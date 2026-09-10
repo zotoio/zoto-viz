@@ -2,6 +2,7 @@ import { NetScene } from "./scene";
 import { Panel } from "./panel";
 import { MODES, defaultOpts, modeById, type ViewMode } from "./modes";
 import { fmtBytes, type StateMsg } from "./types";
+import { rCidr, rIp, redaction } from "./redact";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -88,9 +89,25 @@ for (const [id, key] of [["showInternet", "internet"], ["showMulticast", "multic
   cb.addEventListener("change", () => { scene.setFilters({ [key]: cb.checked }); localStorage.setItem(`netviz.${key}`, cb.checked ? "1" : "0"); });
 }
 
+// ---------------------------------------------------------------- redaction (screenshots / sharing)
+
+let lastState: StateMsg | null = null;
+const redactCb = $<HTMLInputElement>("redact");
+function setRedaction(on: boolean): void {
+  redaction.enabled = on;
+  redactCb.checked = on;
+  document.body.classList.toggle("redacted", on);
+  localStorage.setItem("netviz.redact", on ? "1" : "0");
+  if (lastState) applyStats(lastState);
+  scene.refresh();
+}
+redactCb.addEventListener("change", () => setRedaction(redactCb.checked));
+setRedaction(localStorage.getItem("netviz.redact") === "1");
+
 function applyStats(m: StateMsg): void {
+  lastState = m;
   const extra = (m.interfaces ?? []).filter((i) => i !== m.iface);
-  $("net").textContent = `${m.iface}${extra.length ? ` +${extra.join(", ")}` : ""} · ${m.network} · gw ${m.gateway}`;
+  $("net").textContent = `${m.iface}${extra.length ? ` +${extra.join(", ")}` : ""} · ${rCidr(m.network)} · gw ${rIp(m.gateway)}`;
   $("pps").textContent = Math.round(m.stats.pps).toLocaleString();
   $("bps").textContent = fmtBytes(m.stats.bps, true);
   $("devs").textContent = String(m.stats.devices);
@@ -118,6 +135,7 @@ connect();
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (e.key === "Escape") scene.select(null);
+  if (e.key === "r" || e.key === "R") setRedaction(!redaction.enabled);
   const idx = Number(e.key) - 1;
   if (idx >= 0 && idx < MODES.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(MODES[idx].id);
 });

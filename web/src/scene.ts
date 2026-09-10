@@ -4,6 +4,7 @@ import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer
 import { forceCenter, forceLink, forceManyBody, forceRadial, forceSimulation, type Simulation, type SimNode, type SimLink } from "d3-force-3d";
 import { ROLE_COLOR, displayName, fmtBytes, type Device, type Flow, type Role, type StateMsg } from "./types";
 import { topology, type ModeCtx, type ViewMode } from "./modes";
+import { rIp, rName } from "./redact";
 
 export interface Filters { internet: boolean; multicast: boolean; offline: boolean; labels: boolean }
 
@@ -182,6 +183,11 @@ export class NetScene {
 
   get currentMode(): ViewMode { return this.mode; }
 
+  /** Re-render everything derived from the last snapshot (e.g. after toggling redaction). */
+  refresh(): void {
+    if (this.lastMsg) this.update(this.lastMsg);
+  }
+
   select(n: GNode | null): void {
     this.selected = n;
     this.onSelect(n ? n.device : null);
@@ -341,8 +347,9 @@ export class NetScene {
 
   private setLabelText(n: GNode, extra?: string): void {
     const d = n.device;
-    const name = displayName(d);
-    const sub = name === d.ip ? (d.vendor || "") : d.ip + (d.vendor ? ` · ${d.vendor}` : "");
+    const raw = displayName(d);
+    const name = raw === d.ip ? rIp(d.ip) : rName(raw);
+    const sub = raw === d.ip ? (d.vendor || "") : rIp(d.ip) + (d.vendor ? ` · ${d.vendor}` : "");
     const html = `${escapeHtml(name)}${sub ? `<small>${escapeHtml(sub)}</small>` : ""}${extra ? `<small class="mode">${escapeHtml(extra)}</small>` : ""}`;
     if (n.labelEl.innerHTML !== html) n.labelEl.innerHTML = html;
     n.labelEl.classList.toggle("dim", !d.online);

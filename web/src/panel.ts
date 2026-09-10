@@ -1,4 +1,5 @@
 import { escapeHtml, type NetScene } from "./scene";
+import { rIp, rMac, rName } from "./redact";
 import { ago, displayName, fmtBytes, type Device, type Flow } from "./types";
 
 /** Detail panel. Renders once per selection and then patches text in place, so 1 Hz updates do not flicker. */
@@ -19,9 +20,10 @@ export class Panel {
   show(d: Device | null): void {
     if (!d) { this.el.hidden = true; this.ip = null; return; }
     const now = this.scene.currentTime;
-    if (d.ip !== this.ip) this.render(d);
+    if (d.ip !== this.ip) this.render();
     this.ip = d.ip;
 
+    setText(this.el.querySelector("h2"), shown(d));
     // slow-changing block: only touch the DOM when its content changes
     const html = this.staticBlock(d);
     if (html !== this.staticHtml) {
@@ -47,9 +49,9 @@ export class Panel {
         this.rows.set(other, row);
       }
       const od = this.scene.deviceOf(other);
-      const label = od ? displayName(od) : other;
+      const label = od ? shown(od) : rIp(other);
       setText(row.querySelector("a"), label);
-      setText(row.querySelector(".peer-ip"), label !== other ? other : "");
+      setText(row.querySelector(".peer-ip"), od && displayName(od) !== other ? rIp(other) : "");
       setText(row.querySelector(".rate"), f.rate > 0 ? `${fmtBytes(f.rate, true)} · ` : "");
       setText(row.querySelector(".bytes"), fmtBytes(f.bytes));
       setText(row.querySelector(".meta"), [...f.ports.slice(0, 3), ...(f.ifaces ?? [])].join(" "));
@@ -60,12 +62,12 @@ export class Panel {
     this.el.hidden = false;
   }
 
-  private render(d: Device): void {
+  private render(): void {
     this.rows.clear();
     this.staticHtml = "";
     this.el.innerHTML = `
       <span class="close" title="close">✕</span>
-      <h2>${escapeHtml(displayName(d))}</h2>
+      <h2></h2>
       <div class="sub"></div>
       <dl class="static"></dl>
       <dl>
@@ -80,15 +82,21 @@ export class Panel {
   private staticBlock(d: Device): string {
     const names = d.names?.length ? d.names : d.hostnames;
     return `
-      <dt>IP</dt><dd>${escapeHtml(d.ip)}${d.aliases?.length ? `<br><small style="color:var(--muted)">${d.aliases.map(escapeHtml).join("<br>")}</small>` : ""}</dd>
-      ${d.mac ? `<dt>MAC</dt><dd>${escapeHtml(d.mac)}</dd>` : ""}
+      <dt>IP</dt><dd>${escapeHtml(rIp(d.ip))}${d.aliases?.length ? `<br><small style="color:var(--muted)">${d.aliases.map((a) => escapeHtml(rIp(a))).join("<br>")}</small>` : ""}</dd>
+      ${d.mac ? `<dt>MAC</dt><dd>${escapeHtml(rMac(d.mac))}</dd>` : ""}
       ${d.ifaces?.length ? `<dt>Interface</dt><dd>${d.ifaces.map(escapeHtml).join(", ")}</dd>` : ""}
       ${d.vendor ? `<dt>Vendor</dt><dd>${escapeHtml(d.vendor)}</dd>` : ""}
-      ${names?.length ? `<dt>Names</dt><dd>${names.slice(0, 6).map(escapeHtml).join("<br>")}</dd>` : ""}
-      ${d.mdns_service ? `<dt>mDNS</dt><dd>${escapeHtml(d.mdns_name ?? "")}<br><small>${escapeHtml(d.mdns_service)}</small></dd>` : ""}
+      ${names?.length ? `<dt>Names</dt><dd>${names.slice(0, 6).map((n) => escapeHtml(rName(n))).join("<br>")}</dd>` : ""}
+      ${d.mdns_service ? `<dt>mDNS</dt><dd>${escapeHtml(rName(d.mdns_name ?? ""))}<br><small>${escapeHtml(d.mdns_service)}</small></dd>` : ""}
       ${d.ports?.length ? `<dt>Serves</dt><dd>${d.ports.slice(0, 10).map(escapeHtml).join(", ")}</dd>` : ""}
       ${d.sources?.length ? `<dt>Seen by</dt><dd>${d.sources.map(escapeHtml).join(", ")}</dd>` : ""}`;
   }
+}
+
+/** Display name with redaction applied (IP fallback goes through the IP rule, names through the name rule). */
+function shown(d: Device): string {
+  const raw = displayName(d);
+  return raw === d.ip ? rIp(raw) : rName(raw);
 }
 
 function setText(el: Element | null, text: string): void {

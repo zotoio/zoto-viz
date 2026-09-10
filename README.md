@@ -33,6 +33,12 @@ the header hide internet / multicast / offline nodes and labels. Escape
 deselects. IPv6 addresses are folded onto the IPv4 device with the same MAC
 (via the frame or the SLAAC EUI-64), so one box is one node.
 
+`redact` (or key `R`) partially masks identifiers for screenshots and
+screen-sharing: private IPv4 hides the subnet octet (`192.168.xx.73`), public
+IPv4 the last two, IPv6 keeps two groups, MACs keep the OUI, public names keep
+the registrable domain (`….cursor.sh`), local device names keep three
+characters (`And….local`). Rules live in `web/src/redact.ts`.
+
 ### View modes
 
 The `view` selector (or keys `1`–`6`) switches how the same live graph is

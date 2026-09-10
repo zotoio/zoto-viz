@@ -30,6 +30,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); o
 }
 #bar label.mode select { font-weight: 600; }
 #bar .sep { width: 1px; height: 18px; background: var(--line); }
+body.redacted #bar label:has(#redact) { color: #ffca28; }
 #modeOpts { display: inline-flex; gap: 12px; }
 #modeOpts:empty { display: none; }
 #net { color: var(--muted); }
