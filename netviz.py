@@ -49,9 +49,13 @@ def run(cmd: list[str], *, check: bool = True, timeout: int | None = None, quiet
         die(f"{cmd[0]} not found on PATH")
     except subprocess.TimeoutExpired as e:
         return (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
-    if check and res.returncode != 0:
-        log(res.stderr.strip())
-        die(f"{cmd[0]} exited {res.returncode}")
+    if res.returncode != 0:
+        if check:
+            log(res.stderr.strip())
+            die(f"{cmd[0]} exited {res.returncode}")
+        err = res.stderr.strip().splitlines()
+        if err:
+            log(f"warning: {cmd[0]} exited {res.returncode}: {err[0]}")
     return res.stdout
 
 
@@ -397,9 +401,10 @@ def analyse(args: argparse.Namespace) -> Path:
         if nb_name:
             names[src.split(",")[0]].add(nb_name.split("<")[0].strip())
 
-    # TLS SNI and QUIC SNI: the only hostname evidence left when DNS runs over HTTPS (e.g. WARP)
+    # TLS ClientHello SNI (QUIC's inner TLS shares these fields): the only hostname evidence left when
+    # DNS runs over HTTPS (e.g. WARP)
     out = run(
-        ["tshark", "-r", str(pcap), "-Y", "tls.handshake.type == 1 || quic.tls.handshake.type == 1", "-T", "fields",
+        ["tshark", "-r", str(pcap), "-Y", "tls.handshake.type == 1", "-T", "fields",
          "-e", "ip.dst", "-e", "tls.handshake.extensions_server_name"],
         check=False, quiet=True,
     )
