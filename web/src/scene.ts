@@ -3,10 +3,11 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import { forceCenter, forceLink, forceManyBody, forceRadial, forceSimulation, type Simulation, type SimNode, type SimLink } from "d3-force-3d";
 import { ROLE_COLOR, displayName, fmtBytes, type Device, type Flow, type Role, type StateMsg } from "./types";
+import { topology, type ModeCtx, type ViewMode } from "./modes";
 
 export interface Filters { internet: boolean; multicast: boolean; offline: boolean; labels: boolean }
 
-interface GNode extends SimNode {
+export interface GNode extends SimNode {
   id: string;
   device: Device;
   mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
@@ -18,7 +19,7 @@ interface GNode extends SimNode {
   rate: number;
   targetScale: number;
 }
-interface GLink extends SimLink<GNode> { id: string; flow: Flow; source: GNode; target: GNode; visible: boolean }
+export interface GLink extends SimLink<GNode> { id: string; flow: Flow; source: GNode; target: GNode; visible: boolean }
 
 const SHELL: Record<Role, number> = { self: 110, gateway: 0, local: 200, lan: 360, multicast: 440, internet: 580 };
 const INTERNET_LABEL_MIN_RATE = 2000; // B/s before an internet node earns a persistent label
@@ -49,7 +50,16 @@ export class NetScene {
   private filters: Filters = { internet: true, multicast: false, offline: true, labels: true };
   private lastInteraction = performance.now();
   private now = Date.now() / 1000;
+  private mode: ViewMode = topology;
+  private modeOpts: Record<string, string> = {};
+  private lastMsg: StateMsg | null = null;
+  private overlayObjs = new Map<string, CSS2DObject>();
+  private cameraGoal: THREE.Vector3 | null = null;
   onSelect: (d: Device | null) => void = () => {};
+
+  private get ctx(): ModeCtx {
+    return { now: this.now, nodes: this.nodes, links: this.links, opts: this.modeOpts, gateway: this.lastMsg?.gateway ?? "", localIp: this.lastMsg?.local_ip ?? "", selected: this.selected };
+  }
 
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
@@ -70,7 +80,7 @@ export class NetScene {
     this.controls.dampingFactor = 0.08;
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 0.35;
-    this.controls.addEventListener("start", () => { this.lastInteraction = performance.now(); this.controls.autoRotate = false; });
+    this.controls.addEventListener("start", () => { this.lastInteraction = performance.now(); this.controls.autoRotate = false; this.cameraGoal = null; });
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     const key = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -106,19 +116,22 @@ export class NetScene {
     this.particles.frustumCulled = false;
     this.scene.add(this.particles);
 
-    // layout
+    // layout. Accessors consult the active mode; d3 evaluates them when nodes/links are (re)assigned,
+    // which syncSimulation does on every structural change and on mode switch.
     this.sim = forceSimulation<GNode, GLink>([], 3)
       .alphaDecay(0.006)
       .velocityDecay(0.35)
       .force("link", this.linkForce
         .distance((l) => (l.source.device.role === "internet" || l.target.device.role === "internet" ? 260 : 160))
-        .strength((l) => (l.id.startsWith("~") ? 0.03
+        .strength((l) => this.mode.linkStrength?.(l) ?? (l.id.startsWith("~") ? 0.03
           : l.source.device.role === "multicast" || l.target.device.role === "multicast" ? 0 // hubs are informational only
           : 0.12)))
-      .force("charge", forceManyBody<GNode>().strength((n) => (n.device.role === "lan" || n.device.role === "local" ? -500 : -90)).distanceMax(700))
+      .force("charge", forceManyBody<GNode>().strength((n) => this.mode.charge?.(n) ?? (n.device.role === "lan" || n.device.role === "local" ? -500 : -90)).distanceMax(700))
       .force("center", forceCenter<GNode>(0, 0, 0).strength(0.02))
-      .force("shell", forceRadial<GNode>((n) => SHELL[n.device.role]).strength((n) => (n.device.role === "gateway" ? 1 : n.device.role === "internet" || n.device.role === "multicast" ? 0.6 : 0.9)))
-      .force("flatten", flattenLan(0.12))
+      .force("shell", forceRadial<GNode>((n) => this.mode.shellRadius?.(n) ?? SHELL[n.device.role])
+        .strength((n) => this.mode.shellStrength?.(n) ?? (n.device.role === "gateway" ? 1 : n.device.role === "internet" || n.device.role === "multicast" ? 0.6 : 0.9)))
+      .force("flatten", flattenLan(0.12, () => this.mode.flatten !== false))
+      .force("mode", modeForce((nodes, alpha) => this.mode.force?.(nodes, alpha, this.ctx)))
       .stop();
 
     window.addEventListener("resize", () => this.resize());
@@ -147,6 +160,28 @@ export class NetScene {
     this.syncSimulation(0.3);
   }
 
+  /** Switch view mode (or just its options). Restyles from the last snapshot and re-initialises the layout forces. */
+  setMode(mode: ViewMode, opts: Record<string, string>): void {
+    const changed = mode !== this.mode;
+    this.mode = mode;
+    this.modeOpts = { ...opts };
+    if (changed) {
+      for (const o of this.overlayObjs.values()) { this.scene.remove(o); o.element.remove(); }
+      this.overlayObjs.clear();
+      if (mode.camera) {
+        this.cameraGoal = new THREE.Vector3(...mode.camera);
+        this.controls.autoRotate = false;
+        this.lastInteraction = performance.now();
+      } else if (this.cameraGoal) {
+        this.cameraGoal = new THREE.Vector3(0, 820, 820);
+      }
+    }
+    if (this.lastMsg) this.update(this.lastMsg);
+    this.syncSimulation(changed ? 0.6 : 0.2);
+  }
+
+  get currentMode(): ViewMode { return this.mode; }
+
   select(n: GNode | null): void {
     this.selected = n;
     this.onSelect(n ? n.device : null);
@@ -167,6 +202,7 @@ export class NetScene {
 
   update(msg: StateMsg): void {
     this.now = msg.ts;
+    this.lastMsg = msg;
     let added = false;      // structural change: links appeared/disappeared
     let newNodes = 0;       // only new nodes justify warming the layout up
     const seen = new Set<string>();
@@ -176,10 +212,6 @@ export class NetScene {
       if (!n) { n = this.addNode(d, msg); added = true; newNodes++; }
       n.device = d;
       n.mesh.userData.device = d;
-      const c = ROLE_COLOR[d.role];
-      n.mesh.material.color.setHex(c);
-      n.targetScale = this.sizeFor(d);
-      this.setLabelText(n);
     }
     // devices that vanished from the snapshot (state reset) are removed
     for (const [ip, n] of this.nodes) if (!seen.has(ip)) this.removeNode(n);
@@ -233,6 +265,18 @@ export class NetScene {
         l.source.rate += l.flow.rate;
         l.target.rate += l.flow.rate;
       }
+    }
+
+    // style through the active mode (visibility first, as modes rank visible nodes)
+    for (const n of this.nodes.values()) n.visible = this.nodeVisible(n);
+    const ctx = this.ctx;
+    this.mode.prepare?.(ctx);
+    for (const n of this.nodes.values()) {
+      const d = n.device;
+      n.mesh.material.color.setHex(this.mode.nodeColor?.(n, ctx) ?? ROLE_COLOR[d.role]);
+      n.mesh.material.emissive.setHex(this.mode.nodeColor?.(n, ctx) ?? ROLE_COLOR[d.role]);
+      n.targetScale = this.mode.nodeScale?.(n, ctx) ?? this.sizeFor(d);
+      this.setLabelText(n, this.mode.nodeLabel?.(n, ctx));
     }
 
     this.applyVisibility();
@@ -295,11 +339,11 @@ export class NetScene {
     if (this.selected === n) this.select(null);
   }
 
-  private setLabelText(n: GNode): void {
+  private setLabelText(n: GNode, extra?: string): void {
     const d = n.device;
     const name = displayName(d);
     const sub = name === d.ip ? (d.vendor || "") : d.ip + (d.vendor ? ` · ${d.vendor}` : "");
-    const html = `${escapeHtml(name)}${sub ? `<small>${escapeHtml(sub)}</small>` : ""}`;
+    const html = `${escapeHtml(name)}${sub ? `<small>${escapeHtml(sub)}</small>` : ""}${extra ? `<small class="mode">${escapeHtml(extra)}</small>` : ""}`;
     if (n.labelEl.innerHTML !== html) n.labelEl.innerHTML = html;
     n.labelEl.classList.toggle("dim", !d.online);
   }
@@ -313,17 +357,18 @@ export class NetScene {
   }
 
   private applyVisibility(): void {
+    const ctx = this.ctx;
     for (const n of this.nodes.values()) {
       n.visible = this.nodeVisible(n);
       n.mesh.visible = n.visible;
       const r = n.device.role;
       if (n.rate >= INTERNET_LABEL_MIN_RATE) n.labelUntil = this.now + INTERNET_LABEL_HOLD_S; // hysteresis: earned labels linger
+      const focused = n === this.selected || n === this.hovered;
+      const byRole = r === "lan" || r === "local" || r === "self" || r === "gateway" || (r === "internet" && (n.labelUntil ?? 0) > this.now);
       const showLabel = n.visible && this.filters.labels && (
-        n === this.selected || n === this.hovered ||
-        r === "lan" || r === "local" || r === "self" || r === "gateway" ||
-        (r === "internet" && (n.labelUntil ?? 0) > this.now)
+        focused || this.mode.forceLabel?.(n, ctx) || (byRole && !this.mode.suppressLabel?.(n, ctx))
       );
-      n.label.visible = showLabel; // CSS2DRenderer owns element.style.display; drive it via object visibility
+      n.label.visible = !!showLabel; // CSS2DRenderer owns element.style.display; drive it via object visibility
     }
     for (const l of this.links.values()) l.visible = l.source.visible && l.target.visible;
   }
@@ -394,22 +439,30 @@ export class NetScene {
     // edges
     let i = 0;
     const sel = this.selected;
-    const tmp = new THREE.Color();
+    const tmp = new THREE.Color(), tmp2 = new THREE.Color();
+    const ctx = this.ctx;
+    const mode = this.mode;
     for (const l of this.links.values()) {
       const a = l.source, b = l.target;
       this.linePos[i] = a.x ?? 0; this.linePos[i + 1] = a.y ?? 0; this.linePos[i + 2] = a.z ?? 0;
       this.linePos[i + 3] = b.x ?? 0; this.linePos[i + 4] = b.y ?? 0; this.linePos[i + 5] = b.z ?? 0;
+      const tether = l.id.startsWith("~");
       let bright: number;
-      if (!l.visible) bright = 0;
-      else if (l.id.startsWith("~")) bright = 0.08;
+      if (tether) bright = 0.08;
       else if (l.flow.rate > 0) bright = 0.35 + Math.min(0.65, Math.log10(1 + l.flow.rate) / 6);
       else bright = 0.14;
+      if (!tether && mode.linkBright) bright = mode.linkBright(l, ctx, bright);
       if (sel && (a === sel || b === sel)) bright = Math.max(bright, 0.9);
       else if (sel) bright *= 0.35;
+      if (!l.visible) bright = 0;
       const isLan = a.device.role !== "internet" && b.device.role !== "internet";
-      tmp.setHex(l.id.startsWith("~") ? 0x3a4256 : isLan ? 0x5aa9ff : 0xc97bff).multiplyScalar(bright);
+      const mc = tether ? undefined : mode.linkColor?.(l, ctx);
+      const ca = Array.isArray(mc) ? mc[0] : mc ?? (tether ? 0x3a4256 : isLan ? 0x5aa9ff : 0xc97bff);
+      const cb = Array.isArray(mc) ? mc[1] : ca;
+      tmp.setHex(ca).multiplyScalar(bright);
+      tmp2.setHex(cb).multiplyScalar(bright);
       this.lineCol[i] = tmp.r; this.lineCol[i + 1] = tmp.g; this.lineCol[i + 2] = tmp.b;
-      this.lineCol[i + 3] = tmp.r; this.lineCol[i + 4] = tmp.g; this.lineCol[i + 5] = tmp.b;
+      this.lineCol[i + 3] = tmp2.r; this.lineCol[i + 4] = tmp2.g; this.lineCol[i + 5] = tmp2.b;
       i += 6;
     }
     const pa = this.lines.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
@@ -428,8 +481,14 @@ export class NetScene {
       this.partPos[k * 3] = (a.x ?? 0) + ((b.x ?? 0) - (a.x ?? 0)) * t;
       this.partPos[k * 3 + 1] = (a.y ?? 0) + ((b.y ?? 0) - (a.y ?? 0)) * t;
       this.partPos[k * 3 + 2] = (a.z ?? 0) + ((b.z ?? 0) - (a.z ?? 0)) * t;
-      const isLan = a.device.role !== "internet" && b.device.role !== "internet";
-      tmp.setHex(isLan ? 0x9fd0ff : 0xe6b3ff);
+      const mc = mode.linkColor?.(p.link, ctx);
+      if (mc === undefined) {
+        const isLan = a.device.role !== "internet" && b.device.role !== "internet";
+        tmp.setHex(isLan ? 0x9fd0ff : 0xe6b3ff);
+      } else {
+        // particles are the lightened edge colour so they read against the edge
+        tmp.setHex(Array.isArray(mc) ? mc[t < 0.5 ? 0 : 1] : mc).lerp(tmp2.setHex(0xffffff), 0.35);
+      }
       this.partCol[k * 3] = tmp.r; this.partCol[k * 3 + 1] = tmp.g; this.partCol[k * 3 + 2] = tmp.b;
       k++;
     }
@@ -445,7 +504,32 @@ export class NetScene {
       this.applyVisibility();
     }
 
-    if (!this.controls.autoRotate && performance.now() - this.lastInteraction > 20000 && !this.selected) this.controls.autoRotate = true;
+    // mode overlays (cluster tags etc.)
+    const ovs = mode.overlays?.(ctx) ?? [];
+    const keep = new Set<string>();
+    for (const o of ovs) {
+      keep.add(o.id);
+      let obj = this.overlayObjs.get(o.id);
+      if (!obj) {
+        const el = document.createElement("div");
+        el.className = "overlay";
+        obj = new CSS2DObject(el);
+        this.scene.add(obj);
+        this.overlayObjs.set(o.id, obj);
+      }
+      obj.position.set(o.x, o.y, o.z);
+      if (obj.element.innerHTML !== o.html) obj.element.innerHTML = o.html;
+    }
+    for (const [id, obj] of this.overlayObjs) if (!keep.has(id)) { this.scene.remove(obj); obj.element.remove(); this.overlayObjs.delete(id); }
+
+    // camera glide on mode switch
+    if (this.cameraGoal) {
+      this.camera.position.lerp(this.cameraGoal, Math.min(1, dt * 2.5));
+      this.controls.target.lerp(new THREE.Vector3(0, 0, 0), Math.min(1, dt * 2.5));
+      if (this.camera.position.distanceTo(this.cameraGoal) < 2) this.cameraGoal = null;
+    }
+
+    if (!this.controls.autoRotate && performance.now() - this.lastInteraction > 20000 && !this.selected && !this.mode.camera) this.controls.autoRotate = true;
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
@@ -477,14 +561,23 @@ export class NetScene {
 }
 
 /** Pull LAN/self nodes toward the y=0 plane so they form a ring around the gateway; internet nodes stay spherical. */
-function flattenLan(strength: number) {
+function flattenLan(strength: number, enabled: () => boolean) {
   let nodes: GNode[] = [];
   const force = (alpha: number) => {
+    if (!enabled()) return;
     for (const n of nodes) {
       const r = n.device.role;
       if (r === "lan" || r === "self" || r === "local") n.vy = (n.vy ?? 0) - (n.y ?? 0) * strength * alpha;
     }
   };
+  force.initialize = (ns: GNode[]) => { nodes = ns; };
+  return force;
+}
+
+/** Delegates to the active mode's custom force each tick. */
+function modeForce(apply: (nodes: GNode[], alpha: number) => void) {
+  let nodes: GNode[] = [];
+  const force = (alpha: number) => apply(nodes, alpha);
   force.initialize = (ns: GNode[]) => { nodes = ns; };
   return force;
 }

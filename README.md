@@ -33,6 +33,25 @@ the header hide internet / multicast / offline nodes and labels. Escape
 deselects. IPv6 addresses are folded onto the IPv4 device with the same MAC
 (via the frame or the SLAAC EUI-64), so one box is one node.
 
+### View modes
+
+The `view` selector (or keys `1`–`6`) switches how the same live graph is
+drawn; each mode has its own options next to the selector and its own legend.
+Choices persist in the browser.
+
+| # | Mode | What it shows | Options |
+| - | ---- | ------------- | ------- |
+| 1 | Topology | Default: shells by role, LAN edges blue, internet edges purple, brightness = rate. | |
+| 2 | Top talkers | Sphere size = share of total volume (or of current rate), colour = heat of the current rate, labels with rate/total on the top N. | rank by, label top N |
+| 3 | Services | Internet hosts pulled into clusters by organisation (registrable domain of their TLS/rDNS name, CDN families folded); a tag per cluster gives host count, volume, rate. | arrange by, pool singletons |
+| 4 | Protocols | Edges coloured by protocol family derived from ports (TLS, QUIC, DNS, plaintext, discovery, remote, mail, NTP, media); devices take the family that moved most of their bytes. Focus one family to dim the rest. | focus |
+| 5 | Layers | Sankey-style layered view: internet on top, gateway, LAN, then containers/tunnels, ordered by volume; edges fade between the role colours, brightness = volume. | order by |
+| 6 | Watch | Everything grey except: devices that appeared after monitoring began (orange), plaintext protocols (red edges), LAN devices talking to the internet directly (amber). | new-within window, LAN→internet |
+
+Modes are plug-ins in `web/src/modes.ts`: a `ViewMode` answers optional hooks
+for node colour/size/label, edge colour/brightness, layout forces, overlays and
+camera; the scene falls back to Topology for anything a mode leaves undefined.
+
 Options: `--iface X` (repeatable, restrict capture to named interfaces),
 `--bind 0.0.0.0` (LAN access), `--port`, `-f '<bpf>'` (capture filter),
 `--fresh` (ignore persisted state). JSON snapshot at

@@ -18,19 +18,18 @@
       <span class="stat"><b id="devs">0</b> devices, <b id="online">0</b> online</span>
       <span class="stat"><b id="flows">0</b> flows, <b id="active">0</b> active</span>
       <span class="sp"></span>
+      <label class="mode">view <select id="mode" title="view mode (keys 1–6)"></select></label>
+      <span id="modeOpts"></span>
+      <span class="sep"></span>
       <label><input type="checkbox" id="showInternet" checked /> internet</label>
       <label><input type="checkbox" id="showMulticast" checked /> multicast</label>
       <label><input type="checkbox" id="showOffline" checked /> offline</label>
       <label><input type="checkbox" id="showLabels" checked /> labels</label>
     </header>
     <aside id="panel" hidden></aside>
-    <div id="legend">
-      <span><i style="background:#42a5f5"></i>this host</span>
-      <span><i style="background:#ff7043"></i>gateway</span>
-      <span><i style="background:#66bb6a"></i>LAN</span>
-      <span><i style="background:#26c6da"></i>local (docker / vm / tunnel)</span>
-      <span><i style="background:#ab47bc"></i>internet</span>
-      <span><i style="background:#9e9e9e"></i>multicast</span>
+    <div id="foot">
+      <div id="hint"></div>
+      <div id="legend"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -24,6 +24,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); o
 #bar .stat b { color: var(--fg); font-variant-numeric: tabular-nums; }
 #bar label { color: var(--muted); cursor: pointer; user-select: none; }
 #bar input { vertical-align: -2px; margin-right: 3px; }
+#bar select {
+  background: rgba(255, 255, 255, 0.06); color: var(--fg); border: 1px solid var(--line); border-radius: 5px;
+  padding: 2px 6px; font: inherit; cursor: pointer;
+}
+#bar label.mode select { font-weight: 600; }
+#bar .sep { width: 1px; height: 18px; background: var(--line); }
+#modeOpts { display: inline-flex; gap: 12px; }
+#modeOpts:empty { display: none; }
 #net { color: var(--muted); }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: #e53935; box-shadow: 0 0 8px #e53935; }
 .dot.ok { background: #43a047; box-shadow: 0 0 8px #43a047; }
@@ -48,10 +56,19 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); o
 #panel a { color: #90caf9; cursor: pointer; text-decoration: none; }
 #panel .close { position: absolute; top: 8px; right: 10px; color: var(--muted); cursor: pointer; }
 
-#legend {
-  position: fixed; left: 12px; bottom: 12px; display: flex; gap: 14px; color: var(--muted); z-index: 5;
-}
+#foot { position: fixed; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 360px); z-index: 5; }
+#legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); }
 #legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+#legend i.line { width: 16px; height: 3px; border-radius: 2px; vertical-align: 2px; }
+#legend i.none { display: none; }
+#hint { color: var(--muted); opacity: 0.75; font-size: 12px; }
+
+.overlay {
+  color: var(--fg); font-size: 12px; line-height: 1.2; text-align: center; pointer-events: none; white-space: nowrap;
+  background: rgba(11, 14, 20, 0.7); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px;
+}
+.overlay small { display: block; color: var(--muted); font-size: 10px; }
+.label small.mode { color: #ffd54f; opacity: 0.9; }
 
 .label {
   color: var(--fg); font-size: 11px; line-height: 1.15; text-align: center; pointer-events: none; white-space: nowrap;
