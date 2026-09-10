@@ -11,6 +11,7 @@ interface GNode extends SimNode {
   device: Device;
   mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
   label: CSS2DObject;
+  labelUntil?: number;
   labelEl: HTMLDivElement;
   visible: boolean;
   active: boolean;
@@ -21,6 +22,7 @@ interface GLink extends SimLink<GNode> { id: string; flow: Flow; source: GNode; 
 
 const SHELL: Record<Role, number> = { self: 110, gateway: 0, local: 200, lan: 360, multicast: 440, internet: 580 };
 const INTERNET_LABEL_MIN_RATE = 2000; // B/s before an internet node earns a persistent label
+const INTERNET_LABEL_HOLD_S = 20;     // how long that label survives once the burst is over
 const MAX_PARTICLES = 3000;
 
 export class NetScene {
@@ -141,7 +143,7 @@ export class NetScene {
   setFilters(f: Partial<Filters>): void {
     Object.assign(this.filters, f);
     this.applyVisibility();
-    this.syncSimulation(true);
+    this.syncSimulation(0.3);
   }
 
   select(n: GNode | null): void {
@@ -164,12 +166,13 @@ export class NetScene {
 
   update(msg: StateMsg): void {
     this.now = msg.ts;
-    let added = false;
+    let added = false;      // structural change: links appeared/disappeared
+    let newNodes = 0;       // only new nodes justify warming the layout up
     const seen = new Set<string>();
     for (const d of msg.devices) {
       seen.add(d.ip);
       let n = this.nodes.get(d.ip);
-      if (!n) { n = this.addNode(d); added = true; }
+      if (!n) { n = this.addNode(d, msg); added = true; newNodes++; }
       n.device = d;
       n.mesh.userData.device = d;
       const c = ROLE_COLOR[d.role];
@@ -232,17 +235,17 @@ export class NetScene {
     }
 
     this.applyVisibility();
-    this.syncSimulation(added);
+    if (added) this.syncSimulation(newNodes > 0 ? (this.nodes.size <= newNodes + 1 ? 1 : 0.12) : 0);
     this.rebuildLineBuffers();
     this.rebuildParticles();
     if (this.selected) this.onSelect(this.selected.device);
   }
 
   /** Only visible nodes and links take part in the layout, so hidden multicast hubs cannot bunch LAN devices. */
-  private syncSimulation(reheat: boolean): void {
+  private syncSimulation(minAlpha: number): void {
     this.sim.nodes([...this.nodes.values()].filter((n) => n.visible));
     this.linkForce.links([...this.links.values()].filter((l) => l.visible));
-    if (reheat) this.sim.alpha(Math.max(this.sim.alpha(), 0.5));
+    if (minAlpha > 0) this.sim.alpha(Math.max(this.sim.alpha(), minAlpha));
   }
 
   private sizeFor(d: Device): number {
@@ -251,20 +254,27 @@ export class NetScene {
     return base + Math.min(5, Math.log10(1 + d.bytes_in + d.bytes_out) * 0.45);
   }
 
-  private addNode(d: Device): GNode {
+  private addNode(d: Device, msg: StateMsg): GNode {
     const geo = new THREE.SphereGeometry(1, 24, 18);
-    const mat = new THREE.MeshStandardMaterial({ color: ROLE_COLOR[d.role], roughness: 0.35, metalness: 0.15, emissive: ROLE_COLOR[d.role], emissiveIntensity: 0.15 });
+    const mat = new THREE.MeshStandardMaterial({ color: ROLE_COLOR[d.role], roughness: 0.35, metalness: 0.15, emissive: ROLE_COLOR[d.role], emissiveIntensity: 0.15, transparent: true });
     const mesh = new THREE.Mesh(geo, mat);
     const el = document.createElement("div");
     el.className = "label";
     const label = new CSS2DObject(el);
     label.position.set(0, 1.9, 0);
     mesh.add(label);
+    // spawn on the role's shell, in the direction of its first known peer so it slides in rather than flying across
     const shell = SHELL[d.role];
-    const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+    const peerIp = msg.flows.find((f) => f.a === d.ip || f.b === d.ip);
+    const peer = peerIp ? this.nodes.get(peerIp.a === d.ip ? peerIp.b : peerIp.a) : undefined;
+    let dir = new THREE.Vector3(peer?.x ?? 0, peer?.y ?? 0, peer?.z ?? 0);
+    if (dir.lengthSq() < 1) dir = new THREE.Vector3().randomDirection();
+    dir.normalize().add(new THREE.Vector3().randomDirection().multiplyScalar(0.35)).normalize();
+    if (d.role === "lan" || d.role === "local" || d.role === "self") dir.y *= 0.2;
+    dir.normalize().multiplyScalar(shell || 1);
     const n: GNode = {
       id: d.ip, device: d, mesh, label, labelEl: el, visible: true, active: false, rate: 0, targetScale: this.sizeFor(d),
-      x: shell * Math.sin(ph) * Math.cos(th), y: shell * Math.cos(ph) * 0.6, z: shell * Math.sin(ph) * Math.sin(th),
+      x: dir.x, y: dir.y, z: dir.z,
     };
     mesh.userData.node = n;
     mesh.scale.setScalar(0.01);
@@ -306,10 +316,11 @@ export class NetScene {
       n.visible = this.nodeVisible(n);
       n.mesh.visible = n.visible;
       const r = n.device.role;
+      if (n.rate >= INTERNET_LABEL_MIN_RATE) n.labelUntil = this.now + INTERNET_LABEL_HOLD_S; // hysteresis: earned labels linger
       const showLabel = n.visible && this.filters.labels && (
         n === this.selected || n === this.hovered ||
         r === "lan" || r === "local" || r === "self" || r === "gateway" ||
-        (r === "internet" && n.rate >= INTERNET_LABEL_MIN_RATE)
+        (r === "internet" && (n.labelUntil ?? 0) > this.now)
       );
       n.label.visible = showLabel; // CSS2DRenderer owns element.style.display; drive it via object visibility
     }
@@ -375,8 +386,8 @@ export class NetScene {
       const m = n.mesh.material;
       const boost = n === this.selected ? 1.1 : n === this.hovered ? 0.7 : n.active ? 0.45 : 0.12;
       m.emissiveIntensity += (boost - m.emissiveIntensity) * Math.min(1, dt * 8);
-      m.opacity = 1;
-      if (!n.device.online) { m.transparent = true; m.opacity = 0.35; } else m.transparent = false;
+      const targetOpacity = n.device.online ? 1 : 0.35;
+      m.opacity += (targetOpacity - m.opacity) * Math.min(1, dt * 4);
     }
 
     // edges

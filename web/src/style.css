@@ -33,15 +33,18 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); o
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
   backdrop-filter: blur(6px);
 }
-#panel h2 { margin: 0 0 4px; font-size: 15px; word-break: break-all; }
+#panel h2 { margin: 0 0 4px; font-size: 15px; word-break: break-all; padding-right: 20px; }
+#panel dl + dl { margin-top: 3px; }
 #panel .sub { color: var(--muted); margin-bottom: 10px; }
 #panel dl { display: grid; grid-template-columns: 90px 1fr; gap: 3px 8px; margin: 0; }
 #panel dt { color: var(--muted); }
 #panel dd { margin: 0; word-break: break-all; font-variant-numeric: tabular-nums; }
 #panel h3 { margin: 12px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-#panel table { width: 100%; border-collapse: collapse; }
-#panel td { padding: 2px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-#panel td:last-child { text-align: right; color: var(--muted); white-space: nowrap; }
+#panel table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+#panel td { padding: 2px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#panel td:first-child { width: 55%; padding-right: 6px; }
+#panel td:last-child { text-align: right; color: var(--muted); }
+#panel td .meta { display: block; white-space: normal; line-height: 1.25; }
 #panel a { color: #90caf9; cursor: pointer; text-decoration: none; }
 #panel .close { position: absolute; top: 8px; right: 10px; color: var(--muted); cursor: pointer; }
 

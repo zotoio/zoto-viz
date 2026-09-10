@@ -7,6 +7,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const scene = new NetScene($("scene"));
 const panel = new Panel($("panel"), scene);
 scene.onSelect = (d) => panel.show(d);
+(window as unknown as { netviz: NetScene }).netviz = scene; // devtools handle
 
 for (const [id, key] of [["showInternet", "internet"], ["showMulticast", "multicast"], ["showOffline", "offline"], ["showLabels", "labels"]] as const) {
   const cb = $<HTMLInputElement>(id);
