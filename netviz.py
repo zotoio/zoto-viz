@@ -397,6 +397,18 @@ def analyse(args: argparse.Namespace) -> Path:
         if nb_name:
             names[src.split(",")[0]].add(nb_name.split("<")[0].strip())
 
+    # TLS SNI and QUIC SNI: the only hostname evidence left when DNS runs over HTTPS (e.g. WARP)
+    out = run(
+        ["tshark", "-r", str(pcap), "-Y", "tls.handshake.type == 1 || quic.tls.handshake.type == 1", "-T", "fields",
+         "-e", "ip.dst", "-e", "tls.handshake.extensions_server_name"],
+        check=False, quiet=True,
+    )
+    for line in out.splitlines():
+        dst, sni = (line.split("\t") + [""])[:2]
+        if dst and sni:
+            for n in sni.split(","):
+                names[dst].add(n)
+
     # MAC <-> IP pairs actually observed on the wire
     out = run(["tshark", "-r", str(pcap), "-Y", "ip", "-T", "fields", "-e", "eth.src", "-e", "ip.src"], check=False, quiet=True)
     mac_ip = defaultdict(set)
@@ -421,7 +433,8 @@ def analyse(args: argparse.Namespace) -> Path:
         )
     )
     log(
-        f"eth={len(stats['eth'])} ip={len(stats['ip'])} tcp={len(stats['tcp'])} udp={len(stats['udp'])} conversations -> {path}"
+        f"eth={len(stats['eth'])} ip={len(stats['ip'])} tcp={len(stats['tcp'])} udp={len(stats['udp'])} conversations, "
+        f"{len(names)} endpoints named via DNS/DHCP/NBNS/SNI -> {path}"
     )
     return path
 
@@ -516,7 +529,7 @@ def graph(args: argparse.Namespace) -> None:
                 title.append("Open: " + ", ".join(dev["ports"]))
             title.append("Seen by: " + ", ".join(dev.get("sources", [])))
         elif ip in names:
-            title.append("DNS: " + ", ".join(names[ip][:5]))
+            title.append("Names (DNS/SNI): " + ", ".join(names[ip][:5]))
         G.add_node(ip, label=_label(ip, dev, names), group=group, color=color, shape=shape, title="<br>".join(title), local=local)
 
     for d in devices["devices"]:
