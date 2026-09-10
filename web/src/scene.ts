@@ -90,7 +90,8 @@ export class NetScene {
     this.linePos = new Float32Array(0);
     this.lineCol = new Float32Array(0);
     const lg = new THREE.BufferGeometry();
-    this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }));
+    // additive: dim lines fade into the background instead of being painted darker than it (black strokes)
+    this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.lines.frustumCulled = false;
     this.scene.add(this.lines);
 
