@@ -1,4 +1,4 @@
-export type Role = "self" | "gateway" | "lan" | "internet" | "multicast";
+export type Role = "self" | "gateway" | "lan" | "local" | "internet" | "multicast";
 
 export interface Device {
   ip: string;
@@ -8,6 +8,8 @@ export interface Device {
   names: string[];
   sources: string[];
   ports: string[];
+  ifaces: string[];
+  aliases: string[];
   first_seen: number;
   last_seen: number;
   bytes_in: number;
@@ -26,6 +28,7 @@ export interface Flow {
   packets: number;
   ports: string[];
   protos: string[];
+  ifaces: string[];
   first_seen: number;
   last_seen: number;
   rate: number;
@@ -46,6 +49,7 @@ export interface StateMsg {
   type: "state";
   ts: number;
   iface: string;
+  interfaces: string[];
   network: string;
   local_ip: string;
   gateway: string;
@@ -59,6 +63,7 @@ export const ROLE_COLOR: Record<Role, number> = {
   self: 0x42a5f5,
   gateway: 0xff7043,
   lan: 0x66bb6a,
+  local: 0x26c6da,
   internet: 0xab47bc,
   multicast: 0x9e9e9e,
 };

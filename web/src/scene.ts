@@ -19,7 +19,7 @@ interface GNode extends SimNode {
 }
 interface GLink extends SimLink<GNode> { id: string; flow: Flow; source: GNode; target: GNode; visible: boolean }
 
-const SHELL: Record<Role, number> = { self: 110, gateway: 0, lan: 360, multicast: 440, internet: 580 };
+const SHELL: Record<Role, number> = { self: 110, gateway: 0, local: 200, lan: 360, multicast: 440, internet: 580 };
 const INTERNET_LABEL_MIN_RATE = 2000; // B/s before an internet node earns a persistent label
 const MAX_PARTICLES = 3000;
 
@@ -112,9 +112,9 @@ export class NetScene {
         .strength((l) => (l.id.startsWith("~") ? 0.03
           : l.source.device.role === "multicast" || l.target.device.role === "multicast" ? 0 // hubs are informational only
           : 0.12)))
-      .force("charge", forceManyBody<GNode>().strength((n) => (n.device.role === "lan" ? -500 : -90)).distanceMax(700))
+      .force("charge", forceManyBody<GNode>().strength((n) => (n.device.role === "lan" || n.device.role === "local" ? -500 : -90)).distanceMax(700))
       .force("center", forceCenter<GNode>(0, 0, 0).strength(0.02))
-      .force("shell", forceRadial<GNode>((n) => SHELL[n.device.role]).strength((n) => (n.device.role === "gateway" ? 1 : n.device.role === "lan" || n.device.role === "self" ? 0.9 : 0.6)))
+      .force("shell", forceRadial<GNode>((n) => SHELL[n.device.role]).strength((n) => (n.device.role === "gateway" ? 1 : n.device.role === "internet" || n.device.role === "multicast" ? 0.6 : 0.9)))
       .force("flatten", flattenLan(0.12))
       .stop();
 
@@ -195,27 +195,31 @@ export class NetScene {
     }
     for (const id of [...this.links.keys()]) if (!id.startsWith("~") && !liveKeys.has(id)) this.links.delete(id);
 
-    // tether every LAN node without an observed gateway conversation to the gateway (dashed-equivalent "~" links),
-    // so the layout reads as a star even when only broadcast traffic is visible
+    // tether nodes without an observed conversation to their hub ("~" links): LAN and self -> gateway,
+    // local (Docker / VM / tunnel subnets) -> this host. The layout then reads as a star even when only
+    // broadcast traffic is visible.
     const gw = this.nodes.get(msg.gateway);
-    if (gw) {
-      gw.fx = gw.fy = gw.fz = 0;
-      const realToGw = new Set<string>();
-      for (const l of this.links.values()) {
-        if (l.id.startsWith("~")) continue;
-        if (l.source === gw) realToGw.add(l.target.id);
-        if (l.target === gw) realToGw.add(l.source.id);
-      }
-      for (const n of this.nodes.values()) {
-        const tetherId = `~${n.id}`;
-        const wants = n !== gw && (n.device.role === "lan" || n.device.role === "self") && !realToGw.has(n.id);
-        if (wants && !this.links.has(tetherId)) {
-          const flow: Flow = { a: n.id, b: gw.id, bytes: 0, packets: 0, ports: [], protos: [], first_seen: 0, last_seen: 0, rate: 0 };
-          this.links.set(tetherId, { id: tetherId, flow, source: n, target: gw, visible: true });
-          added = true;
-        } else if (!wants && this.links.has(tetherId)) {
-          this.links.delete(tetherId);
-        }
+    const me = this.nodes.get(msg.local_ip);
+    if (gw) gw.fx = gw.fy = gw.fz = 0;
+    const hubFor = (n: GNode): GNode | undefined =>
+      n.device.role === "lan" || n.device.role === "self" ? gw : n.device.role === "local" ? me : undefined;
+    const realLinks = new Set<string>();
+    for (const l of this.links.values()) {
+      if (l.id.startsWith("~")) continue;
+      realLinks.add(`${l.source.id}|${l.target.id}`);
+      realLinks.add(`${l.target.id}|${l.source.id}`);
+    }
+    for (const n of this.nodes.values()) {
+      const tetherId = `~${n.id}`;
+      const hub = hubFor(n);
+      const wants = hub !== undefined && hub !== n && !realLinks.has(`${n.id}|${hub.id}`);
+      const existing = this.links.get(tetherId);
+      if (wants && (!existing || existing.target !== hub)) {
+        const flow: Flow = { a: n.id, b: hub.id, bytes: 0, packets: 0, ports: [], protos: [], ifaces: [], first_seen: 0, last_seen: 0, rate: 0 };
+        this.links.set(tetherId, { id: tetherId, flow, source: n, target: hub, visible: true });
+        added = true;
+      } else if (!wants && existing) {
+        this.links.delete(tetherId);
       }
     }
     for (const n of this.nodes.values()) { n.active = false; n.rate = 0; }
@@ -304,7 +308,7 @@ export class NetScene {
       const r = n.device.role;
       const showLabel = n.visible && this.filters.labels && (
         n === this.selected || n === this.hovered ||
-        r === "lan" || r === "self" || r === "gateway" ||
+        r === "lan" || r === "local" || r === "self" || r === "gateway" ||
         (r === "internet" && n.rate >= INTERNET_LABEL_MIN_RATE)
       );
       n.label.visible = showLabel; // CSS2DRenderer owns element.style.display; drive it via object visibility
@@ -466,7 +470,7 @@ function flattenLan(strength: number) {
   const force = (alpha: number) => {
     for (const n of nodes) {
       const r = n.device.role;
-      if (r === "lan" || r === "self") n.vy = (n.vy ?? 0) - (n.y ?? 0) * strength * alpha;
+      if (r === "lan" || r === "self" || r === "local") n.vy = (n.vy ?? 0) - (n.y ?? 0) * strength * alpha;
     }
   };
   force.initialize = (ns: GNode[]) => { nodes = ns; };

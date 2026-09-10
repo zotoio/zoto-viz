@@ -17,7 +17,8 @@ for (const [id, key] of [["showInternet", "internet"], ["showMulticast", "multic
 }
 
 function applyStats(m: StateMsg): void {
-  $("net").textContent = `${m.iface} · ${m.network} · gw ${m.gateway}`;
+  const extra = (m.interfaces ?? []).filter((i) => i !== m.iface);
+  $("net").textContent = `${m.iface}${extra.length ? ` +${extra.join(", ")}` : ""} · ${m.network} · gw ${m.gateway}`;
   $("pps").textContent = Math.round(m.stats.pps).toLocaleString();
   $("bps").textContent = fmtBytes(m.stats.bps, true);
   $("devs").textContent = String(m.stats.devices);

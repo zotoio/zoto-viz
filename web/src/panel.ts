@@ -21,15 +21,16 @@ export class Panel {
       const od = this.scene.deviceOf(other);
       const label = od ? displayName(od) : other;
       return `<tr><td><a data-ip="${escapeHtml(other)}">${escapeHtml(label)}</a>${label !== other ? `<br><small style="color:var(--muted)">${escapeHtml(other)}</small>` : ""}</td>` +
-        `<td>${f.rate > 0 ? `<b>${fmtBytes(f.rate, true)}</b><br>` : ""}${fmtBytes(f.bytes)}<br><small>${escapeHtml(f.ports.slice(0, 3).join(" "))}</small></td></tr>`;
+        `<td>${f.rate > 0 ? `<b>${fmtBytes(f.rate, true)}</b><br>` : ""}${fmtBytes(f.bytes)}<br><small>${escapeHtml([...f.ports.slice(0, 3), ...(f.ifaces ?? [])].join(" "))}</small></td></tr>`;
     }).join("");
     this.el.innerHTML = `
       <span class="close" title="close">✕</span>
       <h2>${escapeHtml(displayName(d))}</h2>
       <div class="sub">${escapeHtml(d.role)} · ${d.online ? "online" : "offline"} · last seen ${ago(d.last_seen, now)}</div>
       <dl>
-        <dt>IP</dt><dd>${escapeHtml(d.ip)}</dd>
+        <dt>IP</dt><dd>${escapeHtml(d.ip)}${d.aliases?.length ? `<br><small style="color:var(--muted)">${d.aliases.map(escapeHtml).join("<br>")}</small>` : ""}</dd>
         ${d.mac ? `<dt>MAC</dt><dd>${escapeHtml(d.mac)}</dd>` : ""}
+        ${d.ifaces?.length ? `<dt>Interface</dt><dd>${d.ifaces.map(escapeHtml).join(", ")}</dd>` : ""}
         ${d.vendor ? `<dt>Vendor</dt><dd>${escapeHtml(d.vendor)}</dd>` : ""}
         ${names?.length ? `<dt>Names</dt><dd>${names.slice(0, 6).map(escapeHtml).join("<br>")}</dd>` : ""}
         ${d.mdns_service ? `<dt>mDNS</dt><dd>${escapeHtml(d.mdns_name ?? "")}<br><small>${escapeHtml(d.mdns_service)}</small></dd>` : ""}

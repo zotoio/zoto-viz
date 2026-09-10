@@ -42,7 +42,10 @@ FIELDS = [
     "frame.time_epoch", "frame.len", "eth.src", "eth.dst", "ip.src", "ip.dst", "ipv6.src", "ipv6.dst",
     "ip.proto", "tcp.srcport", "tcp.dstport", "udp.srcport", "udp.dstport",
     "tls.handshake.extensions_server_name", "dns.qry.name", "dns.a", "dhcp.option.hostname", "_ws.col.Protocol",
+    "frame.interface_name",
 ]
+IFACE_RESCAN_S = 15        # how often to check for interfaces appearing/disappearing
+IFACE_SKIP_PREFIXES = ("lo", "veth")  # veth traffic is already visible on its bridge
 FLOW_IDLE_S = 300          # flows silent this long drop out of the live set
 DEVICE_OFFLINE_S = 600     # devices silent this long are shown as offline
 RATE_WINDOW_S = 5          # bytes/s smoothing window
@@ -67,6 +70,25 @@ def mac_from_eui64(ip: str) -> str:
     return ":".join(f"{x:02x}" for x in mac)
 
 
+def list_interfaces(only: list[str] | None = None) -> dict[str, list[str]]:
+    """Capturable interfaces -> their IPv4/IPv6 CIDRs. Link must be up (LOWER_UP); lo and veth* are skipped."""
+    links = json.loads(netviz.run(["ip", "-j", "link"], quiet=True) or "[]")
+    addrs = {a["ifname"]: a.get("addr_info", []) for a in json.loads(netviz.run(["ip", "-j", "addr"], quiet=True) or "[]")}
+    out: dict[str, list[str]] = {}
+    for l in links:
+        name, flags = l["ifname"], set(l.get("flags", []))
+        if only is not None:
+            if name not in only:
+                continue
+        elif name.startswith(IFACE_SKIP_PREFIXES) or "LOWER_UP" not in flags or "UP" not in flags:
+            continue
+        out[name] = [
+            str(ipaddress.ip_interface(f"{ai['local']}/{ai['prefixlen']}").network)
+            for ai in addrs.get(name, []) if ai.get("scope") != "host"
+        ]
+    return out
+
+
 def is_multicast(ip: str) -> bool:
     try:
         a = ipaddress.ip_address(ip)
@@ -79,9 +101,14 @@ def is_multicast(ip: str) -> bool:
 
 
 class State:
-    def __init__(self, iface: str, local_ip: str, net: str, gateway: str) -> None:
+    def __init__(self, iface: str, local_ip: str, net: str, gateway: str, only_ifaces: list[str] | None = None) -> None:
         self.iface, self.local_ip, self.net_str, self.gateway = iface, local_ip, net, gateway
         self.net = ipaddress.ip_network(net)
+        self.only_ifaces = only_ifaces
+        self.ifaces: dict[str, list[str]] = {}
+        self.local_nets: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+        self.own_ips: set[str] = set()
+        self.refresh_interfaces()
         self.started = time.time()
         self.devices: dict[str, dict] = {}       # ip -> device
         self.flows: dict[str, dict] = {}         # "a|b" -> flow
@@ -94,18 +121,45 @@ class State:
         self._rate_buckets: dict[int, list[int]] = defaultdict(lambda: [0, 0])  # sec -> [pkts, bytes]
         self._flow_buckets: dict[str, dict[int, int]] = defaultdict(dict)       # flow -> sec -> bytes
 
+    # ---- interfaces
+    def refresh_interfaces(self) -> bool:
+        """Re-read capturable interfaces and this host's addresses. Returns True when the interface set changed."""
+        ifaces = list_interfaces(self.only_ifaces)
+        changed = set(ifaces) != set(self.ifaces)
+        self.ifaces = ifaces
+        self.local_nets = [ipaddress.ip_network(c) for cidrs in ifaces.values() for c in cidrs]
+        own = {self.local_ip}
+        for a in json.loads(netviz.run(["ip", "-j", "addr"], quiet=True) or "[]"):
+            for ai in a.get("addr_info", []):
+                if ai.get("scope") != "host":
+                    own.add(ai["local"])
+        self.own_ips = own
+        return changed
+
     # ---- classification
     def is_local(self, ip: str) -> bool:
-        return netviz._is_local(ip, self.net)
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        return any(a in n for n in self.local_nets) or a.is_link_local or a.is_private
 
     def role(self, ip: str) -> str:
-        if ip == self.local_ip:
+        if ip == self.local_ip or ip in self.own_ips:
             return "self"
         if ip == self.gateway:
             return "gateway"
         if is_multicast(ip):
             return "multicast"
-        return "lan" if self.is_local(ip) else "internet"
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return "internet"
+        if a in self.net or a.is_link_local:
+            return "lan"
+        if self.is_local(ip):
+            return "local"  # secondary subnet on this host: Docker bridge, VMs, tunnels
+        return "internet"
 
     # ---- devices
     def canonical(self, ip: str, mac: str = "") -> str:
@@ -121,11 +175,13 @@ class State:
         return self.alias_to_ip.get(ip, ip)
 
     def device(self, ip: str, mac: str = "") -> dict:
+        if ip in self.own_ips and ip != self.local_ip:  # every address of this host is one node
+            ip = self.local_ip
         ip = self.alias_to_ip.get(ip, ip)
         d = self.devices.get(ip)
         if d is None:
             d = self.devices[ip] = {
-                "ip": ip, "mac": "", "vendor": "", "hostnames": [], "aliases": [], "sources": [], "ports": [],
+                "ip": ip, "mac": "", "vendor": "", "hostnames": [], "aliases": [], "sources": [], "ports": [], "ifaces": [],
                 "first_seen": time.time(), "last_seen": 0.0, "bytes_in": 0, "bytes_out": 0, "packets": 0,
                 "role": self.role(ip),
             }
@@ -170,6 +226,7 @@ class State:
         dst = f[5] or f[7]
         proto_num, tsp, tdp, usp, udp_ = f[8], f[9], f[10], f[11], f[12]
         sni, dns_q, dns_a, dhcp_host, proto = f[13], f[14], f[15], f[16], f[17]
+        iface = f[18] if len(f) > 18 else self.iface
         sec = int(t)
 
         self.packets += 1
@@ -195,14 +252,23 @@ class State:
         dd = self.device(dst, eth_dst if self.is_local(dst) and not is_multicast(dst) else "")
         dd["last_seen"] = t
         dd["bytes_in"] += size
+        src, dst = ds["ip"], dd["ip"]  # after own-address / alias folding
+        if src == dst:
+            return
+        if iface:
+            for d in (ds, dd):
+                if iface not in d["ifaces"]:
+                    d["ifaces"].append(iface)
 
         # flow
         a, b_ = sorted((src, dst))
         key = f"{a}|{b_}"
         fl = self.flows.get(key)
         if fl is None:
-            fl = self.flows[key] = {"a": a, "b": b_, "bytes": 0, "packets": 0, "ports": [], "protos": [],
+            fl = self.flows[key] = {"a": a, "b": b_, "bytes": 0, "packets": 0, "ports": [], "protos": [], "ifaces": [],
                                     "first_seen": t, "last_seen": t, "rate": 0.0}
+        if iface and iface not in fl["ifaces"]:
+            fl["ifaces"].append(iface)
         fl["bytes"] += size
         fl["packets"] += 1
         fl["last_seen"] = t
@@ -269,12 +335,14 @@ class State:
         devices = []
         for d in self.devices.values():
             dd = dict(d)
+            dd["role"] = self.role(d["ip"])  # interfaces/subnets can change at runtime
             dd["online"] = (now - d["last_seen"]) < DEVICE_OFFLINE_S if d["last_seen"] else False
             dd["names"] = sorted(self.names.get(d["ip"], ()), key=lambda n: (n.startswith("*"), len(n)))
             devices.append(dd)
         return {
             "ts": now,
             "iface": self.iface,
+            "interfaces": sorted(self.ifaces),
             "network": self.net_str,
             "local_ip": self.local_ip,
             "gateway": self.gateway,
@@ -305,10 +373,11 @@ class State:
         except json.JSONDecodeError:
             return
         for ip, d in s.get("devices", {}).items():
-            if ip == "0.0.0.0":
+            if ip == "0.0.0.0" or (ip in self.own_ips and ip != self.local_ip):
                 continue
             d.setdefault("ports", [])
             d.setdefault("aliases", [])
+            d.setdefault("ifaces", [])
             d["role"] = self.role(ip)
             if not self.is_local(ip):  # older state files attributed the gateway MAC to remote hosts
                 d["mac"], d["vendor"] = "", ""
@@ -341,8 +410,11 @@ class State:
 # --------------------------------------------------------------------------- capture
 
 
-def tshark_cmd(iface: str, bpf: str) -> list[str]:
-    cmd = ["tshark", "-i", iface, "-l", "-q", "-n", "-T", "fields", "-E", "separator=|", "-E", "occurrence=f"]
+def tshark_cmd(ifaces: list[str], bpf: str) -> list[str]:
+    cmd = ["tshark"]
+    for i in ifaces:
+        cmd += ["-i", i]
+    cmd += ["-l", "-q", "-n", "-T", "fields", "-E", "separator=|", "-E", "occurrence=f"]
     for f in FIELDS:
         cmd += ["-e", f]
     if bpf:
@@ -358,17 +430,38 @@ def wrap_privileged(cmd: list[str]) -> list[str]:
     return ["sudo", "-n"] + cmd
 
 
+async def _kill_group(proc: asyncio.subprocess.Process) -> None:
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(proc.pid, signal.SIGTERM)
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(proc.wait(), 3)
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(proc.pid, signal.SIGKILL)
+
+
 async def capture_loop(state: State, bpf: str) -> None:
     backoff = 2
     while True:
-        cmd = wrap_privileged(tshark_cmd(state.iface, bpf))
-        log(f"starting capture on {state.iface} via {cmd[0]}" + (f" (filter: {bpf})" if bpf else ""))
+        ifaces = sorted(state.ifaces) or [state.iface]
+        cmd = wrap_privileged(tshark_cmd(ifaces, bpf))
+        log(f"starting capture on {', '.join(ifaces)} via {cmd[0]}" + (f" (filter: {bpf})" if bpf else ""))
         # own process group so `sg -> sh -> tshark -> dumpcap` all die together on shutdown
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True,
         )
         assert proc.stdout
+
+        async def watch_interfaces() -> None:
+            while True:
+                await asyncio.sleep(IFACE_RESCAN_S)
+                if state.refresh_interfaces():
+                    log(f"interfaces changed -> {', '.join(sorted(state.ifaces))}; restarting capture")
+                    await _kill_group(proc)
+                    return
+
+        watcher = asyncio.create_task(watch_interfaces())
         n = 0
+        t0 = time.time()
         try:
             async for raw in proc.stdout:
                 line = raw.decode(errors="replace").rstrip("\n")
@@ -379,18 +472,19 @@ async def capture_loop(state: State, bpf: str) -> None:
                 if n % 2000 == 0:
                     await asyncio.sleep(0)  # yield to the server under heavy load
         except asyncio.CancelledError:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(proc.pid, signal.SIGTERM)
-            with contextlib.suppress(Exception):
-                await asyncio.wait_for(proc.wait(), 3)
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(proc.pid, signal.SIGKILL)
+            watcher.cancel()
+            await _kill_group(proc)
             raise
+        restarted_by_watcher = watcher.done() and not watcher.cancelled()
+        watcher.cancel()
         err = (await proc.stderr.read()).decode(errors="replace").strip() if proc.stderr else ""
         rc = await proc.wait()
-        log(f"tshark exited rc={rc} after {n} packets" + (f": {err.splitlines()[-1]}" if err else ""))
+        if restarted_by_watcher:
+            backoff = 1
+        else:
+            log(f"tshark exited rc={rc} after {n} packets" + (f": {err.splitlines()[-1]}" if err else ""))
+            backoff = 2 if time.time() - t0 > 60 else min(backoff * 2, 60)
         await asyncio.sleep(backoff)
-        backoff = min(backoff * 2, 60)
 
 
 # --------------------------------------------------------------------------- discovery
@@ -399,11 +493,13 @@ async def capture_loop(state: State, bpf: str) -> None:
 def discover_once(state: State) -> None:
     """Root-less discovery pass: kernel neighbour table, mDNS, NetBIOS. Runs in a worker thread."""
     try:
-        for n in json.loads(netviz.run(["ip", "-j", "-4", "neigh", "show", "dev", state.iface], quiet=True) or "[]"):
-            if n.get("lladdr") and n.get("state", [""])[0] not in ("FAILED", "INCOMPLETE"):
+        for n in json.loads(netviz.run(["ip", "-j", "-4", "neigh", "show"], quiet=True) or "[]"):
+            if n.get("lladdr") and n.get("state", [""])[0] not in ("FAILED", "INCOMPLETE") and n.get("dev") in state.ifaces:
                 d = state.device(n["dst"], n["lladdr"].lower())
                 if "neigh" not in d["sources"]:
                     d["sources"].append("neigh")
+                if n["dev"] not in d["ifaces"]:
+                    d["ifaces"].append(n["dev"])
     except Exception as e:  # noqa: BLE001
         log(f"neigh failed: {e}")
 
@@ -550,7 +646,8 @@ def make_app(state: State, bpf: str) -> web.Application:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--iface", help="capture interface (default: the default-route interface)")
+    p.add_argument("--iface", action="append", metavar="IFACE",
+                   help="capture only these interfaces (repeatable; default: every up interface except lo and veth*)")
     p.add_argument("--bind", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("-f", "--filter", default="", help="BPF capture filter, e.g. 'not port 22'")
@@ -558,12 +655,13 @@ def main() -> None:
     args = p.parse_args()
 
     iface, local_ip, cidr, gw = netviz.default_iface()
-    if args.iface and args.iface != iface:
-        iface = args.iface
-    state = State(iface, local_ip, cidr, gw)
+    state = State(iface, local_ip, cidr, gw, only_ifaces=args.iface)
+    if not state.ifaces:
+        sys.exit(f"[monitor] no capturable interfaces" + (f" among {args.iface}" if args.iface else ""))
     if not args.fresh:
         state.load()
-    log(f"iface={iface} ip={local_ip} net={cidr} gw={gw}")
+    log(f"primary={iface} ip={local_ip} net={cidr} gw={gw}")
+    log("capturing: " + ", ".join(f"{i} [{', '.join(c) or 'no addr'}]" for i, c in sorted(state.ifaces.items())))
     log(f"UI: http://{args.bind}:{args.port}/   WS: /ws   JSON: /api/state")
     web.run_app(make_app(state, args.filter), host=args.bind, port=args.port, print=None, access_log=None)
 

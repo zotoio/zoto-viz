@@ -13,14 +13,19 @@ cd web && pnpm install && pnpm build && cd ..     # builds web/dist once
 ./monitor.py                                      # http://127.0.0.1:8765
 ```
 
-What runs: a continuous `tshark -T fields` stream feeding an in-memory model of
-devices, flows and names; a discovery pass every 60 s (`ip neigh`, mDNS,
-NetBIOS, OUI vendors); certificate probes for unnamed TLS peers; a 1 Hz
-WebSocket snapshot to every browser tab; state persisted to
-`data/monitor-state.json` every 30 s.
+What runs: a continuous `tshark -T fields` stream on every up interface
+(except `lo` and `veth*`, whose traffic is already on the bridge) feeding an
+in-memory model of devices, flows and names, each tagged with the interface it
+was seen on; the interface set is rechecked every 15 s and the capture restarts
+when one appears or disappears (Docker bridges, VPN tunnels). A discovery pass
+runs every 60 s (`ip neigh`, mDNS, NetBIOS, OUI vendors); unnamed TLS peers get
+certificate probes; a 1 Hz WebSocket snapshot goes to every browser tab; state
+is persisted to `data/monitor-state.json` every 30 s.
 
-The UI is a force-directed 3D graph: gateway at the centre, LAN devices on a
-ring, internet endpoints on an outer sphere, multicast groups in between.
+The UI is a force-directed 3D graph: gateway at the centre, this host and
+`local` devices (Docker containers, VMs, tunnel peers on secondary subnets)
+close in, LAN devices on a ring, internet endpoints on an outer sphere,
+multicast groups in between.
 Traffic shows as particles along edges, edge brightness follows bytes/s, node
 size follows total bytes. Hover for a label, click for the detail panel
 (MAC, vendor, names, open ports, top conversations, click-through). Filters in
@@ -28,8 +33,9 @@ the header hide internet / multicast / offline nodes and labels. Escape
 deselects. IPv6 addresses are folded onto the IPv4 device with the same MAC
 (via the frame or the SLAAC EUI-64), so one box is one node.
 
-Options: `--iface`, `--bind 0.0.0.0` (LAN access), `--port`, `-f '<bpf>'`
-(capture filter), `--fresh` (ignore persisted state). JSON snapshot at
+Options: `--iface X` (repeatable, restrict capture to named interfaces),
+`--bind 0.0.0.0` (LAN access), `--port`, `-f '<bpf>'` (capture filter),
+`--fresh` (ignore persisted state). JSON snapshot at
 `/api/state`. Frontend dev loop: `cd web && pnpm dev` (proxies to :8765).
 
 Run it permanently as a user service: see `systemd/netviz-monitor.service`.
