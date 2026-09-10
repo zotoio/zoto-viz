@@ -1,0 +1,58 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0e14;
+  --fg: #e6e8ee;
+  --muted: #8a93a6;
+  --panel: rgba(16, 20, 30, 0.92);
+  --line: #232a3a;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+}
+
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; }
+#scene { position: fixed; inset: 0; }
+#scene canvas { display: block; }
+
+#bar {
+  position: fixed; top: 0; left: 0; right: 0; min-height: 40px; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 6px 14px;
+  background: linear-gradient(to bottom, rgba(11, 14, 20, 0.95), rgba(11, 14, 20, 0.6));
+  border-bottom: 1px solid var(--line);
+}
+#bar .sp { flex: 1; }
+#bar .stat { color: var(--muted); white-space: nowrap; }
+#bar .stat b { color: var(--fg); font-variant-numeric: tabular-nums; }
+#bar label { color: var(--muted); cursor: pointer; user-select: none; }
+#bar input { vertical-align: -2px; margin-right: 3px; }
+#net { color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #e53935; box-shadow: 0 0 8px #e53935; }
+.dot.ok { background: #43a047; box-shadow: 0 0 8px #43a047; }
+
+#panel {
+  position: fixed; top: 52px; right: 12px; width: 320px; max-height: calc(100vh - 100px); overflow: auto; z-index: 5;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  backdrop-filter: blur(6px);
+}
+#panel h2 { margin: 0 0 4px; font-size: 15px; word-break: break-all; }
+#panel .sub { color: var(--muted); margin-bottom: 10px; }
+#panel dl { display: grid; grid-template-columns: 90px 1fr; gap: 3px 8px; margin: 0; }
+#panel dt { color: var(--muted); }
+#panel dd { margin: 0; word-break: break-all; font-variant-numeric: tabular-nums; }
+#panel h3 { margin: 12px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+#panel table { width: 100%; border-collapse: collapse; }
+#panel td { padding: 2px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+#panel td:last-child { text-align: right; color: var(--muted); white-space: nowrap; }
+#panel a { color: #90caf9; cursor: pointer; text-decoration: none; }
+#panel .close { position: absolute; top: 8px; right: 10px; color: var(--muted); cursor: pointer; }
+
+#legend {
+  position: fixed; left: 12px; bottom: 12px; display: flex; gap: 14px; color: var(--muted); z-index: 5;
+}
+#legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+
+.label {
+  color: var(--fg); font-size: 11px; line-height: 1.15; text-align: center; pointer-events: none; white-space: nowrap;
+  text-shadow: 0 0 4px #000, 0 0 2px #000;
+}
+.label small { display: block; color: var(--muted); font-size: 9.5px; }
+.label.dim { opacity: 0.45; }

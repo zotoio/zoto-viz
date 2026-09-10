@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>netviz · live</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="scene"></div>
+    <header id="bar">
+      <span id="conn" class="dot"></span>
+      <strong>netviz</strong>
+      <span id="net"></span>
+      <span class="sp"></span>
+      <span class="stat"><b id="pps">0</b> pkt/s</span>
+      <span class="stat"><b id="bps">0</b></span>
+      <span class="stat"><b id="devs">0</b> devices, <b id="online">0</b> online</span>
+      <span class="stat"><b id="flows">0</b> flows, <b id="active">0</b> active</span>
+      <span class="sp"></span>
+      <label><input type="checkbox" id="showInternet" checked /> internet</label>
+      <label><input type="checkbox" id="showMulticast" /> multicast</label>
+      <label><input type="checkbox" id="showOffline" checked /> offline</label>
+      <label><input type="checkbox" id="showLabels" checked /> labels</label>
+    </header>
+    <aside id="panel" hidden></aside>
+    <div id="legend">
+      <span><i style="background:#42a5f5"></i>this host</span>
+      <span><i style="background:#ff7043"></i>gateway</span>
+      <span><i style="background:#66bb6a"></i>LAN</span>
+      <span><i style="background:#ab47bc"></i>internet</span>
+      <span><i style="background:#9e9e9e"></i>multicast</span>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
