@@ -366,6 +366,51 @@ def _parse_conv(text: str, kind: str) -> list[dict]:
     return flows
 
 
+_TLS_PORTS = {"443", "8443", "853", "993", "995", "465", "5223", "5228"}
+
+
+def _probe_cert(ip: str, port: int, timeout: float = 4.0) -> list[str]:
+    """Return CN + SAN DNS names from the certificate a server presents with no SNI. Empty on failure."""
+    import socket
+    import ssl
+
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with socket.create_connection((ip, port), timeout=timeout) as sock:
+            with ctx.wrap_socket(sock) as tls:  # no server_hostname => no SNI
+                der = tls.getpeercert(binary_form=True)
+    except (OSError, ssl.SSLError):
+        return []
+    if not der:
+        return []
+    # the stdlib only decodes certs it has verified, so hand the PEM to the openssl binary
+    try:
+        res = subprocess.run(
+            ["openssl", "x509", "-noout", "-subject", "-nameopt", "RFC2253", "-ext", "subjectAltName"],
+            input=ssl.DER_cert_to_PEM_cert(der), capture_output=True, text=True, timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    names: list[str] = []
+    for m in re.finditer(r"(?:^|,)CN=([^,]+)", res.stdout, re.M):
+        if m.group(1) not in names:
+            names.append(m.group(1))
+    for m in re.finditer(r"DNS:([^,\s]+)", res.stdout):
+        if m.group(1) not in names:
+            names.append(m.group(1))
+    return names
+
+
+def _probe_certs(targets: dict[str, int], workers: int = 16) -> dict[str, list[str]]:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        results = ex.map(lambda kv: (kv[0], _probe_cert(kv[0], kv[1])), targets.items())
+    return {ip: ns for ip, ns in results if ns}
+
+
 def analyse(args: argparse.Namespace) -> Path:
     need("tshark")
     pcap = Path(args.pcap) if args.pcap else latest("capture-*.pcapng")
@@ -414,6 +459,21 @@ def analyse(args: argparse.Namespace) -> Path:
             for n in sni.split(","):
                 names[dst].add(n)
 
+    # Certificate probe: reconnect (no SNI) to each still-unnamed external TLS peer and read the default
+    # certificate's CN/SANs. Names most CDN/ELB hosts that never showed a ClientHello in the window.
+    cert_names: dict[str, list[str]] = {}
+    if getattr(args, "probe_certs", True):
+        targets: dict[str, int] = {}
+        for c in stats["tcp"]:
+            for ip, port in ((c["a"], c["a_port"]), (c["b"], c["b_port"])):
+                if port in _TLS_PORTS and not _is_local(ip, None) and ":" not in ip and ip not in names:
+                    targets.setdefault(ip, int(port))
+        if targets:
+            log(f"probing certificates on {len(targets)} unnamed TLS endpoints")
+            cert_names = _probe_certs(targets)
+            for ip, ns in cert_names.items():
+                names[ip].update(ns)
+
     # MAC <-> IP pairs actually observed on the wire
     out = run(["tshark", "-r", str(pcap), "-Y", "ip", "-T", "fields", "-e", "eth.src", "-e", "ip.src"], check=False, quiet=True)
     mac_ip = defaultdict(set)
@@ -432,6 +492,7 @@ def analyse(args: argparse.Namespace) -> Path:
                 "conversations": stats,
                 "protocol_hierarchy": phs,
                 "names_seen": {k: sorted(v) for k, v in names.items()},
+                "cert_names": cert_names,
                 "mac_to_ips": {k: sorted(v) for k, v in mac_ip.items()},
             },
             indent=2,
@@ -439,7 +500,7 @@ def analyse(args: argparse.Namespace) -> Path:
     )
     log(
         f"eth={len(stats['eth'])} ip={len(stats['ip'])} tcp={len(stats['tcp'])} udp={len(stats['udp'])} conversations, "
-        f"{len(names)} endpoints named via DNS/DHCP/NBNS/SNI -> {path}"
+        f"{len(names)} endpoints named via DNS/DHCP/NBNS/SNI/cert ({len(cert_names)} by cert) -> {path}"
     )
     return path
 
@@ -468,7 +529,8 @@ def _label(ip: str, dev: dict | None, names: dict) -> str:
         if dev.get("vendor"):
             parts.append(dev["vendor"])
     elif ip in names:
-        parts.insert(0, names[ip][0])
+        # concrete hostnames beat wildcards; among equals prefer the shortest
+        parts.insert(0, min(names[ip], key=lambda n: (n.startswith("*"), len(n))))
     return "\n".join(parts)
 
 
@@ -647,6 +709,8 @@ def main() -> None:
 
     a = sub.add_parser("analyse", help="extract conversations from a pcap")
     a.add_argument("pcap", nargs="?", help="pcap/pcapng path (default: newest in data/)")
+    a.add_argument("--no-probe-certs", dest="probe_certs", action="store_false",
+                   help="do not reconnect to unnamed TLS endpoints to read their certificate names")
     a.set_defaults(fn=analyse)
 
     g = sub.add_parser("graph", help="render device/connection graph")
@@ -659,6 +723,7 @@ def main() -> None:
     al.add_argument("-f", "--filter", default="")
     al.add_argument("--ports", action="store_true")
     al.add_argument("--lan-only", action="store_true")
+    al.add_argument("--no-probe-certs", dest="probe_certs", action="store_false")
 
     args = p.parse_args()
     if args.cmd == "all":
