@@ -9,6 +9,8 @@ const BAR_S = 1;
 
 export type FeedLayout = "ticker" | "bars" | "both";
 export type FeedScope = "lan" | "selected" | "any";
+export type FeedSource = "traffic" | "transcript" | "both";
+export type ChatRole = "you" | "think" | "agent";
 
 export const FEED_LAYOUTS: { value: FeedLayout; label: string; hint: string }[] = [
   { value: "ticker", label: "ticker", hint: "decoded packet lines, newest at the top" },
@@ -22,10 +24,17 @@ export const FEED_SCOPES: { value: FeedScope; label: string; hint: string }[] = 
   { value: "any", label: "all", hint: "LAN plus internet hosts this capture can see" },
 ];
 
+export const FEED_SOURCES: { value: FeedSource; label: string; hint: string }[] = [
+  { value: "traffic", label: "traffic", hint: "decoded packets from the capture" },
+  { value: "transcript", label: "transcript", hint: "agent conversation and chain of thought, newest at the bottom" },
+  { value: "both", label: "both", hint: "packets mixed with the agent transcript" },
+];
+
 export interface FeedConfig {
   on: boolean;
   layout: FeedLayout;
   scope: FeedScope;
+  source: FeedSource;
   density: number;
   modulate: boolean;
 }
@@ -34,9 +43,23 @@ export const DEFAULT_FEED: FeedConfig = {
   on: true,
   layout: "both",
   scope: "lan",
+  source: "traffic",
   density: 36,
   modulate: true,
 };
+
+/** Pixels to shift the graph optical center (positive = left). Half the overlay, and only when the view is tighter than 4× the feed. Chrome-right puts the feed on the left. */
+export function feedViewShift(width: number, chrome = "top", viewWidth = 0): number {
+  if (width <= 0 || viewWidth >= width * 4) return 0;
+  const px = width * 0.5;
+  return chrome === "right" ? -px : px;
+}
+
+export interface TranscriptTurn {
+  role: "user" | "assistant";
+  content: string;
+  thinking?: string;
+}
 
 interface Line {
   key: string;
@@ -47,6 +70,7 @@ interface Line {
   host?: string;
   peer?: string;
   count: number;
+  chat?: ChatRole;
   el: HTMLDivElement;
   nEl: HTMLSpanElement;
 }
@@ -69,47 +93,245 @@ export class LiveFeed {
   private buckets: { t: number; bytes: Bucket }[] = [];
   private barPulse = 1;
   private lastBar = 0;
+  private streamLine: Line | null = null;
+  private streamRole: ChatRole | null = null;
   private readonly ticker: HTMLDivElement;
+  private readonly composer: HTMLDivElement;
+  readonly ask: HTMLTextAreaElement;
   private readonly bars: HTMLCanvasElement;
   private readonly hint: HTMLDivElement;
   private raf = 0;
+  private stickToBottom = true;
+  onSourceChange?: () => void;
+  /** Return false to keep the draft (chat already in flight). */
+  onSend?: (text: string) => boolean | void;
+  onMicDown?: () => void;
+  onMicUp?: () => void;
 
   constructor(host: HTMLElement, private scene: NetScene) {
     this.el = host;
     this.el.className = "livefeed";
     this.el.innerHTML = `
       <div class="feed-bars" hidden><canvas></canvas></div>
-      <div class="feed-ticker" aria-label="decoded traffic"></div>
+      <div class="feed-panel">
+        <div class="feed-ticker" aria-label="live feed"></div>
+        <div class="feed-composer" hidden>
+          <textarea class="feed-ask" rows="2" placeholder="Ask about the LAN…" aria-label="message"></textarea>
+          <button type="button" class="btn feed-mic" title="hold to talk" aria-label="microphone">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z"/></svg>
+          </button>
+          <button type="button" class="btn primary feed-send">send</button>
+        </div>
+      </div>
       <div class="feed-hint"></div>`;
     this.ticker = this.el.querySelector(".feed-ticker")!;
+    this.composer = this.el.querySelector(".feed-composer")!;
+    this.ask = this.el.querySelector(".feed-ask")!;
     this.bars = this.el.querySelector("canvas")!;
     this.hint = this.el.querySelector(".feed-hint")!;
     this.ticker.addEventListener("click", (e) => {
       const row = (e.target as HTMLElement).closest<HTMLElement>("[data-host]");
       if (row?.dataset.host) this.scene.selectIp(row.dataset.host);
     });
+    this.ticker.addEventListener("scroll", () => {
+      if (!this.chatLog()) return;
+      const el = this.ticker;
+      this.stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 56;
+    });
+    this.composer.querySelector(".feed-send")!.addEventListener("click", () => this.submitComposer());
+    this.composer.querySelector(".feed-mic")!.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      this.onMicDown?.();
+    });
+    this.composer.querySelector(".feed-mic")!.addEventListener("pointerup", () => this.onMicUp?.());
+    this.composer.querySelector(".feed-mic")!.addEventListener("pointerleave", () => this.onMicUp?.());
+    this.ask.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        this.submitComposer();
+      }
+    });
     this.loop = this.loop.bind(this);
   }
 
+  private submitComposer(): void {
+    const text = this.ask.value.trim();
+    if (!text) return;
+    const accepted = this.onSend?.(text);
+    if (accepted === false) return;
+    this.ask.value = "";
+  }
+
   setConfig(c: FeedConfig): void {
-    this.cfg = { ...c };
+    const prev = this.cfg.source;
+    this.cfg = { ...DEFAULT_FEED, ...c };
     this.el.classList.toggle("off", !c.on);
+    this.el.classList.toggle("transcript", this.showsTranscript());
+    this.el.classList.toggle("chat-log", this.chatLog());
     this.el.hidden = !c.on;
-    this.el.querySelector<HTMLElement>(".feed-bars")!.hidden = !c.on || c.layout === "ticker";
-    this.ticker.hidden = !c.on || c.layout === "bars";
+    this.composer.hidden = !c.on || !this.showsTranscript();
+    this.el.querySelector<HTMLElement>(".feed-bars")!.hidden = !c.on || c.layout === "ticker" || !this.showsTraffic();
+    this.ticker.hidden = !c.on || (c.layout === "bars" && !this.showsTranscript());
     if (c.on) this.start();
     else this.stop();
+    if (prev !== this.cfg.source) {
+      this.resetTicker();
+      this.onSourceChange?.();
+    }
     this.trim();
+    if (this.showsTranscript() && !this.showsTraffic()) this.hint.textContent = this.lines.length ? "" : "agent transcript…";
+  }
+
+  showsTraffic(): boolean { return this.cfg.source !== "transcript"; }
+  showsTranscript(): boolean { return this.cfg.source !== "traffic"; }
+  /** Transcript-only overlay: chronological chat, newest at the bottom. */
+  chatLog(): boolean { return this.cfg.source === "transcript"; }
+
+  /** Newest ticker lines for the agent HUD snapshot. */
+  snapshot(limit = 10): string[] {
+    const src = this.chatLog() ? this.lines.slice(-limit).reverse() : this.lines.slice(0, limit);
+    return src.map((l) => {
+      const n = l.count > 1 ? ` ×${l.count}` : "";
+      return `${l.label} ${l.text}${n}`.trim().slice(0, 160);
+    });
+  }
+
+  /** Live agent tokens (and chain of thought) for the right-hand ticker. */
+  pushChat(role: ChatRole, chunk: string, stream = false): void {
+    if (!this.cfg.on || !this.showsTranscript() || this.ticker.hidden) return;
+    const text = chunk ?? "";
+    if (!text) return;
+    if (role !== "think") this.dropPendingThink();
+    this.hint.textContent = "";
+    if (stream && role === "think" && this.streamLine?.el.classList.contains("pending")) {
+      this.streamLine.el.classList.remove("pending");
+      this.writeStream(this.streamLine, text);
+      return;
+    }
+    if (stream && this.streamRole === role && this.streamLine) {
+      this.writeStream(this.streamLine, (this.streamLine.text + text).slice(0, CHAT_CAP));
+      return;
+    }
+    this.addChatLine(role, text, stream);
+  }
+
+  /** Header / composer wait state: a think row before the first token, gone if the model never thinks. */
+  setThinking(on: boolean): void {
+    const was = this.el.classList.contains("thinking");
+    this.el.classList.toggle("thinking", on);
+    this.el.setAttribute("aria-busy", on ? "true" : "false");
+    if (on) {
+      if (this.showsTranscript()) this.hint.textContent = "thinking…";
+      if (!was && this.cfg.on && this.showsTranscript() && !this.ticker.hidden
+          && !(this.streamRole === "think" && this.streamLine)) {
+        this.addChatLine("think", "thinking…", true);
+        this.streamLine?.el.classList.add("pending");
+      }
+      return;
+    }
+    this.dropPendingThink();
+    if (this.hint.textContent === "thinking…") {
+      this.hint.textContent = this.showsTranscript() && !this.showsTraffic() && !this.lines.length
+        ? "agent transcript…"
+        : "";
+    }
+  }
+
+  seedTranscript(turns: TranscriptTurn[]): void {
+    if (!this.cfg.on || !this.showsTranscript()) return;
+    this.closeStream();
+    if (!this.showsTraffic()) this.resetTicker();
+    else this.dropChatLines();
+    for (const m of turns) {
+      if (m.role === "user" && m.content) this.addChatLine("you", m.content, false);
+      if (m.role === "assistant") {
+        if (m.thinking?.trim()) this.addChatLine("think", m.thinking.trim(), false);
+        const said = (m.content || "").replace(/```memory\n[\s\S]*?```/gi, "").trim() || m.content;
+        if (said?.trim()) this.addChatLine("agent", said.trim(), false);
+      }
+    }
+    this.trim();
+    this.stickToBottom = true;
+    this.pinChat();
+    if (!this.lines.length && !this.showsTraffic()) this.hint.textContent = "agent transcript…";
+    if (this.el.classList.contains("thinking") && this.showsTranscript() && !this.ticker.hidden) {
+      this.hint.textContent = "thinking…";
+      if (!(this.streamRole === "think" && this.streamLine)) {
+        this.addChatLine("think", "thinking…", true);
+        this.streamLine?.el.classList.add("pending");
+      }
+    }
   }
 
   setGraphBase(base: string | undefined): void {
     const next = base ?? "";
     if (next === this.graphBase) return;
     this.graphBase = next;
+    if (this.showsTraffic()) this.resetTicker();
+  }
+
+  private resetTicker(): void {
+    this.closeStream();
     this.lastT = 0;
     for (const l of this.lines) l.el.remove();
     this.lines = [];
     this.buckets = [];
+  }
+
+  private dropChatLines(): void {
+    this.closeStream();
+    this.lines = this.lines.filter((l) => {
+      if (!l.chat) return true;
+      l.el.remove();
+      return false;
+    });
+  }
+
+  private dropPendingThink(): void {
+    if (!this.streamLine?.el.classList.contains("pending")) return;
+    this.streamLine.el.remove();
+    this.lines = this.lines.filter((l) => l !== this.streamLine);
+    this.closeStream();
+  }
+
+  private writeStream(line: Line, text: string): void {
+    line.text = text.slice(0, CHAT_CAP);
+    const tx = line.el.querySelector(".tx");
+    if (tx) tx.textContent = line.text;
+    line.el.title = line.text;
+    this.pinChat();
+  }
+
+  private closeStream(): void {
+    this.streamLine = null;
+    this.streamRole = null;
+  }
+
+  private addChatLine(role: ChatRole, text: string, stream: boolean): void {
+    const clipped = text.slice(0, CHAT_CAP);
+    if (!clipped.trim()) return;
+    const line = this.makeLine({
+      key: `chat:${role}:${this.lines.length}:${clipped.slice(0, 24)}`,
+      t: Date.now() / 1000,
+      color: CHAT_COLOR[role],
+      label: CHAT_LABEL[role],
+      text: clipped,
+      count: 1,
+      chat: role,
+    });
+    if (this.chatLog()) {
+      this.lines.push(line);
+      this.ticker.append(line.el);
+    } else {
+      this.lines.unshift(line);
+      this.ticker.prepend(line.el);
+    }
+    if (stream) {
+      this.streamLine = line;
+      this.streamRole = role;
+    }
+    this.trim();
+    this.pinChat();
   }
 
   private start(): void {
@@ -127,7 +349,7 @@ export class LiveFeed {
 
   private query(): string | null {
     if (document.body.classList.contains("arcade")) return null;
-    if (!this.cfg.on) return null;
+    if (!this.cfg.on || !this.showsTraffic()) return null;
     const rf = this.graphBase === "wifi" ? "@wifi" : this.graphBase === "bluetooth" ? "@bluetooth" : "";
     if (this.graphBase === "cpu") return null;
     if (this.cfg.scope === "selected") {
@@ -160,7 +382,9 @@ export class LiveFeed {
   private ingest(m: TrafficMsg): void {
     const pk = m.packets.slice().reverse();
     if (!pk.length) {
-      this.hint.textContent = this.lastT ? "" : "waiting for packets…";
+      if (!this.lastT && !this.lines.length) {
+        this.hint.textContent = this.showsTranscript() ? "agent transcript…" : "waiting for packets…";
+      }
       return;
     }
     const newest = pk[pk.length - 1]![0];
@@ -174,6 +398,7 @@ export class LiveFeed {
   }
 
   private eat(p: Packet): void {
+    this.closeStream();
     const d = decodePacket(p, this.scene);
     this.addBytes(p[0], d.kind, p[5]);
     if (d.skip) return;
@@ -197,14 +422,20 @@ export class LiveFeed {
   private trim(): void {
     const cap = Math.max(12, this.cfg.density);
     while (this.lines.length > cap) {
-      const old = this.lines.pop();
+      const old = this.chatLog() ? this.lines.shift() : this.lines.pop();
       old?.el.remove();
     }
   }
 
+  private pinChat(): void {
+    if (!this.chatLog() || !this.stickToBottom) return;
+    this.ticker.scrollTop = this.ticker.scrollHeight;
+  }
+
   private makeLine(init: Omit<Line, "el" | "nEl">): Line {
     const el = document.createElement("div");
-    el.className = "row";
+    el.className = "row" + (init.chat ? ` chat ${init.chat}` : "");
+    if (init.chat) el.style.cursor = "default";
     el.dataset.host = init.host ?? "";
     el.style.setProperty("--c", init.color);
     el.title = init.text;
@@ -314,3 +545,11 @@ function colorOf(k: FeedKind): string {
     dhcp: "#ffca28", ssdp: "#ffca28", media: "#26c6da", remote: "#ff7043", plain: "#ef5350", other: "#607d8b",
   } as Record<FeedKind, string>)[k];
 }
+
+const CHAT_CAP = 4000;
+const CHAT_COLOR: Record<ChatRole, string> = {
+  you: "#29b6f6",
+  think: "#90a4ae",
+  agent: "#66bb6a",
+};
+const CHAT_LABEL: Record<ChatRole, string> = { you: "you", think: "think", agent: "agent" };

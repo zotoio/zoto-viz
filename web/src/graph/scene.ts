@@ -952,6 +952,9 @@ export class NetScene {
   private labelsDrawn = false;
   private viewW = 0;
   private viewH = 0;
+  /** eased setViewOffset X (positive slides the graph left to clear the live feed) */
+  private padX = 0;
+  private padWant = 0;
   private readonly ro: ResizeObserver;
   private readonly onWinResize: () => void;
   /** layout stretch so a wide viewport fills with the graph instead of a sphere sitting in the middle */
@@ -2311,20 +2314,21 @@ export class NetScene {
     this.easeNodeVel(dt);
 
     if (this.stageOnly) {
-      this.sampleFocus(dt);
-      this.frameCamera(dt);
-      this.controls.update();
-      if (this.dreaming && !this.dreamHeld && !this.cameraGoalDir) {
-        this.stepDream(dt);
-        this.camera.lookAt(this.controls.target);
-      }
-      if (this.fadeT < 1) {
-        this.fadeT = Math.min(1, this.fadeT + dt / 0.9);
-        this.applyThemeColors(this.fadeT);
-        this.paintGrid();
-        this.paintClear();
-      }
-      this.renderer.render(this.scene, this.camera);
+    this.sampleFocus(dt);
+        this.frameCamera(dt);
+        this.controls.update();
+        if (this.dreaming && !this.dreamHeld && !this.cameraGoalDir) {
+          this.stepDream(dt);
+          this.camera.lookAt(this.controls.target);
+        }
+        if (this.fadeT < 1) {
+          this.fadeT = Math.min(1, this.fadeT + dt / 0.9);
+          this.applyThemeColors(this.fadeT);
+          this.paintGrid();
+          this.paintClear();
+        }
+        this.tickViewShift(dt);
+        this.renderer.render(this.scene, this.camera);
       return;
     }
 
@@ -2514,6 +2518,7 @@ export class NetScene {
       this.paintGrid();
       this.paintClear();
     }
+    this.tickViewShift(dt);
     this.renderer.render(this.scene, this.camera);
     const labelsWanted = labelsOn > 0 || this.overlayObjs.size > 0;
     if (labelsWanted || this.labelsDrawn) {
@@ -2544,6 +2549,43 @@ export class NetScene {
     this.resize();
   }
 
+  /** Slide the optical center (positive px = left) so overlays do not sit on the graph. */
+  setViewShift(px: number, snap = false): void {
+    this.padWant = px;
+    if (snap) {
+      this.padX = px;
+      this.applyViewShift();
+    }
+  }
+
+  private tickViewShift(dt: number): void {
+    const d = this.padWant - this.padX;
+    if (Math.abs(d) < 0.2) {
+      if (this.padX !== this.padWant) {
+        this.padX = this.padWant;
+        this.applyViewShift();
+      }
+      return;
+    }
+    this.padX += d * (1 - Math.exp(-dt / 0.22));
+    this.applyViewShift();
+  }
+
+  private applyViewShift(): void {
+    const w = this.viewW, h = this.viewH;
+    if (w < 2 || h < 2) {
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+    if (Math.abs(this.padX) < 0.5) {
+      if (this.camera.view) this.camera.clearViewOffset();
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+    this.camera.setViewOffset(w, h, this.padX, 0, w, h);
+    this.camera.updateProjectionMatrix();
+  }
+
   private resize(): void {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (w < 2 || h < 2) return;
@@ -2551,10 +2593,10 @@ export class NetScene {
     this.viewW = w;
     this.viewH = h;
     this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.labelRenderer.setSize(w, h);
     this.backdrop.setViewport(w, h);
+    this.applyViewShift();
     this.updateSpread();
   }
 

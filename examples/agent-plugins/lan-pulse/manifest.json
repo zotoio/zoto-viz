@@ -1,0 +1,21 @@
+{
+  "id": "lan-pulse",
+  "name": "LAN Pulse",
+  "version": 1,
+  "hint": "Agent plugin: heatmap from live talkers, UI generated from the bundled skill",
+  "produces": ["graph", "hud", "plugin_state"],
+  "consumes": ["devices", "flows", "feed"],
+  "engine": "graph",
+  "base": "talkers",
+  "capabilities": ["graph.read", "graph.style", "ui.overlay"],
+  "scripts": {
+    "frontend": "scripts/frontend/index.ts",
+    "backend": "scripts/backend/service.py"
+  },
+  "ui": {
+    "kind": "prompt",
+    "skill": "skills/generate-ui/SKILL.md",
+    "prompt": "ui/prompt.md"
+  },
+  "skills": ["skills/generate-ui"]
+}

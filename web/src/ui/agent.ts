@@ -3,6 +3,7 @@ import { redaction } from "../core/redact";
 import { setTsPluginsAllowed, tsPluginsAllowed } from "../plugins/host";
 import { apiFetch, bootSession, csrfToken } from "../core/http";
 import { playPcmStream } from "../audio/tts";
+import { includeView, VIEW_KEY, type ViewCapture } from "./capture";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 const MODEL_KEY = "zoto-viz.aiModel";
@@ -12,12 +13,45 @@ const LISTEN_KEY = "zoto-viz.wakeListen";
 const WATCH_KEY = "zoto-viz.watchword";
 const DEFAULT_WATCH = "zoto";
 const SILENCE_MS = 1400;
+const HEARD_WAIT_MS = 6000;
 const TTS_CAP = 2500;
 const STREAM_TTS = new Set(["elevenlabs", "openai", "piper"]);
+
+export type AgentPhase = "idle" | "listen" | "heard" | "think" | "speak";
+
+export function agentPhase(s: {
+  busy: boolean;
+  speaking: boolean;
+  wakeOn: boolean;
+  heard: boolean;
+  recOn?: boolean;
+}): AgentPhase {
+  if (s.speaking) return "speak";
+  if (s.busy) return "think";
+  if (s.wakeOn && s.heard) return "heard";
+  if (s.wakeOn && s.recOn !== false) return "listen";
+  return "idle";
+}
+
+export function agentHeaderCopy(phase: AgentPhase, watch = DEFAULT_WATCH): { text: string; title: string } {
+  switch (phase) {
+    case "speak":
+      return { text: "AI · speak", title: "speaking a reply" };
+    case "think":
+      return { text: "AI · think", title: "the local model is thinking" };
+    case "heard":
+      return { text: "AI · heard", title: "heard the watchword — keep talking" };
+    case "listen":
+      return { text: "AI · listen", title: `listening for “${watch}”` };
+    default:
+      return { text: "AI", title: "local agent idle" };
+  }
+}
 
 export class AgentPanel {
   readonly el: HTMLDivElement;
   readonly headerBtn: HTMLButtonElement;
+  private readonly led: HTMLSpanElement;
   private readonly log: HTMLDivElement;
   private readonly input: HTMLTextAreaElement;
   private readonly statusEl: HTMLDivElement;
@@ -25,12 +59,19 @@ export class AgentPanel {
   private wakeOn = localStorage.getItem(LISTEN_KEY) !== "0";
   private holdTalk = false;
   private busy = false;
+  private speaking = false;
+  /** Remainder after the watchword in the session that heard it; null = still waiting. */
   private command: string | null = null;
+  /** Speech from a later recognition session after the watchword (Chrome restarts often). */
+  private follow = "";
+  private micBlocked = false;
   private silence = 0;
   private restart = 0;
   private controlToggle: Toggle;
   private modelField!: TextField;
-  private history: { role: "user" | "assistant"; content: string }[] = [];
+  private history: { role: "user" | "assistant"; content: string; thinking?: string }[] = [];
+  private hydrateP: Promise<void> | null = null;
+  private logEpoch = 0;
   private noVoiceHint = false;
   private voicesTried = false;
   private ttsEngine = "";
@@ -38,7 +79,13 @@ export class AgentPanel {
   onControl?: (on: boolean) => void;
   onOpen?: () => void;
   onApplySettings?: (patch: Record<string, unknown>) => void;
-  captureFrame?: () => string | null;
+  onChat?: (role: "you" | "think" | "agent", text: string, stream?: boolean) => void;
+  onPhase?: (phase: AgentPhase) => void;
+  onTranscript?: () => void;
+  /** Overlay transcript box; hold-to-talk and send prefer it when present. */
+  dictateInto: HTMLTextAreaElement | null = null;
+  /** Compact HUD for this turn (not stored in the transcript). */
+  captureView?: () => ViewCapture | null;
 
   constructor() {
     this.el = document.createElement("div");
@@ -46,12 +93,19 @@ export class AgentPanel {
     this.headerBtn = document.createElement("button");
     this.headerBtn.type = "button";
     this.headerBtn.className = "toggle";
-    this.headerBtn.textContent = "AI";
+    this.led = document.createElement("span");
+    this.led.className = "led";
+    this.led.setAttribute("aria-hidden", "true");
+    this.headerBtn.replaceChildren(this.led, document.createTextNode("AI"));
     this.headerBtn.title = "open the local agent · click to start watchword listening";
     this.headerBtn.addEventListener("click", () => {
       this.onOpen?.();
       void this.refreshStatus();
-      if (this.wakeOn) this.startWake();
+      if (!this.busy) void this.hydrate(true);
+      if (this.wakeOn) this.startWake(true);
+    });
+    document.addEventListener("pointerdown", () => {
+      if (this.wakeOn && !this.rec && !this.busy && !this.speaking && !this.holdTalk) this.startWake();
     });
 
     this.statusEl = document.createElement("div");
@@ -82,7 +136,7 @@ export class AgentPanel {
       onChange: (on) => {
         this.wakeOn = on;
         localStorage.setItem(LISTEN_KEY, on ? "1" : "0");
-        if (on) this.startWake();
+        if (on) this.startWake(true);
         else this.stopWake();
         this.paintHeader();
       },
@@ -104,10 +158,10 @@ export class AgentPanel {
     });
 
     const view = new Toggle({
-      label: "include view",
-      title: "attach a JPEG of the graph for Gemma 4 vision insights (not the webcam)",
-      checked: localStorage.getItem("zoto-viz.aiView") === "1",
-      onChange: (on) => localStorage.setItem("zoto-viz.aiView", on ? "1" : "0"),
+      label: "include screen",
+      title: "attach a compact HUD snapshot of what is on screen (no image)",
+      checked: includeView(),
+      onChange: (on) => localStorage.setItem(VIEW_KEY, on ? "1" : "0"),
     });
 
     this.modelField = new TextField({
@@ -140,12 +194,18 @@ export class AgentPanel {
     talk.addEventListener("pointerdown", (e) => { e.preventDefault(); this.startHold(); });
     talk.addEventListener("pointerup", () => this.stopHold());
     talk.addEventListener("pointerleave", () => this.stopHold());
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.textContent = "clear";
+    clear.title = "clear the on-screen log and stored transcript (memories stay)";
+    clear.addEventListener("click", () => void this.clearHistory());
     const row = document.createElement("div");
     row.className = "agent-row";
-    row.append(this.input, send, talk);
+    row.append(this.input, send, talk, clear);
 
     this.el.append(this.statusEl, this.modelField.el, ttsVoice.el, control.el, listen.el, watch.el, voice.el, ts.el, view.el, this.log, row);
     this.paintHeader();
+    void this.hydrate();
     if ("speechSynthesis" in window) {
       speechSynthesis.getVoices();
       speechSynthesis.addEventListener("voiceschanged", () => speechSynthesis.getVoices());
@@ -164,6 +224,7 @@ export class AgentPanel {
   /** Start always-on listening if the operator left the toggle on. Needs a click if the browser blocks it. */
   armWake(): void {
     void this.refreshStatus();
+    void this.hydrate();
     if (this.wakeOn) this.startWake();
   }
 
@@ -217,33 +278,86 @@ export class AgentPanel {
     }
   }
 
+  transcript(): { role: "user" | "assistant"; content: string; thinking?: string }[] {
+    return this.history.slice();
+  }
+
   private append(role: string, text: string): void {
     const p = document.createElement("p");
+    if (role === "think") p.className = "think";
     p.textContent = `${role}: ${text}`;
     this.log.appendChild(p);
     this.log.scrollTop = this.log.scrollHeight;
   }
 
+  private paintLog(): void {
+    this.log.replaceChildren();
+    for (const m of this.history) {
+      if (m.role === "user") this.append("you", m.content);
+      else {
+        if (m.thinking) this.append("think", m.thinking);
+        if (m.content) this.append("agent", displayText(m.content));
+      }
+    }
+  }
+
+  private async hydrate(force = false): Promise<void> {
+    if (this.busy) return;
+    if (!force && this.hydrateP) return this.hydrateP;
+    const epoch = this.logEpoch;
+    const run = (async () => {
+      try {
+        if (!csrfToken()) await bootSession();
+        const r = await apiFetch("/api/ai/history");
+        if (!r.ok) return;
+        const d = await r.json() as { messages?: { role?: string; content?: string; thinking?: string }[] };
+        if (!Array.isArray(d.messages)) return;
+        if (epoch !== this.logEpoch) return;
+        this.history = d.messages
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: String(m.content || ""),
+            thinking: m.thinking ? String(m.thinking) : undefined,
+          }));
+        this.paintLog();
+        this.onTranscript?.();
+      } catch { /* monitor may still be coming up */ }
+    })();
+    this.hydrateP = run;
+    return run;
+  }
+
+  private async clearHistory(): Promise<void> {
+    this.logEpoch += 1;
+    this.history = [];
+    this.log.replaceChildren();
+    this.onTranscript?.();
+    try {
+      if (!csrfToken()) await bootSession();
+      await apiFetch("/api/ai/history", { method: "DELETE" });
+    } catch { /* local log already cleared */ }
+  }
+
   private paintHeader(): void {
-    this.headerBtn.classList.toggle("listening", this.wakeOn && !this.busy);
-    this.headerBtn.classList.toggle("busy", this.busy);
-    if (!this.wakeOn) {
-      this.headerBtn.textContent = "AI";
-      this.headerBtn.title = "open the local agent";
-      return;
-    }
-    if (this.busy) {
-      this.headerBtn.textContent = "AI · speak";
-      this.headerBtn.title = "speaking a reply";
-      return;
-    }
-    if (this.command !== null) {
-      this.headerBtn.textContent = "AI · …";
-      this.headerBtn.title = "heard the watchword — keep talking";
-      return;
-    }
-    this.headerBtn.textContent = "AI · listen";
-    this.headerBtn.title = `listening for “${watchword()}”`;
+    const phase = agentPhase({
+      busy: this.busy,
+      speaking: this.speaking,
+      wakeOn: this.wakeOn,
+      heard: this.command !== null,
+      recOn: !!this.rec,
+    });
+    const { text, title } = agentHeaderCopy(phase, watchword());
+    this.headerBtn.classList.toggle("listening", phase === "listen");
+    this.headerBtn.classList.toggle("heard", phase === "heard");
+    this.headerBtn.classList.toggle("thinking", phase === "think");
+    this.headerBtn.classList.toggle("speaking", phase === "speak");
+    this.headerBtn.classList.toggle("busy", phase === "think" || phase === "speak");
+    this.headerBtn.setAttribute("aria-busy", phase === "think" || phase === "speak" ? "true" : "false");
+    this.headerBtn.title = title;
+    this.headerBtn.replaceChildren(this.led, document.createTextNode(text));
+    document.body.classList.toggle("ai-thinking", phase === "think");
+    this.onPhase?.(phase);
   }
 
   private speechEngine(): (new () => SpeechRec) | null {
@@ -251,27 +365,36 @@ export class AgentPanel {
     return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
   }
 
-  private startWake(): void {
-    if (!this.wakeOn || this.busy || this.holdTalk) return;
+  private startWake(restart = false): void {
+    if (!this.wakeOn || this.busy || this.speaking || this.holdTalk) return;
+    if (this.rec && !restart) return;
     const SR = this.speechEngine();
     if (!SR) {
-      this.append("agent", "this browser has no speech recognition — Chromium on localhost is required");
+      if (restart) this.append("agent", "this browser has no speech recognition — Chromium on localhost is required");
       return;
     }
+    this.micBlocked = false;
+    window.clearTimeout(this.restart);
     this.stopRec();
     unlockSpeech();
     const rec = new SR();
     rec.lang = "en-US";
     rec.continuous = true;
     rec.interimResults = true;
+    rec.maxAlternatives = 5;
     rec.onresult = (e) => this.onHear(e);
     rec.onerror = (e) => {
       if (e.error === "no-speech" || e.error === "aborted") return;
-      if (e.error === "not-allowed") this.append("agent", "mic permission denied — allow the microphone for watchword listening");
+      if (e.error === "not-allowed") {
+        this.micBlocked = true;
+        this.headerBtn.title = "click AI to allow the microphone for watchword listening";
+      }
     };
     rec.onend = () => {
+      if (this.rec !== rec) return;
       this.rec = null;
-      if (this.wakeOn && !this.busy && !this.holdTalk) {
+      this.paintHeader();
+      if (this.wakeOn && !this.busy && !this.speaking && !this.holdTalk && !this.micBlocked) {
         this.restart = window.setTimeout(() => this.startWake(), 250);
       }
     };
@@ -286,6 +409,7 @@ export class AgentPanel {
 
   private stopWake(): void {
     this.command = null;
+    this.follow = "";
     window.clearTimeout(this.silence);
     window.clearTimeout(this.restart);
     this.stopRec();
@@ -302,6 +426,7 @@ export class AgentPanel {
     this.holdTalk = true;
     window.clearTimeout(this.silence);
     this.command = null;
+    this.follow = "";
     this.stopRec();
     const SR = this.speechEngine();
     if (!SR) { this.append("agent", "this browser has no speech recognition"); return; }
@@ -311,7 +436,7 @@ export class AgentPanel {
     rec.continuous = false;
     rec.onresult = (e) => {
       const t = lastTranscript(e);
-      if (t) this.input.value = t;
+      if (t) this.draftBox().value = t;
     };
     rec.onend = () => { this.rec = null; };
     try { rec.start(); this.rec = rec; } catch { this.holdTalk = false; }
@@ -326,30 +451,47 @@ export class AgentPanel {
   }
 
   private onHear(e: SpeechResultEvent): void {
-    if (this.busy || this.holdTalk) return;
-    const said = lastTranscript(e, true);
+    if (this.busy || this.speaking || this.holdTalk) return;
+    const word = watchword();
+    const said = sessionTranscript(e, word);
     if (!said) return;
+    const rest = afterWatchword(said, word);
     if (this.command === null) {
-      const rest = afterWatchword(said, watchword());
       if (rest === null) return;
       this.command = rest;
+      this.follow = "";
       this.paintHeader();
+    } else if (rest !== null) {
+      this.command = rest;
+      this.follow = "";
     } else {
-      const extra = lastTranscript(e);
-      if (extra) this.command = `${this.command} ${extra}`.trim();
+      this.follow = said;
     }
     window.clearTimeout(this.silence);
-    this.silence = window.setTimeout(() => void this.flushCommand(), SILENCE_MS);
+    const text = `${this.command || ""} ${this.follow}`.trim();
+    if (text) {
+      this.silence = window.setTimeout(() => void this.flushCommand(), SILENCE_MS);
+    } else {
+      this.silence = window.setTimeout(() => {
+        this.command = null;
+        this.follow = "";
+        this.paintHeader();
+      }, HEARD_WAIT_MS);
+    }
   }
 
   private async flushCommand(): Promise<void> {
-    const text = (this.command || "").trim();
+    const text = `${this.command || ""} ${this.follow}`.trim();
     this.command = null;
+    this.follow = "";
     this.paintHeader();
     if (!text) return;
     this.input.value = text;
-    await this.send();
+    await this.send(text);
   }
+
+  beginTalk(): void { this.startHold(); }
+  endTalk(): void { this.stopHold(); }
 
   stopVoice(): void {
     this.holdTalk = false;
@@ -360,40 +502,66 @@ export class AgentPanel {
     void apiFetch("/api/ai/speak", { method: "DELETE" });
   }
 
-  private async send(): Promise<void> {
-    const text = this.input.value.trim();
-    if (!text) return;
+  private draftBox(): HTMLTextAreaElement {
+    return this.dictateInto ?? this.input;
+  }
+
+  private takeDraft(explicit?: string): string {
+    const text = (explicit !== undefined ? explicit : (this.dictateInto?.value || this.input.value)).trim();
     this.input.value = "";
+    if (this.dictateInto) this.dictateInto.value = "";
+    return text;
+  }
+
+  async sendText(text: string): Promise<void> {
+    await this.send(text);
+  }
+
+  /** False if a turn is already in flight — the ticker keeps the draft. */
+  offerSend(text: string): boolean {
+    if (this.busy) return false;
+    void this.send(text);
+    return true;
+  }
+
+  private async send(explicit?: string): Promise<boolean> {
+    if (this.busy) return false;
+    const text = this.takeDraft(explicit);
+    if (!text) return false;
+    await this.hydrate();
     this.append("you", text);
+    this.onChat?.("you", text);
     this.busy = true;
     this.stopRec();
     this.paintHeader();
+    let reply = "";
     try {
       if (!csrfToken()) await bootSession();
-      const msg: { role: "user" | "assistant"; content: string; images?: string[] } = { role: "user", content: text };
-      if (localStorage.getItem("zoto-viz.aiView") === "1") {
-        const frame = this.captureFrame?.();
-        if (frame) msg.images = [frame];
-      }
       this.history.push({ role: "user", content: text });
+      const view = includeView() ? this.captureView?.() ?? undefined : undefined;
       const r = await apiFetch("/api/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           redact: redaction.enabled,
           model: localStorage.getItem(MODEL_KEY) || this.modelField.value || "gemma4",
-          messages: this.history.slice(-10).map((m, i, all) => i === all.length - 1 ? msg : m),
+          messages: this.history.slice(-10),
+          ...(view ? { view: { hud: view } } : {}),
         }),
       });
-      const raw = await r.text();
       if (!r.ok) {
+        const raw = await r.text();
         this.history.pop();
-        this.append("agent", `chat failed (${r.status}): ${parseOllamaStream(raw) || r.statusText}`);
-        return;
+        const fail = parseOllamaChat(raw).content || r.statusText;
+        this.append("agent", `chat failed (${r.status}): ${fail}`);
+        this.onChat?.("agent", `chat failed (${r.status}): ${fail}`);
+        return true;
       }
-      const reply = parseOllamaStream(raw);
-      this.history.push({ role: "assistant", content: reply });
-      this.append("agent", reply);
+      const { thinking, content } = await this.readChat(r);
+      reply = content;
+      this.history.push({ role: "assistant", content: reply, thinking: thinking || undefined });
+      if (thinking) this.append("think", thinking);
+      this.append("agent", displayText(reply));
       const settingsPatch = extractSettings(reply);
       if (settingsPatch) {
         if (!this.controlOn) this.append("agent", "AI Control is off — settings were not applied");
@@ -409,14 +577,60 @@ export class AgentPanel {
         }).then((x) => x.json()) as { ok?: boolean; error?: string; installed?: boolean };
         this.append("agent", d.ok ? (d.installed ? "plugin installed" : "plugin draft is valid (enable AI Control to install)") : `plugin invalid: ${d.error}`);
       }
-      await this.speak(reply);
     } catch (e) {
       this.append("agent", String(e));
     } finally {
       this.busy = false;
       this.paintHeader();
-      if (this.wakeOn && !this.holdTalk) this.startWake();
     }
+    if (reply) {
+      this.speaking = true;
+      this.paintHeader();
+      try { await this.speak(reply); }
+      finally { this.speaking = false; }
+    }
+    this.paintHeader();
+    if (this.wakeOn && !this.holdTalk) this.startWake();
+    return true;
+  }
+
+  private async readChat(r: Response): Promise<{ thinking: string; content: string }> {
+    const reader = r.body?.getReader();
+    if (!reader) {
+      return parseOllamaChat(await r.text());
+    }
+    const dec = new TextDecoder();
+    let buf = "";
+    let thinking = "";
+    let content = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        const bit = parseOllamaLine(line);
+        if (!bit) continue;
+        if (bit.error) return { thinking, content: bit.error };
+        if (bit.thinking) {
+          thinking += bit.thinking;
+          this.onChat?.("think", bit.thinking, true);
+        }
+        if (bit.content) {
+          content += bit.content;
+          this.onChat?.("agent", bit.content, true);
+        }
+      }
+    }
+    if (buf.trim()) {
+      const bit = parseOllamaLine(buf);
+      if (bit?.thinking) { thinking += bit.thinking; this.onChat?.("think", bit.thinking, true); }
+      if (bit?.content) { content += bit.content; this.onChat?.("agent", bit.content, true); }
+      if (bit?.error) return { thinking, content: bit.error };
+    }
+    const tagged = splitThinkTags(thinking, content);
+    return tagged;
   }
 
   private async speak(reply: string): Promise<void> {
@@ -492,8 +706,7 @@ export function afterWatchword(text: string, word: string): string | null {
   const said = normSpeech(text);
   const w = normSpeech(word);
   if (!said || !w) return null;
-  const phrases = [...new Set([w, `hey ${w}`, `ok ${w}`, `okay ${w}`])].sort((a, b) => b.length - a.length);
-  for (const p of phrases) {
+  for (const p of watchPhrases(w)) {
     const i = said.indexOf(p);
     if (i < 0) continue;
     const before = i === 0 || said[i - 1] === " ";
@@ -502,6 +715,23 @@ export function afterWatchword(text: string, word: string): string | null {
     return said.slice(i + p.length).trim();
   }
   return null;
+}
+
+/** STT often splits or voiceless-shifts invented words (“zoto” → “so to” / “soto”). */
+function watchPhrases(word: string): string[] {
+  const forms = new Set<string>([word]);
+  if (word.startsWith("z")) forms.add(`s${word.slice(1)}`);
+  else if (word.startsWith("s")) forms.add(`z${word.slice(1)}`);
+  if (word.length >= 4) forms.add(`${word.slice(0, 2)} ${word.slice(2)}`);
+  if (word === "zoto") {
+    for (const a of ["so to", "zo to", "so toe", "zo toe"]) forms.add(a);
+  }
+  const phrases: string[] = [];
+  for (const f of forms) {
+    phrases.push(f, `hey ${f}`, `ok ${f}`, `okay ${f}`, `okey ${f}`, `hi ${f}`);
+    if (!f.includes(" ")) phrases.push(`hey${f}`, `ok${f}`, `okay${f}`);
+  }
+  return [...new Set(phrases)].sort((a, b) => b.length - a.length);
 }
 
 export function spokenText(reply: string): string {
@@ -522,6 +752,25 @@ function lastTranscript(e: SpeechResultEvent, finalsOnly = false): string {
     const r = e.results[i];
     if (finalsOnly && !r.isFinal) continue;
     out += r[0]?.transcript ?? "";
+  }
+  return out.trim();
+}
+
+/** Whole recognition session, including interims. Prefer an alternative that contains the watchword. */
+function sessionTranscript(e: SpeechResultEvent, word: string): string {
+  let out = "";
+  for (let i = 0; i < e.results.length; i++) {
+    const r = e.results[i];
+    let bit = r[0]?.transcript ?? "";
+    const n = r.length ?? 1;
+    for (let j = 0; j < n; j++) {
+      const t = r[j]?.transcript ?? "";
+      if (afterWatchword(t, word) !== null) {
+        bit = t;
+        break;
+      }
+    }
+    out += bit;
   }
   return out.trim();
 }
@@ -559,28 +808,48 @@ function unlockSpeech(): void {
   } catch { /* some engines throw if no voices yet */ }
 }
 
-function parseOllamaStream(raw: string): string {
-  const bits: string[] = [];
+export function parseOllamaLine(line: string): { thinking?: string; content?: string; error?: string } | null {
+  const t = line.trim();
+  if (!t) return null;
+  try {
+    const j = JSON.parse(t) as { message?: { content?: string; thinking?: string }; error?: string };
+    if (j.error) return { error: j.error };
+    const out: { thinking?: string; content?: string } = {};
+    if (j.message?.thinking) out.thinking = j.message.thinking;
+    if (j.message?.content) out.content = j.message.content;
+    return out.thinking || out.content ? out : null;
+  } catch {
+    return { content: t };
+  }
+}
+
+export function splitThinkTags(thinking: string, content: string): { thinking: string; content: string } {
+  const tagged = [...content.matchAll(/<think>([\s\S]*?)<\/think>/gi)].map((m) => m[1]!.trim());
+  if (!tagged.length) return { thinking, content };
+  return {
+    thinking: [thinking, ...tagged].filter(Boolean).join("\n").trim(),
+    content: content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim(),
+  };
+}
+
+export function parseOllamaChat(raw: string): { thinking: string; content: string } {
   const trimmed = raw.trim();
   if (trimmed.startsWith("{") && !trimmed.includes("\n")) {
-    try {
-      const j = JSON.parse(trimmed) as { message?: { content?: string }; error?: string };
-      if (j.error) return j.error;
-      if (j.message?.content) return j.message.content;
-    } catch { /* fall through */ }
+    const bit = parseOllamaLine(trimmed);
+    if (bit?.error) return { thinking: "", content: bit.error };
+    if (bit) return splitThinkTags(bit.thinking || "", bit.content || "");
   }
+  let thinking = "";
+  let content = "";
   for (const line of raw.split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    try {
-      const j = JSON.parse(t) as { message?: { content?: string }; error?: string };
-      if (j.error) return j.error;
-      if (j.message?.content) bits.push(j.message.content);
-    } catch {
-      bits.push(t);
-    }
+    const bit = parseOllamaLine(line);
+    if (!bit) continue;
+    if (bit.error) return { thinking, content: bit.error };
+    if (bit.thinking) thinking += bit.thinking;
+    if (bit.content) content += bit.content;
   }
-  return bits.join("") || raw.slice(0, 2000);
+  if (!content && !thinking) content = raw.slice(0, 2000);
+  return splitThinkTags(thinking, content);
 }
 
 export function extractYaml(text: string): string | null {
@@ -589,6 +858,24 @@ export function extractYaml(text: string): string | null {
   const bare = text.match(/```\n([\s\S]+?)```/);
   if (bare && /^\s*id:\s/m.test(bare[1]!)) return bare[1]!.trim();
   return null;
+}
+
+export function extractMemory(text: string): string | null {
+  const m = text.match(/```memory\n([\s\S]+?)```/i);
+  if (!m) return null;
+  const inner = m[1]!.trim();
+  if (inner.startsWith("{")) {
+    try {
+      const v = JSON.parse(inner) as { text?: unknown };
+      if (typeof v.text === "string" && v.text.trim()) return v.text.trim();
+    } catch { /* fall through */ }
+  }
+  return inner || null;
+}
+
+export function displayText(reply: string): string {
+  const stripped = reply.replace(/```memory\n[\s\S]*?```/gi, "").trim();
+  return stripped || reply;
 }
 
 export function extractSettings(text: string): Record<string, unknown> | null {
@@ -606,6 +893,7 @@ interface SpeechRec {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
+  maxAlternatives: number;
   start(): void;
   stop(): void;
   abort(): void;

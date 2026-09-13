@@ -4,7 +4,7 @@ import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FOCUS_MODES
 import { BACKDROP_OPTIONS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
 import { FLOOR_SHAPES, type FloorShape } from "../graph/floor";
 import { themeById, toCssHex } from "../core/themes";
-import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, type FeedConfig, type FeedLayout, type FeedScope } from "./feed";
+import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, FEED_SOURCES, type FeedConfig, type FeedLayout, type FeedScope, type FeedSource } from "./feed";
 import { liveCam } from "../camera/livecam";
 import { type CamPolicy } from "../camera/want";
 import { fillPluginFields } from "../plugins/plugin-ui";
@@ -95,6 +95,7 @@ export class Settings {
     on: Toggle; modulate: Toggle;
     setLayout: (v: FeedLayout) => void;
     setScope: (v: FeedScope) => void;
+    setSource: (v: FeedSource) => void;
     dens: Slider;
   } | null = null;
   private readonly nav = document.createElement("nav");
@@ -685,10 +686,10 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded capture beside the graph. Header switch or F.</div>`;
+      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Header switch or F.</div>`;
     const on = new Toggle({
       label: "show overlay",
-      title: "decoded packet ticker and/or protocol bars on the right of the scene (header feed switch or F)",
+      title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",
       checked: this.feed.on,
       onChange: (v) => this.setFeedOn(v),
     });
@@ -700,8 +701,9 @@ export class Settings {
     });
     const layout = chips(FEED_LAYOUTS, this.feed.layout, (v) => { this.feed.layout = v; this.persistFeed(); });
     const scope = chips(FEED_SCOPES, this.feed.scope, (v) => { this.feed.scope = v; this.persistFeed(); });
+    const source = chips(FEED_SOURCES, this.feed.source, (v) => { this.feed.source = v; this.persistFeed(); });
     const dens = new Slider({
-      label: "lines", title: "how many decoded lines to keep",
+      label: "lines", title: "how many decoded or transcript lines to keep",
       min: 12, max: 80, step: 4, value: this.feed.density,
       format: (v) => `${v}`,
       onInput: (v) => { this.feed.density = v; this.persistFeed(); },
@@ -711,9 +713,9 @@ export class Settings {
     row.append(on.el, modulate.el);
     const bits = document.createElement("div");
     bits.className = "look-stack";
-    bits.append(labeled("layout", layout.el), labeled("scope", scope.el));
+    bits.append(labeled("layout", layout.el), labeled("source", source.el), labeled("scope", scope.el));
     sec.append(row, lookBlock("overlay", bits, dens));
-    this.feedUi = { on, modulate, setLayout: layout.set, setScope: scope.set, dens };
+    this.feedUi = { on, modulate, setLayout: layout.set, setScope: scope.set, setSource: source.set, dens };
     this.pane("feed").appendChild(sec);
   }
 
@@ -766,6 +768,7 @@ export class Settings {
       ui.modulate.checked = this.feed.modulate;
       ui.setLayout(this.feed.layout);
       ui.setScope(this.feed.scope);
+      ui.setSource(this.feed.source);
       ui.dens.value = this.feed.density;
     }
     this.persistFeed();
@@ -905,6 +908,7 @@ export class Settings {
     localStorage.setItem(`${p}.feed.on`, c.on ? "1" : "0");
     localStorage.setItem(`${p}.feed.layout`, c.layout);
     localStorage.setItem(`${p}.feed.scope`, c.scope);
+    localStorage.setItem(`${p}.feed.source`, c.source);
     localStorage.setItem(`${p}.feed.density`, String(c.density));
     localStorage.setItem(`${p}.feed.modulate`, c.modulate ? "1" : "0");
     this.onFeedChange(c);
@@ -1162,10 +1166,12 @@ function loadFeed(prefix: string): FeedConfig {
     clampNum(localStorage.getItem(`${prefix}.feed.${key}`), lo, hi, fallback);
   const layout = localStorage.getItem(`${prefix}.feed.layout`);
   const scope = localStorage.getItem(`${prefix}.feed.scope`);
+  const source = localStorage.getItem(`${prefix}.feed.source`);
   return {
     on: localStorage.getItem(`${prefix}.feed.on`) !== "0",
     layout: FEED_LAYOUTS.some((o) => o.value === layout) ? (layout as FeedLayout) : d.layout,
     scope: FEED_SCOPES.some((o) => o.value === scope) ? (scope as FeedScope) : d.scope,
+    source: FEED_SOURCES.some((o) => o.value === source) ? (source as FeedSource) : d.source,
     density: n("density", d.density, 12, 80),
     modulate: localStorage.getItem(`${prefix}.feed.modulate`) !== "0",
   };

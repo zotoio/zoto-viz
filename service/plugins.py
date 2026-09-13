@@ -449,3 +449,21 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     ins = inner.add_parser("install", help="copy shipped examples/plugins into ~/.zoto-viz/plugins")
     ins.add_argument("--force", action="store_true", help="overwrite existing files")
     ins.set_defaults(plugin_fn=lambda args: sys.exit(cli_install(args.force)))
+    z = inner.add_parser("zip", help="install an agent-plugin zip (same as MCP install_plugin_zip)")
+    z.add_argument("zipfile", help="path to a plugin zip")
+    z.add_argument("--force", action="store_true", help="overwrite an existing id")
+    z.set_defaults(plugin_fn=lambda args: sys.exit(_cli_zip(args.zipfile, args.force)))
+
+
+def _cli_zip(path: str, force: bool) -> int:
+    from . import agent_plugins
+    try:
+        info = agent_plugins.install_bytes(Path(path).read_bytes(), overwrite=force)
+        agent_plugins.mirror_into_view_plugins(Path(info["dir"]))
+    except (OSError, ValueError) as e:
+        print(e)
+        return 1
+    print(f"installed {info['id']} -> {info['dir']}")
+    if info.get("needsUiGeneration"):
+        print("UI is a generate-ui prompt — call MCP plugin_ui_brief then write_plugin_ui")
+    return 0

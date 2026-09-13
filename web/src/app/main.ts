@@ -7,7 +7,7 @@ import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themeSwatch, type Theme } from "../core/themes";
 import { Select, Toggle } from "../ui/ui";
 import { Settings } from "../ui/settings";
-import { LiveFeed } from "../ui/feed";
+import { LiveFeed, feedViewShift } from "../ui/feed";
 import { liveCam } from "../camera/livecam";
 import { ProfileStore, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { PongView } from "../arcade/pong";
@@ -35,6 +35,7 @@ import { bootSession, apiFetch } from "../core/http";
 import { bindFps } from "../core/fps";
 import { AgentPanel } from "../ui/agent";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import { captureHud, pickAgentSettings } from "../ui/capture";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -206,16 +207,13 @@ sandbox.handlers = {
   setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
 };
 const agent = new AgentPanel();
-agent.captureFrame = () => {
-  try {
-    const url = scene.renderer.domElement.toDataURL("image/jpeg", 0.45);
-    const b64 = url.split(",")[1];
-    return b64 && b64.length < 900_000 ? b64 : null;
-  } catch {
-    return null;
-  }
-};
 const feedCtl: { feed: LiveFeed | null } = { feed: null };
+let feedShiftInited = false;
+function syncFeedShift(): void {
+  if (!feedCtl.feed) return;
+  scene.setViewShift(feedViewShift($("livefeed").offsetWidth, chrome, $("scene").clientWidth), !feedShiftInited);
+  feedShiftInited = true;
+}
 const modeSel = new Select({
   id: "mode",
   caption: "view",
@@ -412,6 +410,7 @@ function applyMode(id: string): void {
   if (activeArcade && activeArcade !== next) { arcade[activeArcade].view.stop(); arcade[activeArcade].el.hidden = true; }
   if (next && activeArcade !== next) { arcade[next].el.hidden = false; arcade[next].view.start(selectedIp); }
   activeArcade = next;
+  syncFeedShift();
 
   // per-mode option selects
   const box = $("modeOpts");
@@ -575,6 +574,7 @@ settings.addAnimation((a) => {
     }
     mosaic!.setSize(a.mosaic, modeSel.value, a.hero);
     applyMode(modeSel.value);
+    syncFeedShift();
   }
 }, dreamCog);
 themeFollow = (t) => settings.syncTheme(t);
@@ -611,17 +611,59 @@ $("cameraBox").appendChild(camSel.el);
 settings.addLiveFeed((c) => {
   liveFeed.setConfig(c);
   feedToggle.checked = c.on;
+  if (c.source !== "traffic") liveFeed.seedTranscript(agent.transcript());
+  syncFeedShift();
 });
 liveFeed.setConfig(settings.feedSettings);
+syncFeedShift();
+const feedShiftRo = new ResizeObserver(() => syncFeedShift());
+feedShiftRo.observe($("livefeed"));
+feedShiftRo.observe($("scene"));
+liveFeed.onSourceChange = () => liveFeed.seedTranscript(agent.transcript());
+agent.onChat = (role, text, stream) => liveFeed.pushChat(role, text, stream);
+agent.onPhase = (phase) => liveFeed.setThinking(phase === "think");
+agent.onTranscript = () => liveFeed.seedTranscript(agent.transcript());
+agent.dictateInto = liveFeed.ask;
+liveFeed.onSend = (text) => agent.offerSend(text);
+liveFeed.onMicDown = () => agent.beginTalk();
+liveFeed.onMicUp = () => agent.endTalk();
+liveFeed.seedTranscript(agent.transcript());
 const privSec = settings.addSection("Privacy", redactToggle);
 $("settingsBox").appendChild(settings.el);
 agent.mountSettings(settings.agentHost());
 agent.onOpen = () => { settings.showPane("agent"); settings.open(); };
+agent.captureView = () => captureHud({
+  mode: modeSel.value,
+  theme: theme.id,
+  chrome: userChrome,
+  dream: dreamToggle.checked,
+  selected: scene.selectedIp,
+  merge: mergeToggle.checked,
+  redact: redaction.enabled,
+  camera: liveCam.camPolicy,
+  show: {
+    lan: filterToggles[0]!.checked,
+    internet: filterToggles[1]!.checked,
+    multicast: filterToggles[2]!.checked,
+    offline: filterToggles[3]!.checked,
+    labels: filterToggles[4]!.checked,
+  },
+  feed: settings.feedSettings,
+  feedLines: liveFeed.snapshot(3),
+});
 agent.onApplySettings = (patch) => {
-  if (typeof patch.theme === "string") applyTheme(patch.theme);
-  if (typeof patch.dream === "boolean") setDream(patch.dream);
-  if (patch.camera === "auto" || patch.camera === "off") settings.setCamPolicy(patch.camera);
-  if (patch.chrome === "top" || patch.chrome === "left" || patch.chrome === "right") applyChrome(patch.chrome);
+  const p = pickAgentSettings(patch, allModes().map((m) => m.id));
+  const next = collectSettings();
+  if (p.theme) next.theme = p.theme;
+  if (typeof p.dream === "boolean") next.dream = p.dream;
+  if (p.chrome) next.chrome = p.chrome;
+  if (p.mode) next.mode = p.mode;
+  if (typeof p.redact === "boolean") next.redact = p.redact;
+  if (typeof p.merge === "boolean") next.merge = p.merge;
+  if (p.show) next.show = { ...next.show, ...p.show };
+  if (p.feed) next.feed = { ...next.feed, ...p.feed };
+  applySettings(next);
+  if (p.camera) settings.setCamPolicy(p.camera);
 };
 $("aiBox").appendChild(agent.headerBtn);
 scene.setNodeFilter((d) => settings.matches(d));
@@ -691,6 +733,7 @@ function applyChrome(pos: ChromePos, fromUser = true): void {
   for (const [k, btn] of layoutBtns) btn.setAttribute("aria-pressed", k === pos ? "true" : "false");
   placeQuick(pos);
   syncChromeMetrics();
+  syncFeedShift();
   if (fromUser) {
     userChrome = pos;
     localStorage.setItem("zoto-viz.chrome", pos);

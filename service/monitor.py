@@ -38,6 +38,8 @@ from aiohttp import WSCloseCode, web
 zotoviz = importlib.import_module("zoto-viz")
 from . import access
 from . import agent
+from . import agent_plugins
+from . import mcp as plugin_mcp
 from . import cpu
 from . import forensics
 from . import hooks
@@ -1722,10 +1724,18 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_get("/api/plugins", plugins.api_list)
     app.router.add_get("/api/plugins/{id}/module.js", plugins.api_module)
     app.router.add_put("/api/plugins/{id}/consent", plugins.api_consent)
+    app.router.add_get("/api/agent-plugins", agent_plugins.api_list)
+    app.router.add_get("/mcp", plugin_mcp.api_mcp)
+    app.router.add_post("/mcp", plugin_mcp.api_mcp)
     app.router.add_get("/api/ai/status", agent.api_status)
     app.router.add_get("/api/ai/control", agent.api_control)
     app.router.add_put("/api/ai/control", agent.api_control)
     app.router.add_post("/api/ai/chat", agent.api_chat)
+    app.router.add_get("/api/ai/history", agent.api_history)
+    app.router.add_delete("/api/ai/history", agent.api_history)
+    app.router.add_get("/api/ai/memories", agent.api_memories)
+    app.router.add_post("/api/ai/memories", agent.api_memories)
+    app.router.add_delete("/api/ai/memories", agent.api_memories)
     app.router.add_post("/api/ai/plugin", agent.api_draft_plugin)
     app.router.add_post("/api/ai/speak", agent.api_speak)
     app.router.add_delete("/api/ai/speak", agent.api_speak)

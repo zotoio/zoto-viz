@@ -81,7 +81,7 @@ function make(spec: {
       chip: `rgba(255, 255, 255, ${chipA})`,
       chipHover: dark ? `rgba(255, 255, 255, ${chipA * 2})` : `rgba(255, 255, 255, 0.95)`,
       accent: spec.accent, warn: spec.warn, link: spec.link ?? spec.accent,
-      labelShadow: dark ? "0 0 4px #000, 0 0 2px #000" : `0 0 4px ${spec.bg}, 0 0 2px ${spec.bg}, 0 0 1px ${spec.bg}`,
+      labelShadow: dark ? "0 0 2px #000" : `0 0 2px ${spec.bg}, 0 1px 0 ${spec.bg}`,
       overlay: dark ? `rgba(${rgb(spec.bg)}, 0.7)` : `rgba(255, 255, 255, 0.8)`,
     },
     scene: {
@@ -165,8 +165,8 @@ const INK_DARK = 0x111318;
 const INK_LIGHT = 0xf4f6fb;
 const MUTED_ON_LIGHT = "#3d4654";
 const MUTED_ON_DARK = "#c9cfdb";
-const SHADOW_FOR_DARK_TEXT = "0 0 3px #fff, 0 0 8px #fff, 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff";
-const SHADOW_FOR_LIGHT_TEXT = "0 0 4px #000, 0 0 2px #000, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000";
+const SHADOW_FOR_DARK_TEXT = "0 0 2px #fff, 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff";
+const SHADOW_FOR_LIGHT_TEXT = "0 0 2px #000, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000";
 
 export interface SceneInk {
   fg: string;

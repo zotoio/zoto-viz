@@ -7,7 +7,7 @@ describe("profiles", () => {
     const s = shippedSettings();
     expect(s.mode).toBe("topology");
     expect(s.chrome).toBe("top");
-    expect(s.show.lan).toBe(true);
+    expect(s.feed.source).toBe("traffic");
   });
 
   it("normalizes partial blobs and suggests ids", () => {

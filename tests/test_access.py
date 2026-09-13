@@ -91,6 +91,7 @@ class AccessMiddlewareTests(AioHTTPTestCase):
         app["insecure_lan"] = False
         app.router.add_get("/ok", ok)
         app.router.add_post("/poke", poke)
+        app.router.add_post("/mcp", poke)
         return app
 
     async def test_loopback_get_and_csrf_post(self) -> None:
@@ -118,3 +119,7 @@ class AccessMiddlewareTests(AioHTTPTestCase):
             headers={"Host": "127.0.0.1:7020", "Origin": "http://evil.example"},
         )
         assert resp.status == 403
+
+    async def test_mcp_skips_csrf(self) -> None:
+        resp = await self.client.post("/mcp", headers={"Host": "127.0.0.1:7020"})
+        assert resp.status == 200

@@ -28,6 +28,7 @@ User data: `~/.zoto-viz/` (migrated from `~/.z-netviz` if present). Loopback onl
 
 ```bash
 ./zoto-viz.py plugin install   # ~/.zoto-viz/plugins + sys-config.yml (ifaces, SSIDs, checkout path)
+# Agent-plugin zips: POST http://127.0.0.1:7020/mcp  (install_plugin_zip) — see docs/plugins.md
 ```
 
 ```bash

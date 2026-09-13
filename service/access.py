@@ -105,7 +105,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
         return _deny("forbidden host")
     if not origin_ok(request):
         return _deny("forbidden origin")
-    if request.method in MUTATE and not csrf_ok(request):
+    if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):
         return _deny("csrf required")
     resp = await handler(request)
     attach_csrf(request, resp)

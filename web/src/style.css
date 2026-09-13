@@ -15,7 +15,7 @@
   --accent-rgb: 90, 169, 255;
   --warn: #ffd54f;
   --link: #90caf9;
-  --label-shadow: 0 0 4px #000, 0 0 2px #000, 0 1px 0 #000, 0 -1px 0 #000;
+  --label-shadow: 0 0 2px #000, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000;
   --label-fg: #f4f6fb;
   --label-muted: #c9cfdb;
   --overlay: rgba(11, 14, 20, 0.7);
@@ -343,12 +343,30 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
   background: #7a2a12; color: #ffd8c8; border: 1px solid var(--line); display: none;
 }
 body.ai-control #ai-banner { display: block; }
+#aiBox .toggle { gap: 8px; }
+#aiBox .toggle .led {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--line-strong, #555); opacity: 0.7;
+}
 #aiBox .toggle.listening { box-shadow: 0 0 0 1px var(--accent, #6cf); }
-#aiBox .toggle.busy { opacity: 0.85; }
+#aiBox .toggle.listening .led { background: var(--accent); box-shadow: 0 0 6px var(--accent); opacity: 1; }
+#aiBox .toggle.heard { box-shadow: 0 0 0 1px var(--warn, #ffd54f); }
+#aiBox .toggle.heard .led { background: var(--warn); box-shadow: 0 0 6px var(--warn); opacity: 1; }
+#aiBox .toggle.thinking {
+  color: var(--fg); border-color: var(--warn);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 70%, transparent);
+}
+#aiBox .toggle.thinking .led {
+  background: var(--warn); box-shadow: 0 0 6px var(--warn); opacity: 1;
+  animation: pulse 0.8s ease-in-out infinite alternate;
+}
+#aiBox .toggle.speaking { color: var(--fg); border-color: var(--accent); }
+#aiBox .toggle.speaking .led { background: var(--accent); box-shadow: 0 0 6px var(--accent); opacity: 1; }
 body.cam-off .camera-look { opacity: 0.45; pointer-events: none; }
 .select.has-plugin-fields .cap::after { content: " ⚙"; font-size: 11px; }
 .agent-panel { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
-.agent-log { min-height: 120px; max-height: 240px; overflow: auto; font-size: 12px; line-height: 1.4; color: var(--fg); }
+.agent-log { min-height: 120px; max-height: 360px; overflow: auto; font-size: 12px; line-height: 1.4; color: var(--fg); }
+.agent-log p.think { color: var(--muted); font-style: italic; }
 .agent-row { display: flex; gap: 6px; }
 .agent-row textarea { flex: 1; min-height: 56px; resize: vertical; font: inherit; background: var(--chip); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
 
@@ -723,12 +741,19 @@ body[data-chrome="right"] #foot { max-width: calc(100vw - var(--bar-w) - 360px);
 /* ------------------------------------------------------------------ live decoded feed (right of the graph) */
 
 #livefeed {
-  position: fixed; top: calc(var(--bar-h) + 12px); right: 12px; z-index: 4;
+  position: fixed; top: calc(var(--bar-h) + 12px); right: 12px; z-index: 6;
   width: min(300px, 30vw); max-height: calc(100vh - var(--bar-h) - 72px);
   display: flex; flex-direction: column; gap: 8px;
   pointer-events: none;
   font-size: 11.5px; line-height: 1.3;
   text-shadow: var(--label-shadow);
+}
+#livefeed.transcript {
+  width: min(420px, 38vw);
+  text-shadow: none;
+}
+#livefeed.chat-log {
+  height: calc(100vh - var(--bar-h) - 72px);
 }
 #livefeed[hidden] { display: none; }
 body.arcade #livefeed { display: none; }
@@ -736,6 +761,8 @@ body.panel-open:not(.panel-wide) #livefeed { right: 344px; }
 body.panel-wide #livefeed { right: calc(24px + min(680px, 100vw - 24px)); }
 body[data-chrome="left"] #livefeed,
 body[data-chrome="right"] #livefeed { top: 12px; max-height: calc(100vh - 84px); }
+body[data-chrome="left"] #livefeed.chat-log,
+body[data-chrome="right"] #livefeed.chat-log { height: calc(100vh - 84px); }
 body[data-chrome="right"] #livefeed { right: auto; left: 12px; }
 body[data-chrome="right"].panel-open:not(.panel-wide) #livefeed { left: 344px; right: auto; }
 body[data-chrome="right"].panel-wide #livefeed { left: calc(24px + min(680px, 100vw - var(--bar-w) - 24px)); right: auto; }
@@ -748,25 +775,81 @@ body[data-chrome="right"].panel-wide #livefeed { left: calc(24px + min(680px, 10
   border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
 }
 .livefeed .feed-bars canvas { display: block; width: 100%; height: 100%; }
+.livefeed .feed-panel {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+}
 .livefeed .feed-ticker {
   pointer-events: auto;
   display: flex; flex-direction: column; gap: 2px;
   overflow: hidden; min-height: 0; flex: 1;
 }
 .livefeed .row {
-  display: grid; grid-template-columns: 44px 1fr auto; gap: 6px; align-items: baseline;
+  display: grid; grid-template-columns: 44px 1fr auto; gap: 6px; align-items: start;
+  flex: 0 0 auto;
   padding: 2px 4px; border-radius: 4px; cursor: pointer;
 }
 .livefeed .row:hover { background: color-mix(in srgb, var(--bg) 55%, transparent); }
 .livefeed .k {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--c, var(--accent));
+  padding-top: 1px;
 }
 .livefeed .tx {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--label-fg, var(--fg));
 }
-.livefeed .n { color: var(--label-muted, var(--muted)); font-variant-numeric: tabular-nums; font-size: 10px; }
+.livefeed .row.chat { cursor: default; grid-template-columns: 48px 1fr auto; }
+.livefeed .row.chat .tx {
+  white-space: pre-wrap; overflow: hidden; overflow-wrap: anywhere; text-overflow: unset;
+  line-height: 1.45;
+}
+.livefeed .row.think .tx { color: var(--label-muted, var(--muted)); font-style: italic; }
+.livefeed.transcript .feed-panel {
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.livefeed.transcript .feed-ticker {
+  overflow-y: auto;
+  padding: 8px 10px 8px 8px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+.livefeed.transcript .feed-composer:not([hidden]) {
+  display: flex; align-items: flex-end; gap: 6px;
+  pointer-events: auto;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 35%, transparent);
+}
+.livefeed .feed-composer[hidden] { display: none !important; }
+.livefeed .feed-ask {
+  flex: 1; min-height: 40px; max-height: 96px; resize: none;
+  font: inherit; font-size: 12px; line-height: 1.35;
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  color: var(--fg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px;
+}
+.livefeed .feed-ask:focus { outline: none; border-color: var(--accent); }
+.livefeed .feed-mic {
+  flex: 0 0 36px; width: 36px; height: 36px; padding: 0;
+  display: grid; place-items: center;
+}
+.livefeed .feed-send { flex: 0 0 auto; height: 36px; }
+/* Chronological chat sits on the bottom of the overlay and grows upward. */
+.livefeed.chat-log .feed-ticker::before {
+  content: "";
+  flex: 1 0 0;
+}
+.livefeed.transcript .tx { color: var(--fg); }
+.livefeed.transcript .row.think .tx { color: var(--muted); }
+.livefeed.transcript .row.chat { padding: 4px 2px; }
 .livefeed .feed-hint { color: var(--label-muted, var(--muted)); font-size: 11px; }
+.livefeed.thinking .feed-hint { color: var(--warn); }
+.livefeed.thinking .feed-send { opacity: 0.55; }
+.livefeed .row.think.pending .tx { color: var(--warn); font-style: italic; }
 
 /* --vol (0..1, set per node by the scene) grows the title and mixes the node's own colour (--hl) into
    the high-contrast ink (--label-fg, black or white against the scene). Unset --hl keeps the ink. */
@@ -782,7 +865,7 @@ body[data-chrome="right"].panel-wide #livefeed { left: calc(24px + min(680px, 10
 }
 .label.hot {
   font-weight: 800; letter-spacing: 0.01em; /* above the labels slider's ceiling (750) */
-  text-shadow: var(--label-shadow), 0 0 10px color-mix(in srgb, var(--hl, var(--accent)) 55%, transparent);
+  text-shadow: var(--label-shadow), 0 0 4px color-mix(in srgb, var(--hl, var(--accent)) 28%, transparent);
 }
 .label.off { display: none !important; }
 .label small { display: block; color: var(--label-muted, var(--muted)); font-size: calc(9.5px * var(--label-scale, 1)); font-weight: var(--label-fw, 500); letter-spacing: 0; }

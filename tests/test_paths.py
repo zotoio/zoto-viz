@@ -42,3 +42,5 @@ def test_plugins_and_profiles_paths() -> None:
     assert plugins.name == "plugins"
     assert paths.profiles_file().name == "profiles.yml"
     assert paths.sys_config_file().name == "sys-config.yml"
+    assert paths.agent_dir().name == "agent"
+    assert paths.agent_plugins_dir().name == "agent-plugins"

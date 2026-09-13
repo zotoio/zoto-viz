@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from pathlib import Path
 
 from service import agent
+from service import memory
 from service import plugins
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,7 @@ class Req:
         self.content_length = content_length
         self.method = "GET"
         self.app = {"state": SimpleNamespace(devices={}, flows={})}
+        self.rel_url = SimpleNamespace(query={})
 
     async def json(self):
         if self._body is None:
@@ -40,16 +42,26 @@ def test_match_model_expands_short_tag() -> None:
 
 def test_chat_options_cpu_for_gemma4(monkeypatch) -> None:
     monkeypatch.delenv("ZOTO_VIZ_OLLAMA_NUM_GPU", raising=False)
+    monkeypatch.delenv("ZOTO_VIZ_OLLAMA_NUM_CTX", raising=False)
     gemma = agent.chat_options("gemma4:e4b")
     assert gemma["num_gpu"] == 0
-    assert gemma["num_ctx"] == 2048
+    assert "num_ctx" not in gemma
     assert gemma["temperature"] == 0.3
     llama = agent.chat_options("llama3.2:latest")
     assert "num_gpu" not in llama
+    assert "num_ctx" not in llama
     monkeypatch.setenv("ZOTO_VIZ_OLLAMA_NUM_GPU", "99")
     assert agent.chat_options("gemma4:e2b")["num_gpu"] == 99
     monkeypatch.setenv("ZOTO_VIZ_OLLAMA_NUM_GPU", "nope")
     assert agent.chat_options("gemma4")["num_gpu"] == 0
+    monkeypatch.setenv("ZOTO_VIZ_OLLAMA_NUM_CTX", "32768")
+    assert agent.chat_options("gemma4")["num_ctx"] == 32768
+    monkeypatch.setenv("ZOTO_VIZ_OLLAMA_NUM_CTX", "64")
+    assert agent.chat_options("gemma4")["num_ctx"] == 512
+    monkeypatch.setenv("ZOTO_VIZ_OLLAMA_NUM_CTX", "999999")
+    assert agent.chat_options("llama3.2")["num_ctx"] == 131072
+    monkeypatch.setenv("ZOTO_VIZ_OLLAMA_NUM_CTX", "nope")
+    assert "num_ctx" not in agent.chat_options("gemma4")
 
 
 def test_ollama_url_loopback() -> None:
@@ -71,16 +83,17 @@ def test_redact_state_masks_ip() -> None:
         {"devices": [{"ip": "192.168.86.10", "role": "lan", "names": ["nest"], "bytes_in": 1, "bytes_out": 2}]},
         True,
     )
-    assert snap["devices"][0]["ip"] == "x.x.x.x"
-    assert "name" not in snap["devices"][0]
+    assert snap["top"][0]["n"] == "x"
+    assert "ip" not in snap["top"][0]
     open_ = agent._redact_state(
         {"devices": [{"ip": "192.168.86.10", "role": "lan", "names": ["nest"], "bytes_in": 1, "bytes_out": 2}]},
         False,
     )
-    assert open_["devices"][0]["ip"] == "192.168.86.10"
-    assert open_["devices"][0]["name"] == ["nest"]
+    assert open_["top"][0]["n"] == "nest"
+    assert open_["top"][0]["b"] == 3
     skip = agent._redact_state({"devices": ["skip", {}]}, False)
-    assert skip["devices"][0]["ip"] is None
+    assert skip["n"] == 1
+    assert skip["top"] == []
 
 
 def test_api_status_offline(monkeypatch) -> None:
@@ -171,3 +184,260 @@ def test_ai_control_file(tmp_path, monkeypatch) -> None:
     put_list.method = "PUT"
     not_obj = asyncio.run(agent.api_control(put_list))
     assert not_obj.status == 400
+
+
+def test_parse_ollama_stream() -> None:
+    assert agent.parse_ollama_stream('{"message":{"content":"hi"}}') == "hi"
+    assert agent.parse_ollama_stream('{"error":"nope"}') == "nope"
+    ndjson = '{"message":{"content":"hel"}}\n{"message":{"content":"lo"}}\n'
+    assert agent.parse_ollama_stream(ndjson) == "hello"
+    assert "plain" in agent.parse_ollama_stream("plain")
+    assert agent.parse_ollama_stream('{"message":{"content":"x"}}\n[1]\nnot json') == "x[1]not json"
+    think, said = agent.parse_ollama_chat('{"message":{"thinking":"why","content":"hi"}}')
+    assert think == "why" and said == "hi"
+    think, said = agent.parse_ollama_chat('{"message":{"content":"<think>plan</think>ok"}}')
+    assert think == "plan" and said == "ok"
+
+
+def test_last_user_and_chat_messages(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
+    msgs = [
+        {"role": "user", "content": "who is the nest?", "images": ["abc"]},
+        "skip",
+    ]
+    user = agent._last_user(msgs)
+    assert user == "who is the nest?"
+    memory.append_message("user", user)
+    memory.append_message("assistant", "kitchen speaker")
+    memory.add_memory("the nest is in the kitchen", kind="memory")
+    built = agent._chat_messages(msgs, snap={"devices": [], "flows": 0}, user=user)
+    assert built[0]["role"] == "system"
+    assert "kitchen" in built[0]["content"]
+    assert built[-1]["content"] == "kitchen speaker"
+    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "empty-agent")
+    fallback = agent._chat_messages(
+        [{"role": "user", "content": "hi there nest"}],
+        snap={"devices": [], "flows": 0},
+        user="hi there nest",
+    )
+    assert fallback[-1]["content"] == "hi there nest"
+    class Boom:
+        @property
+        def devices(self):
+            raise RuntimeError("no")
+    assert agent._snapshot(Boom(), False) == {"n": 0, "fl": 0, "top": []}
+    msgs = [{"role": "user", "content": "hi"}]
+    built = agent._chat_messages(msgs, snap={"n": 0, "fl": 0, "top": []}, user="hi")
+    assert "images" not in built[-1]
+    agent._remember_reply("", "", redact=False)
+    agent._remember_reply("who is the nest?", "kitchen speaker", redact=False)
+    assert memory.messages()[-1]["content"] == "kitchen speaker"
+    assert "{" in agent.parse_ollama_stream("{")
+    assert agent._parse_view({}, False) == ""
+    note = agent._parse_view({
+        "view": {
+            "hud": {"m": "talkers", "sel": "192.168.86.40", "hide": "inet,mc"},
+            "screenshot": "data:image/jpeg;base64," + ("A" * 40),
+        }
+    }, True)
+    assert "Screen:" in note
+    assert "x.x.x.x" in note
+    assert "192.168.86.40" not in note
+    assert "A" * 40 not in note
+    packed = agent.compact_hud({
+        "mode": "talkers",
+        "theme": "matrix",
+        "dream": True,
+        "merge": False,
+        "redact": True,
+        "selected": "192.168.86.40",
+        "stats": {"pps": "12", "bps": "1.2 MB/s", "lan": "8/6", "net": "wlan0 10.0.0.1"},
+        "show": {"internet": False, "multicast": False, "lan": True},
+        "feed": {"on": True, "layout": "ticker", "source": "transcript", "scope": "lan", "lines": ["you hi"]},
+    }, redact=True)
+    assert packed["m"] == "talkers"
+    assert packed["d"] == 1
+    assert packed["mg"] == 0
+    assert packed["hide"] == "inet,mc"
+    assert "10.0.0.1" not in packed["st"]
+    assert agent._parse_view({"view": {"screenshot": "short"}}, False) == ""
+    with_view = agent._chat_messages(
+        [{"role": "user", "content": "what is loud?"}],
+        snap={"n": 0, "fl": 0, "top": []},
+        user="hi",
+        view_note="\nScreen: {\"m\":\"talkers\"}",
+    )
+    assert "Screen:" in with_view[0]["content"]
+    assert agent._ctx_overflow(b'{"error":{"code":400,"message":"request (2099 tokens) exceeds the available context size"}}')
+    assert agent._ctx_overflow('exceed_context_size_error')
+    assert not agent._ctx_overflow("hello")
+    assert agent._chat_budget(True) < agent._chat_budget(False)
+
+
+def test_chat_messages_rolls_old_turns(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
+    for i in range(8):
+        memory.append_message("user", f"q{i} nest")
+        memory.append_message("assistant", f"a{i} kitchen")
+    built = agent._chat_messages(
+        [{"role": "user", "content": "q7 nest"}],
+        snap={"devices": [], "flows": 0},
+        user="q7 nest",
+    )
+    assert any(m.get("content") == memory.ROLL_PROMPT for m in built)
+    assert memory.ui_messages()[0]["content"].startswith("q0")
+
+
+class _Chunks:
+    def __init__(self, parts: list[bytes]) -> None:
+        self.parts = parts
+
+    async def iter_any(self):
+        for p in self.parts:
+            yield p
+
+
+class _Post:
+    def __init__(self, parts: list[bytes]) -> None:
+        self.content = _Chunks(parts)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+
+class _Sess:
+    def __init__(self, parts: list[bytes]) -> None:
+        self.parts = parts
+
+    def post(self, url, json=None):
+        return _Post(self.parts)
+
+
+class _Sink:
+    def __init__(self) -> None:
+        self.out = bytearray()
+
+    async def write(self, chunk):
+        self.out.extend(chunk)
+
+
+def test_pipe_holds_overflow_then_echoes(tmp_path, monkeypatch) -> None:
+    overflow = b'{"error":{"message":"request (2099 tokens) exceeds the available context size (2048 tokens)"}}'
+    sink = _Sink()
+    buf, streamed = asyncio.run(agent._pipe_ollama(_Sess([overflow]), "http://127.0.0.1:11434", {}, sink))
+    assert streamed is False
+    assert sink.out == b""
+    assert agent._ctx_overflow(buf)
+    sink2 = _Sink()
+    buf2, streamed2 = asyncio.run(
+        agent._pipe_ollama(_Sess([b'{"message":{"content":"ok"}}']), "http://127.0.0.1:11434", {}, sink2, hold_overflow=False)
+    )
+    assert streamed2 is True
+    assert b"ok" in sink2.out
+    assert b"ok" in buf2
+
+
+def test_api_chat_retries_overflow(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
+    n = {"i": 0}
+
+    async def fake_pipe(s, base, payload, resp, hold_overflow=True):
+        n["i"] += 1
+        if n["i"] == 1:
+            return bytearray(b'{"error":{"message":"exceeds the available context size"}}'), False
+        return bytearray(b'{"message":{"content":"ok later"}}\n'), True
+
+    class Tags:
+        async def json(self):
+            return {"models": [{"name": "gemma4:e2b"}]}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class Sess:
+        def get(self, url):
+            return Tags()
+
+    class CM:
+        async def __aenter__(self):
+            return Sess()
+
+        async def __aexit__(self, *a):
+            return False
+
+    class FakeResp:
+        def __init__(self, *a, **k):
+            self.status = 200
+
+        async def prepare(self, req):
+            return None
+
+        async def write(self, chunk):
+            return None
+
+        async def write_eof(self):
+            return None
+
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM())
+    monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
+    monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
+    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "hi"}]})))
+    assert n["i"] == 2
+    assert memory.messages()[-1]["content"] == "ok later"
+    assert out.status == 200
+
+
+def test_api_history_and_memories(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
+    memory.append_message("user", "hello")
+    memory.append_message("assistant", "hi")
+    got = asyncio.run(agent.api_history(Req()))
+    body = json.loads(got.body)
+    assert body["ok"] is True
+    assert body["messages"][-1]["content"] == "hi"
+    req = Req({"text": "the lounge tv is a roku"})
+    req.method = "POST"
+    saved = asyncio.run(agent.api_memories(req))
+    saved_body = json.loads(saved.body)
+    assert saved_body["ok"] is True
+    mem_id = saved_body["memory"]["id"]
+    listed = asyncio.run(agent.api_memories(Req()))
+    assert any(m["id"] == mem_id for m in json.loads(listed.body)["memories"])
+    drop = Req({"id": mem_id})
+    drop.method = "DELETE"
+    gone = asyncio.run(agent.api_memories(drop))
+    assert json.loads(gone.body)["ok"] is True
+    empty = Req({"text": "ab"})
+    empty.method = "POST"
+    assert asyncio.run(agent.api_memories(empty)).status == 400
+    wipe = Req({})
+    wipe.method = "DELETE"
+    assert json.loads(asyncio.run(agent.api_memories(wipe)).body)["memories"] == []
+    cleared = Req()
+    cleared.method = "DELETE"
+    hist = asyncio.run(agent.api_history(cleared))
+    assert json.loads(hist.body)["messages"] == []
+    bad = Req()
+    bad.method = "POST"
+    assert asyncio.run(agent.api_memories(bad)).status == 400
+    not_obj = Req([])
+    not_obj.method = "POST"
+    assert asyncio.run(agent.api_memories(not_obj)).status == 400
+    drop_q = Req()
+    drop_q.method = "DELETE"
+    drop_q.content_type = "text/plain"
+    drop_q.rel_url = SimpleNamespace(query={"id": "nope"})
+    assert asyncio.run(agent.api_memories(drop_q)).status == 200
+    bad_del = Req()
+    bad_del.method = "DELETE"
+    assert asyncio.run(agent.api_memories(bad_del)).status == 200
+    list_del = Req([1])
+    list_del.method = "DELETE"
+    assert json.loads(asyncio.run(agent.api_memories(list_del)).body)["ok"] is True
+

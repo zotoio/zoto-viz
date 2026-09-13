@@ -46,3 +46,15 @@ def sys_config_file() -> Path:
     d = user_dir()
     d.mkdir(parents=True, exist_ok=True)
     return d / "sys-config.yml"
+
+
+def agent_dir() -> Path:
+    d = user_dir() / "agent"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def agent_plugins_dir() -> Path:
+    d = user_dir() / "agent-plugins"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
