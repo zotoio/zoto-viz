@@ -1,0 +1,10 @@
+# Overlay for NetPong. Arcade look (theme / sky / floor) is the 3D stage behind the game.
+id: netpong
+name: NetPong
+version: 1
+hint: Requests as balls. Uncomment look to pin the stage behind the canvas.
+engine: netpong
+# look:
+#   theme: neon
+#   backdrop: space
+#   gridShape: hex

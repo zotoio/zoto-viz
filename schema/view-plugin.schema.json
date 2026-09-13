@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zoto-viz.local/schema/view-plugin.schema.json",
+  "title": "zoto-viz view plugin",
+  "description": "Declarative view dropped into ~/.zoto-viz/plugins. YAML reuses a shipped graph or arcade engine. Optional TypeScript (runtime: typescript + entry) is compiled by the host and runs in a sandboxed iframe with an explicit capability allowlist. Optional Python (service/__init__.py, service.py, or a service: path) is hot-loaded in-process by the monitor. A look block optionally pins theme, sky, floor, colours, and modulation. A file whose id matches a shipped mode overlays that mode instead of adding a second view.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "version", "engine"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "description": "Stable id. The live view is addressed as plugin:<id>."
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 48 },
+    "version": { "type": "integer", "minimum": 1 },
+    "hint": { "type": "string", "maxLength": 280 },
+    "engine": {
+      "type": "string",
+      "enum": ["graph", "netpong", "invaders", "command", "frogger", "cpupong"],
+      "description": "graph wraps a shipped 3D mode (see base). The arcade engines reuse the matching 2D view. cpupong is this-host CPU processes vs cores."
+    },
+    "base": {
+      "type": "string",
+      "enum": ["topology", "talkers", "services", "protocols", "layers", "watch", "wifi", "bluetooth", "cpu", "cores", "load"],
+      "description": "Required when engine is graph. The plugin inherits that mode's hooks, then applies style and layout. wifi and bluetooth are RF bases (SSIDs/APs and Bluetooth devices) and only appear when a plugin wraps them. cpu / cores / load are this-host CPU cores and processes."
+    },
+    "options": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/option" },
+      "description": "Selects shown next to the view control, same as shipped mode options."
+    },
+    "config": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/field" },
+      "description": "Plugin-only fields shown in Settings → This view when this plugin is selected."
+    },
+    "style": { "$ref": "#/$defs/style" },
+    "layout": { "$ref": "#/$defs/layout" },
+    "look": { "$ref": "#/$defs/look" },
+    "runtime": {
+      "type": "string",
+      "enum": ["yaml", "typescript"],
+      "default": "yaml",
+      "description": "yaml is declarative only. typescript requires entry and a directory plugin (plugin.yml)."
+    },
+    "entry": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._/-]+\\.ts$",
+      "maxLength": 80,
+      "description": "TypeScript file relative to the plugin directory. Compiled by the host; never eval'd from YAML."
+    },
+    "service": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9._/-]+\\.py$",
+      "maxLength": 80,
+      "description": "Python file relative to the plugin directory. Auto-detected as service/__init__.py or service.py for directory plugins. The monitor hot-loads it in-process (trusted local code, not the TypeScript iframe)."
+    },
+    "capabilities": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["graph.read", "graph.style", "ui.overlay", "config.read"]
+      },
+      "description": "Host API allowlist. camera, mic, parent DOM, and network are never granted."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "engine": { "const": "graph" } },
+        "required": ["engine"]
+      },
+      "then": { "required": ["base"] },
+      "else": {
+        "properties": { "base": false, "style": false, "layout": false }
+      }
+    },
+    {
+      "if": {
+        "properties": { "runtime": { "const": "typescript" } },
+        "required": ["runtime"]
+      },
+      "then": { "required": ["entry"] }
+    }
+  ],
+  "$defs": {
+    "pair": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "type": "string", "minLength": 1, "maxLength": 32 },
+        { "type": "string", "minLength": 1, "maxLength": 48 }
+      ]
+    },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "default", "values"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,23}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "default": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/pair" }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "type"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,23}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "hint": { "type": "string", "maxLength": 160 },
+        "type": { "type": "string", "enum": ["boolean", "select", "number", "text"] },
+        "default": { "type": ["string", "number", "boolean"] },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/pair" }
+        },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "select" } },
+            "required": ["type"]
+          },
+          "then": { "required": ["values"] }
+        }
+      ]
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodeColor": {
+          "type": "string",
+          "enum": ["role", "kind", "heat", "proto", "hash"],
+          "description": "Override sphere colour. heat follows current rate; proto uses the device's seen ports."
+        },
+        "nodeScale": {
+          "type": "string",
+          "enum": ["default", "bytes", "rate"],
+          "description": "default keeps the base mode's sizes."
+        },
+        "labels": {
+          "type": "string",
+          "enum": ["default", "all", "none", "top"],
+          "description": "top keeps the base mode's ranked labels when it has them."
+        },
+        "flatten": { "type": "boolean" }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lanShell": { "type": "number", "minimum": 40, "maximum": 1200 },
+        "internetShell": { "type": "number", "minimum": 80, "maximum": 1600 }
+      }
+    },
+    "hex": {
+      "type": "string",
+      "pattern": "^$|^#[0-9A-Fa-f]{6}$",
+      "description": "Empty string follows the active theme."
+    },
+    "look": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-view overrides. Omitted keys keep the core settings cog / active profile.",
+      "properties": {
+        "theme": {
+          "type": "string",
+          "enum": ["midnight", "ocean", "nord", "dracula", "solarized", "gruvbox", "ember", "neon", "tactical", "paper"]
+        },
+        "chrome": { "type": "string", "enum": ["top", "left", "right"] },
+        "backdrop": { "type": "string", "enum": ["none", "fractal", "space", "matrix", "live"] },
+        "skyOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "skyBright": { "type": "number", "minimum": 0, "maximum": 2 },
+        "skySpeed": { "type": "number", "minimum": 0, "maximum": 4, "description": "Multiplier on the sky's animation clock; 0 freezes it." },
+        "skyEase": { "type": "number", "minimum": 0, "maximum": 1, "description": "How gently the sky's speed follows the pulse: 0 snaps per beat, 1 glides over seconds." },
+        "skyAudio": { "type": "boolean" },
+        "skyCycle": { "type": "string", "enum": ["off", "cadence", "audio"] },
+        "bgColor": { "$ref": "#/$defs/hex" },
+        "bgOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "bgAudio": { "type": "boolean" },
+        "gridShape": { "type": "string", "enum": ["square", "hex", "triangle", "diamond", "circle"] },
+        "gridColor": { "$ref": "#/$defs/hex" },
+        "gridSize": { "type": "number", "minimum": 16, "maximum": 160 },
+        "gridOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "gridBright": { "type": "number", "minimum": 0, "maximum": 2 },
+        "gridAudio": { "type": "boolean" },
+        "audioDrive": { "type": "string", "enum": ["mic", "traffic", "node"] },
+        "audioSens": { "type": "number", "minimum": 0, "maximum": 2 },
+        "audioCamera": { "type": "boolean" },
+        "audioNodes": { "type": "boolean" },
+        "themeCycle": { "type": "string", "enum": ["off", "cadence", "audio"] },
+        "edgeGlow": { "type": "string", "enum": ["off", "comet", "pulse"] },
+        "edgeGlowAmt": { "type": "number", "minimum": 0.2, "maximum": 2 },
+        "edgeGlowSpeed": { "type": "number", "minimum": 0.25, "maximum": 3 }
+      }
+    }
+  }
+}

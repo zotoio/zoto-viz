@@ -1,0 +1,9 @@
+# Overlay for Frogger.
+id: frogger
+name: Frogger
+version: 1
+hint: Connections hopping to a destination. Uncomment look to pin the stage.
+engine: frogger
+# look:
+#   theme: ocean
+#   backdrop: fractal

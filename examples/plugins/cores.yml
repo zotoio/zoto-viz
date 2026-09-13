@@ -1,0 +1,12 @@
+# Overlay: pin Tactical on the CPU cores view (id matches the shipped mode).
+id: cores
+name: CPU cores
+version: 1
+hint: Logical CPUs in a ring. Size and colour are utilisation; busy processes sit on the core they last ran on.
+engine: graph
+base: cores
+look:
+  theme: tactical
+  backdrop: none
+  gridShape: circle
+  themeCycle: "off"

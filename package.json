@@ -1,0 +1,23 @@
+{
+  "name": "zoto-viz",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "bash scripts/dev.sh start both",
+    "start:frontend": "bash scripts/dev.sh start frontend",
+    "start:backend": "bash scripts/dev.sh start backend",
+    "start:both": "bash scripts/dev.sh start both",
+    "stop": "bash scripts/dev.sh stop both",
+    "stop:frontend": "bash scripts/dev.sh stop frontend",
+    "stop:backend": "bash scripts/dev.sh stop backend",
+    "stop:both": "bash scripts/dev.sh stop both",
+    "restart": "bash scripts/dev.sh restart both",
+    "restart:frontend": "bash scripts/dev.sh restart frontend",
+    "restart:backend": "bash scripts/dev.sh restart backend",
+    "restart:both": "bash scripts/dev.sh restart both",
+    "dev:status": "bash scripts/dev.sh status both"
+  }
+}

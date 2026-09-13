@@ -3,35 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>netviz · live</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; frame-src 'self' blob:;" />
+    <title>zoto-viz · live</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="scene"></div>
+    <div id="wall">
+      <div id="scene"></div>
+      <div id="pong" class="arcade" hidden></div>
+      <div id="invaders" class="arcade" hidden></div>
+      <div id="command" class="arcade" hidden></div>
+      <div id="frogger" class="arcade" hidden></div>
+      <div id="cpupong" class="arcade" hidden></div>
+    </div>
     <header id="bar">
-      <span id="conn" class="dot"></span>
-      <strong>netviz</strong>
-      <span id="net"></span>
-      <span class="sp"></span>
-      <span class="stat"><b id="pps">0</b> pkt/s</span>
-      <span class="stat"><b id="bps">0</b></span>
-      <span class="stat"><b id="devs">0</b> devices, <b id="online">0</b> online</span>
-      <span class="stat"><b id="flows">0</b> flows, <b id="active">0</b> active</span>
-      <span class="sp"></span>
-      <label class="mode">view <select id="mode" title="view mode (keys 1–6)"></select></label>
-      <span id="modeOpts"></span>
-      <span class="sep"></span>
-      <label><input type="checkbox" id="showInternet" checked /> internet</label>
-      <label><input type="checkbox" id="showMulticast" checked /> multicast</label>
-      <label><input type="checkbox" id="showOffline" checked /> offline</label>
-      <label><input type="checkbox" id="showLabels" checked /> labels</label>
-      <label title="partially mask addresses and device names for screenshots (key R)"><input type="checkbox" id="redact" /> redact</label>
+      <div class="row top">
+        <span id="conn" class="dot"></span>
+        <strong class="brand">zoto-viz</strong>
+        <span id="net"></span>
+        <span class="sp"></span>
+        <span class="stat"><b id="pps">0</b> pkt/s</span>
+        <span class="stat"><b id="bps">0</b></span>
+        <span class="stat" title="display framerate, averaged over the last second"><b id="fps">–</b> fps</span>
+        <span class="stat" title="this host, gateway, LAN and local"><b id="lanDevs">0</b> devices <em>·</em> <b id="lanOnline">0</b> online</span>
+        <span class="stat" title="internet hosts"><b id="netSvcs">0</b> services <em>·</em> <b id="netOnline">0</b> online</span>
+        <span class="stat"><b id="flows">0</b> flows <em>·</em> <b id="active">0</b> active</span>
+      </div>
+      <div class="row controls">
+        <span id="modeBox"></span>
+        <span id="modeOpts"></span>
+        <span class="sp"></span>
+        <span id="dreamBox"></span>
+        <span id="feedBox"></span>
+        <span id="cameraBox"></span>
+        <span id="aiBox"></span>
+        <div id="quick" hidden></div>
+        <span id="settingsBox"></span>
+      </div>
     </header>
+    <div id="ai-banner">AI Control is on — the local agent can change settings and install plugins</div>
     <aside id="panel" hidden></aside>
+    <div id="livefeed" hidden></div>
     <div id="foot">
       <div id="hint"></div>
       <div id="legend"></div>
     </div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>

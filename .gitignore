@@ -3,6 +3,17 @@ data/
 out/
 web/node_modules/
 web/dist/
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/.vitepress/.temp/
+pytest-cache-files-*/
 __pycache__/
+.pytest_cache/
+.coverage
+.run/
+htmlcov/
+web/coverage/
 *.pcap
 *.pcapng
+sys-config.yml

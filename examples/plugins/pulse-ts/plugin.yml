@@ -1,0 +1,16 @@
+# Overlay that also ships a sandboxed TypeScript tick (optional) and a monitor-side
+# Python module at service/__init__.py (off unless ZOTO_VIZ_PLUGIN_SERVICE=1 and you
+# confirm you wrote or reviewed the source). Capabilities are graph.read + graph.style only.
+id: pulse-ts
+name: Pulse TS
+version: 1
+hint: Topology colours from a sandboxed TypeScript tick. Capabilities are graph.read + graph.style only.
+engine: graph
+base: topology
+runtime: typescript
+entry: index.ts
+capabilities:
+  - graph.read
+  - graph.style
+style:
+  nodeColor: heat

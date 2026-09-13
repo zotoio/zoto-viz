@@ -1,0 +1,2695 @@
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
+import { forceCenter, forceLink, forceManyBody, forceSimulation, type Simulation, type SimNode, type SimLink } from "d3-force-3d";
+import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName, fmtBytes, type Device, type Flow, type Role, type StateMsg } from "../core/types";
+import { categorize, paneLabelCap, topology, type ModeCtx, type ViewMode } from "../core/modes";
+import { rIp, rName } from "../core/redact";
+import { DEFAULT_THEME, contrastRatio, effectiveSceneLuminance, fadeTowardPole, grayHex, hexToHsl, hslHex, sceneInk, toCssHex, type Theme } from "../core/themes";
+import { Backdrop, type BackdropKind } from "./backdrop";
+import { liveCam } from "../camera/livecam";
+import { cameraConsumers } from "../camera/want";
+import { Gaze } from "../camera/gaze";
+import { FloorGrid, type FloorShape } from "./floor";
+import { AudioPulse } from "../audio/audio";
+import { markFrame } from "../core/fps";
+
+export interface Filters { lan: boolean; internet: boolean; multicast: boolean; offline: boolean; labels: boolean }
+
+export interface GNode extends SimNode {
+  id: string;
+  device: Device;
+  /** sphere styling; every node is one instance of the shared InstancedMesh, written each frame */
+  color: THREE.Color;
+  scale: number;
+  glow: number;
+  opacity: number;
+  /** index into modes.SHAPES; the shared material bends the unit sphere into it per instance */
+  shape: number;
+  label: CSS2DObject;
+  labelUntil?: number;
+  labelEl: HTMLDivElement;
+  visible: boolean;
+  active: boolean;
+  rate: number;
+  targetScale: number;
+  /** previous position, for layout-velocity focus */
+  px: number;
+  py: number;
+  pz: number;
+  /** smoothed layout velocity (moveEase); next tick reads these as vx/vy/vz */
+  svx?: number;
+  svy?: number;
+  svz?: number;
+  /** CPU view: wall seconds when this node went unused; opacity fades over `CPU_IDLE_FADE_S` */
+  cpuIdleAt?: number;
+  /** CPU view: dropped from the live slice, kept only to fade out */
+  cpuGhost?: boolean;
+  /** last `--fade` written on the label, so CPU opacity is not a DOM write every frame */
+  labelFade?: string;
+}
+export interface GLink extends SimLink<GNode> { id: string; flow: Flow; source: GNode; target: GNode; visible: boolean }
+
+const SHELL: Record<Role, number> = { self: 110, gateway: 0, local: 200, lan: 360, multicast: 440, internet: 580 };
+/** a shell is crowded when the nodes on it get less ring than this each (world units; a label is ~2× this) */
+const CROWD_SPACING = 56;
+/** room a widened shell keeps before the next shell out (links pull that shell's nodes inward by up to ~40) */
+const CROWD_GAP = 140;
+/** the outermost shell has nothing beyond it to run into, so it widens by at most this factor */
+const CROWD_OUTER_MAX = 1.3;
+/** how long a label earned by live traffic stays on after the flow goes idle */
+const LABEL_HOLD_S = 20;
+/** CPU cores/processes stay on the graph this long after they go unused, fading the whole time */
+const CPU_IDLE_FADE_S = 5;
+/** a core under this percent is unused (processes leave the slice instead) */
+const CPU_IDLE_PCT = 0.5;
+/** idle cores that are still present fade down to this, not to nothing */
+const CPU_IDLE_FLOOR = 0.22;
+/** nodes under this share of the loudest node's log-rate keep a plain label */
+const VOL_FLOOR = 0.45;
+const MAX_PARTICLES = 3000;
+const SPHERE_CAPACITY = 512;  // instances allocated up front; grows by doubling
+
+/** Live unicast conversation (not a tether, multicast hub, or discovery/DNS-to-gateway flak). */
+function flowEarnsLabel(l: GLink): boolean {
+  if (l.id.startsWith("~")) return false;
+  if (l.source.device.role === "multicast" || l.target.device.role === "multicast") return false;
+  const cat = categorize(l.flow.ports ?? []);
+  if (cat.id === "discovery") return false;
+  const gw = l.source.device.role === "gateway" || l.target.device.role === "gateway";
+  if (gw && (cat.id === "dns" || cat.id === "ntp")) return false;
+  return true;
+}
+
+/** Per-direction rates; older snapshots only have undirected `rate`. */
+function flowDirRates(f: Flow): { ab: number; ba: number } {
+  const ab = f.rate_ab, ba = f.rate_ba;
+  if (typeof ab === "number" && typeof ba === "number") return { ab, ba };
+  const half = (f.rate || 0) * 0.5;
+  return { ab: half, ba: half };
+}
+
+function glowStrength(rate: number): number {
+  return rate <= 0 ? 0 : Math.min(1, Math.log10(1 + rate) / 4);
+}
+
+function isCpuGraphId(id: string): boolean {
+  return id === "cpu:host" || id.startsWith("cpu:") || id.startsWith("proc:");
+}
+
+function isCpuCoreId(id: string): boolean {
+  return /^cpu:\d+$/.test(id);
+}
+
+function cpuIdleOpacity(n: GNode, wall: number): number {
+  if (!n.cpuIdleAt) return n.device.online ? 1 : 0.35;
+  const t = Math.min(1, Math.max(0, (wall - n.cpuIdleAt) / CPU_IDLE_FADE_S));
+  const floor = n.cpuGhost && n.id.startsWith("proc:") ? 0 : CPU_IDLE_FLOOR;
+  return 1 - t * (1 - floor);
+}
+
+function uniqPush(arr: string[], v: string): void {
+  if (v && !arr.includes(v)) arr.push(v);
+}
+
+function cloneDevice(d: Device): Device {
+  return {
+    ...d,
+    names: [...(d.names ?? [])],
+    hostnames: [...(d.hostnames ?? [])],
+    aliases: [...(d.aliases ?? [])],
+    ports: [...(d.ports ?? [])],
+    ifaces: [...(d.ifaces ?? [])],
+    sources: [...(d.sources ?? [])],
+  };
+}
+
+function stubDevice(ip: string, role: Role, extra: Partial<Device> = {}): Device {
+  return {
+    ip,
+    mac: extra.mac ?? "",
+    vendor: extra.vendor ?? "",
+    hostnames: extra.hostnames ?? [],
+    names: extra.names ?? (role === "gateway" ? ["gateway"] : []),
+    sources: extra.sources ?? [],
+    ports: extra.ports ?? [],
+    ifaces: extra.ifaces ?? [],
+    aliases: extra.aliases ?? [],
+    first_seen: extra.first_seen ?? 0,
+    last_seen: extra.last_seen ?? 0,
+    bytes_in: extra.bytes_in ?? 0,
+    bytes_out: extra.bytes_out ?? 0,
+    packets: extra.packets ?? 0,
+    role,
+    online: extra.online ?? true,
+  };
+}
+
+/** `ours` (or blank) follows the monitor's default-route gateway. */
+function resolveGatewayIp(opts: Record<string, string> | undefined, msg: StateMsg): string {
+  const raw = (opts?.gateway ?? "").trim();
+  if (!raw || /^ours$/i.test(raw)) return msg.gateway;
+  return raw;
+}
+
+function addAggFlow(map: Map<string, Flow>, a: string, b: string, f: Flow): void {
+  if (!a || !b || a === b) return;
+  let a2 = a, b2 = b, ab = f.rate_ab, ba = f.rate_ba;
+  if (a2 > b2) {
+    [a2, b2] = [b2, a2];
+    [ab, ba] = [ba, ab];
+  }
+  const key = `${a2}\0${b2}`;
+  const cur = map.get(key);
+  if (!cur) {
+    map.set(key, {
+      a: a2, b: b2, bytes: f.bytes, packets: f.packets,
+      ports: [...(f.ports ?? [])], protos: [...(f.protos ?? [])], ifaces: [...(f.ifaces ?? [])],
+      first_seen: f.first_seen, last_seen: f.last_seen, rate: f.rate,
+      ...(typeof ab === "number" ? { rate_ab: ab } : {}),
+      ...(typeof ba === "number" ? { rate_ba: ba } : {}),
+    });
+    return;
+  }
+  cur.bytes += f.bytes;
+  cur.packets += f.packets;
+  cur.rate += f.rate;
+  if (typeof ab === "number") cur.rate_ab = (cur.rate_ab ?? 0) + ab;
+  if (typeof ba === "number") cur.rate_ba = (cur.rate_ba ?? 0) + ba;
+  cur.first_seen = Math.min(cur.first_seen || f.first_seen, f.first_seen);
+  cur.last_seen = Math.max(cur.last_seen, f.last_seen);
+  for (const p of f.ports ?? []) uniqPush(cur.ports, p);
+  for (const p of f.protos ?? []) uniqPush(cur.protos, p);
+  for (const i of f.ifaces ?? []) uniqPush(cur.ifaces, i);
+}
+
+function wifiHop(id: string, role: Role | undefined, hub: string): "hub" | "lan" | "internet" | "skip" {
+  if (id === hub) return "hub";
+  if (role === "multicast") return "skip";
+  if (id.startsWith("sta:")) return "lan";
+  if (id.startsWith("ap:")) return role === "internet" ? "internet" : "lan";
+  if (role === "internet") return "internet";
+  if (role === "lan" || role === "self" || role === "local" || role === "gateway") return "lan";
+  return "skip";
+}
+
+/**
+ * Wi-Fi LAN and internet conversations all transit the IP gateway on this mesh.
+ * RF STA–AP data edges are dropped; APs from scan stay as nodes. Foreign SSIDs stay
+ * on the outer shell and are not forced through our gateway.
+ */
+function wifiViaGateway(msg: StateMsg, opts: Record<string, string> | undefined): { devices: Device[]; flows: Flow[]; gateway: string; localIp: string } {
+  const view = msg.views?.wifi;
+  const devices: Device[] = (view?.devices ?? []).map(cloneDevice);
+  const radioIds = new Set(devices.map((d) => d.ip));
+  const byId = new Map(devices.map((d) => [d.ip, d]));
+  const ipByAddr = new Map(msg.devices.map((d) => [d.ip, d]));
+  const gwIp = resolveGatewayIp(opts, msg);
+  const gwDev = ipByAddr.get(gwIp);
+  const gwMac = (gwDev?.mac || "").toLowerCase();
+  const hub = gwMac && byId.has(`ap:${gwMac}`) ? `ap:${gwMac}` : gwIp;
+  const selfId = view?.self || "";
+  const staByMac = new Map<string, Device>();
+  for (const d of devices) {
+    if (d.ip.startsWith("sta:") && d.mac) staByMac.set(d.mac.toLowerCase(), d);
+  }
+
+  const mapIp = (ip: string): string => {
+    if (!ip) return ip;
+    if (ip === gwIp || ip === hub) return hub;
+    if (ip.startsWith("ap:") || ip.startsWith("sta:") || ip.startsWith("bt:")) return ip;
+    const d = ipByAddr.get(ip);
+    if (!d) return ip;
+    if (d.mac) {
+      const st = staByMac.get(d.mac.toLowerCase());
+      if (st) return st.ip;
+    }
+    if (d.role === "self" && selfId) return selfId;
+    return ip;
+  };
+
+  const roleOf = (id: string): Role | undefined => byId.get(id)?.role ?? ipByAddr.get(id)?.role;
+
+  const take = (id: string): Device | undefined => {
+    const hit = byId.get(id);
+    if (hit) return hit;
+    const src = ipByAddr.get(id);
+    const d = src
+      ? cloneDevice(src)
+      : (id === hub || id === gwIp)
+        ? stubDevice(id, "gateway", {
+          mac: gwMac,
+          vendor: gwDev?.vendor ?? "",
+          names: gwDev?.names?.length ? [...gwDev.names] : ["gateway"],
+          hostnames: gwDev?.hostnames ? [...gwDev.hostnames] : [],
+        })
+        : undefined;
+    if (!d) return undefined;
+    byId.set(d.ip, d);
+    devices.push(d);
+    return d;
+  };
+
+  for (const d of devices) {
+    if (d.ip === hub) d.role = "gateway";
+    else if (d.role === "gateway") d.role = "lan";
+  }
+  const hubDev = take(hub);
+  if (hubDev) hubDev.role = "gateway";
+
+  for (const d of msg.devices) {
+    if (!d.mac) continue;
+    const st = staByMac.get(d.mac.toLowerCase());
+    if (!st) continue;
+    if (d.vendor && !st.vendor) st.vendor = d.vendor;
+    for (const n of d.names ?? []) uniqPush(st.names, n);
+    for (const n of d.hostnames ?? []) uniqPush(st.hostnames, n);
+  }
+
+  const flows = new Map<string, Flow>();
+  const extra = new Set<string>([hub]);
+  if (selfId) extra.add(selfId);
+
+  const onWifi = (id: string): boolean =>
+    id.startsWith("sta:") || id.startsWith("ap:") || id === selfId
+    || roleOf(id) === "self" || roleOf(id) === "local";
+
+  for (const f of msg.flows) {
+    const a = mapIp(f.a), b = mapIp(f.b);
+    const sa = wifiHop(a, roleOf(a), hub);
+    const sb = wifiHop(b, roleOf(b), hub);
+    if (sa === "skip" || sb === "skip") continue;
+    if (sa === "lan" && onWifi(a)) { addAggFlow(flows, a, hub, f); extra.add(a); }
+    if (sb === "lan" && onWifi(b)) { addAggFlow(flows, b, hub, f); extra.add(b); }
+    if (sa === "internet") { addAggFlow(flows, hub, a, f); extra.add(a); }
+    if (sb === "internet") { addAggFlow(flows, hub, b, f); extra.add(b); }
+  }
+
+  for (const id of extra) take(id);
+
+  return {
+    devices: devices.filter((d) => radioIds.has(d.ip) || extra.has(d.ip)),
+    flows: [...flows.values()],
+    gateway: hub,
+    localIp: selfId || msg.local_ip,
+  };
+}
+
+/** matches `cpu.py` RATE_SCALE: 1% CPU → 100 on flow.rate */
+const CPU_RATE_SCALE = 100;
+
+function cpuCoresMode(modeId: string): boolean {
+  return modeId === "cores" || modeId.endsWith(":cores");
+}
+
+function cpuProcName(d: Device): string {
+  return (d.names?.[0] || d.hostnames?.[0] || "proc").trim() || "proc";
+}
+
+function cpuNameId(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9._+-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+  return `proc:name:${slug || "proc"}`;
+}
+
+function mergeCpuRole(members: Device[]): Role {
+  const roles = new Set(members.map((m) => m.role));
+  if (roles.size === 1) return members[0]!.role;
+  if (roles.has("internet")) return "internet";
+  if (roles.has("local")) return "local";
+  return members[0]!.role;
+}
+
+function mergeCpuProcs(id: string, members: Device[]): Device {
+  const name = cpuProcName(members[0]!);
+  let cpu = 0, bytesIn = 0, bytesOut = 0, packets = 0;
+  let first = members[0]!.first_seen, last = members[0]!.last_seen;
+  const byCore = new Map<string, number>();
+  for (const m of members) {
+    const pct = m.cpu ?? 0;
+    cpu += pct;
+    bytesIn += m.bytes_in;
+    bytesOut += m.bytes_out;
+    packets += m.packets;
+    first = Math.min(first, m.first_seen);
+    last = Math.max(last, m.last_seen);
+    const core = m.ports?.[0];
+    if (core) byCore.set(core, (byCore.get(core) ?? 0) + pct);
+  }
+  const ports = [...byCore.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  const one = members.length === 1 ? members[0]! : undefined;
+  return {
+    ...(one ? cloneDevice(one) : cloneDevice(members[0]!)),
+    ip: id,
+    names: [name],
+    hostnames: [name],
+    aliases: one ? [...(one.aliases ?? [])] : [`×${members.length}`],
+    ports: one ? [...(one.ports ?? [])] : ports,
+    first_seen: first,
+    last_seen: last,
+    bytes_in: bytesIn,
+    bytes_out: bytesOut,
+    packets,
+    role: mergeCpuRole(members),
+    online: members.some((m) => m.online),
+    cpu: Math.round(cpu * 100) / 100,
+    members: one ? undefined : members.map((m) => m.ip),
+  };
+}
+
+function groupCpuByName(devices: Device[]): { devices: Device[]; procFlows: Flow[] } {
+  const keep: Device[] = [];
+  const buckets = new Map<string, Device[]>();
+  for (const d of devices) {
+    if (!d.ip.startsWith("proc:")) { keep.push(d); continue; }
+    const id = cpuNameId(cpuProcName(d));
+    const list = buckets.get(id);
+    if (list) list.push(d);
+    else buckets.set(id, [d]);
+  }
+  const grouped: Device[] = [];
+  const procFlows: Flow[] = [];
+  for (const [id, members] of buckets) {
+    const nodeId = members.length === 1 ? members[0]!.ip : id;
+    const node = mergeCpuProcs(nodeId, members);
+    grouped.push(node);
+    const byCore = new Map<string, { cpu: number; first: number; last: number }>();
+    for (const m of members) {
+      const core = m.ports?.[0];
+      if (!core) continue;
+      const cur = byCore.get(core);
+      const pct = m.cpu ?? 0;
+      if (!cur) byCore.set(core, { cpu: pct, first: m.first_seen, last: m.last_seen });
+      else {
+        cur.cpu += pct;
+        cur.first = Math.min(cur.first, m.first_seen);
+        cur.last = Math.max(cur.last, m.last_seen);
+      }
+    }
+    for (const [core, s] of byCore) {
+      const rate = s.cpu * CPU_RATE_SCALE;
+      let a = nodeId, b = core;
+      if (a > b) [a, b] = [b, a];
+      procFlows.push({
+        a, b, bytes: Math.round(rate), packets: 1,
+        ports: ["cpu"], protos: ["cpu"], ifaces: [],
+        first_seen: s.first, last_seen: s.last, rate,
+      });
+    }
+  }
+  return { devices: [...keep, ...grouped], procFlows };
+}
+
+function cpuSlice(msg: StateMsg, mode: ViewMode, opts: Record<string, string>): { devices: Device[]; flows: Flow[]; gateway: string; localIp: string } {
+  const view = msg.views?.cpu;
+  if (!view) return { devices: [], flows: [], gateway: "cpu:host", localIp: "cpu:host" };
+  let devices = view.devices.filter((d) => keepCpuIdentity(d, mode.id, opts));
+  let flows = view.flows;
+  if ((opts.group ?? "each") === "name") {
+    const g = groupCpuByName(devices);
+    devices = g.devices;
+    flows = [...view.flows.filter((f) => !f.a.startsWith("proc:") && !f.b.startsWith("proc:")), ...g.procFlows];
+  }
+  devices = devices.filter((d) => keepCpuBusy(d, mode.id, opts));
+  const ids = new Set(devices.map((d) => d.ip));
+  return {
+    devices,
+    flows: flows.filter((f) => ids.has(f.a) && ids.has(f.b)),
+    gateway: view.hub || "cpu:host",
+    localIp: view.self || "cpu:host",
+  };
+}
+
+function keepCpuIdentity(d: Device, modeId: string, opts: Record<string, string>): boolean {
+  if (d.ip === "cpu:host" || d.ip.startsWith("cpu:")) return true;
+  if (!d.ip.startsWith("proc:")) return false;
+  if (cpuCoresMode(modeId)) return (opts.show ?? "busy") !== "cores";
+  const who = opts.who ?? "all";
+  if (who === "mine" && d.role !== "local") return false;
+  if (who === "kernel" && d.role !== "multicast") return false;
+  return true;
+}
+
+function keepCpuBusy(d: Device, modeId: string, opts: Record<string, string>): boolean {
+  if (!d.ip.startsWith("proc:")) return true;
+  const pct = d.cpu ?? 0;
+  if (cpuCoresMode(modeId)) {
+    const show = opts.show ?? "busy";
+    if (show === "busy") return pct >= 1;
+    return true;
+  }
+  const min = Number(opts.min);
+  return pct >= (Number.isFinite(min) ? min : 0.5);
+}
+
+function rfSlice(msg: StateMsg, mode: ViewMode, opts: Record<string, string> = {}): { devices: Device[]; flows: Flow[]; gateway: string; localIp: string } {
+  const base = mode.graphBase;
+  if (base === "wifi") return wifiViaGateway(msg, opts);
+  if (base === "bluetooth") {
+    const view = msg.views?.bluetooth;
+    return {
+      devices: view?.devices ?? [],
+      flows: view?.flows ?? [],
+      gateway: view?.hub || "",
+      localIp: view?.self || "",
+    };
+  }
+  if (base === "cpu") return cpuSlice(msg, mode, opts);
+  return { devices: msg.devices, flows: msg.flows, gateway: msg.gateway, localIp: msg.local_ip };
+}
+
+const GLOW_VERT = `
+attribute float along;
+attribute float glowAb;
+attribute float glowBa;
+varying vec3 vColor;
+varying float vAlong;
+varying float vAb;
+varying float vBa;
+void main() {
+  vColor = color;
+  vAlong = along;
+  vAb = glowAb;
+  vBa = glowBa;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const GLOW_FRAG = `
+uniform float uTime;
+uniform float uSpeed;
+uniform float uAmt;
+uniform float uMode;
+uniform float uAdditive;
+varying vec3 vColor;
+varying float vAlong;
+varying float vAb;
+varying float vBa;
+
+float comet(float along, float phase) {
+  float behind = fract(phase - along);
+  return exp(-behind * 3.6);
+}
+float pulse(float along, float phase) {
+  return 0.35 + 0.65 * 0.5 * (1.0 + sin((along - phase) * 6.2831853));
+}
+
+void main() {
+  float glow = 0.0;
+  if (vAb > 0.001) {
+    float phase = fract(uTime * uSpeed * (0.40 + 0.70 * vAb));
+    glow += vAb * (uMode < 0.5 ? comet(vAlong, phase) : pulse(vAlong, phase));
+  }
+  if (vBa > 0.001) {
+    float phase = fract(uTime * uSpeed * (0.40 + 0.70 * vBa));
+    float along = 1.0 - vAlong;
+    glow += vBa * (uMode < 0.5 ? comet(along, phase) : pulse(along, phase));
+  }
+  glow *= uAmt;
+  vec3 rgb = vColor * (0.25 + glow * 3.6);
+  float a = clamp(0.12 * max(vAb, vBa) * uAmt + glow, 0.0, 1.0);
+  if (uAdditive > 0.5) gl_FragColor = vec4(rgb * a, 1.0);
+  else gl_FragColor = vec4(rgb, a);
+}
+`;
+
+function glowMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uSpeed: { value: 1 },
+      uAmt: { value: 1 },
+      uMode: { value: 0 },
+      uAdditive: { value: 1 },
+    },
+    vertexShader: GLOW_VERT,
+    fragmentShader: GLOW_FRAG,
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+}
+const _edgeTmp = new THREE.Color();
+const _m = new THREE.Matrix4();
+const _pos = new THREE.Vector3();
+const _scl = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
+const _sphere = new THREE.Sphere();
+const _hit = new THREE.Vector3();
+const _sph = new THREE.Spherical();
+const _sphWant = new THREE.Spherical();
+const _off = new THREE.Vector3();
+const _restT = new THREE.Vector3();
+const _hot = new THREE.Vector3();
+const _camWant = new THREE.Vector3();
+const _fadeB = new THREE.Color();
+const _colA = new THREE.Color();
+const _colB = new THREE.Color();
+const _overlayKeep = new Set<string>();
+/** node colours with less WCAG contrast than this against the scene behind the label make a poor highlight */
+const HL_MIN_CONTRAST = 4.5;
+const _bulkGoal = new THREE.Vector3();
+
+/** Bytes/s before a node pulls the dream zoom. Quiet mDNS chatter stays out of the centroid. */
+const DREAM_HOT_MIN_RATE = 400;
+/** How slowly the focus point tracks shifting activity (seconds). */
+const DREAM_FOCUS_TAU = 10;
+
+/** Cinematic orbit: yaw around the captured view, a pitch nod, and a slow zoom toward busy nodes. */
+export interface DreamAnim {
+  /** seconds per full yaw revolution */
+  yawPeriod: number;
+  /** pitch nod amplitude in degrees */
+  pitchDeg: number;
+  /** seconds per pitch cycle */
+  pitchPeriod: number;
+  /** 0–1 fraction of rest radius to dolly in at the zoom peak */
+  zoom: number;
+  /** seconds for a full zoom in-and-out */
+  zoomPeriod: number;
+  /** when on, the zoom eases the look-at toward the highest-activity nodes */
+  follow: boolean;
+  /** cycle graph views while dreaming */
+  cycle: boolean;
+  /** seconds between view / motion pulses */
+  cyclePeriod: number;
+  /** pick new orbit/pitch/zoom within the slider ranges on each pulse */
+  randomize: boolean;
+  /** far-field sky behind the graph */
+  backdrop: BackdropKind;
+  skyOpacity: number;
+  skyBright: number;
+  skyAudio: boolean;
+  /** 0–4 multiplier on the sky's animation clock (0 freezes it) */
+  skySpeed: number;
+  /** 0–1 how gently that clock's speed follows the pulse and the slider: 0 snaps, 1 glides over seconds */
+  skyEase: number;
+  /** pulse the scene clear / fog (the fill behind the sky) */
+  bgAudio: boolean;
+  /** empty string = scene fill follows the theme's defined bg */
+  bgColor: string;
+  /** 0–1 how much of the fill stays; the rest is black (dark themes) or white (light) */
+  bgOpacity: number;
+  gridOpacity: number;
+  gridBright: number;
+  gridAudio: boolean;
+  /** empty string = follow the theme's grid colour */
+  gridColor: string;
+  /** world units on a side of each tile */
+  gridSize: number;
+  gridShape: FloorShape;
+  /** 0–2 multiplier on the audio / traffic pulse */
+  audioSens: number;
+  /** what feeds the pulse: microphone (traffic fallback), whole-network rate, or the selected node */
+  audioDrive: AudioDrive;
+  /** modulate dream camera orbit / pitch / zoom from the pulse */
+  audioCamera: boolean;
+  /** 0–2 how hard the audio / traffic pulse drives the camera (FOV, orbit speed, zoom) when audioCamera is on */
+  camAudio: number;
+  /** 0–2 how hard detected velocity of change (layout motion + pulse onset) drives the camera */
+  camChange: number;
+  /** 0–2 how hard webcam gaze steers look-at and orbit; asks for the camera when > 0 */
+  camGaze: number;
+  /** 0–1 how heavily the camera resists all motion (orbit, nod, zoom, gaze, framing, FOV); 0 tracks immediately */
+  camInertia: number;
+  /** 0–1 how slowly motion may reverse: camera steps and node velocities ease through zero instead of snapping */
+  moveEase: number;
+  /** tint the theme's accent, edges and roles toward the main colour in the webcam */
+  camTheme: boolean;
+  /** bounce and glow graph nodes from the pulse; drag a node to pin it, release to fling */
+  audioNodes: boolean;
+  /** random theme: off, on the view cadence, or on audio beats */
+  themeCycle: ThemeCycle;
+  /** random far-field sky (including live camera): same clocks as theme, independently on or off */
+  skyCycle: ThemeCycle;
+  /** 0.5–2 multiplier on CSS label size (and font-weight) */
+  labelWeight: number;
+  /** how many LAN / internet names to keep on besides self, gateway, selection, and live bursts */
+  labelCount: number;
+  /** 0.4–2.5 multiplier on sphere radius */
+  nodeWeight: number;
+  /** 0.3–2.5 multiplier on edge brightness and particle size */
+  edgeWeight: number;
+  /** traveling highlight on active edges: off, comet (directional head), or pulse (standing wave) */
+  edgeGlow: EdgeGlow;
+  /** 0–2 multiplier on the glow */
+  edgeGlowAmt: number;
+  /** 0.25–3 multiplier on how fast the glow travels */
+  edgeGlowSpeed: number;
+  /** simultaneous view wall: off, 2×2, 2×3, 2×4 */
+  mosaic: MosaicSize;
+  /** full-height hero pane for the current view; tiles keep the mosaic count */
+  hero: HeroPos;
+  /** what the camera frames: moving/busy nodes, movers only, or the whole graph as a box */
+  focus: FocusMode;
+}
+
+export type MosaicSize = "off" | "4" | "6" | "8";
+export type EdgeGlow = "off" | "comet" | "pulse";
+export type HeroPos = "off" | "left" | "center" | "right";
+export type FocusMode = "activity" | "motion" | "cloud";
+
+export const FOCUS_MODES: { value: FocusMode; label: string; hint: string }[] = [
+  { value: "activity", label: "activity", hint: "frame the nodes that are moving or carrying traffic — not a sphere of everything" },
+  { value: "motion", label: "motion", hint: "frame only nodes that are currently moving in the layout" },
+  { value: "cloud", label: "whole graph", hint: "frame every visible node as a box that matches the viewport, not a sphere" },
+];
+
+export type AudioDrive = "mic" | "traffic" | "node";
+export type ThemeCycle = "off" | "cadence" | "audio";
+
+export const AUDIO_DRIVES: { value: AudioDrive; label: string; hint: string }[] = [
+  { value: "mic", label: "mic", hint: "microphone; live traffic if the mic is unavailable" },
+  { value: "traffic", label: "traffic", hint: "whole-network packet rate" },
+  { value: "node", label: "selection", hint: "selected (or hovered) node's rate — drag a node to pick it" },
+];
+
+export const THEME_CYCLES: { value: ThemeCycle; label: string; hint: string }[] = [
+  { value: "off", label: "off", hint: "keep the current theme" },
+  { value: "cadence", label: "cadence", hint: "random theme on the view cadence, with a fade" },
+  { value: "audio", label: "beat", hint: "random theme on audio / traffic transients" },
+];
+
+export const SKY_CYCLES: { value: ThemeCycle; label: string; hint: string }[] = [
+  { value: "off", label: "off", hint: "keep the current far-field sky" },
+  { value: "cadence", label: "cadence", hint: "random sky (fractal / space / matrix / live) on the view cadence" },
+  { value: "audio", label: "beat", hint: "random sky on audio / traffic transients — independent of theme cycle" },
+];
+
+export const EDGE_GLOWS: { value: EdgeGlow; label: string; hint: string }[] = [
+  { value: "off", label: "off", hint: "no traveling highlight; particles still show traffic" },
+  { value: "comet", label: "comet", hint: "a head-and-tail glow runs along each active edge in the traffic direction" },
+  { value: "pulse", label: "pulse", hint: "a soft wave travels the edge; both ways when the conversation is two-sided" },
+];
+
+export const MOSAIC_SIZES: { value: MosaicSize; label: string; hint: string }[] = [
+  { value: "off", label: "1×", hint: "one view, full screen" },
+  { value: "4", label: "2×2", hint: "four tiles; with a center hero, two on each side" },
+  { value: "6", label: "2×3", hint: "six tiles; with a center hero, four on the left and two on the right" },
+  { value: "8", label: "2×4", hint: "eight tiles; with a center hero, four on each side" },
+];
+
+export const HERO_POS: { value: HeroPos; label: string; hint: string }[] = [
+  { value: "off", label: "off", hint: "equal tiles; no full-height pane" },
+  { value: "left", label: "left", hint: "current view full height on the left; tiles fill the right" },
+  { value: "center", label: "center", hint: "current view full height in the middle; tiles split left/right (2×3 → 4+2)" },
+  { value: "right", label: "right", hint: "current view full height on the right; tiles fill the left" },
+];
+
+export const DEFAULT_DREAM: DreamAnim = {
+  yawPeriod: 150,
+  pitchDeg: 8,
+  pitchPeriod: 16,
+  zoom: 0.4,
+  zoomPeriod: 55,
+  follow: true,
+  cycle: false,
+  cyclePeriod: 45,
+  randomize: false,
+  backdrop: "none",
+  skyOpacity: 1,
+  skyBright: 1,
+  skyAudio: true,
+  skySpeed: 1,
+  skyEase: 0.4,
+  bgAudio: false,
+  bgColor: "",
+  bgOpacity: 1,
+  gridOpacity: 0.7,
+  gridBright: 1,
+  gridAudio: true,
+  gridColor: "",
+  gridSize: 50,
+  gridShape: "square",
+  audioSens: 1,
+  audioDrive: "mic",
+  audioCamera: true,
+  camAudio: 1,
+  camChange: 0.6,
+  camGaze: 0,
+  camInertia: 0.55,
+  moveEase: 0.45,
+  camTheme: false,
+  audioNodes: false,
+  themeCycle: "off",
+  skyCycle: "off",
+  labelWeight: 1,
+  labelCount: 40,
+  nodeWeight: 1,
+  edgeWeight: 1,
+  edgeGlow: "comet",
+  edgeGlowAmt: 1,
+  edgeGlowSpeed: 1,
+  mosaic: "off",
+  hero: "off",
+  focus: "activity",
+};
+
+export const DREAM_BOUNDS = {
+  yawPeriod: { min: 40, max: 480, step: 10 },
+  pitchDeg: { min: 0, max: 20, step: 1 },
+  pitchPeriod: { min: 6, max: 40, step: 1 },
+  zoom: { min: 0, max: 0.7, step: 0.05 },
+  zoomPeriod: { min: 15, max: 180, step: 5 },
+  cyclePeriod: { min: 15, max: 180, step: 5 },
+  opacity: { min: 0, max: 1, step: 0.05 },
+  bright: { min: 0, max: 2, step: 0.05 },
+  skySpeed: { min: 0, max: 4, step: 0.05 },
+  skyEase: { min: 0, max: 1, step: 0.05 },
+  gridSize: { min: 16, max: 160, step: 4 },
+  audioSens: { min: 0, max: 2, step: 0.05 },
+  camDrive: { min: 0, max: 2, step: 0.05 },
+  camInertia: { min: 0, max: 1, step: 0.05 },
+  moveEase: { min: 0, max: 1, step: 0.05 },
+  labelWeight: { min: 0.5, max: 2, step: 0.05 },
+  labelCount: { min: 8, max: 120, step: 4 },
+  nodeWeight: { min: 0.4, max: 2.5, step: 0.05 },
+  edgeWeight: { min: 0.3, max: 2.5, step: 0.05 },
+  edgeGlowAmt: { min: 0.2, max: 2, step: 0.05 },
+  edgeGlowSpeed: { min: 0.25, max: 3, step: 0.05 },
+};
+
+/**
+ * Per-instance node shapes (modes.SHAPES). Every node is an instance of one unit sphere; the vertex shader moves each
+ * vertex along its own direction to the radius the shape has there, so a cube, a star or a disc costs nothing extra
+ * and stays one draw call. Radii are picked for roughly equal volume, so a network's shape does not read as size.
+ * The normal comes from two neighbouring surface points (finite differences), which also softens the edges a little.
+ */
+const SHAPE_GLSL = `
+float shapeR(vec3 d, float s) {
+  vec3 a = abs(d);
+  if (s < 0.5) return 1.0;                                            // sphere
+  if (s < 1.5) return 0.8 / max(a.x, max(a.y, a.z));                  // cube
+  if (s < 2.5) { float m = max(a.x, max(a.y, a.z)); return 0.55 + 0.75 * pow(m, 10.0); }  // six-pointed star
+  if (s < 3.5) return 1.46 / (a.x + a.y + a.z);                       // octahedron
+  if (s < 4.5) return 1.35 / (0.95 * a.y + 1.35 * length(d.xz));      // diamond: two cones tip to base
+  return 1.15 / length(vec3(d.x, d.y * 2.6, d.z));                    // disc
+}
+vec3 shapeNormal(vec3 d, float s) {
+  vec3 t1 = normalize(cross(d, abs(d.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+  vec3 t2 = cross(d, t1);
+  vec3 p0 = d * shapeR(d, s);
+  vec3 d1 = normalize(d + 0.02 * t1);
+  vec3 d2 = normalize(d + 0.02 * t2);
+  vec3 n = cross(d1 * shapeR(d1, s) - p0, d2 * shapeR(d2, s) - p0);
+  n = normalize(n);
+  return dot(n, d) < 0.0 ? -n : n;
+}
+`;
+
+/**
+ * One lit material for every node. Colour comes from `instanceColor`; the emissive glow (selection / hover / activity),
+ * the opacity (offline devices) and the shape are per-instance attributes spliced into the standard shader, so the
+ * whole device cloud is a single draw call instead of one mesh and one material per device.
+ */
+function sphereMaterial(): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.15, transparent: true });
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute float instanceGlow;\nattribute float instanceAlpha;\nattribute float instanceShape;\nvarying float vGlow;\nvarying float vAlpha;" + SHAPE_GLSL)
+      .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nif (instanceShape > 0.5) objectNormal = shapeNormal(normalize(position), instanceShape);")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nif (instanceShape > 0.5) { vec3 sd = normalize(position); transformed = sd * shapeR(sd, instanceShape); }\nvGlow = instanceGlow;\nvAlpha = instanceAlpha;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vGlow;\nvarying float vAlpha;")
+      .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.a *= vAlpha;")
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance = vColor.rgb * vGlow;");
+  };
+  return mat;
+}
+
+/** An instanced sphere cloud with room for `cap` nodes and the extra per-instance attributes the material reads. */
+function sphereCloud(material: THREE.Material, cap: number): THREE.InstancedMesh {
+  // 20×16 is enough for cube/star edges to read; 32×24 was ~2.4× the vertex work per instance
+  const geo = new THREE.SphereGeometry(1, 20, 16);
+  geo.setAttribute("instanceGlow", new THREE.InstancedBufferAttribute(new Float32Array(cap), 1));
+  geo.setAttribute("instanceAlpha", new THREE.InstancedBufferAttribute(new Float32Array(cap), 1));
+  geo.setAttribute("instanceShape", new THREE.InstancedBufferAttribute(new Float32Array(cap), 1));
+  const mesh = new THREE.InstancedMesh(geo, material, cap);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  mesh.count = 0;
+  mesh.frustumCulled = false; // the bounding sphere would be the unit geometry's, not the cloud's
+  return mesh;
+}
+
+export interface SceneOpts {
+  /** extra mosaic pane: no microphone, lower pixel ratio, no view-cadence callbacks */
+  satellite?: boolean;
+}
+
+export class NetScene {
+  readonly renderer: THREE.WebGLRenderer;
+  readonly labelRenderer: CSS2DRenderer;
+  readonly scene = new THREE.Scene();
+  readonly camera: THREE.PerspectiveCamera;
+  readonly controls: OrbitControls;
+  private nodes = new Map<string, GNode>();
+  private links = new Map<string, GLink>();
+  /** every device sphere in one draw call; `labels` holds their CSS2D labels (positioned by hand each frame) */
+  private spheres: THREE.InstancedMesh;
+  private readonly sphereMat = sphereMaterial();
+  private readonly labels = new THREE.Group();
+  private sim: Simulation<GNode, GLink>;
+  private linkForce = forceLink<GNode, GLink>().id((n) => n.id);
+  private lines: THREE.LineSegments;
+  private glowLines: THREE.LineSegments;
+  private glowMat: THREE.ShaderMaterial;
+  private linePos: Float32Array;
+  private lineCol: Float32Array;
+  private glowAlong: Float32Array;
+  private glowAb: Float32Array;
+  private glowBa: Float32Array;
+  private glowCol: Float32Array;
+  private particles: THREE.Points;
+  private partPos: Float32Array;
+  private partCol: Float32Array;
+  private partState: { link: GLink; t: number; dir: 1 | -1; speed: number }[] = [];
+  private raycaster = new THREE.Raycaster();
+  private pointer = new THREE.Vector2(2, 2);
+  private hovered: GNode | null = null;
+  private selected: GNode | null = null;
+  private filters: Filters = { lan: true, internet: true, multicast: false, offline: true, labels: true };
+  /** allow/block predicate from the settings cog; hides matching devices (defaults to show-all) */
+  private nodeFilter: (d: Device) => boolean = () => true;
+  private lastInteraction = performance.now();
+  /** false while a standalone view (NetPong) owns the screen: the frame loop idles instead of rendering */
+  private active = true;
+  /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
+  private stageOnly = false;
+  private now = Date.now() / 1000;
+  private mode: ViewMode = topology;
+  private modeOpts: Record<string, string> = {};
+  private lastMsg: StateMsg | null = null;
+  /** raw address -> representative node, filled by the "merge names" collapse (empty when off) */
+  private aliasMap = new Map<string, string>();
+  private overlayObjs = new Map<string, CSS2DObject>();
+  /** unit direction to glide toward on a mode switch; distance is fitted to the focus box */
+  private cameraGoalDir: THREE.Vector3 | null = null;
+  /** axis-aligned box around the current focus set (not a sphere) */
+  private focus = { x: 0, y: 0, z: 0, hx: 280, hy: 220, hz: 280, n: 0 };
+  /** cinematic orbit: yaw, pitch nod, and zoom toward busy nodes; paused while the user drags */
+  private dreaming = false;
+  private dreamHeld = false;
+  /** user panned / zoomed / orbited: keep that look-at instead of sliding back to the focus box */
+  private lookPinned = false;
+  private dreamYaw = 0;
+  private dreamPitch = 0;
+  private dreamZoom = 0;
+  private dreamRest = { radius: 1, phi: Math.PI / 4, theta: 0, tx: 0, ty: 0, tz: 0 };
+  /** last applied camera step; moveEase turns this toward the new error so heading cannot reverse in one frame */
+  private camStep = { theta: 0, phi: 0, radius: 0, tx: 0, ty: 0, tz: 0, fov: 0 };
+  private dreamFocus = new THREE.Vector3();
+  private dreamFocusW = 0;
+  private anim: DreamAnim = { ...DEFAULT_DREAM };
+  private dreamPulseT = 0;
+  private theme: Theme = DEFAULT_THEME;
+  private rim: THREE.PointLight;
+  private grid = new FloorGrid();
+  private backdrop = new Backdrop();
+  private pulse = new AudioPulse();
+  onSelect: (d: Device | null) => void = () => {};
+  /** fired on the dream cadence so the app can cycle views / reshuffle motion */
+  onDreamPulse: () => void = () => {};
+  /** fired on a bass transient when theme cycle is set to beat */
+  onThemePulse: () => void = () => {};
+  /** live webcam colour for camTheme, or null when the option is off / the camera is dark */
+  onCamTheme: (hex: number | null) => void = () => {};
+  /** last smoothed webcam colour (packed RGB), for a theme switch to retint immediately */
+  liveCamColor: number | null = null;
+  /** last heat hint from a sandboxed TypeScript plugin */
+  pluginHeat = 0;
+  private pluginColors = new Map<string, number>();
+  private pulseLevel = 0;
+  private pulseBass = 0;
+  /** 0–1 smoothed layout speed of moving nodes (sampleFocus); feeds camChange */
+  private layoutVel = 0;
+  /** 0–1 smoothed |d pulse / dt| plus layout velocity, for the camera's "change" mix */
+  private changeVel = 0;
+  private prevPulseLevel = 0;
+  private gaze = new Gaze();
+  private camHue = 0;
+  private camSat = 0;
+  private camHueOn = false;
+  private camThemeAt = 0;
+  private bassSlow = 0;
+  private beatCool = 0;
+  private fadeT = 1;
+  private fadeFrom = { clear: 0, fog: 0, rim: 0, gridMajor: 0, gridMinor: 0 };
+  private dragging: GNode | null = null;
+  private readonly dragPlane = new THREE.Plane();
+  private readonly dragHit = new THREE.Vector3();
+  private readonly dragVel = new THREE.Vector3();
+  private readonly baseFov = 55;
+  private readonly satellite: boolean;
+  /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
+  private compactLabels = false;
+  private raf = 0;
+  /** instanceColor / instanceShape only change on snapshot restyle, not every frame */
+  private instanceStyleDirty = true;
+  /** CSS2DRenderer needs one flush after the last label/overlay is hidden */
+  private labelsDrawn = false;
+  private viewW = 0;
+  private viewH = 0;
+  private readonly ro: ResizeObserver;
+  private readonly onWinResize: () => void;
+  /** layout stretch so a wide viewport fills with the graph instead of a sphere sitting in the middle */
+  private spreadX = 1;
+  private spreadZ = 1;
+  private chargeForce = forceManyBody<GNode>();
+  /** uncrowded shell radius → widened radius, for shells more nodes share than fit around them (measureCrowds) */
+  private crowdRadius = new Map<number, number>();
+  /** uncrowded shell radius → 0..1 flattening multiplier for shells still crowded after widening */
+  private crowdRelax = new Map<number, number>();
+  /** uncrowded shell radius → charge multiplier, so a crowd's total push stays about that of a full ring */
+  private crowdCharge = new Map<number, number>();
+
+  /** The radius the mode wants for the node before crowding is taken into account. */
+  private baseShell(n: GNode): number {
+    return this.mode.shellRadius?.(n, SHELL) ?? SHELL[n.device.role];
+  }
+
+  /** The radius the layout actually uses: the mode's, widened when the shell is crowded. */
+  private shellR(n: GNode): number {
+    const r = this.baseShell(n);
+    return this.crowdRadius.get(r) ?? r;
+  }
+
+  private get ctx(): ModeCtx {
+    const slice = this.lastMsg ? rfSlice(this.lastMsg, this.mode, this.modeOpts) : null;
+    return {
+      now: this.now, nodes: this.nodes, links: this.links, opts: this.modeOpts,
+      gateway: slice?.gateway || this.lastMsg?.gateway || "",
+      localIp: slice?.localIp || this.lastMsg?.local_ip || "",
+      selected: this.selected, spreadX: this.spreadX, spreadZ: this.spreadZ, labelCount: this.anim.labelCount,
+      smallPane: this.smallPane,
+      watch: this.mode.graphBase === "wifi" ? this.lastMsg?.views?.wifi?.watch : undefined,
+    };
+  }
+
+  constructor(private container: HTMLElement, opts: SceneOpts = {}) {
+    this.satellite = !!opts.satellite;
+    const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: !this.satellite && dpr < 1.3,
+      alpha: false,
+      powerPreference: this.satellite ? "low-power" : "high-performance",
+    });
+    this.renderer.setPixelRatio(dpr);
+    const bootW = Math.max(2, container.clientWidth), bootH = Math.max(2, container.clientHeight);
+    this.renderer.setSize(bootW, bootH);
+    this.renderer.setClearColor(this.theme.scene.clear);
+    container.appendChild(this.renderer.domElement);
+    this.renderer.domElement.addEventListener("webglcontextlost", (e) => e.preventDefault());
+    this.renderer.domElement.addEventListener("webglcontextrestored", () => this.relayout());
+
+    this.labelRenderer = new CSS2DRenderer();
+    this.labelRenderer.setSize(container.clientWidth, container.clientHeight);
+    Object.assign(this.labelRenderer.domElement.style, { position: "absolute", top: "0", left: "0", pointerEvents: "none" });
+    container.appendChild(this.labelRenderer.domElement);
+
+    this.camera = new THREE.PerspectiveCamera(this.baseFov, container.clientWidth / container.clientHeight, 1, 12000);
+    this.camera.position.set(0, 820, 820);
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    // one-finger / left-drag pans the graph; pinch and the wheel still zoom; modifier or right-drag orbits
+    this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+    this.controls.touches.ONE = THREE.TOUCH.PAN;
+    this.controls.autoRotate = true;
+    this.controls.autoRotateSpeed = 0.35;
+    this.controls.addEventListener("start", () => {
+      this.lastInteraction = performance.now();
+      this.controls.autoRotate = false;
+      this.cameraGoalDir = null;
+      this.dreamHeld = true;
+    });
+    this.controls.addEventListener("end", () => {
+      this.dreamHeld = false;
+      this.lookPinned = true;
+      this.captureDreamRest();
+    });
+
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 1.4);
+    key.position.set(300, 500, 400);
+    this.scene.add(key);
+    this.rim = new THREE.PointLight(this.theme.scene.rim, 4000, 0, 1.2);
+    this.rim.position.set(-400, -200, -300);
+    this.scene.add(this.rim);
+    this.scene.fog = new THREE.FogExp2(this.theme.scene.fog, 0.00075);
+
+    // faint reference grid on the "floor"
+    this.grid.setColors(this.theme.scene.gridMajor, this.theme.scene.gridMinor);
+    this.scene.add(this.grid.mesh);
+    this.scene.add(this.backdrop.mesh);
+    this.scene.add(this.backdrop.liveMesh);
+    this.backdrop.setColors(this.theme.scene.rim, this.theme.scene.clear);
+
+    // devices
+    this.spheres = sphereCloud(this.sphereMat, SPHERE_CAPACITY);
+    this.scene.add(this.spheres);
+    this.scene.add(this.labels);
+
+    // edges
+    this.linePos = new Float32Array(0);
+    this.lineCol = new Float32Array(0);
+    const lg = new THREE.BufferGeometry();
+    // additive (dark themes): dim lines fade into the background instead of being painted darker than it (black strokes).
+    // Light themes use normal blending and edgeColor() lerps from the background instead.
+    this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.lines.frustumCulled = false;
+    this.scene.add(this.lines);
+    this.glowAlong = new Float32Array(0);
+    this.glowAb = new Float32Array(0);
+    this.glowBa = new Float32Array(0);
+    this.glowCol = new Float32Array(0);
+    this.glowMat = glowMaterial();
+    this.glowLines = new THREE.LineSegments(new THREE.BufferGeometry(), this.glowMat);
+    this.glowLines.frustumCulled = false;
+    this.glowLines.renderOrder = 1;
+    this.scene.add(this.glowLines);
+
+    // traffic particles
+    this.partPos = new Float32Array(MAX_PARTICLES * 3);
+    this.partCol = new Float32Array(MAX_PARTICLES * 3);
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute("position", new THREE.BufferAttribute(this.partPos, 3));
+    pg.setAttribute("color", new THREE.BufferAttribute(this.partCol, 3));
+    pg.setDrawRange(0, 0);
+    this.particles = new THREE.Points(pg, new THREE.PointsMaterial({ size: 3.2, vertexColors: true, transparent: true, opacity: 0.95, sizeAttenuation: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.particles.frustumCulled = false;
+    this.scene.add(this.particles);
+    this.applyBlending();
+
+    // layout. Accessors consult the active mode; d3 evaluates them when nodes/links are (re)assigned,
+    // which syncSimulation does on every structural change and on mode switch.
+    this.sim = forceSimulation<GNode, GLink>([], 3)
+      .alphaDecay(0.006)
+      .velocityDecay(0.35)
+      .force("link", this.linkForce
+        .distance((l) => (l.source.device.role === "internet" || l.target.device.role === "internet" ? 260 * this.spreadX : 160 * (0.7 + 0.3 * this.spreadX)))
+        .strength((l) => this.mode.linkStrength?.(l) ?? (l.id.startsWith("~") ? 0.03
+          : l.source.device.role === "multicast" || l.target.device.role === "multicast" ? 0 // hubs are informational only
+          : 0.12)))
+      .force("charge", this.chargeForce
+        .strength((n) => (this.mode.charge?.(n) ?? (n.device.role === "lan" || n.device.role === "local" ? -500 : -90))
+          * (this.crowdCharge.get(this.baseShell(n)) ?? 1))
+        .distanceMax(700))
+      .force("center", forceCenter<GNode>(0, 0, 0).strength(0.02))
+      .force("shell", ellipseShell(
+        (n) => this.shellR(n),
+        (n) => this.mode.shellStrength?.(n) ?? (n.device.role === "gateway" ? 1 : n.device.role === "internet" || n.device.role === "multicast" ? 0.6 : 0.9),
+        () => this.spreadX,
+        () => this.spreadZ,
+      ))
+      .force("slot", slotRing(
+        (n) => this.shellR(n),
+        (n) => this.mode.shellStrength?.(n),
+        () => this.spreadX,
+        () => this.spreadZ,
+      ))
+      .force("flatten", flattenLan(0.12, () => this.mode.flatten !== false, (n) => this.crowdRelax.get(this.baseShell(n)) ?? 1))
+      .force("mode", modeForce((nodes, alpha) => this.mode.force?.(nodes, alpha, this.ctx)))
+      .stop();
+
+    this.updateSpread();
+
+    this.onWinResize = () => this.relayout();
+    window.addEventListener("resize", this.onWinResize);
+    this.ro = new ResizeObserver(() => this.relayout());
+    this.ro.observe(container);
+    const setPointer = (e: PointerEvent | MouseEvent) => {
+      const r = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    };
+    this.renderer.domElement.addEventListener("pointermove", (e) => {
+      setPointer(e);
+      if (this.dragging) this.moveDrag();
+    });
+    this.renderer.domElement.addEventListener("pointerleave", () => {
+      if (!this.dragging) this.pointer.set(2, 2);
+    });
+    let downAt = 0, downX = 0, downY = 0;
+    this.renderer.domElement.addEventListener("pointerdown", (e) => {
+      downAt = performance.now(); downX = e.clientX; downY = e.clientY;
+      setPointer(e);
+      if (e.button !== 0) return;
+      const n = this.pick();
+      if (!n) return;
+      e.stopImmediatePropagation();
+      this.beginDrag(n);
+      this.renderer.domElement.setPointerCapture(e.pointerId);
+    }, true);
+    const finishPointer = (e: PointerEvent) => {
+      const wasDrag = this.dragging;
+      if (this.dragging) this.endDrag();
+      if (performance.now() - downAt < 300 && Math.hypot(e.clientX - downX, e.clientY - downY) < 6) {
+        setPointer(e);
+        this.select(this.pick());
+      } else if (wasDrag) {
+        this.select(wasDrag);
+      }
+    };
+    this.renderer.domElement.addEventListener("pointerup", finishPointer);
+    this.renderer.domElement.addEventListener("pointercancel", () => { if (this.dragging) this.endDrag(); });
+    this.renderer.domElement.addEventListener("dblclick", () => {
+      this.lookPinned = false;
+      this.cameraGoalDir = null;
+    });
+    this.animate = this.animate.bind(this);
+    this.raf = requestAnimationFrame(this.animate);
+  }
+
+  setFilters(f: Partial<Filters>): void {
+    Object.assign(this.filters, f);
+    this.applyVisibility();
+    this.syncSimulation(0.3);
+  }
+
+  get currentFilters(): Filters { return { ...this.filters }; }
+
+  /** User allow/block filter from settings: return false to hide a device. Re-applies visibility immediately. */
+  setNodeFilter(fn: (d: Device) => boolean): void {
+    this.nodeFilter = fn;
+    this.applyVisibility();
+    this.syncSimulation(0.3);
+  }
+
+  /** Switch view mode (or just its options). Restyles from the last snapshot and re-initialises the layout forces. */
+  setMode(mode: ViewMode, opts: Record<string, string>): void {
+    const changed = mode !== this.mode;
+    this.mode = mode;
+    this.modeOpts = { ...opts };
+    if (changed) {
+      for (const o of this.overlayObjs.values()) { this.scene.remove(o); o.element.remove(); }
+      this.overlayObjs.clear();
+      if (mode.camera) {
+        this.cameraGoalDir = new THREE.Vector3(...mode.camera).normalize();
+        this.controls.autoRotate = false;
+        this.lookPinned = false;
+        this.lastInteraction = performance.now();
+      } else {
+        this.cameraGoalDir = null;
+      }
+    }
+    if (this.lastMsg) this.update(this.lastMsg);
+    this.syncSimulation(changed ? 0.6 : 0.2);
+  }
+
+  get currentMode(): ViewMode { return this.mode; }
+
+  /** Pause / resume rendering and layout ticks (the data model keeps updating either way). */
+  setActive(on: boolean): void {
+    if (on && !this.active) this.clock.getDelta(); // drop the idle time so the first frame back is not a jump
+    this.active = on;
+    if (on && this.dreaming) this.captureDreamRest();
+  }
+
+  /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
+  setStageOnly(on: boolean): void {
+    this.stageOnly = on;
+    this.spheres.visible = !on;
+    this.lines.visible = !on;
+    this.glowLines.visible = !on && this.anim.edgeGlow !== "off";
+    this.particles.visible = !on;
+    this.labels.visible = !on;
+    this.labelRenderer.domElement.style.visibility = on ? "hidden" : "";
+    if (on) {
+      for (const obj of this.overlayObjs.values()) obj.visible = false;
+    }
+    this.applyVisibility();
+  }
+
+  /** Slowly yaw, nod, and zoom around the current camera. Dragging reframes; the orbit continues from the new view. */
+  setDream(on: boolean): void {
+    this.dreaming = on;
+    if (on) {
+      this.controls.autoRotate = false;
+      this.cameraGoalDir = null;
+      this.dreamPulseT = 0;
+      this.captureDreamRest();
+    }
+  }
+
+  get isDreaming(): boolean { return this.dreaming; }
+  /** Latest audio / traffic pulse, for HUD bars and other overlays. */
+  get pulseNow(): { level: number; bass: number } { return { level: this.pulseLevel, bass: this.pulseBass }; }
+  /** Live animation settings so arcade views can share the sky and floor. */
+  get dreamAnim(): DreamAnim { return this.anim; }
+  private get smallPane(): boolean { return this.satellite || this.compactLabels; }
+
+  /** Half the name budget when the main graph is a mosaic tile rather than the hero / full window. */
+  setCompactLabels(on: boolean): void {
+    if (this.compactLabels === on) return;
+    this.compactLabels = on;
+    if (this.lastMsg) this.refresh();
+    else this.applyVisibility();
+  }
+
+  /** Live-tweak the orbit from the settings cog. Phases keep running so sliders do not jump the camera. */
+  setAnim(a: DreamAnim): void {
+    const dropTheme = this.anim.camTheme && !a.camTheme;
+    this.anim = { ...a };
+    this.backdrop.setKind(a.backdrop);
+    if (!this.satellite) {
+      const want = new Set(cameraConsumers({
+        backdrop: a.backdrop,
+        audioCamera: a.audioCamera,
+        camGaze: a.camGaze,
+        camTheme: a.camTheme,
+      }));
+      liveCam.setWanted("live-sky", want.has("live-sky"));
+      liveCam.setWanted("gaze", want.has("gaze"));
+      liveCam.setWanted("cam-theme", want.has("cam-theme"));
+    }
+    const fog = this.scene.fog as THREE.FogExp2 | null;
+    if (fog) fog.density = this.fogDensity();
+    this.applyWeights();
+    this.applyVisibility();
+    if (this.satellite) return;
+    if (dropTheme) {
+      this.liveCamColor = null;
+      this.camHueOn = false;
+      this.onCamTheme(null);
+    }
+    if (this.audioLive() && a.audioDrive === "mic") void this.pulse.enable();
+    else this.pulse.disable();
+  }
+
+  private applyWeights(): void {
+    const a = this.anim;
+    const host = this.satellite ? this.container : document.documentElement;
+    host.style.setProperty("--label-scale", String(a.labelWeight));
+    host.style.setProperty("--label-fw", String(Math.round(400 + 350 * Math.max(0, Math.min(1, a.labelWeight)))));
+    (this.particles.material as THREE.PointsMaterial).size = 3.2 * a.edgeWeight;
+    (this.lines.material as THREE.LineBasicMaterial).opacity = Math.min(1, 0.5 + 0.5 * a.edgeWeight);
+    this.syncGlow();
+  }
+
+  private syncGlow(): void {
+    const a = this.anim;
+    this.glowLines.visible = !this.stageOnly && a.edgeGlow !== "off";
+    const u = this.glowMat.uniforms;
+    u.uAmt.value = a.edgeGlowAmt * a.edgeWeight;
+    u.uSpeed.value = a.edgeGlowSpeed;
+    u.uMode.value = a.edgeGlow === "pulse" ? 1 : 0;
+    u.uAdditive.value = this.theme.scene.additive ? 1 : 0;
+  }
+
+  private audioLive(): boolean {
+    const a = this.anim;
+    return a.skyAudio || a.bgAudio || a.gridAudio || a.audioCamera || a.audioNodes || a.themeCycle === "audio" || a.skyCycle === "audio";
+  }
+
+  private gazeWanted(): boolean {
+    return this.anim.audioCamera && this.anim.camGaze > 0.01;
+  }
+
+  setPluginStyle(s: Record<string, unknown>): void {
+    if (typeof s.heat === "number") this.pluginHeat = Math.min(1, Math.max(0, s.heat));
+  }
+
+  setPluginNodeColor(id: string, hex: number): void {
+    this.pluginColors.set(id, hex >>> 0);
+    this.instanceStyleDirty = true;
+  }
+
+  clearPluginStyle(): void {
+    this.pluginColors.clear();
+    this.pluginHeat = 0;
+    this.instanceStyleDirty = true;
+  }
+
+  /** Smooth the webcam's main colour and tell the app when the theme should retint. */
+  private stepCamTheme(): void {
+    if (!this.anim.camTheme) return;
+    const raw = liveCam.sampleMain();
+    if (!raw) return;
+    const c = hexToHsl(raw);
+    if (c.s < 0.08) return;
+    if (!this.camHueOn) {
+      this.camHue = c.h;
+      this.camSat = c.s;
+      this.camHueOn = true;
+    } else {
+      let dh = c.h - this.camHue;
+      if (dh > 0.5) dh -= 1;
+      if (dh < -0.5) dh += 1;
+      this.camHue = (this.camHue + dh * 0.14 + 1) % 1;
+      this.camSat += (c.s - this.camSat) * 0.14;
+    }
+    const hex = hslHex(this.camHue, this.camSat, 0.52);
+    const now = performance.now();
+    if (this.liveCamColor === hex) return;
+    if (this.liveCamColor != null && now - this.camThemeAt < 280) return;
+    this.liveCamColor = hex;
+    this.camThemeAt = now;
+    this.onCamTheme(hex);
+  }
+
+  private driveEnergy(): number {
+    if (this.anim.audioDrive === "node") {
+      const n = this.dragging ?? this.selected ?? this.hovered;
+      if (n) return Math.min(1, Math.log10(1 + n.rate) / 4);
+    }
+    return this.trafficEnergy();
+  }
+
+  private trafficEnergy(): number {
+    const pps = this.lastMsg?.stats.pps ?? 0;
+    return Math.min(1, Math.log10(1 + pps) / 2.4);
+  }
+
+  /** Apply slider opacity/brightness, optionally modulated by the audio / traffic pulse. */
+  private applyLook(dt: number): void {
+    const a = this.anim;
+    const live = this.audioLive();
+    const p = live ? this.pulse.tick(this.driveEnergy()) : { level: 0, bass: 0 };
+    const sens = Math.max(0, a.audioSens);
+    this.pulseLevel = Math.min(1, p.level * sens);
+    this.pulseBass = Math.min(1, p.bass * sens);
+    const onset = Math.min(1, Math.abs(this.pulseLevel - this.prevPulseLevel) / Math.max(dt, 1 / 90) * 0.28);
+    this.prevPulseLevel = this.pulseLevel;
+    this.changeVel += (Math.min(1, 0.55 * this.layoutVel + 0.85 * onset) - this.changeVel) * Math.min(1, dt * 5);
+    if (this.gazeWanted() && !this.satellite) this.gaze.tick(liveCam.video, dt);
+    else this.gaze.tick(null, dt);
+    if (!this.satellite) this.stepCamTheme();
+    if (a.themeCycle === "audio" || a.skyCycle === "audio") this.stepBeat(dt);
+    const skyP = a.skyAudio ? this.pulseLevel : 0;
+    const floorP = a.gridAudio ? this.pulseLevel : 0;
+    const skyB = a.skyAudio ? this.pulseBass : 0;
+    const floorB = a.gridAudio ? this.pulseBass : 0;
+    this.backdrop.setLook(
+      a.skyAudio ? Math.min(1, a.skyOpacity * (0.28 + 0.85 * skyP)) : a.skyOpacity,
+      a.skyAudio ? a.skyBright * (0.4 + 1.5 * skyB) : a.skyBright,
+      skyP,
+    );
+    this.backdrop.setMotion(a.skySpeed, a.skyEase);
+    this.paintGrid();
+    this.grid.setLook(
+      a.gridAudio ? Math.min(1, a.gridOpacity * (0.28 + 0.85 * floorP)) : a.gridOpacity,
+      a.gridAudio ? a.gridBright * (0.4 + 1.5 * floorB) : a.gridBright,
+      floorP,
+      a.gridSize,
+      a.gridShape,
+    );
+    this.paintClear();
+    const i = THREE.MathUtils.clamp(this.anim.camInertia ?? 0.55, 0, 1);
+    this.controls.dampingFactor = 0.25 * (1 - i) * (1 - i) + 0.015;
+    const drive = this.camDrive();
+    const fov = this.baseFov + 5.5 * drive.audio + 3.2 * drive.change;
+    const wantFov = (fov - this.camera.fov) * this.camK(dt);
+    this.camStep.fov += (wantFov - this.camStep.fov) * this.moveK(dt);
+    if (Math.abs(this.camStep.fov) > 0.002 || Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov += this.camStep.fov;
+      this.camera.updateProjectionMatrix();
+    }
+    const ease = THREE.MathUtils.clamp(this.anim.moveEase ?? 0.45, 0, 1);
+    this.sim.velocityDecay(0.35 - 0.22 * ease);
+  }
+
+  /**
+   * Pose lerp for every camera move. 0% is immediate; 100% glides over a few seconds.
+   * Pointer drag skips this (k = 1) so a pan still lands where it was released.
+   */
+  private camK(dt: number): number {
+    const i = THREE.MathUtils.clamp(this.anim.camInertia ?? 0.55, 0, 1);
+    if (i < 0.01) return 1;
+    return 1 - Math.exp(-dt / (0.12 + 3.7 * i * i));
+  }
+
+  /** How fast a motion step may change heading. 0% adopts the new delta immediately; 100% must slow through zero. */
+  private moveK(dt: number): number {
+    const e = THREE.MathUtils.clamp(this.anim.moveEase ?? 0.45, 0, 1);
+    if (e < 0.01) return 1;
+    return 1 - Math.exp(-dt / (0.06 + 2.2 * e * e));
+  }
+
+  private zeroCamStep(): void {
+    this.camStep.theta = 0;
+    this.camStep.phi = 0;
+    this.camStep.radius = 0;
+    this.camStep.tx = 0;
+    this.camStep.ty = 0;
+    this.camStep.tz = 0;
+    this.camStep.fov = 0;
+  }
+
+  private easeCam(dt: number, wantPos: THREE.Vector3, wantTgt: THREE.Vector3): void {
+    const held = this.dreamHeld || !!this.dragging;
+    const k = held ? 1 : this.camK(dt);
+    const e = held ? 1 : this.moveK(dt);
+    if (held) this.zeroCamStep();
+    const wtx = (wantTgt.x - this.controls.target.x) * k;
+    const wty = (wantTgt.y - this.controls.target.y) * k;
+    const wtz = (wantTgt.z - this.controls.target.z) * k;
+    this.camStep.tx += (wtx - this.camStep.tx) * e;
+    this.camStep.ty += (wty - this.camStep.ty) * e;
+    this.camStep.tz += (wtz - this.camStep.tz) * e;
+    this.controls.target.x += this.camStep.tx;
+    this.controls.target.y += this.camStep.ty;
+    this.controls.target.z += this.camStep.tz;
+    _sph.setFromVector3(_off.copy(this.camera.position).sub(this.controls.target));
+    _sphWant.setFromVector3(_off.copy(wantPos).sub(wantTgt));
+    let dTheta = _sphWant.theta - _sph.theta;
+    if (dTheta > Math.PI) dTheta -= Math.PI * 2;
+    else if (dTheta < -Math.PI) dTheta += Math.PI * 2;
+    const wTheta = dTheta * k;
+    const wPhi = (_sphWant.phi - _sph.phi) * k;
+    const wR = (_sphWant.radius - _sph.radius) * k;
+    this.camStep.theta += (wTheta - this.camStep.theta) * e;
+    this.camStep.phi += (wPhi - this.camStep.phi) * e;
+    this.camStep.radius += (wR - this.camStep.radius) * e;
+    _sph.theta += this.camStep.theta;
+    _sph.phi += this.camStep.phi;
+    _sph.radius += this.camStep.radius;
+    _sph.makeSafe();
+    this.camera.position.copy(this.controls.target).add(_off.setFromSpherical(_sph));
+  }
+
+  /** Blend layout velocity so a force reversal has to slow the node before it can turn around. */
+  private easeNodeVel(dt: number): void {
+    const e = this.moveK(dt);
+    if (e >= 0.999) return;
+    for (const n of this.nodes.values()) {
+      if (n === this.dragging) continue;
+      const vx = n.vx ?? 0, vy = n.vy ?? 0, vz = n.vz ?? 0;
+      n.svx = (n.svx ?? vx) + (vx - (n.svx ?? vx)) * e;
+      n.svy = (n.svy ?? vy) + (vy - (n.svy ?? vy)) * e;
+      n.svz = (n.svz ?? vz) + (vz - (n.svz ?? vz)) * e;
+      n.vx = n.svx;
+      n.vy = n.svy;
+      n.vz = n.svz;
+    }
+  }
+
+  /**
+   * How hard each camera mix is pushing this frame. All zero when the camera chip is off, so orbit
+   * sliders run as written. `audio` is bass × camAudio (orbit / FOV); `level` is the broadband pulse
+   * for zoom and nod; `change` is detected velocity × camChange; `gaze` is webcam confidence × camGaze.
+   */
+  private camDrive(): { audio: number; level: number; change: number; gaze: number; gx: number; gy: number } {
+    if (!this.anim.audioCamera) return { audio: 0, level: 0, change: 0, gaze: 0, gx: 0, gy: 0 };
+    const k = Math.max(0, this.anim.camAudio);
+    return {
+      audio: k * this.pulseBass,
+      level: k * this.pulseLevel,
+      change: Math.max(0, this.anim.camChange) * this.changeVel,
+      gaze: Math.max(0, this.anim.camGaze) * this.gaze.conf,
+      gx: this.gaze.x,
+      gy: this.gaze.y,
+    };
+  }
+
+  /** Scene fill: theme bg (or a custom override), optionally throbbing toward the rim on the audio pulse. */
+  private sceneFill(fadeK: number): number {
+    if (this.anim.bgColor) {
+      _edgeTmp.set(this.anim.bgColor);
+      return _edgeTmp.getHex();
+    }
+    return this.mixHex(this.fadeFrom.clear, this.theme.scene.clear, fadeK);
+  }
+
+  private paintClear(): void {
+    const a = this.anim;
+    const s = this.theme.scene;
+    const fadeK = this.fadeT * this.fadeT * (3 - 2 * this.fadeT);
+    const fill = this.sceneFill(fadeK);
+    const baseClear = fadeTowardPole(fill, a.bgOpacity, this.theme.dark);
+    const baseFog = fadeTowardPole(
+      this.anim.bgColor ? fill : this.mixHex(this.fadeFrom.fog, s.fog, fadeK),
+      a.bgOpacity,
+      this.theme.dark,
+    );
+    const rim = this.mixHex(this.fadeFrom.rim, s.rim, fadeK);
+    const fog = this.scene.fog as THREE.FogExp2 | null;
+    const op = Math.min(1, Math.max(0, a.bgOpacity));
+    let painted = baseClear;
+    if (a.bgAudio) {
+      const k = Math.min(1, this.pulseBass);
+      painted = this.mixHex(baseClear, s.rim, (0.08 + 0.52 * k) * op);
+      this.renderer.setClearColor(painted);
+      if (fog) fog.color.setHex(this.mixHex(baseFog, s.rim, (0.06 + 0.42 * k) * op));
+      this.backdrop.setColors(rim, painted);
+    } else {
+      this.renderer.setClearColor(baseClear);
+      if (fog) fog.color.setHex(baseFog);
+      this.backdrop.setColors(rim, baseClear);
+    }
+    this.syncSceneChrome(painted);
+  }
+
+  private lastSceneBg = "";
+  private lastLabelInk = "";
+  private labelDarkText: boolean | undefined;
+  /** grey standing in for the sky-adjusted scene, for label highlight contrast */
+  private inkBgHex = 0x0b0e14;
+  private labelFgHex = 0xf4f6fb;
+  /** Keep #wall / #scene CSS in lockstep with the WebGL clear; header chrome stays on --bg. */
+  private syncSceneChrome(hex: number): void {
+    const host = this.satellite ? this.container : document.documentElement;
+    const css = toCssHex(hex);
+    if (css !== this.lastSceneBg) {
+      this.lastSceneBg = css;
+      host.style.setProperty("--scene-bg", css);
+    }
+    const a = this.anim;
+    const lum = effectiveSceneLuminance(hex, { kind: a.backdrop, opacity: a.skyOpacity, bright: a.skyBright });
+    const inkBg = grayHex(lum);
+    const ink = sceneInk(inkBg, this.labelDarkText);
+    this.labelDarkText = ink.darkText;
+    this.inkBgHex = inkBg;
+    this.labelFgHex = ink.fgHex;
+    const key = `${ink.fg}|${ink.muted}`;
+    if (key === this.lastLabelInk) return;
+    this.lastLabelInk = key;
+    host.style.setProperty("--label-fg", ink.fg);
+    host.style.setProperty("--label-muted", ink.muted);
+    host.style.setProperty("--label-shadow", ink.shadow);
+  }
+
+  private stepBeat(dt: number): void {
+    this.beatCool = Math.max(0, this.beatCool - dt);
+    this.bassSlow += (this.pulseBass - this.bassSlow) * 0.08;
+    if (this.beatCool <= 0 && this.pulseBass > 0.28 && this.pulseBass > this.bassSlow * 1.38) {
+      this.beatCool = 1.6;
+      this.onThemePulse();
+    }
+  }
+
+  private paintGrid(): void {
+    const a = this.anim;
+    if (a.gridColor) {
+      _edgeTmp.set(a.gridColor);
+      this.grid.setColors(_edgeTmp.getHex(), _fadeB.copy(_edgeTmp).multiplyScalar(0.55).getHex());
+      return;
+    }
+    const s = this.theme.scene;
+    const k = this.fadeT * this.fadeT * (3 - 2 * this.fadeT);
+    this.grid.setColors(
+      this.mixHex(this.fadeFrom.gridMajor, s.gridMajor, k),
+      this.mixHex(this.fadeFrom.gridMinor, s.gridMinor, k),
+    );
+  }
+
+  private captureDreamRest(): void {
+    _sph.setFromVector3(_off.copy(this.camera.position).sub(this.controls.target));
+    const t = this.controls.target;
+    this.dreamRest = { radius: _sph.radius, phi: _sph.phi, theta: _sph.theta, tx: t.x, ty: t.y, tz: t.z };
+    this.dreamYaw = 0;
+    this.dreamPitch = 0;
+    this.dreamZoom = 0;
+    this.zeroCamStep();
+  }
+
+  /**
+   * Build an axis-aligned box around the current focus set. Activity / motion weigh moving and busy
+   * nodes; cloud uses every visible node. Never a bounding sphere — X and Y fit the viewport separately.
+   */
+  private sampleFocus(dt: number): void {
+    const mode = this.anim.focus;
+    const invDt = 1 / Math.max(dt, 1 / 120);
+    let sx = 0, sy = 0, sz = 0, sw = 0;
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let hits = 0;
+    let motion = 0, mw = 0;
+    for (const n of this.nodes.values()) {
+      if (!n.visible || n.scale < 0.4) continue;
+      const x = n.x ?? 0, y = n.y ?? 0, z = n.z ?? 0;
+      const speed = Math.hypot(x - n.px, y - n.py, z - n.pz) * invDt;
+      n.px = x; n.py = y; n.pz = z;
+      const heat = Math.log10(1 + n.rate);
+      let w = 0;
+      if (mode === "cloud") w = 1;
+      else if (mode === "motion") w = speed > 10 ? Math.min(2.5, speed / 35) : 0;
+      else w = (heat > Math.log10(1 + DREAM_HOT_MIN_RATE) ? heat : 0) + (speed > 8 ? Math.min(2, speed / 40) : 0);
+      if (w <= 0) continue;
+      if (speed > 8) { motion += Math.min(2, speed / 40); mw++; }
+      sx += x * w; sy += y * w; sz += z * w; sw += w;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+      hits++;
+    }
+    if (hits < 1) {
+      for (const n of this.nodes.values()) {
+        if (!n.visible || n.scale < 0.4) continue;
+        const x = n.x ?? 0, y = n.y ?? 0, z = n.z ?? 0;
+        sx += x; sy += y; sz += z; sw += 1;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+        hits++;
+      }
+    }
+    if (hits < 1 || sw <= 0) {
+      this.layoutVel += (0 - this.layoutVel) * Math.min(1, dt * 4);
+      return;
+    }
+    const cx = sx / sw, cy = sy / sw, cz = sz / sw;
+    const hx = Math.max(90, (maxX - minX) * 0.5 + 40);
+    const hy = Math.max(70, (maxY - minY) * 0.5 + 40);
+    const hz = Math.max(90, (maxZ - minZ) * 0.5 + 40);
+    const k = this.focus.n ? 1 - Math.exp(-dt / 0.08) : 1;
+    this.focus.x += (cx - this.focus.x) * k;
+    this.focus.y += (cy - this.focus.y) * k;
+    this.focus.z += (cz - this.focus.z) * k;
+    this.focus.hx += (hx - this.focus.hx) * k;
+    this.focus.hy += (hy - this.focus.hy) * k;
+    this.focus.hz += (hz - this.focus.hz) * k;
+    this.focus.n = hits;
+    this.layoutVel += ((mw ? Math.min(1, motion / mw) : 0) - this.layoutVel) * Math.min(1, dt * 4);
+  }
+
+  /** Distance that fits the focus box in the current frustum — width and height independently, not a sphere. */
+  private fitDistance(): number {
+    const vHalf = THREE.MathUtils.degToRad(this.camera.fov) / 2;
+    const hHalf = Math.atan(Math.tan(vHalf) * Math.max(0.35, this.camera.aspect));
+    const dist = Math.max(this.focus.hx / Math.tan(hHalf), this.focus.hy / Math.tan(vHalf)) + this.focus.hz * 0.4;
+    return THREE.MathUtils.clamp(dist * 1.08, 220, 7000);
+  }
+
+  /** Keep look-at on the focus box and the orbit radius large enough that the box stays in frame. */
+  private frameCamera(dt: number): void {
+    if (!this.focus.n) return;
+    const fitR = this.fitDistance();
+    const held = this.dreamHeld || !!this.dragging;
+    const pinned = this.lookPinned && !this.cameraGoalDir;
+    const recently = performance.now() - this.lastInteraction < 6000;
+    const bx = this.focus.x, by = this.focus.y, bz = this.focus.z;
+
+    if (!held && !pinned) {
+      const restK = Math.min(1, dt * 1.5);
+      this.dreamRest.tx += (bx - this.dreamRest.tx) * restK;
+      this.dreamRest.ty += (by - this.dreamRest.ty) * restK;
+      this.dreamRest.tz += (bz - this.dreamRest.tz) * restK;
+      this.dreamRest.radius += (fitR - this.dreamRest.radius) * restK;
+    }
+
+    if (this.cameraGoalDir) {
+      _bulkGoal.copy(this.cameraGoalDir).multiplyScalar(fitR);
+      _restT.set(bx, by, bz);
+      _camWant.copy(_restT).add(_bulkGoal);
+      this.easeCam(dt, _camWant, _restT);
+      const i = THREE.MathUtils.clamp(this.anim.camInertia ?? 0.55, 0, 1);
+      if (this.camera.position.distanceTo(_camWant) < 8 + 120 * i * i) {
+        this.cameraGoalDir = null;
+        this.lookPinned = true;
+        this.captureDreamRest();
+      }
+      return;
+    }
+
+    if (held || this.dreaming) return;
+
+    _sph.setFromVector3(_off.copy(this.camera.position).sub(this.controls.target));
+    const minR = fitR * 0.62;
+    let nextR = _sph.radius;
+    if (nextR < minR) nextR = minR;
+    else if (!pinned && !recently) nextR += (fitR - nextR);
+    _sph.radius = THREE.MathUtils.clamp(nextR, 80, 8000);
+    if (pinned) _restT.copy(this.controls.target);
+    else _restT.set(bx, by, bz);
+    _camWant.copy(_restT).add(_off.setFromSpherical(_sph));
+    this.easeCam(dt, _camWant, _restT);
+  }
+
+  /** Ease the dream look-at toward the current focus box (activity / motion / whole graph). */
+  private updateDreamFocus(dt: number): void {
+    const k = 1 - Math.exp(-dt / DREAM_FOCUS_TAU);
+    _hot.set(this.focus.x, this.focus.y, this.focus.z);
+    this.dreamFocus.lerp(_hot, k);
+    const want = this.anim.focus === "cloud" ? 0.35 : this.focus.n > 0 ? 1 : 0;
+    this.dreamFocusW += (want - this.dreamFocusW) * k;
+  }
+
+  private stepDream(dt: number): void {
+    const a = this.anim;
+    const d = this.camDrive();
+    const yawRadS = (Math.PI * 2) / Math.max(30, a.yawPeriod);
+    const pitchRadS = (Math.PI * 2) / Math.max(4, a.pitchPeriod);
+    const zoomOmega = (Math.PI * 2) / Math.max(8, a.zoomPeriod);
+    const cam = 1 + 0.85 * d.audio + 1.1 * d.change;
+    this.dreamYaw += dt * yawRadS * cam + dt * d.gaze * d.gx * 0.7;
+    this.dreamPitch += dt * pitchRadS * cam;
+    this.dreamZoom += dt * zoomOmega * (1 + 0.65 * d.change);
+    this.updateDreamFocus(dt);
+
+    const rest = this.dreamRest;
+    const lo = this.controls.minPolarAngle + 0.05;
+    const hi = this.controls.maxPolarAngle - 0.05;
+    let amp = (a.pitchDeg * Math.PI) / 180;
+    if (rest.phi - amp < lo) amp = rest.phi - lo;
+    if (rest.phi + amp > hi) amp = Math.min(amp, hi - rest.phi);
+    amp = Math.max(0, amp) * (1 + 0.5 * d.level + 0.45 * d.change);
+
+    const pulse = a.zoom > 0 ? 0.5 * (1 - Math.cos(this.dreamZoom)) : 0;
+    const zoomPulse = pulse * (1 + 0.7 * d.level + 0.55 * d.change);
+    const follow = !this.lookPinned && a.follow ? zoomPulse * this.dreamFocusW : 0;
+    const maxOff = Math.min(this.focus.hx, this.focus.hz) * 0.22;
+    const followX = follow / Math.max(1, this.spreadX);
+    const gx = this.lookPinned ? 0 : d.gaze * d.gx, gy = this.lookPinned ? 0 : d.gaze * d.gy;
+    _restT.set(
+      rest.tx + THREE.MathUtils.clamp((this.dreamFocus.x - rest.tx) * followX + gx * maxOff * 1.5, -maxOff * 1.6, maxOff * 1.6),
+      rest.ty + THREE.MathUtils.clamp((this.dreamFocus.y - rest.ty) * follow + gy * maxOff * 1.2, -maxOff * 1.6, maxOff * 1.6),
+      rest.tz + THREE.MathUtils.clamp((this.dreamFocus.z - rest.tz) * follow, -maxOff, maxOff),
+    );
+
+    const zoomW = a.follow ? this.dreamFocusW : 1;
+    const fitR = this.fitDistance();
+    const minR = fitR * 0.88;
+    const radius = rest.radius * (1 - a.zoom * zoomPulse * zoomW);
+    _sph.radius = Math.max(minR, Math.min(rest.radius, radius));
+    _sph.theta = rest.theta + this.dreamYaw;
+    _sph.phi = THREE.MathUtils.clamp(rest.phi + Math.sin(this.dreamPitch) * amp - gy * 0.2, lo, hi);
+    _camWant.copy(_restT).add(_off.setFromSpherical(_sph));
+    this.easeCam(dt, _camWant, _restT);
+  }
+
+  /** Recolour the scene for a theme. `fade` lerps fog, clear, rim and floor over ~0.9s. */
+  setTheme(t: Theme, fade = false): void {
+    const cur = this.theme.scene;
+    this.fadeFrom = {
+      clear: this.fadeT < 1 ? this.mixHex(this.fadeFrom.clear, cur.clear, this.fadeT) : cur.clear,
+      fog: this.fadeT < 1 ? this.mixHex(this.fadeFrom.fog, cur.fog, this.fadeT) : cur.fog,
+      rim: this.fadeT < 1 ? this.mixHex(this.fadeFrom.rim, cur.rim, this.fadeT) : cur.rim,
+      gridMajor: this.fadeT < 1 ? this.mixHex(this.fadeFrom.gridMajor, cur.gridMajor, this.fadeT) : cur.gridMajor,
+      gridMinor: this.fadeT < 1 ? this.mixHex(this.fadeFrom.gridMinor, cur.gridMinor, this.fadeT) : cur.gridMinor,
+    };
+    this.theme = t;
+    this.fadeT = fade ? 0 : 1;
+    this.applyBlending();
+    this.refresh();
+    const fog = this.scene.fog as THREE.FogExp2;
+    fog.density = this.fogDensity();
+    if (!fade) this.applyThemeColors(1);
+  }
+
+  private mixHex(a: number, b: number, t: number): number {
+    _edgeTmp.setHex(a).lerp(_fadeB.setHex(b), t);
+    return _edgeTmp.getHex();
+  }
+
+  private applyThemeColors(t: number): void {
+    const k = t * t * (3 - 2 * t);
+    this.rim.color.setHex(this.mixHex(this.fadeFrom.rim, this.theme.scene.rim, k));
+    this.paintClear();
+  }
+
+  get currentTheme(): Theme { return this.theme; }
+
+  private applyBlending(): void {
+    const b = this.theme.scene.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
+    for (const m of [this.lines.material as THREE.Material, this.particles.material as THREE.Material, this.glowMat]) {
+      m.blending = b;
+      m.needsUpdate = true;
+    }
+    this.syncGlow();
+  }
+
+  /** Edge colour at a given brightness: scaled toward black for additive themes, toward the background otherwise. */
+  private edgeColor(out: THREE.Color, hex: number, bright: number): THREE.Color {
+    if (this.theme.scene.additive) return out.setHex(hex).multiplyScalar(bright);
+    // light backgrounds need more contrast than the additive brightness curve gives
+    return out.setHex(this.theme.scene.clear).lerp(_edgeTmp.setHex(hex), bright <= 0 ? 0 : Math.min(1, 0.45 + bright * 1.2));
+  }
+
+  /** Re-render everything derived from the last snapshot (e.g. after toggling redaction). */
+  refresh(): void {
+    if (this.lastMsg) this.update(this.lastMsg);
+  }
+
+  select(n: GNode | null): void {
+    this.selected = n;
+    this.onSelect(n ? n.device : null);
+    this.applyVisibility();
+  }
+
+  /** Translate an address the server reported to the node that represents it (merged nodes), else itself. */
+  resolve(ip: string): string { return this.aliasMap.get(ip) ?? ip; }
+  setAliasMap(m: Map<string, string>): void { this.aliasMap = m; }
+
+  selectIp(ip: string): void {
+    const n = this.nodes.get(this.resolve(ip));
+    if (n) this.select(n);
+  }
+
+  private beginDrag(n: GNode): void {
+    this.dragging = n;
+    this.select(n);
+    this.controls.enabled = false;
+    this.dreamHeld = true;
+    n.fx = n.x ?? 0;
+    n.fy = n.y ?? 0;
+    n.fz = n.z ?? 0;
+    this.dragPlane.setFromNormalAndCoplanarPoint(
+      _off.copy(this.camera.position).sub(_pos.set(n.fx, n.fy, n.fz)).normalize(),
+      _pos.set(n.fx, n.fy, n.fz),
+    );
+    this.renderer.domElement.style.cursor = "grabbing";
+    this.dragVel.set(0, 0, 0);
+    this.sim.alpha(Math.max(this.sim.alpha(), 0.2));
+  }
+
+  private moveDrag(): void {
+    const n = this.dragging;
+    if (!n) return;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    if (!this.raycaster.ray.intersectPlane(this.dragPlane, this.dragHit)) return;
+    this.dragVel.set(this.dragHit.x - (n.x ?? 0), this.dragHit.y - (n.y ?? 0), this.dragHit.z - (n.z ?? 0));
+    n.x = n.fx = this.dragHit.x;
+    n.y = n.fy = this.dragHit.y;
+    n.z = n.fz = this.dragHit.z;
+  }
+
+  private endDrag(): void {
+    const n = this.dragging;
+    this.dragging = null;
+    this.controls.enabled = true;
+    this.dreamHeld = false;
+    if (this.dreaming) this.captureDreamRest();
+    this.renderer.domElement.style.cursor = "";
+    if (!n) return;
+    n.vx = (n.vx ?? 0) + this.dragVel.x * 10;
+    n.vy = (n.vy ?? 0) + this.dragVel.y * 10;
+    n.vz = (n.vz ?? 0) + this.dragVel.z * 10;
+    if (this.anim.audioNodes) {
+      this.camera.getWorldDirection(_off);
+      _off.cross(this.camera.up).normalize();
+      const k = 40 + 90 * this.pulseBass;
+      n.vx += _off.x * k;
+      n.vy += _off.y * k * 0.25;
+      n.vz += _off.z * k;
+    }
+    n.fx = n.fy = n.fz = undefined;
+    this.sim.alpha(Math.max(this.sim.alpha(), 0.15));
+  }
+
+  // ------------------------------------------------------------------ data
+
+  update(msg: StateMsg): void {
+    this.now = msg.ts;
+    this.lastMsg = msg;
+    const slice = rfSlice(msg, this.mode, this.modeOpts);
+    const view: StateMsg = { ...msg, devices: slice.devices, flows: slice.flows, gateway: slice.gateway || msg.gateway, local_ip: slice.localIp || msg.local_ip };
+    let added = false;      // structural change: links appeared/disappeared
+    let newNodes = 0;       // only new nodes justify warming the layout up
+    const cpuView = this.mode.graphBase === "cpu";
+    const wall = performance.now() / 1000;
+    const seen = new Set<string>();
+    for (const d of view.devices) {
+      seen.add(d.ip);
+      let n = this.nodes.get(d.ip);
+      if (!n) { n = this.addNode(d, view); added = true; newNodes++; }
+      n.device = d;
+      n.cpuGhost = false;
+      if (cpuView && isCpuCoreId(d.ip) && (d.cpu ?? 0) < CPU_IDLE_PCT) {
+        n.cpuIdleAt ??= wall;
+      } else {
+        n.cpuIdleAt = undefined;
+      }
+    }
+    // devices that vanished from the snapshot (state reset) are removed — except CPU nodes, which
+    // stay on the graph and fade out for a few seconds after they go unused.
+    for (const [ip, n] of this.nodes) {
+      if (seen.has(ip)) continue;
+      if (cpuView && isCpuGraphId(ip)) {
+        if (!n.cpuGhost) {
+          n.cpuGhost = true;
+          n.cpuIdleAt ??= wall;
+          n.device = { ...n.device, online: false };
+        }
+        continue;
+      }
+      this.removeNode(n);
+    }
+
+    const liveKeys = new Set<string>();
+    for (const f of view.flows) {
+      const id = `${f.a}|${f.b}`;
+      liveKeys.add(id);
+      let l = this.links.get(id);
+      const a = this.nodes.get(f.a), b = this.nodes.get(f.b);
+      if (!a || !b) continue;
+      if (!l) {
+        l = { id, flow: f, source: a, target: b, visible: true };
+        this.links.set(id, l);
+        added = true;
+      } else l.flow = f;
+    }
+    for (const id of [...this.links.keys()]) {
+      if (id.startsWith("~") || liveKeys.has(id)) continue;
+      const l = this.links.get(id)!;
+      if (cpuView && (l.source.cpuGhost || l.target.cpuGhost)) {
+        l.flow = { ...l.flow, rate: 0, rate_ab: 0, rate_ba: 0 };
+        continue;
+      }
+      this.links.delete(id);
+    }
+
+    // tether nodes without an observed conversation to their hub ("~" links): LAN and self -> gateway,
+    // local (Docker / VM / tunnel subnets) -> this host. The layout then reads as a star even when only
+    // broadcast traffic is visible.
+    const gw = this.nodes.get(view.gateway);
+    const me = this.nodes.get(view.local_ip);
+    if (gw) gw.fx = gw.fy = gw.fz = 0;
+    const hubFor = (n: GNode): GNode | undefined =>
+      n.device.role === "lan" || n.device.role === "self" ? gw : n.device.role === "local" ? me : undefined;
+    const realLinks = new Set<string>();
+    for (const l of this.links.values()) {
+      if (l.id.startsWith("~")) continue;
+      realLinks.add(`${l.source.id}|${l.target.id}`);
+      realLinks.add(`${l.target.id}|${l.source.id}`);
+    }
+    for (const n of this.nodes.values()) {
+      const tetherId = `~${n.id}`;
+      const hub = hubFor(n);
+      const wants = hub !== undefined && hub !== n && !realLinks.has(`${n.id}|${hub.id}`);
+      const existing = this.links.get(tetherId);
+      if (wants && (!existing || existing.target !== hub)) {
+        const flow: Flow = { a: n.id, b: hub.id, bytes: 0, packets: 0, ports: [], protos: [], ifaces: [], first_seen: 0, last_seen: 0, rate: 0 };
+        this.links.set(tetherId, { id: tetherId, flow, source: n, target: hub, visible: true });
+        added = true;
+      } else if (!wants && existing) {
+        this.links.delete(tetherId);
+      }
+    }
+    for (const n of this.nodes.values()) { n.active = false; n.rate = 0; }
+    for (const l of this.links.values()) {
+      if (l.flow.rate <= 0) continue;
+      l.source.active = l.target.active = true;
+      l.source.rate += l.flow.rate;
+      l.target.rate += l.flow.rate;
+      if (flowEarnsLabel(l)) {
+        l.source.labelUntil = this.now + LABEL_HOLD_S;
+        l.target.labelUntil = this.now + LABEL_HOLD_S;
+      }
+    }
+
+    // style through the active mode (visibility first, as modes rank visible nodes)
+    for (const n of this.nodes.values()) n.visible = this.nodeVisible(n);
+    const savedRoles = { ...ROLE_COLOR };
+    Object.assign(ROLE_COLOR, this.theme.roles);
+    try {
+      const ctx = this.ctx;
+      this.mode.prepare?.(ctx);
+      for (const n of this.nodes.values()) {
+        const d = n.device;
+        const plug = this.pluginColors.get(n.id) ?? this.pluginColors.get(d.ip);
+        n.color.setHex(plug ?? this.mode.nodeColor?.(n, ctx) ?? KIND_COLOR[deviceKind(d)]);
+        n.targetScale = this.mode.nodeScale?.(n, ctx) ?? this.sizeFor(d);
+        n.shape = this.mode.nodeShape?.(n, ctx) ?? 0;
+        this.setLabelText(n, this.mode.nodeLabel?.(n, ctx));
+      }
+      this.instanceStyleDirty = true;
+
+      this.applyVisibility();
+      this.applyVolume();
+      if (added) this.syncSimulation(newNodes > 0 ? (this.nodes.size <= newNodes + 1 ? 1 : 0.12) : 0);
+      this.rebuildLineBuffers();
+      this.rebuildParticles();
+    } finally {
+      Object.assign(ROLE_COLOR, savedRoles);
+    }
+    if (this.selected) this.onSelect(this.selected.device);
+  }
+
+  /**
+   * High-volume nodes get a larger title and a highlight in the node's own colour, so the emphasis follows the
+   * view's palette. `--vol` is 0..1 against the view's loudest node on a log scale; CSS mixes `--hl` into the
+   * high-contrast scene ink only when that mix still meets WCAG AA against the sky-adjusted fill.
+   */
+  private applyVolume(): void {
+    let maxLog = 0;
+    for (const n of this.nodes.values()) if (n.visible && n.rate > 0) maxLog = Math.max(maxLog, Math.log10(1 + n.rate));
+    const bgHex = this.inkBgHex;
+    for (const n of this.nodes.values()) {
+      let vol = 0;
+      if (n.visible && n.rate > 0 && maxLog > 0) {
+        const log = Math.log10(1 + n.rate);
+        const rel = Math.max(0, (log / maxLog - VOL_FLOOR) / (1 - VOL_FLOOR)); // share of the loudest node
+        const abs = Math.min(1, log / 4); // 10 kB/s reads as fully loud; 100 B/s only half
+        vol = rel * abs;
+      }
+      const el = n.labelEl;
+      const q = String(Math.round(vol * 20) / 20); // 5 % steps keep style writes rare
+      if (el.dataset.vol !== q) {
+        el.dataset.vol = q;
+        el.style.setProperty("--vol", q);
+        el.classList.toggle("hot", vol >= 0.5);
+      }
+      // mix the node's colour into the high-contrast ink only when both the colour and the mix stay readable
+      const nodeHex = n.color.getHex();
+      let hl = "";
+      if (contrastRatio(nodeHex, bgHex) >= HL_MIN_CONTRAST) {
+        const mixed = vol > 0 ? _colA.setHex(this.labelFgHex).lerp(n.color, vol * 0.85).getHex() : this.labelFgHex;
+        if (contrastRatio(mixed, bgHex) >= HL_MIN_CONTRAST) hl = `#${n.color.getHexString()}`;
+      }
+      if (el.dataset.hl !== hl) {
+        el.dataset.hl = hl;
+        if (hl) el.style.setProperty("--hl", hl);
+        else el.style.removeProperty("--hl");
+      }
+    }
+  }
+
+  /** Only visible nodes and links take part in the layout, so hidden multicast hubs cannot bunch LAN devices. */
+  private syncSimulation(minAlpha: number): void {
+    const nodes = [...this.nodes.values()].filter((n) => n.visible);
+    this.measureCrowds(nodes);
+    this.sim.nodes(nodes);
+    this.linkForce.links([...this.links.values()].filter((l) => l.visible));
+    if (minAlpha > 0) this.sim.alpha(Math.max(this.sim.alpha(), minAlpha));
+  }
+
+  /**
+   * Give crowded shells room. A shell that more nodes share than fit around it at CROWD_SPACING widens into the
+   * space before the next shell out (the outermost by at most CROWD_OUTER_MAX). Whatever crowding is left after
+   * that relaxes the shell's flattening, so the nodes use the sphere rather than one ring, and scales their charge
+   * down so the crowd pushes on the shells around it about as hard as a full ring would rather than shoving them
+   * to the poles. Everything scales continuously with the count, so a node arriving or leaving nudges the layout
+   * instead of snapping it. Nodes a mode places itself (shell strength 0) and the pinned gateway do not count.
+   */
+  private measureCrowds(nodes: GNode[]): void {
+    const count = new Map<number, number>();
+    const flat = new Map<number, number>();  // how many of them the flatten force holds to a ring
+    const flattening = this.mode.flatten !== false;
+    for (const n of nodes) {
+      const role = n.device.role;
+      if (role === "gateway" || this.mode.shellStrength?.(n) === 0) continue;
+      const r = this.baseShell(n);
+      if (r < 8) continue;
+      count.set(r, (count.get(r) ?? 0) + 1);
+      if (flattening && (role === "lan" || role === "local" || role === "self")) flat.set(r, (flat.get(r) ?? 0) + 1);
+    }
+    this.crowdRadius.clear();
+    this.crowdRelax.clear();
+    this.crowdCharge.clear();
+    const stretch = (this.spreadX + this.spreadZ) / 2;
+    // nodes that fit on a shell of radius r: around its ring when flattened, over its surface otherwise
+    const ring = (r: number) => (2 * Math.PI * r * stretch) / CROWD_SPACING;
+    const sphere = (r: number) => (4 * Math.PI * r * r * stretch * stretch) / (CROWD_SPACING * CROWD_SPACING);
+    const radii = [...count.keys()].sort((a, b) => a - b);
+    radii.forEach((r, i) => {
+      const c = count.get(r)!;
+      const holds = (flat.get(r) ?? 0) * 2 > c ? ring : sphere;
+      const fit = holds(r);
+      if (c <= fit) return;
+      const next = radii[i + 1];
+      const room = next === undefined ? r * CROWD_OUTER_MAX : Math.max(r, next - CROWD_GAP);
+      const wide = Math.min(room, holds === ring ? (r * c) / fit : r * Math.sqrt(c / fit));
+      if (wide > r + 0.5) this.crowdRadius.set(r, wide);
+      const left = holds(wide) / c;  // share of the crowd the widened shell holds
+      if (left < 1) {
+        // squared so a badly crowded ring opens into a whole sphere; a band around the equator would still
+        // shove the shells outside it toward the poles
+        this.crowdRelax.set(r, left * left);
+        this.crowdCharge.set(r, Math.max(0.25, left));
+      }
+    });
+  }
+
+  private sizeFor(d: Device): number {
+    if (d.role === "multicast") return 3;
+    const base = d.role === "gateway" ? 10 : d.role === "self" ? 7 : 5;
+    return base + Math.min(5, Math.log10(1 + d.bytes_in + d.bytes_out) * 0.45);
+  }
+
+  private addNode(d: Device, msg: StateMsg): GNode {
+    const el = document.createElement("div");
+    el.className = "label off";
+    const label = new CSS2DObject(el);
+    label.visible = false;
+    this.labels.add(label);
+    // spawn on the role's shell, in the direction of its first known peer so it slides in rather than flying across
+    const shell = SHELL[d.role];
+    const peerIp = msg.flows.find((f) => f.a === d.ip || f.b === d.ip);
+    const peer = peerIp ? this.nodes.get(peerIp.a === d.ip ? peerIp.b : peerIp.a) : undefined;
+    let dir = new THREE.Vector3(peer?.x ?? 0, peer?.y ?? 0, peer?.z ?? 0);
+    if (dir.lengthSq() < 1) dir = new THREE.Vector3().randomDirection();
+    dir.normalize().add(new THREE.Vector3().randomDirection().multiplyScalar(0.35)).normalize();
+    if (d.role === "lan" || d.role === "local" || d.role === "self") dir.y *= 0.2;
+    dir.normalize();
+    const r = shell || 1;
+    const n: GNode = {
+      id: d.ip, device: d, color: new THREE.Color(this.theme.roles[d.role]), scale: 0.01, glow: 0.15, opacity: 1, shape: 0,
+      label, labelEl: el, visible: true, active: false, rate: 0, targetScale: this.sizeFor(d),
+      x: dir.x * r * this.spreadX, y: dir.y * r, z: dir.z * r * this.spreadZ,
+      px: dir.x * r * this.spreadX, py: dir.y * r, pz: dir.z * r * this.spreadZ,
+    };
+    this.nodes.set(d.ip, n);
+    if (this.nodes.size > this.spheres.instanceMatrix.count) this.growSpheres();
+    this.setLabelText(n);
+    return n;
+  }
+
+  /** Double the instance capacity; the per-frame write fills the new mesh before it is first drawn. */
+  private growSpheres(): void {
+    const cap = Math.max(SPHERE_CAPACITY, this.spheres.instanceMatrix.count * 2);
+    this.scene.remove(this.spheres);
+    this.spheres.geometry.dispose();
+    this.spheres.dispose();
+    this.spheres = sphereCloud(this.sphereMat, cap);
+    this.spheres.visible = !this.stageOnly;
+    this.scene.add(this.spheres);
+  }
+
+  private removeNode(n: GNode): void {
+    this.labels.remove(n.label);
+    n.labelEl.remove();
+    this.nodes.delete(n.id);
+    for (const [id, l] of this.links) if (l.source === n || l.target === n) this.links.delete(id);
+    if (this.selected === n) this.select(null);
+  }
+
+  /** Drop CPU process ghosts that have finished their unused fade. Cores stay at the idle floor. */
+  private pruneCpuIdle(wall: number): boolean {
+    if (this.mode.graphBase !== "cpu") return false;
+    let removed = false;
+    for (const n of [...this.nodes.values()]) {
+      if (!n.cpuGhost || !n.cpuIdleAt || wall - n.cpuIdleAt < CPU_IDLE_FADE_S) continue;
+      if (n.id === "cpu:host" || isCpuCoreId(n.id)) continue;
+      this.removeNode(n);
+      removed = true;
+    }
+    if (removed) this.instanceStyleDirty = true;
+    return removed;
+  }
+
+  private setLabelText(n: GNode, extra?: string): void {
+    const d = n.device;
+    const raw = displayName(d);
+    const name = raw === d.ip ? rIp(d.ip) : rName(raw);
+    const cpu = d.ip.startsWith("cpu:") || d.ip.startsWith("proc:");
+    const sub = cpu
+      ? (d.ip.startsWith("proc:") ? (d.aliases?.[0] ?? "") : (d.aliases?.find((a) => a.startsWith("load") || a.endsWith("cores")) ?? ""))
+      : raw === d.ip ? (d.vendor || "") : rIp(d.ip) + (d.vendor ? ` · ${d.vendor}` : "");
+    const html = `${escapeHtml(name)}${sub ? `<small>${escapeHtml(sub)}</small>` : ""}${extra ? `<small class="mode">${escapeHtml(extra)}</small>` : ""}`;
+    if (n.labelEl.innerHTML !== html) n.labelEl.innerHTML = html;
+    n.labelEl.classList.toggle("dim", !d.online || !!n.cpuIdleAt);
+  }
+
+  private nodeVisible(n: GNode): boolean {
+    const d = n.device;
+    if (!this.nodeFilter(d)) return false;
+    if (this.mode.graphBase === "cpu") return true;
+    if (d.role === "lan" && !this.filters.lan) return false;
+    if (d.role === "internet" && !this.filters.internet) return false;
+    if (d.role === "multicast" && !this.filters.multicast) return false;
+    if (!d.online && !this.filters.offline && d.role !== "gateway" && d.role !== "self") return false;
+    return true;
+  }
+
+  private applyVisibility(): void {
+    const ctx = this.ctx;
+    const cap = paneLabelCap(ctx);
+    const visible = [...this.nodes.values()].filter((n) => this.nodeVisible(n));
+    const byBytes = (a: GNode, b: GNode) => (b.device.bytes_in + b.device.bytes_out) - (a.device.bytes_in + a.device.bytes_out) || b.rate - a.rate;
+    const topLan = new Set(visible.filter((n) => n.device.role === "lan" || n.device.role === "local").sort(byBytes).slice(0, cap).map((n) => n.id));
+    const topNet = new Set(visible.filter((n) => n.device.role === "internet").sort(byBytes).slice(0, cap).map((n) => n.id));
+    for (const n of this.nodes.values()) {
+      n.visible = this.nodeVisible(n);
+      const r = n.device.role;
+      const live = (n.labelUntil ?? 0) > this.now;
+      const focused = n === this.selected || n === this.hovered;
+      const lanKeep = (r === "lan" || r === "local") && topLan.has(n.id);
+      const netKeep = r === "internet" && topNet.has(n.id);
+      const byRole = r === "self" || r === "gateway" || lanKeep || netKeep;
+      const showLabel = n.visible && this.filters.labels && (
+        focused || live || this.mode.forceLabel?.(n, ctx) || (byRole && !this.mode.suppressLabel?.(n, ctx))
+      );
+      n.label.visible = !!showLabel; // CSS2DRenderer owns element.style.display; drive it via object visibility
+      n.labelEl.classList.toggle("off", !showLabel);
+    }
+    for (const l of this.links.values()) l.visible = l.source.visible && l.target.visible;
+  }
+
+  // ------------------------------------------------------------------ buffers
+
+  private rebuildLineBuffers(): void {
+    const n = this.links.size;
+    if (this.linePos.length !== n * 6) {
+      this.linePos = new Float32Array(n * 6);
+      this.lineCol = new Float32Array(n * 6);
+      this.glowAlong = new Float32Array(n * 2);
+      this.glowAb = new Float32Array(n * 2);
+      this.glowBa = new Float32Array(n * 2);
+      this.glowCol = new Float32Array(n * 6);
+      for (let i = 0; i < n; i++) {
+        this.glowAlong[i * 2] = 0;
+        this.glowAlong[i * 2 + 1] = 1;
+      }
+      const pos = new THREE.BufferAttribute(this.linePos, 3);
+      const col = new THREE.BufferAttribute(this.lineCol, 3);
+      this.lines.geometry.setAttribute("position", pos);
+      this.lines.geometry.setAttribute("color", col);
+      const gg = this.glowLines.geometry;
+      gg.setAttribute("position", pos);
+      gg.setAttribute("color", new THREE.BufferAttribute(this.glowCol, 3));
+      gg.setAttribute("along", new THREE.BufferAttribute(this.glowAlong, 1));
+      gg.setAttribute("glowAb", new THREE.BufferAttribute(this.glowAb, 1));
+      gg.setAttribute("glowBa", new THREE.BufferAttribute(this.glowBa, 1));
+    }
+  }
+
+  private rebuildParticles(): void {
+    // particle budget proportional to sqrt(rate) per link, capped globally
+    const wanted: { link: GLink; count: number }[] = [];
+    let total = 0;
+    for (const l of this.links.values()) {
+      if (l.flow.rate <= 0) continue;
+      const c = Math.min(40, 1 + Math.floor(Math.sqrt(l.flow.rate / 200)));
+      wanted.push({ link: l, count: c });
+      total += c;
+    }
+    const scale = total > MAX_PARTICLES ? MAX_PARTICLES / total : 1;
+    const existing = new Map<GLink, { link: GLink; t: number; dir: 1 | -1; speed: number }[]>();
+    for (const p of this.partState) {
+      if (!this.links.has(p.link.id)) continue;
+      (existing.get(p.link) ?? existing.set(p.link, []).get(p.link)!).push(p);
+    }
+    const next: typeof this.partState = [];
+    for (const { link, count } of wanted) {
+      const c = Math.max(1, Math.round(count * scale));
+      const have = existing.get(link) ?? [];
+      const { ab, ba } = flowDirRates(link.flow);
+      const nAb = Math.round(c * (ab + ba > 0 ? ab / (ab + ba) : 0.5));
+      const haveAb = have.filter((p) => p.dir === 1);
+      const haveBa = have.filter((p) => p.dir === -1);
+      for (let i = 0; i < c; i++) {
+        const wantAb = i < nAb;
+        const pool = wantAb ? haveAb : haveBa;
+        const idx = wantAb ? i : i - nAb;
+        next.push(pool[idx] ?? { link, t: Math.random(), dir: wantAb ? 1 : -1, speed: 0.25 + Math.random() * 0.35 });
+      }
+    }
+    this.partState = next;
+  }
+
+  // ------------------------------------------------------------------ frame
+
+  private clock = new THREE.Clock();
+
+  private animate(ts: number): void {
+    this.raf = requestAnimationFrame(this.animate);
+    markFrame(ts);
+    if (!this.active) return;
+    const dt = Math.min(0.05, this.clock.getDelta());
+    const wall = ts / 1000;
+    this.backdrop.tick(wall);
+    this.applyLook(dt);
+    if (this.pruneCpuIdle(wall)) {
+      this.rebuildLineBuffers();
+      this.applyVisibility();
+    }
+
+    if (this.sim.alpha() > 0.003) this.sim.tick();
+    else this.sim.alpha(0.003); // keep a gentle drift so new nodes always settle
+    this.easeNodeVel(dt);
+
+    if (this.stageOnly) {
+      this.sampleFocus(dt);
+      this.frameCamera(dt);
+      this.controls.update();
+      if (this.dreaming && !this.dreamHeld && !this.cameraGoalDir) {
+        this.stepDream(dt);
+        this.camera.lookAt(this.controls.target);
+      }
+      if (this.fadeT < 1) {
+        this.fadeT = Math.min(1, this.fadeT + dt / 0.9);
+        this.applyThemeColors(this.fadeT);
+        this.paintGrid();
+        this.paintClear();
+      }
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    // nodes: one instance each, rewritten every frame (hidden ones collapse to nothing rather than fading)
+    const sp = this.spheres;
+    const glowAttr = sp.geometry.getAttribute("instanceGlow") as THREE.InstancedBufferAttribute;
+    const alphaAttr = sp.geometry.getAttribute("instanceAlpha") as THREE.InstancedBufferAttribute;
+    const shapeAttr = sp.geometry.getAttribute("instanceShape") as THREE.InstancedBufferAttribute;
+    const cpuView = this.mode.graphBase === "cpu";
+    const styleDirty = this.instanceStyleDirty;
+    let ni = 0;
+    let labelsOn = 0;
+    for (const n of this.nodes.values()) {
+      const target = n.visible ? n.targetScale : 0.01;
+      n.scale += (target - n.scale) * Math.min(1, dt * 6);
+      const boost = n === this.selected ? 1.1 : n === this.hovered ? 0.7 : n.active ? 0.45 : 0.12;
+      n.glow += (boost - n.glow) * Math.min(1, dt * 8);
+      if (cpuView && (n.cpuIdleAt || n.cpuGhost)) n.opacity = cpuIdleOpacity(n, wall);
+      else n.opacity += ((n.device.online ? 1 : 0.35) - n.opacity) * Math.min(1, dt * 4);
+      const x = n.x ?? 0, y = n.y ?? 0, z = n.z ?? 0;
+      const beat = this.anim.audioNodes ? 1 + 0.32 * this.pulseBass * (n === this.selected || n === this.dragging ? 1.55 : 1) : 1;
+      const s = n.visible ? n.scale * beat * this.anim.nodeWeight : 0;
+      sp.setMatrixAt(ni, _m.compose(_pos.set(x, y, z), _quat, _scl.set(s, s, s)));
+      if (styleDirty) {
+        sp.setColorAt(ni, n.color);
+        shapeAttr.setX(ni, n.shape);
+      }
+      glowAttr.setX(ni, n.glow + (this.anim.audioNodes ? 0.55 * this.pulseLevel : 0));
+      alphaAttr.setX(ni, n.opacity);
+      ni++;
+      if (n.label.visible) {
+        labelsOn++;
+        n.label.position.set(x, y + 1.9 * n.scale * this.anim.nodeWeight, z);
+      }
+      if (cpuView) {
+        const fade = n.opacity.toFixed(3);
+        if (n.labelFade !== fade) {
+          n.labelFade = fade;
+          n.labelEl.style.setProperty("--fade", fade);
+        }
+      } else if (n.labelFade !== undefined) {
+        n.labelEl.style.removeProperty("--fade");
+        n.labelFade = undefined;
+      }
+    }
+    if (ni !== sp.count) this.instanceStyleDirty = true;
+    sp.count = ni;
+    sp.instanceMatrix.needsUpdate = true;
+    glowAttr.needsUpdate = true;
+    alphaAttr.needsUpdate = true;
+    if (styleDirty) {
+      sp.instanceColor!.needsUpdate = true;
+      shapeAttr.needsUpdate = true;
+      this.instanceStyleDirty = false;
+    }
+
+    // edges
+    let i = 0;
+    const sel = this.selected;
+    const tmp = _colA, tmp2 = _colB;
+    const ctx = this.ctx;
+    const mode = this.mode;
+    const th = this.theme.scene;
+    for (const l of this.links.values()) {
+      const a = l.source, b = l.target;
+      this.linePos[i] = a.x ?? 0; this.linePos[i + 1] = a.y ?? 0; this.linePos[i + 2] = a.z ?? 0;
+      this.linePos[i + 3] = b.x ?? 0; this.linePos[i + 4] = b.y ?? 0; this.linePos[i + 5] = b.z ?? 0;
+      const tether = l.id.startsWith("~");
+      let bright: number;
+      if (tether) bright = this.theme.scene.additive ? 0.08 : 0.22;
+      else if (l.flow.rate > 0) bright = 0.35 + Math.min(0.65, Math.log10(1 + l.flow.rate) / 6);
+      else bright = this.theme.scene.additive ? 0.14 : 0.38;
+      if (!tether && mode.linkBright) bright = mode.linkBright(l, ctx, bright);
+      if (sel && (a === sel || b === sel)) bright = Math.max(bright, 0.9);
+      else if (sel) bright *= 0.35;
+      if (!l.visible) bright = 0;
+      bright *= this.anim.edgeWeight * Math.min(a.opacity, b.opacity);
+      const isLan = a.device.role !== "internet" && b.device.role !== "internet";
+      const mc = tether ? undefined : mode.linkColor?.(l, ctx);
+      const ca = Array.isArray(mc) ? mc[0] : mc ?? (tether ? th.tether : isLan ? th.lanEdge : th.wanEdge);
+      const cb = Array.isArray(mc) ? mc[1] : ca;
+      this.edgeColor(tmp, ca, bright);
+      this.edgeColor(tmp2, cb, bright);
+      this.lineCol[i] = tmp.r; this.lineCol[i + 1] = tmp.g; this.lineCol[i + 2] = tmp.b;
+      this.lineCol[i + 3] = tmp2.r; this.lineCol[i + 4] = tmp2.g; this.lineCol[i + 5] = tmp2.b;
+      this.edgeColor(tmp, ca, 0.9);
+      this.edgeColor(tmp2, cb, 0.9);
+      this.glowCol[i] = tmp.r; this.glowCol[i + 1] = tmp.g; this.glowCol[i + 2] = tmp.b;
+      this.glowCol[i + 3] = tmp2.r; this.glowCol[i + 4] = tmp2.g; this.glowCol[i + 5] = tmp2.b;
+      const { ab, ba } = flowDirRates(l.flow);
+      let gab = tether || !l.visible ? 0 : glowStrength(ab);
+      let gba = tether || !l.visible ? 0 : glowStrength(ba);
+      if (sel && a !== sel && b !== sel) { gab *= 0.35; gba *= 0.35; }
+      const gi = (i / 6) * 2;
+      if (this.glowAb.length > gi + 1) {
+        this.glowAb[gi] = this.glowAb[gi + 1] = gab;
+        this.glowBa[gi] = this.glowBa[gi + 1] = gba;
+      }
+      i += 6;
+    }
+    const pa = this.lines.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
+    const ca = this.lines.geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
+    if (pa && ca) { pa.needsUpdate = true; ca.needsUpdate = true; }
+    const gab = this.glowLines.geometry.getAttribute("glowAb") as THREE.BufferAttribute | undefined;
+    const gba = this.glowLines.geometry.getAttribute("glowBa") as THREE.BufferAttribute | undefined;
+    const gc = this.glowLines.geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
+    if (gab && gba) { gab.needsUpdate = true; gba.needsUpdate = true; }
+    if (gc) gc.needsUpdate = true;
+    this.glowMat.uniforms.uTime.value = wall;
+    this.syncGlow();
+
+    // particles
+    let k = 0;
+    for (const p of this.partState) {
+      if (k >= MAX_PARTICLES) break;
+      if (!p.link.visible) continue;
+      p.t += p.dir * p.speed * dt;
+      if (p.t > 1 || p.t < 0) { p.t = p.dir > 0 ? 0 : 1; }
+      const a = p.link.source, b = p.link.target;
+      const t = p.t;
+      this.partPos[k * 3] = (a.x ?? 0) + ((b.x ?? 0) - (a.x ?? 0)) * t;
+      this.partPos[k * 3 + 1] = (a.y ?? 0) + ((b.y ?? 0) - (a.y ?? 0)) * t;
+      this.partPos[k * 3 + 2] = (a.z ?? 0) + ((b.z ?? 0) - (a.z ?? 0)) * t;
+      const mc = mode.linkColor?.(p.link, ctx);
+      if (mc === undefined) {
+        const isLan = a.device.role !== "internet" && b.device.role !== "internet";
+        tmp.setHex(isLan ? th.lanParticle : th.wanParticle);
+      } else {
+        // particles are the tinted edge colour (lighter on dark themes, darker on light ones) so they read against the edge
+        tmp.setHex(Array.isArray(mc) ? mc[t < 0.5 ? 0 : 1] : mc).lerp(tmp2.setHex(th.particleTint), 0.35);
+      }
+      this.partCol[k * 3] = tmp.r; this.partCol[k * 3 + 1] = tmp.g; this.partCol[k * 3 + 2] = tmp.b;
+      k++;
+    }
+    this.particles.geometry.setDrawRange(0, k);
+    (this.particles.geometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+    (this.particles.geometry.getAttribute("color") as THREE.BufferAttribute).needsUpdate = true;
+
+    // hover
+    const h = this.pick();
+    if (h !== this.hovered) {
+      this.hovered = h;
+      this.renderer.domElement.style.cursor = h ? "pointer" : "";
+      this.applyVisibility();
+    }
+
+    // mode overlays (cluster tags etc.)
+    const ovs = mode.overlays?.(ctx);
+    _overlayKeep.clear();
+    if (ovs) {
+      for (const o of ovs) {
+        _overlayKeep.add(o.id);
+        let obj = this.overlayObjs.get(o.id);
+        if (!obj) {
+          const el = document.createElement("div");
+          el.className = "overlay";
+          obj = new CSS2DObject(el);
+          this.scene.add(obj);
+          this.overlayObjs.set(o.id, obj);
+        }
+        obj.position.set(o.x, o.y, o.z);
+        if (obj.element.innerHTML !== o.html) obj.element.innerHTML = o.html;
+      }
+    }
+    for (const [id, obj] of this.overlayObjs) if (!_overlayKeep.has(id)) { this.scene.remove(obj); obj.element.remove(); this.overlayObjs.delete(id); }
+
+    this.sampleFocus(dt);
+    this.frameCamera(dt);
+
+    if (!this.dreaming && !this.controls.autoRotate && ts - this.lastInteraction > 20000 && !this.selected && !this.mode.camera) this.controls.autoRotate = true;
+    this.controls.update();
+    // last writer: OrbitControls.update() rebuilds the camera from its spherical, so the nod has to land after it
+    if (this.dreaming && !this.dreamHeld && !this.cameraGoalDir) {
+      this.stepDream(dt);
+      this.camera.lookAt(this.controls.target);
+      if (!this.satellite && (this.anim.cycle || this.anim.randomize || this.anim.themeCycle === "cadence" || this.anim.skyCycle === "cadence")) {
+        this.dreamPulseT += dt;
+        if (this.dreamPulseT >= Math.max(8, this.anim.cyclePeriod)) {
+          this.dreamPulseT = 0;
+          this.onDreamPulse();
+        }
+      }
+    }
+    if (this.fadeT < 1) {
+      this.fadeT = Math.min(1, this.fadeT + dt / 0.9);
+      this.applyThemeColors(this.fadeT);
+      this.paintGrid();
+      this.paintClear();
+    }
+    this.renderer.render(this.scene, this.camera);
+    const labelsWanted = labelsOn > 0 || this.overlayObjs.size > 0;
+    if (labelsWanted || this.labelsDrawn) {
+      this.labelRenderer.render(this.scene, this.camera);
+      this.labelsDrawn = labelsWanted;
+    }
+  }
+
+  /** The nearest visible node under the pointer: a ray against each node's bounding sphere (radius = its scale). */
+  private pick(): GNode | null {
+    if (this.pointer.x > 1) return null;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const ray = this.raycaster.ray;
+    let best: GNode | null = null, bestD = Infinity;
+    for (const n of this.nodes.values()) {
+      if (!n.visible || n.scale < 0.5) continue;
+      _sphere.center.set(n.x ?? 0, n.y ?? 0, n.z ?? 0);
+      _sphere.radius = n.scale * this.anim.nodeWeight;
+      if (!ray.intersectSphere(_sphere, _hit)) continue;
+      const d = _hit.distanceToSquared(ray.origin);
+      if (d < bestD) { bestD = d; best = n; }
+    }
+    return best;
+  }
+
+  /** Fit the canvas to the host. Call after mosaic panes land in the layout. */
+  relayout(): void {
+    this.resize();
+  }
+
+  private resize(): void {
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    if (w < 2 || h < 2) return;
+    if (w === this.viewW && h === this.viewH) return;
+    this.viewW = w;
+    this.viewH = h;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+    this.labelRenderer.setSize(w, h);
+    this.backdrop.setViewport(w, h);
+    this.updateSpread();
+  }
+
+  /** Stretch the graph so its width matches the visible floor of this camera, not a 16:9 circle. */
+  private updateSpread(): void {
+    const aspect = Math.max(0.5, this.camera.aspect);
+    // 16:9 keeps the original spherical layout; wider panes stretch X so shells fill the frame.
+    const nextX = THREE.MathUtils.clamp(aspect / (16 / 9), 1, 3.2);
+    const nextZ = 1;
+    const changed = Math.abs(nextX - this.spreadX) > 0.04 || Math.abs(nextZ - this.spreadZ) > 0.04;
+    this.spreadX = nextX;
+    this.spreadZ = nextZ;
+    this.chargeForce.distanceMax(700 * this.spreadX);
+    // PlaneGeometry is XY; the floor mesh is rotated -90° about X, so local Y is world Z.
+    this.grid.mesh.scale.set(Math.max(1, this.spreadX * 1.15), Math.max(1, this.spreadZ), 1);
+    const fog = this.scene.fog as THREE.FogExp2 | null;
+    if (fog) fog.density = this.fogDensity();
+    if (changed && this.nodes.size) this.sim.alpha(Math.max(this.sim.alpha(), 0.18));
+  }
+
+  private fogDensity(): number {
+    const base = this.anim.backdrop === "none" ? 0.00075 : 0.00022;
+    return base / Math.sqrt(Math.max(1, this.spreadX));
+  }
+
+  dispose(): void {
+    this.active = false;
+    cancelAnimationFrame(this.raf);
+    this.ro.disconnect();
+    window.removeEventListener("resize", this.onWinResize);
+    this.pulse.disable();
+    this.renderer.forceContextLoss();
+    this.renderer.dispose();
+    this.container.replaceChildren();
+  }
+
+  get currentTime(): number { return this.now; }
+  peersOf(ip: string): Flow[] {
+    ip = this.resolve(ip);
+    return [...this.links.values()].filter((l) => !l.id.startsWith("~") && (l.flow.a === ip || l.flow.b === ip)).map((l) => l.flow)
+      .sort((x, y) => y.rate - x.rate || y.bytes - x.bytes);
+  }
+  deviceOf(ip: string): Device | undefined { return this.nodes.get(this.resolve(ip))?.device; }
+  get selectedIp(): string | null { return this.selected?.id ?? null; }
+}
+
+/**
+ * Pull LAN/self nodes toward the y=0 plane so they form a ring around the gateway; internet nodes stay spherical.
+ * `relax` (0..1) weakens the pull per node, so a crowded shell can open into a sphere.
+ */
+function flattenLan(strength: number, enabled: () => boolean, relax: (n: GNode) => number) {
+  let nodes: GNode[] = [];
+  const force = (alpha: number) => {
+    if (!enabled()) return;
+    for (const n of nodes) {
+      const r = n.device.role;
+      if (r === "lan" || r === "self" || r === "local") n.vy = (n.vy ?? 0) - (n.y ?? 0) * strength * relax(n) * alpha;
+    }
+  };
+  force.initialize = (ns: GNode[]) => { nodes = ns; };
+  return force;
+}
+
+/** Radial shell in stretched coordinates so the graph is an ellipse matching a wide viewport. */
+function ellipseShell(
+  radius: (n: GNode) => number,
+  strength: (n: GNode) => number,
+  spreadX: () => number,
+  spreadZ: () => number,
+) {
+  let nodes: GNode[] = [];
+  const force = (alpha: number) => {
+    const sx = spreadX(), sz = spreadZ();
+    for (const n of nodes) {
+      const k0 = strength(n);
+      if (!k0) continue;
+      const x = (n.x ?? 0) / sx, y = n.y ?? 0, z = (n.z ?? 0) / sz;
+      const dist = Math.hypot(x, y, z) || 1e-6;
+      const k = (radius(n) - dist) * k0 * alpha;
+      n.vx = (n.vx ?? 0) + (x / dist) * k * sx;
+      n.vy = (n.vy ?? 0) + (y / dist) * k;
+      n.vz = (n.vz ?? 0) + (z / dist) * k * sz;
+    }
+  };
+  force.initialize = (ns: GNode[]) => { nodes = ns; };
+  return force;
+}
+
+/** Stable azimuth on the ellipse so busy nodes fan left/right instead of collapsing onto the camera-facing meridian. */
+function slotRing(
+  radius: (n: GNode) => number,
+  strength: (n: GNode) => number | undefined,
+  spreadX: () => number,
+  spreadZ: () => number,
+) {
+  let nodes: GNode[] = [];
+  const force = (alpha: number) => {
+    const sx = spreadX(), sz = spreadZ();
+    for (const n of nodes) {
+      if (strength(n) === 0) continue;
+      const role = n.device.role;
+      if (role === "gateway" || role === "multicast") continue;
+      const r = radius(n);
+      if (r < 8) continue;
+      const rho = Math.hypot((n.x ?? 0) / sx, (n.z ?? 0) / sz);
+      const mag = rho > 8 ? rho : r;
+      const theta = hashAngle(n.id);
+      const tx = Math.cos(theta) * mag * sx;
+      const tz = Math.sin(theta) * mag * sz;
+      const hot = Math.min(1, Math.log10(1 + n.rate) / 3.2);
+      const k = (0.02 + 0.14 * hot) * alpha;
+      n.vx = (n.vx ?? 0) + (tx - (n.x ?? 0)) * k;
+      n.vz = (n.vz ?? 0) + (tz - (n.z ?? 0)) * k;
+    }
+  };
+  force.initialize = (ns: GNode[]) => { nodes = ns; };
+  return force;
+}
+
+function hashAngle(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) / 4294967296) * Math.PI * 2;
+}
+
+/** Delegates to the active mode's custom force each tick. */
+function modeForce(apply: (nodes: GNode[], alpha: number) => void) {
+  let nodes: GNode[] = [];
+  const force = (alpha: number) => apply(nodes, alpha);
+  force.initialize = (ns: GNode[]) => { nodes = ns; };
+  return force;
+}
+
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+export { fmtBytes };

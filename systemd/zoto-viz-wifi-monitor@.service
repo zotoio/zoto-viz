@@ -1,0 +1,42 @@
+# System unit (root): put a second Wi-Fi radio into monitor mode on the primary Wi-Fi's channel at boot,
+# so the zoto-viz monitor hears the whole access point, then keep hopping through the channel plan the
+# monitor writes for the Air SSIDs watch list (~/.config/zoto-viz/wifi-hop.plan; see the script's --hop).
+# The instance name is the monitor radio from ~/.zoto-viz/sys-config.yml (`monitor_iface`):
+#
+#   sudo cp systemd/zoto-viz-wifi-monitor@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now zoto-viz-wifi-monitor@<monitor-radio>
+#   journalctl -u zoto-viz-wifi-monitor@<monitor-radio> -f
+#
+# Stopping the unit hands the radio back to NetworkManager. Without a plan the radio sits on the primary
+# link's channel; restart the unit if the primary link moves channel while no plan is in force.
+# Install the hopper script once:
+#   sudo install -D systemd/zoto-viz-wifi-monitor.sh /usr/local/sbin/zoto-viz-wifi-monitor
+#   sudo cp systemd/zoto-viz-wifi-monitor@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now zoto-viz-wifi-monitor@<monitor-radio>
+#
+# Stopping the unit hands the radio back to NetworkManager.
+# The script writes a udev rule that starts this unit again whenever the radio (re)appears on the USB bus, and a
+# NetworkManager rule so the radio is never reclaimed; `--off` removes both.
+# WantedBy the net device so a USB re-plug (BindsTo stops us) actually starts ExecStart again.
+
+[Unit]
+Description=zoto-viz: Wi-Fi radio %i in monitor mode, hopping through the SSID watch list
+After=NetworkManager.service network-online.target sys-subsystem-net-devices-%i.device
+Wants=network-online.target
+BindsTo=sys-subsystem-net-devices-%i.device
+
+[Service]
+Type=exec
+# the primary link may take a moment to associate after network-online
+ExecStartPre=/bin/sh -c 'for i in $(seq 30); do nmcli -t -f TYPE,STATE device status | grep -q "^wifi:connected" && exit 0; sleep 2; done; exit 1'
+ExecStart=/usr/local/sbin/zoto-viz-wifi-monitor %i --hop
+# stop only puts the radio back into managed mode; the persistent rules stay so a re-plugged radio is picked up
+ExecStop=/bin/sh -c '[ -e /sys/class/net/%i ] && ip link set %i down && iw dev %i set type managed && ip link set %i up || true'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=sys-subsystem-net-devices-%i.device

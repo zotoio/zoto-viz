@@ -1,0 +1,31 @@
+# User service: constant capture + discovery, serving the live UI on http://127.0.0.1:7020
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp systemd/zoto-viz-monitor.service ~/.config/systemd/user/
+#   ./zoto-viz.py plugin install   # writes ~/.zoto-viz/sys-config.yml and this drop-in from the checkout path
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now zoto-viz-monitor
+#   loginctl enable-linger $USER
+#   journalctl --user -u zoto-viz-monitor -f
+#
+# ZOTO_VIZ_ROOT below is a placeholder. `plugin install` writes
+# ~/.config/systemd/user/zoto-viz-monitor.service.d/override.conf once this unit is in place.
+
+[Unit]
+Description=zoto-viz live network monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=ZOTO_VIZ_ROOT=%h/zoto-viz
+WorkingDirectory=${ZOTO_VIZ_ROOT}
+ExecStart=${ZOTO_VIZ_ROOT}/.venv/bin/python -m service.monitor --bind 127.0.0.1 --port 7020
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+KillMode=control-group
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target
