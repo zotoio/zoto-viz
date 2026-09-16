@@ -29,6 +29,8 @@ BindsTo=sys-subsystem-net-devices-%i.device
 
 [Service]
 Type=exec
+# hop plan path for the operator (written by `zoto-viz.py install`); minus means "ok if missing"
+EnvironmentFile=-/etc/zoto-viz/hopper.env
 # the primary link may take a moment to associate after network-online
 ExecStartPre=/bin/sh -c 'for i in $(seq 30); do nmcli -t -f TYPE,STATE device status | grep -q "^wifi:connected" && exit 0; sleep 2; done; exit 1'
 ExecStart=/usr/local/sbin/zoto-viz-wifi-monitor %i --hop

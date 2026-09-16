@@ -2,17 +2,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from service import plugins
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLES = ROOT / "examples" / "plugins"
+SRC = ROOT / "plugins" / "src"
 
 
 def test_schema_accepts_shipped_topology() -> None:
-    src = EXAMPLES / "topology.yml"
+    src = SRC / "topology" / "plugin.yml"
     doc = plugins.load_file(src)
     assert doc["id"] == "topology"
+
+
+def test_schema_accepts_doom() -> None:
+    src = SRC / "doom" / "plugin.yml"
+    doc = plugins.load_file(src)
+    assert doc["id"] == "doom"
+    plugins.validate_doc(doc)
+    viz = yaml.safe_load((SRC / "doom" / "visualisation.yml").read_text(encoding="utf-8"))
+    assert viz["engine"] == "doom"
 
 
 def test_typescript_requires_entry() -> None:
@@ -32,11 +43,11 @@ def test_typescript_requires_entry() -> None:
 
 
 def test_pulse_ts_schema() -> None:
-    src = EXAMPLES / "pulse-ts" / "plugin.yml"
+    src = SRC / "pulse-ts" / "plugin.yml"
     doc = plugins.load_file(src)
-    assert doc["runtime"] == "typescript"
-    assert doc["entry"] == "index.ts"
-    plugins.validate_doc({**doc, "service": "service/__init__.py"})
+    assert doc["frontend"]["entry"] == "frontend/index.ts"
+    assert doc["backend"]["entry"] == "backend/service.py"
+    plugins.validate_doc(doc)
 
 
 def test_semantics_duplicate_and_default() -> None:
@@ -62,10 +73,10 @@ def test_pairs_and_plugin_paths(tmp_path: Path) -> None:
     assert plugins._pairs([["a", "A"], "skip"]) == [["a", "A"]]
     assert plugins._pairs(None) == []
     yml = tmp_path / "ok.yml"
-    yml.write_text((EXAMPLES / "topology.yml").read_text(encoding="utf-8"), encoding="utf-8")
+    yml.write_text((SRC / "topology" / "plugin.yml").read_text(encoding="utf-8"), encoding="utf-8")
     nested = tmp_path / "pulse-ts"
     nested.mkdir()
-    (nested / "plugin.yml").write_text((EXAMPLES / "pulse-ts" / "plugin.yml").read_text(encoding="utf-8"), encoding="utf-8")
+    (nested / "plugin.yml").write_text((SRC / "pulse-ts" / "plugin.yml").read_text(encoding="utf-8"), encoding="utf-8")
     found = plugins.plugin_paths(tmp_path)
     assert any(p.name == "ok.yml" for p in found)
     assert any(p.name == "plugin.yml" for p in found)
@@ -74,47 +85,72 @@ def test_pairs_and_plugin_paths(tmp_path: Path) -> None:
 
 
 def test_scan_examples() -> None:
-    result = plugins.scan(EXAMPLES)
+    result = plugins.scan(SRC)
     ids = {p["id"] for p in result["plugins"]}
     assert "topology" in ids
-    assert result["schema"].endswith("view-plugin.schema.json")
+    assert result["schema"].endswith("plugin.schema.json")
     pulse = next((p for p in result["plugins"] if p["id"] == "pulse-ts"), None)
-    if pulse:
-        assert pulse["service"] == "service/__init__.py"
+    assert pulse is not None
+    assert pulse["service"] == "backend/service.py"
 
 
-def test_cli_install_applies_watch(tmp_path: Path, monkeypatch) -> None:
-    from service import sysconfig
+def test_scan_zip_catalog(tmp_path: Path) -> None:
+    from service import plugin_zip as pz
 
-    dest = tmp_path / "plug"
-    dest.mkdir()
-    monkeypatch.setattr(plugins, "DIR", dest)
-    monkeypatch.setattr(
-        sysconfig,
-        "ensure",
-        lambda: {"ssids": ["HomeNet", "Guest"], "root": "", "hostname": "h", "iface": "wlan0", "monitor_iface": ""},
+    repo = tmp_path / "repo"
+    pack = tmp_path / "pack" / "catalog"
+    pack.mkdir(parents=True)
+    (pack / "plugin.yml").write_text(
+        "id: catalog\nname: Catalog\nversion: 1\n", encoding="utf-8",
     )
-    monkeypatch.setattr(sysconfig, "write_systemd_override", lambda cfg: None)
-    monkeypatch.setattr(sysconfig, "sys_config_file", lambda: tmp_path / "sys-config.yml")
-    assert plugins.cli_install(False) == 0
-    text = (dest / "air-ssid.yml").read_text(encoding="utf-8")
-    assert "default: HomeNet, Guest" in text
+    (pack / "visualisation.yml").write_text("engine: graph\n", encoding="utf-8")
+    zpath = repo / "plugins" / "catalog.zip"
+    zpath.parent.mkdir(parents=True)
+    pz.pack_tree(pack, zpath)
+    result = plugins.scan(repo)
+    assert not result["errors"], result["errors"]
+    ids = {p["id"] for p in result["plugins"]}
+    assert ids == {"catalog"}
+    row = result["plugins"][0]
+    assert row["origin"] == "zip"
+    assert row["zip"] == str(zpath)
+    assert "visualisation" in row["parts"]
+    assert row.get("visualisation", {}).get("engine") == "graph"
+    assert row["sha256"] == pz.plugin_sha256(zpath)
+    assert not (repo / "plugins" / "src").exists()
+    runtime = repo / "plugins" / ".runtime" / "catalog"
+    assert (runtime / "plugin.yml").is_file()
+    first_mtime = (runtime / "plugin.yml").stat().st_mtime_ns
+    again = plugins.scan(repo)
+    assert again["plugins"][0]["sha256"] == row["sha256"]
+    assert (runtime / "plugin.yml").stat().st_mtime_ns == first_mtime
+    (pack / "plugin.yml").write_text(
+        "id: catalog\nname: Catalog\nversion: 2\n", encoding="utf-8",
+    )
+    pz.pack_tree(pack, zpath)
+    refreshed = plugins.scan(repo)
+    assert refreshed["plugins"][0]["version"] == 2
+    assert refreshed["plugins"][0]["sha256"] != row["sha256"]
 
 
 def test_seed_and_validate(tmp_path: Path) -> None:
     first = plugins.seed(tmp_path)
-    assert first["copied"]
-    second = plugins.seed(tmp_path)
-    assert second["skipped"]
-    forced = plugins.seed(tmp_path, overwrite=True)
-    assert forced["copied"]
-    code = plugins.cli_validate([str(EXAMPLES / "topology.yml")])
+    assert first["copied"] == []
+    assert first["skipped"] == []
+    code = plugins.cli_validate([str(SRC / "topology")])
     assert code == 0
     assert plugins.bundle_for("missing") is None
 
 
+def test_cli_zip_deprecated_missing(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "checkout"
+    (repo / "plugins").mkdir(parents=True)
+    monkeypatch.setenv("ZOTO_VIZ_REPO_ROOT", str(repo))
+    assert plugins.cli_zip_deprecated(str(tmp_path / "missing.zip"), False) == 1
+
+
 def test_compile_typescript_pulse() -> None:
-    src = EXAMPLES / "pulse-ts" / "plugin.yml"
+    src = SRC / "pulse-ts" / "plugin.yml"
     doc = plugins.load_file(src)
     if not plugins._ESBUILD.is_file():
         try:
@@ -125,6 +161,12 @@ def test_compile_typescript_pulse() -> None:
     extra = plugins.compile_typescript(doc, src)
     assert extra["hash"]
     assert plugins.bundle_for("pulse-ts") is not None
+    class Req:
+        match_info = {"id": "pulse-ts"}
+    served = plugins.api_module(Req())
+    assert served.status == 200
+    assert served.content_type == "text/javascript"
+    assert served.body
     try:
         plugins.compile_typescript({**doc, "capabilities": ["graph.read", "os.exec"]}, src)
         raise AssertionError("bad caps")
@@ -153,8 +195,9 @@ def test_validate_errors_and_api(tmp_path: Path, monkeypatch) -> None:
         pass
     dup = tmp_path / "dups"
     dup.mkdir()
-    (dup / "a.yml").write_text((EXAMPLES / "topology.yml").read_text(encoding="utf-8"), encoding="utf-8")
-    (dup / "b.yml").write_text((EXAMPLES / "topology.yml").read_text(encoding="utf-8"), encoding="utf-8")
+    topo = (SRC / "topology" / "plugin.yml").read_text(encoding="utf-8")
+    (dup / "a.yml").write_text(topo, encoding="utf-8")
+    (dup / "b.yml").write_text(topo, encoding="utf-8")
     scanned = plugins.scan(dup)
     assert scanned["errors"]
     class Req:
@@ -164,10 +207,8 @@ def test_validate_errors_and_api(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(plugins, "DIR", tmp_path / "plug")
     listed = plugins.api_list(Req())
     assert listed.status == 200
-    assert plugins.cli_install(False) == 0
     empty = tmp_path / "empty-plugins"
     empty.mkdir()
-    monkeypatch.setattr(plugins, "DIR", empty)
     assert plugins.cli_validate([]) == 0
 
 
@@ -200,12 +241,11 @@ def test_python_enabled_and_consent(tmp_path: Path, monkeypatch) -> None:
 def test_api_consent(tmp_path: Path, monkeypatch) -> None:
     import asyncio
 
-    dest = tmp_path / "plug"
-    dest.mkdir()
-    (dest / "topology.yml").write_text((EXAMPLES / "topology.yml").read_text(encoding="utf-8"), encoding="utf-8")
-    home = dest / "review-me"
-    home.mkdir()
-    (home / "plugin.yml").write_text(
+    repo = tmp_path / "repo"
+    dest = repo / "plugins"
+    src = dest / "src" / "review-me"
+    src.mkdir(parents=True)
+    (src / "plugin.yml").write_text(
         "\n".join(
             [
                 "id: review-me",
@@ -213,13 +253,19 @@ def test_api_consent(tmp_path: Path, monkeypatch) -> None:
                 "version: 1",
                 "engine: graph",
                 "base: topology",
+                "service: service.py",
             ]
         )
         + "\n",
         encoding="utf-8",
     )
-    (home / "service.py").write_text("def setup(host):\n    pass\n", encoding="utf-8")
-    monkeypatch.setattr(plugins, "DIR", dest)
+    (src / "service.py").write_text("def setup(host):\n    pass\n", encoding="utf-8")
+    topo = dest / "src" / "topology"
+    topo.mkdir(parents=True)
+    (topo / "plugin.yml").write_text(
+        (SRC / "topology" / "plugin.yml").read_text(encoding="utf-8"), encoding="utf-8",
+    )
+    monkeypatch.setenv("ZOTO_VIZ_REPO_ROOT", str(repo))
     monkeypatch.setattr(plugins, "CONSENT_FILE", tmp_path / "plugin-consent.yml")
 
     class ConsentReq:

@@ -1,12 +1,13 @@
-"""View plugins: YAML files in ~/.zoto-viz/plugins validated against the view-plugin schema.
+"""Unified plugin catalog: shipped ``plugins/src/<id>/`` plus gitignored contrib zips.
 
-A plugin declares identity plus a shipped engine. Graph plugins wrap topology /
-talkers / services / protocols / layers / watch / cores / load (and the RF/CPU
-bases wifi, bluetooth, cpu). Arcade plugins reuse NetPong, Invaders, Command,
-Frogger, or CPU Pong. TypeScript plugins (runtime: typescript + entry) are compiled
-by esbuild and loaded in a sandboxed iframe with an explicit capability allowlist.
-A directory plugin may also ship `service/__init__.py` (or `service.py`); the monitor
-hot-loads that module in-process. That path is trusted local code, not the iframe.
+Default ``scan()`` loads src trees directly. Non-colliding ``plugins/*.zip``
+unpack into ``plugins/.runtime/<id>/``. A zip whose id is already a src tree
+is a scan error and is skipped.
+
+A plugin declares identity in ``plugin.yml``. Optional folders (``frontend/``,
+``backend/``, ``sky/``, ``datasource/``, ``visualisation.yml``) are the switch.
+TypeScript plugins are compiled by esbuild into a sandboxed iframe; Python
+hooks load in-process behind consent + ``ZOTO_VIZ_PLUGIN_SERVICE``.
 """
 from __future__ import annotations
 
@@ -22,20 +23,46 @@ from typing import Any
 
 from . import hooks
 from . import paths
-from . import sysconfig
+from . import plugin_backend as pb
+from . import plugin_sky as psky
+from . import plugin_zip as pz
 import yaml
 from aiohttp import web
 
 DIR = paths.plugins_dir()
 CONSENT_FILE = paths.user_dir() / "plugin-consent.yml"
 REPO = Path(__file__).resolve().parents[1]
-SCHEMA_FILE = REPO / "schema" / "view-plugin.schema.json"
-SHIPPED = REPO / "examples" / "plugins"
+SCHEMA_FILE = REPO / "schema" / "plugin.schema.json"
 SUFFIXES = {".yml", ".yaml"}
 ALLOWED_CAPS = frozenset({"graph.read", "graph.style", "ui.overlay", "config.read"})
 MAX_BUNDLE = 256 * 1024
+DEFAULT_FRONTEND_ENTRY = "frontend/index.ts"
 _ESBUILD = REPO / "web" / "node_modules" / ".bin" / "esbuild"
-_bundles: dict[str, tuple[str, bytes]] = {}
+# id -> (js sha256, bundle bytes, cache key, entry path, plugin sha256)
+_bundles: dict[str, tuple[str, bytes, str, Path, str]] = {}
+_compile_runs = 0
+_SCHEMA_KEYS = frozenset({"$ref", "$schema", "$id", "title", "description"})
+
+
+def deref_schema(raw: dict[str, Any], origin: Path) -> dict[str, Any]:
+    """Follow a one-line sibling `$ref` shim (view/agent-plugin → plugin.schema.json)."""
+    ref = raw.get("$ref")
+    if (
+        not isinstance(ref, str)
+        or not ref.endswith(".json")
+        or "://" in ref
+        or "#" in ref
+    ):
+        return raw
+    if any(key not in _SCHEMA_KEYS for key in raw):
+        return raw
+    target = (origin.parent / ref).resolve()
+    if target.parent != origin.parent.resolve() or not target.is_file():
+        raise ValueError(f"unresolved schema $ref {ref!r}")
+    loaded = yaml.safe_load(target.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"{target.name} is not a mapping")
+    return loaded
 
 
 def _plugin_home(path: Path) -> Path:
@@ -44,24 +71,125 @@ def _plugin_home(path: Path) -> Path:
     return path.parent
 
 
-def compile_typescript(doc: dict[str, Any], path: Path) -> dict[str, Any]:
-    """Bundle entry.ts with esbuild. Returns {hash, error?} metadata attached to the plugin list."""
-    if doc.get("runtime") != "typescript":
+def _declared_frontend_entry(doc: dict[str, Any]) -> str:
+    fe = doc.get("frontend")
+    if isinstance(fe, dict):
+        return str(fe.get("entry") or "").strip()
+    return ""
+
+
+def resolve_frontend_entry(doc: dict[str, Any], home: Path) -> str:
+    """plugin.yml ``frontend.entry``, else ``frontend/index.ts``, else legacy ``entry``."""
+    declared = _declared_frontend_entry(doc)
+    if declared:
+        return declared
+    if (home / "frontend").is_dir():
+        return DEFAULT_FRONTEND_ENTRY
+    if doc.get("runtime") == "typescript":
+        return str(doc.get("entry") or "index.ts")
+    return DEFAULT_FRONTEND_ENTRY
+
+
+def has_frontend_part(
+    doc: dict[str, Any],
+    home: Path,
+    parts: list[str] | tuple[str, ...] | None = None,
+    *,
+    nested: bool = True,
+) -> bool:
+    partset = set(parts or ())
+    if "frontend" in partset or (nested and (home / "frontend").is_dir()):
+        return True
+    if doc.get("runtime") == "typescript":
+        return True
+    declared = _declared_frontend_entry(doc)
+    return nested and bool(declared) and (home / declared).is_file()
+
+
+def optional_part_flags(
+    doc: dict[str, Any],
+    home: Path,
+    parts: list[str] | tuple[str, ...] | None = None,
+    *,
+    nested: bool = True,
+) -> dict[str, Any]:
+    """Catalog booleans for optional zip parts. Sky GLSL is served by ``api_sky`` after consent."""
+    if parts is not None:
+        partset = set(parts)
+    elif nested and home.is_dir():
+        partset = set(pz.detect_parts(home))
+    else:
+        partset = set()
+    has_frontend = has_frontend_part(doc, home, tuple(partset), nested=nested)
+    entry = resolve_frontend_entry(doc, home) if nested or has_frontend else DEFAULT_FRONTEND_ENTRY
+    caps = [c for c in (doc.get("capabilities") or []) if c in ALLOWED_CAPS]
+    fe = dict(doc["frontend"]) if isinstance(doc.get("frontend"), dict) else {}
+    fe["entry"] = entry
+    inspect = nested and home.is_dir()
+    return {
+        "has_frontend": has_frontend,
+        "frontend": fe,
+        "capabilities": caps,
+        "has_sky": "sky" in partset or (inspect and (home / "sky").is_dir()),
+        "has_sky_shader": inspect and (home / "sky" / "fragment.glsl").is_file(),
+        "has_backend": "backend" in partset or (inspect and (home / "backend").is_dir()),
+        "has_datasource": "datasource" in partset or (inspect and (home / "datasource").is_dir()),
+    }
+
+
+def _plugin_sha(path: Path, given: str | None) -> str:
+    if given:
+        return given
+    yml = path if path.name in ("plugin.yml", "plugin.yaml") else path
+    try:
+        return hashlib.sha256(yml.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _cache_key(sha256: str, entry: Path) -> str:
+    mtime = entry.stat().st_mtime_ns if entry.is_file() else 0
+    return f"{sha256}:{mtime}"
+
+
+def compile_runs() -> int:
+    """How many times esbuild actually ran (cache misses). Tests use this."""
+    return _compile_runs
+
+
+def reset_bundles() -> None:
+    global _compile_runs
+    _bundles.clear()
+    _compile_runs = 0
+
+
+def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = None) -> dict[str, Any]:
+    """Bundle frontend/ (or legacy entry.ts) with esbuild. Cache key is plugin sha256 + entry mtime."""
+    home = _plugin_home(path)
+    nested = path.name in ("plugin.yml", "plugin.yaml")
+    if not has_frontend_part(doc, home, nested=nested):
         return {}
     caps = [c for c in (doc.get("capabilities") or []) if c in ALLOWED_CAPS]
     unknown = [c for c in (doc.get("capabilities") or []) if c not in ALLOWED_CAPS]
     if unknown:
         raise ValueError(f"unknown capabilities {unknown}")
-    home = _plugin_home(path)
-    if path.name not in ("plugin.yml", "plugin.yaml"):
+    if not nested:
         raise ValueError("typescript plugins must live in a directory as plugin.yml")
-    entry = (home / str(doc["entry"])).resolve()
+    rel = resolve_frontend_entry(doc, home)
+    entry = (home / rel).resolve()
     if not str(entry).startswith(str(home.resolve())):
         raise ValueError("entry must stay inside the plugin directory")
     if not entry.is_file():
         raise ValueError(f"missing entry {entry.name}")
+    pid = str(doc["id"])
+    digest_src = _plugin_sha(path, sha256)
+    key = _cache_key(digest_src, entry)
+    cached = _bundles.get(pid)
+    if cached and cached[2] == key:
+        return {"hash": cached[0], "capabilities": caps, "bytes": len(cached[1]), "cached": True}
     if not _ESBUILD.is_file():
         raise ValueError("esbuild is not installed (cd web && pnpm install)")
+    global _compile_runs
     proc = subprocess.run(
         [str(_ESBUILD), str(entry), "--bundle", "--format=esm", "--platform=browser",
          "--target=es2022", "--external:three", "--external:d3-force-3d"],
@@ -73,7 +201,8 @@ def compile_typescript(doc: dict[str, Any], path: Path) -> dict[str, Any]:
     if len(js) > MAX_BUNDLE:
         raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")
     digest = hashlib.sha256(js).hexdigest()
-    _bundles[str(doc["id"])] = (digest, js)
+    _compile_runs += 1
+    _bundles[pid] = (digest, js, key, entry, digest_src)
     return {"hash": digest, "capabilities": caps, "bytes": len(js)}
 
 
@@ -82,16 +211,42 @@ def python_enabled() -> bool:
     return os.environ.get("ZOTO_VIZ_PLUGIN_SERVICE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+CONSENT_ARTEFACTS = ("frontend", "backend", "collector", "shader")
+_ARTEFACT_FIELD = {
+    "frontend": "hash",
+    "backend": "backend_sha256",
+    "collector": "collector_sha256",
+    "shader": "shader_sha256",
+}
+_CONSENT_HASH_KEYS = ("backend_sha256", "collector_sha256", "shader_sha256")
+
+
 def needs_review(doc: dict[str, Any]) -> bool:
-    """True when the plugin ships executable code (TypeScript and/or a service module)."""
-    if doc.get("runtime") == "typescript":
+    """True when the plugin ships executable code (TypeScript, Python, and/or GLSL)."""
+    if doc.get("runtime") == "typescript" or doc.get("has_frontend"):
         return True
     svc = doc.get("service")
-    return isinstance(svc, str) and bool(svc.strip())
+    if isinstance(svc, str) and bool(svc.strip()):
+        return True
+    if doc.get("backend_sha256") or doc.get("collector") or doc.get("collector_sha256"):
+        return True
+    if doc.get("shader_sha256") or doc.get("has_sky_shader"):
+        return True
+    return False
 
 
 def consent_stamp(doc: dict[str, Any]) -> str:
     return f"{doc.get('id')}:{doc.get('version')}:{doc.get('hash') or doc.get('service') or 'yaml'}"
+
+
+def consent_hashes(doc: dict[str, Any]) -> dict[str, str]:
+    """Current artefact sha256s keyed as the union ``{frontend, backend, collector, shader}``."""
+    out: dict[str, str] = {}
+    for arte, field in _ARTEFACT_FIELD.items():
+        digest = doc.get(field)
+        if digest:
+            out[arte] = str(digest)
+    return out
 
 
 def _consent_doc() -> dict[str, Any]:
@@ -108,6 +263,10 @@ def consent_kind(doc: dict[str, Any]) -> str | None:
         return None
     if rec.get("stamp") != consent_stamp(doc):
         return None
+    for key in _CONSENT_HASH_KEYS:
+        current = doc.get(key)
+        if current and rec.get(key) != current:
+            return None
     kind = rec.get("kind")
     return kind if kind in {"reviewed", "authored"} else None
 
@@ -118,11 +277,33 @@ def consented(doc: dict[str, Any]) -> bool:
     return consent_kind(doc) in {"reviewed", "authored"}
 
 
+def consented_for(doc: dict[str, Any], hashes: dict[str, str] | None = None) -> bool:
+    """True when stored consent covers ``hashes`` (keys: frontend, backend, collector, shader).
+
+    Overlay hashes onto ``doc`` and reuse ``consented``. Unknown artefact keys fail closed.
+    Subtask 08 calls this from ``install_plugin_zip`` without reading the stamp file.
+    """
+    merged = dict(doc)
+    if hashes:
+        for arte, digest in hashes.items():
+            field = _ARTEFACT_FIELD.get(arte)
+            if field is None:
+                return False
+            if digest:
+                merged[field] = digest
+    return consented(merged)
+
+
 def grant_consent(doc: dict[str, Any], kind: str) -> str:
     if kind not in {"reviewed", "authored"}:
         raise ValueError("kind must be reviewed or authored")
     data = _consent_doc()
-    data[str(doc["id"])] = {"kind": kind, "stamp": consent_stamp(doc), "version": doc.get("version")}
+    rec: dict[str, Any] = {"kind": kind, "stamp": consent_stamp(doc), "version": doc.get("version")}
+    for key in _CONSENT_HASH_KEYS:
+        digest = doc.get(key)
+        if digest:
+            rec[key] = digest
+    data[str(doc["id"])] = rec
     CONSENT_FILE.parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(data, sort_keys=True, allow_unicode=True)
     fd, tmp = tempfile.mkstemp(prefix="plugin-consent.", suffix=".yml", dir=CONSENT_FILE.parent)
@@ -161,24 +342,78 @@ def service_meta(doc: dict[str, Any], path: Path) -> dict[str, Any]:
 
 
 def bundle_for(pid: str) -> tuple[str, bytes] | None:
-    return _bundles.get(pid)
+    got = _bundles.get(pid)
+    if not got:
+        return None
+    return got[0], got[1]
+
+
+def _bundle_fresh(pid: str) -> tuple[str, bytes] | None:
+    got = _bundles.get(pid)
+    if not got:
+        return None
+    digest, js, key, entry, sha256 = got
+    if key != _cache_key(sha256, entry):
+        return None
+    return digest, js
 
 
 def api_module(req: web.Request) -> web.StreamResponse:
     pid = req.match_info["id"]
-    got = _bundles.get(pid)
+    got = _bundle_fresh(pid)
     if not got:
-        scan()  # compile on demand
-        got = _bundles.get(pid)
+        scan()  # compile on demand from plugins/.runtime/<id>/frontend/
+        got = _bundle_fresh(pid) or bundle_for(pid)
     if not got:
         return web.json_response({"error": "no compiled module"}, status=404)
     digest, js = got
-    resp = web.Response(body=js, content_type="text/javascript; charset=utf-8")
+    resp = web.Response(body=js, content_type="text/javascript", charset="utf-8")
     resp.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'none'"
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Zoto-Viz-Hash"] = digest
-    resp.headers["Cache-Control"] = "no-store"
+    query = getattr(getattr(req, "rel_url", None), "query", None) or {}
+    want = query.get("h") or query.get("hash") if hasattr(query, "get") else None
+    if want and want == digest:
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+def _plugin_row(pid: str) -> dict[str, Any] | None:
+    return next((p for p in (scan().get("plugins") or []) if p.get("id") == pid), None)
+
+
+def api_sky(req: web.Request) -> web.StreamResponse:
+    """Serve ``sky/fragment.glsl`` after consent. 403 without review; 404 if missing."""
+    pid = req.match_info["id"]
+    row = _plugin_row(pid)
+    if not row or not row.get("has_sky_shader"):
+        return web.json_response({"error": "no sky shader"}, status=404)
+    if not row.get("sky_available"):
+        err = str(row.get("sky_error") or "unavailable")
+        status = 403 if err == psky.AWAITING_REVIEW else 404
+        return web.json_response({"error": err}, status=status)
+    home = Path(str(row.get("file") or ""))
+    glsl = psky.shader_file(home.parent if home.name in {"plugin.yml", "plugin.yaml"} else home)
+    try:
+        src = glsl.read_text(encoding="utf-8")
+    except OSError:
+        return web.json_response({"error": "no sky shader"}, status=404)
+    digest = str(row.get("sha256") or row.get("shader_sha256") or "")
+    resp = web.Response(text=src, content_type="text/x-shader", charset="utf-8")
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    if digest:
+        resp.headers["X-Zoto-Viz-Hash"] = digest
+        resp.headers["ETag"] = f'"{digest}"'
+    query = getattr(getattr(req, "rel_url", None), "query", None) or {}
+    want = query.get("h") or query.get("hash") if hasattr(query, "get") else None
+    if want and digest and want == digest:
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        resp.headers["Cache-Control"] = "private, max-age=30"
+    return resp
+
 
 _validator = None
 
@@ -187,7 +422,7 @@ def _schema() -> dict[str, Any]:
     raw = yaml.safe_load(SCHEMA_FILE.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError(f"{SCHEMA_FILE} is not a mapping")
-    return raw
+    return deref_schema(raw, SCHEMA_FILE)
 
 
 def validator():
@@ -281,7 +516,200 @@ def load_file(path: Path) -> dict[str, Any]:
     return validate_doc(raw)
 
 
-def scan(root: Path | None = None) -> dict[str, Any]:
+def _visualisation_doc(home: Path) -> dict[str, Any] | None:
+    """Load optional visualisation.yml next to plugin.yml. None when the file is absent."""
+    path = home / "visualisation.yml"
+    if not path.is_file():
+        return None
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as e:
+        raise ValueError(f"could not read visualisation.yml: {e}") from e
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("visualisation.yml must be a mapping")
+    return raw
+
+
+def _attach_visualisation(
+    row: dict[str, Any],
+    home: Path,
+    errors: list[dict[str, str]],
+    rel: str,
+) -> dict[str, Any]:
+    try:
+        viz = _visualisation_doc(home)
+    except ValueError as e:
+        errors.append({"file": rel, "error": str(e)})
+        return row
+    if viz is None:
+        return row
+    return {**row, "visualisation": viz}
+
+
+def _zip_files(folder: Path) -> list[Path]:
+    if not folder.is_dir():
+        return []
+    return sorted(
+        p for p in folder.iterdir()
+        if p.is_file() and p.suffix.lower() == ".zip" and not p.name.startswith(".")
+    )
+
+
+def _plugin_yml_in(home: Path) -> Path | None:
+    for name in ("plugin.yml", "plugin.yaml"):
+        child = home / name
+        if child.is_file():
+            return child
+    return None
+
+
+def _owned_src_ids(src_dir: Path, loaded: list[dict[str, Any]]) -> set[str]:
+    """Directory names and plugin.yml ids under src — used to skip colliding zips."""
+    owned = {str(p["id"]) for p in loaded if p.get("id")}
+    if not src_dir.is_dir():
+        return owned
+    for child in src_dir.iterdir():
+        if not child.is_dir():
+            continue
+        yml = _plugin_yml_in(child)
+        if yml is None:
+            continue
+        owned.add(child.name)
+        try:
+            raw = yaml.safe_load(yml.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(raw, dict) and raw.get("id"):
+            owned.add(str(raw["id"]))
+    return owned
+
+
+def _catalog_layout(root: Path | None) -> tuple[Path, Path, Path] | None:
+    """Resolve ``(src_dir, zips_dir, runtime_dir)`` for a merge scan, or None."""
+    if root is None:
+        return paths.plugin_src_dir(), paths.plugin_zips_dir(), paths.plugin_runtime_dir()
+    root = Path(root)
+    nested = root / "plugins" / "src"
+    if nested.is_dir():
+        zips = root / "plugins"
+        return nested, zips, zips / ".runtime"
+    sibling = root / "src"
+    if sibling.is_dir():
+        return sibling, root, root / ".runtime"
+    return None
+
+
+def _scan_roots(root: Path | None) -> tuple[Path, Path, str]:
+    if root is None:
+        return paths.plugin_zips_dir(), paths.plugin_runtime_dir(), "zips"
+    root = Path(root)
+    nested = root / "plugins"
+    if nested.is_dir() and _zip_files(nested):
+        return nested, nested / ".runtime", "zips"
+    if root.is_dir() and _zip_files(root):
+        return root, root / ".runtime", "zips"
+    return root, root, "trees"
+
+
+def _scan_payload(dir_path: Path, plugins: list[dict[str, Any]], errors: list[dict[str, str]]) -> dict[str, Any]:
+    return {
+        "dir": str(dir_path),
+        "schema": str(SCHEMA_FILE),
+        "plugins": plugins,
+        "errors": errors,
+        "pythonService": python_enabled(),
+    }
+
+
+def _attach_runtime(
+    doc: dict[str, Any],
+    path: Path,
+    errors: list[dict[str, str]],
+    rel: str,
+    *,
+    sha256: str | None = None,
+    parts: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any] | None:
+    try:
+        home = _plugin_home(path)
+        nested = path.name in ("plugin.yml", "plugin.yaml")
+        flags = optional_part_flags(doc, home, parts, nested=nested)
+        extra = {
+            **flags,
+            **compile_typescript(doc, path, sha256=sha256),
+            **service_meta(doc, path),
+            **pb.artefacts(path),
+            **psky.artefacts(path),
+        }
+    except ValueError as e:
+        errors.append({"file": rel, "error": str(e)})
+        return None
+    return extra
+
+
+def _catalog_row(
+    doc: dict[str, Any],
+    extra: dict[str, Any],
+    home: Path,
+    errors: list[dict[str, str]],
+    rel: str,
+    **more: Any,
+) -> dict[str, Any]:
+    merged = {**doc, **more, **extra}
+    kind = consent_kind(merged)
+    sky = psky.catalog(merged, home, allowed=consented(merged))
+    return _attach_visualisation({**merged, "consent": kind, **sky}, home, errors, rel)
+
+
+def _scan_zips(
+    zips_dir: Path,
+    runtime_dir: Path,
+    *,
+    owned_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    plugins: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    seen: set[str] = set()
+    owned = owned_ids or set()
+    for zip_path in _zip_files(zips_dir):
+        rel = str(zip_path)
+        stem = zip_path.stem
+        if stem in owned:
+            errors.append({"file": rel, "error": f"src catalog owns id {stem!r}"})
+            continue
+        try:
+            manifest = pz.inspect_zip(zip_path)
+            preview = validate_doc(manifest.plugin)
+            pid = str(preview["id"])
+            if pid in owned:
+                errors.append({"file": rel, "error": f"src catalog owns id {pid!r}"})
+                continue
+            dest = runtime_dir / pid
+            unpacked = pz.unpack_zip(zip_path, dest)
+            yml = dest / "plugin.yml"
+            doc = load_file(yml)
+        except (ValueError, OSError) as e:
+            errors.append({"file": rel, "error": str(e)})
+            continue
+        pid = str(doc["id"])
+        if pid in seen:
+            errors.append({"file": rel, "error": f"duplicate plugin id {pid!r}"})
+            continue
+        seen.add(pid)
+        extra = _attach_runtime(doc, yml, errors, rel, sha256=unpacked.sha256, parts=unpacked.parts)
+        if extra is None:
+            continue
+        plugins.append(_catalog_row(
+            doc, extra, dest, errors, rel,
+            file=str(yml), zip=rel, sha256=unpacked.sha256, parts=list(unpacked.parts),
+            origin="zip",
+        ))
+    return _scan_payload(zips_dir, plugins, errors)
+
+
+def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
     files = plugin_paths(root)
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
@@ -298,20 +726,42 @@ def scan(root: Path | None = None) -> dict[str, Any]:
             errors.append({"file": rel, "error": f"duplicate plugin id {pid!r}"})
             continue
         seen.add(pid)
-        extra: dict[str, Any] = {}
-        try:
-            extra = {**compile_typescript(doc, path), **service_meta(doc, path)}
-        except ValueError as e:
-            errors.append({"file": rel, "error": str(e)})
+        home = _plugin_home(path)
+        parts = pz.detect_parts(home) if path.name in ("plugin.yml", "plugin.yaml") else []
+        extra = _attach_runtime(doc, path, errors, rel, parts=parts)
+        if extra is None:
             continue
-        plugins.append({**doc, "file": rel, **extra, "consent": consent_kind({**doc, **extra})})
-    return {
-        "dir": str(root or DIR),
-        "schema": str(SCHEMA_FILE),
-        "plugins": plugins,
-        "errors": errors,
-        "pythonService": python_enabled(),
-    }
+        more: dict[str, Any] = {"file": rel, "parts": list(parts)}
+        if origin:
+            more["origin"] = origin
+            more["sha256"] = _plugin_sha(path, None)
+        plugins.append(_catalog_row(doc, extra, home, errors, rel, **more))
+    return _scan_payload(root, plugins, errors)
+
+
+def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str, Any]:
+    src = _scan_trees(src_dir, origin="src")
+    owned = _owned_src_ids(src_dir, src["plugins"])
+    zipped = _scan_zips(zips_dir, runtime_dir, owned_ids=owned)
+    catalog_dir = zips_dir if zips_dir.is_dir() else src_dir
+    return _scan_payload(
+        catalog_dir,
+        list(src["plugins"]) + list(zipped["plugins"]),
+        list(src["errors"]) + list(zipped["errors"]),
+    )
+
+
+def scan(root: Path | None = None) -> dict[str, Any]:
+    """Build the catalog from src trees plus non-colliding zips, or a YAML tree."""
+    layout = _catalog_layout(root)
+    if layout is not None:
+        src_dir, zips_dir, runtime_dir = layout
+        if root is None or src_dir.is_dir():
+            return _scan_catalog(src_dir, zips_dir, runtime_dir)
+    zips_dir, runtime_dir, mode = _scan_roots(root)
+    if mode == "zips":
+        return _scan_zips(zips_dir, runtime_dir)
+    return _scan_trees(zips_dir)
 
 
 def api_list(_: web.Request) -> web.Response:
@@ -334,7 +784,7 @@ async def api_consent(req: web.Request) -> web.Response:
     if not isinstance(body, dict):
         return web.json_response({"error": "object required"}, status=400)
     kind = str(body.get("kind") or "")
-    found = next((p for p in (scan().get("plugins") or []) if p.get("id") == pid), None)
+    found = _plugin_row(pid)
     if not found:
         return web.json_response({"error": "unknown plugin"}, status=404)
     if not needs_review(found):
@@ -359,111 +809,151 @@ def _print_scan(result: dict[str, Any]) -> int:
     return 1 if errors else 0
 
 
-def cli_validate(paths: list[str]) -> int:
-    if not paths:
-        if not DIR.exists():
-            print(f"no plugins directory at {DIR} (nothing to validate)")
-            return 0
-        return _print_scan(scan(DIR))
+def cli_validate(raw_paths: list[str]) -> int:
+    if not raw_paths:
+        return _print_scan(scan())
     code = 0
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
-    for raw in paths:
+    for raw in raw_paths:
         path = Path(raw).expanduser().resolve()
-        if path.is_dir():
-            result = scan(path)
-            plugins.extend(result["plugins"])
-            errors.extend(result["errors"])
-            continue
         try:
-            doc = load_file(path)
+            if path.is_file() and path.suffix.lower() == ".zip":
+                manifest = pz.inspect_zip(path)
+                doc = validate_doc(manifest.plugin)
+                plugins.append({**doc, "file": str(path), "parts": list(manifest.parts)})
+            elif path.is_dir() and ((path / "plugin.yml").is_file() or (path / "plugin.yaml").is_file()):
+                manifest = pz.inspect_src(path)
+                doc = validate_doc(manifest.plugin)
+                yml = path / "plugin.yml" if (path / "plugin.yml").is_file() else path / "plugin.yaml"
+                plugins.append({**doc, "file": str(yml), "parts": list(manifest.parts)})
+            elif path.is_dir():
+                result = scan(path)
+                plugins.extend(result["plugins"])
+                errors.extend(result["errors"])
+            else:
+                doc = load_file(path)
+                plugins.append({**doc, "file": str(path)})
         except (ValueError, OSError) as e:
             errors.append({"file": str(path), "error": str(e)})
             code = 1
-            continue
-        plugins.append({**doc, "file": str(path)})
     return _print_scan({"plugins": plugins, "errors": errors}) or code
 
 
 def seed(dest: Path | None = None, overwrite: bool = False) -> dict[str, list[str]]:
-    """Copy shipped YAML from examples/plugins into dest. Existing files are left alone unless overwrite."""
-    dest = dest or DIR
-    dest.mkdir(parents=True, exist_ok=True)
-    copied: list[str] = []
-    skipped: list[str] = []
-    if not SHIPPED.is_dir():
-        return {"copied": copied, "skipped": skipped}
-    for src in sorted(SHIPPED.iterdir()):
-        if src.is_dir() and (src / "plugin.yml").is_file():
-            target = dest / src.name
-            if target.exists() and not overwrite:
-                skipped.append(src.name)
-                continue
-            if target.exists():
-                shutil.rmtree(target)
-            shutil.copytree(src, target)
-            copied.append(src.name)
-            continue
-        if src.suffix.lower() not in SUFFIXES:
-            continue
-        target = dest / src.name
-        if target.exists() and not overwrite:
-            skipped.append(src.name)
-            continue
-        shutil.copy2(src, target)
-        copied.append(src.name)
-    return {"copied": copied, "skipped": skipped}
+    """No-op. The shipped catalog is ``plugins/src/<id>/``.
+
+    Home-dir seeding from example YAML was retired. Startup must not mkdir
+    the user-dir plugin tree. Kept so callers that still invoke ``seed()``
+    do not crash.
+    """
+    del dest, overwrite
+    return {"copied": [], "skipped": []}
 
 
-def cli_install(force: bool) -> int:
-    cfg = sysconfig.ensure()
-    result = seed(DIR, overwrite=force)
-    dest = DIR
-    air = dest / "air-ssid.yml"
-    if cfg.get("ssids") and air.is_file():
-        if sysconfig.apply_watch_default(air, cfg["ssids"]):
-            print(f"watch {air}  <-  {', '.join(cfg['ssids'])}")
-    dropin = sysconfig.write_systemd_override(cfg)
-    for name in result["copied"]:
-        print(f"copy  {SHIPPED / name}  ->  {dest / name}")
-    for name in result["skipped"]:
-        print(f"skip  {dest / name}  (exists)")
-    n = len(result["copied"]) + len(result["skipped"])
-    print(f"{n} shipped, {len(result['copied'])} copied, {len(result['skipped'])} kept")
-    print(f"sys-config  {sysconfig.sys_config_file()}")
-    for line in sysconfig.describe(cfg):
-        print(f"  {line}")
-    if dropin:
-        print(f"systemd    {dropin}  (systemctl --user daemon-reload)")
+def cli_list() -> int:
+    result = scan()
+    plugins = result.get("plugins") or []
+    errors = result.get("errors") or []
+    for p in plugins:
+        parts = ",".join(p.get("parts") or []) or "-"
+        consent = p.get("consent") or "-"
+        src = p.get("zip") or p.get("file")
+        print(f"{p.get('id')}  v{p.get('version')}  {src}  parts={parts}  consent={consent}")
+    for e in errors:
+        print(f"FAIL {e.get('file')}: {e.get('error')}", file=sys.stderr)
+    print(f"{len(plugins)} plugin{'' if len(plugins) == 1 else 's'}, {len(errors)} error{'' if len(errors) == 1 else 's'}")
+    return 1 if errors else 0
+
+
+def src_plugin_home(pid: str, repo_root: Path | None = None) -> Path | None:
+    """Return ``plugins/src/<id>/`` when that tree has plugin.yml / plugin.yaml."""
+    name = str(pid or "").strip()
+    if not name:
+        return None
+    home = paths.plugin_src_dir(repo_root) / name
+    if _plugin_yml_in(home) is not None:
+        return home
+    return None
+
+
+def cli_pack(target: str, output: str | None = None) -> int:
+    raw = Path(target).expanduser()
+    src = raw.resolve() if raw.is_dir() else paths.plugin_src_dir() / str(target)
+    try:
+        manifest = pz.inspect_src(src)
+        doc = validate_doc(manifest.plugin)
+        pid = str(doc["id"])
+        if output:
+            dest = Path(output).expanduser()
+            dest = dest.resolve() if dest.is_absolute() else (Path.cwd() / dest).resolve()
+        else:
+            dest = paths.repo_root() / "dist" / f"{pid}.zip"
+        digest = pz.pack_tree(src, dest)
+    except (ValueError, OSError) as e:
+        print(e, file=sys.stderr)
+        return 1
+    print(f"packed {pid} -> {dest}")
+    print(digest)
     return 0
+
+
+def cli_add(zip_path: str, force: bool) -> int:
+    src = Path(zip_path).expanduser().resolve()
+    try:
+        manifest = pz.inspect_zip(src)
+        doc = validate_doc(manifest.plugin)
+        pid = str(doc["id"])
+        owned = src_plugin_home(pid)
+        if owned is not None:
+            print(
+                f"refusing: src owns {pid} at {owned} (--force does not override)",
+                file=sys.stderr,
+            )
+            return 1
+        dest = paths.plugin_zips_dir() / f"{pid}.zip"
+        if dest.exists() and not force:
+            print(f"refusing to overwrite {dest} (pass --force)", file=sys.stderr)
+            return 1
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+    except (ValueError, OSError) as e:
+        print(e, file=sys.stderr)
+        return 1
+    print(f"added {pid} -> {dest}")
+    return 0
+
+
+def cli_zip_deprecated(zip_path: str, force: bool) -> int:
+    print("[deprecation] plugin zip is now plugin add")
+    return cli_add(zip_path, force)
 
 
 def add_parser(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("plugin", help="validate view plugins against the JSON Schema")
+    p = sub.add_parser("plugin", help="validate / list / pack / add (src catalog + contrib zips)")
     inner = p.add_subparsers(dest="plugin_cmd", required=True)
-    v = inner.add_parser("validate", help="check YAML against schema/view-plugin.schema.json")
-    v.add_argument("paths", nargs="*", help="files or directories (default: ~/.zoto-viz/plugins)")
+    v = inner.add_parser("validate", help="check a zip or plugins/src/<id>/ tree against schema + zip safety")
+    v.add_argument("paths", nargs="*", help="zip files, source dirs, or YAML (default: catalog)")
     v.set_defaults(plugin_fn=lambda args: sys.exit(cli_validate(args.paths)))
-    ls = inner.add_parser("list", help="list valid plugins in ~/.zoto-viz/plugins")
-    ls.set_defaults(plugin_fn=lambda _args: sys.exit(_print_scan(scan())))
-    ins = inner.add_parser("install", help="copy shipped examples/plugins into ~/.zoto-viz/plugins")
-    ins.add_argument("--force", action="store_true", help="overwrite existing files")
-    ins.set_defaults(plugin_fn=lambda args: sys.exit(cli_install(args.force)))
-    z = inner.add_parser("zip", help="install an agent-plugin zip (same as MCP install_plugin_zip)")
+    ls = inner.add_parser("list", help="list catalog plugins (id, version, zip, parts, consent)")
+    ls.set_defaults(plugin_fn=lambda _args: sys.exit(cli_list()))
+    pk = inner.add_parser("pack", help="zip plugins/src/<id>/ into dist/<id>.zip for sharing")
+    pk.add_argument("target", help="plugin id or source directory")
+    pk.add_argument("-o", "--output", default=None, help="write zip to this path instead of dist/<id>.zip")
+    pk.set_defaults(plugin_fn=lambda args: sys.exit(cli_pack(args.target, args.output)))
+    add = inner.add_parser("add", help="validate then copy a zip into plugins/<id>.zip")
+    add.add_argument("zipfile", help="path to a plugin zip")
+    add.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing zip (does not override a src tree)",
+    )
+    add.set_defaults(plugin_fn=lambda args: sys.exit(cli_add(args.zipfile, args.force)))
+    z = inner.add_parser("zip", help="deprecated alias for plugin add")
     z.add_argument("zipfile", help="path to a plugin zip")
-    z.add_argument("--force", action="store_true", help="overwrite an existing id")
-    z.set_defaults(plugin_fn=lambda args: sys.exit(_cli_zip(args.zipfile, args.force)))
-
-
-def _cli_zip(path: str, force: bool) -> int:
-    from . import agent_plugins
-    try:
-        info = agent_plugins.install_bytes(Path(path).read_bytes(), overwrite=force)
-        agent_plugins.mirror_into_view_plugins(Path(info["dir"]))
-    except (OSError, ValueError) as e:
-        print(e)
-        return 1
-    print(f"installed {info['id']} -> {info['dir']}")
-    if info.get("needsUiGeneration"):
-        print("UI is a generate-ui prompt — call MCP plugin_ui_brief then write_plugin_ui")
-    return 0
+    z.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing zip (does not override a src tree)",
+    )
+    z.set_defaults(plugin_fn=lambda args: sys.exit(cli_zip_deprecated(args.zipfile, args.force)))

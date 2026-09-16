@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 from pathlib import Path
 
+from service import live
 from service import agent
 from service import memory
 from service import plugins
@@ -41,12 +42,13 @@ def test_match_model_expands_short_tag() -> None:
 
 
 def test_chat_options_cpu_for_gemma4(monkeypatch) -> None:
+    live.reset_for_tests()
     monkeypatch.delenv("ZOTO_VIZ_OLLAMA_NUM_GPU", raising=False)
     monkeypatch.delenv("ZOTO_VIZ_OLLAMA_NUM_CTX", raising=False)
     gemma = agent.chat_options("gemma4:e4b")
     assert gemma["num_gpu"] == 0
     assert "num_ctx" not in gemma
-    assert gemma["temperature"] == 0.3
+    assert gemma["temperature"] == agent.live.ollama_temperature(agent.live.temper())
     llama = agent.chat_options("llama3.2:latest")
     assert "num_gpu" not in llama
     assert "num_ctx" not in llama
@@ -117,25 +119,139 @@ def test_api_chat_rejects_lan_ollama(monkeypatch) -> None:
     monkeypatch.setattr(agent, "OLLAMA", "http://127.0.0.1:11434")
 
 
+def test_parse_sky_recipe() -> None:
+    rec = agent.parse_sky_recipe(
+        {"name": "wake", "motif": 2, "a": [0.1, 0.2, 0.3], "b": [0.9, 0.8, 0.7], "warp": 0.2, "grain": 0.8, "bands": 6}
+    )
+    assert rec["name"] == "wake"
+    assert rec["motif"] == 2
+    assert rec["a"] == [0.1, 0.2, 0.3]
+    clamped = agent.parse_sky_recipe(
+        '```json\n{"name":"x","motif":9,"a":[2,0,0],"b":[0,0,0],"warp":-1,"grain":2,"bands":99}\n```'
+    )
+    assert clamped["motif"] == 5
+    assert clamped["a"][0] == 1.0
+    assert clamped["warp"] == 0.0
+    assert clamped["grain"] == 1.0
+    assert clamped["bands"] == 12.0
+    assert agent.parse_sky_recipe("nope") is None
+
+
+def test_api_sky_rejects_lan_ollama(monkeypatch) -> None:
+    monkeypatch.setattr(agent, "OLLAMA", "http://10.0.0.9:11434")
+    resp = asyncio.run(agent.api_sky(Req({})))
+    assert resp.status == 400
+    monkeypatch.setattr(agent, "OLLAMA", "http://127.0.0.1:11434")
+
+
+def test_api_sky_parses_ollama(monkeypatch) -> None:
+    class Reply:
+        def __init__(self, data):
+            self._data = data
+
+        async def json(self, content_type=None):
+            return self._data
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class Tags(Reply):
+        def __init__(self):
+            super().__init__({"models": [{"name": "gemma4:e2b"}]})
+
+    class Sess:
+        def __init__(self, chat):
+            self._chat = chat
+
+        def get(self, url):
+            return Tags()
+
+        def post(self, url, json=None):
+            return Reply(self._chat)
+
+    class CM:
+        def __init__(self, chat):
+            self._chat = chat
+
+        async def __aenter__(self):
+            return Sess(self._chat)
+
+        async def __aexit__(self, *a):
+            return False
+
+    recipe = {"name": "wake", "motif": 1, "a": [0.1, 0.2, 0.3], "b": [0.9, 0.8, 0.7], "warp": 0.2, "grain": 0.4, "bands": 3}
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM({"message": {"content": json.dumps(recipe)}}))
+    ok = asyncio.run(agent.api_sky(Req({"model": "gemma4"})))
+    assert ok.status == 200
+    assert json.loads(ok.body)["recipe"]["name"] == "wake"
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM({"message": {"content": "nope"}}))
+    bad = asyncio.run(agent.api_sky(Req({})))
+    assert bad.status == 502
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM({"error": "down"}))
+    err = asyncio.run(agent.api_sky(Req({})))
+    assert err.status == 502
+
+
+def test_sky_user_prefixes_view_prompt() -> None:
+    text = agent.sky_user({"view": "cores", "prompt": "harbour dusk\x00"}, hour=21, devices=12)
+    assert "view=cores." in text
+    assert "Operator brief: harbour dusk" in text
+    assert "\x00" not in text
+    assert "hour=21" in text
+    bare = agent.sky_user({}, hour=3, devices=0)
+    assert "Operator brief" not in bare
+    assert "view=" not in bare
+    again = agent.sky_user({"previous": {"name": "harbour", "motif": 0}}, hour=12, devices=3)
+    assert "Previous was harbour motif=0" in again
+    assert "far-apart palette" in again
+
+
+def test_system_drafts_unified_plugin_tree() -> None:
+    prompt = agent.SYSTEM
+    assert "plugin.yml" in prompt
+    assert "visualisation.yml" in prompt
+    assert "frontend/" in prompt
+    assert "backend/" in prompt
+    assert "datasource/" in prompt
+    assert "sky/" in prompt
+    assert "view-plugin" not in prompt.lower()
+    assert "runtime: typescript" not in prompt
+    assert "physics field" in prompt
+    assert "eases palettes and physics" in prompt
+
+
 def test_api_draft_plugin(tmp_path, monkeypatch) -> None:
-    yaml_text = (ROOT / "examples" / "plugins" / "topology.yml").read_text(encoding="utf-8")
-    preview = asyncio.run(agent.api_draft_plugin(Req({"yaml": yaml_text})))
+    yaml_text = (ROOT / "plugins" / "src" / "topology" / "plugin.yml").read_text(encoding="utf-8")
+    files = {"plugin.yml": yaml_text}
+    preview = asyncio.run(agent.api_draft_plugin(Req({"files": files})))
     assert preview.status == 200
-    empty = asyncio.run(agent.api_draft_plugin(Req({"yaml": " "})))
+    empty = asyncio.run(agent.api_draft_plugin(Req({"files": {}})))
     assert empty.status == 400
-    bad = asyncio.run(agent.api_draft_plugin(Req({"yaml": "id: 1"})))
+    bad = asyncio.run(agent.api_draft_plugin(Req({"files": {"plugin.yml": "id: 1"}})))
     assert bad.status == 200
-    monkeypatch.setattr(plugins, "DIR", tmp_path)
+    repo = tmp_path / "checkout"
+    (repo / "plugins" / "src").mkdir(parents=True)
+    monkeypatch.setenv("ZOTO_VIZ_REPO_ROOT", str(repo))
     monkeypatch.setattr(agent, "ai_control_on", lambda: False)
-    blocked = asyncio.run(agent.api_draft_plugin(Req({"yaml": yaml_text, "aiControl": True, "install": True})))
+    blocked = asyncio.run(agent.api_draft_plugin(Req({"files": files, "aiControl": True, "install": True})))
     assert blocked.status == 200
     assert json.loads(blocked.body)["installed"] is False
-    assert not (tmp_path / "topology.yml").is_file()
+    assert not (repo / "plugins" / "src" / "topology" / "plugin.yml").is_file()
     monkeypatch.setattr(agent, "ai_control_on", lambda: True)
-    installed = asyncio.run(agent.api_draft_plugin(Req({"yaml": yaml_text, "aiControl": False, "install": True})))
+    installed = asyncio.run(agent.api_draft_plugin(Req({"files": files, "aiControl": False, "install": True})))
     assert installed.status == 200
-    assert json.loads(installed.body)["installed"] is True
-    assert (tmp_path / "topology.yml").is_file()
+    body = json.loads(installed.body)
+    assert body["installed"] is True
+    assert body["written"]
+    assert "plugins/src/topology" in body["hint"]
+    assert "plugin pack topology" in body["hint"]
+    assert "-o" in body["hint"]
+    assert (repo / "plugins" / "src" / "topology" / "plugin.yml").is_file()
+    yaml_fallback = asyncio.run(agent.api_draft_plugin(Req({"yaml": yaml_text})))
+    assert yaml_fallback.status == 200
     invalid = asyncio.run(agent.api_draft_plugin(Req()))
     assert invalid.status == 400
 
@@ -213,6 +329,8 @@ def test_last_user_and_chat_messages(tmp_path, monkeypatch) -> None:
     built = agent._chat_messages(msgs, snap={"devices": [], "flows": 0}, user=user)
     assert built[0]["role"] == "system"
     assert "kitchen" in built[0]["content"]
+    assert "Temper" in built[0]["content"]
+    assert "Weather" in built[0]["content"]
     assert built[-1]["content"] == "kitchen speaker"
     monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "empty-agent")
     fallback = agent._chat_messages(
@@ -327,17 +445,47 @@ class _Sink:
 def test_pipe_holds_overflow_then_echoes(tmp_path, monkeypatch) -> None:
     overflow = b'{"error":{"message":"request (2099 tokens) exceeds the available context size (2048 tokens)"}}'
     sink = _Sink()
-    buf, streamed = asyncio.run(agent._pipe_ollama(_Sess([overflow]), "http://127.0.0.1:11434", {}, sink))
+    buf, streamed = asyncio.run(agent._pipe_ollama(_Sess([overflow]), "http://127.0.0.1:11434", {}, sink))[:2]
     assert streamed is False
     assert sink.out == b""
     assert agent._ctx_overflow(buf)
     sink2 = _Sink()
-    buf2, streamed2 = asyncio.run(
+    buf2, streamed2, stalled2 = asyncio.run(
         agent._pipe_ollama(_Sess([b'{"message":{"content":"ok"}}']), "http://127.0.0.1:11434", {}, sink2, hold_overflow=False)
     )
     assert streamed2 is True
+    assert stalled2 is False
     assert b"ok" in sink2.out
     assert b"ok" in buf2
+
+
+class _Stall:
+    async def iter_any(self):
+        yield b'{"message":{"thinking":"halfway"}}'
+        raise TimeoutError()
+
+
+class _StallPost:
+    def __init__(self) -> None:
+        self.content = _Stall()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+
+def test_pipe_stall_returns_partial() -> None:
+    class Sess:
+        def post(self, url, json=None):
+            return _StallPost()
+
+    sink = _Sink()
+    buf, streamed, stalled = asyncio.run(agent._pipe_ollama(Sess(), "http://127.0.0.1:11434", {}, sink, hold_overflow=False))
+    assert stalled is True
+    assert streamed is True
+    assert b"halfway" in buf
 
 
 def test_api_chat_retries_overflow(tmp_path, monkeypatch) -> None:
@@ -347,8 +495,8 @@ def test_api_chat_retries_overflow(tmp_path, monkeypatch) -> None:
     async def fake_pipe(s, base, payload, resp, hold_overflow=True):
         n["i"] += 1
         if n["i"] == 1:
-            return bytearray(b'{"error":{"message":"exceeds the available context size"}}'), False
-        return bytearray(b'{"message":{"content":"ok later"}}\n'), True
+            return bytearray(b'{"error":{"message":"exceeds the available context size"}}'), False, False
+        return bytearray(b'{"message":{"content":"ok later"}}\n'), True, False
 
     class Tags:
         async def json(self):
@@ -390,6 +538,197 @@ def test_api_chat_retries_overflow(tmp_path, monkeypatch) -> None:
     out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "hi"}]})))
     assert n["i"] == 2
     assert memory.messages()[-1]["content"] == "ok later"
+    assert out.status == 200
+
+
+def test_reply_incomplete() -> None:
+    assert agent.reply_incomplete('{"message":{"thinking":"plan the lan"},"done":true}')
+    assert agent.reply_incomplete('{"message":{"content":"hello"},"done":true,"done_reason":"length"}')
+    assert agent.reply_incomplete('{"message":{"content":"```yaml\\nid: x\\n"}}')
+    assert agent.reply_incomplete('{"message":{"content":"partial"}}', stalled=True)
+    assert agent.reply_incomplete("", stalled=True)
+    assert not agent.reply_incomplete('{"message":{"content":"the nest is loud."},"done":true,"done_reason":"stop"}')
+    assert not agent.reply_incomplete('{"error":{"message":"exceeds the available context size"}}')
+    think, content = agent.parse_ollama_chat('{"message":{"thinking":"why"}}')
+    msgs = agent._nudge_messages([{"role": "user", "content": "hi"}], think, content)
+    assert msgs[-1]["content"] == agent.ANSWER_NOW
+    msgs2 = agent._nudge_messages(
+        [{"role": "user", "content": "hi"}],
+        "",
+        "half a sent",
+    )
+    assert msgs2[-2]["content"] == "half a sent"
+    assert msgs2[-1]["content"] == agent.NUDGE
+
+
+def test_api_chat_nudges_incomplete(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
+    n = {"i": 0}
+    seen: list[str] = []
+
+    async def fake_pipe(s, base, payload, resp, hold_overflow=True):
+        n["i"] += 1
+        last = str((payload.get("messages") or [{}])[-1].get("content") or "")
+        seen.append(last)
+        if n["i"] == 1:
+            return bytearray(b'{"message":{"thinking":"still working this out"}}\n{"done":true}\n'), True, False
+        return bytearray(b'{"message":{"content":"kitchen speaker"}}\n'), True, False
+
+    class Tags:
+        async def json(self):
+            return {"models": [{"name": "gemma4:e2b"}]}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class Sess:
+        def get(self, url):
+            return Tags()
+
+    class CM:
+        async def __aenter__(self):
+            return Sess()
+
+        async def __aexit__(self, *a):
+            return False
+
+    class FakeResp:
+        def __init__(self, *a, **k):
+            self.status = 200
+
+        async def prepare(self, req):
+            return None
+
+        async def write(self, chunk):
+            return None
+
+        async def write_eof(self):
+            return None
+
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM())
+    monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
+    monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
+    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is the nest?"}]})))
+    assert n["i"] == 2
+    assert any("Stop reasoning" in s for s in seen)
+    assert memory.messages()[-1]["content"] == "kitchen speaker"
+    assert memory.messages()[-2]["content"] == "who is the nest?"
+    assert out.status == 200
+
+
+def test_api_chat_polls_until_reply(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
+    n = {"i": 0}
+
+    async def fake_pipe(s, base, payload, resp, hold_overflow=True):
+        n["i"] += 1
+        if n["i"] < 4:
+            return bytearray(b'{"message":{"thinking":"still working this out"}}\n{"done":true}\n'), True, False
+        return bytearray(b'{"message":{"content":"the nest is the kitchen speaker"}}\n'), True, False
+
+    class Tags:
+        async def json(self):
+            return {"models": [{"name": "gemma4:e2b"}]}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class Sess:
+        def get(self, url):
+            return Tags()
+
+    class CM:
+        async def __aenter__(self):
+            return Sess()
+
+        async def __aexit__(self, *a):
+            return False
+
+    class FakeResp:
+        def __init__(self, *a, **k):
+            self.status = 200
+
+        async def prepare(self, req):
+            return None
+
+        async def write(self, chunk):
+            return None
+
+        async def write_eof(self):
+            return None
+
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM())
+    monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
+    monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
+    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is the nest?"}]})))
+    assert n["i"] == 4
+    assert memory.messages()[-1]["content"] == "the nest is the kitchen speaker"
+    assert out.status == 200
+
+
+def test_api_chat_poll_skips_user_persist(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
+    memory.append_message("user", "who is the nest?")
+    memory.append_message("assistant", "", thinking="still working this out")
+    n = {"i": 0}
+
+    async def fake_pipe(s, base, payload, resp, hold_overflow=True):
+        n["i"] += 1
+        last = str((payload.get("messages") or [{}])[-1].get("content") or "")
+        assert "Stop reasoning" in last
+        return bytearray(b'{"message":{"content":"kitchen speaker"}}\n'), True, False
+
+    class Tags:
+        async def json(self):
+            return {"models": [{"name": "gemma4:e2b"}]}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class Sess:
+        def get(self, url):
+            return Tags()
+
+    class CM:
+        async def __aenter__(self):
+            return Sess()
+
+        async def __aexit__(self, *a):
+            return False
+
+    class FakeResp:
+        def __init__(self, *a, **k):
+            self.status = 200
+
+        async def prepare(self, req):
+            return None
+
+        async def write(self, chunk):
+            return None
+
+        async def write_eof(self):
+            return None
+
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM())
+    monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
+    monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
+    out = asyncio.run(agent.api_chat(Req({
+        "poll": True,
+        "messages": [{"role": "user", "content": "who is the nest?"}],
+    })))
+    users = [m for m in memory.messages() if m["role"] == "user"]
+    assert len(users) == 1
+    assert n["i"] == 1
+    assert memory.messages()[-1]["content"] == "kitchen speaker"
     assert out.status == 200
 
 

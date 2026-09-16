@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
-import importlib
 import ipaddress
 import json
 import os
@@ -34,20 +33,23 @@ from typing import Iterable
 
 from aiohttp import WSCloseCode, web
 
-# discovery helpers, OUI lookup, cert probe. The file is zoto-viz.py (hyphen), which a plain `import` cannot spell.
-zotoviz = importlib.import_module("zoto-viz")
 from . import access
 from . import agent
-from . import agent_plugins
+from . import agent_assets
+from . import live
 from . import mcp as plugin_mcp
+from . import plugin_migration
 from . import cpu
 from . import forensics
 from . import hooks
 from . import paths
+from . import plugin_datasource as plugin_ds
 from . import plugins
 from . import profiles
 from . import rf
 from . import sysconfig
+
+zotoviz = paths.load_cli()
 
 REPO = Path(__file__).resolve().parents[1]
 DATA = REPO / "data"
@@ -1516,7 +1518,9 @@ async def housekeeping_loop(state: State) -> None:
 
 def publish_state(state: State) -> dict:
     """1 Hz snapshot after plugin service hooks have had a chance to decorate it."""
-    return hooks.on_snapshot(state.snapshot(time.time()))
+    msg = plugin_ds.apply_snapshot(hooks.on_snapshot(state.snapshot(time.time())))
+    msg["live"] = live.snapshot()
+    return msg
 
 
 async def plugin_watch_loop(app: web.Application) -> None:
@@ -1723,13 +1727,15 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_delete("/api/profiles/{id}", profiles.api_delete)
     app.router.add_get("/api/plugins", plugins.api_list)
     app.router.add_get("/api/plugins/{id}/module.js", plugins.api_module)
+    app.router.add_get("/api/plugins/{id}/sky/fragment.glsl", plugins.api_sky)
     app.router.add_put("/api/plugins/{id}/consent", plugins.api_consent)
-    app.router.add_get("/api/agent-plugins", agent_plugins.api_list)
     app.router.add_get("/mcp", plugin_mcp.api_mcp)
     app.router.add_post("/mcp", plugin_mcp.api_mcp)
     app.router.add_get("/api/ai/status", agent.api_status)
     app.router.add_get("/api/ai/control", agent.api_control)
     app.router.add_put("/api/ai/control", agent.api_control)
+    app.router.add_get("/api/ai/temper", agent.api_temper)
+    app.router.add_put("/api/ai/temper", agent.api_temper)
     app.router.add_post("/api/ai/chat", agent.api_chat)
     app.router.add_get("/api/ai/history", agent.api_history)
     app.router.add_delete("/api/ai/history", agent.api_history)
@@ -1737,8 +1743,13 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_post("/api/ai/memories", agent.api_memories)
     app.router.add_delete("/api/ai/memories", agent.api_memories)
     app.router.add_post("/api/ai/plugin", agent.api_draft_plugin)
+    app.router.add_post("/api/ai/sky", agent.api_sky)
     app.router.add_post("/api/ai/speak", agent.api_speak)
     app.router.add_delete("/api/ai/speak", agent.api_speak)
+    app.router.add_get("/api/ai/assets", agent_assets.api_assets)
+    app.router.add_post("/api/ai/asset", agent_assets.api_assets)
+    app.router.add_delete("/api/ai/assets", agent_assets.api_assets)
+    app.router.add_get("/api/ai/assets/{id}", agent_assets.api_asset)
     if WEB_DIST.exists():
         app.router.add_static("/", WEB_DIST, show_index=False)
     app.on_startup.append(on_startup)
@@ -1764,7 +1775,7 @@ def main() -> None:
         sys.exit("[monitor] refusing non-loopback --bind (pass --insecure-lan to expose the UI on the LAN)")
 
     iface, local_ip, cidr, gw = zotoviz.default_iface()
-    cfg = sysconfig.ensure()
+    sysconfig.ensure()
     state = State(iface, local_ip, cidr, gw, only_ifaces=args.iface)
     if not state.ifaces:
         sys.exit(f"[monitor] no capturable interfaces" + (f" among {args.iface}" if args.iface else ""))
@@ -1772,18 +1783,17 @@ def main() -> None:
         state.load()
     log(f"primary={iface} ip={local_ip} net={cidr} gw={gw}")
     log("capturing: " + ", ".join(f"{i} [{'monitor mode' if i in state.wlan else ', '.join(c) or 'no addr'}]" for i, c in sorted(state.ifaces.items())))
-    seeded = plugins.seed()
-    if seeded["copied"]:
-        log("plugins installed: " + ", ".join(seeded["copied"]))
-        if "air-ssid.yml" in seeded["copied"] and cfg.get("ssids"):
-            sysconfig.apply_watch_default(plugins.DIR / "air-ssid.yml", cfg["ssids"])
+    migrated = plugin_migration.migrate_home_plugins()
+    if migrated.get("copied"):
+        log("plugin src migrated: " + ", ".join(migrated["copied"]))
+    plugins.seed()
     log(f"UI: http://{args.bind}:{args.port}/   WS: /ws   JSON: /api/state, /api/traffic?ip=…, /api/payload, /api/rf/watch, /api/profiles")
     if args.insecure_lan:
         log("WARNING: --insecure-lan: the UI is reachable beyond loopback with no password")
     if plugins.python_enabled():
         log("plugin Python: enabled (ZOTO_VIZ_PLUGIN_SERVICE) — only consented plugins are loaded")
     else:
-        log("plugin Python: off (set ZOTO_VIZ_PLUGIN_SERVICE=1 to load service/*.py after source review)")
+        log("plugin Python: off (set ZOTO_VIZ_PLUGIN_SERVICE=1 to load backend/service.py after source review)")
     if state.radio.watch["ssids"] or state.radio.watch["other"]:
         w = state.radio.watch
         log(f"wifi watch: {', '.join(w['ssids']) or '(none)'}" + (" + other networks" if w["other"] else "")

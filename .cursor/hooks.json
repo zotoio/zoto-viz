@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": ".cursor/hooks/restart-stale-monitor.sh",
+        "description": "Restart zoto-viz monitor when service/*.py is newer than the running process",
+        "timeout": 25
+      }
+    ]
+  }
+}

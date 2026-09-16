@@ -2,14 +2,15 @@
 #
 #   mkdir -p ~/.config/systemd/user
 #   cp systemd/zoto-viz-monitor.service ~/.config/systemd/user/
-#   ./zoto-viz.py plugin install   # writes ~/.zoto-viz/sys-config.yml and this drop-in from the checkout path
+#   ./zoto-viz install   # writes ~/.zoto-viz/sys-config.yml and this drop-in from the checkout path
 #   systemctl --user daemon-reload
 #   systemctl --user enable --now zoto-viz-monitor
 #   loginctl enable-linger $USER
 #   journalctl --user -u zoto-viz-monitor -f
 #
-# ZOTO_VIZ_ROOT below is a placeholder. `plugin install` writes
-# ~/.config/systemd/user/zoto-viz-monitor.service.d/override.conf once this unit is in place.
+# ZOTO_VIZ_ROOT below is a placeholder. `zoto-viz install` writes
+# ~/.config/systemd/user/zoto-viz-monitor.service.d/override.conf once this unit is in place
+# (absolute WorkingDirectory + ExecStart — systemd does not expand ${ZOTO_VIZ_ROOT}).
 
 [Unit]
 Description=zoto-viz live network monitor
@@ -19,8 +20,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 Environment=ZOTO_VIZ_ROOT=%h/zoto-viz
-WorkingDirectory=${ZOTO_VIZ_ROOT}
-ExecStart=${ZOTO_VIZ_ROOT}/.venv/bin/python -m service.monitor --bind 127.0.0.1 --port 7020
+WorkingDirectory=%h/zoto-viz
+ExecStart=%h/zoto-viz/.venv/bin/python -m service.monitor --bind 127.0.0.1 --port 7020
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

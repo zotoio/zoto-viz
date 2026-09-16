@@ -1,21 +1,26 @@
 """Hot-load plugin Python into the monitor.
 
-Directory plugins may ship `service/__init__.py` (or `service.py`, or a `service:` path in
-plugin.yml). The module runs in-process with the monitor — local/trusted, not the TypeScript
-iframe sandbox. Optional hooks:
+Directory plugins may ship ``backend/service.py`` (unified zip layout) or the
+legacy ``service/__init__.py`` / ``service.py`` (or a ``service:`` path in
+plugin.yml). The module runs in-process with the monitor — local/trusted, not
+the TypeScript iframe sandbox. Optional hooks:
 
     setup(host)              once after load / reload
     teardown(host)           before unload / reload
     on_snapshot(host, msg)   1 Hz, mutates the snapshot dict before it is sent
+
+Unified backends load as ``plugin_<id>_backend``. Collectors live in
+``service.plugin_datasource`` and share this sync / unload lifecycle.
 """
 from __future__ import annotations
 
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any, Callable, Callable
+from typing import Any, Callable
 
-_MOD = "zoto_viz_plugin_"
+from .plugin_backend import backend_file, module_name as _module_name
+from . import plugin_datasource as _datasource
 
 
 class Host:
@@ -46,19 +51,21 @@ def loaded() -> dict[str, dict[str, Any]]:
 def unload_all() -> None:
     for pid in list(_loaded):
         _drop(pid)
+    _datasource.unload_all()
 
 
 def reset() -> None:
     global _host_factory
     unload_all()
     _host_factory = None
+    _datasource.reset()
 
 
 def service_path(home: Path, doc: dict[str, Any], *, yaml_path: Path | None = None) -> Path | None:
     """Resolve the Python entry for a plugin. Confined to `home`.
 
     Auto-detect `service/__init__.py` / `service.py` only for directory plugins
-    (`plugin.yml`) so a stray `service.py` in ~/.zoto-viz/plugins is not attached
+    (`plugin.yml`) so a stray `service.py` in a user-dir tree is not attached
     to every flat YAML overlay.
     """
     raw = str(doc.get("service") or "").strip()
@@ -71,7 +78,7 @@ def service_path(home: Path, doc: dict[str, Any], *, yaml_path: Path | None = No
     directory = yaml_path is None or yaml_path.name in ("plugin.yml", "plugin.yaml")
     if not directory:
         return None
-    for cand in (home / "service" / "__init__.py", home / "service.py"):
+    for cand in (backend_file(home), home / "service" / "__init__.py", home / "service.py"):
         if cand.is_file():
             return cand
     return None
@@ -143,6 +150,8 @@ def sync(plugins: list[dict[str, Any]], *, allow: Callable[[dict[str, Any]], boo
             continue
         _load(pid, path, mtime, factory)
 
+    _datasource.sync(plugins, allow=allow)
+
 
 def on_snapshot(msg: dict[str, Any]) -> dict[str, Any]:
     _call("on_snapshot", msg)
@@ -168,7 +177,7 @@ def _call(name: str, *args: Any) -> None:
 def _load(pid: str, path: Path, mtime: float, factory: Callable[[str], Host] | None) -> None:
     if pid in _loaded:
         _drop(pid)
-    name = f"{_MOD}{pid.replace('-', '_')}"
+    name = _module_name(pid, path)
     search = [str(path.parent)] if path.name == "__init__.py" else None
     spec = importlib.util.spec_from_file_location(name, path, submodule_search_locations=search)
     if spec is None or spec.loader is None:

@@ -7,7 +7,7 @@
 #   sudo systemd/zoto-viz-wifi-monitor.sh <monitor-radio> --hop        # …then rotate through the channel plan (below)
 #   sudo systemd/zoto-viz-wifi-monitor.sh <monitor-radio> --off        # back to a normal, NetworkManager-managed radio
 #
-# Radio names live in ~/.zoto-viz/sys-config.yml (`iface`, `monitor_iface`), written by `./zoto-viz.py plugin install`.
+# Radio names live in ~/.zoto-viz/sys-config.yml (`iface`, `monitor_iface`), written by `./zoto-viz install`.
 #
 # The monitor (python -m service.monitor) notices the interface appear within IFACE_RESCAN_S and restarts its capture with the
 # radio included; WPA frames are decrypted with the passphrase in ~/.config/zoto-viz/wifi-keys (see README).
@@ -40,8 +40,25 @@ done
 NM_CONF=/etc/NetworkManager/conf.d/99-zoto-viz-$MON.conf
 UDEV_RULE=/etc/udev/rules.d/99-zoto-viz-$MON.rules
 UNIT=zoto-viz-wifi-monitor@$MON.service
-OWNER_HOME=$(getent passwd "$(stat -c %U "$0")" | cut -d: -f6)
-PLAN=${ZOTO_VIZ_HOP_PLAN:-${Z_NETVIZ_HOP_PLAN:-${OWNER_HOME:-/root}/.config/zoto-viz/wifi-hop.plan}}
+# Installed copies live in /usr/local/sbin (owned by root). Prefer the operator whose
+# sys-config.yml names this radio, else the script file owner (repo checkout).
+hop_plan() {
+  if [[ -n ${ZOTO_VIZ_HOP_PLAN:-} ]]; then printf '%s\n' "$ZOTO_VIZ_HOP_PLAN"; return; fi
+  if [[ -n ${Z_NETVIZ_HOP_PLAN:-} ]]; then printf '%s\n' "$Z_NETVIZ_HOP_PLAN"; return; fi
+  local sc user home
+  shopt -s nullglob
+  for sc in /home/*/.zoto-viz/sys-config.yml; do
+    grep -Eq "^monitor_iface:[[:space:]]*['\"]?${MON}['\"]?[[:space:]]*$" "$sc" || continue
+    user=$(stat -c %U "$sc")
+    home=$(getent passwd "$user" | cut -d: -f6)
+    [[ -n $home ]] || continue
+    printf '%s\n' "$home/.config/zoto-viz/wifi-hop.plan"
+    return
+  done
+  home=$(getent passwd "$(stat -c %U "$0")" | cut -d: -f6)
+  printf '%s\n' "${home:-/root}/.config/zoto-viz/wifi-hop.plan"
+}
+PLAN=$(hop_plan)
 
 if [[ $EUID -ne 0 ]]; then echo "run as root (sudo)" >&2; exit 1; fi
 for tool in iw ip nmcli; do

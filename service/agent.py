@@ -4,11 +4,16 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import tempfile
+import time
+from pathlib import Path
 from urllib.parse import urlparse
 from typing import Any
 
 from aiohttp import ClientSession, ClientTimeout, web
 
+from . import live
 from . import memory
 from . import paths
 from . import plugins
@@ -20,6 +25,14 @@ DEFAULT_NUM_CTX = 2048
 MIN_NUM_CTX = 512
 MAX_NUM_CTX = 131072
 MAX_BODY = 2 * 1024 * 1024
+CHAT_TIMEOUT_S = 600
+CHAT_STALL_S = 45
+MAX_NUDGES = 8
+NUDGE = "Continue from where you stopped. Finish the answer; do not restart or greet."
+ANSWER_NOW = (
+    "Stop reasoning. Answer the user now in 2-4 short sentences. "
+    "Do not greet, restart, or keep thinking silently."
+)
 AI_CONTROL_FILE = paths.user_dir() / "ai-control"
 
 
@@ -54,7 +67,7 @@ def set_ai_control(on: bool) -> None:
         pass
 
 SYSTEM = """You are the zoto-viz local operator. You run on this machine via Ollama.
-You help the user understand LAN traffic, draft view plugins, and (only when AI Control is on) change UI settings.
+You help the user understand LAN traffic, draft view plugins, and (only when AI Control is on) change UI settings, author GLSL skies, and pin photos or SVG onto the graph.
 Never invent packet contents. Prefer short, concrete observations.
 This conversation is persistent on the monitor. Continue where you left off. If a session brief is present, it is the same thread after a context-window roll — do not greet as if new. Use listed memories when they apply; do not invent facts that are not in memories, the brief, or the snapshot.
 Each user turn may include a Screen HUD object (short keys): m mode, th theme, ch chrome, cam, sel selection, p panel, d dream, mg 0=no merge, rd redact, st stats, hide hidden layers, fd feed, q overlay lines. Use it to read what is on screen before analysing traffic or proposing settings.
@@ -63,14 +76,33 @@ When the user states a lasting fact, preference, name, or device mapping, emit a
 the nest speaker is in the kitchen
 ```
 Do not emit memory for ephemeral traffic. If they say to forget something, acknowledge it; the monitor drops matching memories.
-When drafting a plugin, emit a single YAML document in a fenced yaml block matching the view-plugin schema (id, name, version, engine; graph needs base). Optional TypeScript uses runtime: typescript and entry plus capabilities.
-If the user asks to change settings and AI Control is off, refuse and explain how to enable it.
-When AI Control is on and a setting should change, emit a fenced block:
+When drafting a plugin, emit a files tree. Required: a fenced yaml block for plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/ (TypeScript, typically frontend/index.ts), backend/service.py, datasource/ (streams.yml, collector.py), sky/ (sky.yml, fragment.glsl). Arcade engines: netpong, invaders, command, frogger, cpupong, doom. doom is a first-person view of this host's CPU processes; shots are visual only and must never kill a process. TypeScript is a frontend/ folder plus frontend.entry.
+If the user asks to change settings, the sky, or graph decorations and AI Control is off, refuse and explain how to enable it (header AI toggle).
+When AI Control is on, every applied change is saved on the profile named after the current Ollama model in ~/.zoto-viz/profiles.yml.
+When Control is on, prefer a contrasting theme (not a neighbour on the picker) and a clearly different sky, motion band, or physics field (gravity, swirl, magnets, stringAmt). Tiny nudges look like a glitch; the UI eases palettes and physics, so a bold jump still lands smoothly.
+Settings: emit a fenced JSON block. You may set any profile field: theme, dream, camera (auto|off), mic (auto|off), chrome (top|left|right), mode (a view id from the HUD), redact, merge, feed (on, source traffic|transcript|both, layout ticker|bars|both, scope lan|selected|any, density 12-80, textSize 10-20, modulate), show (lan, internet, multicast, offline, labels, cpuIdle), filters (allowNames, blockNames, allowNets, blockNets), anim (sky, floor, camera, mosaic, weights, physics — partAmt/partBusy/partQuiet/partPeak/partCap, magnets per type −1…1, gravity, swirl, spring, stringAmt, chargeAmt — same keys as Settings → Motion / Camera / Audio / Graph Look / Physics), modeOptions, arcade, plugins.
 ```settings
-{"theme":"matrix","dream":true,"camera":"auto","chrome":"top","mode":"talkers","redact":false,"merge":true,"feed":{"on":true,"source":"transcript","layout":"ticker"},"show":{"internet":false}}
+{"theme":"matrix","dream":true,"anim":{"backdrop":"aurora","skySpeed":1.4},"show":{"multicast":false}}
 ```
-Allowed keys: theme, dream, camera (auto|off), chrome (top|left|right), mode (a view id from the HUD), redact, merge, feed (on, source traffic|transcript|both, layout ticker|bars|both, scope lan|selected|any), show (lan, internet, multicast, offline, labels).
-Prefer hiding noisy layers (multicast, internet) or switching mode/feed when the graph is cluttered. Do not claim a change happened if Control is off.
+Sky shader from the data: emit GLSL with `vec3 color(vec3 dir, float t)` (uniforms uTime, uOpacity, uBright, uAudio, uAccent, uBg, sampler2D uPhoto). Or a full `void main()` writing fragColor. Keep it short. The host wraps helpers (hash, noise, fbm).
+```shader
+vec3 color(vec3 dir, float t) {
+  float n = fbm(dir.xy * 3.0 + t * 0.05);
+  return mix(uBg, uAccent, 0.35 + 0.5 * n);
+}
+```
+Photos: one https URL per line (public web only). Optional JSON `{"url":"...","at":"selected"|"internet"|"origin"|[x,y,z]}`.
+```photo
+https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Example.jpg/320px-Example.jpg
+```
+SVG decorations:
+```svg
+<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="#5aa9ff"/></svg>
+```
+```deco
+{"clear":true}
+```
+clears agent photos/SVG/shader. Prefer hiding noisy layers or switching mode/feed when the graph is cluttered. Do not claim a change happened if Control is off.
 """
 
 
@@ -122,7 +154,7 @@ def _num_ctx() -> int:
 
 def chat_options(model: str) -> dict[str, Any]:
     """Ollama chat options. Gemma 4 E2B/E4B on 0.31.x abort on partial GPU offload."""
-    opts: dict[str, Any] = {"temperature": 0.3}
+    opts: dict[str, Any] = {"temperature": live.ollama_temperature(live.temper())}
     raw_ctx = os.environ.get("ZOTO_VIZ_OLLAMA_NUM_CTX", "").strip()
     if raw_ctx:
         try:
@@ -162,12 +194,14 @@ async def api_status(_: web.Request) -> web.Response:
             "hasGemma": any(str(n).startswith("gemma4") for n in names),
             "aiControl": ai_control_on(),
             "tts": speak_engine(),
+            **live.state(),
         })
     except Exception as e:
         return web.json_response({
             "ok": False, "host": OLLAMA, "error": str(e), "model": DEFAULT_MODEL,
             "aiControl": ai_control_on(),
             "tts": speak_engine(),
+            **live.state(),
         })
 
 
@@ -256,6 +290,60 @@ def _split_think_tags(thinking: str, content: str) -> tuple[str, str]:
         thinking = "\n".join(x for x in [thinking, *tagged] if x).strip()
         content = _THINK_XML.sub("", content).strip()
     return thinking.strip(), content
+
+
+def _last_json(raw: str) -> dict[str, Any]:
+    for line in reversed((raw or "").split("\n")):
+        t = line.strip()
+        if not t:
+            continue
+        try:
+            j = json.loads(t)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(j, dict):
+            return j
+    return {}
+
+
+def reply_incomplete(raw: str, *, stalled: bool = False) -> bool:
+    """True when the model stopped mid-thought or mid-reply and a silent continue is worth it."""
+    if _ctx_overflow(raw):
+        return False
+    j = _last_json(raw)
+    if j.get("error"):
+        return False
+    thinking, content = parse_ollama_chat(raw)
+    if stalled:
+        return True
+    if str(j.get("done_reason") or "") == "length":
+        return True
+    if thinking and not content.strip():
+        return True
+    if content.count("```") % 2 == 1:
+        return True
+    if re.search(r"<think>", content, re.I) and not re.search(r"</think>", content, re.I):
+        return True
+    return False
+
+
+def _nudge_messages(base: list[dict[str, Any]], thinking: str, content: str) -> list[dict[str, Any]]:
+    out = [dict(m) for m in base]
+    while out and out[-1].get("role") == "assistant" and not str(out[-1].get("content") or "").strip():
+        out.pop()
+    so_far = (content or "").strip()
+    if so_far:
+        out.append({"role": "assistant", "content": so_far[:memory.OLLAMA_LAST_CAP]})
+    nudge = ANSWER_NOW if thinking.strip() and not so_far else NUDGE
+    out.append({"role": "user", "content": nudge})
+    return out
+
+
+def _last_assistant() -> tuple[str, str]:
+    for m in reversed(memory.messages()):
+        if m.get("role") == "assistant":
+            return str(m.get("thinking") or ""), str(m.get("content") or "")
+    return "", ""
 
 
 def parse_ollama_stream(raw: str) -> str:
@@ -411,7 +499,9 @@ def _chat_messages(
     snap_cap = 480 if view_note else 720
     sys_msg = (
         SYSTEM
-        + f"\nAI Control is {'ON' if control else 'OFF'}.\n"
+        + f"\n{live.prefix()}\n"
+        + f"AI Control is {'ON' if control else 'OFF'}. Weather {live.weather()} "
+        + f"(AI Dynamic rebuild p={live.WEATHER[live.weather()]['p']} each tick).\n"
         + f"LAN: {json.dumps(snap, ensure_ascii=False, separators=(',', ':'))[:snap_cap]}"
         + memory.inject_block(user)
         + view_note
@@ -435,7 +525,10 @@ def _chat_messages(
         role = m.get("role")
         if role not in ("user", "assistant"):
             continue
-        ollama_msgs.append({"role": role, "content": str(m.get("content") or "")[:memory.OLLAMA_LAST_CAP]})
+        text = str(m.get("content") or "")[:memory.OLLAMA_LAST_CAP]
+        if role == "assistant" and not text.strip():
+            continue
+        ollama_msgs.append({"role": role, "content": text})
     return ollama_msgs
 
 
@@ -446,18 +539,24 @@ async def _pipe_ollama(
     resp: web.StreamResponse,
     *,
     hold_overflow: bool = True,
-) -> tuple[bytearray, bool]:
-    """Stream Ollama NDJSON to the browser. If the first payload is a context overflow, hold it when asked."""
+) -> tuple[bytearray, bool, bool]:
+    """Stream Ollama NDJSON to the browser. If the first payload is a context overflow, hold it when asked.
+
+    A read stall returns whatever arrived so the caller can nudge continue.
+    """
     buf = bytearray()
     streamed = False
-    async with session.post(f"{base}/api/chat", json=payload) as r:
-        async for chunk in r.content.iter_any():
-            buf.extend(chunk)
-            if hold_overflow and not streamed and _ctx_overflow(buf):
-                return buf, False
-            await resp.write(chunk)
-            streamed = True
-    return buf, streamed
+    try:
+        async with session.post(f"{base}/api/chat", json=payload) as r:
+            async for chunk in r.content.iter_any():
+                buf.extend(chunk)
+                if hold_overflow and not streamed and _ctx_overflow(buf):
+                    return buf, False, False
+                await resp.write(chunk)
+                streamed = True
+    except TimeoutError:
+        return buf, streamed, True
+    return buf, streamed, False
 
 
 async def api_chat(req: web.Request) -> web.StreamResponse:
@@ -483,11 +582,14 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
 
     user = _last_user(messages)
     view_note = _parse_view(body, redact)
-    if user:
+    poll = bool(body.get("poll"))
+    if user and not poll:
         memory.append_message("user", user)
     ollama_msgs = _chat_messages(
         messages, snap=snap, user=user, view_note=view_note, redact=redact, has_image=False,
     )
+    think_so_far, content_so_far = _last_assistant() if poll else ("", "")
+    skip_first = poll and bool(think_so_far.strip()) and not content_so_far.strip()
 
     payload = {
         "model": _model(body),
@@ -500,7 +602,7 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
     await resp.prepare(req)
     buf = bytearray()
     try:
-        timeout = ClientTimeout(total=120)
+        timeout = ClientTimeout(total=CHAT_TIMEOUT_S, sock_read=CHAT_STALL_S)
         async with ClientSession(timeout=timeout) as s:
             try:
                 async with s.get(f"{base}/api/tags") as tags:
@@ -508,15 +610,36 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
             except Exception:
                 pass
             payload["options"] = chat_options(payload["model"])
-            buf, streamed = await _pipe_ollama(s, base, payload, resp)
-            if _ctx_overflow(buf) and not streamed:
-                payload["messages"] = _chat_messages(
-                    messages, snap=snap, user=user, view_note=view_note,
-                    redact=redact, has_image=False, force_roll=True, keep=2,
+            streamed = False
+            stalled = False
+            if skip_first:
+                buf = bytearray(
+                    (json.dumps({"message": {"thinking": think_so_far}, "done": True}) + "\n").encode()
                 )
-                buf, _ = await _pipe_ollama(s, base, payload, resp, hold_overflow=False)
+                streamed = True
+            else:
+                buf, streamed, stalled = await _pipe_ollama(s, base, payload, resp)
+                if _ctx_overflow(buf) and not streamed:
+                    payload["messages"] = _chat_messages(
+                        messages, snap=snap, user=user, view_note=view_note,
+                        redact=redact, has_image=False, force_roll=True, keep=2,
+                    )
+                    buf, streamed, stalled = await _pipe_ollama(s, base, payload, resp, hold_overflow=False)
+            base_msgs = list(payload["messages"])
+            combined = bytearray(buf)
+            nudge_i = 0
+            while nudge_i < MAX_NUDGES and reply_incomplete(
+                combined.decode("utf-8", "replace"), stalled=stalled,
+            ):
+                thinking, content = parse_ollama_chat(combined.decode("utf-8", "replace"))
+                payload["messages"] = _nudge_messages(base_msgs, thinking, content)
+                part, _, stalled = await _pipe_ollama(s, base, payload, resp, hold_overflow=False)
+                combined.extend(part)
+                nudge_i += 1
+            buf = combined
     except Exception as e:
-        await resp.write(json.dumps({"error": str(e), "done": True}).encode())
+        if not buf:
+            await resp.write(json.dumps({"error": str(e), "done": True}).encode())
     thinking, reply = parse_ollama_chat(buf.decode("utf-8", "replace"))
     _remember_reply(user, reply, redact=redact, thinking=thinking)
     await resp.write_eof()
@@ -565,26 +688,260 @@ async def api_memories(req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "memories": memory.list_memories(kind="memory")})
 
 
+SKY_SYSTEM = """You invent far-field skies for a LAN visualizer. Reply with ONLY a JSON object:
+{"name":"short-slug","motif":0,"a":[0.2,0.4,0.9],"b":[0.9,0.5,0.2],"warp":0.4,"grain":0.2,"bands":4}
+motif integer 0-5: 0 aurora curtains, 1 cells, 2 stripes, 3 spiral, 4 noise, 5 ribbons.
+a and b are RGB 0-1 and must sit far apart in hue ( complementary or split, not two greys).
+warp and grain are 0-1. bands is 0.5-12. Change motif every reply. No markdown, no talk."""
+
+SKY_PROMPT_MAX = 800
+
+
+def sky_user(body: dict[str, Any], hour: int, devices: int) -> str:
+    """User turn for a one-shot sky. Optional per-view prompt prefix from the profile."""
+    view = str(body.get("view") or "").strip()[:48]
+    brief = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", str(body.get("prompt") or "").strip())[:SKY_PROMPT_MAX]
+    line = f"Invent a new far-field sky. hour={hour} devices={devices}."
+    if view:
+        line += f" view={view}."
+    prev = body.get("previous")
+    if isinstance(prev, dict):
+        name = re.sub(r"[\x00-\x1f]", "", str(prev.get("name") or "").strip())[:40]
+        try:
+            motif = int(prev.get("motif"))
+        except (TypeError, ValueError):
+            motif = -1
+        if name or motif >= 0:
+            bit = name or "last"
+            if motif >= 0:
+                bit += f" motif={motif}"
+            line += f" Previous was {bit}; pick a different motif and a far-apart palette."
+    if brief:
+        line += f"\nOperator brief: {brief}"
+    return line
+
+
+def _clamp01(n: float, fallback: float) -> float:
+    return fallback if n != n else max(0.0, min(1.0, n))  # NaN → fallback
+
+
+def _rgb(v: Any, fallback: list[float]) -> list[float]:
+    if not isinstance(v, (list, tuple)) or len(v) < 3:
+        return list(fallback)
+    out: list[float] = []
+    for i, fb in enumerate(fallback):
+        try:
+            out.append(_clamp01(float(v[i]), fb))
+        except (TypeError, ValueError):
+            out.append(fb)
+    return out
+
+
+def parse_sky_recipe(raw: Any) -> dict[str, Any] | None:
+    """Gemma sky recipe. Motif 0–5; colours and warp/grain stay in 0–1."""
+    obj: Any = raw
+    if isinstance(raw, str):
+        text = raw
+        fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.I)
+        if fence:
+            text = fence.group(1)
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            obj = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(obj, dict):
+        return None
+    try:
+        motif = int(round(float(obj.get("motif"))))
+    except (TypeError, ValueError):
+        return None
+    try:
+        bands = float(obj.get("bands") if obj.get("bands") is not None else 4)
+    except (TypeError, ValueError):
+        bands = 4.0
+    try:
+        warp = float(obj.get("warp") if obj.get("warp") is not None else 0.45)
+    except (TypeError, ValueError):
+        warp = 0.45
+    try:
+        grain = float(obj.get("grain") if obj.get("grain") is not None else 0.25)
+    except (TypeError, ValueError):
+        grain = 0.25
+    return {
+        "name": str(obj.get("name") or "dynamic")[:40],
+        "motif": max(0, min(5, motif)),
+        "a": _rgb(obj.get("a"), [0.15, 0.42, 0.85]),
+        "b": _rgb(obj.get("b"), [0.85, 0.55, 0.2]),
+        "warp": _clamp01(warp, 0.45),
+        "grain": _clamp01(grain, 0.25),
+        "bands": max(0.5, min(12.0, bands if bands == bands else 4.0)),
+    }
+
+
+async def api_sky(req: web.Request) -> web.Response:
+    """One-shot Gemma sky. Not stored on the chat transcript."""
+    body: dict[str, Any] = {}
+    if not req.content_type or "json" in req.content_type:
+        try:
+            raw = await req.json()
+            if isinstance(raw, dict):
+                body = raw
+        except Exception:
+            body = {}
+    try:
+        base = ollama_url()
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
+    model = _model(body)
+    try:
+        n = len(getattr(req.app["state"], "devices", {}) or {})
+    except Exception:
+        n = 0
+    hour = time.localtime().tm_hour
+    payload: dict[str, Any] = {
+        "model": model,
+        "stream": False,
+        "think": False,
+        "messages": [
+            {"role": "system", "content": SKY_SYSTEM},
+            {"role": "user", "content": sky_user(body, hour, n)},
+        ],
+        "options": {**chat_options(model), "temperature": live.sky_temperature(live.temper())},
+    }
+    try:
+        timeout = ClientTimeout(total=90)
+        async with ClientSession(timeout=timeout) as s:
+            try:
+                async with s.get(f"{base}/api/tags") as tags:
+                    payload["model"] = match_model(model, _tag_names(await tags.json()))
+                    payload["options"] = {**chat_options(payload["model"]), "temperature": live.sky_temperature(live.temper())}
+            except Exception:
+                pass
+            async with s.post(f"{base}/api/chat", json=payload) as r:
+                data = await r.json(content_type=None)
+        if not isinstance(data, dict):
+            return web.json_response({"error": "bad ollama reply"}, status=502)
+        if data.get("error"):
+            return web.json_response({"error": str(data["error"])}, status=502)
+        msg = data.get("message") if isinstance(data.get("message"), dict) else {}
+        content = str(msg.get("content") or "")
+        recipe = parse_sky_recipe(content)
+        if not recipe:
+            return web.json_response({"error": "no recipe", "raw": content[:400]}, status=502)
+        return web.json_response({"ok": True, "recipe": recipe})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=502)
+
+
+MAX_DRAFT_FILE = 256 * 1024
+MAX_DRAFT_FILES = 80
+
+
+def _draft_files(body: dict[str, Any]) -> dict[str, str]:
+    """Normalise ``{files: {path: contents}}`` (or legacy ``yaml`` → plugin.yml)."""
+    raw = body.get("files")
+    if not isinstance(raw, dict) or not raw:
+        yaml_text = str(body.get("yaml") or "")
+        if not yaml_text.strip():
+            raise ValueError("files required")
+        raw = {"plugin.yml": yaml_text}
+    if len(raw) > MAX_DRAFT_FILES:
+        raise ValueError(f"more than {MAX_DRAFT_FILES} files")
+    from . import plugin_zip as pz
+
+    tree: dict[str, str] = {}
+    for key, value in raw.items():
+        rel = str(key).replace("\\", "/").lstrip("/")
+        if not rel or ".." in Path(rel).parts:
+            raise ValueError(f"illegal path {key!r}")
+        if not pz._allowed_member(rel):
+            raise ValueError(f"disallowed path {rel!r}")
+        text = value if isinstance(value, str) else str(value)
+        if len(text.encode("utf-8")) > MAX_DRAFT_FILE:
+            raise ValueError(f"{rel} exceeds {MAX_DRAFT_FILE} bytes")
+        tree[rel] = text
+    if "plugin.yml" not in tree and "plugin.yaml" not in tree:
+        raise ValueError("plugin.yml is required")
+    return tree
+
+
 async def api_draft_plugin(req: web.Request) -> web.Response:
-    """Validate YAML from the model and optionally install when AI Control is on."""
+    """Validate a plugin-src tree and optionally write it under plugins/src/<id>/."""
     try:
         body = await req.json()
     except Exception:
         return web.json_response({"error": "invalid json"}, status=400)
-    yaml_text = str(body.get("yaml") or "")
-    if not yaml_text.strip():
-        return web.json_response({"error": "yaml required"}, status=400)
-    import yaml
+    if not isinstance(body, dict):
+        return web.json_response({"error": "object required"}, status=400)
     try:
-        doc = yaml.safe_load(yaml_text)
+        tree = _draft_files(body)
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
+    import yaml
+    from . import plugin_zip as pz
+    from . import plugin_migration as pmg
+
+    yml_name = "plugin.yml" if "plugin.yml" in tree else "plugin.yaml"
+    try:
+        doc = yaml.safe_load(tree[yml_name])
         plugins.validate_doc(doc)
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)})
+    if "visualisation.yml" not in tree:
+        plugin, viz = pmg.split_plugin_doc(doc)
+        if viz:
+            tree[yml_name] = yaml.safe_dump(plugin, sort_keys=False, allow_unicode=True)
+            tree["visualisation.yml"] = yaml.safe_dump(viz, sort_keys=False, allow_unicode=True)
+            doc = plugin
+    tmp = Path(tempfile.mkdtemp(prefix="zoto-draft."))
+    try:
+        for rel, text in tree.items():
+            out = tmp / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(text, encoding="utf-8")
+        pz.inspect_src(tmp)
+        plugins.validate_doc(yaml.safe_load((tmp / yml_name).read_text(encoding="utf-8")))
+    except Exception as e:
+        shutil.rmtree(tmp, ignore_errors=True)
+        return web.json_response({"ok": False, "error": str(e)})
+    preview = yaml.safe_load((tmp / yml_name).read_text(encoding="utf-8"))
+    pid = str(doc["id"])
+    hint = (
+        f"{pid} is live at plugins/src/{pid}/; "
+        f"share with zoto-viz plugin pack {pid} -o dist/{pid}.zip"
+    )
     if not ai_control_on() or not body.get("install"):
-        return web.json_response({"ok": True, "preview": doc, "installed": False, "aiControl": ai_control_on()})
-    dest = plugins.DIR / f"{doc['id']}.yml"
-    dest.write_text(yaml_text, encoding="utf-8")
-    return web.json_response({"ok": True, "preview": doc, "installed": True, "file": str(dest), "aiControl": True})
+        shutil.rmtree(tmp, ignore_errors=True)
+        return web.json_response({
+            "ok": True,
+            "preview": preview,
+            "installed": False,
+            "aiControl": ai_control_on(),
+            "hint": hint,
+        })
+    dest = paths.plugin_src_dir() / pid
+    dest.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for rel, text in tree.items():
+        out = dest / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+        written.append(str(out))
+    shutil.rmtree(tmp, ignore_errors=True)
+    return web.json_response({
+        "ok": True,
+        "preview": preview,
+        "installed": True,
+        "id": pid,
+        "written": written,
+        "hint": hint,
+        "aiControl": True,
+    })
+
 
 
 async def api_control(req: web.Request) -> web.Response:
@@ -598,3 +955,19 @@ async def api_control(req: web.Request) -> web.Response:
             return web.json_response({"error": "object required"}, status=400)
         set_ai_control(bool(body.get("on")))
     return web.json_response({"ok": True, "aiControl": ai_control_on(), "env": _env_flag("ZOTO_VIZ_AI_CONTROL") or None})
+
+
+async def api_temper(req: web.Request) -> web.Response:
+    """GET/PUT agent temper and weather. PUT from the Settings → Agent rail."""
+    if req.method == "PUT":
+        try:
+            body = await req.json()
+        except Exception:
+            return web.json_response({"error": "invalid json"}, status=400)
+        if not isinstance(body, dict):
+            return web.json_response({"error": "object required"}, status=400)
+        if "temper" in body:
+            live.set_temper(body.get("temper"))
+        if "weather" in body:
+            live.set_weather(body.get("weather"))
+    return web.json_response({"ok": True, **live.state()})

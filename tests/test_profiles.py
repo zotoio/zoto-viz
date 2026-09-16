@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+import json
 
 import pytest
 import yaml
@@ -107,5 +108,36 @@ def test_api_list_get_create_put_default_delete(tmp_path, monkeypatch) -> None:
         profiles.FILE.write_text("{", encoding="utf-8")
         listed_bad = await profiles.api_list(Req())
         assert listed_bad.status == 500
+
+    asyncio.run(run())
+
+
+def test_agent_model_meta(tmp_path, monkeypatch) -> None:
+    _iso(tmp_path, monkeypatch)
+
+    async def run() -> None:
+        created = await profiles.api_create(Req({
+            "id": "gemma4-latest",
+            "label": "gemma4:latest",
+            "model": "gemma4:latest",
+            "settings": {"theme": "aurora"},
+        }))
+        assert created.status == 201
+        assert json.loads(created.body)["model"] == "gemma4:latest"
+        got = json.loads((await profiles.api_get(Req(pid="gemma4-latest"))).body)
+        assert got["model"] == "gemma4:latest"
+        assert got["label"] == "gemma4:latest"
+        rows = json.loads((await profiles.api_list(Req())).body)["profiles"]
+        row = next(p for p in rows if p["id"] == "gemma4-latest")
+        assert row["model"] == "gemma4:latest"
+        put = await profiles.api_put(Req({
+            "settings": {"theme": "paper"},
+            "label": "gemma4",
+            "model": "gemma4",
+        }, pid="gemma4-latest"))
+        assert put.status == 200
+        doc = profiles._read()
+        assert doc["profiles"]["gemma4-latest"]["model"] == "gemma4"
+        assert doc["profiles"]["gemma4-latest"]["label"] == "gemma4"
 
     asyncio.run(run())

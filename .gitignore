@@ -17,3 +17,6 @@ web/coverage/
 *.pcap
 *.pcapng
 sys-config.yml
+plugins/.runtime/
+plugins/*.zip
+dist/

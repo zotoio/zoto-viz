@@ -11,7 +11,7 @@ from service import plugins
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLES = ROOT / "examples" / "plugins"
+SRC = ROOT / "plugins" / "src"
 
 
 @pytest.fixture(autouse=True)
@@ -43,15 +43,15 @@ def _dir_plugin(tmp_path: Path, body: str, *, name: str = "pulse") -> Path:
 
 
 def test_service_meta_pulse() -> None:
-    src = EXAMPLES / "pulse-ts" / "plugin.yml"
+    src = SRC / "pulse-ts" / "plugin.yml"
     extra = plugins.service_meta(plugins.load_file(src), src)
-    assert extra["service"] == "service/__init__.py"
+    assert extra["service"] == "backend/service.py"
 
 
 def test_flat_yaml_does_not_auto_attach_sibling_service(tmp_path: Path) -> None:
     (tmp_path / "service.py").write_text("def setup(host):\n    pass\n", encoding="utf-8")
     yml = tmp_path / "topology.yml"
-    yml.write_text((EXAMPLES / "topology.yml").read_text(encoding="utf-8"), encoding="utf-8")
+    yml.write_text((SRC / "topology" / "plugin.yml").read_text(encoding="utf-8"), encoding="utf-8")
     assert plugins.service_meta(plugins.load_file(yml), yml) == {}
 
 

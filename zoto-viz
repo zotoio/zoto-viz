@@ -7,7 +7,8 @@ Subcommands
   analyse    tshark conversation/endpoint stats            -> data/flows-<ts>.json
   graph      devices + flows -> out/network.html (interactive), out/network.svg (graphviz)
   all        discover -> capture -> analyse -> graph
-  plugin     validate / list / install YAML view plugins (~/.zoto-viz/plugins)
+  plugin     validate / list / pack / add (src catalog + contrib zips)
+  install    prereq check, dry-run plan, venv, PATH shim, sys-config (+ hopper hints)
 
 All external tools are invoked via subprocess so each step can also be run by hand.
 """
@@ -24,8 +25,6 @@ import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
-
-from service import plugins
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -312,7 +311,7 @@ def capture(args: argparse.Namespace) -> Path:
     log(f"capturing {args.seconds}s on {iface} -> {path}")
     res = subprocess.run(full)
     if res.returncode != 0 or not path.exists():
-        die("capture failed (try: sudo -E ./zoto-viz.py capture)")
+        die("capture failed (try: sudo -E ./zoto-viz capture)")
     if os.geteuid() != 0:
         subprocess.run(sudo_prefix() + ["chown", f"{os.getuid()}:{os.getgid()}", str(path)], check=False, capture_output=True)
     return path
@@ -416,7 +415,7 @@ def analyse(args: argparse.Namespace) -> Path:
     need("tshark")
     pcap = Path(args.pcap) if args.pcap else latest("capture-*.pcapng")
     if not pcap or not pcap.exists():
-        die("no capture found; run `zoto-viz.py capture` first")
+        die("no capture found; run `zoto-viz capture` first")
     log(f"analysing {pcap}")
 
     stats = {}
@@ -695,7 +694,50 @@ def graph(args: argparse.Namespace) -> None:
 # --------------------------------------------------------------------------- main
 
 
+def _venv_python() -> Path:
+    root = Path(__file__).resolve().parent
+    if sys.platform == "win32":
+        return root / ".venv" / "Scripts" / "python.exe"
+    return root / ".venv" / "bin" / "python"
+
+
+def _reexec_venv() -> None:
+    """Prefer the checkout venv so plugin/batch commands see installed deps."""
+    if os.environ.get("ZOTO_VIZ_NO_REEXEC") == "1":
+        return
+    py = _venv_python()
+    if not py.is_file():
+        return
+    # venv python is usually a symlink to the system interpreter — compare the
+    # invocation path, not the resolved inode.
+    if os.path.normpath(sys.executable) == os.path.normpath(str(py)):
+        return
+    os.execv(str(py), [str(py), str(Path(__file__).resolve()), *sys.argv[1:]])
+
+
+def _run_install(args: argparse.Namespace) -> None:
+    from service.install import cli_install
+
+    sys.exit(
+        cli_install(dry_run=args.dry_run, yes=args.yes, no_system=args.no_system)
+    )
+
+
+def _add_plugin_parser(sub) -> None:
+    try:
+        from service import plugins
+    except ImportError:
+        pl = sub.add_parser("plugin", help="plugin catalog tools (run install first)")
+        pl.add_argument("args", nargs=argparse.REMAINDER)
+        pl.set_defaults(plugin_fn=lambda _a: die("Python deps missing; run: zoto-viz install"))
+        return
+    plugins.add_parser(sub)
+
+
 def main() -> None:
+    argv1 = sys.argv[1] if len(sys.argv) > 1 else ""
+    if argv1 not in {"install", "-h", "--help"}:
+        _reexec_venv()
     p = argparse.ArgumentParser(prog="zoto-viz", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -726,7 +768,16 @@ def main() -> None:
     al.add_argument("--lan-only", action="store_true")
     al.add_argument("--no-probe-certs", dest="probe_certs", action="store_false")
 
-    plugins.add_parser(sub)
+    _add_plugin_parser(sub)
+
+    ins = sub.add_parser(
+        "install",
+        help="check prereqs, print a dry-run plan, install local deps, put zoto-viz on PATH",
+    )
+    ins.add_argument("-n", "--dry-run", action="store_true", help="print the plan and exit")
+    ins.add_argument("-y", "--yes", action="store_true", help="accept system-step risk and apply without prompts")
+    ins.add_argument("--no-system", action="store_true", help="never run sudo/winget/group changes")
+    ins.set_defaults(fn=_run_install)
 
     args = p.parse_args()
     if args.cmd == "plugin":

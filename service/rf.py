@@ -12,13 +12,12 @@ import os
 import re
 import time
 from collections import Counter, defaultdict, deque
-import importlib
 from pathlib import Path
 from typing import Any
 
 from . import paths
 
-zotoviz = importlib.import_module("zoto-viz")
+zotoviz = paths.load_cli()
 
 RECENT = 250
 FLOW_PACKETS = 300
@@ -28,6 +27,8 @@ FLOW_IDLE_S = 300
 DEVICE_OFFLINE_S = 600
 BEACON_RECORD_S = 1.0  # at most one beacon line per AP per second in the traffic ring
 ADV_RECORD_S = 1.0
+BT_MAX_DEVICES = 64     # snapshot ceiling; the Bluetooth view slices further (default 32)
+BT_UNNAMED_KEEP_S = 90  # random BLE addresses rotate; drop them quickly once idle
 
 # Channel rotation. A monitor radio hears one channel, so the Wi-Fi view can name SSIDs to watch in turn: the plan
 # (one line per channel a watched network is on) is written for the root hopper (systemd/zoto-viz-wifi-monitor.sh
@@ -72,6 +73,15 @@ COMPANY = {
     "00C4": "LG",
     "0087": "Garmin",
 }
+
+
+def _bt_rank_key(d: dict) -> tuple:
+    """Lower is kept first: this host, then paired/connected, then named, then recently heard."""
+    ports = d.get("ports") or []
+    self_bit = 0 if d.get("role") == "self" else 1
+    held = 0 if (d.get("role") == "gateway" or "connected" in ports or "paired" in ports) else 1
+    named = 0 if d.get("hostnames") else 1
+    return (self_bit, held, named, -d.get("last_seen", 0), -d.get("packets", 0))
 
 
 def _mac(s: str) -> str:
@@ -950,6 +960,7 @@ class Radio:
                 d["seen_mark"] = d["last_seen"]
             elif not self._held(d):
                 d["idle_s"] = d.get("idle_s", 0.0) + dt
+        self._prune_bts(now)
 
     def _drop_flow(self, key: str) -> None:
         self.flows.pop(key, None)
@@ -957,6 +968,37 @@ class Radio:
         self._flow_ab.pop(key, None)
         self._flow_ba.pop(key, None)
         self.recent_flow.pop(key, None)
+
+    def _drop_bt(self, ip: str) -> None:
+        d = self.bts.pop(ip, None)
+        if d is None:
+            return
+        addr = d.get("mac") or ip.removeprefix("bt:")
+        self._adv_at.pop(addr, None)
+        for key, fl in list(self.flows.items()):
+            if fl["a"] == ip or fl["b"] == ip:
+                self._drop_flow(key)
+
+    def _bt_keep_s(self, d: dict) -> float:
+        ports = d.get("ports") or []
+        if d.get("role") == "self" or "connected" in ports or "paired" in ports:
+            return HELD_MAX_S
+        if d.get("hostnames"):
+            return DEVICE_OFFLINE_S
+        return BT_UNNAMED_KEEP_S
+
+    def _prune_bts(self, now: float) -> None:
+        for ip, d in list(self.bts.items()):
+            silent = max(d.get("idle_s", 0.0), now - d.get("last_seen", now))
+            if silent > self._bt_keep_s(d):
+                self._drop_bt(ip)
+        if len(self.bts) <= BT_MAX_DEVICES:
+            return
+        ranked = sorted(self.bts.values(), key=_bt_rank_key)
+        for d in ranked[BT_MAX_DEVICES:]:
+            if d.get("role") == "self":
+                continue
+            self._drop_bt(d["ip"])
 
     def _snap_dev(self, d: dict, now: float) -> dict:
         dd = dict(d)
@@ -972,6 +1014,7 @@ class Radio:
         return dd
 
     def views(self, now: float) -> dict[str, Any]:
+        self._prune_bts(now)
         wifi_devs = [self._snap_dev(d, now) for d in list(self.aps.values()) + list(self.stas.values())]
         bt_devs = [self._snap_dev(d, now) for d in self.bts.values()]
         wifi_ids = {d["ip"] for d in wifi_devs}

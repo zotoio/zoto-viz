@@ -1,6 +1,9 @@
 """User and system directories for zoto-viz, with a one-time migrate from z-netviz."""
 from __future__ import annotations
 
+import importlib.util
+import os
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 APP = "zoto-viz"
@@ -31,9 +34,8 @@ def config_dir() -> Path:
 
 
 def plugins_dir() -> Path:
-    d = user_dir() / "plugins"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    """Legacy user-dir plugin tree. Does not create the directory (catalog is repo-root plugins/)."""
+    return user_dir() / "plugins"
 
 
 def profiles_file() -> Path:
@@ -55,6 +57,69 @@ def agent_dir() -> Path:
 
 
 def agent_plugins_dir() -> Path:
-    d = user_dir() / "agent-plugins"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    """Legacy user-dir agent-plugin tree. Does not create the directory."""
+    return user_dir() / "agent-plugins"
+
+
+def repo_root() -> Path:
+    """Locate the zoto-viz checkout.
+
+    Detection order:
+    1. ``ZOTO_VIZ_REPO_ROOT`` env var, expanded and resolved
+    2. Walk parents of this file until ``pyproject.toml`` or ``.git`` is found
+    3. Raise ``RuntimeError`` — never silently fall back to ``/plugins`` or ``~/plugins``
+
+    systemd user units get the same pin via ``Environment=ZOTO_VIZ_REPO_ROOT=<abs>``
+    written by ``service.sysconfig.write_systemd_override``. Documented in
+    ``docs/install.md``.
+    """
+    env = os.environ.get("ZOTO_VIZ_REPO_ROOT", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").is_file() or (parent / ".git").exists():
+            return parent
+    raise RuntimeError("cannot locate zoto-viz repo root — set ZOTO_VIZ_REPO_ROOT")
+
+
+def _catalog_root(explicit: Path | None) -> Path:
+    return explicit if explicit is not None else repo_root()
+
+
+def plugin_zips_dir(repo_root: Path | None = None) -> Path:
+    """Local contrib drop zone (gitignored zips): ``<repo_root>/plugins``."""
+    return _catalog_root(repo_root) / "plugins"
+
+
+def plugin_src_dir(repo_root: Path | None = None) -> Path:
+    """Shipped catalog: ``<repo_root>/plugins/src``."""
+    return _catalog_root(repo_root) / "plugins" / "src"
+
+
+def plugin_runtime_dir(repo_root: Path | None = None) -> Path:
+    """Gitignored unpack cache: ``<repo_root>/plugins/.runtime``."""
+    return _catalog_root(repo_root) / "plugins" / ".runtime"
+
+
+def cli_path() -> Path:
+    """Repo-root ``zoto-viz`` script (no ``.py`` suffix; shebang ``#!/usr/bin/env python3``)."""
+    return Path(__file__).resolve().parents[1] / "zoto-viz"
+
+
+_CLI_MOD = None
+
+
+def load_cli():
+    """Load the batch CLI module by path. Hyphenated, extensionless — not ``import``-able."""
+    global _CLI_MOD
+    if _CLI_MOD is not None:
+        return _CLI_MOD
+    path = cli_path()
+    loader = SourceFileLoader("zoto_viz_cli", str(path))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    if spec is None:
+        raise ImportError(f"cannot load CLI from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    _CLI_MOD = mod
+    return mod

@@ -55,11 +55,15 @@ def _read() -> dict[str, Any]:
         if not ID_RE.match(pid) or not isinstance(body, dict):
             continue
         settings = body.get("settings")
-        profiles[pid] = {
+        item: dict[str, Any] = {
             "shipped": pid == SHIPPED_ID or bool(body.get("shipped")),
             "label": str(body.get("label") or pid),
             "settings": settings if isinstance(settings, dict) else {},
         }
+        model = _opt_model(body)
+        if model:
+            item["model"] = model
+        profiles[pid] = item
     if SHIPPED_ID not in profiles:
         profiles[SHIPPED_ID] = {"shipped": True, "label": "netviz", "settings": {}}
     else:
@@ -77,11 +81,7 @@ def _write(doc: dict[str, Any]) -> None:
     out = {
         "default": doc["default"],
         "profiles": {
-            pid: {
-                "shipped": bool(p.get("shipped")),
-                "label": p.get("label") or pid,
-                "settings": p.get("settings") or {},
-            }
+            pid: _body_out(pid, p)
             for pid, p in doc["profiles"].items()
         },
     }
@@ -105,11 +105,38 @@ def _meta(doc: dict[str, Any]) -> dict[str, Any]:
         "default": doc["default"],
         "fresh": bool(doc.get("fresh")),
         "file": str(FILE),
-        "profiles": [
-            {"id": pid, "label": p["label"], "shipped": bool(p["shipped"])}
-            for pid, p in doc["profiles"].items()
-        ],
+        "profiles": [_meta_one(pid, p) for pid, p in doc["profiles"].items()],
     }
+
+
+def _opt_model(body: Any) -> str | None:
+    if not isinstance(body, dict):
+        return None
+    raw = body.get("model")
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    return text[:64] if text else None
+
+
+def _body_out(pid: str, p: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "shipped": bool(p.get("shipped")),
+        "label": p.get("label") or pid,
+        "settings": p.get("settings") or {},
+    }
+    model = p.get("model")
+    if isinstance(model, str) and model.strip():
+        out["model"] = model.strip()[:64]
+    return out
+
+
+def _meta_one(pid: str, p: dict[str, Any]) -> dict[str, Any]:
+    item: dict[str, Any] = {"id": pid, "label": p["label"], "shipped": bool(p["shipped"])}
+    model = p.get("model")
+    if isinstance(model, str) and model.strip():
+        item["model"] = model.strip()[:64]
+    return item
 
 
 def _settings(body: Any) -> dict[str, Any]:
@@ -131,6 +158,20 @@ def _id(raw: str) -> str:
     return pid
 
 
+def current_settings() -> dict[str, Any]:
+    """Default profile's settings blob (empty mapping when missing)."""
+    doc = _read()
+    pid = str(doc.get("default") or SHIPPED_ID)
+    p = doc["profiles"].get(pid) or {}
+    settings = p.get("settings")
+    return settings if isinstance(settings, dict) else {}
+
+
+def current_id() -> str:
+    doc = _read()
+    return str(doc.get("default") or SHIPPED_ID)
+
+
 async def api_list(_request: web.Request) -> web.Response:
     try:
         doc = _read()
@@ -148,7 +189,10 @@ async def api_get(request: web.Request) -> web.Response:
     p = doc["profiles"].get(pid)
     if not p:
         return web.json_response({"error": "unknown profile"}, status=404)
-    return web.json_response({"id": pid, "label": p["label"], "shipped": bool(p["shipped"]), "settings": p["settings"]})
+    out = {"id": pid, "label": p["label"], "shipped": bool(p["shipped"]), "settings": p["settings"]}
+    if p.get("model"):
+        out["model"] = p["model"]
+    return web.json_response(out)
 
 
 async def api_put(request: web.Request) -> web.Response:
@@ -170,6 +214,12 @@ async def api_put(request: web.Request) -> web.Response:
     p["settings"] = settings
     if isinstance(body.get("label"), str) and body["label"].strip():
         p["label"] = body["label"].strip()[:48]
+    if "model" in body:
+        model = _opt_model(body)
+        if model:
+            p["model"] = model
+        else:
+            p.pop("model", None)
     try:
         _write(doc)
     except OSError as e:
@@ -193,14 +243,21 @@ async def api_create(request: web.Request) -> web.Response:
     if pid in doc["profiles"]:
         return web.json_response({"error": f"profile {pid!r} already exists"}, status=409)
     label = str(body.get("label") or pid).strip()[:48] or pid
-    doc["profiles"][pid] = {"shipped": False, "label": label, "settings": settings}
+    entry: dict[str, Any] = {"shipped": False, "label": label, "settings": settings}
+    model = _opt_model(body)
+    if model:
+        entry["model"] = model
+    doc["profiles"][pid] = entry
     if body.get("make_default"):
         doc["default"] = pid
     try:
         _write(doc)
     except OSError as e:
         return web.json_response({"error": str(e)}, status=500)
-    return web.json_response({"id": pid, "label": label, "shipped": False, "default": doc["default"]}, status=201)
+    out = {"id": pid, "label": label, "shipped": False, "default": doc["default"]}
+    if model:
+        out["model"] = model
+    return web.json_response(out, status=201)
 
 
 async def api_shipped(request: web.Request) -> web.Response:

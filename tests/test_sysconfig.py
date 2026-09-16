@@ -186,6 +186,17 @@ def test_apply_watch_default(tmp_path: Path) -> None:
     assert not sysconfig.apply_watch_default(bare, ["Home"])
 
 
+def test_hopper_env_and_install_hint(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    text = sysconfig.hopper_env_text(home)
+    assert f"ZOTO_VIZ_HOP_PLAN={home / '.config' / 'zoto-viz' / 'wifi-hop.plan'}" in text
+    assert sysconfig.hopper_install_hint({"monitor_iface": ""}, home) == []
+    hint = sysconfig.hopper_install_hint({"monitor_iface": "wlx0013eff5130e"}, home)
+    assert any("zoto-viz-wifi-monitor.sh" in line for line in hint)
+    assert any("zoto-viz-wifi-monitor@wlx0013eff5130e" in line for line in hint)
+    assert any(str(home / ".config" / "zoto-viz" / "wifi-hop.plan") in line for line in hint)
+
+
 def test_write_systemd_override(tmp_path: Path) -> None:
     drop = tmp_path / "override.conf"
     assert sysconfig.write_systemd_override({"root": ""}, drop) is None
@@ -193,6 +204,9 @@ def test_write_systemd_override(tmp_path: Path) -> None:
     assert got == drop
     text = drop.read_text(encoding="utf-8")
     assert "ZOTO_VIZ_ROOT=/opt/zoto-viz" in text
+    assert "ZOTO_VIZ_REPO_ROOT=/opt/zoto-viz" in text
+    assert "WorkingDirectory=/opt/zoto-viz" in text
+    assert "ExecStart=/opt/zoto-viz/.venv/bin/python -m service.monitor" in text
     assert "do not copy" in text
 
 
@@ -266,3 +280,24 @@ def test_default_iface_skips_non_dict() -> None:
         _run_map({("nmcli", "-t", "-f", "IN-USE,SSID", "dev", "wifi"): "*:Cafe\\:WiFi\n"}),
         "",
     ) == "Cafe:WiFi"
+
+
+def test_detect_macos_route_and_networksetup(monkeypatch) -> None:
+    monkeypatch.setattr(sysconfig, "_watch_ssids", lambda: [])
+    monkeypatch.setattr(sysconfig, "_plan_ssids", lambda: [])
+    run = _run_map({
+        ("ip", "-j", "route", "show", "default"): "",
+        ("route", "-n", "get", "default"): "    gateway: 192.168.1.1\n    interface: en0\n",
+        ("nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"): "",
+        ("iw", "dev"): "",
+        ("networksetup", "-listallhardwareports"): (
+            "Hardware Port: Ethernet\nDevice: en1\n\nHardware Port: Wi-Fi\nDevice: en0\n"
+        ),
+        ("iw", "dev", "en0", "link"): "",
+        ("iw", "dev", "en0", "info"): "",
+        ("nmcli", "-t", "-f", "IN-USE,SSID", "dev", "wifi"): "",
+        ("networksetup", "-getairportnetwork", "en0"): "Current Wi-Fi Network: HomeNet\n",
+    })
+    got = sysconfig.detect(run=run)
+    assert got["iface"] == "en0"
+    assert got["ssids"] == ["HomeNet"]
