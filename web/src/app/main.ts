@@ -39,7 +39,8 @@ import {
   type PluginView,
 } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
-import { VizBufferWriter, VizFrameBudget, defaultVizContract, vizContractFor } from "../plugins/viz-host";
+import { vizContractFor } from "../plugins/plugin";
+import { VizBufferWriter, VizFrameBudget, defaultVizContract } from "../plugins/viz-host";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { bindFps } from "../core/fps";
