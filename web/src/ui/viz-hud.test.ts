@@ -23,6 +23,7 @@ describe("viz hud helpers", () => {
       { t: 1000, n: 9 },
     ];
     expect(skipRatePerSec(samples, now)).toBeCloseTo(3.75, 1);
+    expect(skipRatePerSec([{ t: now, n: 1 }], now)).toBeCloseTo(1, 1);
     expect(formatSkipRate(0)).toBe("skips 0/s");
     expect(formatSkipRate(2.4)).toBe("skips 2.4/s");
     expect(formatSkipRate(12.7)).toBe("skips 13/s");

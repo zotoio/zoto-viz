@@ -609,7 +609,7 @@ function feed(m: StateMsg): void {
       state: shown,
       now: performance.now(),
     });
-  } else {
+  } else if (!isVizDemoPack(modeById(modeSel.value).pluginId)) {
     vizHud.setActive(null, "");
   }
 }

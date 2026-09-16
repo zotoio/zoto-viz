@@ -82,7 +82,10 @@ export function skipRatePerSec(
     total += s.n;
     if (s.t < oldest) oldest = s.t;
   }
-  const span = Math.min(windowMs, Math.max(1, now - oldest));
+  const span = Math.min(
+    windowMs,
+    oldest === now ? windowMs : Math.max(1, now - oldest),
+  );
   return (total / span) * 1000;
 }
 
@@ -167,8 +170,9 @@ export class VizHud {
   }
 
   tick(input: VizHudTick): void {
+    const { packId, packName, stats, frame, state, now } = input;
+    if (packId && !this.activeId) this.setActive(packId, packName);
     if (!this.activeId) return;
-    const { stats, frame, state, now } = input;
     const metric = vizHudMetric(this.activeId, frame, state);
     this.metricEl.textContent = `${metric.label} ${metric.value}`;
 
