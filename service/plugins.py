@@ -504,6 +504,20 @@ def _check_semantics(doc: dict[str, Any]) -> None:
             raise ValueError("viz.graphWalk must be false")
     elif isinstance(viz, dict) and viz.get("graphWalk") is not False:
         raise ValueError("viz.graphWalk must be false when viz block is present")
+    if isinstance(viz, dict) and needs_viz and viz.get("ubo") is not None:
+        ubo = viz.get("ubo")
+        if ubo != {
+            "block": "ZotoVizData",
+            "binding": 0,
+            "layout": "std140",
+            "hostUniform": "zotoVizSlots",
+            "slotCount": 8,
+            "slotFloats": 64,
+            "slotVec4s": 16,
+            "totalVec4s": 128,
+            "totalBytes": 2048,
+        }:
+            raise ValueError("viz.ubo must match the fixed ZotoVizData std140 layout")
 
 
 def validate_doc(doc: Any) -> dict[str, Any]:

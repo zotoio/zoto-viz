@@ -267,13 +267,34 @@
         "bindings": { "type": "object", "additionalProperties": true }
       }
     },
+    "vizUboLayout": {
+      "title": "VizPlugin GLSL UBO binding",
+      "description": "Fixed std140 buffer→shader layout for all viz packs. Slot `s` float `f` maps to `zotoVizSlots[s * 16 + f / 4][f % 4]` in the host preamble. Per-pack vertex attributes are a later escape hatch, not the default transport.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "block": { "const": "ZotoVizData" },
+        "binding": { "const": 0 },
+        "layout": { "const": "std140" },
+        "hostUniform": { "const": "zotoVizSlots" },
+        "slotCount": { "const": 8 },
+        "slotFloats": { "const": 64 },
+        "slotVec4s": { "const": 16 },
+        "totalVec4s": { "const": 128 },
+        "totalBytes": { "const": 2048 }
+      }
+    },
     "vizContract": {
       "title": "VizPlugin host contract",
-      "description": "Host owns ingest and the 16.7 ms frame budget. Plugins consume pre-decimated VizDataFrames and write only to reserved buffer/uniform slots declared here. graphWalk must be false — plugins never traverse the full device graph per frame.",
+      "description": "Host owns ingest and the 16.7 ms frame budget. Plugins consume pre-decimated VizDataFrames and write only to reserved buffer/uniform slots declared here. graphWalk must be false — plugins never traverse the full device graph per frame. Buffer slots bind through the fixed UBO in $defs/vizUboLayout (separate from graph.read monitor plugins).",
       "type": "object",
       "additionalProperties": false,
       "required": ["graphWalk"],
       "properties": {
+        "ubo": {
+          "$ref": "#/$defs/vizUboLayout",
+          "description": "Optional explicit pin; omit to use the fixed host layout. When present every field must match the const values."
+        },
         "maxBuffers": {
           "type": "integer",
           "minimum": 1,

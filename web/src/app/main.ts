@@ -39,7 +39,7 @@ import {
   type PluginView,
 } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
-import { VizBufferWriter, buildVizFrame, defaultVizContract, vizContractFor } from "../plugins/viz-host";
+import { VizBufferWriter, VizFrameBudget, defaultVizContract, vizContractFor } from "../plugins/viz-host";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { bindFps } from "../core/fps";
@@ -228,16 +228,20 @@ let settings!: Settings;
 const sandbox = new PluginSandbox();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
+const vizBudget = new VizFrameBudget();
 function bindVizWriter(spec: PluginView | null): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
   vizWriter = contract ? new VizBufferWriter(contract) : null;
   vizFrameTs = 0;
+  vizBudget.reset();
 }
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
   setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
-  writeBuffer: (slot, data) => { vizWriter?.writeBuffer(slot, data); },
+  writeBuffer: (slot, data) => {
+    if (vizWriter?.writeBuffer(slot, data).ok) scene.setPluginUboBuffer(vizWriter.ubo);
+  },
   writeUniform: (name, value) => {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
@@ -577,9 +581,8 @@ function feed(m: StateMsg): void {
   const active = pluginSpecs.find((p) => p.id === tsWatchId);
   if (active?.capabilities?.includes("viz.read")) {
     const audio = scene.pulseNow.bass;
-    const frame = buildVizFrame(shown, vizFrameTs, audio);
-    vizFrameTs = frame.t;
-    sandbox.frame(frame);
+    const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => sandbox.frame(f));
+    if (frame) vizFrameTs = frame.t;
   }
 }
 

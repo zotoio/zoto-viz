@@ -19,9 +19,26 @@ viz:
   uniforms:                 # sky uniforms this plugin may write
     - uBright
     - uAccent
+  # ubo: optional explicit pin — omit to use the fixed host layout below
 ```
 
-Canonical schema: `schema/plugin.schema.json` → `$defs/vizContract`.
+Canonical schema: `schema/plugin.schema.json` → `$defs/vizContract` and
+`$defs/vizUboLayout`.
+
+`viz.read` / `viz.write` are **separate** from `graph.read` monitor plugins.
+
+### Fixed UBO layout (`ZotoVizData` @ binding 0, std140)
+
+| Field | Value |
+| --- | --- |
+| Block | `ZotoVizData` |
+| Binding | `0` |
+| Host uniform | `zotoVizSlots` (`vec4[128]`) |
+| Slots | 8 × 64 floats (16 vec4 each) |
+
+Slot `s`, float `f` → `zotoVizSlots[s * 16 + f / 4][f % 4]`. The host
+prepends this block to every plugin `sky/fragment.glsl` and copies
+`writeBuffer` data into the shared UBO mirror without per-frame allocation.
 
 Capabilities `viz.read` and `viz.write` are validated at catalog scan time.
 Unknown capabilities still fail closed.
@@ -63,7 +80,14 @@ The host enforces caps in `VizBufferWriter` before applying writes:
 - uniform name must be listed in `viz.uniforms` and match the sky whitelist
 
 Uniform writes reach the active plugin `sky/fragment.glsl` via
-`scene.setPluginUniform`.
+`scene.setPluginUniform`. Buffer writes land in the UBO mirror and are
+uploaded via `scene.setPluginUboBuffer`.
+
+## Frame budget
+
+`VizFrameBudget` times `buildVizFrame` each tick. Frames over
+**16.7 ms** increment `overBudget` / `skipped` and are **not** delivered to
+the plugin iframe.
 
 ## First-party scaffolds
 

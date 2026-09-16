@@ -235,11 +235,17 @@ def test_catalog_plugin_yml_validates() -> None:
 def test_viz_contract_in_schema() -> None:
     text = SCHEMA_PATH.read_text(encoding="utf-8")
     assert "vizContract" in text
+    assert "vizUboLayout" in text
     assert "viz.read" in text
     assert "viz.write" in text
     assert "graphWalk" in text
     viz = _schema()["$defs"]["vizContract"]
     assert viz["properties"]["graphWalk"]["const"] is False
+    ubo = _schema()["$defs"]["vizUboLayout"]
+    assert ubo["properties"]["block"]["const"] == "ZotoVizData"
+    assert ubo["properties"]["binding"]["const"] == 0
+    assert ubo["properties"]["hostUniform"]["const"] == "zotoVizSlots"
+    assert ubo["properties"]["totalBytes"]["const"] == 2048
 
 
 def test_viz_plugin_yml_validates() -> None:

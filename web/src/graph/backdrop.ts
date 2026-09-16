@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { VIZ_UBO, VIZ_UBO_GLSL } from "../plugins/viz-host";
 import { liveCam } from "../camera/livecam";
 import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
 import { currentSkyRecipe, DEFAULT_SKY_RECIPE, cloneSkyRecipe, lerpSkyRecipe, skyRecipeKey, type SkyRecipe } from "./sky-ai";
@@ -382,7 +383,8 @@ export function wrapPluginSky(raw: string): { frag: string } | { error: string }
     .replace(/\bin\s+vec3\s+vDir\s*;/g, "")
     .replace(/\bout\s+vec4\s+fragColor\s*;/g, "")
     .trim();
-  const preamble = /* glsl */ `uniform float uTime;
+  const preamble = /* glsl */ `${VIZ_UBO_GLSL}
+uniform float uTime;
 uniform float uOpacity;
 uniform float uBright;
 uniform float uAudio;
@@ -403,6 +405,7 @@ export class Backdrop {
   private pluginMat: THREE.ShaderMaterial | null = null;
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
+  private readonly pluginUbo = new Float32Array(VIZ_UBO.totalFloats);
   private kind: BackdropKind = "none";
   private customFrag: string | null = null;
   /** the sky's animation clock, in shader seconds: integrates dt × current speed */
@@ -575,6 +578,7 @@ export class Backdrop {
       uAudio: { value: u.uAudio.value },
       uAccent: { value: (u.uAccent.value as THREE.Color).clone() },
       uBg: { value: (u.uBg.value as THREE.Color).clone() },
+      [VIZ_UBO.threeUniform]: { value: this.pluginUbo },
     };
   }
 
@@ -604,6 +608,16 @@ export class Backdrop {
   /** Plugin id currently bound to the sphere, or null when the shipped program is showing. */
   pluginSkyId(): string | null {
     return this.pluginMat && this.mesh.material === this.pluginMat ? this.pluginId : null;
+  }
+
+  /** Copy the host viz UBO mirror into the active plugin shader (std140 layout). */
+  setPluginUboBuffer(buf: Float32Array): void {
+    if (buf.length !== VIZ_UBO.totalFloats) return;
+    this.pluginUbo.set(buf);
+    const mat = this.pluginMat;
+    if (!mat || this.mesh.material !== mat) return;
+    const u = mat.uniforms[VIZ_UBO.threeUniform];
+    if (u) u.value = this.pluginUbo;
   }
 
   /** Write one whitelisted sky uniform on the active plugin shader material. */
