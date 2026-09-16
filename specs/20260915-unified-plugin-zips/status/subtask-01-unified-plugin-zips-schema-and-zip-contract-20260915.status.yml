@@ -1,0 +1,83 @@
+schema_version: 1
+subtask_id: "01"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+started_at: 2026-09-15T06:54:54.758Z
+last_heartbeat: 2026-09-15T07:14:19.783Z
+git_sha: f1e50b65f1f18ad0787bea3c763179138777ebc1
+checklist:
+  - id: D01
+    text: "`schema/plugin.schema.json` — top-level schema for `plugin.yml` with"
+    done: true
+    evidence_path: schema/plugin.schema.json
+  - id: D02
+    text: "Sub-schemas cover:"
+    done: true
+    evidence_path: schema/plugin.schema.json
+  - id: D03
+    text: Freeze the zip contract in a short `README.md` fragment (embedded
+    done: true
+    evidence_path: schema/plugin-zip-contract.md
+  - id: D04
+    text: Add a doc block (a top-level `description` in the JSON Schema is
+    done: true
+    evidence_path: schema/plugin.schema.json
+  - id: D05
+    text: Update `web/schema/*` references if the schema is copied there for
+    done: true
+    evidence_path: schema/plugin.schema.json
+  - id: D06
+    text: Delete `schema/view-plugin.schema.json` and
+    done: true
+    evidence_path: schema/view-plugin.schema.json
+  - id: D07
+    text: Add or update `tests/test_plugin_schema.py` to load
+    done: true
+    evidence_path: tests/test_plugin_schema.py
+  - id: D08
+    text: Add a test case that the shader uniform contract lives in the
+    done: true
+    evidence_path: tests/test_plugin_schema.py
+artifacts:
+  - path: schema/plugin.schema.json
+    kind: created
+    note: Unified plugin.yml schema with visualisation/sky/streams/shader/zip defs
+  - path: schema/plugin-zip-contract.md
+    kind: created
+    note: Zip member README fragment for later docs/plugins.md embed
+  - path: schema/view-plugin.schema.json
+    kind: modified
+    note: One-line $ref shim to plugin.schema.json
+  - path: schema/agent-plugin.schema.json
+    kind: modified
+    note: One-line $ref shim to plugin.schema.json
+  - path: service/plugins.py
+    kind: modified
+    note: Follow sibling $ref shims via deref_schema
+  - path: service/agent_plugins.py
+    kind: modified
+    note: Resolve agent-plugin schema via plugins.deref_schema
+  - path: tests/test_plugin_schema.py
+    kind: created
+    note: min/max/invalid fixtures, shader grep, shim forward tests
+  - path: specs/20260915-unified-plugin-zips/subtask-01-unified-plugin-zips-schema-and-zip-contract-20260915.md
+    kind: modified
+    note: ticked Deliverables/DoD and filled Execution Notes
+errors: []
+notes: |
+  Shim choice: one-line $ref, not delete. Subtask 10 deletes the shims.
+  No web/schema copy. Targeted pytest 12 passed. token_budget 200000.
+extra:
+  shim_choice: one-line $ref to plugin.schema.json
+  subtask_10_followup: delete view-plugin and agent-plugin schema shims
+  web_schema: none (grep clean; no TS type regen)
+  pytest: 12 passed (test_plugin_schema.py, addopts overridden)
+  judge:
+    verdict: verified
+    at: 2026-09-15T07:14:02.650Z
+    notes: Independently confirmed D01–D08 and DoD01–DoD07 against disk. plugin.schema.json requires id/name/version; $defs cover visualisation, sky, streams, shader, and zipListing. Shader whitelist is uTime, uOpacity, uBright, uAudio, uAccent, uBg; uMode and AI Dynamic uniforms are excluded. Zip fragment matches 1.5 MB / 4 MB / 80 files, suffix list, and hard rejects. Shims are one-line $ref; subtask 10 lists deletion. No web/schema copy. Targeted pytest 12 passed; ruff clean on test_plugin_schema.py and the deref_schema Python files. token_budget 200000.
+    fix_list: []
+completed_at: 2026-09-15T07:09:25.009Z

@@ -1,0 +1,169 @@
+schema_version: 1
+subtask_id: "10"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: "Docs rewrite:"
+    done: true
+    evidence_path: null
+  - id: D02
+    text: "**Retire the `ZOTO_VIZ_LEGACY_PLUGINS` opt-in.** After one green"
+    done: true
+    evidence_path: null
+  - id: D03
+    text: Delete `service/agent_plugins.py`. If any helper still lives there,
+    done: true
+    evidence_path: pytest.ini
+  - id: D04
+    text: "**Delete `tests/test_agent_plugins.py`.** The file imports"
+    done: true
+    evidence_path: null
+  - id: D05
+    text: "Delete the old schemas if subtask 01 left shims:"
+    done: true
+    evidence_path: null
+  - id: D06
+    text: Remove or update any lingering references to
+    done: true
+    evidence_path: null
+  - id: D07
+    text: "Full-suite verification (this is the wrap-up phase):"
+    done: true
+    evidence_path: null
+  - id: D08
+    text: Run `pnpm -w lint` (or the closest equivalent) and address anything
+    done: true
+    evidence_path: null
+  - id: D09
+    text: Update the spec's `Execution Notes` in the index with a short
+    done: true
+    evidence_path: null
+artifacts:
+  - path: docs/plugins.md
+    kind: modified
+    note: unified
+  - path: docs/plugins-ts.md
+    kind: modified
+    note: frontend
+  - path: docs/api.md
+    kind: modified
+    note: catalog
+  - path: docs/install.md
+    kind: modified
+    note: ZOTO_VIZ_REPO_ROOT
+  - path: docs/agent.md
+    kind: modified
+    note: draft
+  - path: docs/contributing.md
+    kind: modified
+    note: pack
+  - path: docs/systemd.md
+    kind: modified
+    note: zoto-viz.py
+  - path: docs/.vitepress/config.ts
+    kind: modified
+    note: sidebar
+  - path: README.md
+    kind: modified
+    note: retired
+  - path: schema/plugin-zip-contract.md
+    kind: modified
+    note: drop
+  - path: service/mcp.py
+    kind: modified
+    note: removed
+  - path: service/monitor.py
+    kind: modified
+    note: dropped
+  - path: service/plugin_migration.py
+    kind: modified
+    note: removed
+  - path: service/agent_plugins.py
+    kind: deleted
+    note: legacy
+  - path: tests/test_agent_plugins.py
+    kind: deleted
+    note: surviving
+  - path: tests/test_plugins.py
+    kind: modified
+    note: ported
+  - path: tests/test_plugin_cli.py
+    kind: modified
+    note: missing
+  - path: tests/test_mcp.py
+    kind: modified
+    note: catalog-only
+  - path: tests/test_plugin_migration.py
+    kind: modified
+    note: dropped
+  - path: tests/test_plugin_schema.py
+    kind: modified
+    note: dropped
+  - path: schema/view-plugin.schema.json
+    kind: deleted
+    note: shim
+  - path: schema/agent-plugin.schema.json
+    kind: deleted
+    note: shim
+  - path: schema/plugin.schema.json
+    kind: modified
+    note: dropped
+  - path: service/paths.py
+    kind: modified
+    note: docs
+  - path: service/plugin_zip.py
+    kind: modified
+    note: zlib
+  - path: service/hooks.py
+    kind: modified
+    note: user-dir
+  - path: service/plugins.py
+    kind: modified
+    note: seed
+  - path: web/src/core/modes.ts
+    kind: modified
+    note: catalog
+  - path: plugins/src/air-ssid/visualisation.yml
+    kind: modified
+    note: install
+  - path: plugins/air-ssid.zip
+    kind: modified
+    note: repacked
+  - path: web/src/ui/feed.test.ts
+    kind: modified
+    note: TrafficMsg.summary
+  - path: specs/20260915-unified-plugin-zips/spec-unified-plugin-zips-20260915.md
+    kind: modified
+    note: Execution
+  - path: specs/20260915-unified-plugin-zips/subtask-10-unified-plugin-zips-docs-and-cleanup-20260915.md
+    kind: modified
+    note: subtask
+  - path: pytest.ini
+    kind: modified
+    note: dropped service.agent_plugins from --cov= and coverage:run source
+  - path: docs/plugins-ts.md
+    kind: modified
+    note: module.js not HTTP 403; consent is UI/sandbox
+  - path: docs/api.md
+    kind: modified
+    note: drop module.js 403; keep GLSL 403
+errors: []
+notes: |
+  Fix-round (quality-audit / module.js 403 overclaim): docs/plugins-ts.md claimed GET /api/plugins/<id>/module.js 403s if the plugin needs review and is not consented. service/plugins.py api_module does not check consent; it always serves the compiled bundle (404 only if missing). Consent for frontend is the UI/sandbox gate (Settings → Agent allow TypeScript plugins + source-review before loadTsPlugin fetches and PluginSandbox inlines). docs/api.md table repeated the same module.js-403 claim; corrected to 404-if-missing and UI/sandbox consent. docs/plugins.md did not repeat it. GLSL remains accurate: GET /api/plugins/{id}/sky/fragment.glsl 403s without consent (api_sky). Targeted grep of docs/ for module.js + 403; no full suite. token_budget 200000.
+  Prior fix-round (judge Partial / D03): dropped service.agent_plugins from pytest.ini --cov= addopts and [coverage:run] source.
+  What's changed (initial round): unified docs; retired ZOTO_VIZ_LEGACY_PLUGINS; deleted service/agent_plugins.py, tests/test_agent_plugins.py, and view/agent schema shims.
+  Tests: pytest 201 passed; vitest 140 passed (35 files) — prior wrap-up; this round docs-only.
+  Follow-ups: vitest logs ECONNREFUSED 127.0.0.1:3000 twice but all tests pass (pre-existing noise). ruff check service/monitor.py still reports pre-existing E402/E741/E702/F841 (not a plugin regression).
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-15T09:35:10Z
+    notes: "Fresh Mode 1 re-verify after quality-audit fix-list (module.js 403 overclaim). Gap closed: docs/plugins-ts.md Module URL now states GET /api/plugins/<id>/module.js always serves the compiled bundle (404 if missing) and does not 403 on missing consent; consent is the UI/sandbox gate (Settings → Agent allow TypeScript plugins plus source-review before loadTsPlugin fetches and PluginSandbox inlines). GLSL remains accurate: api_sky 403s without review / 404 if missing. Cross-check: service/plugins.py api_module has no consent check (404 only); api_sky maps AWAITING_REVIEW to 403. docs/api.md table + catalog prose match (module.js is UI/sandbox not HTTP 403; sky/fragment.glsl keeps 403). docs/plugins.md has no module.js and no 403. D01–D09 independently re-confirmed on disk. DoD: listed docs describe unified zip catalog only (no view-plugin / agent-plugin schema / two-system language); plugins-ts.md exists and is in VitePress sidebar; service/agent_plugins.py, tests/test_agent_plugins.py, schema/view-plugin.schema.json, schema/agent-plugin.schema.json absent; pytest.ini has no service.agent_plugins; ZOTO_VIZ_LEGACY_PLUGINS grep-clean; ~/.zoto-viz/plugins and agent-plugins strings clean in docs/service/tests/web/README (consent ~/.zoto-viz/plugin-consent.yml stays; paths.agent_plugins_dir remains as migration helper). cli_zip_deprecated missing-file case in tests/test_plugins.py. Spec index Execution Notes include this fix-round. Tests not re-run this docs-only round; prior independent wrap-up (pytest 201 / vitest 140) still the suite evidence. Residuals not in this fix_list: leftover examples/plugins YAML comments mention ~/.zoto-viz/plugins; service/agent.py system prompt still says view-plugin schema. token_budget 200000. onStop exited 0 (checked=13, critical=0); this pair is schema-valid, state completed, every checklist[].done true."
+    fix_list: []
+last_heartbeat: 2026-09-15T09:35:24.015Z
+started_at: 2026-09-15T08:46:20.431Z
+completed_at: 2026-09-15T09:35:24.015Z

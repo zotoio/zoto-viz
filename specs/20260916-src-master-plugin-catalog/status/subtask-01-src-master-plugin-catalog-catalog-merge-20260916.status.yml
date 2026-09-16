@@ -1,0 +1,154 @@
+schema_version: 1
+subtask_id: "01"
+feature: Src-Master Plugin Catalog
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: Change `service/plugins.py::scan` so **both** `scan()` (no args /
+    done: true
+    evidence_path: null
+  - id: D02
+    text: "Keep the YAML/tree fallback: `scan(root)` on a directory with neither"
+    done: true
+    evidence_path: null
+  - id: D03
+    text: Frontend compile / Python hooks / sky GLSL for src rows read from
+    done: true
+    evidence_path: null
+  - id: D04
+    text: "Update `.gitignore`: add `plugins/*.zip`. Keep `plugins/.runtime/`."
+    done: true
+    evidence_path: null
+  - id: D05
+    text: "Update `service/paths.py` docstrings: `plugin_zips_dir` is the local"
+    done: true
+    evidence_path: null
+  - id: D06
+    text: Rewrite `tests/test_plugin_catalog.py` **before or atomically with**
+    done: true
+    evidence_path: null
+  - id: D07
+    text: Delete untracked first-party `plugins/*.zip` from the working tree
+    done: true
+    evidence_path: null
+  - id: D08
+    text: Delete `plugins/src/cpu-pong/` (duplicate of `cpupong` with
+    done: true
+    evidence_path: null
+  - id: D09
+    text: Update `tests/test_paths.py::test_gitignore_runtime_not_zips_or_src`
+    done: true
+    evidence_path: null
+  - id: D10
+    text: "`schema/plugin.schema.json` top-level `description` may still say"
+    done: true
+    evidence_path: null
+artifacts:
+  - path: service/plugins.py
+    kind: modified
+    note: src-first
+  - path: service/plugins.py
+    kind: modified
+    note: YAML
+  - path: service/plugins.py
+    kind: modified
+    note: src
+  - path: .gitignore
+    kind: modified
+    note: ignore
+  - path: service/paths.py
+    kind: modified
+    note: src
+  - path: tests/test_plugin_catalog.py
+    kind: modified
+    note: src
+  - path: plugins/watch.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/layers.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/air-ssid.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/pulse-ts.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/air-bt.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/frogger.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/protocols.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/invaders.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/lan-heat.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/cores.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/doom.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/cpupong.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/services.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/command.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/netpong.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/topology.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/load.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/lan-pong.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/lan-pulse.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/talkers.zip
+    kind: deleted
+    note: untracked
+  - path: plugins/src/cpu-pong/plugin.yml
+    kind: deleted
+    note: duplicate
+  - path: plugins/src/cpu-pong/visualisation.yml
+    kind: deleted
+    note: duplicate
+  - path: tests/test_paths.py
+    kind: modified
+    note: gitignore
+  - path: specs/20260916-src-master-plugin-catalog/subtask-01-src-master-plugin-catalog-catalog-merge-20260916.md
+    kind: modified
+    note: execution
+  - path: plugins/src/cpu-pong/
+    kind: deleted
+    note: duplicate
+errors: []
+notes: |
+  Src-first catalog merge. Fix-list round: re-deleted plugins/src/cpu-pong/ (stayed gone after 6s and after pytest). plugins/src/cpupong/ remains. scan() and scan(PLUGINS) return 20 src ids (doom, lan-pulse included), 0 errors (no duplicate cpupong). Targeted pytest --no-cov 20 passed (test_plugin_catalog.py + test_paths.py). No live writer found; restore at 00:53:02Z was during first judge pass. Did not run full suite. Did not commit. Did not start Phase 2.
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-16T03:33:11Z
+    notes: "Re-verify after cpu-pong fix-list. plugins/src/cpu-pong/ is absent (before scan, after pytest, after 6s wait, and immediately before this verdict); plugins/src/cpupong/ remains with id cpupong. scan() and scan(PLUGINS) each return 20 origin=src rows including doom and lan-pulse, zero errors, no duplicate plugin id 'cpupong', no src/zip collisions. No plugins/*.zip on disk. Catalog merge, YAML/tree fallback, src-tree compile/hooks/sky, .gitignore plugins/*.zip, paths.py docstrings, rewritten test_plugin_catalog.py (no assert zips / test_pack_is_reproducible), and test_paths.py gitignore assertions all confirmed. Targeted pytest 20 passed (test_plugin_catalog.py + test_paths.py). git check-ignore plugins/example.zip ignored; plugins/src/topology/plugin.yml and examples/plugins/sample.zip not ignored. ruff clean on modified files. Did not run full pytest/vitest. D10: 01-owned surfaces do not rewrite docs or frontend/sky/backend/cli/mcp tests."
+    fix_list: []
+last_heartbeat: 2026-09-16T03:33:39.754Z
+started_at: 2026-09-16T00:41:37.288Z
+completed_at: 2026-09-16T03:27:39.160Z

@@ -1,0 +1,81 @@
+schema_version: 1
+subtask_id: "11"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: "**Host engines, not menu rows.** Keep the graph-base `ViewMode`"
+    done: true
+    evidence_path: web/src/core/modes.ts
+  - id: D02
+    text: "**Default catalog = former shipped views.** After subtask 09's"
+    done: true
+    evidence_path: tests/test_plugin_catalog.py
+  - id: D03
+    text: "**Duplicate-id overlay (plugin-on-plugin).** If a later zip shares"
+    done: true
+    evidence_path: web/src/core/modes.test.ts
+  - id: D04
+    text: "**Fallbacks.** `modeById` must not hard-code `topology`."
+    done: true
+    evidence_path: web/src/core/modes.ts
+  - id: D05
+    text: "**Consent.** YAML-only catalog views (no `frontend/`, no"
+    done: true
+    evidence_path: web/src/plugins/plugin.ts
+  - id: D06
+    text: "**Tests to rewrite** (targeted):"
+    done: true
+    evidence_path: web/src/core/modes.test.ts
+artifacts:
+  - path: web/src/core/modes.ts
+    kind: modified
+    note: catalog-only allModes; GRAPH_BASES+ARCADE_ENGINES wrap targets
+  - path: web/src/core/modes.test.ts
+    kind: modified
+    note: catalog-driven menu, overlay, empty-catalog fallbacks
+  - path: web/src/plugins/plugin.ts
+    kind: modified
+    note: hostEngine wrap; catalog viewSelectOptions; YAML-only skip consent
+  - path: web/src/plugins/plugin.test.ts
+    kind: modified
+    note: plugin-on-plugin overlay; catalog topology menu row
+  - path: web/src/core/profiles.ts
+    kind: modified
+    note: default mode from catalog topology plugin
+  - path: web/src/core/profiles.test.ts
+    kind: modified
+    note: empty catalog topology string; catalog plugin:topology
+  - path: web/src/app/main.ts
+    kind: modified
+    note: keyboard and dream cycle allModes/graphModes
+  - path: web/src/graph/mosaic.ts
+    kind: modified
+    note: pane pool from catalog allModes
+  - path: web/src/graph/scene.ts
+    kind: modified
+    note: topology host-engine stub for empty catalog
+  - path: tests/test_plugin_catalog.py
+    kind: modified
+    note: 14 former MODES ids are menu plugins
+errors: []
+notes: |-
+  Live menu is catalog-only. Deleted hardcoded MODES from allModes(); GRAPH_BASES + ARCADE_ENGINES stay wrap targets. graphModes() is catalog graph plugins. Keyboard/mosaic/dream cycling iterate allModes()/graphModes(). modeById resolves catalog id or pluginId, then defaultCatalogMode (topology first), then topology host-engine stub (not a menu row). Empty catalog does not throw. YAML-only views skip consent; has_backend/has_datasource join the review path. Profiles keep mode "topology" with an empty catalog and plugin:topology when that zip is loaded.
+
+  Tests: cd web && pnpm test -- src/core/modes.test.ts src/plugins/plugin.test.ts src/core/profiles.test.ts (140 passed / 35 files). .venv/bin/python3 -m pytest tests/test_plugin_catalog.py -q -o addopts= (5 passed, including former 14 MODES ids as menu plugins). token_budget 200000.
+extra:
+  tests:
+    vitest: cd web && pnpm exec vitest run src/core/modes.test.ts src/plugins/plugin.test.ts src/core/profiles.test.ts
+    pytest: .venv/bin/python3 -m pytest tests/test_plugin_catalog.py -q -o addopts=
+  judge:
+    verdict: verified
+    at: 2026-09-15T08:43:47.000Z
+    notes: Independently confirmed D01-D06 and DoD against disk. allModes() returns only pluginModes (no MODES/GRAPH_MODES). GRAPH_BASES (incl. wifi, bluetooth, cpu alias) and ARCADE_ENGINES remain wrap targets; compilePlugin uses hostEngine(). Catalog zips/src cover the 14 former MODES ids plus air-ssid/air-bt and extras, each with visualisation.engine (menu plugins, not overlay-only). Duplicate ids overlay look/style/layout/options/config onto the first catalog row with a single menu entry. Empty catalog leaves allModes empty; modeById("missing") does not throw and does not add a topology menu row (host stub last). pluginNeedsReview is false for YAML-only views; pulse-ts/lan-pulse keep the executable consent path. Keyboard/mosaic/dream cycle allModes()/graphModes(). Targeted vitest 3 files/26 passed; pytest test_plugin_catalog.py 5 passed. token_budget 200000.
+    fix_list: []
+last_heartbeat: 2026-09-15T08:44:46.241Z
+started_at: 2026-09-15T08:28:34.619Z
+git_sha: f1e50b65f1f18ad0787bea3c763179138777ebc1
+completed_at: 2026-09-15T08:35:13.569Z

@@ -1,0 +1,104 @@
+schema_version: 1
+subtask_id: "05"
+feature: Src-Master Plugin Catalog
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: "`docs/plugins.md` — catalog is `plugins/src/<id>/`; zips are local"
+    done: true
+    evidence_path: null
+  - id: D02
+    text: "`docs/contributing.md` — edit src → validate → (optional)"
+    done: true
+    evidence_path: null
+  - id: D03
+    text: "`docs/install.md` — shipped views are src trees; unpack cache is"
+    done: true
+    evidence_path: null
+  - id: D04
+    text: "`docs/api.md` — `GET /api/plugins` payload is the merge; MCP writes"
+    done: true
+    evidence_path: null
+  - id: D05
+    text: "`docs/agent.md` — draft hint: src is live; share with `plugin pack -o`."
+    done: true
+    evidence_path: null
+  - id: D06
+    text: "`docs/plugins-ts.md` — authoring under `plugins/src/<id>/` is live"
+    done: true
+    evidence_path: null
+  - id: D07
+    text: "`README.md` — catalog line matches src-as-master."
+    done: true
+    evidence_path: null
+  - id: D08
+    text: "`schema/plugin.schema.json` top-level `description` and"
+    done: true
+    evidence_path: null
+  - id: D09
+    text: "`zoto-viz.py` module docstring / `plugin` help strings if they still"
+    done: true
+    evidence_path: null
+  - id: D10
+    text: Grep the repo (docs, README, comments in `service/plugin_zip.py`,
+    done: true
+    evidence_path: null
+  - id: D11
+    text: Do **not** mention npm as a way to install or publish plugins.
+    done: true
+    evidence_path: null
+  - id: D12
+    text: Run full `pytest` and `web` vitest; fix regressions caused by this
+    done: true
+    evidence_path: null
+artifacts:
+  - path: docs/plugins.md
+    kind: modified
+    note: src catalog, zip contrib, sample fixture, pack -o/dist
+  - path: docs/contributing.md
+    kind: modified
+    note: edit src, git add src only, sample.zip pack identity
+  - path: docs/install.md
+    kind: modified
+    note: src trees live, .runtime for zip contrib, migrate is live
+  - path: docs/api.md
+    kind: modified
+    note: merge payload, MCP gitignored zip + src refuse, draft src live
+  - path: docs/agent.md
+    kind: modified
+    note: draft src live, share with plugin pack -o
+  - path: docs/plugins-ts.md
+    kind: modified
+    note: src authoring live, no pack for iframe
+  - path: README.md
+    kind: modified
+    note: catalog line is plugins/src
+  - path: schema/plugin.schema.json
+    kind: modified
+    note: zip is contrib interchange; src is first-party
+  - path: schema/plugin-zip-contract.md
+    kind: modified
+    note: contrib interchange layout
+  - path: zoto-viz
+    kind: modified
+    note: plugin help is src catalog + contrib zips
+  - path: service/plugins.py
+    kind: modified
+    note: plugin subparser help
+  - path: service/plugin_zip.py
+    kind: modified
+    note: pack identity gated on sample.zip only
+errors: []
+notes: Docs retargeted to src-as-catalog / zip-as-contrib. pytest 279 passed, vitest 176 passed. No leftover 01–04 suite fixes. No npm plugin path. token_budget 200000. No git commit.
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-16T03:55:02.000Z
+    notes: "Independent Mode 1 verification of docs + full suite. D01–D12 and all five DoD items confirmed against disk. docs/plugins.md: src catalog plugins/src/<id>/, zip is contrib interchange (plugin add / drop / MCP), colliding zip is a scan error, sample fixture examples/plugins/sample/ (+ sample.zip), pack to dist/ or -o, zip-contract pointer, no pack-to-commit. contributing.md: edit src → validate → optional pack -o; git add plugins/src/<id>/ only; pack identity only examples/plugins/sample.zip. install.md: shipped views are src trees; .runtime unpack for zip contribs; migrate copies into src and is live. api.md: GET /api/plugins is the merge; MCP writes gitignored plugins/<id>.zip and refuses src ids; draft writes src. agent.md + plugins-ts.md: src is live; share with plugin pack -o; no pack step for iframe. README catalog line is plugins/src. schema description + plugin-zip-contract.md: zip is interchange; members, suffixes, 1.5MB/4MB/80, hard rejects (absolute, .., symlinks) remain. zoto-viz module docstring and plugins.add_parser help are src catalog + contrib zips, not plugins/*.zip. Grep of docs, README, plugin_zip.py and plugins.py headers: no “committed zip”, “git add plugins/<id>.zip”, or “pack … to commit”. npm appears only as pnpm/corepack for the web app, not plugin install/publish. Judge re-ran .venv/bin/python -m pytest: 279 passed in 17.61s, coverage 88.63%. pnpm --dir web test: 176 passed / 39 files in 10.31s (pre-existing ECONNREFUSED 127.0.0.1:3000 noise, all tests passed). ReadLints clean on modified docs/schema/help files. ruff clean on service/plugins.py and service/plugin_zip.py; two pre-existing E741 hits in zoto-viz (warn_warp / own_mac) predate this subtask and are unrelated. token_budget 200000. State left completed (not in_progress). Subtask pair onStop surface is clean (0 open checklist items, schema-valid yml, verified with empty fix_list). spec-onstop-check exited 2 solely for spec-root status.yml completed_with_open_dod DOD01–DOD10 — aggregator flipped aggregate_state to completed once all five subtasks were completed; those spec-index DoD boxes are executor Step 5, not a subtask-05 deliverable, and this judge must not write spec-root status files. Verdict remains verified."
+    fix_list: []
+last_heartbeat: 2026-09-16T03:56:57.371Z
+started_at: 2026-09-16T03:46:45.952Z
+completed_at: 2026-09-16T03:50:55.178Z

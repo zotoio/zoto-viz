@@ -1,0 +1,88 @@
+schema_version: 1
+subtask_id: "03"
+feature: Src-Master Plugin Catalog
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: "`cli_pack` (`service/plugins.py` / `zoto-viz.py plugin pack`):"
+    done: true
+    evidence_path: service/plugins.py
+  - id: D02
+    text: "`.gitignore`: add `dist/` (in addition to subtask 01’s"
+    done: true
+    evidence_path: .gitignore
+  - id: D03
+    text: "`cli_add`: if `plugins/src/<id>/plugin.yml` (or `.yaml`) exists,"
+    done: true
+    evidence_path: service/plugins.py
+  - id: D04
+    text: "MCP `install_plugin_zip` (`service/mcp.py`):"
+    done: true
+    evidence_path: service/mcp.py
+  - id: D05
+    text: "`plugin_migration.dirty_tree_paths`: stop treating"
+    done: true
+    evidence_path: service/plugin_migration.py
+  - id: D06
+    text: "`plugin_migration.MIGRATE_HINT` and the console line: src is live;"
+    done: true
+    evidence_path: service/plugin_migration.py
+  - id: D07
+    text: "`catalog_ids()` already treats src **or** zip as present; keep that"
+    done: true
+    evidence_path: tests/test_plugin_migration.py
+  - id: D08
+    text: "Tests (tmp repo):"
+    done: true
+    evidence_path: tests/test_plugin_cli.py
+artifacts:
+  - path: service/plugins.py
+    kind: modified
+    note: cli_pack defaults to dist/<id>.zip; -o/--output
+  - path: .gitignore
+    kind: modified
+    note: add dist/; keep plugins/*.zip
+  - path: service/plugins.py
+    kind: modified
+    note: cli_add hard-refuses src ids; --force does not override
+  - path: service/mcp.py
+    kind: modified
+    note: install_plugin_zip src refuse even with force
+  - path: service/plugin_migration.py
+    kind: modified
+    note: dirty_tree_paths no longer tracks gitignored zips
+  - path: service/plugin_migration.py
+    kind: modified
+    note: MIGRATE_HINT src is live; agent pack -o share hint
+  - path: tests/test_plugin_migration.py
+    kind: modified
+    note: catalog_ids src or zip; leftover home matching src uncopied
+  - path: tests/test_plugin_cli.py
+    kind: modified
+    note: pack dist/-o, add src refuse, MCP/migration/agent tests
+  - path: service/agent.py
+    kind: modified
+    note: draft hint src live; pack -o to share
+  - path: tests/test_mcp.py
+    kind: modified
+    note: src_owns_id refuse; gitignored zip not dirty
+  - path: tests/test_agent.py
+    kind: modified
+    note: hint asserts src live and pack -o
+errors: []
+notes: |
+  Pack shares via dist/<id>.zip or -o; add/MCP hard-refuse src ids even with force.
+  Targeted pytest -o addopts=: 58 passed (test_plugin_cli, test_mcp, test_plugin_migration, test_agent).
+  Did not rewrite docs. Did not run full suite. Did not commit. token_budget: 200000.
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-16T03:45:22.000Z
+    notes: 'Independently confirmed on disk: cli_pack writes repo_root()/dist/<id>.zip (pack_tree mkdir) or -o/--output, not plugins/<id>.zip; inspect_src + validate_doc still run. .gitignore has dist/ plus plugins/*.zip. cli_add and MCP install_plugin_zip hard-refuse src_plugin_home even with force; --force still overwrites a zip with no src tree; same-sha MCP unpacks only; no git add/commit. dirty_tree_paths porcelain-scans only plugins/src/<id>/ (gitignored zips and .runtime are not dirty catalog); src-owns refuse runs first. MIGRATE_HINT is "it is live in the catalog"; agent draft hint points at src live and plugin pack -o to share. catalog_ids still src or zip. Targeted pytest -o addopts=: 58 passed (test_plugin_cli, test_mcp, test_plugin_migration, test_agent). No linter errors. Docs not rewritten (subtask 05). token_budget 200000.'
+    fix_list: []
+last_heartbeat: 2026-09-16T03:45:48.423Z
+started_at: 2026-09-16T03:35:02.574Z
+completed_at: 2026-09-16T03:41:01.659Z

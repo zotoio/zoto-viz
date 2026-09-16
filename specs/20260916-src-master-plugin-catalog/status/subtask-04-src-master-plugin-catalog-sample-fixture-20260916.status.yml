@@ -1,0 +1,80 @@
+schema_version: 1
+subtask_id: "04"
+feature: Src-Master Plugin Catalog
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: Create `examples/plugins/sample/` with id `sample` (`plugin.yml`
+    done: true
+    evidence_path: examples/plugins/sample/plugin.yml
+  - id: D02
+    text: Pack with `plugin_zip.pack_tree` to `examples/plugins/sample.zip` and
+    done: true
+    evidence_path: examples/plugins/sample.zip
+  - id: D03
+    text: "Default `plugins.scan()` must **not** include `id: sample` (fixture"
+    done: true
+    evidence_path: tests/test_plugin_sample.py
+  - id: D04
+    text: "Tests (`tests/test_plugin_sample.py` or extend catalog tests):"
+    done: true
+    evidence_path: tests/test_plugin_sample.py
+  - id: D05
+    text: Do not add the sample to `plugins/src/`. Do not document npm.
+    done: true
+    evidence_path: examples/plugins/sample/README.md
+artifacts:
+  - path: examples/plugins/sample/plugin.yml
+    kind: created
+    note: id sample + frontend/backend/datasource/capabilities
+  - path: examples/plugins/sample/visualisation.yml
+    kind: created
+    note: engine graph base topology
+  - path: examples/plugins/sample/frontend/index.ts
+    kind: created
+    note: minimal zoto.onTick stub
+  - path: examples/plugins/sample/backend/service.py
+    kind: created
+    note: setup teardown on_snapshot stubs
+  - path: examples/plugins/sample/datasource/streams.yml
+    kind: created
+    note: consumes devices produces plugin_state
+  - path: examples/plugins/sample/datasource/collector.py
+    kind: created
+    note: start/stop/emit no-op
+  - path: examples/plugins/sample/sky/sky.yml
+    kind: created
+    note: one-key recipe
+  - path: examples/plugins/sample/sky/fragment.glsl
+    kind: created
+    note: OK_FRAG whitelist uniforms
+  - path: examples/plugins/sample/README.md
+    kind: created
+    note: fixture not a shipped view
+  - path: examples/plugins/sample.zip
+    kind: created
+    note: pack_tree 2367 bytes all five parts
+  - path: tests/test_plugin_sample.py
+    kind: created
+    note: inspect detect_parts byte-identity scan()
+  - path: specs/20260916-src-master-plugin-catalog/subtask-04-src-master-plugin-catalog-sample-fixture-20260916.md
+    kind: modified
+    note: execution notes and checklist ticks
+errors: []
+notes: |
+  Packed examples/plugins/sample.zip via pack_tree (2367 bytes).
+  Targeted pytest tests/test_plugin_sample.py: 5 passed.
+  scan() has no id sample. No plugins/src/sample. No npm in README.
+  Did not commit. Did not run the full suite.
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-16T03:45:19.288Z
+    notes: "Independent Mode 1 verification of the all-features sample fixture. examples/plugins/sample/plugin.yml has id sample, name, version, frontend.entry, backend.entry, capabilities [graph.read], datasource.consumes/produces. visualisation.yml is engine graph / base topology (not overlay-only). Stubs present: frontend/index.ts zoto.onTick, backend setup/teardown/on_snapshot, datasource/streams.yml + collector.py start/stop/emit matching plugin_datasource, sky/sky.yml one-key recipe, sky/fragment.glsl equals test_plugin_sky OK_FRAG (validate_source None; no uMode). README is a zip-contract fixture, points at plugins/src as live catalog, documents plugin pack / drop into plugins/, no npm. sample.zip 2367 bytes, PACK_DATE 1980-01-01, members include plugin.yml plus all five optional roots; inspect_zip/inspect_src/cli_validate exit 0; detect_parts reports visualisation, frontend, sky, datasource, backend. Fresh pack_tree bytes equal committed zip (sha256 382a93b292f1b55992b80f7384617c1aeff64e7481052dc3a87dc263076d199e). Default scan() returns 20 src ids, no sample; plugins/src/sample absent. git check-ignore does not ignore examples/plugins/sample.zip (.gitignore is plugins/*.zip only). Zip is working-tree untracked (spec-execute did not git commit; not a blocker). Targeted pytest tests/test_plugin_sample.py -q -o addopts=: 5 passed. ruff clean. Full suite not run. token_budget 200000."
+    fix_list: []
+last_heartbeat: 2026-09-16T03:45:54.092Z
+started_at: 2026-09-16T03:34:44.638Z
+completed_at: 2026-09-16T03:38:56.641Z

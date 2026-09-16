@@ -1,0 +1,59 @@
+schema_version: 1
+subtask_id: "02"
+feature: Src-Master Plugin Catalog
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: Update `tests/test_plugin_frontend.py` so compile/sandbox tests do
+    done: true
+    evidence_path: tests/test_plugin_frontend.py
+  - id: D02
+    text: Update `tests/test_plugin_sky.py` the same way (`_pack_sky` currently
+    done: true
+    evidence_path: tests/test_plugin_sky.py
+  - id: D03
+    text: Update `tests/test_plugin_backend.py` the same way.
+    done: true
+    evidence_path: tests/test_plugin_backend.py
+  - id: D04
+    text: Update `tests/test_plugins.py` (and `tests/test_hooks.py` only if a
+    done: true
+    evidence_path: tests/test_plugins.py
+  - id: D05
+    text: Do **not** edit `tests/test_plugin_cli.py`, `tests/test_mcp.py`,
+    done: true
+    evidence_path: tests/test_plugin_cli.py
+  - id: D06
+    text: Targeted pytest on the files this subtask touches passes.
+    done: true
+    evidence_path: tests/test_plugin_frontend.py
+artifacts:
+  - path: tests/test_plugin_frontend.py
+    kind: modified
+    note: src-only compile plus zip-only runtime compile
+  - path: tests/test_plugin_sky.py
+    kind: modified
+    note: src-only sky serve plus zip-only runtime hash bump
+  - path: tests/test_plugin_backend.py
+    kind: modified
+    note: src catalog hash plus zip-only unpack hash
+  - path: tests/test_plugins.py
+    kind: modified
+    note: zip catalog zip-only and consent src-only
+  - path: specs/20260916-src-master-plugin-catalog/subtask-02-src-master-plugin-catalog-test-fixtures-20260916.md
+    kind: modified
+    note: execution notes and checkboxes
+errors: []
+notes: "Split src+zip fixtures. Shipped-path tests are src-only; unpack tests pack from a staging tree (no plugins/src). test_hooks.py had no dual fixture and was left untouched. CLI/MCP/migration/agent tests left to 03. Targeted pytest --no-cov: 31 passed. ruff clean. Did not run full suite. Did not commit. token_budget: 200000."
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-16T03:44:45.904Z
+    notes: "Independent Mode 1 verification: frontend/sky/backend/plugins fixtures split into _write_*_src vs _pack_*_zip_only (staging tree outside plugins/src). scan() never sees both for the same id. Zip-only unpack/runtime coverage remains in all four files (frontend .runtime compile, sky .runtime hash bump, backend zip unpack hash, test_scan_zip_catalog overlay). test_hooks.py last mtime 2026-09-15 — untouched by this subtask; no dual src+zip fixture. CLI/MCP/migration/agent tests have later mtimes (subtask 03) and were not edited by 02. Targeted pytest -o addopts=: 31 passed. ruff clean. Full suite not run. token_budget 200000."
+    fix_list: []
+last_heartbeat: 2026-09-16T03:44:55.551Z
+started_at: 2026-09-16 03:34:34.107000+00:00
+completed_at: 2026-09-16T03:44:55.551Z

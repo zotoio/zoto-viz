@@ -1,0 +1,244 @@
+schema_version: 1
+subtask_id: "09"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: "Enumerate the sources to migrate:"
+    done: true
+    evidence_path: null
+  - id: D02
+    text: "For each migrated plugin:"
+    done: true
+    evidence_path: null
+  - id: D03
+    text: Delete `examples/plugins/` and `examples/agent-plugins/` (once every
+    done: true
+    evidence_path: null
+  - id: D04
+    text: Update any code that references the old example paths (grep for
+    done: true
+    evidence_path: null
+  - id: D05
+    text: Regenerate the committed `plugins/*.zip` files deterministically so
+    done: true
+    evidence_path: null
+  - id: D06
+    text: Add a test that scans the committed `plugins/` catalog on CI and
+    done: true
+    evidence_path: null
+  - id: D07
+    text: "**Deterministic-pack CI check**: add"
+    done: true
+    evidence_path: null
+artifacts:
+  - path: plugins/src/air-bt
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/air-ssid
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/command
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/cores
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/cpupong
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/doom
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/frogger
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/invaders
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/lan-heat
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/lan-pong
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/lan-pulse
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/layers
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/load
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/netpong
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/protocols
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/pulse-ts
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/services
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/talkers
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/topology
+    kind: created
+    note: migrated source tree
+  - path: plugins/src/watch
+    kind: created
+    note: migrated source tree
+  - path: examples/plugins
+    kind: deleted
+    note: retired flat YAML + pulse-ts examples
+  - path: examples/agent-plugins
+    kind: deleted
+    note: retired lan-pulse agent-plugin example
+  - path: tests/test_plugins.py
+    kind: modified
+    note: retargeted to plugins/src
+  - path: tests/test_hooks.py
+    kind: modified
+    note: retargeted to plugins/src
+  - path: tests/test_agent.py
+    kind: modified
+    note: topology YAML from plugins/src
+  - path: tests/test_plugin_schema.py
+    kind: modified
+    note: shim fixtures from plugins/src
+  - path: tests/test_agent_plugins.py
+    kind: modified
+    note: inlined legacy lan-pulse fixtures
+  - path: service/plugins.py
+    kind: modified
+    note: seed() no-op; examples/plugins retired
+  - path: service/agent_plugins.py
+    kind: modified
+    note: dropped EXAMPLES path
+  - path: docs/plugins.md
+    kind: modified
+    note: example paths now plugins/src
+  - path: docs/plugins-ts.md
+    kind: modified
+    note: example path now plugins/src/pulse-ts
+  - path: plugins/air-bt.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/air-ssid.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/command.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/cores.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/cpupong.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/doom.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/frogger.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/invaders.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/lan-heat.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/lan-pong.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/lan-pulse.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/layers.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/load.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/netpong.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/protocols.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/pulse-ts.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/services.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/talkers.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/topology.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: plugins/watch.zip
+    kind: created
+    note: packed via plugin pack CLI
+  - path: tests/test_plugin_catalog.py
+    kind: created
+    note: catalog scan + doom/lan-pulse smokes + pack repro
+  - path: docs/contributing.md
+    kind: modified
+    note: TODO(subtask-10) zlib/cross-machine pack caveat
+errors: []
+notes: |-
+  Migrated 20 plugins (18 flat YAML views + pulse-ts + lan-pulse) into plugins/src/<id>/ and packed plugins/<id>.zip via CLI.
+
+  Dropped lan-pulse skills/generate-ui/ and ui/prompt.md (v1 has neither). produces/consumes are declarative-only; no datasource/collector.py and no sky/. Follow-up if a maximal collector+sky example is wanted.
+
+  pulse-ts service/__init__.py landed as backend/service.py (unified convention). Doom arcade engine stays in web/src/arcade/; plugins/src/doom is plugin.yml + visualisation.yml with engine: doom → arcadeId dispatch.
+
+  plugins.seed() is a no-op. docs/contributing.md has TODO(subtask-10) for zlib/cross-machine pack caveat.
+
+  Tests: .venv/bin/python3 -m pytest tests/test_plugin_catalog.py -q -o addopts= (4 passed). Also retargeted test_plugins/hooks/agent/plugin_schema/agent_plugins. Pre-existing test_agent_plugins.py::test_cli_zip still fails (plugins._cli_zip removed in subtask 03) — out of scope.
+
+  Grep-clean outside specs/: no remaining examples/plugins or examples/agent-plugins references.
+extra:
+  plugin_ids:
+    - air-bt
+    - air-ssid
+    - command
+    - cores
+    - cpupong
+    - doom
+    - frogger
+    - invaders
+    - lan-heat
+    - lan-pong
+    - lan-pulse
+    - layers
+    - load
+    - netpong
+    - protocols
+    - pulse-ts
+    - services
+    - talkers
+    - topology
+    - watch
+  tests: .venv/bin/python3 -m pytest tests/test_plugin_catalog.py -q -o addopts=
+  follow_ups:
+    - lan-pulse skills/ and ui/ dropped — restore generate-UI later if wanted
+    - maximal datasource/ + sky/ example still missing
+    - "subtask 10: docs/contributing.md zlib/cross-machine pack caveat"
+  judge:
+    verdict: verified
+    at: 2026-09-15T08:22:47Z
+    notes: "Independent Mode 1 check confirmed all 20 plugins (18 YAML views + pulse-ts + lan-pulse) under plugins/src/<id>/ with matching plugins/<id>.zip packed via plugin_zip (1980-01-01 members; test_pack_is_reproducible byte-match). All 20 `zoto-viz.py plugin validate plugins/src/<id>/` passed. examples/plugins and examples/agent-plugins are absent from the working tree (git shows D). service/tests/docs/web are grep-clean of those paths (specs/ mentions only). tests/test_plugin_catalog.py: 4 passed (catalog scan, doom arcadeId smoke wrapping web/src/arcade/doom.ts, lan-pulse frontend+backend declarative datasource, pack repro). test_agent_plugins.py still exists (owned by 08/10; not a fail). docs/contributing.md zlib caveat is TODO(subtask-10) as specified. token_budget remains 200000."
+    fix_list: []
+started_at: 2026-09-15 07:59:34.694000+00:00
+completed_at: 2026-09-15T08:13:33.772Z
+last_heartbeat: 2026-09-15T08:23:11.171Z

@@ -1,0 +1,79 @@
+schema_version: 1
+subtask_id: "04"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: Adapt `service/hooks.py` (or create `service/plugin_backend.py`) to
+    done: true
+    evidence_path: service/plugin_backend.py
+  - id: D02
+    text: "Enforce gate: backend module only imported if both"
+    done: true
+    evidence_path: service/plugins.py
+  - id: D03
+    text: "Optional collector: when `datasource/collector.py` exists, load it"
+    done: true
+    evidence_path: service/plugin_datasource.py
+  - id: D04
+    text: "`datasource/streams.yml` handling:"
+    done: true
+    evidence_path: service/plugin_datasource.py
+  - id: D05
+    text: Update `service/monitor.py` where necessary to publish plugin
+    done: true
+    evidence_path: service/monitor.py
+  - id: D06
+    text: "Update or add tests:"
+    done: true
+    evidence_path: tests/test_plugin_backend.py
+artifacts:
+  - path: service/plugin_backend.py
+    kind: created
+    note: Unified backend artefacts and module names
+  - path: service/plugin_datasource.py
+    kind: created
+    note: streams.yml remap and collector host
+  - path: service/hooks.py
+    kind: modified
+    note: Load backend/service.py as plugin_<id>_backend
+  - path: service/plugins.py
+    kind: modified
+    note: Consent hashes plus catalog streams mapping
+  - path: service/monitor.py
+    kind: modified
+    note: Merge collector emits into 1 Hz snapshot
+  - path: tests/test_plugin_backend.py
+    kind: created
+    note: Gate consent sha256 teardown tests
+  - path: tests/test_plugin_datasource.py
+    kind: created
+    note: Remap collector bus gate tests
+  - path: specs/20260915-unified-plugin-zips/subtask-04-unified-plugin-zips-backend-and-datasource-host-20260915.md
+    kind: modified
+    note: Ticked Deliverables DoD and Execution Notes
+errors: []
+notes: |
+  Backend + datasource host landed. Unified backends load from
+  backend/service.py as plugin_<id>_backend; collectors from
+  datasource/collector.py as plugin_<id>_collector. Gate is existing
+  ZOTO_VIZ_PLUGIN_SERVICE truthy check plus consent covering
+  backend_sha256/collector_sha256 (stamp string unchanged; shader hash
+  is subtask 07). consumes[] remaps live on catalog streams and
+  plugin_streams; produces[] merge onto the 1 Hz snapshot (not descoped).
+  Targeted pytest 30 passed. token_budget 200000.
+extra:
+  pytest: 30 passed (test_plugin_backend.py, test_plugin_datasource.py, test_hooks.py, addopts overridden)
+  produces_v1: shipped via collector emit merge in monitor.publish_state
+  consent_stamp: unchanged string; added backend_sha256 and collector_sha256 keys
+  judge:
+    verdict: verified
+    at: 2026-09-15T07:57:15.810Z
+    notes: Independently confirmed D01–D06 and all six DoD gates against disk. Unified backends load from backend/service.py as plugin_<id>_backend via hooks.sync; collectors from datasource/collector.py as plugin_<id>_collector with start/stop/emit. Gate is plugins.python_enabled() (ZOTO_VIZ_PLUGIN_SERVICE truthy) plus consent covering backend_sha256/collector_sha256. on_snapshot keeps today's (host, msg) shape; capture key is left intact. consumes[] remaps into plugin_streams without mutating originals; produces[] merge onto the 1 Hz snapshot in monitor.publish_state with no per-plugin asyncio task. Targeted pytest 30 passed.
+    fix_list: []
+last_heartbeat: 2026-09-15T07:57:38.772Z
+started_at: 2026-09-15T07:35:41.648Z
+completed_at: 2026-09-15T07:46:54.233Z

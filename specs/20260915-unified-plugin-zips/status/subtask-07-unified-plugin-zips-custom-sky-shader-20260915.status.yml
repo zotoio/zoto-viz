@@ -1,0 +1,96 @@
+schema_version: 1
+subtask_id: "07"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: "Backend:"
+    done: true
+    evidence_path: service/plugins.py
+  - id: D02
+    text: "**Freeze the plugin shader uniform contract** (matches the entry"
+    done: true
+    evidence_path: web/src/graph/backdrop.ts
+  - id: D03
+    text: "Frontend:"
+    done: true
+    evidence_path: web/src/graph/backdrop.ts
+  - id: D04
+    text: "Consent UX: reuse whatever prompt currently gates TypeScript source"
+    done: true
+    evidence_path: web/src/plugins/plugin-ui.ts
+  - id: D05
+    text: "**Own the shared consent-validator refactor** consumed by subtask"
+    done: true
+    evidence_path: service/plugins.py
+  - id: D06
+    text: "Tests:"
+    done: true
+    evidence_path: tests/test_plugin_sky.py
+artifacts:
+  - path: service/plugin_sky.py
+    kind: created
+    note: hash/validate/catalog flags for sky/fragment.glsl
+  - path: service/plugins.py
+    kind: modified
+    note: api_sky + shader_sha256 consent + sky_available payload
+  - path: service/monitor.py
+    kind: modified
+    note: GET /api/plugins/{id}/sky/fragment.glsl
+  - path: web/src/graph/backdrop.ts
+    kind: modified
+    note: pluginShaderError whitelist uTime/uOpacity/uBright/uAudio/uAccent/uBg
+  - path: web/src/graph/backdrop.ts
+    kind: modified
+    note: setPluginShader swaps ShaderMaterial; fallback space
+  - path: web/src/graph/scene.ts
+    kind: modified
+    note: NetScene.setPluginShader delegates to Backdrop
+  - path: web/src/app/main.ts
+    kind: modified
+    note: fetch plugin GLSL when look.backdrop=plugin
+  - path: web/src/plugins/plugin-ui.ts
+    kind: modified
+    note: review prompt mentions sky/fragment.glsl
+  - path: web/src/plugins/plugin.ts
+    kind: modified
+    note: pluginNeedsReview includes has_sky_shader
+  - path: service/plugins.py
+    kind: modified
+    note: consented_for(doc, hashes) union frontend/backend/collector/shader
+  - path: web/src/graph/backdrop.test.ts
+    kind: modified
+    note: setPluginShader contract + fallback
+  - path: tests/test_plugin_sky.py
+    kind: created
+    note: 403 without consent, hash bump, consented_for
+errors: []
+notes: |-
+  Served sky/fragment.glsl at GET /api/plugins/<id>/sky/fragment.glsl (text/x-shader,
+  cache keyed on zip sha256). Fail closed: no consent → 403 + catalog sky_error
+  "awaiting review"; non-whitelisted uniforms → compile error and shipped space sky.
+  Consent stamp records shader_sha256; consented_for(doc, hashes) overlays the
+  {frontend, backend, collector, shader} union for subtask 08. Backdrop.setPluginShader
+  swaps a whitelist-only ShaderMaterial when look.backdrop=plugin. Shipped enum +
+  AI Dynamic coexist. token_budget 200000.
+  Tests: pnpm exec vitest run src/graph/backdrop.test.ts src/plugins/plugin.test.ts
+  src/plugins/plugin-ui.test.ts (19 passed); pytest tests/test_plugin_sky.py
+  tests/test_plugins.py (18 passed).
+extra:
+  tests:
+    vitest: 19 passed (backdrop.test.ts, plugin.test.ts, plugin-ui.test.ts)
+    pytest: 18 passed (test_plugin_sky.py, test_plugins.py)
+    judge_vitest: 3 passed (web/src/graph/backdrop.test.ts via vitest run)
+    judge_pytest: 5 passed (tests/test_plugin_sky.py via .venv/bin/python3 -m pytest -o addopts=)
+  token_budget: 200000
+  judge:
+    verdict: verified
+    at: 2026-09-15T08:23:19.000Z
+    notes: "Independently confirmed all six deliverables and six DoD gates. GET /api/plugins/<id>/sky/fragment.glsl is 403 without consent (sky_error awaiting review) and 200 text/x-shader after grant; shader_sha256 is stamped and invalidates on edit; consented_for overlays {frontend, backend, collector, shader}. Uniform contract matches schema $defs/shader; setPluginShader swaps a whitelist-only ShaderMaterial when look.backdrop=plugin and restores space/dynamic (sky-ai uMode 14) when inactive. Judge re-ran backdrop.test.ts (3 passed) and test_plugin_sky.py (5 passed). Residual: lastPlugin is module-global, so cancelling review after switching from a consented plugin sky can leave the previous fragment bound until setPluginShader(null); GPU compile errors are regex-only, which the spec allows."
+    fix_list: []
+last_heartbeat: 2026-09-15T08:23:37.901Z
+started_at: 2026-09-15T07:59:18.906Z
+completed_at: 2026-09-15T08:18:49.079Z

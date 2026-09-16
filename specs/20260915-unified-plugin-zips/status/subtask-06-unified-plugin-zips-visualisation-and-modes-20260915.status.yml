@@ -1,0 +1,71 @@
+schema_version: 1
+subtask_id: "06"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: Extend the frontend plugin catalog loader (`web/src/plugins/plugin.ts`
+    done: true
+    evidence_path: web/src/plugins/plugin-visualisation.ts
+  - id: D02
+    text: "Preserve overlay behaviour:"
+    done: true
+    evidence_path: web/src/core/modes.ts
+  - id: D03
+    text: Wire `visualisation.look.backdrop` through to `web/src/graph/backdrop.ts`.
+    done: true
+    evidence_path: web/src/graph/backdrop.ts
+  - id: D04
+    text: Make the Settings "This view" panel (`web/src/ui/settings.ts`) show
+    done: true
+    evidence_path: web/src/ui/settings.ts
+  - id: D05
+    text: Route `visualisation.engine` through the real dispatch surface.
+    done: true
+    evidence_path: web/src/plugins/plugin.ts
+  - id: D06
+    text: "Add/extend vitest coverage:"
+    done: true
+    evidence_path: web/src/plugins/plugin.test.ts
+artifacts:
+  - path: web/src/plugins/plugin-visualisation.ts
+    kind: created
+    note: translate visualisation.yml into PluginView
+  - path: web/src/plugins/plugin.ts
+    kind: modified
+    note: catalog overlay and engine dispatch via graphBase/arcadeId
+  - path: web/src/core/modes.ts
+    kind: modified
+    note: pluginMenuRows unique-id menu; keep hardcoded MODES
+  - path: web/src/graph/backdrop.ts
+    kind: modified
+    note: BackdropKind plugin seam for subtask 07
+  - path: web/src/ui/settings.ts
+    kind: modified
+    note: This view pane shows plugin options and config
+  - path: web/src/plugins/plugin.test.ts
+    kind: modified
+    note: visualisation round-trip, overlay, no-viz load
+  - path: web/src/core/modes.test.ts
+    kind: modified
+    note: unique vs duplicate pluginId menu rows
+  - path: web/src/ui/settings.test.ts
+    kind: modified
+    note: This view knobs
+  - path: service/plugins.py
+    kind: modified
+    note: attach visualisation.yml on catalog rows
+errors: []
+notes: Ingest visualisation.yml via plugin-visualisation.ts; unique ids add plugin:<id> menu rows; duplicate ids overlay look pins (plugin-on-plugin). MODES stay in the live menu. look.backdrop=plugin is a BackdropKind seam for 07. Settings This view shows options+config. Targeted vitest 22/22 passed. token_budget 200000.
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-15T07:57:46.000Z
+    notes: Independently confirmed D01–D06 and DoD01–DoD06 against disk. toPluginView maps visualisation.yml into PluginView; unique ids compile to plugin:<id> menu rows; duplicate ids overlay look/style/layout/options/config only (plugin-on-plugin). applyPluginCatalog does not overlay onto shippedModeIds(); lookForMode("topology") stays undefined while allModes() still includes host MODES. engineDispatch maps visualisation.engine onto graphBase/arcadeId (doom → arcadeId doom); unknown engines rejected. BackdropKind "plugin" (uMode 16) is a setKind seam for subtask 07 with no shader load. Settings "This view" renders pluginViewKnobs (options+config) and falls back when visualisation.yml is absent. Targeted vitest 22/22 passed. token_budget 200000.
+    fix_list: []
+last_heartbeat: 2026-09-15T07:57:59.811Z
+started_at: 2026-09-15T07:35:52.530Z
+completed_at: 2026-09-15T07:52:29.473Z

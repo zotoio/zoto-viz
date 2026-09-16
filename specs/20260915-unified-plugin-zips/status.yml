@@ -1,0 +1,413 @@
+schema_version: 1
+spec_id: 20260915-unified-plugin-zips
+phase: 0
+aggregate_state: completed
+started_at: 2026-09-15T06:53:10.287Z
+updated_at: 2026-09-15T09:38:32.588Z
+aggregate_progress:
+  total: 11
+  completed: 11
+  in_progress: 0
+  blocked: 0
+  failed: 0
+subtasks:
+  - subtask_id: "01"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-01-unified-plugin-zips-schema-and-zip-contract-20260915.status.yml
+    last_heartbeat: 2026-09-15T07:14:19.783Z
+  - subtask_id: "02"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-02-unified-plugin-zips-paths-and-gitignore-20260915.status.yml
+    last_heartbeat: 2026-09-15T07:14:17.047Z
+  - subtask_id: "03"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-03-unified-plugin-zips-unpacker-scanner-cli-20260915.status.yml
+    last_heartbeat: 2026-09-15T07:34:03.023Z
+  - subtask_id: "04"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-04-unified-plugin-zips-backend-and-datasource-host-20260915.status.yml
+    last_heartbeat: 2026-09-15T07:57:38.772Z
+  - subtask_id: "05"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-05-unified-plugin-zips-frontend-compile-and-sandbox-20260915.status.yml
+    last_heartbeat: 2026-09-15T07:58:00.850Z
+  - subtask_id: "06"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-06-unified-plugin-zips-visualisation-and-modes-20260915.status.yml
+    last_heartbeat: 2026-09-15T07:57:59.811Z
+  - subtask_id: "07"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-07-unified-plugin-zips-custom-sky-shader-20260915.status.yml
+    last_heartbeat: 2026-09-15T08:23:37.901Z
+  - subtask_id: "08"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-08-unified-plugin-zips-mcp-and-retire-home-dirs-20260915.status.yml
+    last_heartbeat: 2026-09-15T09:36:02.051Z
+  - subtask_id: "09"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-09-unified-plugin-zips-migrate-examples-20260915.status.yml
+    last_heartbeat: 2026-09-15T08:23:11.171Z
+  - subtask_id: "10"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-10-unified-plugin-zips-docs-and-cleanup-20260915.status.yml
+    last_heartbeat: 2026-09-15T09:35:24.015Z
+  - subtask_id: "11"
+    state: completed
+    status_path: specs/20260915-unified-plugin-zips/status/subtask-11-unified-plugin-zips-shipped-views-become-plugins-20260915.status.yml
+    last_heartbeat: 2026-09-15T08:44:46.241Z
+blockers: []
+definition_of_done_status:
+  - id: DOD01
+    text: Single plugin format is the only supported format at runtime (with
+    done: true
+  - id: DOD02
+    text: "`plugins/*.zip` is the sole catalog by default; `~/.zoto-viz/plugins`"
+    done: true
+  - id: DOD03
+    text: "`schema/plugin.schema.json` is the sole plugin schema; legacy"
+    done: true
+  - id: DOD04
+    text: "`zoto-viz.py plugin {validate,list,pack,add}` all work end-to-end."
+    done: true
+  - id: DOD05
+    text: MCP `install_plugin_zip` targets `plugins/*.zip` with the write
+    done: true
+  - id: DOD06
+    text: First-startup migration copies any plugin under
+    done: true
+  - id: DOD07
+    text: Frontend loads plugins from the unpacked cache; iframe sandbox +
+    done: true
+  - id: DOD08
+    text: Custom sky shader path lives beside shipped skies + AI Dynamic and
+    done: true
+  - id: DOD09
+    text: Backend hooks + datasource collectors run only under consent +
+    done: true
+  - id: DOD10
+    text: Existing examples (all 18 flat view YAMLs, `pulse-ts`, and
+    done: true
+  - id: DOD11
+    text: Hardcoded `MODES` is not in the live menu. `allModes()` is the
+    done: true
+  - id: DOD12
+    text: Docs updated; `docs/plugins-ts.md` created; `service/agent_plugins.py`,
+    done: true
+  - id: DOD13
+    text: Targeted pytest + vitest suites for touched files pass. Full suite
+    done: true
+  - id: DOD14
+    text: No linter errors in modified files.
+    done: true
+config_reloaded: []
+events:
+  - at: 2026-09-15T08:18:51.346Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 6b9cae1a…
+  - at: 2026-09-15T08:20:33.984Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest add8ef1c…
+  - at: 2026-09-15T08:20:38.593Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 1e7b892a…
+  - at: 2026-09-15T08:22:57.137Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest c75f4fe7…
+  - at: 2026-09-15T08:23:12.536Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 2becbdc7…
+  - at: 2026-09-15T08:23:34.013Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 35561f39…
+  - at: 2026-09-15T08:23:38.601Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest bfc6e757…
+  - at: 2026-09-15T08:23:58.533Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 5b25314c…
+  - at: 2026-09-15T08:24:09.249Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 0582ed56…
+  - at: 2026-09-15T08:24:12.320Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest e28e2085…
+  - at: 2026-09-15T08:28:35.667Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest f719d0d5…
+  - at: 2026-09-15T08:28:37.196Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest ddf42ba6…
+  - at: 2026-09-15T08:29:41.579Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 4579cebd…
+  - at: 2026-09-15T08:29:43.130Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest c6be92a4…
+  - at: 2026-09-15T08:34:59.827Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 0becc2aa…
+  - at: 2026-09-15T08:35:13.585Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest ae9d4e1f…
+  - at: 2026-09-15T08:35:15.132Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest deca698b…
+  - at: 2026-09-15T08:37:19.210Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 17b353ec…
+  - at: 2026-09-15T08:37:41.176Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 1459d01d…
+  - at: 2026-09-15T08:37:42.744Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 90a8b373…
+  - at: 2026-09-15T08:37:53.801Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 91e4f8fe…
+  - at: 2026-09-15T08:37:55.361Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 681134dd…
+  - at: 2026-09-15T08:39:34.740Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 6b348605…
+  - at: 2026-09-15T08:39:45.785Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 54c34c01…
+  - at: 2026-09-15T08:41:55.096Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 5cab7322…
+  - at: 2026-09-15T08:42:09.233Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 4cc490c5…
+  - at: 2026-09-15T08:42:10.823Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 06ed3e9f…
+  - at: 2026-09-15T08:43:59.583Z
+    kind: source_validation_warn
+    message: |
+      YAML parse failed for specs/20260915-unified-plugin-zips/status/subtask-11-unified-plugin-zips-shipped-views-become-plugins-20260915.status.yml: Nested mappings are not allowed in compact mappings at line 76, column 12:
+
+          notes: Independently confirmed D01–D06 and DoD against disk. allModes() ret…
+                 ^
+  - at: 2026-09-15T08:43:59.583Z
+    kind: rebuild
+    message: Aggregated 10 subtask source(s); digest daea7b1d…
+  - at: 2026-09-15T08:44:01.169Z
+    kind: source_validation_warn
+    message: |
+      YAML parse failed for specs/20260915-unified-plugin-zips/status/subtask-11-unified-plugin-zips-shipped-views-become-plugins-20260915.status.yml: Nested mappings are not allowed in compact mappings at line 76, column 12:
+
+          notes: Independently confirmed D01–D06 and DoD against disk. allModes() ret…
+                 ^
+  - at: 2026-09-15T08:44:01.169Z
+    kind: rebuild
+    message: Aggregated 10 subtask source(s); digest 68dc43fd…
+  - at: 2026-09-15T08:44:39.097Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 109a2495…
+  - at: 2026-09-15T08:44:40.672Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest fb518d2b…
+  - at: 2026-09-15T08:44:47.004Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 0f7295dc…
+  - at: 2026-09-15T08:45:25.171Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 6eb6f34f…
+  - at: 2026-09-15T08:45:26.707Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 44808135…
+  - at: 2026-09-15T08:45:58.812Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 8cfb2062…
+  - at: 2026-09-15T08:46:21.803Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 1a6e888b…
+  - at: 2026-09-15T08:46:23.353Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest fad597bf…
+  - at: 2026-09-15T08:50:04.923Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 9c8a419c…
+  - at: 2026-09-15T08:53:04.988Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 3da95b05…
+  - at: 2026-09-15T08:53:08.056Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 56295c7a…
+  - at: 2026-09-15T08:54:31.732Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 47132b6e…
+  - at: 2026-09-15T08:55:10.132Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 02eb4953…
+  - at: 2026-09-15T08:55:16.278Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 92544f7b…
+  - at: 2026-09-15T08:55:17.838Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 052b615f…
+  - at: 2026-09-15T08:57:03.757Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 4a4bbac3…
+  - at: 2026-09-15T09:00:47.829Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 30a04659…
+  - at: 2026-09-15T09:00:55.560Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 1e66c731…
+  - at: 2026-09-15T09:01:46.206Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest e266b7e6…
+  - at: 2026-09-15T09:01:58.487Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 344fd27e…
+  - at: 2026-09-15T09:02:26.158Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest df71cb70…
+  - at: 2026-09-15T09:03:24.523Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest d1f2dd9f…
+  - at: 2026-09-15T09:03:26.058Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest dc4b97d8…
+  - at: 2026-09-15T09:04:44.536Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 545784bf…
+  - at: 2026-09-15T09:05:06.011Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 622c22e1…
+  - at: 2026-09-15T09:05:10.638Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 6ad5d923…
+  - at: 2026-09-15T09:05:22.932Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 02e78940…
+  - at: 2026-09-15T09:05:24.467Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 257c2b79…
+  - at: 2026-09-15T09:07:18.391Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 6b61110c…
+  - at: 2026-09-15T09:08:16.749Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 006bb168…
+  - at: 2026-09-15T09:09:46.438Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest b4f47fe5…
+  - at: 2026-09-15T09:09:58.841Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 2cfc853d…
+  - at: 2026-09-15T09:10:26.628Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 204f070a…
+  - at: 2026-09-15T09:10:52.682Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 2690ca24…
+  - at: 2026-09-15T09:11:23.357Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest fc040c3c…
+  - at: 2026-09-15T09:11:24.919Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest f26cd42e…
+  - at: 2026-09-15T09:12:15.132Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 5a400ee9…
+  - at: 2026-09-15T09:19:19.127Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest f8b9c827…
+  - at: 2026-09-15T09:27:32.348Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 561b5df4…
+  - at: 2026-09-15T09:27:33.893Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 76d9baef…
+  - at: 2026-09-15T09:28:06.236Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 02d2c81c…
+  - at: 2026-09-15T09:28:07.781Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 88d9aae2…
+  - at: 2026-09-15T09:30:00.395Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest a056da18…
+  - at: 2026-09-15T09:30:01.925Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 7ac73451…
+  - at: 2026-09-15T09:30:03.469Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest db1d4e7b…
+  - at: 2026-09-15T09:30:17.374Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 1ef94e6b…
+  - at: 2026-09-15T09:31:17.379Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 82b22e68…
+  - at: 2026-09-15T09:31:40.408Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest f2b7d835…
+  - at: 2026-09-15T09:31:46.555Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 79203f96…
+  - at: 2026-09-15T09:31:48.100Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest f826ab29…
+  - at: 2026-09-15T09:31:54.239Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 73e5c86a…
+  - at: 2026-09-15T09:32:01.922Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest a1b30ccf…
+  - at: 2026-09-15T09:32:03.474Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 9bb7a9d3…
+  - at: 2026-09-15T09:34:23.883Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest ac9ad8c1…
+  - at: 2026-09-15T09:34:26.983Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 765f1d7a…
+  - at: 2026-09-15T09:34:28.557Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 2db628f8…
+  - at: 2026-09-15T09:34:47.059Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 53dd77d3…
+  - at: 2026-09-15T09:34:57.841Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 9ed56a0e…
+  - at: 2026-09-15T09:35:16.429Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 28b14271…
+  - at: 2026-09-15T09:35:24.336Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 760178d2…
+  - at: 2026-09-15T09:35:25.892Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 680a2f2d…
+  - at: 2026-09-15T09:35:36.687Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 21ed7cf3…
+  - at: 2026-09-15T09:35:42.852Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 4eeaca4f…
+  - at: 2026-09-15T09:35:44.412Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 68ee0c52…
+  - at: 2026-09-15T09:35:49.043Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 0d01670c…
+  - at: 2026-09-15T09:36:02.868Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 3e5abe0b…
+  - at: 2026-09-15T09:36:30.570Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 2cdf14d8…
+  - at: 2026-09-15T09:36:47.533Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest c3e94382…
+  - at: 2026-09-15T09:38:32.588Z
+    kind: rebuild
+    message: Aggregated 11 subtask source(s); digest 6d923302…
+extra:
+  aggregator_digest: 6d923302c4ff218ac8d3d9ec05f45de0e35e9a95bc048d28dda56f52444719f7

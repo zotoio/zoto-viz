@@ -1,0 +1,80 @@
+schema_version: 1
+subtask_id: "02"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: Create `plugins/` directory at the repo root, initially containing a
+    done: true
+    evidence_path: plugins/.gitkeep
+  - id: D02
+    text: "Update `.gitignore`:"
+    done: true
+    evidence_path: .gitignore
+  - id: D03
+    text: "Extend `service/paths.py` with:"
+    done: true
+    evidence_path: service/paths.py
+  - id: D04
+    text: Wire `ZOTO_VIZ_REPO_ROOT` into the systemd override that
+    done: true
+    evidence_path: service/sysconfig.py
+  - id: D05
+    text: Document the detection order + systemd wiring in `docs/install.md`
+    done: true
+    evidence_path: service/paths.py
+  - id: D06
+    text: Remove/guard existing `mkdir(parents=True, exist_ok=True)` calls
+    done: true
+    evidence_path: service/paths.py
+  - id: D07
+    text: Keep `~/.zoto-viz/plugin-consent.yml` handling exactly as-is — it is
+    done: true
+    evidence_path: service/plugins.py
+  - id: D08
+    text: Add `tests/test_paths.py::test_plugin_dirs_resolve` (or extend the
+    done: true
+    evidence_path: tests/test_paths.py
+artifacts:
+  - path: plugins/.gitkeep
+    kind: created
+    note: repo-root
+  - path: plugins/src/.gitkeep
+    kind: created
+    note: editable
+  - path: .gitignore
+    kind: modified
+    note: ignore
+  - path: service/paths.py
+    kind: modified
+    note: repo_root
+  - path: service/sysconfig.py
+    kind: modified
+    note: Environment=ZOTO_VIZ_REPO_ROOT
+  - path: service/plugins.py
+    kind: modified
+    note: seed
+  - path: tests/test_paths.py
+    kind: modified
+    note: plugin-dirs-repo-root-RuntimeError-systemd
+  - path: tests/test_sysconfig.py
+    kind: modified
+    note: assert-ZOTO_VIZ_REPO_ROOT
+  - path: specs/20260915-unified-plugin-zips/subtask-02-unified-plugin-zips-paths-and-gitignore-20260915.md
+    kind: modified
+    note: checkboxes-and-execution-notes
+errors: []
+notes: Repo-root plugins/ catalog paths, gitignore for .runtime/, systemd ZOTO_VIZ_REPO_ROOT, no startup mkdir of legacy home plugin dirs. Consent unchanged. tests/test_paths.py 10 passed.
+git_sha: f1e50b65f1f18ad0787bea3c763179138777ebc1
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-15T07:14:02.000Z
+    notes: "Independently confirmed D01–D08 and all DoD items against disk. plugins/.gitkeep and plugins/src/.gitkeep exist; .gitignore has plugins/.runtime/ only (git check-ignore: zips and plugins/src/** not ignored). repo_root() / plugin_{zips,src,runtime}_dir() match the spec (env, walk-up, RuntimeError). write_systemd_override writes resolved Environment=ZOTO_VIZ_REPO_ROOT. TODO left in paths.py for docs/install.md (subtask 10). plugins_dir/agent_plugins_dir no longer mkdir; plugins.seed() is a no-op if dest missing; monitor.seed() and mcp import paths do not create ~/.zoto-viz/plugins or agent-plugins. Consent functions unchanged in git diff. Targeted pytest: tests/test_paths.py tests/test_sysconfig.py — 26 passed."
+    fix_list: []
+last_heartbeat: 2026-09-15T07:14:17.047Z
+started_at: 2026-09-15T06:58:16.112Z
+completed_at: 2026-09-15T07:02:43.436Z

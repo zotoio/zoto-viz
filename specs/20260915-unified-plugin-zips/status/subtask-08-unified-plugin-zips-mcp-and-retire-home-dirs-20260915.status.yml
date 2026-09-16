@@ -1,0 +1,122 @@
+schema_version: 1
+subtask_id: "08"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: "Update `service/mcp.py`:"
+    done: true
+    evidence_path: service/mcp.py
+  - id: D02
+    text: Delete the mirroring logic that copies from
+    done: true
+    evidence_path: service/mcp.py
+  - id: D03
+    text: Stop seeding `~/.zoto-viz/plugins/` from `examples/plugins/`. The
+    done: true
+    evidence_path: service/plugin_migration.py
+  - id: D04
+    text: Confirm subtask 03 fully retired `zoto-viz.py plugin install` (and
+    done: true
+    evidence_path: tests/test_mcp.py
+  - id: D05
+    text: "**First-startup migration** (owns the plan in the spec index's"
+    done: true
+    evidence_path: service/plugin_migration.py
+  - id: D06
+    text: "**Rollback flag `ZOTO_VIZ_LEGACY_PLUGINS`**: when set to `1`,"
+    done: true
+    evidence_path: service/mcp.py
+  - id: D07
+    text: Update the agent-facing "draft a plugin" flow. Today
+    done: true
+    evidence_path: service/agent.py
+  - id: D08
+    text: "Tests:"
+    done: true
+    evidence_path: tests/test_mcp.py
+  - id: F01
+    text: Update agent.py SYSTEM draft prompt to unified plugin.yml files tree
+    done: true
+    evidence_path: service/agent.py
+  - id: F02
+    text: Fail closed when git is missing or git status fails in dirty_tree_paths
+    done: true
+    evidence_path: service/plugin_migration.py
+artifacts:
+  - path: service/mcp.py
+    kind: modified
+    note: install_plugin_zip writes plugins/<id>.zip with loopback dirty-tree overwrite consent guards; no git add
+  - path: service/plugin_migration.py
+    kind: created
+    note: home-plugin migration, dirty-tree check, legacy seed from plugins/src
+  - path: service/agent.py
+    kind: modified
+    note: api_draft_plugin accepts {files,install} and writes plugins/src/<id>/
+  - path: service/monitor.py
+    kind: modified
+    note: migrate on startup; agent-plugins route behind ZOTO_VIZ_LEGACY_PLUGINS
+  - path: service/agent_plugins.py
+    kind: modified
+    note: top-of-file comment; kept behind legacy flag; mirror only when flag is on
+  - path: web/src/ui/agent.ts
+    kind: modified
+    note: draft POST sends files.plugin.yml
+  - path: tests/test_mcp.py
+    kind: created
+    note: catalog write, overwrite, consent-required, dirty-tree, loopback
+  - path: tests/test_plugin_migration.py
+    kind: created
+    note: copy, skip-if-present, no auto-commit, legacy seed from src
+  - path: tests/test_agent.py
+    kind: modified
+    note: draft-plugin new I/O writes plugins/src/<id>/
+  - path: tests/test_agent_plugins.py
+    kind: modified
+    note: legacy MCP tools + cli_zip_deprecated
+  - path: service/agent.py
+    kind: modified
+    note: SYSTEM drafts plugin.yml plus optional visualisation.yml frontend backend datasource sky
+  - path: tests/test_agent.py
+    kind: modified
+    note: assert SYSTEM uses unified files-tree wording
+  - path: service/plugin_migration.py
+    kind: modified
+    note: dirty_tree_paths fails closed on git missing or git status failure
+  - path: tests/test_plugin_migration.py
+    kind: modified
+    note: targeted tests for git unavailable fail-closed
+  - path: tests/test_mcp.py
+    kind: modified
+    note: MCP refuses write when git unavailable unless force
+errors: []
+notes: |-
+  Fix-round (quality-audit fix_list): SYSTEM now drafts a unified files tree
+  (plugin.yml + optional visualisation.yml / frontend / backend / datasource /
+  sky) instead of the retired view-plugin schema / runtime: typescript.
+  dirty_tree_paths() fails closed on OSError (git missing) and git status
+  nonzero — returns git:unavailable so install_plugin_zip refuses unless force.
+  token_budget 200000.
+  Tests: .venv/bin/python3 -m pytest tests/test_agent.py
+  tests/test_plugin_migration.py tests/test_mcp.py -q -o addopts= (42 passed).
+
+  Original landing: install_plugin_zip writes plugins/<id>.zip + unpacks
+  plugins/.runtime/<id>/ (loopback Host, dirty-tree unless force, overwrite
+  only when sha256 differs, never git add/commit). Consent-required uses
+  plugins.consented_for hashes {frontend,backend,collector,shader} after unpack.
+  Default catalog is plugins/*.zip; plugins.seed() stays a no-op. First-startup
+  migration copies unknown home plugins into plugins/src/<id>/. ZOTO_VIZ_LEGACY_PLUGINS=1
+  re-registers legacy MCP tools. api_draft_plugin accepts {files, install}.
+  plugin install leftover docs are subtask 10.
+extra:
+  judge:
+    verdict: verified
+    at: 2026-09-15T09:35:41.000Z
+    notes: "Fresh Mode 1 re-verify after quality-audit fix-list. F01 closed: service/agent.py SYSTEM drafts a files tree (required plugin.yml; optional visualisation.yml, frontend/, backend/, datasource/, sky/) and contains neither view-plugin schema nor runtime: typescript (tests/test_agent.py::test_system_drafts_unified_plugin_tree). F02 closed: dirty_tree_paths returns git:unavailable on OSError (git missing) and git status nonzero; MCP install_plugin_zip emits dirty_tree and does not write unless force:true (tests/test_plugin_migration.py + tests/test_mcp.py). D01–D08 and original DoD reconfirmed: install_catalog_zip writes plugin_zips_dir()/<id>.zip, unpacks plugin_runtime_dir()/<id>/, overwrite only when sha256 differs, loopback Host 403, never git add/commit, consent-required via plugins.consented_for after unpack, plugins.seed() no-op, migrate_home_plugins copies unknown home plugins into plugins/src/<id>/ with pack hint and no auto-pack/ commit/delete, api_draft_plugin accepts {files,install}. ZOTO_VIZ_LEGACY_PLUGINS / agent_plugins.py are absent on disk because later spec work (subtask 10) retired the rollback path — not a gap in this fix round; default catalog-only still holds. plugin install gone from service/mcp.py and MCP descriptions. Targeted pytest 42 passed; no linter errors. token_budget 200000."
+    fix_list: []
+last_heartbeat: 2026-09-15T09:36:02.051Z
+started_at: 2026-09-15T08:29:40.509Z
+completed_at: 2026-09-15T09:36:02.051Z

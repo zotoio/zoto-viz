@@ -1,0 +1,363 @@
+schema_version: 1
+spec_id: 20260916-src-master-plugin-catalog
+phase: 0
+aggregate_state: completed
+started_at: 2026-09-16T00:40:20.106Z
+updated_at: 2026-09-16T04:14:36.998Z
+aggregate_progress:
+  total: 5
+  completed: 5
+  in_progress: 0
+  blocked: 0
+  failed: 0
+subtasks:
+  - subtask_id: "01"
+    state: completed
+    status_path: specs/20260916-src-master-plugin-catalog/status/subtask-01-src-master-plugin-catalog-catalog-merge-20260916.status.yml
+    last_heartbeat: 2026-09-16T03:33:39.754Z
+  - subtask_id: "02"
+    state: completed
+    status_path: specs/20260916-src-master-plugin-catalog/status/subtask-02-src-master-plugin-catalog-test-fixtures-20260916.status.yml
+    last_heartbeat: 2026-09-16T03:44:55.551Z
+  - subtask_id: "03"
+    state: completed
+    status_path: specs/20260916-src-master-plugin-catalog/status/subtask-03-src-master-plugin-catalog-cli-mcp-pack-20260916.status.yml
+    last_heartbeat: 2026-09-16T03:45:48.423Z
+  - subtask_id: "04"
+    state: completed
+    status_path: specs/20260916-src-master-plugin-catalog/status/subtask-04-src-master-plugin-catalog-sample-fixture-20260916.status.yml
+    last_heartbeat: 2026-09-16T03:45:54.092Z
+  - subtask_id: "05"
+    state: completed
+    status_path: specs/20260916-src-master-plugin-catalog/status/subtask-05-src-master-plugin-catalog-docs-20260916.status.yml
+    last_heartbeat: 2026-09-16T03:56:57.371Z
+blockers: []
+definition_of_done_status:
+  - id: DOD01
+    text: Default `plugins.scan()` lists every `plugins/src/<id>/` view without
+    done: true
+  - id: DOD02
+    text: A colliding `plugins/<id>.zip` is an error and is not loaded.
+    done: true
+  - id: DOD03
+    text: "`plugins/*.zip` and `dist/` are gitignored; `examples/plugins/sample.zip`"
+    done: true
+  - id: DOD04
+    text: "`plugin add` / MCP cannot replace a src id (even with force)."
+    done: true
+  - id: DOD05
+    text: "`plugin pack` writes `dist/<id>.zip` by default (or `-o`), not the live"
+    done: true
+  - id: DOD06
+    text: Sample fixture contains visualisation, frontend, backend, datasource,
+    done: true
+  - id: DOD07
+    text: Docs no longer tell contributors to `git add plugins/<id>.zip`.
+    done: true
+  - id: DOD08
+    text: npm is not mentioned as a plugin install path.
+    done: true
+  - id: DOD09
+    text: Targeted tests for 01–04 pass; 05 leaves pytest + vitest green.
+    done: true
+  - id: DOD10
+    text: No linter errors in modified files.
+    done: true
+config_reloaded: []
+events:
+  - at: 2026-09-16T00:40:20.106Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 7f2cfb2f…
+  - at: 2026-09-16T00:40:21.745Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 87e42791…
+  - at: 2026-09-16T00:41:19.745Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 515ebe28…
+  - at: 2026-09-16T00:41:38.089Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 61c872b3…
+  - at: 2026-09-16T00:41:39.642Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 56516b4c…
+  - at: 2026-09-16T00:47:47.156Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest a1b31ff1…
+  - at: 2026-09-16T00:47:48.692Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 51cd7cc1…
+  - at: 2026-09-16T00:47:50.269Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest e69bd3a4…
+  - at: 2026-09-16T00:47:51.798Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 6d41026d…
+  - at: 2026-09-16T00:47:53.338Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 6775805e…
+  - at: 2026-09-16T00:47:54.889Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest e83cc481…
+  - at: 2026-09-16T00:48:10.025Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest fa8ed426…
+  - at: 2026-09-16T00:48:17.601Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 3af1a3e8…
+  - at: 2026-09-16T00:48:19.112Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 6ebb34d2…
+  - at: 2026-09-16T00:48:55.450Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 0271fd06…
+  - at: 2026-09-16T00:49:43.840Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest f7b24084…
+  - at: 2026-09-16T00:55:04.606Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 6ef6016e…
+  - at: 2026-09-16T00:55:06.120Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 2e8b6a46…
+  - at: 2026-09-16T00:55:15.219Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 15c7b301…
+  - at: 2026-09-16T00:55:16.730Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 0109418e…
+  - at: 2026-09-16T00:55:27.337Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest fa4dabf5…
+  - at: 2026-09-16T00:55:54.597Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest edaf4bdf…
+  - at: 2026-09-16T03:24:27.727Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 8bd1e155…
+  - at: 2026-09-16T03:25:01.114Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest e4e2a013…
+  - at: 2026-09-16T03:25:02.649Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 9324f4bb…
+  - at: 2026-09-16T03:27:08.320Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 02726831…
+  - at: 2026-09-16T03:27:31.013Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest c266497e…
+  - at: 2026-09-16T03:27:40.117Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest ad74e5b9…
+  - at: 2026-09-16T03:27:41.627Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 080730c4…
+  - at: 2026-09-16T03:27:56.782Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 2b64de47…
+  - at: 2026-09-16T03:28:42.673Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 5a4b5a52…
+  - at: 2026-09-16T03:33:12.164Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 09b33314…
+  - at: 2026-09-16T03:33:30.350Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 5637a3d1…
+  - at: 2026-09-16T03:33:40.950Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 2f9d81a0…
+  - at: 2026-09-16T03:34:00.734Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 2177330a…
+  - at: 2026-09-16T03:34:35.559Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 992fa2bf…
+  - at: 2026-09-16T03:34:37.073Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest cf66fc16…
+  - at: 2026-09-16T03:34:44.670Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest d6fccbaa…
+  - at: 2026-09-16T03:34:46.196Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 0fa5687f…
+  - at: 2026-09-16T03:35:02.918Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 9fc2111d…
+  - at: 2026-09-16T03:35:04.443Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest fd0e9e88…
+  - at: 2026-09-16T03:36:46.069Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest dbbd4ff9…
+  - at: 2026-09-16T03:38:03.389Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest a50d1925…
+  - at: 2026-09-16T03:38:04.918Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 215e56bf…
+  - at: 2026-09-16T03:38:48.892Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest ea084381…
+  - at: 2026-09-16T03:38:53.444Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 30d4770d…
+  - at: 2026-09-16T03:38:58.054Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest ca6c1dd7…
+  - at: 2026-09-16T03:38:59.572Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest dbb0e920…
+  - at: 2026-09-16T03:39:17.777Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 193372f5…
+  - at: 2026-09-16T03:40:24.522Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 3e84023b…
+  - at: 2026-09-16T03:40:26.041Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest bbf2063f…
+  - at: 2026-09-16T03:40:27.584Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 337ce593…
+  - at: 2026-09-16T03:40:29.106Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest eba45375…
+  - at: 2026-09-16T03:40:45.797Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest ef697457…
+  - at: 2026-09-16T03:40:56.418Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest dda7a457…
+  - at: 2026-09-16T03:41:02.479Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 4e90593c…
+  - at: 2026-09-16T03:41:03.996Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 07e6831e…
+  - at: 2026-09-16T03:41:26.812Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest c9b00cc5…
+  - at: 2026-09-16T03:42:57.891Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest b977fddd…
+  - at: 2026-09-16T03:43:22.232Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest ae130015…
+  - at: 2026-09-16T03:43:49.606Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest b69169d4…
+  - at: 2026-09-16T03:44:32.148Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 9d43cc60…
+  - at: 2026-09-16T03:44:47.307Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 34f83a0f…
+  - at: 2026-09-16T03:44:53.381Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest e99071b8…
+  - at: 2026-09-16T03:44:56.433Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 82508054…
+  - at: 2026-09-16T03:45:07.091Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 6717464e…
+  - at: 2026-09-16T03:45:08.612Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest e6e6669c…
+  - at: 2026-09-16T03:45:16.240Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest b1b9124e…
+  - at: 2026-09-16T03:45:34.507Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest eba505e3…
+  - at: 2026-09-16T03:45:36.028Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 12556f2c…
+  - at: 2026-09-16T03:45:39.064Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest fa514cff…
+  - at: 2026-09-16T03:45:40.590Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 6e2c9dda…
+  - at: 2026-09-16T03:45:49.720Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 17783d30…
+  - at: 2026-09-16T03:45:54.301Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 3cc4797c…
+  - at: 2026-09-16T03:46:21.620Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 82225e53…
+  - at: 2026-09-16T03:46:45.956Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 9ba41c92…
+  - at: 2026-09-16T03:46:47.482Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 82f2e1e6…
+  - at: 2026-09-16T03:49:39.285Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 4d7d200a…
+  - at: 2026-09-16T03:49:40.811Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 06b69922…
+  - at: 2026-09-16T03:49:42.328Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 41dc6a88…
+  - at: 2026-09-16T03:49:43.861Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest d54f4c9c…
+  - at: 2026-09-16T03:49:45.387Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest be06f6ab…
+  - at: 2026-09-16T03:49:46.937Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest e5103728…
+  - at: 2026-09-16T03:50:43.833Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest ed6baf85…
+  - at: 2026-09-16T03:50:48.416Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 10efaeff…
+  - at: 2026-09-16T03:50:56.005Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 76df799e…
+  - at: 2026-09-16T03:50:57.534Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 74ed643d…
+  - at: 2026-09-16T03:51:11.227Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest be2e69d7…
+  - at: 2026-09-16T03:53:17.624Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 58592ae5…
+  - at: 2026-09-16T03:54:49.253Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest e81ea62b…
+  - at: 2026-09-16T03:55:18.139Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 039ee8ce…
+  - at: 2026-09-16T03:55:37.918Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest d04a1fa2…
+  - at: 2026-09-16T03:56:49.483Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 4eb8dfbe…
+  - at: 2026-09-16T03:56:58.600Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 06c6fc41…
+  - at: 2026-09-16T03:57:32.108Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 2b01d342…
+  - at: 2026-09-16T03:57:51.960Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 0758b12d…
+  - at: 2026-09-16T04:03:14.876Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 8d84eab5…
+  - at: 2026-09-16T04:14:36.998Z
+    kind: rebuild
+    message: Aggregated 5 subtask source(s); digest 73922507…
+extra:
+  aggregator_digest: 73922507e500166b38754c9c02d0dc424ce10ceb119f6d6829dd35e35425e400

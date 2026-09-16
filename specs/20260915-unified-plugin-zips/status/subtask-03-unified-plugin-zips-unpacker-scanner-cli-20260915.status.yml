@@ -1,0 +1,75 @@
+schema_version: 1
+subtask_id: "03"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: "New module `service/plugin_zip.py` (or equivalent name) housing:"
+    done: true
+    evidence_path: service/plugin_zip.py
+  - id: D02
+    text: "Extend or refactor `service/plugins.py` to:"
+    done: true
+    evidence_path: service/plugins.py
+  - id: D03
+    text: Refresh `zoto-viz.py plugin` subcommands (`service/mcp.py` or the
+    done: true
+    evidence_path: service/plugins.py
+  - id: D04
+    text: Retire `zoto-viz.py plugin install` **fully** — do **not** alias it
+    done: true
+    evidence_path: zoto-viz.py
+  - id: D05
+    text: Rename `zoto-viz.py plugin zip <zipfile>` to
+    done: true
+    evidence_path: service/plugins.py
+  - id: D06
+    text: "Add tests:"
+    done: true
+    evidence_path: tests/test_plugin_zip.py
+artifacts:
+  - path: service/plugin_zip.py
+    kind: created
+    note: Zip safety inspect unpack pack sha256
+  - path: service/plugins.py
+    kind: modified
+    note: Zip scanner catalog and plugin CLI
+  - path: service/sysconfig.py
+    kind: modified
+    note: Top-level install writes systemd override
+  - path: zoto-viz.py
+    kind: modified
+    note: plugin add plus top-level install
+  - path: tests/test_plugin_zip.py
+    kind: created
+    note: Zip safety unpack pack tests
+  - path: tests/test_plugin_cli.py
+    kind: created
+    note: validate list pack add install tests
+  - path: tests/test_plugins.py
+    kind: modified
+    note: Zip catalog scanner coverage
+  - path: specs/20260915-unified-plugin-zips/subtask-03-unified-plugin-zips-unpacker-scanner-cli-20260915.md
+    kind: modified
+    note: Ticked Deliverables DoD and Execution Notes
+errors: []
+notes: |
+  Unpacker + scanner + CLI landed. plugin install retired (systemd under
+  zoto-viz.py install). plugin zip is a deprecation alias for plugin add.
+  Targeted pytest 33 passed. token_budget 200000. TODO(subtask-10)
+  docs/contributing.md zlib pack determinism.
+extra:
+  pytest: 33 passed (test_plugin_zip.py, test_plugin_cli.py, test_plugins.py, addopts overridden)
+  max_uncompressed_bytes: 4194304
+  subtask_10_followup: document zlib/cross-machine pack determinism in docs/contributing.md; refresh install docs still mentioning plugin install
+  judge:
+    verdict: verified
+    at: 2026-09-15T07:33:36.000Z
+    notes: Independently confirmed D01–D06 and all eight DoD gates against disk. plugin_zip.py matches schema zipContract (1_500_000 / 4_194_304 / 80, .glsl); inspect/unpack/sha256 and idempotent unpack are present. Scanner scans plugin_zips_dir()/*.zip, unpacks into plugin_runtime_dir()/<id>/, catalogs from unpacked trees, and surfaces errors on /api/plugins. CLI validate/list/pack/add wired; plugin install fully removed (argparse invalid choice); systemd override moved to top-level zoto-viz.py install; plugin zip prints deprecation then delegates to add. Tests cover safety rejections, unpack refresh, validate zip+src, pack byte-identity, add refuse-overwrite/--force, and zip catalog scanner. Targeted pytest 33 passed. Authored Python ruff-clean; two pre-existing E741 hits in zoto-viz.py:161/276 predate this subtask (2026-09-10) and are unrelated. YAML/src fallback remains for example trees when no zips exist; default scan is zip-only.
+    fix_list: []
+last_heartbeat: 2026-09-15T07:34:03.023Z
+started_at: 2026-09-15T07:15:49.017Z
+completed_at: 2026-09-15T07:30:45.314Z

@@ -1,0 +1,82 @@
+schema_version: 1
+subtask_id: "05"
+feature: Unified Plugin Zips
+assigned_agent: generalPurpose
+model: composer-2.5-fast
+token_budget: 200000
+state: completed
+checklist:
+  - id: D01
+    text: Update the plugin frontend host in `web/src/plugins/plugin.ts`
+    done: true
+    evidence_path: web/src/plugins/plugin.ts
+  - id: D02
+    text: Update the backend HTTP handler that serves plugin modules to point
+    done: true
+    evidence_path: service/plugins.py
+  - id: D03
+    text: Add `MIME` + `Cache-Control` headers consistent with the existing
+    done: true
+    evidence_path: service/plugins.py
+  - id: D04
+    text: "Extend the `/plugins` payload to include:"
+    done: true
+    evidence_path: service/plugins.py
+  - id: D05
+    text: Update `web/src/plugins/plugin.test.ts` **and**
+    done: true
+    evidence_path: web/src/plugins/plugin.test.ts
+  - id: D06
+    text: Add or extend a backend test (`tests/test_plugin_frontend.py` if new
+    done: true
+    evidence_path: tests/test_plugin_frontend.py
+artifacts:
+  - path: web/src/plugins/plugin.ts
+    kind: modified
+    note: load /plugins/<id>/module.js via attachPluginFrontend
+  - path: web/src/plugins/host.ts
+    kind: modified
+    note: PluginSandbox.loadModule fetch + iframe sandbox unchanged
+  - path: service/plugins.py
+    kind: modified
+    note: compile plugins/.runtime/<id>/frontend/ with sha256+mtime cache
+  - path: web/src/plugins/plugin-visualisation.ts
+    kind: modified
+    note: toPluginView copies optional-part booleans
+  - path: web/src/plugins/plugin.test.ts
+    kind: modified
+    note: payload shape + attachPluginFrontend fetch mock
+  - path: web/src/plugins/host.test.ts
+    kind: modified
+    note: loadModule iframe-load path
+  - path: tests/test_plugin_frontend.py
+    kind: created
+    note: compile + cache + yaml-only payload
+  - path: web/src/app/main.ts
+    kind: modified
+    note: loadTsPlugin uses pluginHasFrontend + attachPluginFrontend
+  - path: web/src/plugins/plugin-ui.ts
+    kind: modified
+    note: source-review copy treats has_frontend like typescript
+errors: []
+notes: |-
+  Compiled plugins/.runtime/<id>/frontend/ (or legacy runtime:typescript entry)
+  with esbuild; GET /api/plugins/<id>/module.js cache-keyed on zip sha256 +
+  entry mtime. Payload adds has_frontend, frontend.entry, capabilities,
+  has_sky, has_sky_shader, has_backend, has_datasource. Sandbox iframe +
+  capability allowlist unchanged. Sky shader serving left to subtask 07.
+  Tests: vitest plugin.test.ts + host.test.ts (12 passed); pytest
+  test_plugin_frontend.py + test_plugins.py (16 passed).
+extra:
+  tests:
+    vitest: 18 passed (plugin.test.ts, host.test.ts)
+    pytest: 3 passed (test_plugin_frontend.py)
+  token_budget: 200000
+  judge:
+    verdict: verified
+    at: 2026-09-15T07:57:59.000Z
+    notes: Independently confirmed compile from plugins/.runtime/<id>/frontend/ via esbuild (sha256+mtime cache), GET /api/plugins/<id>/module.js (existing /api prefix) with text/javascript + Cache-Control no-store/immutable, iframe sandbox still allow-scripts only, capability allowlist unchanged (ALLOWED_CAPS / hostAllows / SDK), catalog booleans has_frontend, frontend.entry, capabilities, has_sky, has_sky_shader, has_backend, has_datasource. Sky shader advertised only — no fragment.glsl serve route. Re-ran vitest plugin.test.ts+host.test.ts (18 passed) and pytest tests/test_plugin_frontend.py (3 passed).
+    fix_list: []
+last_heartbeat: 2026-09-15T07:58:00.850Z
+started_at: 2026-09-15T07:39:09.925Z
+completed_at: 2026-09-15T07:46:44.776Z
