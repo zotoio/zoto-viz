@@ -39,6 +39,7 @@ import {
   type PluginView,
 } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
+import { VizBufferWriter, buildVizFrame, defaultVizContract, vizContractFor } from "../plugins/viz-host";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { bindFps } from "../core/fps";
@@ -225,9 +226,22 @@ let currentOpts: Record<string, string> = {};
 let pluginSpecs: PluginView[] = [];
 let settings!: Settings;
 const sandbox = new PluginSandbox();
+let vizWriter: VizBufferWriter | null = null;
+let vizFrameTs = 0;
+function bindVizWriter(spec: PluginView | null): void {
+  const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
+    ? defaultVizContract() : undefined);
+  vizWriter = contract ? new VizBufferWriter(contract) : null;
+  vizFrameTs = 0;
+}
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
   setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
+  writeBuffer: (slot, data) => { vizWriter?.writeBuffer(slot, data); },
+  writeUniform: (name, value) => {
+    if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
+  },
+  writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };
@@ -332,24 +346,28 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
+    bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
     return;
   }
   if (!tsPluginsAllowed()) {
     sandbox.unload();
+    bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
     sandbox.unload();
+    bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
     return;
   }
   try {
     await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    bindVizWriter(spec);
     tsWatchId = spec.id;
     tsWatchHash = spec.hash;
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
@@ -556,6 +574,13 @@ function feed(m: StateMsg): void {
     rate: d.packets,
     role: d.role,
   })));
+  const active = pluginSpecs.find((p) => p.id === tsWatchId);
+  if (active?.capabilities?.includes("viz.read")) {
+    const audio = scene.pulseNow.bass;
+    const frame = buildVizFrame(shown, vizFrameTs, audio);
+    vizFrameTs = frame.t;
+    sandbox.frame(frame);
+  }
 }
 
 // ---------------------------------------------------------------- redaction (screenshots / sharing)

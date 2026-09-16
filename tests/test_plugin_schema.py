@@ -230,3 +230,38 @@ def test_catalog_plugin_yml_validates() -> None:
     plugins.validate_doc(doom)
     lan = plugins.load_file(ROOT / "plugins" / "src" / "lan-pulse" / "plugin.yml")
     plugins.validate_doc(lan)
+
+
+def test_viz_contract_in_schema() -> None:
+    text = SCHEMA_PATH.read_text(encoding="utf-8")
+    assert "vizContract" in text
+    assert "viz.read" in text
+    assert "viz.write" in text
+    assert "graphWalk" in text
+    viz = _schema()["$defs"]["vizContract"]
+    assert viz["properties"]["graphWalk"]["const"] is False
+
+
+def test_viz_plugin_yml_validates() -> None:
+    for pid in ("packet-tunnel", "rf-constellation", "talker-storm"):
+        doc = plugins.load_file(ROOT / "plugins" / "src" / pid / "plugin.yml")
+        assert doc["viz"]["graphWalk"] is False
+        assert "viz.read" in doc["capabilities"]
+
+
+def test_viz_block_required_with_viz_caps() -> None:
+    with pytest.raises(ValueError, match="viz block is required"):
+        plugins.validate_doc({
+            "id": "bad-viz",
+            "name": "Bad",
+            "version": 1,
+            "capabilities": ["viz.read"],
+        })
+    with pytest.raises(ValueError, match="graphWalk"):
+        plugins.validate_doc({
+            "id": "bad-walk",
+            "name": "Bad",
+            "version": 1,
+            "capabilities": ["viz.write"],
+            "viz": {"graphWalk": True},
+        })

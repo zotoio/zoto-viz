@@ -1495,6 +1495,10 @@ export class NetScene implements HostedView {
     return this.backdrop.setPluginShader(opts);
   }
 
+  setPluginUniform(name: string, value: number | [number, number, number]): boolean {
+    return this.backdrop.setPluginUniform(name, value);
+  }
+
   /** Photos, SVG, and a custom sky the local agent saved on the model-named profile. */
   setAgentLook(look: AgentLook): void {
     this.agentLook = look;

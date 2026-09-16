@@ -606,6 +606,21 @@ export class Backdrop {
     return this.pluginMat && this.mesh.material === this.pluginMat ? this.pluginId : null;
   }
 
+  /** Write one whitelisted sky uniform on the active plugin shader material. */
+  setPluginUniform(name: string, value: number | [number, number, number]): boolean {
+    if (!this.pluginMat || this.mesh.material !== this.pluginMat) return false;
+    const u = this.pluginMat.uniforms[name];
+    if (!u) return false;
+    if (name === "uAccent" || name === "uBg") {
+      if (!Array.isArray(value) || value.length !== 3) return false;
+      (u.value as THREE.Color).setRGB(value[0], value[1], value[2]);
+      return true;
+    }
+    if (typeof value !== "number" || !Number.isFinite(value)) return false;
+    u.value = value;
+    return true;
+  }
+
   private dropPluginMat(clear = true): void {
     if (this.mesh.material === this.pluginMat) this.mesh.material = this.mat;
     if (this.pluginMat) {

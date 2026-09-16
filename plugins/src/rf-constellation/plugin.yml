@@ -1,0 +1,20 @@
+id: rf-constellation
+name: RF Constellation
+version: 1
+hint: Wi-Fi SSID constellation bloom. RF beacons from the watch list drive accent colour and audio pulse.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 32
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+    - uOpacity
+frontend:
+  entry: frontend/index.ts

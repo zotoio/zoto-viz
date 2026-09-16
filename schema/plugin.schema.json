@@ -63,9 +63,13 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "enum": ["graph.read", "graph.style", "ui.overlay", "config.read"]
+        "enum": ["graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write"]
       },
-      "description": "Frontend host API allowlist. camera, mic, parent DOM, and network are never granted."
+      "description": "Frontend host API allowlist. camera, mic, parent DOM, and network are never granted. viz.read receives host-decimated data frames; viz.write fills reserved buffer/uniform slots (see $defs/vizContract)."
+    },
+    "viz": {
+      "$ref": "#/$defs/vizContract",
+      "description": "VizPlugin contract: caps, buffer slots, particle limit, no full-graph walk. Required when viz.read or viz.write is declared."
     },
     "overlay": {
       "description": "When true or a mode/plugin id, this plugin overlays look onto that catalog row instead of adding a second view.",
@@ -261,6 +265,51 @@
           "items": { "$ref": "#/$defs/streamRef" }
         },
         "bindings": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "vizContract": {
+      "title": "VizPlugin host contract",
+      "description": "Host owns ingest and the 16.7 ms frame budget. Plugins consume pre-decimated VizDataFrames and write only to reserved buffer/uniform slots declared here. graphWalk must be false — plugins never traverse the full device graph per frame.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["graphWalk"],
+      "properties": {
+        "maxBuffers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 4,
+          "description": "Reserved Float32 buffer slots the plugin may write per frame."
+        },
+        "maxBufferFloats": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 256,
+          "default": 64,
+          "description": "Maximum floats per buffer slot write."
+        },
+        "maxParticles": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8192,
+          "default": 0,
+          "description": "Hard cap on particle records per frame (0 disables writeParticles)."
+        },
+        "graphWalk": {
+          "type": "boolean",
+          "const": false,
+          "description": "Must be false. Enforced at validate time and runtime."
+        },
+        "uniforms": {
+          "type": "array",
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"]
+          },
+          "description": "Sky uniforms this plugin may write via viz.write (subset of $defs/shader allowedUniforms)."
+        }
       }
     },
     "shader": {

@@ -28,6 +28,13 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("setNodeColor", ["graph.style"])).toBe(true);
     expect(hostAllows("log", ["graph.style"])).toBe(false);
   });
+
+  it("enforces viz.write on buffer and uniform writes", () => {
+    expect(hostAllows("writeBuffer", ["viz.read"])).toBe(false);
+    expect(hostAllows("writeBuffer", ["viz.write"])).toBe(true);
+    expect(hostAllows("writeUniform", ["viz.write"])).toBe(true);
+    expect(hostAllows("writeParticles", ["viz.write"])).toBe(true);
+  });
 });
 
 describe("PluginSandbox", () => {
