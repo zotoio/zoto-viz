@@ -262,6 +262,7 @@ export class VizFrameBudget {
   private _overBudget = 0;
   private _skipped = 0;
   private _total = 0;
+  private _lastBuilt: VizDataFrame | null = null;
   private readonly now: () => number;
 
   constructor(now: () => number = () => performance.now()) {
@@ -275,6 +276,11 @@ export class VizFrameBudget {
       skipped: this._skipped,
       total: this._total,
     };
+  }
+
+  /** Last frame built by deliver(), including over-budget skips (for CPU HUD metrics). */
+  get lastBuilt(): VizDataFrame | null {
+    return this._lastBuilt;
   }
 
   /** Record a measured duration; returns true when over budget. */
@@ -301,6 +307,7 @@ export class VizFrameBudget {
   ): VizDataFrame | null {
     const t0 = this.now();
     const frame = build(state, prevTs, audio);
+    this._lastBuilt = frame;
     const over = this.record(this.now() - t0);
     if (over) {
       this._skipped++;
@@ -315,6 +322,7 @@ export class VizFrameBudget {
     this._overBudget = 0;
     this._skipped = 0;
     this._total = 0;
+    this._lastBuilt = null;
   }
 }
 

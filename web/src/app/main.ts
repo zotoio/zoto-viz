@@ -50,6 +50,7 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { captureHud, mergeAgentPatch, pickAgentSettings } from "../ui/capture";
+import { VizHud, isVizDemoPack, type VizDemoPackId } from "../ui/viz-hud";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -230,12 +231,32 @@ const sandbox = new PluginSandbox();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
 const vizBudget = new VizFrameBudget();
-function bindVizWriter(spec: PluginView | null): void {
+let preserveVizUbo = false;
+const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
+function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
-  vizWriter = contract ? new VizBufferWriter(contract) : null;
+  if (!contract) {
+    vizWriter = null;
+    vizFrameTs = 0;
+    vizBudget.reset();
+    return;
+  }
+  if (preserveUbo && vizWriter) {
+    const prev = vizWriter.ubo;
+    vizWriter = new VizBufferWriter(contract);
+    vizWriter.ubo.set(prev);
+    scene.setPluginUboBuffer(vizWriter.ubo);
+    return;
+  }
+  vizWriter = new VizBufferWriter(contract);
   vizFrameTs = 0;
   vizBudget.reset();
+}
+function swapVizPack(packId: VizDemoPackId): void {
+  if (modeById(pluginViewId(packId)).id === modeSel.value) return;
+  preserveVizUbo = true;
+  applyMode(pluginViewId(packId));
 }
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
@@ -372,7 +393,9 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   }
   try {
     await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
-    bindVizWriter(spec);
+    const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
+    preserveVizUbo = false;
+    bindVizWriter(spec, preserve);
     tsWatchId = spec.id;
     tsWatchHash = spec.hash;
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
@@ -455,7 +478,10 @@ function applyMode(id: string): void {
   );
   $("modeOpts").replaceChildren();
   void (async () => {
-    if (!(await ensureReviewed(spec))) return;
+    if (!(await ensureReviewed(spec))) {
+      preserveVizUbo = false;
+      return;
+    }
     void loadTsPlugin(spec);
     void syncPluginSky(spec);
   })();
@@ -474,6 +500,7 @@ function applyMode(id: string): void {
     scene.setStageOnly(false);
     renderLegend(m, opts);
     $("hint").textContent = m.hint;
+    vizHud.setActive(spec?.id ?? null, spec?.name ?? m.label);
     applyViewLook();
     return;
   }
@@ -492,6 +519,7 @@ function applyMode(id: string): void {
 
   renderLegend(m, opts);
   $("hint").textContent = m.hint;
+  vizHud.setActive(spec?.id ?? null, spec?.name ?? m.label);
   applyViewLook();
 }
 
@@ -584,6 +612,16 @@ function feed(m: StateMsg): void {
     const audio = scene.pulseNow.bass;
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => sandbox.frame(f));
     if (frame) vizFrameTs = frame.t;
+    vizHud.tick({
+      packId: isVizDemoPack(active.id) ? active.id : null,
+      packName: active.name,
+      stats: vizBudget.stats,
+      frame: vizBudget.lastBuilt,
+      state: shown,
+      now: performance.now(),
+    });
+  } else {
+    vizHud.setActive(null, "");
   }
 }
 

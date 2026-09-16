@@ -128,6 +128,7 @@ describe("VizFrameBudget", () => {
     onTime.deliver(state, 0, 0, (f) => delivered.push(f));
     expect(delivered).toHaveLength(1);
     expect(onTime.stats.overBudget).toBe(0);
+    expect(onTime.lastBuilt?.t).toBe(100);
 
     let n = 0;
     const slow = new VizFrameBudget(() => (++n === 1 ? 0 : VIZ_FRAME_BUDGET_MS + 1));
