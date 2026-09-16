@@ -1,0 +1,4 @@
+id: command
+name: Command
+version: 1
+hint: Unsolicited inbound as missiles. Uncomment look to pin the stage.

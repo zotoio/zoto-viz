@@ -1,0 +1,11 @@
+id: pulse-ts
+name: Pulse TS
+version: 1
+hint: Topology colours from a sandboxed TypeScript tick. Capabilities are graph.read + graph.style only.
+capabilities:
+  - graph.read
+  - graph.style
+frontend:
+  entry: frontend/index.ts
+backend:
+  entry: backend/service.py

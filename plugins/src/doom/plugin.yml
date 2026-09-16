@@ -1,0 +1,4 @@
+id: doom
+name: Doom
+version: 1
+hint: Processes as demons in the cores they last ran on. Shots are visual only — they never kill a PID.

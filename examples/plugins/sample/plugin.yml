@@ -1,0 +1,15 @@
+id: sample
+name: Sample
+version: 1
+hint: Zip-contract fixture with every optional part. Not a shipped view.
+capabilities:
+  - graph.read
+datasource:
+  consumes:
+    - devices
+  produces:
+    - plugin_state
+frontend:
+  entry: frontend/index.ts
+backend:
+  entry: backend/service.py

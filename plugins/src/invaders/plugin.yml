@@ -1,0 +1,4 @@
+id: invaders
+name: Invaders
+version: 1
+hint: Internet formation vs LAN cannons. Uncomment look to pin the stage.

@@ -1,0 +1,4 @@
+id: air-ssid
+name: Air SSIDs
+version: 1
+hint: Access points coloured by SSID, shaped by the watch list (■ ✦ ◆ then ● others). Flows go via the gateway (config default ours). The monitor radio hops through those networks' channels a minute at a time; each keeps its last state until its turn comes round again.

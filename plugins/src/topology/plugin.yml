@@ -1,0 +1,4 @@
+id: topology
+name: Topology
+version: 1
+hint: Device roles around the gateway. Uncomment look to pin theme, sky, floor, or modulation for this view only.

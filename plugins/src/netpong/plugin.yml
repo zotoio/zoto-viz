@@ -1,0 +1,4 @@
+id: netpong
+name: NetPong
+version: 1
+hint: Requests as balls. Uncomment look to pin the stage behind the canvas.

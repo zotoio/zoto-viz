@@ -1,0 +1,4 @@
+consumes:
+  - devices
+produces:
+  - plugin_state

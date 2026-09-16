@@ -1,0 +1,4 @@
+id: lan-pong
+name: LAN Pong
+version: 1
+hint: NetPong as a drop-in view. Open the plugin cog for identity; game controls stay beside the view.

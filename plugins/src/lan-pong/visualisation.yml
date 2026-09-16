@@ -1,0 +1,12 @@
+engine: netpong
+look:
+  theme: neon
+  backdrop: space
+  skyOpacity: 0.85
+  skyBright: 1.1
+  gridShape: hex
+  bgAudio: true
+  skyAudio: true
+  gridAudio: false
+  themeCycle: "off"
+  skyCycle: "off"

@@ -1,0 +1,4 @@
+id: air-bt
+name: Air Bluetooth
+version: 1
+hint: Advertisers around this host. Names come from an inquiry scan; HCI capture decodes advertisement payloads when dumpcap can open bluetooth0. This adapter does not hear two neighbours talking to each other.

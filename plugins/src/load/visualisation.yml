@@ -1,0 +1,7 @@
+engine: graph
+base: load
+look:
+  theme: tactical
+  backdrop: none
+  gridShape: circle
+  themeCycle: "off"

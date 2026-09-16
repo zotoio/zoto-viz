@@ -1,0 +1,5 @@
+engine: doom
+look:
+  theme: tactical
+  backdrop: none
+  themeCycle: "off"

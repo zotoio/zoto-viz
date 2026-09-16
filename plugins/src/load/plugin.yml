@@ -1,0 +1,4 @@
+id: load
+name: CPU load
+version: 1
+hint: Processes sized by CPU share, pulled toward the core they last ran on.

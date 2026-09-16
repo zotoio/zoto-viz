@@ -1,0 +1,45 @@
+engine: graph
+base: wifi
+options:
+  - key: show
+    label: show
+    default: all
+    values:
+      - [all, APs and clients]
+      - [aps, access points]
+      - [ours, this SSID]
+config:
+  - key: gateway
+    label: gateway IP
+    type: text
+    default: ours
+    hint: ours is the detected default-route gateway. Set an IP to override.
+  - key: watch
+    label: watch SSIDs
+    type: text
+    default: Home
+    hint: Networks the radio listens to in turn, comma-separated; order sets the shape (■ ✦ ◆). Filled from ~/.zoto-viz/sys-config.yml on `zoto-viz install`.
+  - key: other
+    label: other networks too
+    type: boolean
+    default: false
+    hint: Also rotate through every other network the scan hears (up to 10 channels in all).
+  - key: dwell
+    label: seconds per channel
+    type: number
+    default: 60
+    min: 10
+    max: 300
+    step: 10
+    hint: How long the radio stays on each channel before hopping on.
+  - key: rotate
+    label: rotate
+    type: boolean
+    default: true
+    hint: Off parks the radio on this host's own channel; the list and the shapes stay.
+style:
+  nodeColor: hash
+  labels: default
+layout:
+  lanShell: 240
+  internetShell: 620

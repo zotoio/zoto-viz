@@ -1,0 +1,35 @@
+engine: graph
+base: talkers
+look:
+  theme: ember
+  backdrop: none
+  gridShape: circle
+  bgOpacity: 0.7
+  bgAudio: true
+  skyAudio: false
+  gridAudio: true
+  themeCycle: "off"
+options:
+  - key: rank
+    label: rank by
+    default: rate
+    values:
+      - [rate, current rate]
+      - [bytes, total volume]
+config:
+  - key: internet
+    label: internet hosts
+    type: select
+    default: dim
+    hint: show, fade, or drop internet endpoints. LAN / internet visibility in core settings still applies first.
+    values:
+      - [show, show]
+      - [dim, dim]
+      - [hide, hide]
+style:
+  nodeColor: heat
+  nodeScale: rate
+  labels: top
+layout:
+  lanShell: 220
+  internetShell: 640

@@ -1,0 +1,4 @@
+id: lan-heat
+name: LAN heat
+version: 1
+hint: LAN devices sized by current rate; colour is heat. Use the cog to dim or hide internet hosts.

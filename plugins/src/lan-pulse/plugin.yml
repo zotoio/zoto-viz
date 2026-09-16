@@ -1,0 +1,21 @@
+id: lan-pulse
+name: LAN Pulse
+version: 1
+hint: Heatmap from live talkers. Capabilities are graph.read, graph.style, and ui.overlay.
+capabilities:
+  - graph.read
+  - graph.style
+  - ui.overlay
+datasource:
+  produces:
+    - graph
+    - hud
+    - plugin_state
+  consumes:
+    - devices
+    - flows
+    - feed
+frontend:
+  entry: frontend/index.ts
+backend:
+  entry: backend/service.py
