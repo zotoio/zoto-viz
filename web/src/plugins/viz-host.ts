@@ -326,6 +326,33 @@ export class VizFrameBudget {
   }
 }
 
+export interface VizWriterBindResult {
+  writer: VizBufferWriter | null;
+  resetFrameTs: boolean;
+  resetBudget: boolean;
+}
+
+/**
+ * Core viz-writer rebind used by the host on plugin load / demo pack swap.
+ * When `preserveUbo` is true and a prior writer exists, UBO bytes are copied and
+ * frame timestamp + budget counters are left for the caller to keep.
+ */
+export function bindVizWriterCore(
+  prevWriter: VizBufferWriter | null,
+  contract: VizPluginContract | null | undefined,
+  preserveUbo = false,
+): VizWriterBindResult {
+  if (!contract) {
+    return { writer: null, resetFrameTs: true, resetBudget: true };
+  }
+  if (preserveUbo && prevWriter) {
+    const writer = new VizBufferWriter(contract);
+    writer.ubo.set(prevWriter.ubo);
+    return { writer, resetFrameTs: false, resetBudget: false };
+  }
+  return { writer: new VizBufferWriter(contract), resetFrameTs: true, resetBudget: true };
+}
+
 /** Enforces per-slot float caps; reuses preallocated slot + UBO buffers. */
 export class VizBufferWriter {
   readonly contract: VizPluginContract;

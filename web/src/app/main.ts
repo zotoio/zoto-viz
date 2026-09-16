@@ -40,7 +40,7 @@ import {
 } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
-import { VizBufferWriter, VizFrameBudget, defaultVizContract } from "../plugins/viz-host";
+import { VizBufferWriter, VizFrameBudget, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { bindFps } from "../core/fps";
@@ -236,22 +236,11 @@ const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
-  if (!contract) {
-    vizWriter = null;
-    vizFrameTs = 0;
-    vizBudget.reset();
-    return;
-  }
-  if (preserveUbo && vizWriter) {
-    const prev = vizWriter.ubo;
-    vizWriter = new VizBufferWriter(contract);
-    vizWriter.ubo.set(prev);
-    scene.setPluginUboBuffer(vizWriter.ubo);
-    return;
-  }
-  vizWriter = new VizBufferWriter(contract);
-  vizFrameTs = 0;
-  vizBudget.reset();
+  const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
+  vizWriter = writer;
+  if (resetFrameTs) vizFrameTs = 0;
+  if (resetBudget) vizBudget.reset();
+  if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
