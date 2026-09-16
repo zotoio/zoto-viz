@@ -50,6 +50,11 @@ export function consentHash(id: string, hash: string): void {
   localStorage.setItem(HASH_STORE, JSON.stringify(raw));
 }
 
+export function pluginModuleUrl(id: string, hash?: string): string {
+  const path = `/api/plugins/${encodeURIComponent(id)}/module.js`;
+  return hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
+}
+
 export class PluginSandbox {
   private iframe: HTMLIFrameElement | null = null;
   private caps: string[] = [];
@@ -79,6 +84,18 @@ export class PluginSandbox {
 <script type="module">const zoto = globalThis.zoto; ${plugin}</script>`;
     document.body.appendChild(iframe);
     this.iframe = iframe;
+  }
+
+  async loadModule(
+    id: string,
+    caps: string[],
+    config: Record<string, string>,
+    hash?: string,
+  ): Promise<void> {
+    const r = await fetch(pluginModuleUrl(id, hash));
+    if (!r.ok) throw new Error(`module ${r.status}`);
+    const js = await r.text();
+    await this.load(id, js, caps, config);
   }
 
   tick(nodes: { id: string; rate: number; role: string }[]): void {

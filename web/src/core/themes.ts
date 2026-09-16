@@ -23,7 +23,7 @@ export interface ThemeUI {
   /** attention colour: redact switch, mode labels in the scene */
   warn: string;
   link: string;
-  /** text-shadow behind scene labels so they stay legible over edges */
+  /** outline behind scene labels so they stay legible over edges */
   labelShadow: string;
   /** background of overlay tags in the scene */
   overlay: string;
@@ -81,7 +81,9 @@ function make(spec: {
       chip: `rgba(255, 255, 255, ${chipA})`,
       chipHover: dark ? `rgba(255, 255, 255, ${chipA * 2})` : `rgba(255, 255, 255, 0.95)`,
       accent: spec.accent, warn: spec.warn, link: spec.link ?? spec.accent,
-      labelShadow: dark ? "0 0 2px #000" : `0 0 2px ${spec.bg}, 0 1px 0 ${spec.bg}`,
+      labelShadow: dark
+        ? "0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000"
+        : `0 1px 0 ${spec.bg}, 0 -1px 0 ${spec.bg}, 1px 0 0 ${spec.bg}, -1px 0 0 ${spec.bg}`,
       overlay: dark ? `rgba(${rgb(spec.bg)}, 0.7)` : `rgba(255, 255, 255, 0.8)`,
     },
     scene: {
@@ -139,64 +141,177 @@ export function grayHex(lum: number): number {
   return (n << 16) | (n << 8) | n;
 }
 
+/** Ceiling on displayed sky luminance. Uncapped `col * uBright` blows out and labels bloom. */
+export const SKY_LUMA_CAP = 0.58;
+/** GLSL helper: scale RGB down so luma never exceeds a cap (default `SKY_LUMA_CAP`). */
+export const SKY_LUMA_CAP_GLSL = `vec3 capSkyLumaTo(vec3 c, float cap) {
+  float y = dot(max(c, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722));
+  return y > cap && cap > 0.001 ? c * (cap / y) : c;
+}
+vec3 capSkyLuma(vec3 c) {
+  return capSkyLumaTo(c, ${SKY_LUMA_CAP.toFixed(4)});
+}
+`;
+
+/**
+ * Packed RGB from a 0–1 shader triple (AI Dynamic recipe colours).
+ */
+export function rgb01Hex(rgb: [number, number, number]): number {
+  const ch = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
+  return (ch(rgb[0]) << 16) | (ch(rgb[1]) << 8) | ch(rgb[2]);
+}
+
 /**
  * Approximate what the eye sees behind labels: the clear colour mixed with the sky.
  * Fractal / live can blow out; space and matrix stay dark. `bright` is the sky slider (0–2).
+ * Displayed luma is capped at `SKY_LUMA_CAP` so labels stay a readable ink, not a bloom.
  */
 export function effectiveSceneLuminance(
   fillHex: number,
-  sky: { kind?: string; opacity?: number; bright?: number } = {},
+  sky: {
+    kind?: string;
+    opacity?: number;
+    bright?: number;
+    recipeA?: [number, number, number];
+    recipeB?: [number, number, number];
+    /** Mean WCAG luminance of the live camera frame, when kind is `live`. */
+    liveLuma?: number;
+    /** Floor grid the camera is looking at; `down` 0 = horizon, 1 = straight down. */
+    floor?: { hex: number; opacity?: number; bright?: number; down?: number };
+    /** Display cap; `false` skips it so a visibility tool can see the uncapped source. */
+    cap?: number | false;
+  } = {},
 ): number {
   const fill = relativeLuminance(fillHex);
   const kind = sky.kind ?? "none";
   const op = Math.min(1, Math.max(0, sky.opacity ?? 1));
   const bright = Math.min(2, Math.max(0, sky.bright ?? 1));
-  if (kind === "none" || op <= 0) return fill;
+  const cap = sky.cap === false ? 1 : (typeof sky.cap === "number" ? sky.cap : SKY_LUMA_CAP);
   let skyLum = fill;
-  if (kind === "space") skyLum = 0.12 + fill * 0.2;
-  else if (kind === "fractal") skyLum = 0.38 + fill * 0.35;
-  else if (kind === "matrix") skyLum = 0.06 + fill * 0.08;
-  else if (kind === "live") skyLum = 0.5;
-  else return fill;
-  return fill * (1 - op) + Math.min(1, skyLum * bright) * op;
+  if (kind !== "none" && op > 0) {
+    if (kind === "space" || kind === "warp") skyLum = 0.12 + fill * 0.2;
+    else if (kind === "fractal" || kind === "clouds" || kind === "fire") skyLum = 0.38 + fill * 0.35;
+    else if (kind === "matrix" || kind === "rain" || kind === "circuit" || kind === "lattice") skyLum = 0.06 + fill * 0.08;
+    else if (kind === "aurora" || kind === "ocean" || kind === "plasma") skyLum = 0.22 + fill * 0.18;
+    else if (kind === "dynamic") {
+      const a = sky.recipeA, b = sky.recipeB;
+      if (a && b) {
+        const rec = (relativeLuminance(rgb01Hex(a)) + relativeLuminance(rgb01Hex(b))) * 0.5;
+        skyLum = rec * 0.85 + fill * 0.03;
+      } else {
+        skyLum = 0.22 + fill * 0.18;
+      }
+    } else if (kind === "live") skyLum = sky.liveLuma ?? 0.55;
+    else skyLum = fill;
+  }
+  let lum = (kind === "none" || op <= 0)
+    ? fill
+    : fill * (1 - op) + Math.min(cap, skyLum * bright) * op;
+  const floor = sky.floor;
+  if (floor && (floor.opacity ?? 0) > 0) {
+    const fl = relativeLuminance(floor.hex) * Math.min(2, Math.max(0, floor.bright ?? 1));
+    const cover = Math.min(1, Math.max(0, floor.down ?? 0)) * Math.min(1, Math.max(0, floor.opacity ?? 0));
+    lum = lum * (1 - cover * 0.7) + Math.min(1, fl) * cover * 0.7;
+  }
+  return lum;
 }
 
-const INK_DARK = 0x111318;
-const INK_LIGHT = 0xf4f6fb;
-const MUTED_ON_LIGHT = "#3d4654";
-const MUTED_ON_DARK = "#c9cfdb";
-const SHADOW_FOR_DARK_TEXT = "0 0 2px #fff, 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff";
-const SHADOW_FOR_LIGHT_TEXT = "0 0 2px #000, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000";
+const INK_DARK = 0x0c0e12;
+const INK_LIGHT = 0xffffff;
+const MUTED_ON_LIGHT = 0x3d4654;
+const MUTED_ON_DARK = 0xc9cfdb;
+const LABEL_STROKE = "#000";
+/** Hard 1px stroke, no blur — a soft halo reads as glow on bright skies. */
+const SHADOW_FOR_DARK_TEXT = "0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff";
+const SHADOW_FOR_LIGHT_TEXT = "0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000";
+/** WCAG AA. Label colour mix and `--hl` must stay at least this against the sky-adjusted fill. */
+export const LABEL_MIN_CONTRAST = 4.5;
+/** Secondary scene text (legend, hint, IP line) still needs a readable floor. */
+export const MUTED_MIN_CONTRAST = 3;
+/** Ceiling on mixing a node's colour into scene ink (CSS used to take 85% and bloom). */
+export const LABEL_MAX_MIX = 0.45;
 
 export interface SceneInk {
   fg: string;
   muted: string;
   shadow: string;
+  stroke: string;
   fgHex: number;
   darkText: boolean;
 }
 
 /**
- * Black or white scene ink, whichever contrasts more with `bgHex`.
- * `hold` is the last choice; switching needs the other ink to win by 15% so a pulsing sky does not flicker.
+ * Largest mix `t` in `[0, want]` of `nodeHex` into `inkHex` that still meets
+ * `LABEL_MIN_CONTRAST` against `bgHex`. Zero when the node colour itself is too close to the sky.
  */
-export function sceneInk(bgHex: number, hold?: boolean): SceneInk {
+export function guardLabelMix(inkHex: number, nodeHex: number, bgHex: number, want: number): number {
+  const cap = Math.min(LABEL_MAX_MIX, Math.max(0, want));
+  if (cap <= 0) return 0;
+  if (contrastRatio(nodeHex, bgHex) < LABEL_MIN_CONTRAST) return 0;
+  let lo = 0, hi = cap, best = 0;
+  for (let i = 0; i < 8; i++) {
+    const mid = (lo + hi) / 2;
+    if (contrastRatio(mix(inkHex, nodeHex, mid), bgHex) >= LABEL_MIN_CONTRAST) {
+      best = mid;
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return best;
+}
+
+/**
+ * Walk `from` toward `toward` until contrast against `bgHex` is at least `min`.
+ */
+function contrastWalk(from: number, toward: number, bgHex: number, min: number): number {
+  if (contrastRatio(from, bgHex) >= min) return from;
+  let lo = 0, hi = 1, best = 1;
+  for (let i = 0; i < 8; i++) {
+    const mid = (lo + hi) / 2;
+    if (contrastRatio(mix(from, toward, mid), bgHex) >= min) {
+      best = mid;
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return mix(from, toward, best);
+}
+
+/** True = dark letters. Picks the ink that actually contrasts; hysteresis only when both meet AA. */
+export function preferDarkInk(bgHex: number, hold?: boolean): boolean {
   const darkC = contrastRatio(INK_DARK, bgHex);
   const lightC = contrastRatio(INK_LIGHT, bgHex);
-  let darkText = darkC >= lightC;
-  if (hold !== undefined) {
-    const cur = hold ? darkC : lightC;
-    const other = hold ? lightC : darkC;
-    darkText = other > cur * 1.15 ? !hold : hold;
+  const darkOk = darkC >= LABEL_MIN_CONTRAST;
+  const lightOk = lightC >= LABEL_MIN_CONTRAST;
+  if (darkOk !== lightOk) return darkOk;
+  if (darkOk && lightOk) {
+    if (hold === true && lightC > darkC * 1.12) return false;
+    if (hold === false && darkC > lightC * 1.12) return true;
+    if (hold === true) return true;
+    if (hold === false) return false;
   }
+  return darkC >= lightC;
+}
+
+/**
+ * Black or white scene ink from the sky-adjusted fill, chosen so WCAG contrast holds.
+ * Stroke stays black (a white outline on dark letters reads as glow).
+ * Hysteresis keeps a pulsing sky from flickering the ink.
+ */
+export function sceneInk(bgHex: number, hold?: boolean): SceneInk {
+  const darkText = preferDarkInk(bgHex, hold);
+  const fgHex = darkText ? INK_DARK : INK_LIGHT;
+  const mutedHex = contrastWalk(darkText ? MUTED_ON_LIGHT : MUTED_ON_DARK, fgHex, bgHex, MUTED_MIN_CONTRAST);
   return darkText
-    ? { fg: "#111318", muted: MUTED_ON_LIGHT, shadow: SHADOW_FOR_DARK_TEXT, fgHex: INK_DARK, darkText: true }
-    : { fg: "#f4f6fb", muted: MUTED_ON_DARK, shadow: SHADOW_FOR_LIGHT_TEXT, fgHex: INK_LIGHT, darkText: false };
+    ? { fg: "#0c0e12", muted: toCssHex(mutedHex), shadow: SHADOW_FOR_DARK_TEXT, stroke: LABEL_STROKE, fgHex, darkText: true }
+    : { fg: "#ffffff", muted: toCssHex(mutedHex), shadow: SHADOW_FOR_LIGHT_TEXT, stroke: LABEL_STROKE, fgHex, darkText: false };
 }
 
 function inkVars(t: Theme): Record<string, string> {
   const ink = sceneInk(parseInt(t.ui.bg.slice(1), 16));
-  return { "--label-fg": ink.fg, "--label-muted": ink.muted, "--label-shadow": ink.shadow };
+  return { "--label-fg": ink.fg, "--label-muted": ink.muted, "--label-shadow": ink.shadow, "--label-stroke": ink.stroke };
 }
 
 export const THEMES: Theme[] = [

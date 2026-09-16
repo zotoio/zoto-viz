@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { parseCamPolicy, shouldRunCamera, type CamConsumer, type CamPolicy, CAM_STORE_KEY } from "./want";
+import { relativeLuminance } from "../core/themes";
 
 /**
  * One shared webcam stream. Consumers (`live-sky`, `gaze`, `cam-theme`) are refcounted.
@@ -34,6 +35,8 @@ class LiveCam {
   private grabCtx: CanvasRenderingContext2D | null = null;
   private sampleCool = 0;
   private sampleHex = 0;
+  private lumaCool = 0;
+  private lumaSample = 0.55;
 
   /** Chromatic peak of the current frame (packed RGB), or 0 when the picture is dark / grey / not ready. */
   sampleMain(now = performance.now()): number {
@@ -45,6 +48,23 @@ class LiveCam {
     const hex = dominantChroma(pix);
     if (hex) this.sampleHex = hex;
     return this.sampleHex;
+  }
+
+  /** Mean WCAG luminance of the current frame (0–1), for label ink. */
+  sampleLuma(now = performance.now()): number {
+    if (!this.ready) return this.lumaSample;
+    if (now < this.lumaCool) return this.lumaSample;
+    this.lumaCool = now + 120;
+    const pix = this.grab(32, 18);
+    if (!pix) return this.lumaSample;
+    let s = 0, n = 0;
+    const d = pix.data;
+    for (let i = 0; i < d.length; i += 4) {
+      s += relativeLuminance((d[i]! << 16) | (d[i + 1]! << 8) | d[i + 2]!);
+      n++;
+    }
+    if (n) this.lumaSample = s / n;
+    return this.lumaSample;
   }
 
   /** A downscaled frame for face / colour sampling. */

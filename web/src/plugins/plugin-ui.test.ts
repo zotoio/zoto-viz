@@ -29,6 +29,24 @@ describe("fillPluginFields", () => {
     expect(fieldDefault(spec.config![0]!)).toBe("1");
   });
 
+  it("renders a profile prompt textarea", () => {
+    const host = document.createElement("div");
+    fillPluginFields(host, { id: "cores", name: "CPU cores", version: 1, engine: "graph", base: "cores" }, [
+      { key: "prompt", label: "prompt", type: "textarea", default: "", hint: "brief" },
+    ], () => {});
+    const ta = host.querySelector("textarea");
+    expect(ta).toBeTruthy();
+    expect(ta?.getAttribute("aria-label")).toBe("prompt");
+    expect(host.textContent).toMatch(/prompt/);
+  });
+
+  it("skips the empty hint when more controls follow", () => {
+    const host = document.createElement("div");
+    fillPluginFields(host, { id: "pong", name: "Pong", version: 1, engine: "netpong" }, [], () => {}, { skipEmpty: true });
+    expect(host.textContent).toMatch(/Pong/);
+    expect(host.textContent).not.toMatch(/no extra settings/);
+  });
+
   it("asks the operator to examine plugin source", async () => {
     const pending = askPluginReview({
       id: "pulse", name: "Pulse", version: 1, engine: "graph", runtime: "typescript",
@@ -38,6 +56,7 @@ describe("fillPluginFields", () => {
     expect(document.body.textContent).toMatch(/AI IDE/);
     expect(document.body.textContent).toMatch(/Cursor/);
     expect(document.body.textContent).toMatch(/service\/\*\.py/);
+    expect(document.body.textContent).toMatch(/fragment\.glsl/);
     const examined = [...document.querySelectorAll("button")].find((b) => b.textContent === "I examined the source");
     examined!.click();
     await expect(pending).resolves.toBe("reviewed");

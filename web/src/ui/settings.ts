@@ -1,23 +1,29 @@
 import { displayName, type Device, usefulName } from "../core/types";
-import { ColorField, pinFlyout, Select, Slider, Toggle, unpinFlyout } from "./ui";
+import { ColorField, pinFlyout, Slider, Toggle, unpinFlyout } from "./ui";
+import { MAGNET_FIELDS } from "../graph/physics";
 import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FOCUS_MODES, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FocusMode, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
 import { BACKDROP_OPTIONS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
+import { invalidateSkyRecipe } from "../graph/sky-ai";
 import { FLOOR_SHAPES, type FloorShape } from "../graph/floor";
 import { themeById, toCssHex } from "../core/themes";
 import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, FEED_SOURCES, type FeedConfig, type FeedLayout, type FeedScope, type FeedSource } from "./feed";
 import { liveCam } from "../camera/livecam";
 import { type CamPolicy } from "../camera/want";
+import { liveMic, type MicPolicy } from "../audio/want";
 import { fillPluginFields } from "../plugins/plugin-ui";
 import type { PluginView } from "../plugins/plugin";
 import type { PluginField } from "../core/modes";
 import type { PluginLook } from "../plugins/plugin";
+import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 
 const PANES: { id: string; label: string }[] = [
   { id: "appearance", label: "Appearance" },
   { id: "view", label: "This view" },
   { id: "graph", label: "Graph" },
+  { id: "physics", label: "Physics" },
   { id: "motion", label: "Motion" },
   { id: "camera", label: "Camera" },
+  { id: "audio", label: "Audio" },
   { id: "feed", label: "Feed" },
   { id: "privacy", label: "Privacy" },
   { id: "agent", label: "Agent" },
@@ -25,7 +31,8 @@ const PANES: { id: string; label: string }[] = [
 
 /**
  * Settings cog: a header button that opens a popover for user-defined filters and the controls that used to
- * sit in the header (show switches, privacy). The filters decide which devices appear in every view:
+ * sit in the header (show switches, privacy). Host and subnet filters live on Privacy and decide which
+ * devices appear in every view:
  *
  *   allow / block hostname patterns   glob (`*`, `?`) or plain substring, matched against names and IPs
  *   allow / block IP subnets          CIDR (`192.168.1.0/24`, `fd00::/16`), a bare IP, or a dotted prefix
@@ -72,7 +79,7 @@ export class Settings {
   private onFeedChange: (c: FeedConfig) => void = () => {};
   private animUi: {
     follow: Toggle; cycle: Toggle; randomize: Toggle;
-    skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider;
+    skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider; skyAi: Slider;
     gridOp: Slider; gridBr: Slider; gridSize: Slider; gridColor: ColorField; bgColor: ColorField; bgOp: Slider;
     yaw: Slider; pitch: Slider; pitchCycle: Slider; zoom: Slider; zoomCycle: Slider; cadence: Slider;
     camAudio: Slider; camChange: Slider; camGaze: Slider; camInertia: Slider; camEase: Slider; camTheme: Toggle;
@@ -86,10 +93,16 @@ export class Settings {
     setHero: (v: HeroPos) => void;
     setFocus: (v: FocusMode) => void;
     setGlow: (v: EdgeGlow) => void;
-    setMod: (key: "background" | "sky" | "floor" | "camera" | "nodes" | "skies", on: boolean) => void;
+    setMod: (key: "background" | "sky" | "floor" | "camera" | "nodes" | "skies" | "physics" | "particles", on: boolean) => void;
     skyPulse: Toggle; floorPulse: Toggle; bgPulse: Toggle;
     labels: Slider; shown: Slider; nodes: Slider; edges: Slider;
     glowAmt: Slider; glowSpeed: Slider;
+    autoTune: Toggle;
+    partAmt: Slider; partBusy: Slider; partQuiet: Slider; partPeak: Slider; partCap: Slider; partSpeed: Slider; partSize: Slider;
+    magnetSelf: Slider; magnetGateway: Slider; magnetLan: Slider; magnetLocal: Slider; magnetInternet: Slider; magnetMulticast: Slider;
+    magnetCross: Slider; magnetRange: Slider; gravity: Slider; swirl: Slider; chargeAmt: Slider; spring: Slider; linkSpan: Slider;
+    drag: Slider; centerPull: Slider; stringAmt: Slider;
+    physPulse: Toggle; partPulse: Toggle;
   } | null = null;
   private feedUi: {
     on: Toggle; modulate: Toggle;
@@ -97,14 +110,20 @@ export class Settings {
     setScope: (v: FeedScope) => void;
     setSource: (v: FeedSource) => void;
     dens: Slider;
+    size: Slider;
   } | null = null;
   private readonly nav = document.createElement("nav");
   private readonly paneEls = new Map<string, HTMLDivElement>();
   private readonly navBtns = new Map<string, HTMLButtonElement>();
   private activePane = "graph";
   private viewHost: HTMLDivElement | null = null;
-  private cameraUi: { policy: Select } | null = null;
+  private viewCog: HTMLButtonElement | null = null;
+  private cameraUi: { policy: Toggle } | null = null;
+  private audioUi: { policy: Toggle; src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
+  private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
+  private meterRaf = 0;
   onCamPolicy?: (p: CamPolicy) => void;
+  onMicPolicy?: (p: MicPolicy) => void;
   onPluginChange?: (id: string, values: Record<string, string>) => void;
   onClose?: () => void;
 
@@ -161,6 +180,7 @@ export class Settings {
     this.buildCamera();
     this.buildViewPane();
     document.body.classList.toggle("cam-off", liveCam.camPolicy === "off");
+    document.body.classList.toggle("mic-off", liveMic.micPolicy === "off");
 
     this.btn.addEventListener("click", () => (this.isOpen ? this.close() : this.open()));
     this.pop.addEventListener("keydown", (e) => { if (e.key === "Escape") { this.close(); this.btn.focus(); } });
@@ -175,13 +195,38 @@ export class Settings {
     this.activePane = id;
     for (const [k, el] of this.paneEls) el.hidden = k !== id;
     for (const [k, b] of this.navBtns) b.setAttribute("aria-current", k === id ? "page" : "false");
+    this.syncViewCog();
+  }
+
+  /** Cog next to the view selector: opens This view (plugin options, config, arcade knobs). */
+  attachViewCog(host: HTMLElement): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cog plugin-cog";
+    btn.title = "this view";
+    btn.setAttribute("aria-label", "this view settings");
+    btn.setAttribute("aria-haspopup", "dialog");
+    btn.setAttribute("aria-expanded", "false");
+    btn.innerHTML = COG;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (this.isOpen && this.activePane === "view") this.close();
+      else this.open("view");
+    });
+    host.appendChild(btn);
+    this.viewCog = btn;
+    return btn;
+  }
+
+  private syncViewCog(): void {
+    this.viewCog?.setAttribute("aria-expanded", this.isOpen && this.activePane === "view" ? "true" : "false");
   }
 
   private buildFilters(): void {
     const sec = document.createElement("section");
     sec.className = "sec";
-    sec.innerHTML = `<div class="sec-title">Filters <button type="button" class="link clear" title="clear all filter patterns">clear</button></div>
-      <div class="sec-hint">Which devices appear in every view. Block wins; if any allow list is set, only matches show.</div>`;
+    sec.innerHTML = `<div class="sec-title">Network detail <button type="button" class="link clear" title="clear all filter patterns">clear</button></div>
+      <div class="sec-hint">Which hosts and subnets appear in every view. Block wins; if any allow list is set, only matches show.</div>`;
     const grid = document.createElement("div");
     grid.className = "fgrid";
     for (const f of FIELDS) {
@@ -207,7 +252,7 @@ export class Settings {
       this.cfg.onChange();
       this.cfg.onPersist?.();
     });
-    this.pane("graph").appendChild(sec);
+    this.pane("privacy").appendChild(sec);
   }
 
   private buildViewPane(): void {
@@ -221,16 +266,12 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Camera</div>
-      <div class="sec-hint">Off is the default and stops the webcam immediately. Auto only starts it for live sky, gaze steering, or live colour. Those Motion controls do nothing while Off.</div>`;
-    const policy = new Select({
-      caption: "camera",
-      title: "Auto starts the webcam only for live sky, gaze, or live colour. Off never starts it.",
-      options: [
-        { value: "auto", label: "Auto", hint: "start only when a view needs it" },
-        { value: "off", label: "Off", hint: "never start the webcam" },
-      ],
-      value: liveCam.camPolicy,
-      onChange: (v) => this.setCamPolicy(v === "off" ? "off" : "auto"),
+      <div class="sec-hint">Off is the default and stops the webcam immediately. On only starts it for live sky, gaze steering, or live colour. Those Motion controls do nothing while Off.</div>`;
+    const policy = new Toggle({
+      label: "cam",
+      title: "On starts the webcam only for live sky, gaze, or live colour. Off never starts it.",
+      checked: liveCam.camPolicy === "auto",
+      onChange: (on) => this.setCamPolicy(on ? "auto" : "off"),
     });
     const row = document.createElement("div");
     row.className = "sec-controls";
@@ -242,12 +283,25 @@ export class Settings {
 
   setCamPolicy(p: CamPolicy): void {
     liveCam.setPolicy(p);
-    if (this.cameraUi) this.cameraUi.policy.value = p;
+    if (this.cameraUi) this.cameraUi.policy.checked = p === "auto";
     document.body.classList.toggle("cam-off", p === "off");
     this.onCamPolicy?.(p);
   }
 
-  bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null): void {
+  setMicPolicy(p: MicPolicy): void {
+    liveMic.setPolicy(p);
+    if (this.audioUi) this.audioUi.policy.checked = p === "auto";
+    document.body.classList.toggle("mic-off", p === "off");
+    this.onMicPolicy?.(p);
+    this.cfg.onChange();
+  }
+
+  /** Live pulse for the Audio tab meter. Call once the scene exists. */
+  bindPulse(fn: () => { level: number; bass: number; listening?: boolean }): void {
+    this.pulseNow = fn;
+  }
+
+  bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null, extras?: HTMLElement[]): void {
     const host = this.viewHost;
     if (!host) return;
     host.replaceChildren();
@@ -259,7 +313,7 @@ export class Settings {
       h.textContent = spec ? `Pinned by ${spec.name}` : "Pinned look";
       const p = document.createElement("div");
       p.className = "sec-hint";
-      p.textContent = "This view overrides matching Motion / Appearance controls while selected.";
+      p.textContent = "This plugin overrides matching Motion / Appearance controls while selected.";
       const row = document.createElement("div");
       row.className = "pin-chips";
       for (const [k, v] of Object.entries(look)) {
@@ -272,16 +326,28 @@ export class Settings {
       pins.append(h, p, row);
       host.append(pins);
     }
+    const extra = extras?.filter(Boolean) ?? [];
     if (spec) {
-      fillPluginFields(host, spec, fields ?? spec.config ?? [], (id, values) => {
+      fillPluginFields(host, spec, pluginViewKnobs(spec, fields), (id, values) => {
         this.onPluginChange?.(id, values);
         this.cfg.onPersist?.();
-      });
-    } else if (!look) {
+      }, { skipEmpty: extra.length > 0 });
+    } else if (!look && !extra.length) {
       const empty = document.createElement("div");
       empty.className = "sec";
-      empty.innerHTML = `<div class="sec-title">This view</div><div class="sec-hint">Shipped views have no extra plugin fields. Pick a plugin view to configure it here.</div>`;
+      empty.innerHTML = `<div class="sec-title">This view</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
       host.append(empty);
+    }
+    if (extra.length) {
+      const sec = document.createElement("div");
+      sec.className = "sec";
+      const row = document.createElement("div");
+      row.className = "sec-controls";
+      for (const el of extra) row.appendChild(el);
+      sec.append(row);
+      const prompt = host.querySelector(".view-prompt");
+      if (prompt) host.insertBefore(sec, prompt);
+      else host.append(sec);
     }
   }
 
@@ -303,22 +369,31 @@ export class Settings {
     this.pane("appearance").appendChild(sec);
   }
 
-  /** Graph pane (show filters live here when chrome is top). */
+  /** Graph pane (Network / System / Look). */
   get host(): HTMLDivElement { return this.pane("graph"); }
   get privacyHost(): HTMLDivElement { return this.pane("privacy"); }
 
   /** Add a titled section of controls (used to move the header's show / privacy toggles into the popover). */
-  addSection(title: string, ...controls: { el: HTMLElement }[]): { el: HTMLElement; list: HTMLElement } {
+  addSection(title: string, controls: { el: HTMLElement }[], hint?: string): { el: HTMLElement; list: HTMLElement } {
     const sec = document.createElement("section");
     sec.className = "sec";
     const h = document.createElement("div");
     h.className = "sec-title";
     h.textContent = title;
+    sec.appendChild(h);
+    if (hint) {
+      const p = document.createElement("div");
+      p.className = "sec-hint";
+      p.textContent = hint;
+      sec.appendChild(p);
+    }
     const list = document.createElement("div");
     list.className = "sec-controls";
     for (const c of controls) list.appendChild(c.el);
-    sec.append(h, list);
-    const pane = title.toLowerCase() === "privacy" ? "privacy" : title.toLowerCase() === "show" ? "graph" : "appearance";
+    sec.appendChild(list);
+    const pane = title.toLowerCase() === "privacy" ? "privacy"
+      : /^(show|network|system)$/.test(title.toLowerCase()) ? "graph"
+      : "appearance";
     this.pane(pane).appendChild(sec);
     return { el: sec, list };
   }
@@ -327,7 +402,7 @@ export class Settings {
   get feedSettings(): FeedConfig { return this.feed; }
 
   /**
-   * Dream-camera sliders. Call after Show so the popover reads Filters → Show → Animation → Privacy.
+   * Dream-camera sliders. Call after Show so the popover reads Network → System → Look on Graph.
    * `dreamToggle` is the on/off switch (kept in sync with the header chip).
    */
   addAnimation(onChange: (a: DreamAnim) => void, dreamToggle: { el: HTMLElement }): void {
@@ -339,11 +414,11 @@ export class Settings {
         <button type="button" class="link shuffle" title="pick new orbit, pitch, and zoom within the slider ranges">randomize</button>
         <button type="button" class="link reset" title="restore default orbit, pitch, and zoom">reset</button>
       </span></div>
-      <div class="sec-hint">Dream (header D): orbit, nod, and zoom toward activity. See docs → Views and motion.</div>`;
+      <div class="sec-hint">Dream (header D): orbit, nod, and zoom toward activity. Live traffic stays near the viewport centre about 70% of the time. See docs → Views and motion.</div>`;
 
     const follow = new Toggle({
       label: "zoom to activity",
-      title: "dolly in toward the highest-activity nodes, then ease back to the captured view",
+      title: "dolly in toward the highest-activity nodes, then ease back; live traffic stays near the viewport centre about 70% of the orbit, wandering on the wide shot",
       checked: this.anim.follow,
       onChange: (on) => { this.anim.follow = on; this.persistAnim(); },
     });
@@ -374,7 +449,12 @@ export class Settings {
       b.textContent = o.label;
       b.title = o.hint;
       b.setAttribute("aria-pressed", o.value === this.anim.backdrop ? "true" : "false");
-      b.addEventListener("click", () => { this.anim.backdrop = o.value; setSky(o.value); this.persistAnim(); });
+      b.addEventListener("click", () => {
+        if (o.value === "dynamic") invalidateSkyRecipe();
+        this.anim.backdrop = o.value;
+        setSky(o.value);
+        this.persistAnim();
+      });
       skyBtns.set(o.value, b);
       skyRow.appendChild(b);
     }
@@ -405,7 +485,13 @@ export class Settings {
       format: (v) => `${v}%`,
       onInput: (v) => { this.anim.skyEase = v / 100; this.persistAnim(); },
     });
-    type ModKey = "background" | "sky" | "floor" | "camera" | "nodes" | "skies";
+    const skyAi = new Slider({
+      label: "AI rebuild", title: "legacy minutes tick; Agent weather now owns how often AI Dynamic asks Gemma (probability bands)",
+      min: B.skyAiMin.min, max: B.skyAiMin.max, step: B.skyAiMin.step, value: this.anim.skyAiMin,
+      format: (v) => `${v}m`,
+      onInput: (v) => { this.anim.skyAiMin = v; this.persistAnim(); },
+    });
+    type ModKey = "background" | "sky" | "floor" | "camera" | "nodes" | "skies" | "physics" | "particles";
     let setMod: (key: ModKey, on: boolean) => void = () => {};
     const skyPulse = new Toggle({
       label: "pulse",
@@ -413,7 +499,7 @@ export class Settings {
       checked: this.anim.skyAudio,
       onChange: (on) => { this.anim.skyAudio = on; setMod("sky", on); this.persistAnim(); },
     });
-    const skyWrap = lookBlock("sky", skyRow, skyOp, skyBr, skySp, skyEz);
+    const skyWrap = lookBlock("sky", skyRow, skyOp, skyBr, skySp, skyEz, skyAi);
     skyWrap.querySelector(".look-head")!.appendChild(skyPulse.el);
     const shapeRow = document.createElement("div");
     shapeRow.className = "skypick";
@@ -500,10 +586,12 @@ export class Settings {
     const modItems: { key: ModKey; label: string; hint: string; get: () => boolean; set: (on: boolean) => void }[] = [
       { key: "background", label: "background", hint: "pulse the scene fill (clear colour and fog)", get: () => this.anim.bgAudio, set: (on) => { this.anim.bgAudio = on; } },
       { key: "sky", label: "sky", hint: "pulse far-field sky opacity and brightness", get: () => this.anim.skyAudio, set: (on) => { this.anim.skyAudio = on; } },
-      { key: "skies", label: "skies", hint: "in dream, cycle fractal / space / matrix / live independently of theme (cadence or beat)", get: () => this.anim.skyCycle !== "off", set: (on) => { this.anim.skyCycle = on ? (this.anim.skyCycle === "off" ? "cadence" : this.anim.skyCycle) : "off"; } },
+      { key: "skies", label: "skies", hint: "in dream, cycle authored skies independently of theme (cadence or beat). AI Dynamic is not in the pool", get: () => this.anim.skyCycle !== "off", set: (on) => { this.anim.skyCycle = on ? (this.anim.skyCycle === "off" ? "cadence" : this.anim.skyCycle) : "off"; } },
       { key: "floor", label: "floor", hint: "pulse the floor grid", get: () => this.anim.gridAudio, set: (on) => { this.anim.gridAudio = on; } },
       { key: "camera", label: "camera", hint: "FOV and dream orbit follow audio, how fast the graph/pulse is changing, and where you look (amounts under Camera)", get: () => this.anim.audioCamera, set: (on) => { this.anim.audioCamera = on; } },
       { key: "nodes", label: "nodes", hint: "bounce and glow graph nodes; fling harder on release", get: () => this.anim.audioNodes, set: (on) => { this.anim.audioNodes = on; } },
+      { key: "physics", label: "physics", hint: "pulse magnets, gravity, swirl, and string sag", get: () => this.anim.audioPhysics, set: (on) => { this.anim.audioPhysics = on; } },
+      { key: "particles", label: "sparks", hint: "pulse traffic spark count and speed", get: () => this.anim.audioParts, set: (on) => { this.anim.audioParts = on; } },
     ];
     const modBtns = new Map<string, HTMLButtonElement>();
     const modRow = document.createElement("div");
@@ -516,6 +604,8 @@ export class Settings {
       if (key === "sky") skyPulse.checked = on;
       if (key === "floor") floorPulse.checked = on;
       if (key === "skies") skyCycle.set(this.anim.skyCycle);
+      if (key === "physics") this.animUi?.physPulse && (this.animUi.physPulse.checked = on);
+      if (key === "particles") this.animUi?.partPulse && (this.animUi.partPulse.checked = on);
     };
     for (const item of modItems) {
       const b = document.createElement("button");
@@ -549,6 +639,12 @@ export class Settings {
       format: (v) => `${v}`,
       onInput: (v) => { this.anim.labelCount = v; this.persistAnim(); },
     });
+    const autoTune = new Toggle({
+      label: "auto-tune",
+      title: "if the last 30 seconds average under 10 fps, ease idle labels, sparks, glow, sky, and pixel density down; after a view change (or on the same view) wait for a 1-minute recovered average, then ease back over about a minute (camera easing stretches that)",
+      checked: this.anim.autoTune !== false,
+      onChange: (on) => { this.anim.autoTune = on; this.persistAnim(); },
+    });
     const nodes = new Slider({
       label: "nodes", title: "device sphere size",
       min: 40, max: 250, step: 5, value: Math.round(this.anim.nodeWeight * 100),
@@ -556,7 +652,7 @@ export class Settings {
       onInput: (v) => { this.anim.nodeWeight = v / 100; this.persistAnim(); },
     });
     const edges = new Slider({
-      label: "edges", title: "link brightness and traffic-particle size",
+      label: "edges", title: "link brightness (traffic spark size is under Physics)",
       min: 30, max: 250, step: 5, value: Math.round(this.anim.edgeWeight * 100),
       format: (v) => `${v}%`,
       onInput: (v) => { this.anim.edgeWeight = v / 100; this.persistAnim(); },
@@ -574,10 +670,33 @@ export class Settings {
       format: (v) => `${(v / 100).toFixed(2)}×`,
       onInput: (v) => { this.anim.edgeGlowSpeed = v / 100; this.persistAnim(); },
     });
+    const layoutBits = document.createElement("div");
+    layoutBits.className = "look-stack";
+    layoutBits.append(labeled("theme cycle", themeCycle.el), labeled("sky cycle", skyCycle.el), labeled("views", mosaic.el), labeled("hero", hero.el), labeled("focus", focus.el));
+    const layoutWrap = lookBlock("layout", layoutBits);
     const audioBits = document.createElement("div");
     audioBits.className = "look-stack";
-    audioBits.append(labeled("drive", drive.el), labeled("modulate", modRow), labeled("theme cycle", themeCycle.el), labeled("sky cycle", skyCycle.el), labeled("views", mosaic.el), labeled("hero", hero.el), labeled("focus", focus.el));
-    const audioWrap = lookBlock("audio", audioBits, sens);
+    audioBits.append(labeled("drive", drive.el), labeled("modulate", modRow));
+    const audioWrap = lookBlock("reactivity", audioBits, sens);
+    const micPolicy = new Toggle({
+      label: "mic",
+      title: "On starts the pulse microphone when drive is mic and something is modulated. Off never starts it — traffic or the selected node still drive the pulse.",
+      checked: liveMic.micPolicy === "auto",
+      onChange: (on) => this.setMicPolicy(on ? "auto" : "off"),
+    });
+    const meter = document.createElement("div");
+    meter.className = "pulse-meter";
+    meter.setAttribute("aria-label", "live pulse");
+    meter.innerHTML = `
+      <div class="pulse-src"></div>
+      <div class="pulse-row"><span>level</span><span class="pulse-track"><i class="pulse-fill" data-k="level"></i></span></div>
+      <div class="pulse-row"><span>bass</span><span class="pulse-track"><i class="pulse-fill" data-k="bass"></i></span></div>`;
+    this.audioUi = {
+      policy: micPolicy,
+      src: meter.querySelector(".pulse-src")!,
+      level: meter.querySelector('[data-k="level"]')!,
+      bass: meter.querySelector('[data-k="bass"]')!,
+    };
     const camAudio = new Slider({
       label: "audio", title: "how hard the audio / traffic pulse drives field of view, orbit speed, nod and zoom (0 = ignore the pulse)",
       min: 0, max: 200, step: 5, value: Math.round(this.anim.camAudio * 100),
@@ -597,7 +716,7 @@ export class Settings {
       onInput: (v) => { this.anim.camGaze = v / 100; this.persistAnim(); },
     });
     const camInertia = new Slider({
-      label: "inertia", title: "how heavily the camera resists all motion: orbit, nod, zoom, gaze, framing, field of view, and the coast after a drag. 0% tracks immediately; 100% glides over a few seconds. Left-drag still lands where you release.",
+      label: "inertia", title: "how heavily the camera resists all motion: orbit, nod, zoom, gaze, framing, field of view, and the coast after a drag. 0% tracks immediately; 100% glides over a few seconds. Pan and zoom stay where you release.",
       min: 0, max: 100, step: 5, value: Math.round(this.anim.camInertia * 100),
       format: (v) => `${v}%`,
       onInput: (v) => { this.anim.camInertia = v / 100; this.persistAnim(); },
@@ -620,7 +739,168 @@ export class Settings {
     const graphBits = document.createElement("div");
     graphBits.className = "look-stack";
     graphBits.append(labeled("glow", glow.el));
-    const graphWrap = lookBlock("graph", graphBits, labels, shown, nodes, edges, glowAmt, glowSpeed);
+    const graphWrap = lookBlock("", graphBits, labels, shown, nodes, edges, glowAmt, glowSpeed);
+    const lookSec = document.createElement("section");
+    lookSec.className = "sec";
+    lookSec.innerHTML = `<div class="sec-title">Look</div>
+      <div class="sec-hint">Label size, how many idle names stay on, node and edge scale, edge glow. Auto-tune eases those plus sparks, sky, and pixel density if the last 30 seconds average under 10 fps, then eases back on a 1-minute recovered average (fresh after a view change). Traffic sparks, magnets, gravity, and stringy edges live under Physics.</div>`;
+    lookSec.append(autoTune.el, graphWrap);
+
+    const magFmt = (v: number) => (Math.abs(v) < 3 ? "off" : v > 0 ? `attract ${v}%` : `repel ${-v}%`);
+    const magnetSelf = new Slider({
+      label: MAGNET_FIELDS[0].label, title: MAGNET_FIELDS[0].hint,
+      min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetSelf * 100), format: magFmt,
+      onInput: (v) => { this.anim.magnetSelf = v / 100; this.persistAnim(); },
+    });
+    const magnetGateway = new Slider({
+      label: MAGNET_FIELDS[1].label, title: MAGNET_FIELDS[1].hint,
+      min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetGateway * 100), format: magFmt,
+      onInput: (v) => { this.anim.magnetGateway = v / 100; this.persistAnim(); },
+    });
+    const magnetLan = new Slider({
+      label: MAGNET_FIELDS[2].label, title: MAGNET_FIELDS[2].hint,
+      min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetLan * 100), format: magFmt,
+      onInput: (v) => { this.anim.magnetLan = v / 100; this.persistAnim(); },
+    });
+    const magnetLocal = new Slider({
+      label: MAGNET_FIELDS[3].label, title: MAGNET_FIELDS[3].hint,
+      min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetLocal * 100), format: magFmt,
+      onInput: (v) => { this.anim.magnetLocal = v / 100; this.persistAnim(); },
+    });
+    const magnetInternet = new Slider({
+      label: MAGNET_FIELDS[4].label, title: MAGNET_FIELDS[4].hint,
+      min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetInternet * 100), format: magFmt,
+      onInput: (v) => { this.anim.magnetInternet = v / 100; this.persistAnim(); },
+    });
+    const magnetMulticast = new Slider({
+      label: MAGNET_FIELDS[5].label, title: MAGNET_FIELDS[5].hint,
+      min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetMulticast * 100), format: magFmt,
+      onInput: (v) => { this.anim.magnetMulticast = v / 100; this.persistAnim(); },
+    });
+    const magnetCross = new Slider({
+      label: "cross", title: "attract or repel nodes of different types (LAN vs internet, and so on)",
+      min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetCross * 100), format: magFmt,
+      onInput: (v) => { this.anim.magnetCross = v / 100; this.persistAnim(); },
+    });
+    const magnetRange = new Slider({
+      label: "range", title: "how far magnets reach",
+      min: 15, max: 200, step: 5, value: Math.round(this.anim.magnetRange * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.magnetRange = v / 100; this.persistAnim(); },
+    });
+    const gravity = new Slider({
+      label: "gravity", title: "pull nodes toward the floor",
+      min: 0, max: 200, step: 5, value: Math.round(this.anim.gravity * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.gravity = v / 100; this.persistAnim(); },
+    });
+    const swirl = new Slider({
+      label: "swirl", title: "yaw torque so the cloud slowly orbits",
+      min: 0, max: 200, step: 5, value: Math.round(this.anim.swirl * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.swirl = v / 100; this.persistAnim(); },
+    });
+    const chargeAmt = new Slider({
+      label: "spread", title: "many-body charge: turn down to pack nodes, up to push them apart",
+      min: 0, max: 200, step: 5, value: Math.round(this.anim.chargeAmt * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.chargeAmt = v / 100; this.persistAnim(); },
+    });
+    const spring = new Slider({
+      label: "spring", title: "how hard edges pull their endpoints together",
+      min: 0, max: 200, step: 5, value: Math.round(this.anim.spring * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.spring = v / 100; this.persistAnim(); },
+    });
+    const linkSpan = new Slider({
+      label: "length", title: "rest length of edges (stringy slack when long, taut when short)",
+      min: 40, max: 250, step: 5, value: Math.round(this.anim.linkSpan * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.linkSpan = v / 100; this.persistAnim(); },
+    });
+    const drag = new Slider({
+      label: "drag", title: "how quickly node velocity dies (higher = heavier)",
+      min: 12, max: 70, step: 1, value: Math.round(this.anim.drag * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.drag = v / 100; this.persistAnim(); },
+    });
+    const centerPull = new Slider({
+      label: "center", title: "pull the whole graph toward the origin",
+      min: 0, max: 200, step: 5, value: Math.round(this.anim.centerPull * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.centerPull = v / 100; this.persistAnim(); },
+    });
+    const stringAmt = new Slider({
+      label: "string", title: "sag edges into catenary strings; sparks follow the curve",
+      min: 0, max: 100, step: 5, value: Math.round(this.anim.stringAmt * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.stringAmt = v / 100; this.persistAnim(); },
+    });
+    const partAmt = new Slider({
+      label: "density", title: "how many traffic sparks ride the edges",
+      min: 0, max: 200, step: 5, value: Math.round(this.anim.partAmt * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.partAmt = v / 100; this.persistAnim(); },
+    });
+    const partBusy = new Slider({
+      label: "rate", title: "how hard byte-rate feeds spark count (turn down to thin busy links)",
+      min: 25, max: 300, step: 5, value: Math.round(this.anim.partBusy * 100),
+      format: (v) => `${(v / 100).toFixed(2)}×`,
+      onInput: (v) => { this.anim.partBusy = v / 100; this.persistAnim(); },
+    });
+    const partQuiet = new Slider({
+      label: "quiet", title: "hide sparks on links slower than this (bytes/s)",
+      min: B.partQuiet.min, max: B.partQuiet.max, step: B.partQuiet.step, value: this.anim.partQuiet,
+      format: (v) => (v <= 0 ? "all" : `${v}`),
+      onInput: (v) => { this.anim.partQuiet = v; this.persistAnim(); },
+    });
+    const partPeak = new Slider({
+      label: "peak", title: "max sparks on one conversation",
+      min: B.partPeak.min, max: B.partPeak.max, step: B.partPeak.step, value: this.anim.partPeak,
+      format: (v) => `${v}`,
+      onInput: (v) => { this.anim.partPeak = v; this.persistAnim(); },
+    });
+    const partCap = new Slider({
+      label: "cap", title: "global spark budget",
+      min: B.partCap.min, max: B.partCap.max, step: B.partCap.step, value: this.anim.partCap,
+      format: (v) => `${v}`,
+      onInput: (v) => { this.anim.partCap = v; this.persistAnim(); },
+    });
+    const partSpeed = new Slider({
+      label: "speed", title: "how fast sparks travel along an edge",
+      min: 25, max: 300, step: 5, value: Math.round(this.anim.partSpeed * 100),
+      format: (v) => `${(v / 100).toFixed(2)}×`,
+      onInput: (v) => { this.anim.partSpeed = v / 100; this.persistAnim(); },
+    });
+    const partSize = new Slider({
+      label: "size", title: "spark size (also scaled by Look → edges)",
+      min: 30, max: 250, step: 5, value: Math.round(this.anim.partSize * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.partSize = v / 100; this.persistAnim(); },
+    });
+    const physPulse = new Toggle({
+      label: "pulse",
+      title: "modulate magnets, gravity, swirl, and string sag from the audio / traffic pulse",
+      checked: this.anim.audioPhysics,
+      onChange: (on) => { this.anim.audioPhysics = on; setMod("physics", on); this.persistAnim(); },
+    });
+    const partPulse = new Toggle({
+      label: "pulse",
+      title: "modulate spark count and speed from the audio / traffic pulse",
+      checked: this.anim.audioParts,
+      onChange: (on) => { this.anim.audioParts = on; setMod("particles", on); this.persistAnim(); },
+    });
+    const magnetWrap = lookBlock("magnets", null, magnetSelf, magnetGateway, magnetLan, magnetLocal, magnetInternet, magnetMulticast, magnetCross, magnetRange);
+    magnetWrap.querySelector(".look-head")!.appendChild(physPulse.el);
+    const fieldWrap = lookBlock("field", null, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt);
+    const sparkWrap = lookBlock("sparks", null, partAmt, partBusy, partQuiet, partPeak, partCap, partSpeed, partSize);
+    sparkWrap.querySelector(".look-head")!.appendChild(partPulse.el);
+    const physSec = document.createElement("section");
+    physSec.className = "sec";
+    physSec.innerHTML = `<div class="sec-title">Physics</div>
+      <div class="sec-hint">Cut traffic sparks with density / rate / quiet / peak / cap. Magnets attract or repel each node type. String sags the edges; gravity, swirl, spread, and springs move the cloud. Pulse lives under Audio → modulate too.</div>`;
+    physSec.append(sparkWrap, magnetWrap, fieldWrap);
+    this.pane("physics").appendChild(physSec);
 
     const yaw = new Slider({
       label: "orbit", title: "seconds for one full revolution",
@@ -661,14 +941,18 @@ export class Settings {
     const grid = document.createElement("div");
     grid.className = "agrid";
     grid.append(yaw.el, zoom.el, pitch.el, zoomCycle.el, pitchCycle.el, cadence.el);
-    sec.append(row, bgWrap, skyWrap, floorWrap, audioWrap, graphWrap, grid);
+    sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, grid);
     this.animUi = {
       follow, cycle, randomize, setSky, setShape,
       setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, setFocus: focus.set, setGlow: glow.set, setMod,
       skyPulse, floorPulse, bgPulse,
-      skyOp, skyBr, skySp, skyEz, gridOp, gridBr, gridSize, gridColor, bgColor, bgOp,
+      skyOp, skyBr, skySp, skyEz, skyAi, gridOp, gridBr, gridSize, gridColor, bgColor, bgOp,
       yaw, pitch, pitchCycle, zoom, zoomCycle, cadence, camAudio, camChange, camGaze, camInertia, camEase, camTheme, sens,
-      labels, shown, nodes, edges, glowAmt, glowSpeed,
+      labels, shown, nodes, edges, glowAmt, glowSpeed, autoTune,
+      partAmt, partBusy, partQuiet, partPeak, partCap, partSpeed, partSize,
+      magnetSelf, magnetGateway, magnetLan, magnetLocal, magnetInternet, magnetMulticast,
+      magnetCross, magnetRange, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt,
+      physPulse, partPulse,
     };
     sec.querySelector(".reset")!.addEventListener("click", () => {
       this.anim = { ...DEFAULT_DREAM };
@@ -677,7 +961,17 @@ export class Settings {
     });
     sec.querySelector(".shuffle")!.addEventListener("click", () => this.shuffleAnim());
     this.pane("motion").appendChild(sec);
+    this.pane("graph").appendChild(lookSec);
     this.pane("camera").appendChild(camWrap);
+    const audioSec = document.createElement("section");
+    audioSec.className = "sec";
+    audioSec.innerHTML = `<div class="sec-title">Audio</div>
+      <div class="sec-hint">What drives the pulse and what it moves. Header <b>mic</b> is the privacy gate (same as this tab). Off never opens the microphone — traffic or the selected node still work. Feed bars have their own modulate switch on the Feed tab.</div>`;
+    const audioRow = document.createElement("div");
+    audioRow.className = "sec-controls";
+    audioRow.append(micPolicy.el);
+    audioSec.append(audioRow, audioWrap, meter);
+    this.pane("audio").appendChild(audioSec);
   }
 
   /** Live decoded-traffic overlay on the right of the graph. */
@@ -686,7 +980,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Header switch or F.</div>`;
+      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Agent thinking streams on the overlay even when source is traffic. Text size scales the ticker; transcript follows the latest line. Header switch or F.</div>`;
     const on = new Toggle({
       label: "show overlay",
       title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",
@@ -708,14 +1002,20 @@ export class Settings {
       format: (v) => `${v}`,
       onInput: (v) => { this.feed.density = v; this.persistFeed(); },
     });
+    const size = new Slider({
+      label: "text", title: "ticker and agent transcript type size",
+      min: 10, max: 20, step: 0.5, value: this.feed.textSize,
+      format: (v) => `${v}px`,
+      onInput: (v) => { this.feed.textSize = v; this.persistFeed(); },
+    });
     const row = document.createElement("div");
     row.className = "sec-controls";
     row.append(on.el, modulate.el);
     const bits = document.createElement("div");
     bits.className = "look-stack";
     bits.append(labeled("layout", layout.el), labeled("source", source.el), labeled("scope", scope.el));
-    sec.append(row, lookBlock("overlay", bits, dens));
-    this.feedUi = { on, modulate, setLayout: layout.set, setScope: scope.set, setSource: source.set, dens };
+    sec.append(row, lookBlock("overlay", bits, dens, size));
+    this.feedUi = { on, modulate, setLayout: layout.set, setScope: scope.set, setSource: source.set, dens, size };
     this.pane("feed").appendChild(sec);
   }
 
@@ -762,6 +1062,7 @@ export class Settings {
 
   applyFeed(c: FeedConfig): void {
     this.feed = { ...DEFAULT_FEED, ...c };
+    this.feed.textSize = Math.min(20, Math.max(10, this.feed.textSize || DEFAULT_FEED.textSize));
     const ui = this.feedUi;
     if (ui) {
       ui.on.checked = this.feed.on;
@@ -770,6 +1071,7 @@ export class Settings {
       ui.setScope(this.feed.scope);
       ui.setSource(this.feed.source);
       ui.dens.value = this.feed.density;
+      ui.size.value = this.feed.textSize;
     }
     this.persistFeed();
   }
@@ -790,7 +1092,9 @@ export class Settings {
       pitchPeriod: snap(B.pitchPeriod),
       zoom: snap(B.zoom),
       zoomPeriod: snap(B.zoomPeriod),
-      backdrop: this.anim.backdrop === "none" ? "none" : pickSky(this.anim.backdrop),
+      backdrop: this.anim.backdrop === "none" || this.anim.backdrop === "dynamic" || this.anim.backdrop === "live" || this.anim.backdrop === "custom"
+        ? this.anim.backdrop
+        : pickSky(this.anim.backdrop),
     };
     this.syncAnimUi();
     this.persistAnim();
@@ -814,6 +1118,7 @@ export class Settings {
     ui.skyBr.value = Math.round(a.skyBright * 100);
     ui.skySp.value = Math.round(a.skySpeed * 100);
     ui.skyEz.value = Math.round(a.skyEase * 100);
+    ui.skyAi.value = a.skyAiMin;
     ui.gridOp.value = Math.round(a.gridOpacity * 100);
     ui.gridBr.value = Math.round(a.gridBright * 100);
     ui.gridSize.value = a.gridSize;
@@ -834,6 +1139,8 @@ export class Settings {
     ui.setMod("floor", a.gridAudio);
     ui.setMod("camera", a.audioCamera);
     ui.setMod("nodes", a.audioNodes);
+    ui.setMod("physics", a.audioPhysics);
+    ui.setMod("particles", a.audioParts);
     ui.sens.value = Math.round(a.audioSens * 100);
     ui.camAudio.value = Math.round(a.camAudio * 100);
     ui.camChange.value = Math.round(a.camChange * 100);
@@ -843,10 +1150,36 @@ export class Settings {
     ui.camTheme.checked = a.camTheme;
     ui.labels.value = Math.round(a.labelWeight * 100);
     ui.shown.value = a.labelCount;
+    ui.autoTune.checked = a.autoTune !== false;
     ui.nodes.value = Math.round(a.nodeWeight * 100);
     ui.edges.value = Math.round(a.edgeWeight * 100);
     ui.glowAmt.value = Math.round(a.edgeGlowAmt * 100);
     ui.glowSpeed.value = Math.round(a.edgeGlowSpeed * 100);
+    ui.partAmt.value = Math.round(a.partAmt * 100);
+    ui.partBusy.value = Math.round(a.partBusy * 100);
+    ui.partQuiet.value = a.partQuiet;
+    ui.partPeak.value = a.partPeak;
+    ui.partCap.value = a.partCap;
+    ui.partSpeed.value = Math.round(a.partSpeed * 100);
+    ui.partSize.value = Math.round(a.partSize * 100);
+    ui.magnetSelf.value = Math.round(a.magnetSelf * 100);
+    ui.magnetGateway.value = Math.round(a.magnetGateway * 100);
+    ui.magnetLan.value = Math.round(a.magnetLan * 100);
+    ui.magnetLocal.value = Math.round(a.magnetLocal * 100);
+    ui.magnetInternet.value = Math.round(a.magnetInternet * 100);
+    ui.magnetMulticast.value = Math.round(a.magnetMulticast * 100);
+    ui.magnetCross.value = Math.round(a.magnetCross * 100);
+    ui.magnetRange.value = Math.round(a.magnetRange * 100);
+    ui.gravity.value = Math.round(a.gravity * 100);
+    ui.swirl.value = Math.round(a.swirl * 100);
+    ui.chargeAmt.value = Math.round(a.chargeAmt * 100);
+    ui.spring.value = Math.round(a.spring * 100);
+    ui.linkSpan.value = Math.round(a.linkSpan * 100);
+    ui.drag.value = Math.round(a.drag * 100);
+    ui.centerPull.value = Math.round(a.centerPull * 100);
+    ui.stringAmt.value = Math.round(a.stringAmt * 100);
+    ui.physPulse.checked = a.audioPhysics;
+    ui.partPulse.checked = a.audioParts;
   }
 
   private persistAnim(): void {
@@ -866,6 +1199,7 @@ export class Settings {
     localStorage.setItem(`${p}.anim.skyBright`, String(a.skyBright));
     localStorage.setItem(`${p}.anim.skySpeed`, String(a.skySpeed));
     localStorage.setItem(`${p}.anim.skyEase`, String(a.skyEase));
+    localStorage.setItem(`${p}.anim.skyAiMin`, String(a.skyAiMin));
     localStorage.setItem(`${p}.anim.skyAudio`, a.skyAudio ? "1" : "0");
     localStorage.setItem(`${p}.anim.bgAudio`, a.bgAudio ? "1" : "0");
     localStorage.setItem(`${p}.anim.bgColor`, a.bgColor);
@@ -890,6 +1224,7 @@ export class Settings {
     localStorage.setItem(`${p}.anim.skyCycle`, a.skyCycle);
     localStorage.setItem(`${p}.anim.labelWeight`, String(a.labelWeight));
     localStorage.setItem(`${p}.anim.labelCount`, String(a.labelCount));
+    localStorage.setItem(`${p}.anim.autoTune`, a.autoTune !== false ? "1" : "0");
     localStorage.setItem(`${p}.anim.nodeWeight`, String(a.nodeWeight));
     localStorage.setItem(`${p}.anim.edgeWeight`, String(a.edgeWeight));
     localStorage.setItem(`${p}.anim.edgeGlow`, a.edgeGlow);
@@ -898,6 +1233,31 @@ export class Settings {
     localStorage.setItem(`${p}.anim.mosaic`, a.mosaic);
     localStorage.setItem(`${p}.anim.hero`, a.hero);
     localStorage.setItem(`${p}.anim.focus`, a.focus);
+    localStorage.setItem(`${p}.anim.partAmt`, String(a.partAmt));
+    localStorage.setItem(`${p}.anim.partBusy`, String(a.partBusy));
+    localStorage.setItem(`${p}.anim.partQuiet`, String(a.partQuiet));
+    localStorage.setItem(`${p}.anim.partPeak`, String(a.partPeak));
+    localStorage.setItem(`${p}.anim.partCap`, String(a.partCap));
+    localStorage.setItem(`${p}.anim.partSpeed`, String(a.partSpeed));
+    localStorage.setItem(`${p}.anim.partSize`, String(a.partSize));
+    localStorage.setItem(`${p}.anim.audioParts`, a.audioParts ? "1" : "0");
+    localStorage.setItem(`${p}.anim.magnetSelf`, String(a.magnetSelf));
+    localStorage.setItem(`${p}.anim.magnetGateway`, String(a.magnetGateway));
+    localStorage.setItem(`${p}.anim.magnetLan`, String(a.magnetLan));
+    localStorage.setItem(`${p}.anim.magnetLocal`, String(a.magnetLocal));
+    localStorage.setItem(`${p}.anim.magnetInternet`, String(a.magnetInternet));
+    localStorage.setItem(`${p}.anim.magnetMulticast`, String(a.magnetMulticast));
+    localStorage.setItem(`${p}.anim.magnetCross`, String(a.magnetCross));
+    localStorage.setItem(`${p}.anim.magnetRange`, String(a.magnetRange));
+    localStorage.setItem(`${p}.anim.gravity`, String(a.gravity));
+    localStorage.setItem(`${p}.anim.swirl`, String(a.swirl));
+    localStorage.setItem(`${p}.anim.chargeAmt`, String(a.chargeAmt));
+    localStorage.setItem(`${p}.anim.spring`, String(a.spring));
+    localStorage.setItem(`${p}.anim.linkSpan`, String(a.linkSpan));
+    localStorage.setItem(`${p}.anim.drag`, String(a.drag));
+    localStorage.setItem(`${p}.anim.centerPull`, String(a.centerPull));
+    localStorage.setItem(`${p}.anim.stringAmt`, String(a.stringAmt));
+    localStorage.setItem(`${p}.anim.audioPhysics`, a.audioPhysics ? "1" : "0");
     this.onAnimChange(a);
     this.cfg.onPersist?.();
   }
@@ -910,6 +1270,7 @@ export class Settings {
     localStorage.setItem(`${p}.feed.scope`, c.scope);
     localStorage.setItem(`${p}.feed.source`, c.source);
     localStorage.setItem(`${p}.feed.density`, String(c.density));
+    localStorage.setItem(`${p}.feed.textSize`, String(c.textSize));
     localStorage.setItem(`${p}.feed.modulate`, c.modulate ? "1" : "0");
     this.onFeedChange(c);
     this.cfg.onPersist?.();
@@ -919,10 +1280,12 @@ export class Settings {
 
   get isOpen(): boolean { return !this.pop.hidden; }
 
-  open(): void {
+  open(pane?: string): void {
+    if (pane) this.showPane(pane);
     this.pop.hidden = false;
     this.el.classList.add("open");
     this.btn.setAttribute("aria-expanded", "true");
+    this.syncViewCog();
     const chrome = document.body.dataset.chrome;
     if (chrome === "left" || chrome === "right") {
       this.pop.classList.remove("right");
@@ -934,19 +1297,35 @@ export class Settings {
     }
     this.syncTheme();
     document.addEventListener("pointerdown", this.onDocDown, true);
+    this.tickMeter();
   }
 
   close(): void {
     this.pop.hidden = true;
     this.el.classList.remove("open");
     this.btn.setAttribute("aria-expanded", "false");
+    this.syncViewCog();
     unpinFlyout(this.pop, this.el);
     document.removeEventListener("pointerdown", this.onDocDown, true);
+    cancelAnimationFrame(this.meterRaf);
+    this.meterRaf = 0;
     this.onClose?.();
   }
 
+  private tickMeter = (): void => {
+    if (!this.isOpen) return;
+    this.meterRaf = requestAnimationFrame(this.tickMeter);
+    const ui = this.audioUi;
+    if (!ui || this.activePane !== "audio") return;
+    const p = this.pulseNow();
+    ui.level.style.width = `${Math.round(Math.max(0, Math.min(1, p.level)) * 100)}%`;
+    ui.bass.style.width = `${Math.round(Math.max(0, Math.min(1, p.bass)) * 100)}%`;
+    ui.src.textContent = p.listening ? "mic live" : liveMic.micPolicy === "off" ? "mic off · traffic fallback" : "traffic fallback";
+  };
+
   private onDocDown = (e: PointerEvent) => {
     const t = e.target as Node;
+    if (this.viewCog?.contains(t)) return;
     if (!this.el.contains(t) && !this.pop.contains(t)) this.close();
   };
 
@@ -989,13 +1368,15 @@ function clampNum(raw: string | null, lo: number, hi: number, fallback: number):
 function lookBlock(caption: string, extra: HTMLElement | null, ...controls: { el: HTMLElement }[]): HTMLDivElement {
   const wrap = document.createElement("div");
   wrap.className = "lookwrap";
-  const head = document.createElement("div");
-  head.className = "look-head";
-  const cap = document.createElement("span");
-  cap.className = "cap";
-  cap.textContent = caption;
-  head.appendChild(cap);
-  wrap.appendChild(head);
+  if (caption) {
+    const head = document.createElement("div");
+    head.className = "look-head";
+    const cap = document.createElement("span");
+    cap.className = "cap";
+    cap.textContent = caption;
+    head.appendChild(cap);
+    wrap.appendChild(head);
+  }
   if (extra) wrap.appendChild(extra);
   if (controls.length) {
     const g = document.createElement("div");
@@ -1095,6 +1476,7 @@ function loadAnim(prefix: string): DreamAnim {
     skyBright: n("skyBright", d.skyBright, B.bright.min, B.bright.max),
     skySpeed: n("skySpeed", d.skySpeed, B.skySpeed.min, B.skySpeed.max),
     skyEase: n("skyEase", d.skyEase, B.skyEase.min, B.skyEase.max),
+    skyAiMin: n("skyAiMin", d.skyAiMin, B.skyAiMin.min, B.skyAiMin.max),
     skyAudio: localStorage.getItem(`${prefix}.anim.skyAudio`) !== "0",
     bgAudio: localStorage.getItem(`${prefix}.anim.bgAudio`) === "1",
     gridOpacity: n("gridOpacity", d.gridOpacity, B.opacity.min, B.opacity.max),
@@ -1119,6 +1501,7 @@ function loadAnim(prefix: string): DreamAnim {
     skyCycle: parseThemeCycle(localStorage.getItem(`${prefix}.anim.skyCycle`)),
     labelWeight: n("labelWeight", d.labelWeight, B.labelWeight.min, B.labelWeight.max),
     labelCount: n("labelCount", d.labelCount, B.labelCount.min, B.labelCount.max),
+    autoTune: localStorage.getItem(`${prefix}.anim.autoTune`) !== "0",
     nodeWeight: n("nodeWeight", d.nodeWeight, B.nodeWeight.min, B.nodeWeight.max),
     edgeWeight: n("edgeWeight", d.edgeWeight, B.edgeWeight.min, B.edgeWeight.max),
     edgeGlow: parseGlow(localStorage.getItem(`${prefix}.anim.edgeGlow`)),
@@ -1127,6 +1510,31 @@ function loadAnim(prefix: string): DreamAnim {
     mosaic: parseMosaic(localStorage.getItem(`${prefix}.anim.mosaic`)),
     hero: parseHero(localStorage.getItem(`${prefix}.anim.hero`)),
     focus: parseFocus(localStorage.getItem(`${prefix}.anim.focus`)),
+    partAmt: n("partAmt", d.partAmt, B.partAmt.min, B.partAmt.max),
+    partBusy: n("partBusy", d.partBusy, B.partBusy.min, B.partBusy.max),
+    partQuiet: n("partQuiet", d.partQuiet, B.partQuiet.min, B.partQuiet.max),
+    partPeak: n("partPeak", d.partPeak, B.partPeak.min, B.partPeak.max),
+    partCap: n("partCap", d.partCap, B.partCap.min, B.partCap.max),
+    partSpeed: n("partSpeed", d.partSpeed, B.partSpeed.min, B.partSpeed.max),
+    partSize: n("partSize", d.partSize, B.partSize.min, B.partSize.max),
+    audioParts: localStorage.getItem(`${prefix}.anim.audioParts`) === "1",
+    magnetSelf: n("magnetSelf", d.magnetSelf, B.magnet.min, B.magnet.max),
+    magnetGateway: n("magnetGateway", d.magnetGateway, B.magnet.min, B.magnet.max),
+    magnetLan: n("magnetLan", d.magnetLan, B.magnet.min, B.magnet.max),
+    magnetLocal: n("magnetLocal", d.magnetLocal, B.magnet.min, B.magnet.max),
+    magnetInternet: n("magnetInternet", d.magnetInternet, B.magnet.min, B.magnet.max),
+    magnetMulticast: n("magnetMulticast", d.magnetMulticast, B.magnet.min, B.magnet.max),
+    magnetCross: n("magnetCross", d.magnetCross, B.magnet.min, B.magnet.max),
+    magnetRange: n("magnetRange", d.magnetRange, B.magnetRange.min, B.magnetRange.max),
+    gravity: n("gravity", d.gravity, B.gravity.min, B.gravity.max),
+    swirl: n("swirl", d.swirl, B.swirl.min, B.swirl.max),
+    chargeAmt: n("chargeAmt", d.chargeAmt, B.chargeAmt.min, B.chargeAmt.max),
+    spring: n("spring", d.spring, B.spring.min, B.spring.max),
+    linkSpan: n("linkSpan", d.linkSpan, B.linkSpan.min, B.linkSpan.max),
+    drag: n("drag", d.drag, B.drag.min, B.drag.max),
+    centerPull: n("centerPull", d.centerPull, B.centerPull.min, B.centerPull.max),
+    stringAmt: n("stringAmt", d.stringAmt, B.stringAmt.min, B.stringAmt.max),
+    audioPhysics: localStorage.getItem(`${prefix}.anim.audioPhysics`) === "1",
   };
 }
 
@@ -1173,6 +1581,7 @@ function loadFeed(prefix: string): FeedConfig {
     scope: FEED_SCOPES.some((o) => o.value === scope) ? (scope as FeedScope) : d.scope,
     source: FEED_SOURCES.some((o) => o.value === source) ? (source as FeedSource) : d.source,
     density: n("density", d.density, 12, 80),
+    textSize: n("textSize", d.textSize, 10, 20),
     modulate: localStorage.getItem(`${prefix}.feed.modulate`) !== "0",
   };
 }

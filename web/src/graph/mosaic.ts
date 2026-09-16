@@ -1,11 +1,8 @@
 import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize } from "./scene";
-import { GRAPH_MODES, modeById, viewCaption, type ViewMode } from "../core/modes";
+import { allModes, modeById, viewCaption, type ViewMode } from "../core/modes";
 import { lookForMode, mergeLook } from "../plugins/plugin";
 import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
-
-const GRAPH_IDS = GRAPH_MODES.map((m) => m.id);
-const ARCADE_IDS = ["netpong", "invaders", "command", "frogger", "cpupong"];
 
 /** Center-hero split of the tile wall: 2×2 → 2+2, 2×3 → 4+2, 2×4 → 4+4. */
 export function centerSplit(n: number): [number, number] {
@@ -19,7 +16,7 @@ export function centerSplit(n: number): [number, number] {
 export function mosaicIds(size: MosaicSize, prefer?: string, hero: HeroPos = "off"): string[] {
   if (size === "off") return [];
   const n = Number(size);
-  const pool = panePool(prefer);
+  const pool = panePool();
   if (hero === "off") {
     const ids = pool.slice(0, n);
     if (!prefer || !pool.includes(prefer)) return ids;
@@ -31,18 +28,12 @@ export function mosaicIds(size: MosaicSize, prefer?: string, hero: HeroPos = "of
   return [heroId, ...pool.filter((id) => id !== heroId).slice(0, n)];
 }
 
-function panePool(prefer?: string): string[] {
-  const pool = [...GRAPH_IDS, ...ARCADE_IDS];
-  if (prefer && !pool.includes(prefer)) {
-    const m = modeById(prefer);
-    if (m && !m.standalone) pool.unshift(prefer);
-  }
-  return pool;
+function panePool(): string[] {
+  return allModes().map((m) => m.id);
 }
 
 function isGraph(id: string): boolean {
-  if (GRAPH_IDS.includes(id)) return true;
-  const m = modeById(id);
+  const m = allModes().find((row) => row.id === id);
   return !!m && !m.standalone;
 }
 
@@ -173,8 +164,14 @@ export class Mosaic {
     for (const e of this.extras) e.scene.update(msg);
   }
 
-  /** Per-pane look from that view's plugin YAML, on top of the shared animation settings. */
-  applyLooks(a: DreamAnim): void {
+  /** Per-pane look from that view's plugin YAML, on top of the shared animation settings.
+   *  `pin` false keeps the shared look (header AI cycling) on every tile. */
+  applyLooks(a: DreamAnim, pin = true): void {
+    if (!pin) {
+      this.cfg.main.setAnim(a);
+      for (const e of this.extras) e.scene.setAnim(a);
+      return;
+    }
     this.cfg.main.setAnim(mergeLook(a, lookForMode(this.cfg.main.currentMode.id)));
     for (const e of this.extras) e.scene.setAnim(mergeLook(a, lookForMode(e.id)));
   }
@@ -183,8 +180,8 @@ export class Mosaic {
    * Hero / main scene keeps `t` (the selected chrome theme). Every other pane gets a different
    * shipped palette so the wall is not one colour repeated.
    */
-  setTheme(t: Theme): void {
-    this.paintPanes(t);
+  setTheme(t: Theme, fade = false): void {
+    this.paintPanes(t, fade);
   }
 
   teardownArcadeExcept(keep: string | null): void {
@@ -267,13 +264,13 @@ export class Mosaic {
     if (st.lastMsg) s.update(st.lastMsg);
   }
 
-  private paintPanes(hero: Theme): void {
+  private paintPanes(hero: Theme, fade = false): void {
     const used = new Set<string>([hero.id]);
     const mainId = this.cfg.main.currentMode.id;
     this.tintPane(mainId, hero);
     for (const e of this.extras) {
       const t = takeTheme(used, lookForMode(e.id)?.theme);
-      e.scene.setTheme(t);
+      e.scene.setTheme(t, fade);
       this.tintPane(e.id, t);
     }
     for (const id of this.liveArcade) {

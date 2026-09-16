@@ -4,7 +4,9 @@
  * so a 2×2 mosaic still reads as ~60 fps when the main thread is keeping up.
  */
 
-const WINDOW_MS = 1000;
+const SHOW_MS = 1000;
+/** Keep a 1-minute trail so auto-tune can average a recovery window. */
+const KEEP_MS = 60_000;
 const stamps: number[] = [];
 let lastTs = -1;
 let shown = "";
@@ -14,20 +16,52 @@ export function bindFps(target: HTMLElement): void {
   el = target;
 }
 
+/** Drop recorded timestamps (tests). */
+export function resetFps(): void {
+  stamps.length = 0;
+  lastTs = -1;
+  shown = "";
+}
+
+/**
+ * Frames per second over the last `windowMs` of marked vsyncs, or null if the trail is too short.
+ * `since` ignores stamps before a lean / view-change so the next minute is a fresh average.
+ */
+export function windowFps(now: number, windowMs = SHOW_MS, since = Number.NEGATIVE_INFINITY): number | null {
+  if (stamps.length < 2) return null;
+  const cutoff = Math.max(now - windowMs, since);
+  let first = -1, n = 0;
+  for (const t of stamps) {
+    if (t < cutoff) continue;
+    if (first < 0) first = t;
+    n++;
+  }
+  if (n < 2 || first < 0) return null;
+  const last = stamps[stamps.length - 1]!;
+  const span = last - first;
+  if (span < Math.min(80, windowMs * 0.5)) return null;
+  if (windowMs >= KEEP_MS * 0.5 && span < windowMs * 0.85) return null;
+  return ((n - 1) * 1000) / span;
+}
+
 /** Call from every animation callback with that callback's rAF timestamp. */
 export function markFrame(ts: number): void {
   if (ts === lastTs) return;
   lastTs = ts;
   stamps.push(ts);
-  const cutoff = ts - WINDOW_MS;
+  const cutoff = ts - KEEP_MS;
   let i = 0;
   while (i < stamps.length && stamps[i]! < cutoff) i++;
   if (i) stamps.splice(0, i);
   if (!el || stamps.length < 2) return;
-  const span = stamps[stamps.length - 1]! - stamps[0]!;
-  if (span < 80) return;
-  const next = String(Math.round(((stamps.length - 1) * 1000) / span));
+  const fps = windowFps(ts, SHOW_MS);
+  if (fps == null) return;
+  const next = String(Math.round(fps));
   if (next === shown) return;
   shown = next;
   el.textContent = next;
+}
+
+export function setFpsHint(text: string): void {
+  if (el) el.parentElement?.setAttribute("title", text);
 }

@@ -1,15 +1,21 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, FEED_SOURCES, feedViewShift, LiveFeed } from "./feed";
 import type { NetScene } from "../graph/scene";
+import type { Packet, TrafficMsg } from "../core/types";
 
 const feeds: LiveFeed[] = [];
 
-function overlay(): LiveFeed {
+function overlay(source: "traffic" | "transcript" | "both" = "transcript"): LiveFeed {
   const host = document.createElement("div");
   document.body.append(host);
-  const feed = new LiveFeed(host, { pulseNow: { level: 0 } } as NetScene);
+  const feed = new LiveFeed(host, {
+    pulseNow: { level: 0 },
+    selectedIp: "",
+    deviceOf: () => undefined,
+    selectIp: () => {},
+  } as unknown as NetScene);
   feeds.push(feed);
-  feed.setConfig({ ...DEFAULT_FEED, on: true, source: "transcript", layout: "ticker" });
+  feed.setConfig({ ...DEFAULT_FEED, on: true, source, layout: "ticker" });
   return feed;
 }
 
@@ -20,12 +26,15 @@ afterEach(() => {
 });
 
 describe("feed defaults", () => {
-  it("is on with shipped layouts and a traffic source", () => {
+  it("is on with shipped layouts and a traffic source that still carries live think", () => {
     expect(DEFAULT_FEED.on).toBe(true);
     expect(DEFAULT_FEED.source).toBe("traffic");
     expect(FEED_LAYOUTS.map((o) => o.value)).toEqual(["ticker", "bars", "both"]);
     expect(FEED_SCOPES.map((o) => o.value)).toContain("lan");
     expect(FEED_SOURCES.map((o) => o.value)).toEqual(["traffic", "transcript", "both"]);
+    expect(FEED_SOURCES.find((o) => o.value === "traffic")?.hint).toMatch(/thinking/);
+    expect(DEFAULT_FEED.textSize).toBe(12);
+    expect(DEFAULT_FEED.density).toBe(36);
   });
 });
 
@@ -55,8 +64,16 @@ describe("transcript overlay", () => {
     ]);
     const rows = [...feed.el.querySelectorAll(".row")];
     expect(rows.map((r) => r.querySelector(".k")?.textContent)).toEqual(["you", "think", "agent"]);
-    expect(rows[1]?.querySelector(".tx")?.textContent).toContain("1. greet");
-    expect(rows[1]?.querySelector(".tx")?.textContent).toContain("2. wait");
+    expect(rows[1]?.querySelector(".tx")?.textContent).toContain("greet");
+    expect(rows[1]?.querySelector(".tx")?.textContent).toContain("wait for a task");
+  });
+
+  it("renders agent markdown as html", () => {
+    const feed = overlay();
+    feed.seedTranscript([{ role: "assistant", content: "**nest** is loud" }]);
+    expect(feed.el.querySelector(".row.agent .tx strong")?.textContent).toBe("nest");
+    feed.pushChat("agent", "use `tcp/443`", true);
+    expect(feed.el.querySelector(".row.agent .tx code")?.textContent).toBe("tcp/443");
   });
 
   it("streams newlines into the same think line", () => {
@@ -67,6 +84,13 @@ describe("transcript overlay", () => {
     expect(think).toHaveLength(1);
     expect(think[0]?.querySelector(".tx")?.textContent).toContain("Analyze the user input:");
     expect(think[0]?.querySelector(".tx")?.textContent).toContain("Goal: reply");
+  });
+
+  it("renders thought markdown as html", () => {
+    const feed = overlay();
+    feed.pushChat("think", "1. **greet**\n2. wait", false);
+    expect(feed.el.querySelector(".row.think .tx strong")?.textContent).toBe("greet");
+    expect(feed.el.querySelector(".row.think .tx ol, .row.think .tx ul")).toBeTruthy();
   });
 
   it("appends later turns below earlier ones and drops the oldest from the top", () => {
@@ -109,7 +133,7 @@ describe("transcript overlay", () => {
     expect(feed.el.getAttribute("aria-busy")).toBe("true");
     expect(feed.el.querySelector(".feed-hint")?.textContent).toBe("thinking…");
     const pending = feed.el.querySelector(".row.think.pending .tx");
-    expect(pending?.textContent).toBe("thinking…");
+    expect(pending?.textContent?.trim()).toBe("thinking…");
     feed.pushChat("think", "checking talkers\n", true);
     expect(feed.el.querySelector(".row.think.pending")).toBeNull();
     expect(feed.el.querySelector(".row.think .tx")?.textContent).toContain("checking talkers");
@@ -121,8 +145,83 @@ describe("transcript overlay", () => {
     quiet.setThinking(true);
     quiet.pushChat("agent", "hi", true);
     expect(quiet.el.querySelector(".row.think")).toBeNull();
-    expect(quiet.el.querySelector(".row.agent .tx")?.textContent).toBe("hi");
+    expect(quiet.el.querySelector(".row.agent .tx")?.textContent?.trim()).toBe("hi");
     quiet.setThinking(false);
     expect(quiet.el.getAttribute("aria-busy")).toBe("false");
+  });
+});
+
+describe("live agent trace", () => {
+  it("streams thinking onto the traffic overlay", () => {
+    const feed = overlay("traffic");
+    expect(feed.el.classList.contains("transcript")).toBe(false);
+    feed.setThinking(true);
+    expect(feed.el.querySelector(".feed-hint")?.textContent).toBe("thinking…");
+    expect(feed.el.querySelector(".row.think.pending .tx")?.textContent?.trim()).toBe("thinking…");
+    feed.pushChat("think", "the nest cam is loud\n", true);
+    expect(feed.el.classList.contains("trace")).toBe(true);
+    expect(feed.el.querySelector(".row.think.pending")).toBeNull();
+    expect(feed.el.querySelector(".row.think .tx")?.textContent).toContain("the nest cam is loud");
+    feed.pushChat("think", "because of the bitrate", true);
+    expect(feed.el.querySelectorAll(".row.think")).toHaveLength(1);
+    expect(feed.el.querySelector(".row.think .tx")?.textContent).toContain("because of the bitrate");
+  });
+
+  it("keeps one think row while packets arrive", () => {
+    const feed = overlay("both");
+    feed.pushChat("think", "plan:\n", true);
+    const t = 1_700_000_000;
+    const pkt: Packet = [t, "out", "8.8.8.8", "dns", "udp/53", 80, "wlan0", "A www.example.com", "53", "192.168.86.4"];
+    const msg: TrafficMsg = {
+      ip: "@lan",
+      peer: null,
+      ts: t,
+      packets: [pkt],
+      window: null,
+      summary: { protos: [], ports: [], queries: [], sni: [], peers: [] },
+    };
+    (feed as unknown as { ingest(m: TrafficMsg): void }).ingest(msg);
+    feed.pushChat("think", "check nest\n", true);
+    const think = [...feed.el.querySelectorAll(".row.think")];
+    expect(think).toHaveLength(1);
+    expect(think[0]?.querySelector(".tx")?.textContent).toContain("plan:");
+    expect(think[0]?.querySelector(".tx")?.textContent).toContain("check nest");
+    expect(feed.el.querySelector(".feed-ticker")?.firstElementChild).toBe(think[0]);
+    expect([...feed.el.querySelectorAll(".row")].some((r) => !r.classList.contains("chat"))).toBe(true);
+  });
+});
+
+describe("feed type size and auto-scroll", () => {
+  function mockTicker(feed: LiveFeed, height = 80, content = 400): () => number {
+    const ticker = feed.el.querySelector(".feed-ticker") as HTMLDivElement;
+    Object.defineProperty(ticker, "clientHeight", { configurable: true, get: () => height });
+    Object.defineProperty(ticker, "scrollHeight", { configurable: true, get: () => content });
+    let top = 0;
+    Object.defineProperty(ticker, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => { top = Number(v); },
+    });
+    return () => top;
+  }
+
+  it("applies --feed-size and clamps", () => {
+    const feed = overlay();
+    feed.setConfig({ ...DEFAULT_FEED, on: true, source: "transcript", layout: "ticker", textSize: 18 });
+    expect(feed.el.style.getPropertyValue("--feed-size")).toBe("18px");
+    feed.setConfig({ ...DEFAULT_FEED, on: true, source: "transcript", layout: "ticker", textSize: 99 });
+    expect(feed.el.style.getPropertyValue("--feed-size")).toBe("20px");
+  });
+
+  it("pins the transcript ticker to the latest line", () => {
+    const feed = overlay();
+    const top = mockTicker(feed);
+    feed.seedTranscript([
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "hello" },
+    ]);
+    expect(top()).toBe(400);
+    feed.pushChat("agent", " more tokens", true);
+    expect(top()).toBe(400);
   });
 });

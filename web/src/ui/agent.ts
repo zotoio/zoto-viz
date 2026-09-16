@@ -1,11 +1,23 @@
 import { Toggle, TextField } from "./ui";
+import { OddsStrip, TemperRail, clampTemper, parseWeather, setCurrentWeather, type Weather } from "./temper";
 import { redaction } from "../core/redact";
 import { setTsPluginsAllowed, tsPluginsAllowed } from "../plugins/host";
 import { apiFetch, bootSession, csrfToken } from "../core/http";
 import { playPcmStream } from "../audio/tts";
 import { includeView, VIEW_KEY, type ViewCapture } from "./capture";
+import { fillMarkdown } from "./markdown";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
+export const CYCLE_KEY = "zoto-viz.aiCycle";
+
+/** Header AI cycling. Unset means on; only an explicit `"0"` is off. */
+export function aiCyclePrefOn(store: Pick<Storage, "getItem"> | null = typeof localStorage === "undefined" ? null : localStorage): boolean {
+  try {
+    return store?.getItem(CYCLE_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
 const MODEL_KEY = "zoto-viz.aiModel";
 const VOICE_KEY = "zoto-viz.voice";
 const TTS_VOICE_KEY = "zoto-viz.ttsVoice";
@@ -29,28 +41,49 @@ export function agentPhase(s: {
   if (s.speaking) return "speak";
   if (s.busy) return "think";
   if (s.wakeOn && s.heard) return "heard";
-  if (s.wakeOn && s.recOn !== false) return "listen";
+  if (s.wakeOn) return "listen";
   return "idle";
 }
 
-export function agentHeaderCopy(phase: AgentPhase, watch = DEFAULT_WATCH): { text: string; title: string } {
+/** Extra silent /api/ai/chat calls if a turn ends on thought with no user-facing reply. */
+export const AGENT_REPLY_POLLS = 4;
+
+export function needsAgentReply(thinking: string, content: string): boolean {
+  const text = content.trim();
+  if ((text.split("```").length - 1) % 2 === 1) return true;
+  if (/<think>/i.test(text) && !/<\/think>/i.test(text)) return true;
+  if (!text) return Boolean(thinking.trim());
+  return false;
+}
+
+const CONTROL_TIP = "AI Control is on — the local agent can change any settings, skies, and decorations (saved on the model-named profile)";
+const CYCLE_TIP = "AI cycling on — Dynamic sky, cadence themes, views and motion (profile named after the Ollama model)";
+
+export function agentHeaderCopy(phase: AgentPhase, watch = DEFAULT_WATCH, controlOn = false, cycleOn = false): { text: string; title: string } {
+  let text = "AI";
+  let title = cycleOn ? CYCLE_TIP : "off — Dynamic sky, cadence themes, views and motion (saved as a profile named after the model)";
   switch (phase) {
     case "speak":
-      return { text: "AI · speak", title: "speaking a reply" };
+      text = "AI · speak"; title = "speaking a reply"; break;
     case "think":
-      return { text: "AI · think", title: "the local model is thinking" };
+      text = "AI · think"; title = "the local model is thinking"; break;
     case "heard":
-      return { text: "AI · heard", title: "heard the watchword — keep talking" };
+      text = "AI · heard"; title = "heard the watchword — keep talking"; break;
     case "listen":
-      return { text: "AI · listen", title: `listening for “${watch}”` };
+      title = `listening for “${watch}”`; break;
     default:
-      return { text: "AI", title: "local agent idle" };
+      break;
   }
+  if (cycleOn && phase !== "idle") title = `${title} · ${CYCLE_TIP}`;
+  if (controlOn) title = `${title} · ${CONTROL_TIP}`;
+  return { text, title };
 }
 
 export class AgentPanel {
   readonly el: HTMLDivElement;
-  readonly headerBtn: HTMLButtonElement;
+  readonly headerEl: HTMLElement;
+  private readonly headerToggle: Toggle;
+  private readonly headerTxt: HTMLSpanElement;
   private readonly led: HTMLSpanElement;
   private readonly log: HTMLDivElement;
   private readonly input: HTMLTextAreaElement;
@@ -68,6 +101,9 @@ export class AgentPanel {
   private silence = 0;
   private restart = 0;
   private controlToggle: Toggle;
+  private temperRail!: TemperRail;
+  private oddsStrip!: OddsStrip;
+  private temperTimer = 0;
   private modelField!: TextField;
   private history: { role: "user" | "assistant"; content: string; thinking?: string }[] = [];
   private hydrateP: Promise<void> | null = null;
@@ -75,10 +111,13 @@ export class AgentPanel {
   private noVoiceHint = false;
   private voicesTried = false;
   private ttsEngine = "";
+  private lastOllama: { ok: boolean; models: string[] } = { ok: false, models: [] };
   private speakAbort: AbortController | null = null;
   onControl?: (on: boolean) => void;
+  onCycle?: (on: boolean) => void;
   onOpen?: () => void;
-  onApplySettings?: (patch: Record<string, unknown>) => void;
+  onApplySettings?: (patch: Record<string, unknown>) => void | Promise<void>;
+  onApplyLook?: (look: AgentLookInput) => Promise<void>;
   onChat?: (role: "you" | "think" | "agent", text: string, stream?: boolean) => void;
   onPhase?: (phase: AgentPhase) => void;
   onTranscript?: () => void;
@@ -90,20 +129,19 @@ export class AgentPanel {
   constructor() {
     this.el = document.createElement("div");
     this.el.className = "agent-panel";
-    this.headerBtn = document.createElement("button");
-    this.headerBtn.type = "button";
-    this.headerBtn.className = "toggle";
     this.led = document.createElement("span");
     this.led.className = "led";
     this.led.setAttribute("aria-hidden", "true");
-    this.headerBtn.replaceChildren(this.led, document.createTextNode("AI"));
-    this.headerBtn.title = "open the local agent · click to start watchword listening";
-    this.headerBtn.addEventListener("click", () => {
-      this.onOpen?.();
-      void this.refreshStatus();
-      if (!this.busy) void this.hydrate(true);
-      if (this.wakeOn) this.startWake(true);
+    this.headerToggle = new Toggle({
+      id: "ai",
+      label: "AI",
+      title: CYCLE_TIP,
+      checked: aiCyclePrefOn(),
+      onChange: (on) => { this.onCycle?.(on); },
     });
+    this.headerTxt = this.headerToggle.el.querySelector(".txt")!;
+    this.headerToggle.el.prepend(this.led);
+    this.headerEl = this.headerToggle.el;
     document.addEventListener("pointerdown", () => {
       if (this.wakeOn && !this.rec && !this.busy && !this.speaking && !this.holdTalk) this.startWake();
     });
@@ -115,7 +153,7 @@ export class AgentPanel {
 
     const control = new Toggle({
       label: "AI Control",
-      title: "when on, the agent may change settings and install drafted plugins (stored on the monitor, not only in this browser)",
+      title: "when on, the agent may change settings and install drafted plugins. The header AI toggle also turns this on with a profile named after the model.",
       checked: false,
       onChange: (on) => { void this.pushControl(on); },
     });
@@ -179,6 +217,17 @@ export class AgentPanel {
       onInput: (v) => localStorage.setItem(TTS_VOICE_KEY, v.trim()),
     });
 
+    this.temperRail = new TemperRail({
+      onChange: (n) => this.pushTemper({ temper: n }),
+    });
+    this.oddsStrip = new OddsStrip({
+      onChange: (w) => {
+        setCurrentWeather(w);
+        this.pushTemper({ weather: w });
+      },
+    });
+    setCurrentWeather(this.oddsStrip.value);
+
     this.log = document.createElement("div");
     this.log.className = "agent-log";
     this.input = document.createElement("textarea");
@@ -203,7 +252,12 @@ export class AgentPanel {
     row.className = "agent-row";
     row.append(this.input, send, talk, clear);
 
-    this.el.append(this.statusEl, this.modelField.el, ttsVoice.el, control.el, listen.el, watch.el, voice.el, ts.el, view.el, this.log, row);
+    this.el.append(
+      this.statusEl,
+      this.temperRail.el,
+      this.oddsStrip.el,
+      this.modelField.el, ttsVoice.el, control.el, listen.el, watch.el, voice.el, ts.el, view.el, this.log, row,
+    );
     this.paintHeader();
     void this.hydrate();
     if ("speechSynthesis" in window) {
@@ -213,13 +267,53 @@ export class AgentPanel {
   }
 
   get controlOn(): boolean { return this.controlToggle.checked; }
+  get cycleOn(): boolean { return this.headerToggle.checked; }
+  get modelTag(): string {
+    return this.modelField.value.trim() || localStorage.getItem(MODEL_KEY) || "gemma4";
+  }
+
+  async probeOllama(): Promise<{ ok: boolean; model: string; models: string[]; online: boolean }> {
+    await this.refreshStatus();
+    const model = this.modelTag;
+    const online = this.lastOllama.ok && (
+      this.lastOllama.models.length ? this.lastOllama.models.includes(model) : true
+    );
+    return { ok: this.lastOllama.ok, model, models: this.lastOllama.models, online };
+  }
+
+  /** Set the header switch without firing onCycle. */
+  setCycleChecked(on: boolean): void {
+    this.headerToggle.checked = on;
+    this.paintHeader();
+  }
+
+  async setControl(on: boolean): Promise<void> {
+    await this.pushControl(on);
+  }
 
   setControlFromServer(on: boolean): void {
     this.controlToggle.checked = on;
     localStorage.setItem(CONTROL_KEY, on ? "1" : "0");
     document.body.classList.toggle("ai-control", on);
+    this.paintHeader();
     this.onControl?.(on);
   }
+
+  /** Apply temper/weather from MCP or the monitor without echoing a PUT. */
+  syncTemper(patch: { temper?: number; weather?: string }): void {
+    if (typeof patch.temper === "number") {
+      this.temperRail.value = clampTemper(patch.temper);
+      try { localStorage.setItem("zoto-viz.temper", String(this.temperRail.value)); } catch { /* ignore */ }
+    }
+    if (patch.weather) {
+      const w = parseWeather(patch.weather);
+      this.oddsStrip.value = w;
+      setCurrentWeather(w);
+    }
+  }
+
+  get weather(): Weather { return this.oddsStrip.value; }
+  get temper(): number { return this.temperRail.value; }
 
   /** Start always-on listening if the operator left the toggle on. Needs a click if the browser blocks it. */
   armWake(): void {
@@ -247,6 +341,24 @@ export class AgentPanel {
     }
   }
 
+  private pushTemper(patch: { temper?: number; weather?: Weather }): void {
+    if (typeof patch.temper === "number") {
+      try { localStorage.setItem("zoto-viz.temper", String(clampTemper(patch.temper))); } catch { /* ignore */ }
+    }
+    if (patch.weather) setCurrentWeather(patch.weather);
+    window.clearTimeout(this.temperTimer);
+    this.temperTimer = window.setTimeout(() => {
+      void apiFetch("/api/ai/temper", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          temper: this.temperRail.value,
+          weather: this.oddsStrip.value,
+        }),
+      }).catch(() => {});
+    }, 120);
+  }
+
   mountSettings(host: HTMLElement): void {
     host.appendChild(this.el);
   }
@@ -255,6 +367,7 @@ export class AgentPanel {
     try {
       const r = await apiFetch("/api/ai/status");
       if (!r.ok) {
+        this.lastOllama = { ok: false, models: [] };
         this.statusEl.textContent = r.status === 404
           ? "This monitor has no AI routes — restart the monitor process to load the current code."
           : `AI status failed (${r.status}).`;
@@ -262,8 +375,11 @@ export class AgentPanel {
       }
       const d = await r.json() as {
         ok?: boolean; error?: string; hasGemma?: boolean; model?: string; host?: string; models?: string[]; tts?: string;
+        temper?: number; weather?: string;
       };
       this.ttsEngine = String(d.tts || "");
+      this.lastOllama = { ok: !!d.ok, models: Array.isArray(d.models) ? d.models.filter((m) => typeof m === "string") : [] };
+      if (typeof d.temper === "number" || d.weather) this.syncTemper({ temper: d.temper, weather: d.weather });
       if (d.ok && d.model && d.models?.length && !d.models.includes(this.modelField.value.trim() || "gemma4")) {
         this.modelField.value = d.model;
         localStorage.setItem(MODEL_KEY, d.model);
@@ -274,6 +390,7 @@ export class AgentPanel {
         ? `Ollama ${d.host || "127.0.0.1:11434"} · ${d.hasGemma ? (d.model || "gemma4") : `pull gemma4`}.${tts} ${listen}`
         : `Ollama offline (${d.error || "unreachable"}). Loopback only (${d.host || "127.0.0.1:11434"}).`;
     } catch {
+      this.lastOllama = { ok: false, models: [] };
       this.statusEl.textContent = "Ollama status unknown — is the monitor up?";
     }
   }
@@ -284,10 +401,26 @@ export class AgentPanel {
 
   private append(role: string, text: string): void {
     const p = document.createElement("p");
-    if (role === "think") p.className = "think";
-    p.textContent = `${role}: ${text}`;
+    if (role === "think" || role === "agent") {
+      p.className = role === "think" ? "think md" : "md";
+      const k = document.createElement("span");
+      k.className = "k";
+      k.textContent = role;
+      const body = document.createElement("div");
+      body.className = "md-body";
+      fillMarkdown(body, text);
+      p.append(k, body);
+    } else {
+      p.textContent = `${role}: ${text}`;
+    }
     this.log.appendChild(p);
-    this.log.scrollTop = this.log.scrollHeight;
+    this.pinLog();
+  }
+
+  private pinLog(): void {
+    const go = () => { this.log.scrollTop = this.log.scrollHeight; };
+    go();
+    requestAnimationFrame(go);
   }
 
   private paintLog(): void {
@@ -347,15 +480,15 @@ export class AgentPanel {
       heard: this.command !== null,
       recOn: !!this.rec,
     });
-    const { text, title } = agentHeaderCopy(phase, watchword());
-    this.headerBtn.classList.toggle("listening", phase === "listen");
-    this.headerBtn.classList.toggle("heard", phase === "heard");
-    this.headerBtn.classList.toggle("thinking", phase === "think");
-    this.headerBtn.classList.toggle("speaking", phase === "speak");
-    this.headerBtn.classList.toggle("busy", phase === "think" || phase === "speak");
-    this.headerBtn.setAttribute("aria-busy", phase === "think" || phase === "speak" ? "true" : "false");
-    this.headerBtn.title = title;
-    this.headerBtn.replaceChildren(this.led, document.createTextNode(text));
+    const { text, title } = agentHeaderCopy(phase, watchword(), this.controlOn, this.cycleOn);
+    this.headerEl.classList.toggle("listening", phase === "listen");
+    this.headerEl.classList.toggle("heard", phase === "heard");
+    this.headerEl.classList.toggle("thinking", phase === "think");
+    this.headerEl.classList.toggle("speaking", phase === "speak");
+    this.headerEl.classList.toggle("busy", phase === "think" || phase === "speak");
+    this.headerEl.setAttribute("aria-busy", phase === "think" || phase === "speak" ? "true" : "false");
+    this.headerEl.title = title;
+    this.headerTxt.textContent = text;
     document.body.classList.toggle("ai-thinking", phase === "think");
     this.onPhase?.(phase);
   }
@@ -387,7 +520,7 @@ export class AgentPanel {
       if (e.error === "no-speech" || e.error === "aborted") return;
       if (e.error === "not-allowed") {
         this.micBlocked = true;
-        this.headerBtn.title = "click AI to allow the microphone for watchword listening";
+        this.headerEl.title = "allow the microphone from Settings → Agent for watchword listening";
       }
     };
     rec.onend = () => {
@@ -403,7 +536,7 @@ export class AgentPanel {
       this.rec = rec;
       this.paintHeader();
     } catch {
-      this.headerBtn.title = "click AI to start watchword listening (browser blocked the mic)";
+      this.headerEl.title = "allow the microphone from Settings → Agent (browser blocked the mic)";
     }
   }
 
@@ -539,15 +672,17 @@ export class AgentPanel {
       if (!csrfToken()) await bootSession();
       this.history.push({ role: "user", content: text });
       const view = includeView() ? this.captureView?.() ?? undefined : undefined;
-      const r = await apiFetch("/api/ai/chat", {
+      const chatBody = (extra: Record<string, unknown> = {}) => JSON.stringify({
+        redact: redaction.enabled,
+        model: localStorage.getItem(MODEL_KEY) || this.modelField.value || "gemma4",
+        messages: this.history.slice(-10),
+        ...(view ? { view: { hud: view } } : {}),
+        ...extra,
+      });
+      let r = await apiFetch("/api/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          redact: redaction.enabled,
-          model: localStorage.getItem(MODEL_KEY) || this.modelField.value || "gemma4",
-          messages: this.history.slice(-10),
-          ...(view ? { view: { hud: view } } : {}),
-        }),
+        body: chatBody(),
       });
       if (!r.ok) {
         const raw = await r.text();
@@ -557,7 +692,20 @@ export class AgentPanel {
         this.onChat?.("agent", `chat failed (${r.status}): ${fail}`);
         return true;
       }
-      const { thinking, content } = await this.readChat(r);
+      let { thinking, content } = await this.readChat(r);
+      let polls = 0;
+      while (needsAgentReply(thinking, content) && polls < AGENT_REPLY_POLLS) {
+        polls += 1;
+        r = await apiFetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: chatBody({ poll: true }),
+        });
+        if (!r.ok) break;
+        const next = await this.readChat(r);
+        thinking += next.thinking;
+        content += next.content;
+      }
       reply = content;
       this.history.push({ role: "assistant", content: reply, thinking: thinking || undefined });
       if (thinking) this.append("think", thinking);
@@ -565,7 +713,15 @@ export class AgentPanel {
       const settingsPatch = extractSettings(reply);
       if (settingsPatch) {
         if (!this.controlOn) this.append("agent", "AI Control is off — settings were not applied");
-        else this.onApplySettings?.(settingsPatch);
+        else await this.onApplySettings?.(settingsPatch);
+      }
+      const look = extractAgentLook(reply);
+      if (look) {
+        if (!this.controlOn) this.append("agent", "AI Control is off — shader / photos / SVG were not applied");
+        else {
+          try { await this.onApplyLook?.(look); }
+          catch (e) { this.append("agent", String(e)); }
+        }
       }
       const yaml = extractYaml(reply);
       if (yaml) {
@@ -573,7 +729,7 @@ export class AgentPanel {
         const d = await apiFetch("/api/ai/plugin", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ yaml, install }),
+          body: JSON.stringify({ files: { "plugin.yml": yaml }, install }),
         }).then((x) => x.json()) as { ok?: boolean; error?: string; installed?: boolean };
         this.append("agent", d.ok ? (d.installed ? "plugin installed" : "plugin draft is valid (enable AI Control to install)") : `plugin invalid: ${d.error}`);
       }
@@ -874,7 +1030,10 @@ export function extractMemory(text: string): string | null {
 }
 
 export function displayText(reply: string): string {
-  const stripped = reply.replace(/```memory\n[\s\S]*?```/gi, "").trim();
+  const stripped = reply
+    .replace(/```memory\n[\s\S]*?```/gi, "")
+    .replace(/```(?:shader|glsl|photo|svg|deco)\n[\s\S]*?```/gi, "")
+    .trim();
   return stripped || reply;
 }
 
@@ -887,6 +1046,73 @@ export function extractSettings(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+export interface AgentLookInput {
+  shader?: string;
+  photos?: { url: string; at?: unknown }[];
+  svg?: string;
+  clear?: boolean;
+}
+
+function fence(text: string, name: string): string | null {
+  const m = text.match(new RegExp("```" + name + "\\n([\\s\\S]+?)```", "i"));
+  return m ? m[1]!.trim() : null;
+}
+
+export function extractShader(text: string): string | null {
+  return fence(text, "shader") || fence(text, "glsl");
+}
+
+export function extractSvg(text: string): string | null {
+  const inner = fence(text, "svg");
+  if (!inner) return null;
+  return inner.startsWith("<svg") ? inner : null;
+}
+
+export function extractPhotos(text: string): { url: string; at?: unknown }[] {
+  const inner = fence(text, "photo");
+  if (!inner) return [];
+  const out: { url: string; at?: unknown }[] = [];
+  if (inner.startsWith("{") || inner.startsWith("[")) {
+    try {
+      const v = JSON.parse(inner) as unknown;
+      const rows = Array.isArray(v) ? v : [v];
+      for (const row of rows) {
+        if (!row || typeof row !== "object") continue;
+        const url = String((row as { url?: unknown }).url || "").trim();
+        if (url.startsWith("https://")) out.push({ url, at: (row as { at?: unknown }).at });
+      }
+    } catch { /* fall through */ }
+  }
+  if (!out.length) {
+    for (const line of inner.split("\n")) {
+      const url = line.trim();
+      if (url.startsWith("https://")) out.push({ url });
+    }
+  }
+  return out;
+}
+
+export function extractAgentLook(text: string): AgentLookInput | null {
+  const deco = fence(text, "deco");
+  let clear = false;
+  if (deco) {
+    try {
+      const v = JSON.parse(deco) as { clear?: unknown };
+      if (v && v.clear) clear = true;
+    } catch { /* ignore */ }
+  }
+  const shader = extractShader(text) ?? undefined;
+  const photos = extractPhotos(text);
+  const svg = extractSvg(text) ?? undefined;
+  if (!shader && !photos.length && !svg && !clear) return null;
+  const look: AgentLookInput = {};
+  if (shader) look.shader = shader;
+  if (photos.length) look.photos = photos;
+  if (svg) look.svg = svg;
+  if (clear) look.clear = true;
+  return look;
 }
 
 interface SpeechRec {

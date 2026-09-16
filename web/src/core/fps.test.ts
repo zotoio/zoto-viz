@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { bindFps, markFrame } from "./fps";
+import { afterEach, describe, expect, it } from "vitest";
+import { bindFps, markFrame, resetFps } from "./fps";
 
 describe("markFrame", () => {
+  afterEach(() => resetFps());
+
   it("does not count the same timestamp twice", () => {
     const el = document.createElement("span");
     bindFps(el);

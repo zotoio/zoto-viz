@@ -1,24 +1,33 @@
 import {
   allModes,
+  ARCADE_ENGINES,
   categorize,
   GRAPH_BASES,
   heat,
   hashColor,
-  modeById,
-  MODES,
+  hostEngine,
   paneLabelCap,
   setPluginModes,
+  topology,
   viewCaption,
   type ModeOption,
   type PluginField,
   type ShellSet,
   type ViewMode,
 } from "../core/modes";
+import {
+  engineDispatch,
+  mergeOverlayPins,
+  partitionCatalog,
+  pluginViewKnobs,
+  toPluginView,
+} from "./plugin-visualisation";
 import type { GNode, DreamAnim, EdgeGlow, AudioDrive, ThemeCycle } from "../graph/scene";
 import type { BackdropKind } from "../graph/backdrop";
 import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
+import { PluginSandbox, pluginModuleUrl } from "./host";
 
 function dimHex(hex: number, amount: number): number {
   const r = Math.round(((hex >> 16) & 255) * amount);
@@ -27,7 +36,7 @@ function dimHex(hex: number, amount: number): number {
   return (r << 16) | (g << 8) | b;
 }
 
-export type PluginEngine = "graph" | "netpong" | "invaders" | "command" | "frogger" | "cpupong";
+export type PluginEngine = "graph" | "netpong" | "invaders" | "command" | "frogger" | "cpupong" | "doom";
 export type NodeColorStyle = "role" | "kind" | "heat" | "proto" | "hash";
 export type NodeScaleStyle = "default" | "bytes" | "rate";
 export type LabelStyle = "default" | "all" | "none" | "top";
@@ -81,7 +90,8 @@ export interface PluginView {
   name: string;
   version: number;
   hint?: string;
-  engine: PluginEngine;
+  /** Absent when the zip has no visualisation.yml and plugin.yml ships no engine. */
+  engine?: PluginEngine;
   base?: string;
   options?: ModeOption[];
   config?: PluginField[];
@@ -91,10 +101,19 @@ export interface PluginView {
   file?: string;
   runtime?: "yaml" | "typescript";
   entry?: string;
+  frontend?: { entry?: string };
   capabilities?: PluginCapability[];
   hash?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;
+  has_frontend?: boolean;
+  has_sky?: boolean;
+  has_sky_shader?: boolean;
+  has_backend?: boolean;
+  has_datasource?: boolean;
+  shader_sha256?: string;
+  sky_available?: boolean;
+  sky_error?: string;
 }
 
 const LOOK_ANIM_KEYS = [
@@ -107,7 +126,9 @@ const LOOK_ANIM_KEYS = [
 
 let looks = new Map<string, PluginLook>();
 
-export const shippedModeIds = (): Set<string> => new Set(MODES.map((m) => m.id));
+/** Host wrap-target ids (graph bases + arcade engines), not live menu ids. */
+export const shippedModeIds = (): Set<string> =>
+  new Set([...GRAPH_BASES, ...ARCADE_ENGINES].map((m) => m.id));
 
 export function lookForMode(modeId: string): PluginLook | undefined {
   return looks.get(modeId);
@@ -135,9 +156,45 @@ export const pluginViewId = (id: string) => `plugin:${id}`;
 export const parsePluginId = (modeId: string): string | null =>
   modeId.startsWith("plugin:") ? modeId.slice("plugin:".length) : null;
 
-/** Executable plugins (TypeScript and/or a monitor-side Python module) need a source-review consent. */
+/** Executable plugins (TypeScript, Python, and/or a custom sky shader) need a source-review consent. YAML-only views skip it. */
 export function pluginNeedsReview(spec: PluginView): boolean {
-  return spec.runtime === "typescript" || !!spec.service;
+  return spec.runtime === "typescript" || spec.has_frontend === true || spec.has_backend === true
+    || spec.has_datasource === true || !!spec.service
+    || spec.has_sky_shader === true || !!spec.shader_sha256;
+}
+
+export function pluginHasFrontend(spec: PluginView | null | undefined): boolean {
+  return !!spec && (spec.has_frontend === true || spec.runtime === "typescript");
+}
+
+export function pluginModulePath(id: string, hash?: string): string {
+  return pluginModuleUrl(id, hash);
+}
+
+export function pluginSkyPath(id: string, hash?: string): string {
+  const path = `/api/plugins/${encodeURIComponent(id)}/sky/fragment.glsl`;
+  return hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
+}
+
+/** Fetch `/api/plugins/<id>/sky/fragment.glsl` (403 without consent). */
+export async function fetchPluginSky(id: string, hash?: string): Promise<string> {
+  const r = await apiFetch(pluginSkyPath(id, hash));
+  if (!r.ok) throw new Error(`plugin sky ${r.status}`);
+  return r.text();
+}
+
+/** Fetch `/plugins/<id>/module.js` and load it in the iframe sandbox. */
+export async function attachPluginFrontend(
+  sandbox: PluginSandbox,
+  spec: PluginView | null,
+  config: Record<string, string> = {},
+): Promise<boolean> {
+  if (!pluginHasFrontend(spec)) {
+    sandbox.unload();
+    return false;
+  }
+  await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash);
+  return true;
 }
 
 const storeKey = (id: string, key: string) => `zoto-viz.plugin.${id}.${key}`;
@@ -152,9 +209,15 @@ export function fieldDefault(f: PluginField): string {
 
 export function loadPluginConfig(spec: PluginView, fields = spec.config): Record<string, string> {
   const out: Record<string, string> = {};
+  const viewId = pluginViewId(spec.id);
   for (const f of fields ?? []) {
     const saved = localStorage.getItem(storeKey(spec.id, f.key));
-    out[f.key] = saved !== null ? saved : fieldDefault(f);
+    if (saved !== null) {
+      out[f.key] = saved;
+      continue;
+    }
+    const legacy = localStorage.getItem(`zoto-viz.mode.${viewId}.${f.key}`);
+    out[f.key] = legacy !== null ? legacy : fieldDefault(f);
   }
   return out;
 }
@@ -164,7 +227,7 @@ export function writePluginConfig(id: string, values: Record<string, string>): v
 }
 
 export function collectPluginConfigs(specs: PluginView[]): Record<string, Record<string, string>> {
-  return Object.fromEntries(specs.map((s) => [s.id, loadPluginConfig(s)]));
+  return Object.fromEntries(specs.map((s) => [s.id, loadPluginConfig(s, pluginViewKnobs(s))]));
 }
 
 export function applyPluginConfigs(raw: Record<string, Record<string, string>> | undefined): void {
@@ -195,7 +258,7 @@ function mergeFields(base?: PluginField[], extra?: PluginField[]): PluginField[]
 }
 
 function compileGraph(spec: PluginView): ViewMode {
-  const base = GRAPH_BASES.find((m) => m.id === spec.base) ?? modeById(spec.base ?? "topology");
+  const base = hostEngine(spec.base ?? "topology") ?? topology;
   const style = spec.style ?? {};
   const layout = spec.layout ?? {};
   let maxBytes = 1, maxLogRate = 1;
@@ -207,9 +270,7 @@ function compileGraph(spec: PluginView): ViewMode {
     label: spec.name,
     hint: spec.hint || base.hint,
     pluginId: spec.id,
-    graphBase: spec.base === "cores" || spec.base === "load" || spec.base === "cpu" ? "cpu" : spec.base,
-    standalone: false,
-    arcadeId: undefined,
+    ...engineDispatch(spec),
     options: mergeOptions(base.options, spec.options),
     config: mergeFields(base.config, spec.config),
     flatten: style.flatten ?? base.flatten,
@@ -298,45 +359,46 @@ function compileGraph(spec: PluginView): ViewMode {
 }
 
 function compileArcade(spec: PluginView): ViewMode {
-  const base = modeById(spec.engine);
+  const engine = spec.engine ?? "netpong";
+  const base = hostEngine(engine) ?? ARCADE_ENGINES[0]!;
   return {
     ...base,
     id: pluginViewId(spec.id),
     label: spec.name,
     hint: spec.hint || base.hint,
     pluginId: spec.id,
-    standalone: true,
-    arcadeId: spec.engine,
+    ...engineDispatch(spec),
     options: mergeOptions(base.options, spec.options),
     config: spec.config ?? [],
   };
 }
 
 export function compilePlugin(spec: PluginView): ViewMode {
-  return spec.engine === "graph" ? compileGraph(spec) : compileArcade(spec);
+  if (!spec.engine) throw new Error("visualisation.engine is required to compile a view");
+  if (spec.engine === "graph") return compileGraph(spec);
+  if (spec.engine === "netpong" || spec.engine === "invaders" || spec.engine === "command"
+    || spec.engine === "frogger" || spec.engine === "cpupong" || spec.engine === "doom") {
+    return compileArcade(spec);
+  }
+  throw new Error(`unknown visualisation.engine ${spec.engine}`);
 }
 
 export function specCaption(spec: PluginView): string {
+  const dispatch = engineDispatch(spec);
   return viewCaption({
     id: spec.id,
     label: spec.name,
-    graphBase: spec.engine === "graph"
-      ? (spec.base === "cores" || spec.base === "load" || spec.base === "cpu" ? "cpu" : spec.base)
-      : undefined,
-    arcadeId: spec.engine !== "graph" ? spec.engine : undefined,
+    graphBase: dispatch.graphBase,
+    arcadeId: dispatch.arcadeId,
   });
 }
 
 export function viewSelectOptions(): { value: string; label: string; hint: string }[] {
-  const shipped = MODES.map((m, i) => ({ value: m.id, label: viewCaption(m), hint: `${i + 1}` }));
-  const extra = allModes()
-    .filter((m) => m.pluginId)
-    .map((m) => ({
-      value: m.id,
-      label: viewCaption(m),
-      hint: (m.config?.length ? "plugin · fields" : "plugin"),
-    }));
-  return [...shipped, ...extra];
+  return allModes().map((m, i) => ({
+    value: m.id,
+    label: viewCaption(m),
+    hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : "plugin",
+  }));
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
@@ -354,28 +416,40 @@ export async function grantPluginConsent(id: string, kind: "reviewed" | "authore
   if (!r.ok) throw new Error(`consent ${r.status}`);
 }
 
+export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
+  const { rows, overlays } = partitionCatalog(specs);
+  const nextLooks = new Map<string, PluginLook>();
+  const modes: ViewMode[] = [];
+  for (const spec of rows) {
+    const extra = overlays.get(spec.id);
+    const merged = extra ? mergeOverlayPins(spec, extra) : spec;
+    if (merged.look) nextLooks.set(pluginViewId(merged.id), merged.look);
+    if (!merged.engine) continue;
+    try {
+      modes.push(compilePlugin(merged));
+    } catch (e) {
+      console.warn("zoto-viz plugin:", merged.file || merged.id, e);
+    }
+  }
+  looks = nextLooks;
+  setPluginModes(modes);
+  return modes;
+}
+
 export async function installPlugins(): Promise<PluginView[]> {
   try {
     const data = await fetchPlugins();
     for (const e of data.errors) console.warn("zoto-viz plugin:", e.file, e.error);
-    const shipped = shippedModeIds();
-    const nextLooks = new Map<string, PluginLook>();
-    const modes: ViewMode[] = [];
-    for (const spec of data.plugins) {
-      if (shipped.has(spec.id)) {
-        if (spec.look) nextLooks.set(spec.id, spec.look);
-        continue;
-      }
+    const specs: PluginView[] = [];
+    for (const raw of data.plugins) {
       try {
-        modes.push(compilePlugin(spec));
-        if (spec.look) nextLooks.set(pluginViewId(spec.id), spec.look);
+        specs.push(toPluginView(raw));
       } catch (e) {
-        console.warn("zoto-viz plugin:", spec.file || spec.id, e);
+        console.warn("zoto-viz plugin:", (raw as PluginView).file || (raw as PluginView).id, e);
       }
     }
-    looks = nextLooks;
-    setPluginModes(modes);
-    return data.plugins;
+    applyPluginCatalog(specs);
+    return specs;
   } catch (e) {
     console.warn("zoto-viz plugins:", e);
     looks = new Map();

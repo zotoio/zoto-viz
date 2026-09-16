@@ -1,18 +1,24 @@
 import { DEFAULT_FEED, type FeedConfig } from "../ui/feed";
-import { allModes, defaultOpts } from "./modes";
+import { allModes, defaultCatalogMode, defaultOpts } from "./modes";
 import { DEFAULT_DREAM, type DreamAnim } from "../graph/scene";
 import { DEFAULT_THEME } from "./themes";
+import { EMPTY_LOOK, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { Toggle } from "../ui/ui";
 import { apiFetch } from "./http";
 
 /** Shipped profile id. Always present, never overwritten from the UI. */
 export const SHIPPED_ID = "netviz";
 export const USER_ID = "user";
+/** Legacy cycling profile id; new agent profiles are named after the Ollama model. */
+export const AI_ID = "ai";
+const AI_PREV_KEY = "zoto-viz.ai.prevProfile";
 
 export interface ProfileMeta {
   id: string;
   label: string;
   shipped: boolean;
+  /** Ollama model tag when this profile belongs to a local agent. */
+  model?: string;
 }
 
 export interface ProfileList {
@@ -27,7 +33,7 @@ export interface ProfileSettings {
   dream: boolean;
   mode: string;
   modeOptions: Record<string, Record<string, string>>;
-  show: { lan: boolean; internet: boolean; multicast: boolean; offline: boolean; labels: boolean };
+  show: { lan: boolean; internet: boolean; multicast: boolean; offline: boolean; labels: boolean; cpuIdle: boolean };
   merge: boolean;
   redact: boolean;
   filters: { allowNames: string; blockNames: string; allowNets: string; blockNets: string };
@@ -38,6 +44,10 @@ export interface ProfileSettings {
   chrome: "top" | "left" | "right";
   /** per-plugin cog values, keyed by YAML plugin id */
   plugins: Record<string, Record<string, string>>;
+  camera: "auto" | "off";
+  mic: "auto" | "off";
+  /** GLSL / photos / SVG the local agent pinned on this profile */
+  agent: AgentLook;
   /** write this writable profile as settings change (ignored for shipped netviz) */
   autosave: boolean;
 }
@@ -55,13 +65,33 @@ export function quiet<T>(fn: () => T): T {
   try { return fn(); } finally { hush--; }
 }
 
+/** Overlay that the header AI toggle writes into a new model-named profile. */
+export function aiCycleSettings(base: ProfileSettings, opts: { keepLook?: boolean } = {}): ProfileSettings {
+  const shader = !!base.agent.shader;
+  const keep = opts.keepLook || shader;
+  return {
+    ...base,
+    dream: true,
+    autosave: true,
+    anim: {
+      ...base.anim,
+      follow: true,
+      cycle: true,
+      randomize: true,
+      backdrop: keep ? (shader ? "custom" : base.anim.backdrop) : "dynamic",
+      themeCycle: keep ? base.anim.themeCycle : "cadence",
+      skyCycle: keep ? base.anim.skyCycle : "off",
+    },
+  };
+}
+
 export function shippedSettings(): ProfileSettings {
   return {
     theme: DEFAULT_THEME.id,
     dream: false,
-    mode: allModes()[0]!.id,
+    mode: defaultCatalogMode()?.id ?? "topology",
     modeOptions: Object.fromEntries(allModes().map((m) => [m.id, defaultOpts(m)])),
-    show: { lan: true, internet: true, multicast: true, offline: true, labels: true },
+    show: { lan: true, internet: true, multicast: true, offline: true, labels: true, cpuIdle: true },
     merge: false,
     redact: false,
     filters: { allowNames: "", blockNames: "", allowNets: "", blockNets: "" },
@@ -70,6 +100,9 @@ export function shippedSettings(): ProfileSettings {
     arcade: {},
     chrome: "top",
     plugins: {},
+    camera: "auto",
+    mic: "auto",
+    agent: { ...EMPTY_LOOK },
     autosave: false,
   };
 }
@@ -97,6 +130,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
       multicast: bool(show.multicast, d.show.multicast),
       offline: bool(show.offline, d.show.offline),
       labels: bool(show.labels, d.show.labels),
+      cpuIdle: bool(show.cpuIdle, d.show.cpuIdle),
     },
     merge: bool(s.merge, d.merge),
     redact: bool(s.redact, d.redact),
@@ -107,10 +141,24 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
       blockNets: str(filters.blockNets),
     },
     anim: { ...d.anim, ...anim },
-    feed: { ...d.feed, ...feed },
+    feed: {
+      ...d.feed,
+      ...feed,
+      textSize: (() => {
+        const n = Number((feed as FeedConfig).textSize);
+        return Number.isFinite(n) ? Math.min(20, Math.max(10, n)) : d.feed.textSize;
+      })(),
+      density: (() => {
+        const n = Number((feed as FeedConfig).density);
+        return Number.isFinite(n) ? Math.min(80, Math.max(12, n)) : d.feed.density;
+      })(),
+    },
     arcade: { ...arcade },
     chrome: s.chrome === "left" || s.chrome === "right" ? s.chrome : d.chrome,
     plugins: { ...plugins },
+    camera: s.camera === "off" ? "off" : d.camera,
+    mic: s.mic === "off" ? "off" : d.mic,
+    agent: normalizeAgentLook(s.agent),
     autosave: bool(s.autosave, d.autosave),
   };
 }
@@ -124,6 +172,23 @@ function str(v: unknown): string {
 
 const ID_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const AUTOSAVE_DEBOUNCE_MS = 450;
+
+/** Slug used as the writable profile id for an Ollama model tag. */
+export function agentProfileId(model: string): string {
+  const compact = model.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  let slug = compact.slice(0, 32).replace(/-+$/g, "");
+  if (!slug) slug = "agent";
+  if (!/^[a-z]/.test(slug)) slug = `m-${slug}`.slice(0, 32).replace(/-+$/g, "");
+  if (!ID_RE.test(slug)) slug = "agent";
+  if (slug === SHIPPED_ID || slug === USER_ID) slug = `agent-${slug}`.slice(0, 32);
+  return slug;
+}
+
+export function isAgentProfile(meta: { id: string; model?: string } | undefined): boolean {
+  if (!meta) return false;
+  if (meta.id === AI_ID) return true;
+  return typeof meta.model === "string" && meta.model.trim().length > 0;
+}
 
 export function suggestId(taken: string[]): string {
   if (!taken.includes(USER_ID)) return USER_ID;
@@ -207,6 +272,10 @@ export class ProfileStore {
 
   meta(id = this.current): ProfileMeta | undefined {
     return this.list.find((p) => p.id === id);
+  }
+
+  isAgent(id = this.current): boolean {
+    return isAgentProfile(this.meta(id) ?? (id ? { id } : undefined));
   }
 
   get shipped(): boolean {
@@ -307,6 +376,126 @@ export class ProfileStore {
     if (opts.quiet) quiet(apply); else quiet(apply);
     this.adoptAutosave(settings.autosave);
     this.syncChrome();
+  }
+
+  /** Create or load the profile named after `model`. Creates only when the model is online. */
+  async activateAiCycle(seed: ProfileSettings, opts: { model: string; online: boolean }): Promise<"live" | "saved" | "none"> {
+    const model = opts.model.trim() || "gemma4";
+    const id = agentProfileId(model);
+    const prev = this.current && !this.isAgent()
+      ? this.current
+      : (localStorage.getItem(AI_PREV_KEY) || this.defaultId || USER_ID);
+    if (prev && !this.isAgent(prev)) localStorage.setItem(AI_PREV_KEY, prev);
+    const has = (pid: string) => this.list.some((p) => p.id === pid);
+    const existing = has(id) ? id : (has(AI_ID) ? AI_ID : "");
+
+    if (!opts.online) {
+      if (!existing) {
+        flash(this.bar, `Ollama is offline — no saved profile for ${model}.`);
+        return "none";
+      }
+      if (!this.available) {
+        this.current = existing;
+        this.dirty = false;
+        this.sel.value = existing;
+        this.syncChrome();
+        return "saved";
+      }
+      await this.flushPending();
+      await this.load(existing);
+      return "saved";
+    }
+
+    const settings = aiCycleSettings(seed);
+    if (!this.available) {
+      this.current = id;
+      this.dirty = false;
+      quiet(() => this.host.apply(settings));
+      this.adoptAutosave(false);
+      this.syncChrome();
+      return "live";
+    }
+    await this.flushPending();
+    if (!has(id) && has(AI_ID) && id !== AI_ID) {
+      const raw = await api<{ settings: unknown }>(`/api/profiles/${AI_ID}`);
+      await api("/api/profiles", {
+        method: "POST",
+        body: JSON.stringify({
+          id,
+          label: model,
+          model,
+          settings: normalizeSettings(raw.settings),
+          make_default: this.defaultId === AI_ID,
+        }),
+      });
+      await api(`/api/profiles/${AI_ID}`, { method: "DELETE" });
+      this.ingest(await api<ProfileList>("/api/profiles"));
+      await this.load(id);
+      return "live";
+    }
+    if (has(id)) {
+      const meta = this.meta(id);
+      if (meta && (meta.model !== model || meta.label !== model)) {
+        const raw = await api<{ settings: unknown }>(`/api/profiles/${id}`);
+        await api(`/api/profiles/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({ settings: raw.settings, label: model, model }),
+        });
+        this.ingest(await api<ProfileList>("/api/profiles"));
+      }
+      await this.load(id);
+      return "live";
+    }
+    await api("/api/profiles", {
+      method: "POST",
+      body: JSON.stringify({ id, label: model, model, settings, make_default: false }),
+    });
+    this.ingest(await api<ProfileList>("/api/profiles"));
+    this.current = id;
+    this.dirty = false;
+    this.sel.value = id;
+    quiet(() => this.host.apply(settings));
+    this.adoptAutosave(true);
+    this.syncChrome();
+    return "live";
+  }
+
+  /** Write live settings into the model-named profile when it already exists. Never creates. */
+  async writeAi(settings: ProfileSettings, model = ""): Promise<void> {
+    const next: ProfileSettings = { ...settings, autosave: true };
+    if (!this.available) return;
+    const tag = model.trim();
+    const slug = tag ? agentProfileId(tag) : "";
+    const id = (slug && this.list.some((p) => p.id === slug))
+      ? slug
+      : (this.isAgent() ? this.current : "");
+    if (!id || this.meta(id)?.shipped) return;
+    const label = tag || this.meta(id)?.model || this.meta(id)?.label || id;
+    const body: Record<string, unknown> = { settings: next, label };
+    if (tag) body.model = tag;
+    else if (this.meta(id)?.model) body.model = this.meta(id)!.model;
+    await api(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    if (this.current === id) {
+      this.dirty = false;
+      this.adoptAutosave(true);
+      this.syncChrome();
+    }
+  }
+
+  /** Leave the agent profile for the profile that was current before the header toggle. */
+  async deactivateAiCycle(): Promise<void> {
+    const prev = localStorage.getItem(AI_PREV_KEY) || this.defaultId || USER_ID;
+    const id = this.isAgent(prev) ? USER_ID : prev;
+    if (!this.available) {
+      this.current = this.isAgent(id) ? USER_ID : id;
+      quiet(() => this.host.apply(shippedSettings()));
+      this.adoptAutosave(false);
+      this.syncChrome();
+      return;
+    }
+    await this.flushPending();
+    const target = this.list.some((p) => p.id === id) ? id : (this.list.some((p) => p.id === USER_ID) ? USER_ID : SHIPPED_ID);
+    await this.load(target, { quiet: true });
   }
 
   private async setAutosave(on: boolean): Promise<void> {
@@ -475,27 +664,22 @@ export class ProfileStore {
     this.list = data.profiles;
     this.defaultId = data.default;
     this.file = data.file;
-    this.sel.setOptions(this.list.map((p) => ({
-      value: p.id,
-      label: p.label,
-      hint: [
-        p.shipped ? "shipped" : "",
-        p.id === this.defaultId ? "startup" : "",
-      ].filter(Boolean).join(" · ") || undefined,
-    })));
+    this.sel.setOptions(this.list.map((p) => this.optionOf(p)));
+  }
+
+  private optionOf(p: ProfileMeta): { value: string; label: string; hint?: string } {
+    const hint = [
+      p.shipped ? "shipped" : "",
+      isAgentProfile(p) ? "agent" : "",
+      p.id === this.defaultId ? "startup" : "",
+      p.id === this.current && this.canAutosave ? "autosave" : "",
+      p.id === this.current && this.dirty ? "unsaved" : "",
+    ].filter(Boolean).join(" · ") || undefined;
+    return { value: p.id, label: p.label, hint };
   }
 
   private syncChrome(): void {
-    this.sel.setOptions(this.list.map((p) => ({
-      value: p.id,
-      label: p.label,
-      hint: [
-        p.shipped ? "shipped" : "",
-        p.id === this.defaultId ? "startup" : "",
-        p.id === this.current && this.canAutosave ? "autosave" : "",
-        p.id === this.current && this.dirty ? "unsaved" : "",
-      ].filter(Boolean).join(" · ") || undefined,
-    })));
+    this.sel.setOptions(this.list.map((p) => this.optionOf(p)));
     this.sel.value = this.current || this.list[0]?.id || "";
     this.sel.el.classList.toggle("dirty", this.dirty);
     this.sel.el.classList.toggle("shipped", this.shipped);

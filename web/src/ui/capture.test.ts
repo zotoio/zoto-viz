@@ -37,7 +37,7 @@ describe("captureHud", () => {
       merge: false,
       redact: true,
       camera: "off",
-      show: { lan: true, internet: false, multicast: false, offline: true, labels: true },
+      show: { lan: true, internet: false, multicast: false, offline: true, labels: true, cpuIdle: false },
       feed: { ...DEFAULT_FEED, source: "transcript", layout: "ticker" },
       feedLines: ["you what's loud", "think looking at pps", "agent nest is the camera"],
     });
@@ -50,7 +50,7 @@ describe("captureHud", () => {
     expect(packed.p).toContain("Nest-Cam");
     expect(packed.st).toContain("12pps");
     expect(packed.st).toContain("lan8/6");
-    expect(packed.hide).toBe("inet,mc");
+    expect(packed.hide).toBe("inet,mc,cpu");
     expect(packed.fd).toBe("ticker/transcript/lan");
     expect(packed.q).toHaveLength(3);
     expect(JSON.stringify(packed).length).toBeLessThan(400);
@@ -91,25 +91,33 @@ describe("pickAgentSettings", () => {
       theme: "matrix",
       dream: true,
       camera: "off",
+      mic: "auto",
       chrome: "left",
       mode: "talkers",
       redact: true,
       merge: true,
-      feed: { on: true, source: "transcript", layout: "ticker", scope: "selected", density: 99 },
-      show: { internet: false, lan: true, bogus: true },
+      feed: { on: true, source: "transcript", layout: "ticker", scope: "selected", density: 99, textSize: 32 },
+      show: { internet: false, lan: true, cpuIdle: false, bogus: true },
       plugins: { x: 1 },
+      anim: { backdrop: "matrix", skySpeed: 2, follow: true, mosaic: "nope" },
+      filters: { allowNames: "nest", bogus: 1 },
     }, ["talkers", "topology"]);
-    expect(p).toEqual({
-      theme: "matrix",
-      dream: true,
-      camera: "off",
-      chrome: "left",
-      mode: "talkers",
-      redact: true,
-      merge: true,
-      feed: { on: true, source: "transcript", layout: "ticker", scope: "selected" },
-      show: { internet: false, lan: true },
-    });
-    expect(pickAgentSettings({ mode: "nope", camera: "maybe", chrome: "bottom" }, ["talkers"])).toEqual({});
+    expect(p.theme).toBe("matrix");
+    expect(p.dream).toBe(true);
+    expect(p.camera).toBe("off");
+    expect(p.mic).toBe("auto");
+    expect(p.chrome).toBe("left");
+    expect(p.mode).toBe("talkers");
+    expect(p.redact).toBe(true);
+    expect(p.merge).toBe(true);
+    expect(p.feed).toEqual({ on: true, source: "transcript", layout: "ticker", scope: "selected", density: 80, textSize: 20 });
+    expect(p.show).toEqual({ internet: false, lan: true, cpuIdle: false });
+    expect(p.plugins).toBeUndefined();
+    expect(p.anim).toEqual({ backdrop: "matrix", skySpeed: 2, follow: true });
+    expect(p.filters).toEqual({ allowNames: "nest" });
+    const t = pickAgentSettings({ temper: 88, weather: "storm" }, ["talkers"]);
+    expect(t.temper).toBe(88);
+    expect(t.weather).toBe("storm");
+    expect(pickAgentSettings({ mode: "nope", camera: "maybe", mic: "maybe", chrome: "bottom" }, ["talkers"])).toEqual({});
   });
 });

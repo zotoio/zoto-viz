@@ -1,6 +1,6 @@
-import { NetScene, escapeHtml } from "../graph/scene";
+import { NetScene, escapeHtml, type Filters } from "../graph/scene";
 import { Panel } from "../ui/panel";
-import { MODES, GRAPH_MODES, allModes, defaultOpts, modeById, type ViewMode } from "../core/modes";
+import { allModes, defaultCatalogMode, defaultOpts, graphModes, modeById, type ViewMode } from "../core/modes";
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";
 import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
@@ -9,12 +9,14 @@ import { Select, Toggle } from "../ui/ui";
 import { Settings } from "../ui/settings";
 import { LiveFeed, feedViewShift } from "../ui/feed";
 import { liveCam } from "../camera/livecam";
+import { liveMic } from "../audio/want";
 import { ProfileStore, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { PongView } from "../arcade/pong";
 import { InvadersView } from "../arcade/invaders";
 import { CommandView } from "../arcade/command";
 import { FroggerView } from "../arcade/frogger";
 import { CpuPongView } from "../arcade/cpupong";
+import { DoomView } from "../arcade/doom";
 import { Mosaic } from "../graph/mosaic";
 import {
   applyPluginConfigs,
@@ -25,17 +27,24 @@ import {
   loadPluginConfig,
   lookForMode,
   mergeLook,
+  attachPluginFrontend,
+  fetchPluginSky,
+  pluginHasFrontend,
   pluginNeedsReview,
   pluginViewId,
   viewSelectOptions,
   type PluginView,
 } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
+import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { bindFps } from "../core/fps";
-import { AgentPanel } from "../ui/agent";
+import { AgentPanel, aiCyclePrefOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
+import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
+import { compileAgentSky } from "../graph/sky-agent";
+import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
-import { captureHud, pickAgentSettings } from "../ui/capture";
+import { captureHud, mergeAgentPatch, pickAgentSettings } from "../ui/capture";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -81,6 +90,7 @@ const arcade: Record<string, { view: Standalone; el: HTMLElement }> = {
   command: { view: new CommandView($("command"), scene), el: $("command") },
   frogger: { view: new FroggerView($("frogger"), scene), el: $("frogger") },
   cpupong: { view: new CpuPongView($("cpupong"), scene), el: $("cpupong") },
+  doom: { view: new DoomView($("doom"), scene), el: $("doom") },
 };
 for (const a of Object.values(arcade)) a.view.setTheme(theme);
 let activeArcade: string | null = null;
@@ -94,7 +104,7 @@ const themeSel = new Select({
   title: "colour theme (key T cycles)",
   options: THEMES.map((t) => ({ value: t.id, label: t.label, hint: t.hint, swatch: themeSwatch(t) })),
   value: theme.id,
-  onChange: (id) => applyTheme(id),
+  onChange: (id) => applyTheme(id, true),
 });
 
 const chromeSel = new Select({
@@ -149,7 +159,7 @@ let themeFollow: (t: Theme) => void = () => {};
 function paintLiveTheme(t: Theme, fade = false): void {
   applyThemeChrome(t);
   scene.setTheme(t, fade);
-  if (mosaic?.on) mosaic.setTheme(t);
+  if (mosaic?.on) mosaic.setTheme(t, fade);
   else for (const a of Object.values(arcade)) a.view.setTheme(t);
   themeFollow(t);
   renderLegend(scene.currentMode, currentOpts);
@@ -174,17 +184,25 @@ function applyTheme(id: string, fade = false, persist = true): void {
 /** set once the settings cog, chrome buttons and show / privacy sections exist; applyMode before that skips the look pass */
 let uiReady = false;
 
-/** Pin theme / sky / floor / modulation from the active view's plugin YAML without writing the profile. */
+/** Pin theme / sky / floor / modulation from the active view's plugin YAML without writing the profile.
+ *  Header AI cycling owns Dynamic sky and cadence look, so plugin pins are skipped while that toggle is on. */
 function applyViewLook(): void {
   if (!uiReady) return;
+  const live = agent.cycleOn;
   if (mosaic?.on) {
-    mosaic.applyLooks(settings.animSettings);
+    mosaic.applyLooks(settings.animSettings, !live);
     mosaic.setTheme(scene.currentTheme);
     applyChrome(userChrome, false);
+    const m = modeById(modeSel.value);
+    const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
+    void syncPluginSky(live ? null : spec);
     return;
   }
-  const look = lookForMode(modeSel.value);
+  const look = live ? undefined : lookForMode(modeSel.value);
   scene.setAnim(mergeLook(settings.animSettings, look));
+  const m = modeById(modeSel.value);
+  const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
+  void syncPluginSky(live ? null : spec);
   const want = look?.theme ?? localStorage.getItem("zoto-viz.theme") ?? theme.id;
   if (theme.id !== want) applyTheme(want, !!look?.theme, false);
   applyChrome(look?.chrome ?? userChrome, false);
@@ -217,7 +235,7 @@ function syncFeedShift(): void {
 const modeSel = new Select({
   id: "mode",
   caption: "view",
-  title: `view mode (keys 1–9, 0 for the ${MODES.length}th)`,
+  title: "view mode (keys 1–9, 0 for the 10th)",
   options: viewSelectOptions(),
   onChange: (id) => applyMode(id),
 });
@@ -227,6 +245,7 @@ function onPluginFields(): void {
   const m = modeById(modeSel.value);
   const opts = optsFor(m);
   currentOpts = opts;
+  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
   else scene.setMode(m, opts);
   renderLegend(m, opts);
@@ -266,13 +285,19 @@ function optsFor(m: ViewMode): Record<string, string> {
   const o = defaultOpts(m);
   if (m.pluginId) {
     const spec = pluginSpecs.find((p) => p.id === m.pluginId);
-    if (spec) Object.assign(o, loadPluginConfig(spec, m.config));
-  }
-  for (const opt of m.options ?? []) {
-    const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
-    if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
+    if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options }, m.config)));
+  } else {
+    for (const opt of m.options ?? []) {
+      const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
+      if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
+    }
   }
   return o;
+}
+
+function arcadeControls(m: ViewMode): HTMLElement[] {
+  const slot = arcade[m.arcadeId ?? ""];
+  return slot ? [...slot.view.controls] : [];
 }
 
 let tsWatch = 0;
@@ -288,6 +313,7 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
     await grantPluginConsent(spec.id, kind);
     spec.consent = kind;
     if (spec.hash) consentHash(spec.id, spec.hash);
+    if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
     return true;
   } catch (e) {
     console.warn("zoto-viz plugin consent:", e);
@@ -296,7 +322,7 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
 }
 
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
-  if (!spec || spec.runtime !== "typescript" || !spec.hash) {
+  if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
     scene.clearPluginStyle();
     tsWatchId = "";
@@ -315,10 +341,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     return;
   }
   try {
-    const r = await apiFetch(`/api/plugins/${spec.id}/module.js`);
-    if (!r.ok) throw new Error(`module ${r.status}`);
-    const js = await r.text();
-    await sandbox.load(spec.id, js, spec.capabilities ?? [], loadPluginConfig(spec, spec.config));
+    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
     tsWatchId = spec.id;
     tsWatchHash = spec.hash;
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
@@ -347,20 +370,63 @@ async function refreshTsPlugin(): Promise<void> {
   } catch { /* monitor down */ }
 }
 
+let skyLoaded = "";
+
+async function syncPluginSky(spec: PluginView | null): Promise<void> {
+  const look = spec ? (lookForMode(pluginViewId(spec.id)) ?? spec.look) : undefined;
+  const want = !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
+  const key = want && spec ? `${spec.id}:${spec.shader_sha256 || ""}` : "";
+  if (key && key === skyLoaded) return;
+  if (!want || !spec) {
+    if (skyLoaded) scene.setPluginShader(null);
+    skyLoaded = "";
+    return;
+  }
+  if (pluginNeedsReview(spec) && !spec.consent) {
+    if (skyLoaded) scene.setPluginShader(null);
+    skyLoaded = "";
+    return;
+  }
+  try {
+    const source = await fetchPluginSky(spec.id, spec.shader_sha256);
+    const err = scene.setPluginShader({ id: spec.id, source });
+    if (err) {
+      console.warn("zoto-viz plugin sky:", err);
+      spec.sky_error = err;
+      spec.sky_available = false;
+      scene.setPluginShader(null);
+      skyLoaded = "";
+      return;
+    }
+    skyLoaded = key;
+  } catch (e) {
+    console.warn("zoto-viz plugin sky:", e);
+    scene.setPluginShader(null);
+    skyLoaded = "";
+  }
+}
+
 function applyMode(id: string): void {
   const m = modeById(id);
   const opts = optsFor(m);
   currentOpts = opts;
+  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   modeSel.value = m.id;
   localStorage.setItem("zoto-viz.mode", m.id);
   touch();
 
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-  settings?.bindView(spec, spec ? m.config : undefined, lookForMode(m.id) ?? spec?.look);
-  modeSel.el.classList.toggle("has-plugin-fields", !!(spec?.config?.length));
+  settings?.bindView(
+    spec ? { ...spec, options: m.options, config: m.config } : null,
+    spec ? m.config : undefined,
+    lookForMode(m.id) ?? spec?.look,
+    arcadeControls(m),
+  );
+  $("modeOpts").replaceChildren();
   void (async () => {
     if (!(await ensureReviewed(spec))) return;
     void loadTsPlugin(spec);
+    void syncPluginSky(spec);
   })();
   feedCtl.feed?.setGraphBase(m.graphBase);
   if (m.graphBase === "wifi") void syncWifiWatch();
@@ -375,25 +441,6 @@ function applyMode(id: string): void {
     document.body.classList.remove("arcade");
     scene.setActive(true);
     scene.setStageOnly(false);
-    const box = $("modeOpts");
-    box.innerHTML = "";
-    const arcadeSlot = arcade[m.arcadeId ?? id];
-    if (arcadeSlot) box.append(...arcadeSlot.view.controls);
-    for (const opt of m.options ?? []) {
-      const sel = new Select({
-        caption: opt.label,
-        options: opt.values.map(([value, label]) => ({ value, label })),
-        value: opts[opt.key],
-        onChange: (v) => {
-          opts[opt.key] = v;
-          localStorage.setItem(`zoto-viz.mode.${m.id}.${opt.key}`, v);
-          touch();
-          mosaic?.graphScene(id)?.setMode(m, opts);
-          renderLegend(m, opts);
-        },
-      });
-      box.appendChild(sel.el);
-    }
     renderLegend(m, opts);
     $("hint").textContent = m.hint;
     applyViewLook();
@@ -412,25 +459,6 @@ function applyMode(id: string): void {
   activeArcade = next;
   syncFeedShift();
 
-  // per-mode option selects
-  const box = $("modeOpts");
-  box.innerHTML = "";
-  if (next) box.append(...arcade[next].view.controls);
-  for (const opt of m.options ?? []) {
-    const sel = new Select({
-      caption: opt.label,
-      options: opt.values.map(([value, label]) => ({ value, label })),
-      value: opts[opt.key],
-      onChange: (v) => {
-        opts[opt.key] = v;
-        localStorage.setItem(`zoto-viz.mode.${m.id}.${opt.key}`, v);
-        touch();
-        scene.setMode(m, opts);
-        renderLegend(m, opts);
-      },
-    });
-    box.appendChild(sel.el);
-  }
   renderLegend(m, opts);
   $("hint").textContent = m.hint;
   applyViewLook();
@@ -450,22 +478,17 @@ function renderLegend(m: ViewMode, opts: Record<string, string>): void {
   }
 }
 
-applyMode(localStorage.getItem("zoto-viz.mode") ?? MODES[0].id);
+applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
 
 // ---------------------------------------------------------------- visibility filters
 
-const FILTERS = [
-  ["showLan", "lan", "LAN devices", "devices on the local network (the ring around the gateway); this host, the gateway and local containers / VMs stay"],
-  ["showInternet", "internet", "internet", "internet endpoints (outer sphere)"],
-  ["showMulticast", "multicast", "multicast", "multicast / broadcast groups"],
-  ["showOffline", "offline", "offline", "devices not seen recently"],
-  ["showLabels", "labels", "labels", "node labels"],
-] as const;
-const filterToggles = FILTERS.map(([id, key, label, title]) => {
+// ---------------------------------------------------------------- visibility filters
+
+function bindShowToggle(id: string, key: keyof Filters, label: string, title: string, fallback = true): Toggle {
   const saved = localStorage.getItem(`zoto-viz.${key}`);
   const t = new Toggle({
     id, label, title,
-    checked: saved !== null ? saved === "1" : true,
+    checked: saved !== null ? saved === "1" : fallback,
     onChange: (on) => {
       scene.setFilters({ [key]: on });
       mosaic?.eachGraph((s) => { if (s !== scene) s.setFilters({ [key]: on }); });
@@ -475,7 +498,14 @@ const filterToggles = FILTERS.map(([id, key, label, title]) => {
   });
   scene.setFilters({ [key]: t.checked });
   return t;
-});
+}
+const netLan = bindShowToggle("showLan", "lan", "LAN devices", "devices on the local network (the ring around the gateway); this host, the gateway and local containers / VMs stay");
+const netInternet = bindShowToggle("showInternet", "internet", "internet", "internet endpoints (outer sphere)");
+const netMulticast = bindShowToggle("showMulticast", "multicast", "multicast", "multicast / broadcast groups");
+const netOffline = bindShowToggle("showOffline", "offline", "offline", "devices not seen recently");
+const sysLabels = bindShowToggle("showLabels", "labels", "labels", "node labels on network and system graphs");
+const sysCpuIdle = bindShowToggle("showCpuIdle", "cpuIdle", "idle processes", "unused CPU processes fade for a few seconds after they go quiet; off hides them at once. Idle cores stay.");
+const showToggles = { lan: netLan, internet: netInternet, multicast: netMulticast, offline: netOffline, labels: sysLabels, cpuIdle: sysCpuIdle };
 // "merge names" is a data transform rather than a visibility filter: the last raw snapshot is re-fed through it
 let lastRaw: StateMsg | null = null;
 const mergeToggle = new Toggle({
@@ -483,8 +513,18 @@ const mergeToggle = new Toggle({
   checked: localStorage.getItem("zoto-viz.merge") === "1",
   onChange: (on) => { localStorage.setItem("zoto-viz.merge", on ? "1" : "0"); touch(); if (lastRaw) feed(lastRaw); },
 });
+let lastLiveSeq = 0;
+function applyLive(m: StateMsg): void {
+  const live = m.live;
+  if (!live || live.seq <= lastLiveSeq) return;
+  lastLiveSeq = live.seq;
+  if (live.temper != null || live.weather) agent.syncTemper({ temper: live.temper, weather: live.weather });
+  if (live.patch && Object.keys(live.patch).length) void applyAgentPatch(live.patch);
+}
+
 function feed(m: StateMsg): void {
   lastRaw = m;
+  applyLive(m);
   let shown = m;
   if (mergeToggle.checked) {
     const c = collapseByName(m);
@@ -542,7 +582,16 @@ settings = new Settings({
   onPersist: () => touch(),
 });
 settings.onPluginChange = () => onPluginFields();
-const showSec = settings.addSection("Show", ...filterToggles, mergeToggle);
+const showSec = settings.addSection(
+  "Network",
+  [netLan, netInternet, netMulticast, netOffline, mergeToggle],
+  "Which LAN and internet nodes appear. Merge folds CDN aliases that share a hostname.",
+);
+settings.addSection(
+  "System",
+  [sysCpuIdle, sysLabels],
+  "CPU graphs: idle processes fade, or hide at once. Labels apply to every graph.",
+);
 mosaic = new Mosaic({
   wall: $("wall"),
   sceneEl: $("scene"),
@@ -561,8 +610,9 @@ mosaic = new Mosaic({
   }),
 });
 settings.addAnimation((a) => {
-  if (mosaic!.on) mosaic!.applyLooks(a);
-  else scene.setAnim(mergeLook(a, lookForMode(modeSel.value)));
+  const pin = !agent.cycleOn;
+  if (mosaic!.on) mosaic!.applyLooks(a, pin);
+  else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
   const key = `${a.mosaic}:${a.hero}:${a.mosaic !== "off" && a.hero !== "off" ? modeSel.value : ""}`;
   if (key !== mosaic!.layoutKey) {
     if (a.mosaic !== "off" && activeArcade) {
@@ -595,19 +645,25 @@ const feedToggle = new Toggle({
   onChange: (on) => settings.setFeedOn(on),
 });
 $("feedBox").appendChild(feedToggle.el);
-const camSel = new Select({
+const camToggle = new Toggle({
   id: "camera",
-  caption: "camera",
-  title: "webcam Auto / Off (Off never starts the camera)",
-  options: [
-    { value: "auto", label: "Auto", hint: "start only when live sky, gaze, or live colour need it" },
-    { value: "off", label: "Off", hint: "never start the webcam" },
-  ],
-  value: liveCam.camPolicy,
-  onChange: (v) => settings.setCamPolicy(v === "off" ? "off" : "auto"),
+  label: "cam",
+  title: "webcam on (Auto) / off. Off never starts the camera; on starts it only for live sky, gaze, or live colour",
+  checked: liveCam.camPolicy === "auto",
+  onChange: (on) => settings.setCamPolicy(on ? "auto" : "off"),
 });
-settings.onCamPolicy = (p) => { camSel.value = p; };
-$("cameraBox").appendChild(camSel.el);
+settings.onCamPolicy = (p) => { camToggle.checked = p === "auto"; };
+$("cameraBox").appendChild(camToggle.el);
+const micToggle = new Toggle({
+  id: "mic",
+  label: "mic",
+  title: "pulse microphone on (Auto) / off. Off never starts the mic; traffic still drives the pulse",
+  checked: liveMic.micPolicy === "auto",
+  onChange: (on) => settings.setMicPolicy(on ? "auto" : "off"),
+});
+settings.onMicPolicy = (p) => { micToggle.checked = p === "auto"; };
+$("micBox").appendChild(micToggle.el);
+settings.bindPulse(() => scene.pulseNow);
 settings.addLiveFeed((c) => {
   liveFeed.setConfig(c);
   feedToggle.checked = c.on;
@@ -628,10 +684,11 @@ liveFeed.onSend = (text) => agent.offerSend(text);
 liveFeed.onMicDown = () => agent.beginTalk();
 liveFeed.onMicUp = () => agent.endTalk();
 liveFeed.seedTranscript(agent.transcript());
-const privSec = settings.addSection("Privacy", redactToggle);
+const privSec = settings.addSection("Privacy", [redactToggle]);
 $("settingsBox").appendChild(settings.el);
+settings.attachViewCog($("modeBox"));
 agent.mountSettings(settings.agentHost());
-agent.onOpen = () => { settings.showPane("agent"); settings.open(); };
+agent.onOpen = () => { settings.open("agent"); };
 agent.captureView = () => captureHud({
   mode: modeSel.value,
   theme: theme.id,
@@ -641,31 +698,25 @@ agent.captureView = () => captureHud({
   merge: mergeToggle.checked,
   redact: redaction.enabled,
   camera: liveCam.camPolicy,
+  mic: liveMic.micPolicy,
   show: {
-    lan: filterToggles[0]!.checked,
-    internet: filterToggles[1]!.checked,
-    multicast: filterToggles[2]!.checked,
-    offline: filterToggles[3]!.checked,
-    labels: filterToggles[4]!.checked,
+    lan: showToggles.lan.checked,
+    internet: showToggles.internet.checked,
+    multicast: showToggles.multicast.checked,
+    offline: showToggles.offline.checked,
+    labels: showToggles.labels.checked,
+    cpuIdle: showToggles.cpuIdle.checked,
   },
   feed: settings.feedSettings,
   feedLines: liveFeed.snapshot(3),
 });
-agent.onApplySettings = (patch) => {
-  const p = pickAgentSettings(patch, allModes().map((m) => m.id));
-  const next = collectSettings();
-  if (p.theme) next.theme = p.theme;
-  if (typeof p.dream === "boolean") next.dream = p.dream;
-  if (p.chrome) next.chrome = p.chrome;
-  if (p.mode) next.mode = p.mode;
-  if (typeof p.redact === "boolean") next.redact = p.redact;
-  if (typeof p.merge === "boolean") next.merge = p.merge;
-  if (p.show) next.show = { ...next.show, ...p.show };
-  if (p.feed) next.feed = { ...next.feed, ...p.feed };
-  applySettings(next);
-  if (p.camera) settings.setCamPolicy(p.camera);
+agent.onApplySettings = (patch) => { void applyAgentPatch(patch); };
+agent.onApplyLook = (look) => applyAgentLook(look);
+$("aiBox").appendChild(agent.headerEl);
+agent.onCycle = (on) => {
+  localStorage.setItem(CYCLE_KEY, on ? "1" : "0");
+  void setAiCycle(on);
 };
-$("aiBox").appendChild(agent.headerBtn);
 scene.setNodeFilter((d) => settings.matches(d));
 scene.setAnim(mergeLook(settings.animSettings, lookForMode(modeSel.value)));
 if (settings.animSettings.mosaic !== "off") {
@@ -676,8 +727,11 @@ scene.onDreamPulse = () => {
   quiet(() => {
     const a = settings.animSettings;
     if (a.cycle && !mosaic?.on) {
-      const i = Math.max(0, GRAPH_MODES.findIndex((m) => m.id === modeSel.value));
-      applyMode(GRAPH_MODES[(i + 1) % GRAPH_MODES.length].id);
+      const graphs = graphModes();
+      if (graphs.length) {
+        const i = Math.max(0, graphs.findIndex((m) => m.id === modeSel.value));
+        applyMode(graphs[(i + 1) % graphs.length].id);
+      }
     }
     if (a.randomize) settings.shuffleAnim();
     if (a.themeCycle === "cadence") cycleRandomTheme();
@@ -710,7 +764,10 @@ for (const o of CHROME_OPTS) {
 function placeQuick(pos: ChromePos): void {
   const quick = $("quick");
   if (pos === "top") {
-    settings.host.append(showSec.el);
+    const graph = settings.host;
+    const first = graph.querySelector(":scope > .sec");
+    if (first && first !== showSec.el) graph.insertBefore(showSec.el, first);
+    else if (showSec.el.parentElement !== graph) graph.append(showSec.el);
     settings.privacyHost.append(privSec.el);
     quick.hidden = true;
   } else {
@@ -761,7 +818,7 @@ profiles = new ProfileStore(
 );
 settings.prependSection(
   "Theme",
-  "Colour theme. A plugin look can pin this; the chip in This view explains why.",
+  "Colour theme. A plugin look can pin this; the chips on This view explain why.",
   themeSel.el,
 );
 settings.prependSection(
@@ -771,7 +828,7 @@ settings.prependSection(
 );
 settings.prependSection(
   "Profile",
-  "Saved in ~/.zoto-viz/profiles.yml. netviz is the shipped default.",
+  "Saved in ~/.zoto-viz/profiles.yml. netviz is the shipped default. Header AI writes a profile named after the Ollama model (settings, shader, photos, SVG, cadence). Selecting that profile while the model is offline loads the saved look only.",
   profileHost,
 );
 uiReady = true;
@@ -781,19 +838,79 @@ void (async () => {
   agent.setControlFromServer(session.aiControl);
   pluginSpecs = await installPlugins();
   modeSel.setOptions(viewSelectOptions());
+  applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
   await profiles.boot();
   applyMode(modeSel.value);
   applyViewLook();
+  if (aiCyclePrefOn()) await setAiCycle(true);
   void syncWifiWatch();
   agent.armWake();
 })();
+
+let liveAgentLook: AgentLook = { decos: [] };
+function sceneAgentLook(): AgentLook { return liveAgentLook; }
+function paintAgentLook(look: AgentLook): void {
+  liveAgentLook = look;
+  scene.setAgentLook(look);
+  mosaic?.eachGraph((g) => { if (g !== scene) g.setAgentLook(look); });
+}
+
+function decoAt(raw: unknown): DecoAt {
+  if (raw === "selected" || raw === "internet" || raw === "origin") return raw;
+  if (Array.isArray(raw) && raw.length >= 3) {
+    const x = Number(raw[0]), y = Number(raw[1]), z = Number(raw[2]);
+    if ([x, y, z].every(Number.isFinite)) return [x, y, z];
+  }
+  return "internet";
+}
+
+async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
+  const p = pickAgentSettings(patch, allModes().map((m) => m.id));
+  if (p.temper != null || p.weather) agent.syncTemper({ temper: p.temper, weather: p.weather });
+  const next = mergeAgentPatch(collectSettings(), p);
+  applySettings(next);
+  await profiles?.writeAi(collectSettings(), agent.modelTag);
+}
+
+async function applyAgentLook(look: AgentLookInput): Promise<void> {
+  const cur = collectSettings();
+  let agentLook: AgentLook = look.clear ? { decos: [] } : { ...cur.agent, decos: [...cur.agent.decos] };
+  if (look.shader) {
+    const err = compileAgentSky(look.shader);
+    if (err) throw new Error(`shader: ${err}`);
+    agentLook = { ...agentLook, shader: look.shader };
+    cur.anim = { ...cur.anim, backdrop: "custom" };
+  }
+  for (const p of look.photos ?? []) {
+    const r = await apiFetch("/api/ai/asset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: p.url }),
+    });
+    const d = await r.json() as { error?: string; asset?: { id: string; href: string } };
+    if (!r.ok || !d.asset) throw new Error(d.error || `photo ${r.status}`);
+    agentLook.decos = [...agentLook.decos, { id: d.asset.id, kind: "photo", src: d.asset.href, at: decoAt(p.at) }];
+  }
+  if (look.svg) {
+    const r = await apiFetch("/api/ai/asset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ svg: look.svg }),
+    });
+    const d = await r.json() as { error?: string; asset?: { id: string; href: string } };
+    if (!r.ok || !d.asset) throw new Error(d.error || `svg ${r.status}`);
+    agentLook.decos = [...agentLook.decos, { id: d.asset.id, kind: "svg", src: look.svg, at: "internet" }];
+  }
+  applySettings({ ...cur, agent: normalizeAgentLook(agentLook), anim: cur.anim });
+  await profiles?.writeAi(collectSettings(), agent.modelTag);
+}
 
 function collectSettings(): ProfileSettings {
   const modeOptions: Record<string, Record<string, string>> = {};
   for (const m of allModes()) modeOptions[m.id] = optsFor(m);
   const arcade: Record<string, string> = {};
   for (const k of Object.keys(localStorage)) {
-    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong)\./.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
+    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
   }
   return {
     theme: localStorage.getItem("zoto-viz.theme") ?? theme.id,
@@ -801,11 +918,12 @@ function collectSettings(): ProfileSettings {
     mode: modeSel.value,
     modeOptions,
     show: {
-      lan: filterToggles[0]!.checked,
-      internet: filterToggles[1]!.checked,
-      multicast: filterToggles[2]!.checked,
-      offline: filterToggles[3]!.checked,
-      labels: filterToggles[4]!.checked,
+      lan: showToggles.lan.checked,
+      internet: showToggles.internet.checked,
+      multicast: showToggles.multicast.checked,
+      offline: showToggles.offline.checked,
+      labels: showToggles.labels.checked,
+      cpuIdle: showToggles.cpuIdle.checked,
     },
     merge: mergeToggle.checked,
     redact: redactToggle.checked,
@@ -815,6 +933,9 @@ function collectSettings(): ProfileSettings {
     arcade,
     chrome: userChrome,
     plugins: collectPluginConfigs(pluginSpecs),
+    camera: liveCam.camPolicy,
+    mic: liveMic.micPolicy,
+    agent: sceneAgentLook(),
     autosave: profiles?.autosave ?? false,
   };
 }
@@ -822,25 +943,23 @@ function collectSettings(): ProfileSettings {
 function applySettings(s: ProfileSettings): void {
   profiles?.adoptAutosave(s.autosave);
   for (const k of Object.keys(localStorage)) {
-    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong)\./.test(k)) localStorage.removeItem(k);
+    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) localStorage.removeItem(k);
   }
   for (const [k, v] of Object.entries(s.arcade ?? {})) {
-    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong)\./.test(k)) localStorage.setItem(k, v);
+    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) localStorage.setItem(k, v);
   }
   for (const [mid, opts] of Object.entries(s.modeOptions ?? {})) {
     for (const [k, v] of Object.entries(opts)) localStorage.setItem(`zoto-viz.mode.${mid}.${k}`, v);
   }
   applyPluginConfigs(s.plugins);
-  applyTheme(s.theme);
+  applyTheme(s.theme, s.theme !== theme.id);
   setDream(s.dream);
   userChrome = parseChrome(s.chrome);
   applyChrome(userChrome, false);
   const show = s.show;
-  const keys = ["lan", "internet", "multicast", "offline", "labels"] as const;
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i]!;
-    const on = show[key];
-    filterToggles[i]!.checked = on;
+  for (const key of Object.keys(showToggles) as (keyof typeof showToggles)[]) {
+    const on = show[key] !== false;
+    showToggles[key].checked = on;
     scene.setFilters({ [key]: on });
     mosaic?.eachGraph((g) => { if (g !== scene) g.setFilters({ [key]: on }); });
     localStorage.setItem(`zoto-viz.${key}`, on ? "1" : "0");
@@ -849,8 +968,11 @@ function applySettings(s: ProfileSettings): void {
   localStorage.setItem("zoto-viz.merge", s.merge ? "1" : "0");
   setRedaction(s.redact);
   settings.setFilterText(s.filters);
+  paintAgentLook(s.agent ?? { decos: [] });
   settings.applyAnim(s.anim);
   settings.applyFeed(s.feed);
+  if (s.camera) settings.setCamPolicy(s.camera);
+  if (s.mic) settings.setMicPolicy(s.mic);
   if (activeArcade) {
     arcade[activeArcade].view.stop();
     arcade[activeArcade].el.hidden = true;
@@ -861,6 +983,36 @@ function applySettings(s: ProfileSettings): void {
   applyMode(s.mode);
   if (lastRaw) feed(lastRaw);
   void syncWifiWatch();
+}
+
+let aiBusy = false;
+async function setAiCycle(on: boolean): Promise<void> {
+  if (!profiles || aiBusy) return;
+  aiBusy = true;
+  try {
+    if (on) {
+      const st = await agent.probeOllama();
+      const result = await profiles.activateAiCycle(collectSettings(), { model: st.model, online: st.online });
+      if (result === "live") {
+        invalidateSkyRecipe();
+        await agent.setControl(true);
+        agent.setCycleChecked(true);
+      } else {
+        await agent.setControl(false);
+        agent.setCycleChecked(false);
+      }
+    } else {
+      if (profiles.isAgent()) await profiles.deactivateAiCycle();
+      await agent.setControl(false);
+      agent.setCycleChecked(false);
+    }
+    applyViewLook();
+  } catch (e) {
+    console.warn("zoto-viz AI cycle:", e);
+    agent.setCycleChecked(false);
+  } finally {
+    aiBusy = false;
+  }
 }
 
 // the panel sits under the header; keep its offset in sync with the header's wrapped height
@@ -949,7 +1101,8 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "r" || e.key === "R") setRedaction(!redaction.enabled);
   if (e.key === "d" || e.key === "D") setDream(!dreamToggle.checked);
   if (e.key === "f" || e.key === "F") settings.setFeedOn(!settings.feedSettings.on);
-  if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id);
+  if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);
   const idx = e.key === "0" ? 9 : Number(e.key) - 1;
-  if (idx >= 0 && idx < MODES.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(MODES[idx].id);
+  const modes = allModes();
+  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.id);
 });

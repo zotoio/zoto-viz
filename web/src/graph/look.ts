@@ -69,7 +69,7 @@ export class LookStage {
     if (!this.attached) return;
     const r = this.ensure();
     this.resize();
-    this.apply(src.dreamAnim, theme, src.pulseNow, r);
+    this.apply(src.dreamAnim, theme, src.pulseNow, r, src.visibilityCap);
     this.follow(src, dt);
     this.backdrop.tick(now);
     r.render(this.world, this.camera);
@@ -98,7 +98,7 @@ export class LookStage {
     this.renderer = null;
   }
 
-  private apply(anim: DreamAnim, theme: Theme, pulse: { level: number; bass: number }, r: THREE.WebGLRenderer): void {
+  private apply(anim: DreamAnim, theme: Theme, pulse: { level: number; bass: number }, r: THREE.WebGLRenderer, lumaCap: number): void {
     const s = theme.scene;
     this.fog.density = anim.backdrop === "none" ? 0.00075 : 0.00022;
     this.rim.color.setHex(s.rim);
@@ -141,6 +141,8 @@ export class LookStage {
       anim.gridSize,
       anim.gridShape,
     );
+    this.backdrop.setLumaCap(lumaCap);
+    this.grid.setLumaCap(lumaCap);
   }
 
   private follow(src: NetScene, dt: number): void {

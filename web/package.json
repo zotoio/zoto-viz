@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "d3-force-3d": "^3.0.6",
+    "marked": "^18.0.13",
     "three": "^0.186.0"
   },
   "devDependencies": {

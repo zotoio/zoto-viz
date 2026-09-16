@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
 
 /**
  * Floor under the graph: a faded tiled plane. Colour, cell size, and tile shape (square / hex /
@@ -32,8 +33,11 @@ uniform float uBright;
 uniform float uAudio;
 uniform float uCell;
 uniform float uShape;
+uniform float uLumaCap;
 in vec3 vWorld;
 out vec4 fragColor;
+
+${SKY_LUMA_CAP_GLSL}
 
 float line1(float x, float w, float aa) {
   float d = abs(fract(x + 0.5) - 0.5);
@@ -85,6 +89,7 @@ void main() {
   if (a < 0.01) discard;
   vec3 col = mix(uMinor, uMajor, uShape < 0.5 ? clamp(major, 0.0, 1.0) : 0.85);
   col *= uBright * (1.0 + uAudio * 1.5);
+  col = capSkyLumaTo(col, uLumaCap);
   fragColor = vec4(col, a);
 }
 `;
@@ -107,6 +112,7 @@ export class FloorGrid {
         uAudio: { value: 0 },
         uCell: { value: 50 },
         uShape: { value: 0 },
+        uLumaCap: { value: SKY_LUMA_CAP },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -136,5 +142,9 @@ export class FloorGrid {
     this.mat.uniforms.uCell.value = cell;
     this.mat.uniforms.uShape.value = SHAPE_NUM[shape];
     this.mesh.visible = opacity > 0.008;
+  }
+
+  setLumaCap(cap: number): void {
+    this.mat.uniforms.uLumaCap.value = Math.min(SKY_LUMA_CAP, Math.max(0.04, cap));
   }
 }

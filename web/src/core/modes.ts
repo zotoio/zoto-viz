@@ -27,7 +27,7 @@ export interface PluginField {
   key: string;
   label: string;
   hint?: string;
-  type: "boolean" | "select" | "number" | "text";
+  type: "boolean" | "select" | "number" | "text" | "textarea";
   default?: string | number | boolean;
   values?: [string, string][];
   min?: number;
@@ -36,6 +36,23 @@ export interface PluginField {
 }
 export interface Legend { color: string; label: string; line?: boolean }
 export interface Overlay { id: string; x: number; y: number; z: number; html: string }
+
+/** Per-frame node extras. Offsets are world units on top of the layout pose. */
+export interface LiveLook {
+  dx?: number;
+  dy?: number;
+  dz?: number;
+  /** multiplier on the drawn sphere radius */
+  scale?: number;
+  /** added to the instance glow */
+  glow?: number;
+  /** 0–5 (sphere…disc), including in-between morphs */
+  shape?: number;
+  /** radians around +Y */
+  spin?: number;
+  /** hue shift in turns, −0.5…0.5 */
+  hue?: number;
+}
 
 export interface ModeCtx {
   now: number;
@@ -72,13 +89,13 @@ export interface ViewMode {
   camera?: [number, number, number];
   /** the mode brings its own renderer instead of styling the 3D scene (main.ts swaps the scene out for it) */
   standalone?: boolean;
-  /** YAML plugin id when this view was compiled from ~/.zoto-viz/plugins */
+  /** catalog plugin id when this view was compiled from plugins/*.zip */
   pluginId?: string;
   /** graph plugin base (`wifi` / `bluetooth`) — scene swaps the IP snapshot for that RF view */
   graphBase?: string;
   /** arcade slot to run when standalone (plugin views reuse a shipped engine) */
   arcadeId?: string;
-  /** plugin-cog fields; values are merged into opts */
+  /** Settings → This view fields; values are merged into opts */
   config?: PluginField[];
   /** once per snapshot, before styling; compute caches here */
   prepare?(ctx: ModeCtx): void;
@@ -92,6 +109,8 @@ export interface ViewMode {
   forceLabel?(n: GNode, ctx: ModeCtx): boolean;
   /** hide labels the default would show */
   suppressLabel?(n: GNode, ctx: ModeCtx): boolean;
+  /** per-frame look (seconds). Layers uses this for the internet stack's wave / shimmer / faces. */
+  liveLook?(n: GNode, t: number, ctx: ModeCtx): LiveLook | undefined;
   /** single colour, or [sourceColour, targetColour] for a gradient */
   linkColor?(l: GLink, ctx: ModeCtx): number | [number, number] | undefined;
   linkBright?(l: GLink, ctx: ModeCtx, base: number): number;
@@ -116,7 +135,7 @@ export type ViewSource = "NET" | "AIR" | "BT" | "CPU";
 export function viewSource(m: Pick<ViewMode, "id" | "graphBase" | "arcadeId">): ViewSource {
   if (m.graphBase === "wifi") return "AIR";
   if (m.graphBase === "bluetooth") return "BT";
-  if (m.graphBase === "cpu" || m.arcadeId === "cpupong" || m.id === "cpupong" || m.id === "cpu") return "CPU";
+  if (m.graphBase === "cpu" || m.arcadeId === "cpupong" || m.arcadeId === "doom" || m.id === "cpupong" || m.id === "doom" || m.id === "cpu") return "CPU";
   return "NET";
 }
 
@@ -263,6 +282,34 @@ function gridTargets(nodes: GNode[], y: number, z0: number, maxCols: number, spa
     out.set(node, [(c - (inRow - 1) / 2) * sx, y + r * dy + (c % 2 ? stagger : 0), z0]);
   });
   return out;
+}
+
+/**
+ * Layers internet stack: a traveling undulation, a glow shimmer, and a face-shape pattern that
+ * periodically locks into a cube/octahedron checker. `col`/`row` are the grid slot from `gridTargets`.
+ */
+export function layersInternetLive(t: number, col: number, row: number, i: number): Required<LiveLook> {
+  const phase = col * 0.62 + row * 1.05 + i * 0.04;
+  const wave = Math.sin(t * (Math.PI * 2 / 5.4) + phase);
+  const sway = Math.cos(t * (Math.PI * 2 / 7.2) + phase * 0.55);
+  const shimmer = 0.5 + 0.5 * Math.sin(t * (Math.PI * 2 / 2.7) + phase * 1.65);
+  const twinkle = Math.pow(0.5 + 0.5 * Math.sin(t * 6.8 + i * 2.1 + col * 0.4), 10);
+  const u = (t / 8.5 + col / 7 + row / 4) % 2;
+  const traveling = (u < 1 ? u : 2 - u) * 5;
+  const patternize = 0.5 + 0.5 * Math.sin(t * (Math.PI * 2 / 15));
+  const hold = Math.max(0, (patternize - 0.74) / 0.26);
+  const patterned = (col + row) % 2 === 0 ? 1 : 3;
+  const shape = traveling + (patterned - traveling) * hold;
+  return {
+    dx: 7 * sway,
+    dy: 18 * wave,
+    dz: 11 * Math.sin(t * 0.92 + col * 0.48 + row * 0.3),
+    scale: 1 + 0.14 * wave + 0.1 * twinkle,
+    glow: 0.18 * shimmer + 0.7 * twinkle,
+    shape,
+    spin: t * 0.48 + phase * 0.35,
+    hue: 0.06 * Math.sin(t * 1.15 + phase) + 0.04 * twinkle,
+  };
 }
 
 // ------------------------------------------------------------------ modes
@@ -452,12 +499,13 @@ export const protocols: ViewMode = (() => {
 export const layers: ViewMode = (() => {
   const target = new Map<GNode, [number, number, number]>();
   const topInternet = new Set<GNode>();
+  const slot = new WeakMap<GNode, { col: number; row: number; i: number }>();
   let maxBytes = 1;
   const Y = { internet: 380, gateway: 170, self: 0, lan: 0, local: -230, multicast: 0 } as const;
   return {
     id: "layers",
     label: "Layers",
-    hint: "Sankey-style: internet destinations on top, gateway, then LAN devices, then containers/tunnels. Ordered left→right by volume; edge brightness = volume.",
+    hint: "Sankey-style: internet destinations on top, gateway, then LAN devices, then containers/tunnels. The internet stack undulates, shimmers, and cycles its faces. Ordered left→right by volume; edge brightness = volume.",
     options: [{ key: "sort", label: "order by", values: [["bytes", "volume"], ["rate", "current rate"], ["name", "name"]], default: "bytes" }],
     camera: [0, 80, 1150],
     legend: () => [
@@ -478,6 +526,8 @@ export const layers: ViewMode = (() => {
         : (a: GNode, b: GNode) => total(b.device) - total(a.device);
       for (const r of Object.values(rows)) r.sort(cmp);
       for (const [n, t] of gridTargets(rows.internet, Y.internet, 0, 40, 30, 40, 0, ctx.spreadX)) target.set(n, t);   // extra rows stack upward
+      const netCols = Math.min(rows.internet.length, 40) || 1;
+      rows.internet.forEach((n, i) => slot.set(n, { i, col: i % netCols, row: Math.floor(i / netCols) }));
       for (const [n, t] of gridTargets(rows.gateway, Y.gateway, 0, 4, 80, 0, 0, ctx.spreadX)) target.set(n, t);
       for (const [n, t] of gridTargets(rows.lan, Y.lan, 0, 18, 68, -70, 26, ctx.spreadX)) target.set(n, t);         // wrap downward, staggered
       for (const [n, t] of gridTargets(rows.local, Y.local, 0, 18, 68, -70, 26, ctx.spreadX)) target.set(n, t);
@@ -501,6 +551,11 @@ export const layers: ViewMode = (() => {
     nodeScale: (n) => (n.device.role === "multicast" ? 3 : 4 + Math.min(8, Math.log10(1 + total(n.device)) * 0.8)),
     forceLabel: (n) => topInternet.has(n),
     suppressLabel: (n) => n.device.role === "internet" && !topInternet.has(n),
+    liveLook(n, t) {
+      const s = slot.get(n);
+      if (!s || n.device.role !== "internet") return undefined;
+      return layersInternetLive(t, s.col, s.row, s.i);
+    },
     linkColor: (l) => [ROLE_COLOR[l.source.device.role], ROLE_COLOR[l.target.device.role]],
     linkBright(l, _ctx, base) {
       if (!isReal(l)) return 0;
@@ -759,6 +814,20 @@ export const cpupong: ViewMode = {
   ],
 };
 
+/** CPU Doom: this host's processes as demons in a first-person corridor. Rendered by doom.ts. */
+export const doom: ViewMode = {
+  id: "doom",
+  label: "Doom",
+  standalone: true,
+  hint: "This host's scheduler as a first-person corridor loop. Logical CPUs sit on the hall; busy processes stand in the core they last ran on. The camera chases the busiest process down the corridor. WASD to take over (D is strafe here, not dream), drag to look, click to fire the rocket launcher. Walls stop you and the rocket. Rockets splash visually — they never kill a process.",
+  legend: () => [
+    { color: "conic-gradient(#ef5350,#ab47bc,#29b6f6,#26a69a,#ffee58,#ff7043,#ef5350)", label: "process · coloured by name" },
+    { color: "#8b3a2a", label: "wall · a core room" },
+    { color: "#c62828", label: "giblets · process is not killed" },
+    { color: css(ROLE_COLOR.self), label: "this host · load in the HUD" },
+  ],
+};
+
 /** Comma-separated watch list from the plugin cog → SSIDs, in order, without blanks or repeats. */
 export function parseWatchList(raw: string | undefined): string[] {
   const out: string[] = [];
@@ -891,6 +960,34 @@ export const wifi: ViewMode = (() => {
   };
 })();
 
+/** Default / ceiling for how many Bluetooth advertisers the graph keeps. BLE random MACs otherwise flood it. */
+export const BT_MAX_NODES = 32;
+export const BT_MAX_NODES_CEILING = 64;
+
+function btKeepScore(d: Device): number {
+  if (d.role === "self") return 4;
+  const ports = d.ports ?? [];
+  if (d.role === "gateway" || ports.includes("connected") || ports.includes("paired")) return 3;
+  if ((d.hostnames ?? []).length || (d.names ?? []).length) return 2;
+  return 0;
+}
+
+function btRank(a: Device, b: Device): number {
+  return btKeepScore(b) - btKeepScore(a) || b.last_seen - a.last_seen || b.packets - a.packets;
+}
+
+/** Keep this host, then named / connected advertisers, then the most recently heard, up to `opts.top`. */
+export function capBluetoothDevices(devices: Device[], opts: Record<string, string> = {}): Device[] {
+  const raw = Number(opts.top);
+  const cap = Math.max(8, Math.min(BT_MAX_NODES_CEILING, Number.isFinite(raw) && raw > 0 ? Math.round(raw) : BT_MAX_NODES));
+  if (devices.length <= cap) return devices;
+  const ranked = [...devices].sort(btRank);
+  const kept = ranked.slice(0, cap);
+  const self = devices.find((d) => d.role === "self");
+  if (self && !kept.some((d) => d.ip === self.ip)) kept[kept.length - 1] = self;
+  return kept;
+}
+
 /** Bluetooth advertisers and this host's adapter. Used as a graph plugin base. */
 export const bluetooth: ViewMode = (() => {
   const seen = new Set<DeviceKind>();
@@ -899,6 +996,13 @@ export const bluetooth: ViewMode = (() => {
     label: "Bluetooth",
     graphBase: "bluetooth",
     hint: "Bluetooth devices this adapter can hear. Colour is the device kind (bulb, speaker, phone…). Advertisements are decoded from HCI when capture is allowed; names also come from an inquiry scan. Links are this host talking to a device, not two neighbours talking to each other.",
+    config: [
+      {
+        key: "top", label: "max nodes", type: "number", default: BT_MAX_NODES,
+        min: 8, max: BT_MAX_NODES_CEILING, step: 4,
+        hint: "Keep this host, then named / connected advertisers, then the most recently heard. BLE random addresses otherwise flood the graph.",
+      },
+    ],
     legend: () => KIND_ORDER.filter((k) => seen.has(k)).map((k) => ({ color: css(KIND_COLOR[k]), label: KIND_LABEL[k] })),
     prepare(ctx) {
       seen.clear();
@@ -912,16 +1016,70 @@ export const bluetooth: ViewMode = (() => {
   };
 })();
 
-export const MODES: ViewMode[] = [topology, talkers, services, protocols, layers, watch, netpong, invaders, command, frogger, cores, load, cpupong];
-/** 3D graph modes only — arcade views keep their own renderer and are skipped by dream cycling. */
-export const GRAPH_MODES: ViewMode[] = MODES.filter((m) => !m.standalone);
-/** Graph engines plugins may wrap, including RF bases that are not in the main view list. */
-export const GRAPH_BASES: ViewMode[] = [...GRAPH_MODES, wifi, bluetooth, { ...cores, id: "cpu", label: "CPU" }];
+/**
+ * Graph engines plugins may wrap. These are wrap targets, not live menu rows.
+ * wifi / bluetooth stay off-menu unless a catalog plugin wraps them; `cpu` aliases cores.
+ */
+export const GRAPH_BASES: ViewMode[] = [
+  topology, talkers, services, protocols, layers, watch, cores, load, wifi, bluetooth,
+  { ...cores, id: "cpu", label: "CPU" },
+];
+/** Arcade engines plugins may wrap (`engine: doom` → arcadeId). Not live menu rows. */
+export const ARCADE_ENGINES: ViewMode[] = [netpong, invaders, command, frogger, cpupong, doom];
 
 let pluginModes: ViewMode[] = [];
-export function setPluginModes(modes: ViewMode[]): void { pluginModes = modes; }
-export function allModes(): ViewMode[] { return [...MODES, ...pluginModes]; }
-export const modeById = (id: string): ViewMode => allModes().find((m) => m.id === id) ?? topology;
+
+/**
+ * Unique `pluginId` values become catalog menu rows. A later compiled view with the
+ * same pluginId is dropped here (plugin-on-plugin overlay is applied by the catalog
+ * loader before this call).
+ */
+export function pluginMenuRows(modes: ViewMode[]): ViewMode[] {
+  const seen = new Set<string>();
+  const rows: ViewMode[] = [];
+  for (const m of modes) {
+    const key = m.pluginId ?? m.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push(m);
+  }
+  return rows;
+}
+
+export function setPluginModes(modes: ViewMode[]): void { pluginModes = pluginMenuRows(modes); }
+/** Live menu: catalog plugin rows only. Host engines are wrap targets, not menu entries. */
+export function allModes(): ViewMode[] { return pluginModes; }
+/** Catalog graph plugins (not arcade). Dream cycling iterates this, not a hardcoded list. */
+export function graphModes(): ViewMode[] { return allModes().filter((m) => !m.standalone); }
+
+function isTopologyRow(m: ViewMode): boolean {
+  return m.pluginId === "topology" || m.id === "plugin:topology" || m.id === "topology";
+}
+
+/** First catalog plugin, topology first when present; otherwise stable by plugin id. */
+export function defaultCatalogMode(): ViewMode | undefined {
+  const modes = allModes();
+  if (!modes.length) return undefined;
+  const topo = modes.find(isTopologyRow);
+  if (topo) return topo;
+  return [...modes].sort((a, b) => (a.pluginId ?? a.id).localeCompare(b.pluginId ?? b.id))[0];
+}
+
+/** Host wrap-target for `id`, or undefined. Never a catalog menu row. */
+export function hostEngine(id: string): ViewMode | undefined {
+  return GRAPH_BASES.find((m) => m.id === id) ?? ARCADE_ENGINES.find((m) => m.id === id);
+}
+
+/**
+ * Resolve a view id against the catalog (exact id or pluginId). Missing / empty
+ * catalog does not throw: fall back to the default catalog row, then the topology
+ * host-engine stub (not a menu row).
+ */
+export function modeById(id: string): ViewMode {
+  const modes = allModes();
+  const found = modes.find((m) => m.id === id) ?? modes.find((m) => m.pluginId === id);
+  return found ?? defaultCatalogMode() ?? topology;
+}
 export function defaultOpts(m: ViewMode): Record<string, string> {
   const opts = Object.fromEntries((m.options ?? []).map((o) => [o.key, o.default]));
   for (const f of m.config ?? []) {

@@ -1,4 +1,6 @@
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - marked@18.0.13
 onlyBuiltDependencies:
   - esbuild

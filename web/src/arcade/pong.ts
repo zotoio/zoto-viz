@@ -153,7 +153,7 @@ class Column<R extends Row> {
 }
 
 export class PongView {
-  /** header controls shown next to the view selector while the mode is active */
+  /** This view settings: source / target / speed while the mode is active */
   readonly controls: HTMLElement[];
   private readonly canvas: HTMLCanvasElement;
   private readonly g: CanvasRenderingContext2D;

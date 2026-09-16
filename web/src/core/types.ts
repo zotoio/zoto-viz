@@ -208,6 +208,13 @@ export interface StateMsg {
   devices: Device[];
   flows: Flow[];
   views?: { wifi?: RfView; bluetooth?: RfView; cpu?: RfView };
+  live?: {
+    seq: number;
+    patch?: Record<string, unknown>;
+    temper?: number;
+    weather?: string;
+    prefix?: string;
+  };
 }
 
 /**

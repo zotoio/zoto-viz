@@ -2,25 +2,42 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import { forceCenter, forceLink, forceManyBody, forceSimulation, type Simulation, type SimNode, type SimLink } from "d3-force-3d";
+import {
+  applyPhys, clampParticleCap, easePhysToward, gravityForce, magnetForce,
+  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, stringPoint, stringSegs, swirlForce,
+  type PhysEase,
+} from "./physics";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName, fmtBytes, type Device, type Flow, type Role, type StateMsg } from "../core/types";
-import { categorize, paneLabelCap, topology, type ModeCtx, type ViewMode } from "../core/modes";
+import { capBluetoothDevices, categorize, heat, paneLabelCap, topology, type ModeCtx, type ViewMode } from "../core/modes";
 import { rIp, rName } from "../core/redact";
-import { DEFAULT_THEME, contrastRatio, effectiveSceneLuminance, fadeTowardPole, grayHex, hexToHsl, hslHex, sceneInk, toCssHex, type Theme } from "../core/themes";
+import { DEFAULT_THEME, effectiveSceneLuminance, fadeTowardPole, grayHex, guardLabelMix, hexToHsl, hslHex, relativeLuminance, sceneInk, SKY_LUMA_CAP, toCssHex, type Theme } from "../core/themes";
+import { assessVisibility, type VisibilityReport } from "../core/visibility";
 import { Backdrop, type BackdropKind } from "./backdrop";
+import { ensureSkyRecipe } from "./sky-ai";
 import { liveCam } from "../camera/livecam";
 import { cameraConsumers } from "../camera/want";
 import { Gaze } from "../camera/gaze";
 import { FloorGrid, type FloorShape } from "./floor";
 import { AudioPulse } from "../audio/audio";
-import { markFrame } from "../core/fps";
+import { liveMic, shouldRunMic } from "../audio/want";
+import { markFrame, setFpsHint } from "../core/fps";
+import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
+import { activityLookMix, centerMixForNdc } from "./cam-center";
+import { wheelCamMotion } from "./wheel-cam";
+import { decoHtml, EMPTY_LOOK, type AgentLook, type DecoAt } from "./deco";
 
-export interface Filters { lan: boolean; internet: boolean; multicast: boolean; offline: boolean; labels: boolean }
+export const THEME_FADE_S = 1.8;
+
+export interface Filters { lan: boolean; internet: boolean; multicast: boolean; offline: boolean; labels: boolean; cpuIdle: boolean }
 
 export interface GNode extends SimNode {
   id: string;
   device: Device;
   /** sphere styling; every node is one instance of the shared InstancedMesh, written each frame */
   color: THREE.Color;
+  /** start of a theme fade; `colorWant` is the incoming palette */
+  colorFrom: THREE.Color;
+  colorWant: THREE.Color;
   scale: number;
   glow: number;
   opacity: number;
@@ -67,7 +84,7 @@ const CPU_IDLE_PCT = 0.5;
 const CPU_IDLE_FLOOR = 0.22;
 /** nodes under this share of the loudest node's log-rate keep a plain label */
 const VOL_FLOOR = 0.45;
-const MAX_PARTICLES = 3000;
+const MAX_PARTICLES = PARTICLE_CAP;
 const SPHERE_CAPACITY = 512;  // instances allocated up front; grows by doubling
 
 /** Live unicast conversation (not a tether, multicast hub, or discovery/DNS-to-gateway flak). */
@@ -446,9 +463,11 @@ function rfSlice(msg: StateMsg, mode: ViewMode, opts: Record<string, string> = {
   if (base === "wifi") return wifiViaGateway(msg, opts);
   if (base === "bluetooth") {
     const view = msg.views?.bluetooth;
+    const devices = capBluetoothDevices(view?.devices ?? [], opts);
+    const ids = new Set(devices.map((d) => d.ip));
     return {
-      devices: view?.devices ?? [],
-      flows: view?.flows ?? [],
+      devices,
+      flows: (view?.flows ?? []).filter((f) => ids.has(f.a) && ids.has(f.b)),
       gateway: view?.hub || "",
       localIp: view?.self || "",
     };
@@ -535,6 +554,7 @@ const _m = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
 const _scl = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
+const _axisY = new THREE.Vector3(0, 1, 0);
 const _sphere = new THREE.Sphere();
 const _hit = new THREE.Vector3();
 const _sph = new THREE.Spherical();
@@ -546,9 +566,8 @@ const _camWant = new THREE.Vector3();
 const _fadeB = new THREE.Color();
 const _colA = new THREE.Color();
 const _colB = new THREE.Color();
+const _hsl = { h: 0, s: 0, l: 0 };
 const _overlayKeep = new Set<string>();
-/** node colours with less WCAG contrast than this against the scene behind the label make a poor highlight */
-const HL_MIN_CONTRAST = 4.5;
 const _bulkGoal = new THREE.Vector3();
 
 /** Bytes/s before a node pulls the dream zoom. Quiet mDNS chatter stays out of the centroid. */
@@ -585,6 +604,8 @@ export interface DreamAnim {
   skySpeed: number;
   /** 0–1 how gently that clock's speed follows the pulse and the slider: 0 snaps, 1 glides over seconds */
   skyEase: number;
+  /** minutes between Gemma sky recipes when backdrop is AI Dynamic */
+  skyAiMin: number;
   /** pulse the scene clear / fog (the fill behind the sky) */
   bgAudio: boolean;
   /** empty string = scene fill follows the theme's defined bg */
@@ -625,8 +646,10 @@ export interface DreamAnim {
   skyCycle: ThemeCycle;
   /** 0.5–2 multiplier on CSS label size (and font-weight) */
   labelWeight: number;
-  /** how many LAN / internet names to keep on besides self, gateway, selection, and live bursts */
+  /** how many idle LAN / internet names to keep on besides self, gateway, selection, and live bursts */
   labelCount: number;
+  /** ease labels / sparks / glow / sky / pixel density down if the 30 s average stays under 10 fps; restore on a 1-minute recovered average */
+  autoTune: boolean;
   /** 0.4–2.5 multiplier on sphere radius */
   nodeWeight: number;
   /** 0.3–2.5 multiplier on edge brightness and particle size */
@@ -643,6 +666,51 @@ export interface DreamAnim {
   hero: HeroPos;
   /** what the camera frames: moving/busy nodes, movers only, or the whole graph as a box */
   focus: FocusMode;
+  /** 0–2 traffic-spark density */
+  partAmt: number;
+  /** 0.25–3 how hard byte-rate feeds spark count */
+  partBusy: number;
+  /** bytes/s below this spawn no sparks */
+  partQuiet: number;
+  /** max sparks on one edge */
+  partPeak: number;
+  /** global spark cap */
+  partCap: number;
+  /** 0.25–3 spark travel speed */
+  partSpeed: number;
+  /** 0.3–2.5 spark size (on top of edgeWeight) */
+  partSize: number;
+  /** pulse spark count and speed */
+  audioParts: boolean;
+  /** same-type magnet −1 repel … +1 attract (0 = off) */
+  magnetSelf: number;
+  magnetGateway: number;
+  magnetLan: number;
+  magnetLocal: number;
+  magnetInternet: number;
+  magnetMulticast: number;
+  /** −1…+1 magnet between different types */
+  magnetCross: number;
+  /** 0.15–2 how far magnets reach */
+  magnetRange: number;
+  /** 0–2 pull toward the floor */
+  gravity: number;
+  /** 0–2 yaw torque around the origin */
+  swirl: number;
+  /** 0–2 multiplier on the existing many-body spread */
+  chargeAmt: number;
+  /** 0–2 multiplier on edge spring strength */
+  spring: number;
+  /** 0.4–2.5 multiplier on rest length of edges */
+  linkSpan: number;
+  /** 0.12–0.7 velocity decay (higher = heavier / less bounce) */
+  drag: number;
+  /** 0–2 multiplier on the origin centering force */
+  centerPull: number;
+  /** 0–1 sag of edges into strings (0 = straight) */
+  stringAmt: number;
+  /** pulse magnets, gravity, swirl, and string sag */
+  audioPhysics: boolean;
 }
 
 export type MosaicSize = "off" | "4" | "6" | "8";
@@ -651,7 +719,7 @@ export type HeroPos = "off" | "left" | "center" | "right";
 export type FocusMode = "activity" | "motion" | "cloud";
 
 export const FOCUS_MODES: { value: FocusMode; label: string; hint: string }[] = [
-  { value: "activity", label: "activity", hint: "frame the nodes that are moving or carrying traffic — not a sphere of everything" },
+  { value: "activity", label: "activity", hint: "frame the nodes that are moving or carrying traffic, and keep that cluster near the viewport centre most of the time" },
   { value: "motion", label: "motion", hint: "frame only nodes that are currently moving in the layout" },
   { value: "cloud", label: "whole graph", hint: "frame every visible node as a box that matches the viewport, not a sphere" },
 ];
@@ -673,7 +741,7 @@ export const THEME_CYCLES: { value: ThemeCycle; label: string; hint: string }[] 
 
 export const SKY_CYCLES: { value: ThemeCycle; label: string; hint: string }[] = [
   { value: "off", label: "off", hint: "keep the current far-field sky" },
-  { value: "cadence", label: "cadence", hint: "random sky (fractal / space / matrix / live) on the view cadence" },
+  { value: "cadence", label: "cadence", hint: "random authored sky on the view cadence (not AI Dynamic)" },
   { value: "audio", label: "beat", hint: "random sky on audio / traffic transients — independent of theme cycle" },
 ];
 
@@ -712,7 +780,8 @@ export const DEFAULT_DREAM: DreamAnim = {
   skyBright: 1,
   skyAudio: true,
   skySpeed: 1,
-  skyEase: 0.4,
+  skyEase: 0.55,
+  skyAiMin: 5,
   bgAudio: false,
   bgColor: "",
   bgOpacity: 1,
@@ -735,7 +804,8 @@ export const DEFAULT_DREAM: DreamAnim = {
   themeCycle: "off",
   skyCycle: "off",
   labelWeight: 1,
-  labelCount: 40,
+  labelCount: 20,
+  autoTune: true,
   nodeWeight: 1,
   edgeWeight: 1,
   edgeGlow: "comet",
@@ -744,6 +814,31 @@ export const DEFAULT_DREAM: DreamAnim = {
   mosaic: "off",
   hero: "off",
   focus: "activity",
+  partAmt: 1,
+  partBusy: 1,
+  partQuiet: 0,
+  partPeak: 40,
+  partCap: MAX_PARTICLES,
+  partSpeed: 1,
+  partSize: 1,
+  audioParts: false,
+  magnetSelf: 0,
+  magnetGateway: 0,
+  magnetLan: 0,
+  magnetLocal: 0,
+  magnetInternet: 0,
+  magnetMulticast: 0,
+  magnetCross: 0,
+  magnetRange: 1,
+  gravity: 0,
+  swirl: 0,
+  chargeAmt: 1,
+  spring: 1,
+  linkSpan: 1,
+  drag: 0.35,
+  centerPull: 1,
+  stringAmt: 0,
+  audioPhysics: false,
 };
 
 export const DREAM_BOUNDS = {
@@ -757,6 +852,7 @@ export const DREAM_BOUNDS = {
   bright: { min: 0, max: 2, step: 0.05 },
   skySpeed: { min: 0, max: 4, step: 0.05 },
   skyEase: { min: 0, max: 1, step: 0.05 },
+  skyAiMin: { min: 1, max: 30, step: 1 },
   gridSize: { min: 16, max: 160, step: 4 },
   audioSens: { min: 0, max: 2, step: 0.05 },
   camDrive: { min: 0, max: 2, step: 0.05 },
@@ -768,6 +864,23 @@ export const DREAM_BOUNDS = {
   edgeWeight: { min: 0.3, max: 2.5, step: 0.05 },
   edgeGlowAmt: { min: 0.2, max: 2, step: 0.05 },
   edgeGlowSpeed: { min: 0.25, max: 3, step: 0.05 },
+  partAmt: { min: 0, max: 2, step: 0.05 },
+  partBusy: { min: 0.25, max: 3, step: 0.05 },
+  partQuiet: { min: 0, max: 4000, step: 50 },
+  partPeak: { min: 1, max: 80, step: 1 },
+  partCap: { min: 20, max: MAX_PARTICLES, step: 20 },
+  partSpeed: { min: 0.25, max: 3, step: 0.05 },
+  partSize: { min: 0.3, max: 2.5, step: 0.05 },
+  magnet: { min: -1, max: 1, step: 0.05 },
+  magnetRange: { min: 0.15, max: 2, step: 0.05 },
+  gravity: { min: 0, max: 2, step: 0.05 },
+  swirl: { min: 0, max: 2, step: 0.05 },
+  chargeAmt: { min: 0, max: 2, step: 0.05 },
+  spring: { min: 0, max: 2, step: 0.05 },
+  linkSpan: { min: 0.4, max: 2.5, step: 0.05 },
+  drag: { min: 0.12, max: 0.7, step: 0.01 },
+  centerPull: { min: 0, max: 2, step: 0.05 },
+  stringAmt: { min: 0, max: 1, step: 0.05 },
 };
 
 /**
@@ -870,7 +983,7 @@ export class NetScene {
   private pointer = new THREE.Vector2(2, 2);
   private hovered: GNode | null = null;
   private selected: GNode | null = null;
-  private filters: Filters = { lan: true, internet: true, multicast: false, offline: true, labels: true };
+  private filters: Filters = { lan: true, internet: true, multicast: false, offline: true, labels: true, cpuIdle: true };
   /** allow/block predicate from the settings cog; hides matching devices (defaults to show-all) */
   private nodeFilter: (d: Device) => boolean = () => true;
   private lastInteraction = performance.now();
@@ -879,12 +992,15 @@ export class NetScene {
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
   private now = Date.now() / 1000;
+  /** Host-engine stub so an empty catalog still constructs; catalog default is applied via setMode. */
   private mode: ViewMode = topology;
   private modeOpts: Record<string, string> = {};
   private lastMsg: StateMsg | null = null;
   /** raw address -> representative node, filled by the "merge names" collapse (empty when off) */
   private aliasMap = new Map<string, string>();
   private overlayObjs = new Map<string, CSS2DObject>();
+  private decoObjs = new Map<string, CSS2DObject>();
+  private agentLook: AgentLook = EMPTY_LOOK;
   /** unit direction to glide toward on a mode switch; distance is fitted to the focus box */
   private cameraGoalDir: THREE.Vector3 | null = null;
   /** axis-aligned box around the current focus set (not a sphere) */
@@ -894,6 +1010,8 @@ export class NetScene {
   private dreamHeld = false;
   /** user panned / zoomed / orbited: keep that look-at instead of sliding back to the focus box */
   private lookPinned = false;
+  /** Follow OrbitControls damping after release before dream / fit take the camera again. */
+  private camCoastUntil = 0;
   private dreamYaw = 0;
   private dreamPitch = 0;
   private dreamZoom = 0;
@@ -903,6 +1021,11 @@ export class NetScene {
   private dreamFocus = new THREE.Vector3();
   private dreamFocusW = 0;
   private anim: DreamAnim = { ...DEFAULT_DREAM };
+  private tune: PerfOverlay | null = null;
+  private lastTuneDpr = 0;
+  private baseDpr = 1;
+  /** latest physics knobs from setAnim; `anim` chases these over PHYS_EASE_S */
+  private physWant: PhysEase | null = null;
   private dreamPulseT = 0;
   private theme: Theme = DEFAULT_THEME;
   private rim: THREE.PointLight;
@@ -920,6 +1043,7 @@ export class NetScene {
   liveCamColor: number | null = null;
   /** last heat hint from a sandboxed TypeScript plugin */
   pluginHeat = 0;
+  private readonly pluginHeatColor = new THREE.Color();
   private pluginColors = new Map<string, number>();
   private pulseLevel = 0;
   private pulseBass = 0;
@@ -961,6 +1085,7 @@ export class NetScene {
   private spreadX = 1;
   private spreadZ = 1;
   private chargeForce = forceManyBody<GNode>();
+  private centerForce = forceCenter<GNode>(0, 0, 0).strength(0.02);
   /** uncrowded shell radius → widened radius, for shells more nodes share than fit around them (measureCrowds) */
   private crowdRadius = new Map<number, number>();
   /** uncrowded shell radius → 0..1 flattening multiplier for shells still crowded after widening */
@@ -985,7 +1110,8 @@ export class NetScene {
       now: this.now, nodes: this.nodes, links: this.links, opts: this.modeOpts,
       gateway: slice?.gateway || this.lastMsg?.gateway || "",
       localIp: slice?.localIp || this.lastMsg?.local_ip || "",
-      selected: this.selected, spreadX: this.spreadX, spreadZ: this.spreadZ, labelCount: this.anim.labelCount,
+      selected: this.selected, spreadX: this.spreadX, spreadZ: this.spreadZ,
+      labelCount: this.tune?.labelCount ?? this.anim.labelCount,
       smallPane: this.smallPane,
       watch: this.mode.graphBase === "wifi" ? this.lastMsg?.views?.wifi?.watch : undefined,
     };
@@ -994,6 +1120,8 @@ export class NetScene {
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
     this.satellite = !!opts.satellite;
     const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
+    this.baseDpr = dpr;
+    this.lastTuneDpr = dpr;
     this.renderer = new THREE.WebGLRenderer({
       antialias: !this.satellite && dpr < 1.3,
       alpha: false,
@@ -1017,9 +1145,31 @@ export class NetScene {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    // one-finger / left-drag pans the graph; pinch and the wheel still zoom; modifier or right-drag orbits
+    // click-hold / one-finger pans; two-finger forward/back zooms; sideways two-finger orbits; pinch / mouse wheel zooms
     this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
     this.controls.touches.ONE = THREE.TOUCH.PAN;
+    this.controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+    type OrbitWheel = OrbitControls & {
+      _rotateLeft(a: number): void;
+      _rotateUp(a: number): void;
+      _handleMouseWheel(e: { deltaY: number; clientX: number; clientY: number }): void;
+      _customWheelEvent(e: WheelEvent): { deltaY: number; clientX: number; clientY: number };
+    };
+    this.renderer.domElement.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.pinUserCamera();
+      const orbit = this.controls as OrbitWheel;
+      const motion = wheelCamMotion(e);
+      if (motion.zoom) orbit._handleMouseWheel(orbit._customWheelEvent(e));
+      if (motion.yaw) {
+        const h = this.renderer.domElement.clientHeight || 1;
+        const k = (2 * Math.PI * this.controls.rotateSpeed) / h;
+        orbit._rotateLeft(k * motion.yaw);
+        this.controls.update();
+      }
+      this.captureDreamRest();
+    }, { capture: true, passive: false });
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 0.35;
     this.controls.addEventListener("start", () => {
@@ -1030,8 +1180,7 @@ export class NetScene {
     });
     this.controls.addEventListener("end", () => {
       this.dreamHeld = false;
-      this.lookPinned = true;
-      this.captureDreamRest();
+      this.pinUserCamera();
     });
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
@@ -1092,15 +1241,23 @@ export class NetScene {
       .alphaDecay(0.006)
       .velocityDecay(0.35)
       .force("link", this.linkForce
-        .distance((l) => (l.source.device.role === "internet" || l.target.device.role === "internet" ? 260 * this.spreadX : 160 * (0.7 + 0.3 * this.spreadX)))
-        .strength((l) => this.mode.linkStrength?.(l) ?? (l.id.startsWith("~") ? 0.03
-          : l.source.device.role === "multicast" || l.target.device.role === "multicast" ? 0 // hubs are informational only
-          : 0.12)))
+        .distance((l) => {
+          const span = this.anim.linkSpan;
+          const base = l.source.device.role === "internet" || l.target.device.role === "internet" ? 260 * this.spreadX : 160 * (0.7 + 0.3 * this.spreadX);
+          return base * span;
+        })
+        .strength((l) => {
+          const k = this.mode.linkStrength?.(l) ?? (l.id.startsWith("~") ? 0.03
+            : l.source.device.role === "multicast" || l.target.device.role === "multicast" ? 0
+            : 0.12);
+          return k * this.anim.spring;
+        }))
       .force("charge", this.chargeForce
         .strength((n) => (this.mode.charge?.(n) ?? (n.device.role === "lan" || n.device.role === "local" ? -500 : -90))
-          * (this.crowdCharge.get(this.baseShell(n)) ?? 1))
+          * (this.crowdCharge.get(this.baseShell(n)) ?? 1)
+          * this.anim.chargeAmt)
         .distanceMax(700))
-      .force("center", forceCenter<GNode>(0, 0, 0).strength(0.02))
+      .force("center", this.centerForce)
       .force("shell", ellipseShell(
         (n) => this.shellR(n),
         (n) => this.mode.shellStrength?.(n) ?? (n.device.role === "gateway" ? 1 : n.device.role === "internet" || n.device.role === "multicast" ? 0.6 : 0.9),
@@ -1115,6 +1272,14 @@ export class NetScene {
       ))
       .force("flatten", flattenLan(0.12, () => this.mode.flatten !== false, (n) => this.crowdRelax.get(this.baseShell(n)) ?? 1))
       .force("mode", modeForce((nodes, alpha) => this.mode.force?.(nodes, alpha, this.ctx)))
+      .force("magnet", magnetForce(
+        () => this.magnetsNow(),
+        () => this.anim.magnetCross,
+        () => this.anim.magnetRange,
+        () => this.physPulse(),
+      ))
+      .force("gravity", gravityForce(() => this.anim.gravity, () => this.physPulse()))
+      .force("swirl", swirlForce(() => this.anim.swirl, () => this.physPulse()))
       .stop();
 
     this.updateSpread();
@@ -1159,6 +1324,7 @@ export class NetScene {
     this.renderer.domElement.addEventListener("pointercancel", () => { if (this.dragging) this.endDrag(); });
     this.renderer.domElement.addEventListener("dblclick", () => {
       this.lookPinned = false;
+      this.camCoastUntil = 0;
       this.cameraGoalDir = null;
     });
     this.animate = this.animate.bind(this);
@@ -1186,12 +1352,14 @@ export class NetScene {
     this.mode = mode;
     this.modeOpts = { ...opts };
     if (changed) {
+      if (!this.satellite) notePerfChange();
       for (const o of this.overlayObjs.values()) { this.scene.remove(o); o.element.remove(); }
       this.overlayObjs.clear();
-      if (mode.camera) {
+        if (mode.camera) {
         this.cameraGoalDir = new THREE.Vector3(...mode.camera).normalize();
         this.controls.autoRotate = false;
         this.lookPinned = false;
+        this.camCoastUntil = 0;
         this.lastInteraction = performance.now();
       } else {
         this.cameraGoalDir = null;
@@ -1238,7 +1406,9 @@ export class NetScene {
 
   get isDreaming(): boolean { return this.dreaming; }
   /** Latest audio / traffic pulse, for HUD bars and other overlays. */
-  get pulseNow(): { level: number; bass: number } { return { level: this.pulseLevel, bass: this.pulseBass }; }
+  get pulseNow(): { level: number; bass: number; listening: boolean } {
+    return { level: this.pulseLevel, bass: this.pulseBass, listening: this.pulse.listening };
+  }
   /** Live animation settings so arcade views can share the sky and floor. */
   get dreamAnim(): DreamAnim { return this.anim; }
   private get smallPane(): boolean { return this.satellite || this.compactLabels; }
@@ -1254,8 +1424,17 @@ export class NetScene {
   /** Live-tweak the orbit from the settings cog. Phases keep running so sliders do not jump the camera. */
   setAnim(a: DreamAnim): void {
     const dropTheme = this.anim.camTheme && !a.camTheme;
-    this.anim = { ...a };
+    const next = { ...a };
+    if (!this.physWant) this.physWant = pickPhys(a);
+    else {
+      this.physWant = pickPhys(a);
+      applyPhys(next, this.anim);
+    }
+    this.anim = next;
+    this.sim.velocityDecay(this.anim.drag);
+    this.centerForce.strength(0.02 * this.anim.centerPull);
     this.backdrop.setKind(a.backdrop);
+    if (!this.satellite && a.backdrop === "dynamic") ensureSkyRecipe(a.skyAiMin * 60_000);
     if (!this.satellite) {
       const want = new Set(cameraConsumers({
         backdrop: a.backdrop,
@@ -1270,6 +1449,8 @@ export class NetScene {
     const fog = this.scene.fog as THREE.FogExp2 | null;
     if (fog) fog.density = this.fogDensity();
     this.applyWeights();
+    this.rebuildLineBuffers();
+    this.rebuildParticles();
     this.applyVisibility();
     if (this.satellite) return;
     if (dropTheme) {
@@ -1277,33 +1458,142 @@ export class NetScene {
       this.camHueOn = false;
       this.onCamTheme(null);
     }
-    if (this.audioLive() && a.audioDrive === "mic") void this.pulse.enable();
+    this.sim.alpha(Math.max(this.sim.alpha(), 0.08));
+    if (shouldRunMic(liveMic.micPolicy, a.audioDrive, this.audioLive())) void this.pulse.enable();
     else this.pulse.disable();
+  }
+
+  /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */
+  setPluginShader(opts: { id: string; source: string } | null): string | null {
+    return this.backdrop.setPluginShader(opts);
+  }
+
+  /** Photos, SVG, and a custom sky the local agent saved on the model-named profile. */
+  setAgentLook(look: AgentLook): void {
+    this.agentLook = look;
+    this.backdrop.setCustom(look.shader ?? null);
+    if (look.shaderPhoto) {
+      const href = look.shaderPhoto.startsWith("/") ? look.shaderPhoto : `/api/ai/assets/${look.shaderPhoto}`;
+      new THREE.TextureLoader().load(href, (t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        this.backdrop.setPhoto(t);
+      });
+    } else {
+      this.backdrop.setPhoto(null);
+    }
+    const keep = new Set(look.decos.map((d) => d.id));
+    for (const d of look.decos) {
+      let obj = this.decoObjs.get(d.id);
+      if (!obj) {
+        const el = document.createElement("div");
+        el.className = "overlay agent-deco";
+        obj = new CSS2DObject(el);
+        this.scene.add(obj);
+        this.decoObjs.set(d.id, obj);
+      }
+      const html = decoHtml(d);
+      if (obj.element.innerHTML !== html) obj.element.innerHTML = html;
+    }
+    for (const [id, obj] of this.decoObjs) {
+      if (keep.has(id)) continue;
+      this.scene.remove(obj);
+      obj.element.remove();
+      this.decoObjs.delete(id);
+    }
+  }
+
+  private placeDecos(): void {
+    for (const d of this.agentLook.decos) {
+      const obj = this.decoObjs.get(d.id);
+      if (!obj) continue;
+      this.decoPoint(d.at, _hot);
+      obj.position.copy(_hot);
+    }
+  }
+
+  private decoPoint(at: DecoAt, out: THREE.Vector3): THREE.Vector3 {
+    if (Array.isArray(at)) return out.set(at[0], at[1], at[2]);
+    if (at === "origin") return out.set(0, 0, 0);
+    if (at === "selected" && this.selected) {
+      return out.set(this.selected.x ?? 0, (this.selected.y ?? 0) + 18, this.selected.z ?? 0);
+    }
+    let n = 0, x = 0, y = 0, z = 0;
+    for (const node of this.nodes.values()) {
+      if (!node.visible || node.device.role !== "internet") continue;
+      x += node.x ?? 0; y += node.y ?? 0; z += node.z ?? 0;
+      n++;
+    }
+    if (!n) return out.set(0, 380, 0);
+    return out.set(x / n, y / n + 24, z / n);
+  }
+
+  private lastTuneLabels = -1;
+  private lastTuneParts = "";
+  private lastTuneK = 0;
+
+  private syncTuneDpr(): void {
+    const k = this.tune?.dprK ?? 0;
+    const want = this.baseDpr + (1 - this.baseDpr) * k;
+    if (Math.abs(want - this.lastTuneDpr) < 0.04) return;
+    this.lastTuneDpr = want;
+    this.renderer.setPixelRatio(want);
   }
 
   private applyWeights(): void {
     const a = this.anim;
+    const t = this.tune;
     const host = this.satellite ? this.container : document.documentElement;
     host.style.setProperty("--label-scale", String(a.labelWeight));
     host.style.setProperty("--label-fw", String(Math.round(400 + 350 * Math.max(0, Math.min(1, a.labelWeight)))));
-    (this.particles.material as THREE.PointsMaterial).size = 3.2 * a.edgeWeight;
+    (this.particles.material as THREE.PointsMaterial).size = 3.2 * a.edgeWeight * (t?.partSize ?? a.partSize);
     (this.lines.material as THREE.LineBasicMaterial).opacity = Math.min(1, 0.5 + 0.5 * a.edgeWeight);
     this.syncGlow();
   }
 
   private syncGlow(): void {
     const a = this.anim;
-    this.glowLines.visible = !this.stageOnly && a.edgeGlow !== "off";
+    const glowAmt = this.tune?.edgeGlowAmt ?? a.edgeGlowAmt;
+    this.glowLines.visible = !this.stageOnly && a.edgeGlow !== "off" && glowAmt > 0.02;
     const u = this.glowMat.uniforms;
-    u.uAmt.value = a.edgeGlowAmt * a.edgeWeight;
+    u.uAmt.value = glowAmt * a.edgeWeight;
     u.uSpeed.value = a.edgeGlowSpeed;
     u.uMode.value = a.edgeGlow === "pulse" ? 1 : 0;
-    u.uAdditive.value = this.theme.scene.additive ? 1 : 0;
+    u.uAdditive.value = this.additiveMarks() ? 1 : 0;
   }
 
   private audioLive(): boolean {
     const a = this.anim;
-    return a.skyAudio || a.bgAudio || a.gridAudio || a.audioCamera || a.audioNodes || a.themeCycle === "audio" || a.skyCycle === "audio";
+    return a.skyAudio || a.bgAudio || a.gridAudio || a.audioCamera || a.audioNodes
+      || a.audioPhysics || a.audioParts
+      || a.themeCycle === "audio" || a.skyCycle === "audio";
+  }
+
+  private physPulse(): number {
+    if (!this.anim.audioPhysics) return 1;
+    return 1 + 0.85 * this.pulseLevel * this.anim.audioSens;
+  }
+
+  private magnetsNow(): Record<string, number> {
+    const a = this.anim;
+    const p = this.physPulse();
+    return {
+      self: a.magnetSelf * p,
+      gateway: a.magnetGateway * p,
+      lan: a.magnetLan * p,
+      local: a.magnetLocal * p,
+      internet: a.magnetInternet * p,
+      multicast: a.magnetMulticast * p,
+    };
+  }
+
+  private stringNow(): { segs: number; sag: number; wave: number } {
+    const a = this.anim;
+    const pulse = this.physPulse();
+    return {
+      segs: stringSegs(a.stringAmt),
+      sag: a.stringAmt * pulse,
+      wave: a.audioPhysics ? this.pulseBass * a.audioSens * a.stringAmt : 0,
+    };
   }
 
   private gazeWanted(): boolean {
@@ -1311,7 +1601,10 @@ export class NetScene {
   }
 
   setPluginStyle(s: Record<string, unknown>): void {
-    if (typeof s.heat === "number") this.pluginHeat = Math.min(1, Math.max(0, s.heat));
+    if (typeof s.heat === "number") {
+      this.pluginHeat = Math.min(1, Math.max(0, s.heat));
+      this.instanceStyleDirty = true;
+    }
   }
 
   setPluginNodeColor(id: string, hex: number): void {
@@ -1384,21 +1677,28 @@ export class NetScene {
     const floorP = a.gridAudio ? this.pulseLevel : 0;
     const skyB = a.skyAudio ? this.pulseBass : 0;
     const floorB = a.gridAudio ? this.pulseBass : 0;
+    const skyOp = this.tune?.skyOpacity ?? a.skyOpacity;
+    const skyBr = this.tune?.skyBright ?? a.skyBright;
+    const skySp = this.tune?.skySpeed ?? a.skySpeed;
+    this.paintClear();
+    this.easeVisibility(dt);
+    const visK = this.visScale;
     this.backdrop.setLook(
-      a.skyAudio ? Math.min(1, a.skyOpacity * (0.28 + 0.85 * skyP)) : a.skyOpacity,
-      a.skyAudio ? a.skyBright * (0.4 + 1.5 * skyB) : a.skyBright,
+      a.skyAudio ? Math.min(1, skyOp * (0.28 + 0.85 * skyP)) : skyOp,
+      (a.skyAudio ? skyBr * (0.4 + 1.5 * skyB) : skyBr) * visK,
       skyP,
     );
-    this.backdrop.setMotion(a.skySpeed, a.skyEase);
+    this.backdrop.setLumaCap(this.visCap);
+    this.backdrop.setMotion(skySp, a.skyEase);
     this.paintGrid();
     this.grid.setLook(
       a.gridAudio ? Math.min(1, a.gridOpacity * (0.28 + 0.85 * floorP)) : a.gridOpacity,
-      a.gridAudio ? a.gridBright * (0.4 + 1.5 * floorB) : a.gridBright,
+      (a.gridAudio ? a.gridBright * (0.4 + 1.5 * floorB) : a.gridBright) * visK,
       floorP,
       a.gridSize,
       a.gridShape,
     );
-    this.paintClear();
+    this.grid.setLumaCap(this.visCap);
     const i = THREE.MathUtils.clamp(this.anim.camInertia ?? 0.55, 0, 1);
     this.controls.dampingFactor = 0.25 * (1 - i) * (1 - i) + 0.015;
     const drive = this.camDrive();
@@ -1415,7 +1715,7 @@ export class NetScene {
 
   /**
    * Pose lerp for every camera move. 0% is immediate; 100% glides over a few seconds.
-   * Pointer drag skips this (k = 1) so a pan still lands where it was released.
+   * Pointer drag and wheel zoom skip this (k = 1) so pan / zoom still land where they were released.
    */
   private camK(dt: number): number {
     const i = THREE.MathUtils.clamp(this.anim.camInertia ?? 0.55, 0, 1);
@@ -1470,6 +1770,18 @@ export class NetScene {
     _sph.radius += this.camStep.radius;
     _sph.makeSafe();
     this.camera.position.copy(this.controls.target).add(_off.setFromSpherical(_sph));
+  }
+
+  /** Chase magnets / gravity / swirl / strings so AI jumps do not teleport the cloud. */
+  private easePhys(dt: number): void {
+    if (!this.physWant) return;
+    const segs = stringSegs(this.anim.stringAmt);
+    const moving = easePhysToward(this.anim, this.physWant, dt);
+    if (!moving) return;
+    this.sim.velocityDecay(this.anim.drag);
+    this.centerForce.strength(0.02 * this.anim.centerPull);
+    if (stringSegs(this.anim.stringAmt) !== segs) this.rebuildLineBuffers();
+    this.sim.alpha(Math.max(this.sim.alpha(), 0.08));
   }
 
   /** Blend layout velocity so a force reversal has to slow the node before it can turn around. */
@@ -1545,11 +1857,18 @@ export class NetScene {
   }
 
   private lastSceneBg = "";
-  private lastLabelInk = "";
   private labelDarkText: boolean | undefined;
   /** grey standing in for the sky-adjusted scene, for label highlight contrast */
   private inkBgHex = 0x0b0e14;
   private labelFgHex = 0xf4f6fb;
+  /** Last sampled WebGL luma behind labels; -1 until the first read. */
+  private sampledLuma = -1;
+  private lumaAt = 0;
+  private readonly lumaPix = new Uint8Array(4 * 16 * 16);
+  private lastVis: VisibilityReport | null = null;
+  private visCap = SKY_LUMA_CAP;
+  private visScale = 1;
+  private lastVisAdditive: boolean | undefined;
   /** Keep #wall / #scene CSS in lockstep with the WebGL clear; header chrome stays on --bg. */
   private syncSceneChrome(hex: number): void {
     const host = this.satellite ? this.container : document.documentElement;
@@ -1559,18 +1878,99 @@ export class NetScene {
       host.style.setProperty("--scene-bg", css);
     }
     const a = this.anim;
-    const lum = effectiveSceneLuminance(hex, { kind: a.backdrop, opacity: a.skyOpacity, bright: a.skyBright });
-    const inkBg = grayHex(lum);
+    const pal = a.backdrop === "dynamic" ? this.backdrop.skyPalette() : undefined;
+    _sph.setFromVector3(_off.copy(this.camera.position).sub(this.controls.target));
+    const down = THREE.MathUtils.clamp((Math.PI / 2 - _sph.phi) / (Math.PI * 0.35), 0, 1);
+    const floorHex = a.gridColor && /^#[0-9a-fA-F]{6}$/.test(a.gridColor)
+      ? parseInt(a.gridColor.slice(1), 16)
+      : this.theme.scene.gridMajor;
+    const floorOp = a.gridAudio ? Math.min(1, a.gridOpacity * (0.28 + 0.85 * this.pulseLevel)) : a.gridOpacity;
+    const floorBr = a.gridAudio ? a.gridBright * (0.4 + 1.5 * this.pulseBass) : a.gridBright;
+    const sky = {
+      kind: a.backdrop, opacity: a.skyOpacity, bright: a.skyBright,
+      recipeA: pal?.a, recipeB: pal?.b,
+      liveLuma: a.backdrop === "live" && !this.satellite ? liveCam.sampleLuma() : undefined,
+      floor: { hex: floorHex, opacity: floorOp, bright: floorBr, down },
+    };
+    const displayed = effectiveSceneLuminance(hex, { ...sky, cap: this.visCap });
+    const uncapped = effectiveSceneLuminance(hex, { ...sky, cap: false });
+    // Ink follows the pixels (or the cap we are actually drawing). Do not max with the
+    // uncapped webcam estimate — that picks black letters on a dimmed navy field.
+    const inkLum = this.sampledLuma >= 0 ? this.sampledLuma : displayed;
+    let visLuma = uncapped;
+    if (this.sampledLuma >= 0 && this.visCap >= SKY_LUMA_CAP - 0.02) {
+      visLuma = Math.max(visLuma, this.sampledLuma);
+    }
+    const inkBg = grayHex(inkLum);
     const ink = sceneInk(inkBg, this.labelDarkText);
     this.labelDarkText = ink.darkText;
     this.inkBgHex = inkBg;
     this.labelFgHex = ink.fgHex;
-    const key = `${ink.fg}|${ink.muted}`;
-    if (key === this.lastLabelInk) return;
-    this.lastLabelInk = key;
+    this.lastVis = assessVisibility({
+      backdropLuma: visLuma,
+      additive: this.theme.scene.additive,
+      darkTheme: this.theme.dark,
+      labelFgHex: ink.fgHex,
+      labelMutedHex: parseInt(ink.muted.slice(1), 16),
+      nodeHexes: [this.theme.scene.lanEdge, this.theme.scene.wanEdge],
+      edgeHex: this.theme.scene.lanEdge,
+    });
+    // Compare the live CSS, not a private cache — applyThemeChrome also writes these vars from
+    // the fill alone, and skipping the write would leave light ink on a bright sky.
+    if (
+      host.style.getPropertyValue("--label-fg") === ink.fg
+      && host.style.getPropertyValue("--label-muted") === ink.muted
+      && host.style.getPropertyValue("--label-stroke") === ink.stroke
+    ) return;
     host.style.setProperty("--label-fg", ink.fg);
     host.style.setProperty("--label-muted", ink.muted);
     host.style.setProperty("--label-shadow", ink.shadow);
+    host.style.setProperty("--label-stroke", ink.stroke);
+  }
+
+  /** Sample the framebuffer behind labels so ink tracks the real floor/sky, not just the estimate. */
+  private captureBackdropLuma(): void {
+    const now = performance.now();
+    if (now - this.lumaAt < 150) return;
+    this.lumaAt = now;
+    const gl = this.renderer.getContext();
+    if (!gl) return;
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    if (w < 16 || h < 16) return;
+    const tw = 16, th = 16;
+    const x = (w - tw) >> 1, y = (h - th) >> 1;
+    try {
+      gl.readPixels(x, y, tw, th, gl.RGBA, gl.UNSIGNED_BYTE, this.lumaPix);
+    } catch {
+      return;
+    }
+    const vals: number[] = [];
+    const d = this.lumaPix;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i]!, g = d[i + 1]!, b = d[i + 2]!;
+      vals.push(relativeLuminance((r << 16) | (g << 8) | b));
+    }
+    if (vals.length < 8) return;
+    vals.sort((a, b) => a - b);
+    this.sampledLuma = vals[vals.length >> 1]!;
+  }
+
+  /** Ease sky/floor dimming and blending toward the visibility tool's fix. Overlay only. */
+  private easeVisibility(dt: number): void {
+    const want = this.lastVis?.fix;
+    const cap = want?.lumaCap ?? SKY_LUMA_CAP;
+    const scale = want?.lumaScale ?? 1;
+    const k = 1 - Math.exp(-dt / 0.35);
+    // Snap down so a blown-out live sky does not linger; ease back up when it recovers.
+    if (cap < this.visCap) this.visCap = cap;
+    else this.visCap += (cap - this.visCap) * k;
+    if (scale < this.visScale) this.visScale = scale;
+    else this.visScale += (scale - this.visScale) * k;
+    const add = want?.additive ?? this.theme.scene.additive;
+    if (add !== this.lastVisAdditive) {
+      this.lastVisAdditive = add;
+      this.applyBlending();
+    }
   }
 
   private stepBeat(dt: number): void {
@@ -1605,6 +2005,25 @@ export class NetScene {
     this.dreamPitch = 0;
     this.dreamZoom = 0;
     this.zeroCamStep();
+  }
+
+  /** Pan, pinch, two-finger zoom, and perspective drag keep this pose instead of refitting. */
+  private pinUserCamera(): void {
+    this.lastInteraction = performance.now();
+    this.controls.autoRotate = false;
+    this.cameraGoalDir = null;
+    this.lookPinned = true;
+    this.camCoastUntil = this.lastInteraction + 450;
+    this.captureDreamRest();
+  }
+
+  /** True while the pointer, a wheel burst, or OrbitControls damping still owns the camera. */
+  private userOwnsCamera(): boolean {
+    return this.dreamHeld || !!this.dragging || performance.now() < this.camCoastUntil;
+  }
+
+  private followUserCameraCoast(): void {
+    if (this.lookPinned && performance.now() < this.camCoastUntil) this.captureDreamRest();
   }
 
   /**
@@ -1675,11 +2094,11 @@ export class NetScene {
     return THREE.MathUtils.clamp(dist * 1.08, 220, 7000);
   }
 
-  /** Keep look-at on the focus box and the orbit radius large enough that the box stays in frame. */
+  /** Auto-fit when the user has not framed the view. User pan / zoom keep their pose. */
   private frameCamera(dt: number): void {
     if (!this.focus.n) return;
     const fitR = this.fitDistance();
-    const held = this.dreamHeld || !!this.dragging;
+    const held = this.userOwnsCamera();
     const pinned = this.lookPinned && !this.cameraGoalDir;
     const recently = performance.now() - this.lastInteraction < 6000;
     const bx = this.focus.x, by = this.focus.y, bz = this.focus.z;
@@ -1706,16 +2125,15 @@ export class NetScene {
       return;
     }
 
-    if (held || this.dreaming) return;
+    if (held || this.dreaming || pinned) return;
 
     _sph.setFromVector3(_off.copy(this.camera.position).sub(this.controls.target));
     const minR = fitR * 0.62;
     let nextR = _sph.radius;
     if (nextR < minR) nextR = minR;
-    else if (!pinned && !recently) nextR += (fitR - nextR);
+    else if (!recently) nextR += (fitR - nextR);
     _sph.radius = THREE.MathUtils.clamp(nextR, 80, 8000);
-    if (pinned) _restT.copy(this.controls.target);
-    else _restT.set(bx, by, bz);
+    _restT.set(bx, by, bz);
     _camWant.copy(_restT).add(_off.setFromSpherical(_sph));
     this.easeCam(dt, _camWant, _restT);
   }
@@ -1751,28 +2169,42 @@ export class NetScene {
 
     const pulse = a.zoom > 0 ? 0.5 * (1 - Math.cos(this.dreamZoom)) : 0;
     const zoomPulse = pulse * (1 + 0.7 * d.level + 0.55 * d.change);
-    const follow = !this.lookPinned && a.follow ? zoomPulse * this.dreamFocusW : 0;
+    const phase = this.dreamZoom / (Math.PI * 2);
+    const hold = activityLookMix({
+      focus: a.focus, pinned: this.lookPinned, focusW: this.dreamFocusW, phase,
+    });
+    if (!this.lookPinned && a.focus !== "cloud" && this.focus.n) {
+      const crawl = (1 - Math.exp(-dt / DREAM_FOCUS_TAU)) * 0.35;
+      rest.tx += (this.focus.x - rest.tx) * crawl;
+      rest.ty += (this.focus.y - rest.ty) * crawl;
+      rest.tz += (this.focus.z - rest.tz) * crawl;
+    }
     const maxOff = Math.min(this.focus.hx, this.focus.hz) * 0.22;
-    const followX = follow / Math.max(1, this.spreadX);
     const gx = this.lookPinned ? 0 : d.gaze * d.gx, gy = this.lookPinned ? 0 : d.gaze * d.gy;
-    _restT.set(
-      rest.tx + THREE.MathUtils.clamp((this.dreamFocus.x - rest.tx) * followX + gx * maxOff * 1.5, -maxOff * 1.6, maxOff * 1.6),
-      rest.ty + THREE.MathUtils.clamp((this.dreamFocus.y - rest.ty) * follow + gy * maxOff * 1.2, -maxOff * 1.6, maxOff * 1.6),
-      rest.tz + THREE.MathUtils.clamp((this.dreamFocus.z - rest.tz) * follow, -maxOff, maxOff),
-    );
+    const wander = 1 - hold;
+    _hot.set(this.focus.x, this.focus.y, this.focus.z);
+    _restT.set(rest.tx, rest.ty, rest.tz);
+    _restT.lerp(_hot, hold);
+    if (!this.lookPinned && a.focus !== "cloud" && this.focus.n) {
+      _bulkGoal.copy(_hot).project(this.camera);
+      const extra = (_bulkGoal.z < 0 || _bulkGoal.z > 1)
+        ? 1
+        : centerMixForNdc(_bulkGoal.x, _bulkGoal.y);
+      if (extra > 0) _restT.lerp(_hot, extra);
+    }
+    _restT.x += THREE.MathUtils.clamp(gx * maxOff * 1.5 * wander, -maxOff * 1.6, maxOff * 1.6);
+    _restT.y += THREE.MathUtils.clamp(gy * maxOff * 1.2 * wander, -maxOff * 1.6, maxOff * 1.6);
 
     const zoomW = a.follow ? this.dreamFocusW : 1;
-    const fitR = this.fitDistance();
-    const minR = fitR * 0.88;
     const radius = rest.radius * (1 - a.zoom * zoomPulse * zoomW);
-    _sph.radius = Math.max(minR, Math.min(rest.radius, radius));
+    _sph.radius = THREE.MathUtils.clamp(radius, 80, 8000);
     _sph.theta = rest.theta + this.dreamYaw;
     _sph.phi = THREE.MathUtils.clamp(rest.phi + Math.sin(this.dreamPitch) * amp - gy * 0.2, lo, hi);
     _camWant.copy(_restT).add(_off.setFromSpherical(_sph));
     this.easeCam(dt, _camWant, _restT);
   }
 
-  /** Recolour the scene for a theme. `fade` lerps fog, clear, rim and floor over ~0.9s. */
+  /** Recolour the scene for a theme. `fade` lerps fog, clear, rim, floor, and node palettes over THEME_FADE_S. */
   setTheme(t: Theme, fade = false): void {
     const cur = this.theme.scene;
     this.fadeFrom = {
@@ -1782,6 +2214,9 @@ export class NetScene {
       gridMajor: this.fadeT < 1 ? this.mixHex(this.fadeFrom.gridMajor, cur.gridMajor, this.fadeT) : cur.gridMajor,
       gridMinor: this.fadeT < 1 ? this.mixHex(this.fadeFrom.gridMinor, cur.gridMinor, this.fadeT) : cur.gridMinor,
     };
+    if (fade) {
+      for (const n of this.nodes.values()) n.colorFrom.copy(n.color);
+    }
     this.theme = t;
     this.fadeT = fade ? 0 : 1;
     this.applyBlending();
@@ -1800,12 +2235,26 @@ export class NetScene {
     const k = t * t * (3 - 2 * t);
     this.rim.color.setHex(this.mixHex(this.fadeFrom.rim, this.theme.scene.rim, k));
     this.paintClear();
+    for (const n of this.nodes.values()) {
+      if (t >= 1) n.color.copy(n.colorWant);
+      else n.color.lerpColors(n.colorFrom, n.colorWant, k);
+    }
+    this.instanceStyleDirty = true;
   }
 
   get currentTheme(): Theme { return this.theme; }
+  /** Eased sky/floor luma cap from the contrast+visibility tool. */
+  get visibilityCap(): number { return this.visCap; }
+  /** Last contrast / element-visibility report, or null before the first chrome sync. */
+  visibilityReport(): VisibilityReport | null { return this.lastVis; }
+
+  /** Additive edges/glow when the visibility tool has not forced normal blending. */
+  private additiveMarks(): boolean {
+    return this.lastVis?.fix.additive ?? this.theme.scene.additive;
+  }
 
   private applyBlending(): void {
-    const b = this.theme.scene.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
+    const b = this.additiveMarks() ? THREE.AdditiveBlending : THREE.NormalBlending;
     for (const m of [this.lines.material as THREE.Material, this.particles.material as THREE.Material, this.glowMat]) {
       m.blending = b;
       m.needsUpdate = true;
@@ -1815,7 +2264,7 @@ export class NetScene {
 
   /** Edge colour at a given brightness: scaled toward black for additive themes, toward the background otherwise. */
   private edgeColor(out: THREE.Color, hex: number, bright: number): THREE.Color {
-    if (this.theme.scene.additive) return out.setHex(hex).multiplyScalar(bright);
+    if (this.additiveMarks()) return out.setHex(hex).multiplyScalar(bright);
     // light backgrounds need more contrast than the additive brightness curve gives
     return out.setHex(this.theme.scene.clear).lerp(_edgeTmp.setHex(hex), bright <= 0 ? 0 : Math.min(1, 0.45 + bright * 1.2));
   }
@@ -1920,6 +2369,10 @@ export class NetScene {
     for (const [ip, n] of this.nodes) {
       if (seen.has(ip)) continue;
       if (cpuView && isCpuGraphId(ip)) {
+        if (!this.filters.cpuIdle && !isCpuCoreId(ip) && ip !== "cpu:host") {
+          this.removeNode(n);
+          continue;
+        }
         if (!n.cpuGhost) {
           n.cpuGhost = true;
           n.cpuIdleAt ??= wall;
@@ -2002,7 +2455,11 @@ export class NetScene {
       for (const n of this.nodes.values()) {
         const d = n.device;
         const plug = this.pluginColors.get(n.id) ?? this.pluginColors.get(d.ip);
-        n.color.setHex(plug ?? this.mode.nodeColor?.(n, ctx) ?? KIND_COLOR[deviceKind(d)]);
+        n.colorWant.setHex(plug ?? this.mode.nodeColor?.(n, ctx) ?? KIND_COLOR[deviceKind(d)]);
+        if (!plug && this.pluginHeat > 0) {
+          n.colorWant.lerp(this.pluginHeatColor.setHex(heat(this.pluginHeat)), 0.45);
+        }
+        if (this.fadeT >= 1) n.color.copy(n.colorWant);
         n.targetScale = this.mode.nodeScale?.(n, ctx) ?? this.sizeFor(d);
         n.shape = this.mode.nodeShape?.(n, ctx) ?? 0;
         this.setLabelText(n, this.mode.nodeLabel?.(n, ctx));
@@ -2021,9 +2478,8 @@ export class NetScene {
   }
 
   /**
-   * High-volume nodes get a larger title and a highlight in the node's own colour, so the emphasis follows the
-   * view's palette. `--vol` is 0..1 against the view's loudest node on a log scale; CSS mixes `--hl` into the
-   * high-contrast scene ink only when that mix still meets WCAG AA against the sky-adjusted fill.
+   * High-volume nodes get a larger title and a guarded tint in the node's own colour.
+   * `--hl-mix` is capped so the mix still meets WCAG AA against the sky-adjusted fill — no bloom.
    */
   private applyVolume(): void {
     let maxLog = 0;
@@ -2033,24 +2489,25 @@ export class NetScene {
       let vol = 0;
       if (n.visible && n.rate > 0 && maxLog > 0) {
         const log = Math.log10(1 + n.rate);
-        const rel = Math.max(0, (log / maxLog - VOL_FLOOR) / (1 - VOL_FLOOR)); // share of the loudest node
-        const abs = Math.min(1, log / 4); // 10 kB/s reads as fully loud; 100 B/s only half
+        const rel = Math.max(0, (log / maxLog - VOL_FLOOR) / (1 - VOL_FLOOR));
+        const abs = Math.min(1, log / 4);
         vol = rel * abs;
       }
       const el = n.labelEl;
-      const q = String(Math.round(vol * 20) / 20); // 5 % steps keep style writes rare
+      const nodeHex = n.color.getHex();
+      const mixT = guardLabelMix(this.labelFgHex, nodeHex, bgHex, vol * 0.85);
+      const q = String(Math.round(vol * 20) / 20);
+      const mixQ = `${Math.round(mixT * 100)}%`;
       if (el.dataset.vol !== q) {
         el.dataset.vol = q;
         el.style.setProperty("--vol", q);
-        el.classList.toggle("hot", vol >= 0.5);
       }
-      // mix the node's colour into the high-contrast ink only when both the colour and the mix stay readable
-      const nodeHex = n.color.getHex();
-      let hl = "";
-      if (contrastRatio(nodeHex, bgHex) >= HL_MIN_CONTRAST) {
-        const mixed = vol > 0 ? _colA.setHex(this.labelFgHex).lerp(n.color, vol * 0.85).getHex() : this.labelFgHex;
-        if (contrastRatio(mixed, bgHex) >= HL_MIN_CONTRAST) hl = `#${n.color.getHexString()}`;
+      el.classList.toggle("hot", vol >= 0.5 && mixT > 0.08);
+      if (el.dataset.hlMix !== mixQ) {
+        el.dataset.hlMix = mixQ;
+        el.style.setProperty("--hl-mix", mixQ);
       }
+      const hl = mixT > 0 ? `#${n.color.getHexString()}` : "";
       if (el.dataset.hl !== hl) {
         el.dataset.hl = hl;
         if (hl) el.style.setProperty("--hl", hl);
@@ -2137,8 +2594,9 @@ export class NetScene {
     if (d.role === "lan" || d.role === "local" || d.role === "self") dir.y *= 0.2;
     dir.normalize();
     const r = shell || 1;
+    const c = new THREE.Color(this.theme.roles[d.role]);
     const n: GNode = {
-      id: d.ip, device: d, color: new THREE.Color(this.theme.roles[d.role]), scale: 0.01, glow: 0.15, opacity: 1, shape: 0,
+      id: d.ip, device: d, color: c, colorFrom: c.clone(), colorWant: c.clone(), scale: 0.01, glow: 0.15, opacity: 1, shape: 0,
       label, labelEl: el, visible: true, active: false, rate: 0, targetScale: this.sizeFor(d),
       x: dir.x * r * this.spreadX, y: dir.y * r, z: dir.z * r * this.spreadZ,
       px: dir.x * r * this.spreadX, py: dir.y * r, pz: dir.z * r * this.spreadZ,
@@ -2198,7 +2656,10 @@ export class NetScene {
   private nodeVisible(n: GNode): boolean {
     const d = n.device;
     if (!this.nodeFilter(d)) return false;
-    if (this.mode.graphBase === "cpu") return true;
+    if (this.mode.graphBase === "cpu") {
+      if (!this.filters.cpuIdle && n.cpuGhost && d.ip.startsWith("proc:")) return false;
+      return true;
+    }
     if (d.role === "lan" && !this.filters.lan) return false;
     if (d.role === "internet" && !this.filters.internet) return false;
     if (d.role === "multicast" && !this.filters.multicast) return false;
@@ -2234,16 +2695,22 @@ export class NetScene {
 
   private rebuildLineBuffers(): void {
     const n = this.links.size;
-    if (this.linePos.length !== n * 6) {
-      this.linePos = new Float32Array(n * 6);
-      this.lineCol = new Float32Array(n * 6);
-      this.glowAlong = new Float32Array(n * 2);
-      this.glowAb = new Float32Array(n * 2);
-      this.glowBa = new Float32Array(n * 2);
-      this.glowCol = new Float32Array(n * 6);
+    const segs = stringSegs(this.anim.stringAmt);
+    const floats = n * segs * 6;
+    if (this.linePos.length !== floats) {
+      this.linePos = new Float32Array(floats);
+      this.lineCol = new Float32Array(floats);
+      this.glowAlong = new Float32Array(n * segs * 2);
+      this.glowAb = new Float32Array(n * segs * 2);
+      this.glowBa = new Float32Array(n * segs * 2);
+      this.glowCol = new Float32Array(floats);
+      let gi = 0;
       for (let i = 0; i < n; i++) {
-        this.glowAlong[i * 2] = 0;
-        this.glowAlong[i * 2 + 1] = 1;
+        for (let s = 0; s < segs; s++) {
+          this.glowAlong[gi] = s / segs;
+          this.glowAlong[gi + 1] = (s + 1) / segs;
+          gi += 2;
+        }
       }
       const pos = new THREE.BufferAttribute(this.linePos, 3);
       const col = new THREE.BufferAttribute(this.lineCol, 3);
@@ -2259,16 +2726,26 @@ export class NetScene {
   }
 
   private rebuildParticles(): void {
-    // particle budget proportional to sqrt(rate) per link, capped globally
+    const a = this.anim;
+    const t = this.tune;
+    const pulse = a.audioParts ? 1 + 0.7 * this.pulseLevel * a.audioSens : 1;
+    const budget = {
+      amt: (t?.partAmt ?? a.partAmt) * pulse,
+      busy: a.partBusy,
+      quiet: a.partQuiet,
+      peak: t?.partPeak ?? a.partPeak,
+      cap: clampParticleCap(t?.partCap ?? a.partCap),
+    };
     const wanted: { link: GLink; count: number }[] = [];
     let total = 0;
     for (const l of this.links.values()) {
-      if (l.flow.rate <= 0) continue;
-      const c = Math.min(40, 1 + Math.floor(Math.sqrt(l.flow.rate / 200)));
+      const c = particlesOnLink(l.flow.rate, budget);
+      if (c <= 0) continue;
       wanted.push({ link: l, count: c });
       total += c;
     }
-    const scale = total > MAX_PARTICLES ? MAX_PARTICLES / total : 1;
+    const cap = budget.cap;
+    const scale = total > cap ? cap / total : 1;
     const existing = new Map<GLink, { link: GLink; t: number; dir: 1 | -1; speed: number }[]>();
     for (const p of this.partState) {
       if (!this.links.has(p.link.id)) continue;
@@ -2301,8 +2778,38 @@ export class NetScene {
     markFrame(ts);
     if (!this.active) return;
     const dt = Math.min(0.05, this.clock.getDelta());
+    if (!this.satellite) {
+      tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
+      const s = perfStress();
+      setFpsHint(s > 0.04
+        ? (perfWant() > 0.5
+          ? "display framerate · auto-tune easing labels, sparks, glow, and sky down"
+          : "display framerate · auto-tune easing back up after a 1-minute recovered average")
+        : "display framerate, averaged over the last second"
+          + (this.lastVis && !this.lastVis.ok
+            ? ` · visibility: ${this.lastVis.issues.map((i) => i.code).join(", ")}`
+            : ""));
+    }
+    this.tune = perfOverlay(this.anim, perfStress());
+    this.syncTuneDpr();
+    if (this.tune.labelCount !== this.lastTuneLabels) {
+      this.lastTuneLabels = this.tune.labelCount;
+      this.applyVisibility();
+    }
+    const pk = `${this.tune.partCap}|${this.tune.partPeak}|${Math.round(this.tune.partAmt * 10)}`;
+    if (pk !== this.lastTuneParts) {
+      this.lastTuneParts = pk;
+      this.rebuildParticles();
+    }
+    if (this.tune.k > 0.001 || this.lastTuneK > 0.001) {
+      (this.particles.material as THREE.PointsMaterial).size = 3.2 * this.anim.edgeWeight * this.tune.partSize;
+      this.syncGlow();
+    }
+    this.lastTuneK = this.tune.k;
+    this.easePhys(dt);
     const wall = ts / 1000;
     this.backdrop.tick(wall);
+    if (!this.satellite && this.anim.backdrop === "dynamic") ensureSkyRecipe(this.anim.skyAiMin * 60_000);
     this.applyLook(dt);
     if (this.pruneCpuIdle(wall)) {
       this.rebuildLineBuffers();
@@ -2317,18 +2824,20 @@ export class NetScene {
     this.sampleFocus(dt);
         this.frameCamera(dt);
         this.controls.update();
-        if (this.dreaming && !this.dreamHeld && !this.cameraGoalDir) {
+        this.followUserCameraCoast();
+        if (this.dreaming && !this.userOwnsCamera() && !this.cameraGoalDir) {
           this.stepDream(dt);
           this.camera.lookAt(this.controls.target);
         }
         if (this.fadeT < 1) {
-          this.fadeT = Math.min(1, this.fadeT + dt / 0.9);
+          this.fadeT = Math.min(1, this.fadeT + dt / THEME_FADE_S);
           this.applyThemeColors(this.fadeT);
           this.paintGrid();
           this.paintClear();
         }
         this.tickViewShift(dt);
         this.renderer.render(this.scene, this.camera);
+        this.captureBackdropLuma();
       return;
     }
 
@@ -2339,6 +2848,9 @@ export class NetScene {
     const shapeAttr = sp.geometry.getAttribute("instanceShape") as THREE.InstancedBufferAttribute;
     const cpuView = this.mode.graphBase === "cpu";
     const styleDirty = this.instanceStyleDirty;
+    const modeCtx = this.ctx;
+    const liveLook = this.mode.liveLook;
+    let liveStyle = false;
     let ni = 0;
     let labelsOn = 0;
     for (const n of this.nodes.values()) {
@@ -2348,15 +2860,30 @@ export class NetScene {
       n.glow += (boost - n.glow) * Math.min(1, dt * 8);
       if (cpuView && (n.cpuIdleAt || n.cpuGhost)) n.opacity = cpuIdleOpacity(n, wall);
       else n.opacity += ((n.device.online ? 1 : 0.35) - n.opacity) * Math.min(1, dt * 4);
-      const x = n.x ?? 0, y = n.y ?? 0, z = n.z ?? 0;
+      const look = liveLook?.(n, wall, modeCtx);
+      const x = (n.x ?? 0) + (look?.dx ?? 0);
+      const y = (n.y ?? 0) + (look?.dy ?? 0);
+      const z = (n.z ?? 0) + (look?.dz ?? 0);
       const beat = this.anim.audioNodes ? 1 + 0.32 * this.pulseBass * (n === this.selected || n === this.dragging ? 1.55 : 1) : 1;
-      const s = n.visible ? n.scale * beat * this.anim.nodeWeight : 0;
+      const s = n.visible ? n.scale * beat * this.anim.nodeWeight * (look?.scale ?? 1) : 0;
+      if (look?.spin != null) _quat.setFromAxisAngle(_axisY, look.spin);
+      else _quat.identity();
       sp.setMatrixAt(ni, _m.compose(_pos.set(x, y, z), _quat, _scl.set(s, s, s)));
-      if (styleDirty) {
+      if (look) {
+        liveStyle = true;
+        _colA.copy(n.color);
+        if (look.hue) {
+          _colA.getHSL(_hsl);
+          _hsl.h = (_hsl.h + look.hue + 1) % 1;
+          _colA.setHSL(_hsl.h, Math.min(1, _hsl.s + 0.15 * (look.glow ?? 0)), Math.min(1, _hsl.l + 0.1 * (look.glow ?? 0)));
+        }
+        sp.setColorAt(ni, _colA);
+        shapeAttr.setX(ni, look.shape ?? n.shape);
+      } else if (styleDirty) {
         sp.setColorAt(ni, n.color);
         shapeAttr.setX(ni, n.shape);
       }
-      glowAttr.setX(ni, n.glow + (this.anim.audioNodes ? 0.55 * this.pulseLevel : 0));
+      glowAttr.setX(ni, n.glow + (this.anim.audioNodes ? 0.55 * this.pulseLevel : 0) + (look?.glow ?? 0));
       alphaAttr.setX(ni, n.opacity);
       ni++;
       if (n.label.visible) {
@@ -2379,13 +2906,15 @@ export class NetScene {
     sp.instanceMatrix.needsUpdate = true;
     glowAttr.needsUpdate = true;
     alphaAttr.needsUpdate = true;
-    if (styleDirty) {
+    if (styleDirty || liveStyle) {
       sp.instanceColor!.needsUpdate = true;
       shapeAttr.needsUpdate = true;
-      this.instanceStyleDirty = false;
+      if (styleDirty) this.instanceStyleDirty = false;
     }
 
     // edges
+    const str = this.stringNow();
+    if (this.linePos.length !== this.links.size * str.segs * 6) this.rebuildLineBuffers();
     let i = 0;
     const sel = this.selected;
     const tmp = _colA, tmp2 = _colB;
@@ -2394,13 +2923,13 @@ export class NetScene {
     const th = this.theme.scene;
     for (const l of this.links.values()) {
       const a = l.source, b = l.target;
-      this.linePos[i] = a.x ?? 0; this.linePos[i + 1] = a.y ?? 0; this.linePos[i + 2] = a.z ?? 0;
-      this.linePos[i + 3] = b.x ?? 0; this.linePos[i + 4] = b.y ?? 0; this.linePos[i + 5] = b.z ?? 0;
+      const ax = a.x ?? 0, ay = a.y ?? 0, az = a.z ?? 0;
+      const bx = b.x ?? 0, by = b.y ?? 0, bz = b.z ?? 0;
       const tether = l.id.startsWith("~");
       let bright: number;
-      if (tether) bright = this.theme.scene.additive ? 0.08 : 0.22;
+      if (tether) bright = this.additiveMarks() ? 0.08 : 0.22;
       else if (l.flow.rate > 0) bright = 0.35 + Math.min(0.65, Math.log10(1 + l.flow.rate) / 6);
-      else bright = this.theme.scene.additive ? 0.14 : 0.38;
+      else bright = this.additiveMarks() ? 0.14 : 0.38;
       if (!tether && mode.linkBright) bright = mode.linkBright(l, ctx, bright);
       if (sel && (a === sel || b === sel)) bright = Math.max(bright, 0.9);
       else if (sel) bright *= 0.35;
@@ -2411,23 +2940,47 @@ export class NetScene {
       const ca = Array.isArray(mc) ? mc[0] : mc ?? (tether ? th.tether : isLan ? th.lanEdge : th.wanEdge);
       const cb = Array.isArray(mc) ? mc[1] : ca;
       this.edgeColor(tmp, ca, bright);
+      const lr = tmp.r, lg = tmp.g, lb = tmp.b;
       this.edgeColor(tmp2, cb, bright);
-      this.lineCol[i] = tmp.r; this.lineCol[i + 1] = tmp.g; this.lineCol[i + 2] = tmp.b;
-      this.lineCol[i + 3] = tmp2.r; this.lineCol[i + 4] = tmp2.g; this.lineCol[i + 5] = tmp2.b;
+      const rr = tmp2.r, rg = tmp2.g, rb = tmp2.b;
       this.edgeColor(tmp, ca, 0.9);
+      const gca = tmp.r, gcg = tmp.g, gcb = tmp.b;
       this.edgeColor(tmp2, cb, 0.9);
-      this.glowCol[i] = tmp.r; this.glowCol[i + 1] = tmp.g; this.glowCol[i + 2] = tmp.b;
-      this.glowCol[i + 3] = tmp2.r; this.glowCol[i + 4] = tmp2.g; this.glowCol[i + 5] = tmp2.b;
+      const gcd = tmp2.r, gce = tmp2.g, gcf = tmp2.b;
       const { ab, ba } = flowDirRates(l.flow);
       let gab = tether || !l.visible ? 0 : glowStrength(ab);
       let gba = tether || !l.visible ? 0 : glowStrength(ba);
       if (sel && a !== sel && b !== sel) { gab *= 0.35; gba *= 0.35; }
-      const gi = (i / 6) * 2;
-      if (this.glowAb.length > gi + 1) {
-        this.glowAb[gi] = this.glowAb[gi + 1] = gab;
-        this.glowBa[gi] = this.glowBa[gi + 1] = gba;
+      for (let s = 0; s < str.segs; s++) {
+        const t0 = s / str.segs, t1 = (s + 1) / str.segs;
+        const u = str.segs === 1
+          ? [ax, ay, az] as [number, number, number]
+          : stringPoint(ax, ay, az, bx, by, bz, t0, str.sag, str.wave);
+        const v = str.segs === 1
+          ? [bx, by, bz] as [number, number, number]
+          : stringPoint(ax, ay, az, bx, by, bz, t1, str.sag, str.wave);
+        this.linePos[i] = u[0]; this.linePos[i + 1] = u[1]; this.linePos[i + 2] = u[2];
+        this.linePos[i + 3] = v[0]; this.linePos[i + 4] = v[1]; this.linePos[i + 5] = v[2];
+        const mix0 = t0, mix1 = t1;
+        this.lineCol[i] = lr + (rr - lr) * mix0;
+        this.lineCol[i + 1] = lg + (rg - lg) * mix0;
+        this.lineCol[i + 2] = lb + (rb - lb) * mix0;
+        this.lineCol[i + 3] = lr + (rr - lr) * mix1;
+        this.lineCol[i + 4] = lg + (rg - lg) * mix1;
+        this.lineCol[i + 5] = lb + (rb - lb) * mix1;
+        this.glowCol[i] = gca + (gcd - gca) * mix0;
+        this.glowCol[i + 1] = gcg + (gce - gcg) * mix0;
+        this.glowCol[i + 2] = gcb + (gcf - gcb) * mix0;
+        this.glowCol[i + 3] = gca + (gcd - gca) * mix1;
+        this.glowCol[i + 4] = gcg + (gce - gcg) * mix1;
+        this.glowCol[i + 5] = gcb + (gcf - gcb) * mix1;
+        const gi = (i / 6) * 2;
+        if (this.glowAb.length > gi + 1) {
+          this.glowAb[gi] = this.glowAb[gi + 1] = gab;
+          this.glowBa[gi] = this.glowBa[gi + 1] = gba;
+        }
+        i += 6;
       }
-      i += 6;
     }
     const pa = this.lines.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
     const ca = this.lines.geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
@@ -2441,17 +2994,22 @@ export class NetScene {
     this.syncGlow();
 
     // particles
+    if (this.anim.audioParts) this.rebuildParticles();
+    const partSpd = this.anim.partSpeed * (this.anim.audioParts ? 1 + 0.6 * this.pulseBass * this.anim.audioSens : 1);
     let k = 0;
     for (const p of this.partState) {
       if (k >= MAX_PARTICLES) break;
       if (!p.link.visible) continue;
-      p.t += p.dir * p.speed * dt;
+      p.t += p.dir * p.speed * partSpd * dt;
       if (p.t > 1 || p.t < 0) { p.t = p.dir > 0 ? 0 : 1; }
       const a = p.link.source, b = p.link.target;
       const t = p.t;
-      this.partPos[k * 3] = (a.x ?? 0) + ((b.x ?? 0) - (a.x ?? 0)) * t;
-      this.partPos[k * 3 + 1] = (a.y ?? 0) + ((b.y ?? 0) - (a.y ?? 0)) * t;
-      this.partPos[k * 3 + 2] = (a.z ?? 0) + ((b.z ?? 0) - (a.z ?? 0)) * t;
+      const pt = str.segs === 1
+        ? [(a.x ?? 0) + ((b.x ?? 0) - (a.x ?? 0)) * t, (a.y ?? 0) + ((b.y ?? 0) - (a.y ?? 0)) * t, (a.z ?? 0) + ((b.z ?? 0) - (a.z ?? 0)) * t] as [number, number, number]
+        : stringPoint(a.x ?? 0, a.y ?? 0, a.z ?? 0, b.x ?? 0, b.y ?? 0, b.z ?? 0, t, str.sag, str.wave);
+      this.partPos[k * 3] = pt[0];
+      this.partPos[k * 3 + 1] = pt[1];
+      this.partPos[k * 3 + 2] = pt[2];
       const mc = mode.linkColor?.(p.link, ctx);
       if (mc === undefined) {
         const isLan = a.device.role !== "internet" && b.device.role !== "internet";
@@ -2494,14 +3052,16 @@ export class NetScene {
       }
     }
     for (const [id, obj] of this.overlayObjs) if (!_overlayKeep.has(id)) { this.scene.remove(obj); obj.element.remove(); this.overlayObjs.delete(id); }
+    this.placeDecos();
 
     this.sampleFocus(dt);
     this.frameCamera(dt);
 
     if (!this.dreaming && !this.controls.autoRotate && ts - this.lastInteraction > 20000 && !this.selected && !this.mode.camera) this.controls.autoRotate = true;
     this.controls.update();
+    this.followUserCameraCoast();
     // last writer: OrbitControls.update() rebuilds the camera from its spherical, so the nod has to land after it
-    if (this.dreaming && !this.dreamHeld && !this.cameraGoalDir) {
+    if (this.dreaming && !this.userOwnsCamera() && !this.cameraGoalDir) {
       this.stepDream(dt);
       this.camera.lookAt(this.controls.target);
       if (!this.satellite && (this.anim.cycle || this.anim.randomize || this.anim.themeCycle === "cadence" || this.anim.skyCycle === "cadence")) {
@@ -2513,14 +3073,15 @@ export class NetScene {
       }
     }
     if (this.fadeT < 1) {
-      this.fadeT = Math.min(1, this.fadeT + dt / 0.9);
+      this.fadeT = Math.min(1, this.fadeT + dt / THEME_FADE_S);
       this.applyThemeColors(this.fadeT);
       this.paintGrid();
       this.paintClear();
     }
     this.tickViewShift(dt);
     this.renderer.render(this.scene, this.camera);
-    const labelsWanted = labelsOn > 0 || this.overlayObjs.size > 0;
+    this.captureBackdropLuma();
+    const labelsWanted = labelsOn > 0 || this.overlayObjs.size > 0 || this.decoObjs.size > 0;
     if (labelsWanted || this.labelsDrawn) {
       this.labelRenderer.render(this.scene, this.camera);
       this.labelsDrawn = labelsWanted;
@@ -2532,11 +3093,14 @@ export class NetScene {
     if (this.pointer.x > 1) return null;
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const ray = this.raycaster.ray;
+    const ctx = this.ctx;
+    const t = performance.now() / 1000;
     let best: GNode | null = null, bestD = Infinity;
     for (const n of this.nodes.values()) {
       if (!n.visible || n.scale < 0.5) continue;
-      _sphere.center.set(n.x ?? 0, n.y ?? 0, n.z ?? 0);
-      _sphere.radius = n.scale * this.anim.nodeWeight;
+      const look = this.mode.liveLook?.(n, t, ctx);
+      _sphere.center.set((n.x ?? 0) + (look?.dx ?? 0), (n.y ?? 0) + (look?.dy ?? 0), (n.z ?? 0) + (look?.dz ?? 0));
+      _sphere.radius = n.scale * this.anim.nodeWeight * (look?.scale ?? 1);
       if (!ray.intersectSphere(_sphere, _hit)) continue;
       const d = _hit.distanceToSquared(ray.origin);
       if (d < bestD) { bestD = d; best = n; }

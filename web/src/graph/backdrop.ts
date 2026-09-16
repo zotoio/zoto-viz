@@ -1,29 +1,43 @@
 import * as THREE from "three";
 import { liveCam } from "../camera/livecam";
+import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
+import { currentSkyRecipe, DEFAULT_SKY_RECIPE, cloneSkyRecipe, lerpSkyRecipe, skyRecipeKey, type SkyRecipe } from "./sky-ai";
+import { wrapAgentSky } from "./sky-agent";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
  * reads as flying through space / rain / a fractal, while the device cloud stays in the foreground.
- *
- *   none     hide the mesh
- *   fractal  slow Julia set on the sky
- *   space    hashed starfield + a faint nebula
- *   matrix   falling glyph columns on the sphere
- *   live     the device camera, object-fit cover on a fullscreen quad
  */
 
-export type BackdropKind = "none" | "fractal" | "space" | "matrix" | "live";
+export type BackdropKind =
+  | "none" | "fractal" | "space" | "matrix" | "live"
+  | "aurora" | "rain" | "ocean" | "fire" | "warp" | "clouds" | "circuit" | "plasma" | "lattice"
+  | "dynamic" | "custom" | "plugin";
 
 export const BACKDROP_OPTIONS: { value: BackdropKind; label: string; hint: string }[] = [
   { value: "none", label: "none", hint: "plain fog" },
   { value: "fractal", label: "fractal", hint: "slow Julia set" },
   { value: "space", label: "space", hint: "starfield" },
   { value: "matrix", label: "matrix", hint: "falling code" },
+  { value: "aurora", label: "aurora", hint: "polar curtains" },
+  { value: "rain", label: "rain", hint: "falling streaks" },
+  { value: "ocean", label: "ocean", hint: "underwater caustics" },
+  { value: "fire", label: "fire", hint: "rising embers" },
+  { value: "warp", label: "warp", hint: "star-streak tunnel" },
+  { value: "clouds", label: "clouds", hint: "soft fbm overcast" },
+  { value: "circuit", label: "circuit", hint: "trace lattice" },
+  { value: "plasma", label: "plasma", hint: "interference wash" },
+  { value: "lattice", label: "lattice", hint: "night grid" },
+  { value: "dynamic", label: "AI Dynamic", hint: "Gemma rebuilds this sky on a timer" },
+  { value: "custom", label: "agent shader", hint: "GLSL the local agent wrote into the model-named profile" },
+  { value: "plugin", label: "plugin shader", hint: "GLSL shipped in the selected plugin zip" },
   { value: "live", label: "live", hint: "this machine's camera" },
 ];
 
-/** Skies the dream / randomize pool picks from (not none). */
-export const CYCLE_SKIES: BackdropKind[] = ["fractal", "space", "matrix", "live"];
+/** Skies the dream / randomize pool picks from (not none / not Gemma). */
+export const CYCLE_SKIES: BackdropKind[] = [
+  "fractal", "space", "matrix", "aurora", "rain", "ocean", "fire", "warp", "clouds", "circuit", "plasma", "lattice", "live",
+];
 
 /** Cycle pool minus live when the camera was denied or is missing. */
 export function cycleSkyPool(): BackdropKind[] {
@@ -47,6 +61,12 @@ uniform float uBright;
 uniform float uAudio;
 uniform vec3 uAccent;
 uniform vec3 uBg;
+uniform float uMotif;
+uniform vec3 uA;
+uniform vec3 uB;
+uniform float uWarp;
+uniform float uGrain;
+uniform float uBands;
 in vec3 vDir;
 out vec4 fragColor;
 
@@ -101,7 +121,6 @@ vec3 matrixRain(vec3 dir, float t) {
   float y = uv.y * rows + t * speed;
   float row = floor(y);
   vec2 cell = fract(vec2(uv.x * cols, y));
-  // 5x7 bitmap with a 1px gutter so columns read as glyphs, not bars.
   vec2 gp = cell * vec2(7.0, 9.0);
   vec2 gi = floor(gp);
   float inGlyph = step(1.0, gi.x) * step(gi.x, 5.0) * step(1.0, gi.y) * step(gi.y, 7.0);
@@ -120,18 +139,157 @@ vec3 matrixRain(vec3 dir, float t) {
   return c;
 }
 
+vec3 aurora(vec3 dir, float t) {
+  float lon = atan(dir.z, dir.x);
+  float w = fbm(vec2(lon * 1.4, dir.y * 3.2 + t * 0.08));
+  float belt = exp(-pow(dir.y - 0.22, 2.0) * 3.2);
+  float curtain = belt * smoothstep(0.18, 0.78, w) * (0.5 + 0.5 * max(0.0, dir.y + 0.4));
+  float band = sin(dir.y * 8.0 + w * 4.0 + t * 0.3);
+  vec3 c = uBg * 0.16;
+  c += mix(uAccent, vec3(0.2, 0.95, 0.55), 0.55) * curtain * (0.75 + 0.35 * band);
+  c += vec3(0.55, 0.2, 0.9) * curtain * pow(max(0.0, band), 3.0) * 0.55;
+  return c;
+}
+
+vec3 rainSky(vec3 dir, float t) {
+  float lon = atan(dir.z, dir.x);
+  float lat = acos(clamp(dir.y, -1.0, 1.0));
+  vec2 uv = vec2(lon * 0.15915 + 0.5, lat * 0.3183);
+  float col = floor(uv.x * 90.0);
+  float speed = 1.4 + hash(col) * 3.2;
+  float y = fract(uv.y * 14.0 + t * speed * 0.18);
+  float streak = exp(-y * 8.0) * step(0.88, hash2(vec2(col, floor(uv.y * 14.0 + t * speed))));
+  vec3 c = uBg * 0.2;
+  c += mix(uAccent, vec3(0.55, 0.7, 0.95), 0.6) * streak * (1.2 + uAudio);
+  return c;
+}
+
+vec3 oceanSky(vec3 dir, float t) {
+  vec2 p = vec2(dir.x, dir.z) / (0.35 + abs(dir.y));
+  float w = fbm(p * 2.2 + t * 0.06);
+  float caust = pow(abs(sin(p.x * 6.0 + w * 4.0 + t * 0.4) * sin(p.y * 5.0 - w * 3.0)), 3.0);
+  vec3 deep = mix(uBg, vec3(0.02, 0.12, 0.28), 0.7);
+  vec3 lite = mix(uAccent, vec3(0.2, 0.85, 0.75), 0.5);
+  return mix(deep, lite, 0.25 + 0.55 * w) + lite * caust * 0.55;
+}
+
+vec3 fireSky(vec3 dir, float t) {
+  float h = 0.5 + 0.5 * dir.y;
+  vec2 p = vec2(atan(dir.z, dir.x), h) * vec2(1.2, 3.5);
+  float n = fbm(p + vec2(0.0, -t * 0.35));
+  float flame = pow(clamp(n * (1.15 - h), 0.0, 1.0), 1.4);
+  vec3 c = mix(vec3(0.08, 0.02, 0.0), vec3(0.95, 0.35, 0.05), flame);
+  c = mix(c, vec3(1.0, 0.85, 0.35), pow(flame, 3.0));
+  c += uAccent * flame * 0.15;
+  return mix(uBg * 0.2, c, 0.85);
+}
+
+vec3 warpSky(vec3 dir, float t) {
+  float r = length(dir.xz);
+  float ang = atan(dir.z, dir.x);
+  float streak = pow(hash2(vec2(floor(ang * 80.0), floor(r * 40.0 - t * 2.0))), 18.0);
+  float tunnel = exp(-abs(dir.y) * 2.2);
+  vec3 c = uBg * 0.12;
+  c += mix(vec3(1.0), uAccent, 0.45) * streak * (1.6 + uAudio) * (0.4 + tunnel);
+  c += uAccent * pow(max(0.0, 1.0 - r * 0.5), 3.0) * 0.2;
+  return c;
+}
+
+vec3 cloudsSky(vec3 dir, float t) {
+  vec2 p = dir.xz / (0.55 + abs(dir.y));
+  float n = fbm(p * 1.6 + t * 0.02);
+  float n2 = fbm(p * 3.1 - t * 0.015);
+  float cover = smoothstep(0.32, 0.72, n * 0.7 + n2 * 0.3);
+  vec3 sky = mix(mix(uBg, uAccent, 0.15), vec3(0.45, 0.62, 0.88), 0.35 + 0.2 * dir.y);
+  vec3 cld = mix(vec3(0.75, 0.78, 0.85), vec3(1.0), n2);
+  return mix(sky, cld, cover * (0.55 + 0.25 * (1.0 - abs(dir.y))));
+}
+
+vec3 circuitSky(vec3 dir, float t) {
+  float lon = atan(dir.z, dir.x) * 0.15915;
+  vec2 uv = vec2(lon, dir.y) * 18.0;
+  vec2 g = abs(fract(uv) - 0.5);
+  float line = 1.0 - smoothstep(0.0, 0.06, min(g.x, g.y));
+  float pulse = step(0.92, hash2(floor(uv) + floor(t * 1.5)));
+  vec3 c = uBg * 0.12;
+  c += uAccent * line * 0.35;
+  c += mix(uAccent, vec3(0.4, 1.0, 0.8), 0.5) * pulse * line * 1.4;
+  return c;
+}
+
+vec3 plasmaSky(vec3 dir, float t) {
+  float a = sin(dir.x * 4.0 + t * 0.3);
+  float b = sin(dir.y * 5.0 + dir.z * 3.0 + t * 0.22);
+  float c = sin((dir.x + dir.y) * 3.5 - t * 0.18);
+  float m = 0.5 + 0.5 * (a * b + c) * 0.7;
+  return mix(mix(uBg, uAccent, 0.25), mix(uAccent, vec3(0.9, 0.3, 0.7), 0.4), m);
+}
+
+vec3 latticeSky(vec3 dir, float t) {
+  vec3 p = dir * 12.0;
+  vec3 g = abs(fract(p) - 0.5);
+  float line = 1.0 - smoothstep(0.0, 0.035, min(min(g.x, g.y), g.z));
+  float twinkle = pow(hash2(floor(p.xy + t * 0.1)), 10.0);
+  vec3 c = uBg * 0.08;
+  c += uAccent * line * 0.45;
+  c += vec3(1.0) * twinkle * 0.8;
+  return c;
+}
+
+vec3 dynamicSky(vec3 dir, float t) {
+  vec2 uv = vec2(atan(dir.z, dir.x), dir.y);
+  uv += uWarp * vec2(fbm(uv * 2.0 + t * 0.05) - 0.5, fbm(uv.yx * 2.0 - t * 0.04) - 0.5);
+  float m = uMotif;
+  float pat;
+  if (m < 0.5) {
+    pat = pow(max(0.0, uv.y), 1.2) * (0.5 + 0.5 * sin(uv.y * uBands * 2.0 + fbm(uv * 3.0) * 4.0 + t * 0.25));
+  } else if (m < 1.5) {
+    vec2 i = floor(uv * uBands);
+    pat = 1.0 - smoothstep(0.1, 0.55, length(fract(uv * uBands) - 0.5) + 0.2 * hash2(i));
+  } else if (m < 2.5) {
+    pat = 0.5 + 0.5 * sin(uv.x * uBands + uv.y * 2.0 + t * 0.3);
+  } else if (m < 3.5) {
+    float r = length(uv);
+    pat = 0.5 + 0.5 * sin(r * uBands * 4.0 - atan(uv.y, uv.x) * 3.0 + t * 0.4);
+  } else if (m < 4.5) {
+    pat = fbm(uv * uBands + t * 0.08);
+  } else {
+    pat = pow(abs(sin(uv.x * uBands + sin(uv.y * 5.0 + t * 0.2) * 2.0)), 2.0);
+  }
+  vec3 col = mix(uA, uB, clamp(pat, 0.0, 1.0));
+  col += (hash2(uv * 80.0 + t) - 0.5) * uGrain * 0.35;
+  return mix(uBg * 0.2, col, 0.85);
+}
+
+${SKY_LUMA_CAP_GLSL}
 void main() {
   vec3 dir = normalize(vDir);
-  float t = uTime; // the sky's own clock: speed slider and pulse are integrated on the CPU, so the picture never jumps
+  float t = uTime;
   vec3 col;
   if (uMode < 1.5) col = fractal(dir, t);
   else if (uMode < 2.5) col = space(dir, t);
-  else col = matrixRain(dir, t);
-  fragColor = vec4(col * uBright, uOpacity);
+  else if (uMode < 3.5) col = matrixRain(dir, t);
+  else if (uMode < 5.5) col = aurora(dir, t);
+  else if (uMode < 6.5) col = rainSky(dir, t);
+  else if (uMode < 7.5) col = oceanSky(dir, t);
+  else if (uMode < 8.5) col = fireSky(dir, t);
+  else if (uMode < 9.5) col = warpSky(dir, t);
+  else if (uMode < 10.5) col = cloudsSky(dir, t);
+  else if (uMode < 11.5) col = circuitSky(dir, t);
+  else if (uMode < 12.5) col = plasmaSky(dir, t);
+  else if (uMode < 13.5) col = latticeSky(dir, t);
+  else col = dynamicSky(dir, t);
+  fragColor = vec4(capSkyLuma(col * uBright), uOpacity);
 }
 `;
 
-const MODE_NUM: Record<BackdropKind, number> = { none: 0, fractal: 1, space: 2, matrix: 3, live: 4 };
+const MODE_NUM: Record<BackdropKind, number> = {
+  none: 0, fractal: 1, space: 2, matrix: 3, live: 4,
+  aurora: 5, rain: 6, ocean: 7, fire: 8, warp: 9, clouds: 10, circuit: 11, plasma: 12, lattice: 13,
+  dynamic: 14,
+  custom: 15,
+  plugin: 16,
+};
 
 const LIVE_VERT = /* glsl */ `
 out vec2 vUv;
@@ -148,9 +306,12 @@ uniform vec2 uVideoSize;
 uniform float uOpacity;
 uniform float uBright;
 uniform float uAudio;
+uniform float uLumaCap;
+uniform vec3 uBg;
 in vec2 vUv;
 out vec4 fragColor;
 
+${SKY_LUMA_CAP_GLSL}
 void main() {
   vec2 canvas = max(uCanvas, vec2(1.0));
   vec2 video = max(uVideoSize, vec2(1.0));
@@ -162,7 +323,9 @@ void main() {
   vec2 uv = (vUv - 0.5) * scale + 0.5;
   vec3 col = texture(uVideo, uv).rgb;
   col *= uBright * (0.85 + 0.35 * uAudio);
-  fragColor = vec4(col, uOpacity);
+  vec3 capped = capSkyLumaTo(col, uLumaCap);
+  vec3 outc = mix(uBg, capped, uOpacity);
+  fragColor = vec4(capSkyLumaTo(outc, uLumaCap), 1.0);
 }
 `;
 
@@ -170,13 +333,78 @@ void main() {
 const PULSE_ACCEL = 2.4;
 /** the easing slider maps 0..1 onto this many seconds of time constant (quadratic, so the low end stays crisp) */
 const EASE_MAX_S = 3;
+/** how long a Dynamic palette/motif morph takes at skyEase=1; ease=0 snaps */
+export const RECIPE_EASE_MAX_S = 4.2;
+
+function blankTex(): THREE.DataTexture {
+  const t = new THREE.DataTexture(new Uint8Array([20, 24, 32, 255]), 1, 1);
+  t.needsUpdate = true;
+  return t;
+}
+
+/** Last compiled agent fragment, so arcade LookStage skies can share it. */
+let lastCustomFrag: string | null = null;
+
+/** Last accepted plugin fragment, so LookStage's separate Backdrop can share it. */
+let lastPlugin: { id: string; frag: string } | null = null;
+
+export const PLUGIN_SKY_UNIFORMS = ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"] as const;
+export const PLUGIN_SKY_MAX = 16_000;
+export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
+
+const PLUGIN_UNIFORM_RE =
+  /\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234]|int|uint|bool|mat[234]|sampler(?:2D|3D|Cube))\s+(\w+)\s*;/g;
+const PLUGIN_ALLOWED = new Set<string>(PLUGIN_SKY_UNIFORMS);
+
+/** Reject includes and any uniform outside the frozen plugin sky contract. */
+export function pluginShaderError(src: string): string | null {
+  if (!src.trim()) return "empty shader";
+  if (src.length > PLUGIN_SKY_MAX) return "shader too long";
+  if (/#\s*include\b/i.test(src) || /\bimport\s/.test(src)) return "shader includes are not allowed";
+  const names = new Set<string>();
+  const re = new RegExp(PLUGIN_UNIFORM_RE.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src))) names.add(m[1]!);
+  for (const n of names) {
+    if (!PLUGIN_ALLOWED.has(n)) return `non-whitelisted uniform ${n}`;
+  }
+  if (!/\bvoid\s+main\s*\(/.test(src)) return "shader needs void main()";
+  return null;
+}
+
+/** Bind the whitelist preamble to a self-contained plugin fragment. */
+export function wrapPluginSky(raw: string): { frag: string } | { error: string } {
+  const err = pluginShaderError(raw);
+  if (err) return { error: err };
+  const body = raw.replace(/#version[^\n]*\n?/g, "").replace(/\bprecision\s+\w+\s+float\s*;/g, "").trim();
+  const stripped = body
+    .replace(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234])\s+(?:uTime|uOpacity|uBright|uAudio|uAccent|uBg)\s*;/g, "")
+    .replace(/\bin\s+vec3\s+vDir\s*;/g, "")
+    .replace(/\bout\s+vec4\s+fragColor\s*;/g, "")
+    .trim();
+  const preamble = /* glsl */ `uniform float uTime;
+uniform float uOpacity;
+uniform float uBright;
+uniform float uAudio;
+uniform vec3 uAccent;
+uniform vec3 uBg;
+in vec3 vDir;
+out vec4 fragColor;
+
+`;
+  return { frag: preamble + stripped };
+}
 
 export class Backdrop {
   readonly mesh: THREE.Mesh;
   readonly liveMesh: THREE.Mesh;
   private readonly mat: THREE.ShaderMaterial;
   private readonly liveMat: THREE.ShaderMaterial;
+  private pluginMat: THREE.ShaderMaterial | null = null;
+  private pluginId: string | null = null;
+  private pluginFrag: string | null = null;
   private kind: BackdropKind = "none";
+  private customFrag: string | null = null;
   /** the sky's animation clock, in shader seconds: integrates dt × current speed */
   private clock = 0;
   /** speed multiplier the clock is running at now; eases toward speed × (1 + pulse × PULSE_ACCEL) */
@@ -185,6 +413,10 @@ export class Backdrop {
   private ease = 0.4;
   private audio = 0;
   private lastT: number | null = null;
+  private paintedRecipe: SkyRecipe = cloneSkyRecipe(DEFAULT_SKY_RECIPE);
+  private recipeFrom: SkyRecipe = cloneSkyRecipe(DEFAULT_SKY_RECIPE);
+  private recipeWant: SkyRecipe = cloneSkyRecipe(DEFAULT_SKY_RECIPE);
+  private recipeT = 1;
 
   constructor() {
     this.mat = new THREE.ShaderMaterial({
@@ -196,6 +428,13 @@ export class Backdrop {
         uAudio: { value: 0 },
         uAccent: { value: new THREE.Color(0x5aa9ff) },
         uBg: { value: new THREE.Color(0x0b0e14) },
+        uMotif: { value: DEFAULT_SKY_RECIPE.motif },
+        uA: { value: new THREE.Color().setRGB(...DEFAULT_SKY_RECIPE.a) },
+        uB: { value: new THREE.Color().setRGB(...DEFAULT_SKY_RECIPE.b) },
+        uWarp: { value: DEFAULT_SKY_RECIPE.warp },
+        uGrain: { value: DEFAULT_SKY_RECIPE.grain },
+        uBands: { value: DEFAULT_SKY_RECIPE.bands },
+        uPhoto: { value: blankTex() },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -220,6 +459,8 @@ export class Backdrop {
         uOpacity: { value: 1 },
         uBright: { value: 1 },
         uAudio: { value: 0 },
+        uLumaCap: { value: SKY_LUMA_CAP },
+        uBg: { value: new THREE.Color(0x0b0e14) },
       },
       vertexShader: LIVE_VERT,
       fragmentShader: LIVE_FRAG,
@@ -237,14 +478,193 @@ export class Backdrop {
   }
 
   setKind(kind: BackdropKind): void {
+    if (kind === "custom") {
+      const frag = this.customFrag || lastCustomFrag;
+      if (frag) {
+        this.customFrag = frag;
+        this.dropPluginMat();
+        this.applyFrag(frag);
+      } else {
+        kind = "dynamic";
+        this.dropPluginMat();
+      }
+    } else if (kind === "plugin") {
+      const ready = this.pluginFrag || lastPlugin?.frag || null;
+      if (ready) {
+        this.ensurePluginMat(lastPlugin?.id ?? this.pluginId ?? "plugin", ready);
+      } else {
+        this.dropPluginMat();
+        if (this.mat.fragmentShader !== FRAG) this.applyFrag(FRAG);
+      }
+    } else {
+      this.dropPluginMat();
+      if (this.mat.fragmentShader !== FRAG) this.applyFrag(FRAG);
+    }
     this.kind = kind;
     this.mesh.visible = kind !== "none" && kind !== "live";
     this.liveMesh.visible = kind === "live";
-    this.mat.uniforms.uMode.value = MODE_NUM[kind] ?? 0;
+    const modeKind = kind === "plugin" && !this.pluginMat ? PLUGIN_SKY_FALLBACK : kind;
+    this.mat.uniforms.uMode.value = MODE_NUM[modeKind] ?? 0;
+    if (kind === "dynamic") this.setRecipe(currentSkyRecipe());
     if (kind === "live" && liveCam.texture) {
       this.liveMat.uniforms.uVideo.value = liveCam.texture;
       this.liveMesh.visible = true;
     }
+  }
+
+  /**
+   * Compile a plugin ``sky/fragment.glsl`` onto the sphere. Returns a contract/compile
+   * error, or null if the host accepted it. ``null`` source restores the shipped program.
+   */
+  setPluginShader(opts: { id: string; source: string } | null): string | null {
+    if (!opts) {
+      lastPlugin = null;
+      this.pluginId = null;
+      this.pluginFrag = null;
+      this.dropPluginMat();
+      if (this.kind === "plugin") this.setKind("plugin");
+      return null;
+    }
+    const wrapped = wrapPluginSky(opts.source);
+    if ("error" in wrapped) {
+      lastPlugin = null;
+      this.pluginId = null;
+      this.pluginFrag = null;
+      this.dropPluginMat();
+      if (this.kind === "plugin") this.setKind("plugin");
+      return wrapped.error;
+    }
+    lastPlugin = { id: opts.id, frag: wrapped.frag };
+    this.pluginId = opts.id;
+    this.pluginFrag = wrapped.frag;
+    if (this.kind === "plugin") this.setKind("plugin");
+    return null;
+  }
+
+  /** Install a Gemma fragment. Returns a compile-wrap error, or null if the host accepted it. */
+  setCustom(src: string | null): string | null {
+    if (!src) {
+      this.customFrag = null;
+      lastCustomFrag = null;
+      if (this.kind === "custom") this.setKind("dynamic");
+      return null;
+    }
+    const wrapped = wrapAgentSky(src);
+    if ("error" in wrapped) return wrapped.error;
+    this.customFrag = wrapped.frag;
+    lastCustomFrag = wrapped.frag;
+    if (this.kind === "custom") this.applyFrag(wrapped.frag);
+    return null;
+  }
+
+  setPhoto(tex: THREE.Texture | null): void {
+    this.mat.uniforms.uPhoto.value = tex ?? blankTex();
+  }
+
+  private applyFrag(src: string): void {
+    this.mat.fragmentShader = src;
+    this.mat.needsUpdate = true;
+  }
+
+  private pluginUniforms(): THREE.ShaderMaterial["uniforms"] {
+    const u = this.mat.uniforms;
+    return {
+      uTime: { value: u.uTime.value },
+      uOpacity: { value: u.uOpacity.value },
+      uBright: { value: u.uBright.value },
+      uAudio: { value: u.uAudio.value },
+      uAccent: { value: (u.uAccent.value as THREE.Color).clone() },
+      uBg: { value: (u.uBg.value as THREE.Color).clone() },
+    };
+  }
+
+  private ensurePluginMat(id: string, frag: string): void {
+    if (this.pluginMat && this.pluginFrag === frag && this.pluginId === id) {
+      this.mesh.material = this.pluginMat;
+      return;
+    }
+    this.dropPluginMat(false);
+    this.pluginId = id;
+    this.pluginFrag = frag;
+    this.pluginMat = new THREE.ShaderMaterial({
+      uniforms: this.pluginUniforms(),
+      vertexShader: VERT,
+      fragmentShader: frag,
+      glslVersion: THREE.GLSL3,
+      side: THREE.BackSide,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      fog: false,
+      toneMapped: false,
+    });
+    this.mesh.material = this.pluginMat;
+  }
+
+  /** Plugin id currently bound to the sphere, or null when the shipped program is showing. */
+  pluginSkyId(): string | null {
+    return this.pluginMat && this.mesh.material === this.pluginMat ? this.pluginId : null;
+  }
+
+  private dropPluginMat(clear = true): void {
+    if (this.mesh.material === this.pluginMat) this.mesh.material = this.mat;
+    if (this.pluginMat) {
+      this.pluginMat.dispose();
+      this.pluginMat = null;
+    }
+    if (clear) {
+      this.pluginId = null;
+      this.pluginFrag = null;
+    }
+  }
+
+  private syncPluginLook(): void {
+    if (!this.pluginMat) return;
+    const src = this.mat.uniforms;
+    const dst = this.pluginMat.uniforms;
+    dst.uTime.value = src.uTime.value;
+    dst.uOpacity.value = src.uOpacity.value;
+    dst.uBright.value = src.uBright.value;
+    dst.uAudio.value = src.uAudio.value;
+    (dst.uAccent.value as THREE.Color).copy(src.uAccent.value as THREE.Color);
+    (dst.uBg.value as THREE.Color).copy(src.uBg.value as THREE.Color);
+  }
+
+  /** Colours currently on the AI Dynamic sky, for label-ink luminance. */
+  skyPalette(): { a: [number, number, number]; b: [number, number, number] } {
+    return { a: this.paintedRecipe.a, b: this.paintedRecipe.b };
+  }
+
+  setRecipe(r: SkyRecipe): void {
+    this.recipeWant = cloneSkyRecipe(r);
+    this.recipeFrom = cloneSkyRecipe(r);
+    this.paintedRecipe = cloneSkyRecipe(r);
+    this.recipeT = 1;
+    this.applyRecipe(r);
+  }
+
+  private applyRecipe(r: SkyRecipe): void {
+    this.mat.uniforms.uMotif.value = r.motif;
+    (this.mat.uniforms.uA.value as THREE.Color).setRGB(r.a[0], r.a[1], r.a[2]);
+    (this.mat.uniforms.uB.value as THREE.Color).setRGB(r.b[0], r.b[1], r.b[2]);
+    this.mat.uniforms.uWarp.value = r.warp;
+    this.mat.uniforms.uGrain.value = r.grain;
+    this.mat.uniforms.uBands.value = r.bands;
+  }
+
+  private followRecipe(r: SkyRecipe, dt: number): void {
+    if (skyRecipeKey(r) !== skyRecipeKey(this.recipeWant)) {
+      this.recipeFrom = cloneSkyRecipe(this.paintedRecipe);
+      this.recipeWant = cloneSkyRecipe(r);
+      this.recipeT = 0;
+    }
+    if (this.ease < 0.08) this.recipeT = 1;
+    else {
+      const tau = 0.45 + RECIPE_EASE_MAX_S * this.ease * this.ease;
+      this.recipeT = Math.min(1, this.recipeT + (1 - this.recipeT) * (1 - Math.exp(-dt / tau)));
+    }
+    this.paintedRecipe = lerpSkyRecipe(this.recipeFrom, this.recipeWant, this.recipeT);
+    this.applyRecipe(this.paintedRecipe);
   }
 
   setViewport(w: number, h: number): void {
@@ -254,6 +674,12 @@ export class Backdrop {
   setColors(accent: number, bg: number): void {
     (this.mat.uniforms.uAccent.value as THREE.Color).setHex(accent);
     (this.mat.uniforms.uBg.value as THREE.Color).setHex(bg);
+    (this.liveMat.uniforms.uBg.value as THREE.Color).setHex(bg);
+    this.syncPluginLook();
+  }
+
+  setLumaCap(cap: number): void {
+    this.liveMat.uniforms.uLumaCap.value = Math.min(SKY_LUMA_CAP, Math.max(0.04, cap));
   }
 
   setLook(opacity: number, brightness: number, audio: number): void {
@@ -264,6 +690,7 @@ export class Backdrop {
     this.liveMat.uniforms.uOpacity.value = opacity;
     this.liveMat.uniforms.uBright.value = brightness;
     this.liveMat.uniforms.uAudio.value = audio;
+    this.syncPluginLook();
   }
 
   /**
@@ -286,6 +713,8 @@ export class Backdrop {
     this.curSpeed += (target - this.curSpeed) * (1 - Math.exp(-dt / tau));
     this.clock += dt * this.curSpeed;
     this.mat.uniforms.uTime.value = this.clock;
+    this.syncPluginLook();
+    if (this.kind === "dynamic") this.followRecipe(currentSkyRecipe(), dt);
     if (this.kind === "live") {
       const v = liveCam.video;
       if (v.videoWidth > 0) {
