@@ -7,6 +7,7 @@ import {
   VIZ_UBO,
   VizBufferWriter,
   VizFrameBudget,
+  bindVizWriterCore,
   buildVizFrame,
   defaultVizContract,
   parseVizContract,
@@ -120,6 +121,72 @@ describe("VizBufferWriter", () => {
   });
 });
 
+describe("bindVizWriterCore (demo pack-swap preserve path)", () => {
+  const contract = defaultVizContract();
+
+  function hostBindState(
+    writer: VizBufferWriter | null,
+    frameTs: number,
+    budget: VizFrameBudget,
+    preserveUbo: boolean,
+  ): { writer: VizBufferWriter | null; frameTs: number; budget: VizFrameBudget } {
+    const result = bindVizWriterCore(writer, contract, preserveUbo);
+    return {
+      writer: result.writer,
+      frameTs: result.resetFrameTs ? 0 : frameTs,
+      budget: result.resetBudget ? (budget.reset(), budget) : budget,
+    };
+  }
+
+  it("preserves vizFrameTs, vizBudget skipped count, and UBO mirror bytes on preserveUbo rebind", () => {
+    let writer = new VizBufferWriter(contract);
+    writer.writeBuffer(0, [1, 2, 3, 4]);
+    const uboBefore = writer.ubo.slice();
+
+    let frameTs = 42.5;
+    let ticks = 0;
+    const budget = new VizFrameBudget(() => (++ticks === 1 ? 0 : VIZ_FRAME_BUDGET_MS + 1));
+    budget.deliver(minimalState(), frameTs, 0, () => {});
+    expect(budget.stats.skipped).toBe(1);
+
+    const next = hostBindState(writer, frameTs, budget, true);
+    writer = next.writer;
+    frameTs = next.frameTs;
+
+    expect(frameTs).toBe(42.5);
+    expect(budget.stats.skipped).toBe(1);
+    expect(writer).not.toBeNull();
+    expect(Array.from(writer!.ubo)).toEqual(Array.from(uboBefore));
+  });
+
+  it("resets frame ts and budget on non-preserve rebind", () => {
+    const writer = new VizBufferWriter(contract);
+    writer.writeBuffer(0, [9, 8, 7]);
+
+    let ticks = 0;
+    const budget = new VizFrameBudget(() => (++ticks === 1 ? 0 : VIZ_FRAME_BUDGET_MS + 1));
+    budget.deliver(minimalState(), 10, 0, () => {});
+    expect(budget.stats.skipped).toBe(1);
+
+    const next = hostBindState(writer, 10, budget, false);
+    expect(next.frameTs).toBe(0);
+    expect(next.budget.stats.skipped).toBe(0);
+    expect(next.writer).not.toBe(writer);
+    expect(next.writer!.ubo[0]).toBe(0);
+  });
+
+  it("falls back to reset when preserveUbo is set but no prior writer exists", () => {
+    let ticks = 0;
+    const budget = new VizFrameBudget(() => (++ticks === 1 ? 0 : VIZ_FRAME_BUDGET_MS + 1));
+    budget.deliver(minimalState(), 5, 0, () => {});
+
+    const next = hostBindState(null, 5, budget, true);
+    expect(next.frameTs).toBe(0);
+    expect(next.budget.stats.skipped).toBe(0);
+    expect(next.writer).not.toBeNull();
+  });
+});
+
 describe("VizFrameBudget", () => {
   it("counts over-budget frames and skips delivery", () => {
     const state = minimalState();
@@ -128,6 +195,7 @@ describe("VizFrameBudget", () => {
     onTime.deliver(state, 0, 0, (f) => delivered.push(f));
     expect(delivered).toHaveLength(1);
     expect(onTime.stats.overBudget).toBe(0);
+    expect(onTime.lastBuilt?.t).toBe(100);
 
     let n = 0;
     const slow = new VizFrameBudget(() => (++n === 1 ? 0 : VIZ_FRAME_BUDGET_MS + 1));
