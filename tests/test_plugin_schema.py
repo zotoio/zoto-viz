@@ -263,6 +263,17 @@ def test_viz_block_required_with_viz_caps() -> None:
             "version": 1,
             "capabilities": ["viz.read"],
         })
+
+
+def test_viz_graph_walk_true_fails_schema() -> None:
+    with pytest.raises(ValidationError):
+        _validator().validate({
+            "id": "bad-walk",
+            "name": "Bad",
+            "version": 1,
+            "capabilities": ["viz.write"],
+            "viz": {"graphWalk": True},
+        })
     with pytest.raises(ValueError, match="graphWalk"):
         plugins.validate_doc({
             "id": "bad-walk",

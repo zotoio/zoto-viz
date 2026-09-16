@@ -299,9 +299,10 @@ export class VizFrameBudget {
     prevTs: number,
     audio: number,
     onFrame: (frame: VizDataFrame) => void,
+    build: (state: StateMsg, prevTs: number, audio: number) => VizDataFrame = buildVizFrame,
   ): VizDataFrame | null {
     const t0 = this.now();
-    const frame = buildVizFrame(state, prevTs, audio);
+    const frame = build(state, prevTs, audio);
     const over = this.record(this.now() - t0);
     if (over) {
       this._skipped++;
