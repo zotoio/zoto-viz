@@ -4,7 +4,7 @@ const base = (globalThis as { process?: { env?: Record<string, string> } }).proc
 
 export default defineConfig({
   title: "zoto-viz",
-  description: "Live LAN visualisation, view plugins, and a local Gemma 4 operator",
+  description: "Live LAN visualisation, catalog plugins, and a local Gemma 4 operator",
   base,
   ignoreDeadLinks: true,
   themeConfig: {
@@ -18,7 +18,7 @@ export default defineConfig({
       { text: "Live monitor", link: "/live" },
       { text: "Views and motion", link: "/motion" },
       { text: "Camera and privacy", link: "/camera" },
-      { text: "YAML plugins", link: "/plugins" },
+      { text: "Plugins", link: "/plugins" },
       { text: "TypeScript plugins", link: "/plugins-ts" },
       { text: "HTTP / WebSocket API", link: "/api" },
       { text: "Ollama agent", link: "/agent" },
