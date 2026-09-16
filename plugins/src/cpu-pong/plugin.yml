@@ -1,4 +1,4 @@
-id: cpupong
+id: cpu-pong
 name: CPU Pong
 version: 1
 hint: Processes vs cores. A timeslice is a ball. Under load one paddle takes the upper

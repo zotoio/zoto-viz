@@ -34,7 +34,9 @@ CONSENT_FILE = paths.user_dir() / "plugin-consent.yml"
 REPO = Path(__file__).resolve().parents[1]
 SCHEMA_FILE = REPO / "schema" / "plugin.schema.json"
 SUFFIXES = {".yml", ".yaml"}
-ALLOWED_CAPS = frozenset({"graph.read", "graph.style", "ui.overlay", "config.read"})
+ALLOWED_CAPS = frozenset({
+    "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
+})
 MAX_BUNDLE = 256 * 1024
 DEFAULT_FRONTEND_ENTRY = "frontend/index.ts"
 _ESBUILD = REPO / "web" / "node_modules" / ".bin" / "esbuild"
@@ -492,6 +494,30 @@ def _check_semantics(doc: dict[str, Any]) -> None:
         lo, hi = field.get("min"), field.get("max")
         if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo > hi:
             raise ValueError(f"config {key!r} min is greater than max")
+    caps = doc.get("capabilities") or []
+    needs_viz = any(c in caps for c in ("viz.read", "viz.write"))
+    viz = doc.get("viz")
+    if needs_viz:
+        if not isinstance(viz, dict):
+            raise ValueError("viz block is required when viz.read or viz.write is declared")
+        if viz.get("graphWalk") is not False:
+            raise ValueError("viz.graphWalk must be false")
+    elif isinstance(viz, dict) and viz.get("graphWalk") is not False:
+        raise ValueError("viz.graphWalk must be false when viz block is present")
+    if isinstance(viz, dict) and needs_viz and viz.get("ubo") is not None:
+        ubo = viz.get("ubo")
+        if ubo != {
+            "block": "ZotoVizData",
+            "binding": 0,
+            "layout": "std140",
+            "hostUniform": "zotoVizSlots",
+            "slotCount": 8,
+            "slotFloats": 64,
+            "slotVec4s": 16,
+            "totalVec4s": 128,
+            "totalBytes": 2048,
+        }:
+            raise ValueError("viz.ubo must match the fixed ZotoVizData std140 layout")
 
 
 def validate_doc(doc: Any) -> dict[str, Any]:

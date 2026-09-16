@@ -28,6 +28,7 @@ import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
 import { PluginSandbox, pluginModuleUrl } from "./host";
+import type { VizPluginContract } from "./viz-host";
 
 function dimHex(hex: number, amount: number): number {
   const r = Math.round(((hex >> 16) & 255) * amount);
@@ -83,7 +84,8 @@ export interface PluginLook {
   edgeGlowSpeed?: number;
 }
 
-export type PluginCapability = "graph.read" | "graph.style" | "ui.overlay" | "config.read";
+export type PluginCapability =
+  | "graph.read" | "graph.style" | "ui.overlay" | "config.read" | "viz.read" | "viz.write";
 
 export interface PluginView {
   id: string;
@@ -103,6 +105,7 @@ export interface PluginView {
   entry?: string;
   frontend?: { entry?: string };
   capabilities?: PluginCapability[];
+  viz?: VizPluginContract;
   hash?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;
@@ -193,8 +196,12 @@ export async function attachPluginFrontend(
     sandbox.unload();
     return false;
   }
-  await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash);
+  await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
   return true;
+}
+
+export function vizContractFor(spec: PluginView | null | undefined): VizPluginContract | undefined {
+  return spec?.viz;
 }
 
 const storeKey = (id: string, key: string) => `zoto-viz.plugin.${id}.${key}`;

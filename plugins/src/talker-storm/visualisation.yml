@@ -1,0 +1,4 @@
+engine: graph
+base: talkers
+look:
+  backdrop: plugin

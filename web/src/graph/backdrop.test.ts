@@ -46,6 +46,8 @@ describe("plugin sky contract", () => {
     expect(pluginShaderError("float n = 1.0;")).toMatch(/main/);
     const wrapped = wrapPluginSky(OK_FRAG);
     expect("frag" in wrapped && wrapped.frag.includes("uniform float uTime")).toBe(true);
+    expect("frag" in wrapped && wrapped.frag.includes("ZotoVizData")).toBe(true);
+    expect("frag" in wrapped && wrapped.frag.includes("zotoVizSlots")).toBe(true);
   });
 
   it("swaps in a plugin program and falls back on compile failure", () => {

@@ -1,0 +1,20 @@
+id: packet-tunnel
+name: Packet Tunnel
+version: 1
+hint: Packet-field tunnel raymarch on the plugin sky. Consumes decimated proto fields; writes uAccent/uBright buffers.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  maxBuffers: 2
+  maxBufferFloats: 16
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts
