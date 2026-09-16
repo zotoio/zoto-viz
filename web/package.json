@@ -9,7 +9,8 @@
     "build": "pnpm asbuild && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "pnpm asbuild && vitest run",
-    "test:coverage": "pnpm asbuild && vitest run --coverage"
+    "test:coverage": "pnpm asbuild && vitest run --coverage",
+    "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs"
   },
   "dependencies": {
     "d3-force-3d": "^3.0.6",

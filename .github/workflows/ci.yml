@@ -27,6 +27,9 @@ jobs:
         run: |
           python -m pip install -r requirements.txt pytest
           pytest tests
+      - name: Viz dogfood gates
+        working-directory: web
+        run: pnpm dogfood
       - name: Web tests and build
         working-directory: web
         run: |
