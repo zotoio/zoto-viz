@@ -140,13 +140,21 @@ CSRF skipped, Host still loopback). Tools:
 
 | Tool | Role |
 | --- | --- |
-| `list_features` | Catalog of settable keys (settings, agent temper/weather, plugins) |
+| `list_features` | Catalog of every settable key (theme, view, feed, show, filters, anim/physics/mosaic/sky, plugins, agent look, dice) |
 | `get_settings` | Startup profile + live temper/weather + queued UI patch |
-| `set_settings` | Patch the open UI (same whitelist as an agent ` ```settings ` fence) plus temper/weather/control |
+| `set_settings` | Patch the open UI (same whitelist as an agent ` ```settings ` fence): theme, view, feed, show, filters, anim, plugins, agent look, dice include/ceilings, shuffle/dice, plus temper/weather/control |
 | `list_plugins` | Each catalog view's options, config, and prompt, with current profile values |
 | `set_plugin` | `{ id, values }` — one view's knobs (including `prompt`) |
 | `set_view` | `{ mode }` e.g. `plugin:command` |
 | `set_agent` | `{ temper?, weather?, control? }` |
+| `roll_dice` | Header dice: randomize groups left on in Settings → Dice (theme, view, mosaic, chrome, feed, motion, physics, knobs by default) |
+| `get_state` | Live LAN snapshot (`GET /api/state`) |
+| `get_traffic` | `{ ip, peer?, since? }` recent packets |
+| `get_rf_watch` / `set_rf_watch` | Wi-Fi SSID watch list and hopper plan |
+| `consent_plugin` | `{ id, kind: reviewed\|authored }` |
+| `draft_plugin` | `{ files, install? }` — same as `POST /api/ai/plugin` |
+| `list_profiles` / `apply_profile` | Saved looks |
+| `list_memories` / `add_memory` / `delete_memory` | Curated chat memories |
 | `install_plugin_zip` | Write gitignored `plugins/<id>.zip` (see guards below) |
 
 Live patches ride the 1 Hz WebSocket as `live: { seq, patch, temper, weather }`.

@@ -1,18 +1,25 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
-import { forceCenter, forceLink, forceManyBody, forceSimulation, type Simulation, type SimNode, type SimLink } from "d3-force-3d";
+import type { SimNode, SimLink } from "d3-force-3d";
+import { LabelItem, LabelLayer } from "./labels";
 import {
-  applyPhys, clampParticleCap, easePhysToward, gravityForce, magnetForce,
-  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, stringPoint, stringSegs, swirlForce,
+  applyPhys, clampParticleCap, easePhysToward, hashAngle,
+  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, stringPoint, stringSegs,
   type PhysEase,
 } from "./physics";
+import { LayoutClient } from "./layout";
+import type { HostedView, RenderHost, Viewport } from "./render-host";
+import {
+  L_BASE, L_DST, L_K, L_SRC, LINK_STRIDE, N_CHARGE, N_FIXED, N_FX, N_FY, N_FZ, N_KEY, N_RATE, N_RELAX, N_ROLE,
+  N_SHELL_K, N_SHELL_R, N_SLOT, N_THETA, NODE_STRIDE, ROLES, roleIdx, type LayoutParams, type PositionsMsg,
+} from "./layout-core";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName, fmtBytes, type Device, type Flow, type Role, type StateMsg } from "../core/types";
 import { capBluetoothDevices, categorize, heat, paneLabelCap, topology, type ModeCtx, type ViewMode } from "../core/modes";
 import { rIp, rName } from "../core/redact";
-import { DEFAULT_THEME, effectiveSceneLuminance, fadeTowardPole, grayHex, guardLabelMix, hexToHsl, hslHex, relativeLuminance, sceneInk, SKY_LUMA_CAP, toCssHex, type Theme } from "../core/themes";
+import { DEFAULT_THEME, effectiveSceneLuminance, fadeTowardPole, grayHex, guardLabelMix, hexToHsl, hslHex, sceneInk, SKY_LUMA_CAP, toCssHex, type Theme } from "../core/themes";
 import { assessVisibility, type VisibilityReport } from "../core/visibility";
 import { Backdrop, type BackdropKind } from "./backdrop";
+import { LumaProbe } from "./lumaProbe";
 import { ensureSkyRecipe } from "./sky-ai";
 import { liveCam } from "../camera/livecam";
 import { cameraConsumers } from "../camera/want";
@@ -32,6 +39,8 @@ export interface Filters { lan: boolean; internet: boolean; multicast: boolean; 
 
 export interface GNode extends SimNode {
   id: string;
+  /** stable key the layout worker uses to keep this node's motion across structure resends */
+  simKey: number;
   device: Device;
   /** sphere styling; every node is one instance of the shared InstancedMesh, written each frame */
   color: THREE.Color;
@@ -43,7 +52,7 @@ export interface GNode extends SimNode {
   opacity: number;
   /** index into modes.SHAPES; the shared material bends the unit sphere into it per instance */
   shape: number;
-  label: CSS2DObject;
+  label: LabelItem;
   labelUntil?: number;
   labelEl: HTMLDivElement;
   visible: boolean;
@@ -54,10 +63,6 @@ export interface GNode extends SimNode {
   px: number;
   py: number;
   pz: number;
-  /** smoothed layout velocity (moveEase); next tick reads these as vx/vy/vz */
-  svx?: number;
-  svy?: number;
-  svz?: number;
   /** CPU view: wall seconds when this node went unused; opacity fades over `CPU_IDLE_FADE_S` */
   cpuIdleAt?: number;
   /** CPU view: dropped from the live slice, kept only to fade out */
@@ -84,6 +89,8 @@ const CPU_IDLE_PCT = 0.5;
 const CPU_IDLE_FLOOR = 0.22;
 /** nodes under this share of the loudest node's log-rate keep a plain label */
 const VOL_FLOOR = 0.45;
+/** a hidden node whose scale has eased down to this no longer gets an instance (its target is 0.01) */
+const COLLAPSED_SCALE = 0.02;
 const MAX_PARTICLES = PARTICLE_CAP;
 const SPHERE_CAPACITY = 512;  // instances allocated up front; grows by doubling
 
@@ -950,22 +957,44 @@ function sphereCloud(material: THREE.Material, cap: number): THREE.InstancedMesh
 export interface SceneOpts {
   /** extra mosaic pane: no microphone, lower pixel ratio, no view-cadence callbacks */
   satellite?: boolean;
+  /** draw through a shared context (one canvas for the whole wall) instead of owning a canvas */
+  host?: RenderHost;
 }
 
-export class NetScene {
+export class NetScene implements HostedView {
   readonly renderer: THREE.WebGLRenderer;
-  readonly labelRenderer: CSS2DRenderer;
+  /** shared renderer this scene draws through, or null when it owns `renderer` */
+  private readonly host: RenderHost | null;
+  /** where pointer / wheel listeners live: the shared host's pane container, or this scene's canvas */
+  private readonly inputEl: HTMLElement;
+  /** viewport of the last present() through the host, framebuffer pixels */
+  private lastVp: Viewport | null = null;
+  /** WebGL clear colour this scene wants (applied at present time so panes sharing a context differ) */
+  private clearHex: number;
+  readonly labelLayer: LabelLayer;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
   private nodes = new Map<string, GNode>();
   private links = new Map<string, GLink>();
-  /** every device sphere in one draw call; `labels` holds their CSS2D labels (positioned by hand each frame) */
+  /** every drawn device sphere in one draw call; labels live in `labelLayer` (positioned by hand each frame) */
   private spheres: THREE.InstancedMesh;
   private readonly sphereMat = sphereMaterial();
-  private readonly labels = new THREE.Group();
-  private sim: Simulation<GNode, GLink>;
-  private linkForce = forceLink<GNode, GLink>().id((n) => n.id);
+  /** the force layout, ticking in a Worker; positions arrive one frame later and are copied onto the nodes */
+  private readonly layout: LayoutClient;
+  /** nodes in the layout, in wire order for the current `simGen` */
+  private simNodes: GNode[] = [];
+  private simGen = 0;
+  private nextSimKey = 1;
+  /** alpha floor to request with the next tick (setAnim / drag / structure bumps) */
+  private pendingAlpha = 0;
+  /** alpha the layout last reported, handed to mode forces */
+  private layoutAlpha = 1;
+  private nudgeBuf = new Float32Array(0);
+  private posRecycle: Float32Array | null = null;
+  private pendingPin: Float32Array | null = null;
+  private pendingRelease: Float32Array | null = null;
+  private lastLayoutParams: LayoutParams | null = null;
   private lines: THREE.LineSegments;
   private glowLines: THREE.LineSegments;
   private glowMat: THREE.ShaderMaterial;
@@ -998,8 +1027,8 @@ export class NetScene {
   private lastMsg: StateMsg | null = null;
   /** raw address -> representative node, filled by the "merge names" collapse (empty when off) */
   private aliasMap = new Map<string, string>();
-  private overlayObjs = new Map<string, CSS2DObject>();
-  private decoObjs = new Map<string, CSS2DObject>();
+  private overlayObjs = new Map<string, LabelItem>();
+  private decoObjs = new Map<string, LabelItem>();
   private agentLook: AgentLook = EMPTY_LOOK;
   /** unit direction to glide toward on a mode switch; distance is fitted to the focus box */
   private cameraGoalDir: THREE.Vector3 | null = null;
@@ -1072,7 +1101,7 @@ export class NetScene {
   private raf = 0;
   /** instanceColor / instanceShape only change on snapshot restyle, not every frame */
   private instanceStyleDirty = true;
-  /** CSS2DRenderer needs one flush after the last label/overlay is hidden */
+  /** the label layer needs one flush after the last label/overlay is hidden */
   private labelsDrawn = false;
   private viewW = 0;
   private viewH = 0;
@@ -1084,8 +1113,6 @@ export class NetScene {
   /** layout stretch so a wide viewport fills with the graph instead of a sphere sitting in the middle */
   private spreadX = 1;
   private spreadZ = 1;
-  private chargeForce = forceManyBody<GNode>();
-  private centerForce = forceCenter<GNode>(0, 0, 0).strength(0.02);
   /** uncrowded shell radius → widened radius, for shells more nodes share than fit around them (measureCrowds) */
   private crowdRadius = new Map<number, number>();
   /** uncrowded shell radius → 0..1 flattening multiplier for shells still crowded after widening */
@@ -1104,8 +1131,21 @@ export class NetScene {
     return this.crowdRadius.get(r) ?? r;
   }
 
+  /** `rfSlice` re-filters every device and flow; its hub / self answer only changes with these three inputs. */
+  private sliceMemo: { msg: StateMsg; mode: ViewMode; opts: Record<string, string>; gateway: string; localIp: string } | null = null;
+
+  private sliceHub(): { gateway: string; localIp: string } | null {
+    const msg = this.lastMsg;
+    if (!msg) return null;
+    const m = this.sliceMemo;
+    if (m && m.msg === msg && m.mode === this.mode && m.opts === this.modeOpts) return m;
+    const slice = rfSlice(msg, this.mode, this.modeOpts);
+    this.sliceMemo = { msg, mode: this.mode, opts: this.modeOpts, gateway: slice.gateway, localIp: slice.localIp };
+    return this.sliceMemo;
+  }
+
   private get ctx(): ModeCtx {
-    const slice = this.lastMsg ? rfSlice(this.lastMsg, this.mode, this.modeOpts) : null;
+    const slice = this.sliceHub();
     return {
       now: this.now, nodes: this.nodes, links: this.links, opts: this.modeOpts,
       gateway: slice?.gateway || this.lastMsg?.gateway || "",
@@ -1119,30 +1159,43 @@ export class NetScene {
 
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
     this.satellite = !!opts.satellite;
-    const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
-    this.baseDpr = dpr;
-    this.lastTuneDpr = dpr;
-    this.renderer = new THREE.WebGLRenderer({
-      antialias: !this.satellite && dpr < 1.3,
-      alpha: false,
-      powerPreference: this.satellite ? "low-power" : "high-performance",
-    });
-    this.renderer.setPixelRatio(dpr);
-    const bootW = Math.max(2, container.clientWidth), bootH = Math.max(2, container.clientHeight);
-    this.renderer.setSize(bootW, bootH);
-    this.renderer.setClearColor(this.theme.scene.clear);
-    container.appendChild(this.renderer.domElement);
-    this.renderer.domElement.addEventListener("webglcontextlost", (e) => e.preventDefault());
-    this.renderer.domElement.addEventListener("webglcontextrestored", () => this.relayout());
+    this.host = opts.host ?? null;
+    this.clearHex = this.theme.scene.clear;
+    if (this.host) {
+      // shared context: the host's canvas covers the wall; this pane is a transparent window onto it
+      this.renderer = this.host.renderer;
+      this.baseDpr = this.host.pixelRatio;
+      this.lastTuneDpr = this.baseDpr;
+      this.inputEl = container;
+      container.classList.add("hosted");
+      this.host.add(this);
+    } else {
+      const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
+      this.baseDpr = dpr;
+      this.lastTuneDpr = dpr;
+      this.renderer = new THREE.WebGLRenderer({
+        antialias: !this.satellite && dpr < 1.3,
+        alpha: false,
+        powerPreference: this.satellite ? "low-power" : "high-performance",
+      });
+      this.renderer.setPixelRatio(dpr);
+      const bootW = Math.max(2, container.clientWidth), bootH = Math.max(2, container.clientHeight);
+      this.renderer.setSize(bootW, bootH);
+      this.renderer.setClearColor(this.clearHex);
+      container.appendChild(this.renderer.domElement);
+      this.renderer.domElement.addEventListener("webglcontextlost", (e) => { e.preventDefault(); this.hostContextLost(); });
+      this.renderer.domElement.addEventListener("webglcontextrestored", () => this.hostContextRestored());
+      this.inputEl = this.renderer.domElement;
+    }
 
-    this.labelRenderer = new CSS2DRenderer();
-    this.labelRenderer.setSize(container.clientWidth, container.clientHeight);
-    Object.assign(this.labelRenderer.domElement.style, { position: "absolute", top: "0", left: "0", pointerEvents: "none" });
-    container.appendChild(this.labelRenderer.domElement);
+    this.labelLayer = new LabelLayer();
+    this.labelLayer.setSize(container.clientWidth, container.clientHeight);
+    Object.assign(this.labelLayer.domElement.style, { position: "absolute", top: "0", left: "0", pointerEvents: "none" });
+    container.appendChild(this.labelLayer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(this.baseFov, container.clientWidth / container.clientHeight, 1, 12000);
     this.camera.position.set(0, 820, 820);
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls = new OrbitControls(this.camera, this.inputEl);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     // click-hold / one-finger pans; two-finger forward/back zooms; sideways two-finger orbits; pinch / mouse wheel zooms
@@ -1155,7 +1208,7 @@ export class NetScene {
       _handleMouseWheel(e: { deltaY: number; clientX: number; clientY: number }): void;
       _customWheelEvent(e: WheelEvent): { deltaY: number; clientX: number; clientY: number };
     };
-    this.renderer.domElement.addEventListener("wheel", (e) => {
+    this.inputEl.addEventListener("wheel", (e) => {
       e.preventDefault();
       e.stopImmediatePropagation();
       this.pinUserCamera();
@@ -1163,7 +1216,7 @@ export class NetScene {
       const motion = wheelCamMotion(e);
       if (motion.zoom) orbit._handleMouseWheel(orbit._customWheelEvent(e));
       if (motion.yaw) {
-        const h = this.renderer.domElement.clientHeight || 1;
+        const h = this.inputEl.clientHeight || 1;
         const k = (2 * Math.PI * this.controls.rotateSpeed) / h;
         orbit._rotateLeft(k * motion.yaw);
         this.controls.update();
@@ -1202,7 +1255,6 @@ export class NetScene {
     // devices
     this.spheres = sphereCloud(this.sphereMat, SPHERE_CAPACITY);
     this.scene.add(this.spheres);
-    this.scene.add(this.labels);
 
     // edges
     this.linePos = new Float32Array(0);
@@ -1237,70 +1289,31 @@ export class NetScene {
 
     // layout. Accessors consult the active mode; d3 evaluates them when nodes/links are (re)assigned,
     // which syncSimulation does on every structural change and on mode switch.
-    this.sim = forceSimulation<GNode, GLink>([], 3)
-      .alphaDecay(0.006)
-      .velocityDecay(0.35)
-      .force("link", this.linkForce
-        .distance((l) => {
-          const span = this.anim.linkSpan;
-          const base = l.source.device.role === "internet" || l.target.device.role === "internet" ? 260 * this.spreadX : 160 * (0.7 + 0.3 * this.spreadX);
-          return base * span;
-        })
-        .strength((l) => {
-          const k = this.mode.linkStrength?.(l) ?? (l.id.startsWith("~") ? 0.03
-            : l.source.device.role === "multicast" || l.target.device.role === "multicast" ? 0
-            : 0.12);
-          return k * this.anim.spring;
-        }))
-      .force("charge", this.chargeForce
-        .strength((n) => (this.mode.charge?.(n) ?? (n.device.role === "lan" || n.device.role === "local" ? -500 : -90))
-          * (this.crowdCharge.get(this.baseShell(n)) ?? 1)
-          * this.anim.chargeAmt)
-        .distanceMax(700))
-      .force("center", this.centerForce)
-      .force("shell", ellipseShell(
-        (n) => this.shellR(n),
-        (n) => this.mode.shellStrength?.(n) ?? (n.device.role === "gateway" ? 1 : n.device.role === "internet" || n.device.role === "multicast" ? 0.6 : 0.9),
-        () => this.spreadX,
-        () => this.spreadZ,
-      ))
-      .force("slot", slotRing(
-        (n) => this.shellR(n),
-        (n) => this.mode.shellStrength?.(n),
-        () => this.spreadX,
-        () => this.spreadZ,
-      ))
-      .force("flatten", flattenLan(0.12, () => this.mode.flatten !== false, (n) => this.crowdRelax.get(this.baseShell(n)) ?? 1))
-      .force("mode", modeForce((nodes, alpha) => this.mode.force?.(nodes, alpha, this.ctx)))
-      .force("magnet", magnetForce(
-        () => this.magnetsNow(),
-        () => this.anim.magnetCross,
-        () => this.anim.magnetRange,
-        () => this.physPulse(),
-      ))
-      .force("gravity", gravityForce(() => this.anim.gravity, () => this.physPulse()))
-      .force("swirl", swirlForce(() => this.anim.swirl, () => this.physPulse()))
-      .stop();
+    // Layout: the forces run in a Worker (see layout-core.ts). syncSimulation resolves every mode
+    // accessor (shell radius / strength, charge, link strength) into numbers on each structural change,
+    // and the active mode's own `force` runs here each frame as a velocity nudge on the reported positions.
+    this.layout = new LayoutClient((m) => this.onLayoutPositions(m));
 
     this.updateSpread();
+    this.pushLayoutParams(1 / 60);
 
     this.onWinResize = () => this.relayout();
     window.addEventListener("resize", this.onWinResize);
     this.ro = new ResizeObserver(() => this.relayout());
     this.ro.observe(container);
     const setPointer = (e: PointerEvent | MouseEvent) => {
-      const r = this.renderer.domElement.getBoundingClientRect();
+      const r = this.inputEl.getBoundingClientRect();
       this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     };
-    this.renderer.domElement.addEventListener("pointermove", (e) => {
+    this.inputEl.addEventListener("pointermove", (e) => {
       setPointer(e);
       if (this.dragging) this.moveDrag();
     });
-    this.renderer.domElement.addEventListener("pointerleave", () => {
+    this.inputEl.addEventListener("pointerleave", () => {
       if (!this.dragging) this.pointer.set(2, 2);
     });
     let downAt = 0, downX = 0, downY = 0;
-    this.renderer.domElement.addEventListener("pointerdown", (e) => {
+    this.inputEl.addEventListener("pointerdown", (e) => {
       downAt = performance.now(); downX = e.clientX; downY = e.clientY;
       setPointer(e);
       if (e.button !== 0) return;
@@ -1308,7 +1321,7 @@ export class NetScene {
       if (!n) return;
       e.stopImmediatePropagation();
       this.beginDrag(n);
-      this.renderer.domElement.setPointerCapture(e.pointerId);
+      this.inputEl.setPointerCapture(e.pointerId);
     }, true);
     const finishPointer = (e: PointerEvent) => {
       const wasDrag = this.dragging;
@@ -1320,15 +1333,33 @@ export class NetScene {
         this.select(wasDrag);
       }
     };
-    this.renderer.domElement.addEventListener("pointerup", finishPointer);
-    this.renderer.domElement.addEventListener("pointercancel", () => { if (this.dragging) this.endDrag(); });
-    this.renderer.domElement.addEventListener("dblclick", () => {
+    this.inputEl.addEventListener("pointerup", finishPointer);
+    this.inputEl.addEventListener("pointercancel", () => { if (this.dragging) this.endDrag(); });
+    this.inputEl.addEventListener("dblclick", () => {
       this.lookPinned = false;
       this.camCoastUntil = 0;
       this.cameraGoalDir = null;
     });
     this.animate = this.animate.bind(this);
-    this.raf = requestAnimationFrame(this.animate);
+    // the host drives hosted scenes from its own loop
+    if (!this.host) this.raf = requestAnimationFrame(this.animate);
+  }
+
+  // ------------------------------------------------------------------ HostedView
+
+  get viewEl(): HTMLElement { return this.container; }
+  hostFrame(ts: number): void { this.animate(ts); }
+  hostContextLost(): void { this.lumaProbe.reset(); }
+  hostContextRestored(): void { this.relayout(); }
+
+  /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
+  private present(): void {
+    if (this.host) {
+      this.lastVp = this.host.present(this, this.clearHex, this.scene, this.camera);
+    } else {
+      this.renderer.setClearColor(this.clearHex);
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   setFilters(f: Partial<Filters>): void {
@@ -1353,7 +1384,7 @@ export class NetScene {
     this.modeOpts = { ...opts };
     if (changed) {
       if (!this.satellite) notePerfChange();
-      for (const o of this.overlayObjs.values()) { this.scene.remove(o); o.element.remove(); }
+      for (const o of this.overlayObjs.values()) this.labelLayer.remove(o);
       this.overlayObjs.clear();
         if (mode.camera) {
         this.cameraGoalDir = new THREE.Vector3(...mode.camera).normalize();
@@ -1385,11 +1416,9 @@ export class NetScene {
     this.lines.visible = !on;
     this.glowLines.visible = !on && this.anim.edgeGlow !== "off";
     this.particles.visible = !on;
-    this.labels.visible = !on;
-    this.labelRenderer.domElement.style.visibility = on ? "hidden" : "";
-    if (on) {
-      for (const obj of this.overlayObjs.values()) obj.visible = false;
-    }
+    this.labelLayer.domElement.style.visibility = on ? "hidden" : "";
+    for (const obj of this.overlayObjs.values()) obj.visible = !on;
+    for (const obj of this.decoObjs.values()) obj.visible = !on;
     this.applyVisibility();
   }
 
@@ -1431,8 +1460,6 @@ export class NetScene {
       applyPhys(next, this.anim);
     }
     this.anim = next;
-    this.sim.velocityDecay(this.anim.drag);
-    this.centerForce.strength(0.02 * this.anim.centerPull);
     this.backdrop.setKind(a.backdrop);
     if (!this.satellite && a.backdrop === "dynamic") ensureSkyRecipe(a.skyAiMin * 60_000);
     if (!this.satellite) {
@@ -1458,7 +1485,7 @@ export class NetScene {
       this.camHueOn = false;
       this.onCamTheme(null);
     }
-    this.sim.alpha(Math.max(this.sim.alpha(), 0.08));
+    this.bumpAlpha(0.08);
     if (shouldRunMic(liveMic.micPolicy, a.audioDrive, this.audioLive())) void this.pulse.enable();
     else this.pulse.disable();
   }
@@ -1487,8 +1514,9 @@ export class NetScene {
       if (!obj) {
         const el = document.createElement("div");
         el.className = "overlay agent-deco";
-        obj = new CSS2DObject(el);
-        this.scene.add(obj);
+        obj = new LabelItem(el);
+        obj.visible = !this.stageOnly;
+        this.labelLayer.add(obj);
         this.decoObjs.set(d.id, obj);
       }
       const html = decoHtml(d);
@@ -1496,8 +1524,7 @@ export class NetScene {
     }
     for (const [id, obj] of this.decoObjs) {
       if (keep.has(id)) continue;
-      this.scene.remove(obj);
-      obj.element.remove();
+      this.labelLayer.remove(obj);
       this.decoObjs.delete(id);
     }
   }
@@ -1536,6 +1563,11 @@ export class NetScene {
     const want = this.baseDpr + (1 - this.baseDpr) * k;
     if (Math.abs(want - this.lastTuneDpr) < 0.04) return;
     this.lastTuneDpr = want;
+    if (this.host) {
+      // one canvas for the wall: only the main pane's auto-tune steers its pixel ratio
+      if (!this.satellite) this.host.setPixelRatio(want);
+      return;
+    }
     this.renderer.setPixelRatio(want);
   }
 
@@ -1571,19 +1603,6 @@ export class NetScene {
   private physPulse(): number {
     if (!this.anim.audioPhysics) return 1;
     return 1 + 0.85 * this.pulseLevel * this.anim.audioSens;
-  }
-
-  private magnetsNow(): Record<string, number> {
-    const a = this.anim;
-    const p = this.physPulse();
-    return {
-      self: a.magnetSelf * p,
-      gateway: a.magnetGateway * p,
-      lan: a.magnetLan * p,
-      local: a.magnetLocal * p,
-      internet: a.magnetInternet * p,
-      multicast: a.magnetMulticast * p,
-    };
   }
 
   private stringNow(): { segs: number; sag: number; wave: number } {
@@ -1669,8 +1688,7 @@ export class NetScene {
     const onset = Math.min(1, Math.abs(this.pulseLevel - this.prevPulseLevel) / Math.max(dt, 1 / 90) * 0.28);
     this.prevPulseLevel = this.pulseLevel;
     this.changeVel += (Math.min(1, 0.55 * this.layoutVel + 0.85 * onset) - this.changeVel) * Math.min(1, dt * 5);
-    if (this.gazeWanted() && !this.satellite) this.gaze.tick(liveCam.video, dt);
-    else this.gaze.tick(null, dt);
+    this.gaze.tick(this.gazeWanted() && !this.satellite ? liveCam.lookSample() : null, dt);
     if (!this.satellite) this.stepCamTheme();
     if (a.themeCycle === "audio" || a.skyCycle === "audio") this.stepBeat(dt);
     const skyP = a.skyAudio ? this.pulseLevel : 0;
@@ -1709,8 +1727,6 @@ export class NetScene {
       this.camera.fov += this.camStep.fov;
       this.camera.updateProjectionMatrix();
     }
-    const ease = THREE.MathUtils.clamp(this.anim.moveEase ?? 0.45, 0, 1);
-    this.sim.velocityDecay(0.35 - 0.22 * ease);
   }
 
   /**
@@ -1778,26 +1794,92 @@ export class NetScene {
     const segs = stringSegs(this.anim.stringAmt);
     const moving = easePhysToward(this.anim, this.physWant, dt);
     if (!moving) return;
-    this.sim.velocityDecay(this.anim.drag);
-    this.centerForce.strength(0.02 * this.anim.centerPull);
     if (stringSegs(this.anim.stringAmt) !== segs) this.rebuildLineBuffers();
-    this.sim.alpha(Math.max(this.sim.alpha(), 0.08));
+    this.bumpAlpha(0.08);
   }
 
-  /** Blend layout velocity so a force reversal has to slow the node before it can turn around. */
-  private easeNodeVel(dt: number): void {
-    const e = this.moveK(dt);
-    if (e >= 0.999) return;
-    for (const n of this.nodes.values()) {
-      if (n === this.dragging) continue;
-      const vx = n.vx ?? 0, vy = n.vy ?? 0, vz = n.vz ?? 0;
-      n.svx = (n.svx ?? vx) + (vx - (n.svx ?? vx)) * e;
-      n.svy = (n.svy ?? vy) + (vy - (n.svy ?? vy)) * e;
-      n.svz = (n.svz ?? vz) + (vz - (n.svz ?? vz)) * e;
-      n.vx = n.svx;
-      n.vy = n.svy;
-      n.vz = n.svz;
+  /** Ask the layout to warm up to at least `min` on its next tick (structure changes, drags, slider moves). */
+  private bumpAlpha(min: number): void {
+    if (min > this.pendingAlpha) this.pendingAlpha = min;
+  }
+
+  /**
+   * Per-frame layout knobs. Sent only when something changed. Velocity decay follows the motion-ease
+   * slider (the camera look pass has always been the last writer of that value); magnets carry the audio
+   * pulse themselves and the magnet / gravity / swirl forces scale by it again, as before.
+   */
+  private pushLayoutParams(dt: number): void {
+    const a = this.anim;
+    const p = this.physPulse();
+    const ease = THREE.MathUtils.clamp(a.moveEase ?? 0.45, 0, 1);
+    const byRole: Record<string, number> = {
+      self: a.magnetSelf, gateway: a.magnetGateway, local: a.magnetLocal, lan: a.magnetLan,
+      multicast: a.magnetMulticast, internet: a.magnetInternet,
+    };
+    const params: LayoutParams = {
+      spring: a.spring, chargeAmt: a.chargeAmt, linkSpan: a.linkSpan,
+      drag: 0.35 - 0.22 * ease, centerPull: a.centerPull,
+      magnets: ROLES.map((r) => (byRole[r] ?? 0) * p),
+      magnetCross: a.magnetCross, magnetRange: a.magnetRange, gravity: a.gravity, swirl: a.swirl, pulse: p,
+      spreadX: this.spreadX, spreadZ: this.spreadZ, flatten: this.mode.flatten !== false,
+      moveK: Math.round(this.moveK(dt) * 1000) / 1000,
+    };
+    const last = this.lastLayoutParams;
+    if (last && sameLayoutParams(last, params)) return;
+    this.lastLayoutParams = params;
+    this.layout.setParams(params);
+  }
+
+  /**
+   * One layout tick per frame. The active mode's `force` runs here against the positions the worker
+   * reported last frame; whatever it adds to `vx/vy/vz` is forwarded as a nudge and cleared.
+   */
+  private stepLayout(dt: number): void {
+    this.pushLayoutParams(dt);
+    if (this.layout.busy) return; // the previous tick has not answered; positions hold, requests wait
+    const sim = this.simNodes;
+    let nudge: Float32Array | null = null;
+    if (this.mode.force && sim.length) {
+      for (const n of sim) { n.vx = 0; n.vy = 0; n.vz = 0; }
+      this.mode.force(sim, this.layoutAlpha, this.ctx);
+      if (this.nudgeBuf.length < sim.length * 3) this.nudgeBuf = new Float32Array(sim.length * 3);
+      const b = this.nudgeBuf;
+      let any = false;
+      for (let i = 0; i < sim.length; i++) {
+        const n = sim[i]!;
+        const vx = n.vx ?? 0, vy = n.vy ?? 0, vz = n.vz ?? 0;
+        b[i * 3] = vx; b[i * 3 + 1] = vy; b[i * 3 + 2] = vz;
+        if (vx !== 0 || vy !== 0 || vz !== 0) any = true;
+      }
+      if (any) nudge = b;
     }
+    const sent = this.layout.frame({
+      type: "frame", gen: this.simGen, alphaMin: this.pendingAlpha, nudge,
+      pin: this.pendingPin, release: this.pendingRelease, recycle: this.posRecycle,
+    });
+    this.posRecycle = null;
+    if (sent) {
+      this.pendingAlpha = 0;
+      this.pendingPin = null;
+      this.pendingRelease = null;
+    }
+  }
+
+  /** Positions from the layout. The node being dragged follows the pointer directly and is skipped. */
+  private onLayoutPositions(m: PositionsMsg): void {
+    this.layoutAlpha = m.alpha;
+    if (m.gen === this.simGen) {
+      const sim = this.simNodes, pos = m.pos;
+      const n = Math.min(m.n, sim.length, pos.length / 3);
+      for (let i = 0; i < n; i++) {
+        const nd = sim[i]!;
+        if (nd === this.dragging) continue;
+        nd.x = pos[i * 3]!;
+        nd.y = pos[i * 3 + 1]!;
+        nd.z = pos[i * 3 + 2]!;
+      }
+    }
+    this.posRecycle = m.pos;
   }
 
   /**
@@ -1845,11 +1927,11 @@ export class NetScene {
     if (a.bgAudio) {
       const k = Math.min(1, this.pulseBass);
       painted = this.mixHex(baseClear, s.rim, (0.08 + 0.52 * k) * op);
-      this.renderer.setClearColor(painted);
+      this.clearHex = painted;
       if (fog) fog.color.setHex(this.mixHex(baseFog, s.rim, (0.06 + 0.42 * k) * op));
       this.backdrop.setColors(rim, painted);
     } else {
-      this.renderer.setClearColor(baseClear);
+      this.clearHex = baseClear;
       if (fog) fog.color.setHex(baseFog);
       this.backdrop.setColors(rim, baseClear);
     }
@@ -1863,8 +1945,7 @@ export class NetScene {
   private labelFgHex = 0xf4f6fb;
   /** Last sampled WebGL luma behind labels; -1 until the first read. */
   private sampledLuma = -1;
-  private lumaAt = 0;
-  private readonly lumaPix = new Uint8Array(4 * 16 * 16);
+  private readonly lumaProbe = new LumaProbe(16, 150);
   private lastVis: VisibilityReport | null = null;
   private visCap = SKY_LUMA_CAP;
   private visScale = 1;
@@ -1928,31 +2009,21 @@ export class NetScene {
     host.style.setProperty("--label-stroke", ink.stroke);
   }
 
-  /** Sample the framebuffer behind labels so ink tracks the real floor/sky, not just the estimate. */
+  /**
+   * Sample the framebuffer behind labels so ink tracks the real floor/sky, not just the estimate.
+   * Asynchronous: the probe is fenced and harvested a frame or two later, never stalling the GPU.
+   */
   private captureBackdropLuma(): void {
-    const now = performance.now();
-    if (now - this.lumaAt < 150) return;
-    this.lumaAt = now;
-    const gl = this.renderer.getContext();
-    if (!gl) return;
-    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
-    if (w < 16 || h < 16) return;
-    const tw = 16, th = 16;
-    const x = (w - tw) >> 1, y = (h - th) >> 1;
-    try {
-      gl.readPixels(x, y, tw, th, gl.RGBA, gl.UNSIGNED_BYTE, this.lumaPix);
-    } catch {
-      return;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
+    if (!gl || typeof gl.fenceSync !== "function") return;
+    if (this.host) {
+      const vp = this.lastVp;
+      if (!vp) return;
+      this.lumaProbe.tick(gl, vp.x + vp.w / 2, vp.y + vp.h / 2);
+    } else {
+      this.lumaProbe.tick(gl, gl.drawingBufferWidth / 2, gl.drawingBufferHeight / 2);
     }
-    const vals: number[] = [];
-    const d = this.lumaPix;
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i]!, g = d[i + 1]!, b = d[i + 2]!;
-      vals.push(relativeLuminance((r << 16) | (g << 8) | b));
-    }
-    if (vals.length < 8) return;
-    vals.sort((a, b) => a - b);
-    this.sampledLuma = vals[vals.length >> 1]!;
+    this.sampledLuma = this.lumaProbe.value;
   }
 
   /** Ease sky/floor dimming and blending toward the visibility tool's fix. Overlay only. */
@@ -2301,9 +2372,10 @@ export class NetScene {
       _off.copy(this.camera.position).sub(_pos.set(n.fx, n.fy, n.fz)).normalize(),
       _pos.set(n.fx, n.fy, n.fz),
     );
-    this.renderer.domElement.style.cursor = "grabbing";
+    this.inputEl.style.cursor = "grabbing";
     this.dragVel.set(0, 0, 0);
-    this.sim.alpha(Math.max(this.sim.alpha(), 0.2));
+    this.pinDrag(n);
+    this.bumpAlpha(0.2);
   }
 
   private moveDrag(): void {
@@ -2315,6 +2387,15 @@ export class NetScene {
     n.x = n.fx = this.dragHit.x;
     n.y = n.fy = this.dragHit.y;
     n.z = n.fz = this.dragHit.z;
+    this.pinDrag(n);
+  }
+
+  /** Tell the layout where the dragged node is held this frame. */
+  private pinDrag(n: GNode): void {
+    const i = this.simNodes.indexOf(n);
+    if (i < 0) return;
+    const p = this.pendingPin ?? (this.pendingPin = new Float32Array(4));
+    p[0] = i; p[1] = n.fx ?? n.x ?? 0; p[2] = n.fy ?? n.y ?? 0; p[3] = n.fz ?? n.z ?? 0;
   }
 
   private endDrag(): void {
@@ -2323,21 +2404,22 @@ export class NetScene {
     this.controls.enabled = true;
     this.dreamHeld = false;
     if (this.dreaming) this.captureDreamRest();
-    this.renderer.domElement.style.cursor = "";
+    this.inputEl.style.cursor = "";
     if (!n) return;
-    n.vx = (n.vx ?? 0) + this.dragVel.x * 10;
-    n.vy = (n.vy ?? 0) + this.dragVel.y * 10;
-    n.vz = (n.vz ?? 0) + this.dragVel.z * 10;
+    let vx = this.dragVel.x * 10, vy = this.dragVel.y * 10, vz = this.dragVel.z * 10;
     if (this.anim.audioNodes) {
       this.camera.getWorldDirection(_off);
       _off.cross(this.camera.up).normalize();
       const k = 40 + 90 * this.pulseBass;
-      n.vx += _off.x * k;
-      n.vy += _off.y * k * 0.25;
-      n.vz += _off.z * k;
+      vx += _off.x * k;
+      vy += _off.y * k * 0.25;
+      vz += _off.z * k;
     }
     n.fx = n.fy = n.fz = undefined;
-    this.sim.alpha(Math.max(this.sim.alpha(), 0.15));
+    const i = this.simNodes.indexOf(n);
+    // a pin still queued for this node lands first (final pointer position), then the release flings it
+    if (i >= 0) this.pendingRelease = Float32Array.of(i, vx, vy, vz);
+    this.bumpAlpha(0.15);
   }
 
   // ------------------------------------------------------------------ data
@@ -2468,7 +2550,9 @@ export class NetScene {
 
       this.applyVisibility();
       this.applyVolume();
-      if (added) this.syncSimulation(newNodes > 0 ? (this.nodes.size <= newNodes + 1 ? 1 : 0.12) : 0);
+      // every snapshot: rates and roles feed the slot / charge forces, so the worker gets fresh numbers
+      // even when the structure did not change (it keeps positions and velocities across the resend)
+      this.syncSimulation(added && newNodes > 0 ? (this.nodes.size <= newNodes + 1 ? 1 : 0.12) : 0);
       this.rebuildLineBuffers();
       this.rebuildParticles();
     } finally {
@@ -2520,9 +2604,57 @@ export class NetScene {
   private syncSimulation(minAlpha: number): void {
     const nodes = [...this.nodes.values()].filter((n) => n.visible);
     this.measureCrowds(nodes);
-    this.sim.nodes(nodes);
-    this.linkForce.links([...this.links.values()].filter((l) => l.visible));
-    if (minAlpha > 0) this.sim.alpha(Math.max(this.sim.alpha(), minAlpha));
+    const n = nodes.length;
+    const arr = new Float32Array(n * NODE_STRIDE);
+    const pos = new Float32Array(n * 3);
+    const idx = new Map<GNode, number>();
+    for (let i = 0; i < n; i++) {
+      const nd = nodes[i]!;
+      idx.set(nd, i);
+      const o = i * NODE_STRIDE;
+      const role = nd.device.role;
+      const baseR = this.baseShell(nd);
+      const sk = this.mode.shellStrength?.(nd);
+      const fixed = nd.fx !== undefined && nd !== this.dragging;
+      arr[o + N_KEY] = nd.simKey;
+      arr[o + N_ROLE] = roleIdx(role);
+      arr[o + N_SHELL_R] = this.crowdRadius.get(baseR) ?? baseR;
+      arr[o + N_SHELL_K] = sk ?? (role === "gateway" ? 1 : role === "internet" || role === "multicast" ? 0.6 : 0.9);
+      arr[o + N_SLOT] = sk === 0 ? 0 : 1;
+      arr[o + N_THETA] = hashAngle(nd.id);
+      arr[o + N_RELAX] = this.crowdRelax.get(baseR) ?? 1;
+      arr[o + N_CHARGE] = (this.mode.charge?.(nd) ?? (role === "lan" || role === "local" ? -500 : -90)) * (this.crowdCharge.get(baseR) ?? 1);
+      arr[o + N_RATE] = nd.rate;
+      arr[o + N_FIXED] = fixed ? 1 : 0;
+      arr[o + N_FX] = fixed ? nd.fx! : 0;
+      arr[o + N_FY] = fixed ? nd.fy ?? 0 : 0;
+      arr[o + N_FZ] = fixed ? nd.fz ?? 0 : 0;
+      pos[i * 3] = nd.x ?? 0;
+      pos[i * 3 + 1] = nd.y ?? 0;
+      pos[i * 3 + 2] = nd.z ?? 0;
+    }
+    const links: number[] = [];
+    for (const l of this.links.values()) {
+      if (!l.visible) continue;
+      const s = idx.get(l.source), t = idx.get(l.target);
+      if (s === undefined || t === undefined) continue;
+      const inet = l.source.device.role === "internet" || l.target.device.role === "internet";
+      const base = inet ? 260 * this.spreadX : 160 * (0.7 + 0.3 * this.spreadX);
+      const k = this.mode.linkStrength?.(l) ?? (l.id.startsWith("~") ? 0.03
+        : l.source.device.role === "multicast" || l.target.device.role === "multicast" ? 0
+        : 0.12);
+      links.push(s, t, base, k);
+    }
+    const linkArr = new Float32Array(links.length);
+    for (let i = 0; i < links.length; i += LINK_STRIDE) {
+      linkArr[i + L_SRC] = links[i]!;
+      linkArr[i + L_DST] = links[i + 1]!;
+      linkArr[i + L_BASE] = links[i + 2]!;
+      linkArr[i + L_K] = links[i + 3]!;
+    }
+    this.simNodes = nodes;
+    this.simGen++;
+    this.layout.setStructure({ type: "structure", gen: this.simGen, n, nodes: arr, pos, links: linkArr, minAlpha });
   }
 
   /**
@@ -2581,9 +2713,8 @@ export class NetScene {
   private addNode(d: Device, msg: StateMsg): GNode {
     const el = document.createElement("div");
     el.className = "label off";
-    const label = new CSS2DObject(el);
-    label.visible = false;
-    this.labels.add(label);
+    const label = new LabelItem(el);
+    this.labelLayer.add(label);
     // spawn on the role's shell, in the direction of its first known peer so it slides in rather than flying across
     const shell = SHELL[d.role];
     const peerIp = msg.flows.find((f) => f.a === d.ip || f.b === d.ip);
@@ -2596,7 +2727,7 @@ export class NetScene {
     const r = shell || 1;
     const c = new THREE.Color(this.theme.roles[d.role]);
     const n: GNode = {
-      id: d.ip, device: d, color: c, colorFrom: c.clone(), colorWant: c.clone(), scale: 0.01, glow: 0.15, opacity: 1, shape: 0,
+      id: d.ip, simKey: this.nextSimKey++, device: d, color: c, colorFrom: c.clone(), colorWant: c.clone(), scale: 0.01, glow: 0.15, opacity: 1, shape: 0,
       label, labelEl: el, visible: true, active: false, rate: 0, targetScale: this.sizeFor(d),
       x: dir.x * r * this.spreadX, y: dir.y * r, z: dir.z * r * this.spreadZ,
       px: dir.x * r * this.spreadX, py: dir.y * r, pz: dir.z * r * this.spreadZ,
@@ -2619,8 +2750,7 @@ export class NetScene {
   }
 
   private removeNode(n: GNode): void {
-    this.labels.remove(n.label);
-    n.labelEl.remove();
+    this.labelLayer.remove(n.label);
     this.nodes.delete(n.id);
     for (const [id, l] of this.links) if (l.source === n || l.target === n) this.links.delete(id);
     if (this.selected === n) this.select(null);
@@ -2670,12 +2800,19 @@ export class NetScene {
   private applyVisibility(): void {
     const ctx = this.ctx;
     const cap = paneLabelCap(ctx);
-    const visible = [...this.nodes.values()].filter((n) => this.nodeVisible(n));
-    const byBytes = (a: GNode, b: GNode) => (b.device.bytes_in + b.device.bytes_out) - (a.device.bytes_in + a.device.bytes_out) || b.rate - a.rate;
-    const topLan = new Set(visible.filter((n) => n.device.role === "lan" || n.device.role === "local").sort(byBytes).slice(0, cap).map((n) => n.id));
-    const topNet = new Set(visible.filter((n) => n.device.role === "internet").sort(byBytes).slice(0, cap).map((n) => n.id));
+    // one visibility pass; the label ranking below reads the flag instead of re-running the filter
+    const lan: GNode[] = [], net: GNode[] = [];
     for (const n of this.nodes.values()) {
       n.visible = this.nodeVisible(n);
+      if (!n.visible) continue;
+      const r = n.device.role;
+      if (r === "lan" || r === "local") lan.push(n);
+      else if (r === "internet") net.push(n);
+    }
+    const byBytes = (a: GNode, b: GNode) => (b.device.bytes_in + b.device.bytes_out) - (a.device.bytes_in + a.device.bytes_out) || b.rate - a.rate;
+    const topLan = new Set(lan.sort(byBytes).slice(0, cap).map((n) => n.id));
+    const topNet = new Set(net.sort(byBytes).slice(0, cap).map((n) => n.id));
+    for (const n of this.nodes.values()) {
       const r = n.device.role;
       const live = (n.labelUntil ?? 0) > this.now;
       const focused = n === this.selected || n === this.hovered;
@@ -2685,7 +2822,7 @@ export class NetScene {
       const showLabel = n.visible && this.filters.labels && (
         focused || live || this.mode.forceLabel?.(n, ctx) || (byRole && !this.mode.suppressLabel?.(n, ctx))
       );
-      n.label.visible = !!showLabel; // CSS2DRenderer owns element.style.display; drive it via object visibility
+      n.label.visible = !!showLabel; // the label layer owns element.style.display; drive it via item visibility
       n.labelEl.classList.toggle("off", !showLabel);
     }
     for (const l of this.links.values()) l.visible = l.source.visible && l.target.visible;
@@ -2774,21 +2911,22 @@ export class NetScene {
   private clock = new THREE.Clock();
 
   private animate(ts: number): void {
-    this.raf = requestAnimationFrame(this.animate);
+    if (!this.host) this.raf = requestAnimationFrame(this.animate);
     markFrame(ts);
     if (!this.active) return;
     const dt = Math.min(0.05, this.clock.getDelta());
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();
-      setFpsHint(s > 0.04
+      setFpsHint((s > 0.04
         ? (perfWant() > 0.5
           ? "display framerate · auto-tune easing labels, sparks, glow, and sky down"
           : "display framerate · auto-tune easing back up after a 1-minute recovered average")
         : "display framerate, averaged over the last second"
           + (this.lastVis && !this.lastVis.ok
             ? ` · visibility: ${this.lastVis.issues.map((i) => i.code).join(", ")}`
-            : ""));
+            : ""))
+        + ` · layout: ${this.layout.backend}/${this.layout.kernel}`);
     }
     this.tune = perfOverlay(this.anim, perfStress());
     this.syncTuneDpr();
@@ -2816,9 +2954,7 @@ export class NetScene {
       this.applyVisibility();
     }
 
-    if (this.sim.alpha() > 0.003) this.sim.tick();
-    else this.sim.alpha(0.003); // keep a gentle drift so new nodes always settle
-    this.easeNodeVel(dt);
+    this.stepLayout(dt);
 
     if (this.stageOnly) {
     this.sampleFocus(dt);
@@ -2836,24 +2972,31 @@ export class NetScene {
           this.paintClear();
         }
         this.tickViewShift(dt);
-        this.renderer.render(this.scene, this.camera);
+        this.present();
         this.captureBackdropLuma();
       return;
     }
 
-    // nodes: one instance each, rewritten every frame (hidden ones collapse to nothing rather than fading)
+    // nodes: one instance per drawn node, rewritten every frame. Hidden nodes shrink to nothing and then
+    // drop out of the instance list entirely, so a filtered-down view costs what it shows, not what it holds.
     const sp = this.spheres;
     const glowAttr = sp.geometry.getAttribute("instanceGlow") as THREE.InstancedBufferAttribute;
     const alphaAttr = sp.geometry.getAttribute("instanceAlpha") as THREE.InstancedBufferAttribute;
     const shapeAttr = sp.geometry.getAttribute("instanceShape") as THREE.InstancedBufferAttribute;
     const cpuView = this.mode.graphBase === "cpu";
-    const styleDirty = this.instanceStyleDirty;
     const modeCtx = this.ctx;
     const liveLook = this.mode.liveLook;
+    // instance indices are compacted over drawn nodes; when the drawn set changes, every colour / shape
+    // slot shifts, so restyle in the same frame rather than a frame late
+    let willDraw = 0;
+    for (const n of this.nodes.values()) if (n.visible || n.scale > COLLAPSED_SCALE) willDraw++;
+    if (willDraw !== sp.count) this.instanceStyleDirty = true;
+    const styleDirty = this.instanceStyleDirty;
     let liveStyle = false;
     let ni = 0;
     let labelsOn = 0;
     for (const n of this.nodes.values()) {
+      if (!n.visible && n.scale <= COLLAPSED_SCALE) continue;
       const target = n.visible ? n.targetScale : 0.01;
       n.scale += (target - n.scale) * Math.min(1, dt * 6);
       const boost = n === this.selected ? 1.1 : n === this.hovered ? 0.7 : n.active ? 0.45 : 0.12;
@@ -3029,7 +3172,7 @@ export class NetScene {
     const h = this.pick();
     if (h !== this.hovered) {
       this.hovered = h;
-      this.renderer.domElement.style.cursor = h ? "pointer" : "";
+      this.inputEl.style.cursor = h ? "pointer" : "";
       this.applyVisibility();
     }
 
@@ -3043,15 +3186,16 @@ export class NetScene {
         if (!obj) {
           const el = document.createElement("div");
           el.className = "overlay";
-          obj = new CSS2DObject(el);
-          this.scene.add(obj);
+          obj = new LabelItem(el);
+          obj.visible = !this.stageOnly;
+          this.labelLayer.add(obj);
           this.overlayObjs.set(o.id, obj);
         }
         obj.position.set(o.x, o.y, o.z);
         if (obj.element.innerHTML !== o.html) obj.element.innerHTML = o.html;
       }
     }
-    for (const [id, obj] of this.overlayObjs) if (!_overlayKeep.has(id)) { this.scene.remove(obj); obj.element.remove(); this.overlayObjs.delete(id); }
+    for (const [id, obj] of this.overlayObjs) if (!_overlayKeep.has(id)) { this.labelLayer.remove(obj); this.overlayObjs.delete(id); }
     this.placeDecos();
 
     this.sampleFocus(dt);
@@ -3079,11 +3223,11 @@ export class NetScene {
       this.paintClear();
     }
     this.tickViewShift(dt);
-    this.renderer.render(this.scene, this.camera);
+    this.present();
     this.captureBackdropLuma();
     const labelsWanted = labelsOn > 0 || this.overlayObjs.size > 0 || this.decoObjs.size > 0;
     if (labelsWanted || this.labelsDrawn) {
-      this.labelRenderer.render(this.scene, this.camera);
+      this.labelLayer.render(this.camera);
       this.labelsDrawn = labelsWanted;
     }
   }
@@ -3157,8 +3301,8 @@ export class NetScene {
     this.viewW = w;
     this.viewH = h;
     this.camera.aspect = w / h;
-    this.renderer.setSize(w, h);
-    this.labelRenderer.setSize(w, h);
+    if (!this.host) this.renderer.setSize(w, h); // hosted: the wall canvas is sized by the host
+    this.labelLayer.setSize(w, h);
     this.backdrop.setViewport(w, h);
     this.applyViewShift();
     this.updateSpread();
@@ -3173,12 +3317,11 @@ export class NetScene {
     const changed = Math.abs(nextX - this.spreadX) > 0.04 || Math.abs(nextZ - this.spreadZ) > 0.04;
     this.spreadX = nextX;
     this.spreadZ = nextZ;
-    this.chargeForce.distanceMax(700 * this.spreadX);
     // PlaneGeometry is XY; the floor mesh is rotated -90° about X, so local Y is world Z.
     this.grid.mesh.scale.set(Math.max(1, this.spreadX * 1.15), Math.max(1, this.spreadZ), 1);
     const fog = this.scene.fog as THREE.FogExp2 | null;
     if (fog) fog.density = this.fogDensity();
-    if (changed && this.nodes.size) this.sim.alpha(Math.max(this.sim.alpha(), 0.18));
+    if (changed && this.nodes.size) this.bumpAlpha(0.18);
   }
 
   private fogDensity(): number {
@@ -3192,8 +3335,16 @@ export class NetScene {
     this.ro.disconnect();
     window.removeEventListener("resize", this.onWinResize);
     this.pulse.disable();
-    this.renderer.forceContextLoss();
-    this.renderer.dispose();
+    this.layout.dispose();
+    this.lumaProbe.reset();
+    this.controls.dispose();
+    if (this.host) {
+      this.host.remove(this);
+      this.container.classList.remove("hosted");
+    } else {
+      this.renderer.forceContextLoss();
+      this.renderer.dispose();
+    }
     this.container.replaceChildren();
   }
 
@@ -3207,91 +3358,15 @@ export class NetScene {
   get selectedIp(): string | null { return this.selected?.id ?? null; }
 }
 
-/**
- * Pull LAN/self nodes toward the y=0 plane so they form a ring around the gateway; internet nodes stay spherical.
- * `relax` (0..1) weakens the pull per node, so a crowded shell can open into a sphere.
- */
-function flattenLan(strength: number, enabled: () => boolean, relax: (n: GNode) => number) {
-  let nodes: GNode[] = [];
-  const force = (alpha: number) => {
-    if (!enabled()) return;
-    for (const n of nodes) {
-      const r = n.device.role;
-      if (r === "lan" || r === "self" || r === "local") n.vy = (n.vy ?? 0) - (n.y ?? 0) * strength * relax(n) * alpha;
-    }
-  };
-  force.initialize = (ns: GNode[]) => { nodes = ns; };
-  return force;
-}
-
-/** Radial shell in stretched coordinates so the graph is an ellipse matching a wide viewport. */
-function ellipseShell(
-  radius: (n: GNode) => number,
-  strength: (n: GNode) => number,
-  spreadX: () => number,
-  spreadZ: () => number,
-) {
-  let nodes: GNode[] = [];
-  const force = (alpha: number) => {
-    const sx = spreadX(), sz = spreadZ();
-    for (const n of nodes) {
-      const k0 = strength(n);
-      if (!k0) continue;
-      const x = (n.x ?? 0) / sx, y = n.y ?? 0, z = (n.z ?? 0) / sz;
-      const dist = Math.hypot(x, y, z) || 1e-6;
-      const k = (radius(n) - dist) * k0 * alpha;
-      n.vx = (n.vx ?? 0) + (x / dist) * k * sx;
-      n.vy = (n.vy ?? 0) + (y / dist) * k;
-      n.vz = (n.vz ?? 0) + (z / dist) * k * sz;
-    }
-  };
-  force.initialize = (ns: GNode[]) => { nodes = ns; };
-  return force;
-}
-
-/** Stable azimuth on the ellipse so busy nodes fan left/right instead of collapsing onto the camera-facing meridian. */
-function slotRing(
-  radius: (n: GNode) => number,
-  strength: (n: GNode) => number | undefined,
-  spreadX: () => number,
-  spreadZ: () => number,
-) {
-  let nodes: GNode[] = [];
-  const force = (alpha: number) => {
-    const sx = spreadX(), sz = spreadZ();
-    for (const n of nodes) {
-      if (strength(n) === 0) continue;
-      const role = n.device.role;
-      if (role === "gateway" || role === "multicast") continue;
-      const r = radius(n);
-      if (r < 8) continue;
-      const rho = Math.hypot((n.x ?? 0) / sx, (n.z ?? 0) / sz);
-      const mag = rho > 8 ? rho : r;
-      const theta = hashAngle(n.id);
-      const tx = Math.cos(theta) * mag * sx;
-      const tz = Math.sin(theta) * mag * sz;
-      const hot = Math.min(1, Math.log10(1 + n.rate) / 3.2);
-      const k = (0.02 + 0.14 * hot) * alpha;
-      n.vx = (n.vx ?? 0) + (tx - (n.x ?? 0)) * k;
-      n.vz = (n.vz ?? 0) + (tz - (n.z ?? 0)) * k;
-    }
-  };
-  force.initialize = (ns: GNode[]) => { nodes = ns; };
-  return force;
-}
-
-function hashAngle(id: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return ((h >>> 0) / 4294967296) * Math.PI * 2;
-}
-
-/** Delegates to the active mode's custom force each tick. */
-function modeForce(apply: (nodes: GNode[], alpha: number) => void) {
-  let nodes: GNode[] = [];
-  const force = (alpha: number) => apply(nodes, alpha);
-  force.initialize = (ns: GNode[]) => { nodes = ns; };
-  return force;
+function sameLayoutParams(a: LayoutParams, b: LayoutParams): boolean {
+  if (
+    a.spring !== b.spring || a.chargeAmt !== b.chargeAmt || a.linkSpan !== b.linkSpan || a.drag !== b.drag ||
+    a.centerPull !== b.centerPull || a.magnetCross !== b.magnetCross || a.magnetRange !== b.magnetRange ||
+    a.gravity !== b.gravity || a.swirl !== b.swirl || a.pulse !== b.pulse || a.spreadX !== b.spreadX ||
+    a.spreadZ !== b.spreadZ || a.flatten !== b.flatten || a.moveK !== b.moveK
+  ) return false;
+  for (let i = 0; i < a.magnets.length; i++) if (a.magnets[i] !== b.magnets[i]) return false;
+  return true;
 }
 
 export function escapeHtml(s: string): string {

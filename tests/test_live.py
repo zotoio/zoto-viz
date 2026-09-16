@@ -66,3 +66,18 @@ def test_sanitize_drops_junk() -> None:
     assert p["show"] == {"lan": False}
     assert p["plugins"]["command"]["prompt"] == "harbour"
     assert "exec" not in p
+    full = {f"k{i}": True for i in range(30)}
+    full.update({"gravity": 1.5, "swirl": 0.4, "mosaic": "4", "hero": "left", "stringAmt": 0.8})
+    anim = live.sanitize_patch({"anim": full})["anim"]
+    assert anim["gravity"] == 1.5
+    assert anim["mosaic"] == "4"
+    assert anim["hero"] == "left"
+    assert anim["stringAmt"] == 0.8
+    look = live.sanitize_patch({"agent": {"shader": "vec3 color(vec3 d, float t) { return uAccent; }", "clear": False}, "shuffle": True})
+    assert look["shuffle"] is True
+    assert "color" in look["agent"]["shader"]
+    dice = live.sanitize_patch({"dice": {"include": {"theme": False, "nope": True}, "labelsMax": 32, "mosaicMax": "8", "handoff": False}})["dice"]
+    assert dice["include"] == {"theme": False}
+    assert dice["labelsMax"] == 32
+    assert dice["mosaicMax"] == "8"
+    assert dice["handoff"] is False

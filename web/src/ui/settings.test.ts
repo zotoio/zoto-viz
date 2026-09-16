@@ -32,6 +32,12 @@ describe("Settings panes", () => {
     expect(labels).toContain("This view");
     expect(labels).toContain("Graph");
     expect(labels).toContain("Physics");
+    expect(labels).toContain("Dice");
+    const dicePane = s.el.querySelector('[data-pane="dice"]');
+    expect(dicePane?.textContent).toMatch(/Randomiser/);
+    expect(dicePane?.textContent).toMatch(/theme/);
+    expect(dicePane?.textContent).toMatch(/Soft ceilings/);
+    expect(dicePane?.textContent).toMatch(/hand back to AI/);
     const net = document.createElement("div");
     net.dataset.k = "net";
     const sys = document.createElement("div");

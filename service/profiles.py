@@ -172,6 +172,21 @@ def current_id() -> str:
     return str(doc.get("default") or SHIPPED_ID)
 
 
+def list_meta() -> dict[str, Any]:
+    """Profile ids/labels for MCP / operators."""
+    return _meta(_read())
+
+
+def profile_entry(pid: str) -> dict[str, Any] | None:
+    """One profile including its settings blob, or None."""
+    pid = (pid or "").strip()
+    doc = _read()
+    p = doc["profiles"].get(pid)
+    if not p:
+        return None
+    return {"id": pid, "default": doc["default"], **_body_out(pid, p)}
+
+
 async def api_list(_request: web.Request) -> web.Response:
     try:
         doc = _read()

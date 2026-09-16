@@ -118,6 +118,9 @@ describe("pickAgentSettings", () => {
     const t = pickAgentSettings({ temper: 88, weather: "storm" }, ["talkers"]);
     expect(t.temper).toBe(88);
     expect(t.weather).toBe("storm");
+    expect(pickAgentSettings({ shuffle: true }, ["talkers"]).shuffle).toBe(true);
+    const d = pickAgentSettings({ dice: { include: { theme: false }, labelsMax: 32, mosaicMax: "8", bogus: 1 } }, ["talkers"]);
+    expect(d.dice).toEqual({ include: { theme: false }, labelsMax: 32, mosaicMax: "8" });
     expect(pickAgentSettings({ mode: "nope", camera: "maybe", mic: "maybe", chrome: "bottom" }, ["talkers"])).toEqual({});
   });
 });

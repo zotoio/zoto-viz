@@ -1,10 +1,16 @@
 import * as THREE from "three";
 import { parseCamPolicy, shouldRunCamera, type CamConsumer, type CamPolicy, CAM_STORE_KEY } from "./want";
-import { relativeLuminance } from "../core/themes";
+import { dominantChroma, type LookHit } from "./analyze";
+import { CamSampler } from "./sampler";
+
+export { dominantChroma };
 
 /**
  * One shared webcam stream. Consumers (`live-sky`, `gaze`, `cam-theme`) are refcounted.
  * The global policy (`auto` | `off`) is an override: Off stops tracks immediately.
+ *
+ * Pixel analysis (face, dominant colour, luminance) runs through one `CamSampler` — in a worker when
+ * the browser has WebCodecs track processors — so the render loop never copies video frames itself.
  */
 
 class LiveCam {
@@ -33,19 +39,15 @@ class LiveCam {
 
   private grabCanvas: HTMLCanvasElement | null = null;
   private grabCtx: CanvasRenderingContext2D | null = null;
-  private sampleCool = 0;
   private sampleHex = 0;
-  private lumaCool = 0;
   private lumaSample = 0.55;
+  /** shared frame analysis (worker when available); started with the stream, stopped with it */
+  readonly sampler = new CamSampler();
 
   /** Chromatic peak of the current frame (packed RGB), or 0 when the picture is dark / grey / not ready. */
   sampleMain(now = performance.now()): number {
     if (!this.ready) return 0;
-    if (now < this.sampleCool) return this.sampleHex;
-    this.sampleCool = now + 120;
-    const pix = this.grab(48, 27);
-    if (!pix) return this.sampleHex;
-    const hex = dominantChroma(pix);
+    const hex = this.sampler.chroma(now);
     if (hex) this.sampleHex = hex;
     return this.sampleHex;
   }
@@ -53,21 +55,20 @@ class LiveCam {
   /** Mean WCAG luminance of the current frame (0–1), for label ink. */
   sampleLuma(now = performance.now()): number {
     if (!this.ready) return this.lumaSample;
-    if (now < this.lumaCool) return this.lumaSample;
-    this.lumaCool = now + 120;
-    const pix = this.grab(32, 18);
-    if (!pix) return this.lumaSample;
-    let s = 0, n = 0;
-    const d = pix.data;
-    for (let i = 0; i < d.length; i += 4) {
-      s += relativeLuminance((d[i]! << 16) | (d[i + 1]! << 8) | d[i + 2]!);
-      n++;
-    }
-    if (n) this.lumaSample = s / n;
+    this.lumaSample = this.sampler.luma(this.lumaSample, now);
     return this.lumaSample;
   }
 
-  /** A downscaled frame for face / colour sampling. */
+  /** Latest face / pupil estimate on the mirrored frame, or null when not ready / nobody in frame. */
+  lookSample(now = performance.now()): LookHit | null {
+    if (!this.ready) return null;
+    return this.sampler.look(now);
+  }
+
+  /**
+   * A downscaled frame copied on the main thread. This is the expensive path (it forces a GPU→CPU copy
+   * of the whole video frame); nothing in the render loop uses it any more. Kept for one-off callers.
+   */
   grab(w: number, h: number): ImageData | null {
     if (!this.ready) return null;
     if (!this.grabCanvas) {
@@ -121,6 +122,7 @@ class LiveCam {
       this.stream = stream;
       this.video.srcObject = stream;
       await this.video.play();
+      this.sampler.start(stream, this.video);
       const tex = new THREE.VideoTexture(this.video);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.minFilter = THREE.LinearFilter;
@@ -136,6 +138,7 @@ class LiveCam {
   }
 
   private stop(): void {
+    this.sampler.stop();
     if (this.stream) {
       for (const t of this.stream.getTracks()) t.stop();
       this.stream = null;
@@ -150,34 +153,3 @@ class LiveCam {
 }
 
 export const liveCam = new LiveCam();
-
-const HUE_BINS = 24;
-
-/** Highest-chroma hue in the frame, pushed to a usable accent lightness. Greys and near-black do not count. */
-export function dominantChroma(img: ImageData): number {
-  const pix = img.data;
-  const mass = new Float32Array(HUE_BINS);
-  const hr = new Float32Array(HUE_BINS), hg = new Float32Array(HUE_BINS), hb = new Float32Array(HUE_BINS);
-  for (let i = 0; i < pix.length; i += 4) {
-    const r = pix[i]!, g = pix[i + 1]!, b = pix[i + 2]!;
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    const d = max - min;
-    const l = (max + min) / 510;
-    if (d < 18 || l < 0.12 || l > 0.92) continue;
-    const s = d / (255 - Math.abs(max + min - 255));
-    if (s < 0.18) continue;
-    let h = 0;
-    if (max === r) h = ((g - b) / d + 6) % 6;
-    else if (max === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    const bin = Math.min(HUE_BINS - 1, Math.floor((h / 6) * HUE_BINS));
-    const w = s * (1 - Math.abs(l - 0.5) * 1.4);
-    mass[bin] += w;
-    hr[bin] += r * w; hg[bin] += g * w; hb[bin] += b * w;
-  }
-  let best = 0, bi = -1;
-  for (let i = 0; i < HUE_BINS; i++) if (mass[i]! > best) { best = mass[i]!; bi = i; }
-  if (bi < 0 || best < 4) return 0;
-  const r = hr[bi]! / best, g = hg[bi]! / best, b = hb[bi]! / best;
-  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
-}

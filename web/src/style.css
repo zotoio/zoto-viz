@@ -55,6 +55,10 @@ body[data-chrome="left"] #wall { left: var(--bar-w); }
 body[data-chrome="right"] #wall { right: var(--bar-w); }
 #scene { position: absolute; inset: 0; background: var(--scene-bg); }
 #scene canvas { display: block; background: var(--scene-bg); }
+/* one WebGL canvas for the whole wall (render-host.ts); hosted panes are transparent windows onto it */
+/* a replaced element ignores `inset` for its size: the explicit 100% keeps it on the wall's box */
+#wall > canvas.render-host { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; pointer-events: none; background: transparent; }
+#scene.hosted, .mosaic-scene.hosted, .mosaic-pane.glass { background: transparent; }
 /* NetPong owns the screen while its mode is active; the 3D scene is hidden and its frame loop idles */
 /* the arcade views (NetPong, Invaders, Command, Frogger): one full-screen canvas each, only the active one shown */
 .arcade { position: absolute; inset: 0; }
@@ -136,6 +140,19 @@ body[data-chrome="right"] .sense-pair .toggle { flex: 1; min-width: 0; }
 #modeBox .plugin-cog { width: 30px; height: 30px; flex: none; }
 #modeBox .plugin-cog[hidden] { display: none; }
 #modeBox .plugin-cog[aria-expanded="true"] svg { transform: rotate(90deg); }
+#diceBox { display: inline-flex; align-items: center; }
+#diceBox .cog.dice svg { transition: transform 0.2s ease; }
+#diceBox .cog.dice:hover svg { transform: rotate(18deg); }
+#diceBox .cog.dice.rolling svg { animation: dice-roll 0.45s ease; }
+@keyframes dice-roll {
+  0% { transform: rotate(0deg) scale(1); }
+  40% { transform: rotate(140deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+body[data-chrome="left"] #diceBox,
+body[data-chrome="right"] #diceBox { width: 100%; }
+body[data-chrome="left"] #diceBox .cog,
+body[data-chrome="right"] #diceBox .cog { width: 100%; height: 32px; }
 #modeOpts { display: contents; }
 #quick { display: none; }
 #quick[hidden] { display: none; }
@@ -460,6 +477,7 @@ body.cam-off .camera-look { opacity: 0.45; pointer-events: none; }
 .settings-pop .sbody { display: flex; flex-direction: column; flex: 1; overflow: auto; min-width: 0; }
 .settings-pop .spane[hidden] { display: none; }
 .settings-pop .sec-controls { display: flex; flex-direction: column; gap: 8px; }
+.settings-pop .dice-include { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
 .settings-pop .sec { padding: 12px 14px; }
 .settings-pop .sec + .sec { border-top: 1px solid var(--line); }
 .settings-pop .sec-title {

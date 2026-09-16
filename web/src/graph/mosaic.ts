@@ -1,4 +1,5 @@
 import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize } from "./scene";
+import type { RenderHost } from "./render-host";
 import { allModes, modeById, viewCaption, type ViewMode } from "../core/modes";
 import { lookForMode, mergeLook } from "../plugins/plugin";
 import type { Device, StateMsg } from "../core/types";
@@ -73,6 +74,8 @@ export class Mosaic {
     wall: HTMLElement;
     sceneEl: HTMLElement;
     main: NetScene;
+    /** shared WebGL context for every graph pane; satellites get their own canvas when absent */
+    host?: RenderHost;
     arcade: Record<string, ArcadeSlot>;
     optsFor: (m: ViewMode) => Record<string, string>;
     onFocus: (id: string) => void;
@@ -91,20 +94,37 @@ export class Mosaic {
     return this.extras.find((e) => e.id === id)?.scene ?? null;
   }
 
+  /** Put the hero graph + arcade hosts back on #wall (mosaic teardown empties it). */
+  private restoreSolo(): void {
+    this.size = "off";
+    this.hero = "off";
+    this.heroId = "";
+    document.body.classList.remove("mosaic");
+    document.body.dataset.mosaic = "off";
+    document.body.dataset.hero = "off";
+    this.cfg.main.setCompactLabels(false);
+    this.cfg.wall.append(this.cfg.sceneEl, ...Object.values(this.cfg.arcade).map((a) => a.el));
+    this.cfg.host?.invalidate();
+  }
+
   setSize(size: MosaicSize, prefer?: string, hero: HeroPos = "off"): void {
     this.teardown();
-    this.size = size;
-    this.hero = size === "off" ? "off" : hero;
-    this.heroId = "";
-    document.body.classList.toggle("mosaic", size !== "off");
-    document.body.dataset.mosaic = size;
-    document.body.dataset.hero = this.hero;
     if (size === "off") {
-      this.cfg.main.setCompactLabels(false);
-      this.cfg.wall.append(this.cfg.sceneEl, ...Object.values(this.cfg.arcade).map((a) => a.el));
+      this.restoreSolo();
       return;
     }
-    const ids = mosaicIds(size, prefer, this.hero);
+    const ids = mosaicIds(size, prefer, hero);
+    // Catalog is empty until installPlugins(); never leave #wall blank.
+    if (!ids.length) {
+      this.restoreSolo();
+      return;
+    }
+    this.size = size;
+    this.hero = hero;
+    this.heroId = "";
+    document.body.classList.add("mosaic");
+    document.body.dataset.mosaic = size;
+    document.body.dataset.hero = this.hero;
     if (this.hero !== "off") this.heroId = ids[0] ?? "";
     const panes = new Map<string, HTMLElement>();
     const pending: { id: string; host: HTMLElement }[] = [];
@@ -113,6 +133,8 @@ export class Mosaic {
       const pane = this.makePane(id, id === this.heroId);
       panes.set(id, pane);
       if (isGraph(id)) {
+        // graph panes are windows onto the shared canvas underneath; arcade panes keep their own backdrop
+        if (this.cfg.host) pane.classList.add("glass");
         if (!usedMain) {
           pane.appendChild(this.cfg.sceneEl);
           this.cfg.main.setMode(modeById(id), this.cfg.optsFor(modeById(id)));
@@ -138,7 +160,7 @@ export class Mosaic {
     void this.cfg.wall.offsetHeight;
     const st = this.cfg.sync();
     for (const p of pending) {
-      const s = new NetScene(p.host, { satellite: true });
+      const s = new NetScene(p.host, { satellite: true, host: this.cfg.host });
       this.applySync(s, p.id, st);
       s.setMode(modeById(p.id), this.cfg.optsFor(modeById(p.id)));
       this.extras.push({ id: p.id, scene: s });
@@ -205,6 +227,7 @@ export class Mosaic {
   private relayoutAll(): void {
     this.cfg.main.relayout();
     for (const e of this.extras) e.scene.relayout();
+    this.cfg.host?.invalidate();
   }
 
   private placePanes(ids: string[]): void {

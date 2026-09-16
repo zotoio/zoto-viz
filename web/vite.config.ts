@@ -11,6 +11,9 @@ export default defineConfig({
       "/api": { target: `http://127.0.0.1:${monitorPort}` },
     },
   },
+  // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same
+  // bytes in with `?inline` (no Node fs types in the browser tsconfig)
+  assetsInclude: ["**/*.wasm"],
   build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
   test: {
     environment: "happy-dom",

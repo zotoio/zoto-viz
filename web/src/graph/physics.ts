@@ -72,6 +72,91 @@ export interface PhysNode {
   device: { role: string };
 }
 
+/**
+ * Pull LAN/self nodes toward the y=0 plane so they form a ring around the gateway; internet nodes stay spherical.
+ * `relax` (0..1) weakens the pull per node, so a crowded shell can open into a sphere.
+ */
+export function flattenLan<N extends PhysNode>(strength: number, enabled: () => boolean, relax: (n: N) => number) {
+  let nodes: N[] = [];
+  const force = (alpha: number) => {
+    if (!enabled()) return;
+    for (const n of nodes) {
+      const r = n.device.role;
+      if (r === "lan" || r === "self" || r === "local") n.vy = (n.vy ?? 0) - (n.y ?? 0) * strength * relax(n) * alpha;
+    }
+  };
+  force.initialize = (ns: N[]) => { nodes = ns; };
+  return force;
+}
+
+/** Radial shell in stretched coordinates so the graph is an ellipse matching a wide viewport. */
+export function ellipseShell<N extends PhysNode>(
+  radius: (n: N) => number,
+  strength: (n: N) => number,
+  spreadX: () => number,
+  spreadZ: () => number,
+) {
+  let nodes: N[] = [];
+  const force = (alpha: number) => {
+    const sx = spreadX(), sz = spreadZ();
+    for (const n of nodes) {
+      const k0 = strength(n);
+      if (!k0) continue;
+      const x = (n.x ?? 0) / sx, y = n.y ?? 0, z = (n.z ?? 0) / sz;
+      const dist = Math.hypot(x, y, z) || 1e-6;
+      const k = (radius(n) - dist) * k0 * alpha;
+      n.vx = (n.vx ?? 0) + (x / dist) * k * sx;
+      n.vy = (n.vy ?? 0) + (y / dist) * k;
+      n.vz = (n.vz ?? 0) + (z / dist) * k * sz;
+    }
+  };
+  force.initialize = (ns: N[]) => { nodes = ns; };
+  return force;
+}
+
+/**
+ * Stable azimuth on the ellipse so busy nodes fan left/right instead of collapsing onto the camera-facing meridian.
+ * `theta` is the node's fixed slot angle (see `hashAngle`); `rate` its bytes/s, which sharpens the pull.
+ */
+export function slotRing<N extends PhysNode>(
+  radius: (n: N) => number,
+  strength: (n: N) => number | undefined,
+  theta: (n: N) => number,
+  rate: (n: N) => number,
+  spreadX: () => number,
+  spreadZ: () => number,
+) {
+  let nodes: N[] = [];
+  const force = (alpha: number) => {
+    const sx = spreadX(), sz = spreadZ();
+    for (const n of nodes) {
+      if (strength(n) === 0) continue;
+      const role = n.device.role;
+      if (role === "gateway" || role === "multicast") continue;
+      const r = radius(n);
+      if (r < 8) continue;
+      const rho = Math.hypot((n.x ?? 0) / sx, (n.z ?? 0) / sz);
+      const mag = rho > 8 ? rho : r;
+      const th = theta(n);
+      const tx = Math.cos(th) * mag * sx;
+      const tz = Math.sin(th) * mag * sz;
+      const hot = Math.min(1, Math.log10(1 + rate(n)) / 3.2);
+      const k = (0.02 + 0.14 * hot) * alpha;
+      n.vx = (n.vx ?? 0) + (tx - (n.x ?? 0)) * k;
+      n.vz = (n.vz ?? 0) + (tz - (n.z ?? 0)) * k;
+    }
+  };
+  force.initialize = (ns: N[]) => { nodes = ns; };
+  return force;
+}
+
+/** FNV-1a of the node id onto [0, 2π): a stable slot angle that survives reloads and snapshot churn. */
+export function hashAngle(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) / 4294967296) * Math.PI * 2;
+}
+
 export interface ParticleBudget {
   /** 0–2 overall density */
   amt: number;

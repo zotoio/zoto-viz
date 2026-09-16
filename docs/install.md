@@ -70,7 +70,7 @@ Windows (manual): install Python 3.12 (Add to PATH), Node.js 22 LTS, and Wiresha
 
 The monitor binds **127.0.0.1** by default. Non-loopback bind is refused unless you pass `--insecure-lan` (no password; anyone who can reach the port can read captures and trigger scans). Do not expose the Ollama proxy on the LAN.
 
-The monitor also serves a loopback MCP endpoint at `http://127.0.0.1:7020/mcp` for live settings, plugin knobs, agent temper/weather, and contrib zip install. See [Plugins](/plugins). Installing a zip that ships `backend/` or `datasource/` reloads that Python in-process. Checkout `service/*.py` changes are picked up by restarting the monitor (Cursor stop hook, `pnpm restart:backend`, or `systemctl --user restart zoto-viz-monitor`).
+The monitor also serves a loopback MCP endpoint at `http://127.0.0.1:7020/mcp` for the live UI (theme, view, motion, physics, mosaic, plugins, dice), LAN state, RF watch, profiles, memories, plugin consent/draft, and contrib zip install. See [Plugins](/plugins). Installing a zip that ships `backend/` or `datasource/` reloads that Python in-process. Checkout `service/*.py` changes are picked up by restarting the monitor (Cursor stop hook, `pnpm restart:backend`, or `systemctl --user restart zoto-viz-monitor`).
 
 In-process plugin Python stays off until `ZOTO_VIZ_PLUGIN_SERVICE=1`. AI Control is a server flag (`~/.zoto-viz/ai-control` or `ZOTO_VIZ_AI_CONTROL`); the UI toggle writes that file.
 

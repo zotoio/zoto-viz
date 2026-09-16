@@ -4,6 +4,7 @@ import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { EMPTY_LOOK, mergeAgentLook, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { DREAM_BOUNDS, type DreamAnim } from "../graph/scene";
 import { FLOOR_SHAPES } from "../graph/floor";
+import { DICE_INCLUDE_KEYS, mergeDice, DEFAULT_DICE, type DicePatch } from "../core/shuffle";
 
 const JPEG_MAX = 900_000;
 const JPEG_MIN = 32;
@@ -71,6 +72,8 @@ export interface AgentPatch {
   agent?: Partial<AgentLook> & { clear?: boolean };
   temper?: number;
   weather?: string;
+  shuffle?: boolean;
+  dice?: DicePatch;
 }
 
 export const VIEW_KEY = "zoto-viz.aiView";
@@ -337,7 +340,33 @@ export function pickAgentSettings(patch: Record<string, unknown>, modeIds: strin
   const temper = Number(patch.temper);
   if (Number.isFinite(temper)) out.temper = Math.min(100, Math.max(0, Math.round(temper)));
   if (typeof patch.weather === "string") out.weather = patch.weather;
+  if (patch.shuffle === true) out.shuffle = true;
+  const dice = pickDice(patch.dice);
+  if (dice) out.dice = dice;
   return out;
+}
+
+function pickDice(raw: unknown): DicePatch | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const s = raw as Record<string, unknown>;
+  const out: DicePatch = {};
+  if (s.include && typeof s.include === "object" && !Array.isArray(s.include)) {
+    const inc = s.include as Record<string, unknown>;
+    const include: NonNullable<DicePatch["include"]> = {};
+    for (const k of DICE_INCLUDE_KEYS) {
+      if (typeof inc[k] === "boolean") include[k] = inc[k];
+    }
+    if (Object.keys(include).length) out.include = include;
+  }
+  if (typeof s.handoff === "boolean") out.handoff = s.handoff;
+  if (typeof s.cycle === "boolean") out.cycle = s.cycle;
+  if (s.mosaicMax === "4" || s.mosaicMax === "6" || s.mosaicMax === "8") out.mosaicMax = s.mosaicMax;
+  const nums = ["labelsMax", "sparksMax", "sparkPeak", "feedDensityMax", "nodeTop"] as const;
+  for (const k of nums) {
+    const n = Number(s[k]);
+    if (Number.isFinite(n)) out[k] = n;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 export function mergeAgentPatch(base: ProfileSettings, patch: AgentPatch): ProfileSettings {
@@ -359,5 +388,6 @@ export function mergeAgentPatch(base: ProfileSettings, patch: AgentPatch): Profi
     arcade: patch.arcade ? { ...base.arcade, ...patch.arcade } : base.arcade,
     plugins: patch.plugins ? { ...base.plugins, ...patch.plugins } : base.plugins,
     agent: patch.agent ? mergeAgentLook(base.agent ?? EMPTY_LOOK, patch.agent) : (base.agent ?? EMPTY_LOOK),
+    dice: patch.dice ? mergeDice(base.dice ?? DEFAULT_DICE, patch.dice) : (base.dice ?? DEFAULT_DICE),
   };
 }

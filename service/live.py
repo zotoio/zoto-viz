@@ -68,11 +68,103 @@ WEATHER = {
 }
 
 SHOW_KEYS = ("lan", "internet", "multicast", "offline", "labels", "cpuIdle")
-CHROME = {"top", "left", "right"}
-CAM = {"auto", "off"}
-FEED_SRC = {"traffic", "transcript", "both"}
-FEED_LAY = {"ticker", "bars", "both"}
-FEED_SCOPE = {"lan", "selected", "any"}
+CHROME = ("top", "left", "right")
+CAM = ("auto", "off")
+FEED_SRC = ("traffic", "transcript", "both")
+FEED_LAY = ("ticker", "bars", "both")
+FEED_SCOPE = ("lan", "selected", "any")
+THEMES = (
+    "midnight", "ocean", "nord", "dracula", "solarized",
+    "gruvbox", "ember", "neon", "tactical", "paper",
+)
+BACKDROPS = (
+    "none", "fractal", "space", "matrix", "live", "aurora", "rain", "ocean",
+    "fire", "warp", "clouds", "circuit", "plasma", "lattice", "dynamic",
+    "custom", "plugin",
+)
+FLOOR_SHAPES = ("square", "hex", "triangle", "diamond", "circle")
+AUDIO_DRIVES = ("mic", "traffic", "node")
+THEME_CYCLES = ("off", "cadence", "audio")
+EDGE_GLOWS = ("off", "comet", "pulse")
+MOSAIC_SIZES = ("off", "4", "6", "8")
+HERO_POS = ("off", "left", "center", "right")
+FOCUS_MODES = ("activity", "motion", "cloud")
+DICE_INCLUDE = (
+    "theme", "view", "mosaic", "chrome", "feed", "camera", "mic",
+    "motion", "physics", "knobs", "show",
+)
+DICE_MOSAIC_MAX = ("4", "6", "8")
+ANIM_BOOL = (
+    "follow", "cycle", "randomize", "skyAudio", "bgAudio", "gridAudio",
+    "audioCamera", "camTheme", "audioNodes", "audioPhysics", "audioParts", "autoTune",
+)
+# mirrors web/src/graph/scene.ts DREAM_BOUNDS (plus shared opacity/bright/magnet aliases)
+ANIM_NUM: dict[str, dict[str, float]] = {
+    "yawPeriod": {"min": 40, "max": 480, "step": 10},
+    "pitchDeg": {"min": 0, "max": 20, "step": 1},
+    "pitchPeriod": {"min": 6, "max": 40, "step": 1},
+    "zoom": {"min": 0, "max": 0.7, "step": 0.05},
+    "zoomPeriod": {"min": 15, "max": 180, "step": 5},
+    "cyclePeriod": {"min": 15, "max": 180, "step": 5},
+    "skyOpacity": {"min": 0, "max": 1, "step": 0.05},
+    "skyBright": {"min": 0, "max": 2, "step": 0.05},
+    "skySpeed": {"min": 0, "max": 4, "step": 0.05},
+    "skyEase": {"min": 0, "max": 1, "step": 0.05},
+    "skyAiMin": {"min": 1, "max": 30, "step": 1},
+    "bgOpacity": {"min": 0, "max": 1, "step": 0.05},
+    "gridOpacity": {"min": 0, "max": 1, "step": 0.05},
+    "gridBright": {"min": 0, "max": 2, "step": 0.05},
+    "gridSize": {"min": 16, "max": 160, "step": 4},
+    "audioSens": {"min": 0, "max": 2, "step": 0.05},
+    "camAudio": {"min": 0, "max": 2, "step": 0.05},
+    "camChange": {"min": 0, "max": 2, "step": 0.05},
+    "camGaze": {"min": 0, "max": 2, "step": 0.05},
+    "camInertia": {"min": 0, "max": 1, "step": 0.05},
+    "moveEase": {"min": 0, "max": 1, "step": 0.05},
+    "labelWeight": {"min": 0.5, "max": 2, "step": 0.05},
+    "labelCount": {"min": 8, "max": 120, "step": 4},
+    "nodeWeight": {"min": 0.4, "max": 2.5, "step": 0.05},
+    "edgeWeight": {"min": 0.3, "max": 2.5, "step": 0.05},
+    "edgeGlowAmt": {"min": 0.2, "max": 2, "step": 0.05},
+    "edgeGlowSpeed": {"min": 0.25, "max": 3, "step": 0.05},
+    "partAmt": {"min": 0, "max": 2, "step": 0.05},
+    "partBusy": {"min": 0.25, "max": 3, "step": 0.05},
+    "partQuiet": {"min": 0, "max": 4000, "step": 50},
+    "partPeak": {"min": 1, "max": 80, "step": 1},
+    "partCap": {"min": 20, "max": 4000, "step": 20},
+    "partSpeed": {"min": 0.25, "max": 3, "step": 0.05},
+    "partSize": {"min": 0.3, "max": 2.5, "step": 0.05},
+    "magnetSelf": {"min": -1, "max": 1, "step": 0.05},
+    "magnetGateway": {"min": -1, "max": 1, "step": 0.05},
+    "magnetLan": {"min": -1, "max": 1, "step": 0.05},
+    "magnetLocal": {"min": -1, "max": 1, "step": 0.05},
+    "magnetInternet": {"min": -1, "max": 1, "step": 0.05},
+    "magnetMulticast": {"min": -1, "max": 1, "step": 0.05},
+    "magnetCross": {"min": -1, "max": 1, "step": 0.05},
+    "magnetRange": {"min": 0.15, "max": 2, "step": 0.05},
+    "gravity": {"min": 0, "max": 2, "step": 0.05},
+    "swirl": {"min": 0, "max": 2, "step": 0.05},
+    "chargeAmt": {"min": 0, "max": 2, "step": 0.05},
+    "spring": {"min": 0, "max": 2, "step": 0.05},
+    "linkSpan": {"min": 0.4, "max": 2.5, "step": 0.05},
+    "drag": {"min": 0.12, "max": 0.7, "step": 0.01},
+    "centerPull": {"min": 0, "max": 2, "step": 0.05},
+    "stringAmt": {"min": 0, "max": 1, "step": 0.05},
+}
+ANIM_ENUM = {
+    "backdrop": BACKDROPS,
+    "gridShape": FLOOR_SHAPES,
+    "audioDrive": AUDIO_DRIVES,
+    "themeCycle": THEME_CYCLES,
+    "skyCycle": THEME_CYCLES,
+    "edgeGlow": EDGE_GLOWS,
+    "mosaic": MOSAIC_SIZES,
+    "hero": HERO_POS,
+    "focus": FOCUS_MODES,
+}
+ANIM_STR = ("bgColor", "gridColor")
+ANIM_CAP = 120
+MAP_CAP = 80
 
 _temper = DEFAULT_TEMPER
 _weather = DEFAULT_WEATHER
@@ -273,6 +365,14 @@ def sanitize_patch(raw: Any) -> dict[str, Any]:
         out["control"] = raw["control"]
     if isinstance(raw.get("model"), str) and raw["model"].strip():
         out["model"] = raw["model"].strip()[:64]
+    if raw.get("shuffle") is True:
+        out["shuffle"] = True
+    dice = _dice(raw.get("dice"))
+    if dice:
+        out["dice"] = dice
+    agent_look = _agent(raw.get("agent"))
+    if agent_look:
+        out["agent"] = agent_look
     return out
 
 
@@ -299,17 +399,59 @@ def _feed(raw: Any) -> dict[str, Any]:
     return out
 
 
+def _dice(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    include = _bool_map(raw.get("include"), DICE_INCLUDE)
+    if include:
+        out["include"] = include
+    if isinstance(raw.get("handoff"), bool):
+        out["handoff"] = raw["handoff"]
+    if isinstance(raw.get("cycle"), bool):
+        out["cycle"] = raw["cycle"]
+    if raw.get("mosaicMax") in DICE_MOSAIC_MAX:
+        out["mosaicMax"] = raw["mosaicMax"]
+    labels = _num(raw.get("labelsMax"), 8, 120)
+    if labels is not None:
+        out["labelsMax"] = int(labels)
+    sparks = _num(raw.get("sparksMax"), 20, 3000)
+    if sparks is not None:
+        out["sparksMax"] = int(sparks)
+    peak = _num(raw.get("sparkPeak"), 1, 80)
+    if peak is not None:
+        out["sparkPeak"] = int(peak)
+    dens = _num(raw.get("feedDensityMax"), 12, 80)
+    if dens is not None:
+        out["feedDensityMax"] = int(dens)
+    top = _num(raw.get("nodeTop"), 8, 80)
+    if top is not None:
+        out["nodeTop"] = int(top)
+    return out
+
+
 def _anim(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return {}
     out: dict[str, Any] = {}
-    for k, v in list(raw.items())[:40]:
+    for k, v in list(raw.items())[:ANIM_CAP]:
         key = str(k)[:32]
-        if isinstance(v, bool):
+        if key in ANIM_BOOL and isinstance(v, bool):
             out[key] = v
-        elif isinstance(v, (int, float)) and not isinstance(v, bool):
+        elif key in ANIM_NUM and isinstance(v, (int, float)) and not isinstance(v, bool):
+            b = ANIM_NUM[key]
+            n = float(v) if not isinstance(v, int) else int(v)
+            lo, hi = b["min"], b["max"]
+            out[key] = max(lo, min(hi, n))
+        elif key in ANIM_ENUM and isinstance(v, str) and v in ANIM_ENUM[key]:
+            out[key] = v
+        elif key in ANIM_STR and isinstance(v, str) and len(v) <= 48:
+            out[key] = v
+        elif isinstance(v, bool) and key not in ANIM_NUM:
+            out[key] = v
+        elif isinstance(v, (int, float)) and not isinstance(v, bool) and key not in ANIM_ENUM:
             out[key] = float(v) if not isinstance(v, int) else int(v)
-        elif isinstance(v, str) and len(v) <= 48:
+        elif isinstance(v, str) and len(v) <= 48 and key not in ANIM_ENUM:
             out[key] = v
     return out
 
@@ -334,7 +476,7 @@ def _flat(raw: Any) -> dict[str, str]:
     if not isinstance(raw, dict):
         return {}
     out: dict[str, str] = {}
-    for k, v in list(raw.items())[:40]:
+    for k, v in list(raw.items())[:MAP_CAP]:
         if isinstance(v, (str, int, float, bool)):
             out[str(k)[:64]] = str(v)[:200]
     return out
@@ -344,10 +486,55 @@ def _nested(raw: Any) -> dict[str, dict[str, str]]:
     if not isinstance(raw, dict):
         return {}
     out: dict[str, dict[str, str]] = {}
-    for k, v in list(raw.items())[:40]:
+    for k, v in list(raw.items())[:MAP_CAP]:
         inner = _flat(v)
         if inner:
             out[str(k)[:48]] = inner
+    return out
+
+
+def _agent(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    if isinstance(raw.get("clear"), bool):
+        out["clear"] = raw["clear"]
+    shader = raw.get("shader")
+    if isinstance(shader, str) and shader.strip():
+        out["shader"] = shader[:16_000]
+    photo = raw.get("shaderPhoto")
+    if isinstance(photo, str) and photo.strip():
+        out["shaderPhoto"] = photo.strip()[:64]
+    decos = raw.get("decos")
+    if isinstance(decos, list):
+        cleaned: list[dict[str, Any]] = []
+        for row in decos[:24]:
+            if not isinstance(row, dict):
+                continue
+            kind = row.get("kind")
+            src = row.get("src")
+            did = row.get("id")
+            if kind not in {"photo", "svg"} or not isinstance(src, str) or not isinstance(did, str):
+                continue
+            item: dict[str, Any] = {
+                "id": did.strip()[:40],
+                "kind": kind,
+                "src": src.strip()[:2000],
+            }
+            at = row.get("at")
+            if at in {"selected", "internet", "origin"}:
+                item["at"] = at
+            elif isinstance(at, list) and len(at) >= 3:
+                try:
+                    item["at"] = [float(at[0]), float(at[1]), float(at[2])]
+                except (TypeError, ValueError):
+                    item["at"] = "internet"
+            if isinstance(row.get("label"), str) and row["label"].strip():
+                item["label"] = row["label"].strip()[:80]
+            if item["id"] and item["src"]:
+                cleaned.append(item)
+        if cleaned:
+            out["decos"] = cleaned
     return out
 
 
@@ -367,7 +554,48 @@ def features() -> dict[str, Any]:
         "settings": [
             "theme", "dream", "mode", "chrome", "camera", "mic", "redact", "merge",
             "feed", "show", "filters", "anim", "modeOptions", "arcade", "plugins",
+            "agent", "dice", "shuffle", "temper", "weather", "control", "model",
         ],
+        "theme": {"values": list(THEMES)},
+        "chrome": {"values": list(CHROME)},
+        "camera": {"values": list(CAM)},
+        "mic": {"values": list(CAM)},
+        "show": {"keys": list(SHOW_KEYS), "type": "boolean"},
+        "filters": {"keys": ["allowNames", "blockNames", "allowNets", "blockNets"]},
+        "feed": {
+            "on": {"type": "boolean"},
+            "source": {"values": list(FEED_SRC)},
+            "layout": {"values": list(FEED_LAY)},
+            "scope": {"values": list(FEED_SCOPE)},
+            "modulate": {"type": "boolean"},
+            "density": {"min": 12, "max": 80},
+            "textSize": {"min": 10, "max": 20},
+        },
+        "anim": {
+            "bool": list(ANIM_BOOL),
+            "number": ANIM_NUM,
+            "enum": {k: list(v) for k, v in ANIM_ENUM.items()},
+            "string": list(ANIM_STR),
+        },
+        "look": {
+            "shader": "GLSL fragment (vec3 color or void main)",
+            "shaderPhoto": "asset id",
+            "decos": "photo/svg pins ({id, kind, src, at, label?})",
+            "clear": {"type": "boolean"},
+        },
+        "shuffle": {"type": "boolean", "hint": "roll_dice — groups on Settings → Dice"},
+        "dice": {
+            "roll_dice": "header dice; respects include + ceilings on Settings → Dice",
+            "include": {"keys": list(DICE_INCLUDE), "type": "boolean", "default": True},
+            "handoff": {"type": "boolean", "hint": "chat turn after a roll when cycling is on"},
+            "cycle": {"type": "boolean", "hint": "dream + view cycling + AI Control after a roll"},
+            "labelsMax": {"min": 8, "max": 120, "default": 48},
+            "sparksMax": {"min": 20, "max": 3000, "default": 800},
+            "sparkPeak": {"min": 1, "max": 80, "default": 48},
+            "mosaicMax": {"values": list(DICE_MOSAIC_MAX), "default": "6"},
+            "feedDensityMax": {"min": 12, "max": 80, "default": 48},
+            "nodeTop": {"min": 8, "max": 80, "default": 40},
+        },
         "agent": {
             "temper": {"min": TEMPER_MIN, "max": TEMPER_MAX, "default": DEFAULT_TEMPER, "bands": list(TEMPER_BANDS)},
             "weather": {"values": list(WEATHERS), "default": DEFAULT_WEATHER, "odds": {
@@ -379,4 +607,11 @@ def features() -> dict[str, Any]:
         "plugins": "list_plugins / set_plugin — options, config, prompt per catalog id",
         "view": "set_view { mode }",
         "install": "install_plugin_zip { zip_b64, overwrite?, force? }",
+        "draft": "draft_plugin { files, install? } — validate / write plugins/src/<id>/ when AI Control is on",
+        "consent": "consent_plugin { id, kind: reviewed|authored }",
+        "state": "get_state — live LAN snapshot",
+        "traffic": "get_traffic { ip, peer?, since? }",
+        "rf": "get_rf_watch / set_rf_watch { ssids, other?, dwell?, rotate? }",
+        "profiles": "list_profiles / apply_profile { id }",
+        "memories": "list_memories / add_memory { text } / delete_memory { id? }",
     }

@@ -869,28 +869,19 @@ def _draft_files(body: dict[str, Any]) -> dict[str, str]:
     return tree
 
 
-async def api_draft_plugin(req: web.Request) -> web.Response:
+def draft_plugin(body: dict[str, Any]) -> dict[str, Any]:
     """Validate a plugin-src tree and optionally write it under plugins/src/<id>/."""
-    try:
-        body = await req.json()
-    except Exception:
-        return web.json_response({"error": "invalid json"}, status=400)
-    if not isinstance(body, dict):
-        return web.json_response({"error": "object required"}, status=400)
-    try:
-        tree = _draft_files(body)
-    except ValueError as e:
-        return web.json_response({"error": str(e)}, status=400)
     import yaml
     from . import plugin_zip as pz
     from . import plugin_migration as pmg
 
+    tree = _draft_files(body)
     yml_name = "plugin.yml" if "plugin.yml" in tree else "plugin.yaml"
     try:
         doc = yaml.safe_load(tree[yml_name])
         plugins.validate_doc(doc)
     except Exception as e:
-        return web.json_response({"ok": False, "error": str(e)})
+        return {"ok": False, "error": str(e)}
     if "visualisation.yml" not in tree:
         plugin, viz = pmg.split_plugin_doc(doc)
         if viz:
@@ -905,42 +896,55 @@ async def api_draft_plugin(req: web.Request) -> web.Response:
             out.write_text(text, encoding="utf-8")
         pz.inspect_src(tmp)
         plugins.validate_doc(yaml.safe_load((tmp / yml_name).read_text(encoding="utf-8")))
-    except Exception as e:
-        shutil.rmtree(tmp, ignore_errors=True)
-        return web.json_response({"ok": False, "error": str(e)})
-    preview = yaml.safe_load((tmp / yml_name).read_text(encoding="utf-8"))
-    pid = str(doc["id"])
-    hint = (
-        f"{pid} is live at plugins/src/{pid}/; "
-        f"share with zoto-viz plugin pack {pid} -o dist/{pid}.zip"
-    )
-    if not ai_control_on() or not body.get("install"):
-        shutil.rmtree(tmp, ignore_errors=True)
-        return web.json_response({
+        preview = yaml.safe_load((tmp / yml_name).read_text(encoding="utf-8"))
+        pid = str(doc["id"])
+        hint = (
+            f"{pid} is live at plugins/src/{pid}/; "
+            f"share with zoto-viz plugin pack {pid} -o dist/{pid}.zip"
+        )
+        if not ai_control_on() or not body.get("install"):
+            return {
+                "ok": True,
+                "preview": preview,
+                "installed": False,
+                "aiControl": ai_control_on(),
+                "hint": hint,
+            }
+        dest = paths.plugin_src_dir() / pid
+        dest.mkdir(parents=True, exist_ok=True)
+        written: list[str] = []
+        for rel, text in tree.items():
+            out = dest / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(text, encoding="utf-8")
+            written.append(str(out))
+        return {
             "ok": True,
             "preview": preview,
-            "installed": False,
-            "aiControl": ai_control_on(),
+            "installed": True,
+            "id": pid,
+            "written": written,
             "hint": hint,
-        })
-    dest = paths.plugin_src_dir() / pid
-    dest.mkdir(parents=True, exist_ok=True)
-    written: list[str] = []
-    for rel, text in tree.items():
-        out = dest / rel
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8")
-        written.append(str(out))
-    shutil.rmtree(tmp, ignore_errors=True)
-    return web.json_response({
-        "ok": True,
-        "preview": preview,
-        "installed": True,
-        "id": pid,
-        "written": written,
-        "hint": hint,
-        "aiControl": True,
-    })
+            "aiControl": True,
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+async def api_draft_plugin(req: web.Request) -> web.Response:
+    """Validate a plugin-src tree and optionally write it under plugins/src/<id>/."""
+    try:
+        body = await req.json()
+    except Exception:
+        return web.json_response({"error": "invalid json"}, status=400)
+    if not isinstance(body, dict):
+        return web.json_response({"error": "object required"}, status=400)
+    try:
+        return web.json_response(draft_plugin(body))
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
 
 
 

@@ -1,4 +1,4 @@
-import { NetScene, escapeHtml, type Filters } from "../graph/scene";
+import { AUDIO_DRIVES, NetScene, escapeHtml, type Filters } from "../graph/scene";
 import { Panel } from "../ui/panel";
 import { allModes, defaultCatalogMode, defaultOpts, graphModes, modeById, type ViewMode } from "../core/modes";
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";
@@ -10,7 +10,9 @@ import { Settings } from "../ui/settings";
 import { LiveFeed, feedViewShift } from "../ui/feed";
 import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
-import { ProfileStore, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
+import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
+import { DICE_HANDOFF, shuffleLook } from "../core/shuffle";
+import { cycleSkyPool } from "../graph/backdrop";
 import { PongView } from "../arcade/pong";
 import { InvadersView } from "../arcade/invaders";
 import { CommandView } from "../arcade/command";
@@ -18,6 +20,7 @@ import { FroggerView } from "../arcade/frogger";
 import { CpuPongView } from "../arcade/cpupong";
 import { DoomView } from "../arcade/doom";
 import { Mosaic } from "../graph/mosaic";
+import { RenderHost } from "../graph/render-host";
 import {
   applyPluginConfigs,
   collectPluginConfigs,
@@ -75,7 +78,9 @@ for (const k of Object.keys(localStorage)) {
 let theme: Theme = themeById(localStorage.getItem("zoto-viz.theme"));
 applyThemeChrome(theme);
 
-const scene = new NetScene($("scene"));
+// one WebGL context for the whole wall: the main graph and every mosaic tile draw through it
+const renderHost = new RenderHost($("wall"));
+const scene = new NetScene($("scene"), { host: renderHost });
 bindFps($("fps"));
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
@@ -229,7 +234,10 @@ const feedCtl: { feed: LiveFeed | null } = { feed: null };
 let feedShiftInited = false;
 function syncFeedShift(): void {
   if (!feedCtl.feed) return;
-  scene.setViewShift(feedViewShift($("livefeed").offsetWidth, chrome, $("scene").clientWidth), !feedShiftInited);
+  const sceneEl = $("scene");
+  const feedEl = $("livefeed");
+  if (!sceneEl || !feedEl) return;
+  scene.setViewShift(feedViewShift(feedEl.offsetWidth, chrome, sceneEl.clientWidth), !feedShiftInited);
   feedShiftInited = true;
 }
 const modeSel = new Select({
@@ -596,6 +604,7 @@ mosaic = new Mosaic({
   wall: $("wall"),
   sceneEl: $("scene"),
   main: scene,
+  host: renderHost,
   arcade,
   optsFor,
   onFocus: (id) => applyMode(id),
@@ -713,16 +722,19 @@ agent.captureView = () => captureHud({
 agent.onApplySettings = (patch) => { void applyAgentPatch(patch); };
 agent.onApplyLook = (look) => applyAgentLook(look);
 $("aiBox").appendChild(agent.headerEl);
+const diceBtn = document.createElement("button");
+diceBtn.type = "button";
+diceBtn.className = "cog dice";
+diceBtn.title = "randomize the groups on Settings → Dice, then hand back to AI if that is on";
+diceBtn.setAttribute("aria-label", "randomize dice groups and hand back to AI");
+diceBtn.innerHTML = `<svg viewBox="0 0 20 20" aria-hidden="true" width="16" height="16"><rect x="2.5" y="2.5" width="15" height="15" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="7" r="1.25" fill="currentColor"/><circle cx="13" cy="7" r="1.25" fill="currentColor"/><circle cx="10" cy="10" r="1.25" fill="currentColor"/><circle cx="7" cy="13" r="1.25" fill="currentColor"/><circle cx="13" cy="13" r="1.25" fill="currentColor"/></svg>`;
+$("diceBox").appendChild(diceBtn);
 agent.onCycle = (on) => {
   localStorage.setItem(CYCLE_KEY, on ? "1" : "0");
   void setAiCycle(on);
 };
 scene.setNodeFilter((d) => settings.matches(d));
 scene.setAnim(mergeLook(settings.animSettings, lookForMode(modeSel.value)));
-if (settings.animSettings.mosaic !== "off") {
-  mosaic.setSize(settings.animSettings.mosaic, modeSel.value, settings.animSettings.hero);
-  applyMode(modeSel.value);
-}
 scene.onDreamPulse = () => {
   quiet(() => {
     const a = settings.animSettings;
@@ -838,6 +850,9 @@ void (async () => {
   agent.setControlFromServer(session.aiControl);
   pluginSpecs = await installPlugins();
   modeSel.setOptions(viewSelectOptions());
+  if (settings.animSettings.mosaic !== "off") {
+    mosaic.setSize(settings.animSettings.mosaic, modeSel.value, settings.animSettings.hero);
+  }
   applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
   await profiles.boot();
   applyMode(modeSel.value);
@@ -866,6 +881,13 @@ function decoAt(raw: unknown): DecoAt {
 
 async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
   const p = pickAgentSettings(patch, allModes().map((m) => m.id));
+  if (p.dice) {
+    applySettings(mergeAgentPatch(collectSettings(), { dice: p.dice }));
+  }
+  if (p.shuffle) {
+    await rollDice();
+    return;
+  }
   if (p.temper != null || p.weather) agent.syncTemper({ temper: p.temper, weather: p.weather });
   const next = mergeAgentPatch(collectSettings(), p);
   applySettings(next);
@@ -936,6 +958,7 @@ function collectSettings(): ProfileSettings {
     camera: liveCam.camPolicy,
     mic: liveMic.micPolicy,
     agent: sceneAgentLook(),
+    dice: { ...settings.diceSettings, include: { ...settings.diceSettings.include } },
     autosave: profiles?.autosave ?? false,
   };
 }
@@ -971,6 +994,7 @@ function applySettings(s: ProfileSettings): void {
   paintAgentLook(s.agent ?? { decos: [] });
   settings.applyAnim(s.anim);
   settings.applyFeed(s.feed);
+  settings.applyDice(s.dice ?? settings.diceSettings);
   if (s.camera) settings.setCamPolicy(s.camera);
   if (s.mic) settings.setMicPolicy(s.mic);
   if (activeArcade) {
@@ -1014,6 +1038,66 @@ async function setAiCycle(on: boolean): Promise<void> {
     aiBusy = false;
   }
 }
+
+const DICE_ROLL_MS = 450;
+let diceBusy = false;
+function diceModes(): ViewMode[] {
+  const allowed = new Set(viewSelectOptions().map((o) => o.value));
+  const ready = allModes().filter((m) => {
+    if (!allowed.has(m.id)) return false;
+    if (!m.pluginId) return true;
+    const spec = pluginSpecs.find((p) => p.id === m.pluginId);
+    if (!spec) return true;
+    return !pluginNeedsReview(spec) || !!spec.consent;
+  });
+  return ready.length ? ready : allModes().filter((m) => allowed.has(m.id));
+}
+
+async function rollDice(): Promise<void> {
+  if (diceBusy) return;
+  diceBusy = true;
+  diceBtn.classList.add("rolling");
+  try {
+    const modes = diceModes();
+    const dice = settings.diceSettings;
+    let rolled = shuffleLook(collectSettings(), {
+      themes: THEMES.map((t) => t.id),
+      modes: modes.map((m) => ({ id: m.id, options: m.options, config: m.config })),
+      plugins: pluginSpecs.map((s) => ({ id: s.id, fields: pluginViewKnobs(s) })),
+      skies: cycleSkyPool(),
+      audioDrives: (liveMic.micPolicy === "off"
+        ? AUDIO_DRIVES.filter((d) => d.value !== "mic")
+        : AUDIO_DRIVES).map((d) => d.value),
+    });
+    if (dice.cycle) rolled = aiCycleSettings(rolled, { keepLook: true });
+    rolled.mode = modeById(rolled.mode).id;
+    applySettings(rolled);
+    if (dice.cycle && !agent.cycleOn) {
+      await profiles?.writeAi(collectSettings(), agent.modelTag);
+      await setAiCycle(true);
+      applySettings(rolled);
+    }
+    await profiles?.writeAi(collectSettings(), agent.modelTag);
+    invalidateSkyRecipe();
+    if (dice.handoff && agent.cycleOn) void handBackToAi();
+  } catch (e) {
+    console.warn("zoto-viz dice:", e);
+  } finally {
+    window.setTimeout(() => {
+      diceBtn.classList.remove("rolling");
+      diceBusy = false;
+    }, DICE_ROLL_MS);
+  }
+}
+
+async function handBackToAi(tries = 16): Promise<void> {
+  for (let i = 0; i < tries; i++) {
+    if (agent.offerSend(DICE_HANDOFF)) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+diceBtn.addEventListener("click", () => { void rollDice(); });
+settings.onDice = () => { void rollDice(); };
 
 // the panel sits under the header; keep its offset in sync with the header's wrapped height
 const bar = $("bar");

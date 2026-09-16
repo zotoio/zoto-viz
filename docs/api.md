@@ -19,7 +19,7 @@ Host must be loopback (unless `--insecure-lan`). Browser `Origin` must also be l
 | `PUT /api/plugins/{id}/consent` | `{kind: "reviewed" \| "authored"}` after source review |
 | `GET /api/plugins/{id}/module.js` | compiled TypeScript (`?h=` cache-bust; 404 if missing). CSP locked down. Consent is a UI/sandbox gate, not HTTP 403 |
 | `GET /api/plugins/{id}/sky/fragment.glsl` | custom far-field shader (`?h=` cache-bust; 403 without consent) |
-| `GET/POST /mcp` | loopback MCP. Tools: `list_features`, `get_settings`, `set_settings`, `list_plugins`, `set_plugin`, `set_view`, `set_agent`, `install_plugin_zip`. CSRF skipped; Host still loopback. Settings/plugin patches land on the open UI via WebSocket `live` |
+| `GET/POST /mcp` | loopback MCP. Tools: `list_features`, `get_settings`, `set_settings`, `list_plugins`, `set_plugin`, `set_view`, `set_agent`, `roll_dice`, `get_state`, `get_traffic`, `get_rf_watch`, `set_rf_watch`, `consent_plugin`, `draft_plugin`, `list_profiles`, `apply_profile`, `list_memories`, `add_memory`, `delete_memory`, `install_plugin_zip`. CSRF skipped; Host still loopback. Settings/plugin patches land on the open UI via WebSocket `live` |
 | `GET /api/ai/status` | Ollama reachability plus current temper/weather |
 | `GET/PUT /api/ai/control` | server-side AI Control (`~/.zoto-viz/ai-control`; env `ZOTO_VIZ_AI_CONTROL` wins) |
 | `GET/PUT /api/ai/temper` | `{temper: 0–100, weather: hush\|drift\|pulse\|storm}` — Agent craziness + AI Dynamic rebuild odds |

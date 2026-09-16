@@ -161,16 +161,22 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
     _repo(tmp_path, monkeypatch)
     listed = plugin_mcp.handle_rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {t["name"] for t in listed["result"]["tools"]}
-    assert names == {
+    assert {
         "list_features", "get_settings", "set_settings",
         "list_plugins", "set_plugin", "set_view", "set_agent",
-        "install_plugin_zip",
-    }
+        "roll_dice", "get_state", "get_traffic", "get_rf_watch", "set_rf_watch",
+        "consent_plugin", "draft_plugin", "list_profiles", "apply_profile",
+        "list_memories", "add_memory", "delete_memory", "install_plugin_zip",
+    } <= names
     unknown = plugin_mcp.call_tool("list_agent_plugins", {})
     assert unknown["isError"] is True
     feat = json.loads(plugin_mcp.call_tool("list_features", {})["content"][0]["text"])
     assert "temper" in feat["agent"]
     assert "hush" in feat["agent"]["weather"]["values"]
+    assert "gravity" in feat["anim"]["number"]
+    assert "mosaic" in feat["anim"]["enum"]
+    assert "roll_dice" in feat["dice"]
+    assert "theme" in feat["dice"]["include"]["keys"]
     got = json.loads(plugin_mcp.call_tool("get_settings", {})["content"][0]["text"])
     assert got["ok"] is True
     assert "temper" in got["agent"]
@@ -181,6 +187,20 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
     assert view["mode"] == "plugin:command"
     settings = json.loads(plugin_mcp.call_tool("set_settings", {"theme": "ember", "dream": True})["content"][0]["text"])
     assert settings["applied"]["theme"] == "ember"
+    physics = json.loads(plugin_mcp.call_tool("set_settings", {"anim": {"gravity": 1.2, "swirl": 0.5, "mosaic": "4"}})["content"][0]["text"])
+    assert physics["applied"]["anim"]["gravity"] == 1.2
+    assert physics["applied"]["anim"]["mosaic"] == "4"
+    dice = json.loads(plugin_mcp.call_tool("roll_dice", {})["content"][0]["text"])
+    assert dice["shuffle"] is True
+    missing = json.loads(plugin_mcp.call_tool("get_state", {})["content"][0]["text"])
+    assert "unavailable" in missing["error"]
+    mem = json.loads(plugin_mcp.call_tool("add_memory", {"text": "nest cam is the doorbell"})["content"][0]["text"])
+    assert mem["ok"] is True
+    listed_mem = json.loads(plugin_mcp.call_tool("list_memories", {})["content"][0]["text"])
+    assert any("doorbell" in str(row.get("text") or "") for row in listed_mem["memories"])
+    schema = next(t for t in listed["result"]["tools"] if t["name"] == "set_settings")["inputSchema"]
+    assert "gravity" in schema["properties"]["anim"]["properties"]
+    assert "mosaic" in schema["properties"]["anim"]["properties"]
 
 
 def test_list_plugins_includes_prompt_knob(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

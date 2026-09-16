@@ -354,9 +354,22 @@ export function unescapeDns(name: string): string {
   return name.replace(/\\032/g, " ").replace(/\\\./g, ".").replace(/\\(\d{3})/g, (_, n) => String.fromCharCode(Number(n) % 256));
 }
 
+/** `usefulName` verdicts by exact string; a snapshot re-asks the same few thousand names every second. */
+const USEFUL_MEMO = new Map<string, boolean>();
+const USEFUL_MEMO_MAX = 8192;
+
 /** Hostnames worth showing; drop PTR names, mDNS service types, and service-instance FQDNs. */
 export function usefulName(name: string | undefined | null): boolean {
   if (!name) return false;
+  const hit = USEFUL_MEMO.get(name);
+  if (hit !== undefined) return hit;
+  const v = computeUsefulName(name);
+  if (USEFUL_MEMO.size >= USEFUL_MEMO_MAX) USEFUL_MEMO.clear();
+  USEFUL_MEMO.set(name, v);
+  return v;
+}
+
+function computeUsefulName(name: string): boolean {
   const n = name.trim().replace(/\.+$/, "");
   if (!n || n === "." || n === "*") return false;
   if (n.startsWith("*") && !n.startsWith("*.")) return false;
@@ -389,7 +402,25 @@ export function usefulAlias(ip: string | undefined | null): boolean {
   return !!ip && ip !== "::" && ip !== "0.0.0.0" && ip !== "::1" && !ip.startsWith("127.");
 }
 
-export function displayName(d: Device): string {
+interface NameMemo {
+  names: string[] | undefined;
+  nLen: number;
+  hosts: string[] | undefined;
+  hLen: number;
+  mdns: string | undefined;
+  ip: string;
+  name: string;
+}
+
+/**
+ * `displayName` runs a dozen regexes per candidate name and is called for every device on every
+ * visibility pass (filters, labels, matchers). Devices arrive as fresh objects each snapshot, so a
+ * WeakMap keyed on the object is a natural per-snapshot memo; the signature guards the few places
+ * that push onto `names` / `hostnames` in place after construction.
+ */
+const NAME_MEMO = new WeakMap<Device, NameMemo>();
+
+function computeDisplayName(d: Device): string {
   const names = (d.names ?? []).map(unescapeDns).filter(usefulName);
   const hosts = (d.hostnames ?? []).map(unescapeDns).filter(usefulName);
   const mdns = d.mdns_name ? unescapeDns(d.mdns_name) : "";
@@ -403,6 +434,20 @@ export function displayName(d: Device): string {
   if (!cand.length) return d.ip;
   cand.sort((a, b) => nameRank(a) - nameRank(b) || a.length - b.length || a.localeCompare(b));
   return cand[0];
+}
+
+export function displayName(d: Device): string {
+  const m = NAME_MEMO.get(d);
+  if (
+    m && m.names === d.names && m.nLen === (d.names?.length ?? 0) && m.hosts === d.hostnames &&
+    m.hLen === (d.hostnames?.length ?? 0) && m.mdns === d.mdns_name && m.ip === d.ip
+  ) return m.name;
+  const name = computeDisplayName(d);
+  NAME_MEMO.set(d, {
+    names: d.names, nLen: d.names?.length ?? 0, hosts: d.hostnames, hLen: d.hostnames?.length ?? 0,
+    mdns: d.mdns_name, ip: d.ip, name,
+  });
+  return name;
 }
 
 export function ago(ts: number, now: number): string {

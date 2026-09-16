@@ -1,0 +1,18 @@
+{
+  "entries": ["assembly/layout.ts"],
+  "targets": {
+    "release": {
+      "outFile": "src/graph/layout.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 0,
+      "noAssert": true
+    }
+  },
+  "options": {
+    "runtime": "stub",
+    "exportRuntime": false,
+    "bindings": false,
+    "initialMemory": 4,
+    "memoryBase": 0
+  }
+}

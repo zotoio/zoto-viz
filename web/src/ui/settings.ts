@@ -15,6 +15,9 @@ import type { PluginView } from "../plugins/plugin";
 import type { PluginField } from "../core/modes";
 import type { PluginLook } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
+import {
+  DEFAULT_DICE, DICE_INCLUDE_META, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
+} from "../core/shuffle";
 
 const PANES: { id: string; label: string }[] = [
   { id: "appearance", label: "Appearance" },
@@ -22,6 +25,7 @@ const PANES: { id: string; label: string }[] = [
   { id: "graph", label: "Graph" },
   { id: "physics", label: "Physics" },
   { id: "motion", label: "Motion" },
+  { id: "dice", label: "Dice" },
   { id: "camera", label: "Camera" },
   { id: "audio", label: "Audio" },
   { id: "feed", label: "Feed" },
@@ -122,10 +126,23 @@ export class Settings {
   private audioUi: { policy: Toggle; src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
   private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
   private meterRaf = 0;
+  private dice: DiceConfig;
+  private diceUi: {
+    include: Record<DiceIncludeKey, Toggle>;
+    handoff: Toggle;
+    cycle: Toggle;
+    labels: Slider;
+    sparks: Slider;
+    sparkPeak: Slider;
+    dens: Slider;
+    nodeTop: Slider;
+    setMosaicMax: (v: DiceMosaicMax) => void;
+  } | null = null;
   onCamPolicy?: (p: CamPolicy) => void;
   onMicPolicy?: (p: MicPolicy) => void;
   onPluginChange?: (id: string, values: Record<string, string>) => void;
   onClose?: () => void;
+  onDice?: () => void;
 
   constructor(private cfg: SettingsConfig) {
     this.el = document.createElement("div");
@@ -176,9 +193,11 @@ export class Settings {
 
     this.anim = loadAnim(cfg.storePrefix);
     this.feed = loadFeed(cfg.storePrefix);
+    this.dice = loadDice(cfg.storePrefix);
     this.buildFilters();
     this.buildCamera();
     this.buildViewPane();
+    this.buildDice();
     document.body.classList.toggle("cam-off", liveCam.camPolicy === "off");
     document.body.classList.toggle("mic-off", liveMic.micPolicy === "off");
 
@@ -400,6 +419,105 @@ export class Settings {
 
   get animSettings(): DreamAnim { return this.anim; }
   get feedSettings(): FeedConfig { return this.feed; }
+  get diceSettings(): DiceConfig { return this.dice; }
+
+  private buildDice(): void {
+    const host = this.pane("dice");
+    const includeSec = document.createElement("section");
+    includeSec.className = "sec";
+    includeSec.innerHTML = `<div class="sec-title">Randomiser
+      <span class="sec-links">
+        <button type="button" class="link roll" title="same as the header dice">roll now</button>
+      </span></div>
+      <div class="sec-hint">Header dice rolls the groups you leave on. Privacy filters and prompts always stay. Soft ceilings apply only to a roll — Settings sliders still go to the full range.</div>`;
+    const includeList = document.createElement("div");
+    includeList.className = "sec-controls dice-include";
+    const include = {} as Record<DiceIncludeKey, Toggle>;
+    for (const o of DICE_INCLUDE_META) {
+      include[o.key] = new Toggle({
+        label: o.label,
+        title: o.hint,
+        checked: this.dice.include[o.key],
+        onChange: (on) => { this.dice.include[o.key] = on; this.persistDice(); },
+      });
+      includeList.appendChild(include[o.key].el);
+    }
+    includeSec.appendChild(includeList);
+    includeSec.querySelector(".roll")!.addEventListener("click", () => this.onDice?.());
+
+    const afterSec = document.createElement("section");
+    afterSec.className = "sec";
+    afterSec.innerHTML = `<div class="sec-title">After a roll</div>
+      <div class="sec-hint">Dream cycling turns on the header AI look (view walk, randomized motion, Control). Hand back sends a chat turn so the local model takes over from the seed.</div>`;
+    const afterList = document.createElement("div");
+    afterList.className = "sec-controls";
+    const cycle = new Toggle({
+      label: "dream + cycling",
+      title: "after a roll, turn on dream camera, view cycling, randomized motion, and AI Control",
+      checked: this.dice.cycle,
+      onChange: (on) => { this.dice.cycle = on; this.persistDice(); },
+    });
+    const handoff = new Toggle({
+      label: "hand back to AI",
+      title: "after a roll, send a chat turn so the local model takes over (when cycling is on)",
+      checked: this.dice.handoff,
+      onChange: (on) => { this.dice.handoff = on; this.persistDice(); },
+    });
+    afterList.append(cycle.el, handoff.el);
+    afterSec.appendChild(afterList);
+
+    const capSec = document.createElement("section");
+    capSec.className = "sec";
+    capSec.innerHTML = `<div class="sec-title">Soft ceilings</div>
+      <div class="sec-hint">Dice-only caps so a roll does not tank the frame. Mosaic 2×4 and high node counts stay a manual choice unless you raise the ceiling.</div>`;
+    const labels = new Slider({
+      label: "labels", title: "max floating labels a roll may pick",
+      min: B.labelCount.min, max: B.labelCount.max, step: B.labelCount.step, value: this.dice.labelsMax,
+      onInput: (v) => { this.dice.labelsMax = v; this.persistDice(); },
+    });
+    const sparks = new Slider({
+      label: "sparks", title: "max traffic particles a roll may pick",
+      min: B.partCap.min, max: B.partCap.max, step: B.partCap.step, value: this.dice.sparksMax,
+      onInput: (v) => { this.dice.sparksMax = v; this.persistDice(); },
+    });
+    const sparkPeak = new Slider({
+      label: "spark peak", title: "max burst of sparks a roll may pick",
+      min: B.partPeak.min, max: B.partPeak.max, step: B.partPeak.step, value: this.dice.sparkPeak,
+      onInput: (v) => { this.dice.sparkPeak = v; this.persistDice(); },
+    });
+    const dens = new Slider({
+      label: "feed density", title: "max feed lines a roll may pick",
+      min: 12, max: 80, step: 1, value: this.dice.feedDensityMax,
+      onInput: (v) => { this.dice.feedDensityMax = v; this.persistDice(); },
+    });
+    const nodeTop = new Slider({
+      label: "node knobs", title: "max talkers / bluetooth node-count a roll may pick",
+      min: 8, max: 80, step: 1, value: this.dice.nodeTop,
+      onInput: (v) => { this.dice.nodeTop = v; this.persistDice(); },
+    });
+    const mosaicOpts: { value: DiceMosaicMax; label: string; hint: string }[] = [
+      { value: "4", label: "2×2", hint: "rolls may pick one view or four tiles" },
+      { value: "6", label: "2×3", hint: "rolls may pick up to six tiles (default)" },
+      { value: "8", label: "2×4", hint: "rolls may pick eight WebGL graphs" },
+    ];
+    const mosaicRow = document.createElement("div");
+    mosaicRow.className = "lookwrap";
+    const mosaicCap = document.createElement("div");
+    mosaicCap.className = "subcap";
+    mosaicCap.textContent = "mosaic max";
+    const mosaic = chips(mosaicOpts, this.dice.mosaicMax, (v) => { this.dice.mosaicMax = v; this.persistDice(); });
+    mosaic.el.setAttribute("aria-label", "mosaic max");
+    mosaicRow.append(mosaicCap, mosaic.el);
+    const capList = document.createElement("div");
+    capList.className = "sec-controls";
+    capList.append(labels.el, sparks.el, sparkPeak.el, dens.el, nodeTop.el, mosaicRow);
+    capSec.appendChild(capList);
+
+    this.diceUi = {
+      include, handoff, cycle, labels, sparks, sparkPeak, dens, nodeTop, setMosaicMax: mosaic.set,
+    };
+    host.append(includeSec, afterSec, capSec);
+  }
 
   /**
    * Dream-camera sliders. Call after Show so the popover reads Network → System → Look on Graph.
@@ -1076,6 +1194,23 @@ export class Settings {
     this.persistFeed();
   }
 
+  applyDice(c: DiceConfig): void {
+    this.dice = normalizeDice(c);
+    const ui = this.diceUi;
+    if (ui) {
+      for (const o of DICE_INCLUDE_META) ui.include[o.key].checked = this.dice.include[o.key];
+      ui.handoff.checked = this.dice.handoff;
+      ui.cycle.checked = this.dice.cycle;
+      ui.labels.value = this.dice.labelsMax;
+      ui.sparks.value = this.dice.sparksMax;
+      ui.sparkPeak.value = this.dice.sparkPeak;
+      ui.dens.value = this.dice.feedDensityMax;
+      ui.nodeTop.value = this.dice.nodeTop;
+      ui.setMosaicMax(this.dice.mosaicMax);
+    }
+    this.persistDice();
+  }
+
   /** Next far-field sky in the dream pool (skips the current one; omits live if the camera is blocked). */
   cycleSky(): void {
     this.anim = { ...this.anim, backdrop: pickSky(this.anim.backdrop) };
@@ -1276,6 +1411,11 @@ export class Settings {
     this.cfg.onPersist?.();
   }
 
+  private persistDice(): void {
+    localStorage.setItem(`${this.cfg.storePrefix}.dice`, JSON.stringify(this.dice));
+    this.cfg.onPersist?.();
+  }
+
   private storeKey(key: string): string { return `${this.cfg.storePrefix}.filter.${key}`; }
 
   get isOpen(): boolean { return !this.pop.hidden; }
@@ -1349,9 +1489,17 @@ export class Settings {
     this.badge.textContent = this.activeCount ? String(this.activeCount) : "";
     this.badge.classList.toggle("on", this.activeCount > 0);
 
+    if (!this.activeCount) {
+      // No filters: the common case. Skip the name normalisation entirely — it is the single hottest
+      // string path when the graph re-checks every device's visibility.
+      this.test = () => true;
+      return;
+    }
+    const needNames = allowNames.length > 0 || blockNames.length > 0;
+    const needAddrs = allowNets.length > 0 || blockNets.length > 0;
     this.test = (d: Device): boolean => {
-      const names = deviceNames(d);
-      const addrs = deviceAddrs(d);
+      const names = needNames ? deviceNames(d) : EMPTY;
+      const addrs = needAddrs ? deviceAddrs(d) : EMPTY;
       if (blockNames.some((m) => names.some(m)) || blockNets.some((m) => addrs.some(m))) return false;
       if (!hasAllow) return true;
       return allowNames.some((m) => names.some(m)) || allowNets.some((m) => addrs.some(m));
@@ -1586,6 +1734,16 @@ function loadFeed(prefix: string): FeedConfig {
   };
 }
 
+function loadDice(prefix: string): DiceConfig {
+  try {
+    const raw = localStorage.getItem(`${prefix}.dice`);
+    if (!raw) return normalizeDice(DEFAULT_DICE);
+    return normalizeDice(JSON.parse(raw) as unknown);
+  } catch {
+    return normalizeDice(DEFAULT_DICE);
+  }
+}
+
 // -------------------------------------------------------------------- matchers
 
 /**
@@ -1608,6 +1766,8 @@ export function compileMatcher(text: string): (d: Device | undefined, ip: string
     return names.some((m) => ns.some(m));
   };
 }
+
+const EMPTY: readonly string[] = [];
 
 function deviceNames(d: Device): string[] {
   const out = new Set<string>();

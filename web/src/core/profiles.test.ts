@@ -17,6 +17,8 @@ describe("profiles", () => {
     expect(s.chrome).toBe("top");
     expect(s.feed.source).toBe("traffic");
     expect(s.feed.textSize).toBe(12);
+    expect(s.dice.include.theme).toBe(true);
+    expect(s.dice.mosaicMax).toBe("6");
   });
 
   it("normalizes partial blobs and suggests ids", () => {
@@ -33,6 +35,10 @@ describe("profiles", () => {
     expect(n.filters.allowNames).toBe("nest");
     expect(n.arcade.a).toBe("1");
     expect(n.feed.textSize).toBe(12);
+    expect(n.dice.include.theme).toBe(true);
+    expect(normalizeSettings({ dice: { include: { physics: false }, labelsMax: 32 } }).dice).toMatchObject({
+      include: { physics: false, theme: true }, labelsMax: 32, mosaicMax: "6",
+    });
     expect(normalizeSettings({ feed: { textSize: 40, density: 4 } }).feed).toMatchObject({ textSize: 20, density: 12 });
     expect(normalizeSettings(null).theme).toBe(shippedSettings().theme);
     expect(quiet(() => 7)).toBe(7);

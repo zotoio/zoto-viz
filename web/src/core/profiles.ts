@@ -3,6 +3,7 @@ import { allModes, defaultCatalogMode, defaultOpts } from "./modes";
 import { DEFAULT_DREAM, type DreamAnim } from "../graph/scene";
 import { DEFAULT_THEME } from "./themes";
 import { EMPTY_LOOK, normalizeAgentLook, type AgentLook } from "../graph/deco";
+import { DEFAULT_DICE, normalizeDice, type DiceConfig } from "./shuffle";
 import { Toggle } from "../ui/ui";
 import { apiFetch } from "./http";
 
@@ -48,6 +49,8 @@ export interface ProfileSettings {
   mic: "auto" | "off";
   /** GLSL / photos / SVG the local agent pinned on this profile */
   agent: AgentLook;
+  /** Header dice: which groups to roll and the soft ceilings. */
+  dice: DiceConfig;
   /** write this writable profile as settings change (ignored for shipped netviz) */
   autosave: boolean;
 }
@@ -103,6 +106,7 @@ export function shippedSettings(): ProfileSettings {
     camera: "auto",
     mic: "auto",
     agent: { ...EMPTY_LOOK },
+    dice: { ...DEFAULT_DICE, include: { ...DEFAULT_DICE.include } },
     autosave: false,
   };
 }
@@ -159,6 +163,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     camera: s.camera === "off" ? "off" : d.camera,
     mic: s.mic === "off" ? "off" : d.mic,
     agent: normalizeAgentLook(s.agent),
+    dice: normalizeDice(s.dice),
     autosave: bool(s.autosave, d.autosave),
   };
 }
