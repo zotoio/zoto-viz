@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { StateMsg } from "../core/types";
 import {
+  VizHud,
   estimateTalkerParticles,
   formatSkipRate,
+  isSkipPulsing,
   isVizDemoPack,
-  skipPulseOpacity,
   skipRatePerSec,
   vizHudMetric,
 } from "./viz-hud";
@@ -28,11 +29,32 @@ describe("viz hud helpers", () => {
     expect(formatSkipRate(12.7)).toBe("skips 13/s");
   });
 
-  it("pulses skip opacity for ~400 ms", () => {
+  it("flags skip pulse for ~400 ms after a skip", () => {
     const start = 1000;
-    expect(skipPulseOpacity(start, start + 400)).toBeCloseTo(1, 2);
-    expect(skipPulseOpacity(start + 200, start + 400)).toBeCloseTo(0.75, 2);
-    expect(skipPulseOpacity(start + 500, start + 400)).toBe(0.5);
+    expect(isSkipPulsing(start, start + 400)).toBe(true);
+    expect(isSkipPulsing(start + 200, start + 400)).toBe(true);
+    expect(isSkipPulsing(start + 500, start + 400)).toBe(false);
+  });
+
+  it("lays out pack, metric, skip, and swap on one nowrap row", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("packet-tunnel", "Packet Tunnel");
+    hud.tick({
+      packId: "packet-tunnel",
+      packName: "Packet Tunnel",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: null,
+      state: minimalState(),
+      now: 1000,
+    });
+
+    const line = hud.root.querySelector(".viz-hud-line");
+    expect(line?.className).toBe("viz-hud-line");
+    expect(hud.root.querySelector(".viz-hud-metric-value")?.textContent).toBe("3");
+    expect(hud.root.querySelector(".viz-hud-skip")?.textContent).toBe("skips 0/s");
+    expect(hud.root.querySelectorAll(".viz-hud-swap-btn")).toHaveLength(3);
+    expect(hud.root.querySelector(".viz-hud-swap")?.parentElement).toBe(line);
   });
 
   it("caps talker particle estimate at 512", () => {
