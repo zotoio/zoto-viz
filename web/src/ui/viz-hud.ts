@@ -13,7 +13,6 @@ const PACK_LABELS: Record<VizDemoPackId, string> = {
 
 const SKIP_WINDOW_MS = 1000;
 const SKIP_PULSE_MS = 400;
-const SKIP_BASE_OPACITY = 0.5;
 
 export function isVizDemoPack(id: string | null | undefined): id is VizDemoPackId {
   return VIZ_DEMO_PACKS.includes(id as VizDemoPackId);
@@ -92,10 +91,8 @@ export function formatSkipRate(rate: number): string {
   return `skips ${rounded}/s`;
 }
 
-export function skipPulseOpacity(now: number, pulseUntil: number, pulseMs = SKIP_PULSE_MS): number {
-  const rem = pulseUntil - now;
-  if (rem <= 0) return SKIP_BASE_OPACITY;
-  return SKIP_BASE_OPACITY + 0.5 * (rem / pulseMs);
+export function isSkipPulsing(now: number, pulseUntil: number): boolean {
+  return now < pulseUntil;
 }
 
 /**
@@ -105,7 +102,8 @@ export function skipPulseOpacity(now: number, pulseUntil: number, pulseMs = SKIP
 export class VizHud {
   readonly root: HTMLElement;
   private readonly packEl: HTMLElement;
-  private readonly metricEl: HTMLElement;
+  private readonly metricLabelEl: HTMLElement;
+  private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly onSwap: (packId: VizDemoPackId) => void;
@@ -128,15 +126,17 @@ export class VizHud {
     this.packEl = document.createElement("span");
     this.packEl.className = "viz-hud-pack";
 
-    this.metricEl = document.createElement("span");
-    this.metricEl.className = "viz-hud-metric";
+    const metric = document.createElement("span");
+    metric.className = "viz-hud-metric";
+    this.metricLabelEl = document.createElement("span");
+    this.metricLabelEl.className = "viz-hud-metric-label";
+    this.metricValueEl = document.createElement("strong");
+    this.metricValueEl.className = "viz-hud-metric-value";
+    metric.append(this.metricLabelEl, " ", this.metricValueEl);
 
     this.skipEl = document.createElement("span");
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Host viz frame skips (over 16.7 ms budget), rolling 1 s";
-
-    line.append(this.packEl, this.metricEl, this.skipEl);
-    root.append(line);
 
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
@@ -150,7 +150,15 @@ export class VizHud {
       btn.addEventListener("click", () => this.onSwap(id));
       this.swapRow.append(btn);
     }
-    root.append(this.swapRow);
+
+    const sep = () => {
+      const el = document.createElement("span");
+      el.className = "viz-hud-sep";
+      el.textContent = "·";
+      return el;
+    };
+    line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
+    root.append(line);
 
     parent.append(root);
     this.root = root;
@@ -170,7 +178,8 @@ export class VizHud {
     if (!this.activeId) return;
     const { stats, frame, state, now } = input;
     const metric = vizHudMetric(this.activeId, frame, state);
-    this.metricEl.textContent = `${metric.label} ${metric.value}`;
+    this.metricLabelEl.textContent = metric.label;
+    this.metricValueEl.textContent = metric.value;
 
     const delta = stats.skipped - this.lastSkipped;
     this.lastSkipped = stats.skipped;
@@ -182,6 +191,6 @@ export class VizHud {
     while (this.skipSamples.length && this.skipSamples[0].t < cutoff) this.skipSamples.shift();
 
     this.skipEl.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, now));
-    this.skipEl.style.opacity = String(skipPulseOpacity(now, this.pulseUntil));
+    this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
   }
 }

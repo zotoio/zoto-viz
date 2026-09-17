@@ -843,7 +843,7 @@ body.modal-open #bar, body.modal-open #foot { pointer-events: none; }
 
 /* ------------------------------------------------------------------ footer, scene labels */
 
-#foot { position: fixed; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 360px); z-index: 5; }
+#foot { position: fixed; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 360px); z-index: 5; anchor-name: --viz-foot; }
 body[data-chrome="left"] #foot { left: calc(var(--bar-w) + 12px); max-width: calc(100vw - var(--bar-w) - 360px); }
 body[data-chrome="right"] #foot { max-width: calc(100vw - var(--bar-w) - 360px); }
 /* Full glyph outline (not a 4-way shadow) so bright skies cannot bloom through the diagonals. */
@@ -1037,30 +1037,62 @@ body[data-chrome="right"].panel-wide #livefeed { left: calc(24px + min(680px, 10
 
 /* CPU-only demoscene viz HUD (viz-hud.ts) — no extra GPU pass */
 .viz-hud {
-  position: absolute;
+  position: fixed;
   left: 12px;
-  bottom: 12px;
-  z-index: 12;
+  bottom: anchor(--viz-foot top);
+  margin-bottom: 8px;
+  z-index: 6;
   pointer-events: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   line-height: 1.35;
-  color: color-mix(in srgb, var(--fg) 72%, transparent);
   user-select: none;
+  max-width: calc(100vw - 360px);
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
 }
-.viz-hud-line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.viz-hud-pack { color: var(--fg); font-weight: 600; letter-spacing: 0.02em; }
-.viz-hud-metric { color: var(--muted); }
+body[data-chrome="left"] .viz-hud { left: calc(var(--bar-w) + 12px); max-width: calc(100vw - var(--bar-w) - 360px); }
+body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360px); }
+.viz-hud-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  -webkit-text-stroke: 1px var(--label-stroke, #000);
+  paint-order: stroke fill;
+  text-shadow: none;
+}
+.viz-hud-pack {
+  color: var(--label-muted, var(--muted));
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viz-hud-sep { color: var(--label-muted, var(--muted)); opacity: 0.75; flex-shrink: 0; -webkit-text-stroke: 0; }
+.viz-hud-metric { color: var(--label-fg, var(--fg)); font-weight: 600; flex-shrink: 0; white-space: nowrap; }
+.viz-hud-metric-label { font-weight: 500; color: var(--label-muted, var(--muted)); }
+.viz-hud-metric-value { font-weight: 700; color: var(--label-fg, var(--fg)); }
 .viz-hud-skip {
-  color: var(--muted);
-  opacity: 0.5;
-  transition: opacity 80ms linear;
+  color: var(--label-muted, var(--muted));
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: color 120ms linear;
 }
+.viz-hud-skip.pulse { color: var(--warn); }
 .viz-hud-swap {
   display: flex;
   gap: 4px;
-  margin-top: 6px;
+  margin-left: 2px;
+  flex-shrink: 0;
   pointer-events: auto;
+  -webkit-text-stroke: 0;
 }
 .viz-hud-swap-btn {
   border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
