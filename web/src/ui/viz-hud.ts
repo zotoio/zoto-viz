@@ -14,8 +14,15 @@ const PACK_LABELS: Record<VizDemoPackId, string> = {
 const SKIP_WINDOW_MS = 1000;
 const SKIP_PULSE_MS = 400;
 
+/** Strip `plugin:` view prefix and return a bare demo pack id, or null. */
+export function normalizeVizDemoPackId(id: string | null | undefined): VizDemoPackId | null {
+  if (!id) return null;
+  const bare = id.startsWith("plugin:") ? id.slice("plugin:".length) : id;
+  return VIZ_DEMO_PACKS.includes(bare as VizDemoPackId) ? (bare as VizDemoPackId) : null;
+}
+
 export function isVizDemoPack(id: string | null | undefined): id is VizDemoPackId {
-  return VIZ_DEMO_PACKS.includes(id as VizDemoPackId);
+  return normalizeVizDemoPackId(id) !== null;
 }
 
 export interface VizHudMetric {
@@ -165,7 +172,7 @@ export class VizHud {
   }
 
   setActive(packId: string | null, packName: string): void {
-    this.activeId = isVizDemoPack(packId) ? packId : null;
+    this.activeId = normalizeVizDemoPackId(packId);
     this.root.hidden = !this.activeId;
     if (!this.activeId) return;
     this.packEl.textContent = packName;
