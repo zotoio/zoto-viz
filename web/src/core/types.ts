@@ -215,6 +215,8 @@ export interface StateMsg {
     weather?: string;
     prefix?: string;
   };
+  /** Backend and host shadow extensions (e.g. typesafe Sense results). */
+  plugin_state?: Record<string, unknown>;
 }
 
 /**

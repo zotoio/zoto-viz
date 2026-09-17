@@ -40,7 +40,12 @@ import {
 } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
-import { VizBufferWriter, VizFrameBudget, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
+import { VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
+import {
+  TypeSafeHost,
+  parseTypeSafeEnable,
+  pluginHasTypeSafe,
+} from "../plugins/typesafe-host";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { bindFps, bindPresentListener } from "../core/fps";
@@ -231,6 +236,8 @@ const sandbox = new PluginSandbox();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
 const vizBudget = new VizFrameBudget();
+const typesafeHost = new TypeSafeHost();
+let typesafePrevTs = 0;
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
 bindPresentListener((ts) => {
@@ -578,6 +585,7 @@ function applyLive(m: StateMsg): void {
 }
 
 function feed(m: StateMsg): void {
+  const feedT0 = performance.now();
   lastRaw = m;
   applyLive(m);
   let shown = m;
@@ -617,6 +625,22 @@ function feed(m: StateMsg): void {
       now: performance.now(),
     });
   }
+
+  const tsActive = pluginSpecs.find((p) => p.id === tsWatchId);
+  typesafeHost.configure({
+    packHasCap: pluginHasTypeSafe(tsActive?.capabilities),
+    enable: parseTypeSafeEnable(),
+    contract: tsActive?.typesafe,
+  });
+  const tsSlice = typesafeHost.pluginStateSlice();
+  if (tsSlice) {
+    shown = { ...shown, plugin_state: { ...shown.plugin_state, ...tsSlice } };
+  }
+  const frameMs = performance.now() - feedT0;
+  const headroomMs = VIZ_FRAME_BUDGET_MS - frameMs;
+  const dt = typesafePrevTs > 0 ? Math.max(0, (shown.ts || 0) - typesafePrevTs) : 0;
+  void typesafeHost.tick(shown, { frameMs, headroomMs, dt });
+  if (shown.ts) typesafePrevTs = shown.ts;
 }
 
 // ---------------------------------------------------------------- redaction (screenshots / sharing)
