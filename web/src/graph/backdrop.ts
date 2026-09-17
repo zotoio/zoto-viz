@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
 import { VIZ_UBO, VIZ_UBO_GLSL } from "../plugins/viz-host";
 import { liveCam } from "../camera/livecam";
 import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
@@ -349,7 +350,7 @@ let lastCustomFrag: string | null = null;
 /** Last accepted plugin fragment, so LookStage's separate Backdrop can share it. */
 let lastPlugin: { id: string; frag: string } | null = null;
 
-export const PLUGIN_SKY_UNIFORMS = ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"] as const;
+export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
 export const PLUGIN_SKY_MAX = 16_000;
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
 
