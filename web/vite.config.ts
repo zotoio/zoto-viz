@@ -4,8 +4,6 @@ import { defineConfig } from "vite";
 const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
 
 export default defineConfig({
-  // Expose VITE_TYPESAFE_API_KEY and TYPESAFE_API_KEY to import.meta.env in the client bundle.
-  envPrefix: ["VITE_", "TYPESAFE_"],
   server: {
     port: 5173,
     proxy: {

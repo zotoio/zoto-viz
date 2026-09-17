@@ -1559,11 +1559,13 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
 
 
 async def api_session(request: web.Request) -> web.Response:
+    from . import typesafe_proxy
     return web.json_response({
         "csrf": request.app.get("csrf") or "",
         "aiControl": agent.ai_control_on(),
         "pluginService": plugins.python_enabled(),
         "insecureLan": bool(request.app.get("insecure_lan")),
+        "typesafeConfigured": typesafe_proxy.api_key_configured(),
     })
 
 
@@ -1725,6 +1727,9 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_get("/api/profiles/{id}", profiles.api_get)
     app.router.add_put("/api/profiles/{id}", profiles.api_put)
     app.router.add_delete("/api/profiles/{id}", profiles.api_delete)
+    from . import typesafe_proxy
+    app.router.add_get("/api/typesafe/status", typesafe_proxy.api_status)
+    app.router.add_post("/api/typesafe/sense", typesafe_proxy.api_sense)
     app.router.add_get("/api/plugins", plugins.api_list)
     app.router.add_get("/api/plugins/{id}/module.js", plugins.api_module)
     app.router.add_get("/api/plugins/{id}/sky/fragment.glsl", plugins.api_sky)

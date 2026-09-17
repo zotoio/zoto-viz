@@ -1,5 +1,4 @@
 import type { StateMsg } from "../core/types";
-import { resolveTypeSafeApiKey } from "./typesafe-env";
 
 /** Target frame interval for continuous Sense (60 fps). */
 export const TYPESAFE_FRAME_BUDGET_MS = 16.7;
@@ -31,13 +30,13 @@ export interface TypeSafeShadowPayload {
   ok: boolean;
   skipped?: "disabled" | "no-headroom" | "over-budget" | "no-api-key" | "no-sdk";
   answer?: unknown;
+  /** Present-to-present interval (rAF clock, ms). */
+  presentIntervalMs?: number;
   headroomMs?: number;
-  frameMs?: number;
-  dt?: number;
 }
 
 export interface TypeSafeEnableFlags {
-  /** `?typesafe=1` and/or settings toggle — enables continuous Sense when headroom allows. */
+  /** `?typesafe=1` and/or localStorage — enables continuous Sense when headroom allows. */
   continuous: boolean;
   /** `?sense=1` — user-initiated freeze-&-sense one-shot (no headroom gate). */
   freeze: boolean;
@@ -45,10 +44,10 @@ export interface TypeSafeEnableFlags {
   replay: boolean;
 }
 
+/** Present-clock timing for continuous Sense (all values in ms). */
 export interface TypeSafeTickTiming {
-  frameMs: number;
+  presentIntervalMs: number;
   headroomMs: number;
-  dt: number;
 }
 
 export interface TypeSafeHostStats {
@@ -57,17 +56,17 @@ export interface TypeSafeHostStats {
   skipped: number;
 }
 
-export type TypeSafeSdkFactory = () => Promise<{ sense: TypeSafeSdk["sense"] }>;
+export type TypeSafeSdkFactory = (proxyConfigured: boolean) => Promise<{ sense: TypeSafeSdk["sense"] }>;
 
 export interface TypeSafeSdk {
   sense(input: { state: unknown; questions?: TypeSafeQuestion[] }): Promise<TypeSafeSenseResult>;
 }
 
-let apiKeyResolver: () => string | undefined = resolveTypeSafeApiKey;
+let proxyConfiguredResolver: () => boolean = () => false;
 
-let sdkFactory: TypeSafeSdkFactory = async () => {
+let sdkFactory: TypeSafeSdkFactory = async (configured) => {
   const mod = await import("./typesafe-sdk.js");
-  return mod.createTypeSafeSdk();
+  return mod.createTypeSafeSdk(configured);
 };
 
 /** Test hook — replace the lazy import without touching production wiring. */
@@ -76,23 +75,23 @@ export function setTypeSafeSdkFactory(factory: TypeSafeSdkFactory): void {
 }
 
 export function resetTypeSafeSdkFactory(): void {
-  sdkFactory = async () => {
+  sdkFactory = async (configured) => {
     const mod = await import("./typesafe-sdk.js");
-    return mod.createTypeSafeSdk();
+    return mod.createTypeSafeSdk(configured);
   };
 }
 
-/** Test hook — stub API key resolution without env mutation. */
-export function setTypeSafeApiKeyResolver(resolver: () => string | undefined): void {
-  apiKeyResolver = resolver;
+/** Test hook — stub monitor proxy availability without HTTP. */
+export function setTypeSafeProxyConfigured(resolver: () => boolean): void {
+  proxyConfiguredResolver = resolver;
 }
 
-export function resetTypeSafeApiKeyResolver(): void {
-  apiKeyResolver = resolveTypeSafeApiKey;
+export function resetTypeSafeProxyConfigured(): void {
+  proxyConfiguredResolver = () => false;
 }
 
-export function typesafeApiKeyConfigured(): boolean {
-  return !!apiKeyResolver();
+export function typesafeProxyConfigured(): boolean {
+  return proxyConfiguredResolver();
 }
 
 export function isTypeSafeCapability(cap: string): boolean {
@@ -115,7 +114,7 @@ export function setTypeSafeSettings(on: boolean): void {
   localStorage.setItem(TYPESAFE_SETTINGS_KEY, on ? "1" : "0");
 }
 
-/** Parse the three enable shapes from URL query + persisted settings. */
+/** Parse the three enable shapes from URL query + persisted localStorage. */
 export function parseTypeSafeEnable(
   search = typeof location !== "undefined" ? location.search : "",
   settingsOn = loadTypeSafeSettings(),
@@ -157,14 +156,17 @@ export function parseTypeSafeContract(raw: unknown): TypeSafeContract | undefine
 
 /**
  * Continuous Sense gate: present-to-present under 16.7 ms and at least 4 ms headroom.
- * One-shot freeze/replay bypasses the headroom check.
+ * `presentIntervalMs` and `headroomMs` are rAF present-clock milliseconds.
+ * Freeze/replay bypass the gate.
  */
 export function typesafeSenseAllowed(
   mode: TypeSafeSenseMode,
   timing: TypeSafeTickTiming,
 ): { ok: true } | { ok: false; reason: "no-headroom" | "over-budget" } {
   if (mode === "freeze" || mode === "replay") return { ok: true };
-  if (timing.dt > TYPESAFE_FRAME_BUDGET_MS) return { ok: false, reason: "over-budget" };
+  if (timing.presentIntervalMs > TYPESAFE_FRAME_BUDGET_MS) {
+    return { ok: false, reason: "over-budget" };
+  }
   if (timing.headroomMs < TYPESAFE_HEADROOM_MS) return { ok: false, reason: "no-headroom" };
   return { ok: true };
 }
@@ -180,7 +182,7 @@ function remapState(state: StateMsg, remap?: Record<string, string>): StateMsg {
 }
 
 /**
- * Host-side TypeSafe / Jev integration. Dark by default: no SDK import until the
+ * Host-side TypeSafe / Jev integration. Dark by default: no proxy call until the
  * active pack declares `typesafe` and a user enable flag is set. Results land in
  * the shadow channel `plugin_state.typesafe` only — never UBO or viz skip paths.
  */
@@ -191,7 +193,6 @@ export class TypeSafeHost {
   private contract: TypeSafeContract | undefined;
   private shadow: TypeSafeShadowPayload | null = null;
   private lastShadow: TypeSafeShadowPayload | null = null;
-  private prevTs = 0;
   private sdk: TypeSafeSdk | null = null;
   private freezeQueued = false;
   private _stats: TypeSafeHostStats = { sdkLoads: 0, senseCalls: 0, skipped: 0 };
@@ -234,7 +235,7 @@ export class TypeSafeHost {
     if (this.sdk) return this.sdk;
     this._stats.sdkLoads++;
     try {
-      this.sdk = await sdkFactory();
+      this.sdk = await sdkFactory(proxyConfiguredResolver());
       return this.sdk;
     } catch {
       return null;
@@ -242,8 +243,8 @@ export class TypeSafeHost {
   }
 
   /**
-   * Run Sense for this monitor tick. Continuous mode is headroom-gated; freeze/replay
-   * are one-shot and bypass headroom. Never blocks the frame path on failure.
+   * Run Sense for this monitor tick. Continuous mode is headroom-gated on the
+   * rAF present clock; freeze/replay are one-shot. Never blocks the frame path.
    */
   async tick(state: StateMsg, timing: TypeSafeTickTiming): Promise<void> {
     if (!this.packHasCap) {
@@ -282,23 +283,21 @@ export class TypeSafeHost {
         mode,
         ok: false,
         skipped: gate.reason,
+        presentIntervalMs: timing.presentIntervalMs,
         headroomMs: timing.headroomMs,
-        frameMs: timing.frameMs,
-        dt: timing.dt,
       };
       return;
     }
 
-    if (!apiKeyResolver()) {
+    if (!proxyConfiguredResolver()) {
       this._stats.skipped++;
       this.shadow = {
         t: state.ts || Date.now() / 1000,
         mode,
         ok: false,
         skipped: "no-api-key",
+        presentIntervalMs: timing.presentIntervalMs,
         headroomMs: timing.headroomMs,
-        frameMs: timing.frameMs,
-        dt: timing.dt,
       };
       return;
     }
@@ -311,9 +310,8 @@ export class TypeSafeHost {
         mode,
         ok: false,
         skipped: "no-sdk",
+        presentIntervalMs: timing.presentIntervalMs,
         headroomMs: timing.headroomMs,
-        frameMs: timing.frameMs,
-        dt: timing.dt,
       };
       return;
     }
@@ -329,18 +327,15 @@ export class TypeSafeHost {
       mode,
       ok: true,
       answer: result.answer,
+      presentIntervalMs: timing.presentIntervalMs,
       headroomMs: timing.headroomMs,
-      frameMs: timing.frameMs,
-      dt: timing.dt,
     };
     this.lastShadow = this.shadow;
-    this.prevTs = state.ts || this.prevTs;
   }
 
   reset(): void {
     this.shadow = null;
     this.lastShadow = null;
-    this.prevTs = 0;
     this.sdk = null;
     this.freezeQueued = false;
     this._stats = { sdkLoads: 0, senseCalls: 0, skipped: 0 };

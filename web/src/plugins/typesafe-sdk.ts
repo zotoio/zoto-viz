@@ -1,12 +1,10 @@
 /**
- * TypeSafe / Jev SDK adapter. When `VITE_TYPESAFE_API_KEY` (or alias) is set,
- * lazy-loads `@typesafe-ai/sdk` and calls `TypeSafeClient.systemOne`. Otherwise
- * returns an offline stub (no network) for CI and dark-by-default runs.
+ * Browser TypeSafe client — POSTs to the monitor proxy (`/api/typesafe/sense`).
+ * The API key never enters the bundle; the monitor reads `TYPESAFE_API_KEY` from
+ * its process environment.
  */
+import { apiFetch } from "../core/http";
 import type { TypeSafeQuestion, TypeSafeSenseResult } from "./typesafe-host";
-import { resolveTypeSafeApiKey } from "./typesafe-env";
-
-export { resolveTypeSafeApiKey } from "./typesafe-env";
 
 export interface TypeSafeSdk {
   sense(input: { state: unknown; questions?: TypeSafeQuestion[] }): Promise<TypeSafeSenseResult>;
@@ -21,33 +19,43 @@ function stubSdk(): TypeSafeSdk {
   };
 }
 
-async function liveSdk(apiKey: string): Promise<TypeSafeSdk> {
-  const { TypeSafeClient, noul } = await import("@typesafe-ai/sdk");
-  const client = new TypeSafeClient({ apiKey });
+async function proxySdk(): Promise<TypeSafeSdk> {
   return {
     async sense(input) {
-      const rows = input.questions?.length
-        ? input.questions
-        : [{ id: "sense", prompt: "Does the monitor state warrant attention?" }];
-      const questions = Object.fromEntries(
-        rows.map((q) => [q.id, noul(q.prompt)]),
-      ) as Record<string, ReturnType<typeof noul>>;
-      const state = typeof input.state === "object" && input.state !== null
-        ? input.state
-        : { value: input.state };
-      const response = await client.systemOne({ state, questions });
-      return { answer: response.answers };
+      const r = await apiFetch("/api/typesafe/sense", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          state: input.state,
+          questions: input.questions,
+        }),
+      });
+      if (r.status === 503) throw new Error("typesafe not configured");
+      if (!r.ok) throw new Error(`typesafe sense ${r.status}`);
+      const data = await r.json() as { answer?: unknown };
+      return { answer: data.answer };
     },
   };
 }
 
 /** Factory used by {@link TypeSafeHost} after opt-in. */
-export async function createTypeSafeSdk(): Promise<TypeSafeSdk> {
-  const apiKey = resolveTypeSafeApiKey();
-  if (!apiKey) return stubSdk();
+export async function createTypeSafeSdk(proxyConfigured = false): Promise<TypeSafeSdk> {
+  if (!proxyConfigured) return stubSdk();
   try {
-    return await liveSdk(apiKey);
+    return await proxySdk();
   } catch {
     return stubSdk();
+  }
+}
+
+/** Probe whether the monitor has `TYPESAFE_API_KEY` configured. */
+export async function fetchTypeSafeProxyConfigured(): Promise<boolean> {
+  try {
+    const r = await apiFetch("/api/typesafe/status");
+    if (!r.ok) return false;
+    const data = await r.json() as { configured?: boolean };
+    return !!data.configured;
+  } catch {
+    return false;
   }
 }
