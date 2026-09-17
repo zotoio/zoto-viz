@@ -6,10 +6,14 @@ import {
   TYPESAFE_SETTINGS_KEY,
   TypeSafeHost,
   parseTypeSafeEnable,
+  resetTypeSafeApiKeyResolver,
   resetTypeSafeSdkFactory,
+  setTypeSafeApiKeyResolver,
   setTypeSafeSdkFactory,
   typesafeSenseAllowed,
 } from "./typesafe-host";
+
+const withTestApiKey = () => setTypeSafeApiKeyResolver(() => "test-key");
 
 function minimalState(ts = 1000): StateMsg {
   return {
@@ -31,6 +35,7 @@ describe("typesafe opt-in", () => {
   afterEach(() => {
     localStorage.removeItem(TYPESAFE_SETTINGS_KEY);
     resetTypeSafeSdkFactory();
+    resetTypeSafeApiKeyResolver();
     vi.restoreAllMocks();
   });
 
@@ -56,6 +61,7 @@ describe("typesafe opt-in", () => {
     const loader = vi.fn(async () => ({
       sense: vi.fn(async () => ({ answer: { ok: true } })),
     }));
+    withTestApiKey();
     setTypeSafeSdkFactory(loader);
 
     const host = new TypeSafeHost();
@@ -82,6 +88,7 @@ describe("typesafe opt-in", () => {
     const loader = vi.fn(async () => ({
       sense: vi.fn(async () => ({ answer: { ok: true } })),
     }));
+    withTestApiKey();
     setTypeSafeSdkFactory(loader);
 
     const host = new TypeSafeHost();
@@ -102,6 +109,7 @@ describe("typesafe opt-in", () => {
 
   it("freeze one-shot allowed without continuous headroom", async () => {
     const sense = vi.fn(async () => ({ answer: { freeze: true } }));
+    withTestApiKey();
     setTypeSafeSdkFactory(async () => ({ sense }));
 
     const host = new TypeSafeHost();
@@ -125,6 +133,7 @@ describe("typesafe opt-in", () => {
 
   it("replay serves last freeze shadow without SDK reload", async () => {
     const sense = vi.fn(async () => ({ answer: { n: 1 } }));
+    withTestApiKey();
     setTypeSafeSdkFactory(async () => ({ sense }));
 
     const host = new TypeSafeHost();
@@ -141,6 +150,7 @@ describe("typesafe opt-in", () => {
   });
 
   it("shadow channel shape is plugin_state.typesafe only", async () => {
+    withTestApiKey();
     setTypeSafeSdkFactory(async () => ({
       sense: async () => ({ answer: { ping: 1 } }),
     }));
@@ -196,5 +206,39 @@ describe("typesafe opt-in", () => {
     const good = { frameMs: 4, headroomMs: TYPESAFE_HEADROOM_MS, dt: 10 };
     expect(typesafeSenseAllowed("continuous", good)).toEqual({ ok: true });
     expect(typesafeSenseAllowed("freeze", { frameMs: 99, headroomMs: 0, dt: 99 })).toEqual({ ok: true });
+  });
+
+  it("enabled + no API key ⇒ no-api-key skip and zero SDK load", async () => {
+    const loader = vi.fn(async () => ({
+      sense: vi.fn(async () => ({ answer: { live: true } })),
+    }));
+    setTypeSafeSdkFactory(loader);
+
+    const host = new TypeSafeHost();
+    host.configure({
+      packHasCap: true,
+      enable: parseTypeSafeEnable("?typesafe=1"),
+    });
+
+    await host.tick(minimalState(), { frameMs: 2, headroomMs: 14, dt: 8 });
+    expect(loader).not.toHaveBeenCalled();
+    expect(host.stats.senseCalls).toBe(0);
+    expect(host.pluginStateSlice()?.typesafe.skipped).toBe("no-api-key");
+  });
+
+  it("with API key + mocked factory ⇒ sense still runs", async () => {
+    const sense = vi.fn(async () => ({ answer: { live: true } }));
+    withTestApiKey();
+    setTypeSafeSdkFactory(async () => ({ sense }));
+
+    const host = new TypeSafeHost();
+    host.configure({
+      packHasCap: true,
+      enable: parseTypeSafeEnable("?typesafe=1"),
+    });
+
+    await host.tick(minimalState(), { frameMs: 2, headroomMs: 14, dt: 8 });
+    expect(sense).toHaveBeenCalledTimes(1);
+    expect(host.pluginStateSlice()?.typesafe.ok).toBe(true);
   });
 });

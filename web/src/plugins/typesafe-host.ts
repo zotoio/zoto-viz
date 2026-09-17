@@ -1,4 +1,5 @@
 import type { StateMsg } from "../core/types";
+import { resolveTypeSafeApiKey } from "./typesafe-env";
 
 /** Target frame interval for continuous Sense (60 fps). */
 export const TYPESAFE_FRAME_BUDGET_MS = 16.7;
@@ -28,7 +29,7 @@ export interface TypeSafeShadowPayload {
   t: number;
   mode: TypeSafeSenseMode;
   ok: boolean;
-  skipped?: "disabled" | "no-headroom" | "over-budget" | "no-sdk";
+  skipped?: "disabled" | "no-headroom" | "over-budget" | "no-api-key" | "no-sdk";
   answer?: unknown;
   headroomMs?: number;
   frameMs?: number;
@@ -62,6 +63,8 @@ export interface TypeSafeSdk {
   sense(input: { state: unknown; questions?: TypeSafeQuestion[] }): Promise<TypeSafeSenseResult>;
 }
 
+let apiKeyResolver: () => string | undefined = resolveTypeSafeApiKey;
+
 let sdkFactory: TypeSafeSdkFactory = async () => {
   const mod = await import("./typesafe-sdk.js");
   return mod.createTypeSafeSdk();
@@ -77,6 +80,19 @@ export function resetTypeSafeSdkFactory(): void {
     const mod = await import("./typesafe-sdk.js");
     return mod.createTypeSafeSdk();
   };
+}
+
+/** Test hook — stub API key resolution without env mutation. */
+export function setTypeSafeApiKeyResolver(resolver: () => string | undefined): void {
+  apiKeyResolver = resolver;
+}
+
+export function resetTypeSafeApiKeyResolver(): void {
+  apiKeyResolver = resolveTypeSafeApiKey;
+}
+
+export function typesafeApiKeyConfigured(): boolean {
+  return !!apiKeyResolver();
 }
 
 export function isTypeSafeCapability(cap: string): boolean {
@@ -157,8 +173,8 @@ function remapState(state: StateMsg, remap?: Record<string, string>): StateMsg {
   if (!remap || !Object.keys(remap).length) return state;
   const out: StateMsg = { ...state };
   for (const [from, to] of Object.entries(remap)) {
-    const val = (state as Record<string, unknown>)[from];
-    if (val !== undefined) (out as Record<string, unknown>)[to] = val;
+    const val = (state as unknown as Record<string, unknown>)[from];
+    if (val !== undefined) (out as unknown as Record<string, unknown>)[to] = val;
   }
   return out;
 }
@@ -261,6 +277,20 @@ export class TypeSafeHost {
         mode,
         ok: false,
         skipped: gate.reason,
+        headroomMs: timing.headroomMs,
+        frameMs: timing.frameMs,
+        dt: timing.dt,
+      };
+      return;
+    }
+
+    if (!apiKeyResolver()) {
+      this._stats.skipped++;
+      this.shadow = {
+        t: state.ts || Date.now() / 1000,
+        mode,
+        ok: false,
+        skipped: "no-api-key",
         headroomMs: timing.headroomMs,
         frameMs: timing.frameMs,
         dt: timing.dt,

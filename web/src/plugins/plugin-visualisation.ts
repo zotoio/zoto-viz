@@ -48,6 +48,7 @@ export type CatalogRow = {
   entry?: unknown;
   capabilities?: unknown;
   viz?: unknown;
+  typesafe?: unknown;
   hash?: unknown;
   service?: unknown;
   consent?: unknown;

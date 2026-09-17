@@ -1,3 +1,9 @@
+.env
+.env.*
+!.env.example
+web/.env
+web/.env.*
+!web/.env.example
 .venv/
 data/
 out/
