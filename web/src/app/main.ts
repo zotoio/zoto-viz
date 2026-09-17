@@ -237,7 +237,7 @@ let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
 const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
-let typesafePrevTs = 0;
+let typesafePrevFrameMs = 0;
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
 bindPresentListener((ts) => {
@@ -626,7 +626,8 @@ function feed(m: StateMsg): void {
     });
   }
 
-  const tsActive = pluginSpecs.find((p) => p.id === tsWatchId);
+  const tsMode = modeById(modeSel.value);
+  const tsActive = tsMode.pluginId ? pluginSpecs.find((p) => p.id === tsMode.pluginId) : undefined;
   typesafeHost.configure({
     packHasCap: pluginHasTypeSafe(tsActive?.capabilities),
     enable: parseTypeSafeEnable(),
@@ -638,9 +639,9 @@ function feed(m: StateMsg): void {
   }
   const frameMs = performance.now() - feedT0;
   const headroomMs = VIZ_FRAME_BUDGET_MS - frameMs;
-  const dt = typesafePrevTs > 0 ? Math.max(0, (shown.ts || 0) - typesafePrevTs) : 0;
+  const dt = typesafePrevFrameMs;
   void typesafeHost.tick(shown, { frameMs, headroomMs, dt });
-  if (shown.ts) typesafePrevTs = shown.ts;
+  typesafePrevFrameMs = frameMs;
 }
 
 // ---------------------------------------------------------------- redaction (screenshots / sharing)

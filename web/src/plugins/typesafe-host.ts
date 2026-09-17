@@ -187,6 +187,7 @@ function remapState(state: StateMsg, remap?: Record<string, string>): StateMsg {
 export class TypeSafeHost {
   private packHasCap = false;
   private enable: TypeSafeEnableFlags = { continuous: false, freeze: false, replay: false };
+  private parsedEnable: TypeSafeEnableFlags = { continuous: false, freeze: false, replay: false };
   private contract: TypeSafeContract | undefined;
   private shadow: TypeSafeShadowPayload | null = null;
   private lastShadow: TypeSafeShadowPayload | null = null;
@@ -204,10 +205,14 @@ export class TypeSafeHost {
     enable: TypeSafeEnableFlags;
     contract?: TypeSafeContract;
   }): void {
+    const prevParsed = this.parsedEnable;
+    this.parsedEnable = opts.enable;
     this.packHasCap = opts.packHasCap;
-    this.enable = opts.enable;
     this.contract = opts.contract;
-    if (opts.enable.freeze) this.freezeQueued = true;
+    this.enable.continuous = opts.enable.continuous;
+    this.enable.freeze = opts.enable.freeze;
+    if (opts.enable.freeze && !prevParsed.freeze) this.freezeQueued = true;
+    if (opts.enable.replay && !prevParsed.replay) this.enable.replay = true;
     if (!this.isEnabled()) {
       this.sdk = null;
     }
