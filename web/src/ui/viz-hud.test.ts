@@ -9,6 +9,7 @@ import {
   formatSkipRate,
   isSkipPulsing,
   isVizDemoPack,
+  normalizeVizDemoPackId,
   skipRatePerSec,
   vizHudMetric,
 } from "./viz-hud";
@@ -46,6 +47,24 @@ describe("viz hud helpers", () => {
   it("recognises demo pack ids", () => {
     expect(isVizDemoPack("packet-tunnel")).toBe(true);
     expect(isVizDemoPack("topology")).toBe(false);
+  });
+
+  it("normalises plugin view ids to bare demo pack ids", () => {
+    expect(normalizeVizDemoPackId("plugin:packet-tunnel")).toBe("packet-tunnel");
+    expect(normalizeVizDemoPackId("plugin:rf-constellation")).toBe("rf-constellation");
+    expect(normalizeVizDemoPackId("plugin:talker-storm")).toBe("talker-storm");
+    expect(normalizeVizDemoPackId("plugin:topology")).toBeNull();
+    expect(normalizeVizDemoPackId("topology")).toBeNull();
+    expect(isVizDemoPack("plugin:packet-tunnel")).toBe(true);
+  });
+
+  it("unhides #viz-hud for plugin-prefixed demo pack ids", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    expect(hud.root.hidden).toBe(true);
+    hud.setActive("plugin:packet-tunnel", "Packet Tunnel");
+    expect(hud.root.hidden).toBe(false);
+    expect(hud.root.id).toBe("viz-hud");
   });
 
   it("computes rolling skip rate over ~1 s", () => {

@@ -50,7 +50,7 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { captureHud, mergeAgentPatch, pickAgentSettings } from "../ui/capture";
-import { VizHud, isVizDemoPack, type VizDemoPackId } from "../ui/viz-hud";
+import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -387,6 +387,10 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(spec, preserve);
     tsWatchId = spec.id;
     tsWatchHash = spec.hash;
+    const m = modeById(modeSel.value);
+    if (m.pluginId === spec.id) {
+      vizHud.setActive(spec.id, spec.name);
+    }
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
     console.warn("zoto-viz plugin runtime:", e);
@@ -489,7 +493,7 @@ function applyMode(id: string): void {
     scene.setStageOnly(false);
     renderLegend(m, opts);
     $("hint").textContent = m.hint;
-    vizHud.setActive(spec?.id ?? null, spec?.name ?? m.label);
+    vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label);
     applyViewLook();
     return;
   }
@@ -508,7 +512,7 @@ function applyMode(id: string): void {
 
   renderLegend(m, opts);
   $("hint").textContent = m.hint;
-  vizHud.setActive(spec?.id ?? null, spec?.name ?? m.label);
+  vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label);
   applyViewLook();
 }
 
@@ -602,15 +606,13 @@ function feed(m: StateMsg): void {
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => sandbox.frame(f));
     if (frame) vizFrameTs = frame.t;
     vizHud.tick({
-      packId: isVizDemoPack(active.id) ? active.id : null,
+      packId: normalizeVizDemoPackId(active.id),
       packName: active.name,
       stats: vizBudget.stats,
       frame: vizBudget.lastBuilt,
       state: shown,
       now: performance.now(),
     });
-  } else {
-    vizHud.setActive(null, "");
   }
 }
 
