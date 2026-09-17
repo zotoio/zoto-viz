@@ -176,7 +176,11 @@ function remapState(state: StateMsg, remap?: Record<string, string>): StateMsg {
   const out: StateMsg = { ...state };
   for (const [from, to] of Object.entries(remap)) {
     const val = (state as unknown as Record<string, unknown>)[from];
-    if (val !== undefined) (out as unknown as Record<string, unknown>)[to] = val;
+    if (val !== undefined) {
+      const rec = out as unknown as Record<string, unknown>;
+      rec[to] = val;
+      delete rec[from];
+    }
   }
   return out;
 }
@@ -215,6 +219,9 @@ export class TypeSafeHost {
     this.enable.freeze = opts.enable.freeze;
     if (opts.enable.freeze && !prevParsed.freeze) this.freezeQueued = true;
     if (opts.enable.replay && !prevParsed.replay) this.enable.replay = true;
+    if (!opts.enable.continuous && !opts.enable.freeze && !opts.enable.replay) {
+      this.shadow = null;
+    }
     if (!this.isEnabled()) {
       this.sdk = null;
     }
@@ -265,10 +272,7 @@ export class TypeSafeHost {
       mode = "continuous";
     }
 
-    if (!mode) {
-      this.shadow = null;
-      return;
-    }
+    if (!mode) return;
 
     if (mode === "replay") {
       this.shadow = this.lastShadow
