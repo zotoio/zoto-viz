@@ -1,5 +1,5 @@
 import type { Device, StateMsg } from "../core/types";
-import { PLUGIN_SKY_UNIFORMS } from "../graph/backdrop";
+import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
 
 /** Target frame budget for viz plugin work (60 fps). */
 export const VIZ_FRAME_BUDGET_MS = 16.7;
