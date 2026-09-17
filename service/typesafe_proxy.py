@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -9,6 +10,25 @@ from aiohttp import web
 
 TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone"
 TYPESAFE_MODEL = "jev-latest"
+_REPO = Path(__file__).resolve().parents[1]
+
+
+def load_dotenv(path: Path | None = None) -> None:
+    """Load KEY=VALUE pairs from `.env` when not already set in the process env."""
+    env_file = path or (_REPO / ".env")
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, sep, val = line.partition("=")
+        if not sep:
+            continue
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = val
 
 
 def api_key_configured() -> bool:

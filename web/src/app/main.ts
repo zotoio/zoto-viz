@@ -40,7 +40,7 @@ import {
 } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
-import { VizBufferWriter, VizFrameBudget, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
+import { VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
 import {
   TypeSafeHost,
   parseTypeSafeEnable,
@@ -50,7 +50,7 @@ import {
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener, bindFps } from "../core/fps";
-import { markPresent, presentTiming } from "../core/present-clock";
+import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiCyclePrefOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -587,6 +587,7 @@ function applyLive(m: StateMsg): void {
 }
 
 function feed(m: StateMsg): void {
+  const feedT0 = performance.now();
   lastRaw = m;
   applyLive(m);
   let shown = m;
@@ -638,7 +639,11 @@ function feed(m: StateMsg): void {
   if (tsSlice) {
     shown = { ...shown, plugin_state: { ...shown.plugin_state, ...tsSlice } };
   }
-  void typesafeHost.tick(shown, presentTiming());
+  const frameMs = performance.now() - feedT0;
+  void typesafeHost.tick(shown, {
+    presentIntervalMs: presentInterval(),
+    headroomMs: VIZ_FRAME_BUDGET_MS - frameMs,
+  });
 }
 
 // ---------------------------------------------------------------- redaction (screenshots / sharing)

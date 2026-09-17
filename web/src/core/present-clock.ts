@@ -1,5 +1,3 @@
-import { VIZ_FRAME_BUDGET_MS } from "../plugins/viz-host";
-
 /** Present-to-present interval from the last rAF mark (ms). */
 let lastPresentTs = 0;
 let presentIntervalMs = 0;
@@ -20,9 +18,7 @@ export function lastPresentIntervalMs(): number {
   return presentIntervalMs;
 }
 
-/** Timing for continuous TypeSafe Sense — present-clock ms, not monitor state.ts. */
-export function presentTiming(): { presentIntervalMs: number; headroomMs: number } {
-  const intervalMs = presentIntervalMs;
-  const headroomMs = VIZ_FRAME_BUDGET_MS - intervalMs;
-  return { presentIntervalMs: intervalMs, headroomMs };
+/** Present-to-present interval for continuous TypeSafe Sense (rAF clock, not monitor state.ts). */
+export function presentInterval(): number {
+  return presentIntervalMs;
 }

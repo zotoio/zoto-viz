@@ -155,16 +155,16 @@ export function parseTypeSafeContract(raw: unknown): TypeSafeContract | undefine
 }
 
 /**
- * Continuous Sense gate: present-to-present under 16.7 ms and at least 4 ms headroom.
- * `presentIntervalMs` and `headroomMs` are rAF present-clock milliseconds.
- * Freeze/replay bypass the gate.
+ * Continuous Sense gate: present-to-present under 16.7 ms and at least 4 ms headroom
+ * after monitor `feed()` work. `presentIntervalMs` is rAF clock; `headroomMs` is
+ * frame-budget minus feed work. Freeze/replay bypass the gate.
  */
 export function typesafeSenseAllowed(
   mode: TypeSafeSenseMode,
   timing: TypeSafeTickTiming,
 ): { ok: true } | { ok: false; reason: "no-headroom" | "over-budget" } {
   if (mode === "freeze" || mode === "replay") return { ok: true };
-  if (timing.presentIntervalMs > TYPESAFE_FRAME_BUDGET_MS) {
+  if (timing.presentIntervalMs <= 0 || timing.presentIntervalMs > TYPESAFE_FRAME_BUDGET_MS) {
     return { ok: false, reason: "over-budget" };
   }
   if (timing.headroomMs < TYPESAFE_HEADROOM_MS) return { ok: false, reason: "no-headroom" };
@@ -195,6 +195,7 @@ export class TypeSafeHost {
   private lastShadow: TypeSafeShadowPayload | null = null;
   private sdk: TypeSafeSdk | null = null;
   private freezeQueued = false;
+  private senseInFlight = false;
   private _stats: TypeSafeHostStats = { sdkLoads: 0, senseCalls: 0, skipped: 0 };
 
   get stats(): TypeSafeHostStats {
@@ -260,6 +261,7 @@ export class TypeSafeHost {
       mode = "replay";
       this.enable = { ...this.enable, replay: false };
     } else if (this.enable.continuous) {
+      if (this.senseInFlight) return;
       mode = "continuous";
     }
 
@@ -318,19 +320,32 @@ export class TypeSafeHost {
 
     const payload = remapState(state, this.contract?.stateRemap);
     this._stats.senseCalls++;
-    const result = await sdk.sense({
-      state: payload,
-      questions: this.contract?.questions,
-    });
-    this.shadow = {
-      t: state.ts || Date.now() / 1000,
-      mode,
-      ok: true,
-      answer: result.answer,
-      presentIntervalMs: timing.presentIntervalMs,
-      headroomMs: timing.headroomMs,
-    };
-    this.lastShadow = this.shadow;
+    this.senseInFlight = true;
+    try {
+      const result = await sdk.sense({
+        state: payload,
+        questions: this.contract?.questions,
+      });
+      this.shadow = {
+        t: state.ts || Date.now() / 1000,
+        mode,
+        ok: true,
+        answer: result.answer,
+        presentIntervalMs: timing.presentIntervalMs,
+        headroomMs: timing.headroomMs,
+      };
+      this.lastShadow = this.shadow;
+    } catch {
+      this.shadow = {
+        t: state.ts || Date.now() / 1000,
+        mode,
+        ok: false,
+        presentIntervalMs: timing.presentIntervalMs,
+        headroomMs: timing.headroomMs,
+      };
+    } finally {
+      this.senseInFlight = false;
+    }
   }
 
   reset(): void {
@@ -338,6 +353,7 @@ export class TypeSafeHost {
     this.lastShadow = null;
     this.sdk = null;
     this.freezeQueued = false;
+    this.senseInFlight = false;
     this._stats = { sdkLoads: 0, senseCalls: 0, skipped: 0 };
   }
 }

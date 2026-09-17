@@ -10,6 +10,15 @@ from aiohttp.test_utils import TestClient, TestServer
 from service import typesafe_proxy
 
 
+def test_load_dotenv_reads_repo_env(tmp_path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("# comment\nTYPESAFE_API_KEY=from-file\nEXISTING=from-file\n")
+    with patch.dict(os.environ, {"EXISTING": "from-shell"}, clear=True):
+        typesafe_proxy.load_dotenv(env)
+        assert os.environ["TYPESAFE_API_KEY"] == "from-file"
+        assert os.environ["EXISTING"] == "from-shell"
+
+
 def test_api_key_configured_reads_monitor_env() -> None:
     with patch.dict(os.environ, {}, clear=True):
         assert typesafe_proxy.api_key_configured() is False

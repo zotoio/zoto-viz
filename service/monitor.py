@@ -1764,6 +1764,9 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
 
 
 def main() -> None:
+    from . import typesafe_proxy
+
+    typesafe_proxy.load_dotenv()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--iface", action="append", metavar="IFACE",
                    help="capture only these interfaces (repeatable; default: every up interface except lo and veth*)")
