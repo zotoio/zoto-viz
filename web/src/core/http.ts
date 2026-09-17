@@ -25,18 +25,39 @@ export async function bootSession(): Promise<{
   csrf: string;
   aiControl: boolean;
   pluginService: boolean;
+  typesafeConfigured: boolean;
 }> {
   try {
     const r = await apiFetch("/api/session");
-    if (!r.ok) return { csrf, aiControl: false, pluginService: false };
-    const data = await r.json() as { csrf?: string; aiControl?: boolean; pluginService?: boolean };
+    if (!r.ok) return { csrf, aiControl: false, pluginService: false, typesafeConfigured: false };
+    const data = await r.json() as {
+      csrf?: string;
+      aiControl?: boolean;
+      pluginService?: boolean;
+      typesafeConfigured?: boolean;
+    };
     if (typeof data.csrf === "string" && data.csrf) csrf = data.csrf;
+    const typesafeConfigured = typeof data.typesafeConfigured === "boolean"
+      ? data.typesafeConfigured
+      : await fetchTypeSafeConfiguredFallback();
     return {
       csrf,
       aiControl: !!data.aiControl,
       pluginService: !!data.pluginService,
+      typesafeConfigured,
     };
   } catch {
-    return { csrf, aiControl: false, pluginService: false };
+    return { csrf, aiControl: false, pluginService: false, typesafeConfigured: false };
+  }
+}
+
+async function fetchTypeSafeConfiguredFallback(): Promise<boolean> {
+  try {
+    const r = await apiFetch("/api/typesafe/status");
+    if (!r.ok) return false;
+    const data = await r.json() as { configured?: boolean };
+    return !!data.configured;
+  } catch {
+    return false;
   }
 }

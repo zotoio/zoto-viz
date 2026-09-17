@@ -25,6 +25,7 @@ ExecStart=%h/zoto-viz/.venv/bin/python -m service.monitor --bind 127.0.0.1 --por
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/zoto-viz/.env
 KillMode=control-group
 TimeoutStopSec=10
 

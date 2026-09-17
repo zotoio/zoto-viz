@@ -265,6 +265,24 @@ def test_viz_block_required_with_viz_caps() -> None:
         })
 
 
+def test_typesafe_capability_in_schema() -> None:
+    caps = _schema()["properties"]["capabilities"]["items"]["enum"]
+    assert "typesafe" in caps
+    ts = _schema()["$defs"]["typesafeContract"]
+    assert "questions" in ts["properties"]
+    assert "stateRemap" in ts["properties"]
+    _validator().validate({
+        "id": "sense-pack",
+        "name": "Sense",
+        "version": 1,
+        "capabilities": ["typesafe"],
+        "typesafe": {
+            "questions": [{"id": "q1", "prompt": "ping?"}],
+            "stateRemap": {"devices": "nodes"},
+        },
+    })
+
+
 def test_viz_graph_walk_true_fails_schema() -> None:
     with pytest.raises(ValidationError):
         _validator().validate({

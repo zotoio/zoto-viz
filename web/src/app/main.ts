@@ -40,10 +40,17 @@ import {
 } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
-import { VizBufferWriter, VizFrameBudget, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
+import { VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
+import {
+  TypeSafeHost,
+  parseTypeSafeEnable,
+  pluginHasTypeSafe,
+  setTypeSafeProxyConfigured,
+} from "../plugins/typesafe-host";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
-import { bindFps, bindPresentListener } from "../core/fps";
+import { addPresentListener, bindFps } from "../core/fps";
+import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiCyclePrefOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -231,11 +238,13 @@ const sandbox = new PluginSandbox();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
 const vizBudget = new VizFrameBudget();
+const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
-bindPresentListener((ts) => {
+addPresentListener((ts) => {
   if (normalizeVizDemoPackId(tsWatchId)) vizBudget.markPresent(ts);
 });
+addPresentListener(markPresent);
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
@@ -578,6 +587,7 @@ function applyLive(m: StateMsg): void {
 }
 
 function feed(m: StateMsg): void {
+  const feedT0 = performance.now();
   lastRaw = m;
   applyLive(m);
   let shown = m;
@@ -617,6 +627,23 @@ function feed(m: StateMsg): void {
       now: performance.now(),
     });
   }
+
+  const tsMode = modeById(modeSel.value);
+  const tsActive = tsMode.pluginId ? pluginSpecs.find((p) => p.id === tsMode.pluginId) : undefined;
+  typesafeHost.configure({
+    packHasCap: pluginHasTypeSafe(tsActive?.capabilities),
+    enable: parseTypeSafeEnable(),
+    contract: tsActive?.typesafe,
+  });
+  const tsSlice = typesafeHost.pluginStateSlice();
+  if (tsSlice) {
+    shown = { ...shown, plugin_state: { ...shown.plugin_state, ...tsSlice } };
+  }
+  const frameMs = performance.now() - feedT0;
+  void typesafeHost.tick(shown, {
+    presentIntervalMs: presentInterval(),
+    headroomMs: VIZ_FRAME_BUDGET_MS - frameMs,
+  });
 }
 
 // ---------------------------------------------------------------- redaction (screenshots / sharing)
@@ -908,6 +935,7 @@ uiReady = true;
 applyViewLook();
 void (async () => {
   const session = await bootSession();
+  setTypeSafeProxyConfigured(() => session.typesafeConfigured);
   agent.setControlFromServer(session.aiControl);
   pluginSpecs = await installPlugins();
   modeSel.setOptions(viewSelectOptions());

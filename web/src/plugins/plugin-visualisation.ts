@@ -1,6 +1,7 @@
 import type { ModeOption, PluginField, ViewMode } from "../core/modes";
 import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { parseVizContract } from "./viz-host";
+import { parseTypeSafeContract } from "./typesafe-host";
 import type {
   PluginEngine,
   PluginLayout,
@@ -47,6 +48,7 @@ export type CatalogRow = {
   entry?: unknown;
   capabilities?: unknown;
   viz?: unknown;
+  typesafe?: unknown;
   hash?: unknown;
   service?: unknown;
   consent?: unknown;
@@ -258,10 +260,12 @@ export function toPluginView(raw: unknown): PluginView {
   if (Array.isArray(row.capabilities)) {
     spec.capabilities = row.capabilities.filter((c): c is NonNullable<PluginView["capabilities"]>[number] =>
       c === "graph.read" || c === "graph.style" || c === "ui.overlay" || c === "config.read"
-      || c === "viz.read" || c === "viz.write");
+      || c === "viz.read" || c === "viz.write" || c === "typesafe");
   }
   const vizContract = parseVizContract(row.viz);
   if (vizContract) spec.viz = vizContract;
+  const typesafeContract = parseTypeSafeContract(row.typesafe);
+  if (typesafeContract) spec.typesafe = typesafeContract;
   if (asString(row.hash)) spec.hash = asString(row.hash);
   if (asString(row.service)) spec.service = asString(row.service);
   if (row.consent === "reviewed" || row.consent === "authored" || row.consent === null) spec.consent = row.consent;

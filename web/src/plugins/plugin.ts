@@ -29,6 +29,8 @@ import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
 import { PluginSandbox, pluginModuleUrl } from "./host";
 import type { VizPluginContract } from "./viz-host";
+import type { TypeSafeContract } from "./typesafe-host";
+import { parseTypeSafeContract } from "./typesafe-host";
 
 function dimHex(hex: number, amount: number): number {
   const r = Math.round(((hex >> 16) & 255) * amount);
@@ -85,7 +87,8 @@ export interface PluginLook {
 }
 
 export type PluginCapability =
-  | "graph.read" | "graph.style" | "ui.overlay" | "config.read" | "viz.read" | "viz.write";
+  | "graph.read" | "graph.style" | "ui.overlay" | "config.read" | "viz.read" | "viz.write"
+  | "typesafe";
 
 export interface PluginView {
   id: string;
@@ -106,6 +109,7 @@ export interface PluginView {
   frontend?: { entry?: string };
   capabilities?: PluginCapability[];
   viz?: VizPluginContract;
+  typesafe?: TypeSafeContract;
   hash?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;

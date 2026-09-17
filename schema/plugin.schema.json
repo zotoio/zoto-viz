@@ -63,13 +63,17 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "enum": ["graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write"]
+        "enum": ["graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write", "typesafe"]
       },
-      "description": "Frontend host API allowlist. camera, mic, parent DOM, and network are never granted. viz.read receives host-decimated data frames; viz.write fills reserved buffer/uniform slots (see $defs/vizContract)."
+      "description": "Frontend host API allowlist. camera, mic, parent DOM, and network are never granted. viz.read receives host-decimated data frames; viz.write fills reserved buffer/uniform slots (see $defs/vizContract). typesafe opts into lazy TypeSafe/Jev Sense (shadow plugin_state only — see $defs/typesafeContract)."
     },
     "viz": {
       "$ref": "#/$defs/vizContract",
       "description": "VizPlugin contract: caps, buffer slots, particle limit, no full-graph walk. Required when viz.read or viz.write is declared."
+    },
+    "typesafe": {
+      "$ref": "#/$defs/typesafeContract",
+      "description": "Optional TypeSafe/Jev contract (or inline typesafe.yml merge). Dark by default — host lazy-loads SDK only when typesafe capability is declared and the user opts in."
     },
     "overlay": {
       "description": "When true or a mode/plugin id, this plugin overlays look onto that catalog row instead of adding a second view.",
@@ -282,6 +286,33 @@
         "slotVec4s": { "const": 16 },
         "totalVec4s": { "const": 128 },
         "totalBytes": { "const": 2048 }
+      }
+    },
+    "typesafeContract": {
+      "title": "TypeSafe/Jev opt-in contract",
+      "description": "Shadow-channel only: results land in plugin_state.typesafe, never UBO or viz skip paths. Optional typesafe.yml at plugin root may supply the same shape.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "questions": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "prompt"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "prompt": { "type": "string", "minLength": 1, "maxLength": 512 }
+            }
+          },
+          "description": "Optional Sense prompts passed to Jev when enabled."
+        },
+        "stateRemap": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "description": "Rename top-level monitor state keys before Sense (e.g. devices → nodes)."
+        }
       }
     },
     "vizContract": {

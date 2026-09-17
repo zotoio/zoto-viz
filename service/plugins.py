@@ -36,6 +36,7 @@ SCHEMA_FILE = REPO / "schema" / "plugin.schema.json"
 SUFFIXES = {".yml", ".yaml"}
 ALLOWED_CAPS = frozenset({
     "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
+    "typesafe",
 })
 MAX_BUNDLE = 256 * 1024
 DEFAULT_FRONTEND_ENTRY = "frontend/index.ts"
@@ -574,6 +575,40 @@ def _attach_visualisation(
     return {**row, "visualisation": viz}
 
 
+def _typesafe_doc(home: Path) -> dict[str, Any] | None:
+    """Load optional typesafe.yml next to plugin.yml. None when absent."""
+    path = home / "typesafe.yml"
+    if not path.is_file():
+        return None
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as e:
+        raise ValueError(f"could not read typesafe.yml: {e}") from e
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("typesafe.yml must be a mapping")
+    return raw
+
+
+def _attach_typesafe(
+    row: dict[str, Any],
+    home: Path,
+    errors: list[dict[str, str]],
+    rel: str,
+) -> dict[str, Any]:
+    if row.get("typesafe") is not None:
+        return row
+    try:
+        ts = _typesafe_doc(home)
+    except ValueError as e:
+        errors.append({"file": rel, "error": str(e)})
+        return row
+    if ts is None:
+        return row
+    return {**row, "typesafe": ts}
+
+
 def _zip_files(folder: Path) -> list[Path]:
     if not folder.is_dir():
         return []
@@ -686,7 +721,8 @@ def _catalog_row(
     merged = {**doc, **more, **extra}
     kind = consent_kind(merged)
     sky = psky.catalog(merged, home, allowed=consented(merged))
-    return _attach_visualisation({**merged, "consent": kind, **sky}, home, errors, rel)
+    row = _attach_visualisation({**merged, "consent": kind, **sky}, home, errors, rel)
+    return _attach_typesafe(row, home, errors, rel)
 
 
 def _scan_zips(
