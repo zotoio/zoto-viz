@@ -843,7 +843,7 @@ body.modal-open #bar, body.modal-open #foot { pointer-events: none; }
 
 /* ------------------------------------------------------------------ footer, scene labels */
 
-#foot { position: fixed; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 360px); z-index: 5; }
+#foot { position: fixed; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 360px); z-index: 5; anchor-name: --viz-foot; }
 body[data-chrome="left"] #foot { left: calc(var(--bar-w) + 12px); max-width: calc(100vw - var(--bar-w) - 360px); }
 body[data-chrome="right"] #foot { max-width: calc(100vw - var(--bar-w) - 360px); }
 /* Full glyph outline (not a 4-way shadow) so bright skies cannot bloom through the diagonals. */
@@ -1039,7 +1039,8 @@ body[data-chrome="right"].panel-wide #livefeed { left: calc(24px + min(680px, 10
 .viz-hud {
   position: fixed;
   left: 12px;
-  bottom: 12px;
+  bottom: anchor(--viz-foot top);
+  margin-bottom: 8px;
   z-index: 6;
   pointer-events: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1051,7 +1052,6 @@ body[data-chrome="right"].panel-wide #livefeed { left: calc(24px + min(680px, 10
   border-radius: 6px;
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
-  backdrop-filter: blur(4px);
 }
 body[data-chrome="left"] .viz-hud { left: calc(var(--bar-w) + 12px); max-width: calc(100vw - var(--bar-w) - 360px); }
 body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360px); }

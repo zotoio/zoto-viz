@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { StateMsg } from "../core/types";
+import { protocols } from "../core/modes";
 import {
   VizHud,
   estimateTalkerParticles,
@@ -9,6 +12,35 @@ import {
   skipRatePerSec,
   vizHudMetric,
 } from "./viz-hud";
+
+type Box = Pick<DOMRect, "top" | "bottom" | "left" | "right">;
+
+/** True when two axis-aligned boxes share interior area. */
+export function boxesOverlap(a: Box, b: Box): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+/** Models anchor-positioned HUD (`bottom: anchor(--viz-foot top); margin-bottom: 8px`). */
+export function modeledHudFootBoxes(
+  viewportH: number,
+  footH: number,
+  hudH: number,
+  footBottom = 12,
+  hudGap = 8,
+): { foot: Box; hud: Box } {
+  const footTop = viewportH - footBottom - footH;
+  const hudBottom = footTop - hudGap;
+  const hudTop = hudBottom - hudH;
+  return {
+    foot: { top: footTop, bottom: footTop + footH, left: 12, right: 920 },
+    hud: { top: hudTop, bottom: hudBottom, left: 12, right: 480 },
+  };
+}
+
+/** packet-tunnel base (protocols legend) @ 1280×800 — conservative lower bound from browser layout. */
+const FAT_PROTOCOLS_FOOT_H = 72;
+const HUD_LINE_H = 26;
+const VIEWPORT_H = 800;
 
 describe("viz hud helpers", () => {
   it("recognises demo pack ids", () => {
@@ -34,6 +66,40 @@ describe("viz hud helpers", () => {
     expect(isSkipPulsing(start, start + 400)).toBe(true);
     expect(isSkipPulsing(start + 200, start + 400)).toBe(true);
     expect(isSkipPulsing(start + 500, start + 400)).toBe(false);
+  });
+
+  it("anchors HUD above #foot and keeps boxes clear under a fat protocols legend", () => {
+    const css = readFileSync(resolve(__dirname, "../style.css"), "utf8");
+    expect(css).toContain("anchor-name: --viz-foot");
+    expect(css).toContain("bottom: anchor(--viz-foot top)");
+
+    document.head.innerHTML = `<style>${css}</style>`;
+    document.body.innerHTML = `
+      <div id="scene"></div>
+      <div id="foot"><div id="hint"></div><div id="legend"></div></div>
+    `;
+    const hint = document.getElementById("hint")!;
+    const legend = document.getElementById("legend")!;
+    hint.textContent = protocols.hint;
+    for (const item of protocols.legend({})) {
+      const s = document.createElement("span");
+      const i = document.createElement("i");
+      i.style.background = item.color;
+      if (item.line) i.classList.add("line");
+      s.append(i, item.label);
+      legend.append(s);
+    }
+
+    const hud = new VizHud(document.getElementById("scene")!, () => {});
+    hud.setActive("packet-tunnel", "Packet Tunnel");
+    hud.root.hidden = false;
+
+    expect(getComputedStyle(document.getElementById("foot")!).anchorName).toBe("--viz-foot");
+
+    const { foot, hud: hudBox } = modeledHudFootBoxes(VIEWPORT_H, FAT_PROTOCOLS_FOOT_H, HUD_LINE_H);
+    expect(boxesOverlap(foot, hudBox)).toBe(false);
+    expect(hudBox.bottom).toBeLessThanOrEqual(foot.top - 8);
+    expect(legend.childElementCount).toBeGreaterThanOrEqual(10);
   });
 
   it("lays out pack, metric, skip, and swap on one nowrap row", () => {
