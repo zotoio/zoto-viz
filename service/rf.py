@@ -161,13 +161,13 @@ def parse_nmcli_line(line: str) -> list[str]:
 
 def read_bt_self() -> tuple[str, str]:
     """Adapter MAC and alias from hciconfig / bluetoothctl."""
-    out = zotoviz.run(["hciconfig", "hci0"], quiet=True) or ""
+    out = zotoviz.run(["hciconfig", "hci0"], quiet=True, check=False) or ""
     mac = ""
     m = re.search(r"BD Address:\s*([0-9A-Fa-f:]{17})", out)
     if m:
         mac = _mac(m.group(1))
     name = ""
-    show = zotoviz.run(["bluetoothctl", "show"], quiet=True) or ""
+    show = zotoviz.run(["bluetoothctl", "show"], quiet=True, check=False) or ""
     for line in show.splitlines():
         line = line.strip()
         if line.startswith("Name:"):
@@ -180,7 +180,7 @@ def read_bt_self() -> tuple[str, str]:
 def read_wifi_link(iface: str) -> tuple[str, str, int]:
     """Associated BSSID, SSID, channel from `iw dev <iface> link` / `info`."""
     bssid, ssid, chan = "", "", 0
-    out = zotoviz.run(["iw", "dev", iface, "link"], quiet=True) or ""
+    out = zotoviz.run(["iw", "dev", iface, "link"], quiet=True, check=False) or ""
     for line in out.splitlines():
         line = line.strip()
         if line.lower().startswith("connected to "):
@@ -189,7 +189,7 @@ def read_wifi_link(iface: str) -> tuple[str, str, int]:
             ssid = _ssid(line.split(":", 1)[1])
         elif line.lower().startswith("freq:"):
             pass
-    info = zotoviz.run(["iw", "dev", iface, "info"], quiet=True) or ""
+    info = zotoviz.run(["iw", "dev", iface, "info"], quiet=True, check=False) or ""
     m = re.search(r"channel\s+(\d+)", info)
     if m:
         chan = int(m.group(1))
@@ -235,7 +235,7 @@ def nmcli_scan(rescan: bool = False) -> list[dict[str, Any]]:
         "device", "wifi", "list",
     ]
     cmd += ["--rescan", "yes" if rescan else "no"]
-    raw = zotoviz.run(cmd, quiet=True) or ""
+    raw = zotoviz.run(cmd, quiet=True, check=False) or ""
     rows = []
     for line in raw.splitlines():
         p = parse_nmcli_line(line)

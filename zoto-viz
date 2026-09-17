@@ -48,11 +48,15 @@ def run(cmd: list[str], *, check: bool = True, timeout: int | None = None, quiet
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
-        die(f"{cmd[0]} not found on PATH")
+        if check and not quiet:
+            die(f"{cmd[0]} not found on PATH")
+        if not quiet:
+            log(f"warning: {cmd[0]} not found on PATH")
+        return ""
     except subprocess.TimeoutExpired as e:
         return (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
     if res.returncode != 0:
-        if check:
+        if check and not quiet:
             log(res.stderr.strip())
             die(f"{cmd[0]} exited {res.returncode}")
         err = res.stderr.strip().splitlines()

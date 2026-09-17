@@ -1158,7 +1158,14 @@ async def _kill_group(proc: asyncio.subprocess.Process) -> None:
 
 async def capture_loop(state: State, bpf: str, wifi_keys: Path) -> None:
     backoff = 2
+    warned = False
     while True:
+        if not shutil.which("tshark"):
+            if not warned:
+                log("tshark not found; packet capture disabled until it is installed")
+                warned = True
+            await asyncio.sleep(30)
+            continue
         # re-read before every start: an interface that vanished while tshark was down (a USB radio re-plugged)
         # would otherwise stay in the list and make every start fail
         state.refresh_interfaces()
@@ -1349,6 +1356,12 @@ async def bluetooth_loop(state: State) -> None:
 async def _bt_tshark_loop(state: State) -> None:
     backoff, warned = 2, False
     while True:
+        if not shutil.which("tshark"):
+            if not warned:
+                log("tshark not found; Bluetooth HCI capture disabled")
+                warned = True
+            await asyncio.sleep(30)
+            continue
         cmd = wrap_privileged(bt_tshark_cmd())
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True,
@@ -1468,7 +1481,7 @@ def discover_once(state: State) -> None:
             state.device(f[0], mac)
             state.add_name(f[0], f[1], "netbios")
 
-    own = json.loads(zotoviz.run(["ip", "-j", "link", "show", state.iface], quiet=True) or "[]")
+    own = json.loads(zotoviz.run(["ip", "-j", "link", "show", state.iface], quiet=True, check=False) or "[]")
     if own:
         d = state.device(state.local_ip, own[0].get("address", "").lower())
         state.add_name(state.local_ip, os.uname().nodename, "self")
