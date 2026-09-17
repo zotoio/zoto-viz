@@ -143,7 +143,7 @@ export class VizHud {
 
     this.skipEl = document.createElement("span");
     this.skipEl.className = "viz-hud-skip";
-    this.skipEl.title = "Host viz frame skips (over 16.7 ms budget), rolling 1 s";
+    this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";

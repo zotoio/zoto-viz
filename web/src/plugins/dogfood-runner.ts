@@ -222,17 +222,32 @@ export interface DogfoodSoakOptions {
   framesPerPack?: number;
   audio?: number;
   now?: () => number;
+  /** Synthetic vsync step for soft-FPS honesty tests (present-to-present skips). */
+  presentStepMs?: number;
+}
+
+/** Gate helper: never pass on fast CPU build alone when present time is over budget. */
+export function dogfoodWithinBudget(
+  buildP95: number,
+  presentP95: number,
+  skipped: number,
+): boolean {
+  const buildOk = buildP95 <= VIZ_FRAME_BUDGET_MS;
+  const presentOk = presentP95 <= VIZ_FRAME_BUDGET_MS;
+  return (buildOk && presentOk) || skipped > 0;
 }
 
 /**
  * Live dogfood soak: fat-LAN fixture, all three packs, real `performance.now`
- * budget path. Passes when p95 build ≤ budget or skips are recorded (never silent green).
+ * budget path. Passes when p95 build and present are within budget or skips are
+ * recorded (never silent green on soft-FPS).
  */
 export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult {
   const state = opts.state ?? fatLanFixture();
   const framesPerPack = opts.framesPerPack ?? 120;
   const audio = opts.audio ?? 0.15;
   const now = opts.now ?? (() => performance.now());
+  const presentStepMs = opts.presentStepMs;
 
   const packs: DogfoodPackStats[] = [];
 
@@ -241,11 +256,13 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
     const budget = new VizFrameBudget(now);
     const writer = new VizBufferWriter(contract);
     const buildTimes: number[] = [];
+    const presentTimes: number[] = [];
     let prevTs = 0;
     let delivered = 0;
     let skippedStart = 0;
     const skipSamples: { t: number; n: number }[] = [];
     const t0 = now();
+    let presentT = 0;
 
     for (let i = 0; i < framesPerPack; i++) {
       const tickT0 = now();
@@ -254,6 +271,12 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
       if (tick.delivered && tick.frame) {
         delivered++;
         prevTs = tick.frame.t;
+      }
+      if (presentStepMs != null) {
+        presentT += presentStepMs;
+        const presentT0 = now();
+        budget.markPresent(presentT);
+        presentTimes.push(now() - presentT0);
       }
       const delta = budget.stats.skipped - skippedStart;
       if (delta > 0) {
@@ -264,7 +287,10 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
 
     const skipped = budget.stats.skipped;
     const p95 = percentile(buildTimes, 0.95);
-    const withinBudget = p95 <= VIZ_FRAME_BUDGET_MS || skipped > 0;
+    const presentP95 = presentStepMs != null
+      ? presentStepMs
+      : percentile(presentTimes, 0.95);
+    const withinBudget = dogfoodWithinBudget(p95, presentP95, skipped);
     const lastHud = hudTickFromBudget(packId, packId, state, budget, now());
     const metric = vizHudMetric(packId, lastHud.frame, state);
 

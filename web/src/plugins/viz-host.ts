@@ -263,6 +263,7 @@ export class VizFrameBudget {
   private _skipped = 0;
   private _total = 0;
   private _lastBuilt: VizDataFrame | null = null;
+  private _lastPresent = -1;
   private readonly now: () => number;
 
   constructor(now: () => number = () => performance.now()) {
@@ -295,6 +296,20 @@ export class VizFrameBudget {
   }
 
   /**
+   * Record present-to-present frame time from the shared rAF path. When the
+   * interval exceeds {@link VIZ_FRAME_BUDGET_MS}, increments the same skip
+   * counter the HUD reads so soft-FPS cannot look green while GPU/compositor
+   * work is over budget.
+   */
+  markPresent(ts: number): void {
+    if (this._lastPresent >= 0) {
+      const over = this.record(ts - this._lastPresent);
+      if (over) this._skipped++;
+    }
+    this._lastPresent = ts;
+  }
+
+  /**
    * Build and optionally deliver a viz frame. Over-budget frames are skipped
    * (not delivered) and the over-budget counter increments.
    */
@@ -323,6 +338,7 @@ export class VizFrameBudget {
     this._skipped = 0;
     this._total = 0;
     this._lastBuilt = null;
+    this._lastPresent = -1;
   }
 }
 

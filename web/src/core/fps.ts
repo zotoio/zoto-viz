@@ -11,6 +11,7 @@ const stamps: number[] = [];
 let lastTs = -1;
 let shown = "";
 let el: HTMLElement | null = null;
+let presentListener: ((ts: number) => void) | null = null;
 
 export function bindFps(target: HTMLElement): void {
   el = target;
@@ -21,6 +22,12 @@ export function resetFps(): void {
   stamps.length = 0;
   lastTs = -1;
   shown = "";
+  presentListener = null;
+}
+
+/** Optional hook for present-to-present budget accounting (viz HUD skips). */
+export function bindPresentListener(fn: ((ts: number) => void) | null): void {
+  presentListener = fn;
 }
 
 /**
@@ -48,6 +55,7 @@ export function windowFps(now: number, windowMs = SHOW_MS, since = Number.NEGATI
 export function markFrame(ts: number): void {
   if (ts === lastTs) return;
   lastTs = ts;
+  presentListener?.(ts);
   stamps.push(ts);
   const cutoff = ts - KEEP_MS;
   let i = 0;

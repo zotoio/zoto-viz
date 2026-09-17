@@ -212,6 +212,30 @@ describe("VizFrameBudget", () => {
     expect(budget.record(VIZ_FRAME_BUDGET_MS + 0.1)).toBe(true);
     expect(budget.stats.overBudget).toBe(1);
   });
+
+  it("counts present-to-present over-budget frames toward skipped", () => {
+    const budget = new VizFrameBudget();
+    budget.markPresent(0);
+    expect(budget.stats.skipped).toBe(0);
+
+    budget.markPresent(10);
+    expect(budget.stats.skipped).toBe(0);
+    expect(budget.stats.lastMs).toBeCloseTo(10, 5);
+
+    budget.markPresent(10 + VIZ_FRAME_BUDGET_MS + 3);
+    expect(budget.stats.skipped).toBe(1);
+    expect(budget.stats.overBudget).toBe(1);
+  });
+
+  it("resets present baseline on reset()", () => {
+    const budget = new VizFrameBudget();
+    budget.markPresent(0);
+    budget.markPresent(30);
+    expect(budget.stats.skipped).toBe(1);
+    budget.reset();
+    budget.markPresent(100);
+    expect(budget.stats.skipped).toBe(0);
+  });
 });
 
 describe("buildVizFrame", () => {
