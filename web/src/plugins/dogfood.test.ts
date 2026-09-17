@@ -4,6 +4,7 @@ import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
   DEMO_PACK_CONTRACTS,
   dogfoodTick,
+  dogfoodWithinBudget,
   formatDogfoodReport,
   hostBindOnPackSwap,
   hudTickFromBudget,
@@ -146,6 +147,28 @@ describe("viz dogfood gates", () => {
 });
 
 describe("viz dogfood over-budget honesty", () => {
+  it("dogfood gate fails on soft-FPS when skips stay blank", () => {
+    expect(dogfoodWithinBudget(5, 25, 0)).toBe(false);
+    expect(dogfoodWithinBudget(5, 25, 3)).toBe(true);
+    expect(dogfoodWithinBudget(20, 10, 0)).toBe(false);
+  });
+
+  it("records present-time skips when synthetic frame dt exceeds budget", () => {
+    const fatLan = fatLanFixture();
+    const result = runDogfoodSoak({
+      state: fatLan,
+      framesPerPack: 40,
+      presentStepMs: 25,
+    });
+
+    for (const pack of result.packs) {
+      expect(pack.skipped).toBeGreaterThan(0);
+      expect(pack.withinBudget).toBe(true);
+      expect(formatSkipRate(skipRatePerSec([{ t: 1000, n: pack.skipped }], 2000))).not.toBe("skips 0/s");
+    }
+    expect(result.allWithinBudgetOrHonestSkips).toBe(true);
+  });
+
   it("records skips when build is injected slow — never silent green", () => {
     const fatLan = fatLanFixture();
     const packId = "talker-storm";

@@ -89,6 +89,11 @@ uploaded via `scene.setPluginUboBuffer`.
 **16.7 ms** increment `overBudget` / `skipped` and are **not** delivered to
 the plugin iframe.
 
+The same skip counter also advances on the shared rAF path via
+`markPresent()` (present-to-present interval), so soft-FPS from WebGL /
+compositor cost cannot stay at `skips 0/s` while measured frame time is over
+budget.
+
 ## First-party scaffolds
 
 | Plugin | Style |
