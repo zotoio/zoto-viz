@@ -73,10 +73,30 @@ describe("viz hud helpers", () => {
       { t: 4600, n: 1 },
       { t: 1000, n: 9 },
     ];
-    expect(skipRatePerSec(samples, now)).toBeCloseTo(3.75, 1);
+    expect(skipRatePerSec(samples, now)).toBeCloseTo(3, 1);
     expect(formatSkipRate(0)).toBe("skips 0/s");
     expect(formatSkipRate(2.4)).toBe("skips 2.4/s");
     expect(formatSkipRate(12.7)).toBe("skips 13/s");
+  });
+
+  it("does not inflate same-timestamp skip bursts", () => {
+    const now = 5000;
+    expect(skipRatePerSec([{ t: now, n: 23 }], now)).toBeCloseTo(23, 1);
+  });
+
+  it("reports steady skip rate spread across the window", () => {
+    const now = 5000;
+    const samples = [
+      { t: 4100, n: 5 },
+      { t: 4300, n: 5 },
+      { t: 4500, n: 5 },
+      { t: 4700, n: 5 },
+    ];
+    expect(skipRatePerSec(samples, now)).toBeCloseTo(20, 1);
+  });
+
+  it("returns zero for empty skip samples", () => {
+    expect(skipRatePerSec([], 5000)).toBe(0);
   });
 
   it("flags skip pulse for ~400 ms after a skip", () => {

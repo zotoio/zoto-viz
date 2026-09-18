@@ -99,6 +99,8 @@ export function vizHudMetric(
   }
 }
 
+const SKIP_RATE_CEILING = 240;
+
 /** Rolling skip rate over the last ~1 s from the host cumulative skip counter. */
 export function skipRatePerSec(
   samples: readonly { t: number; n: number }[],
@@ -107,14 +109,13 @@ export function skipRatePerSec(
 ): number {
   const cutoff = now - windowMs;
   let total = 0;
-  let oldest = now;
   for (const s of samples) {
     if (s.t < cutoff) continue;
     total += s.n;
-    if (s.t < oldest) oldest = s.t;
   }
-  const span = Math.min(windowMs, Math.max(1, now - oldest));
-  return (total / span) * 1000;
+  if (total <= 0) return 0;
+  const rate = (total / windowMs) * 1000;
+  return Math.min(rate, SKIP_RATE_CEILING);
 }
 
 export function formatSkipRate(rate: number): string {
