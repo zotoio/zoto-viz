@@ -38,6 +38,27 @@ def plugins_dir() -> Path:
     return user_dir() / "plugins"
 
 
+def plugin_local_dir(*, create: bool = False) -> Path:
+    """Operator / agent drop zone: ``~/.zoto-viz/plugins/local/*.zip``.
+
+    Override with ``ZOTO_VIZ_PLUGIN_LOCAL``. Does not create the directory unless
+    ``create`` is true (publish + the monitor watch loop).
+    """
+    env = os.environ.get("ZOTO_VIZ_PLUGIN_LOCAL", "").strip()
+    d = Path(env).expanduser() if env else user_dir() / "plugins" / "local"
+    if create:
+        d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def plugin_local_runtime_dir(*, create: bool = False) -> Path:
+    """Unpack cache for local zips: ``<plugin_local_dir>/.runtime``."""
+    d = plugin_local_dir(create=create) / ".runtime"
+    if create:
+        d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def profiles_file() -> Path:
     d = user_dir()
     d.mkdir(parents=True, exist_ok=True)

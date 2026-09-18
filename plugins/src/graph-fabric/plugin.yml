@@ -1,0 +1,5 @@
+id: graph-fabric
+name: Graph cloth
+version: 1
+hint: Nodes and edges are an animated fabric mesh — same hover, selection, and edge-glow as the sphere graph.
+description: Host wrap of the topology graph. Spheres and line segments become tubes plus triangle-cycle cloth panels that breathe and carry comet/pulse glow.

@@ -1,0 +1,11 @@
+engine: graph
+base: talkers
+look:
+  theme: neon
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.18
+  skyAudio: false
+  skySpeed: 0.18
+  gridOpacity: 0

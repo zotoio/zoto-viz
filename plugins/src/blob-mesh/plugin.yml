@@ -1,0 +1,20 @@
+id: blob-mesh
+name: Blob Mesh
+version: 1
+hint: 90s metaballs. Top talkers are blobs that merge when rates climb.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 32
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts

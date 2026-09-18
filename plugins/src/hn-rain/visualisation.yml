@@ -1,0 +1,9 @@
+engine: graph
+base: sources
+look:
+  theme: matrix
+  backdrop: plugin
+  skyOpacity: 1
+  skyBright: 0.68
+  skySpeed: 0.4
+  gridOpacity: 0

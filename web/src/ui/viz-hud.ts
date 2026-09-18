@@ -1,14 +1,26 @@
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
+import { morphCopy, Select } from "./ui";
 
 /** First-party demoscene viz packs that share the host UBO frame. */
-export const VIZ_DEMO_PACKS = ["packet-tunnel", "rf-constellation", "talker-storm"] as const;
+export const VIZ_DEMO_PACKS = [
+  "packet-tunnel", "rf-constellation", "talker-storm",
+  "kefrens-bars", "roto-proto", "blob-mesh", "star-sines", "hn-rain", "hn-term",
+  "stereo-gram",
+] as const;
 export type VizDemoPackId = (typeof VIZ_DEMO_PACKS)[number];
 
 const PACK_LABELS: Record<VizDemoPackId, string> = {
   "packet-tunnel": "tunnel",
   "rf-constellation": "RF",
   "talker-storm": "storm",
+  "kefrens-bars": "kefrens",
+  "roto-proto": "roto",
+  "blob-mesh": "blobs",
+  "star-sines": "sines",
+  "hn-rain": "HN",
+  "hn-term": "term",
+  "stereo-gram": "stereo",
 };
 
 const SKIP_WINDOW_MS = 1000;
@@ -65,12 +77,25 @@ export function vizHudMetric(
     case "talker-storm": {
       const talkers = frame?.talkers ?? [];
       if (talkers.length) {
-        const top = talkers[0]!;
         const particles = estimateTalkerParticles(talkers);
         return { label: "particles", value: String(particles) };
       }
       return { label: "talkers", value: "0" };
     }
+    case "kefrens-bars":
+      return { label: "talkers", value: String(frame?.talkers.length ?? 0) };
+    case "roto-proto":
+      return { label: "flows", value: String(state.stats.active_flows) };
+    case "blob-mesh":
+      return { label: "blobs", value: String(Math.min(8, frame?.talkers.length ?? 0)) };
+    case "star-sines":
+      return { label: "lanes", value: String(frame?.packets.length ?? 0) };
+    case "hn-rain":
+      return { label: "headlines", value: String(frame?.headlines.length ?? 0) };
+    case "hn-term":
+      return { label: "stories", value: String(frame?.headlines.length ?? 0) };
+    case "stereo-gram":
+      return { label: "orbs", value: String(Math.min(8, frame?.talkers.length ?? 0)) };
   }
 }
 
@@ -113,6 +138,7 @@ export class VizHud {
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
   private readonly swapRow: HTMLElement;
+  private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
 
   private activeId: VizDemoPackId | null = null;
@@ -147,16 +173,14 @@ export class VizHud {
 
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
-    for (const id of VIZ_DEMO_PACKS) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "viz-hud-swap-btn";
-      btn.textContent = PACK_LABELS[id];
-      btn.title = id;
-      btn.dataset.pack = id;
-      btn.addEventListener("click", () => this.onSwap(id));
-      this.swapRow.append(btn);
-    }
+    this.packSel = new Select({
+      caption: "pack",
+      title: "swap demoscene pack",
+      filterable: true,
+      options: VIZ_DEMO_PACKS.map((id) => ({ value: id, label: PACK_LABELS[id], hint: id, group: "demo" })),
+      onChange: (id) => this.onSwap(id as VizDemoPackId),
+    });
+    this.swapRow.append(this.packSel.el);
 
     const sep = () => {
       const el = document.createElement("span");
@@ -175,10 +199,9 @@ export class VizHud {
     this.activeId = normalizeVizDemoPackId(packId);
     this.root.hidden = !this.activeId;
     if (!this.activeId) return;
-    this.packEl.textContent = packName;
-    for (const btn of this.swapRow.querySelectorAll<HTMLButtonElement>(".viz-hud-swap-btn")) {
-      btn.classList.toggle("active", btn.dataset.pack === this.activeId);
-    }
+    if (!this.packEl.textContent) this.packEl.textContent = packName;
+    else morphCopy(this.packEl, packName);
+    this.packSel.value = this.activeId;
   }
 
   tick(input: VizHudTick): void {

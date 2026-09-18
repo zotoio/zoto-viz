@@ -107,6 +107,10 @@ def catalog_ids(repo_root: Path | None = None) -> set[str]:
         for child in src.iterdir():
             if (child / "plugin.yml").is_file() or (child / "plugin.yaml").is_file():
                 ids.add(child.name)
+    local = paths.plugin_local_dir()
+    if local.is_dir():
+        for zip_path in local.glob("*.zip"):
+            ids.add(zip_path.stem)
     return ids
 
 

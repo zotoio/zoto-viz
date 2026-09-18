@@ -33,13 +33,13 @@ def test_roll_abbreviates_and_keeps_ui_log(tmp_path: Path, monkeypatch) -> None:
     assert len(memory.messages()) == 16
     rolled = memory.maybe_roll(force=True, keep=4)
     assert rolled is not None
-    assert "q0" in rolled["summary"]
+    assert rolled.get("new_session") is True
     tail = memory.ollama_tail()
-    assert tail[0]["content"] == memory.ROLL_PROMPT
-    assert tail[1]["role"] == "assistant"
+    assert not any(str(m.get("content") or "").startswith("Session brief") for m in tail)
+    assert tail[0]["content"].startswith("q6")
     assert memory.ui_messages()[0]["content"].startswith("q0")
     assert memory.messages()[-1]["content"].startswith("a7")
-    live = [m["content"] for m in tail[2:]]
+    live = [m["content"] for m in tail]
     assert "q0 nest speaker" not in live
     assert live[-1].startswith("a7")
     memory.maybe_roll(extra_tokens=0, budget_tokens=10_000_000)
@@ -73,7 +73,7 @@ def test_roll_through_tracks_trim(tmp_path: Path, monkeypatch) -> None:
         encoding="utf-8",
     )
     tail = memory.ollama_tail()
-    assert tail[0]["content"] == memory.ROLL_PROMPT
+    assert not any(str(m.get("content") or "").startswith("Session brief") for m in tail)
     assert tail[-1]["content"] == "x"
 
 

@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { parseCamPolicy, shouldRunCamera, type CamConsumer, type CamPolicy, CAM_STORE_KEY } from "./want";
+import { askUserMedia } from "../ui/media-ask";
+import { parseCamPolicy, setCurrentCamPolicy, shouldRunCamera, type CamConsumer, type CamPolicy, CAM_STORE_KEY } from "./want";
 import { dominantChroma, type LookHit } from "./analyze";
 import { CamSampler } from "./sampler";
 
@@ -30,6 +31,7 @@ class LiveCam {
     this.video.muted = true;
     this.video.autoplay = true;
     this.video.setAttribute("playsinline", "");
+    setCurrentCamPolicy(this.policy);
   }
 
   get texture(): THREE.VideoTexture | null { return this.tex; }
@@ -85,6 +87,8 @@ class LiveCam {
 
   setPolicy(policy: CamPolicy, persist = true): void {
     this.policy = policy;
+    setCurrentCamPolicy(policy);
+    if (policy === "auto") this.blocked = false;
     if (persist && typeof localStorage !== "undefined") localStorage.setItem(CAM_STORE_KEY, policy);
     this.sync();
     this.onPolicy?.(policy);
@@ -111,10 +115,14 @@ class LiveCam {
     }
     this.starting = true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await askUserMedia({
         audio: false,
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-      });
+      }, "live camera");
+      if (!stream) {
+        this.blocked = true;
+        return null;
+      }
       if (!this.wanted) {
         for (const t of stream.getTracks()) t.stop();
         return null;

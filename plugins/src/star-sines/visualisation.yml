@@ -1,0 +1,8 @@
+engine: graph
+base: protocols
+look:
+  theme: void
+  backdrop: plugin
+  skyOpacity: 0.98
+  skyBright: 1.22
+  gridOpacity: 0.05

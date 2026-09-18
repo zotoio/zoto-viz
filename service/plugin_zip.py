@@ -12,6 +12,7 @@ import os
 import posixpath
 import shutil
 import stat
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -214,6 +215,71 @@ def pack_tree(src: Path, dest: Path) -> str:
             zf.writestr(info, (src / rel).read_bytes(), compresslevel=PACK_COMPRESSLEVEL)
     os.replace(tmp, dest)
     return plugin_sha256(dest)
+
+
+def pack_files(files: dict[str, bytes], dest: Path) -> str:
+    """Write a deterministic zip from ``{rel: bytes}`` and return its sha256."""
+    cleaned: dict[str, bytes] = {}
+    total = 0
+    for raw_name, data in files.items():
+        rel = _safe_name(str(raw_name))
+        if not rel:
+            continue
+        if not _allowed_member(rel):
+            raise ValueError(f"disallowed path {rel!r}")
+        blob = data if isinstance(data, (bytes, bytearray)) else str(data).encode("utf-8")
+        total += len(blob)
+        if total > MAX_UNCOMPRESSED_BYTES:
+            raise ValueError("uncompressed zip too large")
+        cleaned[rel] = bytes(blob)
+        if len(cleaned) > MAX_FILES:
+            raise ValueError(f"zip has more than {MAX_FILES} files")
+    if REQUIRED_MEMBER not in cleaned:
+        raise ValueError(f"{REQUIRED_MEMBER} is required at the archive root")
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".pack-tmp")
+    if tmp.exists():
+        tmp.unlink()
+    with zipfile.ZipFile(
+        tmp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=PACK_COMPRESSLEVEL,
+    ) as zf:
+        for rel in sorted(cleaned):
+            info = zipfile.ZipInfo(filename=rel, date_time=PACK_DATE)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = PACK_CREATE_SYSTEM
+            info.external_attr = PACK_EXTERNAL_ATTR
+            zf.writestr(info, cleaned[rel], compresslevel=PACK_COMPRESSLEVEL)
+    if tmp.stat().st_size > MAX_ZIP_BYTES:
+        tmp.unlink(missing_ok=True)
+        raise ValueError(f"zip exceeds {MAX_ZIP_BYTES} bytes")
+    os.replace(tmp, dest)
+    return plugin_sha256(dest)
+
+
+def rewrite_plugin_id(raw: bytes, new_id: str) -> bytes:
+    """Return a new zip whose ``plugin.yml`` ``id`` is ``new_id``."""
+    pid = str(new_id or "").strip()
+    if not pid:
+        raise ValueError("plugin id is required")
+    fd, src_name = tempfile.mkstemp(prefix="zoto-rewrite-src.", suffix=".zip")
+    os.close(fd)
+    src = Path(src_name)
+    fd, dest_name = tempfile.mkstemp(prefix="zoto-rewrite-dst.", suffix=".zip")
+    os.close(fd)
+    dest = Path(dest_name)
+    dest.unlink(missing_ok=True)
+    try:
+        src.write_bytes(raw)
+        files = _extract_files(src)
+        doc = _parse_plugin_yml(files[REQUIRED_MEMBER])
+        doc["id"] = pid
+        files[REQUIRED_MEMBER] = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).encode("utf-8")
+        pack_files(files, dest)
+        return dest.read_bytes()
+    finally:
+        src.unlink(missing_ok=True)
+        dest.unlink(missing_ok=True)
 
 
 def _parse_plugin_yml(raw: bytes) -> dict[str, Any]:

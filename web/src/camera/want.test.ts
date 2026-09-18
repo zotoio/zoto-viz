@@ -1,10 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { cameraConsumers, parseCamPolicy, shouldRunCamera } from "./want";
+import { cameraConsumers, currentCamPolicy, parseCamPolicy, setCurrentCamPolicy, shouldRunCamera } from "./want";
 
 describe("cameraConsumers", () => {
   it("does not want the camera for sky cycle alone", () => {
     expect(cameraConsumers({
       backdrop: "space",
+      audioCamera: false,
+      camGaze: 0,
+      camTheme: false,
+    })).toEqual([]);
+  });
+
+  it("does not want the camera for photographic skies", () => {
+    expect(cameraConsumers({
+      backdrop: "earth",
+      audioCamera: false,
+      camGaze: 0,
+      camTheme: false,
+    })).toEqual([]);
+    expect(cameraConsumers({
+      backdrop: "meadow",
       audioCamera: false,
       camGaze: 0,
       camTheme: false,
@@ -65,5 +80,15 @@ describe("parseCamPolicy", () => {
     expect(parseCamPolicy("auto")).toBe("auto");
     expect(parseCamPolicy("off")).toBe("off");
     expect(parseCamPolicy("nope")).toBe("off");
+  });
+});
+
+describe("currentCamPolicy", () => {
+  it("tracks the header cam toggle for askUserMedia", () => {
+    setCurrentCamPolicy("off");
+    expect(currentCamPolicy()).toBe("off");
+    setCurrentCamPolicy("auto");
+    expect(currentCamPolicy()).toBe("auto");
+    setCurrentCamPolicy("off");
   });
 });

@@ -1,3 +1,5 @@
+import type { SourceLive } from "./sources";
+
 export type Role = "self" | "gateway" | "lan" | "local" | "internet" | "multicast";
 
 export interface Device {
@@ -217,6 +219,7 @@ export interface StateMsg {
   };
   /** Backend and host shadow extensions (e.g. typesafe Sense results). */
   plugin_state?: Record<string, unknown>;
+  sources?: Record<string, SourceLive>;
 }
 
 /**

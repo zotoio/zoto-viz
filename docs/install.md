@@ -78,7 +78,7 @@ In-process plugin Python stays off until `ZOTO_VIZ_PLUGIN_SERVICE=1`. AI Control
 
 Shipped views are `plugins/src/<id>/` trees in this checkout. Contrib zips (`plugins/*.zip`, gitignored) unpack into gitignored `plugins/.runtime/<id>/`. Src trees load in place — no unpack step. You do not copy YAML into a home directory.
 
-User data lives in `~/.zoto-viz/` (profiles, agent transcript/memories, `sys-config.yml`, `plugin-consent.yml`). System RF files live in `~/.config/zoto-viz/`. A one-time migrate copies `~/.z-netviz` if the new directory is missing.
+User data lives in `~/.zoto-viz/` (profiles, agent transcript/memories, `sys-config.yml`, `plugin-consent.yml`, local plugin zips under `plugins/local/`). System RF files live in `~/.config/zoto-viz/`. A one-time migrate copies `~/.z-netviz` if the new directory is missing.
 
 On first monitor start after upgrade, unknown plugins still in the old user-dir trees are copied into `plugins/src/<id>/` and are live. They are not packed or committed. See [Plugins](/plugins).
 

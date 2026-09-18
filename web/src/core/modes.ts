@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { GLink, GNode } from "../graph/scene";
+import type { FabricKind } from "../graph/fabric";
 import { KIND_COLOR, KIND_LABEL, KIND_ORDER, ROLE_COLOR, ago, deviceKind, displayName, fmtBytes, type Device, type DeviceKind, type Role, type WifiWatch, usefulName, unescapeDns } from "./types";
 import { rName } from "./redact";
 
@@ -7,8 +8,8 @@ import { rName } from "./redact";
  * Node shapes the scene can draw (index = `instanceShape`; the sphere cloud's vertex shader bends each instance
  * into one of these). 0 is the plain sphere; the rest are handed out per network by the Wi-Fi base.
  */
-export const SHAPES = ["sphere", "cube", "star", "octahedron", "diamond", "disc"] as const;
-export const SHAPE_GLYPH = ["●", "■", "✦", "◆", "◇", "▬"];
+export const SHAPES = ["sphere", "cube", "star", "octahedron", "diamond", "disc", "drone"] as const;
+export const SHAPE_GLYPH = ["●", "■", "✦", "◆", "◇", "▬", "✈"];
 /** shapes handed to watched networks in list order (the first list entry gets a cube, the second a star, …) */
 const NETWORK_SHAPES = [1, 2, 3, 4, 5];
 
@@ -46,7 +47,7 @@ export interface LiveLook {
   scale?: number;
   /** added to the instance glow */
   glow?: number;
-  /** 0–5 (sphere…disc), including in-between morphs */
+  /** 0–6 (sphere…drone), including in-between morphs */
   shape?: number;
   /** radians around +Y */
   spin?: number;
@@ -95,6 +96,10 @@ export interface ViewMode {
   graphBase?: string;
   /** arcade slot to run when standalone (plugin views reuse a shipped engine) */
   arcadeId?: string;
+  /** catalog family for grouped menus: graph, arcade, or demoscene viz pack */
+  kind?: "graph" | "arcade" | "demo";
+  /** Hide the LAN graph so a plugin sky owns the frame. */
+  stageOnly?: boolean;
   /** Settings → This view fields; values are merged into opts */
   config?: PluginField[];
   /** once per snapshot, before styling; compute caches here */
@@ -125,24 +130,27 @@ export interface ViewMode {
   charge?(n: GNode): number | undefined;
   linkStrength?(l: GLink): number | undefined;
   flatten?: boolean;
+  /** Draw nodes and edges as an animated fabric mesh (tubes / cloth / ribbon). */
+  fabric?: Exclude<FabricKind, "off">;
   force?(nodes: GNode[], alpha: number, ctx: ModeCtx): void;
   overlays?(ctx: ModeCtx): Overlay[];
 }
 
-/** Capture the view is drawn from: IP/LAN, Wi-Fi, Bluetooth, or this-host CPU. */
-export type ViewSource = "NET" | "AIR" | "BT" | "CPU";
+/** Capture the view is drawn from: IP/LAN, Wi-Fi, Bluetooth, this-host CPU, or host data sources. */
+export type ViewSource = "NET" | "AIR" | "BT" | "CPU" | "SRC";
 
 export function viewSource(m: Pick<ViewMode, "id" | "graphBase" | "arcadeId">): ViewSource {
   if (m.graphBase === "wifi") return "AIR";
   if (m.graphBase === "bluetooth") return "BT";
+  if (m.graphBase === "sources") return "SRC";
   if (m.graphBase === "cpu" || m.arcadeId === "cpupong" || m.arcadeId === "doom" || m.id === "cpupong" || m.id === "doom" || m.id === "cpu") return "CPU";
   return "NET";
 }
 
-/** Menu / mosaic caption: `NET Topology`, `AIR SSIDs`, `CPU cores`. */
+/** Menu / mosaic caption: `NET Topology`, `AIR SSIDs`, `CPU cores`, `SRC Source web`. */
 export function viewCaption(m: Pick<ViewMode, "id" | "label" | "graphBase" | "arcadeId">): string {
   const tag = viewSource(m);
-  let name = m.label.trim().replace(/^(NET|AIR|BT|CPU)\s+/i, "");
+  let name = m.label.trim().replace(/^(NET|AIR|BT|CPU|SRC)\s+/i, "");
   if (tag === "AIR") name = name.replace(/^Air\s+/i, "");
   return `${tag} ${name}`;
 }
@@ -309,6 +317,61 @@ export function layersInternetLive(t: number, col: number, row: number, i: numbe
     shape,
     spin: t * 0.48 + phase * 0.35,
     hue: 0.06 * Math.sin(t * 1.15 + phase) + 0.04 * twinkle,
+  };
+}
+
+/** Fibonacci sphere / helix / stacked rings / waving sheet. Origin is above the floor so the camera looks up. */
+export function droneFormationPoint(form: string, i: number, n: number, spreadX = 1): [number, number, number] {
+  const count = Math.max(1, n);
+  const t = count <= 1 ? 0 : i / (count - 1);
+  if (form === "helix") {
+    const ang = t * 2.35 * Math.PI * 2;
+    return [Math.cos(ang) * 170 * spreadX, 130 + t * 340, Math.sin(ang) * 170];
+  }
+  if (form === "rings") {
+    const rings = Math.min(4, Math.max(2, Math.round(Math.sqrt(count / 7))));
+    const per = Math.ceil(count / rings);
+    const ring = Math.min(rings - 1, Math.floor(i / per));
+    const j = i - ring * per;
+    const ang = (j / Math.max(1, per)) * Math.PI * 2 + ring * 0.35;
+    const r = 100 + ring * 68;
+    return [Math.cos(ang) * r * spreadX, 170 + ring * 78, Math.sin(ang) * r];
+  }
+  if (form === "wave") {
+    const cols = Math.max(2, Math.ceil(Math.sqrt(count * 1.55)));
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const rows = Math.floor((count - 1) / cols);
+    return [
+      (col - (cols - 1) / 2) * 44 * spreadX,
+      230 + 32 * Math.sin(col * 0.55 + row * 0.42),
+      (row - rows / 2) * 44,
+    ];
+  }
+  const phi = Math.acos(1 - 2 * (i + 0.5) / count);
+  const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+  const r = 200;
+  return [
+    Math.sin(phi) * Math.cos(theta) * r * spreadX,
+    300 + Math.cos(phi) * r * 0.82,
+    Math.sin(phi) * Math.sin(theta) * r,
+  ];
+}
+
+/** Per-frame hover / LED pulse / yaw so the fleet reads as flying craft, not parked spheres. */
+export function droneShowLive(t: number, i: number, rate = 0): Required<LiveLook> {
+  const phase = i * 0.37;
+  const orbit = t * 0.32 + phase;
+  const beat = Math.min(1, Math.log10(1 + rate) / 4);
+  return {
+    dx: 9 * Math.cos(orbit),
+    dy: 11 * Math.sin(t * 0.78 + phase),
+    dz: 9 * Math.sin(orbit),
+    scale: 1.02 + 0.16 * beat,
+    glow: 0.28 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.5 + phase)) + 0.35 * beat,
+    shape: 6,
+    spin: t * 1.15 + phase,
+    hue: 0.045 * Math.sin(t * 0.65 + phase),
   };
 }
 
@@ -562,6 +625,89 @@ export const layers: ViewMode = (() => {
       const vol = Math.log10(1 + l.flow.bytes) / Math.log10(1 + maxBytes);
       return Math.max(0.1 + 0.7 * vol, base * 0.8);
     },
+  };
+})();
+
+/** Night drone light show: the LAN is a fleet in the sky; camera sits on the ground looking up. */
+export const droneShow: ViewMode = (() => {
+  const target = new Map<GNode, [number, number, number]>();
+  const slot = new WeakMap<GNode, number>();
+  const top = new Set<GNode>();
+  let maxLogRate = 1;
+  return {
+    id: "drone-show",
+    label: "Drone show",
+    hint: "Devices as a 3D drone fleet. Camera is on the ground looking up. Formations: sphere, helix, rings, wave. Colour is current rate (LED heat); the craft model yaws and pulses.",
+    options: [
+      { key: "form", label: "formation", values: [["sphere", "sphere"], ["helix", "helix"], ["rings", "rings"], ["wave", "wave"]], default: "sphere" },
+    ],
+    camera: [0, 36, 760],
+    flatten: false,
+    legend: () => [
+      { color: css(heat(0)), label: "idle LED" },
+      { color: css(heat(0.45)), label: "cruise" },
+      { color: css(heat(1)), label: "hot talker" },
+      { color: css(ROLE_COLOR.gateway), label: "show control (gateway)" },
+      { color: css(ROLE_COLOR.self), label: "this host (camera drone)" },
+    ],
+    prepare(ctx) {
+      target.clear(); top.clear(); maxLogRate = 1;
+      const fleet: GNode[] = [];
+      const ground: GNode[] = [];
+      for (const n of ctx.nodes.values()) {
+        if (!n.visible) continue;
+        maxLogRate = Math.max(maxLogRate, Math.log10(1 + n.rate));
+        if (n.device.role === "gateway") target.set(n, [0, 72, 0]);
+        else if (n.device.role === "self") target.set(n, [0, 28, 55]);
+        else if (n.device.role === "multicast") ground.push(n);
+        else fleet.push(n);
+      }
+      fleet.sort((a, b) => b.rate - a.rate || total(b.device) - total(a.device));
+      const form = ctx.opts.form || "sphere";
+      fleet.forEach((n, i) => {
+        target.set(n, droneFormationPoint(form, i, fleet.length, ctx.spreadX));
+        slot.set(n, i);
+      });
+      ground.forEach((n, i) => {
+        const ang = (i / Math.max(1, ground.length)) * Math.PI * 2;
+        target.set(n, [Math.cos(ang) * 240 * ctx.spreadX, 8, Math.sin(ang) * 240]);
+      });
+      for (const n of fleet.slice(0, paneLabelCap(ctx))) top.add(n);
+    },
+    shellStrength: () => 0,
+    charge: () => -8,
+    linkStrength: () => 0.04,
+    force(nodes, alpha) {
+      const k = 0.16 * alpha;
+      for (const n of nodes) {
+        const t = target.get(n);
+        if (!t) continue;
+        n.vx = (n.vx ?? 0) + (t[0] - (n.x ?? 0)) * k;
+        n.vy = (n.vy ?? 0) + (t[1] - (n.y ?? 0)) * k;
+        n.vz = (n.vz ?? 0) + (t[2] - (n.z ?? 0)) * k;
+      }
+    },
+    nodeShape: (n) => (n.device.role === "gateway" ? 3 : n.device.role === "self" ? 4 : 6),
+    nodeColor: (n) => (n.rate > 0 ? heat(0.18 + 0.82 * (Math.log10(1 + n.rate) / maxLogRate)) : heat(0.04)),
+    nodeScale: (n) => {
+      if (n.device.role === "gateway") return 9;
+      if (n.device.role === "self") return 7;
+      if (n.device.role === "multicast") return 3;
+      return 4.2 + 10 * (Math.log10(1 + n.rate) / maxLogRate);
+    },
+    forceLabel: (n) => n.device.role === "gateway" || n.device.role === "self" || top.has(n),
+    suppressLabel: (n) => n.device.role !== "gateway" && n.device.role !== "self" && !top.has(n),
+    nodeLabel: (n) => (top.has(n) ? `${fmtBytes(n.rate, true)}` : undefined),
+    liveLook(n, t) {
+      if (n.device.role === "multicast") return undefined;
+      const i = slot.get(n) ?? 0;
+      const look = droneShowLive(t, i, n.rate);
+      if (n.device.role === "gateway") return { ...look, shape: 3, scale: 1.05, spin: t * 0.35 };
+      if (n.device.role === "self") return { ...look, shape: 4, scale: 1.02, spin: t * 0.55 };
+      return look;
+    },
+    linkColor: (l) => [heat(0.35), heat(0.8)],
+    linkBright: (l, _ctx, base) => (isReal(l) ? Math.max(0.12, base * 0.45) : 0.04),
   };
 })();
 
@@ -1017,11 +1163,62 @@ export const bluetooth: ViewMode = (() => {
 })();
 
 /**
+ * Host RSS / HTTP / file registry as a graph. Plugins wrap this with `base: sources`
+ * so a view is not forced onto the LAN snapshot.
+ */
+export const sources: ViewMode = (() => {
+  const SRC_KIND_COLOR: Record<string, number> = {
+    hub: 0x42a5f5,
+    rss: 0xffca28,
+    http: 0x42a5f5,
+    file: 0x66bb6a,
+  };
+  const SRC_KIND_SHAPE: Record<string, number> = { rss: 0, http: 1, file: 4, hub: 2 };
+  const top = new Set<GNode>();
+  return {
+    id: "sources",
+    label: "Source web",
+    graphBase: "sources",
+    hint: "The host sources registry as a graph: each RSS feed, HTTP JSON document, or local file is a hub; titles, JSON leaves, and file lines are nodes. Not the LAN.",
+    camera: [0, 280, 620],
+    flatten: false,
+    options: [
+      { key: "kind", label: "kind", values: [["all", "all kinds"], ["rss", "RSS"], ["http", "HTTP JSON"], ["file", "local files"]], default: "all" },
+    ],
+    config: [
+      {
+        key: "top", label: "max nodes", type: "number", default: 64,
+        min: 8, max: 120, step: 4,
+        hint: "Hub plus feeds, then as many item / leaf / line nodes as fit.",
+      },
+    ],
+    legend: () => [
+      { color: css(SRC_KIND_COLOR.rss), label: "RSS item" },
+      { color: css(SRC_KIND_COLOR.http), label: "HTTP JSON" },
+      { color: css(SRC_KIND_COLOR.file), label: "file line" },
+      { color: css(SRC_KIND_COLOR.hub), label: "source / hub" },
+    ],
+    prepare(ctx) {
+      top.clear();
+      const ranked = [...ctx.nodes.values()]
+        .filter((n) => n.visible && n.device.role !== "self")
+        .sort((a, b) => (b.device.packets - a.device.packets) || a.id.localeCompare(b.id));
+      for (const n of ranked.slice(0, paneLabelCap(ctx))) top.add(n);
+    },
+    nodeColor: (n) => SRC_KIND_COLOR[n.device.vendor] ?? hashColor(n.device.vendor || n.id),
+    nodeScale: (n) => (n.device.role === "self" ? 10 : n.device.role === "gateway" ? 7 : 3.6 + Math.min(5, (n.device.names[0]?.length ?? 4) / 18)),
+    nodeShape: (n) => SRC_KIND_SHAPE[n.device.vendor] ?? 0,
+    nodeLabel: (n) => (n.device.role === "gateway" ? n.device.vendor : undefined),
+    forceLabel: (n) => n.device.role === "self" || n.device.role === "gateway" || top.has(n),
+  };
+})();
+
+/**
  * Graph engines plugins may wrap. These are wrap targets, not live menu rows.
  * wifi / bluetooth stay off-menu unless a catalog plugin wraps them; `cpu` aliases cores.
  */
 export const GRAPH_BASES: ViewMode[] = [
-  topology, talkers, services, protocols, layers, watch, cores, load, wifi, bluetooth,
+  topology, talkers, services, protocols, layers, droneShow, watch, cores, load, wifi, bluetooth, sources,
   { ...cores, id: "cpu", label: "CPU" },
 ];
 /** Arcade engines plugins may wrap (`engine: doom` → arcadeId). Not live menu rows. */

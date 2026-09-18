@@ -1,23 +1,28 @@
+import { apiFetch } from "../core/http";
+import type { SourceKind, SourceLive, SourceRow } from "../core/sources";
 import { displayName, type Device, usefulName } from "../core/types";
-import { ColorField, pinFlyout, Slider, Toggle, unpinFlyout } from "./ui";
+import { ColorField, GroupedChips, pinFlyout, Slider, Toggle, unpinFlyout } from "./ui";
 import { MAGNET_FIELDS } from "../graph/physics";
-import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FOCUS_MODES, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FocusMode, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
-import { BACKDROP_OPTIONS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
+import type { PluginField } from "../core/modes";
+import { assignTiles, equalize, leafIds, parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
+import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FabricKind, type FocusMode, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
+import { BACKDROP_OPTIONS, SKY_GROUP_TABS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
 import { invalidateSkyRecipe } from "../graph/sky-ai";
 import { FLOOR_SHAPES, type FloorShape } from "../graph/floor";
 import { themeById, toCssHex } from "../core/themes";
 import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, FEED_SOURCES, type FeedConfig, type FeedLayout, type FeedScope, type FeedSource } from "./feed";
 import { liveCam } from "../camera/livecam";
 import { type CamPolicy } from "../camera/want";
+import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
 import { fillPluginFields } from "../plugins/plugin-ui";
-import type { PluginView } from "../plugins/plugin";
-import type { PluginField } from "../core/modes";
-import type { PluginLook } from "../plugins/plugin";
+import type { PluginLook, PluginView } from "../plugins/plugin";
+import { viewSelectOptions } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import {
-  DEFAULT_DICE, DICE_INCLUDE_META, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
+  DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
+import { guardReadableAnim } from "../graph/readable";
 
 const PANES: { id: string; label: string }[] = [
   { id: "appearance", label: "Appearance" },
@@ -29,6 +34,7 @@ const PANES: { id: string; label: string }[] = [
   { id: "camera", label: "Camera" },
   { id: "audio", label: "Audio" },
   { id: "feed", label: "Feed" },
+  { id: "sources", label: "Sources" },
   { id: "privacy", label: "Privacy" },
   { id: "agent", label: "Agent" },
 ];
@@ -84,7 +90,7 @@ export class Settings {
   private animUi: {
     follow: Toggle; cycle: Toggle; randomize: Toggle;
     skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider; skyAi: Slider;
-    gridOp: Slider; gridBr: Slider; gridSize: Slider; gridColor: ColorField; bgColor: ColorField; bgOp: Slider;
+    gridOp: Slider; gridBr: Slider; gridSize: Slider; gridFollow: Slider; gridColor: ColorField; bgColor: ColorField; bgOp: Slider;
     yaw: Slider; pitch: Slider; pitchCycle: Slider; zoom: Slider; zoomCycle: Slider; cadence: Slider;
     camAudio: Slider; camChange: Slider; camGaze: Slider; camInertia: Slider; camEase: Slider; camTheme: Toggle;
     sens: Slider;
@@ -95,8 +101,11 @@ export class Settings {
     setSkyCycle: (v: ThemeCycle) => void;
     setMosaic: (v: MosaicSize) => void;
     setHero: (v: HeroPos) => void;
+    syncTiles: () => void;
+    sharedTheme: Toggle;
     setFocus: (v: FocusMode) => void;
     setGlow: (v: EdgeGlow) => void;
+    setFabric: (v: FabricKind) => void;
     setMod: (key: "background" | "sky" | "floor" | "camera" | "nodes" | "skies" | "physics" | "particles", on: boolean) => void;
     skyPulse: Toggle; floorPulse: Toggle; bgPulse: Toggle;
     labels: Slider; shown: Slider; nodes: Slider; edges: Slider;
@@ -116,20 +125,22 @@ export class Settings {
     dens: Slider;
     size: Slider;
   } | null = null;
+  private sourcesUi: { list: HTMLDivElement; include: Toggle } | null = null;
   private readonly nav = document.createElement("nav");
   private readonly paneEls = new Map<string, HTMLDivElement>();
   private readonly navBtns = new Map<string, HTMLButtonElement>();
   private activePane = "graph";
   private viewHost: HTMLDivElement | null = null;
   private viewCog: HTMLButtonElement | null = null;
-  private cameraUi: { policy: Toggle } | null = null;
-  private audioUi: { policy: Toggle; src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
+  private deviceUi: { cam: Toggle; mic: Toggle } | null = null;
+  private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
   private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
   private meterRaf = 0;
   private dice: DiceConfig;
   private diceUi: {
+    on: Toggle;
+    period: Slider;
     include: Record<DiceIncludeKey, Toggle>;
-    handoff: Toggle;
     cycle: Toggle;
     labels: Slider;
     sparks: Slider;
@@ -143,6 +154,7 @@ export class Settings {
   onPluginChange?: (id: string, values: Record<string, string>) => void;
   onClose?: () => void;
   onDice?: () => void;
+  onDiceChange?: (c: DiceConfig) => void;
 
   constructor(private cfg: SettingsConfig) {
     this.el = document.createElement("div");
@@ -194,10 +206,11 @@ export class Settings {
     this.anim = loadAnim(cfg.storePrefix);
     this.feed = loadFeed(cfg.storePrefix);
     this.dice = loadDice(cfg.storePrefix);
+    this.buildDevices();
     this.buildFilters();
-    this.buildCamera();
     this.buildViewPane();
     this.buildDice();
+    this.buildSources();
     document.body.classList.toggle("cam-off", liveCam.camPolicy === "off");
     document.body.classList.toggle("mic-off", liveMic.micPolicy === "off");
 
@@ -274,6 +287,31 @@ export class Settings {
     this.pane("privacy").appendChild(sec);
   }
 
+  private buildDevices(): void {
+    const sec = document.createElement("section");
+    sec.className = "sec";
+    sec.innerHTML = `<div class="sec-title">Devices</div>
+      <div class="sec-hint">Operator-only. Off stops the webcam or microphone so the OS light goes out. AI and dice cannot change these. Header cam / mic are the same switches.</div>`;
+    const cam = new Toggle({
+      label: "cam",
+      title: "On starts the webcam only for live sky, gaze, or live colour. Off stops it and does not open the camera.",
+      checked: liveCam.camPolicy === "auto",
+      onChange: (on) => this.setCamPolicy(on ? "auto" : "off"),
+    });
+    const mic = new Toggle({
+      label: "mic",
+      title: "On allows the pulse microphone, watchword, and hold-to-talk. Off stops every mic stream so the OS light goes out.",
+      checked: liveMic.micPolicy === "auto",
+      onChange: (on) => this.setMicPolicy(on ? "auto" : "off"),
+    });
+    const row = document.createElement("div");
+    row.className = "sec-controls";
+    row.append(cam.el, mic.el);
+    sec.append(row);
+    this.deviceUi = { cam, mic };
+    this.pane("privacy").appendChild(sec);
+  }
+
   private buildViewPane(): void {
     const host = document.createElement("div");
     this.viewHost = host;
@@ -281,35 +319,20 @@ export class Settings {
     this.bindView(null);
   }
 
-  private buildCamera(): void {
-    const sec = document.createElement("section");
-    sec.className = "sec";
-    sec.innerHTML = `<div class="sec-title">Camera</div>
-      <div class="sec-hint">Off is the default and stops the webcam immediately. On only starts it for live sky, gaze steering, or live colour. Those Motion controls do nothing while Off.</div>`;
-    const policy = new Toggle({
-      label: "cam",
-      title: "On starts the webcam only for live sky, gaze, or live colour. Off never starts it.",
-      checked: liveCam.camPolicy === "auto",
-      onChange: (on) => this.setCamPolicy(on ? "auto" : "off"),
-    });
-    const row = document.createElement("div");
-    row.className = "sec-controls";
-    row.append(policy.el);
-    sec.append(row);
-    this.cameraUi = { policy };
-    this.pane("camera").appendChild(sec);
-  }
-
   setCamPolicy(p: CamPolicy): void {
+    if (p === "auto") clearMediaDismiss("cam");
+    else dropMediaAsk("cam");
     liveCam.setPolicy(p);
-    if (this.cameraUi) this.cameraUi.policy.checked = p === "auto";
+    if (this.deviceUi) this.deviceUi.cam.checked = p === "auto";
     document.body.classList.toggle("cam-off", p === "off");
     this.onCamPolicy?.(p);
   }
 
   setMicPolicy(p: MicPolicy): void {
+    if (p === "auto") clearMediaDismiss("mic");
+    else dropMediaAsk("mic");
     liveMic.setPolicy(p);
-    if (this.audioUi) this.audioUi.policy.checked = p === "auto";
+    if (this.deviceUi) this.deviceUi.mic.checked = p === "auto";
     document.body.classList.toggle("mic-off", p === "off");
     this.onMicPolicy?.(p);
     this.cfg.onChange();
@@ -423,13 +446,40 @@ export class Settings {
 
   private buildDice(): void {
     const host = this.pane("dice");
+    const repeatSec = document.createElement("section");
+    repeatSec.className = "sec";
+    repeatSec.innerHTML = `<div class="sec-title">Repeat</div>
+      <div class="sec-hint">Header dice: left switch is on/off repeat. The die on the right rolls now (switch stays). A roll on a plugin sky also changes view so the graph can morph. On also rolls once, then every N minutes. Roll now is always one shot.</div>`;
+    const repeatList = document.createElement("div");
+    repeatList.className = "sec-controls";
+    const on = new Toggle({
+      label: "dice",
+      title: "repeat rolls on the minutes cadence (same as the header switch)",
+      checked: this.dice.on,
+      onChange: (v) => {
+        const was = this.dice.on;
+        this.dice.on = v;
+        this.persistDice();
+        if (v && !was) this.onDice?.();
+      },
+    });
+    const period = new Slider({
+      label: "every",
+      title: "minutes between automatic rolls while dice is on",
+      min: DICE_PERIOD.min, max: DICE_PERIOD.max, step: DICE_PERIOD.step, value: this.dice.periodMin,
+      format: (v) => `${v} min`,
+      onInput: (v) => { this.dice.periodMin = v; this.persistDice(); },
+    });
+    repeatList.append(on.el, period.el);
+    repeatSec.appendChild(repeatList);
+
     const includeSec = document.createElement("section");
     includeSec.className = "sec";
     includeSec.innerHTML = `<div class="sec-title">Randomiser
       <span class="sec-links">
-        <button type="button" class="link roll" title="same as the header dice">roll now</button>
+        <button type="button" class="link roll" title="one-shot roll (does not change the header switch)">roll now</button>
       </span></div>
-      <div class="sec-hint">Header dice rolls the groups you leave on. Privacy filters and prompts always stay. Soft ceilings apply only to a roll — Settings sliders still go to the full range.</div>`;
+      <div class="sec-hint">A roll randomizes the groups you leave on. Privacy filters, camera, microphone, chrome placement, and prompts always stay. Soft ceilings apply only to a roll — Settings sliders still go to the full range.</div>`;
     const includeList = document.createElement("div");
     includeList.className = "sec-controls dice-include";
     const include = {} as Record<DiceIncludeKey, Toggle>;
@@ -448,7 +498,7 @@ export class Settings {
     const afterSec = document.createElement("section");
     afterSec.className = "sec";
     afterSec.innerHTML = `<div class="sec-title">After a roll</div>
-      <div class="sec-hint">Dream cycling turns on the header AI look (view walk, randomized motion, Control). Hand back sends a chat turn so the local model takes over from the seed.</div>`;
+      <div class="sec-hint">Dream cycling turns on the header AI look (view walk, randomized motion, Control). A roll does not start a chat or think turn.</div>`;
     const afterList = document.createElement("div");
     afterList.className = "sec-controls";
     const cycle = new Toggle({
@@ -457,13 +507,7 @@ export class Settings {
       checked: this.dice.cycle,
       onChange: (on) => { this.dice.cycle = on; this.persistDice(); },
     });
-    const handoff = new Toggle({
-      label: "hand back to AI",
-      title: "after a roll, send a chat turn so the local model takes over (when cycling is on)",
-      checked: this.dice.handoff,
-      onChange: (on) => { this.dice.handoff = on; this.persistDice(); },
-    });
-    afterList.append(cycle.el, handoff.el);
+    afterList.append(cycle.el);
     afterSec.appendChild(afterList);
 
     const capSec = document.createElement("section");
@@ -514,9 +558,9 @@ export class Settings {
     capSec.appendChild(capList);
 
     this.diceUi = {
-      include, handoff, cycle, labels, sparks, sparkPeak, dens, nodeTop, setMosaicMax: mosaic.set,
+      on, period, include, cycle, labels, sparks, sparkPeak, dens, nodeTop, setMosaicMax: mosaic.set,
     };
-    host.append(includeSec, afterSec, capSec);
+    host.append(repeatSec, includeSec, afterSec, capSec);
   }
 
   /**
@@ -552,30 +596,18 @@ export class Settings {
       checked: this.anim.randomize,
       onChange: (on) => { this.anim.randomize = on; this.persistAnim(); },
     });
-    const skyRow = document.createElement("div");
-    skyRow.className = "skypick";
-    skyRow.setAttribute("role", "radiogroup");
-    skyRow.setAttribute("aria-label", "far-field sky");
-    const skyBtns = new Map<BackdropKind, HTMLButtonElement>();
-    const setSky = (v: BackdropKind) => {
-      for (const [k, btn] of skyBtns) btn.setAttribute("aria-pressed", k === v ? "true" : "false");
-    };
-    for (const o of BACKDROP_OPTIONS) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "sky";
-      b.textContent = o.label;
-      b.title = o.hint;
-      b.setAttribute("aria-pressed", o.value === this.anim.backdrop ? "true" : "false");
-      b.addEventListener("click", () => {
-        if (o.value === "dynamic") invalidateSkyRecipe();
-        this.anim.backdrop = o.value;
-        setSky(o.value);
+    const skyPick = new GroupedChips<BackdropKind>({
+      label: "far-field sky",
+      options: BACKDROP_OPTIONS,
+      groups: SKY_GROUP_TABS,
+      value: this.anim.backdrop,
+      onChange: (v) => {
+        if (v === "dynamic") invalidateSkyRecipe();
+        this.anim.backdrop = v;
         this.persistAnim();
-      });
-      skyBtns.set(o.value, b);
-      skyRow.appendChild(b);
-    }
+      },
+    });
+    const setSky = (v: BackdropKind) => skyPick.set(v);
     const row = document.createElement("div");
     row.className = "sec-controls";
     row.append(dreamToggle.el, follow.el, cycle.el, randomize.el);
@@ -617,7 +649,7 @@ export class Settings {
       checked: this.anim.skyAudio,
       onChange: (on) => { this.anim.skyAudio = on; setMod("sky", on); this.persistAnim(); },
     });
-    const skyWrap = lookBlock("sky", skyRow, skyOp, skyBr, skySp, skyEz, skyAi);
+    const skyWrap = lookBlock("sky", skyPick.el, skyOp, skyBr, skySp, skyEz, skyAi);
     skyWrap.querySelector(".look-head")!.appendChild(skyPulse.el);
     const shapeRow = document.createElement("div");
     shapeRow.className = "skypick";
@@ -651,6 +683,13 @@ export class Settings {
       format: (v) => `${v}`,
       onInput: (v) => { this.anim.gridSize = v; this.persistAnim(); },
     });
+    const gridFollow = new Slider({
+      label: "follow",
+      title: "0% keeps the floor world-fixed; 100% sits it under the graph so orbit, pan, and zoom move them together",
+      min: 0, max: 100, step: 5, value: Math.round(this.anim.gridFollow * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.gridFollow = v / 100; this.persistAnim(); },
+    });
     const gridOp = new Slider({
       label: "opacity", title: "how solid the floor grid is",
       min: 0, max: 100, step: 5, value: Math.round(this.anim.gridOpacity * 100),
@@ -669,7 +708,7 @@ export class Settings {
       checked: this.anim.gridAudio,
       onChange: (on) => { this.anim.gridAudio = on; setMod("floor", on); this.persistAnim(); },
     });
-    const floorWrap = lookBlock("floor", shapeRow, gridColor, gridSize, gridOp, gridBr);
+    const floorWrap = lookBlock("floor", shapeRow, gridColor, gridSize, gridFollow, gridOp, gridBr);
     floorWrap.querySelector(".look-head")!.appendChild(floorPulse.el);
     const bgColor = new ColorField({
       label: "color",
@@ -742,8 +781,53 @@ export class Settings {
       format: (v) => `${v}%`,
       onInput: (v) => { this.anim.audioSens = v / 100; this.persistAnim(); },
     });
-    const mosaic = chips(MOSAIC_SIZES, this.anim.mosaic, (v) => { this.anim.mosaic = v; this.persistAnim(); });
-    const hero = chips(HERO_POS, this.anim.hero, (v) => { this.anim.hero = v; this.persistAnim(); });
+    const resetLayout = () => {
+      this.anim.mosaicTree = null;
+      this.anim.mosaicMaxId = "";
+      this.anim.mosaicTiles = [];
+    };
+    const mosaic = chips(MOSAIC_SIZES, this.anim.mosaic, (v) => {
+      this.anim.mosaic = v;
+      resetLayout();
+      this.persistAnim();
+      this.animUi?.syncTiles();
+    });
+    const hero = chips(HERO_POS, this.anim.hero, (v) => {
+      this.anim.hero = v;
+      resetLayout();
+      this.persistAnim();
+      this.animUi?.syncTiles();
+    });
+    const tileHost = document.createElement("div");
+    tileHost.className = "mosaic-slots";
+    const syncTiles = () => this.fillMosaicSlots(tileHost);
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "link";
+    resetBtn.textContent = "reset layout";
+    resetBtn.title = "equal 2×N grid from the view count; forget dragged sizes and closed tiles";
+    resetBtn.addEventListener("click", () => { resetLayout(); this.persistAnim(); syncTiles(); });
+    const equalBtn = document.createElement("button");
+    equalBtn.type = "button";
+    equalBtn.className = "link";
+    equalBtn.textContent = "equal tiles";
+    equalBtn.title = "keep the arrangement; set every split back to 50/50";
+    equalBtn.addEventListener("click", () => {
+      if (this.anim.mosaicTree) this.anim.mosaicTree = equalize(this.anim.mosaicTree);
+      this.persistAnim();
+    });
+    const sharedTheme = new Toggle({
+      label: "one theme",
+      title: "use the header colour theme on every tile. Off gives each view its own palette.",
+      checked: !!this.anim.mosaicSharedTheme,
+      onChange: (on) => { this.anim.mosaicSharedTheme = on; this.persistAnim(); },
+    });
+    const mosaicHint = document.createElement("div");
+    mosaicHint.className = "sec-hint";
+    mosaicHint.textContent = "Corner look / max / close on each tile. One theme paints every tile with the header palette. Drag a caption to swap. Drag the gutters to resize (saved). Close expands the neighbour.";
+    const mosaicBtns = document.createElement("div");
+    mosaicBtns.className = "sec-links";
+    mosaicBtns.append(resetBtn, equalBtn);
     const focus = chips(FOCUS_MODES, this.anim.focus, (v) => { this.anim.focus = v; this.persistAnim(); });
     const labels = new Slider({
       label: "labels", title: "label size and font-weight",
@@ -776,6 +860,7 @@ export class Settings {
       onInput: (v) => { this.anim.edgeWeight = v / 100; this.persistAnim(); },
     });
     const glow = chips(EDGE_GLOWS, this.anim.edgeGlow, (v) => { this.anim.edgeGlow = v; this.persistAnim(); });
+    const fabric = chips(FABRIC_OPTIONS, this.anim.graphFabric, (v) => { this.anim.graphFabric = v; this.persistAnim(); });
     const glowAmt = new Slider({
       label: "glow", title: "how bright the traveling edge highlight is",
       min: 20, max: 200, step: 5, value: Math.round(this.anim.edgeGlowAmt * 100),
@@ -790,18 +875,23 @@ export class Settings {
     });
     const layoutBits = document.createElement("div");
     layoutBits.className = "look-stack";
-    layoutBits.append(labeled("theme cycle", themeCycle.el), labeled("sky cycle", skyCycle.el), labeled("views", mosaic.el), labeled("hero", hero.el), labeled("focus", focus.el));
+    layoutBits.append(labeled("theme cycle", themeCycle.el), labeled("sky cycle", skyCycle.el), labeled("focus", focus.el));
     const layoutWrap = lookBlock("layout", layoutBits);
+    const mosaicBits = document.createElement("div");
+    mosaicBits.className = "look-stack";
+    mosaicBits.append(
+      labeled("views", mosaic.el),
+      labeled("hero", hero.el),
+      labeled("tiles", tileHost),
+      sharedTheme.el,
+      mosaicHint,
+      mosaicBtns,
+    );
+    const mosaicWrap = lookBlock("mosaic", mosaicBits);
     const audioBits = document.createElement("div");
     audioBits.className = "look-stack";
     audioBits.append(labeled("drive", drive.el), labeled("modulate", modRow));
     const audioWrap = lookBlock("reactivity", audioBits, sens);
-    const micPolicy = new Toggle({
-      label: "mic",
-      title: "On starts the pulse microphone when drive is mic and something is modulated. Off never starts it — traffic or the selected node still drive the pulse.",
-      checked: liveMic.micPolicy === "auto",
-      onChange: (on) => this.setMicPolicy(on ? "auto" : "off"),
-    });
     const meter = document.createElement("div");
     meter.className = "pulse-meter";
     meter.setAttribute("aria-label", "live pulse");
@@ -810,7 +900,6 @@ export class Settings {
       <div class="pulse-row"><span>level</span><span class="pulse-track"><i class="pulse-fill" data-k="level"></i></span></div>
       <div class="pulse-row"><span>bass</span><span class="pulse-track"><i class="pulse-fill" data-k="bass"></i></span></div>`;
     this.audioUi = {
-      policy: micPolicy,
       src: meter.querySelector(".pulse-src")!,
       level: meter.querySelector('[data-k="level"]')!,
       bass: meter.querySelector('[data-k="bass"]')!,
@@ -856,12 +945,12 @@ export class Settings {
     camWrap.querySelector(".look-head")!.appendChild(camTheme.el);
     const graphBits = document.createElement("div");
     graphBits.className = "look-stack";
-    graphBits.append(labeled("glow", glow.el));
+    graphBits.append(labeled("glow", glow.el), labeled("fabric", fabric.el));
     const graphWrap = lookBlock("", graphBits, labels, shown, nodes, edges, glowAmt, glowSpeed);
     const lookSec = document.createElement("section");
     lookSec.className = "sec";
     lookSec.innerHTML = `<div class="sec-title">Look</div>
-      <div class="sec-hint">Label size, how many idle names stay on, node and edge scale, edge glow. Auto-tune eases those plus sparks, sky, and pixel density if the last 30 seconds average under 10 fps, then eases back on a 1-minute recovered average (fresh after a view change). Traffic sparks, magnets, gravity, and stringy edges live under Physics.</div>`;
+      <div class="sec-hint">Label size, how many idle names stay on, node and edge scale, edge glow, and fabric mesh (nodes + edges become tubes / cloth / ribbon with the same highlight). Auto-tune eases those plus sparks, sky, and pixel density if the last 30 seconds average under 10 fps, then eases back on a 1-minute recovered average (fresh after a view change). Traffic sparks, magnets, gravity, and stringy edges live under Physics.</div>`;
     lookSec.append(autoTune.el, graphWrap);
 
     const magFmt = (v: number) => (Math.abs(v) < 3 ? "off" : v > 0 ? `attract ${v}%` : `repel ${-v}%`);
@@ -1059,12 +1148,12 @@ export class Settings {
     const grid = document.createElement("div");
     grid.className = "agrid";
     grid.append(yaw.el, zoom.el, pitch.el, zoomCycle.el, pitchCycle.el, cadence.el);
-    sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, grid);
+    sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, mosaicWrap, grid);
     this.animUi = {
       follow, cycle, randomize, setSky, setShape,
-      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, setFocus: focus.set, setGlow: glow.set, setMod,
+      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setMod,
       skyPulse, floorPulse, bgPulse,
-      skyOp, skyBr, skySp, skyEz, skyAi, gridOp, gridBr, gridSize, gridColor, bgColor, bgOp,
+      skyOp, skyBr, skySp, skyEz, skyAi, gridOp, gridBr, gridSize, gridFollow, gridColor, bgColor, bgOp,
       yaw, pitch, pitchCycle, zoom, zoomCycle, cadence, camAudio, camChange, camGaze, camInertia, camEase, camTheme, sens,
       labels, shown, nodes, edges, glowAmt, glowSpeed, autoTune,
       partAmt, partBusy, partQuiet, partPeak, partCap, partSpeed, partSize,
@@ -1084,12 +1173,141 @@ export class Settings {
     const audioSec = document.createElement("section");
     audioSec.className = "sec";
     audioSec.innerHTML = `<div class="sec-title">Audio</div>
-      <div class="sec-hint">What drives the pulse and what it moves. Header <b>mic</b> is the privacy gate (same as this tab). Off never opens the microphone — traffic or the selected node still work. Feed bars have their own modulate switch on the Feed tab.</div>`;
-    const audioRow = document.createElement("div");
-    audioRow.className = "sec-controls";
-    audioRow.append(micPolicy.el);
-    audioSec.append(audioRow, audioWrap, meter);
+      <div class="sec-hint">What drives the pulse and what it moves. The microphone on/off switch lives under Privacy (same as the header mic). Traffic or the selected node still drive the pulse when the mic is off. Feed bars have their own modulate switch on the Feed tab.</div>`;
+    audioSec.append(audioWrap, meter);
     this.pane("audio").appendChild(audioSec);
+  }
+
+  private buildSources(): void {
+    const sec = document.createElement("section");
+    sec.className = "sec";
+    sec.innerHTML = `<div class="sec-title">Data sources</div>
+      <div class="sec-hint">RSS, public HTTPS JSON/text, and local files under your home directory or ~/.zoto-viz. The monitor polls them; headlines can join the feed ticker. Remote URLs stay public-HTTPS only.</div>`;
+    const include = new Toggle({
+      label: "headlines on feed",
+      title: "show RSS / HTTP / file titles on the live feed ticker",
+      checked: this.feed.includeSources !== false,
+      onChange: (v) => { this.feed.includeSources = v; this.persistFeed(); },
+    });
+    const list = document.createElement("div");
+    list.className = "source-list";
+    const form = document.createElement("form");
+    form.className = "source-form";
+    form.innerHTML = `
+      <div class="sec-title">Add source</div>
+      <label>type <select name="type">
+        <option value="rss">RSS</option>
+        <option value="http">HTTPS</option>
+        <option value="file">local file</option>
+      </select></label>
+      <label>id <input name="id" maxlength="32" placeholder="hn" autocomplete="off"></label>
+      <label>label <input name="label" maxlength="80" placeholder="Hacker News"></label>
+      <label class="src-url">url <input name="url" placeholder="https://…"></label>
+      <label class="src-path" hidden>path <input name="path" placeholder="~/.zoto-viz/sources/notes.txt"></label>
+      <label>interval <input name="interval" type="number" min="15" max="86400" value="300"> s</label>
+      <button type="submit" class="btn primary">add</button>
+      <div class="src-err" hidden></div>`;
+    const typeSel = form.querySelector<HTMLSelectElement>("[name=type]")!;
+    const urlLab = form.querySelector<HTMLLabelElement>(".src-url")!;
+    const pathLab = form.querySelector<HTMLLabelElement>(".src-path")!;
+    const err = form.querySelector<HTMLElement>(".src-err")!;
+    typeSel.addEventListener("change", () => {
+      const file = typeSel.value === "file";
+      urlLab.hidden = file;
+      pathLab.hidden = !file;
+    });
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const kind = String(fd.get("type") || "rss") as SourceKind;
+      const body: Record<string, unknown> = {
+        id: String(fd.get("id") || "").trim(),
+        type: kind,
+        label: String(fd.get("label") || "").trim(),
+        interval: Number(fd.get("interval") || 300),
+        enabled: true,
+        feed: true,
+      };
+      if (kind === "file") body.path = String(fd.get("path") || "").trim();
+      else body.url = String(fd.get("url") || "").trim();
+      err.hidden = true;
+      void apiFetch("/api/sources", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }).then(async (r) => {
+        const data = await r.json().catch(() => ({})) as { error?: string };
+        if (!r.ok) {
+          err.textContent = data.error || r.statusText;
+          err.hidden = false;
+          return;
+        }
+        form.reset();
+        typeSel.dispatchEvent(new Event("change"));
+        void this.refreshSources();
+      });
+    });
+    sec.append(include.el, list, form);
+    this.pane("sources").appendChild(sec);
+    this.sourcesUi = { list, include };
+    void this.refreshSources();
+  }
+
+  private async refreshSources(): Promise<void> {
+    const host = this.sourcesUi?.list;
+    if (!host) return;
+    try {
+      const r = await apiFetch("/api/sources");
+      if (!r.ok) throw new Error(r.statusText);
+      const data = await r.json() as { sources?: SourceRow[]; live?: Record<string, SourceLive> };
+      const rows = data.sources ?? [];
+      const live = data.live ?? {};
+      host.replaceChildren();
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "sec-hint";
+        empty.textContent = "No sources yet. Add an RSS feed or a local file.";
+        host.appendChild(empty);
+        return;
+      }
+      for (const row of rows) {
+        const el = document.createElement("div");
+        el.className = "source-row";
+        const status = live[row.id];
+        const hint = !status || status.pending ? "waiting"
+          : status.paused ? "paused"
+          : status.ok === false ? (status.error || "error")
+          : status.items ? `${status.items.length} items`
+          : "ok";
+        const on = new Toggle({
+          label: row.label || row.id,
+          title: `${row.type} · ${row.url || row.path || ""} · ${hint}`,
+          checked: row.enabled !== false,
+          onChange: (enabled) => {
+            void apiFetch(`/api/sources/${encodeURIComponent(row.id)}`, {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ ...row, enabled }),
+            }).then(() => this.refreshSources());
+          },
+        });
+        const meta = document.createElement("span");
+        meta.className = "src-meta";
+        meta.textContent = `${row.type} · ${hint}`;
+        const drop = document.createElement("button");
+        drop.type = "button";
+        drop.className = "link";
+        drop.textContent = "remove";
+        drop.addEventListener("click", () => {
+          void apiFetch(`/api/sources/${encodeURIComponent(row.id)}`, { method: "DELETE" })
+            .then(() => this.refreshSources());
+        });
+        el.append(on.el, meta, drop);
+        host.appendChild(el);
+      }
+    } catch {
+      host.textContent = "Sources API unavailable (is the monitor running?)";
+    }
   }
 
   /** Live decoded-traffic overlay on the right of the graph. */
@@ -1098,7 +1316,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Agent thinking streams on the overlay even when source is traffic. Text size scales the ticker; transcript follows the latest line. Header switch or F.</div>`;
+      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Agent thinking streams on the overlay even when source is traffic. Text size scales the ticker; transcript stays on the latest line unless you scroll up. Header switch or F.</div>`;
     const on = new Toggle({
       label: "show overlay",
       title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",
@@ -1159,10 +1377,83 @@ export class Settings {
   }
 
   applyAnim(a: DreamAnim): void {
-    this.anim = { ...DEFAULT_DREAM, ...a };
+    this.anim = guardReadableAnim({
+      ...DEFAULT_DREAM,
+      ...a,
+      mosaicTree: parseMosaicNode(a.mosaicTree) ?? a.mosaicTree ?? null,
+      mosaicMaxId: typeof a.mosaicMaxId === "string" ? a.mosaicMaxId : "",
+      mosaicTiles: parseMosaicTiles(a.mosaicTiles),
+      mosaicSharedTheme: !!a.mosaicSharedTheme,
+    });
     this.syncAnimUi();
     this.syncTheme();
     this.persistAnim();
+  }
+
+  /** Persist a live drag / close / max without resetting the tree. */
+  applyMosaicLayout(patch: { tree: DreamAnim["mosaicTree"]; maximized: string | null; tiles: string[] }): void {
+    this.anim.mosaicTree = parseMosaicNode(patch.tree);
+    this.anim.mosaicMaxId = patch.maximized ?? "";
+    this.anim.mosaicTiles = parseMosaicTiles(patch.tiles);
+    this.persistAnim();
+    this.animUi?.syncTiles();
+  }
+
+  refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
+
+  private fillMosaicSlots(host: HTMLElement): void {
+    host.replaceChildren();
+    if (this.anim.mosaic === "off") {
+      const empty = document.createElement("div");
+      empty.className = "sec-hint";
+      empty.textContent = "1× — turn on 2×2 / 2×3 / 2×4 to assign tiles.";
+      host.appendChild(empty);
+      return;
+    }
+    const modes = viewSelectOptions();
+    const n = this.anim.mosaicTiles.length
+      || (this.anim.mosaicTree ? leafIds(this.anim.mosaicTree).length : Number(this.anim.mosaic) || 0);
+    const ids = this.anim.mosaicTiles.length
+      ? this.anim.mosaicTiles
+      : this.anim.mosaicTree
+        ? leafIds(this.anim.mosaicTree)
+        : Array.from({ length: n }, (_, i) => modes[i]?.value ?? "");
+    for (let i = 0; i < Math.max(ids.length, n); i++) {
+      const sel = document.createElement("select");
+      sel.className = "mosaic-slot";
+      sel.setAttribute("aria-label", `tile ${i + 1}`);
+      const cur = ids[i] ?? "";
+      let groupEl: HTMLOptGroupElement | null = null;
+      let lastGroup = "";
+      for (const m of modes) {
+        if (m.group !== lastGroup) {
+          lastGroup = m.group;
+          groupEl = document.createElement("optgroup");
+          groupEl.label = m.group;
+          sel.appendChild(groupEl);
+        }
+        const o = document.createElement("option");
+        o.value = m.value;
+        o.textContent = m.label;
+        if (m.value === cur) o.selected = true;
+        (groupEl ?? sel).appendChild(o);
+      }
+      if (cur && !modes.some((m) => m.value === cur)) {
+        const o = document.createElement("option");
+        o.value = cur;
+        o.textContent = cur;
+        o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.addEventListener("change", () => {
+        const next = ids.map((id, j) => (j === i ? sel.value : id));
+        next[i] = sel.value;
+        this.anim.mosaicTiles = parseMosaicTiles(next);
+        if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
+        this.persistAnim();
+      });
+      host.appendChild(sel);
+    }
   }
 
   /** Keep theme-follow swatches on the live theme (page chrome + default scene fill). */
@@ -1171,10 +1462,29 @@ export class Settings {
     this.animUi?.bgColor.setThemeHex(themeBgHex(t));
   }
 
+  /** Header / Settings dice repeat switch. Does not roll. */
+  setDiceOn(on: boolean): void {
+    this.dice.on = on;
+    if (this.diceUi) this.diceUi.on.checked = on;
+    this.persistDice();
+  }
+
   /** Show or hide the right-hand activity list. Syncs the cog toggle and persists. */
   setFeedOn(on: boolean): void {
     this.feed.on = on;
     if (this.feedUi) this.feedUi.on.checked = on;
+    this.persistFeed();
+  }
+
+  /** Watchword: open the overlay on the agent transcript (pins to the latest line). */
+  revealTranscript(): void {
+    if (this.feed.on && this.feed.source === "transcript") return;
+    this.feed.on = true;
+    this.feed.source = "transcript";
+    if (this.feedUi) {
+      this.feedUi.on.checked = true;
+      this.feedUi.setSource("transcript");
+    }
     this.persistFeed();
   }
 
@@ -1191,6 +1501,7 @@ export class Settings {
       ui.dens.value = this.feed.density;
       ui.size.value = this.feed.textSize;
     }
+    if (this.sourcesUi) this.sourcesUi.include.checked = this.feed.includeSources !== false;
     this.persistFeed();
   }
 
@@ -1198,8 +1509,9 @@ export class Settings {
     this.dice = normalizeDice(c);
     const ui = this.diceUi;
     if (ui) {
+      ui.on.checked = this.dice.on;
+      ui.period.value = this.dice.periodMin;
       for (const o of DICE_INCLUDE_META) ui.include[o.key].checked = this.dice.include[o.key];
-      ui.handoff.checked = this.dice.handoff;
       ui.cycle.checked = this.dice.cycle;
       ui.labels.value = this.dice.labelsMax;
       ui.sparks.value = this.dice.sparksMax;
@@ -1257,6 +1569,7 @@ export class Settings {
     ui.gridOp.value = Math.round(a.gridOpacity * 100);
     ui.gridBr.value = Math.round(a.gridBright * 100);
     ui.gridSize.value = a.gridSize;
+    ui.gridFollow.value = Math.round(a.gridFollow * 100);
     ui.gridColor.value = a.gridColor;
     ui.bgColor.value = a.bgColor;
     ui.bgOp.value = Math.round(a.bgOpacity * 100);
@@ -1266,8 +1579,11 @@ export class Settings {
     ui.setSkyCycle(a.skyCycle);
     ui.setMosaic(a.mosaic);
     ui.setHero(a.hero);
+    ui.syncTiles();
+    ui.sharedTheme.checked = !!a.mosaicSharedTheme;
     ui.setFocus(a.focus);
     ui.setGlow(a.edgeGlow);
+    ui.setFabric(a.graphFabric);
     ui.setMod("background", a.bgAudio);
     ui.setMod("sky", a.skyAudio);
     ui.setMod("skies", a.skyCycle !== "off");
@@ -1344,6 +1660,7 @@ export class Settings {
     localStorage.setItem(`${p}.anim.gridAudio`, a.gridAudio ? "1" : "0");
     localStorage.setItem(`${p}.anim.gridColor`, a.gridColor);
     localStorage.setItem(`${p}.anim.gridSize`, String(a.gridSize));
+    localStorage.setItem(`${p}.anim.gridFollow`, String(a.gridFollow));
     localStorage.setItem(`${p}.anim.gridShape`, a.gridShape);
     localStorage.setItem(`${p}.anim.audioSens`, String(a.audioSens));
     localStorage.setItem(`${p}.anim.audioDrive`, a.audioDrive);
@@ -1365,8 +1682,15 @@ export class Settings {
     localStorage.setItem(`${p}.anim.edgeGlow`, a.edgeGlow);
     localStorage.setItem(`${p}.anim.edgeGlowAmt`, String(a.edgeGlowAmt));
     localStorage.setItem(`${p}.anim.edgeGlowSpeed`, String(a.edgeGlowSpeed));
+    localStorage.setItem(`${p}.anim.graphFabric`, a.graphFabric);
     localStorage.setItem(`${p}.anim.mosaic`, a.mosaic);
     localStorage.setItem(`${p}.anim.hero`, a.hero);
+    if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
+    else localStorage.removeItem(`${p}.anim.mosaicTree`);
+    localStorage.setItem(`${p}.anim.mosaicMaxId`, a.mosaicMaxId || "");
+    if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
+    else localStorage.removeItem(`${p}.anim.mosaicTiles`);
+    localStorage.setItem(`${p}.anim.mosaicSharedTheme`, a.mosaicSharedTheme ? "1" : "0");
     localStorage.setItem(`${p}.anim.focus`, a.focus);
     localStorage.setItem(`${p}.anim.partAmt`, String(a.partAmt));
     localStorage.setItem(`${p}.anim.partBusy`, String(a.partBusy));
@@ -1407,12 +1731,14 @@ export class Settings {
     localStorage.setItem(`${p}.feed.density`, String(c.density));
     localStorage.setItem(`${p}.feed.textSize`, String(c.textSize));
     localStorage.setItem(`${p}.feed.modulate`, c.modulate ? "1" : "0");
+    localStorage.setItem(`${p}.feed.includeSources`, c.includeSources === false ? "0" : "1");
     this.onFeedChange(c);
     this.cfg.onPersist?.();
   }
 
   private persistDice(): void {
     localStorage.setItem(`${this.cfg.storePrefix}.dice`, JSON.stringify(this.dice));
+    this.onDiceChange?.(this.dice);
     this.cfg.onPersist?.();
   }
 
@@ -1609,7 +1935,7 @@ function loadAnim(prefix: string): DreamAnim {
     localStorage.setItem(`${prefix}.anim.audioCamera`, "1");
     localStorage.setItem(`${prefix}.anim.restoreAudio`, "1");
   }
-  return {
+  return guardReadableAnim({
     yawPeriod: n("yawPeriod", d.yawPeriod, B.yawPeriod.min, B.yawPeriod.max),
     pitchDeg: n("pitchDeg", d.pitchDeg, B.pitchDeg.min, B.pitchDeg.max),
     pitchPeriod: n("pitchPeriod", d.pitchPeriod, B.pitchPeriod.min, B.pitchPeriod.max),
@@ -1634,6 +1960,7 @@ function loadAnim(prefix: string): DreamAnim {
     bgColor: parseGridColor(localStorage.getItem(`${prefix}.anim.bgColor`)),
     bgOpacity: n("bgOpacity", d.bgOpacity, B.opacity.min, B.opacity.max),
     gridSize: n("gridSize", d.gridSize, B.gridSize.min, B.gridSize.max),
+    gridFollow: n("gridFollow", d.gridFollow, B.gridFollow.min, B.gridFollow.max),
     gridShape: parseShape(localStorage.getItem(`${prefix}.anim.gridShape`)),
     audioSens: n("audioSens", d.audioSens, B.audioSens.min, B.audioSens.max),
     audioDrive: parseDrive(localStorage.getItem(`${prefix}.anim.audioDrive`)),
@@ -1655,8 +1982,13 @@ function loadAnim(prefix: string): DreamAnim {
     edgeGlow: parseGlow(localStorage.getItem(`${prefix}.anim.edgeGlow`)),
     edgeGlowAmt: n("edgeGlowAmt", d.edgeGlowAmt, B.edgeGlowAmt.min, B.edgeGlowAmt.max),
     edgeGlowSpeed: n("edgeGlowSpeed", d.edgeGlowSpeed, B.edgeGlowSpeed.min, B.edgeGlowSpeed.max),
+    graphFabric: parseFabricKind(localStorage.getItem(`${prefix}.anim.graphFabric`)),
     mosaic: parseMosaic(localStorage.getItem(`${prefix}.anim.mosaic`)),
     hero: parseHero(localStorage.getItem(`${prefix}.anim.hero`)),
+    mosaicTree: parseStoredTree(localStorage.getItem(`${prefix}.anim.mosaicTree`)),
+    mosaicMaxId: localStorage.getItem(`${prefix}.anim.mosaicMaxId`)?.trim() ?? "",
+    mosaicTiles: parseStoredTiles(localStorage.getItem(`${prefix}.anim.mosaicTiles`)),
+    mosaicSharedTheme: localStorage.getItem(`${prefix}.anim.mosaicSharedTheme`) === "1",
     focus: parseFocus(localStorage.getItem(`${prefix}.anim.focus`)),
     partAmt: n("partAmt", d.partAmt, B.partAmt.min, B.partAmt.max),
     partBusy: n("partBusy", d.partBusy, B.partBusy.min, B.partBusy.max),
@@ -1683,11 +2015,15 @@ function loadAnim(prefix: string): DreamAnim {
     centerPull: n("centerPull", d.centerPull, B.centerPull.min, B.centerPull.max),
     stringAmt: n("stringAmt", d.stringAmt, B.stringAmt.min, B.stringAmt.max),
     audioPhysics: localStorage.getItem(`${prefix}.anim.audioPhysics`) === "1",
-  };
+  });
 }
 
 function parseGlow(raw: string | null): EdgeGlow {
   return EDGE_GLOWS.some((o) => o.value === raw) ? (raw as EdgeGlow) : DEFAULT_DREAM.edgeGlow;
+}
+
+function parseFabricKind(raw: string | null): FabricKind {
+  return FABRIC_OPTIONS.some((o) => o.value === raw) ? (raw as FabricKind) : DEFAULT_DREAM.graphFabric;
 }
 
 function parseMosaic(raw: string | null): MosaicSize {
@@ -1696,6 +2032,16 @@ function parseMosaic(raw: string | null): MosaicSize {
 
 function parseHero(raw: string | null): HeroPos {
   return HERO_POS.some((o) => o.value === raw) ? (raw as HeroPos) : DEFAULT_DREAM.hero;
+}
+
+function parseStoredTree(raw: string | null): DreamAnim["mosaicTree"] {
+  if (!raw) return null;
+  try { return parseMosaicNode(JSON.parse(raw)); } catch { return null; }
+}
+
+function parseStoredTiles(raw: string | null): string[] {
+  if (!raw) return [];
+  try { return parseMosaicTiles(JSON.parse(raw)); } catch { return []; }
 }
 
 function parseFocus(raw: string | null): FocusMode {
@@ -1731,6 +2077,7 @@ function loadFeed(prefix: string): FeedConfig {
     density: n("density", d.density, 12, 80),
     textSize: n("textSize", d.textSize, 10, 20),
     modulate: localStorage.getItem(`${prefix}.feed.modulate`) !== "0",
+    includeSources: localStorage.getItem(`${prefix}.feed.includeSources`) !== "0",
   };
 }
 

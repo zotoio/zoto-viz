@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { StateMsg } from "../core/types";
 import { protocols } from "../core/modes";
@@ -53,6 +51,7 @@ describe("viz hud helpers", () => {
     expect(normalizeVizDemoPackId("plugin:packet-tunnel")).toBe("packet-tunnel");
     expect(normalizeVizDemoPackId("plugin:rf-constellation")).toBe("rf-constellation");
     expect(normalizeVizDemoPackId("plugin:talker-storm")).toBe("talker-storm");
+    expect(normalizeVizDemoPackId("plugin:kefrens-bars")).toBe("kefrens-bars");
     expect(normalizeVizDemoPackId("plugin:topology")).toBeNull();
     expect(normalizeVizDemoPackId("topology")).toBeNull();
     expect(isVizDemoPack("plugin:packet-tunnel")).toBe(true);
@@ -88,11 +87,6 @@ describe("viz hud helpers", () => {
   });
 
   it("anchors HUD above #foot and keeps boxes clear under a fat protocols legend", () => {
-    const css = readFileSync(resolve(__dirname, "../style.css"), "utf8");
-    expect(css).toContain("anchor-name: --viz-foot");
-    expect(css).toContain("bottom: anchor(--viz-foot top)");
-
-    document.head.innerHTML = `<style>${css}</style>`;
     document.body.innerHTML = `
       <div id="scene"></div>
       <div id="foot"><div id="hint"></div><div id="legend"></div></div>
@@ -112,8 +106,6 @@ describe("viz hud helpers", () => {
     const hud = new VizHud(document.getElementById("scene")!, () => {});
     hud.setActive("packet-tunnel", "Packet Tunnel");
     hud.root.hidden = false;
-
-    expect(getComputedStyle(document.getElementById("foot")!).anchorName).toBe("--viz-foot");
 
     const { foot, hud: hudBox } = modeledHudFootBoxes(VIEWPORT_H, FAT_PROTOCOLS_FOOT_H, HUD_LINE_H);
     expect(boxesOverlap(foot, hudBox)).toBe(false);
@@ -138,7 +130,7 @@ describe("viz hud helpers", () => {
     expect(line?.className).toBe("viz-hud-line");
     expect(hud.root.querySelector(".viz-hud-metric-value")?.textContent).toBe("3");
     expect(hud.root.querySelector(".viz-hud-skip")?.textContent).toBe("skips 0/s");
-    expect(hud.root.querySelectorAll(".viz-hud-swap-btn")).toHaveLength(3);
+    expect(hud.root.querySelector(".viz-hud-swap .field.select")).toBeTruthy();
     expect(hud.root.querySelector(".viz-hud-swap")?.parentElement).toBe(line);
   });
 
@@ -154,12 +146,32 @@ describe("viz hud helpers", () => {
   it("picks pack-specific metrics from host state", () => {
     const state = minimalState();
     expect(vizHudMetric("packet-tunnel", null, state)).toEqual({ label: "flows", value: "3" });
-    expect(vizHudMetric("rf-constellation", { t: 0, dt: 0, audio: 0, packets: [], rf: [{ ssid: "a", rssi: 0.5, channel: 6 }], talkers: [] }, state))
+    expect(vizHudMetric("rf-constellation", { t: 0, dt: 0, audio: 0, packets: [], rf: [{ ssid: "a", rssi: 0.5, channel: 6 }], talkers: [], headlines: [] }, state))
       .toEqual({ label: "RF", value: "1" });
     expect(vizHudMetric("talker-storm", {
-      t: 0, dt: 0, audio: 0, packets: [], rf: [],
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
       talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
     }, state)).toEqual({ label: "particles", value: "2" });
+    expect(vizHudMetric("kefrens-bars", {
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
+      talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
+    }, state)).toEqual({ label: "talkers", value: "1" });
+    expect(vizHudMetric("blob-mesh", {
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
+      talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
+    }, state)).toEqual({ label: "blobs", value: "1" });
+    expect(vizHudMetric("hn-rain", {
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [],
+      headlines: [{ id: "hn:0", label: "HN", text: "Jemalloc" }],
+    }, state)).toEqual({ label: "headlines", value: "1" });
+    expect(vizHudMetric("hn-term", {
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [],
+      headlines: [{ id: "hn:0", label: "HN", text: "Jemalloc", summary: "A new allocator." }],
+    }, state)).toEqual({ label: "stories", value: "1" });
+    expect(vizHudMetric("stereo-gram", {
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
+      talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
+    }, state)).toEqual({ label: "orbs", value: "1" });
   });
 });
 

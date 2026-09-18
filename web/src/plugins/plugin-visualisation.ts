@@ -1,5 +1,6 @@
 import type { ModeOption, PluginField, ViewMode } from "../core/modes";
 import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
+import { parseFabric } from "../graph/fabric";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import type {
@@ -22,12 +23,12 @@ const NODE_SCALES = new Set(["default", "bytes", "rate"]);
 const LABEL_STYLES = new Set(["default", "all", "none", "top"]);
 const CHROMES = new Set(["top", "left", "right"]);
 const LOOK_KEYS = [
-  "theme", "chrome", "backdrop",
+  "theme", "chrome", "backdrop", "stageOnly",
   "skyOpacity", "skyBright", "skySpeed", "skyEase", "skyAudio", "skyCycle",
   "bgColor", "bgOpacity", "bgAudio",
-  "gridShape", "gridColor", "gridSize", "gridOpacity", "gridBright", "gridAudio",
+  "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
-  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed",
+  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric",
 ] as const;
 
 export type CatalogRow = {
@@ -171,6 +172,15 @@ export function parseLook(raw: unknown): PluginLook | undefined {
       if (typeof v === "string" && CHROMES.has(v)) look.chrome = v as PluginLook["chrome"];
       continue;
     }
+    if (key === "stageOnly") {
+      if (typeof v === "boolean") look.stageOnly = v;
+      continue;
+    }
+    if (key === "graphFabric") {
+      const f = parseFabric(v);
+      if (f) look.graphFabric = f;
+      continue;
+    }
     (look as Record<string, unknown>)[key] = v;
   }
   return Object.keys(look).length ? look : undefined;
@@ -190,6 +200,8 @@ export function parseStyle(raw: unknown): PluginStyle | undefined {
     style.labels = rec.labels as PluginStyle["labels"];
   }
   if (typeof rec.flatten === "boolean") style.flatten = rec.flatten;
+  const fabric = parseFabric(rec.fabric);
+  if (fabric) style.fabric = fabric;
   return Object.keys(style).length ? style : undefined;
 }
 

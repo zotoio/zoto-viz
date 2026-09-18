@@ -1,3 +1,4 @@
+import type { SourceHeadline } from "../core/sources";
 import { decodePacket, type FeedKind } from "../inspect/decode";
 import { idsOf, type Packet, type TrafficMsg } from "../core/types";
 import type { NetScene } from "../graph/scene";
@@ -40,6 +41,8 @@ export interface FeedConfig {
   /** ticker / transcript type size in px */
   textSize: number;
   modulate: boolean;
+  /** RSS / HTTP / file headlines from the host sources registry. */
+  includeSources: boolean;
 }
 
 export const DEFAULT_FEED: FeedConfig = {
@@ -50,6 +53,7 @@ export const DEFAULT_FEED: FeedConfig = {
   density: 36,
   textSize: 12,
   modulate: true,
+  includeSources: true,
 };
 
 /** Pixels to shift the graph optical center (positive = left). Half the overlay, and only when the view is tighter than 4× the feed. Chrome-right puts the feed on the left. */
@@ -57,6 +61,11 @@ export function feedViewShift(width: number, chrome = "top", viewWidth = 0): num
   if (width <= 0 || viewWidth >= width * 4) return 0;
   const px = width * 0.5;
   return chrome === "right" ? -px : px;
+}
+
+/** True when the ticker is close enough to the latest line to keep following it. */
+export function nearBottom(el: { scrollHeight: number; scrollTop: number; clientHeight: number }, slop = 96): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < slop;
 }
 
 export interface TranscriptTurn {
@@ -108,6 +117,7 @@ export class LiveFeed {
   private stickToBottom = true;
   private pinning = false;
   private pinRaf = 0;
+  private listenPin = false;
   onSourceChange?: () => void;
   /** Return false to keep the draft (chat already in flight). */
   onSend?: (text: string) => boolean | void;
@@ -122,14 +132,14 @@ export class LiveFeed {
       <div class="feed-panel">
         <div class="feed-ticker" aria-label="live feed"></div>
         <div class="feed-composer" hidden>
-          <textarea class="feed-ask" rows="2" placeholder="Ask about the LAN…" aria-label="message"></textarea>
+          <textarea class="feed-ask" rows="2" placeholder="Ask about the LAN… then send" aria-label="message"></textarea>
           <button type="button" class="btn feed-mic" title="hold to talk" aria-label="microphone">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z"/></svg>
           </button>
           <button type="button" class="btn primary feed-send">send</button>
         </div>
       </div>
-      <div class="feed-hint"></div>`;
+      <div class="feed-hint" aria-live="polite"></div>`;
     this.ticker = this.el.querySelector(".feed-ticker")!;
     this.composer = this.el.querySelector(".feed-composer")!;
     this.ask = this.el.querySelector(".feed-ask")!;
@@ -141,9 +151,12 @@ export class LiveFeed {
     });
     this.ticker.addEventListener("scroll", () => {
       if (this.pinning || !this.chatLog()) return;
-      const el = this.ticker;
-      this.stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
+      this.stickToBottom = nearBottom(this.ticker);
     });
+    this.ticker.addEventListener("wheel", (e) => {
+      if (!this.chatLog() || this.pinning) return;
+      if (e.deltaY < 0) this.stickToBottom = false;
+    }, { passive: true });
     this.composer.querySelector(".feed-send")!.addEventListener("click", () => this.submitComposer());
     this.composer.querySelector(".feed-mic")!.addEventListener("pointerdown", (e) => {
       e.preventDefault();
@@ -166,6 +179,49 @@ export class LiveFeed {
     const accepted = this.onSend?.(text);
     if (accepted === false) return;
     this.ask.value = "";
+    this.stickToBottom = true;
+    this.pinChat(true);
+  }
+
+  /** RSS / HTTP / file headlines from the host sources registry. */
+  setSourceHeadlines(rows: SourceHeadline[]): void {
+    const want = this.cfg.includeSources !== false ? rows : [];
+    const keep = new Set(want.map((r) => `src:${r.id}`));
+    this.lines = this.lines.filter((l) => {
+      if (!l.key.startsWith("src:")) return true;
+      if (keep.has(l.key)) return true;
+      l.el.remove();
+      return false;
+    });
+    if (!want.length) return;
+    for (const row of [...want].reverse()) {
+      const key = `src:${row.id}`;
+      const existing = this.lines.find((l) => l.key === key);
+      if (existing) {
+        if (existing.text !== row.text) {
+          existing.text = row.text;
+          existing.label = row.label;
+          existing.el.title = row.text;
+          const k = existing.el.querySelector(".k");
+          const tx = existing.el.querySelector(".tx");
+          if (k) k.textContent = row.label;
+          if (tx) tx.textContent = row.text;
+        }
+        continue;
+      }
+      const line = this.makeLine({
+        key,
+        t: Date.now() / 1000,
+        color: "#8cb4ff",
+        label: row.label,
+        text: row.text,
+        count: 1,
+      });
+      this.lines.unshift(line);
+      this.ticker.prepend(line.el);
+    }
+    this.liftStream();
+    this.trim();
   }
 
   setConfig(c: FeedConfig): void {
@@ -246,6 +302,26 @@ export class LiveFeed {
     this.addChatLine(role, text, stream);
   }
 
+  /** After the watchword: pin the transcript to the bottom and show that capture is live. */
+  setListening(on: boolean): void {
+    this.listenPin = on;
+    this.el.classList.toggle("listening", on);
+    if (on) {
+      this.stickToBottom = true;
+      this.hint.textContent = "listening… say send";
+      this.ask.placeholder = "Listening — say send to submit";
+      this.pinChat(true);
+    } else {
+      this.ask.placeholder = "Ask about the LAN… then send";
+      if (this.hint.textContent === "listening… say send") {
+        this.hint.textContent = this.showsTranscript() && !this.showsTraffic() && !this.lines.length
+          ? "agent transcript…"
+          : "";
+      }
+    }
+    this.syncOverlay();
+  }
+
   /** Header / composer wait state: a think row before the first token, gone if the model never thinks. */
   setThinking(on: boolean): void {
     const was = this.el.classList.contains("thinking");
@@ -258,7 +334,9 @@ export class LiveFeed {
           && !(this.streamRole === "think" && this.streamLine)) {
         this.addChatLine("think", "thinking…", true);
         this.streamLine?.el.classList.add("pending");
+        this.streamLine?.el.setAttribute("aria-live", "polite");
       }
+      this.pinChat();
       return;
     }
     this.dropPendingThink();
@@ -292,6 +370,7 @@ export class LiveFeed {
       if (!(this.streamRole === "think" && this.streamLine)) {
         this.addChatLine("think", "thinking…", true);
         this.streamLine?.el.classList.add("pending");
+        this.streamLine?.el.setAttribute("aria-live", "polite");
       }
     }
   }
@@ -333,7 +412,6 @@ export class LiveFeed {
     if (tx) paintChat(tx, line.chat, line.text);
     line.el.title = line.text;
     this.liftStream();
-    this.stickToBottom = true;
     this.pinChat();
   }
 
@@ -380,7 +458,7 @@ export class LiveFeed {
     }
     this.liftStream();
     this.trim();
-    this.stickToBottom = true;
+    if (role === "you") this.stickToBottom = true;
     this.pinChat();
     this.syncOverlay();
   }
@@ -403,7 +481,7 @@ export class LiveFeed {
     if (document.body.classList.contains("arcade")) return null;
     if (!this.cfg.on || !this.showsTraffic()) return null;
     const rf = this.graphBase === "wifi" ? "@wifi" : this.graphBase === "bluetooth" ? "@bluetooth" : "";
-    if (this.graphBase === "cpu") return null;
+    if (this.graphBase === "cpu" || this.graphBase === "sources") return null;
     if (this.cfg.scope === "selected") {
       const ip = this.scene.selectedIp;
       if (ip) return idsOf(this.scene.deviceOf(ip), ip);
@@ -481,9 +559,10 @@ export class LiveFeed {
     }
   }
 
-  private pinChat(): void {
+  private pinChat(force = false): void {
     const chat = this.chatLog();
-    if (chat && !this.stickToBottom) return;
+    const pin = force || this.listenPin || this.stickToBottom;
+    if (chat && !pin) return;
     if (!chat && !this.streamLine) return;
     const go = () => {
       this.pinning = true;
@@ -494,7 +573,7 @@ export class LiveFeed {
     if (this.pinRaf) cancelAnimationFrame(this.pinRaf);
     this.pinRaf = requestAnimationFrame(() => {
       this.pinRaf = 0;
-      if (chat && !this.stickToBottom) return;
+      if (this.chatLog() && !force && !this.listenPin && !this.stickToBottom) return;
       if (!this.chatLog() && !this.streamLine) return;
       go();
     });

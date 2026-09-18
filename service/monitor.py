@@ -38,6 +38,7 @@ from . import agent
 from . import agent_assets
 from . import live
 from . import mcp as plugin_mcp
+from . import plugin_local
 from . import plugin_migration
 from . import cpu
 from . import forensics
@@ -47,6 +48,7 @@ from . import plugin_datasource as plugin_ds
 from . import plugins
 from . import profiles
 from . import rf
+from . import sources
 from . import sysconfig
 
 zotoviz = paths.load_cli()
@@ -1519,8 +1521,35 @@ async def housekeeping_loop(state: State) -> None:
 def publish_state(state: State) -> dict:
     """1 Hz snapshot after plugin service hooks have had a chance to decorate it."""
     msg = plugin_ds.apply_snapshot(hooks.on_snapshot(state.snapshot(time.time())))
+    sources.apply(msg)
     msg["live"] = live.snapshot()
     return msg
+
+
+async def local_drop_watch_loop(app: web.Application) -> None:
+    """Pick up ``~/.zoto-viz/plugins/local/*.zip`` without waiting on ``hooks.sync``.
+
+    Catalog compile can take longer than a filesystem drop; keep this loop short
+    so a new zip activates on the open UI within a second.
+    """
+    while True:
+        try:
+            from . import plugin_local
+            plugin_local.sync_local_drop()
+        except Exception as e:  # noqa: BLE001
+            log(f"local plugin watch: {e}")
+        await asyncio.sleep(0.5)
+
+
+async def sources_poll_loop(app: web.Application) -> None:
+    """Refresh due RSS / HTTP / file sources without blocking the 1 Hz snapshot."""
+    sources.ensure()
+    while True:
+        try:
+            await sources.poll()
+        except Exception as e:  # noqa: BLE001
+            log(f"sources poll: {e}")
+        await asyncio.sleep(2)
 
 
 async def plugin_watch_loop(app: web.Application) -> None:
@@ -1676,6 +1705,8 @@ async def on_startup(app: web.Application) -> None:
         asyncio.create_task(housekeeping_loop(state)),
         asyncio.create_task(broadcast_loop(app)),
         asyncio.create_task(plugin_watch_loop(app)),
+        asyncio.create_task(local_drop_watch_loop(app)),
+        asyncio.create_task(sources_poll_loop(app)),
     ]
 
 
@@ -1702,6 +1733,7 @@ async def on_cleanup(app: web.Application) -> None:
             j.update(status="error", error="monitor stopped while the analysis was running", finished=time.time())
     app["state"].save()
     app["pool"].shutdown(wait=False, cancel_futures=True)
+    await sources.close()
     log("stopped")
 
 
@@ -1748,6 +1780,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_post("/api/ai/memories", agent.api_memories)
     app.router.add_delete("/api/ai/memories", agent.api_memories)
     app.router.add_post("/api/ai/plugin", agent.api_draft_plugin)
+    app.router.add_post("/api/ai/plugin/local", plugin_local.api_publish_local)
     app.router.add_post("/api/ai/sky", agent.api_sky)
     app.router.add_post("/api/ai/speak", agent.api_speak)
     app.router.add_delete("/api/ai/speak", agent.api_speak)
@@ -1755,6 +1788,11 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_post("/api/ai/asset", agent_assets.api_assets)
     app.router.add_delete("/api/ai/assets", agent_assets.api_assets)
     app.router.add_get("/api/ai/assets/{id}", agent_assets.api_asset)
+    app.router.add_get("/api/sources", sources.api_sources)
+    app.router.add_put("/api/sources", sources.api_sources)
+    app.router.add_post("/api/sources", sources.api_sources)
+    app.router.add_put("/api/sources/{id}", sources.api_source)
+    app.router.add_delete("/api/sources/{id}", sources.api_source)
     if WEB_DIST.exists():
         app.router.add_static("/", WEB_DIST, show_index=False)
     app.on_startup.append(on_startup)

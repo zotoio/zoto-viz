@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMicPolicy, shouldRunMic } from "./want";
+import { liveMic, micCaptureAllowed, parseMicPolicy, shouldRunMic } from "./want";
 
 describe("parseMicPolicy", () => {
   it("defaults to auto", () => {
@@ -16,5 +16,14 @@ describe("shouldRunMic", () => {
     expect(shouldRunMic("off", "mic", true)).toBe(false);
     expect(shouldRunMic("auto", "traffic", true)).toBe(false);
     expect(shouldRunMic("auto", "mic", false)).toBe(false);
+  });
+});
+
+describe("micCaptureAllowed", () => {
+  it("follows the header mic toggle", () => {
+    liveMic.setPolicy("off", false);
+    expect(micCaptureAllowed()).toBe(false);
+    liveMic.setPolicy("auto", false);
+    expect(micCaptureAllowed()).toBe(true);
   });
 });

@@ -1,0 +1,23 @@
+id: hn-term
+name: HN Term
+version: 1
+hint: Greenscreen teletype — Hacker News headlines and article blurbs type in and scroll up.
+description: Stage-only CRT terminal. Host HN RSS titles plus descriptions type character-by-character, wrap, and roll up the screen like a phosphor console.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+datasource:
+  consumes:
+    - sources
+frontend:
+  entry: frontend/index.ts

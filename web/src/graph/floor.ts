@@ -34,6 +34,8 @@ uniform float uAudio;
 uniform float uCell;
 uniform float uShape;
 uniform float uLumaCap;
+uniform vec2 uCenter;
+uniform float uFadeFar;
 in vec3 vWorld;
 out vec4 fragColor;
 
@@ -59,8 +61,8 @@ vec2 hexGV(vec2 p) {
 void main() {
   float cell = max(uCell, 8.0);
   vec2 p = vWorld.xz / cell;
-  float aa = min(fwidth(p.x) + fwidth(p.y), 0.08);
-  float w = 0.014 + uAudio * 0.03;
+  float aa = clamp(fwidth(p.x) + fwidth(p.y), 0.01, 0.03);
+  float w = 0.014 + uAudio * 0.02;
   float line = 0.0;
   float major = 0.0;
   if (uShape < 0.5) {
@@ -83,10 +85,10 @@ void main() {
     float edge = abs(length(hexGV(p)) - 0.38);
     line = 1.0 - smoothstep(w, w + aa, edge);
   }
-  float dist = length(vWorld.xz);
-  float fade = 1.0 - smoothstep(480.0, 1220.0, dist);
+  float dist = length(vWorld.xz - uCenter);
+  float fade = 1.0 - smoothstep(uFadeFar * 0.4, max(uFadeFar, 8.0), dist);
   float a = line * uOpacity * fade;
-  if (a < 0.01) discard;
+  if (a < 0.002) discard;
   vec3 col = mix(uMinor, uMajor, uShape < 0.5 ? clamp(major, 0.0, 1.0) : 0.85);
   col *= uBright * (1.0 + uAudio * 1.5);
   col = capSkyLumaTo(col, uLumaCap);
@@ -97,6 +99,92 @@ void main() {
 const SHAPE_NUM: Record<FloorShape, number> = {
   square: 0, hex: 1, triangle: 2, diamond: 3, circle: 4,
 };
+
+/** PlaneGeometry edge length. Scale 1 → this many world units. */
+export const FLOOR_PLANE = 2400;
+
+export type FloorFocus = { x: number; y: number; z: number; hx: number; hz: number; n: number };
+
+export type FloorPose = {
+  x: number; y: number; z: number;
+  scaleX: number; scaleZ: number;
+  fadeFar: number;
+};
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1, Math.max(0, n));
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** World-fixed floor from before graph-follow (origin plane, wide fade). */
+export function worldFloorPose(spreadX = 1): FloorPose {
+  return {
+    x: 0,
+    y: -320,
+    z: 0,
+    scaleX: Math.max(1, spreadX * 1.15),
+    scaleZ: 1,
+    fadeFar: 1220,
+  };
+}
+
+function gluedFloorPose(graph: FloorFocus): FloorPose {
+  const has = graph.n > 0;
+  const span = Math.max(has ? graph.hx : 280, has ? graph.hz : 280, 160);
+  const cover = (span * 2.6) / (FLOOR_PLANE * 0.5);
+  const scale = Math.max(cover, 0.45);
+  return {
+    x: has ? graph.x : 0,
+    y: (has ? graph.y : 0) - Math.min(240, Math.max(90, span * 0.28)),
+    z: has ? graph.z : 0,
+    scaleX: scale,
+    scaleZ: scale,
+    fadeFar: span * 2.35,
+  };
+}
+
+/**
+ * Blend a world-fixed floor (`follow` 0) into a floor that sits under the
+ * live graph (`follow` 1). Tile pattern stays world-locked either way.
+ */
+export function floorPose(graph: FloorFocus, follow = 1, spreadX = 1): FloorPose {
+  const t = clamp01(follow);
+  const world = worldFloorPose(spreadX);
+  if (t <= 0) return world;
+  const glued = gluedFloorPose(graph);
+  if (t >= 1) return glued;
+  return {
+    x: lerp(world.x, glued.x, t),
+    y: lerp(world.y, glued.y, t),
+    z: lerp(world.z, glued.z, t),
+    scaleX: lerp(world.scaleX, glued.scaleX, t),
+    scaleZ: lerp(world.scaleZ, glued.scaleZ, t),
+    fadeFar: lerp(world.fadeFar, glued.fadeFar, t),
+  };
+}
+
+function holdOrLerp(cur: number, want: number, k: number, rel: number): number {
+  if (Math.abs(want - cur) < Math.max(1e-3, Math.abs(cur) * rel)) return cur;
+  return lerp(cur, want, k);
+}
+
+/** Ease the live pose; keep height / scale / fade still unless they moved by a real step. */
+export function easeFloorPose(cur: FloorPose, want: FloorPose, k: number): FloorPose {
+  const t = clamp01(k);
+  const slow = t * 0.45;
+  return {
+    x: lerp(cur.x, want.x, t),
+    y: holdOrLerp(cur.y, want.y, slow, 0.08),
+    z: lerp(cur.z, want.z, t),
+    scaleX: holdOrLerp(cur.scaleX, want.scaleX, slow, 0.14),
+    scaleZ: holdOrLerp(cur.scaleZ, want.scaleZ, slow, 0.14),
+    fadeFar: holdOrLerp(cur.fadeFar, want.fadeFar, slow, 0.14),
+  };
+}
 
 export class FloorGrid {
   readonly mesh: THREE.Mesh;
@@ -113,6 +201,8 @@ export class FloorGrid {
         uCell: { value: 50 },
         uShape: { value: 0 },
         uLumaCap: { value: SKY_LUMA_CAP },
+        uCenter: { value: new THREE.Vector2(0, 0) },
+        uFadeFar: { value: 1220 },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -123,7 +213,7 @@ export class FloorGrid {
       toneMapped: false,
       side: THREE.DoubleSide,
     });
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), this.mat);
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_PLANE, FLOOR_PLANE), this.mat);
     this.mesh.rotation.x = -Math.PI / 2;
     this.mesh.position.y = -320;
     this.mesh.frustumCulled = false;
@@ -136,15 +226,35 @@ export class FloorGrid {
   }
 
   setLook(opacity: number, brightness: number, audio: number, cell: number, shape: FloorShape): void {
-    this.mat.uniforms.uOpacity.value = opacity;
-    this.mat.uniforms.uBright.value = brightness;
-    this.mat.uniforms.uAudio.value = audio;
+    const k = 0.18;
+    const prevOp = this.mat.uniforms.uOpacity.value as number;
+    const prevBr = this.mat.uniforms.uBright.value as number;
+    const prevAu = this.mat.uniforms.uAudio.value as number;
+    const nextOp = prevOp + (opacity - prevOp) * k;
+    this.mat.uniforms.uOpacity.value = nextOp;
+    this.mat.uniforms.uBright.value = prevBr + (brightness - prevBr) * k;
+    this.mat.uniforms.uAudio.value = prevAu + (audio - prevAu) * k;
     this.mat.uniforms.uCell.value = cell;
     this.mat.uniforms.uShape.value = SHAPE_NUM[shape];
-    this.mesh.visible = opacity > 0.008;
+    if (nextOp > 0.012) this.mesh.visible = true;
+    else if (nextOp < 0.003) this.mesh.visible = false;
   }
 
   setLumaCap(cap: number): void {
     this.mat.uniforms.uLumaCap.value = Math.min(SKY_LUMA_CAP, Math.max(0.04, cap));
+  }
+
+  setPose(p: FloorPose): void {
+    this.mesh.position.set(p.x, p.y, p.z);
+    this.mesh.scale.set(p.scaleX, p.scaleZ, 1);
+    (this.mat.uniforms.uCenter.value as THREE.Vector2).set(p.x, p.z);
+    this.mat.uniforms.uFadeFar.value = p.fadeFar;
+  }
+
+  copyPose(src: FloorGrid): void {
+    this.mesh.position.copy(src.mesh.position);
+    this.mesh.scale.copy(src.mesh.scale);
+    (this.mat.uniforms.uCenter.value as THREE.Vector2).copy(src.mat.uniforms.uCenter.value as THREE.Vector2);
+    this.mat.uniforms.uFadeFar.value = src.mat.uniforms.uFadeFar.value;
   }
 }

@@ -1,0 +1,11 @@
+engine: graph
+base: sources
+look:
+  theme: tactical
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.2
+  skyAudio: false
+  skySpeed: 0.12
+  gridOpacity: 0

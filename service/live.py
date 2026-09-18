@@ -69,34 +69,38 @@ WEATHER = {
 
 SHOW_KEYS = ("lan", "internet", "multicast", "offline", "labels", "cpuIdle")
 CHROME = ("top", "left", "right")
-CAM = ("auto", "off")
 FEED_SRC = ("traffic", "transcript", "both")
 FEED_LAY = ("ticker", "bars", "both")
 FEED_SCOPE = ("lan", "selected", "any")
 THEMES = (
     "midnight", "ocean", "nord", "dracula", "solarized",
     "gruvbox", "ember", "neon", "tactical", "paper",
+    "dusk", "void", "vhs", "acid", "ice", "phosphor",
 )
 BACKDROPS = (
     "none", "fractal", "space", "matrix", "live", "aurora", "rain", "ocean",
-    "fire", "warp", "clouds", "circuit", "plasma", "lattice", "dynamic",
-    "custom", "plugin",
+    "fire", "warp", "clouds", "circuit", "plasma", "lattice",
+    "dusk", "void", "vhs", "nebula", "acid", "ice", "dawn", "phosphor",
+    "earth", "meadow", "tunnel",
+    "dynamic", "custom", "plugin",
 )
 FLOOR_SHAPES = ("square", "hex", "triangle", "diamond", "circle")
 AUDIO_DRIVES = ("mic", "traffic", "node")
 THEME_CYCLES = ("off", "cadence", "audio")
 EDGE_GLOWS = ("off", "comet", "pulse")
+FABRIC_KINDS = ("off", "tubes", "cloth", "ribbon")
 MOSAIC_SIZES = ("off", "4", "6", "8")
 HERO_POS = ("off", "left", "center", "right")
 FOCUS_MODES = ("activity", "motion", "cloud")
 DICE_INCLUDE = (
-    "theme", "view", "mosaic", "chrome", "feed", "camera", "mic",
+    "theme", "view", "mosaic", "feed",
     "motion", "physics", "knobs", "show",
 )
 DICE_MOSAIC_MAX = ("4", "6", "8")
 ANIM_BOOL = (
     "follow", "cycle", "randomize", "skyAudio", "bgAudio", "gridAudio",
     "audioCamera", "camTheme", "audioNodes", "audioPhysics", "audioParts", "autoTune",
+    "mosaicSharedTheme",
 )
 # mirrors web/src/graph/scene.ts DREAM_BOUNDS (plus shared opacity/bright/magnet aliases)
 ANIM_NUM: dict[str, dict[str, float]] = {
@@ -115,6 +119,7 @@ ANIM_NUM: dict[str, dict[str, float]] = {
     "gridOpacity": {"min": 0, "max": 1, "step": 0.05},
     "gridBright": {"min": 0, "max": 2, "step": 0.05},
     "gridSize": {"min": 16, "max": 160, "step": 4},
+    "gridFollow": {"min": 0, "max": 1, "step": 0.05},
     "audioSens": {"min": 0, "max": 2, "step": 0.05},
     "camAudio": {"min": 0, "max": 2, "step": 0.05},
     "camChange": {"min": 0, "max": 2, "step": 0.05},
@@ -158,12 +163,15 @@ ANIM_ENUM = {
     "themeCycle": THEME_CYCLES,
     "skyCycle": THEME_CYCLES,
     "edgeGlow": EDGE_GLOWS,
+    "graphFabric": FABRIC_KINDS,
     "mosaic": MOSAIC_SIZES,
     "hero": HERO_POS,
     "focus": FOCUS_MODES,
 }
 ANIM_STR = ("bgColor", "gridColor")
 ANIM_CAP = 120
+MOSAIC_TREE_DEPTH = 8
+MOSAIC_TILE_CAP = 8
 MAP_CAP = 80
 
 _temper = DEFAULT_TEMPER
@@ -323,10 +331,6 @@ def sanitize_patch(raw: Any) -> dict[str, Any]:
         out["theme"] = theme.strip()[:32]
     if isinstance(raw.get("dream"), bool):
         out["dream"] = raw["dream"]
-    if raw.get("camera") in CAM:
-        out["camera"] = raw["camera"]
-    if raw.get("mic") in CAM:
-        out["mic"] = raw["mic"]
     if raw.get("chrome") in CHROME:
         out["chrome"] = raw["chrome"]
     mode = raw.get("mode")
@@ -367,6 +371,8 @@ def sanitize_patch(raw: Any) -> dict[str, Any]:
         out["model"] = raw["model"].strip()[:64]
     if raw.get("shuffle") is True:
         out["shuffle"] = True
+    if raw.get("reloadPlugins") is True:
+        out["reloadPlugins"] = True
     dice = _dice(raw.get("dice"))
     if dice:
         out["dice"] = dice
@@ -390,6 +396,8 @@ def _feed(raw: Any) -> dict[str, Any]:
         out["scope"] = raw["scope"]
     if isinstance(raw.get("modulate"), bool):
         out["modulate"] = raw["modulate"]
+    if isinstance(raw.get("includeSources"), bool):
+        out["includeSources"] = raw["includeSources"]
     dens = _num(raw.get("density"), 12, 80)
     if dens is not None:
         out["density"] = dens
@@ -406,8 +414,12 @@ def _dice(raw: Any) -> dict[str, Any]:
     include = _bool_map(raw.get("include"), DICE_INCLUDE)
     if include:
         out["include"] = include
-    if isinstance(raw.get("handoff"), bool):
-        out["handoff"] = raw["handoff"]
+    if isinstance(raw.get("on"), bool):
+        out["on"] = raw["on"]
+    period = _num(raw.get("periodMin"), 1, 60)
+    if period is not None:
+        out["periodMin"] = int(period)
+    out["handoff"] = False
     if isinstance(raw.get("cycle"), bool):
         out["cycle"] = raw["cycle"]
     if raw.get("mosaicMax") in DICE_MOSAIC_MAX:
@@ -451,9 +463,50 @@ def _anim(raw: Any) -> dict[str, Any]:
             out[key] = v
         elif isinstance(v, (int, float)) and not isinstance(v, bool) and key not in ANIM_ENUM:
             out[key] = float(v) if not isinstance(v, int) else int(v)
+        elif key == "mosaicTree":
+            node = _mosaic_node(v)
+            if node:
+                out["mosaicTree"] = node
+        elif key == "mosaicTiles" and isinstance(v, list):
+            tiles: list[str] = []
+            seen: set[str] = set()
+            for row in v[:MOSAIC_TILE_CAP]:
+                if not isinstance(row, str) or not row.strip():
+                    continue
+                tid = row.strip()[:80]
+                if tid in seen:
+                    continue
+                seen.add(tid)
+                tiles.append(tid)
+            if tiles:
+                out["mosaicTiles"] = tiles
+        elif key == "mosaicMaxId" and isinstance(v, str) and v.strip():
+            out["mosaicMaxId"] = v.strip()[:80]
         elif isinstance(v, str) and len(v) <= 48 and key not in ANIM_ENUM:
             out[key] = v
     return out
+
+
+def _mosaic_node(raw: Any, depth: int = 0) -> dict[str, Any] | None:
+    if not isinstance(raw, dict) or depth > MOSAIC_TREE_DEPTH:
+        return None
+    kind = raw.get("type")
+    if kind == "leaf" and isinstance(raw.get("id"), str) and raw["id"].strip():
+        return {"type": "leaf", "id": raw["id"].strip()[:80]}
+    if kind == "split" and raw.get("dir") in ("h", "v"):
+        a = _mosaic_node(raw.get("a"), depth + 1)
+        b = _mosaic_node(raw.get("b"), depth + 1)
+        if not a or not b:
+            return None
+        try:
+            ratio = float(raw.get("ratio", 0.5))
+        except (TypeError, ValueError):
+            ratio = 0.5
+        if ratio != ratio:
+            ratio = 0.5
+        ratio = max(0.12, min(0.88, ratio))
+        return {"type": "split", "dir": raw["dir"], "ratio": ratio, "a": a, "b": b}
+    return None
 
 
 def _bool_map(raw: Any, keys: tuple[str, ...]) -> dict[str, bool]:
@@ -552,14 +605,13 @@ def features() -> dict[str, Any]:
     """Catalog of MCP-settable keys."""
     return {
         "settings": [
-            "theme", "dream", "mode", "chrome", "camera", "mic", "redact", "merge",
+            "theme", "dream", "mode", "chrome", "redact", "merge",
             "feed", "show", "filters", "anim", "modeOptions", "arcade", "plugins",
             "agent", "dice", "shuffle", "temper", "weather", "control", "model",
+            "sources",
         ],
         "theme": {"values": list(THEMES)},
         "chrome": {"values": list(CHROME)},
-        "camera": {"values": list(CAM)},
-        "mic": {"values": list(CAM)},
         "show": {"keys": list(SHOW_KEYS), "type": "boolean"},
         "filters": {"keys": ["allowNames", "blockNames", "allowNets", "blockNets"]},
         "feed": {
@@ -568,6 +620,7 @@ def features() -> dict[str, Any]:
             "layout": {"values": list(FEED_LAY)},
             "scope": {"values": list(FEED_SCOPE)},
             "modulate": {"type": "boolean"},
+            "includeSources": {"type": "boolean", "hint": "RSS / HTTP / file headlines on the feed ticker"},
             "density": {"min": 12, "max": 80},
             "textSize": {"min": 10, "max": 20},
         },
@@ -576,6 +629,9 @@ def features() -> dict[str, Any]:
             "number": ANIM_NUM,
             "enum": {k: list(v) for k, v in ANIM_ENUM.items()},
             "string": list(ANIM_STR),
+            "mosaicTree": "split tree ({type, dir, ratio, a, b} or {type:leaf, id})",
+            "mosaicTiles": "view ids in leaf order (AI may set these when mosaic layout is locked)",
+            "mosaicMaxId": "maximized tile view id",
         },
         "look": {
             "shader": "GLSL fragment (vec3 color or void main)",
@@ -583,11 +639,17 @@ def features() -> dict[str, Any]:
             "decos": "photo/svg pins ({id, kind, src, at, label?})",
             "clear": {"type": "boolean"},
         },
+        "sources": {
+            "kinds": ["rss", "http", "file"],
+            "hint": "host RSS / HTTPS / local-file registry (~/.zoto-viz/sources.yml); list_sources / set_source / delete_source",
+        },
         "shuffle": {"type": "boolean", "hint": "roll_dice — groups on Settings → Dice"},
         "dice": {
-            "roll_dice": "header dice; respects include + ceilings on Settings → Dice",
+            "roll_dice": "one-shot roll; respects include + ceilings on Settings → Dice",
+            "on": {"type": "boolean", "default": False, "hint": "header dice repeat switch"},
+            "periodMin": {"min": 1, "max": 60, "default": 5, "hint": "minutes between automatic rolls while on"},
             "include": {"keys": list(DICE_INCLUDE), "type": "boolean", "default": True},
-            "handoff": {"type": "boolean", "hint": "chat turn after a roll when cycling is on"},
+            "handoff": {"type": "boolean", "hint": "ignored — a roll never starts a chat turn"},
             "cycle": {"type": "boolean", "hint": "dream + view cycling + AI Control after a roll"},
             "labelsMax": {"min": 8, "max": 120, "default": 48},
             "sparksMax": {"min": 20, "max": 3000, "default": 800},
@@ -606,7 +668,11 @@ def features() -> dict[str, Any]:
         },
         "plugins": "list_plugins / set_plugin — options, config, prompt per catalog id",
         "view": "set_view { mode }",
-        "install": "install_plugin_zip { zip_b64, overwrite?, force? }",
+        "install": "install_plugin_zip { zip_b64, overwrite?, force? } — repo contrib plugins/<id>.zip",
+        "publish": (
+            "publish_local_plugin { zip_b64 | files | description, overwrite?, activate? } "
+            "— ~/.zoto-viz/plugins/local/<id>.zip, hot-load, activate if YAML-only / already consented"
+        ),
         "draft": "draft_plugin { files, install? } — validate / write plugins/src/<id>/ when AI Control is on",
         "consent": "consent_plugin { id, kind: reviewed|authored }",
         "state": "get_state — live LAN snapshot",

@@ -35,7 +35,7 @@ Only these capabilities are granted (`web/src/plugins/host.ts`):
 Unknown capabilities fail `plugin validate` / catalog scan. Never granted:
 camera, mic, parent DOM, `fetch`, `eval`.
 
-Settings → Agent: **allow TypeScript plugins** (off by default). The first time
+Settings → Agent: **allow TypeScript plugins** (on by default). The first time
 you switch to a TypeScript (or Python / GLSL) plugin, a modal asks you to
 confirm you wrote it or examined the source. A new compile hash asks again.
 Consent is `~/.zoto-viz/plugin-consent.yml` (see [Plugins](/plugins)).

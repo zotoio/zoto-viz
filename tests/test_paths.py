@@ -56,6 +56,8 @@ def test_plugin_dirs_resolve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert paths.plugin_zips_dir() == root / "plugins"
     assert paths.plugin_src_dir() == root / "plugins" / "src"
     assert paths.plugin_runtime_dir() == root / "plugins" / ".runtime"
+    assert paths.plugin_local_dir().name == "local"
+    assert paths.plugin_local_runtime_dir().name == ".runtime"
     monkeypatch.chdir(root / "service")
     assert paths.repo_root() == root
     assert paths.plugin_zips_dir() == root / "plugins"

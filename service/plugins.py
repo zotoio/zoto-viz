@@ -1,8 +1,10 @@
-"""Unified plugin catalog: shipped ``plugins/src/<id>/`` plus gitignored contrib zips.
+"""Unified plugin catalog: shipped ``plugins/src/<id>/`` plus gitignored contrib zips
+and user-local ``~/.zoto-viz/plugins/local/*.zip``.
 
 Default ``scan()`` loads src trees directly. Non-colliding ``plugins/*.zip``
-unpack into ``plugins/.runtime/<id>/``. A zip whose id is already a src tree
-is a scan error and is skipped.
+unpack into ``plugins/.runtime/<id>/``. Local zips unpack into
+``~/.zoto-viz/plugins/local/.runtime/<id>/``. A zip whose id is already a src
+tree (or an earlier zip) is a scan error and is skipped.
 
 A plugin declares identity in ``plugin.yml``. Optional folders (``frontend/``,
 ``backend/``, ``sky/``, ``datasource/``, ``visualisation.yml``) are the switch.
@@ -730,6 +732,7 @@ def _scan_zips(
     runtime_dir: Path,
     *,
     owned_ids: set[str] | None = None,
+    origin: str = "zip",
 ) -> dict[str, Any]:
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
@@ -766,7 +769,7 @@ def _scan_zips(
         plugins.append(_catalog_row(
             doc, extra, dest, errors, rel,
             file=str(yml), zip=rel, sha256=unpacked.sha256, parts=list(unpacked.parts),
-            origin="zip",
+            origin=origin,
         ))
     return _scan_payload(zips_dir, plugins, errors)
 
@@ -805,11 +808,21 @@ def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str,
     src = _scan_trees(src_dir, origin="src")
     owned = _owned_src_ids(src_dir, src["plugins"])
     zipped = _scan_zips(zips_dir, runtime_dir, owned_ids=owned)
+    seen = owned | {str(p.get("id") or "") for p in zipped["plugins"] if p.get("id")}
+    local_dir = paths.plugin_local_dir()
+    local_plugins: list[dict[str, Any]] = []
+    local_errors: list[dict[str, str]] = []
+    if local_dir.is_dir():
+        local = _scan_zips(
+            local_dir, paths.plugin_local_runtime_dir(), owned_ids=seen, origin="local",
+        )
+        local_plugins = list(local["plugins"])
+        local_errors = list(local["errors"])
     catalog_dir = zips_dir if zips_dir.is_dir() else src_dir
     return _scan_payload(
         catalog_dir,
-        list(src["plugins"]) + list(zipped["plugins"]),
-        list(src["errors"]) + list(zipped["errors"]),
+        list(src["plugins"]) + list(zipped["plugins"]) + local_plugins,
+        list(src["errors"]) + list(zipped["errors"]) + local_errors,
     )
 
 

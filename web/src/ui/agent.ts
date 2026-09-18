@@ -4,11 +4,24 @@ import { redaction } from "../core/redact";
 import { setTsPluginsAllowed, tsPluginsAllowed } from "../plugins/host";
 import { apiFetch, bootSession, csrfToken } from "../core/http";
 import { playPcmStream } from "../audio/tts";
+import { WakeStream } from "../audio/wake-stream";
 import { includeView, VIEW_KEY, type ViewCapture } from "./capture";
+import { askUserMedia, clearMediaDismiss } from "./media-ask";
+import { micCaptureAllowed } from "../audio/want";
 import { fillMarkdown } from "./markdown";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
+export const MOSAIC_LAYOUT_KEY = "zoto-viz.ai.mosaicLayout";
+
+/** When false, the model may change tile views but not the split / size / hero. Unset means allowed. */
+export function aiMosaicLayoutOn(store: Pick<Storage, "getItem"> | null = typeof localStorage === "undefined" ? null : localStorage): boolean {
+  try {
+    return store?.getItem(MOSAIC_LAYOUT_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
 
 /** Header AI cycling. Unset means on; only an explicit `"0"` is off. */
 export function aiCyclePrefOn(store: Pick<Storage, "getItem"> | null = typeof localStorage === "undefined" ? null : localStorage): boolean {
@@ -46,7 +59,7 @@ export function agentPhase(s: {
 }
 
 /** Extra silent /api/ai/chat calls if a turn ends on thought with no user-facing reply. */
-export const AGENT_REPLY_POLLS = 4;
+export const AGENT_REPLY_POLLS = 1;
 
 export function needsAgentReply(thinking: string, content: string): boolean {
   const text = content.trim();
@@ -68,7 +81,7 @@ export function agentHeaderCopy(phase: AgentPhase, watch = DEFAULT_WATCH, contro
     case "think":
       text = "AI · think"; title = "the local model is thinking"; break;
     case "heard":
-      text = "AI · heard"; title = "heard the watchword — keep talking"; break;
+      text = "AI · listen"; title = "heard the watchword — keep talking, then say send"; break;
     case "listen":
       title = `listening for “${watch}”`; break;
     default:
@@ -89,6 +102,7 @@ export class AgentPanel {
   private readonly input: HTMLTextAreaElement;
   private readonly statusEl: HTMLDivElement;
   private rec: SpeechRec | null = null;
+  private wakeStream = new WakeStream();
   private wakeOn = localStorage.getItem(LISTEN_KEY) !== "0";
   private holdTalk = false;
   private busy = false;
@@ -108,6 +122,9 @@ export class AgentPanel {
   private history: { role: "user" | "assistant"; content: string; thinking?: string }[] = [];
   private hydrateP: Promise<void> | null = null;
   private logEpoch = 0;
+  private stickLog = true;
+  private pinningLog = false;
+  private thinkHold: HTMLParagraphElement | null = null;
   private noVoiceHint = false;
   private voicesTried = false;
   private ttsEngine = "";
@@ -143,7 +160,8 @@ export class AgentPanel {
     this.headerToggle.el.prepend(this.led);
     this.headerEl = this.headerToggle.el;
     document.addEventListener("pointerdown", () => {
-      if (this.wakeOn && !this.rec && !this.busy && !this.speaking && !this.holdTalk) this.startWake();
+      if (!micCaptureAllowed()) return;
+      if (this.wakeOn && !this.micBlocked && !this.rec && !this.busy && !this.speaking && !this.holdTalk) this.startWake();
     });
 
     this.statusEl = document.createElement("div");
@@ -169,12 +187,16 @@ export class AgentPanel {
 
     const listen = new Toggle({
       label: "listen for watchword",
-      title: "keep the mic on and send speech to the local model after you say the watchword",
+      title: "hold a live mic stream; after the watchword, talk, then say send",
       checked: this.wakeOn,
       onChange: (on) => {
         this.wakeOn = on;
         localStorage.setItem(LISTEN_KEY, on ? "1" : "0");
-        if (on) this.startWake(true);
+        if (on) {
+          clearMediaDismiss("mic");
+          this.micBlocked = false;
+          if (micCaptureAllowed()) this.startWake(true);
+        }
         else this.stopWake();
         this.paintHeader();
       },
@@ -189,7 +211,7 @@ export class AgentPanel {
 
     const watch = new TextField({
       caption: "watchword",
-      title: "always-on listening waits for this word (also ‘hey …’ / ‘okay …’) before sending to the model",
+      title: "always-on listening waits for this word (also ‘hey …’ / ‘okay …’); say send after the question",
       value: localStorage.getItem(WATCH_KEY) || DEFAULT_WATCH,
       placeholder: DEFAULT_WATCH,
       onInput: (v) => localStorage.setItem(WATCH_KEY, v.trim() || DEFAULT_WATCH),
@@ -197,9 +219,15 @@ export class AgentPanel {
 
     const view = new Toggle({
       label: "include screen",
-      title: "attach a compact HUD snapshot of what is on screen (no image)",
+      title: "attach a JPEG of the live canvas plus a compact HUD of mode, theme, and stats",
       checked: includeView(),
       onChange: (on) => localStorage.setItem(VIEW_KEY, on ? "1" : "0"),
+    });
+    const mosaicLayout = new Toggle({
+      label: "AI mosaic layout",
+      title: "On: the model may resize, rearrange, close, or change the mosaic grid. Off: it may only change which views sit in the existing tiles.",
+      checked: aiMosaicLayoutOn(),
+      onChange: (on) => localStorage.setItem(MOSAIC_LAYOUT_KEY, on ? "1" : "0"),
     });
 
     this.modelField = new TextField({
@@ -230,8 +258,16 @@ export class AgentPanel {
 
     this.log = document.createElement("div");
     this.log.className = "agent-log";
+    this.log.addEventListener("scroll", () => {
+      if (this.pinningLog) return;
+      this.stickLog = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 48;
+    });
+    this.log.addEventListener("wheel", (e) => {
+      if (this.pinningLog) return;
+      if (e.deltaY < 0) this.stickLog = false;
+    }, { passive: true });
     this.input = document.createElement("textarea");
-    this.input.placeholder = "Ask about the LAN, or say the watchword…";
+    this.input.placeholder = "Ask about the LAN, or say the watchword… then send";
     const send = document.createElement("button");
     send.type = "button";
     send.textContent = "send";
@@ -256,7 +292,7 @@ export class AgentPanel {
       this.statusEl,
       this.temperRail.el,
       this.oddsStrip.el,
-      this.modelField.el, ttsVoice.el, control.el, listen.el, watch.el, voice.el, ts.el, view.el, this.log, row,
+      this.modelField.el, ttsVoice.el, control.el, listen.el, watch.el, voice.el, ts.el, view.el, mosaicLayout.el, this.log, row,
     );
     this.paintHeader();
     void this.hydrate();
@@ -319,7 +355,14 @@ export class AgentPanel {
   armWake(): void {
     void this.refreshStatus();
     void this.hydrate();
-    if (this.wakeOn) this.startWake();
+    if (this.wakeOn && micCaptureAllowed()) this.startWake();
+    else if (!micCaptureAllowed()) this.releaseMic();
+  }
+
+  /** Header mic Off — stop watchword / hold-to-talk so the OS mic light goes out. */
+  releaseMic(): void {
+    this.holdTalk = false;
+    this.stopWake();
   }
 
   private async pushControl(on: boolean): Promise<void> {
@@ -414,16 +457,40 @@ export class AgentPanel {
       p.textContent = `${role}: ${text}`;
     }
     this.log.appendChild(p);
+    if (role === "you") this.stickLog = true;
+    if (role === "think") this.markLogThinking(false);
     this.pinLog();
   }
 
-  private pinLog(): void {
-    const go = () => { this.log.scrollTop = this.log.scrollHeight; };
+  private pinLog(force = false): void {
+    if (!force && !this.stickLog) return;
+    const go = () => {
+      this.pinningLog = true;
+      this.log.scrollTop = this.log.scrollHeight;
+      this.pinningLog = false;
+    };
     go();
-    requestAnimationFrame(go);
+    requestAnimationFrame(() => { if (force || this.stickLog) go(); });
+  }
+
+  private markLogThinking(on: boolean): void {
+    if (on) {
+      if (this.thinkHold) return;
+      const p = document.createElement("p");
+      p.className = "think pending";
+      p.setAttribute("aria-live", "polite");
+      p.textContent = "thinking…";
+      this.thinkHold = p;
+      this.log.appendChild(p);
+      this.pinLog();
+      return;
+    }
+    this.thinkHold?.remove();
+    this.thinkHold = null;
   }
 
   private paintLog(): void {
+    this.thinkHold = null;
     this.log.replaceChildren();
     for (const m of this.history) {
       if (m.role === "user") this.append("you", m.content);
@@ -464,6 +531,7 @@ export class AgentPanel {
   private async clearHistory(): Promise<void> {
     this.logEpoch += 1;
     this.history = [];
+    this.thinkHold = null;
     this.log.replaceChildren();
     this.onTranscript?.();
     try {
@@ -484,6 +552,7 @@ export class AgentPanel {
     this.headerEl.classList.toggle("listening", phase === "listen");
     this.headerEl.classList.toggle("heard", phase === "heard");
     this.headerEl.classList.toggle("thinking", phase === "think");
+    this.markLogThinking(phase === "think");
     this.headerEl.classList.toggle("speaking", phase === "speak");
     this.headerEl.classList.toggle("busy", phase === "think" || phase === "speak");
     this.headerEl.setAttribute("aria-busy", phase === "think" || phase === "speak" ? "true" : "false");
@@ -499,11 +568,44 @@ export class AgentPanel {
   }
 
   private startWake(restart = false): void {
-    if (!this.wakeOn || this.busy || this.speaking || this.holdTalk) return;
+    void this.armListen(restart);
+  }
+
+  /** Hold one MediaStream for the whole listen session; SpeechRecognition may restart on it. */
+  private async armListen(restart = false): Promise<void> {
+    if (!micCaptureAllowed() || !this.wakeOn || this.busy || this.speaking || this.holdTalk) return;
     if (this.rec && !restart) return;
     const SR = this.speechEngine();
     if (!SR) {
+      this.wakeStream.disable();
       if (restart) this.append("agent", "this browser has no speech recognition — Chromium on localhost is required");
+      return;
+    }
+    const stream = await askUserMedia({ audio: true, video: false }, "watchword listening");
+    if (!stream || !micCaptureAllowed() || !this.wakeOn) {
+      if (stream) for (const t of stream.getTracks()) t.stop();
+      this.wakeStream.disable();
+      if (!stream && this.wakeOn && micCaptureAllowed()) this.micBlocked = true;
+      return;
+    }
+    if (this.busy || this.speaking || this.holdTalk) {
+      for (const t of stream.getTracks()) t.stop();
+      return;
+    }
+    if (this.rec && !restart) {
+      for (const t of stream.getTracks()) t.stop();
+      return;
+    }
+    const open = await this.wakeStream.enable(stream);
+    if (!this.wakeOn || !micCaptureAllowed()) {
+      this.wakeStream.disable();
+      return;
+    }
+    if (this.busy || this.speaking || this.holdTalk) return;
+    if (this.rec && !restart) return;
+    if (!open) {
+      this.micBlocked = true;
+      this.headerEl.title = "allow the microphone on the in-page prompt (this window has no browser listening dialog)";
       return;
     }
     this.micBlocked = false;
@@ -520,14 +622,14 @@ export class AgentPanel {
       if (e.error === "no-speech" || e.error === "aborted") return;
       if (e.error === "not-allowed") {
         this.micBlocked = true;
-        this.headerEl.title = "allow the microphone from Settings → Agent for watchword listening";
+        this.headerEl.title = "allow the microphone on the in-page prompt (this window has no browser listening dialog)";
       }
     };
     rec.onend = () => {
       if (this.rec !== rec) return;
       this.rec = null;
       this.paintHeader();
-      if (this.wakeOn && !this.busy && !this.speaking && !this.holdTalk && !this.micBlocked) {
+      if (this.wakeOn && micCaptureAllowed() && !this.busy && !this.speaking && !this.holdTalk && !this.micBlocked) {
         this.restart = window.setTimeout(() => this.startWake(), 250);
       }
     };
@@ -536,7 +638,7 @@ export class AgentPanel {
       this.rec = rec;
       this.paintHeader();
     } catch {
-      this.headerEl.title = "allow the microphone from Settings → Agent (browser blocked the mic)";
+      this.headerEl.title = "allow the microphone on the in-page prompt (browser blocked the mic)";
     }
   }
 
@@ -546,6 +648,7 @@ export class AgentPanel {
     window.clearTimeout(this.silence);
     window.clearTimeout(this.restart);
     this.stopRec();
+    this.wakeStream.disable();
     this.paintHeader();
   }
 
@@ -561,8 +664,24 @@ export class AgentPanel {
     this.command = null;
     this.follow = "";
     this.stopRec();
+    void this.armHold();
+  }
+
+  private async armHold(): Promise<void> {
+    if (!micCaptureAllowed()) { this.holdTalk = false; return; }
     const SR = this.speechEngine();
-    if (!SR) { this.append("agent", "this browser has no speech recognition"); return; }
+    if (!SR) { this.append("agent", "this browser has no speech recognition"); this.holdTalk = false; return; }
+    clearMediaDismiss("mic");
+    const stream = await askUserMedia({ audio: true, video: false }, "hold to talk");
+    if (!stream || !this.holdTalk || !micCaptureAllowed()) {
+      if (stream) for (const t of stream.getTracks()) t.stop();
+      this.holdTalk = false;
+      if (!stream && micCaptureAllowed()) {
+        this.append("agent", "allow the microphone on the in-page prompt — this window has no browser listening dialog");
+      }
+      return;
+    }
+    await this.wakeStream.enable(stream);
     const rec = new SR();
     rec.lang = "en-US";
     rec.interimResults = true;
@@ -580,7 +699,8 @@ export class AgentPanel {
     this.holdTalk = false;
     this.rec?.stop();
     this.rec = null;
-    void this.send().then(() => { if (this.wakeOn) this.startWake(); });
+    if (!this.wakeOn) this.wakeStream.disable();
+    void this.send().then(() => { if (this.wakeOn && micCaptureAllowed()) this.startWake(); });
   }
 
   private onHear(e: SpeechResultEvent): void {
@@ -600,27 +720,32 @@ export class AgentPanel {
     } else {
       this.follow = said;
     }
+    const raw = `${this.command || ""} ${this.follow}`.trim();
+    const { body, send } = afterSendCue(raw);
+    this.draftBox().value = body;
     window.clearTimeout(this.silence);
-    const text = `${this.command || ""} ${this.follow}`.trim();
-    if (text) {
+    if (send) {
       this.silence = window.setTimeout(() => void this.flushCommand(), SILENCE_MS);
-    } else {
+    } else if (!body) {
       this.silence = window.setTimeout(() => {
         this.command = null;
         this.follow = "";
+        this.draftBox().value = "";
         this.paintHeader();
       }, HEARD_WAIT_MS);
     }
   }
 
   private async flushCommand(): Promise<void> {
-    const text = `${this.command || ""} ${this.follow}`.trim();
+    const raw = `${this.command || ""} ${this.follow}`.trim();
+    const { body } = afterSendCue(raw);
     this.command = null;
     this.follow = "";
     this.paintHeader();
-    if (!text) return;
-    this.input.value = text;
-    await this.send(text);
+    if (!body) return;
+    this.input.value = body;
+    this.draftBox().value = body;
+    await this.send(body);
   }
 
   beginTalk(): void { this.startHold(); }
@@ -676,7 +801,7 @@ export class AgentPanel {
         redact: redaction.enabled,
         model: localStorage.getItem(MODEL_KEY) || this.modelField.value || "gemma4",
         messages: this.history.slice(-10),
-        ...(view ? { view: { hud: view } } : {}),
+        ...(view ? { view: { hud: view.hud, ...(view.screenshot ? { screenshot: view.screenshot } : {}) } } : {}),
         ...extra,
       });
       let r = await apiFetch("/api/ai/chat", {
@@ -725,13 +850,25 @@ export class AgentPanel {
       }
       const yaml = extractYaml(reply);
       if (yaml) {
-        const install = this.controlOn && confirm("Install this plugin draft?");
-        const d = await apiFetch("/api/ai/plugin", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ files: { "plugin.yml": yaml }, install }),
-        }).then((x) => x.json()) as { ok?: boolean; error?: string; installed?: boolean };
-        this.append("agent", d.ok ? (d.installed ? "plugin installed" : "plugin draft is valid (enable AI Control to install)") : `plugin invalid: ${d.error}`);
+        if (!this.controlOn) {
+          const d = await apiFetch("/api/ai/plugin", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ files: { "plugin.yml": yaml } }),
+          }).then((x) => x.json()) as { ok?: boolean; error?: string };
+          this.append("agent", d.ok ? "plugin draft is valid (enable AI Control to install it locally)" : `plugin invalid: ${d.error}`);
+        } else {
+          const d = await apiFetch("/api/ai/plugin/local", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ files: { "plugin.yml": yaml }, activate: true }),
+          }).then((x) => x.json()) as {
+            ok?: boolean; error?: string; id?: string; activated?: boolean; consentRequired?: boolean;
+          };
+          if (d.activated) this.append("agent", `plugin ${d.id} installed and activated`);
+          else if (d.consentRequired) this.append("agent", `plugin ${d.id} installed — source review required`);
+          else this.append("agent", d.ok ? `plugin ${d.id} installed` : `plugin invalid: ${d.error}`);
+        }
       }
     } catch (e) {
       this.append("agent", String(e));
@@ -746,7 +883,7 @@ export class AgentPanel {
       finally { this.speaking = false; }
     }
     this.paintHeader();
-    if (this.wakeOn && !this.holdTalk) this.startWake();
+    if (this.wakeOn && micCaptureAllowed() && !this.holdTalk) this.startWake();
     return true;
   }
 
@@ -871,6 +1008,15 @@ export function afterWatchword(text: string, word: string): string | null {
     return said.slice(i + p.length).trim();
   }
   return null;
+}
+
+/** Trailing “send” (or “please send”) is the submit cue after the watchword. */
+export function afterSendCue(text: string): { body: string; send: boolean } {
+  const said = normSpeech(text);
+  if (!said) return { body: "", send: false };
+  const m = said.match(/^(.*?)(?:^|\s)(?:please\s+)?send$/);
+  if (!m) return { body: said, send: false };
+  return { body: (m[1] || "").trim(), send: true };
 }
 
 /** STT often splits or voiceless-shifts invented words (“zoto” → “so to” / “soto”). */

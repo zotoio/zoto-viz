@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DICE_FEED_DENSITY, DICE_MOSAIC, DICE_NODE_TOP, DICE_SOFT, DEFAULT_DICE, capBound, diceBound, diceMosaic,
+  DICE_FEED_DENSITY, DICE_MOSAIC, DICE_NODE_TOP, DICE_SOFT, DEFAULT_DICE, capBound, diceBound, diceLookForRoll, diceMosaic,
   diceNumberBound, diceSelect, mergeDice, normalizeDice, pickOne, shuffleAnim, shuffleField, shuffleLook, snapBound,
 } from "./shuffle";
 import { shippedSettings } from "./profiles";
@@ -65,7 +65,7 @@ describe("shuffleField", () => {
 });
 
 describe("shuffleLook", () => {
-  it("randomizes theme, view, mosaic, chrome, feed, knobs, and leaves privacy prompts alone", () => {
+  it("randomizes theme, view, mosaic, feed, knobs, and leaves chrome and privacy prompts alone", () => {
     const base = shippedSettings();
     base.theme = "nord";
     base.mode = "plugin:topology";
@@ -106,9 +106,9 @@ describe("shuffleLook", () => {
     expect(next.mode).toBe("plugin:talkers");
     expect(next.anim.mosaic).toBe("6");
     expect(next.anim.hero).toBe("right");
-    expect(next.chrome).toBe("right");
-    expect(next.camera).toBe("auto");
-    expect(next.mic).toBe("off");
+    expect(next.chrome).toBe("left");
+    expect(next.camera).toBe("off");
+    expect(next.mic).toBe("auto");
     expect(next.merge).toBe(false);
     expect(next.show.lan).toBe(false);
     expect(next.feed.on).toBe(false);
@@ -136,7 +136,7 @@ describe("shuffleLook", () => {
     base.merge = true;
     base.anim = { ...base.anim, mosaic: "4", gravity: 0.2, yawPeriod: 150 };
     base.dice = mergeDice(DEFAULT_DICE, {
-      include: { theme: false, view: false, chrome: false, camera: false, show: false, physics: false, knobs: false },
+      include: { theme: false, view: false, mosaic: false, show: false, physics: false, knobs: false },
     });
     const next = shuffleLook(base, {
       themes: ["nord", "matrix"],
@@ -153,7 +153,8 @@ describe("shuffleLook", () => {
     expect(next.camera).toBe("off");
     expect(next.merge).toBe(true);
     expect(next.anim.gravity).toBe(0.2);
-    expect(next.anim.mosaic).toBe("6");
+    expect(next.anim.mosaic).toBe("4");
+    expect(next.anim.hero).toBe(base.anim.hero);
     expect(next.plugins.topology).toBeUndefined();
   });
 });
@@ -186,6 +187,16 @@ describe("shuffleAnim", () => {
     const physOff = shuffleAnim(src, { skies: ["fractal"] }, one, mergeDice(DEFAULT_DICE, { include: { physics: false } }));
     expect(physOff.gravity).toBe(0.2);
     expect(physOff.yawPeriod).not.toBe(150);
+    const mosaicOff = shuffleAnim(src, { skies: ["fractal"] }, one, mergeDice(DEFAULT_DICE, { include: { mosaic: false } }));
+    expect(mosaicOff.mosaic).toBe("4");
+    expect(mosaicOff.hero).toBe(src.hero);
+    expect(mosaicOff.yawPeriod).not.toBe(150);
+    const sharedOn = shuffleAnim(
+      { ...src, mosaicSharedTheme: true },
+      { skies: ["fractal"] },
+      one,
+    );
+    expect(sharedOn.mosaicSharedTheme).toBe(true);
   });
 });
 
@@ -199,6 +210,23 @@ describe("dice config", () => {
     expect(diceMosaic(n)).toContain("8");
     expect(DICE_MOSAIC).not.toContain("8");
     expect(n.feedDensityMax).toBe(12);
-    expect(n.handoff).toBe(true);
+    expect(n.handoff).toBe(false);
+    expect(n.on).toBe(false);
+    expect(n.periodMin).toBe(5);
+    expect(normalizeDice({ on: true, periodMin: 90 }).on).toBe(true);
+    expect(normalizeDice({ on: true, periodMin: 90 }).periodMin).toBe(60);
+    expect(normalizeDice({ periodMin: 0 }).periodMin).toBe(1);
+    expect(normalizeDice({ handoff: true }).handoff).toBe(false);
+    expect(DEFAULT_DICE.handoff).toBe(false);
+    expect(DEFAULT_DICE.on).toBe(false);
+  });
+
+  it("promotes view on a plugin sky so a roll can morph the graph", () => {
+    const off = { ...DEFAULT_DICE, include: { ...DEFAULT_DICE.include, view: false } };
+    expect(diceLookForRoll(off, { pinSky: true }).include.view).toBe(true);
+    expect(diceLookForRoll(off, { stageOnly: true }).include.view).toBe(true);
+    expect(diceLookForRoll(off, { forceView: true }).include.view).toBe(true);
+    expect(diceLookForRoll(off, {}).include.view).toBe(false);
+    expect(diceLookForRoll(DEFAULT_DICE, { pinSky: true }).include.view).toBe(true);
   });
 });

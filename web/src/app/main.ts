@@ -4,14 +4,16 @@ import { allModes, defaultCatalogMode, defaultOpts, graphModes, modeById, type V
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";
 import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
-import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themeSwatch, type Theme } from "../core/themes";
-import { Select, Toggle } from "../ui/ui";
+import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
+import { mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
 import { Settings } from "../ui/settings";
+import { sourceHeadlines } from "../core/sources";
 import { LiveFeed, feedViewShift } from "../ui/feed";
 import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
-import { DICE_HANDOFF, shuffleLook } from "../core/shuffle";
+import { readSessionLive, writeSessionLive } from "../core/session-live";
+import { diceLookForRoll, shuffleLook } from "../core/shuffle";
 import { cycleSkyPool } from "../graph/backdrop";
 import { PongView } from "../arcade/pong";
 import { InvadersView } from "../arcade/invaders";
@@ -47,16 +49,17 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
+import { runPackFrameHandler } from "../plugins/viz-pack-host";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener, bindFps } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
-import { AgentPanel, aiCyclePrefOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
+import { AgentPanel, aiCyclePrefOn, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
-import { captureHud, mergeAgentPatch, pickAgentSettings } from "../ui/capture";
+import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -90,11 +93,12 @@ applyThemeChrome(theme);
 
 // one WebGL context for the whole wall: the main graph and every mosaic tile draw through it
 const renderHost = new RenderHost($("wall"));
+if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 bindFps($("fps"));
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
-scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); };
+scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
 scene.setTheme(theme);
 
 /** the standalone (arcade) views, by mode id; each owns a canvas in its own full-screen container */
@@ -117,7 +121,11 @@ const themeSel = new Select({
   id: "theme",
   caption: "theme",
   title: "colour theme (key T cycles)",
-  options: THEMES.map((t) => ({ value: t.id, label: t.label, hint: t.hint, swatch: themeSwatch(t) })),
+  filterable: true,
+  options: THEMES.map((t) => ({
+    value: t.id, label: t.label, hint: t.hint, swatch: themeSwatch(t),
+    group: themePickerGroup(t),
+  })),
   value: theme.id,
   onChange: (id) => applyTheme(id, true),
 });
@@ -132,7 +140,31 @@ const chromeSel = new Select({
 });
 
 let profiles: ProfileStore | null = null;
-const touch = () => profiles?.touch();
+/** settings cog / chrome exist; persistLive also waits for liveReady so boot does not clobber the snapshot */
+let uiReady = false;
+let liveReady = false;
+let persistLiveTimer = 0;
+function persistLive(immediate = false): void {
+  if (!uiReady || !liveReady || !profiles) return;
+  const write = () => {
+    persistLiveTimer = 0;
+    writeSessionLive({
+      profileId: profiles!.current,
+      dirty: profiles!.dirty,
+      settings: collectSettings(),
+      selected: scene.selectedIp,
+      aiCycle: agent.cycleOn,
+    });
+  };
+  if (immediate) {
+    if (persistLiveTimer) window.clearTimeout(persistLiveTimer);
+    write();
+    return;
+  }
+  if (persistLiveTimer) return;
+  persistLiveTimer = window.setTimeout(write, 80);
+}
+const touch = () => { profiles?.touch(); persistLive(); };
 
 const profileSel = new Select({
   id: "profile",
@@ -190,35 +222,44 @@ function paintedTheme(base: Theme): Theme {
 function applyTheme(id: string, fade = false, persist = true): void {
   theme = themeById(id);
   paintLiveTheme(paintedTheme(theme), fade);
-  if (!persist) return;
+  if (!persist) {
+    persistLive();
+    return;
+  }
   themeSel.value = theme.id;
   localStorage.setItem("zoto-viz.theme", theme.id);
   touch();
 }
 
-/** set once the settings cog, chrome buttons and show / privacy sections exist; applyMode before that skips the look pass */
-let uiReady = false;
+/** Keep plugin sky / stage-only pins even while AI cycle owns other views. */
+function pinViewLook(): boolean {
+  if (!agent.cycleOn) return true;
+  const m = modeById(modeSel.value);
+  if (m.stageOnly || m.kind === "demo") return true;
+  const look = lookForMode(modeSel.value);
+  return look?.backdrop === "plugin" || !!look?.stageOnly;
+}
 
 /** Pin theme / sky / floor / modulation from the active view's plugin YAML without writing the profile.
- *  Header AI cycling owns Dynamic sky and cadence look, so plugin pins are skipped while that toggle is on. */
+ *  Header AI cycling owns Dynamic sky and cadence look, except on plugin-owned stage views. */
 function applyViewLook(): void {
   if (!uiReady) return;
-  const live = agent.cycleOn;
+  const pin = pinViewLook();
   if (mosaic?.on) {
-    mosaic.applyLooks(settings.animSettings, !live);
+    mosaic.applyLooks(settings.animSettings, pin);
     mosaic.setTheme(scene.currentTheme);
     applyChrome(userChrome, false);
     const m = modeById(modeSel.value);
     const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-    void syncPluginSky(live ? null : spec);
+    void syncPluginSky(spec);
     return;
   }
-  const look = live ? undefined : lookForMode(modeSel.value);
+  const look = pin ? lookForMode(modeSel.value) : undefined;
   scene.setAnim(mergeLook(settings.animSettings, look));
   const m = modeById(modeSel.value);
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-  void syncPluginSky(live ? null : spec);
-  const want = look?.theme ?? localStorage.getItem("zoto-viz.theme") ?? theme.id;
+  void syncPluginSky(spec);
+  const want = look?.theme ?? theme.id;
   if (theme.id !== want) applyTheme(want, !!look?.theme, false);
   applyChrome(look?.chrome ?? userChrome, false);
 }
@@ -284,7 +325,8 @@ function syncFeedShift(): void {
 const modeSel = new Select({
   id: "mode",
   caption: "view",
-  title: "view mode (keys 1–9, 0 for the 10th)",
+  title: "view mode (keys 1–9, 0 for the 10th). Type to filter.",
+  filterable: true,
   options: viewSelectOptions(),
   onChange: (id) => applyMode(id),
 });
@@ -373,16 +415,16 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
-    bindVizWriter(null);
+    bindVizWriter(spec);
     scene.clearPluginStyle();
-    tsWatchId = "";
+    tsWatchId = spec?.id ?? "";
     return;
   }
   if (!tsPluginsAllowed()) {
     sandbox.unload();
-    bindVizWriter(null);
+    bindVizWriter(spec);
     scene.clearPluginStyle();
-    tsWatchId = "";
+    tsWatchId = spec?.id ?? "";
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
@@ -465,7 +507,7 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
   }
 }
 
-function applyMode(id: string): void {
+function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const m = modeById(id);
   const opts = optsFor(m);
   currentOpts = opts;
@@ -475,6 +517,8 @@ function applyMode(id: string): void {
   touch();
 
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
+  const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
+  document.body.classList.toggle("stage-only", skyStage);
   settings?.bindView(
     spec ? { ...spec, options: m.options, config: m.config } : null,
     spec ? m.config : undefined,
@@ -494,18 +538,23 @@ function applyMode(id: string): void {
   if (m.graphBase === "wifi") void syncWifiWatch();
 
   if (mosaic?.on && !(m.pluginId && m.standalone)) {
-    if (mosaic.heroPos !== "off" && mosaic.heroMode !== m.id) {
-      mosaic.setSize(mosaic.current, m.id, mosaic.heroPos);
+    if (!flags.keepLayout && mosaic.heroPos !== "off" && mosaic.heroMode !== m.id) {
+      mosaic.setSize(mosaic.current, m.id, mosaic.heroPos, {
+        tree: settings.animSettings.mosaicTree,
+        maximized: settings.animSettings.mosaicMaxId || null,
+        tiles: settings.animSettings.mosaicTiles,
+      });
     }
     mosaic.focus(m.id);
     const target = mosaic.graphScene(id);
-    if (target) target.setMode(m, opts);
+    if (target) {
+      target.setMode(m, opts);
+      target.setStageOnly(skyStage);
+    }
     document.body.classList.remove("arcade");
     scene.setActive(true);
-    scene.setStageOnly(false);
-    renderLegend(m, opts);
-    $("hint").textContent = m.hint;
-    vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label);
+    if (target !== scene) scene.setStageOnly(false);
+    morphViewChrome(m, opts, spec, skyStage);
     applyViewLook();
     return;
   }
@@ -516,21 +565,37 @@ function applyMode(id: string): void {
   const next = m.standalone ? (m.arcadeId ?? m.id) : null;
   document.body.classList.toggle("arcade", next !== null);
   scene.setActive(true);
-  scene.setStageOnly(next !== null);
+  scene.setStageOnly(next !== null || skyStage);
   if (activeArcade && activeArcade !== next) { arcade[activeArcade].view.stop(); arcade[activeArcade].el.hidden = true; }
   if (next && activeArcade !== next) { arcade[next].el.hidden = false; arcade[next].view.start(selectedIp); }
   activeArcade = next;
   syncFeedShift();
 
-  renderLegend(m, opts);
-  $("hint").textContent = m.hint;
-  vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label);
+  morphViewChrome(m, opts, spec, skyStage);
   applyViewLook();
+}
+
+function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
+  morphCopy($("hint"), m.hint);
+  const legend = $("legend");
+  const paint = (): void => {
+    if (skyStage) legend.replaceChildren();
+    else renderLegend(m, opts);
+    legend.classList.remove("morphing");
+  };
+  if (legend.childElementCount) {
+    legend.classList.add("morphing");
+    window.setTimeout(paint, 180);
+  } else {
+    paint();
+  }
+  vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label);
 }
 
 function renderLegend(m: ViewMode, opts: Record<string, string>): void {
   const el = $("legend");
   el.innerHTML = "";
+  if (m.stageOnly || document.body.classList.contains("stage-only")) return;
   for (const item of m.legend(opts)) {
     const s = document.createElement("span");
     const i = document.createElement("i");
@@ -546,19 +611,19 @@ applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "
 
 // ---------------------------------------------------------------- visibility filters
 
-// ---------------------------------------------------------------- visibility filters
+function applyShow(key: keyof Filters, on: boolean): void {
+  scene.setFilters({ [key]: on });
+  mosaic?.eachGraph((s) => { if (s !== scene) s.setFilters({ [key]: on }); });
+  localStorage.setItem(`zoto-viz.${key}`, on ? "1" : "0");
+  touch();
+}
 
 function bindShowToggle(id: string, key: keyof Filters, label: string, title: string, fallback = true): Toggle {
   const saved = localStorage.getItem(`zoto-viz.${key}`);
   const t = new Toggle({
     id, label, title,
     checked: saved !== null ? saved === "1" : fallback,
-    onChange: (on) => {
-      scene.setFilters({ [key]: on });
-      mosaic?.eachGraph((s) => { if (s !== scene) s.setFilters({ [key]: on }); });
-      localStorage.setItem(`zoto-viz.${key}`, on ? "1" : "0");
-      touch();
-    },
+    onChange: (on) => applyShow(key, on),
   });
   scene.setFilters({ [key]: t.checked });
   return t;
@@ -567,8 +632,22 @@ const netLan = bindShowToggle("showLan", "lan", "LAN devices", "devices on the l
 const netInternet = bindShowToggle("showInternet", "internet", "internet", "internet endpoints (outer sphere)");
 const netMulticast = bindShowToggle("showMulticast", "multicast", "multicast", "multicast / broadcast groups");
 const netOffline = bindShowToggle("showOffline", "offline", "offline", "devices not seen recently");
-const sysLabels = bindShowToggle("showLabels", "labels", "labels", "node labels on network and system graphs");
+const sysLabels = bindShowToggle("showLabels", "labels", "labels", "node labels on network and system graphs (key L)");
 const sysCpuIdle = bindShowToggle("showCpuIdle", "cpuIdle", "idle processes", "unused CPU processes fade for a few seconds after they go quiet; off hides them at once. Idle cores stay.");
+const labelsChrome = new Toggle({
+  id: "labels",
+  label: "labels",
+  title: "node labels on network and system graphs (key L)",
+  checked: sysLabels.checked,
+  onChange: (on) => setLabels(on),
+});
+$("labelsBox").appendChild(labelsChrome.el);
+function setLabels(on: boolean): void {
+  sysLabels.checked = on;
+  labelsChrome.checked = on;
+  applyShow("labels", on);
+}
+sysLabels.onChange = setLabels;
 const showToggles = { lan: netLan, internet: netInternet, multicast: netMulticast, offline: netOffline, labels: sysLabels, cpuIdle: sysCpuIdle };
 // "merge names" is a data transform rather than a visibility filter: the last raw snapshot is re-fed through it
 let lastRaw: StateMsg | null = null;
@@ -607,20 +686,40 @@ function feed(m: StateMsg): void {
     for (const a of Object.values(arcade)) a.view.update(m);
   }
   applyStats(shown);
+  feedCtl.feed?.setSourceHeadlines(sourceHeadlines(m.sources));
   renderLegend(scene.currentMode, currentOpts);
   sandbox.tick(shown.devices.slice(0, 80).map((d) => ({
     id: d.ip,
     rate: d.packets,
     role: d.role,
   })));
-  const active = pluginSpecs.find((p) => p.id === tsWatchId);
-  if (active?.capabilities?.includes("viz.read")) {
+  const mode = modeById(modeSel.value);
+  const active = (mode.pluginId && pluginSpecs.find((p) => p.id === mode.pluginId))
+    || pluginSpecs.find((p) => p.id === tsWatchId)
+    || null;
+  const packId = normalizeVizDemoPackId(active?.id ?? mode.pluginId);
+  if (active?.capabilities?.includes("viz.read") || packId) {
+    if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
-    const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => sandbox.frame(f));
-    if (frame) vizFrameTs = frame.t;
+    const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
+      sandbox.frame(f);
+      if (packId) {
+        runPackFrameHandler(packId, f, {
+          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+        });
+      }
+    });
+    if (frame) {
+      vizFrameTs = frame.t;
+      if (packId === "hn-rain" || packId === "hn-term") {
+        scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
+      }
+    }
     vizHud.tick({
-      packId: normalizeVizDemoPackId(active.id),
-      packName: active.name,
+      packId,
+      packName: active?.name ?? packId ?? "",
       stats: vizBudget.stats,
       frame: vizBudget.lastBuilt,
       state: shown,
@@ -695,7 +794,16 @@ mosaic = new Mosaic({
   host: renderHost,
   arcade,
   optsFor,
-  onFocus: (id) => applyMode(id),
+  onFocus: (id) => mosaic?.focus(id),
+  onPromote: (id, theme) => {
+    applyMode(id);
+    if (theme) applyTheme(theme.id);
+    applyViewLook();
+  },
+  onLayout: (patch) => settings.applyMosaicLayout(patch),
+  onCloseLast: () => {
+    settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
+  },
   sync: () => ({
     theme: scene.currentTheme,
     filters: scene.currentFilters,
@@ -707,10 +815,12 @@ mosaic = new Mosaic({
   }),
 });
 settings.addAnimation((a) => {
-  const pin = !agent.cycleOn;
-  if (mosaic!.on) mosaic!.applyLooks(a, pin);
-  else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
-  const key = `${a.mosaic}:${a.hero}:${a.mosaic !== "off" && a.hero !== "off" ? modeSel.value : ""}`;
+  const pin = pinViewLook();
+  if (mosaic!.on) {
+    mosaic!.applyLooks(a, pin);
+    mosaic!.setTheme(scene.currentTheme);
+  } else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
+  const key = `${a.mosaic}:${a.hero}:${(a.mosaicTiles?.length ? a.mosaicTiles : []).join(",")}:${a.mosaicMaxId ?? ""}`;
   if (key !== mosaic!.layoutKey) {
     if (a.mosaic !== "off" && activeArcade) {
       arcade[activeArcade].view.stop();
@@ -719,8 +829,12 @@ settings.addAnimation((a) => {
       scene.setStageOnly(false);
       activeArcade = null;
     }
-    mosaic!.setSize(a.mosaic, modeSel.value, a.hero);
-    applyMode(modeSel.value);
+    mosaic!.setSize(a.mosaic, modeSel.value, a.hero, {
+      tree: a.mosaicTree,
+      maximized: a.mosaicMaxId || null,
+      tiles: a.mosaicTiles,
+    });
+    applyMode(modeSel.value, { keepLayout: true });
     syncFeedShift();
   }
 }, dreamCog);
@@ -745,7 +859,7 @@ $("feedBox").appendChild(feedToggle.el);
 const camToggle = new Toggle({
   id: "camera",
   label: "cam",
-  title: "webcam on (Auto) / off. Off never starts the camera; on starts it only for live sky, gaze, or live colour",
+  title: "webcam on (Auto) / off — same as Settings → Privacy. Off stops the camera so the OS light goes out",
   checked: liveCam.camPolicy === "auto",
   onChange: (on) => settings.setCamPolicy(on ? "auto" : "off"),
 });
@@ -754,11 +868,16 @@ $("cameraBox").appendChild(camToggle.el);
 const micToggle = new Toggle({
   id: "mic",
   label: "mic",
-  title: "pulse microphone on (Auto) / off. Off never starts the mic; traffic still drives the pulse",
+  title: "microphone on (Auto) / off — same as Settings → Privacy. Off stops every mic stream so the OS light goes out",
   checked: liveMic.micPolicy === "auto",
   onChange: (on) => settings.setMicPolicy(on ? "auto" : "off"),
 });
-settings.onMicPolicy = (p) => { micToggle.checked = p === "auto"; };
+settings.onMicPolicy = (p) => {
+  micToggle.checked = p === "auto";
+  scene.syncPulse();
+  if (p === "off") agent.releaseMic();
+  else agent.armWake();
+};
 $("micBox").appendChild(micToggle.el);
 settings.bindPulse(() => scene.pulseNow);
 settings.addLiveFeed((c) => {
@@ -774,7 +893,11 @@ feedShiftRo.observe($("livefeed"));
 feedShiftRo.observe($("scene"));
 liveFeed.onSourceChange = () => liveFeed.seedTranscript(agent.transcript());
 agent.onChat = (role, text, stream) => liveFeed.pushChat(role, text, stream);
-agent.onPhase = (phase) => liveFeed.setThinking(phase === "think");
+agent.onPhase = (phase) => {
+  liveFeed.setThinking(phase === "think");
+  if (phase === "heard") settings.revealTranscript();
+  liveFeed.setListening(phase === "heard");
+};
 agent.onTranscript = () => liveFeed.seedTranscript(agent.transcript());
 agent.dictateInto = liveFeed.ask;
 liveFeed.onSend = (text) => agent.offerSend(text);
@@ -786,37 +909,83 @@ $("settingsBox").appendChild(settings.el);
 settings.attachViewCog($("modeBox"));
 agent.mountSettings(settings.agentHost());
 agent.onOpen = () => { settings.open("agent"); };
-agent.captureView = () => captureHud({
-  mode: modeSel.value,
-  theme: theme.id,
-  chrome: userChrome,
-  dream: dreamToggle.checked,
-  selected: scene.selectedIp,
-  merge: mergeToggle.checked,
-  redact: redaction.enabled,
-  camera: liveCam.camPolicy,
-  mic: liveMic.micPolicy,
-  show: {
-    lan: showToggles.lan.checked,
-    internet: showToggles.internet.checked,
-    multicast: showToggles.multicast.checked,
-    offline: showToggles.offline.checked,
-    labels: showToggles.labels.checked,
-    cpuIdle: showToggles.cpuIdle.checked,
-  },
-  feed: settings.feedSettings,
-  feedLines: liveFeed.snapshot(3),
-});
+agent.captureView = () => {
+  const hud = captureHud({
+    mode: modeSel.value,
+    theme: theme.id,
+    chrome: userChrome,
+    dream: dreamToggle.checked,
+    selected: scene.selectedIp,
+    merge: mergeToggle.checked,
+    redact: redaction.enabled,
+    camera: liveCam.camPolicy,
+    mic: liveMic.micPolicy,
+    show: {
+      lan: showToggles.lan.checked,
+      internet: showToggles.internet.checked,
+      multicast: showToggles.multicast.checked,
+      offline: showToggles.offline.checked,
+      labels: showToggles.labels.checked,
+      cpuIdle: showToggles.cpuIdle.checked,
+    },
+    feed: settings.feedSettings,
+    feedLines: liveFeed.snapshot(3),
+  });
+  let canvas: HTMLCanvasElement | null = null;
+  if (activeArcade) {
+    const el = arcade[activeArcade].el.querySelector("canvas:not(.look)");
+    canvas = el instanceof HTMLCanvasElement ? el : null;
+  } else {
+    scene.flushFrame();
+    canvas = renderHost.canvas;
+  }
+  return packView(hud, canvas);
+};
 agent.onApplySettings = (patch) => { void applyAgentPatch(patch); };
 agent.onApplyLook = (look) => applyAgentLook(look);
 $("aiBox").appendChild(agent.headerEl);
-const diceBtn = document.createElement("button");
-diceBtn.type = "button";
-diceBtn.className = "cog dice";
-diceBtn.title = "randomize the groups on Settings → Dice, then hand back to AI if that is on";
-diceBtn.setAttribute("aria-label", "randomize dice groups and hand back to AI");
-diceBtn.innerHTML = `<svg viewBox="0 0 20 20" aria-hidden="true" width="16" height="16"><rect x="2.5" y="2.5" width="15" height="15" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="7" r="1.25" fill="currentColor"/><circle cx="13" cy="7" r="1.25" fill="currentColor"/><circle cx="10" cy="10" r="1.25" fill="currentColor"/><circle cx="7" cy="13" r="1.25" fill="currentColor"/><circle cx="13" cy="13" r="1.25" fill="currentColor"/></svg>`;
-$("diceBox").appendChild(diceBtn);
+const diceToggle = new Toggle({
+  id: "dice",
+  label: "dice",
+  title: "repeat every N minutes (Settings → Dice)",
+  checked: settings.diceSettings.on,
+  onChange: (on) => setDice(on),
+});
+const diceBox = $("diceBox");
+mountDiceSplit(diceBox, diceToggle, () => { void rollDice({ view: true }); });
+let diceTimer: number | null = null;
+let dicePeriodArmed = 0;
+function dicePeriodMs(): number {
+  return Math.max(1, settings.diceSettings.periodMin) * 60_000;
+}
+function stopDiceTimer(): void {
+  if (diceTimer != null) {
+    window.clearInterval(diceTimer);
+    diceTimer = null;
+  }
+  dicePeriodArmed = 0;
+}
+function syncDiceTimer(): void {
+  const on = settings.diceSettings.on;
+  diceToggle.checked = on;
+  if (!on) {
+    stopDiceTimer();
+    return;
+  }
+  const ms = dicePeriodMs();
+  if (diceTimer != null && dicePeriodArmed === ms) return;
+  stopDiceTimer();
+  dicePeriodArmed = ms;
+  diceTimer = window.setInterval(() => { void rollDice(); }, ms);
+}
+function setDice(on: boolean): void {
+  const was = settings.diceSettings.on;
+  settings.setDiceOn(on);
+  diceToggle.checked = on;
+  if (on && !was) void rollDice({ view: true });
+}
+settings.onDiceChange = () => { syncDiceTimer(); };
+syncDiceTimer();
 agent.onCycle = (on) => {
   localStorage.setItem(CYCLE_KEY, on ? "1" : "0");
   void setAiCycle(on);
@@ -939,14 +1108,25 @@ void (async () => {
   agent.setControlFromServer(session.aiControl);
   pluginSpecs = await installPlugins();
   modeSel.setOptions(viewSelectOptions());
+  settings.refreshMosaicSlots();
   if (settings.animSettings.mosaic !== "off") {
-    mosaic.setSize(settings.animSettings.mosaic, modeSel.value, settings.animSettings.hero);
+    mosaic.setSize(settings.animSettings.mosaic, modeSel.value, settings.animSettings.hero, {
+      tree: settings.animSettings.mosaicTree,
+      maximized: settings.animSettings.mosaicMaxId || null,
+      tiles: settings.animSettings.mosaicTiles,
+    });
   }
+  const live = readSessionLive();
   applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
-  await profiles.boot();
+  const restored = await profiles.boot(live);
   applyMode(modeSel.value);
   applyViewLook();
-  if (aiCyclePrefOn()) await setAiCycle(true);
+  if (restored && live) applyTheme(live.settings.theme, false, false);
+  if (restored && live?.selected) scene.selectIp(live.selected);
+  if (restored) agent.setCycleChecked(!!live?.aiCycle);
+  else if (aiCyclePrefOn()) await setAiCycle(true);
+  liveReady = true;
+  persistLive(true);
   void syncWifiWatch();
   agent.armWake();
 })();
@@ -969,17 +1149,33 @@ function decoAt(raw: unknown): DecoAt {
 }
 
 async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
+  if (patch.reloadPlugins === true) {
+    pluginSpecs = await installPlugins();
+    modeSel.setOptions(viewSelectOptions());
+    settings.refreshMosaicSlots();
+  }
   const p = pickAgentSettings(patch, allModes().map((m) => m.id));
   if (p.dice) {
+    const wasOn = settings.diceSettings.on;
     applySettings(mergeAgentPatch(collectSettings(), { dice: p.dice }));
+    if (p.dice.on === true && !wasOn && !p.shuffle) await rollDice();
   }
   if (p.shuffle) {
     await rollDice();
     return;
   }
   if (p.temper != null || p.weather) agent.syncTemper({ temper: p.temper, weather: p.weather });
-  const next = mergeAgentPatch(collectSettings(), p);
-  applySettings(next);
+  const lockLayout = !aiMosaicLayoutOn();
+  if (lockLayout && p.anim) p.anim = stripMosaicLayout(p.anim);
+  const cur = collectSettings();
+  if (lockLayout && mosaic?.on && p.mode && !mosaic.tileIds.includes(p.mode)) {
+    const tiles = [...mosaic.tileIds];
+    const at = Math.max(0, tiles.indexOf(mosaic.focusedId));
+    tiles[at] = p.mode;
+    p.anim = { ...p.anim, mosaicTiles: tiles };
+  }
+  const next = mergeAgentPatch(cur, p);
+  applySettings(next, { keepLayout: lockLayout });
   await profiles?.writeAi(collectSettings(), agent.modelTag);
 }
 
@@ -1024,7 +1220,7 @@ function collectSettings(): ProfileSettings {
     if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
   }
   return {
-    theme: localStorage.getItem("zoto-viz.theme") ?? theme.id,
+    theme: theme.id,
     dream: dreamToggle.checked,
     mode: modeSel.value,
     modeOptions,
@@ -1052,7 +1248,7 @@ function collectSettings(): ProfileSettings {
   };
 }
 
-function applySettings(s: ProfileSettings): void {
+function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {}): void {
   profiles?.adoptAutosave(s.autosave);
   for (const k of Object.keys(localStorage)) {
     if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) localStorage.removeItem(k);
@@ -1072,6 +1268,7 @@ function applySettings(s: ProfileSettings): void {
   for (const key of Object.keys(showToggles) as (keyof typeof showToggles)[]) {
     const on = show[key] !== false;
     showToggles[key].checked = on;
+    if (key === "labels") labelsChrome.checked = on;
     scene.setFilters({ [key]: on });
     mosaic?.eachGraph((g) => { if (g !== scene) g.setFilters({ [key]: on }); });
     localStorage.setItem(`zoto-viz.${key}`, on ? "1" : "0");
@@ -1093,9 +1290,10 @@ function applySettings(s: ProfileSettings): void {
     document.body.classList.remove("arcade");
     scene.setStageOnly(false);
   }
-  applyMode(s.mode);
+  applyMode(s.mode, { keepLayout: flags.keepLayout });
   if (lastRaw) feed(lastRaw);
   void syncWifiWatch();
+  persistLive();
 }
 
 let aiBusy = false;
@@ -1120,6 +1318,7 @@ async function setAiCycle(on: boolean): Promise<void> {
       agent.setCycleChecked(false);
     }
     applyViewLook();
+    persistLive();
   } catch (e) {
     console.warn("zoto-viz AI cycle:", e);
     agent.setCycleChecked(false);
@@ -1142,14 +1341,17 @@ function diceModes(): ViewMode[] {
   return ready.length ? ready : allModes().filter((m) => allowed.has(m.id));
 }
 
-async function rollDice(): Promise<void> {
+async function rollDice(force: { view?: boolean } = {}): Promise<void> {
   if (diceBusy) return;
   diceBusy = true;
-  diceBtn.classList.add("rolling");
+  diceBox.classList.add("rolling");
   try {
     const modes = diceModes();
-    const dice = settings.diceSettings;
-    let rolled = shuffleLook(collectSettings(), {
+    const cur = modeById(modeSel.value);
+    const pinSky = !!(cur.stageOnly || lookForMode(cur.id)?.stageOnly || lookForMode(cur.id)?.backdrop === "plugin");
+    const liveDice = settings.diceSettings;
+    const dice = diceLookForRoll(liveDice, { pinSky, stageOnly: pinSky, forceView: force.view });
+    let rolled = shuffleLook({ ...collectSettings(), dice }, {
       themes: THEMES.map((t) => t.id),
       modes: modes.map((m) => ({ id: m.id, options: m.options, config: m.config })),
       plugins: pluginSpecs.map((s) => ({ id: s.id, fields: pluginViewKnobs(s) })),
@@ -1160,32 +1362,26 @@ async function rollDice(): Promise<void> {
     });
     if (dice.cycle) rolled = aiCycleSettings(rolled, { keepLook: true });
     rolled.mode = modeById(rolled.mode).id;
+    rolled.dice = liveDice;
     applySettings(rolled);
-    if (dice.cycle && !agent.cycleOn) {
+    invalidateSkyRecipe();
+    const startCycle = dice.cycle && !agent.cycleOn;
+    window.setTimeout(() => {
+      diceBox.classList.remove("rolling");
+      diceBusy = false;
+    }, DICE_ROLL_MS);
+    if (startCycle) {
       await profiles?.writeAi(collectSettings(), agent.modelTag);
       await setAiCycle(true);
       applySettings(rolled);
     }
     await profiles?.writeAi(collectSettings(), agent.modelTag);
-    invalidateSkyRecipe();
-    if (dice.handoff && agent.cycleOn) void handBackToAi();
   } catch (e) {
     console.warn("zoto-viz dice:", e);
-  } finally {
-    window.setTimeout(() => {
-      diceBtn.classList.remove("rolling");
-      diceBusy = false;
-    }, DICE_ROLL_MS);
+    diceBox.classList.remove("rolling");
+    diceBusy = false;
   }
 }
-
-async function handBackToAi(tries = 16): Promise<void> {
-  for (let i = 0; i < tries; i++) {
-    if (agent.offerSend(DICE_HANDOFF)) return;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-}
-diceBtn.addEventListener("click", () => { void rollDice(); });
 settings.onDice = () => { void rollDice(); };
 
 // the panel sits under the header; keep its offset in sync with the header's wrapped height
@@ -1274,8 +1470,10 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "r" || e.key === "R") setRedaction(!redaction.enabled);
   if (e.key === "d" || e.key === "D") setDream(!dreamToggle.checked);
   if (e.key === "f" || e.key === "F") settings.setFeedOn(!settings.feedSettings.on);
+  if (e.key === "l" || e.key === "L") setLabels(!sysLabels.checked);
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);
   const idx = e.key === "0" ? 9 : Number(e.key) - 1;
-  const modes = allModes();
-  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.id);
+  const modes = viewSelectOptions();
+  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.value);
 });
+window.addEventListener("pagehide", () => persistLive(true));

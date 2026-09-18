@@ -1,6 +1,7 @@
 import { DEFAULT_FEED, type FeedConfig } from "../ui/feed";
 import { allModes, defaultCatalogMode, defaultOpts } from "./modes";
 import { DEFAULT_DREAM, type DreamAnim } from "../graph/scene";
+import { guardReadableAnim } from "../graph/readable";
 import { DEFAULT_THEME } from "./themes";
 import { EMPTY_LOOK, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { DEFAULT_DICE, normalizeDice, type DiceConfig } from "./shuffle";
@@ -66,6 +67,10 @@ let hush = 0;
 export function quiet<T>(fn: () => T): T {
   hush++;
   try { return fn(); } finally { hush--; }
+}
+
+export function isQuiet(): boolean {
+  return hush > 0;
 }
 
 /** Overlay that the header AI toggle writes into a new model-named profile. */
@@ -144,10 +149,11 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
       allowNets: str(filters.allowNets),
       blockNets: str(filters.blockNets),
     },
-    anim: { ...d.anim, ...anim },
+    anim: guardReadableAnim({ ...d.anim, ...anim }),
     feed: {
       ...d.feed,
       ...feed,
+      includeSources: bool((feed as FeedConfig).includeSources, d.feed.includeSources),
       textSize: (() => {
         const n = Number((feed as FeedConfig).textSize);
         return Number.isFinite(n) ? Math.min(20, Math.max(10, n)) : d.feed.textSize;
@@ -287,7 +293,7 @@ export class ProfileStore {
     return this.meta()?.shipped === true || this.current === SHIPPED_ID;
   }
 
-  async boot(): Promise<void> {
+  async boot(live?: { profileId: string; dirty?: boolean; settings: unknown } | null): Promise<boolean> {
     try {
       let data = await api<ProfileList>("/api/profiles");
       this.available = true;
@@ -308,14 +314,33 @@ export class ProfileStore {
         data = await api<ProfileList>("/api/profiles");
       }
       this.ingest(data);
+      if (live) return this.applySession(live);
       const load = this.list.some((p) => p.id === data.default) ? data.default : SHIPPED_ID;
       await this.load(load, { quiet: true });
+      return false;
     } catch (e) {
       console.warn("zoto-viz profiles:", e);
       this.available = false;
+      if (live) return this.applySession(live);
       this.current = USER_ID;
       this.syncChrome();
+      return false;
     }
+  }
+
+  /** Apply a same-tab session snapshot instead of the startup default. */
+  applySession(live: { profileId: string; dirty?: boolean; settings: unknown }): boolean {
+    const id = live.profileId && this.list.some((p) => p.id === live.profileId)
+      ? live.profileId
+      : (this.current || this.defaultId || USER_ID);
+    this.current = id;
+    this.sel.value = id;
+    this.dirty = !!live.dirty && !this.shipped;
+    const settings = normalizeSettings(live.settings);
+    quiet(() => this.host.apply(settings));
+    this.adoptAutosave(settings.autosave);
+    this.syncChrome();
+    return true;
   }
 
   touch(): void {

@@ -164,7 +164,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 32,
-      "description": "Graph wrap target when engine is graph. Known values today: topology, talkers, services, protocols, layers, watch, wifi, bluetooth, cpu, cores, load. Open so new wrap targets do not need a schema bump."
+      "description": "Graph wrap target when engine is graph. Known values today: topology, talkers, services, protocols, layers, drone-show, watch, wifi, bluetooth, cpu, cores, load. Open so new wrap targets do not need a schema bump."
     },
     "freeMap": {
       "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims.",
@@ -174,12 +174,12 @@
     "look": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Per-view look pins. Free-form map (additionalProperties: true) — do not treat any look key as required; web/src/core/modes.ts and web/src/plugins/plugin.ts grow one-off knobs faster than this schema can track. Keys that exist in the codebase today (hints only, not required): theme, chrome, backdrop, skyOpacity, skyBright, skySpeed, skyEase, skyAudio, skyCycle, bgColor, bgOpacity, bgAudio, gridShape, gridColor, gridSize, gridOpacity, gridBright, gridAudio, audioDrive, audioSens, audioCamera, audioNodes, themeCycle, edgeGlow, edgeGlowAmt, edgeGlowSpeed. Related ViewMode knobs (not look-schema-required): graphBase, arcadeId, flatten, camera, standalone. Theme ids today: midnight, ocean, nord, dracula, solarized, gruvbox, ember, neon, tactical, paper. BackdropKind today: none, fractal, space, matrix, live, aurora, rain, ocean, fire, warp, clouds, circuit, plasma, lattice, dynamic. FloorShape today: square, hex, triangle, diamond, circle. Fields that are NOT in the current codebase and must not be gated: chromatic, film_noise, film_flicker, halo, drop_amount, cursor_pulse, aim_size, target_size, scanline, follow_zoom_curve, follow_zoom_max, follow_zoom_min."
+      "description": "Per-view look pins. Free-form map (additionalProperties: true) — do not treat any look key as required; web/src/core/modes.ts and web/src/plugins/plugin.ts grow one-off knobs faster than this schema can track. Keys that exist in the codebase today (hints only, not required): theme, chrome, backdrop, stageOnly, skyOpacity, skyBright, skySpeed, skyEase, skyAudio, skyCycle, bgColor, bgOpacity, bgAudio, gridShape, gridColor, gridSize, gridFollow, gridOpacity, gridBright, gridAudio, audioDrive, audioSens, audioCamera, audioNodes, themeCycle, edgeGlow, edgeGlowAmt, edgeGlowSpeed, graphFabric (off|tubes|cloth|ribbon). stageOnly defaults on for demo packs (viz.read/write, backdrop plugin, or a sky shader); set false to keep the LAN graph. Related ViewMode knobs (not look-schema-required): graphBase, arcadeId, flatten, camera, standalone, fabric. Theme ids today: midnight, ocean, nord, dracula, solarized, gruvbox, ember, neon, tactical, paper, dusk, void, vhs, acid, ice, phosphor. BackdropKind today: none, fractal, space, matrix, live, aurora, rain, ocean, fire, warp, clouds, circuit, plasma, lattice, dusk, void, vhs, nebula, acid, ice, dawn, phosphor, earth, meadow, tunnel, dynamic, custom, plugin. FloorShape today: square, hex, triangle, diamond, circle. Fields that are NOT in the current codebase and must not be gated: chromatic, film_noise, film_flicker, halo, drop_amount, cursor_pulse, aim_size, target_size, scanline, follow_zoom_curve, follow_zoom_max, follow_zoom_min."
     },
     "style": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Free-form style map. Keys used today (hints only): nodeColor (role|kind|heat|proto|hash), nodeScale (default|bytes|rate), labels (default|all|none|top), flatten."
+      "description": "Free-form style map. Keys used today (hints only): nodeColor (role|kind|heat|proto|hash), nodeScale (default|bytes|rate), labels (default|all|none|top), flatten, fabric (true|tubes|cloth|ribbon — nodes and edges become an animated mesh with the same hover/selection/glow)."
     },
     "layout": {
       "type": "object",
@@ -187,7 +187,7 @@
       "description": "Free-form layout map. Keys used today (hints only): lanShell, internetShell."
     },
     "streamRef": {
-      "description": "A monitor stream this plugin consumes or produces. Known names today (not a closed enum): devices, flows, packets, traffic, wifi, bluetooth, cpu, audio, feed, graph, hud, plugin_state, rf. Objects may remap fields.",
+      "description": "A monitor stream this plugin consumes or produces. Known names today (not a closed enum): devices, flows, packets, traffic, wifi, bluetooth, cpu, audio, feed, graph, hud, plugin_state, rf, sources. Objects may remap fields.",
       "oneOf": [
         { "type": "string", "minLength": 1, "maxLength": 64 },
         {

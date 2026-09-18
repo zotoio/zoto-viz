@@ -1,0 +1,20 @@
+id: kefrens-bars
+name: Kefrens Bars
+version: 1
+hint: Amiga copper / Kefrens bars. Talker rates drive bar height and hue.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 32
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts

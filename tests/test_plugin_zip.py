@@ -140,6 +140,19 @@ def test_unpack_idempotent_then_refresh(tmp_path: Path) -> None:
     assert yaml.safe_load((dest / "plugin.yml").read_text(encoding="utf-8"))["version"] == 2
 
 
+def test_pack_files_round_trip(tmp_path: Path) -> None:
+    dest = tmp_path / "from-map.zip"
+    digest = pz.pack_files({
+        "plugin.yml": MINIMAL.encode("utf-8"),
+        "visualisation.yml": b"engine: graph\nbase: topology\n",
+    }, dest)
+    assert dest.is_file()
+    assert pz.plugin_sha256(dest) == digest
+    manifest = pz.inspect_zip(dest)
+    assert manifest.plugin["id"] == "sample"
+    assert "visualisation" in manifest.parts
+
+
 def test_pack_is_byte_identical(tmp_path: Path) -> None:
     src = _src(
         tmp_path / "src" / "sample",
@@ -165,3 +178,13 @@ def test_inspect_src_and_sha256(tmp_path: Path) -> None:
     zpath = tmp_path / "sample.zip"
     digest = pz.pack_tree(src, zpath)
     assert pz.plugin_sha256(zpath) == digest
+
+
+def test_rewrite_plugin_id(tmp_path: Path) -> None:
+    src = _src(tmp_path / "sample", {"visualisation.yml": "engine: graph\n"})
+    zpath = tmp_path / "sample.zip"
+    pz.pack_tree(src, zpath)
+    rewritten = pz.rewrite_plugin_id(zpath.read_bytes(), "sample-2")
+    out = tmp_path / "sample-2.zip"
+    out.write_bytes(rewritten)
+    assert pz.inspect_zip(out).plugin["id"] == "sample-2"

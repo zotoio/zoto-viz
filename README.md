@@ -53,7 +53,7 @@ User data: `~/.zoto-viz/` (migrated from `~/.z-netviz` if present). Loopback onl
 
 ```bash
 zoto-viz install          # also writes sys-config.yml + systemd override (ZOTO_VIZ_REPO_ROOT)
-# Shipped catalog: plugins/src/<id>/. Contrib zips: gitignored plugins/*.zip. MCP: POST http://127.0.0.1:7020/mcp  (settings, plugins, agent, install_plugin_zip) — see docs/plugins.md
+# Shipped catalog: plugins/src/<id>/. Contrib zips: gitignored plugins/*.zip. Local inventions: ~/.zoto-viz/plugins/local/*.zip. MCP: POST http://127.0.0.1:7020/mcp  (settings, plugins, agent, publish_local_plugin, install_plugin_zip) — see docs/plugins.md
 ```
 
 ```bash

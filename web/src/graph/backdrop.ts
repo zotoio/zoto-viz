@@ -4,6 +4,7 @@ import { VIZ_UBO, VIZ_UBO_GLSL } from "../plugins/viz-host";
 import { liveCam } from "../camera/livecam";
 import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
 import { currentSkyRecipe, DEFAULT_SKY_RECIPE, cloneSkyRecipe, lerpSkyRecipe, skyRecipeKey, type SkyRecipe } from "./sky-ai";
+import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
 
 /**
@@ -11,34 +12,83 @@ import { wrapAgentSky } from "./sky-agent";
  * reads as flying through space / rain / a fractal, while the device cloud stays in the foreground.
  */
 
+export type PhotoSkyKind = "earth" | "meadow" | "tunnel";
+
 export type BackdropKind =
   | "none" | "fractal" | "space" | "matrix" | "live"
   | "aurora" | "rain" | "ocean" | "fire" | "warp" | "clouds" | "circuit" | "plasma" | "lattice"
+  | "dusk" | "void" | "vhs" | "nebula" | "acid" | "ice" | "dawn" | "phosphor"
+  | "earth" | "meadow" | "tunnel"
   | "dynamic" | "custom" | "plugin";
 
-export const BACKDROP_OPTIONS: { value: BackdropKind; label: string; hint: string }[] = [
-  { value: "none", label: "none", hint: "plain fog" },
-  { value: "fractal", label: "fractal", hint: "slow Julia set" },
-  { value: "space", label: "space", hint: "starfield" },
-  { value: "matrix", label: "matrix", hint: "falling code" },
-  { value: "aurora", label: "aurora", hint: "polar curtains" },
-  { value: "rain", label: "rain", hint: "falling streaks" },
-  { value: "ocean", label: "ocean", hint: "underwater caustics" },
-  { value: "fire", label: "fire", hint: "rising embers" },
-  { value: "warp", label: "warp", hint: "star-streak tunnel" },
-  { value: "clouds", label: "clouds", hint: "soft fbm overcast" },
-  { value: "circuit", label: "circuit", hint: "trace lattice" },
-  { value: "plasma", label: "plasma", hint: "interference wash" },
-  { value: "lattice", label: "lattice", hint: "night grid" },
-  { value: "dynamic", label: "AI Dynamic", hint: "Gemma rebuilds this sky on a timer" },
-  { value: "custom", label: "agent shader", hint: "GLSL the local agent wrote into the model-named profile" },
-  { value: "plugin", label: "plugin shader", hint: "GLSL shipped in the selected plugin zip" },
-  { value: "live", label: "live", hint: "this machine's camera" },
+export type SkyGroup = "plain" | "nature" | "digital" | "live" | "photo";
+
+export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
+  earth: "/skies/earth.jpg",
+  meadow: "/skies/meadow.jpg",
+  tunnel: "/skies/tunnel.jpg",
+};
+
+export function isPhotoSky(kind: BackdropKind): kind is PhotoSkyKind {
+  return kind === "earth" || kind === "meadow" || kind === "tunnel";
+}
+
+export const SKY_GROUP_TABS: { id: string; label: string }[] = [
+  { id: "all", label: "all" },
+  { id: "nature", label: "nature" },
+  { id: "photo", label: "photo" },
+  { id: "digital", label: "digital" },
+  { id: "live", label: "live / AI" },
+  { id: "plain", label: "plain" },
+];
+
+export function skyGroup(kind: BackdropKind): SkyGroup {
+  if (kind === "none") return "plain";
+  if (isPhotoSky(kind)) return "photo";
+  if (kind === "live" || kind === "dynamic" || kind === "custom" || kind === "plugin") return "live";
+  if (kind === "aurora" || kind === "rain" || kind === "ocean" || kind === "fire"
+    || kind === "clouds" || kind === "dusk" || kind === "dawn" || kind === "ice" || kind === "nebula") {
+    return "nature";
+  }
+  return "digital";
+}
+
+export const BACKDROP_OPTIONS: { value: BackdropKind; label: string; hint: string; group: SkyGroup }[] = [
+  { value: "none", label: "none", hint: "plain fog", group: "plain" },
+  { value: "fractal", label: "fractal", hint: "slow Julia set", group: "digital" },
+  { value: "space", label: "space", hint: "starfield", group: "digital" },
+  { value: "matrix", label: "matrix", hint: "falling code", group: "digital" },
+  { value: "aurora", label: "aurora", hint: "polar curtains", group: "nature" },
+  { value: "rain", label: "rain", hint: "falling streaks", group: "nature" },
+  { value: "ocean", label: "ocean", hint: "underwater caustics", group: "nature" },
+  { value: "fire", label: "fire", hint: "rising embers", group: "nature" },
+  { value: "warp", label: "warp", hint: "star-streak tunnel", group: "digital" },
+  { value: "clouds", label: "clouds", hint: "soft fbm overcast", group: "nature" },
+  { value: "circuit", label: "circuit", hint: "trace lattice", group: "digital" },
+  { value: "plasma", label: "plasma", hint: "interference wash", group: "digital" },
+  { value: "lattice", label: "lattice", hint: "night grid", group: "digital" },
+  { value: "dusk", label: "dusk", hint: "warm horizon, purple zenith", group: "nature" },
+  { value: "void", label: "void", hint: "near-black sparse stars", group: "digital" },
+  { value: "vhs", label: "VHS", hint: "scanlines and chroma split", group: "digital" },
+  { value: "nebula", label: "nebula", hint: "colour gas clouds", group: "nature" },
+  { value: "acid", label: "acid", hint: "high-sat swirl", group: "digital" },
+  { value: "ice", label: "ice", hint: "crystalline facets", group: "nature" },
+  { value: "dawn", label: "dawn", hint: "peach and rose horizon", group: "nature" },
+  { value: "phosphor", label: "phosphor", hint: "P1 CRT green bloom", group: "digital" },
+  { value: "earth", label: "Earth", hint: "photograph: Earth from orbit", group: "photo" },
+  { value: "meadow", label: "meadow", hint: "photograph: sunny meadow", group: "photo" },
+  { value: "tunnel", label: "tunnel", hint: "photograph: dark tunnel", group: "photo" },
+  { value: "dynamic", label: "AI Dynamic", hint: "Gemma rebuilds this sky on a timer", group: "live" },
+  { value: "custom", label: "agent shader", hint: "GLSL the local agent wrote into the model-named profile", group: "live" },
+  { value: "plugin", label: "plugin shader", hint: "GLSL shipped in the selected plugin zip", group: "live" },
+  { value: "live", label: "live", hint: "this machine's camera", group: "live" },
 ];
 
 /** Skies the dream / randomize pool picks from (not none / not Gemma). */
 export const CYCLE_SKIES: BackdropKind[] = [
-  "fractal", "space", "matrix", "aurora", "rain", "ocean", "fire", "warp", "clouds", "circuit", "plasma", "lattice", "live",
+  "fractal", "space", "matrix", "aurora", "rain", "ocean", "fire", "warp", "clouds", "circuit", "plasma", "lattice",
+  "dusk", "void", "vhs", "nebula", "acid", "ice", "dawn", "phosphor",
+  "earth", "meadow", "tunnel", "live",
 ];
 
 /** Cycle pool minus live when the camera was denied or is missing. */
@@ -238,6 +288,105 @@ vec3 latticeSky(vec3 dir, float t) {
   return c;
 }
 
+vec3 duskSky(vec3 dir, float t) {
+  float h = 0.5 + 0.5 * dir.y;
+  vec3 zenith = mix(uBg, vec3(0.12, 0.06, 0.22), 0.7);
+  vec3 mid = mix(uAccent, vec3(0.72, 0.28, 0.42), 0.45);
+  vec3 hor = vec3(0.95, 0.48, 0.18);
+  vec3 col = mix(hor, mid, smoothstep(-0.15, 0.35, dir.y));
+  col = mix(col, zenith, smoothstep(0.2, 0.95, h));
+  float glow = exp(-pow(dir.y + 0.08, 2.0) * 18.0);
+  col += hor * glow * 0.55;
+  col += uAccent * pow(hash2(floor(dir.xz * 80.0)), 22.0) * (0.35 + 0.4 * h);
+  return col;
+}
+
+vec3 voidSky(vec3 dir, float t) {
+  vec3 col = uBg * 0.08;
+  float speckle = pow(hash2(floor(dir.xy * 340.0 + dir.z * 90.0)), 36.0);
+  col += vec3(0.75, 0.8, 0.9) * speckle * (1.1 + uAudio);
+  float dust = fbm(dir.xz * 1.4 + t * 0.01);
+  col += uAccent * dust * dust * 0.12;
+  return col;
+}
+
+vec3 vhsSky(vec3 dir, float t) {
+  float lon = atan(dir.z, dir.x) * 0.15915;
+  float lat = acos(clamp(dir.y, -1.0, 1.0)) * 0.3183;
+  float scan = 0.82 + 0.18 * sin(lat * 420.0 + t * 8.0);
+  float roll = step(0.97, hash2(vec2(floor(t * 4.0), floor(lat * 40.0))));
+  vec2 uv = vec2(lon, lat);
+  float n = fbm(uv * 6.0 + t * 0.2);
+  vec3 base = mix(uBg, uAccent, 0.25 + 0.35 * n);
+  vec3 split = vec3(
+    mix(base.r, 0.95, 0.15 + 0.1 * sin(t * 3.0)),
+    base.g,
+    mix(base.b, 0.95, 0.12 + 0.1 * cos(t * 2.4))
+  );
+  return mix(base, split, 0.55) * scan + vec3(0.08, 0.02, 0.08) * roll;
+}
+
+vec3 nebulaSky(vec3 dir, float t) {
+  vec2 p = vec2(atan(dir.z, dir.x), dir.y);
+  float n = fbm(p * 1.8 + t * 0.03);
+  float n2 = fbm(p * 3.4 - t * 0.02);
+  float gas = smoothstep(0.28, 0.78, n * 0.65 + n2 * 0.35);
+  vec3 cool = mix(uBg, vec3(0.15, 0.2, 0.55), 0.6);
+  vec3 hot = mix(uAccent, vec3(0.95, 0.35, 0.65), 0.45);
+  vec3 col = mix(cool, hot, gas);
+  col += hot * pow(n2, 3.0) * 0.55;
+  col += vec3(1.0) * pow(hash2(floor(dir.xy * 200.0)), 24.0);
+  return col;
+}
+
+vec3 acidSky(vec3 dir, float t) {
+  vec2 p = vec2(dir.x, dir.z) / (0.45 + abs(dir.y));
+  float a = sin(p.x * 5.0 + t * 0.35);
+  float b = sin(p.y * 6.0 - t * 0.28);
+  float c = sin((p.x + p.y) * 4.0 + t * 0.2);
+  float m = 0.5 + 0.5 * (a * b + c) * 0.7;
+  vec3 hi = vec3(0.85, 1.0, 0.12);
+  vec3 lo = vec3(0.95, 0.08, 0.72);
+  return mix(mix(uBg, lo, 0.45), mix(uAccent, hi, 0.55), m);
+}
+
+vec3 iceSky(vec3 dir, float t) {
+  vec3 p = dir * 7.5;
+  vec3 g = abs(fract(p) - 0.5);
+  float facet = 1.0 - smoothstep(0.0, 0.08, min(min(g.x, g.y), g.z));
+  float n = fbm(dir.xz * 3.0 + t * 0.02);
+  vec3 deep = mix(uBg, vec3(0.04, 0.12, 0.2), 0.65);
+  vec3 lite = mix(uAccent, vec3(0.7, 0.9, 1.0), 0.55);
+  return mix(deep, lite, 0.2 + 0.45 * n) + lite * facet * 0.55;
+}
+
+vec3 dawnSky(vec3 dir, float t) {
+  float h = 0.5 + 0.5 * dir.y;
+  vec3 zenith = mix(uBg, vec3(0.18, 0.28, 0.55), 0.55);
+  vec3 rose = vec3(1.0, 0.62, 0.58);
+  vec3 peach = vec3(1.0, 0.78, 0.42);
+  vec3 col = mix(peach, rose, smoothstep(-0.2, 0.25, dir.y));
+  col = mix(col, zenith, smoothstep(0.15, 0.9, h));
+  float glow = exp(-pow(dir.y + 0.12, 2.0) * 14.0);
+  col += peach * glow * 0.65;
+  return col;
+}
+
+vec3 phosphorSky(vec3 dir, float t) {
+  float lon = atan(dir.z, dir.x) * 0.15915;
+  vec2 uv = vec2(lon, dir.y) * 22.0;
+  vec2 g = abs(fract(uv) - 0.5);
+  float line = 1.0 - smoothstep(0.0, 0.05, min(g.x, g.y));
+  float bloom = exp(-min(g.x, g.y) * 18.0);
+  float scan = 0.85 + 0.15 * sin(dir.y * 90.0 + t * 6.0);
+  vec3 green = mix(uAccent, vec3(0.2, 1.0, 0.35), 0.7);
+  vec3 c = uBg * 0.06;
+  c += green * line * 0.4;
+  c += green * bloom * 0.35;
+  c += vec3(0.7, 1.0, 0.7) * pow(hash2(floor(uv) + floor(t * 2.0)), 16.0) * 0.8;
+  return c * scan;
+}
+
 vec3 dynamicSky(vec3 dir, float t) {
   vec2 uv = vec2(atan(dir.z, dir.x), dir.y);
   uv += uWarp * vec2(fbm(uv * 2.0 + t * 0.05) - 0.5, fbm(uv.yx * 2.0 - t * 0.04) - 0.5);
@@ -280,6 +429,15 @@ void main() {
   else if (uMode < 11.5) col = circuitSky(dir, t);
   else if (uMode < 12.5) col = plasmaSky(dir, t);
   else if (uMode < 13.5) col = latticeSky(dir, t);
+  else if (uMode < 14.5) col = dynamicSky(dir, t);
+  else if (uMode < 17.5) col = duskSky(dir, t);
+  else if (uMode < 18.5) col = voidSky(dir, t);
+  else if (uMode < 19.5) col = vhsSky(dir, t);
+  else if (uMode < 20.5) col = nebulaSky(dir, t);
+  else if (uMode < 21.5) col = acidSky(dir, t);
+  else if (uMode < 22.5) col = iceSky(dir, t);
+  else if (uMode < 23.5) col = dawnSky(dir, t);
+  else if (uMode < 24.5) col = phosphorSky(dir, t);
   else col = dynamicSky(dir, t);
   fragColor = vec4(capSkyLuma(col * uBright), uOpacity);
 }
@@ -291,6 +449,8 @@ const MODE_NUM: Record<BackdropKind, number> = {
   dynamic: 14,
   custom: 15,
   plugin: 16,
+  dusk: 17, void: 18, vhs: 19, nebula: 20, acid: 21, ice: 22, dawn: 23, phosphor: 24,
+  earth: 25, meadow: 26, tunnel: 27,
 };
 
 const LIVE_VERT = /* glsl */ `
@@ -354,6 +514,23 @@ export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
 export const PLUGIN_SKY_MAX = 16_000;
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
 
+/** Compile the wrapped fragment on a throwaway WebGL2 context. `null` if no GPU or it linked. */
+export function probePluginSkyCompile(frag: string): string | null {
+  if (typeof document === "undefined") return null;
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: false });
+    if (!gl) return null;
+    const sh = gl.createShader(gl.FRAGMENT_SHADER);
+    if (!sh) return null;
+    gl.shaderSource(sh, `#version 300 es\nprecision highp float;\n${frag}`);
+    gl.compileShader(sh);
+    if (gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return null;
+    return (gl.getShaderInfoLog(sh) || "compile failed").replace(/\0/g, "").trim() || "compile failed";
+  } catch {
+    return null;
+  }
+}
+
 const PLUGIN_UNIFORM_RE =
   /\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234]|int|uint|bool|mat[234]|sampler(?:2D|3D|Cube))\s+(\w+)\s*;/g;
 const PLUGIN_ALLOWED = new Set<string>(PLUGIN_SKY_UNIFORMS);
@@ -363,6 +540,9 @@ export function pluginShaderError(src: string): string | null {
   if (!src.trim()) return "empty shader";
   if (src.length > PLUGIN_SKY_MAX) return "shader too long";
   if (/#\s*include\b/i.test(src) || /\bimport\s/.test(src)) return "shader includes are not allowed";
+  if (/\bbinding\s*=/.test(src) || /\blayout\s*\(\s*std140/.test(src)) {
+    return "UBO layout/binding qualifiers are not portable; use zotoVizSlots";
+  }
   const names = new Set<string>();
   const re = new RegExp(PLUGIN_UNIFORM_RE.source, "g");
   let m: RegExpExecArray | null;
@@ -400,9 +580,14 @@ out vec4 fragColor;
 
 export class Backdrop {
   readonly mesh: THREE.Mesh;
+  readonly fadeMesh: THREE.Mesh;
   readonly liveMesh: THREE.Mesh;
+  readonly photoMesh: THREE.Mesh;
   private readonly mat: THREE.ShaderMaterial;
   private readonly liveMat: THREE.ShaderMaterial;
+  private readonly photoMat: THREE.ShaderMaterial;
+  private readonly photoCache = new Map<string, THREE.Texture>();
+  private photoWant: string | null = null;
   private pluginMat: THREE.ShaderMaterial | null = null;
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
@@ -421,6 +606,9 @@ export class Backdrop {
   private recipeFrom: SkyRecipe = cloneSkyRecipe(DEFAULT_SKY_RECIPE);
   private recipeWant: SkyRecipe = cloneSkyRecipe(DEFAULT_SKY_RECIPE);
   private recipeT = 1;
+  private morphT = 1;
+  private lookOpacity = 1;
+  private outgoingMat: THREE.ShaderMaterial | null = null;
 
   constructor() {
     this.mat = new THREE.ShaderMaterial({
@@ -454,6 +642,10 @@ export class Backdrop {
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -10;
     this.mesh.visible = false;
+    this.fadeMesh = new THREE.Mesh(this.mesh.geometry, this.mat);
+    this.fadeMesh.frustumCulled = false;
+    this.fadeMesh.renderOrder = -9;
+    this.fadeMesh.visible = false;
 
     this.liveMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -479,9 +671,26 @@ export class Backdrop {
     this.liveMesh.frustumCulled = false;
     this.liveMesh.renderOrder = -11;
     this.liveMesh.visible = false;
+
+    this.photoMat = this.liveMat.clone();
+    this.photoMat.uniforms = {
+      uVideo: { value: blankTex() },
+      uCanvas: { value: new THREE.Vector2(16, 9) },
+      uVideoSize: { value: new THREE.Vector2(16, 9) },
+      uOpacity: { value: 1 },
+      uBright: { value: 1 },
+      uAudio: { value: 0 },
+      uLumaCap: { value: SKY_LUMA_CAP },
+      uBg: { value: new THREE.Color(0x0b0e14) },
+    };
+    this.photoMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.photoMat);
+    this.photoMesh.frustumCulled = false;
+    this.photoMesh.renderOrder = -11;
+    this.photoMesh.visible = false;
   }
 
   setKind(kind: BackdropKind): void {
+    const prev = this.kind;
     if (kind === "custom") {
       const frag = this.customFrag || lastCustomFrag;
       if (frag) {
@@ -504,9 +713,12 @@ export class Backdrop {
       this.dropPluginMat();
       if (this.mat.fragmentShader !== FRAG) this.applyFrag(FRAG);
     }
+    if (kind !== prev) this.beginSkyMorph();
     this.kind = kind;
-    this.mesh.visible = kind !== "none" && kind !== "live";
+    const photo = isPhotoSky(kind);
+    this.mesh.visible = kind !== "none" && kind !== "live" && !photo;
     this.liveMesh.visible = kind === "live";
+    this.photoMesh.visible = photo;
     const modeKind = kind === "plugin" && !this.pluginMat ? PLUGIN_SKY_FALLBACK : kind;
     this.mat.uniforms.uMode.value = MODE_NUM[modeKind] ?? 0;
     if (kind === "dynamic") this.setRecipe(currentSkyRecipe());
@@ -514,6 +726,7 @@ export class Backdrop {
       this.liveMat.uniforms.uVideo.value = liveCam.texture;
       this.liveMesh.visible = true;
     }
+    if (photo) this.loadPhoto(PHOTO_SKIES[kind as PhotoSkyKind]);
   }
 
   /**
@@ -537,6 +750,15 @@ export class Backdrop {
       this.dropPluginMat();
       if (this.kind === "plugin") this.setKind("plugin");
       return wrapped.error;
+    }
+    const gpuErr = probePluginSkyCompile(wrapped.frag);
+    if (gpuErr) {
+      lastPlugin = null;
+      this.pluginId = null;
+      this.pluginFrag = null;
+      this.dropPluginMat();
+      if (this.kind === "plugin") this.setKind("plugin");
+      return gpuErr;
     }
     lastPlugin = { id: opts.id, frag: wrapped.frag };
     this.pluginId = opts.id;
@@ -565,6 +787,31 @@ export class Backdrop {
     this.mat.uniforms.uPhoto.value = tex ?? blankTex();
   }
 
+  /** Load a photographic plate onto the full-screen sky (cover-fit, no webcam). */
+  loadPhoto(url: string): void {
+    this.photoWant = url;
+    const hit = this.photoCache.get(url);
+    if (hit) {
+      this.bindPhoto(hit);
+      return;
+    }
+    new THREE.TextureLoader().load(url, (t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.minFilter = THREE.LinearFilter;
+      this.photoCache.set(url, t);
+      if (this.photoWant !== url) return;
+      this.bindPhoto(t);
+    });
+  }
+
+  private bindPhoto(t: THREE.Texture): void {
+    this.photoMat.uniforms.uVideo.value = t;
+    const img = t.image as { naturalWidth?: number; naturalHeight?: number; width?: number; height?: number };
+    const w = img.naturalWidth || img.width || 16;
+    const h = img.naturalHeight || img.height || 9;
+    (this.photoMat.uniforms.uVideoSize.value as THREE.Vector2).set(w, h);
+  }
+
   private applyFrag(src: string): void {
     this.mat.fragmentShader = src;
     this.mat.needsUpdate = true;
@@ -584,10 +831,13 @@ export class Backdrop {
   }
 
   private ensurePluginMat(id: string, frag: string): void {
-    if (this.pluginMat && this.pluginFrag === frag && this.pluginId === id) {
+    if (this.pluginMat && this.pluginMat.fragmentShader === frag) {
+      this.pluginId = id;
+      this.pluginFrag = frag;
       this.mesh.material = this.pluginMat;
       return;
     }
+    if (this.kind === "plugin" && this.pluginMat) this.beginSkyMorph();
     this.dropPluginMat(false);
     this.pluginId = id;
     this.pluginFrag = frag;
@@ -699,28 +949,76 @@ export class Backdrop {
 
   setViewport(w: number, h: number): void {
     (this.liveMat.uniforms.uCanvas.value as THREE.Vector2).set(w, h);
+    (this.photoMat.uniforms.uCanvas.value as THREE.Vector2).set(w, h);
   }
 
   setColors(accent: number, bg: number): void {
     (this.mat.uniforms.uAccent.value as THREE.Color).setHex(accent);
     (this.mat.uniforms.uBg.value as THREE.Color).setHex(bg);
     (this.liveMat.uniforms.uBg.value as THREE.Color).setHex(bg);
+    (this.photoMat.uniforms.uBg.value as THREE.Color).setHex(bg);
     this.syncPluginLook();
   }
 
   setLumaCap(cap: number): void {
-    this.liveMat.uniforms.uLumaCap.value = Math.min(SKY_LUMA_CAP, Math.max(0.04, cap));
+    const v = Math.min(SKY_LUMA_CAP, Math.max(0.04, cap));
+    this.liveMat.uniforms.uLumaCap.value = v;
+    this.photoMat.uniforms.uLumaCap.value = v;
   }
 
   setLook(opacity: number, brightness: number, audio: number): void {
     this.audio = audio;
-    this.mat.uniforms.uOpacity.value = opacity;
+    this.lookOpacity = opacity;
     this.mat.uniforms.uBright.value = brightness;
     this.mat.uniforms.uAudio.value = audio;
-    this.liveMat.uniforms.uOpacity.value = opacity;
     this.liveMat.uniforms.uBright.value = brightness;
     this.liveMat.uniforms.uAudio.value = audio;
+    this.photoMat.uniforms.uBright.value = brightness;
+    this.photoMat.uniforms.uAudio.value = audio;
     this.syncPluginLook();
+    this.applyMorphFade();
+  }
+
+  /** True while a sky / plugin-shader crossfade is in flight. */
+  skyMorphing(): boolean {
+    return this.morphT < 1;
+  }
+
+  private beginSkyMorph(): void {
+    this.clearOutgoing();
+    this.morphT = 0;
+    if (!this.mesh.visible) return;
+    const src = this.mesh.material as THREE.ShaderMaterial;
+    if (!src?.uniforms?.uOpacity) return;
+    this.outgoingMat = src.clone();
+    this.outgoingMat.transparent = true;
+    this.fadeMesh.material = this.outgoingMat;
+    this.fadeMesh.visible = true;
+  }
+
+  private clearOutgoing(): void {
+    this.fadeMesh.visible = false;
+    if (this.outgoingMat) {
+      this.outgoingMat.dispose();
+      this.outgoingMat = null;
+    }
+    this.fadeMesh.material = this.mat;
+  }
+
+  private applyMorphFade(): void {
+    const k = this.morphT >= 1 ? 1 : mixFade(this.morphT);
+    const incoming = this.lookOpacity * k;
+    const outgoing = this.lookOpacity * (1 - k);
+    this.mat.uniforms.uOpacity.value = incoming;
+    this.liveMat.uniforms.uOpacity.value = incoming;
+    this.photoMat.uniforms.uOpacity.value = incoming;
+    if (this.pluginMat) this.pluginMat.uniforms.uOpacity.value = incoming;
+    if (this.outgoingMat) {
+      this.outgoingMat.uniforms.uOpacity.value = outgoing;
+      if (this.outgoingMat.uniforms.uTime) this.outgoingMat.uniforms.uTime.value = this.clock;
+      this.fadeMesh.visible = outgoing > 0.008;
+    }
+    if (this.morphT >= 1) this.clearOutgoing();
   }
 
   /**
@@ -744,6 +1042,10 @@ export class Backdrop {
     this.clock += dt * this.curSpeed;
     this.mat.uniforms.uTime.value = this.clock;
     this.syncPluginLook();
+    if (this.morphT < 1) {
+      this.morphT = Math.min(1, this.morphT + dt / VIEW_MORPH_S);
+      this.applyMorphFade();
+    }
     if (this.kind === "dynamic") this.followRecipe(currentSkyRecipe(), dt);
     if (this.kind === "live") {
       const v = liveCam.video;

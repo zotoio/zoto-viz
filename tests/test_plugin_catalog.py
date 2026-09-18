@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from service import paths
 from service import plugin_zip as pz
 from service import plugins
 
@@ -111,7 +112,7 @@ FORMER_MODES = [
     "netpong", "invaders", "command", "frogger", "cores", "load", "cpupong", "doom",
 ]
 RF_WRAPPERS = {"air-ssid": "wifi", "air-bt": "bluetooth"}
-EXTRA_VIEWS = ("lan-heat", "lan-pong", "pulse-ts", "lan-pulse")
+EXTRA_VIEWS = ("lan-heat", "lan-pong", "pulse-ts", "lan-pulse", "drone-show")
 
 
 def test_former_modes_are_menu_plugins() -> None:
@@ -194,6 +195,27 @@ def test_scan_colliding_zip_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert any(str(zpath) == e.get("file") for e in hits)
     assert any("alpha" in str(e.get("error")) for e in hits)
     assert not (repo / "plugins" / ".runtime" / "alpha").exists()
+
+
+def test_scan_local_zip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    src = repo / "plugins" / "src" / "alpha"
+    src.mkdir(parents=True)
+    (src / "plugin.yml").write_text(_MIN_YML.format(pid="alpha", name="Alpha", version=1), encoding="utf-8")
+    monkeypatch.setenv("ZOTO_VIZ_REPO_ROOT", str(repo))
+    pack = tmp_path / "pack" / "gamma"
+    pack.mkdir(parents=True)
+    (pack / "plugin.yml").write_text(_MIN_YML.format(pid="gamma", name="Gamma", version=1), encoding="utf-8")
+    local = paths.plugin_local_dir(create=True)
+    zpath = local / "gamma.zip"
+    pz.pack_tree(pack, zpath)
+    result = plugins.scan()
+    by_id = {p["id"]: p for p in result["plugins"]}
+    assert "alpha" in by_id and by_id["alpha"]["origin"] == "src"
+    assert by_id["gamma"]["origin"] == "local"
+    assert by_id["gamma"]["zip"] == str(zpath)
+    assert (paths.plugin_local_runtime_dir() / "gamma" / "plugin.yml").is_file()
+    assert not result["errors"]
 
 
 def test_scan_yaml_tree_fallback(tmp_path: Path) -> None:

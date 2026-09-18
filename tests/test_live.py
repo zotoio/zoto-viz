@@ -61,6 +61,10 @@ def test_sanitize_drops_junk() -> None:
     })
     assert p["theme"] == "matrix"
     assert p["mode"] == "plugin:command"
+    reload = live.sanitize_patch({"reloadPlugins": True, "exec": "nope"})
+    assert reload["reloadPlugins"] is True
+    assert "exec" not in reload
+    assert live.sanitize_patch({"reloadPlugins": False}) == {}
     assert p["temper"] == 100
     assert p["weather"] == "drift"
     assert p["show"] == {"lan": False}
@@ -69,15 +73,37 @@ def test_sanitize_drops_junk() -> None:
     full = {f"k{i}": True for i in range(30)}
     full.update({"gravity": 1.5, "swirl": 0.4, "mosaic": "4", "hero": "left", "stringAmt": 0.8})
     anim = live.sanitize_patch({"anim": full})["anim"]
+    assert live.sanitize_patch({"anim": {"backdrop": "earth"}})["anim"]["backdrop"] == "earth"
     assert anim["gravity"] == 1.5
     assert anim["mosaic"] == "4"
     assert anim["hero"] == "left"
     assert anim["stringAmt"] == 0.8
+    wall = live.sanitize_patch({"anim": {
+        "mosaic": "4",
+        "mosaicMaxId": "plugin:talkers",
+        "mosaicTiles": ["plugin:talkers", "plugin:topology", "plugin:talkers"],
+        "mosaicSharedTheme": True,
+        "mosaicTree": {
+            "type": "split", "dir": "h", "ratio": 0.9,
+            "a": {"type": "leaf", "id": "plugin:talkers"},
+            "b": {"type": "leaf", "id": "plugin:topology"},
+        },
+    }})["anim"]
+    assert wall["mosaicMaxId"] == "plugin:talkers"
+    assert wall["mosaicTiles"] == ["plugin:talkers", "plugin:topology"]
+    assert wall["mosaicSharedTheme"] is True
+    assert wall["mosaicTree"]["ratio"] == 0.88
+    devices = live.sanitize_patch({"camera": "auto", "mic": "off", "theme": "ember"})
+    assert devices["theme"] == "ember"
+    assert "camera" not in devices
+    assert "mic" not in devices
     look = live.sanitize_patch({"agent": {"shader": "vec3 color(vec3 d, float t) { return uAccent; }", "clear": False}, "shuffle": True})
     assert look["shuffle"] is True
     assert "color" in look["agent"]["shader"]
-    dice = live.sanitize_patch({"dice": {"include": {"theme": False, "nope": True}, "labelsMax": 32, "mosaicMax": "8", "handoff": False}})["dice"]
+    dice = live.sanitize_patch({"dice": {"on": True, "periodMin": 12, "include": {"theme": False, "nope": True}, "labelsMax": 32, "mosaicMax": "8", "handoff": True}})["dice"]
     assert dice["include"] == {"theme": False}
+    assert dice["on"] is True
+    assert dice["periodMin"] == 12
     assert dice["labelsMax"] == 32
     assert dice["mosaicMax"] == "8"
     assert dice["handoff"] is False

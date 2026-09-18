@@ -3,6 +3,7 @@ import type { ProfileSettings } from "../core/profiles";
 import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { EMPTY_LOOK, mergeAgentLook, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { DREAM_BOUNDS, type DreamAnim } from "../graph/scene";
+import { parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
 import { FLOOR_SHAPES } from "../graph/floor";
 import { DICE_INCLUDE_KEYS, mergeDice, DEFAULT_DICE, type DicePatch } from "../core/shuffle";
 
@@ -51,7 +52,17 @@ export interface CaptureCtx {
   feedLines: string[];
 }
 
-export type ViewCapture = PackedHud;
+export type ViewCapture = {
+  hud: PackedHud;
+  /** Raw JPEG base64 (no data-URL prefix). Omitted when the canvas is blank. */
+  screenshot?: string;
+};
+
+/** HUD plus an optional live-canvas JPEG for the current chat turn. */
+export function packView(hud: PackedHud, canvas: HTMLCanvasElement | null): ViewCapture {
+  const screenshot = canvas ? canvasJpeg(canvas) ?? undefined : undefined;
+  return screenshot ? { hud, screenshot } : { hud };
+}
 
 export interface AgentPatch {
   theme?: string;
@@ -172,7 +183,7 @@ export function canvasJpeg(canvas: HTMLCanvasElement, maxEdge = 960, quality = 0
 const SHOW_KEYS = ["lan", "internet", "multicast", "offline", "labels", "cpuIdle"] as const;
 const ANIM_BOOL: (keyof DreamAnim)[] = [
   "follow", "cycle", "randomize", "skyAudio", "bgAudio", "gridAudio", "audioCamera", "camTheme", "audioNodes",
-  "audioPhysics", "audioParts", "autoTune",
+  "audioPhysics", "audioParts", "autoTune", "mosaicSharedTheme",
 ];
 const BACKDROPS = new Set(BACKDROP_OPTIONS.map((o) => o.value));
 const SHAPES = new Set(FLOOR_SHAPES.map((o) => o.value));
@@ -215,6 +226,11 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
   if (typeof s.edgeGlow === "string" && EDGE_GLOWS.has(s.edgeGlow)) out.edgeGlow = s.edgeGlow as DreamAnim["edgeGlow"];
   if (typeof s.mosaic === "string" && MOSAICS.has(s.mosaic)) out.mosaic = s.mosaic as DreamAnim["mosaic"];
   if (typeof s.hero === "string" && HEROS.has(s.hero)) out.hero = s.hero as DreamAnim["hero"];
+  const tree = parseMosaicNode(s.mosaicTree);
+  if (tree) out.mosaicTree = tree;
+  const tiles = parseMosaicTiles(s.mosaicTiles);
+  if (tiles.length) out.mosaicTiles = tiles;
+  if (typeof s.mosaicMaxId === "string") out.mosaicMaxId = s.mosaicMaxId.trim().slice(0, 80);
   if (typeof s.focus === "string" && FOCUSES.has(s.focus)) out.focus = s.focus as DreamAnim["focus"];
   if (typeof s.bgColor === "string") out.bgColor = s.bgColor;
   if (typeof s.gridColor === "string") out.gridColor = s.gridColor;
@@ -234,6 +250,7 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
     gridOpacity: DREAM_BOUNDS.opacity,
     gridBright: DREAM_BOUNDS.bright,
     gridSize: DREAM_BOUNDS.gridSize,
+    gridFollow: DREAM_BOUNDS.gridFollow,
     audioSens: DREAM_BOUNDS.audioSens,
     camAudio: DREAM_BOUNDS.camDrive,
     camChange: DREAM_BOUNDS.camDrive,
@@ -278,13 +295,20 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
+const MOSAIC_LAYOUT_KEYS = ["mosaic", "hero", "mosaicTree", "mosaicMaxId"] as const;
+
+/** Drop split / size / hero / maximize. Tile view ids (`mosaicTiles`) stay. */
+export function stripMosaicLayout(anim: Partial<DreamAnim>): Partial<DreamAnim> {
+  const next = { ...anim };
+  for (const k of MOSAIC_LAYOUT_KEYS) delete next[k];
+  return next;
+}
+
 /** Whitelist a settings fence so the agent cannot write arbitrary keys. */
 export function pickAgentSettings(patch: Record<string, unknown>, modeIds: string[]): AgentPatch {
   const out: AgentPatch = {};
   if (typeof patch.theme === "string" && patch.theme.trim()) out.theme = patch.theme.trim();
   if (typeof patch.dream === "boolean") out.dream = patch.dream;
-  if (patch.camera === "auto" || patch.camera === "off") out.camera = patch.camera;
-  if (patch.mic === "auto" || patch.mic === "off") out.mic = patch.mic;
   if (patch.chrome === "top" || patch.chrome === "left" || patch.chrome === "right") out.chrome = patch.chrome;
   if (typeof patch.mode === "string" && modeIds.includes(patch.mode)) out.mode = patch.mode;
   if (typeof patch.redact === "boolean") out.redact = patch.redact;
@@ -358,10 +382,11 @@ function pickDice(raw: unknown): DicePatch | undefined {
     }
     if (Object.keys(include).length) out.include = include;
   }
+  if (typeof s.on === "boolean") out.on = s.on;
   if (typeof s.handoff === "boolean") out.handoff = s.handoff;
   if (typeof s.cycle === "boolean") out.cycle = s.cycle;
   if (s.mosaicMax === "4" || s.mosaicMax === "6" || s.mosaicMax === "8") out.mosaicMax = s.mosaicMax;
-  const nums = ["labelsMax", "sparksMax", "sparkPeak", "feedDensityMax", "nodeTop"] as const;
+  const nums = ["periodMin", "labelsMax", "sparksMax", "sparkPeak", "feedDensityMax", "nodeTop"] as const;
   for (const k of nums) {
     const n = Number(s[k]);
     if (Number.isFinite(n)) out[k] = n;
@@ -374,8 +399,8 @@ export function mergeAgentPatch(base: ProfileSettings, patch: AgentPatch): Profi
     ...base,
     theme: patch.theme ?? base.theme,
     dream: patch.dream ?? base.dream,
-    camera: patch.camera ?? base.camera,
-    mic: patch.mic ?? base.mic,
+    camera: base.camera,
+    mic: base.mic,
     chrome: patch.chrome ?? base.chrome,
     mode: patch.mode ?? base.mode,
     redact: patch.redact ?? base.redact,

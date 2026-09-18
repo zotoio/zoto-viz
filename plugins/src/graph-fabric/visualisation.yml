@@ -1,0 +1,13 @@
+engine: graph
+base: topology
+style:
+  fabric: cloth
+  labels: top
+look:
+  backdrop: aurora
+  skyOpacity: 0.42
+  skyBright: 0.78
+  skyAudio: false
+  gridOpacity: 0.14
+  edgeGlow: comet
+  graphFabric: cloth

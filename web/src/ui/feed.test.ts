@@ -35,6 +35,7 @@ describe("feed defaults", () => {
     expect(FEED_SOURCES.find((o) => o.value === "traffic")?.hint).toMatch(/thinking/);
     expect(DEFAULT_FEED.textSize).toBe(12);
     expect(DEFAULT_FEED.density).toBe(36);
+    expect(DEFAULT_FEED.includeSources).toBe(true);
   });
 });
 
@@ -223,5 +224,37 @@ describe("feed type size and auto-scroll", () => {
     expect(top()).toBe(400);
     feed.pushChat("agent", " more tokens", true);
     expect(top()).toBe(400);
+  });
+
+  it("leaves the ticker where the user scrolled until they send again", () => {
+    const feed = overlay();
+    const top = mockTicker(feed);
+    feed.seedTranscript([
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "hello" },
+    ]);
+    expect(top()).toBe(400);
+    const ticker = feed.el.querySelector(".feed-ticker") as HTMLDivElement;
+    ticker.scrollTop = 10;
+    ticker.dispatchEvent(new Event("scroll"));
+    feed.pushChat("think", "planning\n", true);
+    expect(top()).toBe(10);
+    feed.setThinking(true);
+    expect(feed.el.querySelector(".feed-hint")?.textContent).toBe("thinking…");
+    feed.pushChat("you", "again");
+    expect(top()).toBe(400);
+  });
+
+  it("marks listening and keeps the ticker pinned to the bottom", () => {
+    const feed = overlay();
+    const top = mockTicker(feed);
+    feed.seedTranscript([{ role: "user", content: "hi" }]);
+    feed.setListening(true);
+    expect(feed.el.classList.contains("listening")).toBe(true);
+    expect(feed.el.querySelector(".feed-hint")?.textContent).toMatch(/listening/i);
+    expect(feed.ask.placeholder).toMatch(/send/i);
+    expect(top()).toBe(400);
+    feed.setListening(false);
+    expect(feed.el.classList.contains("listening")).toBe(false);
   });
 });

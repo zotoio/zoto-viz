@@ -16,6 +16,8 @@ export interface SelectOption {
   hint?: string;
   /** CSS background for a small swatch in front of the label (colour or gradient) */
   swatch?: string;
+  /** optional section header; consecutive options with the same group share one label */
+  group?: string;
 }
 
 export interface SelectConfig {
@@ -24,6 +26,8 @@ export interface SelectConfig {
   value?: string;
   title?: string;
   id?: string;
+  /** show a type-to-filter field when the menu has many rows (default: 8+) */
+  filterable?: boolean;
   onChange?: (value: string, opt: SelectOption) => void;
 }
 
@@ -67,11 +71,14 @@ export class Select {
   private items: HTMLLIElement[] = [];
   private current = "";
   private active = -1;
+  private filter = "";
+  private readonly filterable: boolean;
   private readonly menuId: string;
   onChange: (value: string, opt: SelectOption) => void;
 
   constructor(cfg: SelectConfig) {
     this.onChange = cfg.onChange ?? (() => {});
+    this.filterable = cfg.filterable ?? cfg.options.length >= 8;
     this.menuId = `menu-${Math.random().toString(36).slice(2, 8)}`;
     this.el = document.createElement("div");
     this.el.className = "field select";
@@ -103,13 +110,16 @@ export class Select {
 
     this.btn.addEventListener("click", () => (this.isOpen ? this.close() : this.open()));
     this.btn.addEventListener("keydown", (e) => this.onButtonKey(e));
-    this.menu.addEventListener("pointerdown", (e) => e.preventDefault()); // keep focus on the button
+    this.menu.addEventListener("pointerdown", (e) => {
+      if ((e.target as HTMLElement).closest("input")) return;
+      e.preventDefault();
+    });
     this.menu.addEventListener("pointermove", (e) => {
-      const li = (e.target as HTMLElement).closest("li");
+      const li = (e.target as HTMLElement).closest("li[role='option']");
       if (li) this.setActive(this.items.indexOf(li as HTMLLIElement));
     });
     this.menu.addEventListener("click", (e) => {
-      const li = (e.target as HTMLElement).closest("li");
+      const li = (e.target as HTMLElement).closest("li[role='option']");
       if (li) this.pick(this.items.indexOf(li as HTMLLIElement));
     });
   }
@@ -132,8 +142,61 @@ export class Select {
 
   setOptions(options: SelectOption[]): void {
     this.options = options;
+    this.renderMenu();
+    if (this.current) this.value = this.current;
+  }
+
+  private visibleOptions(): SelectOption[] {
+    const q = this.filter.trim().toLowerCase();
+    if (!q) return this.options;
+    return this.options.filter((o) =>
+      o.label.toLowerCase().includes(q)
+      || o.value.toLowerCase().includes(q)
+      || (o.hint ?? "").toLowerCase().includes(q)
+      || (o.group ?? "").toLowerCase().includes(q));
+  }
+
+  private renderMenu(): void {
     this.menu.innerHTML = "";
-    this.items = options.map((o, i) => {
+    this.items = [];
+    if (this.filterable) {
+      const filterLi = document.createElement("li");
+      filterLi.className = "menu-filter";
+      filterLi.setAttribute("role", "presentation");
+      const input = document.createElement("input");
+      input.type = "search";
+      input.className = "menu-filter-input";
+      input.placeholder = "filter…";
+      input.setAttribute("aria-label", "filter options");
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.value = this.filter;
+      input.addEventListener("input", () => {
+        this.filter = input.value;
+        this.renderMenu();
+        const next = this.menu.querySelector<HTMLInputElement>(".menu-filter-input");
+        if (next) {
+          next.focus();
+          const end = next.value.length;
+          next.setSelectionRange(end, end);
+        }
+        this.setActive(Math.max(0, this.items.findIndex((li) => li.dataset.value === this.current)));
+      });
+      input.addEventListener("keydown", (e) => this.onMenuKey(e));
+      filterLi.appendChild(input);
+      this.menu.appendChild(filterLi);
+    }
+    let lastGroup = "";
+    const visible = this.visibleOptions();
+    visible.forEach((o, i) => {
+      if (o.group && o.group !== lastGroup) {
+        lastGroup = o.group;
+        const head = document.createElement("li");
+        head.className = "menu-group";
+        head.setAttribute("role", "presentation");
+        head.textContent = o.group;
+        this.menu.appendChild(head);
+      }
       const li = document.createElement("li");
       li.setAttribute("role", "option");
       li.id = `${this.menuId}-${i}`;
@@ -149,9 +212,18 @@ export class Select {
         li.appendChild(s);
       }
       this.menu.appendChild(li);
-      return li;
+      this.items.push(li);
     });
-    if (this.current) this.value = this.current;
+    if (!visible.length) {
+      const empty = document.createElement("li");
+      empty.className = "menu-empty";
+      empty.setAttribute("role", "presentation");
+      empty.textContent = "no matches";
+      this.menu.appendChild(empty);
+    }
+    if (this.current) {
+      for (const li of this.items) li.setAttribute("aria-selected", li.dataset.value === this.current ? "true" : "false");
+    }
   }
 
   get isOpen(): boolean { return !this.menu.hidden; }
@@ -160,10 +232,12 @@ export class Select {
     if (this.isOpen) return;
     if (openSelect && openSelect !== this) openSelect.close();
     openSelect = this;
+    this.filter = "";
+    this.renderMenu();
     this.menu.hidden = false;
     this.el.classList.add("open");
     this.btn.setAttribute("aria-expanded", "true");
-    this.setActive(Math.max(0, this.options.findIndex((o) => o.value === this.current)));
+    this.setActive(Math.max(0, this.items.findIndex((li) => li.dataset.value === this.current)));
     document.addEventListener("pointerdown", this.onDocDown, true);
     window.addEventListener("blur", this.closeBound);
     const chrome = document.body.dataset.chrome;
@@ -176,6 +250,7 @@ export class Select {
       this.menu.classList.toggle("up", r.bottom > innerHeight - 8);
       this.menu.classList.toggle("right", r.right > innerWidth - 8);
     }
+    if (this.filterable) this.menu.querySelector<HTMLInputElement>(".menu-filter-input")?.focus();
   }
 
   private closeBound = () => this.close();
@@ -207,28 +282,161 @@ export class Select {
   }
 
   private pick(i: number): void {
-    const opt = this.options[i];
+    const value = this.items[i]?.dataset.value;
+    const opt = this.options.find((o) => o.value === value);
     this.close();
     if (!opt || opt.value === this.current) return;
     this.value = opt.value;
     this.onChange(opt.value, opt);
   }
 
+  private onMenuKey(e: KeyboardEvent): void {
+    const n = this.items.length;
+    if (!n) {
+      if (e.key === "Escape") { e.preventDefault(); this.close(); this.btn.focus(); }
+      return;
+    }
+    switch (e.key) {
+      case "ArrowDown": e.preventDefault(); this.setActive((this.active + 1 + n) % n); break;
+      case "ArrowUp": e.preventDefault(); this.setActive((this.active - 1 + n) % n); break;
+      case "Home": e.preventDefault(); this.setActive(0); break;
+      case "End": e.preventDefault(); this.setActive(n - 1); break;
+      case "Enter": e.preventDefault(); this.pick(this.active); this.btn.focus(); break;
+      case "Escape": e.preventDefault(); this.close(); this.btn.focus(); break;
+      case "Tab": this.close(); break;
+    }
+  }
+
   private onButtonKey(e: KeyboardEvent): void {
-    const n = this.options.length;
     if (!this.isOpen) {
       if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(e.key)) { e.preventDefault(); this.open(); }
       return;
     }
-    switch (e.key) {
-      case "ArrowDown": e.preventDefault(); this.setActive((this.active + 1) % n); break;
-      case "ArrowUp": e.preventDefault(); this.setActive((this.active - 1 + n) % n); break;
-      case "Home": e.preventDefault(); this.setActive(0); break;
-      case "End": e.preventDefault(); this.setActive(n - 1); break;
-      case "Enter": case " ": e.preventDefault(); this.pick(this.active); break;
-      case "Escape": e.preventDefault(); this.close(); break;
-      case "Tab": this.close(); break;
+    this.onMenuKey(e);
+  }
+}
+
+export interface ChipOption<T extends string = string> {
+  value: T;
+  label: string;
+  hint?: string;
+  group: string;
+}
+
+export interface ChipGroup {
+  id: string;
+  label: string;
+}
+
+export interface GroupedChipsConfig<T extends string> {
+  label: string;
+  options: ChipOption<T>[];
+  groups: ChipGroup[];
+  value: T;
+  onChange?: (value: T) => void;
+}
+
+/** Searchable chip row with group tabs — used when a radiogroup would wrap into a pile. */
+export class GroupedChips<T extends string> {
+  readonly el: HTMLDivElement;
+  private readonly chips: HTMLDivElement;
+  private readonly search: HTMLInputElement;
+  private readonly tabs = new Map<string, HTMLButtonElement>();
+  private readonly btns = new Map<T, HTMLButtonElement>();
+  private group = "all";
+  private query = "";
+  private current: T;
+  onChange: (value: T) => void;
+
+  constructor(cfg: GroupedChipsConfig<T>) {
+    this.onChange = cfg.onChange ?? (() => {});
+    this.current = cfg.value;
+    this.el = document.createElement("div");
+    this.el.className = "chip-picker";
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "chip-toolbar";
+    this.search = document.createElement("input");
+    this.search.type = "search";
+    this.search.className = "chip-search";
+    this.search.placeholder = "filter skies…";
+    this.search.setAttribute("aria-label", `filter ${cfg.label}`);
+    this.search.autocomplete = "off";
+    this.search.spellcheck = false;
+    this.search.addEventListener("input", () => {
+      this.query = this.search.value;
+      this.paint();
+    });
+
+    const tabs = document.createElement("div");
+    tabs.className = "chip-groups";
+    tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("aria-label", `${cfg.label} groups`);
+    for (const g of cfg.groups) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip-group";
+      b.textContent = g.label;
+      b.dataset.group = g.id;
+      b.setAttribute("role", "tab");
+      b.addEventListener("click", () => {
+        this.group = g.id;
+        this.paint();
+      });
+      this.tabs.set(g.id, b);
+      tabs.appendChild(b);
     }
+    toolbar.append(this.search, tabs);
+
+    this.chips = document.createElement("div");
+    this.chips.className = "skypick";
+    this.chips.setAttribute("role", "radiogroup");
+    this.chips.setAttribute("aria-label", cfg.label);
+    for (const o of cfg.options) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "sky";
+      b.textContent = o.label;
+      b.title = o.hint ?? o.label;
+      b.dataset.value = o.value;
+      b.dataset.group = o.group;
+      b.addEventListener("click", () => {
+        this.current = o.value;
+        this.syncPressed();
+        this.onChange(o.value);
+      });
+      this.btns.set(o.value, b);
+      this.chips.appendChild(b);
+    }
+
+    this.el.append(toolbar, this.chips);
+    this.paint();
+  }
+
+  get value(): T { return this.current; }
+  set(v: T): void {
+    this.current = v;
+    this.syncPressed();
+    const btn = this.btns.get(v);
+    if (btn?.hidden && this.group !== "all") {
+      this.group = "all";
+      this.paint();
+    }
+  }
+
+  private syncPressed(): void {
+    for (const [k, btn] of this.btns) btn.setAttribute("aria-pressed", k === this.current ? "true" : "false");
+  }
+
+  private paint(): void {
+    const q = this.query.trim().toLowerCase();
+    for (const [id, tab] of this.tabs) tab.setAttribute("aria-selected", id === this.group ? "true" : "false");
+    for (const btn of this.btns.values()) {
+      const groupOk = this.group === "all" || btn.dataset.group === this.group;
+      const text = `${btn.textContent ?? ""} ${btn.title}`.toLowerCase();
+      btn.hidden = !(groupOk && (!q || text.includes(q)));
+    }
+    this.syncPressed();
   }
 }
 
@@ -450,6 +658,40 @@ export class Toggle {
     this.el.classList.toggle("disabled", v);
     this.el.setAttribute("aria-disabled", v ? "true" : "false");
   }
+}
+
+const DICE_ICON = `<svg viewBox="0 0 20 20" aria-hidden="true" width="16" height="16"><rect x="1.8" y="1.8" width="16.4" height="16.4" rx="3.4" fill="currentColor" opacity="0.18"/><rect x="1.8" y="1.8" width="16.4" height="16.4" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="6.6" cy="6.6" r="1.35" fill="currentColor"/><circle cx="13.4" cy="6.6" r="1.35" fill="currentColor"/><circle cx="10" cy="10" r="1.35" fill="currentColor"/><circle cx="6.6" cy="13.4" r="1.35" fill="currentColor"/><circle cx="13.4" cy="13.4" r="1.35" fill="currentColor"/></svg>`;
+
+/** Header dice: left switch is repeat; right icon is a one-shot roll that does not toggle. */
+export function mountDiceSplit(box: HTMLElement, toggle: Toggle, onRoll: () => void): HTMLButtonElement {
+  box.classList.add("dice-split");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "dice-roll";
+  btn.title = "roll now";
+  btn.setAttribute("aria-label", "roll now");
+  btn.innerHTML = DICE_ICON;
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (toggle.disabled) return;
+    onRoll();
+  });
+  box.append(toggle.el, btn);
+  return btn;
+}
+
+/** Crossfade an element's text so HUD / hint / feed captions morph instead of snapping. */
+export function morphCopy(el: HTMLElement, text: string, ms = 420): void {
+  if ((el.dataset.morphTo ?? el.textContent) === text) return;
+  el.dataset.morphTo = text;
+  el.classList.add("morphing");
+  window.setTimeout(() => {
+    if (el.dataset.morphTo !== text) return;
+    el.textContent = text;
+    delete el.dataset.morphTo;
+    el.classList.remove("morphing");
+  }, Math.max(40, ms / 2));
 }
 
 /** Caption over a row of controls, so a cluster of toggles reads as one two-line field. */

@@ -1,0 +1,20 @@
+id: roto-proto
+name: Roto Proto
+version: 1
+hint: Classic rotozoomer. Protocol mix drives rotation, zoom, and checker hue.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 8
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts

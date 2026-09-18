@@ -10,5 +10,5 @@
     "isolatedModules": true,
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/orbs.ts"]
 }

@@ -1,8 +1,8 @@
 """Loopback Host/Origin checks, CSRF for mutating HTTP, and a mutate access log.
 
 DNS rebinding is blocked by requiring a loopback Host (unless --insecure-lan). Browsers
-that send Origin must also use a loopback origin. PUT/POST/DELETE need the CSRF cookie
-plus X-Zoto-Viz-Csrf (same value), minted at process start.
+that send Origin must also use a loopback origin. PUT/POST/DELETE need X-Zoto-Viz-Csrf matching the process token
+(minted at start). The matching cookie is set for browsers but is not required.
 """
 from __future__ import annotations
 
@@ -85,14 +85,13 @@ def attach_csrf(request: web.Request, resp: web.StreamResponse) -> None:
 
 
 def csrf_ok(request: web.Request) -> bool:
+    """Header must match the process token. Cookie is optional: Vite's /api
+    proxy and a monitor restart often leave a stale or missing cookie."""
     token = request.app.get("csrf") or ""
-    if not token:
-        return False
-    cookie = request.cookies.get(COOKIE, "")
     header = request.headers.get(HEADER, "")
-    return bool(cookie and header
-                and hmac.compare_digest(cookie, token)
-                and hmac.compare_digest(header, token))
+    if not token or not header:
+        return False
+    return hmac.compare_digest(header, token)
 
 
 def _deny(msg: str, status: int = 403) -> web.Response:

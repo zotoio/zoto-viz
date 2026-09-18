@@ -25,6 +25,44 @@ describe("apiFetch CSRF", () => {
     expect(seen[1]).toBe("tok");
   });
 
+  it("reboots the session and retries once on csrf required", async () => {
+    const seen: string[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      const h = new Headers(init?.headers);
+      const sent = h.get("X-Zoto-Viz-Csrf") || "";
+      seen.push(`${path}:${sent}`);
+      if (path.includes("/api/session")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
+          json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
+        } as Response;
+      }
+      if (sent !== "fresh") {
+        return {
+          ok: false,
+          status: 403,
+          headers: new Headers(),
+          clone() { return this; },
+          json: async () => ({ error: "csrf required" }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
+        json: async () => ({}),
+      } as Response;
+    }) as typeof fetch;
+    const r = await apiFetch("/api/profiles/user", { method: "PUT" });
+    expect(r.ok).toBe(true);
+    expect(seen.some((s) => s.startsWith("/api/session"))).toBe(true);
+    expect(seen.some((s) => s === "/api/profiles/user:fresh")).toBe(true);
+    expect(csrfToken()).toBe("fresh");
+  });
+
   it("treats a failed session boot as unauthenticated", async () => {
     globalThis.fetch = (async () => { throw new Error("down"); }) as typeof fetch;
     const session = await bootSession();

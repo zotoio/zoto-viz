@@ -88,9 +88,11 @@ def test_overwrite_guard_and_same_sha(tmp_path: Path, monkeypatch: pytest.Monkey
     assert again["isError"] is False
     assert json.loads(again["content"][0]["text"])["wrote"] is False
     other = _zip({"plugin.yml": "id: sample\nname: Sample\nversion: 2\n"})
-    blocked = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(other)})
-    assert blocked["isError"] is True
-    assert "already exists" in json.loads(blocked["content"][0]["text"])["error"]
+    reminted = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(other)})
+    assert reminted["isError"] is False
+    reminted_payload = json.loads(reminted["content"][0]["text"])
+    assert reminted_payload["id"] == "sample-2"
+    assert reminted_payload["remintedFrom"] == "sample"
     forced = plugin_mcp.call_tool(
         "install_plugin_zip",
         {"zip_b64": _b64(other), "overwrite": True},
@@ -133,26 +135,28 @@ def test_dirty_tree_git_unavailable_requires_force(tmp_path: Path, monkeypatch: 
     assert (repo / "plugins" / "sample.zip").is_file()
 
 
-def test_src_owned_id_refuses_even_with_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_src_owned_id_remints_even_with_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _repo(tmp_path, monkeypatch)
     _git_init(repo)
     src = repo / "plugins" / "src" / "sample"
     src.mkdir(parents=True)
     (src / "plugin.yml").write_text(MINIMAL, encoding="utf-8")
     raw = _zip({"plugin.yml": MINIMAL})
-    blocked = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(raw)})
-    payload = json.loads(blocked["content"][0]["text"])
-    assert payload["error"] == "src_owns_id"
-    assert payload["id"] == "sample"
-    assert "plugins/src/sample" in payload["path"]
+    reminted = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(raw)})
+    payload = json.loads(reminted["content"][0]["text"])
+    assert reminted["isError"] is False
+    assert payload["id"] == "sample-2"
+    assert payload["remintedFrom"] == "sample"
+    assert (repo / "plugins" / "sample-2.zip").is_file()
     assert not (repo / "plugins" / "sample.zip").is_file()
     forced = plugin_mcp.call_tool(
         "install_plugin_zip",
         {"zip_b64": _b64(raw), "force": True, "overwrite": True},
     )
     payload = json.loads(forced["content"][0]["text"])
-    assert forced["isError"] is True
-    assert payload["error"] == "src_owns_id"
+    assert forced["isError"] is False
+    assert payload["id"] == "sample-3"
+    assert payload["remintedFrom"] == "sample"
     assert not (repo / "plugins" / "sample.zip").is_file()
     assert not (repo / "plugins" / ".runtime" / "sample").exists()
 
@@ -166,7 +170,9 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
         "list_plugins", "set_plugin", "set_view", "set_agent",
         "roll_dice", "get_state", "get_traffic", "get_rf_watch", "set_rf_watch",
         "consent_plugin", "draft_plugin", "list_profiles", "apply_profile",
-        "list_memories", "add_memory", "delete_memory", "install_plugin_zip",
+        "list_memories", "add_memory", "delete_memory", "list_sources",
+        "set_source", "delete_source", "install_plugin_zip",
+        "publish_local_plugin",
     } <= names
     unknown = plugin_mcp.call_tool("list_agent_plugins", {})
     assert unknown["isError"] is True
@@ -175,8 +181,17 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
     assert "hush" in feat["agent"]["weather"]["values"]
     assert "gravity" in feat["anim"]["number"]
     assert "mosaic" in feat["anim"]["enum"]
+    assert "earth" in feat["anim"]["enum"]["backdrop"]
+    assert "sources" in feat
     assert "roll_dice" in feat["dice"]
+    assert feat["dice"]["on"]["type"] == "boolean"
+    assert feat["dice"]["periodMin"]["min"] == 1
+    assert feat["dice"]["periodMin"]["max"] == 60
     assert "theme" in feat["dice"]["include"]["keys"]
+    assert "camera" not in feat["settings"]
+    assert "mic" not in feat["settings"]
+    assert "camera" not in feat["dice"]["include"]["keys"]
+    assert "mic" not in feat["dice"]["include"]["keys"]
     got = json.loads(plugin_mcp.call_tool("get_settings", {})["content"][0]["text"])
     assert got["ok"] is True
     assert "temper" in got["agent"]
@@ -229,7 +244,9 @@ def test_initialize_and_loopback_host(tmp_path: Path, monkeypatch: pytest.Monkey
         "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}},
     })
     assert init and init["result"]["serverInfo"]["name"] == "zoto-viz-plugins"
+    assert init["result"]["capabilities"]["tools"]["listChanged"] is True
     assert "plugin.yml" in init["result"]["instructions"]
+    assert "publish_local_plugin" in init["result"]["instructions"]
 
     async def _run() -> None:
         req = make_mocked_request("GET", "/mcp", headers={"Host": "127.0.0.1"})
@@ -237,6 +254,7 @@ def test_initialize_and_loopback_host(tmp_path: Path, monkeypatch: pytest.Monkey
         body = json.loads(resp.body)
         assert body["ok"] is True
         assert "install_plugin_zip" in body["tools"]
+        assert "publish_local_plugin" in body["tools"]
         denied = make_mocked_request("GET", "/mcp", headers={"Host": "example.com"})
         bad = await plugin_mcp.api_mcp(denied)
         assert bad.status == 403

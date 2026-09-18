@@ -3,7 +3,7 @@ import {
   alignThemeToColor, applyPaneChrome, applyThemeChrome, contrastRatio, effectiveSceneLuminance,
   fadeTowardPole, grayHex, guardLabelMix, hexToHsl, hslHex, LABEL_MAX_MIX, LABEL_MIN_CONTRAST,
   MUTED_MIN_CONTRAST, preferDarkInk, relativeLuminance, sceneInk, SKY_LUMA_CAP,
-  takeTheme, themeById, themeSwatch, THEMES, toCssHex,
+  takeTheme, themeById, themePickerGroup, themeSwatch, THEMES, toCssHex,
 } from "./themes";
 
 describe("themes", () => {
@@ -33,6 +33,10 @@ describe("themes", () => {
     expect(takeTheme(all).id).toBeTruthy();
     expect(document.documentElement.style.getPropertyValue("--label-fg")).toBe("#ffffff");
     expect(document.documentElement.style.getPropertyValue("--label-stroke")).toBe("#000");
+    expect(themePickerGroup({ id: "midnight", dark: true })).toBe("dark");
+    expect(themePickerGroup({ id: "paper", dark: false })).toBe("light");
+    expect(themePickerGroup({ id: "dusk", dark: true })).toBe("scene");
+    expect(themePickerGroup({ id: "vhs", dark: true })).toBe("scene");
     const paper = THEMES.find((x) => x.id === "paper")!;
     applyThemeChrome(paper);
     expect(document.documentElement.style.getPropertyValue("--label-fg")).toBe("#0c0e12");

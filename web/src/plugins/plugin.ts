@@ -23,6 +23,8 @@ import {
   toPluginView,
 } from "./plugin-visualisation";
 import type { GNode, DreamAnim, EdgeGlow, AudioDrive, ThemeCycle } from "../graph/scene";
+import { parseFabric, type FabricKind } from "../graph/fabric";
+import { guardReadableAnim } from "../graph/readable";
 import type { BackdropKind } from "../graph/backdrop";
 import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
@@ -49,6 +51,8 @@ export interface PluginStyle {
   nodeScale?: NodeScaleStyle;
   labels?: LabelStyle;
   flatten?: boolean;
+  /** Nodes + edges become an animated fabric mesh (same highlight / glow as the sphere graph). */
+  fabric?: FabricKind | boolean;
 }
 
 export interface PluginLayout {
@@ -61,6 +65,8 @@ export interface PluginLook {
   theme?: string;
   chrome?: "top" | "left" | "right";
   backdrop?: BackdropKind;
+  /** Hide nodes / edges / labels so the plugin sky owns the frame. */
+  stageOnly?: boolean;
   skyOpacity?: number;
   skyBright?: number;
   skySpeed?: number;
@@ -76,6 +82,7 @@ export interface PluginLook {
   gridOpacity?: number;
   gridBright?: number;
   gridAudio?: boolean;
+  gridFollow?: number;
   audioDrive?: AudioDrive;
   audioSens?: number;
   audioCamera?: boolean;
@@ -84,6 +91,7 @@ export interface PluginLook {
   edgeGlow?: EdgeGlow;
   edgeGlowAmt?: number;
   edgeGlowSpeed?: number;
+  graphFabric?: FabricKind | boolean;
 }
 
 export type PluginCapability =
@@ -126,9 +134,9 @@ export interface PluginView {
 const LOOK_ANIM_KEYS = [
   "backdrop", "skyOpacity", "skyBright", "skySpeed", "skyEase", "skyAudio", "skyCycle",
   "bgColor", "bgOpacity", "bgAudio",
-  "gridShape", "gridColor", "gridSize", "gridOpacity", "gridBright", "gridAudio",
+  "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
-  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed",
+  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric",
 ] as const satisfies readonly (keyof PluginLook)[];
 
 let looks = new Map<string, PluginLook>();
@@ -142,13 +150,13 @@ export function lookForMode(modeId: string): PluginLook | undefined {
 }
 
 export function mergeLook(base: DreamAnim, look?: PluginLook | null): DreamAnim {
-  if (!look) return base;
+  if (!look) return guardReadableAnim(base);
   const out = { ...base };
   for (const key of LOOK_ANIM_KEYS) {
     const v = look[key];
     if (v !== undefined) (out as Record<string, unknown>)[key] = v;
   }
-  return out;
+  return guardReadableAnim(out);
 }
 
 export interface PluginList {
@@ -281,10 +289,16 @@ function compileGraph(spec: PluginView): ViewMode {
     label: spec.name,
     hint: spec.hint || base.hint,
     pluginId: spec.id,
+    kind: catalogKindOf(spec),
     ...engineDispatch(spec),
+    stageOnly: pluginStageOnly(spec),
     options: mergeOptions(base.options, spec.options),
     config: mergeFields(base.config, spec.config),
     flatten: style.flatten ?? base.flatten,
+    fabric: (() => {
+      const f = parseFabric(style.fabric);
+      return f && f !== "off" ? f : undefined;
+    })(),
     prepare(ctx) {
       maxBytes = 1;
       maxLogRate = 1;
@@ -378,10 +392,30 @@ function compileArcade(spec: PluginView): ViewMode {
     label: spec.name,
     hint: spec.hint || base.hint,
     pluginId: spec.id,
+    kind: catalogKindOf(spec),
     ...engineDispatch(spec),
     options: mergeOptions(base.options, spec.options),
     config: spec.config ?? [],
   };
+}
+
+export function catalogKindOf(spec: Pick<PluginView, "engine" | "capabilities" | "look">): "graph" | "arcade" | "demo" {
+  const caps = spec.capabilities ?? [];
+  if (caps.includes("viz.read") || caps.includes("viz.write") || spec.look?.backdrop === "plugin") return "demo";
+  if (spec.engine && spec.engine !== "graph") return "arcade";
+  return "graph";
+}
+
+/**
+ * Demo viz packs hide the LAN graph so the plugin sky owns the frame.
+ * Graph wraps (topology, talkers, …) keep nodes. `look.stageOnly: false` opts out.
+ */
+export function pluginStageOnly(
+  spec: Pick<PluginView, "engine" | "capabilities" | "look" | "has_sky_shader">,
+): boolean {
+  if (spec.look?.stageOnly === false) return false;
+  if (spec.look?.stageOnly === true) return true;
+  return catalogKindOf(spec) === "demo" || spec.has_sky_shader === true;
 }
 
 export function compilePlugin(spec: PluginView): ViewMode {
@@ -404,11 +438,19 @@ export function specCaption(spec: PluginView): string {
   });
 }
 
-export function viewSelectOptions(): { value: string; label: string; hint: string }[] {
-  return allModes().map((m, i) => ({
+const CATALOG_GROUP_RANK: Record<string, number> = { graph: 0, demo: 1, arcade: 2 };
+
+export function viewSelectOptions(): { value: string; label: string; hint: string; group: string }[] {
+  const rows = allModes().map((m) => ({
     value: m.id,
     label: viewCaption(m),
-    hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : "plugin",
+    group: m.kind === "arcade" ? "arcade" : m.kind === "demo" ? "demo" : "graph",
+  }));
+  rows.sort((a, b) => (CATALOG_GROUP_RANK[a.group] ?? 9) - (CATALOG_GROUP_RANK[b.group] ?? 9)
+    || a.label.localeCompare(b.label));
+  return rows.map((row, i) => ({
+    ...row,
+    hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : row.group,
   }));
 }
 

@@ -12,12 +12,52 @@ import {
   runPackFrameHandler,
   runPackSwapPreserve,
 } from "./dogfood-runner";
+import { packHnRainBuffer, packHnTermBuffer, packStereoOrbs } from "./viz-pack-host";
 import {
   VIZ_FRAME_BUDGET_MS,
   VizBufferWriter,
   VizFrameBudget,
   buildVizFrame,
 } from "./viz-host";
+
+describe("hn rain pack", () => {
+  it("packs uppercase headline bytes the sky can decode", () => {
+    const buf = packHnRainBuffer(
+      [{ id: "hn:0", label: "Hacker News", text: "Jemalloc" }],
+      0.2,
+      0.1,
+    );
+    expect(buf[0]).toBe(1);
+    expect(buf[1]).toBeCloseTo(8 / 60);
+    expect(buf.length).toBe(4 + 8);
+    expect(Math.round(buf[4]! * 95) + 32).toBe("J".charCodeAt(0));
+  });
+});
+
+describe("stereo gram pack", () => {
+  it("packs talker orbs for the depth field", () => {
+    const buf = packStereoOrbs([{ id: "10.0.0.1", rate: 80, role: "lan" }], 0);
+    expect(buf.length).toBe(4);
+    expect(buf[2]).toBeGreaterThan(0.1);
+    expect(buf[3]).toBeCloseTo(0.45);
+  });
+});
+
+describe("hn term pack", () => {
+  it("packs a typed screen the sky can decode", () => {
+    const buf = packHnTermBuffer(
+      [{ id: "hn:0", label: "Hacker News", text: "Jemalloc", summary: "A new allocator." }],
+      20,
+      0.2,
+      1,
+    );
+    expect(buf[0]).toBe(14);
+    expect(buf[1]).toBe(4);
+    expect(buf.length).toBe(8 + 14 * 4);
+    expect(buf.length).toBeLessThanOrEqual(64);
+    expect(buf.slice(8).some((v) => Math.round(v * 95) + 32 === "J".charCodeAt(0))).toBe(true);
+  });
+});
 
 describe("viz dogfood gates", () => {
   const fatLan = fatLanFixture();
@@ -129,12 +169,19 @@ describe("viz dogfood gates", () => {
 
     expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
     expect(result.fixture.flows).toBeGreaterThanOrEqual(1000);
-    expect(result.packs).toHaveLength(3);
-    expect(result.packs.map((p) => p.packId)).toEqual([
+    expect(result.packs.length).toBeGreaterThanOrEqual(3);
+    expect(result.packs.map((p) => p.packId)).toEqual(expect.arrayContaining([
       "packet-tunnel",
       "rf-constellation",
       "talker-storm",
-    ]);
+      "kefrens-bars",
+      "roto-proto",
+      "blob-mesh",
+      "star-sines",
+      "hn-rain",
+      "hn-term",
+      "stereo-gram",
+    ]));
 
     for (const pack of result.packs) {
       expect(pack.buildMs.p95).toBeLessThan(VIZ_FRAME_BUDGET_MS + 0.01);

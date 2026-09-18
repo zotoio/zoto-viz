@@ -40,7 +40,7 @@ const TS_STORE = "zoto-viz.tsPlugins";
 const HASH_STORE = "zoto-viz.tsHashes";
 
 export function tsPluginsAllowed(): boolean {
-  return localStorage.getItem(TS_STORE) === "1";
+  return localStorage.getItem(TS_STORE) !== "0";
 }
 
 export function setTsPluginsAllowed(on: boolean): void {

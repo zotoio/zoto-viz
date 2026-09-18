@@ -1,0 +1,23 @@
+---
+description: After UI, sky, or plugin changes, verify the live screen — not just compile or catalog flags.
+alwaysApply: true
+---
+
+# Verify screens after changes
+
+A shader compile, `sky_available`, or HUD label is not proof the screen works.
+
+After any change that touches the live monitor (plugin sky/GLSL, `visualisation.yml` look, backdrop, stage-only, feed/chrome, camera, or client look uniforms):
+
+1. Open the running UI (`http://127.0.0.1:7020/` or the Vite port) and select each affected **VIEW**.
+2. Confirm the canvas is the intended picture: screenshot **and** sample WebGL pixels (center + a side). Near-black `(≈5,10,22)` means the sky failed even if `pluginSkyId` is set.
+3. Check the HUD view label matches, and that graph/feed/grid are not covering a stage-only sky unless that is the point.
+4. If you patched look in DevTools (`setPluginShader`, forced uniforms), **re-verify from the packed zip** after reload. A hot shader is not the shipped screen.
+
+Host traps that fake a working sky:
+
+- `anim.skyAudio` crushes `uOpacity`/`uBright` when pulse is 0 on older bundles.
+- `autoTune` / `perfOverlay` dims sky when the tab is at 1–2 fps.
+- Frontend `writeUniform("uBright", 0.5…)` overwrites the look slider every frame.
+
+Do not declare done on a black or swapped view. Fix, then re-screenshot.

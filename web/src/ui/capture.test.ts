@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canvasJpeg, captureHud, elText, includeView, pickAgentSettings, VIEW_KEY } from "./capture";
+import { canvasJpeg, captureHud, elText, includeView, packView, pickAgentSettings, stripMosaicLayout, VIEW_KEY } from "./capture";
 import { DEFAULT_FEED } from "./feed";
 
 function hud(): void {
@@ -83,6 +83,17 @@ describe("canvasJpeg", () => {
     c.toDataURL = () => `data:image/jpeg;base64,${"A".repeat(900_000)}`;
     expect(canvasJpeg(c)).toBeNull();
   });
+
+  it("packView attaches a JPEG when the canvas is readable", () => {
+    const c = document.createElement("canvas");
+    c.width = 8;
+    c.height = 8;
+    c.toDataURL = () => `data:image/jpeg;base64,${"A".repeat(40)}`;
+    const packed = packView({ m: "plugin:hn-rain" }, c);
+    expect(packed.hud.m).toBe("plugin:hn-rain");
+    expect(packed.screenshot).toBe("A".repeat(40));
+    expect(packView({ m: "talkers" }, null).screenshot).toBeUndefined();
+  });
 });
 
 describe("pickAgentSettings", () => {
@@ -104,8 +115,8 @@ describe("pickAgentSettings", () => {
     }, ["talkers", "topology"]);
     expect(p.theme).toBe("matrix");
     expect(p.dream).toBe(true);
-    expect(p.camera).toBe("off");
-    expect(p.mic).toBe("auto");
+    expect(p.camera).toBeUndefined();
+    expect(p.mic).toBeUndefined();
     expect(p.chrome).toBe("left");
     expect(p.mode).toBe("talkers");
     expect(p.redact).toBe(true);
@@ -119,8 +130,22 @@ describe("pickAgentSettings", () => {
     expect(t.temper).toBe(88);
     expect(t.weather).toBe("storm");
     expect(pickAgentSettings({ shuffle: true }, ["talkers"]).shuffle).toBe(true);
-    const d = pickAgentSettings({ dice: { include: { theme: false }, labelsMax: 32, mosaicMax: "8", bogus: 1 } }, ["talkers"]);
-    expect(d.dice).toEqual({ include: { theme: false }, labelsMax: 32, mosaicMax: "8" });
-    expect(pickAgentSettings({ mode: "nope", camera: "maybe", mic: "maybe", chrome: "bottom" }, ["talkers"])).toEqual({});
+    const d = pickAgentSettings({ dice: { on: true, periodMin: 12, include: { theme: false }, labelsMax: 32, mosaicMax: "8", bogus: 1 } }, ["talkers"]);
+    expect(d.dice).toEqual({ on: true, periodMin: 12, include: { theme: false }, labelsMax: 32, mosaicMax: "8" });
+    expect(pickAgentSettings({ mode: "nope", camera: "off", mic: "auto", chrome: "bottom" }, ["talkers"])).toEqual({});
+    const wall = pickAgentSettings({
+      anim: {
+        mosaic: "4",
+        hero: "left",
+        mosaicMaxId: "plugin:talkers",
+        mosaicTiles: ["plugin:talkers", "plugin:topology"],
+        mosaicSharedTheme: true,
+        mosaicTree: { type: "split", dir: "h", ratio: 0.4, a: { type: "leaf", id: "plugin:talkers" }, b: { type: "leaf", id: "plugin:topology" } },
+      },
+    }, ["plugin:talkers"]);
+    expect(wall.anim?.mosaic).toBe("4");
+    expect(wall.anim?.mosaicTiles).toEqual(["plugin:talkers", "plugin:topology"]);
+    expect(wall.anim?.mosaicSharedTheme).toBe(true);
+    expect(stripMosaicLayout(wall.anim ?? {})).toEqual({ mosaicTiles: ["plugin:talkers", "plugin:topology"], mosaicSharedTheme: true });
   });
 });

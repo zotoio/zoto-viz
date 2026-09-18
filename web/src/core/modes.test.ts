@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ARCADE_ENGINES, GRAPH_BASES, BT_MAX_NODES, BT_MAX_NODES_CEILING, allModes, bluetooth, capBluetoothDevices, categorize, CPU_RED, cpuHeat, defaultCatalogMode, defaultOpts, graphModes, hashColor, heat,
-  layersInternetLive, modeById, orgOf, paneLabelCap, parseWatchList, pluginMenuRows, setPluginModes, topology, viewCaption, viewSource, wifi,
+  droneFormationPoint, droneShow, droneShowLive, layersInternetLive, modeById, orgOf, paneLabelCap, parseWatchList, pluginMenuRows, setPluginModes, sources, topology, viewCaption, viewSource, wifi,
 } from "./modes";
 import type { Device } from "./types";
 
@@ -23,6 +23,7 @@ describe("modes", () => {
     expect(GRAPH_BASES.some((m) => m.id === "wifi")).toBe(true);
     expect(GRAPH_BASES.some((m) => m.id === "bluetooth")).toBe(true);
     expect(GRAPH_BASES.some((m) => m.id === "cpu")).toBe(true);
+    expect(GRAPH_BASES.some((m) => m.id === "sources")).toBe(true);
     expect(new Set(GRAPH_BASES.map((m) => m.id)).size).toBe(GRAPH_BASES.length);
     expect(ARCADE_ENGINES.map((m) => m.id)).toEqual(["netpong", "invaders", "command", "frogger", "cpupong", "doom"]);
     expect(ARCADE_ENGINES.every((m) => m.standalone)).toBe(true);
@@ -82,7 +83,9 @@ describe("modes", () => {
     expect(orgOf({ ip: "1.1.1.1", names: ["api.google.com"], hostnames: [], role: "internet" } as unknown as Device).length).toBeGreaterThan(0);
     expect(viewSource(topology)).toBe("NET");
     expect(viewSource({ id: "doom" })).toBe("CPU");
+    expect(viewSource(sources)).toBe("SRC");
     expect(viewCaption(topology)).toBe("NET Topology");
+    expect(viewCaption(sources)).toBe("SRC Source web");
     expect(viewCaption(wifi)).toMatch(/^AIR /);
     expect(viewCaption(bluetooth)).toMatch(/^BT /);
   });
@@ -142,5 +145,28 @@ describe("modes", () => {
     expect(a.scale).toBeGreaterThan(0.7);
     expect(Math.abs(a.spin)).toBeGreaterThan(0);
     expect(a.glow).toBeGreaterThanOrEqual(0);
+  });
+
+  it("places a 3D drone fleet and yaws the craft", () => {
+    expect(GRAPH_BASES.some((m) => m.id === "drone-show")).toBe(true);
+    expect(droneShow.camera?.[1]).toBeLessThan(80);
+    const a = droneFormationPoint("sphere", 0, 16, 1);
+    const b = droneFormationPoint("sphere", 8, 16, 1);
+    expect(a[1]).toBeGreaterThan(80);
+    expect(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])).toBeGreaterThan(20);
+    const helix = droneFormationPoint("helix", 0, 12);
+    const helixTop = droneFormationPoint("helix", 11, 12);
+    expect(helixTop[1]).toBeGreaterThan(helix[1]);
+    const rings = droneFormationPoint("rings", 0, 20);
+    expect(rings[1]).toBeGreaterThan(50);
+    const wave = droneFormationPoint("wave", 3, 20);
+    expect(Number.isFinite(wave[0])).toBe(true);
+    const look = droneShowLive(1.4, 2, 80);
+    expect(look.shape).toBe(6);
+    expect(look.spin).not.toBe(droneShowLive(1.4, 9, 0).spin);
+    expect(look.glow).toBeGreaterThan(droneShowLive(1.4, 2, 0).glow);
+    const opts = defaultOpts(droneShow);
+    expect(opts.form).toBe("sphere");
+    expect(droneShow.legend(opts).length).toBeGreaterThan(2);
   });
 });

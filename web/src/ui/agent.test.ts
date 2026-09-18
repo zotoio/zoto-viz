@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterWatchword, agentHeaderCopy, agentPhase, aiCyclePrefOn, CYCLE_KEY, displayText, extractAgentLook, extractMemory, extractSettings, extractYaml, needsAgentReply, parseOllamaChat, parseOllamaLine, spokenText, splitThinkTags } from "./agent";
+import { afterSendCue, afterWatchword, agentHeaderCopy, agentPhase, aiCyclePrefOn, aiMosaicLayoutOn, CYCLE_KEY, MOSAIC_LAYOUT_KEY, displayText, extractAgentLook, extractMemory, extractSettings, extractYaml, needsAgentReply, parseOllamaChat, parseOllamaLine, spokenText, splitThinkTags } from "./agent";
 
 describe("extractYaml", () => {
   it("reads a yaml fence", () => {
@@ -39,6 +39,16 @@ describe("afterWatchword", () => {
     expect(afterWatchword("okay soto list hosts", "zoto")).toBe("list hosts");
     expect(afterWatchword("zo to show the talkers", "zoto")).toBe("show the talkers");
     expect(afterWatchword("soto hello", "pulse")).toBeNull();
+  });
+});
+
+describe("afterSendCue", () => {
+  it("submits only on a trailing send", () => {
+    expect(afterSendCue("what's on the lan send")).toEqual({ body: "what s on the lan", send: true });
+    expect(afterSendCue("please send")).toEqual({ body: "", send: true });
+    expect(afterSendCue("send")).toEqual({ body: "", send: true });
+    expect(afterSendCue("list hosts")).toEqual({ body: "list hosts", send: false });
+    expect(afterSendCue("send the logs")).toEqual({ body: "send the logs", send: false });
   });
 });
 
@@ -118,11 +128,22 @@ describe("aiCyclePrefOn", () => {
   });
 });
 
+describe("aiMosaicLayoutOn", () => {
+  it("defaults on so the model may rearrange until the operator turns it off", () => {
+    expect(aiMosaicLayoutOn({ getItem: () => null })).toBe(true);
+    expect(aiMosaicLayoutOn({ getItem: () => "1" })).toBe(true);
+    expect(aiMosaicLayoutOn({ getItem: () => "0" })).toBe(false);
+    expect(MOSAIC_LAYOUT_KEY).toBe("zoto-viz.ai.mosaicLayout");
+  });
+});
+
 describe("agentHeaderCopy", () => {
   it("labels think vs idle so the chip is not a silent ellipsis", () => {
     expect(agentHeaderCopy("think").text).toBe("AI · think");
     expect(agentHeaderCopy("idle").text).toBe("AI");
     expect(agentHeaderCopy("listen").text).toBe("AI");
+    expect(agentHeaderCopy("heard").text).toBe("AI · listen");
+    expect(agentHeaderCopy("heard").title).toMatch(/send/i);
     expect(agentHeaderCopy("listen", "zoto").title).toContain("zoto");
     expect(agentHeaderCopy("idle", "zoto", true).title).toMatch(/AI Control is on/);
     expect(agentHeaderCopy("idle", "zoto", false, true).title).toMatch(/Ollama model/i);

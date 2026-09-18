@@ -3,6 +3,7 @@ import { Backdrop } from "./backdrop";
 import { FloorGrid } from "./floor";
 import type { DreamAnim, NetScene } from "./scene";
 import { fadeTowardPole, type Theme } from "../core/themes";
+import { probeWebGL } from "./webgl";
 
 const _grid = new THREE.Color();
 const _fill = new THREE.Color();
@@ -42,13 +43,17 @@ export class LookStage {
     this.rim.position.set(-400, -200, -300);
     this.world.add(this.rim);
     this.world.add(this.backdrop.mesh);
+    this.world.add(this.backdrop.fadeMesh);
     this.world.add(this.backdrop.liveMesh);
+    this.world.add(this.backdrop.photoMesh);
     this.world.add(this.grid.mesh);
   }
 
   attach(): void {
     if (this.attached) return;
-    const r = this.ensure();
+    if (!probeWebGL()) return;
+    let r: THREE.WebGLRenderer;
+    try { r = this.ensure(); } catch { return; }
     this.host.prepend(r.domElement);
     this.attached = true;
     this.dreamT = 0;
@@ -66,8 +71,8 @@ export class LookStage {
 
   /** Pull sky / floor / camera from the graph scene and paint one frame. */
   frame(src: NetScene, theme: Theme, dt: number, now: number): void {
-    if (!this.attached) return;
-    const r = this.ensure();
+    if (!this.attached || !this.renderer) return;
+    const r = this.renderer;
     this.resize();
     this.apply(src.dreamAnim, theme, src.pulseNow, r, src.visibilityCap);
     this.follow(src, dt);
@@ -148,6 +153,7 @@ export class LookStage {
   private follow(src: NetScene, dt: number): void {
     this.camera.position.copy(src.camera.position);
     this.camera.quaternion.copy(src.camera.quaternion);
+    src.alignFloor(this.grid);
     if (src.isDreaming) {
       this.dreamT += dt;
       this.camera.position.applyAxisAngle(_axis, this.dreamT * 0.04);

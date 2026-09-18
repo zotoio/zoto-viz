@@ -1,0 +1,16 @@
+engine: graph
+base: sources
+style:
+  fabric: tubes
+  nodeColor: kind
+  labels: top
+look:
+  theme: dusk
+  backdrop: nebula
+  stageOnly: false
+  skyOpacity: 0.38
+  skyBright: 0.72
+  skyAudio: false
+  gridOpacity: 0.12
+  edgeGlow: comet
+  graphFabric: tubes

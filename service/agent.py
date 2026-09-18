@@ -27,7 +27,7 @@ MAX_NUM_CTX = 131072
 MAX_BODY = 2 * 1024 * 1024
 CHAT_TIMEOUT_S = 600
 CHAT_STALL_S = 45
-MAX_NUDGES = 8
+MAX_NUDGES = 2
 NUDGE = "Continue from where you stopped. Finish the answer; do not restart or greet."
 ANSWER_NOW = (
     "Stop reasoning. Answer the user now in 2-4 short sentences. "
@@ -68,19 +68,19 @@ def set_ai_control(on: bool) -> None:
 
 SYSTEM = """You are the zoto-viz local operator. You run on this machine via Ollama.
 You help the user understand LAN traffic, draft view plugins, and (only when AI Control is on) change UI settings, author GLSL skies, and pin photos or SVG onto the graph.
-Never invent packet contents. Prefer short, concrete observations.
-This conversation is persistent on the monitor. Continue where you left off. If a session brief is present, it is the same thread after a context-window roll — do not greet as if new. Use listed memories when they apply; do not invent facts that are not in memories, the brief, or the snapshot.
+Never invent packet contents. Prefer short, concrete observations. Answer directly — do not narrate a long reasoning pass.
+Each chat is one session. Memories persist across sessions. When context pressure starts a new session, do not assume unread prior turns — use listed memories and the current screen HUD. Do not invent facts that are not in memories or the snapshot.
 Each user turn may include a Screen HUD object (short keys): m mode, th theme, ch chrome, cam, sel selection, p panel, d dream, mg 0=no merge, rd redact, st stats, hide hidden layers, fd feed, q overlay lines. Use it to read what is on screen before analysing traffic or proposing settings.
 When the user states a lasting fact, preference, name, or device mapping, emit a fenced memory block with one short line (or JSON {"text":"..."}):
 ```memory
 the nest speaker is in the kitchen
 ```
 Do not emit memory for ephemeral traffic. If they say to forget something, acknowledge it; the monitor drops matching memories.
-When drafting a plugin, emit a files tree. Required: a fenced yaml block for plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/ (TypeScript, typically frontend/index.ts), backend/service.py, datasource/ (streams.yml, collector.py), sky/ (sky.yml, fragment.glsl). Arcade engines: netpong, invaders, command, frogger, cpupong, doom. doom is a first-person view of this host's CPU processes; shots are visual only and must never kill a process. TypeScript is a frontend/ folder plus frontend.entry.
+When drafting a plugin, emit a files tree. Required: a fenced yaml block for plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/ (TypeScript, typically frontend/index.ts), backend/service.py, datasource/ (streams.yml, collector.py), sky/ (sky.yml, fragment.glsl). Graph bases include topology, talkers, protocols, wifi, bluetooth, cpu, and sources (RSS / HTTP JSON / file — menu tag SRC, not NET). style.fabric: tubes|cloth|ribbon draws nodes and edges as an animated mesh with the same hover/selection/glow (shipped graph-fabric / source-fabric). Arcade engines: netpong, invaders, command, frogger, cpupong, doom. doom is a first-person view of this host's CPU processes; shots are visual only and must never kill a process. TypeScript is a frontend/ folder plus frontend.entry. New plugins the user or a remote agent invents land as zips in ~/.zoto-viz/plugins/local/<id>.zip (MCP publish_local_plugin, or POST /api/ai/plugin/local) and go live when the zip is valid and YAML-only. Always use a catalog-unique id (remint if the requested slug is taken).
 If the user asks to change settings, the sky, or graph decorations and AI Control is off, refuse and explain how to enable it (header AI toggle).
 When AI Control is on, every applied change is saved on the profile named after the current Ollama model in ~/.zoto-viz/profiles.yml.
 When Control is on, prefer a contrasting theme (not a neighbour on the picker) and a clearly different sky, motion band, or physics field (gravity, swirl, magnets, stringAmt). Tiny nudges look like a glitch; the UI eases palettes and physics, so a bold jump still lands smoothly.
-Settings: emit a fenced JSON block. You may set any profile field: theme, dream, camera (auto|off), mic (auto|off), chrome (top|left|right), mode (a view id from the HUD), redact, merge, feed (on, source traffic|transcript|both, layout ticker|bars|both, scope lan|selected|any, density 12-80, textSize 10-20, modulate), show (lan, internet, multicast, offline, labels, cpuIdle), filters (allowNames, blockNames, allowNets, blockNets), anim (sky, floor, camera, mosaic, weights, physics — partAmt/partBusy/partQuiet/partPeak/partCap, magnets per type −1…1, gravity, swirl, spring, stringAmt, chargeAmt — same keys as Settings → Motion / Camera / Audio / Graph Look / Physics), modeOptions, arcade, plugins.
+Settings: emit a fenced JSON block. You may set profile fields except camera and microphone (operator-only, Settings → Privacy): theme, dream, chrome (top|left|right), mode (a view id from the HUD), redact, merge, feed (on, source traffic|transcript|both, layout ticker|bars|both, scope lan|selected|any, density 12-80, textSize 10-20, modulate), show (lan, internet, multicast, offline, labels, cpuIdle), filters (allowNames, blockNames, allowNets, blockNets), anim (sky, floor, camera motion, mosaic, mosaicTiles, mosaicTree, mosaicMaxId, mosaicSharedTheme, weights, physics — partAmt/partBusy/partQuiet/partPeak/partCap, magnets per type −1…1, gravity, swirl, spring, stringAmt, chargeAmt — same keys as Settings → Motion / Camera / Audio / Graph Look / Physics). Never set camera or mic. To change which views sit in mosaic tiles without rearranging the grid, set anim.mosaicTiles to view ids in leaf order. If the operator turned off Settings → Agent → AI mosaic layout, mosaic / hero / mosaicTree / mosaicMaxId are ignored — mosaicTiles still apply. modeOptions, arcade, plugins.
 ```settings
 {"theme":"matrix","dream":true,"anim":{"backdrop":"aurora","skySpeed":1.4},"show":{"multicast":false}}
 ```
@@ -458,8 +458,12 @@ def compact_hud(dom: dict[str, Any], *, redact: bool = False) -> dict[str, Any]:
     return out
 
 
+_JPEG_MIN = 32
+_JPEG_MAX = 900_000
+
+
 def _parse_view(body: dict[str, Any], redact: bool) -> str:
-    """Packed HUD for the system prompt. Graph JPEGs are ignored."""
+    """Packed HUD for the system prompt. JPEG bytes stay on the user message, not here."""
     view = body.get("view")
     if not isinstance(view, dict):
         return ""
@@ -470,6 +474,29 @@ def _parse_view(body: dict[str, Any], redact: bool) -> str:
     if not packed:
         return ""
     return "\nScreen: " + json.dumps(packed, ensure_ascii=False, separators=(",", ":"))[:HUD_CAP]
+
+
+def _parse_screenshot(body: dict[str, Any]) -> str:
+    """Raw JPEG base64 from include-screen. Empty when missing, tiny, or oversized."""
+    view = body.get("view")
+    if not isinstance(view, dict):
+        return ""
+    raw = view.get("screenshot")
+    if not isinstance(raw, str):
+        return ""
+    if raw.startswith("data:image/"):
+        raw = raw.split(",", 1)[-1]
+    raw = "".join(raw.split())
+    if len(raw) < _JPEG_MIN or len(raw) >= _JPEG_MAX:
+        return ""
+    return raw
+
+
+def _attach_image(msgs: list[dict[str, Any]], b64: str) -> None:
+    for m in reversed(msgs):
+        if m.get("role") == "user":
+            m["images"] = [b64]
+            return
 
 
 def _remember_reply(user: str, reply: str, *, redact: bool, thinking: str = "") -> None:
@@ -582,12 +609,15 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
 
     user = _last_user(messages)
     view_note = _parse_view(body, redact)
+    shot = _parse_screenshot(body)
     poll = bool(body.get("poll"))
     if user and not poll:
         memory.append_message("user", user)
     ollama_msgs = _chat_messages(
-        messages, snap=snap, user=user, view_note=view_note, redact=redact, has_image=False,
+        messages, snap=snap, user=user, view_note=view_note, redact=redact, has_image=bool(shot),
     )
+    if shot:
+        _attach_image(ollama_msgs, shot)
     think_so_far, content_so_far = _last_assistant() if poll else ("", "")
     skip_first = poll and bool(think_so_far.strip()) and not content_so_far.strip()
 
@@ -595,7 +625,7 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
         "model": _model(body),
         "messages": ollama_msgs,
         "stream": True,
-        "think": True,
+        "think": False,
         "options": chat_options(_model(body)),
     }
     resp = web.StreamResponse(status=200, headers={"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"})
@@ -897,19 +927,32 @@ def draft_plugin(body: dict[str, Any]) -> dict[str, Any]:
         pz.inspect_src(tmp)
         plugins.validate_doc(yaml.safe_load((tmp / yml_name).read_text(encoding="utf-8")))
         preview = yaml.safe_load((tmp / yml_name).read_text(encoding="utf-8"))
-        pid = str(doc["id"])
+        wanted = str(doc["id"])
+        from . import plugin_local
+        pid = plugin_local.unique_id(wanted)
+        reminted_from = wanted if pid != wanted else None
+        if reminted_from:
+            doc = dict(doc)
+            doc["id"] = pid
+            tree[yml_name] = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+            (tmp / yml_name).write_text(tree[yml_name], encoding="utf-8")
+            preview = doc
         hint = (
             f"{pid} is live at plugins/src/{pid}/; "
             f"share with zoto-viz plugin pack {pid} -o dist/{pid}.zip"
         )
         if not ai_control_on() or not body.get("install"):
-            return {
+            out = {
                 "ok": True,
                 "preview": preview,
                 "installed": False,
                 "aiControl": ai_control_on(),
                 "hint": hint,
             }
+            if reminted_from:
+                out["id"] = pid
+                out["remintedFrom"] = reminted_from
+            return out
         dest = paths.plugin_src_dir() / pid
         dest.mkdir(parents=True, exist_ok=True)
         written: list[str] = []
@@ -918,7 +961,7 @@ def draft_plugin(body: dict[str, Any]) -> dict[str, Any]:
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(text, encoding="utf-8")
             written.append(str(out))
-        return {
+        info = {
             "ok": True,
             "preview": preview,
             "installed": True,
@@ -927,6 +970,9 @@ def draft_plugin(body: dict[str, Any]) -> dict[str, Any]:
             "hint": hint,
             "aiControl": True,
         }
+        if reminted_from:
+            info["remintedFrom"] = reminted_from
+        return info
     except Exception as e:
         return {"ok": False, "error": str(e)}
     finally:

@@ -1,0 +1,28 @@
+engine: graph
+base: drone-show
+options:
+  - key: form
+    label: formation
+    default: sphere
+    values:
+      - [sphere, sphere]
+      - [helix, helix]
+      - [rings, rings]
+      - [wave, wave]
+look:
+  theme: neon
+  backdrop: space
+  skyOpacity: 0.92
+  skyBright: 1.15
+  skySpeed: 0.55
+  gridShape: circle
+  gridOpacity: 0.22
+  gridBright: 0.35
+  edgeGlow: true
+  edgeGlowAmt: 1.45
+  edgeGlowSpeed: 1.15
+  audioNodes: true
+style:
+  nodeColor: heat
+  labels: top
+  flatten: false

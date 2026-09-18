@@ -25,3 +25,8 @@ class LiveMic {
 }
 
 export const liveMic = new LiveMic();
+
+/** Header / Settings mic Off is the OS master switch — pulse, watchword, and hold-to-talk. */
+export function micCaptureAllowed(policy: MicPolicy = liveMic.micPolicy): boolean {
+  return policy === "auto";
+}

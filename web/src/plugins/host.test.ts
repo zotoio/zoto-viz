@@ -16,6 +16,7 @@ describe("hash consent and TypeScript allow", () => {
   });
 
   it("toggles TypeScript plugins", () => {
+    expect(tsPluginsAllowed()).toBe(true);
     setTsPluginsAllowed(true);
     expect(tsPluginsAllowed()).toBe(true);
     setTsPluginsAllowed(false);

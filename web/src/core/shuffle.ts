@@ -1,6 +1,6 @@
 import type { PluginField, ModeOption } from "./modes";
 import type { ProfileSettings } from "./profiles";
-import { DEFAULT_DREAM, DREAM_BOUNDS, AUDIO_DRIVES, EDGE_GLOWS, FOCUS_MODES, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type MosaicSize } from "../graph/scene";
+import { DEFAULT_DREAM, DREAM_BOUNDS, AUDIO_DRIVES, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type MosaicSize } from "../graph/scene";
 import { FLOOR_SHAPES } from "../graph/floor";
 import type { BackdropKind } from "../graph/backdrop";
 import { VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
@@ -11,10 +11,10 @@ export type Rng = () => number;
 
 /** Chat line after a dice roll so the local agent takes over from the new look. */
 export const DICE_HANDOFF =
-  "Operator rolled the dice. Visual settings in the dice pool are a fresh random seed (theme, view, mosaic, chrome, feed, motion, physics, knobs) with a soft ceiling on labels, sparks, mosaic tiles, and node-count knobs so the frame stays usable. Privacy filters and prompts stay. Groups left off were not rolled. Dream cycling and AI Control follow the dice settings. Take over from this look — keep, rewrite, or surprise. Leave those ceilings unless the operator asks for more.";
+  "Operator rolled the dice. Visual settings in the dice pool are a fresh random seed (theme, view, mosaic, feed, motion, physics, knobs) with a soft ceiling on labels, sparks, mosaic tiles, and node-count knobs so the frame stays usable. Privacy filters, camera, microphone, chrome placement, and prompts stay. Groups left off were not rolled. Dream cycling and AI Control follow the dice settings. Take over from this look — keep, rewrite, or surprise. Leave those ceilings unless the operator asks for more.";
 
 export const DICE_INCLUDE_KEYS = [
-  "theme", "view", "mosaic", "chrome", "feed", "camera", "mic",
+  "theme", "view", "mosaic", "feed",
   "motion", "physics", "knobs", "show",
 ] as const;
 
@@ -26,10 +26,7 @@ export const DICE_INCLUDE_META: { key: DiceIncludeKey; label: string; hint: stri
   { key: "theme", label: "theme", hint: "colour theme" },
   { key: "view", label: "view", hint: "catalog view (Topology, Talkers, …)" },
   { key: "mosaic", label: "mosaic", hint: "tile count and hero pane" },
-  { key: "chrome", label: "chrome", hint: "header on top, left, or right" },
   { key: "feed", label: "feed", hint: "overlay on/off, layout, source, density" },
-  { key: "camera", label: "camera", hint: "live camera auto / off" },
-  { key: "mic", label: "mic", hint: "microphone auto / off" },
   { key: "motion", label: "motion", hint: "orbit, sky, floor, labels, audio, theme / sky cycles" },
   { key: "physics", label: "physics", hint: "magnets, gravity, strings, traffic sparks" },
   { key: "knobs", label: "knobs", hint: "per-view options and plugin fields (not prompts)" },
@@ -38,7 +35,11 @@ export const DICE_INCLUDE_META: { key: DiceIncludeKey; label: string; hint: stri
 
 export interface DiceConfig {
   include: DiceInclude;
-  /** Send the dice handoff chat turn after a roll (when AI cycling is on). */
+  /** Header / Settings repeat switch. When on, rolls on `periodMin`. */
+  on: boolean;
+  /** Minutes between automatic rolls while `on`. */
+  periodMin: number;
+  /** Reserved. A roll never starts a chat / think turn. */
   handoff: boolean;
   /** Turn on dream + view cycling + AI Control after a roll. */
   cycle: boolean;
@@ -50,14 +51,18 @@ export interface DiceConfig {
   nodeTop: number;
 }
 
+export const DICE_PERIOD: Bound = { min: 1, max: 60, step: 1 };
+
 export type DicePatch = Partial<Omit<DiceConfig, "include">> & { include?: Partial<DiceInclude> };
 
 export const DEFAULT_DICE: DiceConfig = {
   include: {
-    theme: true, view: true, mosaic: true, chrome: true, feed: true, camera: true, mic: true,
+    theme: true, view: true, mosaic: true, feed: true,
     motion: true, physics: true, knobs: true, show: true,
   },
-  handoff: true,
+  on: false,
+  periodMin: 5,
+  handoff: false,
   cycle: true,
   labelsMax: 48,
   sparksMax: 800,
@@ -118,7 +123,9 @@ export function normalizeDice(raw: unknown): DiceConfig {
   const mosaicMax = s.mosaicMax === "4" || s.mosaicMax === "6" || s.mosaicMax === "8" ? s.mosaicMax : DEFAULT_DICE.mosaicMax;
   return {
     include,
-    handoff: typeof s.handoff === "boolean" ? s.handoff : DEFAULT_DICE.handoff,
+    on: typeof s.on === "boolean" ? s.on : DEFAULT_DICE.on,
+    periodMin: snapStep(Number(s.periodMin), DICE_PERIOD.min, DICE_PERIOD.max, DICE_PERIOD.step, DEFAULT_DICE.periodMin),
+    handoff: false,
     cycle: typeof s.cycle === "boolean" ? s.cycle : DEFAULT_DICE.cycle,
     labelsMax: snapStep(Number(s.labelsMax), DREAM_BOUNDS.labelCount.min, DREAM_BOUNDS.labelCount.max, DREAM_BOUNDS.labelCount.step, DEFAULT_DICE.labelsMax),
     sparksMax: snapStep(Number(s.sparksMax), DREAM_BOUNDS.partCap.min, DREAM_BOUNDS.partCap.max, DREAM_BOUNDS.partCap.step, DEFAULT_DICE.sparksMax),
@@ -171,6 +178,7 @@ const ANIM_NUM_MOTION: [keyof DreamAnim, Bound][] = [
   ["gridOpacity", DREAM_BOUNDS.opacity],
   ["gridBright", DREAM_BOUNDS.bright],
   ["gridSize", DREAM_BOUNDS.gridSize],
+  ["gridFollow", DREAM_BOUNDS.gridFollow],
   ["audioSens", DREAM_BOUNDS.audioSens],
   ["camAudio", DREAM_BOUNDS.camDrive],
   ["camChange", DREAM_BOUNDS.camDrive],
@@ -239,8 +247,6 @@ export interface ShuffleCtx {
   audioDrives?: AudioDrive[];
 }
 
-const CHROME = ["top", "left", "right"] as const;
-const CAM_MIC = ["auto", "off"] as const;
 const SHOW_KEYS = ["lan", "internet", "multicast", "offline", "labels", "cpuIdle"] as const;
 
 export function snapBound(b: Bound, rnd: Rng = Math.random): number {
@@ -340,6 +346,7 @@ export function shuffleAnim(
     const drives = ctx.audioDrives?.length ? ctx.audioDrives : AUDIO_DRIVES.map((o) => o.value);
     next.audioDrive = pickOther(drives, anim.audioDrive, rnd);
     next.edgeGlow = pickOther(EDGE_GLOWS.map((o) => o.value), anim.edgeGlow, rnd);
+    next.graphFabric = pickOther(FABRIC_OPTIONS.map((o) => o.value), anim.graphFabric, rnd);
     next.focus = pickOther(FOCUS_MODES.map((o) => o.value), anim.focus, rnd);
     next.themeCycle = pickOther(THEME_CYCLES.map((o) => o.value), anim.themeCycle, rnd);
     next.skyCycle = pickOther(SKY_CYCLES.map((o) => o.value), anim.skyCycle, rnd);
@@ -351,7 +358,17 @@ export function shuffleAnim(
   if (cfg.include.mosaic) {
     next.mosaic = pickOther(diceMosaic(cfg), anim.mosaic, rnd);
     next.hero = pickOther(HERO_POS.map((o) => o.value), anim.hero, rnd);
+    next.mosaicTree = null;
+    next.mosaicMaxId = "";
+    next.mosaicTiles = [];
+  } else {
+    next.mosaic = anim.mosaic;
+    next.hero = anim.hero;
+    next.mosaicTree = anim.mosaicTree ?? null;
+    next.mosaicMaxId = anim.mosaicMaxId ?? "";
+    next.mosaicTiles = anim.mosaicTiles ?? [];
   }
+  next.mosaicSharedTheme = !!anim.mosaicSharedTheme;
   return next;
 }
 
@@ -364,6 +381,7 @@ function shuffleFeed(feed: FeedConfig, rnd: Rng, cfg: DiceConfig): FeedConfig {
     density: snapBound(diceFeedBound(cfg), rnd),
     textSize: snapBound({ min: 10, max: 20, step: 1 }, rnd),
     modulate: rnd() < 0.5,
+    includeSources: feed.includeSources,
   };
 }
 
@@ -372,9 +390,20 @@ function diceOf(s: ProfileSettings): DiceConfig {
 }
 
 /**
- * Random theme, catalog view, mosaic, chrome, feed, camera, every view's knobs, motion, and physics.
- * Leaves privacy filters, prompts, agent decorations, and the dice config itself.
+ * Random theme, catalog view, mosaic, feed, every view's knobs, motion, and physics.
+ * Leaves chrome, camera, microphone, privacy filters, prompts, agent decorations, and the dice config itself.
  */
+/** Plugin skies hide the graph. The header die always asks for a new view. */
+export function diceLookForRoll(
+  cfg: DiceConfig,
+  current: { pinSky?: boolean; stageOnly?: boolean; forceView?: boolean } = {},
+): DiceConfig {
+  if (cfg.include.view || current.forceView || current.pinSky || current.stageOnly) {
+    return cfg.include.view ? cfg : { ...cfg, include: { ...cfg.include, view: true } };
+  }
+  return cfg;
+}
+
 export function shuffleLook(s: ProfileSettings, ctx: ShuffleCtx, rnd: Rng = Math.random): ProfileSettings {
   const cfg = diceOf(s);
   const on = cfg.include;
@@ -403,9 +432,9 @@ export function shuffleLook(s: ProfileSettings, ctx: ShuffleCtx, rnd: Rng = Math
     modeOptions,
     plugins,
     anim: animOn ? shuffleAnim(s.anim, ctx, rnd, cfg) : s.anim,
-    chrome: on.chrome ? pickOther(CHROME, s.chrome, rnd) : s.chrome,
-    camera: on.camera ? pickOther(CAM_MIC, s.camera, rnd) : s.camera,
-    mic: on.mic ? pickOther(CAM_MIC, s.mic, rnd) : s.mic,
+    chrome: s.chrome,
+    camera: s.camera,
+    mic: s.mic,
     merge,
     show,
     feed: on.feed ? shuffleFeed(s.feed ?? DEFAULT_FEED, rnd, cfg) : s.feed,

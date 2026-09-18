@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ColorField, group, pinFlyout, Select, Slider, TextField, Toggle, unpinFlyout } from "./ui";
+import { ColorField, GroupedChips, group, morphCopy, mountDiceSplit, pinFlyout, Select, Slider, TextField, Toggle, unpinFlyout } from "./ui";
 
 describe("Select", () => {
   it("creates a labelled control and opens", () => {
@@ -11,6 +11,29 @@ describe("Select", () => {
     expect(s.isOpen).toBe(true);
     s.close();
     expect(s.isOpen).toBe(false);
+  });
+
+  it("groups options and filters by label", () => {
+    const s = new Select({
+      caption: "view",
+      filterable: true,
+      options: [
+        { value: "topo", label: "Topology", group: "graph" },
+        { value: "kefrens", label: "Kefrens Bars", group: "demo" },
+        { value: "pong", label: "Pong", group: "arcade" },
+      ],
+    });
+    s.open();
+    expect(s.el.querySelector(".menu-group")?.textContent).toBe("graph");
+    expect([...s.el.querySelectorAll(".menu-group")].map((el) => el.textContent)).toEqual(["graph", "demo", "arcade"]);
+    const input = s.el.querySelector<HTMLInputElement>(".menu-filter-input");
+    expect(input).toBeTruthy();
+    input!.value = "kef";
+    input!.dispatchEvent(new Event("input", { bubbles: true }));
+    const opts = [...s.el.querySelectorAll("li[role='option']")].map((el) => el.textContent);
+    expect(opts.some((t) => t?.includes("Kefrens"))).toBe(true);
+    expect(opts.some((t) => t?.includes("Topology"))).toBe(false);
+    s.close();
   });
 });
 
@@ -39,7 +62,19 @@ describe("controls", () => {
     expect(t.disabled).toBe(true);
 
     const g = group("row", t, sl);
-    expect(g.querySelector(".cap")?.textContent).toBe("row");
+    const chips = new GroupedChips({
+      label: "sky",
+      groups: [{ id: "all", label: "all" }, { id: "nature", label: "nature" }],
+      value: "aurora",
+      options: [
+        { value: "aurora", label: "aurora", hint: "polar", group: "nature" },
+        { value: "matrix", label: "matrix", hint: "code", group: "digital" },
+      ],
+    });
+    expect(chips.value).toBe("aurora");
+    chips.set("matrix");
+    expect(chips.value).toBe("matrix");
+    expect(chips.el.querySelector(".chip-search")).toBeTruthy();
 
     const fly = document.createElement("div");
     const home = document.createElement("div");
@@ -50,5 +85,39 @@ describe("controls", () => {
     expect(fly.classList.contains("flyout")).toBe(true);
     unpinFlyout(fly, home);
     expect(fly.classList.contains("flyout")).toBe(false);
+  });
+
+  it("puts a roll icon on the right that does not flip the dice switch", () => {
+    let toggles = 0;
+    let rolls = 0;
+    const t = new Toggle({ label: "dice", checked: false, onChange: () => { toggles += 1; } });
+    const box = document.createElement("span");
+    box.id = "diceBox";
+    document.body.append(box);
+    const btn = mountDiceSplit(box, t, () => { rolls += 1; });
+    expect(box.classList.contains("dice-split")).toBe(true);
+    expect(btn.getAttribute("aria-label")).toBe("roll now");
+    expect(btn.querySelector("svg")).toBeTruthy();
+    expect(box.lastElementChild).toBe(btn);
+    btn.click();
+    expect(rolls).toBe(1);
+    expect(toggles).toBe(0);
+    expect(t.checked).toBe(false);
+    t.el.click();
+    expect(rolls).toBe(1);
+    expect(toggles).toBe(1);
+    expect(t.checked).toBe(true);
+    box.remove();
+  });
+
+  it("morphs copy instead of snapping the text", async () => {
+    const el = document.createElement("div");
+    el.textContent = "a";
+    morphCopy(el, "b", 40);
+    expect(el.classList.contains("morphing")).toBe(true);
+    expect(el.textContent).toBe("a");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(el.textContent).toBe("b");
+    expect(el.classList.contains("morphing")).toBe(false);
   });
 });

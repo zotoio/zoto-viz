@@ -1,4 +1,5 @@
 import type { Device, StateMsg } from "../core/types";
+import { sourceHeadlines } from "../core/sources";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
 
 /** Target frame budget for viz plugin work (60 fps). */
@@ -11,6 +12,7 @@ export const VIZ_DEFAULT_MAX_PARTICLES = 4096;
 export const VIZ_MAX_PACKET_SAMPLES = 32;
 export const VIZ_MAX_RF_SAMPLES = 24;
 export const VIZ_MAX_TALKER_SAMPLES = 24;
+export const VIZ_MAX_HEADLINE_SAMPLES = 8;
 
 /** Fixed std140 UBO layout — locked in schema `$defs/vizUboLayout`. */
 export const VIZ_UBO = {
@@ -27,13 +29,12 @@ export const VIZ_UBO = {
 } as const;
 
 /**
- * GLSL preamble for the fixed std140 block. The host binds this at
- * `binding` 0 as `zotoVizSlots` (vec4[128]); slot `s` float `f` is
- * `zotoVizSlots[s * 16 + f / 4][f % 4]`.
+ * Portable GLSL for the host slot mirror. A `layout(std140, binding=N)` UBO is
+ * rejected on many WebGL2 drivers (`binding` is not a valid qualifier there),
+ * so the host injects a plain vec4 array that Three.js can set from the same
+ * 512-float buffer. Slot `s` float `f` is `zotoVizSlots[s * 16 + f / 4][f % 4]`.
  */
-export const VIZ_UBO_GLSL = `layout(std140, binding = ${VIZ_UBO.binding}) uniform ${VIZ_UBO.block} {
-  vec4 ${VIZ_UBO.threeUniform}[${VIZ_UBO.totalVec4s}];
-};`;
+export const VIZ_UBO_GLSL = `uniform vec4 ${VIZ_UBO.threeUniform}[${VIZ_UBO.totalVec4s}];`;
 
 export type VizSkyUniform = (typeof PLUGIN_SKY_UNIFORMS)[number];
 
@@ -65,6 +66,14 @@ export interface VizTalkerSample {
   role: string;
 }
 
+export interface VizHeadline {
+  id: string;
+  label: string;
+  text: string;
+  kind?: string;
+  summary?: string;
+}
+
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */
 export interface VizDataFrame {
   t: number;
@@ -73,6 +82,7 @@ export interface VizDataFrame {
   packets: VizPacketSample[];
   rf: VizRfBeacon[];
   talkers: VizTalkerSample[];
+  headlines: VizHeadline[];
 }
 
 export type VizUniformValue = number | [number, number, number];
@@ -253,6 +263,13 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFr
     packets: packetSamples(state, VIZ_MAX_PACKET_SAMPLES),
     rf: rfBeacons(state, VIZ_MAX_RF_SAMPLES),
     talkers: topTalkers(state.devices, VIZ_MAX_TALKER_SAMPLES),
+    headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES).map((h) => ({
+      id: h.id,
+      label: h.label,
+      text: h.text.slice(0, 160),
+      kind: h.kind,
+      summary: h.summary,
+    })),
   };
 }
 

@@ -376,7 +376,51 @@ export const THEMES: Theme[] = [
     roles: { self: 0x1e6fd9, gateway: 0xd9480f, lan: 0x2f9e44, local: 0x0c8599, internet: 0x7048e8, multicast: 0x868e96 },
     scene: { lanEdge: 0x1565c0, wanEdge: 0x5e35b1, rim: 0x1e6fd9 },
   }),
+  make({
+    id: "dusk", label: "Dusk", hint: "warm horizon, violet night",
+    bg: "#1a1018", fg: "#f3e4ea", muted: "#a88896", line: "#3a2432", accent: "#ff7a59", warn: "#ffd27a", link: "#ff9b7a",
+    roles: { self: 0xff7a59, gateway: 0xffb347, lan: 0xc084fc, local: 0xf472b6, internet: 0x818cf8, multicast: 0x7a6570 },
+    scene: { lanEdge: 0xff7a59, wanEdge: 0xc084fc, rim: 0xff5e3a },
+  }),
+  make({
+    id: "void", label: "Void", hint: "near-black, silver ink",
+    bg: "#07080b", fg: "#e8eaef", muted: "#7c8294", line: "#1a1d26", accent: "#c5c9d6", warn: "#e8b86d", link: "#d4d8e4",
+    roles: { self: 0xc5c9d6, gateway: 0xe8b86d, lan: 0x8fd4c1, local: 0x9bb0d4, internet: 0xc4a3e0, multicast: 0x5c6170 },
+    scene: { lanEdge: 0xa8b0c4, wanEdge: 0xc4a3e0, rim: 0x6b7288, lanParticle: 0xdce1ee, wanParticle: 0xe6d4f5 },
+  }),
+  make({
+    id: "vhs", label: "VHS", hint: "magenta / cyan tracking",
+    bg: "#120814", fg: "#f4e8ff", muted: "#9a82a8", line: "#2e1836", accent: "#ff4ad8", warn: "#5df2ff", link: "#7af0ff",
+    roles: { self: 0x5df2ff, gateway: 0xff4ad8, lan: 0x7cff6b, local: 0x7af0ff, internet: 0xff79c6, multicast: 0x6b5a78 },
+    scene: { lanEdge: 0x5df2ff, wanEdge: 0xff4ad8, rim: 0xff2bd6 },
+  }),
+  make({
+    id: "acid", label: "Acid", hint: "lime and magenta wash",
+    bg: "#0c1006", fg: "#f4ffe8", muted: "#8aa06a", line: "#243018", accent: "#c8ff00", warn: "#ff2bd6", link: "#d4ff4a",
+    roles: { self: 0xc8ff00, gateway: 0xff2bd6, lan: 0x7dff4a, local: 0xeaff6b, internet: 0xff59d6, multicast: 0x667055 },
+    scene: { lanEdge: 0xc8ff00, wanEdge: 0xff2bd6, rim: 0xa0e000 },
+  }),
+  make({
+    id: "ice", label: "Ice", hint: "pale cyan on slate",
+    bg: "#0b141c", fg: "#e8f4fa", muted: "#7e9aab", line: "#1c2c38", accent: "#7ee0ff", warn: "#ffd27a", link: "#a8ecff",
+    roles: { self: 0x7ee0ff, gateway: 0xf4a261, lan: 0x80ed99, local: 0x48cae4, internet: 0xb8a0ff, multicast: 0x5c7380 },
+    scene: { lanEdge: 0x7ee0ff, wanEdge: 0xb8a0ff, rim: 0x4cc9f0 },
+  }),
+  make({
+    id: "phosphor", label: "Phosphor", hint: "P1 CRT green",
+    bg: "#050806", fg: "#d4f5c8", muted: "#6e8f62", line: "#152018", accent: "#5cff4a", warn: "#ffe08a", link: "#9cff7a",
+    roles: { self: 0x5cff4a, gateway: 0xffe08a, lan: 0x6dbf4c, local: 0xc6f06a, internet: 0x4aa3a0, multicast: 0x4a5c46 },
+    scene: { lanEdge: 0x5cff4a, wanEdge: 0xffe08a, rim: 0x2d6b28, tether: 0x1a281c, lanParticle: 0xb8ff9a, wanParticle: 0xffe8a0 },
+  }),
 ];
+
+/** Scene palettes sit in their own picker group so dark/light stay scannable. */
+const SCENE_THEME_IDS = new Set(["dusk", "void", "vhs", "acid", "ice", "phosphor"]);
+
+export function themePickerGroup(t: Pick<Theme, "id" | "dark">): "dark" | "light" | "scene" {
+  if (SCENE_THEME_IDS.has(t.id)) return "scene";
+  return t.dark ? "dark" : "light";
+}
 
 export const DEFAULT_THEME = THEMES[0];
 

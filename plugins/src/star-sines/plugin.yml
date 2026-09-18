@@ -1,0 +1,20 @@
+id: star-sines
+name: Star Sines
+version: 2
+hint: Sine-scroll starfield. Hidden faces fade in from the dust, then recede. A faceless slender figure lurks on the floor; a glitch can glow a pareidolia face, then fade.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 16
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts

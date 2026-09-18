@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
-  loadPluginConfig, lookForMode, mergeLook, parsePluginId, pluginHasFrontend, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginViewId, shippedModeIds, specCaption,
+  loadPluginConfig, lookForMode, mergeLook, parsePluginId, pluginHasFrontend, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, shippedModeIds, specCaption,
   viewSelectOptions, writePluginConfig, type PluginView,
 } from "./plugin";
 import { pluginViewKnobs, toPluginView, VIEW_PROMPT_KEY } from "./plugin-visualisation";
@@ -53,9 +53,11 @@ describe("plugin ids and look", () => {
     expect(shippedModeIds().has("topology")).toBe(true);
     expect(shippedModeIds().has("doom")).toBe(true);
     expect(shippedModeIds().has("wifi")).toBe(true);
+    expect(shippedModeIds().has("sources")).toBe(true);
     expect(mergeLook(DEFAULT_DREAM, null).backdrop).toBe(DEFAULT_DREAM.backdrop);
     expect(mergeLook(DEFAULT_DREAM, { backdrop: "matrix" }).backdrop).toBe("matrix");
     expect(mergeLook(DEFAULT_DREAM, { backdrop: "plugin" }).backdrop).toBe("plugin");
+    expect(mergeLook(DEFAULT_DREAM, { graphFabric: "cloth" }).graphFabric).toBe("cloth");
     expect(lookForMode("missing")).toBeUndefined();
   });
 });
@@ -117,6 +119,13 @@ describe("compilePlugin", () => {
     expect(mode.shellRadius?.(lan, { self: 1, gateway: 2, lan: 3, local: 4, internet: 5, multicast: 6 })).toBe(40);
   });
 
+  it("pins fabric mesh style onto the compiled graph mode", () => {
+    const mode = compilePlugin(spec({ id: "cloth", style: { fabric: "cloth" } }));
+    expect(mode.fabric).toBe("cloth");
+    const off = compilePlugin(spec({ id: "plain", style: { flatten: true } }));
+    expect(off.fabric).toBeUndefined();
+  });
+
   it("honours label and colour variants", () => {
     const styles = ["kind", "heat", "proto", "hash"] as const;
     for (const nodeColor of styles) {
@@ -146,9 +155,30 @@ describe("compilePlugin", () => {
     const arcade = compilePlugin({ id: "pong", name: "Pong", version: 1, engine: "netpong" });
     expect(arcade.standalone).toBe(true);
     expect(arcade.arcadeId).toBe("netpong");
+    expect(arcade.kind).toBe("arcade");
+    const storm = compilePlugin({
+      id: "storm", name: "Storm", version: 1, engine: "graph", base: "talkers",
+      capabilities: ["viz.read", "viz.write"], look: { backdrop: "plugin" },
+    });
+    expect(storm.kind).toBe("demo");
+    expect(storm.stageOnly).toBe(true);
+    expect(pluginStageOnly({
+      engine: "graph", capabilities: ["viz.read"], look: { backdrop: "plugin" },
+    })).toBe(true);
+    expect(pluginStageOnly({
+      engine: "graph", look: { backdrop: "none" },
+    })).toBe(false);
+    expect(pluginStageOnly({
+      engine: "graph", capabilities: ["viz.write"], look: { backdrop: "plugin", stageOnly: false },
+    })).toBe(false);
+    expect(compilePlugin(toPluginView({
+      id: "heat", name: "Heat", version: 1, engine: "graph", base: "talkers",
+      look: { backdrop: "none" },
+    })).stageOnly).toBe(false);
     expect(specCaption({ id: "air", name: "Air SSIDs", version: 1, engine: "graph", base: "wifi" })).toBe("AIR SSIDs");
     expect(specCaption({ id: "bt", name: "Air Bluetooth", version: 1, engine: "graph", base: "bluetooth" })).toBe("BT Bluetooth");
     expect(specCaption({ id: "cores", name: "CPU cores", version: 1, engine: "graph", base: "cores" })).toBe("CPU cores");
+    expect(specCaption({ id: "source-web", name: "Source web", version: 1, engine: "graph", base: "sources" })).toBe("SRC Source web");
     expect(specCaption({ id: "pong", name: "Pong", version: 1, engine: "netpong" })).toBe("NET Pong");
     expect(specCaption({ id: "doom", name: "Doom", version: 1, engine: "doom" })).toBe("CPU Doom");
     applyPluginCatalog([spec({ id: "topology", name: "Topology" })]);
@@ -210,11 +240,21 @@ describe("compilePlugin", () => {
     let body = "";
     globalThis.fetch = (async (_url: string, init?: RequestInit) => {
       body = String(init?.body || "");
-      return { ok: true, headers: { get: () => null }, json: async () => ({ ok: true }) } as unknown as Response;
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => ({ ok: true }),
+        clone: () => ({ json: async () => ({}) }),
+      } as unknown as Response;
     }) as typeof fetch;
     await grantPluginConsent("pulse-ts", "reviewed");
     expect(body).toMatch(/reviewed/);
-    globalThis.fetch = (async () => ({ ok: false, status: 403, headers: { get: () => null } }) as unknown as Response) as typeof fetch;
+    globalThis.fetch = (async () => ({
+      ok: false,
+      status: 403,
+      headers: { get: () => null },
+      clone: () => ({ json: async () => ({ error: "consent" }) }),
+    }) as unknown as Response) as typeof fetch;
     await expect(grantPluginConsent("pulse-ts", "authored")).rejects.toThrow(/consent/);
     globalThis.fetch = orig;
   });
@@ -229,7 +269,7 @@ describe("visualisation.yml", () => {
       visualisation: {
         engine: "graph",
         base: "talkers",
-        look: { backdrop: "plugin", theme: "ember" },
+        look: { backdrop: "plugin", theme: "ember", stageOnly: true },
         style: { nodeColor: "heat", nodeScale: "rate", labels: "top" },
         layout: { lanShell: 220, internetShell: 640 },
         options: {
@@ -243,6 +283,7 @@ describe("visualisation.yml", () => {
     expect(spec.engine).toBe("graph");
     expect(spec.base).toBe("talkers");
     expect(spec.look?.backdrop).toBe("plugin");
+    expect(spec.look?.stageOnly).toBe(true);
     expect(spec.style?.nodeColor).toBe("heat");
     expect(spec.layout?.lanShell).toBe(220);
     expect(spec.options?.[0]?.key).toBe("rank");
@@ -253,6 +294,24 @@ describe("visualisation.yml", () => {
     expect(mode.graphBase).toBe("talkers");
     expect(mode.label).toBe("LAN heat");
     expect(mode.standalone).toBe(false);
+    expect(mode.stageOnly).toBe(true);
+  });
+
+  it("parses fabric style and look pins", () => {
+    const spec = toPluginView({
+      id: "cloth",
+      name: "Cloth",
+      version: 1,
+      visualisation: {
+        engine: "graph",
+        base: "topology",
+        style: { fabric: "tubes" },
+        look: { graphFabric: "ribbon" },
+      },
+    });
+    expect(spec.style?.fabric).toBe("tubes");
+    expect(spec.look?.graphFabric).toBe("ribbon");
+    expect(compilePlugin(spec).fabric).toBe("tubes");
   });
 
   it("still loads a plugin with no visualisation.yml", () => {
@@ -280,6 +339,12 @@ describe("visualisation.yml", () => {
     expect(mode.id).toBe("plugin:topology");
     expect(mode.graphBase).toBe("topology");
     expect(mode.standalone).toBe(false);
+    const src = compilePlugin(toPluginView({
+      id: "source-web", name: "Source web", version: 1, engine: "graph", base: "sources",
+    }));
+    expect(src.graphBase).toBe("sources");
+    expect(src.kind).toBe("graph");
+    expect(src.stageOnly).toBe(false);
     expect(mode.pluginId).toBe("topology");
   });
 

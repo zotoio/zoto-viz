@@ -4,6 +4,8 @@
  * still follows packet energy so dream mode has something to react to.
  */
 
+import { askUserMedia } from "../ui/media-ask";
+
 export class AudioPulse {
   level = 0;
   bass = 0;
@@ -22,7 +24,8 @@ export class AudioPulse {
     if (!navigator.mediaDevices?.getUserMedia) return;
     this.starting = true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await askUserMedia({ audio: true, video: false }, "pulse microphone");
+      if (!stream) return;
       if (!this.wanted) {
         for (const t of stream.getTracks()) t.stop();
         return;

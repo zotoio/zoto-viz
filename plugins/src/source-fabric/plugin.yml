@@ -1,0 +1,5 @@
+id: source-fabric
+name: Source cloth
+version: 1
+hint: Host RSS, HTTP JSON, and file lines woven as a tubular mesh — not the LAN.
+description: Wraps the sources graph. Feed hubs, headlines, JSON leaves, and file lines become fabric knots and tubes with the same highlight logic as the sphere graph.

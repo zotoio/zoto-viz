@@ -27,18 +27,18 @@ Canonical schema: `schema/plugin.schema.json` → `$defs/vizContract` and
 
 `viz.read` / `viz.write` are **separate** from `graph.read` monitor plugins.
 
-### Fixed UBO layout (`ZotoVizData` @ binding 0, std140)
+### Fixed slot layout (`zotoVizSlots`)
 
 | Field | Value |
 | --- | --- |
-| Block | `ZotoVizData` |
-| Binding | `0` |
-| Host uniform | `zotoVizSlots` (`vec4[128]`) |
+| Logical block | `ZotoVizData` (schema id) |
+| Host uniform | `uniform vec4 zotoVizSlots[128]` |
 | Slots | 8 × 64 floats (16 vec4 each) |
 
 Slot `s`, float `f` → `zotoVizSlots[s * 16 + f / 4][f % 4]`. The host
-prepends this block to every plugin `sky/fragment.glsl` and copies
-`writeBuffer` data into the shared UBO mirror without per-frame allocation.
+prepends a **plain** `vec4` array (not `layout(std140, binding=N)`) because
+WebGL2 often rejects the `binding` qualifier and the plugin sky then draws
+nothing. `writeBuffer` still fills the same 512-float mirror.
 
 Capabilities `viz.read` and `viz.write` are validated at catalog scan time.
 Unknown capabilities still fail closed.
@@ -55,6 +55,7 @@ Each frame the host sends a **decimated** `VizDataFrame` (see
 | `packets[]` | flow proto tallies | 32 |
 | `rf[]` | Wi-Fi watch SSIDs + RSSI | 24 |
 | `talkers[]` | top devices by packet rate | 24 |
+| `headlines[]` | host sources: RSS titles + `summary` blurbs, HTTP JSON strings, file lines (`kind`) | 8 |
 
 Plugins must **not** request or traverse the full device graph. Use
 `graph.read` only when you need the legacy `{id, rate, role}` tick.
@@ -101,9 +102,18 @@ budget.
 | `plugins/src/packet-tunnel/` | packet-field tunnel raymarch |
 | `plugins/src/rf-constellation/` | RF / SSID constellation bloom |
 | `plugins/src/talker-storm/` | talker particle storm (512 cap) |
+| `plugins/src/kefrens-bars/` | Amiga copper / Kefrens bars from talker rates |
+| `plugins/src/roto-proto/` | classic rotozoomer driven by protocol mix |
+| `plugins/src/blob-mesh/` | 90s metaballs from top talkers |
+| `plugins/src/star-sines/` | 3D sine-scroll starfield; pareidolia faces morph from the lanes |
+| `plugins/src/hn-rain/` | phosphor rain of Hacker News headlines |
+| `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
+| `plugins/src/stereo-gram/` | Magic Eye autostereogram — hidden torus + talker orbs |
 
 Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
-with `backdrop: plugin`.
+with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,
+legend) for every demo pack — `viz.read` / `viz.write`, `backdrop: plugin`,
+or a sky shader. Set `look.stageOnly: false` only when the graph should stay.
 
 ## Tests
 

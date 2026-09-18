@@ -24,8 +24,6 @@ HIGHLIGHT_MAX = 40
 INJECT_CHARS = 900
 CONTENT_MAX = 8000
 HIGHLIGHT_LINE = 160
-ROLL_PROMPT = "Session brief (same conversation; continue, do not greet as new):"
-
 _LOCK = threading.Lock()
 
 _IP = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
@@ -177,13 +175,9 @@ def ollama_tail() -> list[dict[str, str]]:
         rows = data.get("messages") if isinstance(data.get("messages"), list) else []
         rolls = _rolls_of(data)
         through = _through(rows, rolls)
-        summary = str(rolls[-1].get("summary") or "").strip() if rolls else ""
     live = [m for m in rows[through:] if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
     live = live[-OLLAMA_TAIL:]
     out: list[dict[str, str]] = []
-    if summary:
-        out.append({"role": "user", "content": ROLL_PROMPT})
-        out.append({"role": "assistant", "content": summary[:ROLL_SUMMARY_CAP]})
     for i, m in enumerate(live):
         cap = OLLAMA_LAST_CAP if i == len(live) - 1 else OLLAMA_MSG_CAP
         out.append({"role": str(m["role"]), "content": str(m.get("content") or "")[:cap]})
@@ -198,7 +192,7 @@ def maybe_roll(
     redact: bool = False,
     force: bool = False,
 ) -> dict[str, Any] | None:
-    """Fold older turns into a brief and start a fresh Ollama window. UI transcript is unchanged."""
+    """Close the live Ollama window and start a new session. Memories stay; UI transcript is unchanged."""
     keep = max(1, min(int(keep), OLLAMA_TAIL))
     with _LOCK:
         path = conversation_file()
@@ -218,10 +212,13 @@ def maybe_roll(
             compact = live[:-keep]
         if not compact:
             return None
-        summary = abbreviate(compact, redact=redact)
-        if not summary.strip():
-            return None
-        roll = {"t": time.time(), "summary": summary, "through": through + len(compact)}
+        _ = redact
+        roll = {
+            "t": time.time(),
+            "summary": "",
+            "through": through + len(compact),
+            "new_session": True,
+        }
         rolls.append(roll)
         data["rolls"] = rolls[-20:]
         data["messages"] = rows

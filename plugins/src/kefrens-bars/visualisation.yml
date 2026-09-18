@@ -1,0 +1,8 @@
+engine: graph
+base: talkers
+look:
+  theme: dusk
+  backdrop: plugin
+  skyOpacity: 0.98
+  skyBright: 1.25
+  gridOpacity: 0.08

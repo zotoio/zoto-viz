@@ -1,0 +1,20 @@
+id: stereo-gram
+name: 3D Stereogram
+version: 1
+hint: Magic Eye wallpaper — cross your eyes on the two dots; talkers are hidden 3D orbs.
+description: Stage-only autostereogram. A repeating 90s tile encodes a torus and LAN talker blobs as stereo depth. Two fuse dots sit at the far-plane separation.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 32
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts

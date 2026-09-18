@@ -1,0 +1,8 @@
+engine: graph
+base: talkers
+look:
+  theme: ice
+  backdrop: plugin
+  skyOpacity: 0.96
+  skyBright: 1.18
+  gridOpacity: 0.07

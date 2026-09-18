@@ -13,8 +13,11 @@ import {
   type VizDataFrame,
   type VizFrameBudgetStats,
   type VizPluginContract,
-  type VizUniformValue,
 } from "./viz-host";
+import { runPackFrameHandler, type VizPackHandlers } from "./viz-pack-host";
+
+export { runPackFrameHandler };
+export type DogfoodHostHandlers = VizPackHandlers;
 
 /** Shipped viz contracts — mirrors plugins/src pack plugin.yml viz blocks. */
 export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
@@ -39,13 +42,56 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxParticles: 512,
     uniforms: ["uTime", "uBright", "uAudio"],
   })!,
+  "kefrens-bars": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 32,
+    maxParticles: 0,
+    uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+  })!,
+  "roto-proto": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 8,
+    maxParticles: 0,
+    uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+  })!,
+  "blob-mesh": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 32,
+    maxParticles: 0,
+    uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+  })!,
+  "star-sines": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 16,
+    maxParticles: 0,
+    uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+  })!,
+  "hn-rain": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 64,
+    maxParticles: 0,
+    uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+  })!,
+  "hn-term": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 64,
+    maxParticles: 0,
+    uniforms: ["uTime", "uAudio", "uAccent", "uBg"],
+  })!,
+  "stereo-gram": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 32,
+    maxParticles: 0,
+    uniforms: ["uTime", "uAudio", "uAccent", "uBg"],
+  })!,
 };
-
-export interface DogfoodHostHandlers {
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: VizUniformValue) => void;
-  writeParticles: (data: number[], stride?: number) => void;
-}
 
 export interface DogfoodTickResult {
   delivered: boolean;
@@ -72,70 +118,6 @@ export interface DogfoodSoakResult {
   framesPerPack: number;
   packs: DogfoodPackStats[];
   allWithinBudgetOrHonestSkips: boolean;
-}
-
-function tunnelHue(field: number): [number, number, number] {
-  return [0.15 + field * 0.7, 0.35 + field * 0.4, 0.85 - field * 0.3];
-}
-
-function roleHue(role: string): number {
-  if (role === "gateway") return 0.9;
-  if (role === "internet") return 0.75;
-  if (role === "lan") return 0.45;
-  return 0.2;
-}
-
-/** Host-side mirror of pack frontend onFrame handlers (no iframe). */
-export function runPackFrameHandler(
-  packId: VizDemoPackId,
-  frame: VizDataFrame,
-  handlers: DogfoodHostHandlers,
-): void {
-  switch (packId) {
-    case "packet-tunnel": {
-      const lead = frame.packets[0]?.field ?? 0;
-      const depth = frame.packets.reduce((s, p) => s + p.field, 0) / Math.max(1, frame.packets.length);
-      handlers.writeBuffer(0, [lead, depth, frame.t % 1]);
-      handlers.writeUniform("uBright", 0.55 + depth * 0.35);
-      handlers.writeUniform("uAccent", tunnelHue(lead));
-      break;
-    }
-    case "rf-constellation": {
-      const beacons = frame.rf;
-      const buf: number[] = [];
-      for (let i = 0; i < Math.min(8, beacons.length); i++) {
-        const b = beacons[i]!;
-        buf.push(b.rssi, b.channel / 165, i / 8);
-      }
-      handlers.writeBuffer(0, buf);
-      const avg = beacons.reduce((s, b) => s + b.rssi, 0) / Math.max(1, beacons.length);
-      handlers.writeUniform("uAudio", Math.min(1, frame.audio + avg * 0.25));
-      handlers.writeUniform("uAccent", [0.2 + avg * 0.6, 0.45, 0.95 - avg * 0.3]);
-      handlers.writeUniform("uOpacity", 0.65 + avg * 0.25);
-      break;
-    }
-    case "talker-storm": {
-      const particles: number[] = [];
-      let count = 0;
-      for (const talker of frame.talkers) {
-        const n = Math.min(8, Math.ceil(talker.rate / 40));
-        for (let i = 0; i < n && count < 512; i++, count++) {
-          const hash = (talker.id.charCodeAt(0) + i * 17) % 97;
-          particles.push(
-            (hash / 97) * 2 - 1,
-            roleHue(talker.role),
-            (frame.t % 1) + i * 0.01,
-            Math.min(1, talker.rate / 200),
-          );
-        }
-      }
-      handlers.writeParticles(particles, 4);
-      handlers.writeBuffer(0, [count, frame.audio, frame.t % 1]);
-      handlers.writeUniform("uBright", 0.4 + frame.audio * 0.5);
-      handlers.writeUniform("uAudio", frame.audio);
-      break;
-    }
-  }
 }
 
 export function percentile(samples: number[], p: number): number {

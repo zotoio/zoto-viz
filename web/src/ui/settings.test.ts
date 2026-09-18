@@ -33,11 +33,15 @@ describe("Settings panes", () => {
     expect(labels).toContain("Graph");
     expect(labels).toContain("Physics");
     expect(labels).toContain("Dice");
+    expect(labels).toContain("Sources");
     const dicePane = s.el.querySelector('[data-pane="dice"]');
+    expect(dicePane?.textContent).toMatch(/Repeat/);
+    expect(dicePane?.textContent).toMatch(/every/);
+    expect(dicePane?.textContent).toMatch(/min/);
     expect(dicePane?.textContent).toMatch(/Randomiser/);
     expect(dicePane?.textContent).toMatch(/theme/);
     expect(dicePane?.textContent).toMatch(/Soft ceilings/);
-    expect(dicePane?.textContent).toMatch(/hand back to AI/);
+    expect(dicePane?.textContent).toMatch(/does not start a chat/);
     const net = document.createElement("div");
     net.dataset.k = "net";
     const sys = document.createElement("div");
@@ -53,6 +57,9 @@ describe("Settings panes", () => {
     const privacy = s.privacyHost;
     expect(privacy.textContent).toContain("Network detail");
     expect(privacy.textContent).toContain("Allow host patterns");
+    expect(privacy.textContent).toContain("Devices");
+    expect(privacy.textContent).toMatch(/AI and dice cannot/);
+    expect(dicePane?.textContent).toMatch(/camera, microphone/);
     s.bindView(null);
     const pluginPane = s.el.querySelector('[data-pane="view"]');
     expect(pluginPane?.textContent).toMatch(/The cog next to the view menu opens this tab/);

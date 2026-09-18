@@ -1,0 +1,8 @@
+id: source-web
+name: Source web
+version: 1
+hint: Host RSS, HTTP JSON, and local files as a graph — not the LAN. Filter by kind in this-view settings.
+description: Wraps the sources graph engine. Each registry row is a hub; RSS titles, JSON leaves, and file lines become nodes. Use kind=rss|http|file to isolate one ingest path.
+datasource:
+  consumes:
+    - sources

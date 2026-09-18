@@ -379,6 +379,14 @@ def test_last_user_and_chat_messages(tmp_path, monkeypatch) -> None:
     assert packed["hide"] == "inet,mc"
     assert "10.0.0.1" not in packed["st"]
     assert agent._parse_view({"view": {"screenshot": "short"}}, False) == ""
+    assert agent._parse_screenshot({}) == ""
+    assert agent._parse_screenshot({"view": {"screenshot": "short"}}) == ""
+    long_shot = "A" * 40
+    assert agent._parse_screenshot({"view": {"screenshot": "data:image/jpeg;base64," + long_shot}}) == long_shot
+    assert agent._parse_screenshot({"view": {"screenshot": long_shot}}) == long_shot
+    with_img = [{"role": "system", "content": "x"}, {"role": "user", "content": "what is this?"}]
+    agent._attach_image(with_img, long_shot)
+    assert with_img[-1]["images"] == [long_shot]
     with_view = agent._chat_messages(
         [{"role": "user", "content": "what is loud?"}],
         snap={"n": 0, "fl": 0, "top": []},
@@ -402,8 +410,9 @@ def test_chat_messages_rolls_old_turns(tmp_path, monkeypatch) -> None:
         snap={"devices": [], "flows": 0},
         user="q7 nest",
     )
-    assert any(m.get("content") == memory.ROLL_PROMPT for m in built)
+    assert not any(str(m.get("content") or "").startswith("Session brief") for m in built)
     assert memory.ui_messages()[0]["content"].startswith("q0")
+    assert built[-1]["content"].startswith("a7") or built[-1]["content"].startswith("q7")
 
 
 class _Chunks:
@@ -494,6 +503,7 @@ def test_api_chat_retries_overflow(tmp_path, monkeypatch) -> None:
 
     async def fake_pipe(s, base, payload, resp, hold_overflow=True):
         n["i"] += 1
+        assert payload.get("think") is False
         if n["i"] == 1:
             return bytearray(b'{"error":{"message":"exceeds the available context size"}}'), False, False
         return bytearray(b'{"message":{"content":"ok later"}}\n'), True, False
@@ -625,7 +635,7 @@ def test_api_chat_polls_until_reply(tmp_path, monkeypatch) -> None:
 
     async def fake_pipe(s, base, payload, resp, hold_overflow=True):
         n["i"] += 1
-        if n["i"] < 4:
+        if n["i"] < 3:
             return bytearray(b'{"message":{"thinking":"still working this out"}}\n{"done":true}\n'), True, False
         return bytearray(b'{"message":{"content":"the nest is the kitchen speaker"}}\n'), True, False
 
@@ -667,7 +677,7 @@ def test_api_chat_polls_until_reply(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
     monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
     out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is the nest?"}]})))
-    assert n["i"] == 4
+    assert n["i"] == 3
     assert memory.messages()[-1]["content"] == "the nest is the kitchen speaker"
     assert out.status == 200
 

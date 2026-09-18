@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { AI_ID, SHIPPED_ID, USER_ID, agentProfileId, aiCycleSettings, isAgentProfile, normalizeSettings, quiet, shippedSettings, suggestId } from "./profiles";
+import { AI_ID, ProfileStore, SHIPPED_ID, USER_ID, agentProfileId, aiCycleSettings, isAgentProfile, isQuiet, normalizeSettings, quiet, shippedSettings, suggestId } from "./profiles";
 import { setPluginModes, topology } from "./modes";
 
 afterEach(() => setPluginModes([]));
@@ -37,11 +37,16 @@ describe("profiles", () => {
     expect(n.feed.textSize).toBe(12);
     expect(n.dice.include.theme).toBe(true);
     expect(normalizeSettings({ dice: { include: { physics: false }, labelsMax: 32 } }).dice).toMatchObject({
-      include: { physics: false, theme: true }, labelsMax: 32, mosaicMax: "6",
+      include: { physics: false, theme: true }, labelsMax: 32, mosaicMax: "6", on: false, periodMin: 5,
     });
     expect(normalizeSettings({ feed: { textSize: 40, density: 4 } }).feed).toMatchObject({ textSize: 20, density: 12 });
+    expect(normalizeSettings({
+      anim: { follow: true, audioCamera: true, camInertia: 0.05, gravity: 1.9, partCap: 2420, partSize: 2.4, labelWeight: 2 },
+    }).anim).toMatchObject({ camInertia: 0.45, gravity: 1, partCap: 800, labelWeight: 1.2 });
     expect(normalizeSettings(null).theme).toBe(shippedSettings().theme);
     expect(quiet(() => 7)).toBe(7);
+    expect(isQuiet()).toBe(false);
+    quiet(() => { expect(isQuiet()).toBe(true); });
     expect(suggestId([])).toBe(USER_ID);
     expect(suggestId([USER_ID])).toBe("user-2");
     expect(suggestId([USER_ID, ...Array.from({ length: 98 }, (_, i) => `user-${i + 2}`)])).toMatch(/^user-/);
@@ -82,5 +87,22 @@ describe("profiles", () => {
     const keep = aiCycleSettings(base, { keepLook: true });
     expect(keep.anim.backdrop).toBe("custom");
     expect(keep.agent.shader).toContain("color");
+  });
+
+  it("applySession restores a snapshot onto the matching profile", () => {
+    const applied: ReturnType<typeof shippedSettings>[] = [];
+    const store = new ProfileStore(
+      { collect: shippedSettings, apply: (s) => { applied.push(s); } },
+      { value: SHIPPED_ID, el: document.createElement("div"), setOptions() {} },
+      document.createElement("div"),
+      document.createElement("div"),
+    );
+    store.list = [{ id: USER_ID, label: USER_ID, shipped: false }, { id: SHIPPED_ID, label: SHIPPED_ID, shipped: true }];
+    const ok = store.applySession({ profileId: USER_ID, dirty: true, settings: { theme: "ember", dream: true } });
+    expect(ok).toBe(true);
+    expect(store.current).toBe(USER_ID);
+    expect(store.dirty).toBe(true);
+    expect(applied.at(-1)?.theme).toBe("ember");
+    expect(applied.at(-1)?.dream).toBe(true);
   });
 });

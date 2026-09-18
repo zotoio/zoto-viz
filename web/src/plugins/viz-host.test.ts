@@ -5,6 +5,7 @@ import {
   VIZ_FRAME_BUDGET_MS,
   VIZ_MAX_TALKER_SAMPLES,
   VIZ_UBO,
+  VIZ_UBO_GLSL,
   VizBufferWriter,
   VizFrameBudget,
   bindVizWriterCore,
@@ -40,6 +41,8 @@ describe("viz contract", () => {
     expect(c?.ubo.block).toBe("ZotoVizData");
     expect(c?.ubo.binding).toBe(0);
     expect(c?.ubo.totalBytes).toBe(2048);
+    expect(VIZ_UBO_GLSL).toContain("uniform vec4 zotoVizSlots[128]");
+    expect(VIZ_UBO_GLSL).not.toMatch(/binding\s*=/);
   });
 
   it("detects viz capabilities separately from graph.read", () => {
@@ -139,7 +142,7 @@ describe("bindVizWriterCore (demo pack-swap preserve path)", () => {
   }
 
   it("preserves vizFrameTs, vizBudget skipped count, and UBO mirror bytes on preserveUbo rebind", () => {
-    let writer = new VizBufferWriter(contract);
+    let writer: VizBufferWriter | null = new VizBufferWriter(contract);
     writer.writeBuffer(0, [1, 2, 3, 4]);
     const uboBefore = writer.ubo.slice();
 
@@ -274,6 +277,21 @@ describe("buildVizFrame", () => {
     expect(frame.audio).toBe(0.2);
     expect(frame.packets).toHaveLength(2);
     expect(frame.talkers[0]?.id).toBe("192.168.1.3");
+    expect(frame.headlines).toEqual([]);
+  });
+
+  it("passes host source headlines into the viz frame", () => {
+    const frame = buildVizFrame(minimalState({
+      sources: {
+        hn: {
+          id: "hn", kind: "rss", label: "Hacker News", ok: true, feed: true,
+          items: [{ title: "Jemalloc", summary: "<b>alloc</b> news" }, { title: "Waymo" }],
+        },
+      },
+    }), 99, 0);
+    expect(frame.headlines.map((h) => h.text)).toEqual(["Jemalloc", "Waymo"]);
+    expect(frame.headlines[0]?.summary).toBe("alloc news");
+    expect(frame.headlines.every((h) => h.kind === "rss")).toBe(true);
   });
 });
 

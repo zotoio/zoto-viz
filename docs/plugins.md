@@ -9,6 +9,13 @@ A zip is the **contrib interchange** format: drop `plugins/<id>.zip`, run
 monitor unpacks them into `plugins/.runtime/<id>/`. They never replace a
 shipped src tree.
 
+New plugins invented by the operator, the local agent, or a remote MCP agent
+land as zips in `~/.zoto-viz/plugins/local/<id>.zip` (`origin: local`). Drop a
+zip there, or call `publish_local_plugin`. The monitor validates the zip
+contract, unpacks to `~/.zoto-viz/plugins/local/.runtime/<id>/`, and activates
+`plugin:<id>` when the plugin is YAML-only (or already consented). Override the
+drop zone with `ZOTO_VIZ_PLUGIN_LOCAL`.
+
 If `plugins/src/<id>/` already exists, a `plugins/<id>.zip` (or a zip whose
 `plugin.yml` id is `<id>`) is a **scan error**: the zip is not loaded and the
 src row stays.
@@ -38,7 +45,8 @@ switch.
 ```
 <id>.zip
   plugin.yml                 # required
-  visualisation.yml          # optional (engine / base / look / layout / …)
+  visualisation.yml          # optional (engine / base / look / style / layout / …)
+                             # style.fabric: tubes|cloth|ribbon weaves nodes+edges as a mesh
   frontend/                  # optional TypeScript module (+ tests)
   sky/sky.yml                # optional sky recipe / pins
   sky/fragment.glsl          # optional custom far-field shader (GLSL)
@@ -131,7 +139,7 @@ those pins under **This view**, along with `options` / `config`, arcade knobs, a
 The cog next to the view menu opens that tab. Network and system visibility live under
 **Graph**. Host and subnet filters live under **Privacy**.
 
-Examples: `plugins/src/lan-pulse/`, `plugins/src/pulse-ts/`, `plugins/src/doom/`.
+Examples: `plugins/src/lan-pulse/`, `plugins/src/pulse-ts/`, `plugins/src/doom/`, `plugins/src/hn-term/`, `plugins/src/stereo-gram/`.
 
 ## MCP
 
@@ -142,19 +150,21 @@ CSRF skipped, Host still loopback). Tools:
 | --- | --- |
 | `list_features` | Catalog of every settable key (theme, view, feed, show, filters, anim/physics/mosaic/sky, plugins, agent look, dice) |
 | `get_settings` | Startup profile + live temper/weather + queued UI patch |
-| `set_settings` | Patch the open UI (same whitelist as an agent ` ```settings ` fence): theme, view, feed, show, filters, anim, plugins, agent look, dice include/ceilings, shuffle/dice, plus temper/weather/control |
+| `set_settings` | Patch the open UI (same whitelist as an agent ` ```settings ` fence): theme, view, feed, show, filters, anim, plugins, agent look, dice on/periodMin/include/ceilings, shuffle/dice, plus temper/weather/control |
 | `list_plugins` | Each catalog view's options, config, and prompt, with current profile values |
 | `set_plugin` | `{ id, values }` — one view's knobs (including `prompt`) |
 | `set_view` | `{ mode }` e.g. `plugin:command` |
 | `set_agent` | `{ temper?, weather?, control? }` |
-| `roll_dice` | Header dice: randomize groups left on in Settings → Dice (theme, view, mosaic, chrome, feed, motion, physics, knobs by default) |
+| `roll_dice` | One-shot roll of groups left on in Settings → Dice (theme, view, mosaic, feed, motion, physics, knobs by default; chrome placement stays). Does not toggle the header dice repeat switch. |
 | `get_state` | Live LAN snapshot (`GET /api/state`) |
 | `get_traffic` | `{ ip, peer?, since? }` recent packets |
 | `get_rf_watch` / `set_rf_watch` | Wi-Fi SSID watch list and hopper plan |
 | `consent_plugin` | `{ id, kind: reviewed\|authored }` |
 | `draft_plugin` | `{ files, install? }` — same as `POST /api/ai/plugin` |
+| `publish_local_plugin` | `{ zip_b64 \| files \| description }` → `~/.zoto-viz/plugins/local/<id>.zip`; hot-load + activate if safe |
 | `list_profiles` / `apply_profile` | Saved looks |
 | `list_memories` / `add_memory` / `delete_memory` | Curated chat memories |
+| `list_sources` / `set_source` / `delete_source` | Host RSS / HTTPS / local-file registry (`~/.zoto-viz/sources.yml`) |
 | `install_plugin_zip` | Write gitignored `plugins/<id>.zip` (see guards below) |
 
 Live patches ride the 1 Hz WebSocket as `live: { seq, patch, temper, weather }`.
@@ -172,16 +182,32 @@ Cursor MCP config (monitor must be running):
 ```
 
 ```
+publish_local_plugin { zip_b64 | files | description, overwrite?, activate? }
 install_plugin_zip { zip_b64, overwrite?, force? }
 ```
+
+`publish_local_plugin` is the remote-agent path for a **new** plugin: it never
+touches the checkout. YAML-only zips activate on the open UI (`reloadPlugins` +
+`set_view`). TypeScript / Python / GLSL still write the zip, then return
+`consent-required`. Every new plugin gets a catalog-unique `id`: an explicit
+id is slugged, then reminted (`<id>-2`, …) when src, a contrib zip, or a local
+zip already uses it. Same-sha republish and `overwrite: true` keep the existing
+id. A filesystem drop into
+`~/.zoto-viz/plugins/local/*.zip` is picked up on a half-second loop (not
+behind catalog Python reload) by the same validate → unpack → activate path
+(the first watch pass only records existing zips so a restart does not steal
+the current view).
 
 Write-safety guards (the tool writes into gitignored `plugins/<id>.zip`):
 
 1. **Loopback only** — Host must be loopback; hosted MCP is not on the roadmap.
-2. **Src owns id** — refuse when `plugins/src/<id>/` exists (`error: src_owns_id`).
-   `overwrite` / `force` do not override a shipped src tree.
-3. **Overwrite** — refuse unless `overwrite: true` **and** `plugins/<id>.zip`
-   differs by sha256 (mirrors CLI `--force`). Same digest unpacks only.
+2. **Unique id** — never write a second plugin under an id that src, a contrib
+   zip, or the local drop zone already uses. Remint and return `remintedFrom`.
+   `overwrite` / `force` update that zip in place; they still never write into
+   `plugins/src/<id>/`.
+3. **Overwrite** — `overwrite: true` replaces `plugins/<id>.zip` (or the local
+   dest) when the sha256 differs. Same digest unpacks only. Without overwrite,
+   a different payload remints instead of failing.
 4. **Dirty tree** — refuse when the working tree has uncommitted changes to
    `plugins/src/<id>/` unless `force: true`. Gitignored zips and
    `plugins/.runtime/<id>/` are not dirty catalog paths.
@@ -190,14 +216,14 @@ Write-safety guards (the tool writes into gitignored `plugins/<id>.zip`):
    stamp does not cover the new hashes, the tool still writes the zip then
    returns `error: consent-required` (`ok: false`, `consentRequired: true`).
 
-Src-owned response shape:
+Reminted response (src or another zip already used the requested id):
 
 ```json
 {
-  "error": "src_owns_id",
-  "id": "topology",
-  "path": "plugins/src/topology",
-  "hint": "force does not override a shipped src tree"
+  "ok": true,
+  "id": "topology-2",
+  "remintedFrom": "topology",
+  "path": "~/.zoto-viz/plugins/local/topology-2.zip"
 }
 ```
 

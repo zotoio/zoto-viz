@@ -1,19 +1,24 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { SimNode, SimLink } from "d3-force-3d";
-import { LabelItem, LabelLayer } from "./labels";
+import { LabelItem, LabelLayer, labelActivity } from "./labels";
 import {
   applyPhys, clampParticleCap, easePhysToward, hashAngle,
   MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, stringPoint, stringSegs,
   type PhysEase,
 } from "./physics";
 import { LayoutClient } from "./layout";
-import type { HostedView, RenderHost, Viewport } from "./render-host";
+import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
+import { SoftwareGpu } from "./render-host";
+import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
+import { probeWebGL } from "./webgl";
+import type { MosaicNode } from "./mosaic-layout";
 import {
   L_BASE, L_DST, L_K, L_SRC, LINK_STRIDE, N_CHARGE, N_FIXED, N_FX, N_FY, N_FZ, N_KEY, N_RATE, N_RELAX, N_ROLE,
   N_SHELL_K, N_SHELL_R, N_SLOT, N_THETA, NODE_STRIDE, ROLES, roleIdx, type LayoutParams, type PositionsMsg,
 } from "./layout-core";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName, fmtBytes, type Device, type Flow, type Role, type StateMsg } from "../core/types";
+import { sourcesSlice } from "../core/source-graph";
 import { capBluetoothDevices, categorize, heat, paneLabelCap, topology, type ModeCtx, type ViewMode } from "../core/modes";
 import { rIp, rName } from "../core/redact";
 import { DEFAULT_THEME, effectiveSceneLuminance, fadeTowardPole, grayHex, guardLabelMix, hexToHsl, hslHex, sceneInk, SKY_LUMA_CAP, toCssHex, type Theme } from "../core/themes";
@@ -24,14 +29,23 @@ import { ensureSkyRecipe } from "./sky-ai";
 import { liveCam } from "../camera/livecam";
 import { cameraConsumers } from "../camera/want";
 import { Gaze } from "../camera/gaze";
-import { FloorGrid, type FloorShape } from "./floor";
+import { FloorGrid, easeFloorPose, floorPose, type FloorPose, type FloorShape } from "./floor";
+import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, shouldRunMic } from "../audio/want";
 import { markFrame, setFpsHint } from "../core/fps";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
-import { wheelCamMotion } from "./wheel-cam";
+import { PINCH_HOLD_MS, mouseWheelTick, pinchWheel, pointerCentroid, threeFingerZoomDelta, wheelCamMotion } from "./wheel-cam";
 import { decoHtml, EMPTY_LOOK, type AgentLook, type DecoAt } from "./deco";
+import {
+  GraphFabric, edgeHighlightBright, fabricActive, graphFaces, nodeHighlightBoost,
+  resolveFabric, type FabricEdgePose, type FabricKind, type FabricNodePose,
+} from "./fabric";
+import { VIEW_MORPH_S, mixFade, mixShape } from "./morph";
+
+export { FABRIC_KINDS, FABRIC_OPTIONS, type FabricKind } from "./fabric";
+export { VIEW_MORPH_S } from "./morph";
 
 export const THEME_FADE_S = 1.8;
 
@@ -52,6 +66,8 @@ export interface GNode extends SimNode {
   opacity: number;
   /** index into modes.SHAPES; the shared material bends the unit sphere into it per instance */
   shape: number;
+  shapeFrom: number;
+  shapeWant: number;
   label: LabelItem;
   labelUntil?: number;
   labelEl: HTMLDivElement;
@@ -480,6 +496,7 @@ function rfSlice(msg: StateMsg, mode: ViewMode, opts: Record<string, string> = {
     };
   }
   if (base === "cpu") return cpuSlice(msg, mode, opts);
+  if (base === "sources") return sourcesSlice(msg.sources, opts);
   return { devices: msg.devices, flows: msg.flows, gateway: msg.gateway, localIp: msg.local_ip };
 }
 
@@ -627,6 +644,8 @@ export interface DreamAnim {
   /** world units on a side of each tile */
   gridSize: number;
   gridShape: FloorShape;
+  /** 0–1 how hard the floor sits under the graph (0 = world-fixed, 1 = glued) */
+  gridFollow: number;
   /** 0–2 multiplier on the audio / traffic pulse */
   audioSens: number;
   /** what feeds the pulse: microphone (traffic fallback), whole-network rate, or the selected node */
@@ -667,10 +686,20 @@ export interface DreamAnim {
   edgeGlowAmt: number;
   /** 0.25–3 multiplier on how fast the glow travels */
   edgeGlowSpeed: number;
+  /** draw the graph as an animated mesh (nodes + edges are the fabric) */
+  graphFabric: FabricKind;
   /** simultaneous view wall: off, 2×2, 2×3, 2×4 */
   mosaic: MosaicSize;
   /** full-height hero pane for the current view; tiles keep the mosaic count */
   hero: HeroPos;
+  /** live split tree (ratios + which view sits in each cell). null = build from mosaic/hero */
+  mosaicTree: MosaicNode | null;
+  /** view id filling the wall; the tree stays so restore works */
+  mosaicMaxId: string;
+  /** leaf view ids in tree order — AI may rewrite these when layout is locked */
+  mosaicTiles: string[];
+  /** one header palette on every mosaic tile; off gives each view its own */
+  mosaicSharedTheme: boolean;
   /** what the camera frames: moving/busy nodes, movers only, or the whole graph as a box */
   focus: FocusMode;
   /** 0–2 traffic-spark density */
@@ -798,6 +827,7 @@ export const DEFAULT_DREAM: DreamAnim = {
   gridColor: "",
   gridSize: 50,
   gridShape: "square",
+  gridFollow: 1,
   audioSens: 1,
   audioDrive: "mic",
   audioCamera: true,
@@ -818,8 +848,13 @@ export const DEFAULT_DREAM: DreamAnim = {
   edgeGlow: "comet",
   edgeGlowAmt: 1,
   edgeGlowSpeed: 1,
+  graphFabric: "off",
   mosaic: "off",
   hero: "off",
+  mosaicTree: null,
+  mosaicMaxId: "",
+  mosaicTiles: [],
+  mosaicSharedTheme: false,
   focus: "activity",
   partAmt: 1,
   partBusy: 1,
@@ -861,6 +896,7 @@ export const DREAM_BOUNDS = {
   skyEase: { min: 0, max: 1, step: 0.05 },
   skyAiMin: { min: 1, max: 30, step: 1 },
   gridSize: { min: 16, max: 160, step: 4 },
+  gridFollow: { min: 0, max: 1, step: 0.05 },
   audioSens: { min: 0, max: 2, step: 0.05 },
   camDrive: { min: 0, max: 2, step: 0.05 },
   camInertia: { min: 0, max: 1, step: 0.05 },
@@ -904,7 +940,14 @@ float shapeR(vec3 d, float s) {
   if (s < 2.5) { float m = max(a.x, max(a.y, a.z)); return 0.55 + 0.75 * pow(m, 10.0); }  // six-pointed star
   if (s < 3.5) return 1.46 / (a.x + a.y + a.z);                       // octahedron
   if (s < 4.5) return 1.35 / (0.95 * a.y + 1.35 * length(d.xz));      // diamond: two cones tip to base
-  return 1.15 / length(vec3(d.x, d.y * 2.6, d.z));                    // disc
+  if (s < 5.5) return 1.15 / length(vec3(d.x, d.y * 2.6, d.z));       // disc
+  float hull = 0.58 / length(vec3(d.x * 1.2, d.y * 2.05, d.z * 1.2)); // drone: squat hull
+  float armX = 1.28 / max(a.y * 5.4, length(vec2(a.x * 0.38, a.z * 2.7)));
+  float armZ = 1.28 / max(a.y * 5.4, length(vec2(a.z * 0.38, a.x * 2.7)));
+  float tip = length(vec2(abs(d.x) - 0.62, abs(d.z) - 0.62));
+  float rotor = 0.95 / length(vec3(d.x, d.y * 9.0, d.z));
+  float rotorMask = 1.0 - smoothstep(0.18, 0.42, tip);
+  return max(hull, max(armX, max(armZ, mix(hull, rotor, rotorMask * 0.85))));
 }
 vec3 shapeNormal(vec3 d, float s) {
   vec3 t1 = normalize(cross(d, abs(d.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
@@ -962,7 +1005,7 @@ export interface SceneOpts {
 }
 
 export class NetScene implements HostedView {
-  readonly renderer: THREE.WebGLRenderer;
+  readonly renderer: HostGpu;
   /** shared renderer this scene draws through, or null when it owns `renderer` */
   private readonly host: RenderHost | null;
   /** where pointer / wheel listeners live: the shared host's pane container, or this scene's canvas */
@@ -980,6 +1023,7 @@ export class NetScene implements HostedView {
   /** every drawn device sphere in one draw call; labels live in `labelLayer` (positioned by hand each frame) */
   private spheres: THREE.InstancedMesh;
   private readonly sphereMat = sphereMaterial();
+  private readonly fabric = new GraphFabric();
   /** the force layout, ticking in a Worker; positions arrive one frame later and are copied onto the nodes */
   private readonly layout: LayoutClient;
   /** nodes in the layout, in wire order for the current `simGen` */
@@ -1020,6 +1064,7 @@ export class NetScene implements HostedView {
   private active = true;
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
+  private vizHeadlineText = "";
   private now = Date.now() / 1000;
   /** Host-engine stub so an empty catalog still constructs; catalog default is applied via setMode. */
   private mode: ViewMode = topology;
@@ -1041,6 +1086,8 @@ export class NetScene implements HostedView {
   private lookPinned = false;
   /** Follow OrbitControls damping after release before dream / fit take the camera again. */
   private camCoastUntil = 0;
+  /** Linux often drops ctrlKey after the first ctrl+two-finger tick; stay on pan for this burst. */
+  private pinchWheelUntil = 0;
   private dreamYaw = 0;
   private dreamPitch = 0;
   private dreamZoom = 0;
@@ -1059,6 +1106,7 @@ export class NetScene implements HostedView {
   private theme: Theme = DEFAULT_THEME;
   private rim: THREE.PointLight;
   private grid = new FloorGrid();
+  private lastFloor: FloorPose = floorPose({ x: 0, y: 0, z: 0, hx: 280, hz: 280, n: 0 });
   private backdrop = new Backdrop();
   private pulse = new AudioPulse();
   onSelect: (d: Device | null) => void = () => {};
@@ -1089,6 +1137,7 @@ export class NetScene implements HostedView {
   private bassSlow = 0;
   private beatCool = 0;
   private fadeT = 1;
+  private viewMorphT = 1;
   private fadeFrom = { clear: 0, fog: 0, rim: 0, gridMajor: 0, gridMinor: 0 };
   private dragging: GNode | null = null;
   private readonly dragPlane = new THREE.Plane();
@@ -1110,6 +1159,7 @@ export class NetScene implements HostedView {
   private padWant = 0;
   private readonly ro: ResizeObserver;
   private readonly onWinResize: () => void;
+  private readonly onCamPtrLost: (e: PointerEvent) => void;
   /** layout stretch so a wide viewport fills with the graph instead of a sphere sitting in the middle */
   private spreadX = 1;
   private spreadZ = 1;
@@ -1173,18 +1223,13 @@ export class NetScene implements HostedView {
       const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
       this.baseDpr = dpr;
       this.lastTuneDpr = dpr;
-      this.renderer = new THREE.WebGLRenderer({
-        antialias: !this.satellite && dpr < 1.3,
-        alpha: false,
-        powerPreference: this.satellite ? "low-power" : "high-performance",
+      this.renderer = ownRenderer(container, {
+        satellite: this.satellite,
+        dpr,
+        clearHex: this.clearHex,
+        onLost: () => this.hostContextLost(),
+        onRestored: () => this.hostContextRestored(),
       });
-      this.renderer.setPixelRatio(dpr);
-      const bootW = Math.max(2, container.clientWidth), bootH = Math.max(2, container.clientHeight);
-      this.renderer.setSize(bootW, bootH);
-      this.renderer.setClearColor(this.clearHex);
-      container.appendChild(this.renderer.domElement);
-      this.renderer.domElement.addEventListener("webglcontextlost", (e) => { e.preventDefault(); this.hostContextLost(); });
-      this.renderer.domElement.addEventListener("webglcontextrestored", () => this.hostContextRestored());
       this.inputEl = this.renderer.domElement;
     }
 
@@ -1198,13 +1243,14 @@ export class NetScene implements HostedView {
     this.controls = new OrbitControls(this.camera, this.inputEl);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    // click-hold / one-finger pans; two-finger forward/back zooms; sideways two-finger orbits; pinch / mouse wheel zooms
-    this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
-    this.controls.touches.ONE = THREE.TOUCH.PAN;
-    this.controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+    // left-drag / one-finger orbits; two-finger / wheel zooms; ctrl+two-finger or right-drag pans
+    this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+    this.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+    this.controls.touches.ONE = THREE.TOUCH.ROTATE;
+    // Orbit has no dolly-only two-finger mode; we own two-finger zoom / ctrl-pan below.
+    this.controls.touches.TWO = 4 as typeof THREE.TOUCH.PAN;
     type OrbitWheel = OrbitControls & {
-      _rotateLeft(a: number): void;
-      _rotateUp(a: number): void;
+      _pan(dx: number, dy: number): void;
       _handleMouseWheel(e: { deltaY: number; clientX: number; clientY: number }): void;
       _customWheelEvent(e: WheelEvent): { deltaY: number; clientX: number; clientY: number };
     };
@@ -1213,16 +1259,42 @@ export class NetScene implements HostedView {
       e.stopImmediatePropagation();
       this.pinUserCamera();
       const orbit = this.controls as OrbitWheel;
-      const motion = wheelCamMotion(e);
-      if (motion.zoom) orbit._handleMouseWheel(orbit._customWheelEvent(e));
-      if (motion.yaw) {
-        const h = this.inputEl.clientHeight || 1;
-        const k = (2 * Math.PI * this.controls.rotateSpeed) / h;
-        orbit._rotateLeft(k * motion.yaw);
+      // two+ real pointers: we zoom / ctrl-pan from the pointer path; don't also wheel
+      if (((this.controls as { _pointers?: unknown[] })._pointers?.length ?? 0) >= 2) {
+        this.captureDreamRest();
+        return;
+      }
+      const now = performance.now();
+      const ctrlPan = pinchWheel(e) || now < this.pinchWheelUntil;
+      if (ctrlPan) this.pinchWheelUntil = now + PINCH_HOLD_MS;
+      const motion = wheelCamMotion(e, ctrlPan);
+      if (motion.zoom) {
+        const custom = orbit._customWheelEvent(e);
+        if (!mouseWheelTick(e) && e.deltaMode === 0) custom.deltaY = motion.zoom * 10;
+        orbit._handleMouseWheel(custom);
+      }
+      if (motion.panX || motion.panY) {
+        orbit._pan(motion.panX, motion.panY);
         this.controls.update();
       }
       this.captureDreamRest();
     }, { capture: true, passive: false });
+    type GestureScale = Event & { scale: number; clientX: number; clientY: number };
+    let gestureScale = 1;
+    this.inputEl.addEventListener("gesturestart", (e) => {
+      e.preventDefault();
+      gestureScale = 1;
+      this.pinUserCamera();
+    }, { passive: false });
+    this.inputEl.addEventListener("gesturechange", (e) => {
+      e.preventDefault();
+      const g = e as GestureScale;
+      const deltaY = (gestureScale - g.scale) * 80;
+      gestureScale = g.scale;
+      this.pinchWheelUntil = performance.now() + PINCH_HOLD_MS;
+      (this.controls as OrbitWheel)._handleMouseWheel({ deltaY, clientX: g.clientX, clientY: g.clientY });
+      this.captureDreamRest();
+    }, { passive: false });
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 0.35;
     this.controls.addEventListener("start", () => {
@@ -1249,12 +1321,15 @@ export class NetScene implements HostedView {
     this.grid.setColors(this.theme.scene.gridMajor, this.theme.scene.gridMinor);
     this.scene.add(this.grid.mesh);
     this.scene.add(this.backdrop.mesh);
+    this.scene.add(this.backdrop.fadeMesh);
     this.scene.add(this.backdrop.liveMesh);
+    this.scene.add(this.backdrop.photoMesh);
     this.backdrop.setColors(this.theme.scene.rim, this.theme.scene.clear);
 
     // devices
     this.spheres = sphereCloud(this.sphereMat, SPHERE_CAPACITY);
     this.scene.add(this.spheres);
+    this.scene.add(this.fabric.mesh);
 
     // edges
     this.linePos = new Float32Array(0);
@@ -1313,19 +1388,57 @@ export class NetScene implements HostedView {
       if (!this.dragging) this.pointer.set(2, 2);
     });
     let downAt = 0, downX = 0, downY = 0;
+    const camPts = new Map<number, { x: number; y: number }>();
+    let lastFinger = { x: 0, y: 0 };
+    const orbit = this.controls as OrbitWheel;
+    const dropCamPtr = (id: number) => { camPts.delete(id); };
+    this.onCamPtrLost = (e) => dropCamPtr(e.pointerId);
+    window.addEventListener("pointerup", this.onCamPtrLost);
+    window.addEventListener("pointercancel", this.onCamPtrLost);
     this.inputEl.addEventListener("pointerdown", (e) => {
+      camPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (camPts.size >= 2) {
+        const c = pointerCentroid(camPts.values());
+        lastFinger = c ?? { x: e.clientX, y: e.clientY };
+        if (this.dragging) this.endDrag();
+        this.pinUserCamera();
+      }
       downAt = performance.now(); downX = e.clientX; downY = e.clientY;
       setPointer(e);
-      if (e.button !== 0) return;
+      if (e.button !== 0 || camPts.size >= 2) return;
       const n = this.pick();
       if (!n) return;
       e.stopImmediatePropagation();
       this.beginDrag(n);
       this.inputEl.setPointerCapture(e.pointerId);
     }, true);
+    this.inputEl.addEventListener("pointermove", (e) => {
+      if (!camPts.has(e.pointerId)) return;
+      camPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (camPts.size < 2) return;
+      const c = pointerCentroid(camPts.values());
+      if (!c) return;
+      const dx = c.x - lastFinger.x;
+      const dy = c.y - lastFinger.y;
+      lastFinger = c;
+      this.pinUserCamera();
+      if (e.ctrlKey || e.metaKey) {
+        if (dx || dy) {
+          orbit._pan(dx, dy);
+          this.controls.update();
+        }
+      } else {
+        const deltaY = threeFingerZoomDelta(dy);
+        if (deltaY) orbit._handleMouseWheel({ deltaY, clientX: c.x, clientY: c.y });
+      }
+      this.captureDreamRest();
+    }, true);
     const finishPointer = (e: PointerEvent) => {
+      const multi = camPts.size >= 2;
+      dropCamPtr(e.pointerId);
       const wasDrag = this.dragging;
       if (this.dragging) this.endDrag();
+      if (multi) return;
       if (performance.now() - downAt < 300 && Math.hypot(e.clientX - downX, e.clientY - downY) < 6) {
         setPointer(e);
         this.select(this.pick());
@@ -1334,7 +1447,10 @@ export class NetScene implements HostedView {
       }
     };
     this.inputEl.addEventListener("pointerup", finishPointer);
-    this.inputEl.addEventListener("pointercancel", () => { if (this.dragging) this.endDrag(); });
+    this.inputEl.addEventListener("pointercancel", (e) => {
+      dropCamPtr(e.pointerId);
+      if (this.dragging) this.endDrag();
+    });
     this.inputEl.addEventListener("dblclick", () => {
       this.lookPinned = false;
       this.camCoastUntil = 0;
@@ -1352,14 +1468,90 @@ export class NetScene implements HostedView {
   hostContextLost(): void { this.lumaProbe.reset(); }
   hostContextRestored(): void { this.relayout(); }
 
+  get software(): boolean {
+    return this.host?.software ?? this.renderer instanceof SoftwareGpu;
+  }
+
+  /** Paint now so a canvas JPEG is not an empty WebGL backbuffer. */
+  flushFrame(): void {
+    this.present();
+  }
+
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
   private present(): void {
     if (this.host) {
       this.lastVp = this.host.present(this, this.clearHex, this.scene, this.camera);
-    } else {
-      this.renderer.setClearColor(this.clearHex);
-      this.renderer.render(this.scene, this.camera);
+      return;
     }
+    if (this.renderer instanceof SoftwareGpu) {
+      const canvas = this.renderer.domElement;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const pr = this.renderer.getPixelRatio();
+      ctx.setTransform(pr, 0, 0, pr, 0, 0);
+      ctx.fillStyle = cssHex(this.clearHex);
+      ctx.fillRect(0, 0, this.viewW, this.viewH);
+      this.paintSoftware(ctx, { x: 0, y: 0, w: this.viewW, h: this.viewH });
+      return;
+    }
+    this.renderer.setClearColor(this.clearHex);
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  paintSoftware(ctx: CanvasRenderingContext2D, rect: SoftRect): void {
+    const th = this.theme.scene;
+    const segs: { ax: number; ay: number; az: number; bx: number; by: number; bz: number; r: number; g: number; b: number }[] = [];
+    for (let i = 0; i + 5 < this.linePos.length; i += 6) {
+      segs.push({
+        ax: this.linePos[i]!, ay: this.linePos[i + 1]!, az: this.linePos[i + 2]!,
+        bx: this.linePos[i + 3]!, by: this.linePos[i + 4]!, bz: this.linePos[i + 5]!,
+        r: this.lineCol[i] ?? 0, g: this.lineCol[i + 1] ?? 0, b: this.lineCol[i + 2] ?? 0,
+      });
+    }
+    const partN = this.particles.geometry.drawRange.count;
+    const particles = [];
+    for (let i = 0; i < partN; i++) {
+      particles.push({
+        x: this.partPos[i * 3] ?? 0, y: this.partPos[i * 3 + 1] ?? 0, z: this.partPos[i * 3 + 2] ?? 0,
+        r: this.partCol[i * 3] ?? 1, g: this.partCol[i * 3 + 1] ?? 1, b: this.partCol[i * 3 + 2] ?? 1,
+      });
+    }
+    const wall = this.now;
+    const modeCtx = this.ctx;
+    const nodes = [];
+    for (const n of this.nodes.values()) {
+      if (!n.visible && n.scale <= COLLAPSED_SCALE) continue;
+      const look = this.mode.liveLook?.(n, wall, modeCtx);
+      nodes.push({
+        x: (n.x ?? 0) + (look?.dx ?? 0),
+        y: (n.y ?? 0) + (look?.dy ?? 0),
+        z: (n.z ?? 0) + (look?.dz ?? 0),
+        scale: n.scale * this.anim.nodeWeight * (look?.scale ?? 1),
+        r: n.color.r, g: n.color.g, b: n.color.b, a: n.opacity,
+        glow: n.glow,
+        shape: look?.shape ?? n.shape,
+        selected: n === this.selected,
+        hovered: n === this.hovered,
+      });
+    }
+    if (this.stageOnly || this.anim.backdrop === "plugin") {
+      paintSoftwarePluginRain(ctx, rect, this.now, this.pulseNow.bass, this.vizHeadlineText);
+      if (this.stageOnly) return;
+    }
+    paintSoftwareGraph(ctx, this.camera, rect, {
+      clearHex: this.clearHex,
+      rimHex: th.rim,
+      dark: this.theme.dark,
+      gridMajor: th.gridMajor,
+      gridMinor: th.gridMinor,
+      floor: {
+        x: this.lastFloor.x, y: this.lastFloor.y, z: this.lastFloor.z,
+        span: this.lastFloor.fadeFar * 0.85,
+      },
+      nodes,
+      segs,
+      particles,
+    });
   }
 
   setFilters(f: Partial<Filters>): void {
@@ -1383,6 +1575,7 @@ export class NetScene implements HostedView {
     this.mode = mode;
     this.modeOpts = { ...opts };
     if (changed) {
+      this.beginViewMorph();
       if (!this.satellite) notePerfChange();
       for (const o of this.overlayObjs.values()) this.labelLayer.remove(o);
       this.overlayObjs.clear();
@@ -1400,6 +1593,12 @@ export class NetScene implements HostedView {
     this.syncSimulation(changed ? 0.6 : 0.2);
   }
 
+  private beginViewMorph(): void {
+    this.viewMorphT = 0;
+    for (const n of this.nodes.values()) n.shapeFrom = n.shape;
+    this.instanceStyleDirty = true;
+  }
+
   get currentMode(): ViewMode { return this.mode; }
 
   /** Pause / resume rendering and layout ticks (the data model keeps updating either way). */
@@ -1412,14 +1611,32 @@ export class NetScene implements HostedView {
   /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
   setStageOnly(on: boolean): void {
     this.stageOnly = on;
-    this.spheres.visible = !on;
-    this.lines.visible = !on;
-    this.glowLines.visible = !on && this.anim.edgeGlow !== "off";
+    this.applyGraphMarks();
     this.particles.visible = !on;
+    this.labelLayer.domElement.style.display = on ? "none" : "";
     this.labelLayer.domElement.style.visibility = on ? "hidden" : "";
+    if (on) {
+      for (const n of this.nodes.values()) n.label.visible = false;
+    }
     for (const obj of this.overlayObjs.values()) obj.visible = !on;
     for (const obj of this.decoObjs.values()) obj.visible = !on;
     this.applyVisibility();
+  }
+
+  private fabricKind(): FabricKind {
+    return resolveFabric(this.mode.fabric, this.anim.graphFabric);
+  }
+
+  /** Hide spheres / line edges when the fabric mesh owns the graph, and hide everything in stage-only. */
+  private applyGraphMarks(): void {
+    const show = !this.stageOnly;
+    const kind = this.fabricKind();
+    const mesh = show && fabricActive(kind);
+    this.spheres.visible = show && !mesh;
+    this.lines.visible = show && !mesh;
+    this.glowLines.visible = show && !mesh && this.anim.edgeGlow !== "off";
+    this.fabric.mesh.visible = mesh;
+    this.inputEl.dataset.fabric = kind;
   }
 
   /** Slowly yaw, nod, and zoom around the current camera. Dragging reframes; the orbit continues from the new view. */
@@ -1452,6 +1669,7 @@ export class NetScene implements HostedView {
 
   /** Live-tweak the orbit from the settings cog. Phases keep running so sliders do not jump the camera. */
   setAnim(a: DreamAnim): void {
+    a = guardReadableAnim(a);
     const dropTheme = this.anim.camTheme && !a.camTheme;
     const next = { ...a };
     if (!this.physWant) this.physWant = pickPhys(a);
@@ -1486,7 +1704,13 @@ export class NetScene implements HostedView {
       this.onCamTheme(null);
     }
     this.bumpAlpha(0.08);
-    if (shouldRunMic(liveMic.micPolicy, a.audioDrive, this.audioLive())) void this.pulse.enable();
+    this.syncPulse();
+  }
+
+  /** Start or stop the pulse microphone from the current drive + header mic toggle. */
+  syncPulse(): void {
+    if (this.satellite) return;
+    if (shouldRunMic(liveMic.micPolicy, this.anim.audioDrive, this.audioLive())) void this.pulse.enable();
     else this.pulse.disable();
   }
 
@@ -1501,6 +1725,11 @@ export class NetScene implements HostedView {
 
   setPluginUboBuffer(buf: Float32Array): void {
     this.backdrop.setPluginUboBuffer(buf);
+  }
+
+  /** Headline crawl for the software rain fallback (HN Rain and other stage packs). */
+  setVizHeadlines(text: string): void {
+    this.vizHeadlineText = text.slice(0, 240);
   }
 
   /** Photos, SVG, and a custom sky the local agent saved on the model-named profile. */
@@ -1524,6 +1753,7 @@ export class NetScene implements HostedView {
         el.className = "overlay agent-deco";
         obj = new LabelItem(el);
         obj.visible = !this.stageOnly;
+        obj.pinned = true;
         this.labelLayer.add(obj);
         this.decoObjs.set(d.id, obj);
       }
@@ -1593,7 +1823,7 @@ export class NetScene implements HostedView {
   private syncGlow(): void {
     const a = this.anim;
     const glowAmt = this.tune?.edgeGlowAmt ?? a.edgeGlowAmt;
-    this.glowLines.visible = !this.stageOnly && a.edgeGlow !== "off" && glowAmt > 0.02;
+    this.glowLines.visible = !this.stageOnly && !fabricActive(this.fabricKind()) && a.edgeGlow !== "off" && glowAmt > 0.02;
     const u = this.glowMat.uniforms;
     u.uAmt.value = glowAmt * a.edgeWeight;
     u.uSpeed.value = a.edgeGlowSpeed;
@@ -1709,9 +1939,10 @@ export class NetScene implements HostedView {
     this.paintClear();
     this.easeVisibility(dt);
     const visK = this.visScale;
+    const stageSky = this.stageOnly || a.backdrop === "plugin";
     this.backdrop.setLook(
-      a.skyAudio ? Math.min(1, skyOp * (0.28 + 0.85 * skyP)) : skyOp,
-      (a.skyAudio ? skyBr * (0.4 + 1.5 * skyB) : skyBr) * visK,
+      stageSky ? skyOp : (a.skyAudio ? Math.min(1, skyOp * (0.28 + 0.85 * skyP)) : skyOp),
+      (stageSky ? skyBr : (a.skyAudio ? skyBr * (0.4 + 1.5 * skyB) : skyBr)) * visK,
       skyP,
     );
     this.backdrop.setLumaCap(this.visCap);
@@ -2086,7 +2317,7 @@ export class NetScene implements HostedView {
     this.zeroCamStep();
   }
 
-  /** Pan, pinch, two-finger zoom, and perspective drag keep this pose instead of refitting. */
+  /** Orbit, ctrl+two-finger / right-drag pan, two-finger / wheel zoom keep this pose instead of refitting. */
   private pinUserCamera(): void {
     this.lastInteraction = performance.now();
     this.controls.autoRotate = false;
@@ -2551,7 +2782,9 @@ export class NetScene implements HostedView {
         }
         if (this.fadeT >= 1) n.color.copy(n.colorWant);
         n.targetScale = this.mode.nodeScale?.(n, ctx) ?? this.sizeFor(d);
-        n.shape = this.mode.nodeShape?.(n, ctx) ?? 0;
+        n.shapeWant = this.mode.nodeShape?.(n, ctx) ?? 0;
+        n.shape = mixShape(n.shapeFrom, n.shapeWant, this.viewMorphT);
+        if (this.viewMorphT >= 1) n.shapeFrom = n.shapeWant;
         this.setLabelText(n, this.mode.nodeLabel?.(n, ctx));
       }
       this.instanceStyleDirty = true;
@@ -2593,6 +2826,7 @@ export class NetScene implements HostedView {
       if (el.dataset.vol !== q) {
         el.dataset.vol = q;
         el.style.setProperty("--vol", q);
+        n.label.invalidateBox();
       }
       el.classList.toggle("hot", vol >= 0.5 && mixT > 0.08);
       if (el.dataset.hlMix !== mixQ) {
@@ -2735,7 +2969,7 @@ export class NetScene implements HostedView {
     const r = shell || 1;
     const c = new THREE.Color(this.theme.roles[d.role]);
     const n: GNode = {
-      id: d.ip, simKey: this.nextSimKey++, device: d, color: c, colorFrom: c.clone(), colorWant: c.clone(), scale: 0.01, glow: 0.15, opacity: 1, shape: 0,
+      id: d.ip, simKey: this.nextSimKey++, device: d, color: c, colorFrom: c.clone(), colorWant: c.clone(), scale: 0.01, glow: 0.15, opacity: 1, shape: 0, shapeFrom: 0, shapeWant: 0,
       label, labelEl: el, visible: true, active: false, rate: 0, targetScale: this.sizeFor(d),
       x: dir.x * r * this.spreadX, y: dir.y * r, z: dir.z * r * this.spreadZ,
       px: dir.x * r * this.spreadX, py: dir.y * r, pz: dir.z * r * this.spreadZ,
@@ -2787,7 +3021,10 @@ export class NetScene implements HostedView {
       ? (d.ip.startsWith("proc:") ? (d.aliases?.[0] ?? "") : (d.aliases?.find((a) => a.startsWith("load") || a.endsWith("cores")) ?? ""))
       : raw === d.ip ? (d.vendor || "") : rIp(d.ip) + (d.vendor ? ` · ${d.vendor}` : "");
     const html = `${escapeHtml(name)}${sub ? `<small>${escapeHtml(sub)}</small>` : ""}${extra ? `<small class="mode">${escapeHtml(extra)}</small>` : ""}`;
-    if (n.labelEl.innerHTML !== html) n.labelEl.innerHTML = html;
+    if (n.labelEl.innerHTML !== html) {
+      n.labelEl.innerHTML = html;
+      n.label.invalidateBox();
+    }
     n.labelEl.classList.toggle("dim", !d.online || !!n.cpuIdleAt);
   }
 
@@ -2830,8 +3067,12 @@ export class NetScene implements HostedView {
       const showLabel = n.visible && this.filters.labels && (
         focused || live || this.mode.forceLabel?.(n, ctx) || (byRole && !this.mode.suppressLabel?.(n, ctx))
       );
-      n.label.visible = !!showLabel; // the label layer owns element.style.display; drive it via item visibility
-      n.labelEl.classList.toggle("off", !showLabel);
+      n.label.visible = !this.stageOnly && !!showLabel;
+      n.labelEl.classList.toggle("off", this.stageOnly || !showLabel);
+      n.label.pinned = focused;
+      n.label.rank = (live ? 1e6 : 0)
+        + (r === "self" || r === "gateway" ? 1e5 : 0)
+        + labelActivity(n.rate, n.device.bytes_in + n.device.bytes_out);
     }
     for (const l of this.links.values()) l.visible = l.source.visible && l.target.visible;
   }
@@ -2934,7 +3175,8 @@ export class NetScene implements HostedView {
           + (this.lastVis && !this.lastVis.ok
             ? ` · visibility: ${this.lastVis.issues.map((i) => i.code).join(", ")}`
             : ""))
-        + ` · layout: ${this.layout.backend}/${this.layout.kernel}`);
+        + ` · layout: ${this.layout.backend}/${this.layout.kernel}`
+        + (this.software ? " · canvas 2D (this browser has no WebGL)" : ""));
     }
     this.tune = perfOverlay(this.anim, perfStress());
     this.syncTuneDpr();
@@ -2973,6 +3215,10 @@ export class NetScene implements HostedView {
           this.stepDream(dt);
           this.camera.lookAt(this.controls.target);
         }
+        if (this.viewMorphT < 1) {
+          this.viewMorphT = Math.min(1, this.viewMorphT + dt / VIEW_MORPH_S);
+          this.instanceStyleDirty = true;
+        }
         if (this.fadeT < 1) {
           this.fadeT = Math.min(1, this.fadeT + dt / THEME_FADE_S);
           this.applyThemeColors(this.fadeT);
@@ -2983,6 +3229,12 @@ export class NetScene implements HostedView {
         this.present();
         this.captureBackdropLuma();
       return;
+    }
+
+    if (this.viewMorphT < 1) {
+      this.viewMorphT = Math.min(1, this.viewMorphT + dt / VIEW_MORPH_S);
+      for (const n of this.nodes.values()) n.shape = mixShape(n.shapeFrom, n.shapeWant, this.viewMorphT);
+      this.instanceStyleDirty = true;
     }
 
     // nodes: one instance per drawn node, rewritten every frame. Hidden nodes shrink to nothing and then
@@ -3003,11 +3255,13 @@ export class NetScene implements HostedView {
     let liveStyle = false;
     let ni = 0;
     let labelsOn = 0;
+    const fabricNodes: FabricNodePose[] = [];
+    const fabricById = new Map<string, FabricNodePose>();
     for (const n of this.nodes.values()) {
       if (!n.visible && n.scale <= COLLAPSED_SCALE) continue;
       const target = n.visible ? n.targetScale : 0.01;
       n.scale += (target - n.scale) * Math.min(1, dt * 6);
-      const boost = n === this.selected ? 1.1 : n === this.hovered ? 0.7 : n.active ? 0.45 : 0.12;
+      const boost = nodeHighlightBoost(n === this.selected, n === this.hovered, n.active);
       n.glow += (boost - n.glow) * Math.min(1, dt * 8);
       if (cpuView && (n.cpuIdleAt || n.cpuGhost)) n.opacity = cpuIdleOpacity(n, wall);
       else n.opacity += ((n.device.online ? 1 : 0.35) - n.opacity) * Math.min(1, dt * 4);
@@ -3016,7 +3270,7 @@ export class NetScene implements HostedView {
       const y = (n.y ?? 0) + (look?.dy ?? 0);
       const z = (n.z ?? 0) + (look?.dz ?? 0);
       const beat = this.anim.audioNodes ? 1 + 0.32 * this.pulseBass * (n === this.selected || n === this.dragging ? 1.55 : 1) : 1;
-      const s = n.visible ? n.scale * beat * this.anim.nodeWeight * (look?.scale ?? 1) : 0;
+      const s = n.visible ? n.scale * beat * this.anim.nodeWeight * (look?.scale ?? 1) * (0.86 + 0.14 * mixFade(this.viewMorphT)) : 0;
       if (look?.spin != null) _quat.setFromAxisAngle(_axisY, look.spin);
       else _quat.identity();
       sp.setMatrixAt(ni, _m.compose(_pos.set(x, y, z), _quat, _scl.set(s, s, s)));
@@ -3034,8 +3288,13 @@ export class NetScene implements HostedView {
         sp.setColorAt(ni, n.color);
         shapeAttr.setX(ni, n.shape);
       }
-      glowAttr.setX(ni, n.glow + (this.anim.audioNodes ? 0.55 * this.pulseLevel : 0) + (look?.glow ?? 0));
+      const instGlow = n.glow + (this.anim.audioNodes ? 0.55 * this.pulseLevel : 0) + (look?.glow ?? 0);
+      glowAttr.setX(ni, instGlow);
       alphaAttr.setX(ni, n.opacity);
+      const cr = look ? _colA.r : n.color.r, cg = look ? _colA.g : n.color.g, cb = look ? _colA.b : n.color.b;
+      const pose: FabricNodePose = { id: n.id, x, y, z, scale: Math.max(s, 0.35), r: cr, g: cg, b: cb, glow: instGlow, opacity: n.opacity, visible: n.visible && s > 0.05 };
+      fabricNodes.push(pose);
+      fabricById.set(n.id, pose);
       ni++;
       if (n.label.visible) {
         labelsOn++;
@@ -3072,6 +3331,7 @@ export class NetScene implements HostedView {
     const ctx = this.ctx;
     const mode = this.mode;
     const th = this.theme.scene;
+    const fabricEdges: FabricEdgePose[] = [];
     for (const l of this.links.values()) {
       const a = l.source, b = l.target;
       const ax = a.x ?? 0, ay = a.y ?? 0, az = a.z ?? 0;
@@ -3082,9 +3342,7 @@ export class NetScene implements HostedView {
       else if (l.flow.rate > 0) bright = 0.35 + Math.min(0.65, Math.log10(1 + l.flow.rate) / 6);
       else bright = this.additiveMarks() ? 0.14 : 0.38;
       if (!tether && mode.linkBright) bright = mode.linkBright(l, ctx, bright);
-      if (sel && (a === sel || b === sel)) bright = Math.max(bright, 0.9);
-      else if (sel) bright *= 0.35;
-      if (!l.visible) bright = 0;
+      bright = edgeHighlightBright(bright, !!(sel && (a === sel || b === sel)), !!sel, l.visible);
       bright *= this.anim.edgeWeight * Math.min(a.opacity, b.opacity);
       const isLan = a.device.role !== "internet" && b.device.role !== "internet";
       const mc = tether ? undefined : mode.linkColor?.(l, ctx);
@@ -3102,6 +3360,12 @@ export class NetScene implements HostedView {
       let gab = tether || !l.visible ? 0 : glowStrength(ab);
       let gba = tether || !l.visible ? 0 : glowStrength(ba);
       if (sel && a !== sel && b !== sel) { gab *= 0.35; gba *= 0.35; }
+      if (!tether && fabricById.has(a.id) && fabricById.has(b.id)) {
+        fabricEdges.push({
+          a: a.id, b: b.id, r0: lr, g0: lg, b0: lb, r1: rr, g1: rg, b1: rb,
+          gab, gba, wave: 0.18 + 0.55 * glowStrength(l.flow.rate), visible: l.visible && bright > 0.01,
+        });
+      }
       for (let s = 0; s < str.segs; s++) {
         const t0 = s / str.segs, t1 = (s + 1) / str.segs;
         const u = str.segs === 1
@@ -3143,6 +3407,21 @@ export class NetScene implements HostedView {
     if (gc) gc.needsUpdate = true;
     this.glowMat.uniforms.uTime.value = wall;
     this.syncGlow();
+    const fabricKind = this.fabricKind();
+    this.fabric.setKind(fabricKind);
+    if (fabricActive(fabricKind)) {
+      const pairs = fabricEdges.filter((e) => e.visible).map((e) => [e.a, e.b] as [string, string]);
+      this.fabric.sync(fabricNodes, fabricEdges, graphFaces(pairs), {
+        time: wall,
+        pulse: this.pulseLevel,
+        glowMode: this.anim.edgeGlow,
+        glowAmt: (this.tune?.edgeGlowAmt ?? this.anim.edgeGlowAmt) * this.anim.edgeWeight,
+        glowSpeed: this.anim.edgeGlowSpeed,
+        additive: this.additiveMarks(),
+        morph: this.viewMorphT,
+      });
+    }
+    this.applyGraphMarks();
 
     // particles
     if (this.anim.audioParts) this.rebuildParticles();
@@ -3196,6 +3475,7 @@ export class NetScene implements HostedView {
           el.className = "overlay";
           obj = new LabelItem(el);
           obj.visible = !this.stageOnly;
+          obj.pinned = true;
           this.labelLayer.add(obj);
           this.overlayObjs.set(o.id, obj);
         }
@@ -3231,6 +3511,7 @@ export class NetScene implements HostedView {
       this.paintClear();
     }
     this.tickViewShift(dt);
+    this.syncFloor(dt);
     this.present();
     this.captureBackdropLuma();
     const labelsWanted = labelsOn > 0 || this.overlayObjs.size > 0 || this.decoObjs.size > 0;
@@ -3252,7 +3533,7 @@ export class NetScene implements HostedView {
       if (!n.visible || n.scale < 0.5) continue;
       const look = this.mode.liveLook?.(n, t, ctx);
       _sphere.center.set((n.x ?? 0) + (look?.dx ?? 0), (n.y ?? 0) + (look?.dy ?? 0), (n.z ?? 0) + (look?.dz ?? 0));
-      _sphere.radius = n.scale * this.anim.nodeWeight * (look?.scale ?? 1);
+      _sphere.radius = n.scale * this.anim.nodeWeight * (look?.scale ?? 1) * (fabricActive(this.fabricKind()) ? 1.45 : 1);
       if (!ray.intersectSphere(_sphere, _hit)) continue;
       const d = _hit.distanceToSquared(ray.origin);
       if (d < bestD) { bestD = d; best = n; }
@@ -3309,11 +3590,35 @@ export class NetScene implements HostedView {
     this.viewW = w;
     this.viewH = h;
     this.camera.aspect = w / h;
-    if (!this.host) this.renderer.setSize(w, h); // hosted: the wall canvas is sized by the host
+    if (!this.host) {
+      if (this.renderer instanceof SoftwareGpu) {
+        const pr = this.renderer.getPixelRatio();
+        const c = this.renderer.domElement;
+        c.width = Math.max(1, Math.round(w * pr));
+        c.height = Math.max(1, Math.round(h * pr));
+        c.style.width = `${w}px`;
+        c.style.height = `${h}px`;
+      } else {
+        this.renderer.setSize(w, h);
+      }
+    }
     this.labelLayer.setSize(w, h);
     this.backdrop.setViewport(w, h);
     this.applyViewShift();
     this.updateSpread();
+  }
+
+  /** Sit the floor under the live cloud. Camera moves then keep graph and tiles together. */
+  private syncFloor(dt?: number): void {
+    const want = floorPose(this.focus, this.anim.gridFollow ?? 1, this.spreadX);
+    const k = dt === undefined ? 1 : 1 - Math.exp(-dt / 0.32);
+    this.lastFloor = easeFloorPose(this.lastFloor, want, k);
+    this.grid.setPose(this.lastFloor);
+  }
+
+  /** Arcade look stage copies this so its floor stays under the same cloud. */
+  alignFloor(dst: FloorGrid): void {
+    dst.copyPose(this.grid);
   }
 
   /** Stretch the graph so its width matches the visible floor of this camera, not a 16:9 circle. */
@@ -3325,8 +3630,7 @@ export class NetScene implements HostedView {
     const changed = Math.abs(nextX - this.spreadX) > 0.04 || Math.abs(nextZ - this.spreadZ) > 0.04;
     this.spreadX = nextX;
     this.spreadZ = nextZ;
-    // PlaneGeometry is XY; the floor mesh is rotated -90° about X, so local Y is world Z.
-    this.grid.mesh.scale.set(Math.max(1, this.spreadX * 1.15), Math.max(1, this.spreadZ), 1);
+    this.syncFloor();
     const fog = this.scene.fog as THREE.FogExp2 | null;
     if (fog) fog.density = this.fogDensity();
     if (changed && this.nodes.size) this.bumpAlpha(0.18);
@@ -3342,6 +3646,8 @@ export class NetScene implements HostedView {
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     window.removeEventListener("resize", this.onWinResize);
+    window.removeEventListener("pointerup", this.onCamPtrLost);
+    window.removeEventListener("pointercancel", this.onCamPtrLost);
     this.pulse.disable();
     this.layout.dispose();
     this.lumaProbe.reset();
@@ -3364,6 +3670,38 @@ export class NetScene implements HostedView {
   }
   deviceOf(ip: string): Device | undefined { return this.nodes.get(this.resolve(ip))?.device; }
   get selectedIp(): string | null { return this.selected?.id ?? null; }
+}
+
+function ownRenderer(container: HTMLElement, opts: {
+  satellite: boolean;
+  dpr: number;
+  clearHex: number;
+  onLost: () => void;
+  onRestored: () => void;
+}): HostGpu {
+  if (probeWebGL()) {
+    try {
+      const renderer = new THREE.WebGLRenderer({
+        antialias: !opts.satellite && opts.dpr < 1.3,
+        alpha: false,
+        preserveDrawingBuffer: !opts.satellite,
+        powerPreference: opts.satellite ? "low-power" : "high-performance",
+        failIfMajorPerformanceCaveat: false,
+      });
+      renderer.setPixelRatio(opts.dpr);
+      const bootW = Math.max(2, container.clientWidth), bootH = Math.max(2, container.clientHeight);
+      renderer.setSize(bootW, bootH);
+      renderer.setClearColor(opts.clearHex);
+      container.appendChild(renderer.domElement);
+      renderer.domElement.addEventListener("webglcontextlost", (e) => { e.preventDefault(); opts.onLost(); });
+      renderer.domElement.addEventListener("webglcontextrestored", () => opts.onRestored());
+      return renderer;
+    } catch { /* fall through to canvas 2D */ }
+  }
+  const canvas = document.createElement("canvas");
+  canvas.dataset.softgl = "";
+  container.appendChild(canvas);
+  return new SoftwareGpu(canvas, opts.dpr);
 }
 
 function sameLayoutParams(a: LayoutParams, b: LayoutParams): boolean {

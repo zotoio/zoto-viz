@@ -6,9 +6,11 @@ CSRF is skipped; Host must still be loopback.
 
 Live tools (list_features, get_settings, set_settings, list_plugins, set_plugin,
 set_view, set_agent, roll_dice) patch the open UI over the 1 Hz WebSocket ``live``
-field. Also exposes LAN state, RF watch, plugin consent/draft, profiles, and
-memories. ``install_plugin_zip`` writes ``plugins/<id>.zip`` and unpacks into
-``plugins/.runtime/<id>/``. It never ``git add`` / ``git commit``.
+field. Also exposes LAN state, RF watch, plugin consent/draft, profiles,
+memories, and host data sources (RSS / HTTPS / local files). ``install_plugin_zip`` writes ``plugins/<id>.zip`` and unpacks into
+``plugins/.runtime/<id>/``. ``publish_local_plugin`` writes
+``~/.zoto-viz/plugins/local/<id>.zip`` and activates when the zip is safe.
+Colliding ids remint. Neither tool ``git add`` / ``git commit``.
 """
 from __future__ import annotations
 
@@ -30,22 +32,76 @@ from . import memory
 from . import paths
 from . import plugin_migration as pmg
 from . import plugin_zip as pz
+from . import plugin_local
 from . import plugins
 from . import profiles
 
 PROTOCOL = "2025-03-26"
 SERVER_NAME = "zoto-viz-plugins"
-SERVER_VERSION = "2"
+SERVER_VERSION = "3"
+
+PUBLISH_LOCAL_TOOL: dict[str, Any] = {
+    "name": "publish_local_plugin",
+    "description": (
+        "Create or replace a plugin zip in the user-local drop zone "
+        "(~/.zoto-viz/plugins/local/<id>.zip), unpack it, and activate the view when "
+        "the zip contract + schema pass and the plugin is YAML-only (or already consented). "
+        "Accepts a packed zip (zip_b64), a files tree, or a text description (mints a "
+        "graph/topology overlay). Does not write into the git checkout. Colliding ids "
+        "are reminted (id-2, …) instead of overwriting a shipped src tree or another zip. "
+        "Loopback only."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "zip_b64": {"type": "string", "description": "Base64-encoded plugin zip"},
+            "files": {
+                "type": "object",
+                "additionalProperties": {"type": "string"},
+                "description": "Plugin tree (plugin.yml required; optional visualisation.yml, frontend/, …)",
+            },
+            "description": {
+                "type": "string",
+                "description": "Natural-language brief, or a plugin.yml body starting with id:",
+            },
+            "yaml": {"type": "string", "description": "Lone plugin.yml body"},
+            "id": {
+                "type": "string",
+                "description": (
+                    "Preferred plugin id when minting from description. Slugged, then reminted "
+                    "if that id is already in the catalog (unless overwrite updates that zip)."
+                ),
+            },
+            "name": {"type": "string"},
+            "engine": {
+                "type": "string",
+                "enum": ["graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom"],
+            },
+            "base": {"type": "string", "description": "Graph wrap target when engine is graph"},
+            "overwrite": {
+                "type": "boolean",
+                "default": False,
+                "description": "Replace ~/.zoto-viz/plugins/local/<id>.zip when the sha256 differs",
+            },
+            "activate": {
+                "type": "boolean",
+                "default": True,
+                "description": "Switch the open UI to plugin:<id> when the zip is safe",
+            },
+        },
+    },
+}
 
 INSTALL_TOOL: dict[str, Any] = {
     "name": "install_plugin_zip",
     "description": (
         "Write a zoto-viz plugin zip into the contrib drop zone at plugins/<id>.zip and "
-        "unpack it into plugins/.runtime/<id>/. Loopback only. Hard-refuses when "
-        "plugins/src/<id>/ already exists (force does not override a shipped src tree). "
+        "unpack it into plugins/.runtime/<id>/. Loopback only. A colliding id (shipped "
+        "src tree or an existing zip) is reminted to <id>-2, … unless overwrite updates "
+        "that same contrib zip. Never writes over plugins/src/<id>/. "
         "Refuses a dirty working tree on plugins/src/<id>/ unless force is true. "
-        "Refuses overwrite unless overwrite is true and the existing zip differs "
-        "by sha256. Does not git-add or commit — return the written path and let the "
+        "Does not git-add or commit — return the written path and let the "
         "operator promote. Emits consent-required when TypeScript, Python, or GLSL is "
         "present and the current consent stamp does not cover the new hashes."
     ),
@@ -111,19 +167,19 @@ def _settings_schema() -> dict[str, Any]:
             "dream": {"type": "boolean"},
             "mode": {"type": "string", "description": "Catalog view id, e.g. plugin:command"},
             "chrome": {"type": "string", "enum": list(live.CHROME)},
-            "camera": {"type": "string", "enum": list(live.CAM)},
-            "mic": {"type": "string", "enum": list(live.CAM)},
             "redact": {"type": "boolean"},
             "merge": {"type": "boolean"},
             "temper": {"type": "integer", "minimum": live.TEMPER_MIN, "maximum": live.TEMPER_MAX},
             "weather": {"type": "string", "enum": list(live.WEATHERS)},
             "control": {"type": "boolean", "description": "Server AI Control"},
             "model": {"type": "string", "description": "Ollama model tag"},
-            "shuffle": {"type": "boolean", "description": "Same as header dice: randomize groups on Settings → Dice"},
+            "shuffle": {"type": "boolean", "description": "One-shot dice roll (same as Settings → Dice roll now). Repeat uses dice.on + dice.periodMin."},
             "dice": {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
+                    "on": {"type": "boolean", "description": "Header dice repeat switch"},
+                    "periodMin": {"type": "integer", "minimum": 1, "maximum": 60, "description": "Minutes between automatic rolls while on"},
                     "include": {
                         "type": "object",
                         "additionalProperties": False,
@@ -148,6 +204,7 @@ def _settings_schema() -> dict[str, Any]:
                     "layout": {"type": "string", "enum": list(live.FEED_LAY)},
                     "scope": {"type": "string", "enum": list(live.FEED_SCOPE)},
                     "modulate": {"type": "boolean"},
+                    "includeSources": {"type": "boolean"},
                     "density": {"type": "number", "minimum": 12, "maximum": 80},
                     "textSize": {"type": "number", "minimum": 10, "maximum": 20},
                 },
@@ -184,9 +241,10 @@ SET_SETTINGS_TOOL: dict[str, Any] = {
     "name": "set_settings",
     "description": (
         "Patch the open live UI. Same whitelist as an agent ```settings``` fence: theme, dream, "
-        "mode, chrome, camera, mic, redact, merge, feed, show, filters, anim (motion, physics, "
-        "mosaic, sky, audio), modeOptions, arcade, plugins, agent look (shader/photos/SVG), "
-        "dice (include groups + ceilings), shuffle (dice), plus temper, weather, control, model."
+        "mode, chrome, redact, merge, feed, show, filters, anim (motion, physics, "
+        "mosaic / mosaicTiles / mosaicTree, sky, audio), modeOptions, arcade, plugins, agent look (shader/photos/SVG), "
+        "dice (on / periodMin / include groups + ceilings), shuffle (one-shot dice), plus temper, weather, control, model. "
+        "Camera and microphone are operator-only (Settings → Privacy)."
     ),
     "inputSchema": _settings_schema(),
 }
@@ -260,10 +318,10 @@ SET_AGENT_TOOL: dict[str, Any] = {
 ROLL_DICE_TOOL: dict[str, Any] = {
     "name": "roll_dice",
     "description": (
-        "Same as the header dice: randomize the groups left on in Settings → Dice "
-        "(theme, view, mosaic, chrome, feed, camera, motion, physics, knobs by default). "
-        "Privacy filters and prompts stay. Dream cycling + AI Control and the handoff chat "
-        "follow the dice settings."
+        "One-shot roll of the groups left on in Settings → Dice "
+        "(theme, view, mosaic, feed, motion, physics, knobs by default). Does not toggle the header dice repeat switch. "
+        "Chrome, camera, and microphone stay. Privacy filters and prompts stay. "
+        "Dream cycling + AI Control follow the dice settings. A roll does not start a chat or think turn."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -378,6 +436,48 @@ ADD_MEMORY_TOOL: dict[str, Any] = {
     },
 }
 
+LIST_SOURCES_TOOL: dict[str, Any] = {
+    "name": "list_sources",
+    "description": (
+        "Host data sources (RSS, public HTTPS, local files under $HOME / ~/.zoto-viz). "
+        "Returns the registry plus the last poll. Headlines also ride GET /api/state as sources."
+    ),
+    "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
+}
+
+SET_SOURCE_TOOL: dict[str, Any] = {
+    "name": "set_source",
+    "description": (
+        "Create or update one host source. type is rss, http, or file. "
+        "Remote urls must be public HTTPS. File paths must stay under the home directory."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "id": {"type": "string"},
+            "type": {"type": "string", "enum": ["rss", "http", "file"]},
+            "label": {"type": "string"},
+            "url": {"type": "string", "description": "Public HTTPS URL for rss / http"},
+            "path": {"type": "string", "description": "Local file under $HOME or ~/.zoto-viz"},
+            "interval": {"type": "number", "minimum": 15, "maximum": 86400},
+            "enabled": {"type": "boolean"},
+            "feed": {"type": "boolean", "description": "Show headlines on the live feed ticker"},
+        },
+    },
+}
+
+DELETE_SOURCE_TOOL: dict[str, Any] = {
+    "name": "delete_source",
+    "description": "Remove one host source by id.",
+    "inputSchema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["id"],
+        "properties": {"id": {"type": "string"}},
+    },
+}
+
 DELETE_MEMORY_TOOL: dict[str, Any] = {
     "name": "delete_memory",
     "description": "Delete one memory by id, or all memories when id is omitted.",
@@ -410,7 +510,11 @@ def active_tools() -> list[dict[str, Any]]:
         LIST_MEMORIES_TOOL,
         ADD_MEMORY_TOOL,
         DELETE_MEMORY_TOOL,
+        LIST_SOURCES_TOOL,
+        SET_SOURCE_TOOL,
+        DELETE_SOURCE_TOOL,
         INSTALL_TOOL,
+        PUBLISH_LOCAL_TOOL,
     ]
 
 
@@ -461,14 +565,16 @@ def install_catalog_zip(
         doc = plugins.validate_doc(manifest.plugin)
         pid = str(doc["id"])
         dest = paths.plugin_zips_dir() / f"{pid}.zip"
+        raw, doc, dest, reminted_from = plugin_local.remint_zip(raw, dest, overwrite=overwrite)
+        pid = str(doc["id"])
+        tmp_path.write_bytes(raw)
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
-        owned = plugins.src_plugin_home(pid)
-        if owned is not None:
-            raise pmg.SrcOwnedError(pid, str(owned))
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
             unpacked = pz.unpack_zip(dest, runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
+            if reminted_from:
+                info["remintedFrom"] = reminted_from
             _refresh_plugin_python(info)
             return info
         dirty = pmg.dirty_tree_paths(pid)
@@ -482,6 +588,8 @@ def install_catalog_zip(
         os.replace(staged, dest)
         unpacked = pz.unpack_zip(dest, runtime)
         info = _install_result(doc, dest, unpacked, wrote=True)
+        if reminted_from:
+            info["remintedFrom"] = reminted_from
         _refresh_plugin_python(info)
         return info
     finally:
@@ -682,6 +790,21 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
         if name == "roll_dice":
             snap = live.queue_patch({"shuffle": True})
             return _tool_text({"ok": True, "shuffle": True, "live": snap})
+        if name == "list_sources":
+            from . import sources
+            return _tool_text({"ok": True, **sources.config_payload()})
+        if name == "set_source":
+            from . import sources
+            row = sources.upsert(args)
+            return _tool_text({"ok": True, "source": row, **sources.config_payload()})
+        if name == "delete_source":
+            from . import sources
+            sid = str(args.get("id") or "").strip()
+            if not sid:
+                raise ValueError("id required")
+            if not sources.delete(sid):
+                raise ValueError(f"unknown source {sid!r}")
+            return _tool_text({"ok": True, "id": sid, **sources.config_payload()})
         if name == "get_state":
             from .monitor import publish_state
             return _tool_text({"ok": True, **publish_state(_require_state(app))})
@@ -748,6 +871,9 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
                 return _tool_text({"ok": ok, "memories": memory.list_memories(kind="memory")})
             memory.clear_memories()
             return _tool_text({"ok": True, "memories": []})
+        if name == "publish_local_plugin":
+            info = plugin_local.publish_local(args)
+            return _tool_text(info, is_error=not info.get("ok"))
         if name == "install_plugin_zip":
             raw = decode_zip_b64(str(args.get("zip_b64") or ""))
             info = install_catalog_zip(
@@ -786,17 +912,19 @@ def handle_rpc(msg: dict[str, Any], app: web.Application | None = None) -> dict[
     if method == "initialize":
         return _ok(rid, {
             "protocolVersion": PROTOCOL,
-            "capabilities": {"tools": {"listChanged": False}},
+            "capabilities": {"tools": {"listChanged": True}},
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             "instructions": (
                 "Control a running zoto-viz monitor. list_features names every settable key "
                 "(theme, view, feed, show, filters, anim/physics/mosaic, plugins, agent look, dice). "
                 "get_settings / set_settings / set_view / set_plugin / set_agent / roll_dice patch the open UI. "
                 "get_state and get_traffic read the LAN. get_rf_watch / set_rf_watch tune Wi-Fi. "
-                "consent_plugin and draft_plugin / install_plugin_zip manage catalog plugins "
+                "consent_plugin, draft_plugin, publish_local_plugin, and install_plugin_zip manage plugins "
                 "(plugin.yml at the zip or src root; optional visualisation.yml, frontend/, backend/, datasource/, sky/). "
+                "publish_local_plugin writes ~/.zoto-viz/plugins/local/<id>.zip and hot-activates when safe. "
                 "list_profiles / apply_profile load saved looks. list_memories / add_memory / delete_memory "
-                "curate chat memories. Zip install does not git-add; the operator promotes."
+                "curate chat memories. list_sources / set_source / delete_source manage RSS, HTTPS, and "
+                "local-file feeds (~/.zoto-viz/sources.yml). Repo zip install does not git-add; the operator promotes."
             ),
         })
     if method == "ping":

@@ -66,7 +66,10 @@ def test_host_origin_csrf_helpers() -> None:
     assert access.origin_ok(FakeReq(host="lan.box:7020", origin="http://lan.box:7020", lan=True))
     assert not access.origin_ok(FakeReq(host="lan.box:7020", origin="http://other.box", lan=True))
     assert access.csrf_ok(FakeReq(cookie="tok", header="tok"))
+    assert access.csrf_ok(FakeReq(cookie="", header="tok"))
+    assert access.csrf_ok(FakeReq(cookie="stale", header="tok"))
     assert not access.csrf_ok(FakeReq(cookie="tok", header="nope"))
+    assert not access.csrf_ok(FakeReq(cookie="tok", header=""))
     assert not access.csrf_ok(FakeReq(cookie="tok", header="tok", csrf=""))
     resp = type("R", (), {"headers": {}, "set_cookie": lambda *a, **k: None})()
     access.attach_csrf(FakeReq(csrf=""), resp)
@@ -108,6 +111,12 @@ class AccessMiddlewareTests(AioHTTPTestCase):
             headers={"Host": "127.0.0.1:7020", access.HEADER: token or ""},
         )
         assert ok.status == 200
+
+        stale = await self.client.post(
+            "/poke",
+            headers={"Host": "127.0.0.1:7020", access.HEADER: "token-aaa", "Cookie": f"{access.COOKIE}=stale"},
+        )
+        assert stale.status == 200
 
     async def test_rebinding_host_rejected(self) -> None:
         resp = await self.client.get("/ok", headers={"Host": "evil.example:7020"})
