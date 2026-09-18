@@ -283,7 +283,9 @@ const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
 addPresentListener((ts) => {
-  if (normalizeVizDemoPackId(tsWatchId)) vizBudget.markPresent(ts);
+  const mode = modeById(modeSel.value);
+  const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
+  if (packId) vizBudget.markPresent(ts);
 });
 addPresentListener(markPresent);
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
@@ -292,7 +294,10 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
   vizWriter = writer;
   if (resetFrameTs) vizFrameTs = 0;
-  if (resetBudget) vizBudget.reset();
+  if (resetBudget) {
+    vizBudget.reset();
+    vizHud.resetSkipBaseline();
+  }
   if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
 }
 function swapVizPack(packId: VizDemoPackId): void {

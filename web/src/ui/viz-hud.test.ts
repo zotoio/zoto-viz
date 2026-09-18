@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { StateMsg } from "../core/types";
 import { protocols } from "../core/modes";
+import { hudTickFromBudget } from "../plugins/dogfood-runner";
+import { VizFrameBudget } from "../plugins/viz-host";
 import {
   VizHud,
   estimateTalkerParticles,
@@ -97,6 +99,43 @@ describe("viz hud helpers", () => {
 
   it("returns zero for empty skip samples", () => {
     expect(skipRatePerSec([], 5000)).toBe(0);
+  });
+
+  it("records present-time skips after the second markPresent (soft FPS honesty)", () => {
+    const budget = new VizFrameBudget();
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("rf-constellation", "RF Constellation");
+    hud.tick(hudTickFromBudget("rf-constellation", "RF Constellation", minimalState(), budget, 1000));
+
+    budget.markPresent(1000);
+    budget.markPresent(1029);
+    expect(budget.stats.skipped).toBeGreaterThanOrEqual(1);
+
+    hud.tick(hudTickFromBudget("rf-constellation", "RF Constellation", minimalState(), budget, 1029));
+
+    const skipText = hud.root.querySelector(".viz-hud-skip")?.textContent ?? "";
+    expect(skipText).not.toBe("skips 0/s");
+    expect(skipRatePerSec([{ t: 1029, n: budget.stats.skipped }], 1029)).toBeLessThanOrEqual(240);
+  });
+
+  it("syncs skip baseline on pack change without a false burst", () => {
+    const budget = new VizFrameBudget();
+    budget.markPresent(0);
+    budget.markPresent(29);
+    expect(budget.stats.skipped).toBe(1);
+
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("hn-term", "HN Term");
+    hud.tick(hudTickFromBudget("hn-term", "HN Term", minimalState(), budget, 29));
+    expect(hud.root.querySelector(".viz-hud-skip")?.textContent).toBe("skips 0/s");
+
+    budget.markPresent(58);
+    hud.tick(hudTickFromBudget("hn-term", "HN Term", minimalState(), budget, 58));
+    const skipText = hud.root.querySelector(".viz-hud-skip")?.textContent ?? "";
+    expect(skipText).not.toBe("skips 0/s");
+    expect(skipRatePerSec([{ t: 58, n: 1 }], 58)).toBeLessThanOrEqual(240);
   });
 
   it("flags skip pulse for ~400 ms after a skip", () => {
