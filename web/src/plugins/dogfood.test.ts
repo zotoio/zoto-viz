@@ -87,6 +87,50 @@ describe("viz dogfood gates", () => {
     expect(delivered).toBe(0);
   });
 
+  it("packet-tunnel demo fallback animates buffer and bright with no packets", () => {
+    const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
+    let bright = 0;
+    const frame = {
+      t: 1.5,
+      dt: 0,
+      audio: 0,
+      packets: [] as { proto: string; field: number }[],
+      rf: [],
+      talkers: [],
+      headlines: [],
+    };
+    runPackFrameHandler("packet-tunnel", frame, {
+      writeBuffer: (slot, data) => { writer.writeBuffer(slot, data); },
+      writeUniform: (name, value) => {
+        writer.writeUniform(name, value);
+        if (name === "uBright" && typeof value === "number") bright = value;
+      },
+      writeParticles: () => {},
+    });
+    const buf = Array.from(writer.snapshot(0));
+    expect(buf[0]).toBeGreaterThan(0.25);
+    expect(buf[1]).toBeGreaterThan(0.25);
+    expect(bright).toBeGreaterThan(0.4);
+  });
+
+  it("packet-tunnel prefers live packets over demo fallback", () => {
+    const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
+    let bright = 0;
+    const frame = buildVizFrame(fatLan, 0, 0.1);
+    runPackFrameHandler("packet-tunnel", frame, {
+      writeBuffer: (slot, data) => { writer.writeBuffer(slot, data); },
+      writeUniform: (name, value) => {
+        writer.writeUniform(name, value);
+        if (name === "uBright" && typeof value === "number") bright = value;
+      },
+      writeParticles: () => {},
+    });
+    const buf = Array.from(writer.snapshot(0));
+    expect(buf[0]).toBeCloseTo(frame.packets[0]!.field);
+    expect(buf[1]).toBeGreaterThan(0);
+    expect(bright).toBeGreaterThan(0.4);
+  });
+
   it("talker-storm pack handler refuses more than 512 particles", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["talker-storm"]);
     const frame = buildVizFrame(fatLan, 0, 0.1);

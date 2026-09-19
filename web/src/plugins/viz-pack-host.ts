@@ -5,15 +5,12 @@ import {
 } from "../../../plugins/src/hn-term/frontend/teletype";
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoOrbs } from "../../../plugins/src/stereo-gram/frontend/orbs";
+import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
 
 export interface VizPackHandlers {
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: VizUniformValue) => void;
   writeParticles: (data: number[], stride?: number) => void;
-}
-
-function tunnelHue(field: number): [number, number, number] {
-  return [0.15 + field * 0.7, 0.35 + field * 0.4, 0.85 - field * 0.3];
 }
 
 function roleHue(role: string): number {
@@ -79,11 +76,10 @@ export function runPackFrameHandler(
 ): void {
   switch (packId) {
     case "packet-tunnel": {
-      const lead = frame.packets[0]?.field ?? 0;
-      const depth = frame.packets.reduce((s, p) => s + p.field, 0) / Math.max(1, frame.packets.length);
-      handlers.writeBuffer(0, [lead, depth, frame.t % 1]);
-      handlers.writeUniform("uBright", 0.55 + depth * 0.35);
-      handlers.writeUniform("uAccent", tunnelHue(lead));
+      const sample = packetTunnelSample(frame);
+      handlers.writeBuffer(0, sample.buffer);
+      handlers.writeUniform("uBright", sample.bright);
+      handlers.writeUniform("uAccent", sample.accent);
       break;
     }
     case "rf-constellation": {
