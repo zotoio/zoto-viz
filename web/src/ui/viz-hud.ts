@@ -99,6 +99,8 @@ export function vizHudMetric(
   }
 }
 
+const SKIP_RATE_CEILING = 240;
+
 /** Rolling skip rate over the last ~1 s from the host cumulative skip counter. */
 export function skipRatePerSec(
   samples: readonly { t: number; n: number }[],
@@ -107,14 +109,13 @@ export function skipRatePerSec(
 ): number {
   const cutoff = now - windowMs;
   let total = 0;
-  let oldest = now;
   for (const s of samples) {
     if (s.t < cutoff) continue;
     total += s.n;
-    if (s.t < oldest) oldest = s.t;
   }
-  const span = Math.min(windowMs, Math.max(1, now - oldest));
-  return (total / span) * 1000;
+  if (total <= 0) return 0;
+  const rate = (total / windowMs) * 1000;
+  return Math.min(rate, SKIP_RATE_CEILING);
 }
 
 export function formatSkipRate(rate: number): string {
@@ -143,6 +144,7 @@ export class VizHud {
 
   private activeId: VizDemoPackId | null = null;
   private lastSkipped = 0;
+  private skipNeedsSync = true;
   private readonly skipSamples: { t: number; n: number }[] = [];
   private pulseUntil = 0;
 
@@ -196,12 +198,22 @@ export class VizHud {
   }
 
   setActive(packId: string | null, packName: string): void {
-    this.activeId = normalizeVizDemoPackId(packId);
+    const next = normalizeVizDemoPackId(packId);
+    const changed = next !== this.activeId;
+    this.activeId = next;
     this.root.hidden = !this.activeId;
     if (!this.activeId) return;
+    if (changed) this.resetSkipBaseline();
     if (!this.packEl.textContent) this.packEl.textContent = packName;
     else morphCopy(this.packEl, packName);
     this.packSel.value = this.activeId;
+  }
+
+  /** Re-sync skip delta baseline after host budget reset (avoids desync / false bursts). */
+  resetSkipBaseline(): void {
+    this.skipSamples.length = 0;
+    this.pulseUntil = 0;
+    this.skipNeedsSync = true;
   }
 
   tick(input: VizHudTick): void {
@@ -211,11 +223,16 @@ export class VizHud {
     this.metricLabelEl.textContent = metric.label;
     this.metricValueEl.textContent = metric.value;
 
-    const delta = stats.skipped - this.lastSkipped;
-    this.lastSkipped = stats.skipped;
-    if (delta > 0) {
-      this.skipSamples.push({ t: now, n: delta });
-      this.pulseUntil = now + SKIP_PULSE_MS;
+    if (this.skipNeedsSync) {
+      this.lastSkipped = stats.skipped;
+      this.skipNeedsSync = false;
+    } else {
+      const delta = stats.skipped - this.lastSkipped;
+      this.lastSkipped = stats.skipped;
+      if (delta > 0) {
+        this.skipSamples.push({ t: now, n: delta });
+        this.pulseUntil = now + SKIP_PULSE_MS;
+      }
     }
     const cutoff = now - SKIP_WINDOW_MS;
     while (this.skipSamples.length && this.skipSamples[0].t < cutoff) this.skipSamples.shift();
