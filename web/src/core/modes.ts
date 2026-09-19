@@ -3,6 +3,10 @@ import type { GLink, GNode } from "../graph/scene";
 import type { FabricKind } from "../graph/fabric";
 import { KIND_COLOR, KIND_LABEL, KIND_ORDER, ROLE_COLOR, ago, deviceKind, displayName, fmtBytes, type Device, type DeviceKind, type Role, type WifiWatch, usefulName, unescapeDns } from "./types";
 import { rName } from "./redact";
+import {
+  cgroupTree, diskColumns, gpuPodium, memoryBubbles, pullToward,
+  socketBipartite, udevClusters, unitGrid, type SysLayoutNode,
+} from "./sys-layouts";
 
 /**
  * Node shapes the scene can draw (index = `instanceShape`; the sphere cloud's vertex shader bends each instance
@@ -136,21 +140,41 @@ export interface ViewMode {
   overlays?(ctx: ModeCtx): Overlay[];
 }
 
-/** Capture the view is drawn from: IP/LAN, Wi-Fi, Bluetooth, this-host CPU, or host data sources. */
-export type ViewSource = "NET" | "AIR" | "BT" | "CPU" | "SRC";
+/** Capture the view is drawn from: IP/LAN, Wi-Fi, Bluetooth, this-host CPU, Linux SYS, or host data sources. */
+export type ViewSource = "NET" | "AIR" | "BT" | "CPU" | "SYS" | "SRC";
 
-export function viewSource(m: Pick<ViewMode, "id" | "graphBase" | "arcadeId">): ViewSource {
+export const SYS_BASES = ["memory", "disk", "gpu", "sockets", "cgroups", "units", "udev", "bridge"] as const;
+export type SysBase = (typeof SYS_BASES)[number];
+
+export function isSysBase(base: string | undefined): base is SysBase {
+  return !!base && (SYS_BASES as readonly string[]).includes(base);
+}
+
+export function viewSource(m: Pick<ViewMode, "id" | "graphBase" | "arcadeId" | "pluginId" | "label">): ViewSource {
   if (m.graphBase === "wifi") return "AIR";
   if (m.graphBase === "bluetooth") return "BT";
-  if (m.graphBase === "sources") return "SRC";
+  if (m.graphBase === "sources" || m.arcadeId === "carousel" || m.id === "carousel" || nasaStillView(m)) return "SRC";
   if (m.graphBase === "cpu" || m.arcadeId === "cpupong" || m.arcadeId === "doom" || m.id === "cpupong" || m.id === "doom" || m.id === "cpu") return "CPU";
+  if (isSysBase(m.graphBase) || (m.id ? isSysBase(m.id) : false)) return "SYS";
   return "NET";
 }
 
-/** Menu / mosaic caption: `NET Topology`, `AIR SSIDs`, `CPU cores`, `SRC Source web`. */
+/** NASA Ring / Slides / Drift (and any catalog row whose id or label says NASA). */
+export function nasaStillView(m: Pick<ViewMode, "id" | "pluginId" | "label">): boolean {
+  return /nasa/i.test(`${m.pluginId ?? ""} ${m.id ?? ""} ${m.label ?? ""}`);
+}
+
+/** Which arcade canvas to run. NASA views share the contain-fit slideshow stage. */
+export function arcadeSlotFor(m: Pick<ViewMode, "id" | "standalone" | "arcadeId" | "pluginId" | "label">): string | null {
+  if (m.standalone) return m.arcadeId ?? m.id ?? null;
+  if (nasaStillView(m)) return "carousel";
+  return null;
+}
+
+/** Menu / mosaic caption: `NET Topology`, `AIR SSIDs`, `CPU cores`, `SYS Memory`, `SRC Source web`. */
 export function viewCaption(m: Pick<ViewMode, "id" | "label" | "graphBase" | "arcadeId">): string {
   const tag = viewSource(m);
-  let name = m.label.trim().replace(/^(NET|AIR|BT|CPU|SRC)\s+/i, "");
+  let name = m.label.trim().replace(/^(NET|AIR|BT|CPU|SYS|SRC)\s+/i, "");
   if (tag === "AIR") name = name.replace(/^Air\s+/i, "");
   return `${tag} ${name}`;
 }
@@ -189,6 +213,14 @@ const cpuPct = (d: Device) => Math.max(0, d.cpu ?? 0);
 export const CPU_RED = 80;
 export function cpuHeat(pct: number): number {
   return heat(Math.min(1, Math.max(0, pct) / CPU_RED));
+}
+/** Blend utilisation with package/device °C so RAPL/hwmon tints cores without a new view. */
+export function cpuThermalHeat(d: Device, asCore = false): number {
+  const pct = cpuPct(d);
+  const temp = d.temp;
+  if (!asCore || temp == null || !Number.isFinite(temp)) return cpuHeat(pct);
+  const th = Math.min(1, Math.max(0, (temp - 45) / 40));
+  return heat(0.55 * Math.min(1, pct / CPU_RED) + 0.45 * th);
 }
 const fmtCpu = (n: number) => `${n >= 9.5 ? Math.round(n) : n.toFixed(1)}%`;
 const isCpuCore = (id: string) => /^cpu:\d+$/.test(id);
@@ -811,7 +843,7 @@ export const cores: ViewMode = (() => {
       const ranked = [...ctx.nodes.values()].filter((n) => n.visible && isCpuProc(n.id)).sort((a, b) => cpuPct(b.device) - cpuPct(a.device));
       for (const n of ranked.slice(0, paneLabelCap(ctx))) top.add(n);
     },
-    nodeColor: (n) => (n.id === "cpu:host" ? ROLE_COLOR.self : cpuHeat(cpuPct(n.device))),
+    nodeColor: (n) => (n.id === "cpu:host" ? ROLE_COLOR.self : cpuThermalHeat(n.device, isCpuCore(n.id))),
     nodeShape: (n) => (isCpuCore(n.id) ? 1 : n.id === "cpu:host" ? 3 : 0),
     nodeScale: (n) => {
       const p = cpuPct(n.device);
@@ -857,7 +889,7 @@ export const load: ViewMode = (() => {
       for (const n of ranked.slice(0, paneLabelCap(ctx, Number(ctx.opts.top) || ctx.labelCount))) top.add(n);
     },
     nodeColor: (n) => {
-      if (isCpuCore(n.id)) return ROLE_COLOR.lan;
+      if (isCpuCore(n.id)) return cpuThermalHeat(n.device, true);
       if (n.id === "cpu:host") return ROLE_COLOR.self;
       return cpuHeat(cpuPct(n.device));
     },
@@ -1034,11 +1066,12 @@ export const pacman: ViewMode = {
   id: "pacman",
   label: "Pac-Man",
   standalone: true,
-  hint: "A 3D maze built from beveled wall modules. Pac-Man is this host; ghosts are the busiest talkers; pellets spawn from live packets. The camera follows the mouth. Drag to look around the set.",
+  hint: "A 3D maze. Pac-Man is this host; ghosts are talkers; pellets are packets. Ticker words fly into the mouth, get munched, and yellow crumbs hop out and fall. The camera follows the chomp.",
   legend: () => [
     { color: "#ffee58", label: "Pac-Man · this host" },
     { color: "#ef5350", label: "ghost · talker" },
     { color: "#fff8e1", label: "pellet · packet" },
+    { color: "#ffee58", label: "crumb · munched ticker" },
     { color: "#1565c0", label: "wall" },
   ],
 };
@@ -1055,6 +1088,18 @@ export const tetris: ViewMode = {
     { color: "#66bb6a", label: "HTTP" },
     { color: "#ab47bc", label: "QUIC" },
     { color: "#ef5350", label: "SSH" },
+  ],
+};
+
+/** NASA IOTD stills, full-viewport contain-fit slideshow. Rendered by carousel.ts. */
+export const carousel: ViewMode = {
+  id: "carousel",
+  label: "Carousel",
+  standalone: true,
+  hint: "NASA Image of the Day stills fill the viewport without stretching, hold, then rotate. Captions crawl on the ticker.",
+  legend: () => [
+    { color: "#f4e8c8", label: "still · contain-fit" },
+    { color: "#90caf9", label: "ticker · caption" },
   ],
 };
 
@@ -1270,18 +1315,23 @@ export const sources: ViewMode = (() => {
     rss: 0xffca28,
     http: 0x42a5f5,
     file: 0x66bb6a,
+    journal: 0xab47bc,
+    kmsg: 0xef5350,
   };
-  const SRC_KIND_SHAPE: Record<string, number> = { rss: 0, http: 1, file: 4, hub: 2 };
+  const SRC_KIND_SHAPE: Record<string, number> = { rss: 0, http: 1, file: 4, journal: 2, kmsg: 1, hub: 2 };
   const top = new Set<GNode>();
   return {
     id: "sources",
     label: "Source web",
     graphBase: "sources",
-    hint: "The host sources registry as a graph: each RSS feed, HTTP JSON document, or local file is a hub; titles, JSON leaves, and file lines are nodes. Not the LAN.",
+    hint: "The host sources registry as a graph: each RSS feed, HTTP JSON document, local file, user journal, or kernel ring is a hub; titles, JSON leaves, and log lines are nodes. Not the LAN.",
     camera: [0, 280, 620],
     flatten: false,
     options: [
-      { key: "kind", label: "kind", values: [["all", "all kinds"], ["rss", "RSS"], ["http", "HTTP JSON"], ["file", "local files"]], default: "all" },
+      { key: "kind", label: "kind", values: [
+        ["all", "all kinds"], ["rss", "RSS"], ["http", "HTTP JSON"], ["file", "local files"],
+        ["journal", "user journal"], ["kmsg", "kernel ring"],
+      ], default: "all" },
     ],
     config: [
       {
@@ -1294,6 +1344,8 @@ export const sources: ViewMode = (() => {
       { color: css(SRC_KIND_COLOR.rss), label: "RSS item" },
       { color: css(SRC_KIND_COLOR.http), label: "HTTP JSON" },
       { color: css(SRC_KIND_COLOR.file), label: "file line" },
+      { color: css(SRC_KIND_COLOR.journal ?? 0xab47bc), label: "journal" },
+      { color: css(SRC_KIND_COLOR.kmsg ?? 0xef5350), label: "kmsg" },
       { color: css(SRC_KIND_COLOR.hub), label: "source / hub" },
     ],
     prepare(ctx) {
@@ -1311,18 +1363,262 @@ export const sources: ViewMode = (() => {
   };
 })();
 
+function asSysNodes(nodes: Iterable<GNode>): SysLayoutNode[] {
+  return [...nodes].map((n) => ({
+    id: n.id,
+    role: n.device.role,
+    vendor: n.device.vendor,
+    cpu: n.device.cpu,
+    bytes_in: n.device.bytes_in,
+    ports: n.device.ports,
+  }));
+}
+
+const SYS_CHART: Record<SysBase, {
+  flatten: boolean;
+  camera: [number, number, number];
+  hint: string;
+  legend: string;
+  edges: "none" | "struct" | "all";
+  snap: number;
+  place: (nodes: SysLayoutNode[], spreadX: number) => Map<string, [number, number, number]>;
+}> = {
+  memory: {
+    flatten: true,
+    camera: [0, 920, 36],
+    hint: "2D packed bubbles: RAM pressure on a disc. PSI and swap sit on the inner ring; process size is RSS.",
+    legend: "RSS share (bubbles)",
+    edges: "none",
+    snap: 0.55,
+    place: memoryBubbles,
+  },
+  disk: {
+    flatten: false,
+    camera: [520, 130, 260],
+    hint: "3D columns: block devices at the back, height is read+write bytes/s. Front row is processes doing I/O.",
+    legend: "bytes/s (columns)",
+    edges: "none",
+    snap: 0.5,
+    place: diskColumns,
+  },
+  gpu: {
+    flatten: false,
+    camera: [90, 150, 480],
+    hint: "3D podium: each GPU is a card in front of this host. Height and heat are utilisation; aliases carry VRAM and watts.",
+    legend: "GPU util (podium)",
+    edges: "none",
+    snap: 0.5,
+    place: gpuPodium,
+  },
+  sockets: {
+    flatten: true,
+    camera: [0, 900, 40],
+    hint: "2D bipartite: local processes on the left, TCP peers on the right. Internet peers sit farther out.",
+    legend: "process ↔ peer",
+    edges: "struct",
+    snap: 0.55,
+    place: socketBipartite,
+  },
+  cgroups: {
+    flatten: true,
+    camera: [0, 880, 50],
+    hint: "2D tree: user.slice / system.slice by path depth. Node size is process count in the group.",
+    legend: "cgroup tree",
+    edges: "struct",
+    snap: 0.5,
+    place: (nodes, sx) => cgroupTree(nodes, sx),
+  },
+  units: {
+    flatten: true,
+    camera: [0, 940, 28],
+    hint: "2D status grid: failed user units on the front row, running units behind. Red is failed.",
+    legend: "failed / running",
+    edges: "none",
+    snap: 0.6,
+    place: unitGrid,
+  },
+  udev: {
+    flatten: false,
+    camera: [380, 160, 300],
+    hint: "3D class clusters: net, drm, block, input each get a ring. New devices lift; gone devices drop.",
+    legend: "udev class",
+    edges: "none",
+    snap: 0.5,
+    place: udevClusters,
+  },
+  bridge: {
+    flatten: false,
+    camera: [0, 420, 820],
+    hint: "3D schematic: this host at the hub, one satellite per subsystem.",
+    legend: "subsystems",
+    edges: "all",
+    snap: 0.35,
+    place: (nodes, spreadX) => {
+      const out = new Map<string, [number, number, number]>();
+      const sats = nodes.filter((n) => n.id.startsWith("bridge:") && n.role !== "self");
+      const hub = nodes.find((n) => n.role === "self");
+      if (hub) out.set(hub.id, [0, 0, 0]);
+      sats.forEach((n, i) => {
+        const a = (i / Math.max(1, sats.length)) * Math.PI * 2 - Math.PI / 2;
+        out.set(n.id, [Math.cos(a) * 200 * spreadX, 20, Math.sin(a) * 200]);
+      });
+      for (const n of nodes) if (!out.has(n.id)) out.set(n.id, [0, 0, 0]);
+      return out;
+    },
+  },
+};
+
+/** Linux host graphs that are not CPU: memory/PSI, disk, GPU, sockets, cgroups, units, udev, bridge. */
+function sysGraph(
+  id: SysBase,
+  label: string,
+  hint: string,
+  hub: string,
+): ViewMode {
+  const top = new Set<GNode>();
+  const isHub = (n: GNode) => n.id === hub || n.device.role === "self";
+  const chart = SYS_CHART[id];
+  let targets = new Map<string, [number, number, number]>();
+  return {
+    id,
+    label,
+    graphBase: id,
+    hint: chart.hint || hint,
+    camera: chart.camera,
+    flatten: chart.flatten,
+    legend: () => [
+      { color: css(heat(0.15)), label: "quiet" },
+      { color: css(heat(0.6)), label: "busy" },
+      { color: css(heat(1)), label: "hot" },
+      { color: css(ROLE_COLOR.self), label: "this host" },
+      { color: css(0x8ecae6), label: chart.legend },
+    ],
+    prepare(ctx) {
+      top.clear();
+      const ranked = [...ctx.nodes.values()]
+        .filter((n) => n.visible && !isHub(n))
+        .sort((a, b) => (cpuPct(b.device) - cpuPct(a.device)) || (b.device.bytes_in - a.device.bytes_in));
+      for (const n of ranked.slice(0, paneLabelCap(ctx))) top.add(n);
+      targets = chart.place(asSysNodes([...ctx.nodes.values()].filter((n) => n.visible)), ctx.spreadX);
+    },
+    force(nodes, alpha) {
+      pullToward(nodes, targets, alpha, chart.snap);
+    },
+    nodeColor: (n) => {
+      if (isHub(n)) return ROLE_COLOR.self;
+      if (id === "units") return n.device.role === "internet" ? 0xff4d4d : 0x7ee8a0;
+      if (id === "sockets") return n.id.startsWith("sock:peer:") ? (n.device.role === "internet" ? ROLE_COLOR.internet : 0x8ecae6) : 0xf4d35e;
+      if (id === "udev") return n.device.role === "local" ? 0x5eead4 : n.device.role === "internet" ? 0xff6b4a : cpuHeat(cpuPct(n.device));
+      if (id === "disk" && n.device.vendor === "block") return cpuHeat(Math.max(20, cpuPct(n.device)));
+      return n.device.role === "internet" ? ROLE_COLOR.internet : cpuHeat(cpuPct(n.device));
+    },
+    nodeShape: (n) => {
+      if (isHub(n)) return 3;
+      if (id === "memory") return 0;
+      if (id === "disk") return 1;
+      if (id === "gpu") return 4;
+      if (id === "sockets") return n.id.startsWith("sock:peer:") ? 5 : 1;
+      if (id === "cgroups") return n.device.role === "gateway" ? 1 : 0;
+      if (id === "units") return n.device.role === "internet" ? 2 : 1;
+      if (id === "udev") return 2;
+      return 0;
+    },
+    nodeScale: (n) => {
+      const p = cpuPct(n.device);
+      if (isHub(n)) {
+        if (id === "memory" || id === "cgroups") return 8 + Math.min(5, p / 20);
+        return 0.35;
+      }
+      if (id === "memory") return 4 + 18 * Math.min(1, p / 100);
+      if (id === "gpu") return 12 + 14 * Math.min(1, p / 80);
+      if (id === "disk" && n.device.vendor === "block") return 7 + 16 * Math.min(1, p / 80);
+      if (id === "disk") return 4;
+      if (id === "units") return 6;
+      if (id === "cgroups") return 7 + 8 * Math.min(1, p / 40);
+      if (id === "sockets") return 5;
+      if (id === "udev") return 5;
+      return 3 + 14 * Math.min(1, p / 80);
+    },
+    forceLabel: (n) => isHub(n) || top.has(n),
+    suppressLabel: (n) => !isHub(n) && !top.has(n),
+    nodeLabel: (n) => {
+      const alias = (n.device.aliases ?? []).find((a) => /°C|W\b|\/s|avail|failed|running|gpu|procs|new|gone/.test(a));
+      if (alias) return alias;
+      const p = cpuPct(n.device);
+      return p >= 1 ? fmtCpu(p) : undefined;
+    },
+    linkColor: (l) => {
+      if (id === "sockets") return 0x8ecae6;
+      if (id === "cgroups") return 0xb8c0cc;
+      return cpuHeat(Math.max(cpuPct(l.source.device), cpuPct(l.target.device)));
+    },
+    linkBright: (l, _ctx, base) => {
+      if (chart.edges === "none") return 0;
+      if (chart.edges === "struct") {
+        if (isHub(l.source) || isHub(l.target)) return 0;
+        return Math.max(base * 0.7, 0.45);
+      }
+      return Math.max(base * 0.35, 0.1 + 0.7 * Math.min(1, Math.max(cpuPct(l.source.device), cpuPct(l.target.device)) / CPU_RED));
+    },
+    shellStrength: () => 0,
+    charge: () => 0,
+    linkStrength: () => 0,
+  };
+}
+
+export const memory = sysGraph("memory", "Memory", "RAM, swap, PSI, and the fattest RSS processes. Size is share of RAM or pressure.", "mem:host");
+export const disk = sysGraph("disk", "Disk I/O", "Block devices and processes by read+write bytes per second. Loop devices are dropped.", "disk:host");
+export const gpu = sysGraph("gpu", "GPU", "DRM cards plus nvidia-smi when present. Size is utilisation; aliases carry VRAM and watts.", "gpu:host");
+export const sockets = sysGraph("sockets", "Sockets", "This host's TCP sockets: process to remote peer. Distinct from the packet LAN graph.", "sock:host");
+export const cgroups = sysGraph("cgroups", "Cgroups", "user.slice / system.slice tree. Node size is process count in the group.", "cg:root");
+export const units = sysGraph("units", "User units", "systemd --user services. Failed units sit as internet-red; running units as LAN.", "unit:host");
+export const udev = sysGraph("udev", "Devices", "sysfs class add/remove (net, drm, block, input, …). New and gone nodes flare for half a minute.", "udev:host");
+export const bridge: ViewMode = (() => {
+  const base = sysGraph(
+    "bridge",
+    "Syscon",
+    "All local host systems on one schematic: CPU, RAM, disk, GPU, sockets, cgroups, user units, and devices.",
+    "bridge:host",
+  );
+  const isSat = (n: GNode) => n.id.startsWith("bridge:") && n.device.role !== "self";
+  return {
+    ...base,
+    camera: [0, 420, 820],
+    nodeShape: (n) => (isSat(n) ? 4 : base.nodeShape?.(n) ?? 0),
+    forceLabel: (n, ctx) => isSat(n) || !!base.forceLabel?.(n, ctx),
+    overlays(ctx) {
+      const out: Overlay[] = [];
+      for (const n of ctx.nodes.values()) {
+        if (!isSat(n) || !n.visible) continue;
+        const tag = (n.device.names[0] || n.device.hostnames[0] || "").toUpperCase();
+        const bit = (n.device.aliases ?? [])[0] ?? "";
+        const hot = cpuPct(n.device) >= 70;
+        out.push({
+          id: n.id,
+          x: n.x ?? 0,
+          y: (n.y ?? 0) + 34,
+          z: n.z ?? 0,
+          html: `<b style="color:${hot ? "#ff6b4a" : "#7ee8ff"}">${rName(tag)}</b>${bit ? `<small>${rName(bit)}</small>` : ""}`,
+        });
+      }
+      return out;
+    },
+  };
+})();
+
 /**
  * Graph engines plugins may wrap. These are wrap targets, not live menu rows.
  * wifi / bluetooth stay off-menu unless a catalog plugin wraps them; `cpu` aliases cores.
  */
 export const GRAPH_BASES: ViewMode[] = [
   topology, talkers, services, protocols, layers, droneShow, watch, cores, load, wifi, bluetooth, sources,
+  memory, disk, gpu, sockets, cgroups, units, udev, bridge,
   { ...cores, id: "cpu", label: "CPU" },
 ];
 /** Arcade engines plugins may wrap (`engine: doom` → arcadeId). Not live menu rows. */
 export const ARCADE_ENGINES: ViewMode[] = [
   netpong, invaders, command, frogger, cpupong, doom,
-  waves, orbits, helix, skyline, pacman, tetris, portal,
+  waves, orbits, helix, skyline, pacman, tetris, portal, carousel,
 ];
 
 let pluginModes: ViewMode[] = [];

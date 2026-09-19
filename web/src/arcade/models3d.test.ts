@@ -5,6 +5,7 @@ import {
   makeGhost,
   makeLighthouse,
   makePacman,
+  makePhotoFrame,
   makePortalRing,
   makeSatellite,
   makeShip,
@@ -31,5 +32,7 @@ describe("models3d", () => {
     expect(parts(makePortalRing(0xff6d00))).toBeGreaterThan(8);
     expect(parts(makeCompanionCube())).toBeGreaterThan(8);
     expect(parts(makeTurret(0x90a4ae))).toBeGreaterThan(5);
+    expect(parts(makePhotoFrame())).toBeGreaterThan(5);
+    expect(makePhotoFrame().getObjectByName("still")).toBeTruthy();
   });
 });

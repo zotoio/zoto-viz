@@ -114,7 +114,8 @@ FORMER_MODES = [
 RF_WRAPPERS = {"air-ssid": "wifi", "air-bt": "bluetooth"}
 EXTRA_VIEWS = (
     "lan-heat", "lan-pong", "pulse-ts", "lan-pulse", "drone-show",
-    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
+    "memory", "disk", "gpu", "sockets", "cgroups", "units", "udev", "syscon",
 )
 
 

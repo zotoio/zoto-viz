@@ -1,0 +1,4 @@
+id: disk
+name: Disk I/O
+version: 1
+hint: 3D columns — block devices at the back, height is read+write bytes/s. Front row is processes doing I/O.

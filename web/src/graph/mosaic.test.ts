@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mosaicIds, mosaicTileTheme } from "./mosaic";
-import { setPluginModes, topology } from "../core/modes";
+import { mosaicIds, mosaicIsGraph, mosaicPaneMode, mosaicTileTheme } from "./mosaic";
+import { memory, setPluginModes, topology } from "../core/modes";
 import { themeById } from "../core/themes";
 
 afterEach(() => setPluginModes([]));
@@ -19,6 +19,21 @@ describe("mosaicIds", () => {
       label: id,
     })));
     expect(mosaicIds("4")).toEqual(["plugin:a", "plugin:b", "plugin:c", "plugin:d"]);
+  });
+});
+
+describe("mosaicPaneMode", () => {
+  it("uses the host engine when the catalog is empty so SYS tiles still graph", () => {
+    expect(mosaicIsGraph("plugin:memory")).toBe(true);
+    expect(mosaicPaneMode("plugin:memory").graphBase).toBe("memory");
+    expect(mosaicPaneMode("plugin:cores").graphBase).toBe("cpu");
+    expect(mosaicIsGraph("plugin:pacman")).toBe(false);
+  });
+
+  it("prefers the compiled catalog row when present", () => {
+    setPluginModes([{ ...memory, id: "plugin:memory", pluginId: "memory", label: "Mem wrap" }]);
+    expect(mosaicPaneMode("plugin:memory").id).toBe("plugin:memory");
+    expect(mosaicPaneMode("plugin:memory").label).toBe("Mem wrap");
   });
 });
 

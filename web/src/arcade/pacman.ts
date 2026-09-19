@@ -1,16 +1,20 @@
 import * as THREE from "three";
 import type { NetScene } from "../graph/scene";
+import { sourceHeadlines } from "../core/sources";
 import { DevicePicker } from "./arcade";
 import { buildPacMaze, mazeOpens, mazeStep } from "./stage-math";
 import { Stage3D } from "./stage3d";
 import { makeGhost, makePacman, makePellet, makePanel } from "./models3d";
+import { bitePhrases, facingOf, launchCrumbs, mouthCameraTheta, stepCrumb, tickerApproach, type Crumb } from "./pacman-ticker";
 import type { Packet } from "../core/types";
 
 const KEY_WHO = "zoto-viz.pacman.who";
 const CELL = 1.15;
 const GHOST_COLORS = [0xef5350, 0xff80ab, 0x4fc3f7, 0xffb74d, 0xce93d8];
 
-/** 3D maze: this host is Pac-Man, talkers are ghosts, packets are pellets. */
+type Bite = { mesh: THREE.Mesh; from: [number, number, number]; t: number; text: string };
+
+/** 3D maze: this host is Pac-Man. Ticker words fly into the mouth; crumbs hop out and fall. */
 export class PacmanView extends Stage3D {
   readonly controls: HTMLElement[];
   private readonly picker: DevicePicker;
@@ -19,6 +23,12 @@ export class PacmanView extends Stage3D {
   private readonly pac: THREE.Group;
   private readonly ghosts = new Map<string, { g: THREE.Group; x: number; y: number; dir: 0 | 1 | 2 | 3 }>();
   private pellets: { mesh: THREE.Mesh; x: number; y: number }[] = [];
+  private bites: Bite[] = [];
+  private crumbs: { mesh: THREE.Mesh; c: Crumb }[] = [];
+  private playlist: string[] = ["live ticker", "LAN pulse", "packet crumb"];
+  private playAt = 0;
+  private chew = 0;
+  private spawnWait = 0;
   private px = 8;
   private py = 7;
   private pdir: 0 | 1 | 2 | 3 = 0;
@@ -33,13 +43,19 @@ export class PacmanView extends Stage3D {
       onChange: () => this.resync(),
     }, scene);
     this.controls = [this.picker.el];
-    this.camOrbit.radius = 22;
-    this.camOrbit.phi = 1.15;
-    this.camOrbit.target.set(0, 0.4, 0);
+    this.camOrbit.radius = 13.5;
+    this.camOrbit.phi = 1.28;
+    this.camOrbit.theta = 0;
+    this.camOrbit.target.set(0, 0.85, 0);
     this.root.add(this.mazeRoot);
     this.pac = makePacman();
     this.root.add(this.pac);
     this.rebuildMaze();
+  }
+
+  setTicker(lines: string[]): void {
+    const next = bitePhrases(lines, 22);
+    if (next.length) this.playlist = next;
   }
 
   protected query() {
@@ -50,6 +66,7 @@ export class PacmanView extends Stage3D {
   protected onSnapshot(): void {
     if (!this.msg) return;
     this.picker.update(this.msg);
+    this.setTicker(sourceHeadlines(this.msg.sources, 16).map((h) => `${h.label} ${h.text}`));
     const talkers = this.knownDevices()
       .filter((d) => d.role !== "self" && d.role !== "multicast")
       .sort((a, b) => b.packets - a.packets)
@@ -104,15 +121,80 @@ export class PacmanView extends Stage3D {
     }
     this.placeWorld(this.pac, this.px, this.py, 0.02);
     this.pac.rotation.y = -this.pdir * Math.PI / 2;
-    const mouth = 0.65 + 0.35 * Math.sin(now * 12);
-    this.pac.scale.set(1, 1, mouth);
+    this.stepTicker(dt);
+    const chomp = this.chew > 0 ? 0.22 + 0.78 * Math.abs(Math.sin(now * 22)) : 0.65 + 0.35 * Math.sin(now * 12);
+    this.pac.scale.set(1, 1, chomp);
+    this.chew = Math.max(0, this.chew - dt);
     for (const row of this.ghosts.values()) {
       this.placeWorld(row.g, row.x, row.y, 0);
       row.g.rotation.y = now * 2;
     }
     const [wx, , wz] = this.worldOf(this.px, this.py);
-    this.camOrbit.target.lerp(new THREE.Vector3(wx, 0.6, wz), 1 - Math.exp(-dt * 3));
-    this.camOrbit.theta += dt * 0.04;
+    this.camOrbit.target.lerp(new THREE.Vector3(wx, 0.85, wz), 1 - Math.exp(-dt * 3.2));
+    const want = mouthCameraTheta(this.pdir);
+    let dth = want - this.camOrbit.theta;
+    while (dth > Math.PI) dth -= Math.PI * 2;
+    while (dth < -Math.PI) dth += Math.PI * 2;
+    this.camOrbit.theta += dth * (1 - Math.exp(-dt * 2.4));
+    this.camOrbit.phi += (1.28 - this.camOrbit.phi) * (1 - Math.exp(-dt * 2));
+    this.camOrbit.radius += (13.5 - this.camOrbit.radius) * (1 - Math.exp(-dt * 1.6));
+  }
+
+  private stepTicker(dt: number): void {
+    const [wx, , wz] = this.worldOf(this.px, this.py);
+    const [fx, fz] = facingOf(this.pdir);
+    const mouth: [number, number, number] = [wx + fx * 0.62, 0.92, wz + fz * 0.62];
+    this.spawnWait -= dt;
+    if (this.spawnWait <= 0 && this.bites.length < 5 && this.playlist.length) {
+      const text = this.playlist[this.playAt++ % this.playlist.length]!;
+      const from: [number, number, number] = [wx + fx * 7.4, 2.55, wz + fz * 7.4];
+      const mesh = makeBiteCard(text);
+      this.root.add(mesh);
+      this.bites.push({ mesh, from, t: 0, text });
+      this.spawnWait = 0.52;
+    }
+    const keep: Bite[] = [];
+    for (const bite of this.bites) {
+      bite.t += dt * 0.55;
+      if (bite.t >= 1) {
+        bite.mesh.removeFromParent();
+        (bite.mesh.material as THREE.MeshBasicMaterial).map?.dispose();
+        this.chew = 0.42;
+        this.burstCrumbs(mouth, bite.text.length);
+        continue;
+      }
+      const [x, y, z] = tickerApproach(bite.from, mouth, bite.t);
+      bite.mesh.position.set(x, y, z);
+      bite.mesh.lookAt(this.camera.position);
+      const s = 1 - bite.t * 0.45;
+      bite.mesh.scale.setScalar(s);
+      keep.push(bite);
+    }
+    this.bites = keep;
+    const live: { mesh: THREE.Mesh; c: Crumb }[] = [];
+    for (const row of this.crumbs) {
+      const next = stepCrumb(row.c, dt, 0.08);
+      if (!next) {
+        row.mesh.removeFromParent();
+        continue;
+      }
+      row.c = next;
+      row.mesh.position.set(next.x, next.y, next.z);
+      live.push(row);
+    }
+    this.crumbs = live;
+  }
+
+  private burstCrumbs(origin: [number, number, number], n: number): void {
+    for (const c of launchCrumbs(origin, 8 + (n % 5), this.crumbs.length)) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.14, 0.18),
+        new THREE.MeshBasicMaterial({ color: 0xffee58 }),
+      );
+      mesh.position.set(c.x, c.y, c.z);
+      this.root.add(mesh);
+      this.crumbs.push({ mesh, c });
+    }
   }
 
   private rebuildMaze(): void {
@@ -157,5 +239,34 @@ export class PacmanView extends Stage3D {
     super.reset();
     for (const p of this.pellets) p.mesh.removeFromParent();
     this.pellets = [];
+    for (const b of this.bites) b.mesh.removeFromParent();
+    this.bites = [];
+    for (const c of this.crumbs) c.mesh.removeFromParent();
+    this.crumbs = [];
   }
+}
+
+function makeBiteCard(text: string): THREE.Mesh {
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.clearRect(0, 0, 640, 128);
+    ctx.fillStyle = "rgba(8,10,16,0.72)";
+    ctx.fillRect(0, 18, 640, 92);
+    ctx.strokeStyle = "#ffee58";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(4, 22, 632, 84);
+    ctx.fillStyle = "#ffee58";
+    ctx.font = "800 52px ui-sans-serif, system-ui, sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text.slice(0, 18), 22, 64);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(4.2, 0.84),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+  );
 }

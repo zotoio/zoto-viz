@@ -27,8 +27,12 @@ export interface Device {
   analysis?: "running" | "done" | "error" | null;
   /** every address folded into this node by the "merge names" option (client-side; the first is `ip`) */
   members?: string[];
-  /** this-host CPU views: utilisation of a core or process, percent of one core */
+  /** this-host CPU / SYS views: utilisation or pressure, percent */
   cpu?: number;
+  /** package or device temperature in °C when the host sampler has hwmon */
+  temp?: number;
+  /** RAPL / GPU watts when readable */
+  watts?: number;
   /* ---- RF nodes (ap: / sta:) */
   /** network the node lives on: an AP's own SSID, the SSID of the AP a station talks to */
   ssid?: string;
@@ -159,6 +163,8 @@ export interface RfView {
   self: string;
   /** wifi view only */
   watch?: WifiWatch;
+  /** CPU view: package temp / RAPL / GPU watts for look overlays */
+  thermal?: { pkg_c?: number; rapl_w?: number; gpu_w?: number; zones?: { name: string; c: number }[] };
 }
 
 /** One capture interface for the header lights (State.link_status in the monitor). */
@@ -209,7 +215,7 @@ export interface StateMsg {
   stats: Stats;
   devices: Device[];
   flows: Flow[];
-  views?: { wifi?: RfView; bluetooth?: RfView; cpu?: RfView };
+  views?: Partial<Record<string, RfView>>;
   live?: {
     seq: number;
     patch?: Record<string, unknown>;
@@ -220,6 +226,28 @@ export interface StateMsg {
   /** Backend and host shadow extensions (e.g. typesafe Sense results). */
   plugin_state?: Record<string, unknown>;
   sources?: Record<string, SourceLive>;
+  /** Google Nest Device Access (redacted). */
+  sdm?: {
+    linked?: boolean;
+    pcm_url?: string | null;
+    error?: string;
+    devices?: Array<{
+      id: string;
+      label: string;
+      room?: string;
+      type?: string;
+      camera?: boolean;
+      webrtc?: boolean;
+    }>;
+    events?: Array<{
+      ts?: string;
+      device?: string;
+      kinds?: string[];
+      event_id?: string;
+    }>;
+    client_id?: string;
+    enterprise_id?: string;
+  };
 }
 
 /**

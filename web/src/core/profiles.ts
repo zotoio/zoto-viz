@@ -5,11 +5,13 @@ import { guardReadableAnim } from "../graph/readable";
 import { DEFAULT_THEME } from "./themes";
 import { EMPTY_LOOK, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { DEFAULT_DICE, normalizeDice, type DiceConfig } from "./shuffle";
-import { Toggle } from "../ui/ui";
 import { apiFetch } from "./http";
 
 /** Shipped profile id. Always present, never overwritten from the UI. */
-export const SHIPPED_ID = "netviz";
+export const SHIPPED_ID = "zoto-viz";
+export const SHIPPED_LABEL = "zoto viz";
+/** Pre-rename shipped id; still treated as the factory profile. */
+export const LEGACY_SHIPPED_ID = "netviz";
 export const USER_ID = "user";
 /** Legacy cycling profile id; new agent profiles are named after the Ollama model. */
 export const AI_ID = "ai";
@@ -52,7 +54,7 @@ export interface ProfileSettings {
   agent: AgentLook;
   /** Header dice: which groups to roll and the soft ceilings. */
   dice: DiceConfig;
-  /** write this writable profile as settings change (ignored for shipped netviz) */
+  /** always true; kept on the blob so older files upgrade on the next write */
   autosave: boolean;
 }
 
@@ -112,7 +114,7 @@ export function shippedSettings(): ProfileSettings {
     mic: "auto",
     agent: { ...EMPTY_LOOK },
     dice: { ...DEFAULT_DICE, include: { ...DEFAULT_DICE.include } },
-    autosave: false,
+    autosave: true,
   };
 }
 
@@ -170,7 +172,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     mic: s.mic === "off" ? "off" : d.mic,
     agent: normalizeAgentLook(s.agent),
     dice: normalizeDice(s.dice),
-    autosave: bool(s.autosave, d.autosave),
+    autosave: true,
   };
 }
 
@@ -191,7 +193,7 @@ export function agentProfileId(model: string): string {
   if (!slug) slug = "agent";
   if (!/^[a-z]/.test(slug)) slug = `m-${slug}`.slice(0, 32).replace(/-+$/g, "");
   if (!ID_RE.test(slug)) slug = "agent";
-  if (slug === SHIPPED_ID || slug === USER_ID) slug = `agent-${slug}`.slice(0, 32);
+  if (slug === SHIPPED_ID || slug === LEGACY_SHIPPED_ID || slug === USER_ID) slug = `agent-${slug}`.slice(0, 32);
   return slug;
 }
 
@@ -199,6 +201,21 @@ export function isAgentProfile(meta: { id: string; model?: string } | undefined)
   if (!meta) return false;
   if (meta.id === AI_ID) return true;
   return typeof meta.model === "string" && meta.model.trim().length > 0;
+}
+
+export function isShippedId(id: string): boolean {
+  return id === SHIPPED_ID || id === LEGACY_SHIPPED_ID;
+}
+
+/** Suffix after the header brand: ` - user-2`. */
+export function headerBrandProfile(label: string | undefined): string {
+  const name = (label ?? "").trim();
+  return name ? ` - ${name}` : "";
+}
+
+/** Writable profile that absorbs factory-look edits. Always `user`, never an agent or startup profile. */
+export function workingProfileId(_defaultId: string, _ids: string[]): string {
+  return USER_ID;
 }
 
 export function suggestId(taken: string[]): string {
@@ -227,10 +244,14 @@ export class ProfileStore {
   dirty = false;
   available = false;
   file = "";
-  /** write the current writable profile as settings change */
-  autosave = false;
+  /** writable profiles always write as settings change */
+  autosave = true;
   private saveTimer = 0;
   private saveGen = 0;
+  private adopting = false;
+  private recoverTimer = 0;
+  private recoverDelay = 2000;
+  private recovering = false;
   private readonly host: ProfileHost;
   private readonly sel: { setOptions(o: { value: string; label: string; hint?: string }[]): void; value: string; el: HTMLElement };
   private readonly bar: HTMLElement;
@@ -238,7 +259,6 @@ export class ProfileStore {
   private readonly saveBtn: HTMLButtonElement;
   private readonly discardBtn: HTMLButtonElement;
   private readonly saveAsBtn: HTMLButtonElement;
-  private readonly autosaveToggle: Toggle;
   private readonly defaultBtn: HTMLButtonElement;
   private readonly deleteBtn: HTMLButtonElement;
 
@@ -258,17 +278,10 @@ export class ProfileStore {
     actions.append(this.saveBtn, this.discardBtn, this.saveAsBtn);
     this.bar.append(this.status, actions);
 
-    this.autosaveToggle = new Toggle({
-      id: "autosave",
-      label: "autosave",
-      title: "write this profile as you change it (the shipped netviz default cannot be overwritten)",
-      checked: false,
-      onChange: (on) => void this.setAutosave(on),
-    });
     this.defaultBtn = btn("startup default", "load this profile when the page opens");
     this.deleteBtn = btn("delete", "remove this profile");
     this.deleteBtn.classList.add("warn");
-    tools.append(this.autosaveToggle.el, this.defaultBtn, this.deleteBtn);
+    tools.append(this.defaultBtn, this.deleteBtn);
 
     this.saveBtn.addEventListener("click", () => void this.confirmSave());
     this.discardBtn.addEventListener("click", () => void this.discard());
@@ -278,7 +291,7 @@ export class ProfileStore {
   }
 
   get canAutosave(): boolean {
-    return this.available && !!this.current && !this.shipped && this.autosave;
+    return this.available && !!this.current && !this.shipped;
   }
 
   meta(id = this.current): ProfileMeta | undefined {
@@ -290,49 +303,126 @@ export class ProfileStore {
   }
 
   get shipped(): boolean {
-    return this.meta()?.shipped === true || this.current === SHIPPED_ID;
+    return this.meta()?.shipped === true || isShippedId(this.current);
   }
 
   async boot(live?: { profileId: string; dirty?: boolean; settings: unknown } | null): Promise<boolean> {
+    let data: ProfileList;
     try {
-      let data = await api<ProfileList>("/api/profiles");
-      this.available = true;
-      this.file = data.file;
-      await api("/api/profiles/shipped", { method: "POST", body: JSON.stringify({ settings: shippedSettings() }) });
-      data = await api<ProfileList>("/api/profiles");
-      const hasUser = data.profiles.some((p) => p.id === USER_ID);
-      if (!hasUser) {
-        await api("/api/profiles", {
-          method: "POST",
-          body: JSON.stringify({
-            id: USER_ID,
-            label: USER_ID,
-            settings: this.host.collect(),
-            make_default: data.fresh || data.default === USER_ID || data.default === SHIPPED_ID,
-          }),
-        });
-        data = await api<ProfileList>("/api/profiles");
-      }
-      this.ingest(data);
+      data = await this.pullList();
+    } catch (e) {
+      console.warn("zoto-viz profiles:", e);
+      this.markUnavailable();
+      if (live) return this.applySession(live);
+      this.current = USER_ID;
+      this.syncChrome();
+      return false;
+    }
+    try {
       if (live) return this.applySession(live);
       const load = this.list.some((p) => p.id === data.default) ? data.default : SHIPPED_ID;
       await this.load(load, { quiet: true });
       return false;
     } catch (e) {
       console.warn("zoto-viz profiles:", e);
-      this.available = false;
-      if (live) return this.applySession(live);
-      this.current = USER_ID;
       this.syncChrome();
       return false;
     }
   }
 
+  /**
+   * Re-open ~/.zoto-viz/profiles.yml after a monitor blip. Keeps the live look;
+   * does not reload the startup default.
+   */
+  async recover(): Promise<boolean> {
+    if (this.available) return true;
+    if (this.recovering) return false;
+    this.recovering = true;
+    try {
+      await this.pullList();
+      this.syncChrome();
+      if (this.canAutosave && this.dirty) void this.writeNow();
+      return true;
+    } catch (e) {
+      console.warn("zoto-viz profiles:", e);
+      this.markUnavailable();
+      return false;
+    } finally {
+      this.recovering = false;
+    }
+  }
+
+  private async pullList(): Promise<ProfileList> {
+    let data = await api<ProfileList>("/api/profiles");
+    this.available = true;
+    this.file = data.file;
+    this.clearRecoverTimer();
+    data = await this.ensureCatalog(data);
+    this.ingest(data);
+    return data;
+  }
+
+  /** Best-effort factory + user rows. A write failure must not flip available off. */
+  private async ensureCatalog(data: ProfileList): Promise<ProfileList> {
+    try {
+      await api("/api/profiles/shipped", { method: "POST", body: JSON.stringify({ settings: shippedSettings() }) });
+      data = await api<ProfileList>("/api/profiles");
+    } catch (e) {
+      console.warn("zoto-viz profiles shipped:", e);
+    }
+    if (data.profiles.some((p) => p.id === USER_ID)) return data;
+    try {
+      await api("/api/profiles", {
+        method: "POST",
+        body: JSON.stringify({
+          id: USER_ID,
+          label: USER_ID,
+          settings: { ...this.host.collect(), autosave: true },
+          make_default: data.fresh || data.default === USER_ID || isShippedId(data.default),
+        }),
+      });
+      return await api<ProfileList>("/api/profiles");
+    } catch (e) {
+      console.warn("zoto-viz profiles user:", e);
+      return data;
+    }
+  }
+
+  private markUnavailable(): void {
+    this.available = false;
+    this.syncChrome();
+    this.scheduleRecover();
+  }
+
+  private scheduleRecover(): void {
+    if (this.recoverTimer || this.available) return;
+    this.recoverTimer = window.setTimeout(() => {
+      this.recoverTimer = 0;
+      void this.recover().then((ok) => {
+        if (ok) this.recoverDelay = 2000;
+        else {
+          this.recoverDelay = Math.min(this.recoverDelay * 2, 30_000);
+          this.scheduleRecover();
+        }
+      });
+    }, this.recoverDelay);
+  }
+
+  private clearRecoverTimer(): void {
+    if (this.recoverTimer) {
+      window.clearTimeout(this.recoverTimer);
+      this.recoverTimer = 0;
+    }
+    this.recoverDelay = 2000;
+  }
+
   /** Apply a same-tab session snapshot instead of the startup default. */
   applySession(live: { profileId: string; dirty?: boolean; settings: unknown }): boolean {
-    const id = live.profileId && this.list.some((p) => p.id === live.profileId)
-      ? live.profileId
+    const raw = live.profileId === LEGACY_SHIPPED_ID ? SHIPPED_ID : live.profileId;
+    let id = raw && this.list.some((p) => p.id === raw)
+      ? raw
       : (this.current || this.defaultId || USER_ID);
+    if (isShippedId(id) && this.list.some((p) => p.id === USER_ID)) id = USER_ID;
     this.current = id;
     this.sel.value = id;
     this.dirty = !!live.dirty && !this.shipped;
@@ -345,6 +435,10 @@ export class ProfileStore {
 
   touch(): void {
     if (hush || !this.available || !this.current) return;
+    if (this.shipped) {
+      void this.adoptWorking();
+      return;
+    }
     if (this.canAutosave) {
       this.scheduleSave();
       return;
@@ -355,10 +449,44 @@ export class ProfileStore {
     }
   }
 
-  /** Apply the flag from a loaded profile without writing. */
-  adoptAutosave(on: boolean): void {
-    this.autosave = on && !this.shipped;
-    this.autosaveToggle.checked = this.autosave;
+  /** Autosave stays on for every writable profile. */
+  adoptAutosave(_on?: boolean): void {
+    this.autosave = true;
+  }
+
+  /** First edit on the factory profile lands on the writable working profile. */
+  private async adoptWorking(): Promise<void> {
+    if (this.adopting || !this.available || !this.shipped) return;
+    this.adopting = true;
+    const id = workingProfileId(this.defaultId, this.list.map((p) => p.id));
+    const settings: ProfileSettings = { ...this.host.collect(), autosave: true };
+    try {
+      if (this.list.some((p) => p.id === id)) {
+        await api(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify({ settings }) });
+      } else {
+        await api("/api/profiles", {
+          method: "POST",
+          body: JSON.stringify({
+            id,
+            label: id,
+            settings,
+            make_default: isShippedId(this.defaultId),
+          }),
+        });
+      }
+      this.ingest(await api<ProfileList>("/api/profiles"));
+      this.current = id;
+      this.dirty = false;
+      this.sel.value = id;
+      this.adoptAutosave(true);
+      this.syncChrome();
+    } catch (e) {
+      this.dirty = true;
+      this.syncChrome();
+      flash(this.bar, String(e));
+    } finally {
+      this.adopting = false;
+    }
   }
 
   async select(id: string): Promise<void> {
@@ -368,7 +496,7 @@ export class ProfileStore {
       const choice = await ask({
         title: "Unsaved profile",
         body: this.shipped
-          ? `Shipped ${SHIPPED_ID} cannot be overwritten. Save as a new profile before switching, or discard the changes.`
+          ? `Shipped ${SHIPPED_LABEL} cannot be overwritten. Save as a new profile before switching, or discard the changes.`
           : `Save changes to profile “${this.current}” before switching to “${id}”?`,
         actions: this.shipped
           ? [
@@ -396,7 +524,7 @@ export class ProfileStore {
 
   private async load(id: string, opts: { quiet?: boolean } = {}): Promise<void> {
     this.clearTimer();
-    const settings = id === SHIPPED_ID
+    const settings = isShippedId(id)
       ? shippedSettings()
       : normalizeSettings((await api<{ settings: unknown }>(`/api/profiles/${id}`)).settings);
     this.current = id;
@@ -528,20 +656,6 @@ export class ProfileStore {
     await this.load(target, { quiet: true });
   }
 
-  private async setAutosave(on: boolean): Promise<void> {
-    if (!this.available || this.shipped) {
-      this.autosaveToggle.checked = false;
-      this.autosave = false;
-      this.syncChrome();
-      return;
-    }
-    this.autosave = on;
-    this.autosaveToggle.checked = on;
-    const ok = await this.writeNow();
-    if (!ok) this.dirty = true;
-    this.syncChrome();
-  }
-
   private scheduleSave(): void {
     this.clearTimer();
     this.saveTimer = window.setTimeout(() => {
@@ -613,7 +727,7 @@ export class ProfileStore {
     const result = await ask({
       title: this.shipped ? "Shipped profile is read-only" : "Save as new profile",
       body: this.shipped
-        ? `“${SHIPPED_ID}” cannot be edited. Save these settings as a new profile? It becomes the startup default.`
+        ? `“${SHIPPED_LABEL}” cannot be edited. Save these settings as a new profile? It becomes the startup default.`
         : "Create a new profile from the current settings.",
       fields: [{ id: "name", label: "profile id", value: suggested, placeholder: "my-lan" }],
       actions: [
@@ -627,20 +741,21 @@ export class ProfileStore {
       await ask({ title: "Invalid id", body: "Use a slug: start with a letter, then letters, digits, _ or -.", actions: [{ id: "ok", label: "OK", kind: "primary" }] });
       return false;
     }
-    if (id === SHIPPED_ID) {
-      await ask({ title: "Reserved", body: `${SHIPPED_ID} is the shipped default.`, actions: [{ id: "ok", label: "OK", kind: "primary" }] });
+    if (isShippedId(id)) {
+      await ask({ title: "Reserved", body: `${SHIPPED_LABEL} is the shipped default.`, actions: [{ id: "ok", label: "OK", kind: "primary" }] });
       return false;
     }
     try {
       await api("/api/profiles", {
         method: "POST",
-        body: JSON.stringify({ id, label: id, settings: this.host.collect(), make_default: makeDefault }),
+        body: JSON.stringify({ id, label: id, settings: { ...this.host.collect(), autosave: true }, make_default: makeDefault }),
       });
       const data = await api<ProfileList>("/api/profiles");
       this.ingest(data);
       this.current = id;
       this.dirty = false;
       this.sel.value = id;
+      this.adoptAutosave(true);
       this.syncChrome();
       return true;
     } catch (e) {
@@ -673,7 +788,7 @@ export class ProfileStore {
     if (this.shipped) return;
     const ok = await ask({
       title: "Delete profile",
-      body: `Delete profile “${this.current}”? The shipped ${SHIPPED_ID} profile is kept.`,
+      body: `Delete profile “${this.current}”? The shipped ${SHIPPED_LABEL} profile is kept.`,
       actions: [
         { id: "delete", label: "Delete", kind: "danger" },
         { id: "cancel", label: "Cancel" },
@@ -705,19 +820,26 @@ export class ProfileStore {
       p.id === this.current && this.canAutosave ? "autosave" : "",
       p.id === this.current && this.dirty ? "unsaved" : "",
     ].filter(Boolean).join(" · ") || undefined;
-    return { value: p.id, label: p.label, hint };
+    return { value: p.id, label: p.shipped ? SHIPPED_LABEL : p.label, hint };
+  }
+
+  private headerLabel(): string {
+    const p = this.meta();
+    if (!p) return this.current;
+    return p.shipped ? SHIPPED_LABEL : (p.label || p.id);
   }
 
   private syncChrome(): void {
+    const brand = document.getElementById("brandProfile");
+    if (brand) {
+      const suffix = headerBrandProfile(this.headerLabel());
+      brand.textContent = suffix;
+      brand.hidden = !suffix;
+    }
     this.sel.setOptions(this.list.map((p) => this.optionOf(p)));
     this.sel.value = this.current || this.list[0]?.id || "";
     this.sel.el.classList.toggle("dirty", this.dirty);
     this.sel.el.classList.toggle("shipped", this.shipped);
-    this.autosaveToggle.checked = this.canAutosave;
-    this.autosaveToggle.disabled = !this.available || this.shipped;
-    this.autosaveToggle.el.title = this.shipped
-      ? "the shipped netviz profile cannot be overwritten; switch to a writable profile to autosave"
-      : "write this profile as you change it (the shipped netviz default cannot be overwritten)";
     this.defaultBtn.disabled = !this.available || !this.current || this.current === this.defaultId;
     this.deleteBtn.disabled = !this.available || this.shipped || this.list.filter((p) => !p.shipped).length === 0;
     this.saveAsBtn.hidden = false;
@@ -734,11 +856,12 @@ export class ProfileStore {
     this.discardBtn.hidden = false;
     if (!this.dirty) {
       this.bar.hidden = true;
+      this.status.textContent = "";
       return;
     }
     this.bar.hidden = false;
     if (this.shipped) {
-      this.status.textContent = `Shipped “${SHIPPED_ID}” cannot be edited. Save as a new profile to keep these settings (it becomes the startup default).`;
+      this.status.textContent = `Shipped “${SHIPPED_LABEL}” cannot be edited. Save as a new profile to keep these settings (it becomes the startup default).`;
       this.saveBtn.hidden = true;
       this.saveAsBtn.hidden = false;
     } else {

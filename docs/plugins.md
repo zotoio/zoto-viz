@@ -62,8 +62,8 @@ switch.
 
 ### Size limits
 
-- 1.5 MB compressed (`1500000` bytes)
-- 4 MB uncompressed (`4194304` bytes)
+- 12 MB compressed (`12000000` bytes)
+- 24 MB uncompressed (`24000000` bytes)
 - at most 80 files
 
 ### Hard rejects
@@ -134,7 +134,7 @@ and skipped; it does not take down capture. Changes to the monitor's own
 
 A plugin reuses a shipped `engine` (`graph` needs `base`; arcade engines
 include `netpong`, `invaders`, `command`, `frogger`, `cpupong`, `doom`,
-`waves`, `orbits`, `helix`, `skyline`, `pacman`, `tetris`, `portal`).
+`waves`, `orbits`, `helix`, `skyline`, `pacman`, `tetris`, `portal`, `carousel`).
 Optional `look` pins theme/sky/floor for that view — the settings drawer shows
 those pins under **This view**, along with `options` / `config`, arcade knobs, and a per-view **prompt** (stored on the active profile; prefixes AI Dynamic and rebuilds it after a short pause).
 The cog next to the view menu opens that tab. Network and system visibility live under
@@ -166,6 +166,7 @@ CSRF skipped, Host still loopback). Tools:
 | `list_profiles` / `apply_profile` | Saved looks |
 | `list_memories` / `add_memory` / `delete_memory` | Curated chat memories |
 | `list_sources` / `set_source` / `delete_source` | Host RSS / HTTPS / local-file registry (`~/.zoto-viz/sources.yml`) |
+| `get_sdm` / `list_cameras` / `set_sdm` | Nest Device Access (`~/.zoto-viz/sdm.yml`; OAuth, Pub/Sub, WebRTC) |
 | `install_plugin_zip` | Write gitignored `plugins/<id>.zip` (see guards below) |
 
 Live patches ride the 1 Hz WebSocket as `live: { seq, patch, temper, weather }`.

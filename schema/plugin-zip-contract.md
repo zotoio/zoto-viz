@@ -29,8 +29,8 @@ optional; folder presence is the switch.
 
 ### Size limits
 
-- 1.5 MB compressed (`1500000` bytes)
-- 4 MB uncompressed (`4194304` bytes)
+- 12 MB compressed (`12000000` bytes)
+- 24 MB uncompressed (`24000000` bytes)
 - at most 80 files
 
 ### Hard rejects

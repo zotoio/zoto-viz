@@ -283,6 +283,33 @@ def clear_conversation() -> None:
         _save_memories(rows)
 
 
+def pending_task() -> str:
+    with _LOCK:
+        raw = _read_json(conversation_file()).get("pending")
+    return str(raw or "").strip()[:CONTENT_MAX]
+
+
+def set_pending_task(text: str) -> None:
+    task = str(text or "").strip()[:CONTENT_MAX]
+    with _LOCK:
+        path = conversation_file()
+        data = _read_json(path)
+        if task:
+            data["pending"] = task
+        else:
+            data.pop("pending", None)
+        _write_json(path, data)
+
+
+def clear_pending_task() -> str:
+    with _LOCK:
+        path = conversation_file()
+        data = _read_json(path)
+        old = str(data.pop("pending", "") or "").strip()[:CONTENT_MAX]
+        _write_json(path, data)
+    return old
+
+
 def list_memories(*, kind: str | None = None) -> list[dict[str, Any]]:
     with _LOCK:
         rows = _read_json(memories_file()).get("memories") or []

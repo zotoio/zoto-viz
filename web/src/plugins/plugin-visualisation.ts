@@ -1,5 +1,6 @@
 import type { ModeOption, PluginField, ViewMode } from "../core/modes";
 import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
+import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric } from "../graph/fabric";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
@@ -14,7 +15,7 @@ import type {
 /** Host engines plugins may wrap. Unknown `visualisation.engine` values are rejected. */
 export const PLUGIN_ENGINES = [
   "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
-  "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+  "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
 ] as const satisfies readonly PluginEngine[];
 
 const ENGINE_SET = new Set<string>(PLUGIN_ENGINES);
@@ -30,6 +31,7 @@ const LOOK_KEYS = [
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
   "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric",
+  "mosaic", "hero", "mosaicTiles", "mosaicSharedTheme",
 ] as const;
 
 export type CatalogRow = {
@@ -180,6 +182,23 @@ export function parseLook(raw: unknown): PluginLook | undefined {
     if (key === "graphFabric") {
       const f = parseFabric(v);
       if (f) look.graphFabric = f;
+      continue;
+    }
+    if (key === "mosaic") {
+      if (v === "4" || v === "6" || v === "8") look.mosaic = v;
+      continue;
+    }
+    if (key === "hero") {
+      if (v === "off" || v === "left" || v === "center" || v === "right") look.hero = v;
+      continue;
+    }
+    if (key === "mosaicTiles") {
+      const tiles = parseMosaicTiles(v);
+      if (tiles.length) look.mosaicTiles = tiles;
+      continue;
+    }
+    if (key === "mosaicSharedTheme") {
+      if (typeof v === "boolean") look.mosaicSharedTheme = v;
       continue;
     }
     (look as Record<string, unknown>)[key] = v;

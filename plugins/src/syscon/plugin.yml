@@ -1,0 +1,20 @@
+id: syscon
+name: Syscon
+version: 1
+hint: CIC wall — CPU, RAM, disk, GPU, sockets, cgroups, units, and devices as tiled SYS views.
+description: Sci-fi command console. Selecting Syscon opens a 2×4 mosaic of the eight SYS graphs (cores, memory, disk, GPU, sockets, cgroups, user units, devices). Journal and kernel lines stay on the feed ticker.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 16
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts

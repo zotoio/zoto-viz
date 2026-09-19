@@ -19,15 +19,21 @@ Host must be loopback (unless `--insecure-lan`). Browser `Origin` must also be l
 | `PUT /api/plugins/{id}/consent` | `{kind: "reviewed" \| "authored"}` after source review |
 | `GET /api/plugins/{id}/module.js` | compiled TypeScript (`?h=` cache-bust; 404 if missing). CSP locked down. Consent is a UI/sandbox gate, not HTTP 403 |
 | `GET /api/plugins/{id}/sky/fragment.glsl` | custom far-field shader (`?h=` cache-bust; 403 without consent) |
+| `GET /api/plugins/hn-rain/still` | Composer 2.5 SVG still for an HN title (`202` while queued, cached under `~/.zoto-viz/agent/stills`) |
+| `GET/POST /api/sdm` | Nest Device Access status / config + PCM `code` (`~/.zoto-viz/sdm.yml`) |
+| `GET /api/sdm/devices` | SDM `devices.list` |
+| `POST /api/sdm/devices/{id}/webrtc` | Forward WebRTC offer / extend / stop |
+| `GET /api/sdm/still?device=&event=` | Event JPEG via CameraEventImage |
 | `GET/PUT/POST /api/sources` | Host RSS / HTTPS / local-file registry (`~/.zoto-viz/sources.yml`) |
+| `GET /api/sources/image?url=` | Same-origin JPEG/PNG proxy for RSS enclosure stills (NASA IOTD). HTTPS / public-IP gate, 24 MB cap |
 | `PUT/DELETE /api/sources/{id}` | Upsert or remove one source |
-| `GET/POST /mcp` | loopback MCP. Tools: `list_features`, `get_settings`, `set_settings`, `list_plugins`, `set_plugin`, `set_view`, `set_agent`, `roll_dice`, `get_state`, `get_traffic`, `get_rf_watch`, `set_rf_watch`, `consent_plugin`, `draft_plugin`, `list_profiles`, `apply_profile`, `list_memories`, `add_memory`, `delete_memory`, `list_sources`, `set_source`, `delete_source`, `install_plugin_zip`, `publish_local_plugin`. CSRF skipped; Host still loopback. Settings/plugin patches land on the open UI via WebSocket `live` |
+| `GET/POST /mcp` | loopback MCP. Tools: `list_features`, `get_settings`, `set_settings`, `list_plugins`, `set_plugin`, `set_view`, `set_agent`, `roll_dice`, `get_state`, `get_traffic`, `get_rf_watch`, `set_rf_watch`, `consent_plugin`, `draft_plugin`, `list_profiles`, `apply_profile`, `list_memories`, `add_memory`, `delete_memory`, `list_sources`, `set_source`, `delete_source`, `get_sdm`, `list_cameras`, `set_sdm`, `install_plugin_zip`, `publish_local_plugin`. CSRF skipped; Host still loopback. Settings/plugin patches land on the open UI via WebSocket `live` |
 | `GET /api/ai/status` | Ollama reachability + installed/popular catalog (size/VRAM) + Cursor SDK models; temper/weather |
 | `POST /api/ai/ollama/pull` | `{name}` stream `ollama pull` (loopback) |
 | `GET/PUT/DELETE /api/ai/cursor` | Cursor API key (`~/.zoto-viz/cursor-key`; `CURSOR_API_KEY` env wins) |
 | `GET/PUT /api/ai/control` | server-side AI Control (`~/.zoto-viz/ai-control`; env `ZOTO_VIZ_AI_CONTROL` wins) |
 | `GET/PUT /api/ai/temper` | `{temper: 0–100, weather: hush\|drift\|pulse\|storm}` — Agent craziness + AI Dynamic rebuild odds |
-| `POST /api/ai/chat` | streaming chat. `{backend: "ollama"\|"cursor", model}`. Ollama is loopback `think` off; Cursor SDK runs `@cursor/sdk` with MCP `publish_local_plugin`. Persists under `~/.zoto-viz/agent/`. Optional `view: { hud }`. Prompts carry a token-capped **Facts** window (outcomes + memories; `ZOTO_VIZ_FACTS_TOKENS`), not prior CoT. Overflow starts a **new session**. `{ poll: true }` is a UI retry that does not append another user line |
+| `POST /api/ai/chat` | streaming chat. `{backend: "ollama"\|"cursor", model}`. A new user line is parked until the operator says **yes** (the monitor restates the request first; the model is not called). Ollama is loopback `think` off; Cursor SDK runs `@cursor/sdk` with MCP `publish_local_plugin`. Persists under `~/.zoto-viz/agent/`. Optional `view: { hud }`. Prompts carry a token-capped **Facts** window (outcomes + memories; `ZOTO_VIZ_FACTS_TOKENS`), not prior CoT. Overflow starts a **new session**. `{ poll: true }` is a UI retry that does not append another user line |
 | `GET /api/ai/history` | last ~80 turns (`thinking` when the model produced chain of thought) |
 | `DELETE /api/ai/history` | clear the transcript and outcome facts (curated memories stay) |
 | `GET/POST/DELETE /api/ai/memories` | curated memories for later lookup (`POST {text}`, `DELETE {id}`) |

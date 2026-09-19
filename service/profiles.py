@@ -1,8 +1,9 @@
 """UI settings profiles stored at ~/.zoto-viz/profiles.yml.
 
-`netviz` is the shipped default: the file always contains it, the UI treats it
-as read-only, and each boot refreshes its settings blob from the frontend.
-Other profiles (starting with `user`) are writable.
+`zoto-viz` (label "zoto viz") is the shipped default: the file always
+contains it, the UI treats it as read-only, and each boot refreshes its
+settings blob from the frontend. A leftover `netviz` id is migrated on
+read. Other profiles (starting with `user`) are writable.
 """
 from __future__ import annotations
 
@@ -18,11 +19,13 @@ from aiohttp import web
 
 DIR = paths.user_dir()
 FILE = paths.profiles_file()
-SHIPPED_ID = "netviz"
+SHIPPED_ID = "zoto-viz"
+SHIPPED_LABEL = "zoto viz"
+LEGACY_SHIPPED_ID = "netviz"
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 HEADER = (
     "# zoto-viz UI profiles.\n"
-    "# `netviz` is the shipped default: the UI will not overwrite it.\n"
+    "# `zoto-viz` is the shipped default: the UI will not overwrite it.\n"
     "# `default` is the profile loaded on startup.\n"
 )
 
@@ -31,10 +34,18 @@ def _empty(fresh: bool = False) -> dict[str, Any]:
     return {
         "default": "user",
         "profiles": {
-            SHIPPED_ID: {"shipped": True, "label": "netviz", "settings": {}},
+            SHIPPED_ID: {"shipped": True, "label": SHIPPED_LABEL, "settings": {}},
         },
         "fresh": fresh,
     }
+
+
+def _is_shipped(pid: str) -> bool:
+    return pid == SHIPPED_ID or pid == LEGACY_SHIPPED_ID
+
+
+def _canon_id(pid: str) -> str:
+    return SHIPPED_ID if pid == LEGACY_SHIPPED_ID else pid
 
 
 def _read() -> dict[str, Any]:
@@ -56,7 +67,7 @@ def _read() -> dict[str, Any]:
             continue
         settings = body.get("settings")
         item: dict[str, Any] = {
-            "shipped": pid == SHIPPED_ID or bool(body.get("shipped")),
+            "shipped": _is_shipped(pid) or bool(body.get("shipped")),
             "label": str(body.get("label") or pid),
             "settings": settings if isinstance(settings, dict) else {},
         }
@@ -64,16 +75,29 @@ def _read() -> dict[str, Any]:
         if model:
             item["model"] = model
         profiles[pid] = item
+    migrated = False
+    if LEGACY_SHIPPED_ID in profiles:
+        legacy = profiles.pop(LEGACY_SHIPPED_ID)
+        if SHIPPED_ID not in profiles:
+            profiles[SHIPPED_ID] = legacy
+        migrated = True
     if SHIPPED_ID not in profiles:
-        profiles[SHIPPED_ID] = {"shipped": True, "label": "netviz", "settings": {}}
+        profiles[SHIPPED_ID] = {"shipped": True, "label": SHIPPED_LABEL, "settings": {}}
+        migrated = True
     else:
         profiles[SHIPPED_ID]["shipped"] = True
-        profiles[SHIPPED_ID].setdefault("label", "netviz")
+        profiles[SHIPPED_ID]["label"] = SHIPPED_LABEL
         profiles[SHIPPED_ID].setdefault("settings", {})
-    default = str(raw.get("default") or SHIPPED_ID)
+    default = _canon_id(str(raw.get("default") or SHIPPED_ID))
     if default not in profiles:
         default = SHIPPED_ID
-    return {"default": default, "profiles": profiles, "fresh": False}
+    doc = {"default": default, "profiles": profiles, "fresh": False}
+    if migrated:
+        try:
+            _write(doc)
+        except OSError:
+            pass
+    return doc
 
 
 def _write(doc: dict[str, Any]) -> None:
@@ -179,7 +203,7 @@ def list_meta() -> dict[str, Any]:
 
 def profile_entry(pid: str) -> dict[str, Any] | None:
     """One profile including its settings blob, or None."""
-    pid = (pid or "").strip()
+    pid = _canon_id((pid or "").strip())
     doc = _read()
     p = doc["profiles"].get(pid)
     if not p:
@@ -196,7 +220,7 @@ async def api_list(_request: web.Request) -> web.Response:
 
 
 async def api_get(request: web.Request) -> web.Response:
-    pid = _id(request.match_info["id"])
+    pid = _canon_id(_id(request.match_info["id"]))
     try:
         doc = _read()
     except ValueError as e:
@@ -211,7 +235,7 @@ async def api_get(request: web.Request) -> web.Response:
 
 
 async def api_put(request: web.Request) -> web.Response:
-    pid = _id(request.match_info["id"])
+    pid = _canon_id(_id(request.match_info["id"]))
     try:
         body = await request.json()
     except Exception:
@@ -224,7 +248,7 @@ async def api_put(request: web.Request) -> web.Response:
     p = doc["profiles"].get(pid)
     if not p:
         return web.json_response({"error": "unknown profile"}, status=404)
-    if p["shipped"] or pid == SHIPPED_ID:
+    if p["shipped"] or _is_shipped(pid):
         return web.json_response({"error": "shipped profile is read-only; save as a new profile"}, status=403)
     p["settings"] = settings
     if isinstance(body.get("label"), str) and body["label"].strip():
@@ -247,9 +271,9 @@ async def api_create(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         return web.json_response({"error": "json body required"}, status=400)
-    pid = _id(str(body.get("id") or ""))
-    if pid == SHIPPED_ID:
-        return web.json_response({"error": "netviz is reserved for the shipped default"}, status=403)
+    pid = _canon_id(_id(str(body.get("id") or "")))
+    if _is_shipped(pid):
+        return web.json_response({"error": "zoto-viz is reserved for the shipped default"}, status=403)
     settings = _settings(body)
     try:
         doc = _read()
@@ -276,7 +300,7 @@ async def api_create(request: web.Request) -> web.Response:
 
 
 async def api_shipped(request: web.Request) -> web.Response:
-    """Refresh the read-only `netviz` blob from the UI's current shipped defaults."""
+    """Refresh the read-only `zoto-viz` blob from the UI's current shipped defaults."""
     try:
         body = await request.json()
     except Exception:
@@ -286,7 +310,7 @@ async def api_shipped(request: web.Request) -> web.Response:
         doc = _read()
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=500)
-    doc["profiles"][SHIPPED_ID] = {"shipped": True, "label": "netviz", "settings": settings}
+    doc["profiles"][SHIPPED_ID] = {"shipped": True, "label": SHIPPED_LABEL, "settings": settings}
     try:
         _write(doc)
     except OSError as e:
@@ -299,7 +323,7 @@ async def api_default(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         return web.json_response({"error": "json body required"}, status=400)
-    pid = _id(str(body.get("id") or ""))
+    pid = _canon_id(_id(str(body.get("id") or "")))
     try:
         doc = _read()
     except ValueError as e:
@@ -315,7 +339,7 @@ async def api_default(request: web.Request) -> web.Response:
 
 
 async def api_delete(request: web.Request) -> web.Response:
-    pid = _id(request.match_info["id"])
+    pid = _canon_id(_id(request.match_info["id"]))
     try:
         doc = _read()
     except ValueError as e:
@@ -323,7 +347,7 @@ async def api_delete(request: web.Request) -> web.Response:
     p = doc["profiles"].get(pid)
     if not p:
         return web.json_response({"error": "unknown profile"}, status=404)
-    if p["shipped"] or pid == SHIPPED_ID:
+    if p["shipped"] or _is_shipped(pid):
         return web.json_response({"error": "cannot delete the shipped default"}, status=403)
     del doc["profiles"][pid]
     if doc["default"] == pid:

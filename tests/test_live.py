@@ -74,6 +74,8 @@ def test_sanitize_drops_junk() -> None:
     full.update({"gravity": 1.5, "swirl": 0.4, "mosaic": "4", "hero": "left", "stringAmt": 0.8})
     anim = live.sanitize_patch({"anim": full})["anim"]
     assert live.sanitize_patch({"anim": {"backdrop": "earth"}})["anim"]["backdrop"] == "earth"
+    assert live.sanitize_patch({"anim": {"backdrop": "amazon"}})["anim"]["backdrop"] == "amazon"
+    assert live.sanitize_patch({"anim": {"backdrop": "fungi"}})["anim"]["backdrop"] == "fungi"
     assert anim["gravity"] == 1.5
     assert anim["mosaic"] == "4"
     assert anim["hero"] == "left"

@@ -1,0 +1,4 @@
+id: gpu
+name: GPU
+version: 1
+hint: 3D podium — each GPU is a card in front of this host. Height and heat are utilisation.

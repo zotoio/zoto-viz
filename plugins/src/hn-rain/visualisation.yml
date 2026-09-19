@@ -7,3 +7,33 @@ look:
   skyBright: 0.68
   skySpeed: 0.4
   gridOpacity: 0
+config:
+  - key: tilt
+    label: ticker angle
+    type: number
+    default: 8
+    min: -20
+    max: 20
+    step: 1
+    hint: Degrees. Positive rises to the right; 0 is level.
+  - key: type
+    label: ticker size
+    type: number
+    default: 50
+    min: 28
+    max: 96
+    step: 2
+    hint: Glyph width in pixels.
+  - key: pace
+    label: ticker speed
+    type: number
+    default: 1
+    min: 0.25
+    max: 3
+    step: 0.05
+    hint: Crawl scroll rate. 1 is the shipped pace.
+  - key: pics
+    label: title stills
+    type: boolean
+    default: true
+    hint: Composer 2.5 illustration for each HN headline, top-left. Uses CURSOR_API_KEY.

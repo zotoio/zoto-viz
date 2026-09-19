@@ -37,11 +37,13 @@ from . import access
 from . import agent
 from . import agent_assets
 from . import cursor_agent
+from . import hn_rain_stills
 from . import live
 from . import mcp as plugin_mcp
 from . import plugin_local
 from . import plugin_migration
 from . import cpu
+from . import sys as hostsys
 from . import forensics
 from . import hooks
 from . import paths
@@ -49,6 +51,7 @@ from . import plugin_datasource as plugin_ds
 from . import plugins
 from . import profiles
 from . import rf
+from . import sdm
 from . import sources
 from . import sysconfig
 
@@ -366,6 +369,7 @@ class State:
         self.radio = rf.Radio()
         self.radio.load_watch()
         self.cpu = cpu.Sampler()
+        self.hostsys = hostsys.Sampler()
         self.refresh_interfaces()
         self.started = time.time()
         self.devices: dict[str, dict] = {}       # ip -> device
@@ -997,7 +1001,11 @@ class State:
                       "flows": len(self.flows), "active_flows": sum(1 for f in self.flows.values() if f["rate"] > 0)},
             "devices": devices,
             "flows": list(self.flows.values()),
-            "views": {**self.radio.views(now), "cpu": self.cpu.snapshot(now)},
+            "views": {
+                **self.radio.views(now),
+                "cpu": self.hostsys.decorate_cpu(self.cpu.snapshot(now)),
+                **self.hostsys.views(now),
+            },
         }
 
     # ---- deep analysis (forensics.py)
@@ -1523,6 +1531,7 @@ def publish_state(state: State) -> dict:
     """1 Hz snapshot after plugin service hooks have had a chance to decorate it."""
     msg = plugin_ds.apply_snapshot(hooks.on_snapshot(state.snapshot(time.time())))
     sources.apply(msg)
+    sdm.apply(msg)
     msg["live"] = live.snapshot()
     return msg
 
@@ -1551,6 +1560,17 @@ async def sources_poll_loop(app: web.Application) -> None:
         except Exception as e:  # noqa: BLE001
             log(f"sources poll: {e}")
         await asyncio.sleep(2)
+
+
+async def sdm_poll_loop(app: web.Application) -> None:
+    """List Nest devices and pull Pub/Sub events when Device Access is linked."""
+    sdm.ensure()
+    while True:
+        try:
+            await sdm.poll()
+        except Exception as e:  # noqa: BLE001
+            log(f"sdm poll: {e}")
+        await asyncio.sleep(4)
 
 
 async def plugin_watch_loop(app: web.Application) -> None:
@@ -1708,6 +1728,7 @@ async def on_startup(app: web.Application) -> None:
         asyncio.create_task(plugin_watch_loop(app)),
         asyncio.create_task(local_drop_watch_loop(app)),
         asyncio.create_task(sources_poll_loop(app)),
+        asyncio.create_task(sdm_poll_loop(app)),
     ]
 
 
@@ -1735,6 +1756,7 @@ async def on_cleanup(app: web.Application) -> None:
     app["state"].save()
     app["pool"].shutdown(wait=False, cancel_futures=True)
     await sources.close()
+    await sdm.close()
     log("stopped")
 
 
@@ -1766,6 +1788,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_get("/api/plugins", plugins.api_list)
     app.router.add_get("/api/plugins/{id}/module.js", plugins.api_module)
     app.router.add_get("/api/plugins/{id}/sky/fragment.glsl", plugins.api_sky)
+    app.router.add_get("/api/plugins/hn-rain/still", hn_rain_stills.api_still)
     app.router.add_put("/api/plugins/{id}/consent", plugins.api_consent)
     app.router.add_get("/mcp", plugin_mcp.api_mcp)
     app.router.add_post("/mcp", plugin_mcp.api_mcp)
@@ -1793,6 +1816,12 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_post("/api/ai/asset", agent_assets.api_assets)
     app.router.add_delete("/api/ai/assets", agent_assets.api_assets)
     app.router.add_get("/api/ai/assets/{id}", agent_assets.api_asset)
+    app.router.add_get("/api/sdm", sdm.api_sdm)
+    app.router.add_post("/api/sdm", sdm.api_sdm)
+    app.router.add_get("/api/sdm/devices", sdm.api_devices)
+    app.router.add_post("/api/sdm/devices/{id}/webrtc", sdm.api_webrtc)
+    app.router.add_get("/api/sdm/still", sdm.api_still)
+    app.router.add_get("/api/sources/image", sources.api_image)
     app.router.add_get("/api/sources", sources.api_sources)
     app.router.add_put("/api/sources", sources.api_sources)
     app.router.add_post("/api/sources", sources.api_sources)

@@ -22,7 +22,7 @@ describe("apiFetch CSRF", () => {
     expect(session.csrf).toBe("tok");
     expect(csrfToken()).toBe("tok");
     await apiFetch("/api/rf/watch", { method: "PUT" });
-    expect(seen[1]).toBe("tok");
+    expect(seen.at(-1)).toBe("tok");
   });
 
   it("reboots the session and retries once on csrf required", async () => {

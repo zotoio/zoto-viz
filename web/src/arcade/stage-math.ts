@@ -37,6 +37,87 @@ export function helixPoint(i: number, n: number, strand: 0 | 1, turns = 3): [num
   return [Math.cos(ang) * r, (t - 0.5) * 28, Math.sin(ang) * r];
 }
 
+/** Archimedean carousel: cards climb while they orbit. `spin` is radians. */
+export function carouselPoint(i: number, n: number, spin: number, turns = 2.15): [number, number, number] {
+  const count = Math.max(1, n);
+  const t = i / count;
+  const ang = t * turns * Math.PI * 2 + spin;
+  const r = 8.2 + t * 3.6;
+  return [Math.cos(ang) * r, (t - 0.5) * 14, Math.sin(ang) * r];
+}
+
+/** Yaw that puts card `i` on +X (in front of the default camera). */
+export function carouselSpinFor(i: number, n: number, turns = 2.15): number {
+  const count = Math.max(1, n);
+  return -(i / count) * turns * Math.PI * 2;
+}
+
+/** One still: zoom in, hold the caption, zoom out into the next card. */
+export const CAROUSEL_PERIOD = 11;
+
+export type CarouselBeat = {
+  phase: "in" | "hold" | "out";
+  /** 0 = wide spiral, 1 = tight on the featured still. */
+  zoom: number;
+  /** 0 = caption hidden, 1 = title fully up. */
+  caption: number;
+  /** 0 = current card, 1 = next card (spin during `out`). */
+  travel: number;
+};
+
+export function carouselBeat(elapsed: number, period = CAROUSEL_PERIOD): CarouselBeat {
+  const span = period > 0 ? period : CAROUSEL_PERIOD;
+  const p = ((elapsed % span) + span) % span;
+  const inEnd = span * 0.16;
+  const holdEnd = span * 0.74;
+  const smooth = (t: number) => {
+    const u = clamp(t, 0, 1);
+    return u * u * (3 - 2 * u);
+  };
+  if (p < inEnd) {
+    const e = smooth(p / inEnd);
+    return { phase: "in", zoom: e, caption: e, travel: 0 };
+  }
+  if (p < holdEnd) {
+    return { phase: "hold", zoom: 1, caption: 1, travel: 0 };
+  }
+  const e = smooth((p - holdEnd) / (span - holdEnd));
+  return { phase: "out", zoom: 1 - e, caption: 1 - e, travel: e };
+}
+
+/**
+ * World scale for a w×h plane at `distance` so it covers a perspective frustum.
+ * Closer camera → smaller scale (perspective already enlarges the card).
+ */
+export function planeCoverScale(
+  distance: number,
+  fovDeg: number,
+  aspect: number,
+  planeW: number,
+  planeH: number,
+): number {
+  const d = Math.max(0.2, distance);
+  const fov = (Math.max(1, fovDeg) * Math.PI) / 180;
+  const visibleH = 2 * Math.tan(fov / 2) * d;
+  const visibleW = visibleH * Math.max(0.2, aspect);
+  const sx = visibleW / Math.max(0.01, planeW);
+  const sy = visibleH / Math.max(0.01, planeH);
+  return Math.max(sx, sy);
+}
+
+/** Fit a photo into a landscape matte without stretching (NASA IOTD and HN stills). */
+export function fitStillSize(aspect: number, maxW: number, maxH: number): { w: number; h: number } {
+  const box = maxW / Math.max(0.01, maxH);
+  const a = Number.isFinite(aspect) && aspect > 0.05 ? aspect : box;
+  if (a >= box) return { w: maxW, h: maxW / a };
+  return { w: maxH * a, h: maxH };
+}
+
+/** Featured still: rest size at zoom 0, frustum-cover at zoom 1. */
+export function carouselStillScale(zoom: number, cover: number, wide = 0.86): number {
+  return wide + (cover - wide) * clamp(zoom, 0, 1);
+}
+
 export function orbitRadius(role: string, index: number, count: number): number {
   const base = role === "gateway" ? 0 : role === "self" ? 8 : role === "lan" || role === "local" ? 16 : role === "multicast" ? 22 : 30;
   const spread = count <= 1 ? 0 : (index / count) * 4;

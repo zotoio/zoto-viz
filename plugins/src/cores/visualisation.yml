@@ -1,5 +1,7 @@
 engine: graph
 base: cores
+style:
+  flatten: false
 look:
   theme: tactical
   backdrop: none

@@ -19,7 +19,7 @@ import {
 } from "./layout-core";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName, fmtBytes, type Device, type Flow, type Role, type StateMsg } from "../core/types";
 import { sourcesSlice } from "../core/source-graph";
-import { capBluetoothDevices, categorize, heat, paneLabelCap, topology, type ModeCtx, type ViewMode } from "../core/modes";
+import { capBluetoothDevices, categorize, heat, isSysBase, paneLabelCap, topology, type ModeCtx, type ViewMode } from "../core/modes";
 import { rIp, rName } from "../core/redact";
 import { DEFAULT_THEME, effectiveSceneLuminance, fadeTowardPole, grayHex, guardLabelMix, hexToHsl, hslHex, sceneInk, SKY_LUMA_CAP, toCssHex, type Theme } from "../core/themes";
 import { assessVisibility, type VisibilityReport } from "../core/visibility";
@@ -481,6 +481,18 @@ function keepCpuBusy(d: Device, modeId: string, opts: Record<string, string>): b
   return pct >= (Number.isFinite(min) ? min : 0.5);
 }
 
+function sysSlice(msg: StateMsg, base: string): { devices: Device[]; flows: Flow[]; gateway: string; localIp: string } {
+  const view = msg.views?.[base];
+  const fallback = `${base}:host`;
+  if (!view) return { devices: [], flows: [], gateway: fallback, localIp: fallback };
+  return {
+    devices: view.devices ?? [],
+    flows: view.flows ?? [],
+    gateway: view.hub || fallback,
+    localIp: view.self || fallback,
+  };
+}
+
 function rfSlice(msg: StateMsg, mode: ViewMode, opts: Record<string, string> = {}): { devices: Device[]; flows: Flow[]; gateway: string; localIp: string } {
   const base = mode.graphBase;
   if (base === "wifi") return wifiViaGateway(msg, opts);
@@ -497,6 +509,7 @@ function rfSlice(msg: StateMsg, mode: ViewMode, opts: Record<string, string> = {
   }
   if (base === "cpu") return cpuSlice(msg, mode, opts);
   if (base === "sources") return sourcesSlice(msg.sources, opts);
+  if (isSysBase(base)) return sysSlice(msg, base);
   return { devices: msg.devices, flows: msg.flows, gateway: msg.gateway, localIp: msg.local_ip };
 }
 
@@ -1238,7 +1251,8 @@ export class NetScene implements HostedView {
     Object.assign(this.labelLayer.domElement.style, { position: "absolute", top: "0", left: "0", pointerEvents: "none" });
     container.appendChild(this.labelLayer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(this.baseFov, container.clientWidth / container.clientHeight, 1, 12000);
+    const aw = container.clientWidth, ah = container.clientHeight;
+    this.camera = new THREE.PerspectiveCamera(this.baseFov, ah > 0 ? aw / ah : 1, 1, 12000);
     this.camera.position.set(0, 820, 820);
     this.controls = new OrbitControls(this.camera, this.inputEl);
     this.controls.enableDamping = true;
@@ -1591,6 +1605,7 @@ export class NetScene implements HostedView {
     }
     if (this.lastMsg) this.update(this.lastMsg);
     this.syncSimulation(changed ? 0.6 : 0.2);
+    this.stampPane();
   }
 
   private beginViewMorph(): void {
@@ -1915,6 +1930,16 @@ export class NetScene implements HostedView {
     return Math.min(1, Math.log10(1 + pps) / 2.4);
   }
 
+  /** Multiply the look sky slider by package temp / RAPL on CPU views — never writes uBright. */
+  private thermalSkyK(): number {
+    if (this.mode.graphBase !== "cpu" && this.mode.graphBase !== "bridge") return 1;
+    const t = this.lastMsg?.views?.[this.mode.graphBase]?.thermal ?? this.lastMsg?.views?.cpu?.thermal;
+    if (!t) return 1;
+    const w = Number(t.rapl_w) || 0;
+    const c = Number(t.pkg_c) || 0;
+    return Math.min(1.22, 0.88 + 0.22 * Math.min(1, w / 40) + 0.12 * Math.min(1, Math.max(0, c - 50) / 40));
+  }
+
   /** Apply slider opacity/brightness, optionally modulated by the audio / traffic pulse. */
   private applyLook(dt: number): void {
     const a = this.anim;
@@ -1934,7 +1959,7 @@ export class NetScene implements HostedView {
     const skyB = a.skyAudio ? this.pulseBass : 0;
     const floorB = a.gridAudio ? this.pulseBass : 0;
     const skyOp = this.tune?.skyOpacity ?? a.skyOpacity;
-    const skyBr = this.tune?.skyBright ?? a.skyBright;
+    const skyBr = (this.tune?.skyBright ?? a.skyBright) * this.thermalSkyK();
     const skySp = this.tune?.skySpeed ?? a.skySpeed;
     this.paintClear();
     this.easeVisibility(dt);
@@ -2398,8 +2423,9 @@ export class NetScene implements HostedView {
 
   /** Distance that fits the focus box in the current frustum — width and height independently, not a sphere. */
   private fitDistance(): number {
+    const aspect = Number.isFinite(this.camera.aspect) && this.camera.aspect > 0 ? this.camera.aspect : 1;
     const vHalf = THREE.MathUtils.degToRad(this.camera.fov) / 2;
-    const hHalf = Math.atan(Math.tan(vHalf) * Math.max(0.35, this.camera.aspect));
+    const hHalf = Math.atan(Math.tan(vHalf) * Math.max(0.35, aspect));
     const dist = Math.max(this.focus.hx / Math.tan(hHalf), this.focus.hy / Math.tan(vHalf)) + this.focus.hz * 0.4;
     return THREE.MathUtils.clamp(dist * 1.08, 220, 7000);
   }
@@ -2800,6 +2826,14 @@ export class NetScene implements HostedView {
       Object.assign(ROLE_COLOR, savedRoles);
     }
     if (this.selected) this.onSelect(this.selected.device);
+    this.stampPane();
+  }
+
+  /** Mosaic chrome can read live graphBase / node counts without poking private fields. */
+  private stampPane(): void {
+    this.container.dataset.graphBase = this.mode.graphBase ?? "";
+    this.container.dataset.nodes = String(this.nodes.size);
+    this.container.dataset.viewId = this.mode.id;
   }
 
   /**
@@ -3031,8 +3065,8 @@ export class NetScene implements HostedView {
   private nodeVisible(n: GNode): boolean {
     const d = n.device;
     if (!this.nodeFilter(d)) return false;
-    if (this.mode.graphBase === "cpu") {
-      if (!this.filters.cpuIdle && n.cpuGhost && d.ip.startsWith("proc:")) return false;
+    if (this.mode.graphBase === "cpu" || isSysBase(this.mode.graphBase)) {
+      if (this.mode.graphBase === "cpu" && !this.filters.cpuIdle && n.cpuGhost && d.ip.startsWith("proc:")) return false;
       return true;
     }
     if (d.role === "lan" && !this.filters.lan) return false;
@@ -3163,6 +3197,10 @@ export class NetScene implements HostedView {
     if (!this.host) this.raf = requestAnimationFrame(this.animate);
     markFrame(ts);
     if (!this.active) return;
+    if (this.satellite && this.satelliteCameraBroken()) {
+      this.resize();
+      this.recoverSatelliteCamera();
+    }
     const dt = Math.min(0.05, this.clock.getDelta());
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
@@ -3546,6 +3584,12 @@ export class NetScene implements HostedView {
     this.resize();
   }
 
+  /** Mosaic extras: fix aspect and re-aim the camera after a pane is shown. */
+  refit(): void {
+    this.resize();
+    if (this.satellite) this.recoverSatelliteCamera();
+  }
+
   /** Slide the optical center (positive px = left) so overlays do not sit on the graph. */
   setViewShift(px: number, snap = false): void {
     this.padWant = px;
@@ -3586,10 +3630,12 @@ export class NetScene implements HostedView {
   private resize(): void {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (w < 2 || h < 2) return;
-    if (w === this.viewW && h === this.viewH) return;
+    const firstBox = this.viewW < 2 || this.viewH < 2 || !Number.isFinite(this.camera.aspect);
+    if (w === this.viewW && h === this.viewH && !firstBox) return;
     this.viewW = w;
     this.viewH = h;
     this.camera.aspect = w / h;
+    if (this.satellite && (firstBox || this.satelliteCameraBroken())) this.recoverSatelliteCamera();
     if (!this.host) {
       if (this.renderer instanceof SoftwareGpu) {
         const pr = this.renderer.getPixelRatio();
@@ -3606,6 +3652,23 @@ export class NetScene implements HostedView {
     this.backdrop.setViewport(w, h);
     this.applyViewShift();
     this.updateSpread();
+  }
+
+  private satelliteCameraBroken(): boolean {
+    const p = this.camera.position;
+    return !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)
+      || !Number.isFinite(this.camera.aspect) || this.camera.aspect <= 0;
+  }
+
+  /** Extra created while its pane was detached (0×0) can park the camera at NaN. */
+  private recoverSatelliteCamera(): void {
+    const cam = this.mode.camera ?? [0, 820, 820];
+    this.camera.position.set(cam[0], cam[1], cam[2]);
+    this.controls.target.set(0, 0, 0);
+    this.camera.lookAt(this.controls.target);
+    this.lookPinned = false;
+    this.cameraGoalDir = new THREE.Vector3(cam[0], cam[1], cam[2]).normalize();
+    this.focus.n = 0;
   }
 
   /** Sit the floor under the live cloud. Camera moves then keep graph and tiles together. */

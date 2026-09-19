@@ -1,0 +1,29 @@
+engine: graph
+base: bridge
+style:
+  flatten: false
+look:
+  theme: tactical
+  backdrop: plugin
+  stageOnly: false
+  skyOpacity: 1
+  skyBright: 0.92
+  skySpeed: 0.42
+  gridShape: hex
+  gridOpacity: 0.14
+  gridBright: 0.55
+  themeCycle: "off"
+  edgeGlow: true
+  edgeGlowAmt: 0.55
+  mosaic: "8"
+  hero: "off"
+  mosaicSharedTheme: true
+  mosaicTiles:
+    - plugin:cores
+    - plugin:memory
+    - plugin:disk
+    - plugin:gpu
+    - plugin:sockets
+    - plugin:cgroups
+    - plugin:units
+    - plugin:udev

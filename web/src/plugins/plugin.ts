@@ -23,7 +23,8 @@ import {
   pluginViewKnobs,
   toPluginView,
 } from "./plugin-visualisation";
-import type { GNode, DreamAnim, EdgeGlow, AudioDrive, ThemeCycle } from "../graph/scene";
+import type { GNode, DreamAnim, EdgeGlow, AudioDrive, HeroPos, MosaicSize, ThemeCycle } from "../graph/scene";
+import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, type FabricKind } from "../graph/fabric";
 import { guardReadableAnim } from "../graph/readable";
 import type { BackdropKind } from "../graph/backdrop";
@@ -44,7 +45,7 @@ function dimHex(hex: number, amount: number): number {
 
 export type PluginEngine =
   | "graph" | "netpong" | "invaders" | "command" | "frogger" | "cpupong" | "doom"
-  | "waves" | "orbits" | "helix" | "skyline" | "pacman" | "tetris" | "portal";
+  | "waves" | "orbits" | "helix" | "skyline" | "pacman" | "tetris" | "portal" | "carousel";
 export type NodeColorStyle = "role" | "kind" | "heat" | "proto" | "hash";
 export type NodeScaleStyle = "default" | "bytes" | "rate";
 export type LabelStyle = "default" | "all" | "none" | "top";
@@ -95,6 +96,36 @@ export interface PluginLook {
   edgeGlowAmt?: number;
   edgeGlowSpeed?: number;
   graphFabric?: FabricKind | boolean;
+  /** Open a mosaic wall of other catalog views when this plugin is selected. */
+  mosaic?: MosaicSize;
+  hero?: HeroPos;
+  mosaicTiles?: string[];
+  mosaicSharedTheme?: boolean;
+}
+
+export type PluginWall = {
+  mosaic: Exclude<MosaicSize, "off">;
+  hero: HeroPos;
+  mosaicTiles: string[];
+  mosaicSharedTheme: boolean;
+};
+
+/** A plugin look that pins a multi-view mosaic (Syscon and future walls). */
+export function pluginWall(look?: PluginLook | null): PluginWall | null {
+  if (!look?.mosaic || look.mosaic === "off") return null;
+  const mosaicTiles = parseMosaicTiles(look.mosaicTiles);
+  if (mosaicTiles.length < 2) return null;
+  return {
+    mosaic: look.mosaic,
+    hero: look.hero ?? "off",
+    mosaicTiles,
+    mosaicSharedTheme: look.mosaicSharedTheme !== false,
+  };
+}
+
+export function pluginWallOwns(look: PluginLook | null | undefined, modeId: string): boolean {
+  const wall = pluginWall(look);
+  return !!wall && wall.mosaicTiles.includes(modeId);
 }
 
 export type PluginCapability =

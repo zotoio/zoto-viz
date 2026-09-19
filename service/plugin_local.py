@@ -24,7 +24,7 @@ from . import plugins
 
 ENGINES = frozenset({
     "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
-    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
 })
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _seen: dict[str, str] = {}

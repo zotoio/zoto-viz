@@ -117,10 +117,41 @@ async function chat() {
   }
 }
 
+async function still() {
+  const body = await readStdin();
+  const title = String(body.title || body.prompt || "").trim();
+  const model = String(body.model || "composer-2.5");
+  if (!title) {
+    write({ error: "title required", done: true });
+    process.exit(1);
+  }
+  const result = await Agent.prompt(
+    [
+      "Illustrate this Hacker News headline as one self-contained SVG.",
+      "Output ONLY an <svg>...</svg> document. No markdown, no explanation.",
+      "Landscape like a NASA image of the day: viewBox 0 0 1600 900 (16:9). Do not draw a square.",
+      "Bold shapes, limited palette (orange #ff6600, black, cream). Fill the wide frame; no letterbox bars.",
+      `Headline: ${title}`,
+    ].join(" "),
+    {
+      apiKey: process.env.CURSOR_API_KEY,
+      model: { id: model },
+      local: { cwd: repoRoot(), settingSources: [] },
+    },
+  );
+  const text = typeof result?.result === "string"
+    ? result.result
+    : (result?.result && typeof result.result === "object" && "text" in result.result)
+      ? String(result.result.text)
+      : JSON.stringify(result?.result ?? "");
+  write({ ok: result?.status === "finished", svg: text, status: result?.status, done: true });
+}
+
 const cmd = process.argv[2] || "list";
 try {
   if (cmd === "list") await listModels();
   else if (cmd === "chat") await chat();
+  else if (cmd === "still") await still();
   else {
     write({ error: `unknown command ${cmd}` });
     process.exit(1);

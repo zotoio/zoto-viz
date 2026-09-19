@@ -3,6 +3,7 @@ import type { VizDataFrame, VizUniformValue } from "./viz-host";
 import {
   TERM_COLS, TERM_ROWS, packScreen, preferHnStories, scriptFromStories, visibleScreen,
 } from "../../../plugins/src/hn-term/frontend/teletype";
+import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoOrbs } from "../../../plugins/src/stereo-gram/frontend/orbs";
 
 export interface VizPackHandlers {
@@ -23,24 +24,7 @@ function roleHue(role: string): number {
 }
 
 /** ASCII 32–126 packed as (code-32)/95 so the sky can draw a 5×7 font. */
-export { packStereoOrbs };
-
-export function packHnRainBuffer(
-  headlines: { id: string; label: string; text: string }[],
-  field: number,
-  audio: number,
-): number[] {
-  const hn = headlines.filter((h) => /hn|hacker/i.test(`${h.id} ${h.label}`));
-  const use = (hn.length ? hn : headlines).map((h) => h.text).filter(Boolean);
-  const joined = (use.join(" / ") || "HN RAIN").toUpperCase();
-  const n = Math.min(60, joined.length);
-  const buf = [use.length, n / 60, field, audio];
-  for (let i = 0; i < n; i++) {
-    const c = joined.charCodeAt(i);
-    buf.push((c >= 32 && c < 127 ? c - 32 : 0) / 95);
-  }
-  return buf;
-}
+export { packHnRainBuffer, packStereoOrbs };
 
 export function packHnTermBuffer(
   headlines: { id: string; label: string; text: string; summary?: string }[],
@@ -91,6 +75,7 @@ export function runPackFrameHandler(
   packId: VizDemoPackId,
   frame: VizDataFrame,
   handlers: VizPackHandlers,
+  opts?: Record<string, string>,
 ): void {
   switch (packId) {
     case "packet-tunnel": {
@@ -187,7 +172,13 @@ export function runPackFrameHandler(
       break;
     }
     case "hn-rain": {
-      handlers.writeBuffer(0, packHnRainBuffer(frame.headlines, frame.packets[0]?.field ?? 0, frame.audio));
+      handlers.writeBuffer(0, packHnRainBuffer(
+        frame.headlines,
+        frame.packets[0]?.field ?? 0,
+        frame.audio,
+        parseHnRainLook(opts),
+        hnRainCanvasSize(typeof document !== "undefined" ? document : null),
+      ));
       const n = frame.headlines.length;
       handlers.writeUniform("uBright", 0.92 + Math.min(0.2, n * 0.02));
       handlers.writeUniform("uAudio", frame.audio);

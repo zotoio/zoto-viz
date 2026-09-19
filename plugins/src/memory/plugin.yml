@@ -1,0 +1,4 @@
+id: memory
+name: Memory
+version: 1
+hint: 2D packed bubbles — RAM pressure on a disc. PSI and swap on the inner ring; process size is RSS.

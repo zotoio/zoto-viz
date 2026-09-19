@@ -1,0 +1,4 @@
+id: udev
+name: Devices
+version: 1
+hint: 3D class clusters — net, drm, block, input each get a ring. New devices lift; gone devices drop.

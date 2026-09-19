@@ -1,5 +1,7 @@
 /** Phosphor rain — HN / host source headlines become the glyph stream. */
 
+import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook, type HnRainLook } from "./crawl";
+
 type VizFrame = {
   t: number;
   audio: number;
@@ -9,30 +11,22 @@ type VizFrame = {
 
 declare const zoto: {
   onFrame: ((frame: VizFrame) => void) | null;
+  onConfig: ((cfg: Record<string, string>) => void) | null;
+  getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };
 
-function preferHn(headlines: NonNullable<VizFrame["headlines"]>): string[] {
-  const hn = headlines.filter((h) => /hn|hacker/i.test(`${h.id} ${h.label}`));
-  return (hn.length ? hn : headlines).map((h) => h.text).filter(Boolean);
-}
+let look: HnRainLook = parseHnRainLook(zoto.getConfig?.());
 
-function packHeadlines(titles: string[], field: number, audio: number): number[] {
-  const joined = (titles.join(" / ") || "HN RAIN").toUpperCase();
-  const n = Math.min(60, joined.length);
-  const buf = [titles.length, n / 60, field, audio];
-  for (let i = 0; i < n; i++) {
-    const c = joined.charCodeAt(i);
-    buf.push((c >= 32 && c < 127 ? c - 32 : 0) / 95);
-  }
-  return buf;
-}
+zoto.onConfig = (cfg) => {
+  look = parseHnRainLook(cfg);
+};
 
 zoto.onFrame = (frame) => {
-  const titles = preferHn(frame.headlines ?? []);
+  const titles = frame.headlines ?? [];
   const field = frame.packets[0]?.field ?? 0;
-  zoto.writeBuffer(0, packHeadlines(titles, field, frame.audio));
+  zoto.writeBuffer(0, packHnRainBuffer(titles, field, frame.audio, look, hnRainCanvasSize()));
   zoto.writeUniform("uBright", 0.92 + Math.min(0.2, titles.length * 0.02) + frame.audio * 0.18);
   zoto.writeUniform("uAudio", frame.audio);
   zoto.writeUniform("uAccent", [0.35, 1.0, 0.42]);

@@ -71,6 +71,7 @@ def set_ai_control(on: bool) -> None:
 SYSTEM = """You are the zoto-viz local operator. You run on this machine (Ollama or the Cursor SDK).
 You help the user understand LAN traffic, draft view plugins, and (only when AI Control is on) change UI settings, author GLSL skies, and pin photos or SVG onto the graph.
 Never invent packet contents. Prefer short, concrete observations. Answer directly — do not narrate a long reasoning pass.
+The monitor always confirms a new request before any work: it restates what you heard and waits for yes. After the operator says yes, do the work immediately — do not ask again. If they say no or give a different request, wait for a fresh yes. Never emit settings, plugins, shaders, photos, or SVG until that yes.
 Prior turns are not replayed. A sliding Facts window lists outcomes to reuse (token-capped). Chain of thought may show on the live feed for the current operation only — do not assume unread reasoning. When context pressure starts a new session, use Facts and the current screen HUD. Do not invent facts that are not in Facts or the snapshot. Memories persist across sessions.
 Each user turn may include a Screen HUD object (short keys): m mode, th theme, ch chrome, cam, sel selection, p panel, d dream, mg 0=no merge, rd redact, st stats, hide hidden layers, fd feed, q overlay lines. Use it to read what is on screen before analysing traffic or proposing settings.
 When the user states a lasting fact, preference, name, or device mapping, emit a fenced memory block with one short line (or JSON {"text":"..."}):
@@ -94,7 +95,7 @@ base: topology
 ```glsl sky/fragment.glsl
 vec3 color(vec3 dir, float t) { return uAccent; }
 ```
-Required: plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/, backend/service.py, datasource/, sky/. Graph bases include topology, talkers, protocols, wifi, bluetooth, cpu, and sources (RSS / HTTP JSON / file — menu tag SRC, not NET). style.fabric: tubes|cloth|ribbon draws nodes and edges as an animated mesh. Arcade engines: netpong, invaders, command, frogger, cpupong, doom, waves, orbits, helix, skyline, pacman, tetris, portal. doom shots are visual only. waves/orbits/helix/skyline/pacman/tetris/portal are 3D mesh stages. Cursor SDK turns must also call MCP publish_local_plugin with that files tree so the view is installed. Ollama turns are installed by the monitor from the fences when AI Control is on. Always use a catalog-unique id (remint if taken).
+Required: plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/, backend/service.py, datasource/, sky/. Graph bases include topology, talkers, protocols, wifi, bluetooth, cpu, sources (RSS / HTTP JSON / file / journal / kmsg — menu tag SRC, not NET), and SYS graphs memory, disk, gpu, sockets, cgroups, units, udev, bridge (all-systems CIC). style.fabric: tubes|cloth|ribbon draws nodes and edges as an animated mesh. Arcade engines: netpong, invaders, command, frogger, cpupong, doom, waves, orbits, helix, skyline, pacman, tetris, portal, carousel. doom shots are visual only. waves/orbits/helix/skyline/pacman/tetris/portal/carousel are 3D mesh stages. carousel shows RSS stills (NASA IOTD) on a spiral. Cursor SDK turns must also call MCP publish_local_plugin with that files tree so the view is installed. Ollama turns are installed by the monitor from the fences when AI Control is on. Always use a catalog-unique id (remint if taken).
 If the user asks to change settings, the sky, or graph decorations and AI Control is off, refuse and explain how to enable it (header AI toggle).
 When AI Control is on, every applied change is saved on the profile named after the current model in ~/.zoto-viz/profiles.yml.
 When Control is on, prefer a contrasting theme (not a neighbour on the picker) and a clearly different sky, motion band, or physics field (gravity, swirl, magnets, stringAmt). Tiny nudges look like a glitch; the UI eases palettes and physics, so a bold jump still lands smoothly.
@@ -442,6 +443,92 @@ def _last_user(messages: list[Any]) -> str:
     return user
 
 
+_YES = re.compile(
+    r"^\s*(?:yes|yeah|yep|yup|yea|yess+"
+    r"|correct|confirmed|affirmative"
+    r"|(?:ok(?:ay)?\s+)?yes"
+    r"|go\s+(?:ahead|on)|do\s+it|please\s+do|start"
+    r"|that(?:'s| is)\s+(?:right|correct|it)"
+    r"|sounds\s+(?:right|good))\s*[.!]?\s*$",
+    re.I,
+)
+_NO = re.compile(
+    r"^\s*(?:no|nope|nah|cancel|stop|wait|never\s*mind)(?:\s*[,.\-:]+\s*(.*))?\s*$",
+    re.I,
+)
+CONFIRMED = (
+    "The operator said yes to this request. Do the work now. "
+    "Do not ask if it is correct again.\n\n"
+)
+
+
+def is_confirm_yes(text: str) -> bool:
+    return bool(_YES.match((text or "").strip()))
+
+
+def confirm_revision(text: str) -> str | None:
+    """Rest after a leading no/cancel. Empty string means they only declined. None if not a no."""
+    m = _NO.match((text or "").strip())
+    if not m:
+        return None
+    return (m.group(1) or "").strip()
+
+
+def confirm_reply(task: str) -> str:
+    clipped = re.sub(r"\s+", " ", (task or "").strip())[:400]
+    if not clipped:
+        return "What should I do? Say the request, and I will confirm it before starting."
+    return f"You want me to: {clipped}. Is that correct? Say yes and I will start."
+
+
+def confirm_turn(user: str, *, poll: bool = False) -> tuple[str, str | None]:
+    """Park a new request until the operator says yes.
+
+    Returns (user_for_the_model, canned_reply). A canned reply means do not call the model.
+    """
+    text = (user or "").strip()
+    if poll:
+        return text, None
+    pending = memory.pending_task()
+    if not pending:
+        if not text:
+            return text, None
+        if is_confirm_yes(text):
+            return text, confirm_reply("")
+        memory.set_pending_task(text)
+        return text, confirm_reply(text)
+    if is_confirm_yes(text):
+        task = memory.clear_pending_task() or pending
+        return CONFIRMED + task, None
+    revised = confirm_revision(text)
+    if revised is not None:
+        if revised:
+            memory.set_pending_task(revised)
+            return text, confirm_reply(revised)
+        memory.clear_pending_task()
+        return text, "Okay — what should I do instead?"
+    memory.set_pending_task(text)
+    return text, confirm_reply(text)
+
+
+def _put_user(msgs: list[dict[str, Any]], text: str) -> None:
+    for m in reversed(msgs):
+        if m.get("role") == "user":
+            m["content"] = text
+            return
+    msgs.append({"role": "user", "content": text})
+
+
+async def _stream_plain(req: web.Request, text: str) -> web.StreamResponse:
+    body = (json.dumps({"message": {"content": text}, "done": True}) + "\n").encode()
+    return web.Response(
+        body=body,
+        content_type="text/plain",
+        charset="utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 def _snapshot(state: Any, redact: bool) -> dict[str, Any]:
     try:
         return _redact_state({
@@ -696,9 +783,14 @@ async def _api_chat_cursor(req: web.Request, body: dict[str, Any], messages: lis
     poll = bool(body.get("poll"))
     if user and not poll:
         memory.append_message("user", user)
+    work, canned = confirm_turn(user, poll=poll)
+    if canned is not None:
+        memory.append_message("assistant", canned)
+        return await _stream_plain(req, canned)
     ollama_msgs = _chat_messages(
-        messages, snap=snap, user=user, view_note=view_note, redact=redact, has_image=False,
+        messages, snap=snap, user=work, view_note=view_note, redact=redact, has_image=False,
     )
+    _put_user(ollama_msgs, work)
     system, prompt = _flatten_prompt(ollama_msgs)
     resp = web.StreamResponse(status=200, headers={"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"})
     await resp.prepare(req)
@@ -709,7 +801,7 @@ async def _api_chat_cursor(req: web.Request, body: dict[str, Any], messages: lis
         system=system,
         control=ai_control_on(),
     )
-    _remember_reply(user, reply, redact=redact)
+    _remember_reply(work, reply, redact=redact)
     await resp.write_eof()
     return resp
 
@@ -743,9 +835,14 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
     poll = bool(body.get("poll"))
     if user and not poll:
         memory.append_message("user", user)
+    work, canned = confirm_turn(user, poll=poll)
+    if canned is not None:
+        memory.append_message("assistant", canned)
+        return await _stream_plain(req, canned)
     ollama_msgs = _chat_messages(
-        messages, snap=snap, user=user, view_note=view_note, redact=redact, has_image=bool(shot),
+        messages, snap=snap, user=work, view_note=view_note, redact=redact, has_image=bool(shot),
     )
+    _put_user(ollama_msgs, work)
     if shot:
         _attach_image(ollama_msgs, shot)
     think_so_far, content_so_far = _last_assistant() if poll else ("", "")
@@ -781,9 +878,10 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
                 buf, streamed, stalled = await _pipe_ollama(s, base, payload, resp)
                 if _ctx_overflow(buf) and not streamed:
                     payload["messages"] = _chat_messages(
-                        messages, snap=snap, user=user, view_note=view_note,
+                        messages, snap=snap, user=work, view_note=view_note,
                         redact=redact, has_image=False, force_roll=True, keep=2,
                     )
+                    _put_user(payload["messages"], work)
                     buf, streamed, stalled = await _pipe_ollama(s, base, payload, resp, hold_overflow=False)
             base_msgs = list(payload["messages"])
             combined = bytearray(buf)
@@ -801,7 +899,7 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
         if not buf:
             await resp.write(json.dumps({"error": str(e), "done": True}).encode())
     thinking, reply = parse_ollama_chat(buf.decode("utf-8", "replace"))
-    _remember_reply(user, reply, redact=redact, thinking=thinking)
+    _remember_reply(work, reply, redact=redact, thinking=thinking)
     await resp.write_eof()
     return resp
 

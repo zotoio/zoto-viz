@@ -1,6 +1,6 @@
-import { AUDIO_DRIVES, NetScene, escapeHtml, type Filters } from "../graph/scene";
+import { AUDIO_DRIVES, NetScene, escapeHtml, type DreamAnim, type Filters } from "../graph/scene";
 import { Panel } from "../ui/panel";
-import { allModes, defaultCatalogMode, defaultOpts, graphModes, modeById, type ViewMode } from "../core/modes";
+import { allModes, arcadeSlotFor, defaultCatalogMode, defaultOpts, graphModes, modeById, type ViewMode } from "../core/modes";
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";
 import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
@@ -28,6 +28,7 @@ import { SkylineView } from "../arcade/skyline";
 import { PacmanView } from "../arcade/pacman";
 import { TetrisView } from "../arcade/tetris";
 import { PortalView } from "../arcade/portal";
+import { CarouselView } from "../arcade/carousel";
 import { Mosaic } from "../graph/mosaic";
 import { RenderHost } from "../graph/render-host";
 import {
@@ -39,6 +40,9 @@ import {
   loadPluginConfig,
   lookForMode,
   mergeLook,
+  parsePluginId,
+  pluginWall,
+  pluginWallOwns,
   attachPluginFrontend,
   fetchPluginSky,
   pluginHasFrontend,
@@ -57,6 +61,9 @@ import {
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
 import { runPackFrameHandler } from "../plugins/viz-pack-host";
+import { HnRainStills } from "../plugins/hn-rain-stills";
+import { NestCamsLive } from "../plugins/nest-cams-live";
+import { parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener, bindFps } from "../core/fps";
@@ -109,7 +116,14 @@ scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive
 scene.setTheme(theme);
 
 /** the standalone (arcade) views, by mode id; each owns a canvas in its own full-screen container */
-interface Standalone { controls: HTMLElement[]; start(preferIp?: string | null): void; stop(): void; update(m: StateMsg): void; setTheme(t: Theme): void }
+interface Standalone {
+  controls: HTMLElement[];
+  start(preferIp?: string | null): void;
+  stop(): void;
+  update(m: StateMsg): void;
+  setTheme(t: Theme): void;
+  setTicker?(lines: string[]): void;
+}
 const arcade: Record<string, { view: Standalone; el: HTMLElement }> = {
   netpong: { view: new PongView($("pong"), scene), el: $("pong") },
   invaders: { view: new InvadersView($("invaders"), scene), el: $("invaders") },
@@ -124,6 +138,7 @@ const arcade: Record<string, { view: Standalone; el: HTMLElement }> = {
   pacman: { view: new PacmanView($("pacman"), scene), el: $("pacman") },
   tetris: { view: new TetrisView($("tetris"), scene), el: $("tetris") },
   portal: { view: new PortalView($("portal"), scene), el: $("portal") },
+  carousel: { view: new CarouselView($("carousel"), scene), el: $("carousel") },
 };
 for (const a of Object.values(arcade)) a.view.setTheme(theme);
 let activeArcade: string | null = null;
@@ -183,8 +198,8 @@ const touch = () => { profiles?.touch(); persistLive(); };
 const profileSel = new Select({
   id: "profile",
   caption: "profile",
-  title: "settings profile (~/.zoto-viz/profiles.yml); netviz is the shipped default",
-  options: [{ value: SHIPPED_ID, label: SHIPPED_ID, hint: "shipped" }],
+  title: "settings profile (~/.zoto-viz/profiles.yml); zoto viz is the shipped default",
+  options: [{ value: SHIPPED_ID, label: "zoto viz", hint: "shipped" }],
   value: SHIPPED_ID,
   onChange: (id) => { void profiles?.select(id); },
 });
@@ -265,14 +280,14 @@ function applyViewLook(): void {
     applyChrome(userChrome, false);
     const m = modeById(modeSel.value);
     const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-    void syncPluginSky(spec);
+    void syncPluginSky(skySpecForMode(m.id, spec));
     return;
   }
   const look = pin ? lookForMode(modeSel.value) : undefined;
   scene.setAnim(mergeLook(settings.animSettings, look));
   const m = modeById(modeSel.value);
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-  void syncPluginSky(spec);
+  void syncPluginSky(skySpecForMode(m.id, spec));
   const want = look?.theme ?? theme.id;
   if (theme.id !== want) applyTheme(want, !!look?.theme, false);
   applyChrome(look?.chrome ?? userChrome, false);
@@ -350,12 +365,15 @@ const modeSel = new Select({
   onChange: (id) => applyMode(id),
 });
 $("modeBox").append(modeSel.el);
+const hnRainStills = new HnRainStills($("wall"));
+const nestCams = new NestCamsLive($("wall"));
 
 function onPluginFields(): void {
   const m = modeById(modeSel.value);
   const opts = optsFor(m);
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
+  nestCams.setLook(opts);
   if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
   else scene.setMode(m, opts);
   renderLegend(m, opts);
@@ -492,6 +510,79 @@ async function refreshTsPlugin(): Promise<void> {
 
 let skyLoaded = "";
 
+type WallSnap = Pick<DreamAnim, "mosaic" | "hero" | "mosaicTree" | "mosaicMaxId" | "mosaicSharedTheme"> & {
+  mosaicTiles: string[];
+};
+
+let wallOwner: string | null = null;
+let wallRestore: WallSnap | null = null;
+
+function snapWall(a: DreamAnim): WallSnap {
+  return {
+    mosaic: a.mosaic,
+    hero: a.hero,
+    mosaicTiles: [...(a.mosaicTiles ?? [])],
+    mosaicTree: a.mosaicTree,
+    mosaicMaxId: a.mosaicMaxId,
+    mosaicSharedTheme: !!a.mosaicSharedTheme,
+  };
+}
+
+function wallMatches(a: DreamAnim, wall: NonNullable<ReturnType<typeof pluginWall>>): boolean {
+  const tiles = a.mosaicTiles ?? [];
+  return a.mosaic === wall.mosaic
+    && a.hero === wall.hero
+    && tiles.length === wall.mosaicTiles.length
+    && tiles.every((id, i) => id === wall.mosaicTiles[i]);
+}
+
+function applyPluginWall(modeId: string, flags: { keepLayout?: boolean }): void {
+  if (flags.keepLayout || !settings) return;
+  const wall = pluginWall(lookForMode(modeId));
+  if (wall) {
+    const a = settings.animSettings;
+    if (!wallMatches(a, wall)) {
+      if (wallOwner !== modeId) {
+        wallRestore = snapWall(a);
+        wallOwner = modeId;
+      }
+      settings.applyAnim({
+        ...a,
+        mosaic: wall.mosaic,
+        hero: wall.hero,
+        mosaicTiles: wall.mosaicTiles,
+        mosaicSharedTheme: wall.mosaicSharedTheme,
+        mosaicTree: null,
+        mosaicMaxId: "",
+      });
+    } else {
+      wallOwner = modeId;
+    }
+    mosaic?.hydrate();
+    return;
+  }
+  if (!wallOwner) return;
+  if (pluginWallOwns(lookForMode(wallOwner), modeId)) return;
+  const restore = wallRestore;
+  wallOwner = null;
+  wallRestore = null;
+  if (restore) settings.applyAnim({ ...settings.animSettings, ...restore });
+}
+
+function pluginSpecForMode(modeId: string): PluginView | null {
+  const id = parsePluginId(modeId);
+  return id ? pluginSpecs.find((p) => p.id === id) ?? null : null;
+}
+
+/** Mosaic extras keep their own look; the plugin sky binds to the main pane only. */
+function skySpecForMode(modeId: string, fallback: PluginView | null): PluginView | null {
+  if (mosaic?.on) {
+    const pane = mosaic.mainMode || mosaic.focusedId;
+    if (pane) return pluginSpecForMode(pane);
+  }
+  return fallback ?? pluginSpecForMode(modeId);
+}
+
 async function syncPluginSky(spec: PluginView | null): Promise<void> {
   const look = spec ? (lookForMode(pluginViewId(spec.id)) ?? spec.look) : undefined;
   const want = !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
@@ -534,10 +625,16 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   modeSel.value = m.id;
   localStorage.setItem("zoto-viz.mode", m.id);
   touch();
+  applyPluginWall(m.id, flags);
 
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
+  const paneSpec = skySpecForMode(m.id, spec);
   const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
   document.body.classList.toggle("stage-only", skyStage);
+  hnRainStills.setActive(m.pluginId === "hn-rain");
+  hnRainStills.sync([], parseHnRainLook(opts).pics);
+  nestCams.setActive(m.pluginId === "nest-cams");
+  nestCams.setLook(opts);
   settings?.bindView(
     spec ? { ...spec, options: m.options, config: m.config } : null,
     spec ? m.config : undefined,
@@ -550,8 +647,10 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
       preserveVizUbo = false;
       return;
     }
-    void loadTsPlugin(spec);
-    void syncPluginSky(spec);
+    if (m.standalone || arcadeSlotFor(m) !== "carousel") {
+      void loadTsPlugin(paneSpec);
+      void syncPluginSky(paneSpec);
+    }
   })();
   feedCtl.feed?.setGraphBase(m.graphBase);
   if (m.graphBase === "wifi") void syncWifiWatch();
@@ -564,9 +663,10 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
         tiles: settings.animSettings.mosaicTiles,
       });
     }
-    mosaic.focus(m.id);
-    const target = mosaic.graphScene(id);
-    if (target) {
+    const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.tileIds[0] ?? m.id;
+    mosaic.focus(focusId);
+    const target = mosaic.graphScene(focusId);
+    if (target && focusId === m.id) {
       target.setMode(m, opts);
       target.setStageOnly(skyStage);
     }
@@ -580,8 +680,8 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
 
   scene.setMode(m, opts);
 
-  // a standalone mode (an arcade view) keeps the 3D sky and floor; the graph hides
-  const next = m.standalone ? (m.arcadeId ?? m.id) : null;
+  // standalone arcade, or NASA catalog views which share the contain-fit slideshow stage
+  const next = arcadeSlotFor(m);
   document.body.classList.toggle("arcade", next !== null);
   scene.setActive(true);
   scene.setStageOnly(next !== null || skyStage);
@@ -706,6 +806,12 @@ function feed(m: StateMsg): void {
   }
   applyStats(shown);
   feedCtl.feed?.setSourceHeadlines(sourceHeadlines(m.sources));
+  nestCams.sync(m.sdm);
+  const ticker = [
+    ...sourceHeadlines(m.sources, 12).map((h) => `${h.label} ${h.text}`),
+    ...(feedCtl.feed?.snapshot(10) ?? []),
+  ];
+  arcade.pacman?.view.setTicker?.(ticker);
   renderLegend(scene.currentMode, currentOpts);
   sandbox.tick(shown.devices.slice(0, 80).map((d) => ({
     id: d.ip,
@@ -727,13 +833,16 @@ function feed(m: StateMsg): void {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        });
+        }, optsFor(mode));
       }
     });
     if (frame) {
       vizFrameTs = frame.t;
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
+      }
+      if (packId === "hn-rain") {
+        hnRainStills.sync(frame.headlines, parseHnRainLook(optsFor(mode)).pics);
       }
     }
     vizHud.tick({
@@ -912,6 +1021,8 @@ feedShiftRo.observe($("livefeed"));
 feedShiftRo.observe($("scene"));
 liveFeed.onSourceChange = () => liveFeed.seedTranscript(agent.transcript());
 agent.onChat = (role, text, stream) => liveFeed.pushChat(role, text, stream);
+agent.onChatEnd = () => liveFeed.lockStream();
+liveFeed.onDisplay = (info) => agent.hearFeed(info);
 agent.onPhase = (phase) => {
   liveFeed.setThinking(phase === "think");
   if (phase === "heard") settings.revealTranscript();
@@ -1116,7 +1227,7 @@ settings.prependSection(
 );
 settings.prependSection(
   "Profile",
-  "Saved in ~/.zoto-viz/profiles.yml. netviz is the shipped default. Header AI writes a profile named after the Ollama model (settings, shader, photos, SVG, cadence). Selecting that profile while the model is offline loads the saved look only.",
+  "Saved in ~/.zoto-viz/profiles.yml. zoto viz is the shipped default. Header AI writes a profile named after the Ollama model (settings, shader, photos, SVG, cadence). Selecting that profile while the model is offline loads the saved look only.",
   profileHost,
 );
 uiReady = true;
@@ -1134,13 +1245,16 @@ void (async () => {
       maximized: settings.animSettings.mosaicMaxId || null,
       tiles: settings.animSettings.mosaicTiles,
     });
+    mosaic.hydrate();
   }
   const live = readSessionLive();
   applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
   const restored = await profiles.boot(live);
-  applyMode(modeSel.value);
-  applyViewLook();
-  if (restored && live) applyTheme(live.settings.theme, false, false);
+  quiet(() => {
+    applyMode(modeSel.value);
+    applyViewLook();
+    if (restored && live) applyTheme(live.settings.theme, false, false);
+  });
   if (restored && live?.selected) scene.selectIp(live.selected);
   if (restored) agent.setCycleChecked(!!live?.aiCycle);
   else if (aiCyclePrefOn()) await setAiCycle(true);
@@ -1236,7 +1350,7 @@ function collectSettings(): ProfileSettings {
   for (const m of allModes()) modeOptions[m.id] = optsFor(m);
   const arcade: Record<string, string> = {};
   for (const k of Object.keys(localStorage)) {
-    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom|waves|orbits|helix|skyline|pacman|tetris|portal)\./.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
+    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom|waves|orbits|helix|skyline|pacman|tetris|portal|carousel)\./.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
   }
   return {
     theme: theme.id,
@@ -1263,7 +1377,7 @@ function collectSettings(): ProfileSettings {
     mic: liveMic.micPolicy,
     agent: sceneAgentLook(),
     dice: { ...settings.diceSettings, include: { ...settings.diceSettings.include } },
-    autosave: profiles?.autosave ?? false,
+    autosave: true,
   };
 }
 
@@ -1470,7 +1584,10 @@ function connect(): void {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${proto}://${location.host}/ws`);
   const dot = $("conn");
-  ws.onopen = () => dot.classList.add("ok");
+  ws.onopen = () => {
+    dot.classList.add("ok");
+    void bootSession().then(() => profiles?.recover());
+  };
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data) as StateMsg;
     if (m.type !== "state") return;

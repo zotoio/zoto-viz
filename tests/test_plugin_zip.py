@@ -34,8 +34,8 @@ def _src(tree: Path, extra: dict[str, str] | None = None) -> Path:
 
 
 def test_constants_match_schema_zip_contract() -> None:
-    assert pz.MAX_ZIP_BYTES == 1_500_000
-    assert pz.MAX_UNCOMPRESSED_BYTES == 4_194_304
+    assert pz.MAX_ZIP_BYTES == 12_000_000
+    assert pz.MAX_UNCOMPRESSED_BYTES == 24_000_000
     assert pz.MAX_FILES == 80
     assert ".glsl" in pz.ALLOWED_SUFFIX
     assert ".yml" in pz.ALLOWED_SUFFIX

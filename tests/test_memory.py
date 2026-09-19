@@ -52,6 +52,19 @@ def test_roll_abbreviates_and_keeps_ui_log(tmp_path: Path, monkeypatch) -> None:
     assert memory.ollama_tail() == []
 
 
+def test_pending_task_survives_log_writes(tmp_path: Path, monkeypatch) -> None:
+    _iso(tmp_path, monkeypatch)
+    assert memory.pending_task() == ""
+    memory.set_pending_task("show NASA stills")
+    memory.append_message("user", "show NASA stills")
+    assert memory.pending_task() == "show NASA stills"
+    assert memory.clear_pending_task() == "show NASA stills"
+    assert memory.pending_task() == ""
+    memory.set_pending_task("again")
+    memory.clear_conversation()
+    assert memory.pending_task() == ""
+
+
 def test_roll_through_tracks_trim(tmp_path: Path, monkeypatch) -> None:
     _iso(tmp_path, monkeypatch)
     monkeypatch.setattr(memory, "CONV_MAX", 6)

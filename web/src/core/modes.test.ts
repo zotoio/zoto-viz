@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  ARCADE_ENGINES, GRAPH_BASES, BT_MAX_NODES, BT_MAX_NODES_CEILING, allModes, bluetooth, capBluetoothDevices, categorize, CPU_RED, cpuHeat, defaultCatalogMode, defaultOpts, graphModes, hashColor, heat,
-  droneFormationPoint, droneShow, droneShowLive, layersInternetLive, modeById, orgOf, paneLabelCap, parseWatchList, pluginMenuRows, setPluginModes, sources, topology, viewCaption, viewSource, wifi,
+  ARCADE_ENGINES, GRAPH_BASES, BT_MAX_NODES, BT_MAX_NODES_CEILING, allModes, arcadeSlotFor, bluetooth, capBluetoothDevices, categorize, CPU_RED, cpuHeat, cpuThermalHeat, defaultCatalogMode, defaultOpts, graphModes, hashColor, heat,
+  droneFormationPoint, droneShow, droneShowLive, layersInternetLive, modeById, nasaStillView, orgOf, paneLabelCap, parseWatchList, pluginMenuRows, setPluginModes, sources, topology, viewCaption, viewSource, wifi,
+  memory, disk, gpu, sockets, cgroups, units, udev, bridge,
 } from "./modes";
 import type { Device } from "./types";
 
@@ -24,10 +25,13 @@ describe("modes", () => {
     expect(GRAPH_BASES.some((m) => m.id === "bluetooth")).toBe(true);
     expect(GRAPH_BASES.some((m) => m.id === "cpu")).toBe(true);
     expect(GRAPH_BASES.some((m) => m.id === "sources")).toBe(true);
+    expect(GRAPH_BASES.some((m) => m.id === "memory")).toBe(true);
+    expect(GRAPH_BASES.some((m) => m.id === "disk")).toBe(true);
+    expect(GRAPH_BASES.some((m) => m.id === "udev")).toBe(true);
     expect(new Set(GRAPH_BASES.map((m) => m.id)).size).toBe(GRAPH_BASES.length);
     expect(ARCADE_ENGINES.map((m) => m.id)).toEqual([
       "netpong", "invaders", "command", "frogger", "cpupong", "doom",
-      "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+      "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
     ]);
     expect(ARCADE_ENGINES.every((m) => m.standalone)).toBe(true);
   });
@@ -71,6 +75,8 @@ describe("modes", () => {
     expect(heat(0.4)).toBeTypeOf("number");
     expect(cpuHeat(0)).toBe(heat(0));
     expect(cpuHeat(CPU_RED)).toBe(heat(1));
+    expect(cpuThermalHeat({ cpu: 10 } as Device, true)).toBe(cpuHeat(10));
+    expect(cpuThermalHeat({ cpu: 10, temp: 85 } as Device, true)).toBe(heat(0.55 * (10 / CPU_RED) + 0.45));
     expect(cpuHeat(100)).toBe(heat(1));
     expect(categorize(["udp/53"]).id).toBe("dns");
     expect(categorize(["tcp/443"]).id).toBe("tls");
@@ -87,6 +93,17 @@ describe("modes", () => {
     expect(viewSource(topology)).toBe("NET");
     expect(viewSource({ id: "doom" })).toBe("CPU");
     expect(viewSource(sources)).toBe("SRC");
+    expect(viewSource({ id: "carousel", arcadeId: "carousel" })).toBe("SRC");
+    expect(viewSource({ id: "plugin:memory", graphBase: "memory", label: "Memory" })).toBe("SYS");
+    expect(viewCaption({ id: "plugin:disk", graphBase: "disk", label: "Disk I/O" })).toBe("SYS Disk I/O");
+    expect(viewSource({ id: "plugin:syscon", graphBase: "bridge", label: "Syscon" })).toBe("SYS");
+    expect(viewCaption({ id: "plugin:syscon", graphBase: "bridge", label: "Syscon" })).toBe("SYS Syscon");
+    expect(nasaStillView({ id: "plugin:nasa-ring", pluginId: "nasa-ring", label: "NASA Ring" })).toBe(true);
+    expect(nasaStillView({ id: "plugin:hn-rain", pluginId: "hn-rain", label: "HN Rain" })).toBe(false);
+    expect(arcadeSlotFor({ id: "plugin:nasa-slides", pluginId: "nasa-slides", label: "NASA Slides" })).toBe("carousel");
+    expect(arcadeSlotFor({ id: "plugin:hn-rain", pluginId: "hn-rain", label: "HN Rain" })).toBeNull();
+    expect(arcadeSlotFor({ id: "plugin:carousel", pluginId: "carousel", label: "Carousel", standalone: true, arcadeId: "carousel" })).toBe("carousel");
+    expect(arcadeSlotFor({ id: "plugin:topology", pluginId: "topology", label: "Topology" })).toBeNull();
     expect(viewCaption(topology)).toBe("NET Topology");
     expect(viewCaption(sources)).toBe("SRC Source web");
     expect(viewCaption(wifi)).toMatch(/^AIR /);
@@ -171,5 +188,53 @@ describe("modes", () => {
     const opts = defaultOpts(droneShow);
     expect(opts.form).toBe("sphere");
     expect(droneShow.legend(opts).length).toBeGreaterThan(2);
+  });
+
+  it("gives each SYS view a 2D or 3D chart that fits the data", () => {
+    expect(memory.flatten).toBe(true);
+    expect(sockets.flatten).toBe(true);
+    expect(cgroups.flatten).toBe(true);
+    expect(units.flatten).toBe(true);
+    expect(disk.flatten).toBe(false);
+    expect(gpu.flatten).toBe(false);
+    expect(udev.flatten).toBe(false);
+    expect(bridge.flatten).toBe(false);
+    expect(memory.hint).toMatch(/2D packed bubbles/);
+    expect(disk.hint).toMatch(/3D columns/);
+    expect(gpu.hint).toMatch(/3D podium/);
+    expect(sockets.hint).toMatch(/2D bipartite/);
+    expect(cgroups.hint).toMatch(/2D tree/);
+    expect(units.hint).toMatch(/2D status grid/);
+    expect(udev.hint).toMatch(/3D class clusters/);
+    expect(typeof memory.force).toBe("function");
+    expect(memory.camera).not.toEqual(disk.camera);
+    expect(memory.camera![1]).toBeGreaterThan((memory.camera![2] ?? 0) * 8);
+    expect(disk.camera![0]).toBeGreaterThan(200);
+    expect(memory.linkBright?.({} as never, {} as never, 1)).toBe(0);
+    expect(units.linkBright?.({} as never, {} as never, 1)).toBe(0);
+    expect(disk.linkBright?.({} as never, {} as never, 1)).toBe(0);
+    const hub = {
+      id: "mem:host",
+      device: { role: "self", cpu: 5, bytes_in: 0, aliases: [], names: [], hostnames: [] },
+      visible: true, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0,
+    };
+    const proc = {
+      id: "mem:proc:1",
+      device: { role: "lan", cpu: 10, bytes_in: 900, aliases: [], names: [], hostnames: [] },
+      visible: true, x: 0, y: 40, z: 0, vx: 0, vy: 0, vz: 0,
+    };
+    const ctx = {
+      nodes: new Map([[hub.id, hub], [proc.id, proc]]),
+      links: new Map(),
+      opts: {},
+      now: 0,
+      spreadX: 1,
+      spreadZ: 1,
+      labelCount: 10,
+    };
+    memory.prepare?.(ctx as never);
+    memory.force?.([hub, proc] as never, 1, ctx as never);
+    expect(proc.vy).toBeLessThan(0);
+    expect(Math.hypot(proc.vx, proc.vz)).toBeGreaterThan(0);
   });
 });

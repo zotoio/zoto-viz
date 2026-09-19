@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zoto-viz.local/schema/plugin.schema.json",
   "title": "zoto-viz unified plugin",
-  "description": "Canonical schema for a zoto-viz plugin. First-party trees live at `plugins/src/<id>/`. A zip (`<id>.zip`) is the contrib / interchange format (`plugin add`, drop into `plugins/`, MCP `install_plugin_zip`).\n\nFolder layout (convention-over-config; only plugin.yml is required):\n  plugin.yml                 required metadata (this document)\n  visualisation.yml          optional engine / base / look / style / layout / options / config\n  frontend/**                optional TypeScript module (+ tests)\n  sky/sky.yml                optional sky recipe / pins (AI-generated or hand-authored)\n  sky/fragment.glsl          optional custom far-field GLSL (see $defs/shader)\n  datasource/streams.yml     optional consumes[] / produces[] + field remaps\n  datasource/collector.py    optional trusted collector (consent + ZOTO_VIZ_PLUGIN_SERVICE)\n  backend/service.py         optional on_snapshot / setup / teardown hooks\n\nZip contract (enforced by service/plugin_zip.py):\n  required member: plugin.yml at the archive root\n  size limits: 1500000 bytes compressed (1.5 MB), 4194304 bytes uncompressed (4 MB), at most 80 files\n  allowed suffixes: .yml .yaml .json .py .ts .tsx .js .mjs .css .html .md .txt .svg .png .jpg .jpeg .webp .gif .glsl\n  hard rejects: absolute paths, `..` traversal, symlinks\n\nPlugin shader uniform contract (sky/fragment.glsl; subtask 07 enforces at compile time):\n  allowed uniforms: uTime (float), uOpacity (float), uBright (float), uAudio (float), uAccent (vec3), uBg (vec3)\n  plus varying `in vec3 vDir` from the shipped vertex program\n  exclude uMode (shipped-enum index — implementation-specific)\n  exclude AI Dynamic uniforms uMotif / uA / uB / uWarp / uGrain / uBands (private state)",
+  "description": "Canonical schema for a zoto-viz plugin. First-party trees live at `plugins/src/<id>/`. A zip (`<id>.zip`) is the contrib / interchange format (`plugin add`, drop into `plugins/`, MCP `install_plugin_zip`).\n\nFolder layout (convention-over-config; only plugin.yml is required):\n  plugin.yml                 required metadata (this document)\n  visualisation.yml          optional engine / base / look / style / layout / options / config\n  frontend/**                optional TypeScript module (+ tests)\n  sky/sky.yml                optional sky recipe / pins (AI-generated or hand-authored)\n  sky/fragment.glsl          optional custom far-field GLSL (see $defs/shader)\n  datasource/streams.yml     optional consumes[] / produces[] + field remaps\n  datasource/collector.py    optional trusted collector (consent + ZOTO_VIZ_PLUGIN_SERVICE)\n  backend/service.py         optional on_snapshot / setup / teardown hooks\n\nZip contract (enforced by service/plugin_zip.py):\n  required member: plugin.yml at the archive root\n  size limits: 12000000 bytes compressed (12 MB), 24000000 bytes uncompressed (24 MB), at most 80 files\n  allowed suffixes: .yml .yaml .json .py .ts .tsx .js .mjs .css .html .md .txt .svg .png .jpg .jpeg .webp .gif .glsl\n  hard rejects: absolute paths, `..` traversal, symlinks\n\nPlugin shader uniform contract (sky/fragment.glsl; subtask 07 enforces at compile time):\n  allowed uniforms: uTime (float), uOpacity (float), uBright (float), uAudio (float), uAccent (vec3), uBg (vec3)\n  plus varying `in vec3 vDir` from the shipped vertex program\n  exclude uMode (shipped-enum index — implementation-specific)\n  exclude AI Dynamic uniforms uMotif / uA / uB / uWarp / uGrain / uBands (private state)",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "name", "version"],
@@ -158,13 +158,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 32,
-      "description": "Visualisation engine. Known values today: graph, netpong, invaders, command, frogger, cpupong, doom, waves, orbits, helix, skyline, pacman, tetris, portal. Open (not a closed enum) so new engines still validate."
+      "description": "Visualisation engine. Known values today: graph, netpong, invaders, command, frogger, cpupong, doom, waves, orbits, helix, skyline, pacman, tetris, portal, carousel. Open (not a closed enum) so new engines still validate."
     },
     "base": {
       "type": "string",
       "minLength": 1,
       "maxLength": 32,
-      "description": "Graph wrap target when engine is graph. Known values today: topology, talkers, services, protocols, layers, drone-show, watch, wifi, bluetooth, cpu, cores, load. Open so new wrap targets do not need a schema bump."
+      "description": "Graph wrap target when engine is graph. Known values today: topology, talkers, services, protocols, layers, drone-show, watch, wifi, bluetooth, cpu, cores, load, sources, memory, disk, gpu, sockets, cgroups, units, udev, bridge. Open so new wrap targets do not need a schema bump."
     },
     "freeMap": {
       "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims.",
@@ -174,7 +174,7 @@
     "look": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Per-view look pins. Free-form map (additionalProperties: true) — do not treat any look key as required; web/src/core/modes.ts and web/src/plugins/plugin.ts grow one-off knobs faster than this schema can track. Keys that exist in the codebase today (hints only, not required): theme, chrome, backdrop, stageOnly, skyOpacity, skyBright, skySpeed, skyEase, skyAudio, skyCycle, bgColor, bgOpacity, bgAudio, gridShape, gridColor, gridSize, gridFollow, gridOpacity, gridBright, gridAudio, audioDrive, audioSens, audioCamera, audioNodes, themeCycle, edgeGlow, edgeGlowAmt, edgeGlowSpeed, graphFabric (off|tubes|cloth|ribbon). stageOnly defaults on for demo packs (viz.read/write, backdrop plugin, or a sky shader); set false to keep the LAN graph. Related ViewMode knobs (not look-schema-required): graphBase, arcadeId, flatten, camera, standalone, fabric. Theme ids today: midnight, ocean, nord, dracula, solarized, gruvbox, ember, neon, tactical, paper, dusk, void, vhs, acid, ice, phosphor. BackdropKind today: none, fractal, space, matrix, live, aurora, rain, ocean, fire, warp, clouds, circuit, plasma, lattice, dusk, void, vhs, nebula, acid, ice, dawn, phosphor, earth, meadow, tunnel, dynamic, custom, plugin. FloorShape today: square, hex, triangle, diamond, circle. Fields that are NOT in the current codebase and must not be gated: chromatic, film_noise, film_flicker, halo, drop_amount, cursor_pulse, aim_size, target_size, scanline, follow_zoom_curve, follow_zoom_max, follow_zoom_min."
+      "description": "Per-view look pins. Free-form map (additionalProperties: true) — do not treat any look key as required; web/src/core/modes.ts and web/src/plugins/plugin.ts grow one-off knobs faster than this schema can track. Keys that exist in the codebase today (hints only, not required): theme, chrome, backdrop, stageOnly, skyOpacity, skyBright, skySpeed, skyEase, skyAudio, skyCycle, bgColor, bgOpacity, bgAudio, gridShape, gridColor, gridSize, gridFollow, gridOpacity, gridBright, gridAudio, audioDrive, audioSens, audioCamera, audioNodes, themeCycle, edgeGlow, edgeGlowAmt, edgeGlowSpeed, graphFabric (off|tubes|cloth|ribbon), mosaic (4|6|8), hero (off|left|center|right), mosaicTiles (catalog view ids), mosaicSharedTheme. mosaic + mosaicTiles open a split wall when the plugin is selected (Syscon uses this). stageOnly defaults on for demo packs (viz.read/write, backdrop plugin, or a sky shader); set false to keep the LAN graph. Related ViewMode knobs (not look-schema-required): graphBase, arcadeId, flatten, camera, standalone, fabric. Theme ids today: midnight, ocean, nord, dracula, solarized, gruvbox, ember, neon, tactical, paper, dusk, void, vhs, acid, ice, phosphor. BackdropKind today: none, fractal, space, matrix, live, aurora, rain, ocean, fire, warp, clouds, circuit, plasma, lattice, dusk, void, vhs, nebula, acid, ice, dawn, phosphor, earth, meadow, tunnel, dynamic, custom, plugin. FloorShape today: square, hex, triangle, diamond, circle. Fields that are NOT in the current codebase and must not be gated: chromatic, film_noise, film_flicker, halo, drop_amount, cursor_pulse, aim_size, target_size, scanline, follow_zoom_curve, follow_zoom_max, follow_zoom_min."
     },
     "style": {
       "type": "object",
@@ -386,7 +386,7 @@
     },
     "zipListing": {
       "title": "Plugin zip member listing",
-      "description": "Frozen zip contract: plugin.yml required at the archive root; optional roots visualisation.yml, frontend/**, sky/sky.yml, sky/fragment.glsl, datasource/streams.yml, datasource/collector.py, backend/service.py. Limits: 1.5 MB compressed (1500000), 4 MB uncompressed (4194304), at most 80 files. Hard rejects: absolute paths, `..` traversal, symlinks.",
+      "description": "Frozen zip contract: plugin.yml required at the archive root; optional roots visualisation.yml, frontend/**, sky/sky.yml, sky/fragment.glsl, datasource/streams.yml, datasource/collector.py, backend/service.py. Limits: 12 MB compressed (12000000), 24 MB uncompressed (24000000), at most 80 files. Hard rejects: absolute paths, `..` traversal, symlinks.",
       "type": "object",
       "additionalProperties": false,
       "required": ["members"],
@@ -398,20 +398,20 @@
           "contains": { "const": "plugin.yml" },
           "items": { "$ref": "#/$defs/zipMember" }
         },
-        "compressedBytes": { "type": "integer", "minimum": 0, "maximum": 1500000 },
-        "uncompressedBytes": { "type": "integer", "minimum": 0, "maximum": 4194304 },
+        "compressedBytes": { "type": "integer", "minimum": 0, "maximum": 12000000 },
+        "uncompressedBytes": { "type": "integer", "minimum": 0, "maximum": 24000000 },
         "fileCount": { "type": "integer", "minimum": 1, "maximum": 80 },
         "hasSymlinks": { "type": "boolean", "const": false }
       }
     },
     "zipContract": {
       "title": "Plugin zip numeric contract",
-      "description": "Zip size and file-count limits (MAX_ZIP=1500000, MAX_UNCOMPRESSED=4MiB, MAX_FILES=80). Runtime: service/plugin_zip.py.",
+      "description": "Zip size and file-count limits (MAX_ZIP=12000000, MAX_UNCOMPRESSED=24MB, MAX_FILES=80). Runtime: service/plugin_zip.py.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "maxCompressedBytes": { "const": 1500000 },
-        "maxUncompressedBytes": { "const": 4194304 },
+        "maxCompressedBytes": { "const": 12000000 },
+        "maxUncompressedBytes": { "const": 24000000 },
         "maxFiles": { "const": 80 },
         "requiredMember": { "const": "plugin.yml" },
         "allowedSuffixes": {

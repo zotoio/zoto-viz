@@ -1,6 +1,6 @@
 import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize } from "./scene";
 import type { RenderHost } from "./render-host";
-import { allModes, modeById, viewCaption, type ViewMode } from "../core/modes";
+import { allModes, hostEngine, modeById, viewCaption, type ViewMode } from "../core/modes";
 import { lookForMode, mergeLook } from "../plugins/plugin";
 import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
@@ -36,13 +36,28 @@ function panePool(): string[] {
   return allModes().map((m) => m.id);
 }
 
+/**
+ * Resolve a mosaic tile to a graph/arcade mode. Catalog rows win; if the menu
+ * has not loaded yet, fall back to the host engine (`plugin:memory` → `memory`)
+ * so a SYS wall still mounts NetScenes instead of chrome-only panes.
+ */
+export function mosaicPaneMode(id: string): ViewMode {
+  const catalog = allModes().find((row) => row.id === id);
+  if (catalog) return catalog;
+  const raw = id.startsWith("plugin:") ? id.slice("plugin:".length) : id;
+  return hostEngine(raw) ?? hostEngine(id) ?? modeById(id);
+}
+
+export function mosaicIsGraph(id: string): boolean {
+  return !mosaicPaneMode(id).standalone;
+}
+
 function isGraph(id: string): boolean {
-  const m = allModes().find((row) => row.id === id);
-  return !!m && !m.standalone;
+  return mosaicIsGraph(id);
 }
 
 function arcadeKey(id: string): string {
-  return modeById(id).arcadeId ?? id;
+  return mosaicPaneMode(id).arcadeId ?? id;
 }
 
 interface ArcadeSlot {
@@ -103,6 +118,7 @@ export class Mosaic {
   get heroPos(): HeroPos { return this.hero; }
   get heroMode(): string { return this.heroId; }
   get focusedId(): string { return this.focused; }
+  get mainMode(): string { return this.mainId; }
   get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
   get layout(): MosaicLayoutPatch {
     return { tree: this.tree, maximized: this.maximized, tiles: this.tileIds };
@@ -178,7 +194,8 @@ export class Mosaic {
     const sameWall = this.on && this.size === size && this.hero === hero
       && structureKey(this.tree) === structureKey(tree)
       && this.maximized === max
-      && this.panes.size === ids.length;
+      && this.panes.size === ids.length
+      && ids.filter(isGraph).every((id) => this.paneBound(id));
     this.size = size;
     this.hero = hero;
     this.heroId = hero !== "off" ? ids[0] ?? "" : "";
@@ -203,7 +220,20 @@ export class Mosaic {
     this.relayoutAll();
     requestAnimationFrame(() => this.relayoutAll());
     this.focus(prefer && this.panes.has(prefer) ? prefer : ids[0] ?? "");
+    this.refreshPaneModes();
+    this.flushSync();
     this.emitLayout();
+  }
+
+  /** Attach missing graph scenes and restyle from the catalog (empty panes after a pre-catalog setSize). */
+  hydrate(): void {
+    if (!this.on || !this.tree) return;
+    this.syncPanes(leafIds(this.tree));
+    this.refreshPaneModes();
+    this.placeTree();
+    this.relayoutAll();
+    this.flushSync();
+    this.cfg.host?.invalidate();
   }
 
   focus(id: string): void {
@@ -308,7 +338,7 @@ export class Mosaic {
 
   private relayoutAll(): void {
     this.cfg.main.relayout();
-    for (const e of this.extras) e.scene.relayout();
+    for (const e of this.extras) e.scene.refit();
     this.cfg.host?.invalidate();
   }
 
@@ -319,37 +349,71 @@ export class Mosaic {
     for (const id of ids) this.ensurePane(id);
   }
 
+  private paneBound(id: string): boolean {
+    if (this.mainId === id) return true;
+    if (this.extras.some((e) => e.id === id)) return true;
+    return this.liveArcade.has(id);
+  }
+
+  private flushSync(): void {
+    const msg = this.cfg.sync().lastMsg;
+    if (msg) this.update(msg);
+  }
+
+  /** Re-apply compiled catalog modes so extras created as host stubs pick up graphBase. */
+  private refreshPaneModes(): void {
+    if (this.mainId) {
+      const m = mosaicPaneMode(this.mainId);
+      this.cfg.main.setMode(m, this.cfg.optsFor(m));
+    }
+    for (const e of this.extras) {
+      const m = mosaicPaneMode(e.id);
+      e.scene.setMode(m, this.cfg.optsFor(m));
+    }
+  }
+
   private ensurePane(id: string): HTMLElement {
-    const existing = this.panes.get(id);
-    if (existing) return existing;
-    const pane = this.makePane(id, id === this.heroId);
-    this.panes.set(id, pane);
+    let pane = this.panes.get(id);
+    if (!pane) {
+      pane = this.makePane(id, id === this.heroId);
+      this.panes.set(id, pane);
+    }
+    this.bindPaneView(pane, id);
+    return pane;
+  }
+
+  private bindPaneView(pane: HTMLElement, id: string): void {
+    if (this.mainId === id && this.cfg.sceneEl.parentElement !== pane) {
+      pane.appendChild(this.cfg.sceneEl);
+    }
+    if (this.paneBound(id)) return;
     if (isGraph(id)) {
       if (this.cfg.host) pane.classList.add("glass");
       if (!this.mainId) {
         pane.appendChild(this.cfg.sceneEl);
-        this.cfg.main.setMode(modeById(id), this.cfg.optsFor(modeById(id)));
+        const m = mosaicPaneMode(id);
+        this.cfg.main.setMode(m, this.cfg.optsFor(m));
         this.mainId = id;
       } else {
-        const host = document.createElement("div");
-        host.className = "mosaic-scene";
-        pane.appendChild(host);
+        const host = pane.querySelector<HTMLElement>(":scope > .mosaic-scene")
+          ?? Object.assign(document.createElement("div"), { className: "mosaic-scene" });
+        if (!host.parentElement) pane.appendChild(host);
         const s = new NetScene(host, { satellite: true, host: this.cfg.host });
         this.applySync(s, id, this.cfg.sync());
-        s.setMode(modeById(id), this.cfg.optsFor(modeById(id)));
+        const m = mosaicPaneMode(id);
+        s.setMode(m, this.cfg.optsFor(m));
         this.extras.push({ id, scene: s });
       }
-    } else {
-      const slot = this.cfg.arcade[arcadeKey(id)];
-      if (slot) {
-        pane.appendChild(slot.el);
-        slot.el.hidden = false;
-        slot.el.classList.add("mosaic-live");
-        slot.view.start();
-        this.liveArcade.add(id);
-      }
+      return;
     }
-    return pane;
+    const slot = this.cfg.arcade[arcadeKey(id)];
+    if (slot) {
+      pane.appendChild(slot.el);
+      slot.el.hidden = false;
+      slot.el.classList.add("mosaic-live");
+      slot.view.start();
+      this.liveArcade.add(id);
+    }
   }
 
   private dropPane(id: string): void {
@@ -362,7 +426,8 @@ export class Mosaic {
         pane?.querySelector(".mosaic-scene")?.remove();
         if (pane) {
           pane.appendChild(this.cfg.sceneEl);
-          this.cfg.main.setMode(modeById(next.id), this.cfg.optsFor(modeById(next.id)));
+          const m = mosaicPaneMode(next.id);
+          this.cfg.main.setMode(m, this.cfg.optsFor(m));
         }
         this.mainId = next.id;
       } else {
@@ -465,7 +530,7 @@ export class Mosaic {
   private refreshChrome(): void {
     for (const [id, pane] of this.panes) {
       const cap = pane.querySelector(".mosaic-cap");
-      if (cap) cap.textContent = viewCaption(modeById(id));
+      if (cap) cap.textContent = viewCaption(mosaicPaneMode(id));
       pane.classList.toggle("hero", this.hero !== "off" && id === this.heroId);
       pane.classList.toggle("max", this.maximized === id);
       const maxBtn = pane.querySelector<HTMLButtonElement>('[data-act="max"]');
@@ -484,7 +549,7 @@ export class Mosaic {
     bar.className = "mosaic-chrome";
     const cap = document.createElement("span");
     cap.className = "mosaic-cap";
-    cap.textContent = viewCaption(modeById(id));
+    cap.textContent = viewCaption(mosaicPaneMode(id));
     cap.title = "drag to swap tiles";
     const tools = document.createElement("div");
     tools.className = "mosaic-tools";
@@ -521,7 +586,7 @@ export class Mosaic {
       let dragging = false;
       const ghost = document.createElement("div");
       ghost.className = "mosaic-ghost";
-      ghost.textContent = viewCaption(modeById(id));
+      ghost.textContent = viewCaption(mosaicPaneMode(id));
       const onMove = (ev: PointerEvent) => {
         if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
         if (!dragging) {
@@ -563,6 +628,7 @@ export class Mosaic {
   }
 
   private applySync(s: NetScene, id: string, st: MosaicSync): void {
+    s.setActive(true);
     s.setFilters(st.filters);
     s.setNodeFilter(st.nodeFilter);
     s.setAnim(mergeLook(st.anim, lookForMode(id)));

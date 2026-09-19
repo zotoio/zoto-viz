@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterSendCue, afterWatchword, agentHeaderCopy, agentPhase, aiCyclePrefOn, aiMosaicLayoutOn, CYCLE_KEY, MOSAIC_LAYOUT_KEY, displayText, extractAgentLook, extractMemory, extractPluginFiles, extractSettings, extractYaml, needsAgentReply, parseOllamaChat, parseOllamaLine, spokenText, splitThinkTags } from "./agent";
+import { afterSendCue, afterWatchword, agentHeaderCopy, agentPhase, aiCyclePrefOn, aiMosaicLayoutOn, CYCLE_KEY, MOSAIC_LAYOUT_KEY, displayText, extractAgentLook, extractMemory, extractPluginFiles, extractSettings, extractYaml, isSpeakStop, needsAgentReply, parseOllamaChat, parseOllamaLine, spokenText, splitThinkTags, takeSpokenChunks, speakablePrefix } from "./agent";
 
 describe("extractYaml", () => {
   it("reads a yaml fence", () => {
@@ -61,6 +61,28 @@ describe("afterWatchword", () => {
     expect(afterWatchword("okay soto list hosts", "zoto")).toBe("list hosts");
     expect(afterWatchword("zo to show the talkers", "zoto")).toBe("show the talkers");
     expect(afterWatchword("soto hello", "pulse")).toBeNull();
+  });
+});
+
+describe("isSpeakStop", () => {
+  it("matches watchword plus stop", () => {
+    expect(isSpeakStop("zoto stop", "zoto")).toBe(true);
+    expect(isSpeakStop("hey zoto please stop", "zoto")).toBe(true);
+    expect(isSpeakStop("soto stop talking", "zoto")).toBe(true);
+    expect(isSpeakStop("zo to stop speaking", "zoto")).toBe(true);
+    expect(isSpeakStop("zoto stop send", "zoto")).toBe(true);
+    expect(isSpeakStop("zoto stop that", "zoto")).toBe(true);
+    expect(isSpeakStop("zoto", "zoto")).toBe(false);
+    expect(isSpeakStop("zoto list hosts", "zoto")).toBe(false);
+    expect(isSpeakStop("stop", "zoto")).toBe(false);
+    expect(isSpeakStop("stop the packets", "zoto")).toBe(false);
+  });
+
+  it("accepts a bare stop once already listening or speaking", () => {
+    expect(isSpeakStop("stop", "zoto", true)).toBe(true);
+    expect(isSpeakStop("please stop", "zoto", true)).toBe(true);
+    expect(isSpeakStop("stop send", "zoto", true)).toBe(true);
+    expect(isSpeakStop("stop the packets", "zoto", true)).toBe(false);
   });
 });
 
@@ -185,5 +207,34 @@ describe("needsAgentReply", () => {
 describe("spokenText", () => {
   it("strips fences so TTS does not read yaml", () => {
     expect(spokenText("Hello.\n```yaml\nid: x\n```\nMore.")).toBe("Hello. More.");
+  });
+});
+
+describe("speakablePrefix", () => {
+  it("hides an unclosed fence", () => {
+    expect(speakablePrefix("Hi.\n```yaml\nid:")).toBe("Hi.\n");
+    expect(speakablePrefix("Hi.\n```yaml\nid: x\n```\nMore.")).toContain("More.");
+  });
+});
+
+describe("takeSpokenChunks", () => {
+  it("emits complete sentences as they appear, then the tail on flush", () => {
+    expect(takeSpokenChunks("Hello world", "", false)).toEqual({ chunks: [], already: "" });
+    expect(takeSpokenChunks("Hello world. More", "", false)).toEqual({
+      chunks: ["Hello world."],
+      already: "Hello world. ",
+    });
+    expect(takeSpokenChunks("Hello world. More to say", "Hello world. ", true)).toEqual({
+      chunks: ["More to say"],
+      already: "Hello world. More to say",
+    });
+  });
+
+  it("does not speak inside an open code fence", () => {
+    const open = takeSpokenChunks("Okay.\n```yaml\nid: pulse", "", false);
+    expect(open.chunks).toEqual(["Okay."]);
+    const closed = takeSpokenChunks("Okay.\n```yaml\nid: pulse\n```\nDone now.", open.already, true);
+    expect(closed.chunks.join(" ")).toMatch(/Done now/);
+    expect(closed.chunks.join(" ")).not.toMatch(/pulse/);
   });
 });

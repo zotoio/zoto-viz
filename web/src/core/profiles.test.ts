@@ -1,12 +1,17 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { AI_ID, ProfileStore, SHIPPED_ID, USER_ID, agentProfileId, aiCycleSettings, isAgentProfile, isQuiet, normalizeSettings, quiet, shippedSettings, suggestId } from "./profiles";
+import { AI_ID, LEGACY_SHIPPED_ID, ProfileStore, SHIPPED_ID, SHIPPED_LABEL, USER_ID, agentProfileId, aiCycleSettings, headerBrandProfile, isAgentProfile, isQuiet, isShippedId, normalizeSettings, quiet, shippedSettings, suggestId, workingProfileId, type ProfileList } from "./profiles";
 import { setPluginModes, topology } from "./modes";
 
 afterEach(() => setPluginModes([]));
 
 describe("profiles", () => {
   it("ships netviz and fills defaults", () => {
-    expect(SHIPPED_ID).toBe("netviz");
+    expect(SHIPPED_ID).toBe("zoto-viz");
+    expect(SHIPPED_LABEL).toBe("zoto viz");
+    expect(LEGACY_SHIPPED_ID).toBe("netviz");
+    expect(isShippedId("zoto-viz")).toBe(true);
+    expect(isShippedId("netviz")).toBe(true);
+    expect(isShippedId(USER_ID)).toBe(false);
     const s = shippedSettings();
     expect(s.mode).toBe("topology");
     expect(s.modeOptions).toEqual({});
@@ -19,6 +24,9 @@ describe("profiles", () => {
     expect(s.feed.textSize).toBe(12);
     expect(s.dice.include.theme).toBe(true);
     expect(s.dice.mosaicMax).toBe("6");
+    expect(s.autosave).toBe(true);
+    expect(normalizeSettings({ theme: "ember" }).autosave).toBe(true);
+    expect(normalizeSettings({ autosave: false }).autosave).toBe(true);
   });
 
   it("normalizes partial blobs and suggests ids", () => {
@@ -50,6 +58,13 @@ describe("profiles", () => {
     expect(suggestId([])).toBe(USER_ID);
     expect(suggestId([USER_ID])).toBe("user-2");
     expect(suggestId([USER_ID, ...Array.from({ length: 98 }, (_, i) => `user-${i + 2}`)])).toMatch(/^user-/);
+    expect(headerBrandProfile("user-2")).toBe(" - user-2");
+    expect(headerBrandProfile(SHIPPED_LABEL)).toBe(" - zoto viz");
+    expect(headerBrandProfile("")).toBe("");
+    expect(headerBrandProfile(undefined)).toBe("");
+    expect(workingProfileId("user-2", [SHIPPED_ID, USER_ID, "user-2"])).toBe(USER_ID);
+    expect(workingProfileId(SHIPPED_ID, [SHIPPED_ID, USER_ID])).toBe(USER_ID);
+    expect(workingProfileId("grok-4-5", [SHIPPED_ID, "grok-4-5"])).toBe(USER_ID);
   });
 
   it("overlays cycling flags for a new agent profile", () => {
@@ -74,6 +89,7 @@ describe("profiles", () => {
     expect(agentProfileId("Gemma4")).toBe("gemma4");
     expect(agentProfileId("3b-model")).toBe("m-3b-model");
     expect(agentProfileId("netviz")).toBe("agent-netviz");
+    expect(agentProfileId("zoto-viz")).toBe("agent-zoto-viz");
     expect(agentProfileId("user")).toBe("agent-user");
     expect(isAgentProfile({ id: "ai" })).toBe(true);
     expect(isAgentProfile({ id: "gemma4", model: "gemma4:latest" })).toBe(true);
@@ -104,5 +120,140 @@ describe("profiles", () => {
     expect(store.dirty).toBe(true);
     expect(applied.at(-1)?.theme).toBe("ember");
     expect(applied.at(-1)?.dream).toBe(true);
+  });
+
+  it("maps a leftover shipped session onto user", () => {
+    const store = new ProfileStore(
+      { collect: shippedSettings, apply: () => {} },
+      { value: "", el: document.createElement("div"), setOptions() {} },
+      document.createElement("div"),
+      document.createElement("div"),
+    );
+    store.list = [{ id: SHIPPED_ID, label: SHIPPED_LABEL, shipped: true }, { id: USER_ID, label: USER_ID, shipped: false }];
+    store.applySession({ profileId: "netviz", dirty: true, settings: { theme: "ember" } });
+    expect(store.current).toBe(USER_ID);
+    expect(store.dirty).toBe(true);
+    expect(store.shipped).toBe(false);
+  });
+});
+
+function jsonOk(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null },
+    json: async () => body,
+  };
+}
+
+function profileList(overrides: Partial<ProfileList> = {}): ProfileList {
+  return {
+    default: USER_ID,
+    fresh: false,
+    file: "/home/x/.zoto-viz/profiles.yml",
+    profiles: [
+      { id: SHIPPED_ID, label: SHIPPED_LABEL, shipped: true },
+      { id: USER_ID, label: USER_ID, shipped: false },
+    ],
+    ...overrides,
+  };
+}
+
+function mockProfilesFetch(opts: { down?: () => boolean; shippedStatus?: number } = {}) {
+  return (async (url: string, init?: RequestInit) => {
+    if (opts.down?.()) throw new Error("down");
+    const path = String(url);
+    const method = (init?.method || "GET").toUpperCase();
+    if (path.includes("/api/session")) return jsonOk({ csrf: "t" });
+    if (path.includes("/api/profiles/shipped") && method === "POST") {
+      if (opts.shippedStatus && opts.shippedStatus >= 400) {
+        return jsonOk({ error: "write failed" }, opts.shippedStatus);
+      }
+      return jsonOk({});
+    }
+    if (path.endsWith("/api/profiles") && method === "GET") return jsonOk(profileList());
+    if (path.includes("/api/profiles/") && method === "GET") return jsonOk({ settings: shippedSettings() });
+    return jsonOk({});
+  }) as typeof fetch;
+}
+
+describe("profiles availability", () => {
+  const origFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = origFetch;
+  });
+
+  it("stays available when the shipped write fails after a good list", async () => {
+    globalThis.fetch = mockProfilesFetch({ shippedStatus: 500 });
+    const bar = document.createElement("div");
+    const store = new ProfileStore(
+      { collect: shippedSettings, apply: () => {} },
+      { value: "", el: document.createElement("div"), setOptions() {} },
+      bar,
+      document.createElement("div"),
+    );
+    await store.boot();
+    expect(store.available).toBe(true);
+    expect(bar.hidden).toBe(true);
+    expect(bar.textContent).not.toMatch(/Profiles file unavailable/);
+  });
+
+  it("omits the autosave toggle and always writes writable profiles", async () => {
+    let puts = 0;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      const method = (init?.method || "GET").toUpperCase();
+      if (path.includes("/api/session")) return jsonOk({ csrf: "t" });
+      if (path.includes("/api/profiles/shipped") && method === "POST") return jsonOk({});
+      if (path.endsWith("/api/profiles") && method === "GET") return jsonOk(profileList());
+      if (path.includes("/api/profiles/") && method === "GET") {
+        return jsonOk({ settings: { ...shippedSettings(), autosave: false } });
+      }
+      if (path.includes("/api/profiles/") && method === "PUT") {
+        puts += 1;
+        return jsonOk({});
+      }
+      return jsonOk({});
+    }) as typeof fetch;
+    const tools = document.createElement("div");
+    const store = new ProfileStore(
+      { collect: shippedSettings, apply: () => {} },
+      { value: "", el: document.createElement("div"), setOptions() {} },
+      document.createElement("div"),
+      tools,
+    );
+    await store.boot();
+    expect(tools.textContent).not.toMatch(/autosave/i);
+    expect(store.current).toBe(USER_ID);
+    expect(store.autosave).toBe(true);
+    expect(store.canAutosave).toBe(true);
+    store.touch();
+    await new Promise((r) => setTimeout(r, 500));
+    expect(puts).toBeGreaterThan(0);
+  });
+
+  it("recovers after a failed boot without applying the startup default", async () => {
+    let down = true;
+    const applied: string[] = [];
+    globalThis.fetch = mockProfilesFetch({ down: () => down });
+    const bar = document.createElement("div");
+    const store = new ProfileStore(
+      { collect: shippedSettings, apply: (s) => { applied.push(s.theme); } },
+      { value: "", el: document.createElement("div"), setOptions() {} },
+      bar,
+      document.createElement("div"),
+    );
+    await store.boot({ profileId: USER_ID, dirty: false, settings: { theme: "ember" } });
+    expect(store.available).toBe(false);
+    expect(bar.hidden).toBe(false);
+    expect(bar.textContent).toMatch(/Profiles file unavailable/);
+    expect(applied).toEqual(["ember"]);
+    down = false;
+    expect(await store.recover()).toBe(true);
+    expect(store.available).toBe(true);
+    expect(bar.hidden).toBe(true);
+    expect(bar.textContent).not.toMatch(/Profiles file unavailable/);
+    expect(applied).toEqual(["ember"]);
   });
 });

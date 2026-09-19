@@ -1,0 +1,5 @@
+id: nest-cams
+name: Nest cams
+version: 1
+hint: Google Nest cameras via Device Access. Labeled 2×2 live wall plus event stills. OAuth tokens stay on the host.
+description: Stage-only labeled camera wall (1–4 panes). The monitor lists SDM devices, pulls Pub/Sub motion/person events, proxies event JPEGs, and exchanges WebRTC SDP so the browser talks to Nest. Config is ~/.zoto-viz/sdm.yml.

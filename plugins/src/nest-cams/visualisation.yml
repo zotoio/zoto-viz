@@ -1,0 +1,30 @@
+engine: graph
+base: topology
+look:
+  theme: dusk
+  backdrop: space
+  stageOnly: true
+  skyOpacity: 0.55
+  skyBright: 0.62
+  gridOpacity: 0
+style:
+  labels: none
+config:
+  - key: live
+    label: live stream
+    type: boolean
+    default: true
+    hint: WebRTC from the selected camera. Off shows event stills only.
+  - key: grid
+    label: panes
+    type: number
+    default: 4
+    min: 1
+    max: 4
+    step: 1
+    hint: 1 is one camera. 4 is a labeled 2×2 wall.
+  - key: pick
+    label: camera
+    type: text
+    default: ""
+    hint: Comma-separated labels or ids. Empty fills the grid from the first cameras that will stream.

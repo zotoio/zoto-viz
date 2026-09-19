@@ -7,7 +7,8 @@ CSRF is skipped; Host must still be loopback.
 Live tools (list_features, get_settings, set_settings, list_plugins, set_plugin,
 set_view, set_agent, roll_dice) patch the open UI over the 1 Hz WebSocket ``live``
 field. Also exposes LAN state, RF watch, plugin consent/draft, profiles,
-memories, and host data sources (RSS / HTTPS / local files). ``install_plugin_zip`` writes ``plugins/<id>.zip`` and unpacks into
+memories, host data sources (RSS / HTTPS / local files / journal / kmsg), and Nest Device Access
+cameras (OAuth / Pub/Sub / WebRTC). ``install_plugin_zip`` writes ``plugins/<id>.zip`` and unpacks into
 ``plugins/.runtime/<id>/``. ``publish_local_plugin`` writes
 ``~/.zoto-viz/plugins/local/<id>.zip`` and activates when the zip is safe.
 Colliding ids remint. Neither tool ``git add`` / ``git commit``.
@@ -78,7 +79,7 @@ PUBLISH_LOCAL_TOOL: dict[str, Any] = {
                 "type": "string",
                 "enum": [
                     "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
-                    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+                    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
                 ],
             },
             "base": {"type": "string", "description": "Graph wrap target when engine is graph"},
@@ -141,7 +142,7 @@ LIST_FEATURES_TOOL: dict[str, Any] = {
     "description": (
         "Catalog of every MCP-settable zoto-viz key: theme, view, feed, show, filters, "
         "anim (motion/physics/mosaic/sky/audio), plugins, agent look, dice, temper/weather, "
-        "plus state, RF watch, consent, draft, profiles, and memories."
+        "plus state, RF watch, consent, draft, profiles, memories, sources, and Nest cameras."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -442,7 +443,7 @@ ADD_MEMORY_TOOL: dict[str, Any] = {
 LIST_SOURCES_TOOL: dict[str, Any] = {
     "name": "list_sources",
     "description": (
-        "Host data sources (RSS, public HTTPS, local files under $HOME / ~/.zoto-viz). "
+        "Host data sources (RSS, public HTTPS, local files, user journal, kernel ring). "
         "Returns the registry plus the last poll. Headlines also ride GET /api/state as sources."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
@@ -451,18 +452,20 @@ LIST_SOURCES_TOOL: dict[str, Any] = {
 SET_SOURCE_TOOL: dict[str, Any] = {
     "name": "set_source",
     "description": (
-        "Create or update one host source. type is rss, http, or file. "
-        "Remote urls must be public HTTPS. File paths must stay under the home directory."
+        "Create or update one host source. type is rss, http, file, journal, or kmsg. "
+        "Remote urls must be public HTTPS. File paths must stay under the home directory. "
+        "journal is journalctl --user; optional unit filters to one user unit. kmsg reads /dev/kmsg."
     ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
         "properties": {
             "id": {"type": "string"},
-            "type": {"type": "string", "enum": ["rss", "http", "file"]},
+            "type": {"type": "string", "enum": ["rss", "http", "file", "journal", "kmsg"]},
             "label": {"type": "string"},
             "url": {"type": "string", "description": "Public HTTPS URL for rss / http"},
             "path": {"type": "string", "description": "Local file under $HOME or ~/.zoto-viz"},
+            "unit": {"type": "string", "description": "Optional systemd user unit for type=journal"},
             "interval": {"type": "number", "minimum": 15, "maximum": 86400},
             "enabled": {"type": "boolean"},
             "feed": {"type": "boolean", "description": "Show headlines on the live feed ticker"},
@@ -478,6 +481,45 @@ DELETE_SOURCE_TOOL: dict[str, Any] = {
         "additionalProperties": False,
         "required": ["id"],
         "properties": {"id": {"type": "string"}},
+    },
+}
+
+GET_SDM_TOOL: dict[str, Any] = {
+    "name": "get_sdm",
+    "description": (
+        "Google Nest Device Access status (no secrets). Includes PCM URL, linked flag, "
+        "devices, and recent Pub/Sub events. Config is ~/.zoto-viz/sdm.yml."
+    ),
+    "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
+}
+
+LIST_CAMERAS_TOOL: dict[str, Any] = {
+    "name": "list_cameras",
+    "description": "List Nest cameras/doorbells from the last SDM devices.list poll.",
+    "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
+}
+
+SET_SDM_TOOL: dict[str, Any] = {
+    "name": "set_sdm",
+    "description": (
+        "Write Device Access config and/or exchange a PCM authorization code. "
+        "enterprise_id is the Device Access UUID (not the GCP project id). "
+        "client_id/client_secret must be a Web OAuth client with redirect https://www.google.com. "
+        "Pass code after PCM redirects to google.com?code=..."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "enterprise_id": {"type": "string", "description": "Device Access project UUID"},
+            "gcp_project": {"type": "string"},
+            "client_id": {"type": "string"},
+            "client_secret": {"type": "string"},
+            "redirect_uri": {"type": "string"},
+            "topic": {"type": "string"},
+            "subscription": {"type": "string"},
+            "code": {"type": "string", "description": "PCM OAuth authorization code"},
+        },
     },
 }
 
@@ -516,6 +558,9 @@ def active_tools() -> list[dict[str, Any]]:
         LIST_SOURCES_TOOL,
         SET_SOURCE_TOOL,
         DELETE_SOURCE_TOOL,
+        GET_SDM_TOOL,
+        LIST_CAMERAS_TOOL,
+        SET_SDM_TOOL,
         INSTALL_TOOL,
         PUBLISH_LOCAL_TOOL,
     ]
@@ -808,6 +853,27 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             if not sources.delete(sid):
                 raise ValueError(f"unknown source {sid!r}")
             return _tool_text({"ok": True, "id": sid, **sources.config_payload()})
+        if name == "get_sdm":
+            from . import sdm
+            return _tool_text({"ok": True, **sdm.status_payload()})
+        if name == "list_cameras":
+            from . import sdm
+            st = sdm.status_payload()
+            return _tool_text({"ok": True, "devices": st.get("devices") or [], "linked": st.get("linked")})
+        if name == "set_sdm":
+            from . import sdm
+            keys = {k: args[k] for k in (
+                "enterprise_id", "gcp_project", "client_id", "client_secret",
+                "redirect_uri", "topic", "subscription",
+            ) if k in args}
+            if keys:
+                sdm.upsert(keys)
+            if args.get("code"):
+                sdm.queue_code(str(args["code"]))
+            st = sdm.status_payload()
+            if args.get("code"):
+                st = {**st, "code_queued": True}
+            return _tool_text({"ok": True, **st})
         if name == "get_state":
             from .monitor import publish_state
             return _tool_text({"ok": True, **publish_state(_require_state(app))})
@@ -926,8 +992,10 @@ def handle_rpc(msg: dict[str, Any], app: web.Application | None = None) -> dict[
                 "(plugin.yml at the zip or src root; optional visualisation.yml, frontend/, backend/, datasource/, sky/). "
                 "publish_local_plugin writes ~/.zoto-viz/plugins/local/<id>.zip and hot-activates when safe. "
                 "list_profiles / apply_profile load saved looks. list_memories / add_memory / delete_memory "
-                "curate chat memories. list_sources / set_source / delete_source manage RSS, HTTPS, and "
-                "local-file feeds (~/.zoto-viz/sources.yml). Repo zip install does not git-add; the operator promotes."
+                "curate chat memories. list_sources / set_source / delete_source manage RSS, HTTPS, "
+                "local-file, user-journal, and kernel-ring feeds (~/.zoto-viz/sources.yml). get_sdm / list_cameras / set_sdm manage Nest "
+                "Device Access (OAuth, Pub/Sub, WebRTC; secrets in ~/.zoto-viz/sdm.yml). "
+                "Repo zip install does not git-add; the operator promotes."
             ),
         })
     if method == "ping":

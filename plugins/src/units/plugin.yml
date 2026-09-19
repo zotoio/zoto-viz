@@ -1,0 +1,4 @@
+id: units
+name: User units
+version: 1
+hint: 2D status grid — failed user units on the front row, running units behind. Red is failed.

@@ -1182,10 +1182,10 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Data sources</div>
-      <div class="sec-hint">RSS, public HTTPS JSON/text, and local files under your home directory or ~/.zoto-viz. The monitor polls them; headlines can join the feed ticker. Remote URLs stay public-HTTPS only.</div>`;
+      <div class="sec-hint">RSS, public HTTPS JSON/text, local files under $HOME / ~/.zoto-viz, the user journal, and the kernel ring (/dev/kmsg). The monitor polls them; headlines can join the feed ticker. Remote URLs stay public-HTTPS only.</div>`;
     const include = new Toggle({
       label: "headlines on feed",
-      title: "show RSS / HTTP / file titles on the live feed ticker",
+      title: "show RSS / HTTP / file / journal / kmsg titles on the live feed ticker",
       checked: this.feed.includeSources !== false,
       onChange: (v) => { this.feed.includeSources = v; this.persistFeed(); },
     });
@@ -1199,22 +1199,27 @@ export class Settings {
         <option value="rss">RSS</option>
         <option value="http">HTTPS</option>
         <option value="file">local file</option>
+        <option value="journal">user journal</option>
+        <option value="kmsg">kernel ring</option>
       </select></label>
       <label>id <input name="id" maxlength="32" placeholder="hn" autocomplete="off"></label>
       <label>label <input name="label" maxlength="80" placeholder="Hacker News"></label>
       <label class="src-url">url <input name="url" placeholder="https://…"></label>
       <label class="src-path" hidden>path <input name="path" placeholder="~/.zoto-viz/sources/notes.txt"></label>
+      <label class="src-unit" hidden>unit <input name="unit" placeholder="optional, e.g. zoto-viz-monitor.service"></label>
       <label>interval <input name="interval" type="number" min="15" max="86400" value="300"> s</label>
       <button type="submit" class="btn primary">add</button>
       <div class="src-err" hidden></div>`;
     const typeSel = form.querySelector<HTMLSelectElement>("[name=type]")!;
     const urlLab = form.querySelector<HTMLLabelElement>(".src-url")!;
     const pathLab = form.querySelector<HTMLLabelElement>(".src-path")!;
+    const unitLab = form.querySelector<HTMLLabelElement>(".src-unit")!;
     const err = form.querySelector<HTMLElement>(".src-err")!;
     typeSel.addEventListener("change", () => {
-      const file = typeSel.value === "file";
-      urlLab.hidden = file;
-      pathLab.hidden = !file;
+      const kind = typeSel.value;
+      urlLab.hidden = kind !== "rss" && kind !== "http";
+      pathLab.hidden = kind !== "file";
+      unitLab.hidden = kind !== "journal";
     });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -1229,7 +1234,10 @@ export class Settings {
         feed: true,
       };
       if (kind === "file") body.path = String(fd.get("path") || "").trim();
-      else body.url = String(fd.get("url") || "").trim();
+      else if (kind === "journal") {
+        const unit = String(fd.get("unit") || "").trim();
+        if (unit) body.unit = unit;
+      } else if (kind !== "kmsg") body.url = String(fd.get("url") || "").trim();
       err.hidden = true;
       void apiFetch("/api/sources", {
         method: "POST",
@@ -1316,7 +1324,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Agent thinking streams on the overlay even when source is traffic. Agent conversation always pins to the latest line. Header switch or F.</div>`;
+      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Agent thinking streams on the overlay even when source is traffic. Replies type onto the ticker and the viewport eases to the latest line. Header switch or F.</div>`;
     const on = new Toggle({
       label: "show overlay",
       title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",

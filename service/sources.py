@@ -6,8 +6,12 @@ Local files must resolve under the home directory or ``~/.zoto-viz``.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import re
+import subprocess
+import threading
 import time
 import xml.etree.ElementTree as ET
 from html import unescape
@@ -20,11 +24,13 @@ from aiohttp import ClientError, ClientSession, ClientTimeout, web
 from . import agent_assets
 from . import paths
 
-KINDS = ("rss", "http", "file")
+KINDS = ("rss", "http", "file", "journal", "kmsg")
+SYS_KINDS = ("journal", "kmsg")
 ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 MAX_BODY = 256_000
 MAX_ITEMS = 20
-MAX_SUMMARY = 240
+MAX_TITLE = 240
+MAX_SUMMARY = 400
 MIN_INTERVAL = 15
 MAX_INTERVAL = 86_400
 DEFAULT_INTERVAL = 300
@@ -44,8 +50,24 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "id": "nasa",
         "type": "rss",
         "label": "NASA image of the day",
-        "url": "https://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss",
+        "url": "https://www.nasa.gov/feeds/iotd-feed",
         "interval": 3600,
+        "enabled": True,
+        "feed": True,
+    },
+    {
+        "id": "journal",
+        "type": "journal",
+        "label": "User journal",
+        "interval": 15,
+        "enabled": True,
+        "feed": True,
+    },
+    {
+        "id": "kmsg",
+        "type": "kmsg",
+        "label": "Kernel ring",
+        "interval": 15,
         "enabled": True,
         "feed": True,
     },
@@ -132,7 +154,7 @@ def normalize(raw: Any, *, taken: set[str] | None = None) -> dict[str, Any]:
     sid = unique_id(sid or str(raw.get("label") or raw.get("url") or raw.get("path") or "src"), owned)
     kind = str(raw.get("type") or raw.get("kind") or "").strip().lower()
     if kind not in KINDS:
-        raise ValueError("type must be rss, http, or file")
+        raise ValueError("type must be rss, http, file, journal, or kmsg")
     interval = raw.get("interval", DEFAULT_INTERVAL)
     try:
         interval = int(interval)
@@ -155,6 +177,12 @@ def normalize(raw: Any, *, taken: set[str] | None = None) -> dict[str, Any]:
         if not path:
             raise ValueError("path required")
         row["path"] = path
+    elif kind == "journal":
+        unit = str(raw.get("unit") or "").strip()
+        if unit:
+            row["unit"] = unit[:80]
+    elif kind == "kmsg":
+        pass
     else:
         url = agent_assets.check_url(str(raw.get("url") or ""))
         row["url"] = url
@@ -195,9 +223,28 @@ def load(*, seed: bool = True) -> list[dict[str, Any]]:
             continue
         taken.add(row["id"])
         out.append(row)
+    out = _seed_sys_kinds(out, taken, persist=p.is_file())
     _rows = out
     _loaded = True
     return list(_rows)
+
+
+def _seed_sys_kinds(rows: list[dict[str, Any]], taken: set[str], *, persist: bool) -> list[dict[str, Any]]:
+    """Add journal / kmsg once on existing registries that predate those kinds."""
+    added = False
+    for raw in DEFAULT_SOURCES:
+        if raw["type"] not in SYS_KINDS or raw["id"] in taken:
+            continue
+        try:
+            row = normalize(raw, taken=taken)
+        except ValueError:
+            continue
+        rows.append(row)
+        taken.add(row["id"])
+        added = True
+    if added and persist:
+        _dump(rows)
+    return rows
 
 
 def ensure() -> list[dict[str, Any]]:
@@ -280,6 +327,39 @@ def _child(el: ET.Element, *names: str) -> ET.Element | None:
     return None
 
 
+_IMG_HREF = re.compile(
+    r"https://[^\s\"'<>]+?\.(?:jpe?g|png|webp|gif)(?:\?[^\s\"'<>]*)?",
+    re.I,
+)
+
+
+def _attr(el: ET.Element, name: str) -> str:
+    if el.attrib.get(name):
+        return str(el.attrib[name])
+    for key, val in el.attrib.items():
+        if str(key).split("}")[-1] == name and val:
+            return str(val)
+    return ""
+
+
+def _item_image(it: ET.Element) -> str:
+    """enclosure / media:content / img-in-description — NASA IOTD uses enclosure."""
+    for child in list(it):
+        local = (child.tag or "").split("}")[-1].lower()
+        if local not in {"enclosure", "content", "thumbnail"}:
+            continue
+        url = _attr(child, "url")
+        typ = _attr(child, "type").lower()
+        medium = _attr(child, "medium").lower()
+        if not url.startswith("https://"):
+            continue
+        if typ.startswith("image/") or medium == "image" or _IMG_HREF.match(url):
+            return url[:500]
+    blob = _inner(_child(it, "description", "summary", "content"))
+    hit = _IMG_HREF.search(blob)
+    return hit.group(0)[:500] if hit else ""
+
+
 def parse_rss(body: str) -> dict[str, Any]:
     """RSS 2.0 or Atom → ``{title, items[]}``."""
     root = ET.fromstring(body)
@@ -290,12 +370,16 @@ def parse_rss(body: str) -> dict[str, Any]:
         ch = root.find("channel") if root.find("channel") is not None else root
         title = _text(_child(ch, "title"))
         for it in list(ch.findall("item"))[:MAX_ITEMS]:
-            items.append({
-                "title": _text(_child(it, "title"))[:160],
+            row = {
+                "title": _text(_child(it, "title"))[:MAX_TITLE],
                 "link": _text(_child(it, "link"))[:500],
                 "published": _text(_child(it, "pubDate", "published"))[:80],
                 "summary": _plain(_inner(_child(it, "description", "summary")))[:MAX_SUMMARY],
-            })
+            }
+            image = _item_image(it)
+            if image:
+                row["image"] = image
+            items.append(row)
     else:
         title = _text(_child(root, "title"))
         for it in list(root.findall("{http://www.w3.org/2005/Atom}entry") or root.findall("entry"))[:MAX_ITEMS]:
@@ -303,13 +387,171 @@ def parse_rss(body: str) -> dict[str, Any]:
             href = ""
             if link_el is not None:
                 href = (link_el.attrib.get("href") or _text(link_el))[:500]
-            items.append({
-                "title": _text(_child(it, "title"))[:160],
+            row = {
+                "title": _text(_child(it, "title"))[:MAX_TITLE],
                 "link": href,
                 "published": _text(_child(it, "updated", "published"))[:80],
                 "summary": _plain(_inner(_child(it, "summary", "content")))[:MAX_SUMMARY],
-            })
+            }
+            image = _item_image(it)
+            if image:
+                row["image"] = image
+            items.append(row)
     return {"title": title[:120], "items": [i for i in items if i.get("title") or i.get("link")]}
+
+
+_KMSG_RE = re.compile(r"^(\d+),(\d+),(\d+),([^;]*);(.*)$")
+_kmsg_lock = threading.Lock()
+_kmsg_items: list[dict[str, str]] = []
+_kmsg_started = False
+
+
+def parse_kmsg_line(raw: str) -> dict[str, str] | None:
+    """Decode one ``/dev/kmsg`` record into a source item."""
+    line = raw.strip()
+    if not line:
+        return None
+    m = _KMSG_RE.match(line)
+    text = (m.group(5) if m else line).strip()[:MAX_TITLE]
+    if not text:
+        return None
+    pri = int(m.group(1)) if m else 6
+    ident = "err" if pri <= 3 else "warn" if pri <= 4 else "kern"
+    return {"title": text, "summary": ident, "published": m.group(3) if m else "", "link": ""}
+
+
+def read_journal(unit: str | None = None, n: int = MAX_ITEMS) -> list[dict[str, str]]:
+    """Recent user-journal lines as RSS-shaped items. No system journal."""
+    cmd = ["journalctl", "--user", "-n", str(min(MAX_ITEMS, max(1, n))), "-o", "json", "--no-pager"]
+    u = (unit or "").strip()
+    if u:
+        cmd.extend(["-u", u])
+    try:
+        raw = subprocess.check_output(cmd, timeout=2.0, stderr=subprocess.DEVNULL, text=True)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    items: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        msg = str(rec.get("MESSAGE") or "").strip()
+        if not msg:
+            continue
+        ident = str(rec.get("SYSLOG_IDENTIFIER") or rec.get("_SYSTEMD_USER_UNIT") or rec.get("_COMM") or "journal")
+        items.append({
+            "title": msg[:MAX_TITLE],
+            "summary": ident[:MAX_SUMMARY],
+            "published": str(rec.get("__REALTIME_TIMESTAMP") or "")[:20],
+            "link": "",
+        })
+    return items[-MAX_ITEMS:]
+
+
+def _kmsg_loop() -> None:
+    try:
+        fd = os.open("/dev/kmsg", os.O_RDONLY | os.O_NONBLOCK)
+    except OSError:
+        return
+    buf = b""
+    while True:
+        try:
+            chunk = os.read(fd, 8192)
+        except BlockingIOError:
+            time.sleep(0.4)
+            continue
+        except OSError:
+            break
+        if not chunk:
+            time.sleep(0.4)
+            continue
+        buf += chunk
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            item = parse_kmsg_line(line.decode("utf-8", errors="replace"))
+            if not item:
+                continue
+            with _kmsg_lock:
+                _kmsg_items.append(item)
+                del _kmsg_items[:-MAX_ITEMS]
+
+
+def _prime_kmsg() -> None:
+    """Drain whatever is already sitting in the ring so the first poll is not empty."""
+    try:
+        fd = os.open("/dev/kmsg", os.O_RDONLY | os.O_NONBLOCK)
+    except OSError:
+        return
+    buf = b""
+    try:
+        for _ in range(80):
+            try:
+                chunk = os.read(fd, 8192)
+            except BlockingIOError:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                item = parse_kmsg_line(line.decode("utf-8", errors="replace"))
+                if not item:
+                    continue
+                _kmsg_items.append(item)
+        del _kmsg_items[:-MAX_ITEMS]
+    finally:
+        os.close(fd)
+
+
+def _ensure_kmsg() -> None:
+    global _kmsg_started
+    if _kmsg_started:
+        return
+    _kmsg_started = True
+    with _kmsg_lock:
+        _prime_kmsg()
+    threading.Thread(target=_kmsg_loop, name="zoto-kmsg", daemon=True).start()
+
+
+def read_kmsg() -> list[dict[str, str]]:
+    """Last kernel-ring lines. Prefers ``/dev/kmsg``; falls back to ``journalctl -k`` when dmesg is restricted."""
+    _ensure_kmsg()
+    with _kmsg_lock:
+        live = list(_kmsg_items)
+    return live or _kmsg_from_journal()
+
+
+def _kmsg_from_journal() -> list[dict[str, str]]:
+    try:
+        raw = subprocess.check_output(
+            ["journalctl", "-k", "-n", str(MAX_ITEMS), "-o", "json", "--no-pager"],
+            timeout=2.0,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    items: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        msg = str(rec.get("MESSAGE") or "").strip()
+        if not msg:
+            continue
+        items.append({
+            "title": msg[:MAX_TITLE],
+            "summary": "kern",
+            "published": str(rec.get("__REALTIME_TIMESTAMP") or "")[:20],
+            "link": "",
+        })
+    return items[-MAX_ITEMS:]
 
 
 def _file_payload(path: Path) -> dict[str, Any]:
@@ -338,7 +580,10 @@ async def _http_body(url: str) -> tuple[str, str]:
 async def session() -> ClientSession:
     global _session
     if _session is None or _session.closed:
-        _session = ClientSession(timeout=ClientTimeout(total=FETCH_S))
+        _session = ClientSession(
+            timeout=ClientTimeout(total=FETCH_S),
+            headers={"User-Agent": "zoto-viz/1.0", "Accept": "application/rss+xml, application/atom+xml, application/json, text/xml, */*"},
+        )
     return _session
 
 
@@ -358,10 +603,13 @@ def _record(row: dict[str, Any], *, ok: bool, payload: dict[str, Any] | None = N
         "ts": time.time(),
         "feed": bool(row.get("feed", True)),
     }
-    if row["type"] != "file":
-        live["url"] = row.get("url")
-    else:
+    if row["type"] == "file":
         live["path"] = row.get("path")
+    elif row["type"] == "journal":
+        if row.get("unit"):
+            live["unit"] = row["unit"]
+    elif row["type"] != "kmsg":
+        live["url"] = row.get("url")
     if payload:
         live.update(payload)
     if error:
@@ -375,9 +623,15 @@ async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
         if kind == "file":
             path = check_file(str(row.get("path") or ""))
             _record(row, ok=True, payload=_file_payload(path))
+        elif kind == "journal":
+            _record(row, ok=True, payload={"items": read_journal(row.get("unit"))})
+        elif kind == "kmsg":
+            _record(row, ok=True, payload={"items": read_kmsg()})
         elif kind == "rss":
             body, _ = await _http_body(str(row["url"]))
-            _record(row, ok=True, payload=parse_rss(body))
+            parsed = parse_rss(body)
+            _record(row, ok=True, payload=parsed)
+            _schedule_prefetch(parsed.get("items") or [])
         else:
             body, ctype = await _http_body(str(row["url"]))
             if "json" in ctype or body.lstrip().startswith(("{", "[")):
@@ -407,7 +661,11 @@ async def poll(now: float | None = None) -> dict[str, dict[str, Any]]:
         if t < due:
             continue
         await fetch_one(row)
-        _due[row["id"]] = t + int(row.get("interval") or DEFAULT_INTERVAL)
+        wait = int(row.get("interval") or DEFAULT_INTERVAL)
+        live = _live.get(row["id"]) or {}
+        if not live.get("ok"):
+            wait = min(wait, 30)
+        _due[row["id"]] = t + wait
     return snapshot()
 
 
@@ -429,6 +687,29 @@ def apply(msg: dict[str, Any]) -> dict[str, Any]:
     return msg
 
 
+def _schedule_prefetch(items: list[dict[str, Any]]) -> None:
+    urls = [
+        str(it.get("image") or "")
+        for it in items
+        if str(it.get("image") or "").startswith("https://")
+    ]
+    if not urls:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    loop.create_task(_prefetch_stills(urls[:8]))
+
+
+async def _prefetch_stills(urls: list[str]) -> None:
+    for url in urls:
+        try:
+            await agent_assets.ensure_photo(url)
+        except (ValueError, ClientError):
+            continue
+
+
 def headlines(limit: int = 12) -> list[dict[str, str]]:
     """Feed-ready rows from enabled sources that opted into the ticker."""
     out: list[dict[str, str]] = []
@@ -441,13 +722,17 @@ def headlines(limit: int = 12) -> list[dict[str, str]]:
             title = str(item.get("title") or "").strip()
             if not title:
                 continue
-            out.append({
+            line = {
                 "id": f"{row['id']}:{len(out)}",
                 "source": row["id"],
                 "label": label,
-                "text": title,
+                "text": title[:MAX_TITLE],
                 "link": str(item.get("link") or ""),
-            })
+            }
+            image = str(item.get("image") or "").strip()
+            if image:
+                line["image"] = image[:500]
+            out.append(line)
             if len(out) >= limit:
                 return out
         if live.get("text") and not live.get("items"):
@@ -465,6 +750,20 @@ def headlines(limit: int = 12) -> list[dict[str, str]]:
 
 def config_payload() -> dict[str, Any]:
     return {"sources": ensure(), "live": snapshot(), "kinds": list(KINDS)}
+
+
+async def api_image(request: web.Request) -> web.Response:
+    """Same-origin JPEG/PNG for RSS enclosure stills (CSP img-src 'self')."""
+    raw = str(request.query.get("url") or "").strip()
+    if not raw:
+        return web.json_response({"error": "url required"}, status=400)
+    try:
+        row = await agent_assets.ensure_photo(raw)
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
+    except ClientError as e:
+        return web.json_response({"error": f"fetch failed: {e}"}, status=400)
+    return agent_assets.file_response(row)
 
 
 async def api_sources(request: web.Request) -> web.Response:

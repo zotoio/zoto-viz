@@ -74,6 +74,7 @@ describe("transcript overlay", () => {
     feed.seedTranscript([{ role: "assistant", content: "**nest** is loud" }]);
     expect(feed.el.querySelector(".row.agent .tx strong")?.textContent).toBe("nest");
     feed.pushChat("agent", "use `tcp/443`", true);
+    feed.flushReveal();
     expect(feed.el.querySelector(".row.agent .tx code")?.textContent).toBe("tcp/443");
   });
 
@@ -81,6 +82,7 @@ describe("transcript overlay", () => {
     const feed = overlay();
     feed.pushChat("think", "Analyze the user input:\n", true);
     feed.pushChat("think", "they said hi\nGoal: reply", true);
+    feed.flushReveal();
     const think = [...feed.el.querySelectorAll(".row.think")];
     expect(think).toHaveLength(1);
     expect(think[0]?.querySelector(".tx")?.textContent).toContain("Analyze the user input:");
@@ -136,6 +138,7 @@ describe("transcript overlay", () => {
     const pending = feed.el.querySelector(".row.think.pending .tx");
     expect(pending?.textContent?.trim()).toBe("thinking…");
     feed.pushChat("think", "checking talkers\n", true);
+    feed.flushReveal();
     expect(feed.el.querySelector(".row.think.pending")).toBeNull();
     expect(feed.el.querySelector(".row.think .tx")?.textContent).toContain("checking talkers");
     feed.setThinking(false);
@@ -145,6 +148,7 @@ describe("transcript overlay", () => {
     const quiet = overlay();
     quiet.setThinking(true);
     quiet.pushChat("agent", "hi", true);
+    quiet.flushReveal();
     expect(quiet.el.querySelector(".row.think")).toBeNull();
     expect(quiet.el.querySelector(".row.agent .tx")?.textContent?.trim()).toBe("hi");
     quiet.setThinking(false);
@@ -160,10 +164,12 @@ describe("live agent trace", () => {
     expect(feed.el.querySelector(".feed-hint")?.textContent).toBe("thinking…");
     expect(feed.el.querySelector(".row.think.pending .tx")?.textContent?.trim()).toBe("thinking…");
     feed.pushChat("think", "the nest cam is loud\n", true);
+    feed.flushReveal();
     expect(feed.el.classList.contains("trace")).toBe(true);
     expect(feed.el.querySelector(".row.think.pending")).toBeNull();
     expect(feed.el.querySelector(".row.think .tx")?.textContent).toContain("the nest cam is loud");
     feed.pushChat("think", "because of the bitrate", true);
+    feed.flushReveal();
     expect(feed.el.querySelectorAll(".row.think")).toHaveLength(1);
     expect(feed.el.querySelector(".row.think .tx")?.textContent).toContain("because of the bitrate");
   });
@@ -183,6 +189,7 @@ describe("live agent trace", () => {
     };
     (feed as unknown as { ingest(m: TrafficMsg): void }).ingest(msg);
     feed.pushChat("think", "check nest\n", true);
+    feed.flushReveal();
     const think = [...feed.el.querySelectorAll(".row.think")];
     expect(think).toHaveLength(1);
     expect(think[0]?.querySelector(".tx")?.textContent).toContain("plan:");
@@ -247,7 +254,7 @@ describe("feed type size and auto-scroll", () => {
     expect(texts).toEqual(["live ask", "live reply"]);
   });
 
-  it("pins the traffic ticker to the latest line", () => {
+  it("queues traffic lines below the viewport until the ticker scrolls to them", () => {
     const feed = overlay("traffic");
     const top = mockTicker(feed);
     const t = 1_700_000_000;
@@ -256,10 +263,13 @@ describe("feed type size and auto-scroll", () => {
       ip: "@lan", peer: null, ts: t, packets: [pkt],
       window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] },
     });
-    expect(top()).toBe(400);
+    expect(top()).toBe(0);
+    feed.stepClock(0.016);
+    expect(top()).toBeGreaterThan(0);
+    expect(top()).toBeLessThan(400);
   });
 
-  it("pins the transcript ticker to the latest line", () => {
+  it("snaps seeded history, then queues live tokens below until catch-up", () => {
     const feed = overlay();
     const top = mockTicker(feed);
     feed.seedTranscript([
@@ -271,7 +281,7 @@ describe("feed type size and auto-scroll", () => {
     expect(top()).toBe(400);
   });
 
-  it("keeps pinning the transcript as agent tokens arrive", () => {
+  it("keeps following the transcript as agent tokens arrive", () => {
     const feed = overlay();
     const top = mockTicker(feed);
     feed.seedTranscript([
@@ -283,14 +293,16 @@ describe("feed type size and auto-scroll", () => {
     ticker.scrollTop = 10;
     ticker.dispatchEvent(new Event("scroll"));
     feed.pushChat("think", "planning\n", true);
-    expect(top()).toBe(400);
+    expect(top()).toBe(10);
     feed.setThinking(true);
     expect(feed.el.querySelector(".feed-hint")?.textContent).toBe("thinking…");
     feed.pushChat("agent", "next line", true);
-    expect(top()).toBe(400);
+    expect(top()).toBe(10);
+    feed.stepClock(2);
+    expect(top()).toBe(320);
   });
 
-  it("marks listening and keeps the ticker pinned to the bottom", () => {
+  it("marks listening and keeps following the ticker", () => {
     const feed = overlay();
     const top = mockTicker(feed);
     feed.seedTranscript([{ role: "user", content: "hi" }]);
@@ -301,5 +313,75 @@ describe("feed type size and auto-scroll", () => {
     expect(top()).toBe(400);
     feed.setListening(false);
     expect(feed.el.classList.contains("listening")).toBe(false);
+  });
+
+  it("buffers streamed agent text until the typewriter catches up", () => {
+    const feed = overlay();
+    feed.pushChat("agent", "Hello there, friend. ", true);
+    expect(feed.el.querySelector(".row.agent .tx")?.textContent).toBe("");
+    feed.stepClock(0.05);
+    const mid = feed.el.querySelector(".row.agent .tx")?.textContent || "";
+    expect(mid.length).toBeGreaterThan(0);
+    expect(mid.length).toBeLessThan("Hello there, friend. ".length);
+    feed.flushReveal();
+    expect(feed.el.querySelector(".row.agent .tx")?.textContent).toContain("Hello there");
+  });
+
+  it("keeps following after a backlog queues below and a scroll event fires", () => {
+    const feed = overlay("traffic");
+    const ticker = feed.el.querySelector(".feed-ticker") as HTMLDivElement;
+    Object.defineProperty(ticker, "clientHeight", { configurable: true, get: () => 80 });
+    let height = 200;
+    Object.defineProperty(ticker, "scrollHeight", { configurable: true, get: () => height });
+    let top = 120;
+    Object.defineProperty(ticker, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => { top = Number(v); },
+    });
+    const t = 1_700_000_000;
+    const pkt: Packet = [t, "out", "8.8.8.8", "dns", "udp/53", 80, "wlan0", "A www.example.com", "53", "192.168.86.4"];
+    (feed as unknown as { ingest(m: TrafficMsg): void }).ingest({
+      ip: "@lan", peer: null, ts: t, packets: [pkt],
+      window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] },
+    });
+    height = 600;
+    ticker.dispatchEvent(new Event("scroll"));
+    expect(top).toBe(120);
+    feed.stepClock(0.5);
+    expect(top).toBeGreaterThan(180);
+    expect(top).toBeLessThan(320);
+  });
+
+  it("eases the ticker toward the latest line while the buffer grows", () => {
+    const feed = overlay();
+    const ticker = feed.el.querySelector(".feed-ticker") as HTMLDivElement;
+    Object.defineProperty(ticker, "clientHeight", { configurable: true, get: () => 80 });
+    let height = 200;
+    Object.defineProperty(ticker, "scrollHeight", { configurable: true, get: () => height });
+    let top = 100;
+    Object.defineProperty(ticker, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => { top = Number(v); },
+    });
+    feed.pushChat("agent", "Hello world. ", true);
+    expect(top).toBe(100);
+    height = 400;
+    feed.stepClock(0.016);
+    expect(top).toBeGreaterThan(100);
+    expect(top).toBeLessThan(140);
+  });
+
+  it("notifies onDisplay as characters appear and when the stream locks", () => {
+    const feed = overlay();
+    const seen: { shown: string; done: boolean }[] = [];
+    feed.onDisplay = (info) => { if (info.role === "agent") seen.push({ shown: info.shown, done: info.done }); };
+    feed.pushChat("agent", "Hello world.", true);
+    feed.stepClock(1);
+    feed.lockStream();
+    expect(seen.some((s) => s.shown.includes("Hello") && !s.done)).toBe(true);
+    expect(seen.at(-1)?.done).toBe(true);
+    expect(seen.at(-1)?.shown).toBe("Hello world.");
   });
 });

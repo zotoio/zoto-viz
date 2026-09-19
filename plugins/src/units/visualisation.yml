@@ -1,0 +1,9 @@
+engine: graph
+base: units
+style:
+  flatten: true
+look:
+  theme: tactical
+  backdrop: none
+  gridShape: square
+  themeCycle: "off"

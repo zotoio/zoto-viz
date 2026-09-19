@@ -12,7 +12,7 @@ export const VIZ_DEFAULT_MAX_PARTICLES = 4096;
 export const VIZ_MAX_PACKET_SAMPLES = 32;
 export const VIZ_MAX_RF_SAMPLES = 24;
 export const VIZ_MAX_TALKER_SAMPLES = 24;
-export const VIZ_MAX_HEADLINE_SAMPLES = 8;
+export const VIZ_MAX_HEADLINE_SAMPLES = 16;
 
 /** Fixed std140 UBO layout — locked in schema `$defs/vizUboLayout`. */
 export const VIZ_UBO = {
@@ -72,6 +72,7 @@ export interface VizHeadline {
   text: string;
   kind?: string;
   summary?: string;
+  image?: string;
 }
 
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */
@@ -83,6 +84,74 @@ export interface VizDataFrame {
   rf: VizRfBeacon[];
   talkers: VizTalkerSample[];
   headlines: VizHeadline[];
+  /** Linux SYS gauges 0..1 for holotable / CIC plugins. */
+  sys?: VizSysTelemetry;
+}
+
+/** Compact this-host gauges. Missing views stay 0. */
+export interface VizSysTelemetry {
+  cpu: number;
+  mem: number;
+  disk: number;
+  gpu: number;
+  temp: number;
+  watts: number;
+  psi: number;
+  sockets: number;
+  failed: number;
+  udev: number;
+}
+
+export const EMPTY_SYS_TELEMETRY: VizSysTelemetry = {
+  cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0,
+};
+
+function clamp01(n: number): number {
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
+}
+
+function hubCpu(view: { devices?: Device[]; hub?: string } | undefined): number {
+  if (!view?.devices?.length) return 0;
+  const hub = view.hub;
+  const row = view.devices.find((d) => d.ip === hub) ?? view.devices[0];
+  return clamp01((row?.cpu ?? 0) / 100);
+}
+
+function aliasNum(aliases: string[] | undefined, re: RegExp): number {
+  for (const a of aliases ?? []) {
+    const m = a.match(re);
+    if (m) return Number(m[1]) || 0;
+  }
+  return 0;
+}
+
+/** Pull 0..1 SYS gauges from `views.*` without walking the LAN graph. */
+export function extractSysTelemetry(state: StateMsg): VizSysTelemetry {
+  const views = state.views ?? {};
+  const cpuView = views.cpu;
+  const mem = views.memory;
+  const thermal = cpuView?.thermal ?? views.bridge?.thermal;
+  const psi = Math.max(
+    0,
+    ...(mem?.devices ?? [])
+      .filter((d) => d.ip.startsWith("psi:"))
+      .map((d) => (d.cpu ?? 0) / 100),
+  );
+  const failed = aliasNum(views.units?.devices?.find((d) => d.ip === views.units?.hub)?.aliases, /(\d+)\s+failed/);
+  const udevEvents = aliasNum(views.udev?.devices?.find((d) => d.ip === views.udev?.hub)?.aliases, /(\d+)\s+events/);
+  const sockN = views.sockets?.devices?.find((d) => d.ip === views.sockets?.hub)?.packets ?? 0;
+  return {
+    cpu: hubCpu(cpuView),
+    mem: hubCpu(mem),
+    disk: hubCpu(views.disk),
+    gpu: hubCpu(views.gpu),
+    temp: clamp01(((thermal?.pkg_c ?? 0) - 40) / 50),
+    watts: clamp01((thermal?.gpu_w || thermal?.rapl_w || 0) / 200),
+    psi: clamp01(psi),
+    sockets: clamp01(sockN / 64),
+    failed: clamp01(failed / 4),
+    udev: clamp01(udevEvents / 24),
+  };
 }
 
 export type VizUniformValue = number | [number, number, number];
@@ -266,10 +335,12 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFr
     headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES).map((h) => ({
       id: h.id,
       label: h.label,
-      text: h.text.slice(0, 160),
+      text: h.text.slice(0, 240),
       kind: h.kind,
       summary: h.summary,
+      image: h.image,
     })),
+    sys: extractSysTelemetry(state),
   };
 }
 

@@ -20,8 +20,8 @@ from typing import Any, Iterable
 
 import yaml
 
-MAX_ZIP_BYTES = 1_500_000
-MAX_UNCOMPRESSED_BYTES = 4_194_304  # 4 MiB — schema $defs/zipContract
+MAX_ZIP_BYTES = 12_000_000
+MAX_UNCOMPRESSED_BYTES = 24_000_000  # schema $defs/zipContract — a few NASA stills + tree
 MAX_FILES = 80
 ALLOWED_SUFFIX = frozenset({
     ".yml", ".yaml", ".json", ".py", ".ts", ".tsx", ".js", ".mjs",

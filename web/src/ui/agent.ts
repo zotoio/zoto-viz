@@ -147,12 +147,23 @@ export class AgentPanel {
   private catalog: CatalogRow[] = [];
   private pulling = false;
   private speakAbort: AbortController | null = null;
+  private spoken = "";
+  private speakQ: string[] = [];
+  private speakRunning = false;
+  private liveVoice = false;
+  /** After “zoto stop”, TTS stays off until the watchword is heard again. */
+  private speakMuted = false;
+  private displayCaughtUp = true;
+  private heardFeed = false;
+  private speechWait: (() => void) | null = null;
   onControl?: (on: boolean) => void;
   onCycle?: (on: boolean) => void;
   onOpen?: () => void;
   onApplySettings?: (patch: Record<string, unknown>) => void | Promise<void>;
   onApplyLook?: (look: AgentLookInput) => Promise<void>;
   onChat?: (role: "you" | "think" | "agent", text: string, stream?: boolean) => void;
+  /** Called when the model has no more tokens for this turn. */
+  onChatEnd?: () => void;
   onPhase?: (phase: AgentPhase) => void;
   onTranscript?: () => void;
   /** Overlay transcript box; hold-to-talk and send prefer it when present. */
@@ -178,7 +189,7 @@ export class AgentPanel {
     this.headerEl = this.headerToggle.el;
     document.addEventListener("pointerdown", () => {
       if (!micCaptureAllowed()) return;
-      if (this.wakeOn && !this.micBlocked && !this.rec && !this.busy && !this.speaking && !this.holdTalk) this.startWake();
+      if (this.wakeOn && !this.micBlocked && !this.rec && !this.holdTalk) this.startWake();
     });
 
     this.statusEl = document.createElement("div");
@@ -203,7 +214,7 @@ export class AgentPanel {
 
     const listen = new Toggle({
       label: "listen for watchword",
-      title: "hold a live mic stream; after the watchword, talk, then say send",
+      title: "hold a live mic stream; after the watchword, talk, then say send — or zoto stop to cut speech",
       checked: this.wakeOn,
       onChange: (on) => {
         this.wakeOn = on;
@@ -220,14 +231,14 @@ export class AgentPanel {
 
     const voice = new Toggle({
       label: "speak replies",
-      title: "read agent replies through the speakers (ElevenLabs / Kokoro / Piper stream, else espeak)",
+      title: "read agent replies through the speakers (ElevenLabs / Kokoro / Piper stream, else espeak); say zoto stop to halt until the watchword again",
       checked: localStorage.getItem(VOICE_KEY) !== "0",
       onChange: (on) => localStorage.setItem(VOICE_KEY, on ? "1" : "0"),
     });
 
     const watch = new TextField({
       caption: "watchword",
-      title: "always-on listening waits for this word (also ‘hey …’ / ‘okay …’); say send after the question",
+      title: "always-on listening waits for this word (also ‘hey …’ / ‘okay …’); say send after the question, or zoto stop to cut speech",
       value: localStorage.getItem(WATCH_KEY) || DEFAULT_WATCH,
       placeholder: DEFAULT_WATCH,
       onInput: (v) => localStorage.setItem(WATCH_KEY, v.trim() || DEFAULT_WATCH),
@@ -714,7 +725,7 @@ export class AgentPanel {
 
   /** Hold one MediaStream for the whole listen session; SpeechRecognition may restart on it. */
   private async armListen(restart = false): Promise<void> {
-    if (!micCaptureAllowed() || !this.wakeOn || this.busy || this.speaking || this.holdTalk) return;
+    if (!micCaptureAllowed() || !this.wakeOn || this.holdTalk) return;
     if (this.rec && !restart) return;
     const SR = this.speechEngine();
     if (!SR) {
@@ -729,7 +740,7 @@ export class AgentPanel {
       if (!stream && this.wakeOn && micCaptureAllowed()) this.micBlocked = true;
       return;
     }
-    if (this.busy || this.speaking || this.holdTalk) {
+    if (this.holdTalk) {
       for (const t of stream.getTracks()) t.stop();
       return;
     }
@@ -742,7 +753,7 @@ export class AgentPanel {
       this.wakeStream.disable();
       return;
     }
-    if (this.busy || this.speaking || this.holdTalk) return;
+    if (this.holdTalk) return;
     if (this.rec && !restart) return;
     if (!open) {
       this.micBlocked = true;
@@ -770,7 +781,7 @@ export class AgentPanel {
       if (this.rec !== rec) return;
       this.rec = null;
       this.paintHeader();
-      if (this.wakeOn && micCaptureAllowed() && !this.busy && !this.speaking && !this.holdTalk && !this.micBlocked) {
+      if (this.wakeOn && micCaptureAllowed() && !this.holdTalk && !this.micBlocked) {
         this.restart = window.setTimeout(() => this.startWake(), 250);
       }
     };
@@ -845,11 +856,18 @@ export class AgentPanel {
   }
 
   private onHear(e: SpeechResultEvent): void {
-    if (this.busy || this.speaking || this.holdTalk) return;
+    if (this.holdTalk) return;
     const word = watchword();
     const said = sessionTranscript(e, word);
     if (!said) return;
+    const attentive = this.speaking || this.busy || this.command !== null;
+    if (isSpeakStop(said, word, attentive)) {
+      this.haltSpeak();
+      return;
+    }
+    if (this.busy || this.speaking) return;
     const rest = afterWatchword(said, word);
+    if (rest !== null) this.speakMuted = false;
     if (this.command === null) {
       if (rest === null) return;
       this.command = rest;
@@ -895,10 +913,23 @@ export class AgentPanel {
   stopVoice(): void {
     this.holdTalk = false;
     this.stopWake();
-    this.speakAbort?.abort();
-    this.speakAbort = null;
+    this.resetSpeech();
     if ("speechSynthesis" in window) speechSynthesis.cancel();
     void apiFetch("/api/ai/speak", { method: "DELETE" });
+  }
+
+  /** Cut TTS now and keep it off until the watchword is heard again. */
+  private haltSpeak(): void {
+    this.speakMuted = true;
+    this.liveVoice = false;
+    this.resetSpeech();
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    void apiFetch("/api/ai/speak", { method: "DELETE" });
+    this.command = null;
+    this.follow = "";
+    this.draftBox().value = "";
+    window.clearTimeout(this.silence);
+    this.paintHeader();
   }
 
   private draftBox(): HTMLTextAreaElement {
@@ -913,11 +944,19 @@ export class AgentPanel {
   }
 
   async sendText(text: string): Promise<void> {
+    if (isSpeakStop(text, watchword(), true)) {
+      this.haltSpeak();
+      return;
+    }
     await this.send(text);
   }
 
   /** False if a turn is already in flight — the ticker keeps the draft. */
   offerSend(text: string): boolean {
+    if (isSpeakStop(text, watchword(), true)) {
+      this.haltSpeak();
+      return true;
+    }
     if (this.busy) return false;
     void this.send(text);
     return true;
@@ -927,11 +966,17 @@ export class AgentPanel {
     if (this.busy) return false;
     const text = this.takeDraft(explicit);
     if (!text) return false;
+    if (isSpeakStop(text, watchword(), true)) {
+      this.haltSpeak();
+      return true;
+    }
+    this.resetSpeech();
     await this.hydrate();
     this.append("you", text);
+    this.liveVoice = this.voiceEnabled();
     this.busy = true;
-    this.stopRec();
     this.paintHeader();
+    if (this.wakeOn && micCaptureAllowed() && !this.holdTalk) this.startWake();
     let reply = "";
     try {
       if (!csrfToken()) await bootSession();
@@ -1017,10 +1062,18 @@ export class AgentPanel {
       this.busy = false;
       this.paintHeader();
     }
-    if (reply) {
-      this.speaking = true;
-      this.paintHeader();
-      try { await this.speak(reply); }
+    this.onChatEnd?.();
+    if (reply && this.liveVoice && !this.heardFeed) {
+      this.displayCaughtUp = true;
+      const { chunks, already } = takeSpokenChunks(reply, "", true);
+      this.spoken = already;
+      if (chunks.length) {
+        this.speakQ.push(...chunks);
+        void this.pumpSpeak();
+      }
+    }
+    if (reply && this.liveVoice) {
+      try { await this.awaitSpeech(); }
       finally { this.speaking = false; }
     }
     this.paintHeader();
@@ -1053,6 +1106,7 @@ export class AgentPanel {
         }
         if (bit.content) {
           content += bit.content;
+          this.displayCaughtUp = false;
           this.onChat?.("agent", bit.content, true);
         }
       }
@@ -1060,23 +1114,106 @@ export class AgentPanel {
     if (buf.trim()) {
       const bit = parseOllamaLine(buf);
       if (bit?.thinking) { thinking += bit.thinking; this.onChat?.("think", bit.thinking, true); }
-      if (bit?.content) { content += bit.content; this.onChat?.("agent", bit.content, true); }
+      if (bit?.content) {
+        content += bit.content;
+        this.displayCaughtUp = false;
+        this.onChat?.("agent", bit.content, true);
+      }
       if (bit?.error) return { thinking, content: bit.error };
     }
     const tagged = splitThinkTags(thinking, content);
     return tagged;
   }
 
-  private async speak(reply: string): Promise<void> {
-    if (localStorage.getItem(VOICE_KEY) === "0") return;
+  /** Feed typewriter: speak each sentence as it is painted. */
+  hearFeed(info: { role: string; shown: string; done: boolean }): void {
+    if (!this.liveVoice || this.speakMuted || info.role !== "agent") {
+      if (info.role === "agent" && info.done) {
+        this.displayCaughtUp = true;
+        this.signalSpeech();
+      }
+      return;
+    }
+    this.heardFeed = true;
+    if (info.done) this.displayCaughtUp = true;
+    const { chunks, already } = takeSpokenChunks(info.shown, this.spoken, info.done);
+    this.spoken = already;
+    if (chunks.length) {
+      this.speakQ.push(...chunks);
+      void this.pumpSpeak();
+    } else {
+      this.signalSpeech();
+    }
+  }
+
+  private voiceEnabled(): boolean {
+    if (this.speakMuted) return false;
+    try { return localStorage.getItem(VOICE_KEY) !== "0"; }
+    catch { return true; }
+  }
+
+  private resetSpeech(): void {
+    this.speakAbort?.abort();
+    this.speakAbort = new AbortController();
+    this.speakQ = [];
+    this.spoken = "";
+    this.speakRunning = false;
+    this.displayCaughtUp = true;
+    this.heardFeed = false;
+    this.liveVoice = false;
+    this.speaking = false;
+    this.speechWait?.();
+    this.speechWait = null;
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+  }
+
+  private speechIdle(): boolean {
+    return this.displayCaughtUp && !this.speakQ.length && !this.speakRunning;
+  }
+
+  private signalSpeech(): void {
+    if (!this.speechIdle()) return;
+    this.speaking = false;
+    const done = this.speechWait;
+    this.speechWait = null;
+    done?.();
+  }
+
+  private awaitSpeech(): Promise<void> {
+    if (!this.voiceEnabled() || this.speechIdle()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const prev = this.speechWait;
+      this.speechWait = () => { prev?.(); resolve(); };
+      window.setTimeout(() => resolve(), 120_000);
+    });
+  }
+
+  private async pumpSpeak(): Promise<void> {
+    if (this.speakRunning) return;
+    this.speakRunning = true;
+    this.speaking = true;
+    this.paintHeader();
+    try {
+      while (this.speakQ.length && !this.speakMuted) {
+        const bit = this.speakQ.shift();
+        if (bit) await this.speak(bit, true);
+      }
+    } finally {
+      this.speakRunning = false;
+      this.signalSpeech();
+    }
+  }
+
+  private async speak(reply: string, chain = false): Promise<void> {
+    if (this.speakMuted || localStorage.getItem(VOICE_KEY) === "0") return;
     const text = spokenText(reply);
     if (!text) return;
-    if (STREAM_TTS.has(this.ttsEngine) || !(await this.speakBrowser(text))) {
+    if (STREAM_TTS.has(this.ttsEngine) || !(await this.speakBrowser(text, chain))) {
       await this.speakHost(text);
     }
   }
 
-  private async speakBrowser(text: string): Promise<boolean> {
+  private async speakBrowser(text: string, chain = false): Promise<boolean> {
     if (!("speechSynthesis" in window)) return false;
     const voices = await waitVoices(this.voicesTried ? 0 : 400);
     this.voicesTried = true;
@@ -1093,15 +1230,14 @@ export class AgentPanel {
       const done = (ok: boolean) => { window.clearTimeout(t); resolve(ok); };
       u.onend = () => done(true);
       u.onerror = () => done(false);
-      speechSynthesis.cancel();
+      if (!chain) speechSynthesis.cancel();
       speechSynthesis.speak(u);
     });
   }
 
   private async speakHost(text: string): Promise<void> {
-    this.speakAbort?.abort();
-    this.speakAbort = new AbortController();
-    const signal = this.speakAbort.signal;
+    const signal = this.speakAbort?.signal;
+    if (signal?.aborted) return;
     try {
       const r = await apiFetch("/api/ai/speak", {
         method: "POST",
@@ -1123,7 +1259,7 @@ export class AgentPanel {
       const d = await r.json().catch(() => ({})) as { error?: string };
       this.append("agent", d.error || "no TTS engine — set ELEVENLABS_API_KEY, a loopback Kokoro URL, or install espeak-ng.");
     } catch (e) {
-      if (signal.aborted) return;
+      if (signal?.aborted) return;
       if (this.noVoiceHint) return;
       this.noVoiceHint = true;
       this.append("agent", e instanceof Error ? e.message : "no TTS engine — set ELEVENLABS_API_KEY, a loopback Kokoro URL, or install espeak-ng.");
@@ -1149,6 +1285,14 @@ export function afterWatchword(text: string, word: string): string | null {
     return said.slice(i + p.length).trim();
   }
   return null;
+}
+
+/** Watchword plus stop (or a bare “stop” once already listening / speaking). */
+export function isSpeakStop(text: string, word: string, attentive = false): boolean {
+  const rest = afterWatchword(text, word);
+  const said = rest !== null ? afterSendCue(rest).body : attentive ? afterSendCue(text).body : "";
+  if (rest === null && !attentive) return false;
+  return /^(please\s+)?stop(\s+(talking|speaking|that))?$/.test(said);
 }
 
 /** Trailing “send” (or “please send”) is the submit cue after the watchword. */
@@ -1183,6 +1327,43 @@ export function spokenText(reply: string): string {
     .replace(/[*_`#]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Drop an unclosed fence so TTS does not read yaml / shader source mid-stream. */
+export function speakablePrefix(text: string): string {
+  const parts = text.split("```");
+  if (parts.length % 2 === 0) return parts[0] ?? "";
+  return text;
+}
+
+function sharedPrefixLength(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i += 1;
+  return i;
+}
+
+/** Sentences (or a flushed tail) that have appeared on the ticker but not yet been spoken. */
+export function takeSpokenChunks(displayed: string, already: string, flush = false): { chunks: string[]; already: string } {
+  const voice = spokenText(speakablePrefix(displayed));
+  let pos = already && voice.startsWith(already) ? already.length : sharedPrefixLength(voice, already);
+  const chunks: string[] = [];
+  const mark = /[.!?…]["')\]]*(\s+|$)/g;
+  while (pos < voice.length) {
+    mark.lastIndex = pos;
+    const m = mark.exec(voice);
+    if (!m) break;
+    const end = m.index + m[0].length;
+    const bit = voice.slice(pos, end).trim();
+    pos = end;
+    if (bit) chunks.push(bit);
+  }
+  if (flush) {
+    const bit = voice.slice(pos).trim();
+    if (bit) chunks.push(bit);
+    pos = voice.length;
+  }
+  return { chunks, already: voice.slice(0, pos) };
 }
 
 function normSpeech(s: string): string {

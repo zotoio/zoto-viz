@@ -24,6 +24,12 @@ describe("cameraConsumers", () => {
       camGaze: 0,
       camTheme: false,
     })).toEqual([]);
+    expect(cameraConsumers({
+      backdrop: "bomb",
+      audioCamera: false,
+      camGaze: 0,
+      camTheme: false,
+    })).toEqual([]);
   });
 
   it("wants live-sky only when the backdrop is live", () => {

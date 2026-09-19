@@ -1,0 +1,9 @@
+engine: graph
+base: cgroups
+style:
+  flatten: true
+look:
+  theme: dusk
+  backdrop: none
+  gridShape: square
+  themeCycle: "off"

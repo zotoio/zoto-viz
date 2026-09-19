@@ -6,14 +6,17 @@ describe("sourceHeadlines", () => {
     const sources: Record<string, SourceLive> = {
       hn: {
         id: "hn", kind: "rss", label: "HN", ok: true, feed: true,
-        items: [{ title: "One", summary: "<p>First blurb</p>" }, { title: "Two" }],
+        items: [
+          { title: "One", summary: "<p>First blurb</p>", image: "https://www.nasa.gov/iotd.jpg" },
+          { title: "Two" },
+        ],
       },
       down: { id: "down", kind: "rss", label: "X", ok: false, error: "timeout", items: [{ title: "Nope" }] },
       quiet: { id: "quiet", kind: "file", label: "Notes", ok: true, feed: true, text: "hello\nworld" },
       off: { id: "off", kind: "rss", label: "Off", ok: true, paused: true, items: [{ title: "Hidden" }] },
     };
     expect(sourceHeadlines(sources, 8)).toEqual([
-      { id: "hn:0", label: "HN", text: "One", kind: "rss", summary: "First blurb" },
+      { id: "hn:0", label: "HN", text: "One", kind: "rss", summary: "First blurb", image: "https://www.nasa.gov/iotd.jpg" },
       { id: "hn:1", label: "HN", text: "Two", kind: "rss" },
       { id: "quiet:0", label: "Notes", text: "hello", kind: "file" },
       { id: "quiet:1", label: "Notes", text: "world", kind: "file" },

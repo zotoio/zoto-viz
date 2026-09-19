@@ -1,4 +1,4 @@
-export type SourceKind = "rss" | "http" | "file";
+export type SourceKind = "rss" | "http" | "file" | "journal" | "kmsg";
 
 export interface SourceRow {
   id: string;
@@ -6,6 +6,7 @@ export interface SourceRow {
   label: string;
   url?: string;
   path?: string;
+  unit?: string;
   interval: number;
   enabled: boolean;
   feed: boolean;
@@ -16,6 +17,7 @@ export interface SourceItem {
   link?: string;
   published?: string;
   summary?: string;
+  image?: string;
 }
 
 export interface SourceLive {
@@ -40,6 +42,8 @@ export interface SourceHeadline {
   kind?: string;
   /** RSS description / Atom summary, HTML stripped. */
   summary?: string;
+  /** HTTPS still from enclosure / media:content (NASA IOTD). */
+  image?: string;
 }
 
 export function stripMarkup(s: string): string {
@@ -89,12 +93,14 @@ export function sourceHeadlines(
 ): SourceHeadline[] {
   if (!sources) return [];
   const out: SourceHeadline[] = [];
-  const push = (id: string, label: string, text: string, kind?: string, summary?: string): boolean => {
+  const push = (id: string, label: string, text: string, kind?: string, summary?: string, image?: string): boolean => {
     const t = text.trim();
     if (!t) return out.length >= limit;
-    const row: SourceHeadline = { id, label, text: t.slice(0, 160), kind };
-    const body = summary ? stripMarkup(summary).slice(0, 360) : "";
+    const row: SourceHeadline = { id, label, text: t.slice(0, 240), kind };
+    const body = summary ? stripMarkup(summary).slice(0, 400) : "";
     if (body && body !== row.text) row.summary = body;
+    const href = (image || "").trim();
+    if (href.startsWith("https://")) row.image = href.slice(0, 500);
     out.push(row);
     return out.length >= limit;
   };
@@ -110,7 +116,7 @@ export function sourceHeadlines(
     }
     for (const [i, item] of (live.items ?? []).entries()) {
       const title = item.title || stripMarkup(item.summary || "");
-      if (push(`${live.id}:${i}`, label, title, kind, item.summary)) return out;
+      if (push(`${live.id}:${i}`, label, title, kind, item.summary, item.image)) return out;
     }
     if (!live.items?.length && live.text) {
       const lines = String(live.text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);

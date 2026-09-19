@@ -280,17 +280,72 @@ describe("buildVizFrame", () => {
     expect(frame.headlines).toEqual([]);
   });
 
+  it("extracts SYS gauges from host views", () => {
+    const frame = buildVizFrame(minimalState({
+      views: {
+        cpu: {
+          hub: "cpu:host",
+          self: "cpu:host",
+          devices: [{
+            ip: "cpu:host", mac: "", vendor: "", hostnames: [], names: [], sources: [],
+            ports: [], ifaces: [], aliases: [], first_seen: 0, last_seen: 0, role: "self",
+            online: true, packets: 1, bytes_in: 0, bytes_out: 0, cpu: 40,
+          }],
+          flows: [],
+          thermal: { pkg_c: 80, rapl_w: 10, gpu_w: 100 },
+        },
+        memory: {
+          hub: "mem:host",
+          self: "mem:host",
+          devices: [
+            {
+              ip: "mem:host", mac: "", vendor: "", hostnames: [], names: [], sources: [],
+              ports: [], ifaces: [], aliases: [], first_seen: 0, last_seen: 0, role: "self",
+              online: true, packets: 1, bytes_in: 0, bytes_out: 0, cpu: 60,
+            },
+            {
+              ip: "psi:cpu", mac: "", vendor: "", hostnames: [], names: [], sources: [],
+              ports: [], ifaces: [], aliases: [], first_seen: 0, last_seen: 0, role: "lan",
+              online: true, packets: 1, bytes_in: 0, bytes_out: 0, cpu: 20,
+            },
+          ],
+          flows: [],
+        },
+        units: {
+          hub: "unit:host",
+          self: "unit:host",
+          devices: [{
+            ip: "unit:host", mac: "", vendor: "", hostnames: [], names: [], sources: [],
+            ports: [], ifaces: [], aliases: ["2 failed"], first_seen: 0, last_seen: 0, role: "self",
+            online: true, packets: 1, bytes_in: 0, bytes_out: 0, cpu: 80,
+          }],
+          flows: [],
+        },
+      },
+    }), 99, 0);
+    expect(frame.sys?.cpu).toBeCloseTo(0.4);
+    expect(frame.sys?.mem).toBeCloseTo(0.6);
+    expect(frame.sys?.temp).toBeCloseTo(0.8);
+    expect(frame.sys?.watts).toBeCloseTo(0.5);
+    expect(frame.sys?.psi).toBeCloseTo(0.2);
+    expect(frame.sys?.failed).toBeCloseTo(0.5);
+  });
+
   it("passes host source headlines into the viz frame", () => {
     const frame = buildVizFrame(minimalState({
       sources: {
         hn: {
           id: "hn", kind: "rss", label: "Hacker News", ok: true, feed: true,
-          items: [{ title: "Jemalloc", summary: "<b>alloc</b> news" }, { title: "Waymo" }],
+          items: [
+            { title: "Jemalloc", summary: "<b>alloc</b> news", image: "https://www.nasa.gov/iotd.jpg" },
+            { title: "Waymo" },
+          ],
         },
       },
     }), 99, 0);
     expect(frame.headlines.map((h) => h.text)).toEqual(["Jemalloc", "Waymo"]);
     expect(frame.headlines[0]?.summary).toBe("alloc news");
+    expect(frame.headlines[0]?.image).toBe("https://www.nasa.gov/iotd.jpg");
     expect(frame.headlines.every((h) => h.kind === "rss")).toBe(true);
   });
 });

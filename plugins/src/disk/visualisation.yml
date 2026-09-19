@@ -1,0 +1,9 @@
+engine: graph
+base: disk
+style:
+  flatten: false
+look:
+  theme: tactical
+  backdrop: none
+  gridShape: hex
+  themeCycle: "off"

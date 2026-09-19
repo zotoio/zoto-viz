@@ -1,7 +1,7 @@
 id: hn-rain
 name: HN Rain
 version: 1
-hint: Phosphor rain of Hacker News headlines. Host RSS text drives the glyphs.
+hint: Phosphor rain of Hacker News headlines plus a Composer still for each title.
 description: Matrix-style digital rain whose glyph stream is packed from Hacker News (or other host source) headlines. Packet field and audio change fall speed.
 capabilities:
   - viz.read

@@ -12,13 +12,15 @@ import { wrapAgentSky } from "./sky-agent";
  * reads as flying through space / rain / a fractal, while the device cloud stays in the foreground.
  */
 
-export type PhotoSkyKind = "earth" | "meadow" | "tunnel";
+export type PhotoSkyKind =
+  | "earth" | "meadow" | "tunnel" | "bomb" | "reef" | "tornado" | "desert" | "amazon"
+  | "aquarium" | "macaws" | "ruins" | "fungi";
 
 export type BackdropKind =
   | "none" | "fractal" | "space" | "matrix" | "live"
   | "aurora" | "rain" | "ocean" | "fire" | "warp" | "clouds" | "circuit" | "plasma" | "lattice"
   | "dusk" | "void" | "vhs" | "nebula" | "acid" | "ice" | "dawn" | "phosphor"
-  | "earth" | "meadow" | "tunnel"
+  | PhotoSkyKind
   | "dynamic" | "custom" | "plugin";
 
 export type SkyGroup = "plain" | "nature" | "digital" | "live" | "photo";
@@ -27,10 +29,68 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
   earth: "/skies/earth.jpg",
   meadow: "/skies/meadow.jpg",
   tunnel: "/skies/tunnel.jpg",
+  bomb: "/skies/bomb.jpg",
+  reef: "/skies/reef.jpg",
+  tornado: "/skies/tornado.jpg",
+  desert: "/skies/desert.jpg",
+  amazon: "/skies/amazon.jpg",
+  aquarium: "/skies/aquarium.jpg",
+  macaws: "/skies/macaws.jpg",
+  ruins: "/skies/ruins.jpg",
+  fungi: "/skies/fungi.jpg",
 };
 
+/** Target length of a photo-sky video loop (seconds). Stills Ken-Burns on this period until a clip lands. */
+export const PHOTO_LOOP_S = 5;
+/** Crossfade from the last frames onto a second decoder at t=0 so the wrap has no hitch. */
+export const PHOTO_LOOP_FADE_S = 0.35;
+
+/** 0..1 phase of the photo-sky loop. */
+export function photoLoopPhase(t: number, period = PHOTO_LOOP_S): number {
+  const p = period > 0 ? period : PHOTO_LOOP_S;
+  return (((t % p) + p) % p) / p;
+}
+
+/**
+ * Mix of the incoming pass (start) over the outgoing pass (end).
+ * 0 until the fade window; 1 at the last instant before wrap. At t === duration the phase is 0 again.
+ */
+export function photoLoopMix(t: number, duration: number, fade = PHOTO_LOOP_FADE_S): number {
+  if (!(duration > 0) || !(fade > 0) || duration <= fade * 2) return 0;
+  const p = ((t % duration) + duration) % duration;
+  const start = duration - fade;
+  if (p < start) return 0;
+  return (p - start) / fade;
+}
+
+/** Cover-fit Ken Burns UV + breath. Closed over `period` (t and t+period match). */
+export function photoStillLoopSample(u: number, v: number, t: number, period = PHOTO_LOOP_S): {
+  x: number; y: number; zoom: number; breath: number;
+} {
+  const ang = photoLoopPhase(t, period) * Math.PI * 2;
+  const zoom = 1.08 + 0.035 * Math.sin(ang);
+  const x0 = (u - 0.5) / zoom + 0.5 + Math.cos(ang) * 0.018;
+  const y0 = (v - 0.5) / zoom + 0.5 + Math.sin(ang * 2) * 0.018;
+  return {
+    x: x0 + 0.0035 * Math.sin(ang + y0 * 5.5),
+    y: y0 + 0.0035 * Math.cos(ang + x0 * 4.5),
+    zoom,
+    breath: 0.975 + 0.04 * Math.sin(ang),
+  };
+}
+
 export function isPhotoSky(kind: BackdropKind): kind is PhotoSkyKind {
-  return kind === "earth" || kind === "meadow" || kind === "tunnel";
+  return Object.hasOwn(PHOTO_SKIES, kind);
+}
+
+/** True for looping sky clips (not the JPEG poster). */
+export function isPhotoVideoUrl(url: string): boolean {
+  return /\.(webm|mp4|ogv)(?:[?#]|$)/i.test(url);
+}
+
+/** Prefer a 5 s muted loop, then the JPEG poster. Drop `/skies/<id>.webm` beside the still. */
+export function photoSkyCandidates(kind: PhotoSkyKind): string[] {
+  return [`/skies/${kind}.webm`, `/skies/${kind}.mp4`, PHOTO_SKIES[kind]];
 }
 
 export const SKY_GROUP_TABS: { id: string; label: string }[] = [
@@ -75,9 +135,18 @@ export const BACKDROP_OPTIONS: { value: BackdropKind; label: string; hint: strin
   { value: "ice", label: "ice", hint: "crystalline facets", group: "nature" },
   { value: "dawn", label: "dawn", hint: "peach and rose horizon", group: "nature" },
   { value: "phosphor", label: "phosphor", hint: "P1 CRT green bloom", group: "digital" },
-  { value: "earth", label: "Earth", hint: "photograph: Earth from orbit", group: "photo" },
-  { value: "meadow", label: "meadow", hint: "photograph: sunny meadow", group: "photo" },
-  { value: "tunnel", label: "tunnel", hint: "photograph: dark tunnel", group: "photo" },
+  { value: "earth", label: "Earth", hint: "photo / video loop: Earth from orbit", group: "photo" },
+  { value: "meadow", label: "meadow", hint: "photo / video loop: sunny meadow", group: "photo" },
+  { value: "tunnel", label: "tunnel", hint: "photo / video loop: dark tunnel", group: "photo" },
+  { value: "bomb", label: "bomb", hint: "photo / video loop: hydrogen bomb mushroom cloud", group: "photo" },
+  { value: "reef", label: "reef", hint: "photo / video loop: coral reef", group: "photo" },
+  { value: "tornado", label: "tornado", hint: "photo / video loop: plains tornado", group: "photo" },
+  { value: "desert", label: "desert", hint: "photo / video loop: desert heat", group: "photo" },
+  { value: "amazon", label: "amazon", hint: "photo / video loop: Amazon rainforest", group: "photo" },
+  { value: "aquarium", label: "aquarium", hint: "photo / video loop: aquarium tank", group: "photo" },
+  { value: "macaws", label: "macaws", hint: "photo / video loop: macaws in jungle", group: "photo" },
+  { value: "ruins", label: "ruins", hint: "photo / video loop: Incan ruins", group: "photo" },
+  { value: "fungi", label: "fungi", hint: "photo / video loop: bioluminescent mushroom forest", group: "photo" },
   { value: "dynamic", label: "AI Dynamic", hint: "Gemma rebuilds this sky on a timer", group: "live" },
   { value: "custom", label: "agent shader", hint: "GLSL the local agent wrote into the model-named profile", group: "live" },
   { value: "plugin", label: "plugin shader", hint: "GLSL shipped in the selected plugin zip", group: "live" },
@@ -88,7 +157,8 @@ export const BACKDROP_OPTIONS: { value: BackdropKind; label: string; hint: strin
 export const CYCLE_SKIES: BackdropKind[] = [
   "fractal", "space", "matrix", "aurora", "rain", "ocean", "fire", "warp", "clouds", "circuit", "plasma", "lattice",
   "dusk", "void", "vhs", "nebula", "acid", "ice", "dawn", "phosphor",
-  "earth", "meadow", "tunnel", "live",
+  "earth", "meadow", "tunnel", "bomb", "reef", "tornado", "desert", "amazon",
+  "aquarium", "macaws", "ruins", "fungi", "live",
 ];
 
 /** Cycle pool minus live when the camera was denied or is missing. */
@@ -451,6 +521,8 @@ const MODE_NUM: Record<BackdropKind, number> = {
   plugin: 16,
   dusk: 17, void: 18, vhs: 19, nebula: 20, acid: 21, ice: 22, dawn: 23, phosphor: 24,
   earth: 25, meadow: 26, tunnel: 27,
+  bomb: 28, reef: 29, tornado: 30, desert: 31, amazon: 32,
+  aquarium: 33, macaws: 34, ruins: 35, fungi: 36,
 };
 
 const LIVE_VERT = /* glsl */ `
@@ -491,6 +563,46 @@ void main() {
 }
 `;
 
+/** Photographic plates: cover-fit. Ken Burns only when uAnimate is on (JPEG fallback). Video loops play 1:1 with uLoopMix wrapping end onto start. */
+const PHOTO_FRAG = /* glsl */ `
+uniform sampler2D uVideo;
+uniform sampler2D uVideoB;
+uniform vec2 uCanvas;
+uniform vec2 uVideoSize;
+uniform float uOpacity;
+uniform float uBright;
+uniform float uAudio;
+uniform float uLumaCap;
+uniform float uTime;
+uniform float uAnimate;
+uniform float uLoopMix;
+uniform vec3 uBg;
+in vec2 vUv;
+out vec4 fragColor;
+
+${SKY_LUMA_CAP_GLSL}
+void main() {
+  vec2 canvas = max(uCanvas, vec2(1.0));
+  vec2 video = max(uVideoSize, vec2(1.0));
+  float ca = canvas.x / canvas.y;
+  float va = video.x / video.y;
+  vec2 scale = ca > va ? vec2(1.0, va / ca) : vec2(ca / va, 1.0);
+  float live = step(0.5, uAnimate);
+  float ang = live * fract(max(uTime, 0.0) / 5.0) * 6.28318530718;
+  float zoom = mix(1.0, 1.08 + 0.035 * sin(ang), live);
+  vec2 pan = live * vec2(cos(ang), sin(ang * 2.0)) * 0.018;
+  vec2 uv = (vUv - 0.5) * scale / zoom + 0.5 + pan;
+  uv += live * 0.0035 * vec2(sin(ang + uv.y * 5.5), cos(ang + uv.x * 4.5));
+  vec3 cola = texture(uVideo, uv).rgb;
+  vec3 colb = texture(uVideoB, uv).rgb;
+  vec3 col = mix(cola, colb, clamp(uLoopMix, 0.0, 1.0));
+  col *= uBright * (0.85 + 0.35 * uAudio) * mix(1.0, 0.975 + 0.04 * sin(ang), live);
+  vec3 capped = capSkyLumaTo(col, uLumaCap);
+  vec3 outc = mix(uBg, capped, uOpacity);
+  fragColor = vec4(capSkyLumaTo(outc, uLumaCap), 1.0);
+}
+`;
+
 /** how much the pulse accelerates the sky at full level (a 1.0 pulse runs the clock 3.4× the slider speed) */
 const PULSE_ACCEL = 2.4;
 /** the easing slider maps 0..1 onto this many seconds of time constant (quadratic, so the low end stays crisp) */
@@ -502,6 +614,32 @@ function blankTex(): THREE.DataTexture {
   const t = new THREE.DataTexture(new Uint8Array([20, 24, 32, 255]), 1, 1);
   t.needsUpdate = true;
   return t;
+}
+
+type PhotoVideoSlot = { el: HTMLVideoElement; tex: THREE.VideoTexture };
+type PhotoVideoLoop = { url: string; slots: [PhotoVideoSlot, PhotoVideoSlot]; active: 0 | 1; incoming: boolean };
+
+function makeSkyVideo(url: string): HTMLVideoElement {
+  const el = document.createElement("video");
+  el.muted = true;
+  el.defaultMuted = true;
+  el.loop = false;
+  el.playsInline = true;
+  el.autoplay = false;
+  el.preload = "auto";
+  el.crossOrigin = "anonymous";
+  el.setAttribute("playsinline", "");
+  el.setAttribute("muted", "");
+  el.src = url;
+  return el;
+}
+
+function makeSkyVideoTex(el: HTMLVideoElement): THREE.VideoTexture {
+  const tex = new THREE.VideoTexture(el);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
 }
 
 /** Last compiled agent fragment, so arcade LookStage skies can share it. */
@@ -587,7 +725,10 @@ export class Backdrop {
   private readonly liveMat: THREE.ShaderMaterial;
   private readonly photoMat: THREE.ShaderMaterial;
   private readonly photoCache = new Map<string, THREE.Texture>();
+  private readonly photoVideoCache = new Map<string, PhotoVideoLoop>();
   private photoWant: string | null = null;
+  private photoLoadGen = 0;
+  private photoVideoUrl: string | null = null;
   private pluginMat: THREE.ShaderMaterial | null = null;
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
@@ -672,17 +813,30 @@ export class Backdrop {
     this.liveMesh.renderOrder = -11;
     this.liveMesh.visible = false;
 
-    this.photoMat = this.liveMat.clone();
-    this.photoMat.uniforms = {
-      uVideo: { value: blankTex() },
-      uCanvas: { value: new THREE.Vector2(16, 9) },
-      uVideoSize: { value: new THREE.Vector2(16, 9) },
-      uOpacity: { value: 1 },
-      uBright: { value: 1 },
-      uAudio: { value: 0 },
-      uLumaCap: { value: SKY_LUMA_CAP },
-      uBg: { value: new THREE.Color(0x0b0e14) },
-    };
+    this.photoMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uVideo: { value: blankTex() },
+        uCanvas: { value: new THREE.Vector2(16, 9) },
+        uVideoSize: { value: new THREE.Vector2(16, 9) },
+        uOpacity: { value: 1 },
+        uBright: { value: 1 },
+        uAudio: { value: 0 },
+        uLumaCap: { value: SKY_LUMA_CAP },
+        uTime: { value: 0 },
+        uAnimate: { value: 1 },
+        uLoopMix: { value: 0 },
+        uVideoB: { value: blankTex() },
+        uBg: { value: new THREE.Color(0x0b0e14) },
+      },
+      vertexShader: LIVE_VERT,
+      fragmentShader: PHOTO_FRAG,
+      glslVersion: THREE.GLSL3,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      fog: false,
+      toneMapped: false,
+    });
     this.photoMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.photoMat);
     this.photoMesh.frustumCulled = false;
     this.photoMesh.renderOrder = -11;
@@ -726,7 +880,11 @@ export class Backdrop {
       this.liveMat.uniforms.uVideo.value = liveCam.texture;
       this.liveMesh.visible = true;
     }
-    if (photo) this.loadPhoto(PHOTO_SKIES[kind as PhotoSkyKind]);
+    if (photo) {
+      if (kind !== prev) this.loadPhotoSky(kind as PhotoSkyKind);
+    } else {
+      this.pausePhotoVideos();
+    }
   }
 
   /**
@@ -789,26 +947,170 @@ export class Backdrop {
 
   /** Load a photographic plate onto the full-screen sky (cover-fit, no webcam). */
   loadPhoto(url: string): void {
+    this.loadPhotoStill(url, ++this.photoLoadGen);
+  }
+
+  /** Prefer a looping video plate, then the JPEG poster. Never opens the webcam. */
+  loadPhotoSky(kind: PhotoSkyKind): void {
+    const gen = ++this.photoLoadGen;
+    this.tryPhotoSrc(photoSkyCandidates(kind), 0, gen);
+  }
+
+  private tryPhotoSrc(urls: string[], i: number, gen: number): void {
+    if (gen !== this.photoLoadGen) return;
+    const url = urls[i];
+    if (!url) return;
+    if (isPhotoVideoUrl(url)) {
+      this.loadPhotoVideo(url, gen, () => this.tryPhotoSrc(urls, i + 1, gen));
+      return;
+    }
+    this.loadPhotoStill(url, gen);
+  }
+
+  private loadPhotoStill(url: string, gen: number): void {
     this.photoWant = url;
     const hit = this.photoCache.get(url);
     if (hit) {
-      this.bindPhoto(hit);
+      if (gen !== this.photoLoadGen) return;
+      this.bindPhoto(hit, true);
       return;
     }
     new THREE.TextureLoader().load(url, (t) => {
       t.colorSpace = THREE.SRGBColorSpace;
       t.minFilter = THREE.LinearFilter;
       this.photoCache.set(url, t);
-      if (this.photoWant !== url) return;
-      this.bindPhoto(t);
+      if (gen !== this.photoLoadGen) return;
+      this.bindPhoto(t, true);
     });
   }
 
-  private bindPhoto(t: THREE.Texture): void {
+  private loadPhotoVideo(url: string, gen: number, onMiss: () => void): void {
+    const cached = this.photoVideoCache.get(url);
+    if (cached && cached.slots[0].el.readyState >= 2 && cached.slots[0].el.videoWidth > 0) {
+      if (gen !== this.photoLoadGen) return;
+      this.bindPhotoVideo(cached);
+      return;
+    }
+    const a = makeSkyVideo(url);
+    const fail = (): void => {
+      a.removeEventListener("error", fail);
+      a.removeEventListener("loadeddata", ok);
+      if (gen !== this.photoLoadGen) return;
+      onMiss();
+    };
+    const ok = (): void => {
+      a.removeEventListener("error", fail);
+      a.removeEventListener("loadeddata", ok);
+      if (gen !== this.photoLoadGen) return;
+      if (a.videoWidth <= 0) {
+        onMiss();
+        return;
+      }
+      const b = makeSkyVideo(url);
+      const pack: PhotoVideoLoop = {
+        url,
+        slots: [
+          { el: a, tex: makeSkyVideoTex(a) },
+          { el: b, tex: makeSkyVideoTex(b) },
+        ],
+        active: 0,
+        incoming: false,
+      };
+      this.photoVideoCache.set(url, pack);
+      this.bindPhotoVideo(pack);
+    };
+    a.addEventListener("error", fail);
+    a.addEventListener("loadeddata", ok);
+    a.load();
+  }
+
+  private bindPhotoVideo(pack: PhotoVideoLoop): void {
+    this.photoWant = pack.url;
+    this.photoVideoUrl = pack.url;
+    this.pausePhotoVideos(pack.url);
+    pack.active = 0;
+    pack.incoming = false;
+    const cur = pack.slots[0];
+    const nxt = pack.slots[1];
+    try { nxt.el.currentTime = 0; } catch { /* seek before metadata */ }
+    nxt.el.pause();
+    this.photoMat.uniforms.uAnimate.value = 0;
+    this.photoMat.uniforms.uLoopMix.value = 0;
+    this.photoMat.uniforms.uVideoB.value = nxt.tex;
+    this.bindPhoto(cur.tex, false);
+    try { cur.el.currentTime = 0; } catch { /* */ }
+    const play = cur.el.play();
+    if (play) void play.catch(() => undefined);
+  }
+
+  private pausePhotoVideos(except?: string): void {
+    for (const [url, loop] of this.photoVideoCache) {
+      if (url === except) continue;
+      for (const slot of loop.slots) slot.el.pause();
+    }
+    if (!except) {
+      this.photoVideoUrl = null;
+      this.photoMat.uniforms.uLoopMix.value = 0;
+    }
+  }
+
+  private tickPhotoVideoLoop(): void {
+    const url = this.photoVideoUrl;
+    if (!url) return;
+    const pack = this.photoVideoCache.get(url);
+    if (!pack) return;
+    const cur = pack.slots[pack.active];
+    const nxt = pack.slots[pack.active === 0 ? 1 : 0];
+    const dur = cur.el.duration;
+    if (cur.el.videoWidth > 0) {
+      (this.photoMat.uniforms.uVideoSize.value as THREE.Vector2).set(cur.el.videoWidth, cur.el.videoHeight);
+    }
+    if (!Number.isFinite(dur) || dur <= PHOTO_LOOP_FADE_S * 2) {
+      this.photoMat.uniforms.uLoopMix.value = 0;
+      return;
+    }
+    const t = cur.el.ended ? dur : cur.el.currentTime;
+    const mix = photoLoopMix(t, dur);
+    this.photoMat.uniforms.uLoopMix.value = mix;
+    this.photoMat.uniforms.uVideoB.value = nxt.tex;
+    if (mix > 0 && !pack.incoming) {
+      pack.incoming = true;
+      try { nxt.el.currentTime = 0; } catch { /* */ }
+      const play = nxt.el.play();
+      if (play) void play.catch(() => undefined);
+    }
+    if (cur.el.ended || mix >= 0.97) {
+      pack.active = pack.active === 0 ? 1 : 0;
+      pack.incoming = false;
+      cur.el.pause();
+      try { cur.el.currentTime = 0; } catch { /* */ }
+      this.photoMat.uniforms.uVideo.value = nxt.tex;
+      this.photoMat.uniforms.uLoopMix.value = 0;
+      if (nxt.el.paused) {
+        const play = nxt.el.play();
+        if (play) void play.catch(() => undefined);
+      }
+    }
+  }
+
+  private bindPhoto(t: THREE.Texture, animate: boolean): void {
     this.photoMat.uniforms.uVideo.value = t;
-    const img = t.image as { naturalWidth?: number; naturalHeight?: number; width?: number; height?: number };
-    const w = img.naturalWidth || img.width || 16;
-    const h = img.naturalHeight || img.height || 9;
+    this.photoMat.uniforms.uAnimate.value = animate ? 1 : 0;
+    this.photoMat.uniforms.uLoopMix.value = 0;
+    if (animate) {
+      this.photoVideoUrl = null;
+      this.photoMat.uniforms.uVideoB.value = t;
+    }
+    const img = t.image as {
+      naturalWidth?: number;
+      naturalHeight?: number;
+      videoWidth?: number;
+      videoHeight?: number;
+      width?: number;
+      height?: number;
+    };
+    const w = img.videoWidth || img.naturalWidth || img.width || 16;
+    const h = img.videoHeight || img.naturalHeight || img.height || 9;
     (this.photoMat.uniforms.uVideoSize.value as THREE.Vector2).set(w, h);
   }
 
@@ -1041,6 +1343,7 @@ export class Backdrop {
     this.curSpeed += (target - this.curSpeed) * (1 - Math.exp(-dt / tau));
     this.clock += dt * this.curSpeed;
     this.mat.uniforms.uTime.value = this.clock;
+    this.photoMat.uniforms.uTime.value = this.clock;
     this.syncPluginLook();
     if (this.morphT < 1) {
       this.morphT = Math.min(1, this.morphT + dt / VIEW_MORPH_S);
@@ -1056,6 +1359,8 @@ export class Backdrop {
         this.liveMat.uniforms.uVideo.value = liveCam.texture;
         this.liveMesh.visible = true;
       }
+    } else if (this.photoVideoUrl) {
+      this.tickPhotoVideoLoop();
     }
   }
 }

@@ -1,0 +1,4 @@
+id: cgroups
+name: Cgroups
+version: 1
+hint: 2D tree — user.slice / system.slice by path depth. Node size is process count in the group.

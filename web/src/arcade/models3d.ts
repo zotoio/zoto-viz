@@ -250,6 +250,28 @@ export function makeEnergyOrb(color: number): THREE.Mesh {
   return mesh(geo.sphere, mat(hexOf(color), { emissive: hexOf(color), emissiveIntensity: 0.9, roughness: 0.15 }), 0, 0, 0, 0.22, 0.22, 0.22);
 }
 
+/** Native still size inside `makePhotoFrame` (world units). */
+export const PHOTO_STILL_W = 3.15;
+export const PHOTO_STILL_H = 2.05;
+
+/** Gold-framed still for the spiral carousel. The `still` plane takes the photo texture. */
+export function makePhotoFrame(w = PHOTO_STILL_W, h = PHOTO_STILL_H): THREE.Group {
+  const g = new THREE.Group();
+  const gold = mat(0xc9a227, { metalness: 0.72, roughness: 0.28 });
+  const t = 0.09;
+  g.add(mesh(geo.box, gold, 0, h / 2 + t / 2, 0, w + t * 2, t, 0.14));
+  g.add(mesh(geo.box, gold, 0, -h / 2 - t / 2, 0, w + t * 2, t, 0.14));
+  g.add(mesh(geo.box, gold, w / 2 + t / 2, 0, 0, t, h, 0.14));
+  g.add(mesh(geo.box, gold, -w / 2 - t / 2, 0, 0, t, h, 0.14));
+  g.add(mesh(geo.box, mat(0x1a1510, { roughness: 0.7 }), 0, 0, -0.04, w, h, 0.05));
+  const plate = new THREE.Mesh(geo.plane, new THREE.MeshBasicMaterial({ color: 0x102027 }));
+  plate.name = "still";
+  plate.position.set(0, 0, 0.03);
+  plate.scale.set(w, h, 1);
+  g.add(plate);
+  return g;
+}
+
 export function disposeGroup(g: THREE.Object3D): void {
   g.traverse((o) => {
     const m = o as THREE.Mesh;

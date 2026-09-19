@@ -1,0 +1,4 @@
+id: sockets
+name: Sockets
+version: 1
+hint: 2D bipartite — local processes on the left, TCP peers on the right. Internet peers sit farther out.

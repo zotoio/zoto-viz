@@ -29,8 +29,8 @@ describe("hn rain pack", () => {
     );
     expect(buf[0]).toBe(1);
     expect(buf[1]).toBeCloseTo(8 / 60);
-    expect(buf.length).toBe(4 + 8);
-    expect(Math.round(buf[4]! * 95) + 32).toBe("J".charCodeAt(0));
+    expect(buf.length).toBe(9 + 8);
+    expect(Math.round(buf[9]! * 95) + 32).toBe("J".charCodeAt(0));
   });
 });
 

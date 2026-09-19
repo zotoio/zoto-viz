@@ -1,0 +1,9 @@
+engine: graph
+base: memory
+style:
+  flatten: true
+look:
+  theme: ember
+  backdrop: none
+  gridShape: square
+  themeCycle: "off"

@@ -46,6 +46,25 @@ describe("sourcesSlice", () => {
     expect(alpha?.vendor).toBe("file");
   });
 
+  it("maps journal and kmsg items", () => {
+    const slice = sourcesSlice({
+      journal: live({
+        id: "journal", kind: "journal", label: "Journal",
+        items: [{ title: "monitor started" }],
+      }),
+      kmsg: live({
+        id: "kmsg", kind: "kmsg", label: "kmsg",
+        items: [{ title: "usb 1-2: new high-speed" }],
+      }),
+    });
+    const j = slice.devices.find((d) => d.names[0] === "monitor started");
+    const k = slice.devices.find((d) => d.names[0]?.startsWith("usb"));
+    expect(j?.role).toBe("local");
+    expect(j?.vendor).toBe("journal");
+    expect(k?.role).toBe("multicast");
+    expect(k?.vendor).toBe("kmsg");
+  });
+
   it("filters by kind", () => {
     const slice = sourcesSlice({
       hn: live({ id: "hn", kind: "rss", items: [{ title: "A" }] }),

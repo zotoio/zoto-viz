@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
-  loadPluginConfig, lookForMode, mergeLook, parsePluginId, pluginHasFrontend, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, shippedModeIds, specCaption,
+  loadPluginConfig, lookForMode, mergeLook, parsePluginId, pluginHasFrontend, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
   viewSelectOptions, writePluginConfig, type PluginView,
 } from "./plugin";
 import { pluginViewKnobs, toPluginView, VIEW_PROMPT_KEY } from "./plugin-visualisation";
@@ -179,6 +179,12 @@ describe("compilePlugin", () => {
     expect(specCaption({ id: "bt", name: "Air Bluetooth", version: 1, engine: "graph", base: "bluetooth" })).toBe("BT Bluetooth");
     expect(specCaption({ id: "cores", name: "CPU cores", version: 1, engine: "graph", base: "cores" })).toBe("CPU cores");
     expect(specCaption({ id: "source-web", name: "Source web", version: 1, engine: "graph", base: "sources" })).toBe("SRC Source web");
+    expect(specCaption({ id: "memory", name: "Memory", version: 1, engine: "graph", base: "memory" })).toBe("SYS Memory");
+    expect(specCaption({ id: "syscon", name: "Syscon", version: 1, engine: "graph", base: "bridge" })).toBe("SYS Syscon");
+    expect(pluginStageOnly({
+      engine: "graph", capabilities: ["viz.read", "viz.write"], look: { backdrop: "plugin", stageOnly: false },
+      has_sky_shader: true,
+    })).toBe(false);
     expect(specCaption({ id: "pong", name: "Pong", version: 1, engine: "netpong" })).toBe("NET Pong");
     expect(specCaption({ id: "doom", name: "Doom", version: 1, engine: "doom" })).toBe("CPU Doom");
     applyPluginCatalog([spec({ id: "topology", name: "Topology" })]);
@@ -297,6 +303,32 @@ describe("visualisation.yml", () => {
     expect(mode.stageOnly).toBe(true);
   });
 
+  it("parses a mosaic wall pin and ignores a one-tile look", () => {
+    const spec = toPluginView({
+      id: "syscon",
+      name: "Syscon",
+      version: 1,
+      visualisation: {
+        engine: "graph",
+        base: "bridge",
+        look: {
+          mosaic: "8",
+          hero: "off",
+          mosaicSharedTheme: true,
+          mosaicTiles: ["plugin:cores", "plugin:memory", "plugin:disk", "plugin:gpu", "plugin:sockets", "plugin:cgroups", "plugin:units", "plugin:udev"],
+        },
+      },
+    });
+    expect(spec.look?.mosaic).toBe("8");
+    expect(pluginWall(spec.look)?.mosaicTiles).toEqual([
+      "plugin:cores", "plugin:memory", "plugin:disk", "plugin:gpu",
+      "plugin:sockets", "plugin:cgroups", "plugin:units", "plugin:udev",
+    ]);
+    expect(pluginWallOwns(spec.look, "plugin:disk")).toBe(true);
+    expect(pluginWallOwns(spec.look, "plugin:topology")).toBe(false);
+    expect(pluginWall({ mosaic: "8", mosaicTiles: ["plugin:cores"] })).toBeNull();
+  });
+
   it("parses fabric style and look pins", () => {
     const spec = toPluginView({
       id: "cloth",
@@ -352,7 +384,7 @@ describe("visualisation.yml", () => {
     const doom = compilePlugin({ id: "doom", name: "Doom", version: 1, engine: "doom" });
     expect(doom.arcadeId).toBe("doom");
     expect(doom.standalone).toBe(true);
-    for (const engine of ["waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal"] as const) {
+    for (const engine of ["waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel"] as const) {
       const mode = compilePlugin({ id: engine, name: engine, version: 1, engine });
       expect(mode.arcadeId).toBe(engine);
       expect(mode.standalone).toBe(true);

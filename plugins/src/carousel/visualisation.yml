@@ -1,0 +1,5 @@
+engine: carousel
+look:
+  theme: ember
+  backdrop: none
+  themeCycle: "off"

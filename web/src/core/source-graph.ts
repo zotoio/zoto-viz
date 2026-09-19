@@ -6,12 +6,14 @@ export const SRC_MAX_NODES = 64;
 export const SRC_MAX_NODES_CEILING = 120;
 const SRC_MAX_PER_FEED = 16;
 
-export type SourceGraphKind = "all" | "rss" | "http" | "file";
+export type SourceGraphKind = "all" | "rss" | "http" | "file" | "journal" | "kmsg";
 
 const KIND_ROLE: Record<string, Role> = {
   rss: "lan",
   http: "internet",
   file: "local",
+  journal: "local",
+  kmsg: "multicast",
 };
 
 function blankDevice(over: Partial<Device> & Pick<Device, "ip" | "role">): Device {
@@ -43,7 +45,7 @@ function flow(a: string, b: string, packets: number, proto: string): Flow {
 
 function wantKind(opts: Record<string, string>): SourceGraphKind {
   const k = (opts.kind ?? "all").toLowerCase();
-  if (k === "rss" || k === "http" || k === "file") return k;
+  if (k === "rss" || k === "http" || k === "file" || k === "journal" || k === "kmsg") return k;
   return "all";
 }
 

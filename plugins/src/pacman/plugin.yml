@@ -1,4 +1,4 @@
 id: pacman
 name: Pac-Man
 version: 1
-hint: 3D maze. This host is Pac-Man, talkers are ghosts, packets are pellets. Visual only.
+hint: 3D maze. Ticker words fly into Pac-Man’s mouth; crumbs hop out and fall. Ghosts are talkers, pellets are packets.

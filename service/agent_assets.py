@@ -1,7 +1,9 @@
 """Agent-collected photos and SVG, stored under ~/.zoto-viz/agent/assets.
 
 HTTPS only, public addresses only, size-capped. Used when the local model
-emits ```photo / ```svg fences (AI Control required).
+emits ```photo / ```svg fences (AI Control required). The byte cap is a
+disk / fetch bound, not a visual quality target — 24 MB fits NASA IOTD /
+APOD originals (often 2–19 MB) that the old 1.5 MB cap rejected.
 """
 from __future__ import annotations
 
@@ -19,10 +21,10 @@ from aiohttp import ClientError, ClientSession, ClientTimeout, web
 from . import agent
 from . import paths
 
-MAX_BYTES = 1_500_000
+MAX_BYTES = 24_000_000
 MAX_SVG = 80_000
 MAX_REDIRECTS = 2
-FETCH_S = 12
+FETCH_S = 30
 ID_RE = re.compile(r"^[a-f0-9]{12,32}$")
 IMAGE_TYPES = {
     "image/jpeg": ".jpg",
@@ -143,8 +145,40 @@ def store_svg(markup: str) -> dict[str, Any]:
     return row
 
 
+def find_by_url(url: str) -> dict[str, Any] | None:
+    """Return a cached photo row for this HTTPS URL, if we already fetched it."""
+    try:
+        want = check_url(url)[:300]
+    except ValueError:
+        return None
+    for row in list_assets():
+        if str(row.get("url") or "")[:300] == want or str(row.get("src") or "")[:300] == want:
+            return row
+    return None
+
+
+def asset_path(aid: str, mime: str) -> Path | None:
+    ext = IMAGE_TYPES.get(mime, ".bin")
+    path = assets_dir() / f"{aid}{ext}"
+    if path.is_file():
+        return path
+    hits = [p for p in assets_dir().glob(f"{aid}.*") if p.suffix != ".json"]
+    return hits[0] if hits else None
+
+
+async def ensure_photo(url: str) -> dict[str, Any]:
+    hit = find_by_url(url)
+    if hit:
+        return hit
+    return await fetch_photo(url)
+
+
 async def fetch_photo(url: str) -> dict[str, Any]:
-    current = check_url(url)
+    requested = check_url(url)
+    cached = find_by_url(requested)
+    if cached:
+        return cached
+    current = requested
     timeout = ClientTimeout(total=FETCH_S)
     hops = 0
     async with ClientSession(timeout=timeout) as s:
@@ -184,6 +218,7 @@ async def fetch_photo(url: str) -> dict[str, Any]:
                     "href": f"/api/ai/assets/{aid}",
                     "bytes": len(blob),
                     "url": current[:300],
+                    "src": requested[:300],
                 }
                 _write_meta(aid, row)
                 return row
@@ -240,6 +275,15 @@ async def api_assets(req: web.Request) -> web.Response:
     return web.json_response({"ok": True, "asset": row})
 
 
+def file_response(row: dict[str, Any]) -> web.Response:
+    aid = str(row.get("id") or "")
+    mime = str(row.get("mime") or "application/octet-stream")
+    path = asset_path(aid, mime)
+    if not path:
+        return web.json_response({"error": "missing"}, status=404)
+    return web.FileResponse(path, headers={"Content-Type": mime, "Cache-Control": "private, max-age=3600"})
+
+
 async def api_asset(req: web.Request) -> web.Response:
     aid = str(req.match_info.get("id") or "")
     if not ID_RE.fullmatch(aid):
@@ -247,12 +291,4 @@ async def api_asset(req: web.Request) -> web.Response:
     meta = _read_meta(aid)
     if not meta:
         return web.json_response({"error": "missing"}, status=404)
-    mime = str(meta.get("mime") or "application/octet-stream")
-    ext = IMAGE_TYPES.get(mime, ".bin")
-    path = assets_dir() / f"{aid}{ext}"
-    if not path.is_file():
-        hits = [p for p in assets_dir().glob(f"{aid}.*") if p.suffix != ".json"]
-        if not hits:
-            return web.json_response({"error": "missing"}, status=404)
-        path = hits[0]
-    return web.FileResponse(path, headers={"Content-Type": mime, "Cache-Control": "private, max-age=3600"})
+    return file_response(meta)

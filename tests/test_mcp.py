@@ -171,7 +171,8 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
         "roll_dice", "get_state", "get_traffic", "get_rf_watch", "set_rf_watch",
         "consent_plugin", "draft_plugin", "list_profiles", "apply_profile",
         "list_memories", "add_memory", "delete_memory", "list_sources",
-        "set_source", "delete_source", "install_plugin_zip",
+        "set_source", "delete_source", "get_sdm", "list_cameras", "set_sdm",
+        "install_plugin_zip",
         "publish_local_plugin",
     } <= names
     unknown = plugin_mcp.call_tool("list_agent_plugins", {})
@@ -183,6 +184,8 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
     assert "mosaic" in feat["anim"]["enum"]
     assert "earth" in feat["anim"]["enum"]["backdrop"]
     assert "sources" in feat
+    assert "sdm" in feat
+    assert "sdm" in feat["settings"]
     assert "roll_dice" in feat["dice"]
     assert feat["dice"]["on"]["type"] == "boolean"
     assert feat["dice"]["periodMin"]["min"] == 1

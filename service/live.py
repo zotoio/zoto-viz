@@ -82,6 +82,8 @@ BACKDROPS = (
     "fire", "warp", "clouds", "circuit", "plasma", "lattice",
     "dusk", "void", "vhs", "nebula", "acid", "ice", "dawn", "phosphor",
     "earth", "meadow", "tunnel",
+    "bomb", "reef", "tornado", "desert", "amazon",
+    "aquarium", "macaws", "ruins", "fungi",
     "dynamic", "custom", "plugin",
 )
 FLOOR_SHAPES = ("square", "hex", "triangle", "diamond", "circle")
@@ -609,6 +611,7 @@ def features() -> dict[str, Any]:
             "feed", "show", "filters", "anim", "modeOptions", "arcade", "plugins",
             "agent", "dice", "shuffle", "temper", "weather", "control", "model",
             "sources",
+            "sdm",
         ],
         "theme": {"values": list(THEMES)},
         "chrome": {"values": list(CHROME)},
@@ -642,6 +645,9 @@ def features() -> dict[str, Any]:
         "sources": {
             "kinds": ["rss", "http", "file"],
             "hint": "host RSS / HTTPS / local-file registry (~/.zoto-viz/sources.yml); list_sources / set_source / delete_source",
+        },
+        "sdm": {
+            "hint": "Google Nest Device Access (~/.zoto-viz/sdm.yml). list_cameras / get_sdm / set_sdm. OAuth + Pub/Sub + WebRTC.",
         },
         "shuffle": {"type": "boolean", "hint": "roll_dice — groups on Settings → Dice"},
         "dice": {

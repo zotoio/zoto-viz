@@ -1,0 +1,9 @@
+engine: graph
+base: sockets
+style:
+  flatten: true
+look:
+  theme: ocean
+  backdrop: none
+  gridShape: square
+  themeCycle: "off"

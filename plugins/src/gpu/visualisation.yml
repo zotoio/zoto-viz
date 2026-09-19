@@ -1,0 +1,9 @@
+engine: graph
+base: gpu
+style:
+  flatten: false
+look:
+  theme: neon
+  backdrop: none
+  gridShape: hex
+  themeCycle: "off"

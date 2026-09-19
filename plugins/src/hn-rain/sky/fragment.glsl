@@ -49,12 +49,39 @@ float glyph(int code, vec2 uv) {
   return mix(mix(s00, s10, w.x), mix(s01, s11, w.x), w.y);
 }
 
+float glyphSharp(int code, vec2 uv) {
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
+  vec2 p = vec2(uv.x * 5.0, (1.0 - uv.y) * 7.0);
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  float s = fontBit(code, int(i.x), int(i.y));
+  float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+  return s * smoothstep(0.0, 0.16, edge + 0.1);
+}
+
 int packedChar(float idx, int n) {
   if (n < 1) return 32;
   float fi = mod(idx, float(n));
-  int code = int(slot0(4.0 + fi) * 95.0 + 0.5) + 32;
+  int code = int(slot0(9.0 + fi) * 95.0 + 0.5) + 32;
   if (code < 32 || code > 90) return 32;
   return code;
+}
+
+float sdSeg(vec2 p, vec2 a, vec2 b, float r) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.00001), 0.0, 1.0);
+  return length(pa - ba * h) - r;
+}
+
+float hnY(vec2 uv) {
+  float w = 0.055;
+  float arms = min(
+    sdSeg(uv, vec2(0.22, 0.82), vec2(0.50, 0.46), w),
+    sdSeg(uv, vec2(0.78, 0.82), vec2(0.50, 0.46), w)
+  );
+  float stem = sdSeg(uv, vec2(0.50, 0.46), vec2(0.50, 0.18), w);
+  return 1.0 - smoothstep(0.0, 0.014, min(arms, stem));
 }
 
 void main() {
@@ -84,18 +111,37 @@ void main() {
 
   col *= clamp(uBright, 0.45, 0.85);
 
-  float crawlH = 44.0;
-  float crawlY = 228.0;
-  float crawlBand = smoothstep(crawlH * 0.62, crawlH * 0.22, abs(fc.y - crawlY));
+  float tilt = slot0(4.0);
+  float cw2 = max(24.0, slot0(5.0) * 100.0);
+  float crawlH = cw2 * 1.76;
+  float crawlY = 180.0 + crawlH * 0.72;
+  float cy = fc.y - fc.x * tilt;
+  float crawlBand = smoothstep(crawlH * 0.52, crawlH * 0.16, abs(cy - crawlY));
   if (crawlBand > 0.0) {
-    col *= 1.0 - crawlBand * 0.72;
-    float cw2 = 26.0;
-    float x = fc.x / cw2 + uTime * (2.4 + aud * 1.4);
-    vec2 uv2 = vec2(fract(fc.x / cw2), (fc.y - (crawlY - crawlH * 0.5)) / crawlH);
+    col *= 1.0 - crawlBand * 0.9;
+    col += vec3(0.0, 0.05, 0.018) * crawlBand;
+    float uvY = (cy - (crawlY - crawlH * 0.5)) / crawlH;
+    float italic = (uvY - 0.5) * 0.22;
+    float pace = max(0.15, slot0(8.0));
+    float x = fc.x / cw2 + italic + uTime * pace * (1.85 + aud * 1.1);
+    vec2 uv2 = vec2(fract(x), uvY);
     int big = packedChar(x, nChars);
-    float g2 = glyph(big, (uv2 - vec2(0.06, 0.1)) / vec2(0.88, 0.8));
-    float ink = smoothstep(0.18, 0.72, g2);
-    col += mix(vec3(0.55, 0.95, 0.58), vec3(0.88, 1.0, 0.82), ink) * ink * 1.35 * crawlBand;
+    float g2 = glyphSharp(big, (uv2 - vec2(0.06, 0.1)) / vec2(0.88, 0.78));
+    float ink = smoothstep(0.2, 0.55, g2);
+    col += mix(vec3(0.42, 0.9, 0.46), vec3(0.95, 1.0, 0.9), ink) * ink * 1.7 * crawlBand;
+  }
+
+  float sw = slot0(6.0);
+  float sh = slot0(7.0);
+  if (sw < 64.0) sw = 1280.0;
+  if (sh < 64.0) sh = 800.0;
+  float logo = 68.0;
+  float pad = 22.0;
+  vec2 lp = fc - vec2(sw - pad - logo, pad);
+  float inLogo = step(0.0, lp.x) * step(0.0, lp.y) * step(lp.x, logo) * step(lp.y, logo);
+  if (inLogo > 0.5) {
+    float y = hnY(lp / logo);
+    col = mix(vec3(1.0, 0.4, 0.0), vec3(1.0, 1.0, 1.0), y);
   }
 
   fragColor = vec4(col, max(uOpacity, 0.94));

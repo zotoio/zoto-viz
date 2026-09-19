@@ -18,6 +18,8 @@ export default defineConfig({
       { text: "Live monitor", link: "/live" },
       { text: "Views and motion", link: "/motion" },
       { text: "Camera and privacy", link: "/camera" },
+      { text: "Data sources", link: "/sources" },
+      { text: "Nest cameras (SDM)", link: "/sdm" },
       { text: "Plugins", link: "/plugins" },
       { text: "TypeScript plugins", link: "/plugins-ts" },
       { text: "HTTP / WebSocket API", link: "/api" },
