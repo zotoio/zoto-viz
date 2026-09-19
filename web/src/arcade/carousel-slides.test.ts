@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   carouselCaption,
+  carouselCaptionParts,
   carouselSlides,
   carouselTickerSeconds,
   carouselTickerText,
@@ -49,7 +50,7 @@ describe("carousel-slides", () => {
     );
   });
 
-  it("keeps NASA captions intact on the ticker", () => {
+  it("keeps NASA captions intact on each still", () => {
     const headlines = headlinesFromSources({
       nasa: {
         id: "nasa", kind: "rss", label: "NASA image of the day", ok: true,
@@ -63,6 +64,10 @@ describe("carousel-slides", () => {
     const slides = carouselSlides(headlines);
     expect(slides[0]!.title).toContain("long NASA caption");
     expect(slides[0]!.caption).toContain("superbubble");
+    expect(carouselCaptionParts(slides[0]!)).toEqual({
+      title: expect.stringContaining("long NASA caption"),
+      body: expect.stringContaining("superbubble"),
+    });
     expect(carouselCaption(slides[0]!)).toContain(" — ");
     const line = carouselTickerText(slides);
     expect(line).toContain("long NASA caption");

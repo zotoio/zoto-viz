@@ -73,10 +73,9 @@ body[data-softgl] .brand::after {
 .arcade canvas { display: block; position: absolute; inset: 0; background: transparent; }
 .arcade canvas.look { z-index: 0; pointer-events: none; }
 .arcade canvas:not(.look) { z-index: 1; }
-#carousel { --carousel-ticker-h: 7.5rem; }
 #carousel .carousel-still {
   position: absolute;
-  inset: var(--bar-h) 0 var(--carousel-ticker-h, 7.5rem) 0;
+  inset: var(--bar-h) 0 0 0;
   z-index: 2;
   margin: 0;
   overflow: hidden;
@@ -88,51 +87,43 @@ body[data-softgl] .brand::after {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
+  transform-origin: center center;
+  will-change: transform, opacity;
   opacity: 0;
   pointer-events: none;
 }
 #carousel canvas:not(.look) { opacity: 0; }
-#carousel .carousel-ticker {
+#carousel .carousel-caption {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 3;
-  height: var(--carousel-ticker-h);
-  overflow: hidden;
-  pointer-events: none;
-  background: #07090f;
-  color: #f4e8c8;
-  font: 600 15px/1.35 ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: 0.02em;
-  text-shadow: 0 1px 8px #000;
-}
-#carousel .carousel-ticker-track {
-  display: flex;
-  width: max-content;
-  animation: carousel-marquee var(--carousel-ticker-s, 70s) linear infinite;
-}
-#carousel .carousel-ticker-col {
-  display: flex;
-  flex-direction: column;
-}
-#carousel .carousel-ticker-col span {
-  display: flex;
-  align-items: center;
   box-sizing: border-box;
-  height: var(--carousel-ticker-h);
-  padding: 0 4.5rem 0 0.9rem;
-  white-space: nowrap;
+  padding: 4.5rem 5vw 1.8rem;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(7, 9, 15, 0.55) 42%, rgba(7, 9, 15, 0.92) 100%);
+  color: #f4e8c8;
+  text-shadow: 0 1px 10px #000, 0 0 24px #000;
 }
-@keyframes carousel-marquee {
-  from { transform: translate(0, 0); }
-  to { transform: translate(-50%, -50%); }
+#carousel .carousel-caption-title {
+  display: block;
+  font: 750 clamp(1.7rem, 4.6vw, 3.6rem)/1.12 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  max-width: 72rem;
 }
-@media (prefers-reduced-motion: reduce) {
-  #carousel .carousel-ticker-track { animation: none; }
+#carousel .carousel-caption-body {
+  display: block;
+  margin-top: 0.65rem;
+  font: 500 clamp(1.05rem, 2.1vw, 1.7rem)/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  max-width: 58rem;
+  max-height: 8.4rem;
+  overflow: hidden;
 }
+#carousel .carousel-caption-body[hidden] { display: none; }
 body.arcade #scene { pointer-events: none; }
 body.arcade #scene canvas { pointer-events: none; }
 body.stage-only #legend,

@@ -49,12 +49,17 @@ export function proxiedStill(url: string): string {
   return `/api/sources/image?url=${encodeURIComponent(url)}`;
 }
 
-/** One still's ticker fragment: title, plus summary when it adds something. */
-export function carouselCaption(slide: Pick<CarouselSlide, "title" | "caption">): string {
+/** Title plus optional IOTD blurb for the still on screen. */
+export function carouselCaptionParts(slide: Pick<CarouselSlide, "title" | "caption">): { title: string; body: string } {
   const title = slide.title.trim();
   const body = (slide.caption ?? "").trim();
-  if (body && body !== title) return `${title} — ${body}`;
-  return title;
+  return { title, body: body && body !== title ? body : "" };
+}
+
+/** One still's caption: title, plus summary when it adds something. */
+export function carouselCaption(slide: Pick<CarouselSlide, "title" | "caption">): string {
+  const { title, body } = carouselCaptionParts(slide);
+  return body ? `${title} — ${body}` : title;
 }
 
 /** All NASA captions on one crawl. Empty when there are no pictured stills. */

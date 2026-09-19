@@ -52,8 +52,14 @@ export function carouselSpinFor(i: number, n: number, turns = 2.15): number {
   return -(i / count) * turns * Math.PI * 2;
 }
 
-/** One still: zoom in, hold the caption, zoom out into the next card. */
-export const CAROUSEL_PERIOD = 11;
+/** One still: slow Ken Burns, then a crossfade into the next. */
+export const CAROUSEL_PERIOD = 18;
+/** Seconds the outgoing and incoming stills overlap. */
+export const CAROUSEL_XFADE = 2.8;
+/** Extra cover scale at the end of a still. */
+export const CAROUSEL_ZOOM = 0.16;
+/** Translate % at full aim (of the image box). */
+export const CAROUSEL_PAN = 5.5;
 
 export type CarouselBeat = {
   phase: "in" | "hold" | "out";
@@ -83,6 +89,52 @@ export function carouselBeat(elapsed: number, period = CAROUSEL_PERIOD): Carouse
   }
   const e = smooth((p - holdEnd) / (span - holdEnd));
   return { phase: "out", zoom: 1 - e, caption: 1 - e, travel: e };
+}
+
+export type KenBurns = {
+  scale: number;
+  x: number;
+  y: number;
+};
+
+/** Stable per-still pan aim in −1…1. Looks random across titles. */
+export function kenBurnsAim(id: string): { x: number; y: number } {
+  const ang = hashUnit(id, 3) * Math.PI * 2;
+  const mag = 0.55 + hashUnit(id, 7) * 0.45;
+  return { x: Math.cos(ang) * mag, y: Math.sin(ang) * mag };
+}
+
+/** Linear zoom-in + pan from rest toward `aim`. `progress` is 0…1 through the still. */
+export function kenBurnsAt(progress: number, aim: { x: number; y: number }, zoom = CAROUSEL_ZOOM): KenBurns {
+  const t = clamp(progress, 0, 1);
+  return { scale: 1 + zoom * t, x: aim.x * t, y: aim.y * t };
+}
+
+export function kenBurnsTransform(kb: KenBurns, pan = CAROUSEL_PAN): string {
+  return `translate(${(kb.x * pan).toFixed(3)}%, ${(kb.y * pan).toFixed(3)}%) scale(${kb.scale.toFixed(4)})`;
+}
+
+export type CarouselPlayhead = {
+  cycle: number;
+  local: number;
+  progress: number;
+  fade: number;
+};
+
+/** `fade` is 0 until the last `xfade` seconds, then 0…1 for the crossfade. */
+export function carouselPlayhead(
+  elapsed: number,
+  period = CAROUSEL_PERIOD,
+  xfade = CAROUSEL_XFADE,
+): CarouselPlayhead {
+  const span = period > 0 ? period : CAROUSEL_PERIOD;
+  const xf = Math.min(Math.max(xfade, 0.4), span * 0.45);
+  const t = elapsed > 0 ? elapsed : 0;
+  const cycle = Math.floor(t / span);
+  const local = t - cycle * span;
+  const fadeStart = span - xf;
+  const fade = local < fadeStart ? 0 : clamp((local - fadeStart) / xf, 0, 1);
+  return { cycle, local, progress: local / span, fade };
 }
 
 /**

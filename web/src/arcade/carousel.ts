@@ -1,10 +1,9 @@
 import type { NetScene } from "../graph/scene";
-import { CAROUSEL_PERIOD, carouselBeat } from "./stage-math";
+import { carouselPlayhead, kenBurnsAim, kenBurnsAt, kenBurnsTransform } from "./stage-math";
 import { Stage3D } from "./stage3d";
 import {
+  carouselCaptionParts,
   carouselSlides,
-  carouselTickerSeconds,
-  carouselTickerText,
   headlinesFromSources,
   proxiedStill,
   type CarouselSlide,
@@ -12,14 +11,15 @@ import {
 
 const MAX_SLIDES = 12;
 
-/** Full-viewport NASA IOTD slideshow: contain-fit stills, rotating, captions on a ticker. */
+/** Full-viewport NASA IOTD slideshow: Ken Burns stills, large caption, crossfade. */
 export class CarouselView extends Stage3D {
   readonly controls: HTMLElement[] = [];
   private readonly stillEl: HTMLElement;
   private readonly imgA: HTMLImageElement;
   private readonly imgB: HTMLImageElement;
-  private readonly tickerEl: HTMLElement;
-  private readonly tickerTrack: HTMLElement;
+  private readonly capEl: HTMLElement;
+  private readonly capTitle: HTMLElement;
+  private readonly capBody: HTMLElement;
   private slides: CarouselSlide[] = [];
   private focus = 0;
   private cycle0 = 0;
@@ -27,6 +27,7 @@ export class CarouselView extends Stage3D {
   private slideKey = "";
   private shownId = "";
   private front: HTMLImageElement;
+  private reduceMotion = false;
 
   constructor(container: HTMLElement, scene: NetScene) {
     super(container, scene);
@@ -44,18 +45,20 @@ export class CarouselView extends Stage3D {
     this.imgB.alt = "";
     this.imgA.decoding = "async";
     this.imgB.decoding = "async";
-    this.stillEl.append(this.imgA, this.imgB);
+    this.capEl = document.createElement("figcaption");
+    this.capEl.className = "carousel-caption";
+    this.capEl.setAttribute("aria-label", "NASA caption");
+    this.capTitle = document.createElement("strong");
+    this.capTitle.className = "carousel-caption-title";
+    this.capBody = document.createElement("span");
+    this.capBody.className = "carousel-caption-body";
+    this.capEl.append(this.capTitle, this.capBody);
+    this.stillEl.append(this.imgA, this.imgB, this.capEl);
     this.front = this.imgA;
 
-    this.tickerEl = document.createElement("div");
-    this.tickerEl.className = "carousel-ticker";
-    this.tickerEl.setAttribute("aria-label", "NASA captions");
-    this.tickerTrack = document.createElement("div");
-    this.tickerTrack.className = "carousel-ticker-track";
-    this.tickerEl.append(this.tickerTrack);
-
-    this.container.append(this.stillEl, this.tickerEl);
-    this.paintTicker("NASA image of the day · waiting for stills…");
+    this.container.append(this.stillEl);
+    this.reduceMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.paintCaption(undefined);
   }
 
   protected useTraffic(): boolean { return false; }
@@ -73,26 +76,29 @@ export class CarouselView extends Stage3D {
     this.cycleN = 0;
     this.shownId = "";
     this.warm(next);
-    this.paintTicker(carouselTickerText(next) || "NASA image of the day · waiting for stills…");
     this.showSlide(next[0], true);
   }
 
   protected step(now: number, dt: number): void {
     void dt;
-    const n = Math.max(1, this.slides.length);
+    const n = this.slides.length;
     if (!this.cycle0) this.cycle0 = now;
-    const elapsed = now - this.cycle0;
-    const cycles = Math.floor(elapsed / CAROUSEL_PERIOD);
-    const beat = carouselBeat(elapsed, CAROUSEL_PERIOD);
-    if (beat.phase === "out" && this.slides.length > 1) {
-      this.arm(this.slides[(this.focus + 1) % n]!);
+    const play = carouselPlayhead(now - this.cycle0);
+    if (play.fade > 0 && n > 1) this.arm(this.slides[(this.focus + 1) % n]!);
+    if (n > 1 && play.cycle !== this.cycleN) {
+      this.focus = (this.focus + (((play.cycle - this.cycleN) % n) + n) % n) % n;
+      this.cycleN = play.cycle;
+      this.showSlide(this.slides[this.focus], true);
     }
-    if (cycles !== this.cycleN) {
-      this.focus = this.slides.length ? (this.focus + (((cycles - this.cycleN) % n) + n) % n) % n : 0;
-      this.cycleN = cycles;
-      this.showSlide(this.slides[this.focus], false);
-    }
-    this.front.style.opacity = beat.zoom.toFixed(3);
+    const outgoing = this.slides[this.focus];
+    const incoming = this.slides[n > 1 ? (this.focus + 1) % n : this.focus];
+    const fade = n > 1 ? play.fade : 0;
+    this.paintStill(this.front, outgoing, n > 1 ? play.progress : Math.min(1, play.progress), 1 - fade);
+    if (n > 1 && fade > 0) this.paintStill(this.back(), incoming, 0, fade);
+    else if (this.back() !== this.front) this.back().style.opacity = "0";
+    const capSlide = fade >= 0.5 ? incoming : outgoing;
+    this.paintCaption(capSlide);
+    this.capEl.style.opacity = (fade < 0.5 ? 1 - fade * 2 : (fade - 0.5) * 2).toFixed(3);
     this.camOrbit.target.set(0, 1.05, 0);
     this.camOrbit.radius = 4;
     this.camOrbit.theta = 0;
@@ -111,6 +117,15 @@ export class CarouselView extends Stage3D {
     return this.front === this.imgA ? this.imgB : this.imgA;
   }
 
+  private paintStill(el: HTMLImageElement, slide: CarouselSlide | undefined, progress: number, opacity: number): void {
+    el.style.opacity = opacity.toFixed(3);
+    if (this.reduceMotion || !slide) {
+      el.style.transform = "none";
+      return;
+    }
+    el.style.transform = kenBurnsTransform(kenBurnsAt(progress, kenBurnsAim(slide.id)));
+  }
+
   private arm(slide: CarouselSlide): void {
     if (!slide.image) return;
     const src = proxiedStill(slide.image);
@@ -127,13 +142,12 @@ export class CarouselView extends Stage3D {
       this.imgA.style.opacity = "0";
       this.imgB.style.opacity = "0";
       this.shownId = "";
+      this.paintCaption(undefined);
       return;
     }
     const src = proxiedStill(slide.image);
-    if (slide.id === this.shownId && this.front.getAttribute("src") === src) {
-      if (instant) this.front.style.opacity = "1";
-      return;
-    }
+    this.paintCaption(slide);
+    if (slide.id === this.shownId && this.front.getAttribute("src") === src) return;
     const next = this.front.getAttribute("src") === src ? this.front : this.back();
     const reveal = (): void => {
       if (next.getAttribute("src") !== src) return;
@@ -155,15 +169,10 @@ export class CarouselView extends Stage3D {
     if (next.complete && next.naturalWidth) reveal();
   }
 
-  private paintTicker(text: string): void {
-    const line = text.trim() || "NASA image of the day · waiting for stills…";
-    this.tickerEl.style.setProperty("--carousel-ticker-s", `${carouselTickerSeconds(line)}s`);
-    const bit = `<span>${esc(line)}</span>`;
-    const col = `<div class="carousel-ticker-col">${bit}${bit}</div>`;
-    this.tickerTrack.innerHTML = `${col}${col}`;
+  private paintCaption(slide: CarouselSlide | undefined): void {
+    const { title, body } = carouselCaptionParts(slide ?? { title: "NASA image of the day · waiting for stills…" });
+    this.capTitle.textContent = title;
+    this.capBody.textContent = body;
+    this.capBody.hidden = !body;
   }
-}
-
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]!));
 }

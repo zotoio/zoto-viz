@@ -1096,10 +1096,10 @@ export const carousel: ViewMode = {
   id: "carousel",
   label: "Carousel",
   standalone: true,
-  hint: "NASA Image of the Day stills fill the viewport without stretching, hold, then rotate. Captions crawl on the ticker.",
+  hint: "NASA Image of the Day stills fill the viewport. Each still slowly zooms and pans, then crossfades to the next. Large title and caption sit on the picture.",
   legend: () => [
-    { color: "#f4e8c8", label: "still · contain-fit" },
-    { color: "#90caf9", label: "ticker · caption" },
+    { color: "#f4e8c8", label: "still · zoom + pan" },
+    { color: "#90caf9", label: "crossfade · next still" },
   ],
 };
 

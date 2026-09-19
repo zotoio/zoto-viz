@@ -128,6 +128,16 @@ export function pluginWallOwns(look: PluginLook | null | undefined, modeId: stri
   return !!wall && wall.mosaicTiles.includes(modeId);
 }
 
+/** Catalog views whose look pins a multi-tile mosaic (Syscon and future walls). */
+export function catalogPluginWalls(): { modeId: string; wall: PluginWall }[] {
+  const out: { modeId: string; wall: PluginWall }[] = [];
+  for (const [modeId, look] of looks) {
+    const wall = pluginWall(look);
+    if (wall) out.push({ modeId, wall });
+  }
+  return out;
+}
+
 export type PluginCapability =
   | "graph.read" | "graph.style" | "ui.overlay" | "config.read" | "viz.read" | "viz.write"
   | "typesafe";

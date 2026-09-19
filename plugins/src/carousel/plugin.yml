@@ -1,4 +1,4 @@
 id: carousel
 name: Carousel
 version: 1
-hint: NASA Image of the Day stills fill the viewport without stretching, hold, then rotate. Captions crawl on the ticker.
+hint: NASA Image of the Day stills fill the viewport. Each still slowly zooms and pans, then crossfades to the next. Large title and caption sit on the picture.

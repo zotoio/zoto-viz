@@ -42,7 +42,7 @@ import {
   mergeLook,
   parsePluginId,
   pluginWall,
-  pluginWallOwns,
+  catalogPluginWalls,
   attachPluginFrontend,
   fetchPluginSky,
   pluginHasFrontend,
@@ -51,6 +51,7 @@ import {
   viewSelectOptions,
   type PluginView,
 } from "../plugins/plugin";
+import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
 import { VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
@@ -510,63 +511,29 @@ async function refreshTsPlugin(): Promise<void> {
 
 let skyLoaded = "";
 
-type WallSnap = Pick<DreamAnim, "mosaic" | "hero" | "mosaicTree" | "mosaicMaxId" | "mosaicSharedTheme"> & {
-  mosaicTiles: string[];
-};
-
 let wallOwner: string | null = null;
 let wallRestore: WallSnap | null = null;
+/** Last mode applyMode committed — Select updates its value before onChange. */
+let liveMode = "";
 
-function snapWall(a: DreamAnim): WallSnap {
-  return {
-    mosaic: a.mosaic,
-    hero: a.hero,
-    mosaicTiles: [...(a.mosaicTiles ?? [])],
-    mosaicTree: a.mosaicTree,
-    mosaicMaxId: a.mosaicMaxId,
-    mosaicSharedTheme: !!a.mosaicSharedTheme,
-  };
-}
-
-function wallMatches(a: DreamAnim, wall: NonNullable<ReturnType<typeof pluginWall>>): boolean {
-  const tiles = a.mosaicTiles ?? [];
-  return a.mosaic === wall.mosaic
-    && a.hero === wall.hero
-    && tiles.length === wall.mosaicTiles.length
-    && tiles.every((id, i) => id === wall.mosaicTiles[i]);
-}
-
-function applyPluginWall(modeId: string, flags: { keepLayout?: boolean }): void {
-  if (flags.keepLayout || !settings) return;
-  const wall = pluginWall(lookForMode(modeId));
-  if (wall) {
-    const a = settings.animSettings;
-    if (!wallMatches(a, wall)) {
-      if (wallOwner !== modeId) {
-        wallRestore = snapWall(a);
-        wallOwner = modeId;
-      }
-      settings.applyAnim({
-        ...a,
-        mosaic: wall.mosaic,
-        hero: wall.hero,
-        mosaicTiles: wall.mosaicTiles,
-        mosaicSharedTheme: wall.mosaicSharedTheme,
-        mosaicTree: null,
-        mosaicMaxId: "",
-      });
-    } else {
-      wallOwner = modeId;
-    }
+function applyPluginWall(modeId: string, flags: { keepLayout?: boolean; prevMode?: string }): void {
+  if (!settings) return;
+  const resolved = resolvePluginWall({
+    modeId,
+    prevModeId: flags.prevMode ?? liveMode,
+    keepLayout: !!flags.keepLayout,
+    anim: settings.animSettings,
+    wall: pluginWall(lookForMode(modeId)),
+    walls: catalogPluginWalls(),
+    owner: wallOwner,
+    restore: wallRestore,
+  });
+  wallOwner = resolved.state.owner;
+  wallRestore = resolved.state.restore;
+  if (resolved.anim) {
+    settings.applyAnim({ ...settings.animSettings, ...resolved.anim });
     mosaic?.hydrate();
-    return;
   }
-  if (!wallOwner) return;
-  if (pluginWallOwns(lookForMode(wallOwner), modeId)) return;
-  const restore = wallRestore;
-  wallOwner = null;
-  wallRestore = null;
-  if (restore) settings.applyAnim({ ...settings.animSettings, ...restore });
 }
 
 function pluginSpecForMode(modeId: string): PluginView | null {
@@ -620,12 +587,14 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const m = modeById(id);
   const opts = optsFor(m);
+  const prevMode = liveMode;
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   modeSel.value = m.id;
   localStorage.setItem("zoto-viz.mode", m.id);
   touch();
-  applyPluginWall(m.id, flags);
+  applyPluginWall(m.id, { ...flags, prevMode });
+  liveMode = m.id;
 
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
   const paneSpec = skySpecForMode(m.id, spec);
@@ -924,7 +893,7 @@ mosaic = new Mosaic({
   optsFor,
   onFocus: (id) => mosaic?.focus(id),
   onPromote: (id, theme) => {
-    applyMode(id);
+    applyMode(id, { keepLayout: true });
     if (theme) applyTheme(theme.id);
     applyViewLook();
   },

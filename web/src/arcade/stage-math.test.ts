@@ -3,7 +3,11 @@ import {
   buildPacMaze,
   gerstner,
   carouselBeat,
+  carouselPlayhead,
   carouselPoint,
+  kenBurnsAim,
+  kenBurnsAt,
+  kenBurnsTransform,
   carouselSpinFor,
   carouselStillScale,
   fitStillSize,
@@ -39,6 +43,30 @@ describe("stage-math", () => {
     expect(front[0]).toBeGreaterThan(0);
     expect(Math.abs(front[2])).toBeLessThan(0.2);
     expect(Math.hypot(spun[0], spun[2])).toBeGreaterThan(6);
+  });
+
+  it("zooms and pans a still then crossfades", () => {
+    const a = kenBurnsAim("nasa:nebula");
+    const b = kenBurnsAim("nasa:moon");
+    expect(Math.hypot(a.x, a.y)).toBeGreaterThan(0.5);
+    expect(a.x).not.toBeCloseTo(b.x);
+    const rest = kenBurnsAt(0, a);
+    expect(rest.scale).toBe(1);
+    expect(rest.x).toBeCloseTo(0);
+    expect(rest.y).toBeCloseTo(0);
+    const end = kenBurnsAt(1, a);
+    expect(end.scale).toBeCloseTo(1.16);
+    expect(end.x).toBeCloseTo(a.x);
+    expect(kenBurnsTransform(end)).toContain("scale(1.1600)");
+    const mid = carouselPlayhead(9, 18, 2.8);
+    expect(mid.cycle).toBe(0);
+    expect(mid.fade).toBe(0);
+    expect(mid.progress).toBeCloseTo(0.5);
+    const leave = carouselPlayhead(17, 18, 2.8);
+    expect(leave.fade).toBeGreaterThan(0.4);
+    expect(leave.fade).toBeLessThan(1);
+    expect(carouselPlayhead(18, 18, 2.8).cycle).toBe(1);
+    expect(carouselPlayhead(18, 18, 2.8).fade).toBe(0);
   });
 
   it("holds a zoomed still with caption before travelling to the next", () => {
