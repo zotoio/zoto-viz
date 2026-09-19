@@ -14,6 +14,7 @@ import type {
 /** Host engines plugins may wrap. Unknown `visualisation.engine` values are rejected. */
 export const PLUGIN_ENGINES = [
   "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
+  "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
 ] as const satisfies readonly PluginEngine[];
 
 const ENGINE_SET = new Set<string>(PLUGIN_ENGINES);

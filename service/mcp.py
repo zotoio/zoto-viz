@@ -76,7 +76,10 @@ PUBLISH_LOCAL_TOOL: dict[str, Any] = {
             "name": {"type": "string"},
             "engine": {
                 "type": "string",
-                "enum": ["graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom"],
+                "enum": [
+                    "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
+                    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+                ],
             },
             "base": {"type": "string", "description": "Graph wrap target when engine is graph"},
             "overwrite": {
@@ -172,7 +175,7 @@ def _settings_schema() -> dict[str, Any]:
             "temper": {"type": "integer", "minimum": live.TEMPER_MIN, "maximum": live.TEMPER_MAX},
             "weather": {"type": "string", "enum": list(live.WEATHERS)},
             "control": {"type": "boolean", "description": "Server AI Control"},
-            "model": {"type": "string", "description": "Ollama model tag"},
+            "model": {"type": "string", "description": "Ollama tag or Cursor SDK model id"},
             "shuffle": {"type": "boolean", "description": "One-shot dice roll (same as Settings → Dice roll now). Repeat uses dice.on + dice.periodMin."},
             "dice": {
                 "type": "object",

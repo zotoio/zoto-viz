@@ -112,7 +112,10 @@ FORMER_MODES = [
     "netpong", "invaders", "command", "frogger", "cores", "load", "cpupong", "doom",
 ]
 RF_WRAPPERS = {"air-ssid": "wifi", "air-bt": "bluetooth"}
-EXTRA_VIEWS = ("lan-heat", "lan-pong", "pulse-ts", "lan-pulse", "drone-show")
+EXTRA_VIEWS = (
+    "lan-heat", "lan-pong", "pulse-ts", "lan-pulse", "drone-show",
+    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+)
 
 
 def test_former_modes_are_menu_plugins() -> None:

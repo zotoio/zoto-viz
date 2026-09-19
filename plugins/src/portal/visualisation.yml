@@ -1,0 +1,5 @@
+engine: portal
+look:
+  theme: paper
+  backdrop: none
+  themeCycle: "off"

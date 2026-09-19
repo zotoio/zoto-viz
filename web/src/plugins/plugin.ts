@@ -19,6 +19,7 @@ import {
   engineDispatch,
   mergeOverlayPins,
   partitionCatalog,
+  PLUGIN_ENGINES,
   pluginViewKnobs,
   toPluginView,
 } from "./plugin-visualisation";
@@ -41,7 +42,9 @@ function dimHex(hex: number, amount: number): number {
   return (r << 16) | (g << 8) | b;
 }
 
-export type PluginEngine = "graph" | "netpong" | "invaders" | "command" | "frogger" | "cpupong" | "doom";
+export type PluginEngine =
+  | "graph" | "netpong" | "invaders" | "command" | "frogger" | "cpupong" | "doom"
+  | "waves" | "orbits" | "helix" | "skyline" | "pacman" | "tetris" | "portal";
 export type NodeColorStyle = "role" | "kind" | "heat" | "proto" | "hash";
 export type NodeScaleStyle = "default" | "bytes" | "rate";
 export type LabelStyle = "default" | "all" | "none" | "top";
@@ -418,13 +421,12 @@ export function pluginStageOnly(
   return catalogKindOf(spec) === "demo" || spec.has_sky_shader === true;
 }
 
+const ARCADE_ENGINE_SET = new Set<string>(PLUGIN_ENGINES.filter((e) => e !== "graph"));
+
 export function compilePlugin(spec: PluginView): ViewMode {
   if (!spec.engine) throw new Error("visualisation.engine is required to compile a view");
   if (spec.engine === "graph") return compileGraph(spec);
-  if (spec.engine === "netpong" || spec.engine === "invaders" || spec.engine === "command"
-    || spec.engine === "frogger" || spec.engine === "cpupong" || spec.engine === "doom") {
-    return compileArcade(spec);
-  }
+  if (ARCADE_ENGINE_SET.has(spec.engine)) return compileArcade(spec);
   throw new Error(`unknown visualisation.engine ${spec.engine}`);
 }
 

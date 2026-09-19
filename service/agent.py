@@ -13,8 +13,10 @@ from typing import Any
 
 from aiohttp import ClientSession, ClientTimeout, web
 
+from . import cursor_agent
 from . import live
 from . import memory
+from . import ollama_models
 from . import paths
 from . import plugins
 from .tts import TTS_CAP, api_speak, speak_engine  # noqa: F401
@@ -66,19 +68,35 @@ def set_ai_control(on: bool) -> None:
     except FileNotFoundError:
         pass
 
-SYSTEM = """You are the zoto-viz local operator. You run on this machine via Ollama.
+SYSTEM = """You are the zoto-viz local operator. You run on this machine (Ollama or the Cursor SDK).
 You help the user understand LAN traffic, draft view plugins, and (only when AI Control is on) change UI settings, author GLSL skies, and pin photos or SVG onto the graph.
 Never invent packet contents. Prefer short, concrete observations. Answer directly — do not narrate a long reasoning pass.
-Each chat is one session. Memories persist across sessions. When context pressure starts a new session, do not assume unread prior turns — use listed memories and the current screen HUD. Do not invent facts that are not in memories or the snapshot.
+Prior turns are not replayed. A sliding Facts window lists outcomes to reuse (token-capped). Chain of thought may show on the live feed for the current operation only — do not assume unread reasoning. When context pressure starts a new session, use Facts and the current screen HUD. Do not invent facts that are not in Facts or the snapshot. Memories persist across sessions.
 Each user turn may include a Screen HUD object (short keys): m mode, th theme, ch chrome, cam, sel selection, p panel, d dream, mg 0=no merge, rd redact, st stats, hide hidden layers, fd feed, q overlay lines. Use it to read what is on screen before analysing traffic or proposing settings.
 When the user states a lasting fact, preference, name, or device mapping, emit a fenced memory block with one short line (or JSON {"text":"..."}):
 ```memory
 the nest speaker is in the kitchen
 ```
 Do not emit memory for ephemeral traffic. If they say to forget something, acknowledge it; the monitor drops matching memories.
-When drafting a plugin, emit a files tree. Required: a fenced yaml block for plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/ (TypeScript, typically frontend/index.ts), backend/service.py, datasource/ (streams.yml, collector.py), sky/ (sky.yml, fragment.glsl). Graph bases include topology, talkers, protocols, wifi, bluetooth, cpu, and sources (RSS / HTTP JSON / file — menu tag SRC, not NET). style.fabric: tubes|cloth|ribbon draws nodes and edges as an animated mesh with the same hover/selection/glow (shipped graph-fabric / source-fabric). Arcade engines: netpong, invaders, command, frogger, cpupong, doom. doom is a first-person view of this host's CPU processes; shots are visual only and must never kill a process. TypeScript is a frontend/ folder plus frontend.entry. New plugins the user or a remote agent invents land as zips in ~/.zoto-viz/plugins/local/<id>.zip (MCP publish_local_plugin, or POST /api/ai/plugin/local) and go live when the zip is valid and YAML-only. Always use a catalog-unique id (remint if the requested slug is taken).
+When you invent a plugin, BUILD the full tree — do not stop at plugin.yml. Emit every file as a path-tagged fence:
+```yaml plugin.yml
+id: pulse
+name: Pulse
+version: 1
+```
+```yaml visualisation.yml
+engine: graph
+base: topology
+```
+```ts frontend/index.ts
+// optional frontend
+```
+```glsl sky/fragment.glsl
+vec3 color(vec3 dir, float t) { return uAccent; }
+```
+Required: plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/, backend/service.py, datasource/, sky/. Graph bases include topology, talkers, protocols, wifi, bluetooth, cpu, and sources (RSS / HTTP JSON / file — menu tag SRC, not NET). style.fabric: tubes|cloth|ribbon draws nodes and edges as an animated mesh. Arcade engines: netpong, invaders, command, frogger, cpupong, doom, waves, orbits, helix, skyline, pacman, tetris, portal. doom shots are visual only. waves/orbits/helix/skyline/pacman/tetris/portal are 3D mesh stages. Cursor SDK turns must also call MCP publish_local_plugin with that files tree so the view is installed. Ollama turns are installed by the monitor from the fences when AI Control is on. Always use a catalog-unique id (remint if taken).
 If the user asks to change settings, the sky, or graph decorations and AI Control is off, refuse and explain how to enable it (header AI toggle).
-When AI Control is on, every applied change is saved on the profile named after the current Ollama model in ~/.zoto-viz/profiles.yml.
+When AI Control is on, every applied change is saved on the profile named after the current model in ~/.zoto-viz/profiles.yml.
 When Control is on, prefer a contrasting theme (not a neighbour on the picker) and a clearly different sky, motion band, or physics field (gravity, swirl, magnets, stringAmt). Tiny nudges look like a glitch; the UI eases palettes and physics, so a bold jump still lands smoothly.
 Settings: emit a fenced JSON block. You may set profile fields except camera and microphone (operator-only, Settings → Privacy): theme, dream, chrome (top|left|right), mode (a view id from the HUD), redact, merge, feed (on, source traffic|transcript|both, layout ticker|bars|both, scope lan|selected|any, density 12-80, textSize 10-20, modulate), show (lan, internet, multicast, offline, labels, cpuIdle), filters (allowNames, blockNames, allowNets, blockNets), anim (sky, floor, camera motion, mosaic, mosaicTiles, mosaicTree, mosaicMaxId, mosaicSharedTheme, weights, physics — partAmt/partBusy/partQuiet/partPeak/partCap, magnets per type −1…1, gravity, swirl, spring, stringAmt, chargeAmt — same keys as Settings → Motion / Camera / Audio / Graph Look / Physics). Never set camera or mic. To change which views sit in mosaic tiles without rearranging the grid, set anim.mosaicTiles to view ids in leaf order. If the operator turned off Settings → Agent → AI mosaic layout, mosaic / hero / mosaicTree / mosaicMaxId are ignored — mosaicTiles still apply. modeOptions, arcade, plugins.
 ```settings
@@ -115,10 +133,16 @@ def ollama_url() -> str:
     return raw.rstrip("/")
 
 
+def _backend(body: dict[str, Any]) -> str:
+    raw = str(body.get("backend") or "ollama").strip().lower()
+    return "cursor" if raw in {"cursor", "sdk", "cursor-sdk"} else "ollama"
+
+
 def _model(body: dict[str, Any]) -> str:
-    raw = str(body.get("model") or DEFAULT_MODEL)
-    if not re.fullmatch(r"[A-Za-z0-9._:-]{1,64}", raw):
-        return DEFAULT_MODEL
+    default = cursor_agent.DEFAULT_MODEL if _backend(body) == "cursor" else DEFAULT_MODEL
+    raw = str(body.get("model") or default)
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{1,96}", raw):
+        return default
     return raw
 
 
@@ -178,7 +202,20 @@ def _tag_names(data: dict[str, Any]) -> list[str]:
     return [m.get("name") for m in (data.get("models") or []) if isinstance(m, dict) and m.get("name")]
 
 
+def _tag_sizes(data: dict[str, Any]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for m in data.get("models") or []:
+        if not isinstance(m, dict) or not m.get("name"):
+            continue
+        try:
+            out[str(m["name"])] = int(m.get("size") or 0)
+        except (TypeError, ValueError):
+            out[str(m["name"])] = 0
+    return out
+
+
 async def api_status(_: web.Request) -> web.Response:
+    cursor = await cursor_agent.enrich_status()
     try:
         base = ollama_url()
         timeout = ClientTimeout(total=2)
@@ -186,23 +223,69 @@ async def api_status(_: web.Request) -> web.Response:
             async with s.get(f"{base}/api/tags") as r:
                 data = await r.json()
         names = _tag_names(data)
+        sizes = _tag_sizes(data)
+        catalog = ollama_models.catalog(names, sizes)
+        ollama = {
+            "ok": True,
+            "host": base,
+            "error": None,
+            **catalog,
+        }
         return web.json_response({
             "ok": True,
             "host": base,
             "model": match_model(DEFAULT_MODEL, names),
             "models": names,
             "hasGemma": any(str(n).startswith("gemma4") for n in names),
+            "ollama": ollama,
+            "cursor": cursor,
             "aiControl": ai_control_on(),
             "tts": speak_engine(),
             **live.state(),
         })
     except Exception as e:
         return web.json_response({
-            "ok": False, "host": OLLAMA, "error": str(e), "model": DEFAULT_MODEL,
+            "ok": bool(cursor.get("ok") or cursor.get("configured")),
+            "host": OLLAMA, "error": str(e), "model": DEFAULT_MODEL,
+            "models": [],
+            "ollama": {
+                "ok": False, "host": OLLAMA, "error": str(e),
+                **ollama_models.catalog([], {}),
+            },
+            "cursor": cursor,
             "aiControl": ai_control_on(),
             "tts": speak_engine(),
             **live.state(),
         })
+
+
+async def api_ollama_pull(req: web.Request) -> web.StreamResponse:
+    """Stream ``ollama pull`` progress (loopback only)."""
+    try:
+        body = await req.json()
+    except Exception:
+        return web.json_response({"error": "invalid json"}, status=400)
+    if not isinstance(body, dict):
+        return web.json_response({"error": "object required"}, status=400)
+    name = str(body.get("name") or body.get("model") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{1,96}", name):
+        return web.json_response({"error": "bad model name"}, status=400)
+    try:
+        base = ollama_url()
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
+    resp = web.StreamResponse(status=200, headers={"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"})
+    await resp.prepare(req)
+    timeout = ClientTimeout(total=3600, sock_read=120)
+    try:
+        async with ClientSession(timeout=timeout) as s:
+            async with s.post(f"{base}/api/pull", json={"name": name, "stream": True}) as r:
+                async for chunk in r.content.iter_any():
+                    await resp.write(chunk)
+    except Exception as e:
+        await resp.write((json.dumps({"error": str(e), "status": "error"}) + "\n").encode())
+    await resp.write_eof()
+    return resp
 
 
 def _redact_state(state: dict[str, Any], redact: bool) -> dict[str, Any]:
@@ -586,6 +669,51 @@ async def _pipe_ollama(
     return buf, streamed, False
 
 
+def _flatten_prompt(msgs: list[dict[str, Any]]) -> tuple[str, str]:
+    """Split a chat-messages list into system + user prompt for the Cursor SDK."""
+    system = ""
+    parts: list[str] = []
+    for m in msgs:
+        role = str(m.get("role") or "")
+        text = str(m.get("content") or "").strip()
+        if not text:
+            continue
+        if role == "system" and not system:
+            system = text
+            continue
+        if role == "user":
+            parts.append(f"User: {text}")
+        elif role == "assistant":
+            parts.append(f"Assistant: {text}")
+    return system, "\n\n".join(parts) or "Continue."
+
+
+async def _api_chat_cursor(req: web.Request, body: dict[str, Any], messages: list[Any]) -> web.StreamResponse:
+    redact = bool(body.get("redact"))
+    snap = _snapshot(req.app["state"], redact)
+    user = _last_user(messages)
+    view_note = _parse_view(body, redact)
+    poll = bool(body.get("poll"))
+    if user and not poll:
+        memory.append_message("user", user)
+    ollama_msgs = _chat_messages(
+        messages, snap=snap, user=user, view_note=view_note, redact=redact, has_image=False,
+    )
+    system, prompt = _flatten_prompt(ollama_msgs)
+    resp = web.StreamResponse(status=200, headers={"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"})
+    await resp.prepare(req)
+    reply = await cursor_agent.stream_chat(
+        resp,
+        model=_model(body),
+        prompt=prompt,
+        system=system,
+        control=ai_control_on(),
+    )
+    _remember_reply(user, reply, redact=redact)
+    await resp.write_eof()
+    return resp
+
+
 async def api_chat(req: web.Request) -> web.StreamResponse:
     if getattr(req, "content_length", None) and req.content_length > MAX_BODY:
         return web.json_response({"error": "body too large"}, status=413)
@@ -600,6 +728,8 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
         return web.json_response({"error": "messages required"}, status=400)
+    if _backend(body) == "cursor":
+        return await _api_chat_cursor(req, body, messages)
     try:
         base = ollama_url()
     except ValueError as e:

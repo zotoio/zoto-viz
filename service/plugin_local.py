@@ -22,7 +22,10 @@ from . import plugin_migration as pmg
 from . import plugin_zip as pz
 from . import plugins
 
-ENGINES = frozenset({"graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom"})
+ENGINES = frozenset({
+    "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
+    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+})
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _seen: dict[str, str] = {}
 _primed = False

@@ -1,0 +1,5 @@
+engine: waves
+look:
+  theme: ocean
+  backdrop: none
+  themeCycle: "off"

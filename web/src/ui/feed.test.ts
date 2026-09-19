@@ -187,8 +187,29 @@ describe("live agent trace", () => {
     expect(think).toHaveLength(1);
     expect(think[0]?.querySelector(".tx")?.textContent).toContain("plan:");
     expect(think[0]?.querySelector(".tx")?.textContent).toContain("check nest");
-    expect(feed.el.querySelector(".feed-ticker")?.firstElementChild).toBe(think[0]);
+    expect(feed.el.querySelector(".feed-ticker")?.lastElementChild).toBe(think[0]);
     expect([...feed.el.querySelectorAll(".row")].some((r) => !r.classList.contains("chat"))).toBe(true);
+  });
+
+  it("appends packets below earlier ones instead of replacing the visible list", () => {
+    const feed = overlay("traffic");
+    const t = 1_700_000_000;
+    const pkt = (n: number, q: string): Packet =>
+      [t + n, "out", "8.8.8.8", "dns", "udp/53", 80, "wlan0", q, "53", "192.168.86.4"];
+    const ingest = (feed as unknown as { ingest(m: TrafficMsg): void }).ingest.bind(feed);
+    ingest({
+      ip: "@lan", peer: null, ts: t, packets: [pkt(1, "A one.example")],
+      window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] },
+    });
+    const first = [...feed.el.querySelectorAll(".row .tx")].map((el) => el.textContent);
+    ingest({
+      ip: "@lan", peer: null, ts: t + 2, packets: [pkt(2, "A two.example")],
+      window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] },
+    });
+    const texts = [...feed.el.querySelectorAll(".row .tx")].map((el) => el.textContent);
+    expect(texts[0]).toContain("one.example");
+    expect(texts.at(-1)).toContain("two.example");
+    expect(texts).toHaveLength(first.length + 1);
   });
 });
 
@@ -214,6 +235,30 @@ describe("feed type size and auto-scroll", () => {
     expect(feed.el.style.getPropertyValue("--feed-size")).toBe("20px");
   });
 
+  it("does not wipe live chat rows when history reseeds", () => {
+    const feed = overlay();
+    feed.pushChat("you", "live ask");
+    feed.pushChat("agent", "live reply");
+    feed.seedTranscript([
+      { role: "user", content: "stale" },
+      { role: "assistant", content: "would replace" },
+    ]);
+    const texts = [...feed.el.querySelectorAll(".row .tx")].map((el) => el.textContent?.trim());
+    expect(texts).toEqual(["live ask", "live reply"]);
+  });
+
+  it("pins the traffic ticker to the latest line", () => {
+    const feed = overlay("traffic");
+    const top = mockTicker(feed);
+    const t = 1_700_000_000;
+    const pkt: Packet = [t, "out", "8.8.8.8", "dns", "udp/53", 80, "wlan0", "A www.example.com", "53", "192.168.86.4"];
+    (feed as unknown as { ingest(m: TrafficMsg): void }).ingest({
+      ip: "@lan", peer: null, ts: t, packets: [pkt],
+      window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] },
+    });
+    expect(top()).toBe(400);
+  });
+
   it("pins the transcript ticker to the latest line", () => {
     const feed = overlay();
     const top = mockTicker(feed);
@@ -226,7 +271,7 @@ describe("feed type size and auto-scroll", () => {
     expect(top()).toBe(400);
   });
 
-  it("leaves the ticker where the user scrolled until they send again", () => {
+  it("keeps pinning the transcript as agent tokens arrive", () => {
     const feed = overlay();
     const top = mockTicker(feed);
     feed.seedTranscript([
@@ -238,10 +283,10 @@ describe("feed type size and auto-scroll", () => {
     ticker.scrollTop = 10;
     ticker.dispatchEvent(new Event("scroll"));
     feed.pushChat("think", "planning\n", true);
-    expect(top()).toBe(10);
+    expect(top()).toBe(400);
     feed.setThinking(true);
     expect(feed.el.querySelector(".feed-hint")?.textContent).toBe("thinking…");
-    feed.pushChat("you", "again");
+    feed.pushChat("agent", "next line", true);
     expect(top()).toBe(400);
   });
 

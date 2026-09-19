@@ -1,0 +1,5 @@
+engine: tetris
+look:
+  theme: phosphor
+  backdrop: none
+  themeCycle: "off"

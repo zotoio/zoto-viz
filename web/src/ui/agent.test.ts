@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterSendCue, afterWatchword, agentHeaderCopy, agentPhase, aiCyclePrefOn, aiMosaicLayoutOn, CYCLE_KEY, MOSAIC_LAYOUT_KEY, displayText, extractAgentLook, extractMemory, extractSettings, extractYaml, needsAgentReply, parseOllamaChat, parseOllamaLine, spokenText, splitThinkTags } from "./agent";
+import { afterSendCue, afterWatchword, agentHeaderCopy, agentPhase, aiCyclePrefOn, aiMosaicLayoutOn, CYCLE_KEY, MOSAIC_LAYOUT_KEY, displayText, extractAgentLook, extractMemory, extractPluginFiles, extractSettings, extractYaml, needsAgentReply, parseOllamaChat, parseOllamaLine, spokenText, splitThinkTags } from "./agent";
 
 describe("extractYaml", () => {
   it("reads a yaml fence", () => {
@@ -8,6 +8,28 @@ describe("extractYaml", () => {
     expect(extractYaml("```\nid: pulse\nname: Pulse\n```")).toContain("id: pulse");
     expect(extractYaml("```settings\n{\"theme\":\"matrix\"}\n```")).toBeNull();
     expect(extractYaml("plain")).toBeNull();
+  });
+});
+
+describe("extractPluginFiles", () => {
+  it("collects a path-tagged tree", () => {
+    const files = extractPluginFiles(`
+\`\`\`yaml plugin.yml
+id: pulse
+name: Pulse
+version: 1
+\`\`\`
+\`\`\`yaml visualisation.yml
+engine: graph
+base: topology
+\`\`\`
+\`\`\`ts frontend/index.ts
+export default {}
+\`\`\`
+`);
+    expect(files?.["plugin.yml"]).toContain("id: pulse");
+    expect(files?.["visualisation.yml"]).toContain("engine: graph");
+    expect(files?.["frontend/index.ts"]).toContain("export default");
   });
 });
 
@@ -146,7 +168,7 @@ describe("agentHeaderCopy", () => {
     expect(agentHeaderCopy("heard").title).toMatch(/send/i);
     expect(agentHeaderCopy("listen", "zoto").title).toContain("zoto");
     expect(agentHeaderCopy("idle", "zoto", true).title).toMatch(/AI Control is on/);
-    expect(agentHeaderCopy("idle", "zoto", false, true).title).toMatch(/Ollama model/i);
+    expect(agentHeaderCopy("idle", "zoto", false, true).title).toMatch(/current model/i);
     expect(agentHeaderCopy("idle", "zoto", false, true).title).toMatch(/Dynamic/i);
   });
 });

@@ -21,6 +21,13 @@ import { CommandView } from "../arcade/command";
 import { FroggerView } from "../arcade/frogger";
 import { CpuPongView } from "../arcade/cpupong";
 import { DoomView } from "../arcade/doom";
+import { WavesView } from "../arcade/waves";
+import { OrbitsView } from "../arcade/orbits";
+import { HelixView } from "../arcade/helix";
+import { SkylineView } from "../arcade/skyline";
+import { PacmanView } from "../arcade/pacman";
+import { TetrisView } from "../arcade/tetris";
+import { PortalView } from "../arcade/portal";
 import { Mosaic } from "../graph/mosaic";
 import { RenderHost } from "../graph/render-host";
 import {
@@ -110,6 +117,13 @@ const arcade: Record<string, { view: Standalone; el: HTMLElement }> = {
   frogger: { view: new FroggerView($("frogger"), scene), el: $("frogger") },
   cpupong: { view: new CpuPongView($("cpupong"), scene), el: $("cpupong") },
   doom: { view: new DoomView($("doom"), scene), el: $("doom") },
+  waves: { view: new WavesView($("waves"), scene), el: $("waves") },
+  orbits: { view: new OrbitsView($("orbits"), scene), el: $("orbits") },
+  helix: { view: new HelixView($("helix"), scene), el: $("helix") },
+  skyline: { view: new SkylineView($("skyline"), scene), el: $("skyline") },
+  pacman: { view: new PacmanView($("pacman"), scene), el: $("pacman") },
+  tetris: { view: new TetrisView($("tetris"), scene), el: $("tetris") },
+  portal: { view: new PortalView($("portal"), scene), el: $("portal") },
 };
 for (const a of Object.values(arcade)) a.view.setTheme(theme);
 let activeArcade: string | null = null;
@@ -1217,7 +1231,7 @@ function collectSettings(): ProfileSettings {
   for (const m of allModes()) modeOptions[m.id] = optsFor(m);
   const arcade: Record<string, string> = {};
   for (const k of Object.keys(localStorage)) {
-    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
+    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom|waves|orbits|helix|skyline|pacman|tetris|portal)\./.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
   }
   return {
     theme: theme.id,

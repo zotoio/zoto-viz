@@ -1,4 +1,4 @@
-import { Toggle, TextField } from "./ui";
+import { Toggle, TextField, Select, type SelectOption } from "./ui";
 import { OddsStrip, TemperRail, clampTemper, parseWeather, setCurrentWeather, type Weather } from "./temper";
 import { redaction } from "../core/redact";
 import { setTsPluginsAllowed, tsPluginsAllowed } from "../plugins/host";
@@ -8,7 +8,6 @@ import { WakeStream } from "../audio/wake-stream";
 import { includeView, VIEW_KEY, type ViewCapture } from "./capture";
 import { askUserMedia, clearMediaDismiss } from "./media-ask";
 import { micCaptureAllowed } from "../audio/want";
-import { fillMarkdown } from "./markdown";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
@@ -32,6 +31,8 @@ export function aiCyclePrefOn(store: Pick<Storage, "getItem"> | null = typeof lo
   }
 }
 const MODEL_KEY = "zoto-viz.aiModel";
+const BACKEND_KEY = "zoto-viz.aiBackend";
+const CURSOR_MODEL_KEY = "zoto-viz.aiCursorModel";
 const VOICE_KEY = "zoto-viz.voice";
 const TTS_VOICE_KEY = "zoto-viz.ttsVoice";
 const LISTEN_KEY = "zoto-viz.wakeListen";
@@ -43,6 +44,19 @@ const TTS_CAP = 2500;
 const STREAM_TTS = new Set(["elevenlabs", "openai", "piper"]);
 
 export type AgentPhase = "idle" | "listen" | "heard" | "think" | "speak";
+export type AgentBackend = "ollama" | "cursor";
+
+export interface CatalogRow {
+  id: string;
+  label: string;
+  name?: string;
+  sizeGb?: number | null;
+  vramGb?: number;
+  installed?: boolean;
+  pull?: boolean;
+  hint?: string;
+  warning?: string;
+}
 
 export function agentPhase(s: {
   busy: boolean;
@@ -70,7 +84,7 @@ export function needsAgentReply(thinking: string, content: string): boolean {
 }
 
 const CONTROL_TIP = "AI Control is on — the local agent can change any settings, skies, and decorations (saved on the model-named profile)";
-const CYCLE_TIP = "AI cycling on — Dynamic sky, cadence themes, views and motion (profile named after the Ollama model)";
+const CYCLE_TIP = "AI cycling on — Dynamic sky, cadence themes, views and motion (profile named after the current model)";
 
 export function agentHeaderCopy(phase: AgentPhase, watch = DEFAULT_WATCH, controlOn = false, cycleOn = false): { text: string; title: string } {
   let text = "AI";
@@ -98,7 +112,6 @@ export class AgentPanel {
   private readonly headerToggle: Toggle;
   private readonly headerTxt: HTMLSpanElement;
   private readonly led: HTMLSpanElement;
-  private readonly log: HTMLDivElement;
   private readonly input: HTMLTextAreaElement;
   private readonly statusEl: HTMLDivElement;
   private rec: SpeechRec | null = null;
@@ -118,17 +131,21 @@ export class AgentPanel {
   private temperRail!: TemperRail;
   private oddsStrip!: OddsStrip;
   private temperTimer = 0;
-  private modelField!: TextField;
+  private backendSel!: Select;
+  private modelSel!: Select;
+  private pullBtn!: HTMLButtonElement;
+  private warnEl!: HTMLDivElement;
+  private cursorKey!: TextField;
   private history: { role: "user" | "assistant"; content: string; thinking?: string }[] = [];
   private hydrateP: Promise<void> | null = null;
   private logEpoch = 0;
-  private stickLog = true;
-  private pinningLog = false;
-  private thinkHold: HTMLParagraphElement | null = null;
   private noVoiceHint = false;
   private voicesTried = false;
   private ttsEngine = "";
   private lastOllama: { ok: boolean; models: string[] } = { ok: false, models: [] };
+  private lastCursor = { ok: false, configured: false, models: [] as { id: string; label: string; hint?: string }[] };
+  private catalog: CatalogRow[] = [];
+  private pulling = false;
   private speakAbort: AbortController | null = null;
   onControl?: (on: boolean) => void;
   onCycle?: (on: boolean) => void;
@@ -166,8 +183,7 @@ export class AgentPanel {
 
     this.statusEl = document.createElement("div");
     this.statusEl.className = "sec-hint";
-    this.statusEl.textContent = "Local Ollama · gemma4";
-    void this.refreshStatus();
+    this.statusEl.textContent = "Local Ollama or Cursor SDK";
 
     const control = new Toggle({
       label: "AI Control",
@@ -230,13 +246,51 @@ export class AgentPanel {
       onChange: (on) => localStorage.setItem(MOSAIC_LAYOUT_KEY, on ? "1" : "0"),
     });
 
-    this.modelField = new TextField({
-      caption: "model",
-      title: "Ollama model tag (loopback only)",
-      value: localStorage.getItem(MODEL_KEY) || "gemma4",
-      placeholder: "gemma4",
-      onInput: (v) => localStorage.setItem(MODEL_KEY, v.trim() || "gemma4"),
+    this.backendSel = new Select({
+      caption: "backend",
+      title: "Ollama on this machine, or Cursor SDK (Grok by default)",
+      value: (localStorage.getItem(BACKEND_KEY) === "cursor" ? "cursor" : "ollama"),
+      options: [
+        { value: "ollama", label: "Ollama", hint: "installed local tags" },
+        { value: "cursor", label: "Cursor SDK", hint: "hosted models, default Grok" },
+      ],
+      onChange: (v) => {
+        localStorage.setItem(BACKEND_KEY, v);
+        this.paintModels();
+        this.paintCursorKey();
+        void this.refreshStatus();
+      },
     });
+    this.modelSel = new Select({
+      caption: "model",
+      title: "Installed Ollama tags, popular pulls, or Cursor SDK models",
+      filterable: true,
+      value: localStorage.getItem(MODEL_KEY) || "gemma4",
+      options: [{ value: localStorage.getItem(MODEL_KEY) || "gemma4", label: localStorage.getItem(MODEL_KEY) || "gemma4" }],
+      onChange: (v) => {
+        if (this.backend === "cursor") localStorage.setItem(CURSOR_MODEL_KEY, v);
+        else localStorage.setItem(MODEL_KEY, v);
+        this.paintPull();
+      },
+    });
+    this.pullBtn = document.createElement("button");
+    this.pullBtn.type = "button";
+    this.pullBtn.className = "agent-pull";
+    this.pullBtn.textContent = "download";
+    this.pullBtn.hidden = true;
+    this.pullBtn.addEventListener("click", () => void this.pullSelected());
+    this.warnEl = document.createElement("div");
+    this.warnEl.className = "sec-hint agent-warn";
+    this.cursorKey = new TextField({
+      caption: "Cursor API key",
+      title: "CURSOR_API_KEY, or paste a user / service-account key (stored in ~/.zoto-viz/cursor-key)",
+      value: "",
+      placeholder: "cursor_…",
+      onInput: () => { /* saved on blur / apply */ },
+    });
+    this.cursorKey.input.type = "password";
+    this.cursorKey.input.autocomplete = "off";
+    this.cursorKey.input.addEventListener("change", () => void this.saveCursorKey());
     const ttsVoice = new TextField({
       caption: "TTS voice",
       title: "ElevenLabs voice id, or Kokoro name (af_heart). Empty uses the monitor default.",
@@ -256,45 +310,29 @@ export class AgentPanel {
     });
     setCurrentWeather(this.oddsStrip.value);
 
-    this.log = document.createElement("div");
-    this.log.className = "agent-log";
-    this.log.addEventListener("scroll", () => {
-      if (this.pinningLog) return;
-      this.stickLog = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 48;
-    });
-    this.log.addEventListener("wheel", (e) => {
-      if (this.pinningLog) return;
-      if (e.deltaY < 0) this.stickLog = false;
-    }, { passive: true });
     this.input = document.createElement("textarea");
-    this.input.placeholder = "Ask about the LAN, or say the watchword… then send";
-    const send = document.createElement("button");
-    send.type = "button";
-    send.textContent = "send";
-    send.addEventListener("click", () => void this.send());
-    const talk = document.createElement("button");
-    talk.type = "button";
-    talk.textContent = "talk";
-    talk.title = "hold to speak without the watchword";
-    talk.addEventListener("pointerdown", (e) => { e.preventDefault(); this.startHold(); });
-    talk.addEventListener("pointerup", () => this.stopHold());
-    talk.addEventListener("pointerleave", () => this.stopHold());
+    this.input.hidden = true;
+    this.input.setAttribute("aria-hidden", "true");
     const clear = document.createElement("button");
     clear.type = "button";
-    clear.textContent = "clear";
-    clear.title = "clear the on-screen log and stored transcript (memories stay)";
+    clear.textContent = "clear conversation";
+    clear.title = "clear the feed transcript and outcome facts (memories stay)";
     clear.addEventListener("click", () => void this.clearHistory());
     const row = document.createElement("div");
     row.className = "agent-row";
-    row.append(this.input, send, talk, clear);
+    row.append(this.pullBtn, clear);
 
     this.el.append(
       this.statusEl,
       this.temperRail.el,
       this.oddsStrip.el,
-      this.modelField.el, ttsVoice.el, control.el, listen.el, watch.el, voice.el, ts.el, view.el, mosaicLayout.el, this.log, row,
+      this.backendSel.el, this.modelSel.el, this.warnEl, this.cursorKey.el,
+      ttsVoice.el, control.el, listen.el, watch.el, voice.el, ts.el, view.el, mosaicLayout.el, row, this.input,
     );
+    this.paintCursorKey();
+    this.paintPull();
     this.paintHeader();
+    void this.refreshStatus();
     void this.hydrate();
     if ("speechSynthesis" in window) {
       speechSynthesis.getVoices();
@@ -304,15 +342,25 @@ export class AgentPanel {
 
   get controlOn(): boolean { return this.controlToggle.checked; }
   get cycleOn(): boolean { return this.headerToggle.checked; }
+  get backend(): AgentBackend {
+    return this.backendSel?.value === "cursor" ? "cursor" : "ollama";
+  }
   get modelTag(): string {
-    return this.modelField.value.trim() || localStorage.getItem(MODEL_KEY) || "gemma4";
+    if (this.backend === "cursor") {
+      return this.modelSel?.value.trim() || localStorage.getItem(CURSOR_MODEL_KEY) || "grok-4.5";
+    }
+    return this.modelSel?.value.trim() || localStorage.getItem(MODEL_KEY) || "gemma4";
   }
 
   async probeOllama(): Promise<{ ok: boolean; model: string; models: string[]; online: boolean }> {
     await this.refreshStatus();
     const model = this.modelTag;
+    if (this.backend === "cursor") {
+      const online = this.lastCursor.configured;
+      return { ok: this.lastCursor.ok || online, model, models: this.lastCursor.models.map((m) => m.id), online };
+    }
     const online = this.lastOllama.ok && (
-      this.lastOllama.models.length ? this.lastOllama.models.includes(model) : true
+      this.lastOllama.models.length ? this.lastOllama.models.some((n) => n === model || n.startsWith(model + ":")) : true
     );
     return { ok: this.lastOllama.ok, model, models: this.lastOllama.models, online };
   }
@@ -419,22 +467,167 @@ export class AgentPanel {
       const d = await r.json() as {
         ok?: boolean; error?: string; hasGemma?: boolean; model?: string; host?: string; models?: string[]; tts?: string;
         temper?: number; weather?: string;
+        ollama?: { ok?: boolean; host?: string; error?: string; catalog?: CatalogRow[]; vramGb?: number | null; gpu?: string | null };
+        cursor?: { ok?: boolean; configured?: boolean; default?: string; error?: string; models?: { id?: string; label?: string; hint?: string }[] };
       };
       this.ttsEngine = String(d.tts || "");
-      this.lastOllama = { ok: !!d.ok, models: Array.isArray(d.models) ? d.models.filter((m) => typeof m === "string") : [] };
+      this.lastOllama = {
+        ok: !!(d.ollama?.ok ?? d.ok),
+        models: Array.isArray(d.models) ? d.models.filter((m) => typeof m === "string") : [],
+      };
+      this.catalog = Array.isArray(d.ollama?.catalog) ? d.ollama.catalog : [];
+      this.lastCursor = {
+        ok: !!d.cursor?.ok,
+        configured: !!d.cursor?.configured,
+        models: (d.cursor?.models || []).filter((m) => m.id).map((m) => ({
+          id: String(m.id),
+          label: String(m.label || m.id),
+          hint: m.hint,
+        })),
+      };
       if (typeof d.temper === "number" || d.weather) this.syncTemper({ temper: d.temper, weather: d.weather });
-      if (d.ok && d.model && d.models?.length && !d.models.includes(this.modelField.value.trim() || "gemma4")) {
-        this.modelField.value = d.model;
-        localStorage.setItem(MODEL_KEY, d.model);
-      }
+      this.paintModels();
       const listen = this.wakeOn ? `Listening for “${watchword()}”.` : "Watchword listening is off.";
       const tts = this.ttsEngine ? ` TTS ${this.ttsEngine}.` : "";
-      this.statusEl.textContent = d.ok
-        ? `Ollama ${d.host || "127.0.0.1:11434"} · ${d.hasGemma ? (d.model || "gemma4") : `pull gemma4`}.${tts} ${listen}`
-        : `Ollama offline (${d.error || "unreachable"}). Loopback only (${d.host || "127.0.0.1:11434"}).`;
+      const vram = d.ollama?.vramGb != null ? ` GPU ${d.ollama.vramGb} GB${d.ollama.gpu ? ` (${d.ollama.gpu})` : ""}.` : "";
+      if (this.backend === "cursor") {
+        this.statusEl.textContent = d.cursor?.configured
+          ? `Cursor SDK · ${this.modelTag}.${d.cursor.ok ? "" : ` ${d.cursor.error || "model list unavailable"}`.trim()}${tts} ${listen}`
+          : `Cursor SDK needs a key (CURSOR_API_KEY or Settings). ${d.cursor?.error || ""}`.trim();
+      } else {
+        this.statusEl.textContent = this.lastOllama.ok
+          ? `Ollama ${d.ollama?.host || d.host || "127.0.0.1:11434"} · ${this.modelTag}.${vram}${tts} ${listen}`
+          : `Ollama offline (${d.ollama?.error || d.error || "unreachable"}).${vram}`;
+      }
     } catch {
       this.lastOllama = { ok: false, models: [] };
-      this.statusEl.textContent = "Ollama status unknown — is the monitor up?";
+      this.statusEl.textContent = "Agent status unknown — is the monitor up?";
+    }
+  }
+
+  private paintCursorKey(): void {
+    this.cursorKey.hidden = this.backend !== "cursor";
+    this.cursorKey.input.placeholder = this.lastCursor.configured ? "key saved on the monitor" : "cursor_…";
+  }
+
+  private paintModels(): void {
+    if (this.backend === "cursor") {
+      const opts: SelectOption[] = (this.lastCursor.models.length ? this.lastCursor.models : [
+        { id: "grok-4.5", label: "Grok 4.5", hint: "default" },
+      ]).map((m) => ({ value: m.id, label: m.label, hint: m.hint, group: "Cursor" }));
+      this.modelSel.setOptions(opts);
+      const want = localStorage.getItem(CURSOR_MODEL_KEY) || this.lastCursor.models.find((m) => /^grok/i.test(m.id))?.id || "grok-4.5";
+      this.modelSel.value = opts.some((o) => o.value === want) ? want : (opts[0]?.value || want);
+      localStorage.setItem(CURSOR_MODEL_KEY, this.modelSel.value);
+    } else {
+      const opts = this.ollamaOptions();
+      this.modelSel.setOptions(opts);
+      const want = localStorage.getItem(MODEL_KEY) || "gemma4";
+      const hit = opts.find((o) => o.value === want) || opts.find((o) => o.value.startsWith(`${want}:`)) || opts[0];
+      this.modelSel.value = hit?.value || want;
+      localStorage.setItem(MODEL_KEY, this.modelSel.value);
+    }
+    this.paintCursorKey();
+    this.paintPull();
+  }
+
+  private ollamaOptions(): SelectOption[] {
+    const rows = this.catalog.length
+      ? this.catalog
+      : this.lastOllama.models.map((name) => ({ id: name, label: name, name, installed: true, pull: false }));
+    const installed = rows.filter((r) => r.installed);
+    const pulls = rows.filter((r) => !r.installed);
+    const hint = (r: CatalogRow) => {
+      const size = r.sizeGb != null ? `${r.sizeGb} GB` : "";
+      const vram = r.vramGb != null ? `~${r.vramGb} GB VRAM` : "";
+      const warn = r.warning ? ` · ${r.warning}` : "";
+      return [r.installed ? "installed" : "download", size, vram].filter(Boolean).join(" · ") + warn;
+    };
+    return [
+      ...installed.map((r) => ({ value: r.name || r.id, label: r.label || r.id, hint: hint(r), group: "Installed" })),
+      ...pulls.map((r) => ({ value: r.id, label: r.label || r.id, hint: hint(r), group: "Download" })),
+    ];
+  }
+
+  private selectedCatalog(): CatalogRow | undefined {
+    const id = this.modelSel.value;
+    return this.catalog.find((r) => r.id === id || r.name === id);
+  }
+
+  private paintPull(): void {
+    const row = this.selectedCatalog();
+    const need = this.backend === "ollama" && !!row?.pull;
+    this.pullBtn.hidden = !need;
+    this.pullBtn.disabled = this.pulling;
+    this.pullBtn.textContent = this.pulling ? "downloading…" : "download";
+    this.warnEl.textContent = row?.warning && need ? row.warning : "";
+  }
+
+  private async saveCursorKey(): Promise<void> {
+    const key = this.cursorKey.value.trim();
+    if (!key) return;
+    try {
+      if (!csrfToken()) await bootSession();
+      const r = await apiFetch("/api/ai/cursor", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      const d = await r.json() as { error?: string };
+      this.cursorKey.value = "";
+      if (!r.ok) this.note(d.error || `Cursor key failed (${r.status})`);
+      await this.refreshStatus();
+    } catch (e) {
+      this.note(String(e));
+    }
+  }
+
+  private async pullSelected(): Promise<void> {
+    const name = this.selectedCatalog()?.id || this.modelSel.value;
+    if (!name || this.pulling) return;
+    const row = this.selectedCatalog();
+    if (row?.warning && !window.confirm(`${row.warning}\n\nDownload ${name} anyway?`)) return;
+    this.pulling = true;
+    this.paintPull();
+    this.note(`downloading ${name}…`);
+    try {
+      if (!csrfToken()) await bootSession();
+      const r = await apiFetch("/api/ai/ollama/pull", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) {
+        this.note(`pull failed (${r.status})`);
+        return;
+      }
+      const reader = r.body?.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      let last = "";
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            try {
+              const j = JSON.parse(line) as { status?: string; error?: string; completed?: number; total?: number };
+              if (j.error) { last = j.error; break; }
+              if (j.status) last = j.total ? `${j.status} ${Math.round(100 * (j.completed || 0) / j.total)}%` : j.status;
+            } catch { /* ignore */ }
+          }
+        }
+      }
+      this.note(last && !/success/i.test(last) ? `${name}: ${last}` : `${name} is ready`);
+      await this.refreshStatus();
+    } catch (e) {
+      this.note(String(e));
+    } finally {
+      this.pulling = false;
+      this.paintPull();
     }
   }
 
@@ -442,62 +635,14 @@ export class AgentPanel {
     return this.history.slice();
   }
 
+  private note(text: string): void {
+    if (!text) return;
+    this.onChat?.("agent", text);
+  }
+
   private append(role: string, text: string): void {
-    const p = document.createElement("p");
-    if (role === "think" || role === "agent") {
-      p.className = role === "think" ? "think md" : "md";
-      const k = document.createElement("span");
-      k.className = "k";
-      k.textContent = role;
-      const body = document.createElement("div");
-      body.className = "md-body";
-      fillMarkdown(body, text);
-      p.append(k, body);
-    } else {
-      p.textContent = `${role}: ${text}`;
-    }
-    this.log.appendChild(p);
-    if (role === "you") this.stickLog = true;
-    if (role === "think") this.markLogThinking(false);
-    this.pinLog();
-  }
-
-  private pinLog(force = false): void {
-    if (!force && !this.stickLog) return;
-    const go = () => {
-      this.pinningLog = true;
-      this.log.scrollTop = this.log.scrollHeight;
-      this.pinningLog = false;
-    };
-    go();
-    requestAnimationFrame(() => { if (force || this.stickLog) go(); });
-  }
-
-  private markLogThinking(on: boolean): void {
-    if (on) {
-      if (this.thinkHold) return;
-      const p = document.createElement("p");
-      p.className = "think pending";
-      p.setAttribute("aria-live", "polite");
-      p.textContent = "thinking…";
-      this.thinkHold = p;
-      this.log.appendChild(p);
-      this.pinLog();
-      return;
-    }
-    this.thinkHold?.remove();
-    this.thinkHold = null;
-  }
-
-  private paintLog(): void {
-    this.thinkHold = null;
-    this.log.replaceChildren();
-    for (const m of this.history) {
-      if (m.role === "user") this.append("you", m.content);
-      else {
-        if (m.thinking) this.append("think", m.thinking);
-        if (m.content) this.append("agent", displayText(m.content));
-      }
+    if (role === "you" || role === "think" || role === "agent") {
+      this.onChat?.(role, text);
     }
   }
 
@@ -520,7 +665,6 @@ export class AgentPanel {
             content: String(m.content || ""),
             thinking: m.thinking ? String(m.thinking) : undefined,
           }));
-        this.paintLog();
         this.onTranscript?.();
       } catch { /* monitor may still be coming up */ }
     })();
@@ -531,8 +675,6 @@ export class AgentPanel {
   private async clearHistory(): Promise<void> {
     this.logEpoch += 1;
     this.history = [];
-    this.thinkHold = null;
-    this.log.replaceChildren();
     this.onTranscript?.();
     try {
       if (!csrfToken()) await bootSession();
@@ -552,7 +694,6 @@ export class AgentPanel {
     this.headerEl.classList.toggle("listening", phase === "listen");
     this.headerEl.classList.toggle("heard", phase === "heard");
     this.headerEl.classList.toggle("thinking", phase === "think");
-    this.markLogThinking(phase === "think");
     this.headerEl.classList.toggle("speaking", phase === "speak");
     this.headerEl.classList.toggle("busy", phase === "think" || phase === "speak");
     this.headerEl.setAttribute("aria-busy", phase === "think" || phase === "speak" ? "true" : "false");
@@ -788,7 +929,6 @@ export class AgentPanel {
     if (!text) return false;
     await this.hydrate();
     this.append("you", text);
-    this.onChat?.("you", text);
     this.busy = true;
     this.stopRec();
     this.paintHeader();
@@ -799,7 +939,8 @@ export class AgentPanel {
       const view = includeView() ? this.captureView?.() ?? undefined : undefined;
       const chatBody = (extra: Record<string, unknown> = {}) => JSON.stringify({
         redact: redaction.enabled,
-        model: localStorage.getItem(MODEL_KEY) || this.modelField.value || "gemma4",
+        backend: this.backend,
+        model: this.modelTag,
         messages: this.history.slice(-10),
         ...(view ? { view: { hud: view.hud, ...(view.screenshot ? { screenshot: view.screenshot } : {}) } } : {}),
         ...extra,
@@ -814,7 +955,6 @@ export class AgentPanel {
         this.history.pop();
         const fail = parseOllamaChat(raw).content || r.statusText;
         this.append("agent", `chat failed (${r.status}): ${fail}`);
-        this.onChat?.("agent", `chat failed (${r.status}): ${fail}`);
         return true;
       }
       let { thinking, content } = await this.readChat(r);
@@ -833,8 +973,6 @@ export class AgentPanel {
       }
       reply = content;
       this.history.push({ role: "assistant", content: reply, thinking: thinking || undefined });
-      if (thinking) this.append("think", thinking);
-      this.append("agent", displayText(reply));
       const settingsPatch = extractSettings(reply);
       if (settingsPatch) {
         if (!this.controlOn) this.append("agent", "AI Control is off — settings were not applied");
@@ -848,26 +986,29 @@ export class AgentPanel {
           catch (e) { this.append("agent", String(e)); }
         }
       }
-      const yaml = extractYaml(reply);
-      if (yaml) {
+      const files = extractPluginFiles(reply);
+      if (files) {
+        const names = Object.keys(files).join(", ");
         if (!this.controlOn) {
           const d = await apiFetch("/api/ai/plugin", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ files: { "plugin.yml": yaml } }),
+            body: JSON.stringify({ files }),
           }).then((x) => x.json()) as { ok?: boolean; error?: string };
-          this.append("agent", d.ok ? "plugin draft is valid (enable AI Control to install it locally)" : `plugin invalid: ${d.error}`);
+          this.append("agent", d.ok
+            ? `plugin draft is valid (${names}) — enable AI Control to install it`
+            : `plugin invalid: ${d.error}`);
         } else {
           const d = await apiFetch("/api/ai/plugin/local", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ files: { "plugin.yml": yaml }, activate: true }),
+            body: JSON.stringify({ files, activate: true }),
           }).then((x) => x.json()) as {
             ok?: boolean; error?: string; id?: string; activated?: boolean; consentRequired?: boolean;
           };
-          if (d.activated) this.append("agent", `plugin ${d.id} installed and activated`);
-          else if (d.consentRequired) this.append("agent", `plugin ${d.id} installed — source review required`);
-          else this.append("agent", d.ok ? `plugin ${d.id} installed` : `plugin invalid: ${d.error}`);
+          if (d.activated) this.append("agent", `plugin ${d.id} built and activated (${names})`);
+          else if (d.consentRequired) this.append("agent", `plugin ${d.id} installed (${names}) — source review required`);
+          else this.append("agent", d.ok ? `plugin ${d.id} built (${names})` : `plugin invalid: ${d.error}`);
         }
       }
     } catch (e) {
@@ -1155,11 +1296,69 @@ export function parseOllamaChat(raw: string): { thinking: string; content: strin
 }
 
 export function extractYaml(text: string): string | null {
-  const tagged = text.match(/```(?:ya?ml)\n([\s\S]+?)```/i);
-  if (tagged) return tagged[1]!.trim();
-  const bare = text.match(/```\n([\s\S]+?)```/);
-  if (bare && /^\s*id:\s/m.test(bare[1]!)) return bare[1]!.trim();
+  return extractPluginFiles(text)?.["plugin.yml"] ?? null;
+}
+
+const SKIP_FENCE = new Set(["settings", "memory", "shader", "photo", "svg", "deco"]);
+
+function fencePath(info: string): string | null {
+  const bits = info.trim().split(/\s+/).filter(Boolean);
+  for (const raw of bits) {
+    const t = raw.replace(/^["']|["']$/g, "").replace(/^\.\//, "");
+    if (SKIP_FENCE.has(t.toLowerCase())) return null;
+    if (t.includes("/") || /\.(ya?ml|tsx?|jsx?|mjs|py|glsl|json|md|css|html)$/i.test(t)) return t;
+  }
+  const lang = (bits[0] || "").toLowerCase();
+  if (lang === "ts" || lang === "tsx" || lang === "typescript" || lang === "javascript" || lang === "js") {
+    return "frontend/index.ts";
+  }
+  if (lang === "py" || lang === "python") return "backend/service.py";
   return null;
+}
+
+function looksPluginYml(body: string): boolean {
+  return /^\s*id:\s/m.test(body);
+}
+
+function looksVizYml(body: string): boolean {
+  return /^\s*(engine|base|look|style|layout):/m.test(body);
+}
+
+/** Full plugin tree from path-tagged fences (and a ```files JSON object). */
+export function extractPluginFiles(text: string): Record<string, string> | null {
+  const files: Record<string, string> = {};
+  const unlabeledYaml: string[] = [];
+  const re = /```([^\n`]*)\n([\s\S]*?)```/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const info = (m[1] || "").trim();
+    const body = (m[2] || "").replace(/\s+$/, "");
+    if (!body) continue;
+    const lang = info.split(/\s+/)[0]?.toLowerCase() || "";
+    if (lang === "files") {
+      try {
+        const v = JSON.parse(body) as unknown;
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+            if (typeof val === "string" && k) files[k.replace(/^\.\//, "")] = val;
+          }
+        }
+      } catch { /* ignore */ }
+      continue;
+    }
+    if (SKIP_FENCE.has(lang) || lang === "glsl" && !info.includes("/")) continue;
+    const path = fencePath(info);
+    if (path) {
+      files[path] = body;
+      continue;
+    }
+    if (lang === "yaml" || lang === "yml" || (!lang && looksPluginYml(body))) unlabeledYaml.push(body);
+  }
+  for (const body of unlabeledYaml) {
+    if (!files["plugin.yml"] && looksPluginYml(body)) files["plugin.yml"] = body;
+    else if (!files["visualisation.yml"] && looksVizYml(body)) files["visualisation.yml"] = body;
+  }
+  return files["plugin.yml"] ? files : null;
 }
 
 export function extractMemory(text: string): string | null {

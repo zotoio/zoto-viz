@@ -1,0 +1,4 @@
+id: pacman
+name: Pac-Man
+version: 1
+hint: 3D maze. This host is Pac-Man, talkers are ghosts, packets are pellets. Visual only.

@@ -15,7 +15,7 @@ export type FeedSource = "traffic" | "transcript" | "both";
 export type ChatRole = "you" | "think" | "agent";
 
 export const FEED_LAYOUTS: { value: FeedLayout; label: string; hint: string }[] = [
-  { value: "ticker", label: "ticker", hint: "decoded packet lines, newest at the top" },
+  { value: "ticker", label: "ticker", hint: "decoded packet lines, newest at the bottom; older lines scroll up" },
   { value: "bars", label: "bars", hint: "vertical stack of per-second protocol mix" },
   { value: "both", label: "both", hint: "bars above a scrolling ticker" },
 ];
@@ -27,9 +27,9 @@ export const FEED_SCOPES: { value: FeedScope; label: string; hint: string }[] = 
 ];
 
 export const FEED_SOURCES: { value: FeedSource; label: string; hint: string }[] = [
-  { value: "traffic", label: "traffic", hint: "decoded packets from the capture; agent thinking still streams here" },
-  { value: "transcript", label: "transcript", hint: "agent conversation and chain of thought, newest at the bottom" },
-  { value: "both", label: "both", hint: "packets mixed with the agent transcript" },
+  { value: "traffic", label: "traffic", hint: "decoded packets from the capture; newest at the bottom, older lines scroll up; agent thinking still streams here" },
+  { value: "transcript", label: "transcript", hint: "agent conversation and chain of thought; older lines scroll up" },
+  { value: "both", label: "both", hint: "packets mixed with the agent transcript; everything scrolls up" },
 ];
 
 export interface FeedConfig {
@@ -92,8 +92,9 @@ type Bucket = Record<FeedKind, number>;
 const KINDS: FeedKind[] = ["tls", "quic", "dns", "mdns", "http", "media", "ssdp", "dhcp", "remote", "plain", "wifi", "bt", "other"];
 
 /**
- * Right-hand live overlay: decoded capture headlines (newest on top), a vertical strip of
- * protocol-mix bars, and a live agent think/reply trace that streams even when source is traffic.
+ * Right-hand live overlay: decoded capture headlines and agent think/reply on one ticker.
+ * Every source appends at the bottom so older lines scroll up; the viewport follows the
+ * latest row instead of replacing the visible list.
  */
 export class LiveFeed {
   readonly el: HTMLElement;
@@ -117,6 +118,7 @@ export class LiveFeed {
   private stickToBottom = true;
   private pinning = false;
   private pinRaf = 0;
+  private pinSmoothTimer = 0;
   private listenPin = false;
   onSourceChange?: () => void;
   /** Return false to keep the draft (chat already in flight). */
@@ -150,11 +152,11 @@ export class LiveFeed {
       if (row?.dataset.host) this.scene.selectIp(row.dataset.host);
     });
     this.ticker.addEventListener("scroll", () => {
-      if (this.pinning || !this.chatLog()) return;
+      if (this.pinning || this.ticker.classList.contains("pin-smooth")) return;
       this.stickToBottom = nearBottom(this.ticker);
     });
     this.ticker.addEventListener("wheel", (e) => {
-      if (!this.chatLog() || this.pinning) return;
+      if (this.pinning) return;
       if (e.deltaY < 0) this.stickToBottom = false;
     }, { passive: true });
     this.composer.querySelector(".feed-send")!.addEventListener("click", () => this.submitComposer());
@@ -180,7 +182,7 @@ export class LiveFeed {
     if (accepted === false) return;
     this.ask.value = "";
     this.stickToBottom = true;
-    this.pinChat(true);
+    this.pinLatest(true, true);
   }
 
   /** RSS / HTTP / file headlines from the host sources registry. */
@@ -194,7 +196,8 @@ export class LiveFeed {
       return false;
     });
     if (!want.length) return;
-    for (const row of [...want].reverse()) {
+    let added = false;
+    for (const row of want) {
       const key = `src:${row.id}`;
       const existing = this.lines.find((l) => l.key === key);
       if (existing) {
@@ -217,11 +220,13 @@ export class LiveFeed {
         text: row.text,
         count: 1,
       });
-      this.lines.unshift(line);
-      this.ticker.prepend(line.el);
+      this.lines.push(line);
+      this.ticker.append(line.el);
+      added = true;
     }
     this.liftStream();
     this.trim();
+    if (added) this.pinLatest(false, true);
   }
 
   setConfig(c: FeedConfig): void {
@@ -242,7 +247,7 @@ export class LiveFeed {
     }
     this.trim();
     if (this.showsTranscript() && !this.showsTraffic()) this.hint.textContent = this.lines.length ? "" : "agent transcript…";
-    this.pinChat();
+    this.pinLatest();
   }
 
   showsTraffic(): boolean { return this.cfg.source !== "transcript"; }
@@ -274,8 +279,7 @@ export class LiveFeed {
 
   /** Newest ticker lines for the agent HUD snapshot. */
   snapshot(limit = 10): string[] {
-    const src = this.chatLog() ? this.lines.slice(-limit).reverse() : this.lines.slice(0, limit);
-    return src.map((l) => {
+    return this.lines.slice(-limit).reverse().map((l) => {
       const n = l.count > 1 ? ` ×${l.count}` : "";
       return `${l.label} ${l.text}${n}`.trim().slice(0, 160);
     });
@@ -310,7 +314,7 @@ export class LiveFeed {
       this.stickToBottom = true;
       this.hint.textContent = "listening… say send";
       this.ask.placeholder = "Listening — say send to submit";
-      this.pinChat(true);
+      this.pinLatest(true, true);
     } else {
       this.ask.placeholder = "Ask about the LAN… then send";
       if (this.hint.textContent === "listening… say send") {
@@ -336,7 +340,7 @@ export class LiveFeed {
         this.streamLine?.el.classList.add("pending");
         this.streamLine?.el.setAttribute("aria-live", "polite");
       }
-      this.pinChat();
+      this.pinLatest();
       return;
     }
     this.dropPendingThink();
@@ -350,9 +354,20 @@ export class LiveFeed {
 
   seedTranscript(turns: TranscriptTurn[]): void {
     if (!this.cfg.on || !this.showsTranscript()) return;
+    if (!turns.length) {
+      this.dropChatLines();
+      this.stickToBottom = true;
+      this.pinLatest();
+      if (!this.lines.length && !this.showsTraffic()) this.hint.textContent = "agent transcript…";
+      return;
+    }
+    // Live pushChat already owns the rows — do not wipe the visible ticker.
+    if (this.lines.some((l) => l.chat)) {
+      this.stickToBottom = true;
+      this.pinLatest();
+      return;
+    }
     this.closeStream();
-    if (!this.showsTraffic()) this.resetTicker();
-    else this.dropChatLines();
     for (const m of turns) {
       if (m.role === "user" && m.content) this.addChatLine("you", m.content, false);
       if (m.role === "assistant") {
@@ -363,7 +378,7 @@ export class LiveFeed {
     }
     this.trim();
     this.stickToBottom = true;
-    this.pinChat();
+    this.pinLatest(true);
     if (!this.lines.length && !this.showsTraffic()) this.hint.textContent = "agent transcript…";
     if (this.el.classList.contains("thinking") && !this.ticker.hidden) {
       this.hint.textContent = "thinking…";
@@ -388,6 +403,7 @@ export class LiveFeed {
     for (const l of this.lines) l.el.remove();
     this.lines = [];
     this.buckets = [];
+    this.stickToBottom = true;
   }
 
   private dropChatLines(): void {
@@ -412,20 +428,20 @@ export class LiveFeed {
     if (tx) paintChat(tx, line.chat, line.text);
     line.el.title = line.text;
     this.liftStream();
-    this.pinChat();
+    this.pinLatest();
   }
 
-  /** Mixed / traffic ticker is newest-on-top; keep the in-flight think/reply row pinned there. */
+  /** Keep the in-flight think/reply as the latest (bottom) row so the ticker scrolls up to it. */
   private liftStream(): void {
     const line = this.streamLine;
-    if (!line || this.chatLog()) return;
-    if (this.lines[0] === line) {
-      if (this.ticker.firstElementChild !== line.el) this.ticker.prepend(line.el);
+    if (!line) return;
+    if (this.lines[this.lines.length - 1] === line) {
+      if (this.ticker.lastElementChild !== line.el) this.ticker.append(line.el);
       return;
     }
     this.lines = this.lines.filter((l) => l !== line);
-    this.lines.unshift(line);
-    this.ticker.prepend(line.el);
+    this.lines.push(line);
+    this.ticker.append(line.el);
   }
 
   private closeStream(): void {
@@ -445,21 +461,16 @@ export class LiveFeed {
       count: 1,
       chat: role,
     });
-    if (this.chatLog()) {
-      this.lines.push(line);
-      this.ticker.append(line.el);
-    } else {
-      this.lines.unshift(line);
-      this.ticker.prepend(line.el);
-    }
+    this.lines.push(line);
+    this.ticker.append(line.el);
     if (stream) {
       this.streamLine = line;
       this.streamRole = role;
     }
     this.liftStream();
     this.trim();
-    if (role === "you") this.stickToBottom = true;
-    this.pinChat();
+    if (role === "you" || role === "think" || role === "agent") this.stickToBottom = true;
+    this.pinLatest(true, true);
     this.syncOverlay();
   }
 
@@ -475,6 +486,8 @@ export class LiveFeed {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     if (this.pinRaf) { cancelAnimationFrame(this.pinRaf); this.pinRaf = 0; }
+    if (this.pinSmoothTimer) { window.clearTimeout(this.pinSmoothTimer); this.pinSmoothTimer = 0; }
+    this.ticker.classList.remove("pin-smooth");
   }
 
   private query(): string | null {
@@ -523,59 +536,81 @@ export class LiveFeed {
     this.lastT = newest;
     if (!fresh.length) return;
     this.hint.textContent = "";
-    for (const p of fresh) this.eat(p);
+    let added = false;
+    for (const p of fresh) {
+      if (this.eat(p)) added = true;
+    }
     this.trim();
+    if (added) this.pinLatest(false, true);
   }
 
-  private eat(p: Packet): void {
+  private eat(p: Packet): boolean {
     const d = decodePacket(p, this.scene);
     this.addBytes(p[0], d.kind, p[5]);
-    if (d.skip) return;
+    if (d.skip) return false;
     const host = p[9] ?? (p[1] === "out" ? this.scene.selectedIp ?? undefined : p[2]);
     const key = `${d.kind}|${d.text}`;
-    const same = this.lines.find((l, i) => i < 8 && l.key === key && p[0] - l.t < 2.5);
+    const same = this.lines.slice(-8).find((l) => l.key === key && p[0] - l.t < 2.5);
     if (same) {
       same.count++;
       same.t = p[0];
       this.paintCount(same);
-      return;
+      return false;
     }
     const line = this.makeLine({
       key, t: p[0], color: d.color, label: d.label, text: d.text,
       host: host ?? d.host, peer: d.peer, count: 1,
     });
-    this.lines.unshift(line);
-    this.ticker.prepend(line.el);
+    this.lines.push(line);
+    this.ticker.append(line.el);
     this.liftStream();
+    return true;
   }
 
   private trim(): void {
     const cap = Math.max(12, this.cfg.density);
     while (this.lines.length > cap) {
-      const idx = this.chatLog() ? 0 : this.lines.length - 1;
-      if (this.lines[idx] === this.streamLine) break;
-      const old = this.chatLog() ? this.lines.shift() : this.lines.pop();
+      if (this.lines[0] === this.streamLine) break;
+      const old = this.lines.shift();
       old?.el.remove();
     }
   }
 
-  private pinChat(force = false): void {
-    const chat = this.chatLog();
-    const pin = force || this.listenPin || this.stickToBottom;
-    if (chat && !pin) return;
-    if (!chat && !this.streamLine) return;
-    const go = () => {
-      this.pinning = true;
-      this.ticker.scrollTop = chat ? this.ticker.scrollHeight : 0;
-      this.pinning = false;
-    };
-    go();
+  /** Follow the latest row. New rows smooth-scroll up; a long catch-up snaps so the list is not left at the top. */
+  private pinLatest(force = false, smooth = false): void {
+    const following = this.el.classList.contains("thinking") || !!this.streamLine;
+    const pin = force || this.listenPin || this.stickToBottom || following;
+    if (!pin) return;
     if (this.pinRaf) cancelAnimationFrame(this.pinRaf);
+    if (this.pinSmoothTimer) { window.clearTimeout(this.pinSmoothTimer); this.pinSmoothTimer = 0; }
+    this.pinning = true;
+    const apply = () => { this.ticker.scrollTop = this.ticker.scrollHeight; };
+    const gap = () => this.ticker.scrollHeight - this.ticker.scrollTop - this.ticker.clientHeight;
+    const useSmooth = smooth && this.ticker.clientHeight > 8 && gap() < 160;
+    this.ticker.classList.toggle("pin-smooth", useSmooth);
+    apply();
     this.pinRaf = requestAnimationFrame(() => {
       this.pinRaf = 0;
-      if (this.chatLog() && !force && !this.listenPin && !this.stickToBottom) return;
-      if (!this.chatLog() && !this.streamLine) return;
-      go();
+      if (!force && !this.listenPin && !this.stickToBottom && !this.el.classList.contains("thinking") && !this.streamLine) {
+        this.ticker.classList.remove("pin-smooth");
+        this.pinning = false;
+        return;
+      }
+      apply();
+      const finish = () => {
+        this.pinSmoothTimer = 0;
+        this.ticker.classList.remove("pin-smooth");
+        this.pinning = false;
+      };
+      if (this.ticker.clientHeight < 8) {
+        this.pinSmoothTimer = window.setTimeout(() => {
+          if (force || this.listenPin || this.stickToBottom || this.el.classList.contains("thinking") || this.streamLine) apply();
+          finish();
+        }, 80);
+        return;
+      }
+      if (useSmooth) this.pinSmoothTimer = window.setTimeout(finish, 420);
+      else finish();
     });
   }
 

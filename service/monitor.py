@@ -36,6 +36,7 @@ from aiohttp import WSCloseCode, web
 from . import access
 from . import agent
 from . import agent_assets
+from . import cursor_agent
 from . import live
 from . import mcp as plugin_mcp
 from . import plugin_local
@@ -1774,6 +1775,10 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_get("/api/ai/temper", agent.api_temper)
     app.router.add_put("/api/ai/temper", agent.api_temper)
     app.router.add_post("/api/ai/chat", agent.api_chat)
+    app.router.add_post("/api/ai/ollama/pull", agent.api_ollama_pull)
+    app.router.add_get("/api/ai/cursor", cursor_agent.api_key)
+    app.router.add_put("/api/ai/cursor", cursor_agent.api_key)
+    app.router.add_delete("/api/ai/cursor", cursor_agent.api_key)
     app.router.add_get("/api/ai/history", agent.api_history)
     app.router.add_delete("/api/ai/history", agent.api_history)
     app.router.add_get("/api/ai/memories", agent.api_memories)

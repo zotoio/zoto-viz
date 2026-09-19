@@ -158,7 +158,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 32,
-      "description": "Visualisation engine. Known values today: graph, netpong, invaders, command, frogger, cpupong, doom. Open (not a closed enum) so WIP engines such as doom still validate."
+      "description": "Visualisation engine. Known values today: graph, netpong, invaders, command, frogger, cpupong, doom, waves, orbits, helix, skyline, pacman, tetris, portal. Open (not a closed enum) so new engines still validate."
     },
     "base": {
       "type": "string",

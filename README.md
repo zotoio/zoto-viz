@@ -4,7 +4,7 @@ Discover every device on the home LAN, capture traffic, and render a live 3D gra
 
 - `service/` — capture + discovery daemon (`python -m service.monitor`) and Three.js UI (`http://127.0.0.1:7020`)
 - `zoto-viz` — CLI (batch pipeline, plugin catalog, install). Shebang `#!/usr/bin/env python3`; Windows wrapper `zoto-viz.cmd`
-- Optional local **Gemma 4** agent via Ollama (insights, plugin drafts, gated AI Control)
+- Optional agent: **Ollama** (any installed tag, plus popular pulls) or **Cursor SDK** (Grok by default) — insights, plugin drafts that install, gated AI Control
 
 Full documentation: [docs/](docs/) (VitePress). This README is the short path to a running monitor.
 
@@ -62,4 +62,4 @@ cd web && pnpm test                  # Vitest
 cd docs && pnpm install && pnpm dev   # docs site
 ```
 
-Optional agent: `ollama pull gemma4`. Optional hopper: see [docs/systemd.md](docs/systemd.md).
+Optional agent: `ollama pull gemma4`, or set `CURSOR_API_KEY` for the Cursor SDK. Optional hopper: see [docs/systemd.md](docs/systemd.md).

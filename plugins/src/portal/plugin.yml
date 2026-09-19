@@ -1,0 +1,4 @@
+id: portal
+name: Portal
+version: 1
+hint: Two 3D test chambers. Orange and blue portals carry packets between LAN and internet.

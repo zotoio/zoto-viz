@@ -25,7 +25,10 @@ describe("modes", () => {
     expect(GRAPH_BASES.some((m) => m.id === "cpu")).toBe(true);
     expect(GRAPH_BASES.some((m) => m.id === "sources")).toBe(true);
     expect(new Set(GRAPH_BASES.map((m) => m.id)).size).toBe(GRAPH_BASES.length);
-    expect(ARCADE_ENGINES.map((m) => m.id)).toEqual(["netpong", "invaders", "command", "frogger", "cpupong", "doom"]);
+    expect(ARCADE_ENGINES.map((m) => m.id)).toEqual([
+      "netpong", "invaders", "command", "frogger", "cpupong", "doom",
+      "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal",
+    ]);
     expect(ARCADE_ENGINES.every((m) => m.standalone)).toBe(true);
   });
 

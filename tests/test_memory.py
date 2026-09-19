@@ -36,12 +36,13 @@ def test_roll_abbreviates_and_keeps_ui_log(tmp_path: Path, monkeypatch) -> None:
     assert rolled.get("new_session") is True
     tail = memory.ollama_tail()
     assert not any(str(m.get("content") or "").startswith("Session brief") for m in tail)
-    assert tail[0]["content"].startswith("q6")
+    assert [m["role"] for m in tail] == ["user"]
+    assert tail[0]["content"].startswith("q7")
     assert memory.ui_messages()[0]["content"].startswith("q0")
     assert memory.messages()[-1]["content"].startswith("a7")
     live = [m["content"] for m in tail]
     assert "q0 nest speaker" not in live
-    assert live[-1].startswith("a7")
+    assert not any(c.startswith("a") for c in live)
     memory.maybe_roll(extra_tokens=0, budget_tokens=10_000_000)
     memory.append_message("user", "tiny")
     memory.append_message("assistant", "yep")
@@ -141,6 +142,40 @@ def test_recall_prefers_memories(tmp_path: Path, monkeypatch) -> None:
     memory.add_memory("who is talking · three hosts on udp", kind="highlight")
     hits = memory.recall("printer on the guest ssid")
     assert hits and "printer" in hits[0]
+
+
+def test_facts_window_slides_to_token_budget(tmp_path: Path, monkeypatch) -> None:
+    _iso(tmp_path, monkeypatch)
+    memory.add_memory("the nest speaker is in the kitchen", kind="memory")
+    for i in range(12):
+        memory.add_memory(f"turn {i} · nest cam was loud at {i} Mbps on the guest ssid", kind="highlight")
+    tight = memory.facts_window(query="nest kitchen", max_tokens=80)
+    assert tight.startswith("Facts (outcomes to reuse")
+    assert "kitchen" in tight
+    assert memory.estimate_tokens(tight) <= 80
+    wide = memory.facts_window(query="nest", max_tokens=400)
+    assert memory.estimate_tokens(wide) <= 400
+    assert wide.count("- ") >= tight.count("- ")
+    injected = memory.inject_block("kitchen")
+    assert injected.startswith("\nFacts")
+    memory.append_message("user", "who is loud?")
+    memory.append_message("assistant", "the nest cam · thinking leftover", thinking="long chain of thought about bitrate")
+    tail = memory.ollama_tail()
+    assert tail == [{"role": "user", "content": "who is loud?"}]
+    assert "thinking leftover" not in json.dumps(tail)
+    memory.harvest(
+        "make a pulse view",
+        "```yaml plugin.yml\nid: pulse\nname: Pulse\nversion: 1\n```\n```settings\n{\"theme\":\"ember\"}\n```\nready",
+        redact=False,
+    )
+    facts = memory.facts_window(query="pulse", max_tokens=256)
+    assert "built plugin pulse" in facts
+    assert "changed theme" in facts
+    memory.add_memory("operator is andrew", kind="memory")
+    memory.clear_conversation()
+    kinds = {m["kind"] for m in memory.list_memories()}
+    assert "highlight" not in kinds
+    assert any("andrew" in m["text"] or "kitchen" in m["text"] for m in memory.list_memories(kind="memory"))
 
 
 def test_corrupt_files_are_empty(tmp_path: Path, monkeypatch) -> None:

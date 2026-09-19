@@ -1,0 +1,4 @@
+id: tetris
+name: Tetris
+version: 1
+hint: 3D well. Packets drop as protocol-coloured tetrominoes. Gravity follows packet rate. Visual only.

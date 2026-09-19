@@ -1316,7 +1316,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Agent thinking streams on the overlay even when source is traffic. Text size scales the ticker; transcript stays on the latest line unless you scroll up. Header switch or F.</div>`;
+      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Agent thinking streams on the overlay even when source is traffic. Agent conversation always pins to the latest line. Header switch or F.</div>`;
     const on = new Toggle({
       label: "show overlay",
       title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",

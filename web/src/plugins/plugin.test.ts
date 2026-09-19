@@ -352,6 +352,12 @@ describe("visualisation.yml", () => {
     const doom = compilePlugin({ id: "doom", name: "Doom", version: 1, engine: "doom" });
     expect(doom.arcadeId).toBe("doom");
     expect(doom.standalone).toBe(true);
+    for (const engine of ["waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal"] as const) {
+      const mode = compilePlugin({ id: engine, name: engine, version: 1, engine });
+      expect(mode.arcadeId).toBe(engine);
+      expect(mode.standalone).toBe(true);
+      expect(mode.kind).toBe("arcade");
+    }
   });
 
   it("rejects unknown visualisation.engine", () => {

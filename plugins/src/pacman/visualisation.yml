@@ -1,0 +1,5 @@
+engine: pacman
+look:
+  theme: neon
+  backdrop: none
+  themeCycle: "off"

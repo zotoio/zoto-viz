@@ -421,7 +421,7 @@ export class ProfileStore {
 
     if (!opts.online) {
       if (!existing) {
-        flash(this.bar, `Ollama is offline — no saved profile for ${model}.`);
+        flash(this.bar, `Agent backend is offline — no saved profile for ${model}.`);
         return "none";
       }
       if (!this.available) {

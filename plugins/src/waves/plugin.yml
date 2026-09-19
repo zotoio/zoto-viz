@@ -1,0 +1,4 @@
+id: waves
+name: Waves
+version: 1
+hint: 3D ocean. Gateway lighthouse, this host a ship, LAN buoys, internet islands. Sea state follows packet rate.

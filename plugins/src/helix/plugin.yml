@@ -1,0 +1,4 @@
+id: helix
+name: Helix
+version: 1
+hint: Rotating double-helix graph. Devices as nucleotide models; packets zipper the rungs.

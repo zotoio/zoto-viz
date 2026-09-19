@@ -133,7 +133,8 @@ and skipped; it does not take down capture. Changes to the monitor's own
 `service/*.py` still need a process restart.
 
 A plugin reuses a shipped `engine` (`graph` needs `base`; arcade engines
-include `netpong`, `invaders`, `command`, `frogger`, `cpupong`, `doom`).
+include `netpong`, `invaders`, `command`, `frogger`, `cpupong`, `doom`,
+`waves`, `orbits`, `helix`, `skyline`, `pacman`, `tetris`, `portal`).
 Optional `look` pins theme/sky/floor for that view — the settings drawer shows
 those pins under **This view**, along with `options` / `config`, arcade knobs, and a per-view **prompt** (stored on the active profile; prefixes AI Dynamic and rebuilds it after a short pause).
 The cog next to the view menu opens that tab. Network and system visibility live under

@@ -22,12 +22,14 @@ Host must be loopback (unless `--insecure-lan`). Browser `Origin` must also be l
 | `GET/PUT/POST /api/sources` | Host RSS / HTTPS / local-file registry (`~/.zoto-viz/sources.yml`) |
 | `PUT/DELETE /api/sources/{id}` | Upsert or remove one source |
 | `GET/POST /mcp` | loopback MCP. Tools: `list_features`, `get_settings`, `set_settings`, `list_plugins`, `set_plugin`, `set_view`, `set_agent`, `roll_dice`, `get_state`, `get_traffic`, `get_rf_watch`, `set_rf_watch`, `consent_plugin`, `draft_plugin`, `list_profiles`, `apply_profile`, `list_memories`, `add_memory`, `delete_memory`, `list_sources`, `set_source`, `delete_source`, `install_plugin_zip`, `publish_local_plugin`. CSRF skipped; Host still loopback. Settings/plugin patches land on the open UI via WebSocket `live` |
-| `GET /api/ai/status` | Ollama reachability plus current temper/weather |
+| `GET /api/ai/status` | Ollama reachability + installed/popular catalog (size/VRAM) + Cursor SDK models; temper/weather |
+| `POST /api/ai/ollama/pull` | `{name}` stream `ollama pull` (loopback) |
+| `GET/PUT/DELETE /api/ai/cursor` | Cursor API key (`~/.zoto-viz/cursor-key`; `CURSOR_API_KEY` env wins) |
 | `GET/PUT /api/ai/control` | server-side AI Control (`~/.zoto-viz/ai-control`; env `ZOTO_VIZ_AI_CONTROL` wins) |
 | `GET/PUT /api/ai/temper` | `{temper: 0–100, weather: hush\|drift\|pulse\|storm}` — Agent craziness + AI Dynamic rebuild odds |
-| `POST /api/ai/chat` | streaming chat (loopback → Ollama, `think` off); persists the turn under `~/.zoto-viz/agent/`. Optional `view: { hud }` — a packed on-screen HUD (short keys, no JPEG) is injected into the system prompt. When the live window would overflow Ollama's default context, a **new session** starts (memories still inject; no session brief). The UI transcript stays one log. A stall or truncated thought is polled with silent continues (not stored as a user turn) until a reply or two nudges. `{ poll: true }` is a UI retry that does not append another user line |
+| `POST /api/ai/chat` | streaming chat. `{backend: "ollama"\|"cursor", model}`. Ollama is loopback `think` off; Cursor SDK runs `@cursor/sdk` with MCP `publish_local_plugin`. Persists under `~/.zoto-viz/agent/`. Optional `view: { hud }`. Prompts carry a token-capped **Facts** window (outcomes + memories; `ZOTO_VIZ_FACTS_TOKENS`), not prior CoT. Overflow starts a **new session**. `{ poll: true }` is a UI retry that does not append another user line |
 | `GET /api/ai/history` | last ~80 turns (`thinking` when the model produced chain of thought) |
-| `DELETE /api/ai/history` | clear the transcript (memories stay) |
+| `DELETE /api/ai/history` | clear the transcript and outcome facts (curated memories stay) |
 | `GET/POST/DELETE /api/ai/memories` | curated memories for later lookup (`POST {text}`, `DELETE {id}`) |
 | `POST /api/ai/plugin` | validate `{files, install}` (legacy `yaml` → `plugin.yml`); write `plugins/src/<id>/` only when server AI Control is on and `install` is true. Never packs or git-commits |
 | `POST /api/ai/plugin/local` | `{zip_b64 \| files \| description}` → `~/.zoto-viz/plugins/local/<id>.zip`; hot-load and activate when the zip is YAML-only or already consented |

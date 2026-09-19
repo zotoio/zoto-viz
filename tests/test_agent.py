@@ -32,6 +32,23 @@ def test_model_rejects_junk() -> None:
     assert agent._model({"model": "gemma4:e4b"}) == "gemma4:e4b"
     assert agent._model({"model": "../../etc"}) == "gemma4"
     assert agent._model({}) == "gemma4"
+    assert agent._backend({"backend": "cursor"}) == "cursor"
+    assert agent._backend({}) == "ollama"
+    assert agent._model({"backend": "cursor", "model": "grok-4.5"}) == "grok-4.5"
+    assert agent._model({"backend": "cursor", "model": "../../x"}) == "grok-4.5"
+
+
+def test_flatten_prompt_for_cursor() -> None:
+    system, prompt = agent._flatten_prompt([
+        {"role": "system", "content": "You are zoto."},
+        {"role": "user", "content": "who is loud"},
+        {"role": "assistant", "content": "nest"},
+        {"role": "user", "content": "again"},
+    ])
+    assert system == "You are zoto."
+    assert "User: who is loud" in prompt
+    assert "Assistant: nest" in prompt
+    assert prompt.endswith("User: again")
 
 
 def test_match_model_expands_short_tag() -> None:
@@ -221,6 +238,8 @@ def test_system_drafts_unified_plugin_tree() -> None:
     assert "runtime: typescript" not in prompt
     assert "physics field" in prompt
     assert "eases palettes and physics" in prompt
+    assert "Facts window" in prompt
+    assert "Chain of thought" in prompt
 
 
 def test_api_draft_plugin(tmp_path, monkeypatch) -> None:
@@ -331,7 +350,9 @@ def test_last_user_and_chat_messages(tmp_path, monkeypatch) -> None:
     assert "kitchen" in built[0]["content"]
     assert "Temper" in built[0]["content"]
     assert "Weather" in built[0]["content"]
-    assert built[-1]["content"] == "kitchen speaker"
+    assert built[-1]["role"] == "user"
+    assert built[-1]["content"] == "who is the nest?"
+    assert not any(m.get("role") == "assistant" for m in built[1:])
     monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "empty-agent")
     fallback = agent._chat_messages(
         [{"role": "user", "content": "hi there nest"}],
@@ -412,7 +433,9 @@ def test_chat_messages_rolls_old_turns(tmp_path, monkeypatch) -> None:
     )
     assert not any(str(m.get("content") or "").startswith("Session brief") for m in built)
     assert memory.ui_messages()[0]["content"].startswith("q0")
-    assert built[-1]["content"].startswith("a7") or built[-1]["content"].startswith("q7")
+    assert built[-1]["role"] == "user"
+    assert built[-1]["content"].startswith("q7")
+    assert not any(str(m.get("content") or "").startswith("a7") for m in built)
 
 
 class _Chunks:

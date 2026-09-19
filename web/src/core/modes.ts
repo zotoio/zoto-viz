@@ -974,6 +974,104 @@ export const doom: ViewMode = {
   ],
 };
 
+/** 3D ocean: devices as craft, packet rate as sea state. Rendered by waves.ts. */
+export const waves: ViewMode = {
+  id: "waves",
+  label: "Waves",
+  standalone: true,
+  hint: "The LAN as a 3D sea. The gateway is a lighthouse, this host a ship, other devices buoys and distant islands. Gerstner waves rise with packet rate; each burst leaves a splash. Drag to orbit, scroll to zoom.",
+  legend: () => [
+    { color: css(ROLE_COLOR.gateway), label: "lighthouse · gateway" },
+    { color: css(ROLE_COLOR.self), label: "ship · this host" },
+    { color: css(ROLE_COLOR.lan), label: "buoy · LAN device" },
+    { color: css(ROLE_COLOR.internet), label: "island · internet host" },
+  ],
+};
+
+/** 3D orbital graph: gateway sun, satellites and outer planets. Rendered by orbits.ts. */
+export const orbits: ViewMode = {
+  id: "orbits",
+  label: "Orbits",
+  standalone: true,
+  hint: "An animated solar-system graph. The gateway is the sun; LAN devices are detailed satellites on inner rings; internet hosts are outer planets. Packets streak as sparks between orbits. Drag to inspect the models.",
+  legend: () => [
+    { color: css(ROLE_COLOR.gateway), label: "sun · gateway" },
+    { color: css(ROLE_COLOR.lan), label: "satellite · LAN" },
+    { color: css(ROLE_COLOR.internet), label: "planet · internet" },
+    { color: "#ffc107", label: "spark · packet", line: true },
+  ],
+};
+
+/** 3D double-helix graph: devices as nucleotides, packets zipper the rungs. Rendered by helix.ts. */
+export const helix: ViewMode = {
+  id: "helix",
+  label: "Helix",
+  standalone: true,
+  hint: "A rotating double helix. Each device is a nucleotide model; rungs span the two strands. Packets walk the backbone as glowing charges. Busier talkers sit larger on the strand.",
+  legend: () => [
+    { color: css(ROLE_COLOR.lan), label: "nucleotide · device" },
+    { color: "#eceff1", label: "rung · pair", line: true },
+    { color: "#00acc1", label: "charge · packet" },
+  ],
+};
+
+/** 3D skyline graph: talkers as towers. Rendered by skyline.ts. */
+export const skyline: ViewMode = {
+  id: "skyline",
+  label: "Skyline",
+  standalone: true,
+  hint: "An animated city of talkers. Each device is a detailed tower; height follows current rate and historic packets. New packets launch light from the roof. Drag around the block.",
+  legend: () => [
+    { color: css(ROLE_COLOR.gateway), label: "tower · gateway" },
+    { color: css(ROLE_COLOR.lan), label: "tower · LAN talker" },
+    { color: css(ROLE_COLOR.internet), label: "tower · internet" },
+    { color: "#ffee58", label: "roof pulse · packet" },
+  ],
+};
+
+/** 3D Pac-Man maze: this host eats pellets (packets); talkers are ghosts. Rendered by pacman.ts. */
+export const pacman: ViewMode = {
+  id: "pacman",
+  label: "Pac-Man",
+  standalone: true,
+  hint: "A 3D maze built from beveled wall modules. Pac-Man is this host; ghosts are the busiest talkers; pellets spawn from live packets. The camera follows the mouth. Drag to look around the set.",
+  legend: () => [
+    { color: "#ffee58", label: "Pac-Man · this host" },
+    { color: "#ef5350", label: "ghost · talker" },
+    { color: "#fff8e1", label: "pellet · packet" },
+    { color: "#1565c0", label: "wall" },
+  ],
+};
+
+/** 3D Tetris well: protocols drop as tetrominoes. Rendered by tetris.ts. */
+export const tetris: ViewMode = {
+  id: "tetris",
+  label: "Tetris",
+  standalone: true,
+  hint: "A glass 3D well. Each packet becomes a bevelled tetromino coloured by protocol. Gravity follows packet rate; a full row clears. The stack is visual only — it never drops a flow.",
+  legend: () => [
+    { color: "#42a5f5", label: "TLS" },
+    { color: "#ffee58", label: "DNS" },
+    { color: "#66bb6a", label: "HTTP" },
+    { color: "#ab47bc", label: "QUIC" },
+    { color: "#ef5350", label: "SSH" },
+  ],
+};
+
+/** 3D Portal chambers: LAN and internet linked by orange/blue rings. Rendered by portal.ts. */
+export const portal: ViewMode = {
+  id: "portal",
+  label: "Portal",
+  standalone: true,
+  hint: "Two test chambers. LAN on the left (orange portal), internet on the right (blue). Packets cross as energy orbs; devices are turrets and companion cubes. Drag to walk the set with the camera.",
+  legend: () => [
+    { color: "#ff6d00", label: "orange portal · into the internet" },
+    { color: "#29b6f6", label: "blue portal · back to the LAN" },
+    { color: "#f48fb1", label: "companion cube · gateway" },
+    { color: "#90a4ae", label: "turret · device" },
+  ],
+};
+
 /** Comma-separated watch list from the plugin cog → SSIDs, in order, without blanks or repeats. */
 export function parseWatchList(raw: string | undefined): string[] {
   const out: string[] = [];
@@ -1222,7 +1320,10 @@ export const GRAPH_BASES: ViewMode[] = [
   { ...cores, id: "cpu", label: "CPU" },
 ];
 /** Arcade engines plugins may wrap (`engine: doom` → arcadeId). Not live menu rows. */
-export const ARCADE_ENGINES: ViewMode[] = [netpong, invaders, command, frogger, cpupong, doom];
+export const ARCADE_ENGINES: ViewMode[] = [
+  netpong, invaders, command, frogger, cpupong, doom,
+  waves, orbits, helix, skyline, pacman, tetris, portal,
+];
 
 let pluginModes: ViewMode[] = [];
 

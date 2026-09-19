@@ -14,13 +14,17 @@ from . import paths
 
 CONV_MAX = 200
 UI_MAX = 80
-OLLAMA_TAIL = 12
-ROLL_KEEP = 4
+# Prompt tail is the current user turn only. Older prose is not replayed.
+OLLAMA_TAIL = 2
+ROLL_KEEP = 1
 ROLL_SUMMARY_CAP = 1400
 OLLAMA_MSG_CAP = 600
 OLLAMA_LAST_CAP = 2000
 MEMORY_MAX = 50
 HIGHLIGHT_MAX = 40
+FACTS_MAX_TOKENS = 384
+FACTS_MIN_TOKENS = 64
+FACTS_MAX_TOKENS_CAP = 2048
 INJECT_CHARS = 900
 CONTENT_MAX = 8000
 HIGHLIGHT_LINE = 160
@@ -170,18 +174,23 @@ def _through(rows: list[Any], rolls: list[dict[str, Any]]) -> int:
 
 
 def ollama_tail() -> list[dict[str, str]]:
+    """Current user turn only. Prior assistant prose and CoT stay on the feed, not in the prompt."""
     with _LOCK:
         data = _read_json(conversation_file())
         rows = data.get("messages") if isinstance(data.get("messages"), list) else []
         rolls = _rolls_of(data)
         through = _through(rows, rolls)
     live = [m for m in rows[through:] if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
-    live = live[-OLLAMA_TAIL:]
-    out: list[dict[str, str]] = []
-    for i, m in enumerate(live):
-        cap = OLLAMA_LAST_CAP if i == len(live) - 1 else OLLAMA_MSG_CAP
-        out.append({"role": str(m["role"]), "content": str(m.get("content") or "")[:cap]})
-    return out
+    last_user = ""
+    for m in reversed(live):
+        if m.get("role") != "user":
+            continue
+        last_user = str(m.get("content") or "").strip()
+        if last_user:
+            break
+    if not last_user:
+        return []
+    return [{"role": "user", "content": last_user[:OLLAMA_LAST_CAP]}]
 
 
 def maybe_roll(
@@ -266,6 +275,12 @@ def append_message(role: str, content: str, *, thinking: str = "") -> None:
 def clear_conversation() -> None:
     with _LOCK:
         _write_json(conversation_file(), {"messages": [], "rolls": []})
+        data = _read_json(memories_file())
+        rows = [
+            m for m in (data.get("memories") or [])
+            if isinstance(m, dict) and str(m.get("kind") or "memory") != "highlight"
+        ]
+        _save_memories(rows)
 
 
 def list_memories(*, kind: str | None = None) -> list[dict[str, Any]]:
@@ -394,12 +409,54 @@ def recall(query: str, limit: int = 8) -> list[str]:
     return picked[:limit]
 
 
-def inject_block(query: str) -> str:
-    lines = recall(query)
+def facts_token_budget() -> int:
+    raw = os.environ.get("ZOTO_VIZ_FACTS_TOKENS", "").strip()
+    if raw:
+        try:
+            return max(FACTS_MIN_TOKENS, min(FACTS_MAX_TOKENS_CAP, int(raw)))
+        except ValueError:
+            pass
+    return FACTS_MAX_TOKENS
+
+
+def facts_window(*, query: str = "", max_tokens: int | None = None) -> str:
+    """Sliding outcome window for the next prompt. CoT is not included."""
+    budget = facts_token_budget() if max_tokens is None else int(max_tokens)
+    budget = max(FACTS_MIN_TOKENS, min(FACTS_MAX_TOKENS_CAP, budget))
+    mems = list_memories(kind="memory")
+    highs = list_memories(kind="highlight")
+    q = _tokens(query)
+
+    def rank(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return sorted(
+            rows,
+            key=lambda m: (len(q & _tokens(m["text"])) if q else 0, float(m["t"] or 0)),
+            reverse=True,
+        )
+
+    header = "Facts (outcomes to reuse; not a transcript):\n"
+    used = estimate_tokens(header)
+    lines: list[str] = []
+    seen: set[str] = set()
+    for m in rank(mems) + rank(highs):
+        n = _norm(m["text"])
+        if n in seen:
+            continue
+        line = f"- {m['text']}"
+        cost = estimate_tokens(line) + 1
+        if used + cost > budget:
+            continue
+        seen.add(n)
+        lines.append(line)
+        used += cost
     if not lines:
         return ""
-    body = "\n".join(f"- {x}" for x in lines)
-    return ("\nMemories (facts to reuse; do not invent beyond these):\n" + body)[:INJECT_CHARS]
+    return (header + "\n".join(lines))[: max(INJECT_CHARS, budget * 4)]
+
+
+def inject_block(query: str, *, max_tokens: int | None = None) -> str:
+    body = facts_window(query=query, max_tokens=max_tokens)
+    return ("\n" + body) if body else ""
 
 
 def _memory_texts_from_fence(blob: str) -> list[str]:
@@ -427,7 +484,7 @@ def _memory_texts_from_fence(blob: str) -> list[str]:
 
 
 def harvest(user: str, assistant: str, *, redact: bool = False) -> list[dict[str, Any]]:
-    """Save explicit memories, forget matches, and a one-line transcript highlight."""
+    """Save explicit memories, forget matches, and a one-line outcome fact (not CoT)."""
     added: list[dict[str, Any]] = []
     user_text = _scrub(user, redact).strip()
     reply = _scrub(assistant, redact).strip()
@@ -453,7 +510,7 @@ def harvest(user: str, assistant: str, *, redact: bool = False) -> list[dict[str
         row = add_memory(text, kind="memory", redact=redact)
         if row:
             added.append(row)
-    highlight = _highlight_line(user_text, reply)
+    highlight = _outcome_line(user_text, reply)
     if highlight:
         row = add_memory(highlight, kind="highlight", redact=redact)
         if row:
@@ -461,16 +518,38 @@ def harvest(user: str, assistant: str, *, redact: bool = False) -> list[dict[str
     return added
 
 
-def _highlight_line(user: str, assistant: str) -> str:
+_PLUGIN_FENCE = re.compile(r"```[^\n]*plugin\.yml[^\n]*\n([\s\S]+?)```", re.I)
+_PLUGIN_ID = re.compile(r"(?:^|\n)\s*id:\s*([A-Za-z0-9][A-Za-z0-9_-]{1,40})")
+_SETTINGS_FENCE = re.compile(r"```settings\n([\s\S]+?)```", re.I)
+
+
+def _outcome_line(user: str, assistant: str) -> str:
+    """One retained fact from a finished turn. Drops fences and reasoning prose."""
     if not user.strip() or not assistant.strip():
         return ""
     if assistant.lower().startswith("chat failed") or assistant.lower().startswith("error"):
         return ""
+    bits: list[str] = []
+    for block in _PLUGIN_FENCE.finditer(assistant):
+        hit = _PLUGIN_ID.search(block.group(1))
+        if hit:
+            bits.append(f"built plugin {hit.group(1)}")
+            break
+    settings = _SETTINGS_FENCE.search(assistant)
+    if settings:
+        try:
+            obj = json.loads(settings.group(1))
+        except json.JSONDecodeError:
+            obj = None
+        if isinstance(obj, dict) and obj:
+            bits.append("changed " + ", ".join(str(k) for k in list(obj)[:6]))
     clean = _FENCE_MEMORY.sub(" ", assistant)
     clean = re.sub(r"```[\s\S]*?```", " ", clean)
+    clean = re.sub(r"<think>[\s\S]*?</think>", " ", clean, flags=re.I)
     clean = re.sub(r"\s+", " ", clean).strip()
-    if len(clean) < 12:
+    if clean and len(clean) >= 12:
+        bits.append(clean[:100])
+    if not bits:
         return ""
     u = re.sub(r"\s+", " ", user).strip()
-    line = f"{u[:70]} · {clean[:80]}"
-    return line[:HIGHLIGHT_LINE]
+    return f"{u[:70]} · {'; '.join(bits)}"[:HIGHLIGHT_LINE]
