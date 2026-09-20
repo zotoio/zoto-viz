@@ -2,8 +2,9 @@
 
 HTTPS only, public addresses only, size-capped. Used when the local model
 emits ```photo / ```svg fences (AI Control required). The byte cap is a
-disk / fetch bound, not a visual quality target — 24 MB fits NASA IOTD /
-APOD originals (often 2–19 MB) that the old 1.5 MB cap rejected.
+disk / fetch bound, not a visual quality target — 24 MB fits large public
+stills (often 2–19 MB) that the old 1.5 MB cap rejected. NASA IOTD / APOD
+stills stay on carousel plugin views, not graph decorations.
 """
 from __future__ import annotations
 

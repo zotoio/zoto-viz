@@ -163,6 +163,7 @@ export function diceFeedBound(cfg: DiceConfig = DEFAULT_DICE): Bound {
 /** Operational / free-text knobs the dice leaves alone (RF watch, prompts, identity). */
 const SKIP_KEYS = new Set([
   VIEW_PROMPT_KEY, "watch", "dwell", "ssid", "ssids", "source", "target", "pattern",
+  "pick", "stills", "grid",
 ]);
 
 const ANIM_NUM_MOTION: [keyof DreamAnim, Bound][] = [

@@ -70,7 +70,7 @@ describe("Settings panes", () => {
     expect(dicePane?.textContent).toMatch(/Guardian/);
     s.bindView(null);
     const pluginPane = s.el.querySelector('[data-pane="view"]');
-    expect(pluginPane?.textContent).toMatch(/The cog next to the view menu opens this tab/);
+    expect(pluginPane?.textContent).toMatch(/The cog next to the view menu or on a mosaic tile opens this tab/);
     expect(pluginPane?.textContent).toMatch(/Network and system visibility live under Graph/);
     expect(pluginPane?.textContent).toMatch(/Host and subnet filters live under Privacy/);
   });
@@ -126,5 +126,38 @@ describe("Settings panes", () => {
     expect(s.isOpen).toBe(false);
     expect(cog.getAttribute("aria-expanded")).toBe("false");
     host.remove();
+  });
+
+  it("puts mosaic pane pickers on This view", () => {
+    const s = new Settings({ storePrefix: "zoto-viz-mosaic-view", onChange: () => {} });
+    s.addAnimation(() => {}, { el: document.createElement("div") });
+    const view = s.el.querySelector('[data-pane="view"]');
+    expect(view?.textContent).toMatch(/Wall/);
+    expect(view?.textContent).toMatch(/1×/);
+    expect(view?.textContent).toMatch(/hero/);
+    expect(s.el.querySelector('[data-pane="motion"]')?.textContent).not.toMatch(/assign a view to every pane/);
+    s.bindView({ id: "nest-cams", name: "Nest cams", version: 1, engine: "graph" });
+    const thisView = s.el.querySelector('[data-pane="view"]');
+    expect(thisView?.textContent).toMatch(/View/);
+    expect(thisView?.textContent).toMatch(/Wall/);
+    expect(thisView?.querySelector(".mosaic-settings")).toBeTruthy();
+    expect(thisView?.querySelector('[data-layer="view"]')).toBeTruthy();
+    expect(thisView?.querySelector('[data-layer="pack"]')?.textContent).toMatch(/Plugin pack/);
+  });
+
+  it("opens This view from a pane cog and marks that pane row", () => {
+    const s = new Settings({ storePrefix: "zoto-viz-pane-cog", onChange: () => {} });
+    s.addAnimation(() => {}, { el: document.createElement("div") });
+    s.applyAnim({
+      ...s.animSettings,
+      mosaic: "4",
+      mosaicTiles: ["plugin:cores", "plugin:memory", "plugin:disk", "plugin:gpu"],
+    });
+    s.openView("plugin:memory");
+    expect(s.isOpen).toBe(true);
+    expect(s.viewFocus).toBe("plugin:memory");
+    expect(s.el.querySelector('.mosaic-pane-row[data-pane="plugin:memory"]')?.classList.contains("focus")).toBe(true);
+    s.openView("plugin:memory");
+    expect(s.isOpen).toBe(false);
   });
 });

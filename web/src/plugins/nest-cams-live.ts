@@ -1,33 +1,47 @@
 import { apiFetch } from "../core/http";
 import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
+import {
+  gridCameras,
+  nestCamCaption,
+  nestEventForPick,
+  nestIdleNote,
+  nestShowEventTiles,
+  nestStillSrc,
+  nestStreamFailover,
+  parseNestLook,
+  sdmSyncKey,
+  streamableCameras,
+  type NestLook,
+  type SdmDevice,
+  type SdmEvent,
+  type SdmStatus,
+} from "./nest-cams-look";
+import { paintNestCamControls, type NestCamPatch } from "./nest-cams-ui";
+import { makeViewCogButton } from "../ui/view-cog";
 
-export type SdmDevice = {
-  id: string;
-  label: string;
-  room?: string;
-  type?: string;
-  camera?: boolean;
-  webrtc?: boolean;
-};
-
-export type SdmEvent = {
-  ts?: string;
-  device?: string;
-  kinds?: string[];
-  event_id?: string;
-};
-
-export type SdmStatus = {
-  linked?: boolean;
-  pcm_url?: string | null;
-  error?: string;
-  devices?: SdmDevice[];
-  events?: SdmEvent[];
-  client_id?: string;
-  enterprise_id?: string;
-};
-
-export type NestLook = { live: boolean; pick: string; grid: number };
+export {
+  clampNestGrid,
+  firstCamera,
+  gridCameras,
+  nestCamCaption,
+  nestCamHint,
+  nestEventForPick,
+  nestGridToken,
+  nestIdleNote,
+  nestPaneCap,
+  nestPickPressed,
+  nestShowEventTiles,
+  nestStillSrc,
+  nestStreamFailover,
+  parseNestLook,
+  parsePicks,
+  sdmSyncKey,
+  streamableCameras,
+  toggleNestPick,
+  NEST_GRID_MAX,
+  NEST_LAYOUTS,
+} from "./nest-cams-look";
+export type { NestLook, SdmDevice, SdmEvent, SdmStatus } from "./nest-cams-look";
 
 type NestPane = {
   cam: SdmDevice;
@@ -38,88 +52,6 @@ type NestPane = {
   sessionId: string;
   extendTimer: number;
 };
-
-export function nestStillSrc(device: string, event: string): string {
-  return `/api/sdm/still?device=${encodeURIComponent(device)}&event=${encodeURIComponent(event)}`;
-}
-
-export function streamableCameras(devices: SdmDevice[] | undefined): SdmDevice[] {
-  return (devices ?? []).filter((d) => d.camera !== false && d.type !== "display" && d.webrtc !== false);
-}
-
-export function nestCamCaption(cam: SdmDevice): string {
-  return cam.room && cam.room !== cam.label ? `${cam.label} · ${cam.room}` : cam.label;
-}
-
-export function parsePicks(pick: string): string[] {
-  return pick.split(",").map((s) => s.trim()).filter(Boolean);
-}
-
-export function clampNestGrid(raw: string | undefined): number {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return 4;
-  return Math.min(6, Math.max(1, Math.round(n)));
-}
-
-export function parseNestLook(cfg: Record<string, string> | undefined): NestLook {
-  const live = cfg?.live !== "0" && cfg?.live !== "false";
-  return { live, pick: (cfg?.pick ?? "").trim(), grid: clampNestGrid(cfg?.grid) };
-}
-
-/** Event stills sit under a 1-pane live view, or replace the wall when live is off. */
-export function nestShowEventTiles(live: boolean, grid: number): boolean {
-  return !live || grid < 2;
-}
-
-export function nestIdleNote(live: boolean, events: SdmEvent[]): string {
-  if (live) return "";
-  if (events.some((e) => e.device && e.event_id)) return "";
-  return "Live stream off. No recent motion stills.";
-}
-
-export function sdmSyncKey(sdm: SdmStatus | undefined, look: NestLook): string {
-  return JSON.stringify({
-    linked: sdm?.linked,
-    pcm_url: sdm?.pcm_url,
-    error: sdm?.error,
-    devices: sdm?.devices,
-    events: sdm?.events,
-    live: look.live,
-    pick: look.pick,
-    grid: look.grid,
-  });
-}
-
-export function firstCamera(devices: SdmDevice[] | undefined, pick: string): SdmDevice | null {
-  return gridCameras(devices, pick, 1)[0] ?? null;
-}
-
-/** Fill up to `grid` panes: named picks first (comma-separated), then remaining streamable cameras. */
-export function gridCameras(devices: SdmDevice[] | undefined, pick: string, grid: number): SdmDevice[] {
-  const n = Math.min(6, Math.max(0, Math.round(grid)));
-  if (n <= 0) return [];
-  const rows = devices ?? [];
-  const used = new Set<string>();
-  const out: SdmDevice[] = [];
-  for (const want of parsePicks(pick)) {
-    const hit = rows.find((d) => d.id === want || d.label === want);
-    if (!hit || used.has(hit.id)) continue;
-    used.add(hit.id);
-    out.push(hit);
-    if (out.length >= n) return out;
-  }
-  for (const cam of streamableCameras(rows)) {
-    if (used.has(cam.id)) continue;
-    used.add(cam.id);
-    out.push(cam);
-    if (out.length >= n) break;
-  }
-  return out;
-}
-
-export function nestStreamFailover(err: string): boolean {
-  return /not available for streaming|internal error|unavailable|rate.?limit|try again/i.test(err);
-}
 
 function sdpLines(sdp: string): { lines: string[]; nl: string } {
   const nl = sdp.includes("\r\n") ? "\r\n" : "\n";
@@ -203,61 +135,96 @@ async function gatherOffer(pc: RTCPeerConnection): Promise<string> {
 /** Stage-only labeled camera wall + WebRTC panes. Same-origin SDP exchange; ICE is browser-to-Nest. */
 export class NestCamsLive {
   readonly el: HTMLElement;
+  onChange: ((patch: NestCamPatch) => void) | null = null;
+  onSettings: ((camId?: string) => void) | null = null;
+  private readonly bar: HTMLElement;
   private readonly wall: HTMLElement;
   private readonly status: HTMLElement;
   private readonly tiles: HTMLElement;
   private panes: NestPane[] = [];
   private active = false;
   private liveOn = true;
+  private stillsOn = false;
   private pick = "";
-  private grid = 4;
+  private grid = 0;
   private devices: SdmDevice[] = [];
+  private sdm: SdmStatus | undefined;
   private lastJson = "";
   private connecting = false;
+  private queued: SdmDevice[] | null = null;
   private wallKey = "";
+  private readonly host: HTMLElement;
 
   constructor(host: HTMLElement) {
+    this.host = host;
     this.el = document.createElement("section");
     this.el.id = "nest-cams";
     this.el.hidden = true;
     this.el.innerHTML = `
+      <div class="nest-cams-bar"></div>
       <div class="nest-cams-wall" data-count="0"></div>
       <div class="nest-cams-status" hidden></div>
       <div class="nest-cams-tiles"></div>`;
+    this.bar = this.el.querySelector(".nest-cams-bar")!;
     this.wall = this.el.querySelector(".nest-cams-wall")!;
     this.status = this.el.querySelector(".nest-cams-status")!;
     this.tiles = this.el.querySelector(".nest-cams-tiles")!;
-    host.append(this.el);
+    this.attach();
+  }
+
+  /** Mosaic teardown empties `#wall`; put the overlay back when this view is on. */
+  private attach(): void {
+    if (this.el.parentElement !== this.host) this.host.append(this.el);
+  }
+
+  private look(): NestLook {
+    return { live: this.liveOn, stills: this.stillsOn, pick: this.pick, grid: this.grid };
   }
 
   setActive(on: boolean): void {
     this.active = on;
-    if (!on) this.stopAll();
-    this.el.hidden = !on;
+    if (!on) {
+      this.stopAll();
+      this.el.hidden = true;
+      return;
+    }
+    const remount = this.el.parentElement !== this.host;
+    this.attach();
+    this.el.hidden = false;
+    if (remount) {
+      this.lastJson = "";
+      this.sync(this.sdm);
+    }
   }
 
   setLook(cfg: Record<string, string> | undefined): void {
     const look = parseNestLook(cfg);
-    const changed = look.live !== this.liveOn || look.pick !== this.pick || look.grid !== this.grid;
+    const changed = look.live !== this.liveOn || look.stills !== this.stillsOn
+      || look.pick !== this.pick || look.grid !== this.grid;
     this.liveOn = look.live;
+    this.stillsOn = look.stills;
     this.pick = look.pick;
     this.grid = look.grid;
     if (!changed) return;
     this.lastJson = "";
     if (!this.liveOn) this.stopAll();
+    if (this.active) this.sync(this.sdm);
   }
 
   sync(sdm: SdmStatus | undefined): void {
+    this.sdm = sdm;
     if (!this.active) {
       this.el.hidden = true;
       return;
     }
+    this.attach();
     this.el.hidden = false;
-    const look = { live: this.liveOn, pick: this.pick, grid: this.grid };
+    const look = this.look();
     const json = sdmSyncKey(sdm, look);
     if (json === this.lastJson) return;
     this.lastJson = json;
     this.devices = sdm?.devices ?? [];
+    this.paintBar();
     const events = sdm?.events ?? [];
     if (!sdm?.linked) {
       this.status.replaceChildren(renderAuthSetup(AUTH_SETUPS.sdm, { pcmUrl: sdm?.pcm_url }));
@@ -275,10 +242,16 @@ export class NestCamsLive {
     const wanted = this.liveOn ? gridCameras(this.devices, this.pick, this.grid) : [];
     if (sdm.error) this.setNote(sdm.error);
     else this.setNote(nestIdleNote(this.liveOn, events));
-    if (nestShowEventTiles(this.liveOn, this.grid)) this.paintTiles(this.devices, events);
+    if (nestShowEventTiles(this.liveOn, this.stillsOn)) this.paintTiles(this.devices, events);
     else this.tiles.replaceChildren();
     if (wanted.length) void this.ensureWall(wanted);
     else this.stopAll();
+  }
+
+  private paintBar(): void {
+    paintNestCamControls(this.bar, this.look(), this.devices, (patch) => {
+      this.onChange?.(patch);
+    });
   }
 
   dispose(): void {
@@ -295,11 +268,11 @@ export class NestCamsLive {
   private paintTiles(devices: SdmDevice[], events: SdmEvent[]): void {
     this.tiles.replaceChildren();
     for (const ev of events.slice(0, 8)) {
-      if (!ev.device || !ev.event_id) continue;
+      if (!nestEventForPick(ev, devices, this.pick)) continue;
       const fig = document.createElement("figure");
       const img = document.createElement("img");
       img.alt = (ev.kinds ?? []).join(" ") || "event";
-      img.src = nestStillSrc(ev.device, ev.event_id);
+      img.src = nestStillSrc(ev.device!, ev.event_id!);
       const cap = document.createElement("figcaption");
       const dev = devices.find((d) => d.id === ev.device);
       cap.textContent = `${dev?.label ?? ev.device} · ${(ev.kinds ?? []).join(" ")}`;
@@ -318,8 +291,18 @@ export class NestCamsLive {
       video.autoplay = true;
       video.muted = true;
       const cap = document.createElement("figcaption");
-      cap.textContent = nestCamCaption(cam);
-      figure.append(video, cap);
+      cap.textContent = nestCamCaption(cam, this.devices);
+      figure.append(
+        video,
+        cap,
+        makeViewCogButton({
+          className: "mosaic-pane-cog",
+          title: "this camera's view settings",
+          ariaLabel: "this pane settings",
+          pane: cam.id,
+          onClick: () => this.onSettings?.(cam.id),
+        }),
+      );
       this.wall.append(figure);
       return { cam, figure, video, cap, pc: null, sessionId: "", extendTimer: 0 };
     });
@@ -327,10 +310,14 @@ export class NestCamsLive {
   }
 
   private async ensureWall(wanted: SdmDevice[]): Promise<void> {
-    if (this.connecting) return;
+    if (this.connecting) {
+      this.queued = wanted;
+      return;
+    }
     const key = wanted.map((c) => c.id).join("|");
     if (key === this.wallKey && this.panes.length && this.panes.every((p) => p.pc)) return;
     this.connecting = true;
+    this.queued = null;
     try {
       if (key !== this.wallKey) {
         this.stopAll();
@@ -343,9 +330,10 @@ export class NestCamsLive {
           tried.add(pane.cam.id);
           continue;
         }
+        const assigned = new Set(this.panes.filter((p) => p !== pane).map((p) => p.cam.id));
         const extras = this.pick
           ? []
-          : streamableCameras(this.devices).filter((c) => c.id !== pane.cam.id && !tried.has(c.id));
+          : streamableCameras(this.devices).filter((c) => c.id !== pane.cam.id && !tried.has(c.id) && !assigned.has(c.id));
         for (const cam of [pane.cam, ...extras]) {
           if (tried.has(cam.id)) continue;
           tried.add(cam.id);
@@ -362,13 +350,16 @@ export class NestCamsLive {
       }
     } finally {
       this.connecting = false;
+      const again = this.queued;
+      this.queued = null;
+      if (again && this.active && this.liveOn) void this.ensureWall(again);
     }
   }
 
   private async connectPane(pane: NestPane): Promise<string | null> {
     if (pane.pc) return null;
     const deviceId = pane.cam.id;
-    pane.cap.textContent = nestCamCaption(pane.cam);
+    pane.cap.textContent = nestCamCaption(pane.cam, this.devices);
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     pane.pc = pc;
     pc.addTransceiver("audio", { direction: "recvonly" });
@@ -400,7 +391,7 @@ export class NestCamsLive {
       if (!r.ok || !body.answerSdp) {
         if (pane.pc === pc) this.stopPane(pane);
         const err = body.error || `stream ${r.status}`;
-        pane.cap.textContent = `${nestCamCaption(pane.cam)} · ${err}`;
+        pane.cap.textContent = `${nestCamCaption(pane.cam, this.devices)} · ${err}`;
         return err;
       }
       const sid = body.mediaSessionId || "";
@@ -422,7 +413,7 @@ export class NestCamsLive {
       if (pane.pc !== pc || pc.signalingState === "closed") return "aborted";
       this.stopPane(pane);
       const err = e instanceof Error ? e.message : "stream failed";
-      pane.cap.textContent = `${nestCamCaption(pane.cam)} · ${err}`;
+      pane.cap.textContent = `${nestCamCaption(pane.cam, this.devices)} · ${err}`;
       return err;
     }
   }

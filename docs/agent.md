@@ -28,7 +28,7 @@ When Control is on, the model may emit:
 
 - ` ```settings ` JSON — profile fields except camera and microphone (theme, view, show/hide layers, filters, motion/camera/audio/mosaic `anim` including `mosaicTiles` / `mosaicTree` / `mosaicSharedTheme`, feed, chrome, plugins). Webcam and mic stay on Settings → Privacy. Settings → Agent → **AI mosaic layout** (on by default) gates whether the model may resize or rearrange the wall; tile view ids still apply when it is off.
 - ` ```shader ` / ` ```glsl ` — a `vec3 color(vec3 dir, float t)` (or `void main`) fragment. Host uniforms: `uTime`, `uOpacity`, `uBright`, `uAudio`, `uAccent`, `uBg`, `uPhoto`.
-- ` ```photo ` — `https://` image URLs (fetched by the monitor, public addresses only, 12 MB cap so NASA IOTD / APOD originals fit) pinned on the graph.
+- ` ```photo ` — `https://` image URLs (fetched by the monitor, public addresses only, 24 MB cap) pinned on the graph. NASA IOTD / APOD / Earth Observatory stills stay on carousel plugin views and are not pinned here.
 - ` ```svg ` — a small SVG overlay.
 - ` ```deco ` `{"clear":true}` — drop agent decorations and the custom shader.
 

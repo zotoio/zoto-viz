@@ -5,7 +5,7 @@ import { applyFloatRect, bindFloatPanel, readFloatRect } from "./float-drag";
 import { ColorField, GroupedChips, pinFlyout, Slider, Toggle, unpinFlyout } from "./ui";
 import { MAGNET_FIELDS } from "../graph/physics";
 import type { PluginField } from "../core/modes";
-import { assignTiles, equalize, leafIds, parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
+import { assignTiles, equalize, leafIds, nextPaneTiles, parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
 import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FabricKind, type FocusMode, type GraphSpace, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
 import { BACKDROP_OPTIONS, SKY_GROUP_TABS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
 import { invalidateSkyRecipe } from "../graph/sky-ai";
@@ -19,7 +19,8 @@ import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
 import { fillPluginFields } from "../plugins/plugin-ui";
 import type { PluginLook, PluginView } from "../plugins/plugin";
-import { viewSelectOptions } from "../plugins/plugin";
+import type { SdmDevice } from "../plugins/nest-cams-look";
+import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
@@ -32,6 +33,7 @@ import {
   sourceAuthReady,
   type AuthSetup,
 } from "../core/auth-setup";
+import { makeViewCogButton, VIEW_COG_SVG } from "./view-cog";
 
 const PANES: { id: string; label: string }[] = [
   { id: "appearance", label: "Appearance" },
@@ -75,7 +77,30 @@ const FIELDS: FilterField[] = [
   { key: "blockNets", label: "Block IP subnets", kind: "net", placeholder: "192.168.1.20\n10.0.0.0/8" },
 ];
 
-const COG = `<svg viewBox="0 0 20 20" aria-hidden="true" width="16" height="16"><path fill="currentColor" d="M11.4 1.6a1 1 0 0 0-2.8 0l-.2 1.4a6.6 6.6 0 0 0-1.5.6L5.6 2.8a1 1 0 0 0-1.4 0L2.8 4.2a1 1 0 0 0 0 1.4l.9 1.2a6.6 6.6 0 0 0-.6 1.5l-1.5.2a1 1 0 0 0 0 2.8l1.4.2q.2.8.6 1.5l-.9 1.2a1 1 0 0 0 0 1.4l1.4 1.4a1 1 0 0 0 1.4 0l1.2-.9q.7.4 1.5.6l.2 1.5a1 1 0 0 0 2.8 0l.2-1.4q.8-.2 1.5-.6l1.2.9a1 1 0 0 0 1.4 0l1.4-1.4a1 1 0 0 0 0-1.4l-.9-1.2q.4-.7.6-1.5l1.5-.2a1 1 0 0 0 0-2.8l-1.4-.2a6.6 6.6 0 0 0-.6-1.5l.9-1.2a1 1 0 0 0 0-1.4l-1.4-1.4a1 1 0 0 0-1.4 0l-1.2.9a6.6 6.6 0 0 0-1.5-.6zM10 13a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg>`;
+export { makeViewCogButton } from "./view-cog";
+
+function pluginLayer(id: string, title: string, hint: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "plugin-layer";
+  wrap.dataset.layer = id;
+  const h = document.createElement("div");
+  h.className = "sec-title";
+  h.textContent = title;
+  const p = document.createElement("div");
+  p.className = "sec-hint";
+  p.textContent = hint;
+  wrap.append(h, p);
+  return wrap;
+}
+
+function packLayerNames(spec: PluginView): string[] {
+  const layers: string[] = [];
+  if (spec.has_datasource) layers.push("datasource");
+  if (spec.has_backend || spec.service) layers.push("backend");
+  if (spec.has_frontend || spec.has_sky || spec.has_sky_shader) layers.push("frontend");
+  layers.push("view");
+  return layers;
+}
 
 export interface SettingsConfig {
   storePrefix: string;
@@ -144,7 +169,17 @@ export class Settings {
   private readonly navBtns = new Map<string, HTMLButtonElement>();
   private activePane = "graph";
   private viewHost: HTMLDivElement | null = null;
+  private viewMosaicSec: HTMLElement | null = null;
   private viewCog: HTMLButtonElement | null = null;
+  private viewFocusId = "";
+  private nestDevices: SdmDevice[] = [];
+  private nestDeviceKey = "";
+  private viewBind: {
+    spec: PluginView | null;
+    fields?: PluginField[];
+    look?: PluginLook | null;
+    extras?: HTMLElement[];
+  } | null = null;
   private deviceUi: { cam: Toggle; mic: Toggle } | null = null;
   private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
   private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
@@ -181,7 +216,7 @@ export class Settings {
     this.btn.setAttribute("aria-label", "settings");
     this.btn.setAttribute("aria-haspopup", "dialog");
     this.btn.setAttribute("aria-expanded", "false");
-    this.btn.innerHTML = COG;
+    this.btn.innerHTML = VIEW_COG_SVG;
     this.badge = document.createElement("span");
     this.badge.className = "badge";
     this.badge.title = "active filter rules";
@@ -252,27 +287,41 @@ export class Settings {
   }
 
   /** Cog next to the view selector: opens This view (plugin options, config, arcade knobs). */
-  attachViewCog(host: HTMLElement): HTMLButtonElement {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "cog plugin-cog";
-    btn.title = "this view";
-    btn.setAttribute("aria-label", "this view settings");
-    btn.setAttribute("aria-haspopup", "dialog");
-    btn.setAttribute("aria-expanded", "false");
-    btn.innerHTML = COG;
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (this.isOpen && this.activePane === "view") this.close();
-      else this.open("view");
+  attachViewCog(host: HTMLElement, onOpen?: () => void): HTMLButtonElement {
+    const btn = makeViewCogButton({
+      onClick: () => {
+        if (this.isOpen && this.activePane === "view" && !this.viewFocusId) this.close();
+        else {
+          onOpen?.();
+          this.openView();
+        }
+      },
     });
     host.appendChild(btn);
     this.viewCog = btn;
     return btn;
   }
 
+  /** This view for the wall, or for one mosaic / camera pane when `focusId` is set. */
+  openView(focusId?: string): void {
+    const want = focusId ?? "";
+    if (this.isOpen && this.activePane === "view" && this.viewFocusId === want) {
+      this.close();
+      return;
+    }
+    this.viewFocusId = want;
+    this.open("view");
+    this.animUi?.syncTiles();
+  }
+
+  get viewFocus(): string { return this.viewFocusId; }
+
   private syncViewCog(): void {
-    this.viewCog?.setAttribute("aria-expanded", this.isOpen && this.activePane === "view" ? "true" : "false");
+    const on = this.isOpen && this.activePane === "view";
+    this.viewCog?.setAttribute("aria-expanded", on && !this.viewFocusId ? "true" : "false");
+    for (const el of document.querySelectorAll<HTMLElement>(".mosaic-pane-cog")) {
+      el.setAttribute("aria-expanded", on && el.dataset.pane === this.viewFocusId ? "true" : "false");
+    }
   }
 
   private buildFilters(): void {
@@ -365,18 +414,26 @@ export class Settings {
   }
 
   bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null, extras?: HTMLElement[]): void {
+    this.viewBind = { spec, fields, look, extras };
     const host = this.viewHost;
     if (!host) return;
     host.replaceChildren();
+    if (spec) {
+      const layers = packLayerNames(spec);
+      host.append(pluginLayer(
+        "pack",
+        spec.name,
+        `Plugin pack · ${layers.join(" · ")}. Datasource, backend, and frontend are reusable; this tab is the selected view. Wall composes other views.`,
+      ));
+    }
     if (look && Object.keys(look).length) {
-      const pins = document.createElement("div");
-      pins.className = "sec";
-      const h = document.createElement("div");
-      h.className = "sec-title";
-      h.textContent = spec ? `Pinned by ${spec.name}` : "Pinned look";
-      const p = document.createElement("div");
-      p.className = "sec-hint";
-      p.textContent = "This plugin overrides matching Motion / Appearance controls while selected.";
+      const front = pluginLayer(
+        "frontend",
+        "Frontend",
+        spec
+          ? `Look pins from ${spec.name}'s visualisation — they override matching Motion / Appearance controls while this view is selected.`
+          : "Look pins from the plugin pack — they override matching Motion / Appearance controls while selected.",
+      );
       const row = document.createElement("div");
       row.className = "pin-chips";
       for (const [k, v] of Object.entries(look)) {
@@ -386,31 +443,59 @@ export class Settings {
         c.textContent = `${k}: ${String(v)}`;
         row.appendChild(c);
       }
-      pins.append(h, p, row);
-      host.append(pins);
+      front.append(row);
+      host.append(front);
     }
     const extra = extras?.filter(Boolean) ?? [];
     if (spec) {
-      fillPluginFields(host, spec, pluginViewKnobs(spec, fields), (id, values) => {
+      const view = pluginLayer(
+        "view",
+        "View",
+        spec.instanceId && spec.instanceId !== spec.id
+          ? `Instance ${spec.instanceId} of ${spec.id}. Corner cog on a mosaic tile opens that tile's view.`
+          : "This catalog row. Corner cog on a mosaic tile opens that tile's view.",
+      );
+      fillPluginFields(view, spec, pluginViewKnobs(spec, fields), (id, values) => {
         this.onPluginChange?.(id, values);
         this.cfg.onPersist?.();
-      }, { skipEmpty: extra.length > 0 });
-    } else if (!look && !extra.length) {
+      }, { skipEmpty: extra.length > 0, devices: this.nestDevices });
+      if (extra.length) {
+        const sec = document.createElement("div");
+        sec.className = "sec";
+        const row = document.createElement("div");
+        row.className = "sec-controls";
+        for (const el of extra) row.appendChild(el);
+        sec.append(row);
+        const prompt = view.querySelector(".view-prompt");
+        if (prompt) view.insertBefore(sec, prompt);
+        else view.append(sec);
+      }
+      host.append(view);
+    } else if (!look && !extra.length && !this.viewMosaicSec) {
       const empty = document.createElement("div");
       empty.className = "sec";
-      empty.innerHTML = `<div class="sec-title">This view</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
+      empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu or on a mosaic tile opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
       host.append(empty);
     }
-    if (extra.length) {
-      const sec = document.createElement("div");
-      sec.className = "sec";
-      const row = document.createElement("div");
-      row.className = "sec-controls";
-      for (const el of extra) row.appendChild(el);
-      sec.append(row);
-      const prompt = host.querySelector(".view-prompt");
-      if (prompt) host.insertBefore(sec, prompt);
-      else host.append(sec);
+    this.attachViewMosaic();
+  }
+
+  private attachViewMosaic(): void {
+    const host = this.viewHost;
+    const sec = this.viewMosaicSec;
+    if (!host || !sec) return;
+    host.append(sec);
+    this.animUi?.syncTiles();
+  }
+
+  /** Refresh Nest camera chips when Device Access lists devices. */
+  setNestDevices(devices: SdmDevice[]): void {
+    const key = devices.map((d) => d.id).join("|");
+    if (key === this.nestDeviceKey) return;
+    this.nestDeviceKey = key;
+    this.nestDevices = devices;
+    if (this.viewBind?.spec?.id === "nest-cams") {
+      this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
     }
   }
 
@@ -420,8 +505,8 @@ export class Settings {
     if (!host) return;
     host.querySelectorAll(":scope > .auth-setup, :scope > .sec.auth-setup-sec").forEach((n) => n.remove());
     if (!setup) return;
-    const sec = document.createElement("div");
-    sec.className = "sec auth-setup-sec";
+    const sec = pluginLayer("datasource", "Datasource", "Host primitive this view consumes — OAuth, keys, or a collector. Tokens stay on the host.");
+    sec.classList.add("auth-setup-sec");
     sec.appendChild(renderAuthSetup(setup, extra));
     host.prepend(sec);
   }
@@ -858,11 +943,28 @@ export class Settings {
     });
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
-    mosaicHint.textContent = "Corner look / max / close on each tile. One theme paints every tile with the header palette. Drag a tile onto another to swap views (caption, chrome, or drag the view across). Alt-drag picks the tile up. Drag the gutters to resize (saved). Close expands the neighbour.";
+    mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
     const mosaicBtns = document.createElement("div");
     mosaicBtns.className = "sec-links";
     mosaicBtns.append(resetBtn, equalBtn);
-    const focus = chips(FOCUS_MODES, this.anim.focus, (v) => { this.anim.focus = v; this.persistAnim(); });
+    const mosaicBits = document.createElement("div");
+    mosaicBits.className = "look-stack";
+    mosaicBits.append(
+      labeled("views", mosaic.el),
+      labeled("hero", hero.el),
+      labeled("tiles", tileHost),
+      sharedTheme.el,
+      mosaicHint,
+      mosaicBtns,
+    );
+    const viewMosaic = document.createElement("div");
+    viewMosaic.className = "sec mosaic-settings";
+    const mosaicTitle = document.createElement("div");
+    mosaicTitle.className = "sec-title";
+    mosaicTitle.textContent = "Wall";
+    viewMosaic.append(mosaicTitle, mosaicBits);
+    this.viewMosaicSec = viewMosaic;
+    this.attachViewMosaic();
     const labels = new Slider({
       label: "labels", title: "label size and font-weight",
       min: 50, max: 200, step: 5, value: Math.round(this.anim.labelWeight * 100),
@@ -896,6 +998,7 @@ export class Settings {
     const glow = chips(EDGE_GLOWS, this.anim.edgeGlow, (v) => { this.anim.edgeGlow = v; this.persistAnim(); });
     const fabric = chips(FABRIC_OPTIONS, this.anim.graphFabric, (v) => { this.anim.graphFabric = v; this.persistAnim(); });
     const space = chips(GRAPH_SPACE_OPTIONS, this.anim.graphSpace, (v) => { this.anim.graphSpace = v; this.persistAnim(); });
+    const focus = chips(FOCUS_MODES, this.anim.focus, (v) => { this.anim.focus = v; this.persistAnim(); });
     const glowAmt = new Slider({
       label: "glow", title: "how bright the traveling edge highlight is",
       min: 20, max: 200, step: 5, value: Math.round(this.anim.edgeGlowAmt * 100),
@@ -912,17 +1015,6 @@ export class Settings {
     layoutBits.className = "look-stack";
     layoutBits.append(labeled("theme cycle", themeCycle.el), labeled("sky cycle", skyCycle.el), labeled("focus", focus.el));
     const layoutWrap = lookBlock("layout", layoutBits);
-    const mosaicBits = document.createElement("div");
-    mosaicBits.className = "look-stack";
-    mosaicBits.append(
-      labeled("views", mosaic.el),
-      labeled("hero", hero.el),
-      labeled("tiles", tileHost),
-      sharedTheme.el,
-      mosaicHint,
-      mosaicBtns,
-    );
-    const mosaicWrap = lookBlock("mosaic", mosaicBits);
     const audioBits = document.createElement("div");
     audioBits.className = "look-stack";
     audioBits.append(labeled("drive", drive.el), labeled("modulate", modRow));
@@ -1183,7 +1275,7 @@ export class Settings {
     const grid = document.createElement("div");
     grid.className = "agrid";
     grid.append(yaw.el, zoom.el, pitch.el, zoomCycle.el, pitchCycle.el, cadence.el);
-    sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, mosaicWrap, grid);
+    sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, grid);
     this.animUi = {
       follow, cycle, randomize, setSky, setShape,
       setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setSpace: space.set, setMod,
@@ -1625,53 +1717,40 @@ export class Settings {
     if (this.anim.mosaic === "off") {
       const empty = document.createElement("div");
       empty.className = "sec-hint";
-      empty.textContent = "1× — turn on 2×2 / 2×3 / 2×4 to assign tiles.";
+      empty.textContent = "1× — turn on 2×2 / 2×3 / 2×4 to assign a view to every pane.";
       host.appendChild(empty);
       return;
     }
-    const modes = viewSelectOptions();
     const n = this.anim.mosaicTiles.length
       || (this.anim.mosaicTree ? leafIds(this.anim.mosaicTree).length : Number(this.anim.mosaic) || 0);
     const ids = this.anim.mosaicTiles.length
       ? this.anim.mosaicTiles
       : this.anim.mosaicTree
         ? leafIds(this.anim.mosaicTree)
-        : Array.from({ length: n }, (_, i) => modes[i]?.value ?? "");
+        : Array.from({ length: n }, (_, i) => viewSelectOptions()[i]?.value ?? "");
     for (let i = 0; i < Math.max(ids.length, n); i++) {
+      const cur = ids[i] ?? "";
+      const row = document.createElement("div");
+      row.className = "mosaic-pane-row";
+      row.dataset.pane = cur;
+      row.classList.toggle("focus", !!cur && cur === this.viewFocusId);
+      const cap = document.createElement("div");
+      cap.className = "subcap";
+      cap.textContent = `pane ${i + 1}`;
       const sel = document.createElement("select");
       sel.className = "mosaic-slot";
-      sel.setAttribute("aria-label", `tile ${i + 1}`);
-      const cur = ids[i] ?? "";
-      let groupEl: HTMLOptGroupElement | null = null;
-      let lastGroup = "";
-      for (const m of modes) {
-        if (m.group !== lastGroup) {
-          lastGroup = m.group;
-          groupEl = document.createElement("optgroup");
-          groupEl.label = m.group;
-          sel.appendChild(groupEl);
-        }
-        const o = document.createElement("option");
-        o.value = m.value;
-        o.textContent = m.label;
-        if (m.value === cur) o.selected = true;
-        (groupEl ?? sel).appendChild(o);
-      }
-      if (cur && !modes.some((m) => m.value === cur)) {
-        const o = document.createElement("option");
-        o.value = cur;
-        o.textContent = cur;
-        o.selected = true;
-        sel.appendChild(o);
-      }
+      sel.setAttribute("aria-label", cap.textContent);
+      fillViewSelect(sel, cur);
       sel.addEventListener("change", () => {
-        const next = ids.map((id, j) => (j === i ? sel.value : id));
-        next[i] = sel.value;
+        const from = ids[i] ?? "";
+        const next = nextPaneTiles(ids, from, sel.value);
         this.anim.mosaicTiles = parseMosaicTiles(next);
         if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
         this.persistAnim();
+        this.animUi?.syncTiles();
       });
-      host.appendChild(sel);
+      row.append(cap, sel);
+      host.appendChild(row);
     }
   }
 
@@ -2030,6 +2109,7 @@ export class Settings {
   }
 
   close(): void {
+    this.viewFocusId = "";
     this.pop.hidden = true;
     this.el.classList.remove("open");
     this.btn.setAttribute("aria-expanded", "false");
@@ -2054,7 +2134,7 @@ export class Settings {
 
   private onDocDown = (e: PointerEvent) => {
     const t = e.target as HTMLElement;
-    if (this.viewCog?.contains(t)) return;
+    if (this.viewCog?.contains(t) || t.closest(".mosaic-pane-cog")) return;
     if (t.closest(".float-handle, .float-resize")) return;
     if (!this.el.contains(t) && !this.pop.contains(t)) this.close();
   };

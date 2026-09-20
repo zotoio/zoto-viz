@@ -1,6 +1,7 @@
 import { stillSrc } from "../core/load-image";
+import { isNasaStillDeco } from "../core/nasa-stills";
 
-/** Photos and SVG the local agent pins onto the graph. */
+/** Photos and SVG the local agent pins onto the graph. NASA stills stay on carousel views. */
 
 export type DecoAt = "selected" | "internet" | "origin" | [number, number, number];
 
@@ -10,6 +11,8 @@ export interface AgentDeco {
   src: string;
   at: DecoAt;
   label?: string;
+  /** Original https URL when `src` is a local `/api/ai/assets/` copy. */
+  from?: string;
 }
 
 export interface AgentLook {
@@ -58,7 +61,9 @@ export function normalizeAgentLook(raw: unknown): AgentLook {
     if (!kind || !href || !id) continue;
     if (kind === "photo" && !(href.startsWith("/api/ai/assets/") || href.startsWith("https://"))) continue;
     const deco: AgentDeco = { id, kind, src: href.slice(0, 2000), at: parseAt(d.at) };
+    if (typeof d.from === "string" && d.from.trim().startsWith("https://")) deco.from = d.from.trim().slice(0, 2000);
     if (typeof d.label === "string" && d.label.trim()) deco.label = d.label.trim().slice(0, 80);
+    if (kind === "photo" && isNasaStillDeco(deco)) continue;
     decos.push(deco);
     if (decos.length >= DECO_CAP) break;
   }

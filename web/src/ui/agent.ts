@@ -9,6 +9,7 @@ import { includeView, VIEW_KEY, type ViewCapture } from "./capture";
 import { askUserMedia, clearMediaDismiss } from "./media-ask";
 import { micCaptureAllowed } from "../audio/want";
 import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
+import { isNasaStillUrl } from "../core/nasa-stills";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
@@ -1627,7 +1628,7 @@ export function extractPhotos(text: string): { url: string; at?: unknown }[] {
       if (url.startsWith("https://")) out.push({ url });
     }
   }
-  return out;
+  return out.filter((p) => !isNasaStillUrl(p.url));
 }
 
 export function extractAgentLook(text: string): AgentLookInput | null {

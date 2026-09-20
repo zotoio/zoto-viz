@@ -126,6 +126,7 @@ https://example.com/a.png
     expect(look?.svg).toContain("<svg");
     expect(look?.clear).toBe(true);
     expect(extractAgentLook("nope")).toBeNull();
+    expect(extractAgentLook("```photo\nhttps://www.nasa.gov/a.jpg\n```")).toBeNull();
   });
 });
 

@@ -20,10 +20,13 @@ describe("normalizeAgentLook", () => {
         { id: "a", kind: "photo", src: "/api/ai/assets/abc", at: "selected" },
         { id: "b", kind: "photo", src: "javascript:alert(1)" },
         { id: "c", kind: "svg", src: "<svg></svg>", at: [0, 1, 2] },
+        { id: "nasa", kind: "photo", src: "https://www.nasa.gov/a.jpg", at: "origin" },
+        { id: "apod", kind: "photo", src: "/api/ai/assets/d3060344229da9e7", from: "https://apod.nasa.gov/x.jpg" },
       ],
     });
     expect(look.shader).toContain("color");
     expect(look.decos).toHaveLength(2);
+    expect(look.decos.map((d) => d.id)).toEqual(["a", "c"]);
     expect(look.decos[0]!.at).toBe("selected");
     expect(look.decos[1]!.at).toEqual([0, 1, 2]);
   });

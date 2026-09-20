@@ -6,7 +6,7 @@ import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
 import { mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
-import { Settings } from "../ui/settings";
+import { Settings, makeViewCogButton } from "../ui/settings";
 import { parseSourceBind, sourceHeadlines } from "../core/sources";
 import { bindSourceOf, viewAuthBlock, type AuthCtx } from "../core/auth-setup";
 import { LiveFeed, feedViewShift } from "../ui/feed";
@@ -54,6 +54,8 @@ import {
   pluginNeedsReview,
   pluginViewId,
   viewSelectOptions,
+  writePluginConfig,
+  configStoreId,
   type PluginView,
 } from "../plugins/plugin";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
@@ -83,6 +85,7 @@ import { AgentPanel, aiCyclePrefOn, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookI
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
+import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
@@ -392,6 +395,17 @@ const modeSel = new Select({
 $("modeBox").append(modeSel.el);
 const hnRainStills = new HnRainStills($("wall"));
 const nestCams = new NestCamsLive($("wall"));
+nestCams.onSettings = (camId) => {
+  bindThisView("plugin:nest-cams");
+  settings.openView(camId);
+};
+nestCams.onChange = (patch) => {
+  const spec = pluginSpecForMode("plugin:nest-cams");
+  if (!spec) return;
+  const fields = pluginViewKnobs(spec, spec.config);
+  writePluginConfig(configStoreId(spec), { ...loadPluginConfig(spec, fields), ...patch });
+  onPluginFields();
+};
 
 function onPluginFields(): void {
   const m = modeById(modeSel.value);
@@ -452,6 +466,18 @@ function optsFor(m: ViewMode): Record<string, string> {
 function arcadeControls(m: ViewMode): HTMLElement[] {
   const slot = arcade[m.arcadeId ?? ""];
   return slot ? [...slot.view.controls] : [];
+}
+
+function bindThisView(modeId: string): void {
+  const m = modeById(modeId);
+  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
+  settings?.bindView(
+    spec ? { ...spec, options: m.options, config: m.config } : null,
+    spec ? m.config : undefined,
+    lookForMode(m.id) ?? spec?.look,
+    arcadeControls(m),
+  );
+  paintViewAuth(m, spec);
 }
 
 let tsWatch = 0;
@@ -655,13 +681,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   hnRainStills.sync([], parseHnRainLook(opts).pics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
-  settings?.bindView(
-    spec ? { ...spec, options: m.options, config: m.config } : null,
-    spec ? m.config : undefined,
-    lookForMode(m.id) ?? spec?.look,
-    arcadeControls(m),
-  );
-  paintViewAuth(m, spec);
+  bindThisView(m.id);
   $("modeOpts").replaceChildren();
   void (async () => {
     if (!(await ensureReviewed(spec))) {
@@ -841,6 +861,7 @@ function feed(m: StateMsg): void {
   applyStats(shown);
   feedCtl.feed?.setSourceHeadlines(sourceHeadlines(m.sources));
   nestCams.sync(m.sdm);
+  settings.setNestDevices(m.sdm?.devices ?? []);
   if (uiReady) {
     const cur = modeById(liveMode || modeSel.value);
     paintViewAuth(cur, cur.pluginId ? pluginSpecForMode(cur.id) : null);
@@ -947,7 +968,14 @@ settings = new Settings({
   },
   onPersist: () => touch(),
 });
-settings.onPluginChange = () => onPluginFields();
+settings.onPluginChange = () => {
+  onPluginFields();
+  if (!mosaic?.on) return;
+  const focus = mosaic.focusedId;
+  if (!focus) return;
+  const pane = modeById(focus);
+  mosaic.graphScene(focus)?.setMode(pane, optsFor(pane));
+};
 settings.onInstancesChange = () => {
   void (async () => {
     pluginSpecs = await installPlugins();
@@ -983,6 +1011,17 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
+  paneCog: (id) => makeViewCogButton({
+    className: "mosaic-pane-cog",
+    title: "this pane's view settings",
+    ariaLabel: "this pane settings",
+    pane: id,
+    onClick: () => {
+      mosaic?.focus(id);
+      bindThisView(id);
+      settings.openView(id);
+    },
+  }),
   sync: () => ({
     theme: scene.currentTheme,
     filters: scene.currentFilters,
@@ -1128,7 +1167,7 @@ liveChat.onMicUp = () => agent.endTalk();
 liveChat.seedTranscript(agent.transcript());
 const privSec = settings.addSection("Privacy", [redactToggle]);
 $("settingsBox").appendChild(settings.el);
-settings.attachViewCog($("modeBox"));
+settings.attachViewCog($("modeBox"), () => bindThisView(modeSel.value));
 agent.mountSettings(settings.agentHost());
 agent.onOpen = () => { settings.open("agent"); };
 agent.captureView = () => {
@@ -1358,11 +1397,51 @@ void (async () => {
 })();
 
 let liveAgentLook: AgentLook = { decos: [] };
-function sceneAgentLook(): AgentLook { return liveAgentLook; }
+let nasaAssetOrigins: Map<string, string> | null = null;
+let nasaAssetOriginsP: Promise<void> | null = null;
+
+function graphAgentLook(look: AgentLook): AgentLook {
+  const decos = look.decos.filter((d) => !isNasaStillDeco(d, nasaAssetOrigins));
+  const shaderPhoto = look.shaderPhoto && isNasaStillUrl(look.shaderPhoto) ? undefined : look.shaderPhoto;
+  if (decos.length === look.decos.length && shaderPhoto === look.shaderPhoto) return look;
+  const next: AgentLook = { decos };
+  if (look.shader) next.shader = look.shader;
+  if (shaderPhoto) next.shaderPhoto = shaderPhoto;
+  return next;
+}
+
+function sceneAgentLook(): AgentLook { return graphAgentLook(liveAgentLook); }
+
 function paintAgentLook(look: AgentLook): void {
-  liveAgentLook = look;
-  scene.setAgentLook(look);
-  mosaic?.eachGraph((g) => { if (g !== scene) g.setAgentLook(look); });
+  const next = graphAgentLook(normalizeAgentLook(look));
+  liveAgentLook = next;
+  scene.setAgentLook(next);
+  mosaic?.eachGraph((g) => { if (g !== scene) g.setAgentLook(next); });
+  void ensureNasaAssetOrigins();
+}
+
+async function ensureNasaAssetOrigins(): Promise<void> {
+  if (nasaAssetOrigins || nasaAssetOriginsP) return nasaAssetOriginsP ?? Promise.resolve();
+  nasaAssetOriginsP = (async () => {
+    try {
+      const r = await apiFetch("/api/ai/assets");
+      const d = await r.json() as { assets?: { id?: string; url?: string; src?: string }[] };
+      const map = new Map<string, string>();
+      for (const row of d.assets ?? []) {
+        const id = (row.id || "").toLowerCase();
+        const origin = row.url || row.src || "";
+        if (id && origin) map.set(id, origin);
+      }
+      nasaAssetOrigins = map;
+      const stripped = graphAgentLook(liveAgentLook);
+      if (stripped !== liveAgentLook) paintAgentLook(stripped);
+    } catch {
+      nasaAssetOrigins = new Map();
+    } finally {
+      nasaAssetOriginsP = null;
+    }
+  })();
+  return nasaAssetOriginsP;
 }
 
 function decoAt(raw: unknown): DecoAt {
@@ -1419,6 +1498,7 @@ async function applyAgentLook(look: AgentLookInput): Promise<void> {
     cur.anim = { ...cur.anim, backdrop: "custom" };
   }
   for (const p of look.photos ?? []) {
+    if (isNasaStillUrl(p.url)) continue;
     const r = await apiFetch("/api/ai/asset", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1426,7 +1506,9 @@ async function applyAgentLook(look: AgentLookInput): Promise<void> {
     });
     const d = await r.json() as { error?: string; asset?: { id: string; href: string } };
     if (!r.ok || !d.asset) throw new Error(d.error || `photo ${r.status}`);
-    agentLook.decos = [...agentLook.decos, { id: d.asset.id, kind: "photo", src: d.asset.href, at: decoAt(p.at) }];
+    agentLook.decos = [...agentLook.decos, {
+      id: d.asset.id, kind: "photo", src: d.asset.href, from: p.url, at: decoAt(p.at),
+    }];
   }
   if (look.svg) {
     const r = await apiFetch("/api/ai/asset", {

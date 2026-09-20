@@ -1,13 +1,15 @@
 import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
+import { mountNestCamFields } from "./nest-cams-ui";
+import type { SdmDevice } from "./nest-cams-look";
 
 export function fillPluginFields(
   host: HTMLElement,
   spec: PluginView,
   fields: PluginField[],
   onPersist: (id: string, values: Record<string, string>) => void,
-  opts?: { skipEmpty?: boolean },
+  opts?: { skipEmpty?: boolean; devices?: SdmDevice[] },
 ): void {
   const values = loadPluginConfig(spec, fields);
   const head = document.createElement("div");
@@ -19,9 +21,14 @@ export function fillPluginFields(
   meta.className = "sec-hint";
   meta.textContent = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
   head.append(title, meta);
-  host.append(head);
-  if (!fields.length) {
-    if (!opts?.skipEmpty) {
+  let knobs = fields;
+  if (spec.id === "nest-cams") {
+    knobs = mountNestCamFields(host, spec, fields, values, opts?.devices ?? [], onPersist);
+  } else {
+    host.append(head);
+  }
+  if (!knobs.length) {
+    if (!opts?.skipEmpty && spec.id !== "nest-cams") {
       const empty = document.createElement("div");
       empty.className = "sec";
       empty.innerHTML = `<div class="sec-hint">This plugin has no extra settings.</div>`;
@@ -35,7 +42,7 @@ export function fillPluginFields(
   };
   const compact: PluginField[] = [];
   const notes: PluginField[] = [];
-  for (const f of fields) {
+  for (const f of knobs) {
     if (f.type === "textarea") notes.push(f);
     else compact.push(f);
   }

@@ -8,7 +8,7 @@ Google Nest live cameras use the **Smart Device Management** API. That is three 
 
 Config and tokens: `~/.zoto-viz/sdm.yml` (mode 600). Never commit that file. The desktop/installed OAuth JSONs on this machine **cannot** be used for PCM — Device Access needs a **Web** client with redirect `https://www.google.com`.
 
-View: **Nest cams** (`plugin:nest-cams`). Stage-only labeled wall (`grid` 1–6; 4 is 2×2, 6 is 3×2). `pick` is comma-separated labels or ids; empty fills from the first cameras that will stream. Dice skips this view until `linked` is true. Setup links sit on the view and on Settings → Sources.
+View: **Nest cams** (`plugin:nest-cams`). Stage-only labeled wall. **Show** chips toggle live WebRTC and motion stills (stills stay on when live is off). **Layout** is `auto` (all selected cameras, up to six), `1`, `2`, `2×2`, or `3×2`. **Cameras** are chips on the wall and on Settings → This view — empty `pick` means every streamable camera; a named list is exactly those cameras (not padded with extras). Stills follow the same pick. Pane captions use the camera name; a Nest room is only appended when it is not another camera's label. Dice skips this view until `linked` is true. Setup links sit on Settings → Sources until Device Access is linked.
 
 ## One-time Google setup
 

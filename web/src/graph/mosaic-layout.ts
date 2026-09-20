@@ -189,6 +189,21 @@ export function mapLeaves(n: MosaicNode, ids: string[]): MosaicNode {
   return walk(cloneNode(n));
 }
 
+/** Replace one pane's view. Picking a view already on the wall swaps those two panes. */
+export function nextPaneTiles(ids: string[], fromId: string, toId: string): string[] {
+  const i = ids.indexOf(fromId);
+  if (i < 0 || !toId || fromId === toId) return ids;
+  const next = ids.slice();
+  const j = next.indexOf(toId);
+  if (j >= 0) {
+    next[i] = toId;
+    next[j] = fromId;
+    return next;
+  }
+  next[i] = toId;
+  return next;
+}
+
 /** Put `want` onto existing cells in order. Extra / missing ids keep the leftover leaves. */
 export function assignTiles(n: MosaicNode, want: string[]): MosaicNode {
   const cur = leafIds(n);

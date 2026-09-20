@@ -523,6 +523,34 @@ export function specCaption(spec: PluginView): string {
 
 const CATALOG_GROUP_RANK: Record<string, number> = { graph: 0, demo: 1, arcade: 2 };
 
+/** Catalog <select> used on mosaic tiles and This view pane pickers. */
+export function fillViewSelect(sel: HTMLSelectElement, current: string): void {
+  sel.replaceChildren();
+  const modes = viewSelectOptions();
+  let groupEl: HTMLOptGroupElement | null = null;
+  let lastGroup = "";
+  for (const m of modes) {
+    if (m.group !== lastGroup) {
+      lastGroup = m.group;
+      groupEl = document.createElement("optgroup");
+      groupEl.label = m.group;
+      sel.appendChild(groupEl);
+    }
+    const o = document.createElement("option");
+    o.value = m.value;
+    o.textContent = m.label;
+    if (m.value === current) o.selected = true;
+    (groupEl ?? sel).appendChild(o);
+  }
+  if (current && !modes.some((m) => m.value === current)) {
+    const o = document.createElement("option");
+    o.value = current;
+    o.textContent = current;
+    o.selected = true;
+    sel.appendChild(o);
+  }
+}
+
 export function viewSelectOptions(): { value: string; label: string; hint: string; group: string }[] {
   const rows = allModes().map((m) => ({
     value: m.id,

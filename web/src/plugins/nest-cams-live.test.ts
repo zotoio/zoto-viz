@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstCamera, fixNestAnswerSdp, gridCameras, nestCamCaption, nestIdleNote, nestShowEventTiles, nestStillSrc, nestStreamFailover, parseNestLook, sdmSyncKey, streamableCameras } from "./nest-cams-live";
+import { NestCamsLive, firstCamera, fixNestAnswerSdp, gridCameras, nestCamCaption, nestEventForPick, nestGridToken, nestIdleNote, nestPickPressed, nestShowEventTiles, nestStillSrc, nestStreamFailover, parseNestLook, sdmSyncKey, streamableCameras, toggleNestPick } from "./nest-cams-live";
 
 describe("nest cams live", () => {
   it("builds a same-origin still URL", () => {
@@ -29,7 +29,7 @@ describe("nest cams live", () => {
     expect(firstCamera(rows, "Kitchen")?.id).toBe("hub");
   });
 
-  it("fills a labeled 2×2 from picks then remaining streamable cams", () => {
+  it("fills from streamable cameras when pick is empty, and keeps named picks exact", () => {
     const rows = [
       { id: "hub", label: "Kitchen", type: "display", camera: true, webrtc: true },
       { id: "a", label: "Verandah", room: "Lounge", type: "camera", camera: true },
@@ -39,15 +39,18 @@ describe("nest cams live", () => {
       { id: "e", label: "Front", type: "camera", camera: true },
     ];
     expect(gridCameras(rows, "", 4).map((d) => d.label)).toEqual(["Verandah", "Carport", "Backyard", "Lounge"]);
-    expect(gridCameras(rows, "Carport,Front", 4).map((d) => d.label)).toEqual(["Carport", "Front", "Verandah", "Backyard"]);
-    expect(gridCameras(rows, "", 6).map((d) => d.label)).toEqual(["Verandah", "Carport", "Backyard", "Lounge", "Front"]);
+    expect(gridCameras(rows, "Carport,Front", 4).map((d) => d.label)).toEqual(["Carport", "Front"]);
+    expect(gridCameras(rows, "", 0).map((d) => d.label)).toEqual(["Verandah", "Carport", "Backyard", "Lounge", "Front"]);
     expect(gridCameras(rows, "", 1).map((d) => d.id)).toEqual(["a"]);
     expect(nestCamCaption(rows[1]!)).toBe("Verandah · Lounge");
-    expect(nestCamCaption(rows[4]!)).toBe("Lounge");
+    expect(nestCamCaption(rows[1]!, rows)).toBe("Verandah");
+    expect(nestCamCaption(rows[4]!, rows)).toBe("Lounge");
+    expect(nestCamCaption(rows[2]!, rows)).toBe("Carport");
+    expect(nestCamCaption({ id: "c", label: "Backyard", room: "Back", type: "camera", camera: true }, rows)).toBe("Backyard · Back");
   });
 
   it("ignores poll timestamps when fingerprinting SDM state", () => {
-    const look = { live: true, pick: "", grid: 4 };
+    const look = { live: true, stills: false, pick: "", grid: 4 };
     const a = sdmSyncKey({ linked: true, devices: [], last_list: 1 } as never, look);
     const b = sdmSyncKey({ linked: true, devices: [], last_list: 2 } as never, look);
     expect(a).toBe(b);
@@ -89,18 +92,58 @@ describe("nest cams live", () => {
     expect(fixed).toContain("a=candidate:1 1 udp");
   });
 
-  it("defaults live stream on and a 4-pane grid", () => {
-    expect(parseNestLook(undefined)).toEqual({ live: true, pick: "", grid: 4 });
-    expect(parseNestLook({ live: "0", pick: "Kitchen", grid: "1" })).toEqual({ live: false, pick: "Kitchen", grid: 1 });
+  it("defaults live stream on, stills off, and an auto-sized grid", () => {
+    expect(parseNestLook(undefined)).toEqual({ live: true, stills: false, pick: "", grid: 0 });
+    expect(parseNestLook({ live: "0", pick: "Kitchen", grid: "1" })).toEqual({ live: false, stills: false, pick: "Kitchen", grid: 1 });
     expect(parseNestLook({ grid: "9" }).grid).toBe(6);
+    expect(parseNestLook({ grid: "auto" }).grid).toBe(0);
   });
 
-  it("keeps event stills when live is off, even on a multi-pane grid", () => {
-    expect(nestShowEventTiles(true, 4)).toBe(false);
-    expect(nestShowEventTiles(true, 1)).toBe(true);
-    expect(nestShowEventTiles(false, 4)).toBe(true);
+  it("keeps named picks from being padded, and treats empty pick as every streamable camera", () => {
+    const rows = [
+      { id: "a", label: "Verandah", type: "camera", camera: true },
+      { id: "b", label: "Carport", type: "camera", camera: true },
+      { id: "c", label: "Front", type: "camera", camera: true },
+    ];
+    expect(toggleNestPick("", rows[1]!, rows)).toBe("Verandah, Front");
+    expect(toggleNestPick("Verandah, Front", rows[1]!, rows)).toBe("");
+    expect(nestPickPressed("", rows[0]!)).toBe(true);
+    expect(nestPickPressed("Carport", rows[0]!)).toBe(false);
+    expect(nestGridToken(0)).toBe("auto");
+    expect(nestGridToken(4)).toBe("4");
+  });
+
+  it("keeps event stills when live is off, or when stills is on", () => {
+    expect(nestShowEventTiles(true, false)).toBe(false);
+    expect(nestShowEventTiles(true, true)).toBe(true);
+    expect(nestShowEventTiles(false, false)).toBe(true);
     expect(nestIdleNote(true, [])).toBe("");
     expect(nestIdleNote(false, [{ device: "a", event_id: "e1" }])).toBe("");
     expect(nestIdleNote(false, [])).toBe("Live stream off. No recent motion stills.");
+  });
+
+  it("filters motion stills to the same camera pick as the wall", () => {
+    const rows = [
+      { id: "a", label: "Office", type: "camera", camera: true },
+      { id: "b", label: "Front", type: "camera", camera: true },
+    ];
+    expect(nestEventForPick({ device: "a", event_id: "e1" }, rows, "")).toBe(true);
+    expect(nestEventForPick({ device: "a", event_id: "e1" }, rows, "Front")).toBe(false);
+    expect(nestEventForPick({ device: "b", event_id: "e2" }, rows, "Front")).toBe(true);
+    expect(nestEventForPick({ device: "a" }, rows, "")).toBe(false);
+  });
+
+  it("reattaches the overlay after mosaic empties the wall", () => {
+    const wall = document.createElement("div");
+    document.body.append(wall);
+    const live = new NestCamsLive(wall);
+    expect(wall.querySelector("#nest-cams")).toBe(live.el);
+    wall.replaceChildren();
+    expect(wall.querySelector("#nest-cams")).toBeNull();
+    live.setActive(true);
+    expect(wall.querySelector("#nest-cams")).toBe(live.el);
+    expect(live.el.hidden).toBe(false);
+    expect(live.el.querySelector(".nest-cams-wall")).toBeTruthy();
+    wall.remove();
   });
 });

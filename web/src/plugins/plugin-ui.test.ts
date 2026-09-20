@@ -47,6 +47,27 @@ describe("fillPluginFields", () => {
     expect(host.textContent).not.toMatch(/no extra settings/);
   });
 
+  it("renders nest-cams layout and camera chips instead of a pane slider", () => {
+    const host = document.createElement("div");
+    fillPluginFields(host, { id: "nest-cams", name: "Nest cams", version: 1, engine: "graph" }, [
+      { key: "live", label: "live stream", type: "boolean", default: true },
+      { key: "stills", label: "motion stills", type: "boolean", default: false },
+      { key: "grid", label: "layout", type: "select", values: [["auto", "all"], ["4", "2×2"]], default: "auto" },
+      { key: "pick", label: "cameras", type: "text", default: "" },
+      { key: "prompt", label: "prompt", type: "textarea", default: "" },
+    ], () => {}, { devices: [{ id: "a", label: "Office", type: "camera", camera: true }] });
+    expect(host.textContent).toMatch(/layout/);
+    expect(host.textContent).toMatch(/cameras/);
+    expect(host.textContent).toMatch(/Office/);
+    expect(host.textContent).toMatch(/show/);
+    expect([...host.querySelectorAll("button")].map((b) => b.textContent)).toEqual(
+      expect.arrayContaining(["live", "stills", "all", "Office"]),
+    );
+    expect(host.querySelector(".slider")).toBeNull();
+    expect(host.querySelector(".toggle")).toBeNull();
+    expect(host.querySelector("textarea")).toBeTruthy();
+  });
+
   it("asks the operator to examine plugin source", async () => {
     const pending = askPluginReview({
       id: "pulse", name: "Pulse", version: 1, engine: "graph", runtime: "typescript",

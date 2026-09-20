@@ -111,7 +111,7 @@ vec3 color(vec3 dir, float t) {
   return mix(uBg, uAccent, 0.35 + 0.5 * n);
 }
 ```
-Photos: one https URL per line (public web only). Optional JSON `{"url":"...","at":"selected"|"internet"|"origin"|[x,y,z]}`.
+Photos: one https URL per line (public web only). Optional JSON `{"url":"...","at":"selected"|"internet"|"origin"|[x,y,z]}`. NASA IOTD / APOD / Earth Observatory stills stay on carousel plugin views — do not pin those URLs on the graph.
 ```photo
 https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Example.jpg/320px-Example.jpg
 ```

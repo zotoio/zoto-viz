@@ -2,7 +2,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
   loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
-  viewSelectOptions, writePluginConfig, type PluginView,
+  viewSelectOptions, fillViewSelect, writePluginConfig, type PluginView,
 } from "./plugin";
 import { pluginViewKnobs, toPluginView, VIEW_PROMPT_KEY } from "./plugin-visualisation";
 import { PluginSandbox } from "./host";
@@ -409,6 +409,10 @@ describe("visualisation.yml", () => {
     expect(extras.filter((o) => o.value === "plugin:pulse")).toHaveLength(1);
     expect(extras.some((o) => o.value === "plugin:heat")).toBe(true);
     expect(viewSelectOptions().some((o) => o.value === "pulse" || o.value === "topology")).toBe(false);
+    const sel = document.createElement("select");
+    fillViewSelect(sel, "plugin:heat");
+    expect([...sel.querySelectorAll("option")].some((o) => o.value === "plugin:heat" && o.selected)).toBe(true);
+    expect(sel.querySelector("optgroup")?.label).toBe("graph");
     applyPluginCatalog([]);
   });
 

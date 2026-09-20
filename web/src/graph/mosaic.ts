@@ -1,14 +1,14 @@
 import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize } from "./scene";
 import type { RenderHost } from "./render-host";
 import { allModes, arcadeSlotFor, hostEngine, modeById, viewCaption, type ViewMode } from "../core/modes";
-import { lookForMode, mergeLook } from "../plugins/plugin";
 import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
 import { cycleSkyPool, type BackdropKind } from "./backdrop";
 import {
-  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, parseMosaicNode,
+  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, nextPaneTiles, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
+import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -197,6 +197,7 @@ export class Mosaic {
     onPromote: (id: string, theme: Theme | null) => void;
     onLayout: (patch: MosaicLayoutPatch) => void;
     onCloseLast: () => void;
+    paneCog?: (id: string) => HTMLButtonElement;
     sync: () => MosaicSync;
   }) {}
 
@@ -423,6 +424,14 @@ export class Mosaic {
     this.emitLayout();
   }
 
+  /** Change one pane. Picking a view already on the wall swaps those two tiles. */
+  setPaneView(fromId: string, toId: string): void {
+    if (!this.tree || !toId || fromId === toId) return;
+    const next = nextPaneTiles(this.tileIds, fromId, toId);
+    if (next.join("\0") === this.tileIds.join("\0")) return;
+    this.assignViews(next);
+  }
+
   private emitLayout(): void {
     this.cfg.onLayout({
       tree: this.tree,
@@ -646,8 +655,8 @@ export class Mosaic {
 
   private refreshChrome(): void {
     for (const [id, pane] of this.panes) {
-      const cap = pane.querySelector(".mosaic-cap");
-      if (cap) cap.textContent = viewCaption(mosaicPaneMode(id));
+      const pick = pane.querySelector<HTMLSelectElement>(".mosaic-pick");
+      if (pick) fillViewSelect(pick, id);
       pane.classList.toggle("hero", this.hero !== "off" && id === this.heroId);
       pane.classList.toggle("max", this.maximized === id);
       const maxBtn = pane.querySelector<HTMLButtonElement>('[data-act="max"]');
@@ -664,11 +673,14 @@ export class Mosaic {
     pane.dataset.mode = id;
     const bar = document.createElement("div");
     bar.className = "mosaic-chrome";
-    const cap = document.createElement("span");
-    cap.className = "mosaic-cap";
-    cap.textContent = viewCaption(mosaicPaneMode(id));
-    cap.title = "drag onto another tile to swap views";
-    bar.title = cap.title;
+    const pick = document.createElement("select");
+    pick.className = "mosaic-pick";
+    pick.setAttribute("aria-label", "pane view");
+    pick.title = "this pane's view — pick another to swap or replace";
+    fillViewSelect(pick, id);
+    pick.addEventListener("pointerdown", (e) => e.stopPropagation());
+    pick.addEventListener("click", (e) => e.stopPropagation());
+    pick.addEventListener("change", () => this.setPaneView(id, pick.value));
     const tools = document.createElement("div");
     tools.className = "mosaic-tools";
     tools.append(
@@ -676,10 +688,13 @@ export class Mosaic {
       this.toolBtn("max", "max", "fill the wall", () => this.toggleMax(id)),
       this.toolBtn("close", "close", "close and expand the neighbour", () => this.closeTile(id)),
     );
-    bar.append(cap, tools);
+    bar.append(pick, tools);
+    bar.title = "drag onto another tile to swap views";
     this.bindSwapHandle(bar, id, "chrome");
     this.bindPaneBodySwap(pane, id);
     pane.appendChild(bar);
+    const cog = this.cfg.paneCog?.(id);
+    if (cog) pane.appendChild(cog);
     return pane;
   }
 
@@ -698,7 +713,7 @@ export class Mosaic {
   private bindSwapHandle(handle: HTMLElement, id: string, kind: "chrome" | "alt"): void {
     handle.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
-      if ((e.target as HTMLElement).closest(".mosaic-tool")) return;
+      if ((e.target as HTMLElement).closest(".mosaic-tool, .mosaic-pick, .mosaic-pane-cog")) return;
       e.preventDefault();
       e.stopPropagation();
       this.beginSwapDrag(id, e.clientX, e.clientY, kind);
@@ -710,7 +725,7 @@ export class Mosaic {
     pane.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       const t = e.target as HTMLElement;
-      if (t.closest(".mosaic-tool, .mosaic-handle, .mosaic-chrome")) return;
+      if (t.closest(".mosaic-tool, .mosaic-handle, .mosaic-chrome, .mosaic-pane-cog")) return;
       if (e.altKey || e.metaKey) {
         e.preventDefault();
         e.stopPropagation();

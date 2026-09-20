@@ -55,6 +55,21 @@ switch.
   backend/service.py         # optional on_snapshot / setup / teardown hooks
 ```
 
+One zip is a **pack** of reusable layers. Folder presence is the switch; a pack
+may ship any subset.
+
+| Layer | What it is | Settings live on |
+| --- | --- | --- |
+| **Datasource** / primitives | Streams, collectors, host maps (`sources`, `views.*`, SDM cameras) | This view → Datasource; Sources; Privacy |
+| **Backend** | Trusted Python (`on_snapshot` / setup / teardown) | This view when the pack ships `backend/` |
+| **Frontend** | TypeScript viz, GLSL sky, `look` pins | This view → Frontend |
+| **View** × N | Catalog rows (`plugin:<id>` or `plugin:<id>:<instance>`) | This view → View; tile corner cog |
+| **Wall** | Mosaic composing other views | This view → Wall; tile view menu |
+
+Syscon is a view whose look opens a wall of eight SYS views. Nest cams is a
+view over the SDM datasource. HN Rain instances reuse one frontend against
+different sources. None of those layers require a new zip format.
+
 ### Allowed member suffixes
 
 `.yml` `.yaml` `.json` `.py` `.ts` `.tsx` `.js` `.mjs` `.css` `.html` `.md`
@@ -135,8 +150,10 @@ and skipped; it does not take down capture. Changes to the monitor's own
 A plugin reuses a shipped `engine` (`graph` needs `base`; arcade engines
 include `netpong`, `invaders`, `command`, `frogger`, `cpupong`, `doom`,
 `waves`, `orbits`, `helix`, `skyline`, `pacman`, `tetris`, `portal`, `carousel`).
-Optional `look` pins theme/sky/floor for that view — the settings drawer shows
-those pins under **This view**, along with `options` / `config`, arcade knobs, and a per-view **prompt** (stored on the active profile; prefixes AI Dynamic and rebuilds it after a short pause).
+Optional `look` pins theme/sky/floor for that view — **This view → Frontend**.
+`options` / `config`, arcade knobs, and a per-view **prompt** (stored on the
+active profile; prefixes AI Dynamic and rebuilds it after a short pause) live
+under **This view → View**. A mosaic wall is **This view → Wall**.
 
 Content plugins are **instances**, not copies. `plugin.yml` `instances:` (and `~/.zoto-viz/plugin-instances.yml`) add catalog rows that reuse the same tree with a host `source` and title / caption / image / filter defaults. View id is `plugin:<id>` when the instance id matches the plugin, otherwise `plugin:<id>:<instance>`. Carousel ships NASA IOTD plus APOD / Earth Observatory / Commons POTD / Met; HN Rain ships HN plus Lobsters / Guardian / Mastodon.
 The cog next to the view menu opens that tab. Network and system visibility live under
