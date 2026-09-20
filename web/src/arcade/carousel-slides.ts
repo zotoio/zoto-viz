@@ -1,4 +1,5 @@
-import { parseSourceBind, sourceHeadlines, type SourceBind, type SourceHeadline, type SourceLive } from "../core/sources";
+import { stillSrc } from "../core/load-image";
+import { FEED_HEADLINE_LIMIT, FEED_SLIDE_LIMIT, parseSourceBind, sourceHeadlines, type SourceBind, type SourceHeadline, type SourceLive } from "../core/sources";
 
 export interface CarouselSlide {
   id: string;
@@ -17,12 +18,12 @@ export function headlinesFromSources(
     ? bind as SourceBind
     : parseSourceBind(bind as Record<string, string> | undefined);
   const next: SourceBind = { ...parsed, filter: parsed.filter && parsed.filter !== "all" ? parsed.filter : "has-image" };
-  return sourceHeadlines(sources, 16, next);
+  return sourceHeadlines(sources, FEED_HEADLINE_LIMIT, next);
 }
 
 /** Pictured headlines only. Empty when the bound source has no stills. */
-export function carouselSlides(headlines: SourceHeadline[], cap = 12): CarouselSlide[] {
-  const limit = Math.max(1, Math.min(16, cap | 0));
+export function carouselSlides(headlines: SourceHeadline[], cap = FEED_SLIDE_LIMIT): CarouselSlide[] {
+  const limit = Math.max(1, Math.min(FEED_HEADLINE_LIMIT, cap | 0));
   return headlines.filter((h) => !!h.image).slice(0, limit).map((h) => ({
     id: h.id,
     title: h.text,
@@ -33,7 +34,7 @@ export function carouselSlides(headlines: SourceHeadline[], cap = 12): CarouselS
 }
 
 export function proxiedStill(url: string): string {
-  return `/api/sources/image?url=${encodeURIComponent(url)}`;
+  return stillSrc(url);
 }
 
 /** Title plus optional blurb for the still on screen. */

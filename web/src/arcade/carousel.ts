@@ -1,15 +1,16 @@
 import type { NetScene } from "../graph/scene";
 import { carouselPlayhead, kenBurnsAim, kenBurnsAt, kenBurnsTransform } from "./stage-math";
 import { Stage3D } from "./stage3d";
+import { loadHtmlImage, stillSrc, warmStill } from "../core/load-image";
+import { FEED_SLIDE_LIMIT } from "../core/sources";
 import {
   carouselCaptionParts,
   carouselSlides,
   headlinesFromSources,
-  proxiedStill,
   type CarouselSlide,
 } from "./carousel-slides";
 
-const MAX_SLIDES = 12;
+const MAX_SLIDES = FEED_SLIDE_LIMIT;
 
 /** Full-viewport NASA IOTD slideshow: Ken Burns stills, large caption, crossfade. */
 export class CarouselView extends Stage3D {
@@ -118,9 +119,7 @@ export class CarouselView extends Stage3D {
 
   private warm(slides: CarouselSlide[]): void {
     for (const slide of slides) {
-      if (!slide.image) continue;
-      const img = new Image();
-      img.src = proxiedStill(slide.image);
+      if (slide.image) warmStill(slide.image);
     }
   }
 
@@ -139,11 +138,11 @@ export class CarouselView extends Stage3D {
 
   private arm(slide: CarouselSlide): void {
     if (!slide.image) return;
-    const src = proxiedStill(slide.image);
+    const src = stillSrc(slide.image);
     const back = this.back();
-    if (back.getAttribute("src") === src) return;
+    if (!src || back.getAttribute("src")?.split("&_try=")[0] === src) return;
     back.alt = slide.title;
-    back.src = src;
+    void loadHtmlImage(back, src).catch(() => {});
   }
 
   private showSlide(slide: CarouselSlide | undefined, instant: boolean): void {
@@ -156,12 +155,15 @@ export class CarouselView extends Stage3D {
       this.paintCaption(undefined);
       return;
     }
-    const src = proxiedStill(slide.image);
+    const src = stillSrc(slide.image);
     this.paintCaption(slide);
-    if (slide.id === this.shownId && this.front.getAttribute("src") === src) return;
-    const next = this.front.getAttribute("src") === src ? this.front : this.back();
+    if (!src) return;
+    const frontSrc = this.front.getAttribute("src")?.split("&_try=")[0] ?? "";
+    if (slide.id === this.shownId && frontSrc === src) return;
+    const next = frontSrc === src ? this.front : this.back();
     const reveal = (): void => {
-      if (next.getAttribute("src") !== src) return;
+      const now = next.getAttribute("src")?.split("&_try=")[0] ?? "";
+      if (now !== src) return;
       if (next !== this.front) {
         this.front.style.opacity = "0";
         this.front = next;
@@ -171,13 +173,7 @@ export class CarouselView extends Stage3D {
       this.shownId = slide.id;
     };
     next.alt = slide.title;
-    next.onload = reveal;
-    next.onerror = () => {
-      if (next.getAttribute("src") !== src) return;
-      next.removeAttribute("src");
-    };
-    if (next.getAttribute("src") !== src) next.src = src;
-    if (next.complete && next.naturalWidth) reveal();
+    void loadHtmlImage(next, src).then(reveal).catch(() => {});
   }
 
   private paintCaption(slide: CarouselSlide | undefined): void {

@@ -10,7 +10,7 @@ Config: `~/.zoto-viz/sources.yml`. Local drop files: `~/.zoto-viz/sources/`.
 
 | type | Input | Notes |
 | --- | --- | --- |
-| `rss` | public `https://` URL | RSS 2.0 or Atom. Up to 20 items (title, HTML-stripped summary, enclosure / media image). |
+| `rss` | public `https://` URL | RSS 2.0 or Atom. Up to 80 items (title, HTML-stripped summary, enclosure / media image). |
 | `http` | public `https://` URL | JSON object/array, or text. 256 KB cap. Optional `fields` map (list / title / caption / image / link / filter / expand) projects JSON onto RSS-shaped `items[]`. |
 | `file` | path under `$HOME` or `~/.zoto-viz` | JSON if it parses, otherwise `{text}`. |
 | `journal` | optional user-unit name | `journalctl --user` (not the system journal). Optional `unit` filters to one user unit. |
@@ -22,7 +22,9 @@ Remote fetches reuse the agent-asset gate: HTTPS, port 443, public DNS, no priva
 
 ## Defaults
 
-A first run seeds **Hacker News** (`hn`), **NASA image of the day** (`nasa`), **APOD** (`apod`, NASA DEMO_KEY), **Earth Observatory** (`earth-iotd`), **Commons picture of the day** (`commons-potd`), **Met highlights** (`met`, object-id expand), **Lobsters** (`lobsters`), **Guardian world** (`guardian`, public test key), **Mastodon #space** (`mastodon`), **User journal** (`journal`), and **Kernel ring** (`kmsg`). Existing registries gain the new content rows (and journal / kmsg) on the next load. Disable them in Settings → Sources rather than deleting if you do not want them re-seeded.
+A first run seeds **Hacker News** (`hn`), **NASA image of the day** (`nasa`), **APOD** (`apod`, [NASA DEMO_KEY](https://api.nasa.gov/)), **Earth Observatory** (`earth-iotd`), **Commons picture of the day** (`commons-potd`), **Met highlights** (`met`, object-id expand), **Lobsters** (`lobsters`), **Guardian world** (`guardian`, replace `api-key=test` with a key from [Guardian Open Platform](https://open-platform.theguardian.com/access/)), **Mastodon #space** (`mastodon`), **User journal** (`journal`), and **Kernel ring** (`kmsg`). Existing registries gain the new content rows (and journal / kmsg) on the next load. Disable them in Settings → Sources rather than deleting if you do not want them re-seeded.
+
+Views that still need a key or OAuth stay out of **dice** until they work: **Nest cams** ([Device Access](https://developers.google.com/nest/device-access), [console](https://console.nest.google.com/device-access)) and any view bound to Guardian while `api-key=test`. Settings → Sources shows the signup links on those rows.
 
 HTTP JSON field maps live on the source row. Example APOD: `title`, `explanation` → caption, `hdurl` / `url` → image, `media_type=image` filter. Met uses `list: objectIDs` plus `expand: https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}`.
 

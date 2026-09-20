@@ -14,7 +14,7 @@ instances:
     source: lobsters
   - id: guardian
     name: Guardian Rain
-    hint: Phosphor rain of Guardian world headlines.
+    hint: Phosphor rain of Guardian world headlines. Needs a real Open Platform key (not api-key=test) — https://open-platform.theguardian.com/access/ — and stays out of dice until the source is ok.
     source: guardian
   - id: mastodon
     name: Mastodon Rain

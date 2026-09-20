@@ -1,4 +1,5 @@
 import { apiFetch } from "../core/http";
+import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
 
 export type SdmDevice = {
   id: string;
@@ -68,6 +69,7 @@ export function parseNestLook(cfg: Record<string, string> | undefined): NestLook
 export function sdmSyncKey(sdm: SdmStatus | undefined, look: NestLook): string {
   return JSON.stringify({
     linked: sdm?.linked,
+    pcm_url: sdm?.pcm_url,
     error: sdm?.error,
     devices: sdm?.devices,
     events: sdm?.events,
@@ -209,7 +211,7 @@ export class NestCamsLive {
     this.el.hidden = true;
     this.el.innerHTML = `
       <div class="nest-cams-wall" data-count="0"></div>
-      <p class="nest-cams-status" hidden></p>
+      <div class="nest-cams-status" hidden></div>
       <div class="nest-cams-tiles"></div>`;
     this.wall = this.el.querySelector(".nest-cams-wall")!;
     this.status = this.el.querySelector(".nest-cams-status")!;
@@ -247,11 +249,13 @@ export class NestCamsLive {
     this.devices = sdm?.devices ?? [];
     const events = sdm?.events ?? [];
     if (!sdm?.linked) {
-      this.setNote(
-        sdm?.pcm_url
-          ? "Link Nest via Device Access (PCM). Open the auth URL from GET /api/sdm, then POST the code."
-          : (sdm?.error || "Nest SDM is not linked. Set enterprise_id + Web OAuth client in ~/.zoto-viz/sdm.yml."),
-      );
+      this.status.replaceChildren(renderAuthSetup(AUTH_SETUPS.sdm, { pcmUrl: sdm?.pcm_url }));
+      if (sdm?.error) {
+        const err = document.createElement("p");
+        err.textContent = sdm.error;
+        this.status.appendChild(err);
+      }
+      this.status.hidden = false;
       this.tiles.replaceChildren();
       this.stopAll();
       this.buildWall([]);
@@ -272,6 +276,7 @@ export class NestCamsLive {
   }
 
   private setNote(text: string): void {
+    this.status.replaceChildren();
     this.status.textContent = text;
     this.status.hidden = !text;
   }

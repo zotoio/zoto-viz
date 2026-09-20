@@ -6,6 +6,7 @@ import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
 import { currentSkyRecipe, DEFAULT_SKY_RECIPE, cloneSkyRecipe, lerpSkyRecipe, skyRecipeKey, type SkyRecipe } from "./sky-ai";
 import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
+import { loadHtmlImage } from "../core/load-image";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -975,13 +976,15 @@ export class Backdrop {
       this.bindPhoto(hit, true);
       return;
     }
-    new THREE.TextureLoader().load(url, (t) => {
+    void loadHtmlImage(new Image(), url).then((img) => {
+      const t = new THREE.Texture(img);
       t.colorSpace = THREE.SRGBColorSpace;
       t.minFilter = THREE.LinearFilter;
+      t.needsUpdate = true;
       this.photoCache.set(url, t);
       if (gen !== this.photoLoadGen) return;
       this.bindPhoto(t, true);
-    });
+    }).catch(() => undefined);
   }
 
   private loadPhotoVideo(url: string, gen: number, onMiss: () => void): void {

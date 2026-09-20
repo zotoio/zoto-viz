@@ -53,4 +53,6 @@ def test_project_guardian_nested_and_met_template() -> None:
 def test_expand_ids_cap() -> None:
     ids = source_fields.expand_ids({"objectIDs": [1, 2, 3, 4, 5]}, {"list": "objectIDs", "expandCap": 3})
     assert ids == [1, 2, 3]
-    assert source_fields.normalize_fields({"title": "webTitle", "expandCap": 99})["expandCap"] == 12
+    assert source_fields.normalize_fields({"title": "webTitle", "expandCap": 99})["expandCap"] == source_fields.MAX_EXPAND
+    many = source_fields.expand_ids({"objectIDs": list(range(80))}, {"list": "objectIDs", "expandCap": 40})
+    assert many == list(range(40))

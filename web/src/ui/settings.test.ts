@@ -66,6 +66,8 @@ describe("Settings panes", () => {
     expect(privacy.textContent).toContain("Devices");
     expect(privacy.textContent).toMatch(/AI and dice cannot/);
     expect(dicePane?.textContent).toMatch(/camera, microphone/);
+    expect(dicePane?.textContent).toMatch(/Nest cams/);
+    expect(dicePane?.textContent).toMatch(/Guardian/);
     s.bindView(null);
     const pluginPane = s.el.querySelector('[data-pane="view"]');
     expect(pluginPane?.textContent).toMatch(/The cog next to the view menu opens this tab/);

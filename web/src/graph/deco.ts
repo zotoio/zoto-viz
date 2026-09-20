@@ -1,3 +1,5 @@
+import { stillSrc } from "../core/load-image";
+
 /** Photos and SVG the local agent pins onto the graph. */
 
 export type DecoAt = "selected" | "internet" | "origin" | [number, number, number];
@@ -100,7 +102,7 @@ export function decoHtml(d: AgentDeco): string {
     const svg = d.src.startsWith("<svg") ? sanitizeSvg(d.src) : "";
     if (svg) return `${svg}${cap}`;
   }
-  const src = escapeAttr(d.src);
+  const src = escapeAttr(stillSrc(d.src) || d.src);
   return `<img src="${src}" alt="${escapeAttr(d.label || "agent")}" />${cap}`;
 }
 

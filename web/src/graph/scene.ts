@@ -39,6 +39,7 @@ import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfO
 import { activityLookMix, centerMixForNdc } from "./cam-center";
 import { PINCH_HOLD_MS, mouseWheelTick, pinchWheel, pointerCentroid, threeFingerZoomDelta, wheelCamMotion } from "./wheel-cam";
 import { decoHtml, EMPTY_LOOK, type AgentLook, type DecoAt } from "./deco";
+import { loadHtmlImage } from "../core/load-image";
 import {
   GraphFabric, edgeHighlightBright, fabricActive, graphFaces, nodeHighlightBoost,
   resolveFabric, resolveGraphFlatten, type FabricEdgePose, type FabricKind, type FabricNodePose,
@@ -1761,10 +1762,12 @@ export class NetScene implements HostedView {
     this.backdrop.setCustom(look.shader ?? null);
     if (look.shaderPhoto) {
       const href = look.shaderPhoto.startsWith("/") ? look.shaderPhoto : `/api/ai/assets/${look.shaderPhoto}`;
-      new THREE.TextureLoader().load(href, (t) => {
+      void loadHtmlImage(new Image(), href).then((img) => {
+        const t = new THREE.Texture(img);
         t.colorSpace = THREE.SRGBColorSpace;
+        t.needsUpdate = true;
         this.backdrop.setPhoto(t);
-      });
+      }).catch(() => undefined);
     } else {
       this.backdrop.setPhoto(null);
     }

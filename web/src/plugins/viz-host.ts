@@ -13,7 +13,7 @@ export const VIZ_DEFAULT_MAX_PARTICLES = 4096;
 export const VIZ_MAX_PACKET_SAMPLES = 32;
 export const VIZ_MAX_RF_SAMPLES = 24;
 export const VIZ_MAX_TALKER_SAMPLES = 24;
-export const VIZ_MAX_HEADLINE_SAMPLES = 16;
+export const VIZ_MAX_HEADLINE_SAMPLES = 64;
 
 /** Fixed std140 UBO layout — locked in schema `$defs/vizUboLayout`. */
 export const VIZ_UBO = {

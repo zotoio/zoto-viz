@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sourceHeadlines, stripMarkup, type SourceLive } from "./sources";
+import { FEED_HEADLINE_LIMIT, sourceHeadlines, stripMarkup, type SourceLive } from "./sources";
 
 describe("sourceHeadlines", () => {
   it("takes RSS titles and skips paused or failed sources", () => {
@@ -34,6 +34,18 @@ describe("sourceHeadlines", () => {
       expect.arrayContaining(["Roster", "Ada"]),
     );
     expect(sourceHeadlines(sources, 8).every((h) => h.kind === "http")).toBe(true);
+  });
+
+  it("keeps a deep pictured page by default", () => {
+    const items = Array.from({ length: 40 }, (_, i) => ({
+      title: `Shot ${i}`,
+      image: `https://www.nasa.gov/${i}.jpg`,
+    }));
+    const sources: Record<string, SourceLive> = {
+      nasa: { id: "nasa", kind: "rss", label: "NASA", ok: true, feed: true, items },
+    };
+    expect(sourceHeadlines(sources)).toHaveLength(40);
+    expect(FEED_HEADLINE_LIMIT).toBeGreaterThanOrEqual(40);
   });
 
   it("returns nothing without a map", () => {

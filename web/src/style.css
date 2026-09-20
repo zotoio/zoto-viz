@@ -717,7 +717,14 @@ body.mic-off .feed-mic { opacity: 0.45; pointer-events: none; }
 }
 .settings-pop .sec-hint { color: var(--muted); font-size: 11.5px; line-height: 1.4; margin-bottom: 10px; }
 .settings-pop .source-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 16px; }
+.settings-pop .source-block { display: flex; flex-direction: column; gap: 4px; }
 .settings-pop .source-row { display: flex; align-items: center; gap: 10px; }
+.auth-setup { font-size: 12px; line-height: 1.45; color: var(--muted); margin: 6px 0 10px; }
+.auth-setup strong { display: block; color: var(--fg); margin-bottom: 4px; }
+.auth-setup p { margin: 0 0 6px; }
+.auth-setup .auth-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0; }
+.auth-setup a { color: var(--accent, #7dd3fc); }
+#nest-cams .nest-cams-status .auth-setup { max-width: 42rem; text-align: left; }
 .settings-pop .source-row .src-meta { color: var(--muted); font-size: 11px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-pop .source-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; align-items: end; }
 .settings-pop .source-form .sec-title { grid-column: 1 / -1; margin: 8px 0 0; }

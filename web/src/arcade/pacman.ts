@@ -66,7 +66,7 @@ export class PacmanView extends Stage3D {
   protected onSnapshot(): void {
     if (!this.msg) return;
     this.picker.update(this.msg);
-    this.setTicker(sourceHeadlines(this.msg.sources, 16).map((h) => `${h.label} ${h.text}`));
+    this.setTicker(sourceHeadlines(this.msg.sources).map((h) => `${h.label} ${h.text}`));
     const talkers = this.knownDevices()
       .filter((d) => d.role !== "self" && d.role !== "multicast")
       .sort((a, b) => b.packets - a.packets)

@@ -11,7 +11,7 @@ instances:
     filter: has-image
   - id: apod
     name: APOD
-    hint: NASA Astronomy Picture of the Day. Uses DEMO_KEY unless you put your own key on the apod source URL.
+    hint: NASA Astronomy Picture of the Day. DEMO_KEY works for light use. Get a personal key at https://api.nasa.gov/ and put it on the apod source URL if NASA starts rate-limiting.
     source: apod
     filter: has-image
   - id: earth-iotd

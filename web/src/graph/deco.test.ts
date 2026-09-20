@@ -44,6 +44,8 @@ describe("mergeAgentLook", () => {
 describe("decoHtml", () => {
   it("renders an img for photos", () => {
     expect(decoHtml({ id: "a", kind: "photo", src: "/api/ai/assets/x", at: "origin", label: "x" })).toContain("<img");
+    expect(decoHtml({ id: "a", kind: "photo", src: "https://www.nasa.gov/a.jpg", at: "origin" }))
+      .toContain("/api/sources/image?url=");
     expect(decoHtml({ id: "a", kind: "svg", src: "<svg viewBox='0 0 1 1'></svg>", at: "origin" })).toContain("<svg");
   });
 });

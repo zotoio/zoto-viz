@@ -8,6 +8,7 @@ import { WakeStream } from "../audio/wake-stream";
 import { includeView, VIEW_KEY, type ViewCapture } from "./capture";
 import { askUserMedia, clearMediaDismiss } from "./media-ask";
 import { micCaptureAllowed } from "../audio/want";
+import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
@@ -136,6 +137,8 @@ export class AgentPanel {
   private pullBtn!: HTMLButtonElement;
   private warnEl!: HTMLDivElement;
   private cursorKey!: TextField;
+  private cursorHelp!: HTMLElement;
+  private ttsHelp!: HTMLElement;
   private history: { role: "user" | "assistant"; content: string; thinking?: string; usage?: Record<string, unknown> }[] = [];
   private hydrateP: Promise<void> | null = null;
   private logEpoch = 0;
@@ -333,12 +336,14 @@ export class AgentPanel {
     row.className = "agent-row";
     row.append(this.pullBtn, clear);
 
+    this.cursorHelp = renderAuthSetup(AUTH_SETUPS.cursor);
+    this.ttsHelp = renderAuthSetup(AUTH_SETUPS.elevenlabs);
     this.el.append(
       this.statusEl,
       this.temperRail.el,
       this.oddsStrip.el,
-      this.backendSel.el, this.modelSel.el, this.warnEl, this.cursorKey.el,
-      ttsVoice.el, control.el, listen.el, watch.el, voice.el, ts.el, view.el, mosaicLayout.el, row, this.input,
+      this.backendSel.el, this.modelSel.el, this.warnEl, this.cursorKey.el, this.cursorHelp,
+      ttsVoice.el, this.ttsHelp, control.el, listen.el, watch.el, voice.el, ts.el, view.el, mosaicLayout.el, row, this.input,
     );
     this.paintCursorKey();
     this.paintPull();
@@ -362,6 +367,8 @@ export class AgentPanel {
     }
     return this.modelSel?.value.trim() || localStorage.getItem(MODEL_KEY) || "gemma4";
   }
+
+  cursorReady(): boolean { return this.lastCursor.configured; }
 
   async probeOllama(): Promise<{ ok: boolean; model: string; models: string[]; online: boolean }> {
     await this.refreshStatus();
@@ -519,6 +526,8 @@ export class AgentPanel {
   private paintCursorKey(): void {
     this.cursorKey.hidden = this.backend !== "cursor";
     this.cursorKey.input.placeholder = this.lastCursor.configured ? "key saved on the monitor" : "cursor_…";
+    if (this.cursorHelp) this.cursorHelp.hidden = this.backend !== "cursor" || this.lastCursor.configured;
+    if (this.ttsHelp) this.ttsHelp.hidden = this.ttsEngine === "elevenlabs";
   }
 
   private paintModels(): void {

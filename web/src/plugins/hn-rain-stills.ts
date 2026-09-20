@@ -1,4 +1,5 @@
 import { preferHnTitles } from "../../../plugins/src/hn-rain/frontend/crawl";
+import { loadHtmlImage } from "../core/load-image";
 
 export const HN_RAIN_STILL_HOLD_MS = 7000;
 export const HN_RAIN_STILL_POLL_MS = 2000;
@@ -140,21 +141,17 @@ export class HnRainStills {
       if (ticket !== this.gen || !src) return;
       this.shown = srcWanted;
       this.img.alt = title;
-      const reveal = (): void => {
+      void loadHtmlImage(this.img, src).then(() => {
         if (ticket !== this.gen) return;
         this.img.hidden = false;
         this.wait.hidden = true;
-      };
-      this.img.onload = reveal;
-      this.img.onerror = () => {
+      }).catch(() => {
         if (ticket !== this.gen) return;
         this.loading = "";
         this.shown = "";
         this.img.hidden = true;
         this.wait.hidden = false;
-      };
-      this.img.src = src;
-      if (this.img.complete && this.img.naturalWidth) reveal();
+      });
     });
   }
 

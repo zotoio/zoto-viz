@@ -3,7 +3,7 @@
 Two backends share the feed, memories, AI Control, and plugin install:
 
 - **Ollama** — any tag already on the machine, plus popular downloads (size / VRAM warning when the GPU is small). The monitor proxies `127.0.0.1:11434` (`ZOTO_VIZ_OLLAMA`).
-- **Cursor SDK** (`@cursor/sdk`) — hosted models from `Cursor.models.list()`, **Grok 4.6** by default. Needs `CURSOR_API_KEY` or a key pasted in Settings → Agent (stored `0600` at `~/.zoto-viz/cursor-key`). Chat is a resumed local agent (`Agent.create` / `Agent.resume`) with Cursor’s tool harness and zoto-viz MCP tools; the transcript is not replayed into the prompt. Session id is `~/.zoto-viz/agent/cursor-session.json` (cleared with the conversation). Each list / chat / still call appends tokens and billed cost to `~/.zoto-viz/cursor-stats.jsonl` (`0600`; override with `ZOTO_VIZ_CURSOR_STATS`). Header **debug** (key B) opens a side panel that tails the monitor log and Cursor token/cost lines. The API key is never written.
+- **Cursor SDK** (`@cursor/sdk`) — hosted models from `Cursor.models.list()`, **Grok 4.6** by default. Needs `CURSOR_API_KEY` or a key pasted in Settings → Agent (stored `0600` at `~/.zoto-viz/cursor-key`). Mint a user key at [Cursor Dashboard → API keys](https://cursor.com/dashboard/api) ([API docs](https://cursor.com/docs/api)). Chat is a resumed local agent (`Agent.create` / `Agent.resume`) with Cursor’s tool harness and zoto-viz MCP tools; the transcript is not replayed into the prompt. Session id is `~/.zoto-viz/agent/cursor-session.json` (cleared with the conversation). Each list / chat / still call appends tokens and billed cost to `~/.zoto-viz/cursor-stats.jsonl` (`0600`; override with `ZOTO_VIZ_CURSOR_STATS`). Header **debug** (key B) opens a side panel that tails the monitor log and Cursor token/cost lines. The API key is never written.
 
 Settings → Agent picks the backend and model. Conversation lives on the **feed**, not in Settings.
 
@@ -38,7 +38,7 @@ Voice: **listen for watchword** (on by default) holds a live microphone stream a
 
 Chrome on Linux usually has no Web Speech voices. Spoken replies then go through the monitor (`POST /api/ai/speak`) as a **PCM stream** the UI plays as chunks arrive:
 
-1. **ElevenLabs** when `ELEVENLABS_API_KEY` is set (cloud; reply text leaves this machine). Default voice is George (`JBFqnCBsd6RMkjVDRZzb`); override with **TTS voice** in Settings or `ELEVENLABS_VOICE_ID`. Flash model: `ELEVENLABS_MODEL=eleven_flash_v2_5`.
+1. **ElevenLabs** when `ELEVENLABS_API_KEY` is set (cloud; reply text leaves this machine). Create a key at [ElevenLabs API keys](https://elevenlabs.io/app/settings/api-keys). Default voice is George (`JBFqnCBsd6RMkjVDRZzb`); override with **TTS voice** in Settings or `ELEVENLABS_VOICE_ID`. Flash model: `ELEVENLABS_MODEL=eleven_flash_v2_5`.
 2. **Local Kokoro** (or any OpenAI-compatible speech server) at a **loopback** URL:
 
 ```bash

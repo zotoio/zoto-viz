@@ -25,6 +25,13 @@ import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
 import { guardReadableAnim } from "../graph/readable";
+import {
+  AUTH_SETUPS,
+  renderAuthSetup,
+  sourceAuthKind,
+  sourceAuthReady,
+  type AuthSetup,
+} from "../core/auth-setup";
 
 const PANES: { id: string; label: string }[] = [
   { id: "appearance", label: "Appearance" },
@@ -131,7 +138,7 @@ export class Settings {
     size: Slider;
   } | null = null;
   private chatUi: { on: Toggle; size: Slider } | null = null;
-  private sourcesUi: { list: HTMLDivElement; include: Toggle; instances: HTMLDivElement } | null = null;
+  private sourcesUi: { list: HTMLDivElement; include: Toggle; instances: HTMLDivElement; auth: HTMLDivElement } | null = null;
   private readonly nav = document.createElement("nav");
   private readonly paneEls = new Map<string, HTMLDivElement>();
   private readonly navBtns = new Map<string, HTMLButtonElement>();
@@ -407,6 +414,18 @@ export class Settings {
     }
   }
 
+  /** Setup card for a view that still needs a key or OAuth. */
+  setAuthSetup(setup: AuthSetup | null, extra?: { pcmUrl?: string | null }): void {
+    const host = this.viewHost;
+    if (!host) return;
+    host.querySelectorAll(":scope > .auth-setup, :scope > .sec.auth-setup-sec").forEach((n) => n.remove());
+    if (!setup) return;
+    const sec = document.createElement("div");
+    sec.className = "sec auth-setup-sec";
+    sec.appendChild(renderAuthSetup(setup, extra));
+    host.prepend(sec);
+  }
+
   agentHost(): HTMLDivElement {
     return this.pane("agent");
   }
@@ -494,7 +513,7 @@ export class Settings {
       <span class="sec-links">
         <button type="button" class="link roll" title="one-shot roll (does not change the header switch)">roll now</button>
       </span></div>
-      <div class="sec-hint">A roll randomizes the groups you leave on. Privacy filters, camera, microphone, chrome placement, and prompts always stay. Soft ceilings apply only to a roll — Settings sliders still go to the full range.</div>`;
+      <div class="sec-hint">A roll randomizes the groups you leave on. Privacy filters, camera, microphone, chrome placement, and prompts always stay. Views that still need a key or OAuth (Nest cams, Guardian until you replace api-key=test) stay out of the roll. Soft ceilings apply only to a roll — Settings sliders still go to the full range.</div>`;
     const includeList = document.createElement("div");
     includeList.className = "sec-controls dice-include";
     const include = {} as Record<DiceIncludeKey, Toggle>;
@@ -1197,8 +1216,10 @@ export class Settings {
   private buildSources(): void {
     const sec = document.createElement("section");
     sec.className = "sec";
+    const auth = document.createElement("div");
+    auth.className = "source-auth";
     sec.innerHTML = `<div class="sec-title">Data sources</div>
-      <div class="sec-hint">RSS, public HTTPS JSON/text, local files under $HOME / ~/.zoto-viz, the user journal, and the kernel ring (/dev/kmsg). HTTP JSON can map list / title / caption / image fields. Views (carousel, rain, term) are instances of one plugin pointed at a source — do not fork a tree per feed.</div>`;
+      <div class="sec-hint">RSS, public HTTPS JSON/text, local files under $HOME / ~/.zoto-viz, the user journal, and the kernel ring (/dev/kmsg). HTTP JSON can map list / title / caption / image fields. Views (carousel, rain, term) are instances of one plugin pointed at a source — do not fork a tree per feed. Sources that need a key show the signup link here and stay out of dice until they work.</div>`;
     const include = new Toggle({
       label: "headlines on feed",
       title: "show RSS / HTTP / file / journal / kmsg titles on the live feed ticker",
@@ -1331,11 +1352,12 @@ export class Settings {
         this.onInstancesChange?.();
       });
     });
-    sec.append(include.el, list, form, inst, instList);
+    sec.append(auth, include.el, list, form, inst, instList);
     this.pane("sources").appendChild(sec);
-    this.sourcesUi = { list, include, instances: instList };
+    this.sourcesUi = { list, include, instances: instList, auth };
     void this.refreshSources();
     void this.refreshInstances();
+    void this.refreshAuthIntegrations();
   }
 
   private async refreshSources(): Promise<void> {
@@ -1388,10 +1410,42 @@ export class Settings {
             .then(() => this.refreshSources());
         });
         el.append(on.el, meta, drop);
-        host.appendChild(el);
+        const block = document.createElement("div");
+        block.className = "source-block";
+        block.appendChild(el);
+        const kind = sourceAuthKind(row.id, row.url || "");
+        if (kind) {
+          const ready = sourceAuthReady(kind, row.url || "", status);
+          if (!ready || !AUTH_SETUPS[kind].blocksDice) {
+            const card = renderAuthSetup(AUTH_SETUPS[kind]);
+            if (ready && !AUTH_SETUPS[kind].blocksDice) card.classList.add("auth-setup-optional");
+            block.appendChild(card);
+          }
+        }
+        host.appendChild(block);
       }
     } catch {
       host.textContent = "Sources API unavailable (is the monitor running?)";
+    }
+  }
+
+  private async refreshAuthIntegrations(): Promise<void> {
+    const host = this.sourcesUi?.auth;
+    if (!host) return;
+    host.replaceChildren();
+    try {
+      const r = await apiFetch("/api/sdm");
+      const sdm = r.ok ? await r.json() as { linked?: boolean; pcm_url?: string | null; error?: string } : {};
+      if (sdm.linked) {
+        const ok = document.createElement("div");
+        ok.className = "sec-hint";
+        ok.textContent = "Nest Device Access is linked. Nest cams can join dice.";
+        host.appendChild(ok);
+        return;
+      }
+      host.appendChild(renderAuthSetup(AUTH_SETUPS.sdm, { pcmUrl: sdm.pcm_url }));
+    } catch {
+      host.appendChild(renderAuthSetup(AUTH_SETUPS.sdm));
     }
   }
 

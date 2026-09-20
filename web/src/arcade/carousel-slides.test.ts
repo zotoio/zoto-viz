@@ -10,6 +10,16 @@ import {
 } from "./carousel-slides";
 
 describe("carousel-slides", () => {
+  it("keeps a deep pictured page", () => {
+    const slides = carouselSlides(Array.from({ length: 40 }, (_, i) => ({
+      id: `nasa:${i}`,
+      label: "NASA",
+      text: `Shot ${i}`,
+      image: `https://www.nasa.gov/${i}.jpg`,
+    })));
+    expect(slides).toHaveLength(40);
+  });
+
   it("keeps pictured headlines", () => {
     const slides = carouselSlides([
       { id: "hn:0", label: "Hacker News", text: "A story" },

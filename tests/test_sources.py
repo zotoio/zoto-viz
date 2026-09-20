@@ -50,6 +50,29 @@ def test_parse_rss_and_atom() -> None:
     ]
     assert rss["items"][0]["summary"] == "Hi & there"
     assert rss["items"][2]["image"] == "https://www.nasa.gov/wp-content/uploads/2026/01/iotd.jpg"
+
+
+ATOM_POTD = """<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>Commons POTD</title>
+<entry>
+  <title>Picture of the day</title>
+  <summary type="html">&lt;img src=&quot;https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Baikal%2C_Cape_Burhan.jpg/330px-Baikal%2C_Cape_Burhan.jpg?utm_source=commons&amp;amp;utm_campaign=parser&quot; /&gt;
+  &lt;img src=&quot;https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Baikal%2C_Cape_Burhan.jpg/960px-Baikal%2C_Cape_Burhan.jpg?utm_source=commons&quot; /&gt;</summary>
+</entry>
+</feed>
+"""
+
+
+def test_commons_potd_keeps_full_thumb() -> None:
+    atom = sources.parse_rss(ATOM_POTD)
+    image = atom["items"][0]["image"]
+    assert "/960px-Baikal" in image
+    assert image.startswith("https://thumb.wikimedia.org/")
+    assert "utm_" not in image
+    assert sources.clean_image_url(
+        "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Baikal.jpg"
+    ).endswith("/1280px-Baikal.jpg")
     atom = sources.parse_rss(ATOM)
     assert atom["items"][0]["title"] == "A1"
     assert atom["items"][0]["link"] == "https://example.com/a"
@@ -117,6 +140,37 @@ def test_seed_defaults_and_crud() -> None:
     assert sources.delete("notes") is False
     lines = sources.headlines()
     assert isinstance(lines, list)
+
+
+def test_parse_rss_keeps_a_deep_page() -> None:
+    items = "".join(f"<item><title>Shot {i}</title></item>" for i in range(40))
+    parsed = sources.parse_rss(f'<?xml version="1.0"?><rss><channel><title>Deep</title>{items}</channel></rss>')
+    assert len(parsed["items"]) == 40
+
+
+def test_raise_feed_depth_rewrites_old_caps() -> None:
+    sources.save([
+        sources.normalize({
+            "id": "apod", "type": "http",
+            "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count=8",
+            "fields": {"title": "title", "image": "hdurl"},
+        }),
+        sources.normalize({
+            "id": "met", "type": "http",
+            "url": "https://collectionapi.metmuseum.org/public/collection/v1/search?q=art",
+            "fields": {"list": "objectIDs", "expandCap": 8, "title": "title"},
+        }),
+        sources.normalize({
+            "id": "guardian", "type": "http",
+            "url": "https://content.guardianapis.com/search?page-size=12&api-key=test",
+            "fields": {"list": "response.results", "title": "webTitle"},
+        }),
+    ])
+    sources.reset_for_tests()
+    rows = {r["id"]: r for r in sources.load()}
+    assert f"count={sources.APOD_COUNT}" in rows["apod"]["url"]
+    assert rows["met"]["fields"]["expandCap"] == sources.MET_EXPAND
+    assert f"page-size={sources.GUARDIAN_PAGE}" in rows["guardian"]["url"]
 
 
 def test_seed_content_sources_on_old_registry() -> None:

@@ -8,6 +8,7 @@ import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGrou
 import { mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
 import { Settings } from "../ui/settings";
 import { parseSourceBind, sourceHeadlines } from "../core/sources";
+import { bindSourceOf, viewAuthBlock, type AuthCtx } from "../core/auth-setup";
 import { LiveFeed, feedViewShift } from "../ui/feed";
 import { ChatPanel } from "../ui/chat";
 import { DebugLog, readDebugOn } from "../ui/debug-log";
@@ -660,6 +661,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
     lookForMode(m.id) ?? spec?.look,
     arcadeControls(m),
   );
+  paintViewAuth(m, spec);
   $("modeOpts").replaceChildren();
   void (async () => {
     if (!(await ensureReviewed(spec))) {
@@ -790,6 +792,7 @@ sysLabels.onChange = setLabels;
 const showToggles = { lan: netLan, internet: netInternet, multicast: netMulticast, offline: netOffline, labels: sysLabels, cpuIdle: sysCpuIdle };
 // "merge names" is a data transform rather than a visibility filter: the last raw snapshot is re-fed through it
 let lastRaw: StateMsg | null = null;
+let typeSafeKeyOn = false;
 const mergeToggle = new Toggle({
   id: "mergeNames", label: "merge names", title: "collapse internet hosts that share a hostname (CDN aliases). LAN devices with the same factory name stay separate — Wi-Fi+Ethernet of one box is already folded by MAC",
   checked: localStorage.getItem("zoto-viz.merge") === "1",
@@ -838,8 +841,12 @@ function feed(m: StateMsg): void {
   applyStats(shown);
   feedCtl.feed?.setSourceHeadlines(sourceHeadlines(m.sources));
   nestCams.sync(m.sdm);
+  if (uiReady) {
+    const cur = modeById(liveMode || modeSel.value);
+    paintViewAuth(cur, cur.pluginId ? pluginSpecForMode(cur.id) : null);
+  }
   const ticker = [
-    ...sourceHeadlines(m.sources, 12).map((h) => `${h.label} ${h.text}`),
+    ...sourceHeadlines(m.sources).map((h) => `${h.label} ${h.text}`),
     ...(feedCtl.feed?.snapshot(10) ?? []),
   ];
   arcade.pacman?.view.setTicker?.(ticker);
@@ -1319,7 +1326,8 @@ uiReady = true;
 applyViewLook();
 void (async () => {
   const session = await bootSession();
-  setTypeSafeProxyConfigured(() => session.typesafeConfigured);
+  typeSafeKeyOn = session.typesafeConfigured;
+  setTypeSafeProxyConfigured(() => typeSafeKeyOn);
   agent.setControlFromServer(session.aiControl);
   pluginSpecs = await installPlugins();
   modeSel.setOptions(viewSelectOptions());
@@ -1553,16 +1561,53 @@ async function setAiCycle(on: boolean): Promise<void> {
 
 const DICE_ROLL_MS = 450;
 let diceBusy = false;
+function liveAuthCtx(): AuthCtx {
+  return {
+    sdmLinked: !!lastRaw?.sdm?.linked,
+    sdmPcmUrl: lastRaw?.sdm?.pcm_url,
+    sources: lastRaw?.sources,
+    cursorConfigured: agent.cursorReady(),
+    typesafeConfigured: typeSafeKeyOn,
+  };
+}
+
+function paintViewAuth(m: ViewMode, spec: PluginView | null): void {
+  const block = viewAuthBlock({
+    id: m.id,
+    pluginId: m.pluginId,
+    source: bindSourceOf(spec, parseSourceBind(optsFor(m)).source),
+    capabilities: spec?.capabilities,
+  }, liveAuthCtx());
+  settings?.setAuthSetup(block, { pcmUrl: lastRaw?.sdm?.pcm_url });
+}
+
 function diceModes(): ViewMode[] {
   const allowed = new Set(viewSelectOptions().map((o) => o.value));
+  const ctx = liveAuthCtx();
   const ready = allModes().filter((m) => {
     if (!allowed.has(m.id)) return false;
     if (!m.pluginId) return true;
-    const spec = pluginSpecs.find((p) => p.id === m.pluginId);
-    if (!spec) return true;
-    return !pluginNeedsReview(spec) || !!spec.consent;
+    const spec = pluginSpecForMode(m.id);
+    if (spec && pluginNeedsReview(spec) && !spec.consent) return false;
+    if (viewAuthBlock({
+      id: m.id,
+      pluginId: m.pluginId,
+      source: bindSourceOf(spec, parseSourceBind(optsFor(m)).source),
+      capabilities: spec?.capabilities,
+    }, ctx)) return false;
+    return true;
   });
-  return ready.length ? ready : allModes().filter((m) => allowed.has(m.id));
+  if (ready.length) return ready;
+  return allModes().filter((m) => {
+    if (!allowed.has(m.id)) return false;
+    const spec = pluginSpecForMode(m.id);
+    return !viewAuthBlock({
+      id: m.id,
+      pluginId: m.pluginId,
+      source: bindSourceOf(spec, parseSourceBind(optsFor(m)).source),
+      capabilities: spec?.capabilities,
+    }, ctx);
+  });
 }
 
 async function rollDice(force: { view?: boolean } = {}): Promise<void> {
@@ -1580,7 +1625,9 @@ async function rollDice(force: { view?: boolean } = {}): Promise<void> {
       modes: modes.map((m) => ({ id: m.id, options: m.options, config: m.config })),
       plugins: allModes().filter((m) => m.pluginId).map((m) => {
         const spec = pluginSpecForMode(m.id);
-        return { id: spec ? `${spec.id}${spec.instanceId && spec.instanceId !== spec.id ? `:${spec.instanceId}` : ""}` : m.pluginId!, fields: pluginViewKnobs({ ...(spec ?? { id: m.pluginId!, name: m.label, version: 1 }), options: m.options, config: m.config }, m.config) };
+        const fields = pluginViewKnobs({ ...(spec ?? { id: m.pluginId!, name: m.label, version: 1 }), options: m.options, config: m.config }, m.config)
+          .filter((f) => f.key !== "pics" || agent.cursorReady());
+        return { id: spec ? `${spec.id}${spec.instanceId && spec.instanceId !== spec.id ? `:${spec.instanceId}` : ""}` : m.pluginId!, fields };
       }),
       skies: cycleSkyPool(),
       audioDrives: (liveMic.micPolicy === "off"

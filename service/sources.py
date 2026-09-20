@@ -29,13 +29,20 @@ KINDS = ("rss", "http", "file", "journal", "kmsg")
 SYS_KINDS = ("journal", "kmsg")
 ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 MAX_BODY = 256_000
-MAX_ITEMS = 20
+MAX_ITEMS = 80
 MAX_TITLE = 240
 MAX_SUMMARY = 400
 MIN_INTERVAL = 15
 MAX_INTERVAL = 86_400
 DEFAULT_INTERVAL = 300
 FETCH_S = 12
+APOD_COUNT = 40
+GUARDIAN_PAGE = 50
+MET_EXPAND = 40
+PREFETCH_STILLS = 48
+HEADLINE_LIMIT = 64
+_COUNT_Q = re.compile(r"([?&]count=)(\d+)")
+_PAGE_Q = re.compile(r"([?&]page-size=)(\d+)")
 
 DEFAULT_SOURCES: list[dict[str, Any]] = [
     {
@@ -60,7 +67,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "id": "apod",
         "type": "http",
         "label": "Astronomy Picture of the Day",
-        "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count=8",
+        "url": f"https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count={APOD_COUNT}",
         "interval": 3600,
         "enabled": True,
         "feed": True,
@@ -102,7 +109,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "fields": {
             "list": "objectIDs",
             "expand": "https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}",
-            "expandCap": 8,
+            "expandCap": MET_EXPAND,
             "title": "title",
             "caption": "artistDisplayName",
             "image": "primaryImage",
@@ -123,7 +130,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "id": "guardian",
         "type": "http",
         "label": "Guardian world",
-        "url": "https://content.guardianapis.com/search?section=world&show-fields=trailText,thumbnail&page-size=12&api-key=test",
+        "url": f"https://content.guardianapis.com/search?section=world&show-fields=trailText,thumbnail&page-size={GUARDIAN_PAGE}&api-key=test",
         "interval": 600,
         "enabled": True,
         "feed": True,
@@ -325,9 +332,41 @@ def load(*, seed: bool = True) -> list[dict[str, Any]]:
         taken.add(row["id"])
         out.append(row)
     out = _seed_missing(out, taken, persist=p.is_file())
+    if _raise_feed_depth(out) and p.is_file():
+        _dump(out)
     _rows = out
     _loaded = True
     return list(_rows)
+
+
+def _raise_feed_depth(rows: list[dict[str, Any]]) -> bool:
+    """Lift shipped pictured feeds that still carry the old thin caps."""
+    changed = False
+    for row in rows:
+        sid = row.get("id")
+        url = str(row.get("url") or "")
+        if sid == "apod":
+            m = _COUNT_Q.search(url)
+            if m and int(m.group(2)) < APOD_COUNT:
+                row["url"] = _COUNT_Q.sub(rf"\g<1>{APOD_COUNT}", url, count=1)
+                changed = True
+        elif sid == "guardian":
+            m = _PAGE_Q.search(url)
+            if m and int(m.group(2)) < GUARDIAN_PAGE:
+                row["url"] = _PAGE_Q.sub(rf"\g<1>{GUARDIAN_PAGE}", url, count=1)
+                changed = True
+        elif sid == "met":
+            fields = row.get("fields")
+            if not isinstance(fields, dict):
+                continue
+            try:
+                cap = int(fields.get("expandCap") or 0)
+            except (TypeError, ValueError):
+                cap = 0
+            if cap < MET_EXPAND:
+                fields["expandCap"] = MET_EXPAND
+                changed = True
+    return changed
 
 
 def _seed_missing(rows: list[dict[str, Any]], taken: set[str], *, persist: bool) -> list[dict[str, Any]]:
@@ -429,9 +468,16 @@ def _child(el: ET.Element, *names: str) -> ET.Element | None:
 
 
 _IMG_HREF = re.compile(
-    r"https://[^\s\"'<>]+?\.(?:jpe?g|png|webp|gif)(?:\?[^\s\"'<>]*)?",
+    r"https://[^\s\"'<>]+?\.(?:jpe?g|png|webp|gif)(?:/\d+px-[^\s\"'<>]+)?(?:\?[^\s\"'<>]*)?",
     re.I,
 )
+_WIKI_THUMB = re.compile(
+    r"^(https://(?:upload|thumb)\.wikimedia\.org/wikipedia/commons/thumb/[0-9a-f]/[0-9a-f]{2}/)"
+    r"([^/]+\.(?:jpe?g|png|webp|gif))$",
+    re.I,
+)
+_WIKI_PX = re.compile(r"/(\d+)px-", re.I)
+MAX_IMAGE_URL = 2000
 
 
 def _attr(el: ET.Element, name: str) -> str:
@@ -443,8 +489,44 @@ def _attr(el: ET.Element, name: str) -> str:
     return ""
 
 
+def clean_image_url(url: str) -> str:
+    """Unescape HTML, drop tracker query, finish a truncated Wikimedia thumb."""
+    raw = unescape((url or "").strip()).replace("&amp;", "&")
+    if not raw.startswith("https://"):
+        return ""
+    if "?" in raw:
+        base, query = raw.split("?", 1)
+        if "utm_" in query:
+            raw = base
+    m = _WIKI_THUMB.match(raw)
+    if m:
+        name = m.group(2)
+        raw = f"{m.group(1)}{name}/1280px-{name}"
+    if len(raw) > MAX_IMAGE_URL:
+        return ""
+    return raw
+
+
+def _image_score(url: str) -> int:
+    m = _WIKI_PX.search(url)
+    return int(m.group(1)) if m else 0
+
+
+def pick_image_url(*blobs: str) -> str:
+    found: list[str] = []
+    for blob in blobs:
+        for hit in _IMG_HREF.finditer(blob or ""):
+            url = clean_image_url(hit.group(0))
+            if url and url not in found:
+                found.append(url)
+    if not found:
+        return ""
+    return max(found, key=_image_score)
+
+
 def _item_image(it: ET.Element) -> str:
     """enclosure / media:content / img-in-description — NASA IOTD uses enclosure."""
+    enclosed: list[str] = []
     for child in list(it):
         local = (child.tag or "").split("}")[-1].lower()
         if local not in {"enclosure", "content", "thumbnail"}:
@@ -455,10 +537,9 @@ def _item_image(it: ET.Element) -> str:
         if not url.startswith("https://"):
             continue
         if typ.startswith("image/") or medium == "image" or _IMG_HREF.match(url):
-            return url[:500]
+            enclosed.append(url)
     blob = _inner(_child(it, "description", "summary", "content"))
-    hit = _IMG_HREF.search(blob)
-    return hit.group(0)[:500] if hit else ""
+    return pick_image_url(*enclosed, blob)
 
 
 def parse_rss(body: str) -> dict[str, Any]:
@@ -845,18 +926,20 @@ def _schedule_prefetch(items: list[dict[str, Any]]) -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    loop.create_task(_prefetch_stills(urls[:8]))
+    loop.create_task(_prefetch_stills(urls[:PREFETCH_STILLS]))
 
 
 async def _prefetch_stills(urls: list[str]) -> None:
-    for url in urls:
+    async def one(url: str) -> None:
         try:
             await agent_assets.ensure_photo(url)
-        except (ValueError, ClientError):
-            continue
+        except (ValueError, ClientError, TimeoutError):
+            return
+
+    await asyncio.gather(*(one(url) for url in urls), return_exceptions=True)
 
 
-def headlines(limit: int = 12) -> list[dict[str, str]]:
+def headlines(limit: int = HEADLINE_LIMIT) -> list[dict[str, str]]:
     """Feed-ready rows from enabled sources that opted into the ticker."""
     out: list[dict[str, str]] = []
     for row in ensure():
@@ -877,7 +960,7 @@ def headlines(limit: int = 12) -> list[dict[str, str]]:
             }
             image = str(item.get("image") or "").strip()
             if image:
-                line["image"] = image[:500]
+                line["image"] = image[:MAX_IMAGE_URL]
             out.append(line)
             if len(out) >= limit:
                 return out
@@ -905,10 +988,9 @@ async def api_image(request: web.Request) -> web.Response:
         return web.json_response({"error": "url required"}, status=400)
     try:
         row = await agent_assets.ensure_photo(raw)
-    except ValueError as e:
-        return web.json_response({"error": str(e)}, status=400)
-    except ClientError as e:
-        return web.json_response({"error": f"fetch failed: {e}"}, status=400)
+    except (ValueError, ClientError, TimeoutError) as e:
+        status = agent_assets.image_http_status(e)
+        return web.json_response({"error": str(e) if isinstance(e, ValueError) else f"fetch failed: {e}"}, status=status)
     return agent_assets.file_response(row)
 
 

@@ -48,6 +48,7 @@ export interface SourceLive {
   ok: boolean;
   ts?: number;
   feed?: boolean;
+  url?: string;
   items?: SourceItem[];
   text?: string;
   json?: unknown;
@@ -90,7 +91,7 @@ function jsonStrings(value: unknown, cap: number): string[] {
       return;
     }
     if (Array.isArray(v)) {
-      for (const item of v.slice(0, 12)) walk(item, depth + 1);
+      for (const item of v.slice(0, FEED_HEADLINE_LIMIT)) walk(item, depth + 1);
       return;
     }
     if (v && typeof v === "object") {
@@ -115,9 +116,13 @@ function itemField(item: SourceItem, key: string): string {
   return typeof val === "string" ? val : "";
 }
 
+export const FEED_HEADLINE_LIMIT = 64;
+export const FEED_SLIDE_LIMIT = 48;
+const MAX_IMAGE_HREF = 2000;
+
 export function sourceHeadlines(
   sources: Record<string, SourceLive> | undefined,
-  limit = 12,
+  limit = FEED_HEADLINE_LIMIT,
   bind?: SourceBind,
 ): SourceHeadline[] {
   if (!sources) return [];
@@ -135,7 +140,7 @@ export function sourceHeadlines(
     const row: SourceHeadline = { id, label, text: t.slice(0, 240), kind };
     const body = summary ? stripMarkup(summary).slice(0, 400) : "";
     if (body && body !== row.text) row.summary = body;
-    if (href.startsWith("https://")) row.image = href.slice(0, 500);
+    if (href.startsWith("https://")) row.image = href.slice(0, MAX_IMAGE_HREF);
     out.push(row);
     return out.length >= limit;
   };

@@ -7,6 +7,7 @@ APOD originals (often 2–19 MB) that the old 1.5 MB cap rejected.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import ipaddress
 import json
@@ -23,8 +24,17 @@ from . import paths
 
 MAX_BYTES = 24_000_000
 MAX_SVG = 80_000
-MAX_REDIRECTS = 2
+MAX_REDIRECTS = 5
 FETCH_S = 30
+FETCH_TRIES = 3
+USER_AGENT = "zoto-viz/1.0 (source stills; +https://zoto.local)"
+GENERIC_MIME = {
+    "",
+    "application/octet-stream",
+    "binary/octet-stream",
+    "application/force-download",
+    "application/download",
+}
 ID_RE = re.compile(r"^[a-f0-9]{12,32}$")
 IMAGE_TYPES = {
     "image/jpeg": ".jpg",
@@ -145,14 +155,43 @@ def store_svg(markup: str) -> dict[str, Any]:
     return row
 
 
+def sniff_image_mime(blob: bytes) -> str | None:
+    """Magic-byte type. CDNs often send octet-stream; HTML error pages must not cache as JPEG."""
+    if len(blob) < 12:
+        return None
+    if blob[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if blob[:6] in {b"GIF87a", b"GIF89a"}:
+        return "image/gif"
+    if blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return "image/webp"
+    head = blob.lstrip()[:240].lower()
+    if head.startswith(b"<svg") or (head.startswith(b"<?xml") and b"<svg" in head):
+        return "image/svg+xml"
+    return None
+
+
+def resolve_image_mime(_header: str, blob: bytes) -> str:
+    """Prefer magic bytes so an HTML error page with a JPEG Content-Type is rejected."""
+    sniffed = sniff_image_mime(blob)
+    if sniffed:
+        return sniffed
+    raise ValueError("not an image")
+
+
 def find_by_url(url: str) -> dict[str, Any] | None:
-    """Return a cached photo row for this HTTPS URL, if we already fetched it."""
+    """Return a cached photo row for this HTTPS URL, if the bytes are still on disk."""
     try:
         want = check_url(url)[:300]
     except ValueError:
         return None
     for row in list_assets():
-        if str(row.get("url") or "")[:300] == want or str(row.get("src") or "")[:300] == want:
+        if str(row.get("url") or "")[:300] != want and str(row.get("src") or "")[:300] != want:
+            continue
+        path = asset_path(str(row.get("id") or ""), str(row.get("mime") or ""))
+        if path:
             return row
     return None
 
@@ -166,11 +205,47 @@ def asset_path(aid: str, mime: str) -> Path | None:
     return hits[0] if hits else None
 
 
+_inflight: dict[str, asyncio.Task[dict[str, Any]]] = {}
+
+
+def _fetch_headers(url: str) -> dict[str, str]:
+    host = urlparse(url).hostname or ""
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    }
+    if host:
+        headers["Referer"] = f"https://{host}/"
+    return headers
+
+
+def image_http_status(exc: BaseException) -> int:
+    """Map fetch failures so the browser can retry 5xx and not cache 4xx."""
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+        return 504
+    if isinstance(exc, ClientError):
+        return 502
+    msg = str(exc).lower()
+    if any(s in msg for s in ("https url", "host not", "port not", "url too", "address not", "could not resolve")):
+        return 400
+    return 502
+
+
 async def ensure_photo(url: str) -> dict[str, Any]:
     hit = find_by_url(url)
     if hit:
         return hit
-    return await fetch_photo(url)
+    key = check_url(url)
+    existing = _inflight.get(key)
+    if existing:
+        return await asyncio.shield(existing)
+    task = asyncio.create_task(fetch_photo(key))
+    _inflight[key] = task
+    try:
+        return await asyncio.shield(task)
+    finally:
+        if _inflight.get(key) is task:
+            del _inflight[key]
 
 
 async def fetch_photo(url: str) -> dict[str, Any]:
@@ -178,6 +253,23 @@ async def fetch_photo(url: str) -> dict[str, Any]:
     cached = find_by_url(requested)
     if cached:
         return cached
+    last: BaseException | None = None
+    for attempt in range(FETCH_TRIES):
+        try:
+            return await _download_photo(requested)
+        except (ClientError, TimeoutError, asyncio.TimeoutError) as e:
+            last = e
+        except ValueError as e:
+            last = e
+            if "fetch failed (429)" not in str(e) and "fetch failed (5" not in str(e):
+                raise
+        if attempt + 1 < FETCH_TRIES:
+            await asyncio.sleep(0.4 * (attempt + 1))
+    assert last is not None
+    raise last
+
+
+async def _download_photo(requested: str) -> dict[str, Any]:
     current = requested
     timeout = ClientTimeout(total=FETCH_S)
     hops = 0
@@ -186,7 +278,7 @@ async def fetch_photo(url: str) -> dict[str, Any]:
             async with s.get(
                 current,
                 allow_redirects=False,
-                headers={"User-Agent": "zoto-viz/1.0", "Accept": "image/*,image/svg+xml"},
+                headers=_fetch_headers(current),
             ) as r:
                 if r.status in {301, 302, 303, 307, 308}:
                     hops += 1
@@ -195,11 +287,11 @@ async def fetch_photo(url: str) -> dict[str, Any]:
                     loc = r.headers.get("Location") or ""
                     current = check_url(urljoin(current, loc))
                     continue
+                if r.status in {429, 500, 502, 503, 504}:
+                    raise ValueError(f"fetch failed ({r.status})")
                 if r.status >= 400:
                     raise ValueError(f"fetch failed ({r.status})")
-                mime = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-                if mime not in IMAGE_TYPES:
-                    raise ValueError("not an image")
+                header_mime = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
                 cl = r.headers.get("Content-Length")
                 if cl and cl.isdigit() and int(cl) > MAX_BYTES:
                     raise ValueError("image too large")
@@ -208,6 +300,7 @@ async def fetch_photo(url: str) -> dict[str, Any]:
                     raise ValueError("image too large")
                 if len(blob) < 32:
                     raise ValueError("image too small")
+                mime = resolve_image_mime(header_mime, blob)
                 aid = _new_id(blob)
                 dest = assets_dir() / f"{aid}{IMAGE_TYPES[mime]}"
                 dest.write_bytes(blob)
@@ -281,7 +374,11 @@ def file_response(row: dict[str, Any]) -> web.Response:
     path = asset_path(aid, mime)
     if not path:
         return web.json_response({"error": "missing"}, status=404)
-    return web.FileResponse(path, headers={"Content-Type": mime, "Cache-Control": "private, max-age=3600"})
+    return web.FileResponse(path, headers={
+        "Content-Type": mime,
+        "Cache-Control": "private, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+    })
 
 
 async def api_asset(req: web.Request) -> web.Response:

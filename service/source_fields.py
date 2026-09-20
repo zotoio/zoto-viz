@@ -4,10 +4,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
-MAX_ITEMS = 20
+MAX_ITEMS = 80
 MAX_TITLE = 240
 MAX_SUMMARY = 400
-MAX_EXPAND = 8
+MAX_EXPAND = 48
+MAX_IMAGE = 2000
 FIELD_KEYS = (
     "list", "title", "caption", "image", "imageFallback", "link",
     "filter", "imageTemplate", "linkTemplate", "expand", "expandCap", "id",
@@ -29,7 +30,7 @@ def normalize_fields(raw: Any) -> dict[str, Any] | None:
                 n = int(val)
             except (TypeError, ValueError):
                 continue
-            out[key] = max(1, min(12, n))
+            out[key] = max(1, min(MAX_EXPAND, n))
             continue
         text = str(val or "").strip()
         if text:
@@ -77,7 +78,7 @@ def _text(val: Any, cap: int) -> str:
 
 def _https(url: str) -> str:
     href = (url or "").strip()
-    return href[:500] if href.startswith("https://") else ""
+    return href[:MAX_IMAGE] if href.startswith("https://") else ""
 
 
 def item_from_record(rec: dict[str, Any], fields: dict[str, Any]) -> dict[str, str] | None:
@@ -141,4 +142,4 @@ def expand_ids(data: Any, fields: dict[str, Any]) -> list[Any]:
     """List of ids (or records) to hydrate when ``expand`` is set."""
     rows = as_list(data, str(fields.get("list") or "") or None)
     cap = int(fields.get("expandCap") or MAX_EXPAND)
-    return rows[: max(1, min(12, cap))]
+    return rows[: max(1, min(MAX_EXPAND, cap))]
