@@ -33,6 +33,15 @@ export function parseSourceBind(cfg?: Record<string, string> | null): SourceBind
   };
 }
 
+/** HN Rain / HN Term draw their own stills — pictured-only would hide HN and Lobsters. */
+export function illustratedSourceBind(cfg?: Record<string, string> | null): SourceBind {
+  const bind = parseSourceBind(cfg);
+  if (bind.filter === "has-image" || bind.filter === "image" || bind.filter === "pictured") {
+    bind.filter = "all";
+  }
+  return bind;
+}
+
 export interface SourceItem {
   title?: string;
   link?: string;

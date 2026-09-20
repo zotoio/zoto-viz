@@ -38,3 +38,4 @@ config:
       - [all, all]
       - [has-image, pictured]
     default: all
+    hint: Pictured-only is ignored — the teletype shows every title.

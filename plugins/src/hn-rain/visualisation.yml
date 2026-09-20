@@ -65,3 +65,4 @@ config:
       - [all, all]
       - [has-image, pictured]
     default: all
+    hint: Pictured-only is ignored here — Composer stills illustrate every title.

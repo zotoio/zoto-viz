@@ -1624,6 +1624,8 @@ export class NetScene implements HostedView {
   }
 
   get currentMode(): ViewMode { return this.mode; }
+  get nodeCount(): number { return this.nodes.size; }
+  get pluginSkyId(): string | null { return this.backdrop.pluginSkyId(); }
 
   /** Pause / resume rendering and layout ticks (the data model keeps updating either way). */
   setActive(on: boolean): void {

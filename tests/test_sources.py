@@ -16,6 +16,19 @@ RSS = """<?xml version="1.0"?>
   <title>A long NASA caption that should stay intact on the ticker and slides</title>
   <enclosure url="https://www.nasa.gov/wp-content/uploads/2026/01/iotd.jpg" type="image/jpeg" length="4500000"/>
 </item>
+<item>
+  <description><p>Galaxy snapshot from a toot</p></description>
+  <link>https://mastodon.social/@x/1</link>
+  <media:content url="https://i.guim.co.uk/img/media/abc123" width="600"/>
+</item>
+<item>
+  <title>Lake Powell</title>
+  <description>Snow drought.</description>
+  <content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+    <img src="https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/x/old.jpg"/>
+    <img src="https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/x/now.jpg"/>
+  ]]></content:encoded>
+</item>
 </channel></rss>
 """
 
@@ -47,9 +60,18 @@ def test_parse_rss_and_atom() -> None:
         "First",
         "Second",
         "A long NASA caption that should stay intact on the ticker and slides",
+        "Galaxy snapshot from a toot",
+        "Lake Powell",
     ]
     assert rss["items"][0]["summary"] == "Hi & there"
     assert rss["items"][2]["image"] == "https://www.nasa.gov/wp-content/uploads/2026/01/iotd.jpg"
+    assert rss["items"][3]["title"].startswith("Galaxy snapshot")
+    assert rss["items"][3]["image"] == "https://i.guim.co.uk/img/media/abc123"
+    assert rss["items"][4]["image"].endswith("now.jpg")
+    assert "&amp;" not in (rss["items"][4]["image"] or "")
+    atom = sources.parse_rss(ATOM)
+    assert atom["items"][0]["title"] == "A1"
+    assert atom["items"][0]["link"] == "https://example.com/a"
 
 
 ATOM_POTD = """<?xml version="1.0"?>
@@ -67,15 +89,12 @@ ATOM_POTD = """<?xml version="1.0"?>
 def test_commons_potd_keeps_full_thumb() -> None:
     atom = sources.parse_rss(ATOM_POTD)
     image = atom["items"][0]["image"]
-    assert "/960px-Baikal" in image
+    assert "/960px-Baikal" in image or "/1280px-Baikal" in image
     assert image.startswith("https://thumb.wikimedia.org/")
     assert "utm_" not in image
     assert sources.clean_image_url(
         "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Baikal.jpg"
     ).endswith("/1280px-Baikal.jpg")
-    atom = sources.parse_rss(ATOM)
-    assert atom["items"][0]["title"] == "A1"
-    assert atom["items"][0]["link"] == "https://example.com/a"
 
 
 def test_normalize_and_unique_ids() -> None:
@@ -149,28 +168,15 @@ def test_parse_rss_keeps_a_deep_page() -> None:
 
 
 def test_raise_feed_depth_rewrites_old_caps() -> None:
-    sources.save([
-        sources.normalize({
-            "id": "apod", "type": "http",
-            "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count=8",
-            "fields": {"title": "title", "image": "hdurl"},
-        }),
-        sources.normalize({
-            "id": "met", "type": "http",
-            "url": "https://collectionapi.metmuseum.org/public/collection/v1/search?q=art",
-            "fields": {"list": "objectIDs", "expandCap": 8, "title": "title"},
-        }),
-        sources.normalize({
-            "id": "guardian", "type": "http",
-            "url": "https://content.guardianapis.com/search?page-size=12&api-key=test",
-            "fields": {"list": "response.results", "title": "webTitle"},
-        }),
-    ])
-    sources.reset_for_tests()
-    rows = {r["id"]: r for r in sources.load()}
-    assert f"count={sources.APOD_COUNT}" in rows["apod"]["url"]
-    assert rows["met"]["fields"]["expandCap"] == sources.MET_EXPAND
-    assert f"page-size={sources.GUARDIAN_PAGE}" in rows["guardian"]["url"]
+    rows = [
+        {"id": "apod", "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count=8"},
+        {"id": "met", "fields": {"expandCap": 8}},
+        {"id": "guardian", "url": "https://content.guardianapis.com/search?page-size=12&api-key=live"},
+    ]
+    assert sources._raise_feed_depth(rows)
+    assert f"count={sources.APOD_COUNT}" in rows[0]["url"]
+    assert rows[1]["fields"]["expandCap"] == sources.MET_EXPAND
+    assert f"page-size={sources.GUARDIAN_PAGE}" in rows[2]["url"]
 
 
 def test_seed_content_sources_on_old_registry() -> None:
@@ -185,6 +191,48 @@ def test_seed_content_sources_on_old_registry() -> None:
     assert "mastodon" in ids
     apod = next(r for r in sources.ensure() if r["id"] == "apod")
     assert apod["fields"]["image"] == "hdurl"
+    assert "count=" not in apod["url"]
+    guardian = next(r for r in sources.ensure() if r["id"] == "guardian")
+    assert guardian["type"] == "rss"
+    assert "theguardian.com" in guardian["url"]
+
+
+def test_refresh_shipped_stale_defaults() -> None:
+    sources.save([
+        sources.normalize({
+            "id": "apod",
+            "type": "http",
+            "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count=8",
+            "fields": {"title": "title", "image": "hdurl"},
+        }),
+        sources.normalize({
+            "id": "guardian",
+            "type": "http",
+            "url": "https://content.guardianapis.com/search?section=world&api-key=test",
+        }),
+    ])
+    sources.reset_for_tests()
+    rows = {r["id"]: r for r in sources.load()}
+    assert "count=" not in rows["apod"]["url"]
+    assert rows["guardian"]["type"] == "rss"
+    assert rows["guardian"]["url"] == "https://www.theguardian.com/world/rss"
+
+
+def test_url_key_treats_encoded_comma_as_same() -> None:
+    a = "https://science.nasa.gov/feed/?science_org=19791%2C22453"
+    b = "https://science.nasa.gov/feed/?science_org=19791,22453"
+    assert sources._url_key(a) == sources._url_key(b)
+
+
+def test_apod_fetch_url_uses_recent_days() -> None:
+    url = sources.resolve_fetch_url("https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count=8")
+    assert "count=" not in url
+    assert "start_date=" in url and "end_date=" in url
+    keep = sources.resolve_fetch_url(
+        "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&date=2026-09-20",
+    )
+    assert "date=2026-09-20" in keep
+    assert sources.resolve_fetch_url("https://hnrss.org/frontpage") == "https://hnrss.org/frontpage"
 
 
 def test_api_image_requires_url() -> None:

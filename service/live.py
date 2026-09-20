@@ -435,6 +435,18 @@ def _feed(raw: Any) -> dict[str, Any]:
     return out
 
 
+def _chat(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    if isinstance(raw.get("on"), bool):
+        out["on"] = raw["on"]
+    size = _num(raw.get("textSize"), 10, 20)
+    if size is not None:
+        out["textSize"] = size
+    return out
+
+
 def _dice(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return {}

@@ -74,7 +74,8 @@ describe("mosaic unique skies", () => {
   it("overrides a host wall sky per tile and keeps plugin shaders", () => {
     const wall = { ...DEFAULT_DREAM, backdrop: "aurora" as const };
     expect(mosaicAnimForTile(wall, "plugin:talkers", "fire").backdrop).toBe("fire");
-    expect(mosaicAnimForTile({ ...wall, backdrop: "plugin" as const }, "plugin:talkers", "fire").backdrop).toBe("plugin");
+    expect(mosaicAnimForTile({ ...wall, backdrop: "plugin" as const }, "plugin:talkers", "plugin").backdrop).toBe("plugin");
+    expect(mosaicAnimForTile({ ...wall, backdrop: "plugin" as const }, "plugin:talkers", "fire").backdrop).toBe("fire");
   });
 });
 

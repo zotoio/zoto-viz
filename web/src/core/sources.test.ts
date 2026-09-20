@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { FEED_HEADLINE_LIMIT, sourceHeadlines, stripMarkup, type SourceLive } from "./sources";
+import {
+  FEED_HEADLINE_LIMIT, illustratedSourceBind, sourceHeadlines, stripMarkup, type SourceLive,
+} from "./sources";
 
 describe("sourceHeadlines", () => {
   it("takes RSS titles and skips paused or failed sources", () => {
@@ -65,6 +67,10 @@ describe("sourceHeadlines", () => {
     };
     expect(sourceHeadlines(sources, 8, { source: "nasa" }).map((h) => h.text)).toEqual(["Nebula"]);
     expect(sourceHeadlines(sources, 8, { source: "hn", filter: "has-image" }).map((h) => h.text)).toEqual(["Pic"]);
+    expect(sourceHeadlines(sources, 8, illustratedSourceBind({
+      source: "hn",
+      filter: "has-image",
+    })).map((h) => h.text)).toEqual(["One", "Pic"]);
   });
 
   it("strips HTML from article blurbs", () => {
