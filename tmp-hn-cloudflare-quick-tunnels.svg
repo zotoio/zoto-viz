@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000"/>
+      <stop offset="55%" stop-color="#000"/>
+      <stop offset="100%" stop-color="#1a1208"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a2218"/>
+      <stop offset="30%" stop-color="#c9b896"/>
+      <stop offset="100%" stop-color="#f5eed8"/>
+    </linearGradient>
+    <linearGradient id="tunnelGlow" x1="0" y1="0.5" x2="1" y2="0.5">
+      <stop offset="0%" stop-color="#ff6600" stop-opacity="0"/>
+      <stop offset="15%" stop-color="#ff6600" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#ff6600"/>
+      <stop offset="85%" stop-color="#ff6600" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ff6600" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f5eed8"/>
+      <stop offset="35%" stop-color="#ff6600"/>
+      <stop offset="100%" stop-color="#ff6600" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="18" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="frame">
+      <rect width="1600" height="900"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="1600" height="900" fill="url(#sky)"/>
+    <!-- distant mesa / horizon -->
+    <path fill="#1a1208" d="M0 520 L120 480 L280 510 L420 460 L580 500 L720 440 L900 490 L1080 430 L1240 470 L1400 420 L1600 480 L1600 900 L0 900 Z"/>
+    <path fill="#2a2218" d="M0 580 L200 540 L380 570 L560 520 L760 560 L980 510 L1180 550 L1380 500 L1600 540 L1600 900 L0 900 Z"/>
+    <rect y="620" width="1600" height="280" fill="url(#ground)"/>
+    <!-- foreground dunes -->
+    <path fill="#c9b896" d="M0 720 Q200 680 400 720 T800 710 T1200 730 T1600 700 L1600 900 L0 900 Z"/>
+    <path fill="#f5eed8" d="M0 780 Q300 740 600 770 T1200 760 T1600 790 L1600 900 L0 900 Z"/>
+    <!-- star field -->
+    <circle cx="120" cy="80" r="2" fill="#f5eed8" opacity="0.9"/>
+    <circle cx="340" cy="140" r="1.5" fill="#f5eed8" opacity="0.7"/>
+    <circle cx="520" cy="60" r="2" fill="#f5eed8"/>
+    <circle cx="780" cy="110" r="1.5" fill="#f5eed8" opacity="0.8"/>
+    <circle cx="980" cy="45" r="2" fill="#f5eed8" opacity="0.6"/>
+    <circle cx="1180" cy="95" r="1.5" fill="#f5eed8"/>
+    <circle cx="1420" cy="130" r="2" fill="#f5eed8" opacity="0.75"/>
+    <circle cx="1500" cy="55" r="1.5" fill="#f5eed8" opacity="0.5"/>
+    <circle cx="260" cy="220" r="1" fill="#f5eed8" opacity="0.5"/>
+    <circle cx="1350" cy="200" r="1" fill="#f5eed8" opacity="0.6"/>
+    <!-- massive cloud bank -->
+    <ellipse cx="400" cy="320" rx="380" ry="120" fill="#f5eed8" opacity="0.95"/>
+    <ellipse cx="700" cy="280" rx="420" ry="140" fill="#f5eed8"/>
+    <ellipse cx="1050" cy="310" rx="360" ry="110" fill="#f5eed8" opacity="0.92"/>
+    <ellipse cx="200" cy="360" rx="250" ry="80" fill="#c9b896" opacity="0.7"/>
+    <ellipse cx="1300" cy="350" rx="280" ry="90" fill="#c9b896" opacity="0.65"/>
+    <!-- tunnel glow through clouds -->
+    <g filter="url(#glow)">
+      <ellipse cx="800" cy="300" rx="720" ry="55" fill="url(#tunnelGlow)" opacity="0.85"/>
+      <rect x="80" y="268" width="1440" height="64" fill="url(#tunnelGlow)" opacity="0.5"/>
+    </g>
+    <!-- tunnel ring segments -->
+    <g fill="none" stroke="#ff6600" stroke-width="6" opacity="0.9">
+      <ellipse cx="800" cy="300" rx="680" ry="48"/>
+      <ellipse cx="800" cy="300" rx="580" ry="40"/>
+      <ellipse cx="800" cy="300" rx="480" ry="32"/>
+      <ellipse cx="800" cy="300" rx="380" ry="24"/>
+      <ellipse cx="800" cy="300" rx="280" ry="16"/>
+      <ellipse cx="800" cy="300" rx="180" ry="10"/>
+    </g>
+    <!-- tunnel interior -->
+    <ellipse cx="800" cy="300" rx="140" ry="8" fill="#000"/>
+    <ellipse cx="800" cy="300" rx="100" ry="6" fill="url(#core)"/>
+    <!-- speed streaks -->
+    <g stroke="#ff6600" stroke-width="3" stroke-linecap="round" opacity="0.8">
+      <line x1="200" y1="295" x2="320" y2="300"/>
+      <line x1="250" y1="310" x2="380" y2="305"/>
+      <line x1="180" y1="305" x2="290" y2="298"/>
+      <line x1="1320" y1="298" x2="1440" y2="302"/>
+      <line x1="1280" y1="308" x2="1400" y2="295"/>
+      <line x1="1350" y1="290" x2="1480" y2="300"/>
+    </g>
+    <!-- local origin node -->
+    <g transform="translate(180, 640)">
+      <rect x="-40" y="-30" width="80" height="60" rx="4" fill="#000" stroke="#ff6600" stroke-width="4"/>
+      <rect x="-24" y="-14" width="48" height="28" fill="#f5eed8"/>
+      <circle cx="0" cy="38" r="8" fill="#ff6600"/>
+      <path d="M0 30 L0 -50" stroke="#ff6600" stroke-width="3" stroke-dasharray="8 6" opacity="0.6"/>
+    </g>
+    <!-- cloud edge node -->
+    <g transform="translate(1420, 640)">
+      <path d="M-50 20 Q-50 -10 -20 -20 Q10 -35 40 -20 Q70 -10 70 20 Q70 45 40 50 Q10 55 -20 50 Q-50 45 -50 20 Z" fill="#f5eed8" stroke="#000" stroke-width="3"/>
+      <circle cx="10" cy="15" r="6" fill="#ff6600"/>
+      <path d="M10 21 L10 90" stroke="#ff6600" stroke-width="3" stroke-dasharray="8 6" opacity="0.6"/>
+    </g>
+    <!-- connecting arc under clouds -->
+    <path d="M220 640 Q800 180 1410 640" fill="none" stroke="#ff6600" stroke-width="5" opacity="0.35" stroke-dasharray="20 14"/>
+    <!-- headline -->
+    <text x="800" y="820" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="52" font-weight="bold" fill="#f5eed8" letter-spacing="2">Cloudflare Quick Tunnels</text>
+    <text x="800" y="862" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="22" fill="#ff6600" letter-spacing="6" opacity="0.85">LOCAL - CLOUD - WORLD</text>
+  </g>
+</svg>
