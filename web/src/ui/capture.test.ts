@@ -126,6 +126,14 @@ describe("pickAgentSettings", () => {
     expect(p.plugins).toBeUndefined();
     expect(p.anim).toEqual({ backdrop: "matrix", skySpeed: 2, follow: true });
     expect(p.filters).toEqual({ allowNames: "nest" });
+    const g = pickAgentSettings({
+      anim: { graphFabric: "tubes", graphSpace: "space", graphLayout: "globe", graphLinks: "both", focus: "selection" },
+    }, ["talkers"]);
+    expect(g.anim).toEqual({
+      graphFabric: "tubes", graphSpace: "space", graphLayout: "globe", graphLinks: "both", focus: "selection",
+    });
+    expect(pickAgentSettings({ anim: { graphLayout: "spectrum" } }, ["talkers"]).anim).toEqual({ graphLayout: "spectrum" });
+    expect(pickAgentSettings({ anim: { graphLayout: "heap" } }, ["talkers"]).anim).toEqual({ graphLayout: "heap" });
     const t = pickAgentSettings({ temper: 88, weather: "storm" }, ["talkers"]);
     expect(t.temper).toBe(88);
     expect(t.weather).toBe("storm");

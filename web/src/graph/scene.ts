@@ -45,9 +45,18 @@ import {
   resolveFabric, resolveGraphFlatten, type FabricEdgePose, type FabricKind, type FabricNodePose,
   type GraphSpace,
 } from "./fabric";
+import {
+  graphLayoutAnimates, graphLayoutIsForce, graphLayoutPlaces, graphLinksArrows, graphLinksBundle, layoutGraph,
+  pickHub, pullTowardLayout, type GraphLayout, type GraphLinks, type LayoutLink, type LayoutNode,
+  type LayoutXyz,
+} from "./graph-layouts";
 import { VIEW_MORPH_S, mixFade, mixShape } from "./morph";
 
 export { FABRIC_KINDS, FABRIC_OPTIONS, FABRIC_DICE, GRAPH_SPACE_OPTIONS, type FabricKind, type GraphSpace } from "./fabric";
+export {
+  GRAPH_LAYOUTS, GRAPH_LAYOUT_OPTIONS, GRAPH_LAYOUT_DICE, GRAPH_LINKS, GRAPH_LINK_OPTIONS, GRAPH_LINK_DICE,
+  type GraphLayout, type GraphLinks,
+} from "./graph-layouts";
 export { VIEW_MORPH_S } from "./morph";
 
 export const THEME_FADE_S = 1.8;
@@ -595,7 +604,9 @@ const _pos = new THREE.Vector3();
 const _scl = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _axisY = new THREE.Vector3(0, 1, 0);
+const _dir = new THREE.Vector3();
 const _sphere = new THREE.Sphere();
+const ARROW_CAP = 280;
 const _hit = new THREE.Vector3();
 const _sph = new THREE.Spherical();
 const _sphWant = new THREE.Spherical();
@@ -706,6 +717,10 @@ export interface DreamAnim {
   graphFabric: FabricKind;
   /** auto follows the view; plane / space force 2D or 3D layout for any plugin */
   graphSpace: GraphSpace;
+  /** auto keeps the view's placement; tree / radial / globe / bars / … override any graph plugin */
+  graphLayout: GraphLayout;
+  /** auto keeps strings + sparks; arrows / bundle add 3d-force-graph / reagraph edge tricks */
+  graphLinks: GraphLinks;
   /** simultaneous view wall: off, 2×2, 2×3, 2×4 */
   mosaic: MosaicSize;
   /** full-height hero pane for the current view; tiles keep the mosaic count */
@@ -774,12 +789,13 @@ export interface DreamAnim {
 export type MosaicSize = "off" | "4" | "6" | "8";
 export type EdgeGlow = "off" | "comet" | "pulse";
 export type HeroPos = "off" | "left" | "center" | "right";
-export type FocusMode = "activity" | "motion" | "cloud";
+export type FocusMode = "activity" | "motion" | "cloud" | "selection";
 
 export const FOCUS_MODES: { value: FocusMode; label: string; hint: string }[] = [
   { value: "activity", label: "activity", hint: "frame the nodes that are moving or carrying traffic, and keep that cluster near the viewport centre most of the time" },
   { value: "motion", label: "motion", hint: "frame only nodes that are currently moving in the layout" },
   { value: "cloud", label: "whole graph", hint: "frame every visible node as a box that matches the viewport, not a sphere" },
+  { value: "selection", label: "selection", hint: "frame the selected (or hovered) node and its neighbours — click-to-focus" },
 ];
 
 export type AudioDrive = "mic" | "traffic" | "node";
@@ -872,6 +888,8 @@ export const DEFAULT_DREAM: DreamAnim = {
   edgeGlowSpeed: 1,
   graphFabric: "auto",
   graphSpace: "auto",
+  graphLayout: "auto",
+  graphLinks: "auto",
   mosaic: "off",
   hero: "off",
   mosaicTree: null,
@@ -1047,6 +1065,9 @@ export class NetScene implements HostedView {
   private spheres: THREE.InstancedMesh;
   private readonly sphereMat = sphereMaterial();
   private readonly fabric = new GraphFabric();
+  private arrows: THREE.InstancedMesh;
+  private layoutTargets = new Map<string, LayoutXyz>();
+  private layoutSig = "";
   /** the force layout, ticking in a Worker; positions arrive one frame later and are copied onto the nodes */
   private readonly layout: LayoutClient;
   /** nodes in the layout, in wire order for the current `simGen` */
@@ -1354,6 +1375,16 @@ export class NetScene implements HostedView {
     this.spheres = sphereCloud(this.sphereMat, SPHERE_CAPACITY);
     this.scene.add(this.spheres);
     this.scene.add(this.fabric.mesh);
+    const arrowGeo = new THREE.ConeGeometry(5.5, 16, 7);
+    arrowGeo.translate(0, 8, 0);
+    this.arrows = new THREE.InstancedMesh(arrowGeo, new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.92, depthWrite: false, toneMapped: false,
+    }), ARROW_CAP);
+    this.arrows.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.arrows.count = 0;
+    this.arrows.frustumCulled = false;
+    this.arrows.visible = false;
+    this.scene.add(this.arrows);
 
     // edges
     this.linePos = new Float32Array(0);
@@ -1637,6 +1668,7 @@ export class NetScene implements HostedView {
     this.stageOnly = on;
     this.applyGraphMarks();
     this.particles.visible = !on;
+    this.arrows.visible = !on && graphLinksArrows(this.anim.graphLinks);
     this.labelLayer.domElement.style.display = on ? "none" : "";
     this.labelLayer.domElement.style.visibility = on ? "hidden" : "";
     if (on) {
@@ -1659,8 +1691,46 @@ export class NetScene implements HostedView {
     this.spheres.visible = show && !mesh;
     this.lines.visible = show && !mesh;
     this.glowLines.visible = show && !mesh && this.anim.edgeGlow !== "off";
+    this.arrows.visible = show && !mesh && graphLinksArrows(this.anim.graphLinks);
     this.fabric.mesh.visible = mesh;
     this.inputEl.dataset.fabric = kind;
+  }
+
+  private syncArrows(str: { sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number }): void {
+    const on = !this.stageOnly && !fabricActive(this.fabricKind()) && graphLinksArrows(this.anim.graphLinks);
+    if (!on) {
+      this.arrows.count = 0;
+      this.arrows.visible = false;
+      return;
+    }
+    this.arrows.visible = true;
+    (this.arrows.material as THREE.MeshBasicMaterial).color.setHex(this.theme.scene.rim);
+    let n = 0;
+    for (const l of this.links.values()) {
+      if (n >= ARROW_CAP) break;
+      if (!l.visible || l.id.startsWith("~")) continue;
+      const { ab, ba } = flowDirRates(l.flow);
+      const fwd = ab >= ba;
+      const a = fwd ? l.source : l.target;
+      const b = fwd ? l.target : l.source;
+      const ax = a.x ?? 0, ay = a.y ?? 0, az = a.z ?? 0;
+      const bx = b.x ?? 0, by = b.y ?? 0, bz = b.z ?? 0;
+      const dist = Math.hypot(bx - ax, by - ay, bz - az);
+      if (dist < 12) continue;
+      const t = 0.72;
+      const p = this.edgePoint(ax, ay, az, bx, by, bz, t, str);
+      const q = this.edgePoint(ax, ay, az, bx, by, bz, Math.min(1, t + 0.1), str);
+      _dir.set(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+      if (_dir.lengthSq() < 1e-8) _dir.set(bx - ax, by - ay, bz - az);
+      if (_dir.lengthSq() < 1e-8) continue;
+      _dir.normalize();
+      _quat.setFromUnitVectors(_axisY, _dir);
+      const s = Math.min(2.4, Math.max(0.65, dist / 150)) * this.anim.edgeWeight;
+      this.arrows.setMatrixAt(n, _m.compose(_pos.set(p[0], p[1], p[2]), _quat, _scl.set(s, s, s)));
+      n++;
+    }
+    this.arrows.count = n;
+    this.arrows.instanceMatrix.needsUpdate = true;
   }
 
   /** Slowly yaw, nod, and zoom around the current camera. Dragging reframes; the orbit continues from the new view. */
@@ -1701,6 +1771,11 @@ export class NetScene implements HostedView {
       this.physWant = pickPhys(a);
       applyPhys(next, this.anim);
     }
+    const layoutChanged = this.anim.graphLayout !== a.graphLayout
+      || this.anim.graphSpace !== a.graphSpace
+      || this.anim.graphLinks !== a.graphLinks;
+    next.graphLayout = next.graphLayout ?? "auto";
+    next.graphLinks = next.graphLinks ?? "auto";
     this.anim = next;
     this.backdrop.setKind(a.backdrop);
     if (!this.satellite && a.backdrop === "dynamic") ensureSkyRecipe(a.skyAiMin * 60_000);
@@ -1720,7 +1795,12 @@ export class NetScene implements HostedView {
     this.applyWeights();
     this.rebuildLineBuffers();
     this.rebuildParticles();
+    this.applyGraphMarks();
     this.applyVisibility();
+    if (layoutChanged) {
+      this.layoutSig = "";
+      this.syncSimulation(0.45);
+    }
     if (this.satellite) return;
     if (dropTheme) {
       this.liveCamColor = null;
@@ -1745,6 +1825,10 @@ export class NetScene implements HostedView {
 
   setPluginUniform(name: string, value: number | [number, number, number]): boolean {
     return this.backdrop.setPluginUniform(name, value);
+  }
+
+  skyTime(): number {
+    return this.backdrop.skyTime();
   }
 
   setPluginUboBuffer(buf: Float32Array): void {
@@ -1869,14 +1953,40 @@ export class NetScene implements HostedView {
     return 1 + 0.85 * this.pulseLevel * this.anim.audioSens;
   }
 
-  private stringNow(): { segs: number; sag: number; wave: number } {
+  private bundleAmt(): number {
+    return graphLinksBundle(this.anim.graphLinks) ? 0.72 : 0;
+  }
+
+  private bundleHub(): [number, number, number] {
+    const id = pickHub(
+      [...this.nodes.values()].filter((n) => n.visible).map((n) => ({ id: n.id, role: n.device.role })),
+      this.ctx.gateway,
+    );
+    const n = this.nodes.get(id);
+    if (!n) return [0, 0, 0];
+    return [n.x ?? 0, n.y ?? 0, n.z ?? 0];
+  }
+
+  private stringNow(): { segs: number; sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number } {
     const a = this.anim;
     const pulse = this.physPulse();
+    const bundle = this.bundleAmt();
+    const hub = bundle > 0.01 ? this.bundleHub() : [0, 0, 0] as [number, number, number];
     return {
-      segs: stringSegs(a.stringAmt),
+      segs: stringSegs(a.stringAmt, bundle),
       sag: a.stringAmt * pulse,
       wave: a.audioPhysics ? this.pulseBass * a.audioSens * a.stringAmt : 0,
+      hx: hub[0], hy: hub[1], hz: hub[2], bundle,
     };
+  }
+
+  private edgePoint(
+    ax: number, ay: number, az: number,
+    bx: number, by: number, bz: number,
+    t: number,
+    str: { sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number },
+  ): [number, number, number] {
+    return stringPoint(ax, ay, az, bx, by, bz, t, str.sag, str.wave, str.hx, str.hy, str.hz, str.bundle);
   }
 
   private gazeWanted(): boolean {
@@ -2066,10 +2176,10 @@ export class NetScene implements HostedView {
   /** Chase magnets / gravity / swirl / strings so AI jumps do not teleport the cloud. */
   private easePhys(dt: number): void {
     if (!this.physWant) return;
-    const segs = stringSegs(this.anim.stringAmt);
+    const segs = stringSegs(this.anim.stringAmt, this.bundleAmt());
     const moving = easePhysToward(this.anim, this.physWant, dt);
     if (!moving) return;
-    if (stringSegs(this.anim.stringAmt) !== segs) this.rebuildLineBuffers();
+    if (stringSegs(this.anim.stringAmt, this.bundleAmt()) !== segs) this.rebuildLineBuffers();
     this.bumpAlpha(0.08);
   }
 
@@ -2097,7 +2207,7 @@ export class NetScene implements HostedView {
       magnets: ROLES.map((r) => (byRole[r] ?? 0) * p),
       magnetCross: a.magnetCross, magnetRange: a.magnetRange, gravity: a.gravity, swirl: a.swirl, pulse: p,
       spreadX: this.spreadX, spreadZ: this.spreadZ,
-      flatten: resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace),
+      flatten: resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace, this.anim.graphLayout),
       moveK: Math.round(this.moveK(dt) * 1000) / 1000,
     };
     const last = this.lastLayoutParams;
@@ -2115,9 +2225,25 @@ export class NetScene implements HostedView {
     if (this.layout.busy) return; // the previous tick has not answered; positions hold, requests wait
     const sim = this.simNodes;
     let nudge: Float32Array | null = null;
-    if (this.mode.force && sim.length) {
+    const pinned = graphLayoutPlaces(this.anim.graphLayout);
+    const skipMode = pinned || graphLayoutIsForce(this.anim.graphLayout);
+    if (this.mode.force && sim.length && !skipMode) {
       for (const n of sim) { n.vx = 0; n.vy = 0; n.vz = 0; }
       this.mode.force(sim, this.layoutAlpha, this.ctx);
+      if (this.nudgeBuf.length < sim.length * 3) this.nudgeBuf = new Float32Array(sim.length * 3);
+      const b = this.nudgeBuf;
+      let any = false;
+      for (let i = 0; i < sim.length; i++) {
+        const n = sim[i]!;
+        const vx = n.vx ?? 0, vy = n.vy ?? 0, vz = n.vz ?? 0;
+        b[i * 3] = vx; b[i * 3 + 1] = vy; b[i * 3 + 2] = vz;
+        if (vx !== 0 || vy !== 0 || vz !== 0) any = true;
+      }
+      if (any) nudge = b;
+    } else if (pinned && sim.length) {
+      for (const n of sim) { n.vx = 0; n.vy = 0; n.vz = 0; }
+      const targets = this.pinnedLayoutTargets(sim);
+      if (targets.size) pullTowardLayout(sim, targets, this.layoutAlpha, 0.24);
       if (this.nudgeBuf.length < sim.length * 3) this.nudgeBuf = new Float32Array(sim.length * 3);
       const b = this.nudgeBuf;
       let any = false;
@@ -2139,6 +2265,61 @@ export class NetScene implements HostedView {
       this.pendingPin = null;
       this.pendingRelease = null;
     }
+  }
+
+  private pinnedLayoutTargets(sim: GNode[]): Map<string, LayoutXyz> {
+    const kind = this.anim.graphLayout;
+    if (!graphLayoutPlaces(kind)) {
+      this.layoutTargets.clear();
+      this.layoutSig = "";
+      return this.layoutTargets;
+    }
+    const flatten = resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace, kind);
+    const live = kind === "bars" || kind === "scatter" || kind === "vortex" || kind === "hourglass" || kind === "cascade"
+      || kind === "heap" || kind === "spectrum" || kind === "waterfall" || kind === "julia"
+      || kind === "carrier" || kind === "phased" || kind === "matrix" || kind === "queue"
+      || kind === "hilbert" || kind === "hashmap";
+    const animates = graphLayoutAnimates(kind);
+    const wall = performance.now() / 1000;
+    const pulse = this.physPulse();
+    const ids = sim.map((n) => n.id).join(",");
+    const pairs: LayoutLink[] = [];
+    for (const l of this.links.values()) {
+      if (!l.visible || l.id.startsWith("~")) continue;
+      pairs.push({ a: l.source.id, b: l.target.id });
+    }
+    const rates = live ? sim.map((n) => Math.round(Math.log10(1 + n.rate) * 4)).join(",") : "";
+    const seen = kind === "queue" ? sim.map((n) => Math.round(n.device.last_seen)).join(",") : "";
+    const spec = this.pulse.spectrum(32);
+    const frames = this.pulse.waterfall();
+    const tq = animates ? (Math.round(wall * 8) / 8).toFixed(3) : "";
+    const pq = animates ? (Math.round(pulse * 10) / 10).toFixed(1) : "";
+    const bq = (kind === "spectrum" || kind === "waterfall" || kind === "phased")
+      ? spec.slice(0, 8).map((v) => Math.round(v * 20)).join(",")
+      : "";
+    const sig = `${kind}|${flatten}|${this.spreadX.toFixed(2)}|${this.ctx.gateway}|${ids}|${pairs.map((p) => `${p.a}>${p.b}`).join(";")}|${rates}|${seen}|${tq}|${pq}|${bq}`;
+    if (sig === this.layoutSig && this.layoutTargets.size) return this.layoutTargets;
+    const nodes: LayoutNode[] = sim.map((n) => ({
+      id: n.id,
+      role: n.device.role,
+      rate: n.rate,
+      bytesIn: n.device.bytes_in,
+      bytesOut: n.device.bytes_out,
+      ip: n.device.ip,
+      chan: n.device.chan,
+      lastSeen: n.device.last_seen,
+    }));
+    this.layoutTargets = layoutGraph(kind, nodes, pairs, {
+      spreadX: this.spreadX,
+      flatten,
+      hub: this.ctx.gateway,
+      time: wall,
+      pulse,
+      bins: spec,
+      frames,
+    });
+    this.layoutSig = sig;
+    return this.layoutTargets;
   }
 
   /** Positions from the layout. The node being dragged follows the pointer directly and is skipped. */
@@ -2394,6 +2575,19 @@ export class NetScene implements HostedView {
       let w = 0;
       if (mode === "cloud") w = 1;
       else if (mode === "motion") w = speed > 10 ? Math.min(2.5, speed / 35) : 0;
+      else if (mode === "selection") {
+        const focus = this.selected ?? this.hovered;
+        if (!focus) w = (heat > Math.log10(1 + DREAM_HOT_MIN_RATE) ? heat : 0) + (speed > 8 ? Math.min(2, speed / 40) : 0);
+        else if (n === focus) w = 4;
+        else {
+          let nbr = false;
+          for (const l of this.links.values()) {
+            if (!l.visible || l.id.startsWith("~")) continue;
+            if ((l.source === focus && l.target === n) || (l.target === focus && l.source === n)) { nbr = true; break; }
+          }
+          w = nbr ? 1.6 : 0;
+        }
+      }
       else w = (heat > Math.log10(1 + DREAM_HOT_MIN_RATE) ? heat : 0) + (speed > 8 ? Math.min(2, speed / 40) : 0);
       if (w <= 0) continue;
       if (speed > 8) { motion += Math.min(2, speed / 40); mw++; }
@@ -2903,12 +3097,13 @@ export class NetScene implements HostedView {
       const role = nd.device.role;
       const baseR = this.baseShell(nd);
       const sk = this.mode.shellStrength?.(nd);
+      const placed = graphLayoutPlaces(this.anim.graphLayout);
       const fixed = nd.fx !== undefined && nd !== this.dragging;
       arr[o + N_KEY] = nd.simKey;
       arr[o + N_ROLE] = roleIdx(role);
       arr[o + N_SHELL_R] = this.crowdRadius.get(baseR) ?? baseR;
-      arr[o + N_SHELL_K] = sk ?? (role === "gateway" ? 1 : role === "internet" || role === "multicast" ? 0.6 : 0.9);
-      arr[o + N_SLOT] = sk === 0 ? 0 : 1;
+      arr[o + N_SHELL_K] = placed ? 0 : sk ?? (role === "gateway" ? 1 : role === "internet" || role === "multicast" ? 0.6 : 0.9);
+      arr[o + N_SLOT] = placed || sk === 0 ? 0 : 1;
       arr[o + N_THETA] = hashAngle(nd.id);
       arr[o + N_RELAX] = this.crowdRelax.get(baseR) ?? 1;
       arr[o + N_CHARGE] = (this.mode.charge?.(nd) ?? (role === "lan" || role === "local" ? -500 : -90)) * (this.crowdCharge.get(baseR) ?? 1);
@@ -3127,7 +3322,7 @@ export class NetScene implements HostedView {
 
   private rebuildLineBuffers(): void {
     const n = this.links.size;
-    const segs = stringSegs(this.anim.stringAmt);
+    const segs = stringSegs(this.anim.stringAmt, this.bundleAmt());
     const floats = n * segs * 6;
     if (this.linePos.length !== floats) {
       this.linePos = new Float32Array(floats);
@@ -3421,10 +3616,10 @@ export class NetScene implements HostedView {
         const t0 = s / str.segs, t1 = (s + 1) / str.segs;
         const u = str.segs === 1
           ? [ax, ay, az] as [number, number, number]
-          : stringPoint(ax, ay, az, bx, by, bz, t0, str.sag, str.wave);
+          : this.edgePoint(ax, ay, az, bx, by, bz, t0, str);
         const v = str.segs === 1
           ? [bx, by, bz] as [number, number, number]
-          : stringPoint(ax, ay, az, bx, by, bz, t1, str.sag, str.wave);
+          : this.edgePoint(ax, ay, az, bx, by, bz, t1, str);
         this.linePos[i] = u[0]; this.linePos[i + 1] = u[1]; this.linePos[i + 2] = u[2];
         this.linePos[i + 3] = v[0]; this.linePos[i + 4] = v[1]; this.linePos[i + 5] = v[2];
         const mix0 = t0, mix1 = t1;
@@ -3473,6 +3668,7 @@ export class NetScene implements HostedView {
       });
     }
     this.applyGraphMarks();
+    this.syncArrows(str);
 
     // particles
     if (this.anim.audioParts) this.rebuildParticles();
@@ -3487,7 +3683,7 @@ export class NetScene implements HostedView {
       const t = p.t;
       const pt = str.segs === 1
         ? [(a.x ?? 0) + ((b.x ?? 0) - (a.x ?? 0)) * t, (a.y ?? 0) + ((b.y ?? 0) - (a.y ?? 0)) * t, (a.z ?? 0) + ((b.z ?? 0) - (a.z ?? 0)) * t] as [number, number, number]
-        : stringPoint(a.x ?? 0, a.y ?? 0, a.z ?? 0, b.x ?? 0, b.y ?? 0, b.z ?? 0, t, str.sag, str.wave);
+        : this.edgePoint(a.x ?? 0, a.y ?? 0, a.z ?? 0, b.x ?? 0, b.y ?? 0, b.z ?? 0, t, str);
       this.partPos[k * 3] = pt[0];
       this.partPos[k * 3 + 1] = pt[1];
       this.partPos[k * 3 + 2] = pt[2];
@@ -3726,6 +3922,8 @@ export class NetScene implements HostedView {
     window.removeEventListener("pointercancel", this.onCamPtrLost);
     this.pulse.disable();
     this.layout.dispose();
+    this.arrows.geometry.dispose();
+    (this.arrows.material as THREE.Material).dispose();
     this.lumaProbe.reset();
     this.controls.dispose();
     if (this.host) {

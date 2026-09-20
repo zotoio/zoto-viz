@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mixFade } from "./morph";
+import { graphLayoutIsFlat, graphLayoutPinned, type GraphLayout } from "./graph-layouts";
 
 /** How the graph is drawn as a living surface. `auto` follows the plugin; `off` keeps spheres + lines. */
 export const FABRIC_KINDS = [
@@ -80,10 +81,20 @@ export function resolveFabric(
   return "off";
 }
 
-/** `auto` keeps the view's flatten flag; plane / space override any plugin. */
-export function resolveGraphFlatten(modeFlatten: boolean | undefined, space?: GraphSpace | null): boolean {
+/**
+ * `auto` keeps the view's flatten flag; plane / space override any plugin.
+ * A pinned host layout (tree / globe / bars / …) picks its own dimensionality
+ * unless space is forced.
+ */
+export function resolveGraphFlatten(
+  modeFlatten: boolean | undefined,
+  space?: GraphSpace | null,
+  layout?: GraphLayout | null,
+): boolean {
   if (space === "plane") return true;
   if (space === "space") return false;
+  if (graphLayoutPinned(layout) && layout && layout !== "force") return graphLayoutIsFlat(layout);
+  if (layout === "force") return false;
   return modeFlatten !== false;
 }
 

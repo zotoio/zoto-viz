@@ -7,6 +7,7 @@ import {
   nodeHighlightBoost,
   parseFabric,
   resolveFabric,
+  resolveGraphFlatten,
 } from "./fabric";
 
 describe("parseFabric / resolveFabric", () => {
@@ -18,13 +19,23 @@ describe("parseFabric / resolveFabric", () => {
     expect(parseFabric("nope")).toBeUndefined();
   });
 
-  it("lets plugin style win over the settings pin", () => {
-    expect(resolveFabric("cloth", "tubes")).toBe("cloth");
+  it("lets settings named style win over the plugin pin", () => {
+    expect(resolveFabric("cloth", "tubes")).toBe("tubes");
     expect(resolveFabric(undefined, "ribbon")).toBe("ribbon");
     expect(resolveFabric(false, true)).toBe("tubes");
     expect(resolveFabric(undefined, "off")).toBe("off");
-    expect(fabricActive(resolveFabric("tubes", "off"))).toBe(true);
+    expect(fabricActive(resolveFabric("tubes", "off"))).toBe(false);
     expect(fabricActive("off")).toBe(false);
+  });
+
+  it("lets space override a pinned layout's flatten", () => {
+    expect(resolveGraphFlatten(true, "auto")).toBe(true);
+    expect(resolveGraphFlatten(true, "space")).toBe(false);
+    expect(resolveGraphFlatten(false, "plane")).toBe(true);
+    expect(resolveGraphFlatten(true, "auto", "globe")).toBe(false);
+    expect(resolveGraphFlatten(false, "auto", "tree")).toBe(true);
+    expect(resolveGraphFlatten(true, "space", "tree")).toBe(false);
+    expect(resolveGraphFlatten(true, "auto", "force")).toBe(false);
   });
 });
 

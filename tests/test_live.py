@@ -93,6 +93,8 @@ def test_sanitize_drops_junk() -> None:
         "mosaicSkies": {"plugin:talkers": "fire", "plugin:topology": "ocean", "bad": "zzz"},
         "graphFabric": "crystals",
         "graphSpace": "space",
+        "graphLayout": "helix",
+        "graphLinks": "arrows",
         "mosaicTree": {
             "type": "split", "dir": "h", "ratio": 0.9,
             "a": {"type": "leaf", "id": "plugin:talkers"},
@@ -106,6 +108,11 @@ def test_sanitize_drops_junk() -> None:
     assert wall["mosaicSkies"] == {"plugin:talkers": "fire", "plugin:topology": "ocean"}
     assert wall["graphFabric"] == "crystals"
     assert wall["graphSpace"] == "space"
+    assert wall["graphLayout"] == "helix"
+    assert wall["graphLinks"] == "arrows"
+    assert live.sanitize_patch({"anim": {"graphLayout": "spectrum"}})["anim"]["graphLayout"] == "spectrum"
+    assert live.sanitize_patch({"anim": {"graphLayout": "heap"}})["anim"]["graphLayout"] == "heap"
+    assert live.sanitize_patch({"anim": {"graphLayout": "hilbert"}})["anim"]["graphLayout"] == "hilbert"
     assert wall["mosaicTree"]["ratio"] == 0.88
     devices = live.sanitize_patch({"camera": "auto", "mic": "off", "theme": "ember"})
     assert devices["theme"] == "ember"

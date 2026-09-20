@@ -6,7 +6,7 @@ import { ColorField, GroupedChips, pinFlyout, Slider, Toggle, unpinFlyout } from
 import { MAGNET_FIELDS } from "../graph/physics";
 import type { PluginField } from "../core/modes";
 import { assignTiles, equalize, leafIds, nextPaneTiles, parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
-import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FabricKind, type FocusMode, type GraphSpace, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
+import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, GRAPH_LAYOUT_OPTIONS, GRAPH_LINK_OPTIONS, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FabricKind, type FocusMode, type GraphLayout, type GraphLinks, type GraphSpace, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
 import { BACKDROP_OPTIONS, SKY_GROUP_TABS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
 import { invalidateSkyRecipe } from "../graph/sky-ai";
 import { FLOOR_SHAPES, type FloorShape } from "../graph/floor";
@@ -144,6 +144,8 @@ export class Settings {
     setGlow: (v: EdgeGlow) => void;
     setFabric: (v: FabricKind) => void;
     setSpace: (v: GraphSpace) => void;
+    setLayout: (v: GraphLayout) => void;
+    setLinks: (v: GraphLinks) => void;
     setMod: (key: "background" | "sky" | "floor" | "camera" | "nodes" | "skies" | "physics" | "particles", on: boolean) => void;
     skyPulse: Toggle; floorPulse: Toggle; bgPulse: Toggle;
     labels: Slider; shown: Slider; nodes: Slider; edges: Slider;
@@ -998,6 +1000,8 @@ export class Settings {
     const glow = chips(EDGE_GLOWS, this.anim.edgeGlow, (v) => { this.anim.edgeGlow = v; this.persistAnim(); });
     const fabric = chips(FABRIC_OPTIONS, this.anim.graphFabric, (v) => { this.anim.graphFabric = v; this.persistAnim(); });
     const space = chips(GRAPH_SPACE_OPTIONS, this.anim.graphSpace, (v) => { this.anim.graphSpace = v; this.persistAnim(); });
+    const layout = chips(GRAPH_LAYOUT_OPTIONS, this.anim.graphLayout, (v) => { this.anim.graphLayout = v; this.persistAnim(); });
+    const links = chips(GRAPH_LINK_OPTIONS, this.anim.graphLinks, (v) => { this.anim.graphLinks = v; this.persistAnim(); });
     const focus = chips(FOCUS_MODES, this.anim.focus, (v) => { this.anim.focus = v; this.persistAnim(); });
     const glowAmt = new Slider({
       label: "glow", title: "how bright the traveling edge highlight is",
@@ -1072,12 +1076,15 @@ export class Settings {
     camWrap.querySelector(".look-head")!.appendChild(camTheme.el);
     const graphBits = document.createElement("div");
     graphBits.className = "look-stack";
-    graphBits.append(labeled("glow", glow.el), labeled("style", fabric.el), labeled("space", space.el));
+    graphBits.append(
+      labeled("glow", glow.el), labeled("style", fabric.el), labeled("space", space.el),
+      labeled("layout", layout.el), labeled("links", links.el),
+    );
     const graphWrap = lookBlock("", graphBits, labels, shown, nodes, edges, glowAmt, glowSpeed);
     const lookSec = document.createElement("section");
     lookSec.className = "sec";
     lookSec.innerHTML = `<div class="sec-title">Look</div>
-      <div class="sec-hint">Label size, idle names, node and edge scale, edge glow, and graph style. Style is a 2D or 3D mesh any graph plugin can use (\`style.fabric\` / Look → style); space forces a flat or volumetric layout. Dice → graph style rolls both. Auto-tune eases labels, sparks, glow, sky, and pixel density if the last 30 seconds average under 10 fps.</div>`;
+      <div class="sec-hint">Label size, idle names, node and edge scale, edge glow, and graph style. Style is a 2D or 3D mesh any graph plugin can use (\`style.fabric\` / Look → style). Space forces a flat or volumetric layout. Layout pins tree / globe / bars, animated models, and insight placements: fractals (sierp / hilbert / koch / julia), radio FFT (spectrum / waterfall / carrier / array), and data structures (heap / trie / hash / matrix / queue) that map rate, hops, IPs, and spectrum bins. Links add directional arrows and hub bundling. Dice → graph style rolls style, space, layout, and links. Auto-tune eases labels, sparks, glow, sky, and pixel density if the last 30 seconds average under 10 fps.</div>`;
     lookSec.append(autoTune.el, graphWrap);
 
     const magFmt = (v: number) => (Math.abs(v) < 3 ? "off" : v > 0 ? `attract ${v}%` : `repel ${-v}%`);
@@ -1278,7 +1285,7 @@ export class Settings {
     sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, grid);
     this.animUi = {
       follow, cycle, randomize, setSky, setShape,
-      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setSpace: space.set, setMod,
+      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setSpace: space.set, setLayout: layout.set, setLinks: links.set, setMod,
       skyPulse, floorPulse, bgPulse,
       skyOp, skyBr, skySp, skyEz, skyAi, gridOp, gridBr, gridSize, gridFollow, gridColor, bgColor, bgOp,
       yaw, pitch, pitchCycle, zoom, zoomCycle, cadence, camAudio, camChange, camGaze, camInertia, camEase, camTheme, sens,
@@ -1894,6 +1901,8 @@ export class Settings {
     ui.setGlow(a.edgeGlow);
     ui.setFabric(a.graphFabric);
     ui.setSpace(a.graphSpace);
+    ui.setLayout(a.graphLayout);
+    ui.setLinks(a.graphLinks);
     ui.setMod("background", a.bgAudio);
     ui.setMod("sky", a.skyAudio);
     ui.setMod("skies", a.skyCycle !== "off");
@@ -1994,6 +2003,8 @@ export class Settings {
     localStorage.setItem(`${p}.anim.edgeGlowSpeed`, String(a.edgeGlowSpeed));
     localStorage.setItem(`${p}.anim.graphFabric`, a.graphFabric);
     localStorage.setItem(`${p}.anim.graphSpace`, a.graphSpace);
+    localStorage.setItem(`${p}.anim.graphLayout`, a.graphLayout);
+    localStorage.setItem(`${p}.anim.graphLinks`, a.graphLinks);
     localStorage.setItem(`${p}.anim.mosaic`, a.mosaic);
     localStorage.setItem(`${p}.anim.hero`, a.hero);
     if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
@@ -2328,6 +2339,8 @@ function loadAnim(prefix: string): DreamAnim {
     edgeGlowSpeed: n("edgeGlowSpeed", d.edgeGlowSpeed, B.edgeGlowSpeed.min, B.edgeGlowSpeed.max),
     graphFabric: parseFabricKind(localStorage.getItem(`${prefix}.anim.graphFabric`)),
     graphSpace: parseGraphSpaceKind(localStorage.getItem(`${prefix}.anim.graphSpace`)),
+    graphLayout: parseGraphLayoutKind(localStorage.getItem(`${prefix}.anim.graphLayout`)),
+    graphLinks: parseGraphLinksKind(localStorage.getItem(`${prefix}.anim.graphLinks`)),
     mosaic: parseMosaic(localStorage.getItem(`${prefix}.anim.mosaic`)),
     hero: parseHero(localStorage.getItem(`${prefix}.anim.hero`)),
     mosaicTree: parseStoredTree(localStorage.getItem(`${prefix}.anim.mosaicTree`)),
@@ -2375,6 +2388,14 @@ function parseFabricKind(raw: string | null): FabricKind {
 
 function parseGraphSpaceKind(raw: string | null): GraphSpace {
   return GRAPH_SPACE_OPTIONS.some((o) => o.value === raw) ? (raw as GraphSpace) : DEFAULT_DREAM.graphSpace;
+}
+
+function parseGraphLayoutKind(raw: string | null): GraphLayout {
+  return GRAPH_LAYOUT_OPTIONS.some((o) => o.value === raw) ? (raw as GraphLayout) : DEFAULT_DREAM.graphLayout;
+}
+
+function parseGraphLinksKind(raw: string | null): GraphLinks {
+  return GRAPH_LINK_OPTIONS.some((o) => o.value === raw) ? (raw as GraphLinks) : DEFAULT_DREAM.graphLinks;
 }
 
 function parseMosaic(raw: string | null): MosaicSize {

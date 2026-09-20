@@ -194,7 +194,22 @@ const THEME_CYCLES = new Set(["off", "cadence", "audio"]);
 const EDGE_GLOWS = new Set(["off", "comet", "pulse"]);
 const MOSAICS = new Set(["off", "4", "6", "8"]);
 const HEROS = new Set(["off", "left", "center", "right"]);
-const FOCUSES = new Set(["activity", "motion", "cloud"]);
+const FOCUSES = new Set(["activity", "motion", "cloud", "selection"]);
+const GRAPH_LAYOUTS = new Set([
+  "auto", "force", "tree", "radial", "concentric", "cluster", "dag", "globe", "bars", "scatter",
+  "helix", "vortex", "bloom", "ripple", "weave", "cascade", "knot", "hourglass", "coral",
+  "tide", "mobius", "spine", "halo", "fold", "drift",
+  "sierpinski", "hilbert", "koch", "julia",
+  "spectrum", "waterfall", "carrier", "phased",
+  "heap", "trie", "hashmap", "matrix", "queue",
+]);
+const GRAPH_LINKS = new Set(["auto", "arrows", "bundle", "both"]);
+const GRAPH_SPACES = new Set(["auto", "space", "plane"]);
+const FABRICS = new Set([
+  "auto", "off",
+  "tubes", "cloth", "crystals", "voxels", "neon", "beads", "pillars", "orbit", "wire", "lattice",
+  "ribbon", "dots", "constellation", "hex", "circuit", "ink", "map", "tiles", "mosaic",
+]);
 
 function strRecord(v: unknown): Record<string, string> | undefined {
   if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
@@ -241,6 +256,10 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
     if (Object.keys(skies).length) out.mosaicSkies = skies;
   }
   if (typeof s.focus === "string" && FOCUSES.has(s.focus)) out.focus = s.focus as DreamAnim["focus"];
+  if (typeof s.graphFabric === "string" && FABRICS.has(s.graphFabric)) out.graphFabric = s.graphFabric as DreamAnim["graphFabric"];
+  if (typeof s.graphSpace === "string" && GRAPH_SPACES.has(s.graphSpace)) out.graphSpace = s.graphSpace as DreamAnim["graphSpace"];
+  if (typeof s.graphLayout === "string" && GRAPH_LAYOUTS.has(s.graphLayout)) out.graphLayout = s.graphLayout as DreamAnim["graphLayout"];
+  if (typeof s.graphLinks === "string" && GRAPH_LINKS.has(s.graphLinks)) out.graphLinks = s.graphLinks as DreamAnim["graphLinks"];
   if (typeof s.bgColor === "string") out.bgColor = s.bgColor;
   if (typeof s.gridColor === "string") out.gridColor = s.gridColor;
   const bound: Record<string, { min: number; max: number }> = {

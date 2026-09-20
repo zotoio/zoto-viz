@@ -96,9 +96,18 @@ FABRIC_KINDS = (
     "ribbon", "dots", "constellation", "hex", "circuit", "ink", "map", "tiles", "mosaic",
 )
 GRAPH_SPACES = ("auto", "space", "plane")
+GRAPH_LAYOUTS = (
+    "auto", "force", "tree", "radial", "concentric", "cluster", "dag", "globe", "bars", "scatter",
+    "helix", "vortex", "bloom", "ripple", "weave", "cascade", "knot", "hourglass", "coral",
+    "tide", "mobius", "spine", "halo", "fold", "drift",
+    "sierpinski", "hilbert", "koch", "julia",
+    "spectrum", "waterfall", "carrier", "phased",
+    "heap", "trie", "hashmap", "matrix", "queue",
+)
+GRAPH_LINKS = ("auto", "arrows", "bundle", "both")
 MOSAIC_SIZES = ("off", "4", "6", "8")
 HERO_POS = ("off", "left", "center", "right")
-FOCUS_MODES = ("activity", "motion", "cloud")
+FOCUS_MODES = ("activity", "motion", "cloud", "selection")
 DICE_INCLUDE = (
     "theme", "view", "mosaic", "feed",
     "motion", "style", "physics", "knobs", "show",
@@ -172,6 +181,8 @@ ANIM_ENUM = {
     "edgeGlow": EDGE_GLOWS,
     "graphFabric": FABRIC_KINDS,
     "graphSpace": GRAPH_SPACES,
+    "graphLayout": GRAPH_LAYOUTS,
+    "graphLinks": GRAPH_LINKS,
     "mosaic": MOSAIC_SIZES,
     "hero": HERO_POS,
     "focus": FOCUS_MODES,

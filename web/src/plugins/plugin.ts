@@ -33,6 +33,7 @@ import {
 import type { GNode, DreamAnim, EdgeGlow, AudioDrive, HeroPos, MosaicSize, ThemeCycle } from "../graph/scene";
 import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, type FabricKind, type GraphSpace } from "../graph/fabric";
+import type { GraphLayout, GraphLinks } from "../graph/graph-layouts";
 import { guardReadableAnim } from "../graph/readable";
 import type { BackdropKind } from "../graph/backdrop";
 import type { FloorShape } from "../graph/floor";
@@ -104,6 +105,8 @@ export interface PluginLook {
   edgeGlowSpeed?: number;
   graphFabric?: FabricKind | boolean;
   graphSpace?: GraphSpace;
+  graphLayout?: GraphLayout;
+  graphLinks?: GraphLinks;
   /** Open a mosaic wall of other catalog views when this plugin is selected. */
   mosaic?: MosaicSize;
   hero?: HeroPos;
@@ -212,7 +215,7 @@ const LOOK_ANIM_KEYS = [
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
-  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric", "graphSpace",
+  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric", "graphSpace", "graphLayout", "graphLinks",
 ] as const satisfies readonly (keyof PluginLook)[];
 
 let looks = new Map<string, PluginLook>();

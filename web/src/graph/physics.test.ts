@@ -45,6 +45,13 @@ describe("string path", () => {
     expect(sag[0]).toBeCloseTo(5, 5);
     expect(sag[1]).toBeLessThan(-1);
   });
+
+  it("pulls the midpoint toward a hub when bundling", () => {
+    expect(stringSegs(0, 0.8)).toBeGreaterThan(1);
+    const mid = stringPoint(0, 0, 0, 10, 0, 0, 0.5, 0, 0, 0, 40, 0, 1);
+    expect(mid[1]).toBeGreaterThan(10);
+    expect(mid[0]).toBeLessThan(4);
+  });
 });
 
 describe("magnetPair", () => {

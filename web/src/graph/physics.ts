@@ -183,9 +183,9 @@ export function clampParticleCap(n: number): number {
   return Math.min(MAX_PARTICLES, Math.max(20, Math.round(n)));
 }
 
-/** Straight line at 0; up to 8 segments when the string is fully slack. */
-export function stringSegs(stringAmt: number): number {
-  const a = Math.max(0, Math.min(1, stringAmt));
+/** Straight line at 0; extra segments when the string sags or edges bundle toward a hub. */
+export function stringSegs(stringAmt: number, bundle = 0): number {
+  const a = Math.max(0, Math.min(1, Math.max(stringAmt, bundle)));
   if (a < 0.04) return 1;
   return Math.min(8, 2 + Math.round(a * 6));
 }
@@ -193,6 +193,7 @@ export function stringSegs(stringAmt: number): number {
 /**
  * Point along a catenary-ish quadratic from A to B.
  * `sag` 0–1 droops the middle; `wave` 0–1 adds a sideways ripple.
+ * Optional hub + `bundle` 0–1 pull the control point toward a shared root (hierarchical bundling).
  */
 export function stringPoint(
   ax: number, ay: number, az: number,
@@ -200,15 +201,23 @@ export function stringPoint(
   t: number,
   sag: number,
   wave = 0,
+  hx = 0, hy = 0, hz = 0,
+  bundle = 0,
 ): [number, number, number] {
-  if (sag < 0.01 && Math.abs(wave) < 0.01) {
+  const bund = Math.max(0, Math.min(1, bundle));
+  if (sag < 0.01 && Math.abs(wave) < 0.01 && bund < 0.01) {
     return [ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t];
   }
   const dx = bx - ax, dy = by - ay, dz = bz - az;
   const dist = Math.hypot(dx, dy, dz) || 1;
-  const mx = (ax + bx) * 0.5;
-  const my = (ay + by) * 0.5 - sag * dist * 0.28;
-  const mz = (az + bz) * 0.5;
+  let mx = (ax + bx) * 0.5;
+  let my = (ay + by) * 0.5 - sag * dist * 0.28;
+  let mz = (az + bz) * 0.5;
+  if (bund > 0.01) {
+    mx += (hx - mx) * bund;
+    my += (hy - my) * bund;
+    mz += (hz - mz) * bund;
+  }
   const nx = -dz / dist, nz = dx / dist;
   const w = Math.sin(t * Math.PI) * wave * dist * 0.08;
   const cx = mx + nx * w;

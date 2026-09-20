@@ -56,7 +56,7 @@ Never use MCP to `git add` / `git commit`. Camera and microphone are operator-on
 
 - `theme`, `mode` (`plugin:<id>`), `chrome` (top/left/right), `dream`, `redact`, `merge`
 - `feed` `{on, source, layout, scope, modulate, includeSources, density, textSize}`
-- `show`, `filters`, `anim` (motion / physics / mosaic / sky / audio, including `mosaicTiles`, `mosaicTree`, `mosaicSharedTheme`, `mosaicUniqueSkies`, `mosaicSkies`, `graphFabric`, `graphSpace`)
+- `show`, `filters`, `anim` (motion / physics / mosaic / sky / audio, including `mosaicTiles`, `mosaicTree`, `mosaicSharedTheme`, `mosaicUniqueSkies`, `mosaicSkies`, `graphFabric`, `graphSpace`, `graphLayout`, `graphLinks`)
 - `plugins` / `modeOptions` / `arcade`, `agent` `{clear, shader, shaderPhoto, decos}`
 - `dice`, `shuffle`, `temper`, `weather`, `control`, `model`
 

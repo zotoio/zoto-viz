@@ -36,7 +36,7 @@ Mutating REST (`PUT /api/plugins/{id}/consent`, `PUT /api/ai/control`) needs `X-
 | `list_profiles` | — | |
 | `apply_profile` | `id` | Same patch path as `set_settings`. |
 
-`set_settings` `anim` includes mosaic (`"off"` \| `"4"` \| `"6"` \| `"8"`), `hero` (`off` \| `left` \| `center` \| `right`), `mosaicTiles` (catalog ids), `mosaicTree`, `mosaicSharedTheme`, sky (`skyOpacity`, `skyBright`, `skySpeed`, `skyAudio`, `backdrop`), physics, audio.
+`set_settings` `anim` includes mosaic (`"off"` \| `"4"` \| `"6"` \| `"8"`), `hero` (`off` \| `left` \| `center` \| `right`), `mosaicTiles` (catalog ids), `mosaicTree`, `mosaicSharedTheme`, sky (`skyOpacity`, `skyBright`, `skySpeed`, `skyAudio`, `backdrop`), graph (`graphFabric`, `graphSpace`, `graphLayout` including fractal / FFT / data-structure ids such as `hilbert`, `spectrum`, `heap`, `graphLinks`, `focus`), physics, audio.
 
 ### Read LAN / RF
 

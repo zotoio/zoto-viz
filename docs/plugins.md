@@ -47,6 +47,7 @@ switch.
   plugin.yml                 # required
   visualisation.yml          # optional (engine / base / look / style / layout / …)
                              # style.fabric: tubes|cloth|ribbon weaves nodes+edges as a mesh
+                             # look.graphLayout / graphLinks: tree|globe|helix|hilbert|spectrum|heap|… + arrows|bundle
   frontend/                  # optional TypeScript module (+ tests)
   sky/sky.yml                # optional sky recipe / pins
   sky/fragment.glsl          # optional custom far-field shader (GLSL)

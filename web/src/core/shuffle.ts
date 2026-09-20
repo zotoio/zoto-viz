@@ -1,6 +1,6 @@
 import type { PluginField, ModeOption } from "./modes";
 import type { ProfileSettings } from "./profiles";
-import { DEFAULT_DREAM, DREAM_BOUNDS, AUDIO_DRIVES, EDGE_GLOWS, FABRIC_DICE, FOCUS_MODES, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type MosaicSize } from "../graph/scene";
+import { DEFAULT_DREAM, DREAM_BOUNDS, AUDIO_DRIVES, EDGE_GLOWS, FABRIC_DICE, FOCUS_MODES, GRAPH_LAYOUT_DICE, GRAPH_LINK_DICE, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type MosaicSize } from "../graph/scene";
 import { FLOOR_SHAPES } from "../graph/floor";
 import { CYCLE_SKIES, type BackdropKind } from "../graph/backdrop";
 import { assignMosaicSkies, mosaicIds, shouldUniqueMosaicSkies } from "../graph/mosaic";
@@ -357,6 +357,8 @@ export function shuffleAnim(
   if (cfg.include.style) {
     next.graphFabric = pickOther(FABRIC_DICE, anim.graphFabric, rnd);
     next.graphSpace = pickOther(GRAPH_SPACE_OPTIONS.map((o) => o.value), anim.graphSpace, rnd);
+    next.graphLayout = pickOther(GRAPH_LAYOUT_DICE, anim.graphLayout, rnd);
+    next.graphLinks = pickOther(GRAPH_LINK_DICE, anim.graphLinks, rnd);
   }
   if (cfg.include.physics) {
     snapGroup(rec, ANIM_NUM_PHYSICS, cfg, rnd);

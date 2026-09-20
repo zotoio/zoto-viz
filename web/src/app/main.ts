@@ -14,6 +14,7 @@ import { ChatPanel } from "../ui/chat";
 import { DebugLog, readDebugOn } from "../ui/debug-log";
 import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
+import { PluginSfx, backroomsRoarLevel } from "../audio/plugin-sfx";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -321,6 +322,7 @@ let currentOpts: Record<string, string> = {};
 let pluginSpecs: PluginView[] = [];
 let settings!: Settings;
 const sandbox = new PluginSandbox();
+const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
 const vizBudget = new VizFrameBudget();
@@ -331,6 +333,8 @@ addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
+  if (mode.pluginId === "backrooms") pluginSfx.setRoar(backroomsRoarLevel(scene.skyTime()));
+  else pluginSfx.silence();
 });
 addPresentListener(markPresent);
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {

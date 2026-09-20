@@ -58,6 +58,10 @@ describe("plugin ids and look", () => {
     expect(mergeLook(DEFAULT_DREAM, { backdrop: "matrix" }).backdrop).toBe("matrix");
     expect(mergeLook(DEFAULT_DREAM, { backdrop: "plugin" }).backdrop).toBe("plugin");
     expect(mergeLook(DEFAULT_DREAM, { graphFabric: "cloth" }).graphFabric).toBe("cloth");
+    expect(mergeLook(DEFAULT_DREAM, { graphLayout: "globe", graphLinks: "arrows" }).graphLayout).toBe("globe");
+    expect(mergeLook(DEFAULT_DREAM, { graphLayout: "globe", graphLinks: "arrows" }).graphLinks).toBe("arrows");
+    expect(mergeLook(DEFAULT_DREAM, { graphLayout: "spectrum" }).graphLayout).toBe("spectrum");
+    expect(mergeLook(DEFAULT_DREAM, { graphLayout: "heap" }).graphLayout).toBe("heap");
     expect(lookForMode("missing")).toBeUndefined();
   });
 });

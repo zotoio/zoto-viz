@@ -12,6 +12,7 @@ export class AudioPulse {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private bins: Uint8Array | null = null;
+  private frames: number[][] = [];
   private stream: MediaStream | null = null;
   private wanted = false;
   private starting = false;
@@ -56,8 +57,29 @@ export class AudioPulse {
     this.ctx = null;
     this.analyser = null;
     this.bins = null;
+    this.frames = [];
     this.level = 0;
     this.bass = 0;
+  }
+
+  /** Downsampled 0–1 FFT magnitudes (mic). Empty when the analyser is off — layouts then DFT traffic. */
+  spectrum(count = 32): number[] {
+    const out = new Array(count).fill(0);
+    if (!this.bins?.length) return out;
+    const n = this.bins.length;
+    for (let i = 0; i < count; i++) {
+      const a = Math.floor((i * n) / count);
+      const b = Math.max(a + 1, Math.floor(((i + 1) * n) / count));
+      let s = 0;
+      for (let j = a; j < b; j++) s += this.bins[j]! / 255;
+      out[i] = s / (b - a);
+    }
+    return out;
+  }
+
+  /** Recent spectrum frames, oldest first (radio waterfall). */
+  waterfall(): number[][] {
+    return this.frames;
   }
 
   /** `traffic` is a 0–1 stand-in from live packet rate, used when the mic is not capturing. */
@@ -79,6 +101,14 @@ export class AudioPulse {
     const k = 0.2;
     this.level += (raw - this.level) * k;
     this.bass += (bass - this.bass) * k;
+    const frame = this.spectrum(32);
+    if (!this.bins?.length) {
+      for (let i = 0; i < frame.length; i++) {
+        frame[i] = Math.min(1, this.level * Math.exp(-i / 9) + this.bass * Math.exp(-((i - 3) ** 2) / 18));
+      }
+    }
+    this.frames.push(frame);
+    if (this.frames.length > 18) this.frames.shift();
     return { level: this.level, bass: this.bass };
   }
 }

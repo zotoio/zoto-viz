@@ -75,6 +75,25 @@ describe("Settings panes", () => {
     expect(pluginPane?.textContent).toMatch(/Host and subnet filters live under Privacy/);
   });
 
+  it("exposes graph layout and link chips on Look", () => {
+    const s = new Settings({ storePrefix: "zoto-viz-graph-layout", onChange: () => {} });
+    s.addAnimation(() => {}, { el: document.createElement("div") });
+    const graph = s.host;
+    expect(graph.textContent).toMatch(/layout/);
+    expect(graph.textContent).toMatch(/tree/);
+    expect(graph.textContent).toMatch(/globe/);
+    expect(graph.textContent).toMatch(/helix/);
+    expect(graph.textContent).toMatch(/vortex/);
+    expect(graph.textContent).toMatch(/bloom/);
+    expect(graph.textContent).toMatch(/hilbert/);
+    expect(graph.textContent).toMatch(/fft/);
+    expect(graph.textContent).toMatch(/heap/);
+    expect(graph.textContent).toMatch(/bars/);
+    expect(graph.textContent).toMatch(/arrows/);
+    expect(graph.textContent).toMatch(/bundle/);
+    expect(s.el.querySelector('[data-pane="motion"]')?.textContent).toMatch(/selection/);
+  });
+
   it("exposes a feed text-size slider", () => {
     const s = new Settings({ storePrefix: "zoto-viz-feed-size", onChange: () => {} });
     s.addLiveFeed(() => {});

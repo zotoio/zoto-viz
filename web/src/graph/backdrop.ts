@@ -738,6 +738,11 @@ export class Backdrop {
   private customFrag: string | null = null;
   /** the sky's animation clock, in shader seconds: integrates dt × current speed */
   private clock = 0;
+
+  /** Seconds on the far-field clock (`uTime`). */
+  skyTime(): number {
+    return this.clock;
+  }
   /** speed multiplier the clock is running at now; eases toward speed × (1 + pulse × PULSE_ACCEL) */
   private curSpeed = 1;
   private speed = 1;

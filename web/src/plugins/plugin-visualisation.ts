@@ -2,6 +2,7 @@ import type { ModeOption, PluginField, ViewMode } from "../core/modes";
 import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, parseGraphSpace } from "../graph/fabric";
+import { parseGraphLayout, parseGraphLinks } from "../graph/graph-layouts";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
@@ -31,7 +32,7 @@ const LOOK_KEYS = [
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
-  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric", "graphSpace",
+  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric", "graphSpace", "graphLayout", "graphLinks",
   "mosaic", "hero", "mosaicTiles", "mosaicSharedTheme", "mosaicUniqueSkies",
 ] as const;
 
@@ -189,6 +190,16 @@ export function parseLook(raw: unknown): PluginLook | undefined {
     if (key === "graphSpace") {
       const space = parseGraphSpace(v);
       if (space) look.graphSpace = space;
+      continue;
+    }
+    if (key === "graphLayout") {
+      const layout = parseGraphLayout(v);
+      if (layout) look.graphLayout = layout;
+      continue;
+    }
+    if (key === "graphLinks") {
+      const links = parseGraphLinks(v);
+      if (links) look.graphLinks = links;
       continue;
     }
     if (key === "mosaic") {
