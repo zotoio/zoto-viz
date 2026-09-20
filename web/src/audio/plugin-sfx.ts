@@ -28,8 +28,8 @@ export function backroomsRoarLevel(t: number): number {
   const seen = smoothstep(0.11, 0.145, phA);
   const come = seen * (1 - smoothstep(0.20, 0.26, phA));
   const lookUp = hold(phA, 0.04, 0.10) * (1 - seen);
-  const turned = smoothstep(0.12, 0.175, phA);
-  const flee = Math.max(band(phA, 0.12, 0.88), turned);
+  const turned = smoothstep(0.16, 0.22, phA);
+  const flee = Math.max(band(phA, 0.16, 0.88), turned);
   const spot = come * (1 - turned);
   return Math.max(spot * 0.55, flee);
 }
