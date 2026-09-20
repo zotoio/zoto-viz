@@ -202,6 +202,25 @@ describe("viz hud helpers", () => {
     expect(estimateTalkerParticles(talkers)).toBe(512);
   });
 
+  it("shows demo metric value for idle-backed frames", () => {
+    const state = minimalState();
+    const idleFrame = {
+      t: 0,
+      dt: 0,
+      audio: 0,
+      demo: true,
+      packets: [{ proto: "tcp", size: 1, field: 0.5 }],
+      rf: [],
+      talkers: [],
+      headlines: [],
+    };
+    expect(vizHudMetric("packet-tunnel", idleFrame, state)).toEqual({ label: "flows", value: "demo" });
+    expect(vizHudMetric("talker-storm", {
+      ...idleFrame,
+      talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
+    }, state)).toEqual({ label: "particles", value: "demo" });
+  });
+
   it("picks pack-specific metrics from host state", () => {
     const state = minimalState();
     expect(vizHudMetric("packet-tunnel", null, state)).toEqual({ label: "flows", value: "3" });

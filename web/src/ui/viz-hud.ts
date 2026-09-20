@@ -62,7 +62,7 @@ export function estimateTalkerParticles(talkers: VizTalkerSample[]): number {
   return count;
 }
 
-export function vizHudMetric(
+function vizHudMetricLive(
   packId: VizDemoPackId,
   frame: VizDataFrame | null,
   state: StateMsg,
@@ -97,6 +97,16 @@ export function vizHudMetric(
     case "stereo-gram":
       return { label: "orbs", value: String(Math.min(8, frame?.talkers.length ?? 0)) };
   }
+}
+
+export function vizHudMetric(
+  packId: VizDemoPackId,
+  frame: VizDataFrame | null,
+  state: StateMsg,
+): VizHudMetric {
+  const live = vizHudMetricLive(packId, frame, state);
+  if (frame?.demo) return { label: live.label, value: "demo" };
+  return live;
 }
 
 const SKIP_RATE_CEILING = 240;

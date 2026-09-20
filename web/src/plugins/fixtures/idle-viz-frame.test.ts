@@ -36,6 +36,7 @@ describe("mergeVizIdleFrame", () => {
     const merged = mergeVizIdleFrame(live, idle);
     expect(merged.packets.length).toBeGreaterThan(0);
     expect(merged.talkers.length).toBeGreaterThan(0);
+    expect(merged.demo).toBe(true);
   });
 
   it("prefers live packets over idle", () => {
@@ -44,6 +45,22 @@ describe("mergeVizIdleFrame", () => {
     const merged = mergeVizIdleFrame(live, idle);
     expect(merged.packets[0]?.proto).toBe(live.packets[0]?.proto);
     expect(merged.packets[0]?.field).toBe(live.packets[0]?.field);
+    expect(merged.demo).toBe(true);
+  });
+
+  it("leaves demo unset when every slice is live", () => {
+    const live = {
+      t: 5,
+      dt: 0,
+      audio: 0.1,
+      packets: [{ proto: "tcp", size: 10, field: 0.5 }],
+      rf: [{ ssid: "home", rssi: 0.5, channel: 6 }],
+      talkers: [{ id: "10.0.0.1", rate: 50, role: "lan" }],
+      headlines: [{ id: "h1", label: "HN", text: "Live" }],
+    };
+    const merged = mergeVizIdleFrame(live, idle);
+    expect(merged).toBe(live);
+    expect(merged.demo).toBeUndefined();
   });
 });
 

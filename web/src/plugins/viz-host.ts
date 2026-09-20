@@ -95,6 +95,8 @@ export interface VizDataFrame {
   rf: VizRfBeacon[];
   talkers: VizTalkerSample[];
   headlines: VizHeadline[];
+  /** True when any slice was filled from viz.idle (host fixture or inline seed). */
+  demo?: boolean;
   /** Linux SYS gauges 0..1 for holotable / CIC plugins. */
   sys?: VizSysTelemetry;
 }
@@ -313,6 +315,7 @@ export function mergeVizIdleFrame(live: VizDataFrame, idle: VizIdleConfig): VizD
     rf: needsRf ? seed.rf : live.rf,
     talkers: needsTalkers ? seed.talkers : live.talkers,
     headlines: needsHeadlines ? seed.headlines : live.headlines,
+    demo: true,
   };
 }
 
