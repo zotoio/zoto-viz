@@ -65,6 +65,10 @@ def test_sanitize_drops_junk() -> None:
     assert reload["reloadPlugins"] is True
     assert "exec" not in reload
     assert live.sanitize_patch({"reloadPlugins": False}) == {}
+    assert live.sanitize_patch({"reloadClient": True})["reloadClient"] is True
+    assert live.sanitize_patch({"reloadClient": False}) == {}
+    chat = live.sanitize_patch({"chat": {"on": True, "textSize": 18, "exec": "nope"}})
+    assert chat["chat"] == {"on": True, "textSize": 18}
     assert p["temper"] == 100
     assert p["weather"] == "drift"
     assert p["show"] == {"lan": False}

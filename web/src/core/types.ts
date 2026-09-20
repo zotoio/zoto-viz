@@ -223,6 +223,8 @@ export interface StateMsg {
     weather?: string;
     prefix?: string;
   };
+  /** Install checkout HEAD — UI hard-reloads when this changes after a repo sync. */
+  repoRev?: string;
   /** Backend and host shadow extensions (e.g. typesafe Sense results). */
   plugin_state?: Record<string, unknown>;
   sources?: Record<string, SourceLive>;

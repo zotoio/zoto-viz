@@ -155,6 +155,28 @@
           { "required": ["frontend"] }
         ]
       }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": { "capabilities": { "contains": { "const": "viz.read" } } },
+            "required": ["capabilities"]
+          },
+          {
+            "properties": { "capabilities": { "contains": { "const": "viz.write" } } },
+            "required": ["capabilities"]
+          }
+        ]
+      },
+      "then": {
+        "required": ["viz"],
+        "properties": {
+          "viz": {
+            "required": ["graphWalk", "idle"]
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -343,9 +365,105 @@
         }
       }
     },
+    "vizPacketSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proto", "size", "field"],
+      "properties": {
+        "proto": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "size": { "type": "number", "minimum": 0 },
+        "field": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "vizRfBeacon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ssid", "rssi", "channel"],
+      "properties": {
+        "ssid": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "rssi": { "type": "number", "minimum": 0, "maximum": 1 },
+        "channel": { "type": "number", "minimum": 0, "maximum": 255 }
+      }
+    },
+    "vizTalkerSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "rate", "role"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "rate": { "type": "number", "minimum": 0 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    },
+    "vizHeadline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "text"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 48 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "kind": { "type": "string", "maxLength": 32 },
+        "summary": { "type": "string", "maxLength": 512 },
+        "image": { "type": "string", "maxLength": 512 }
+      }
+    },
+    "vizIdleSeed": {
+      "title": "Inline viz idle seed",
+      "description": "Static demo slices merged when the live monitor frame has empty packets/rf/talkers/headlines. Live non-empty slices always win.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "audio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "packets": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/vizPacketSample" }
+        },
+        "rf": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/vizRfBeacon" }
+        },
+        "talkers": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/vizTalkerSample" }
+        },
+        "headlines": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/vizHeadline" }
+        }
+      },
+      "anyOf": [
+        { "required": ["packets"] },
+        { "required": ["rf"] },
+        { "required": ["talkers"] },
+        { "required": ["headlines"] }
+      ]
+    },
+    "vizIdle": {
+      "title": "Viz idle fallback",
+      "description": "Required when viz.read or viz.write is declared. Either { fixture: \"host\" } for the shared host VizDataFrame demo seed, or an inline seed object. Live monitor traffic always wins when a slice is non-empty; idle fills empty slices only and must stay within the 16.7 ms present-time budget (no hotter path than live).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fixture"],
+          "properties": {
+            "fixture": {
+              "const": "host",
+              "description": "Use buildIdleVizFrame() — modest demo packets, RF beacons, talkers, and headlines."
+            }
+          }
+        },
+        { "$ref": "#/$defs/vizIdleSeed" }
+      ]
+    },
     "vizContract": {
       "title": "VizPlugin host contract",
-      "description": "Host owns ingest and the 16.7 ms frame budget. Plugins consume pre-decimated VizDataFrames and write only to reserved buffer/uniform slots declared here. graphWalk must be false — plugins never traverse the full device graph per frame. Buffer slots bind through the fixed UBO in $defs/vizUboLayout (separate from graph.read monitor plugins).",
+      "description": "Host owns ingest and the 16.7 ms frame budget. Plugins consume pre-decimated VizDataFrames and write only to reserved buffer/uniform slots declared here. graphWalk must be false — plugins never traverse the full device graph per frame. Buffer slots bind through the fixed UBO in $defs/vizUboLayout (separate from graph.read monitor plugins). When viz.read or viz.write is declared, idle is required — live slices win over idle when non-empty.",
       "type": "object",
       "additionalProperties": false,
       "required": ["graphWalk"],
@@ -389,6 +507,10 @@
             "enum": ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"]
           },
           "description": "Sky uniforms this plugin may write via viz.write (subset of $defs/shader allowedUniforms)."
+        },
+        "idle": {
+          "$ref": "#/$defs/vizIdle",
+          "description": "Demo frame fallback when live monitor slices are empty. Required with viz.read or viz.write."
         }
       }
     },

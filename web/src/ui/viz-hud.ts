@@ -27,6 +27,28 @@ const PACK_LABELS: Record<VizDemoPackId, string> = {
 const SKIP_WINDOW_MS = 1000;
 const SKIP_PULSE_MS = 400;
 
+type VizHudSlice = "packets" | "rf" | "talkers" | "headlines";
+
+const PACK_HUD_SLICE: Partial<Record<VizDemoPackId, VizHudSlice>> = {
+  "packet-tunnel": "packets",
+  "rf-constellation": "rf",
+  "talker-storm": "talkers",
+  "kefrens-bars": "talkers",
+  "roto-proto": "packets",
+  "blob-mesh": "talkers",
+  "star-sines": "packets",
+  "hn-rain": "headlines",
+  "hn-term": "headlines",
+  "stereo-gram": "talkers",
+};
+
+function vizHudSliceDemo(packId: VizDemoPackId, frame: VizDataFrame | null): boolean {
+  if (!frame) return false;
+  const slice = PACK_HUD_SLICE[packId];
+  if (slice && frame.demoSlices?.[slice]) return true;
+  return frame.demo === true && !frame.demoSlices;
+}
+
 /** Strip `plugin:` view prefix and return a bare demo pack id, or null. */
 export function normalizeVizDemoPackId(id: string | null | undefined): VizDemoPackId | null {
   if (!id) return null;
@@ -63,7 +85,7 @@ export function estimateTalkerParticles(talkers: VizTalkerSample[]): number {
   return count;
 }
 
-export function vizHudMetric(
+function vizHudMetricLive(
   packId: VizDemoPackId,
   frame: VizDataFrame | null,
   state: StateMsg,
@@ -100,6 +122,16 @@ export function vizHudMetric(
     case "nixie-clock":
       return { label: "nixie", value: "clock" };
   }
+}
+
+export function vizHudMetric(
+  packId: VizDemoPackId,
+  frame: VizDataFrame | null,
+  state: StateMsg,
+): VizHudMetric {
+  const live = vizHudMetricLive(packId, frame, state);
+  if (vizHudSliceDemo(packId, frame)) return { label: live.label, value: "demo" };
+  return live;
 }
 
 const SKIP_RATE_CEILING = 240;

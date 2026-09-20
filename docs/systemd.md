@@ -10,7 +10,17 @@ systemctl --user daemon-reload
 systemctl --user enable --now zoto-viz-monitor
 ```
 
-The unit’s `ZOTO_VIZ_ROOT=%h/zoto-viz` is a placeholder. Install writes the drop-in from the detected checkout (`Environment=ZOTO_VIZ_ROOT` and `Environment=ZOTO_VIZ_REPO_ROOT`). See [Install](/install) for catalog detection order. A Cursor stop hook restarts this unit when checkout `service/*.py` is newer than the process (`ZOTO_VIZ_NO_AUTO_RESTART=1` disables it).
+The unit’s `ZOTO_VIZ_ROOT=%h/zoto-viz` is a placeholder. Install writes the drop-in from the detected checkout (`Environment=ZOTO_VIZ_ROOT` and `Environment=ZOTO_VIZ_REPO_ROOT`) and from listen keys in `~/.zoto-viz/sys-config.yml` (`bind`, `port`, `insecure_lan`, `inhibit_screensaver`). See [Install](/install) for catalog detection order. A Cursor stop hook restarts this unit when checkout `service/*.py` is newer than the process (`ZOTO_VIZ_NO_AUTO_RESTART=1` disables it). The monitor also fast-forwards the checkout every 5 minutes (`ZOTO_VIZ_PULL_S` / `ZOTO_VIZ_NO_AUTO_PULL=1`) and restarts this unit after a pull.
+
+```yaml
+# ~/.zoto-viz/sys-config.yml — LAN kiosk
+bind: 0.0.0.0
+port: 7020
+insecure_lan: true          # no password; anyone on the network can use the UI
+inhibit_screensaver: true   # systemd-inhibit idle:sleep (+ xset when DISPLAY is set)
+```
+
+Then `./zoto-viz install` (or restart the monitor so `ensure` rewrites the drop-in) and `systemctl --user daemon-reload && systemctl --user restart zoto-viz-monitor`.
 
 Wi-Fi hopper (root, second radio). The radio name is `monitor_iface` in `~/.zoto-viz/sys-config.yml`. `./zoto-viz install` prints the sudo lines; a USB `wlx*` stick stays DOWN until that unit is enabled:
 

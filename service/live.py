@@ -387,12 +387,26 @@ def sanitize_patch(raw: Any) -> dict[str, Any]:
         out["shuffle"] = True
     if raw.get("reloadPlugins") is True:
         out["reloadPlugins"] = True
+    if raw.get("reloadClient") is True:
+        out["reloadClient"] = True
     dice = _dice(raw.get("dice"))
     if dice:
         out["dice"] = dice
     agent_look = _agent(raw.get("agent"))
     if agent_look:
         out["agent"] = agent_look
+    return out
+
+
+def _chat(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    if isinstance(raw.get("on"), bool):
+        out["on"] = raw["on"]
+    size = _num(raw.get("textSize"), 10, 20)
+    if size is not None:
+        out["textSize"] = size
     return out
 
 
@@ -630,7 +644,7 @@ def features() -> dict[str, Any]:
     return {
         "settings": [
             "theme", "dream", "mode", "chrome", "redact", "merge",
-            "feed", "show", "filters", "anim", "modeOptions", "arcade", "plugins",
+            "feed", "chat", "show", "filters", "anim", "modeOptions", "arcade", "plugins",
             "agent", "dice", "shuffle", "temper", "weather", "control", "model",
             "sources",
             "sdm",

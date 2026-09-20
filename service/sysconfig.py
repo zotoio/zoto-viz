@@ -3,12 +3,20 @@
 Checkout path, hostname, Wi-Fi interfaces, and watched SSIDs stay off git.
 `zoto-viz install` and the first monitor start detect missing keys and write the
 file (existing values are kept). The user systemd drop-in is filled from it.
+
+Listen and display keys (optional; defaults keep today's loopback-only monitor):
+
+- ``bind`` — ``127.0.0.1`` (default) or ``0.0.0.0`` / a LAN IP
+- ``port`` — ``7020``
+- ``insecure_lan`` — required acknowledgement when ``bind`` is not loopback
+- ``inhibit_screensaver`` — hold idle/sleep so the display does not blank
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 from pathlib import Path
@@ -16,12 +24,20 @@ from typing import Any, Callable
 
 import yaml
 
+from . import access
 from . import paths
 
 KEYS = ("root", "hostname", "iface", "monitor_iface", "ssids")
+LISTEN_KEYS = ("bind", "port", "insecure_lan", "inhibit_screensaver")
+DEFAULT_BIND = "127.0.0.1"
+DEFAULT_PORT = 7020
 HEADER = (
     "# Machine-local zoto-viz layout. Do not commit this file.\n"
     "# Written on zoto-viz install / first monitor start; existing keys are kept.\n"
+    "# bind: 127.0.0.1                 # 0.0.0.0 or a LAN IP to listen beyond loopback\n"
+    "# port: 7020\n"
+    "# insecure_lan: false             # required when bind is not loopback (no password)\n"
+    "# inhibit_screensaver: false      # hold idle/sleep so the display does not blank\n"
 )
 REPO = Path(__file__).resolve().parents[1]
 Run = Callable[[list[str]], str]
@@ -66,6 +82,73 @@ def _ssids(raw: Any) -> list[str]:
     return out[:16]
 
 
+def _bool(raw: Any) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _port(raw: Any) -> int:
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_PORT
+    return n if 1 <= n <= 65535 else DEFAULT_PORT
+
+
+def _bind(raw: Any) -> str:
+    return str(raw or "").strip() or DEFAULT_BIND
+
+
+def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """Resolved listen / display keys. Missing file → loopback defaults."""
+    raw = cfg or {}
+    bind = _bind(raw.get("bind"))
+    loopback = access.bind_is_loopback(bind)
+    return {
+        "bind": bind,
+        "port": _port(raw.get("port")),
+        "insecure_lan": True if not loopback else _bool(raw.get("insecure_lan")),
+        "inhibit_screensaver": _bool(raw.get("inhibit_screensaver")),
+    }
+
+
+def resolve_listen(
+    cfg: dict[str, Any] | None,
+    *,
+    bind: str | None = None,
+    port: int | None = None,
+    insecure_lan: bool = False,
+    inhibit_screensaver: bool = False,
+) -> dict[str, Any]:
+    """CLI values win when set; otherwise sys-config; otherwise loopback defaults."""
+    opts = listen_opts(cfg)
+    resolved_bind = _bind(bind if bind is not None else opts["bind"])
+    resolved_port = _port(port if port is not None else opts["port"])
+    lan = bool(insecure_lan or opts["insecure_lan"])
+    if not access.bind_is_loopback(resolved_bind):
+        lan = True
+    return {
+        "bind": resolved_bind,
+        "port": resolved_port,
+        "insecure_lan": lan,
+        "inhibit_screensaver": bool(inhibit_screensaver or opts["inhibit_screensaver"]),
+    }
+
+
+def monitor_cli_args(cfg: dict[str, Any] | None) -> list[str]:
+    """Argv after ``python`` for the monitor unit / LaunchAgent."""
+    opts = resolve_listen(cfg)
+    args = ["-m", "service.monitor", "--bind", str(opts["bind"]), "--port", str(opts["port"])]
+    if opts["insecure_lan"]:
+        args.append("--insecure-lan")
+    if opts["inhibit_screensaver"]:
+        args.append("--inhibit-screensaver")
+    return args
+
+
 def load(path: Path | None = None) -> dict[str, Any]:
     path = path or sys_config_file()
     try:
@@ -74,22 +157,29 @@ def load(path: Path | None = None) -> dict[str, Any]:
         return {}
     if not isinstance(raw, dict):
         return {}
-    return {
+    out = {
         "root": str(raw.get("root") or "").strip(),
         "hostname": str(raw.get("hostname") or "").strip(),
         "iface": str(raw.get("iface") or "").strip(),
         "monitor_iface": str(raw.get("monitor_iface") or "").strip(),
         "ssids": _ssids(raw.get("ssids")),
     }
+    out.update(listen_opts(raw))
+    return out
 
 
 def dump(cfg: dict[str, Any]) -> str:
+    opts = listen_opts(cfg)
     body = {
         "root": str(cfg.get("root") or ""),
         "hostname": str(cfg.get("hostname") or ""),
         "iface": str(cfg.get("iface") or ""),
         "monitor_iface": str(cfg.get("monitor_iface") or ""),
         "ssids": _ssids(cfg.get("ssids")),
+        "bind": str(opts["bind"]),
+        "port": int(opts["port"]),
+        "insecure_lan": bool(opts["insecure_lan"]),
+        "inhibit_screensaver": bool(opts["inhibit_screensaver"]),
     }
     return HEADER + yaml.safe_dump(body, sort_keys=False, default_flow_style=False)
 
@@ -234,6 +324,7 @@ def merge(existing: dict[str, Any], detected: dict[str, Any]) -> dict[str, Any]:
         have, found = existing.get(key), detected.get(key)
         out[key] = have if _present(have) else (found if _present(found) else (have or found or ([] if key == "ssids" else "")))
     out["ssids"] = _ssids(out.get("ssids"))
+    out.update(listen_opts(existing))
     return out
 
 
@@ -309,7 +400,12 @@ def hopper_install_hint(cfg: dict[str, Any], home: Path | None = None) -> list[s
     ]
 
 
-def write_systemd_override(cfg: dict[str, Any], path: Path | None = None) -> Path | None:
+def write_systemd_override(
+    cfg: dict[str, Any],
+    path: Path | None = None,
+    *,
+    inhibit_bin: str | None = None,
+) -> Path | None:
     root = str(cfg.get("root") or "").strip()
     if not root:
         return None
@@ -320,7 +416,21 @@ def write_systemd_override(cfg: dict[str, Any], path: Path | None = None) -> Pat
             return None
     path = dest
     # Resolve now so the user unit pins the checkout even if its cwd differs.
+    # Listen / screensaver flags are read from sys-config.yml at process start
+    # (do not bake --bind into ExecStart or a later yaml edit is ignored).
     abs_root = str(Path(root).expanduser().resolve())
+    argv = [f"{abs_root}/.venv/bin/python", "-m", "service.monitor"]
+    if resolve_listen(cfg)["inhibit_screensaver"]:
+        binary = inhibit_bin if inhibit_bin is not None else shutil.which("systemd-inhibit")
+        if binary:
+            argv = [
+                binary,
+                "--what=idle:sleep",
+                "--who=zoto-viz",
+                "--why=live-monitor",
+                "--mode=block",
+                *argv,
+            ]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "# generated by zoto-viz from ~/.zoto-viz/sys-config.yml — do not copy this into git\n"
@@ -329,7 +439,7 @@ def write_systemd_override(cfg: dict[str, Any], path: Path | None = None) -> Pat
         f"Environment=ZOTO_VIZ_ROOT={abs_root}\n"
         f"Environment=ZOTO_VIZ_REPO_ROOT={abs_root}\n"
         "ExecStart=\n"
-        f"ExecStart={abs_root}/.venv/bin/python -m service.monitor --bind 127.0.0.1 --port 7020\n",
+        f"ExecStart={' '.join(argv)}\n",
         encoding="utf-8",
     )
     return path
@@ -337,12 +447,17 @@ def write_systemd_override(cfg: dict[str, Any], path: Path | None = None) -> Pat
 
 def describe(cfg: dict[str, Any]) -> list[str]:
     ssids = ", ".join(_ssids(cfg.get("ssids"))) or "(none yet)"
+    opts = listen_opts(cfg)
+    lan = "yes (no password)" if opts["insecure_lan"] else "loopback"
+    saver = "inhibit" if opts["inhibit_screensaver"] else "allow"
     return [
         f"root           {cfg.get('root') or '—'}",
         f"hostname       {cfg.get('hostname') or '—'}",
         f"iface          {cfg.get('iface') or '—'}",
         f"monitor_iface  {cfg.get('monitor_iface') or '—'}",
         f"ssids          {ssids}",
+        f"listen         {opts['bind']}:{opts['port']}  {lan}",
+        f"screensaver    {saver}",
     ]
 
 

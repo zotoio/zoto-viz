@@ -1029,11 +1029,23 @@ def install_systemd_user(host: Host) -> None:
     subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
 
 
-def launchd_plist_text(root: Path, python: Path, home: Path) -> str:
+def launchd_plist_text(root: Path, python: Path, home: Path, cfg: dict | None = None) -> str:
     abs_root = str(root.expanduser().resolve())
     abs_py = str(python)
     log = str(home / ".zoto-viz" / "monitor.log")
     err = str(home / ".zoto-viz" / "monitor.err")
+    try:
+        from . import sysconfig
+
+        args = sysconfig.monitor_cli_args(cfg)
+        inhibit = bool(sysconfig.listen_opts(cfg or {}).get("inhibit_screensaver"))
+    except Exception:
+        args = ["-m", "service.monitor", "--bind", "127.0.0.1", "--port", "7020"]
+        inhibit = False
+    argv = [abs_py, *args]
+    if inhibit:
+        argv = ["/usr/bin/caffeinate", "-dimsu", *argv]
+    arg_xml = "\n".join(f"    <string>{item}</string>" for item in argv)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -1044,13 +1056,7 @@ def launchd_plist_text(root: Path, python: Path, home: Path) -> str:
   <string>{abs_root}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{abs_py}</string>
-    <string>-m</string>
-    <string>service.monitor</string>
-    <string>--bind</string>
-    <string>127.0.0.1</string>
-    <string>--port</string>
-    <string>7020</string>
+{arg_xml}
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -1076,10 +1082,10 @@ def launchd_plist_path(host: Host) -> Path:
     return host.home / "Library" / "LaunchAgents" / "com.zoto-viz.monitor.plist"
 
 
-def install_launchd_user(host: Host) -> Path:
+def install_launchd_user(host: Host, cfg: dict | None = None) -> Path:
     dest = launchd_plist_path(host)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(launchd_plist_text(host.root, venv_python(host), host.home), encoding="utf-8")
+    dest.write_text(launchd_plist_text(host.root, venv_python(host), host.home, cfg=cfg), encoding="utf-8")
     return dest
 
 
@@ -1114,7 +1120,14 @@ def apply_step(step: PlanStep, host: Host, run: Run) -> str:
         install_systemd_user(host)
         return "ok"
     if fn == "install_launchd_user":
-        return str(install_launchd_user(host))
+        cfg = None
+        try:
+            from . import sysconfig
+
+            cfg = sysconfig.load()
+        except Exception:
+            cfg = None
+        return str(install_launchd_user(host, cfg=cfg))
     raise RuntimeError(f"unknown step {step.id}")
 
 

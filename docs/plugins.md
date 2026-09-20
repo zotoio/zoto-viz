@@ -146,8 +146,8 @@ Examples: `plugins/src/lan-pulse/`, `plugins/src/pulse-ts/`, `plugins/src/doom/`
 
 ## MCP
 
-The monitor exposes a loopback MCP server at `POST /mcp` (Streamable HTTP JSON,
-CSRF skipped, Host still loopback). Tools:
+The monitor exposes an MCP server at `POST /mcp` (Streamable HTTP JSON,
+CSRF skipped). Host must be loopback unless `insecure_lan` is on. Tools:
 
 | Tool | Role |
 | --- | --- |

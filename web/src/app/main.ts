@@ -58,7 +58,10 @@ import {
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
-import { buildVizFrame, VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
+import {
+  VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
+  buildVizFrameForPlugin, defaultVizContract,
+} from "../plugins/viz-host";
 import {
   TypeSafeHost,
   parseTypeSafeEnable,
@@ -793,10 +796,21 @@ const mergeToggle = new Toggle({
   onChange: (on) => { localStorage.setItem("zoto-viz.merge", on ? "1" : "0"); touch(); if (lastRaw) feed(lastRaw); },
 });
 let lastLiveSeq = 0;
+let lastRepoRev = "";
 function applyLive(m: StateMsg): void {
+  const rev = m.repoRev || "";
+  if (rev && lastRepoRev && rev !== lastRepoRev) {
+    location.reload();
+    return;
+  }
+  if (rev) lastRepoRev = rev;
   const live = m.live;
   if (!live || live.seq <= lastLiveSeq) return;
   lastLiveSeq = live.seq;
+  if (live.patch?.reloadClient === true) {
+    location.reload();
+    return;
+  }
   if (live.temper != null || live.weather) agent.syncTemper({ temper: live.temper, weather: live.weather });
   if (live.patch && Object.keys(live.patch).length) void applyAgentPatch(live.patch);
 }
@@ -843,6 +857,11 @@ function feed(m: StateMsg): void {
   if (active?.capabilities?.includes("viz.read") || packId) {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
+    const idle = active?.viz?.idle;
+    const bind = parseSourceBind(optsFor(mode));
+    const buildFrame = idle
+      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
+      : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       sandbox.frame(f);
       if (packId) {
@@ -852,7 +871,7 @@ function feed(m: StateMsg): void {
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
         }, optsFor(mode));
       }
-    }, (state, prev, pulse) => buildVizFrame(state, prev, pulse, parseSourceBind(optsFor(mode))));
+    }, buildFrame);
     if (frame) {
       vizFrameTs = frame.t;
       if (packId === "hn-rain" || packId === "hn-term") {
@@ -1348,6 +1367,10 @@ function decoAt(raw: unknown): DecoAt {
 }
 
 async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
+  if (patch.reloadClient === true) {
+    location.reload();
+    return;
+  }
   if (patch.reloadPlugins === true) {
     pluginSpecs = await installPlugins();
     modeSel.setOptions(viewSelectOptions());

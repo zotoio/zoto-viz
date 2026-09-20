@@ -178,6 +178,16 @@ def test_install_launchd_user(tmp_path: Path) -> None:
     assert "ZOTO_VIZ_REPO_ROOT" in text
     assert str(host.root) in text
     assert "service.monitor" in text
+    assert "127.0.0.1" in text
+    lan = inst.launchd_plist_text(
+        host.root,
+        inst.venv_python(host),
+        host.home,
+        cfg={"bind": "0.0.0.0", "insecure_lan": True, "inhibit_screensaver": True},
+    )
+    assert "0.0.0.0" in lan
+    assert "--insecure-lan" in lan
+    assert "caffeinate" in lan
 
 
 def test_manual_darwin_tshark() -> None:

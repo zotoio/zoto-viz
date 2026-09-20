@@ -41,7 +41,22 @@ def test_save_roundtrip_mode(tmp_path: Path) -> None:
     got = sysconfig.load(path)
     assert got["root"] == "/opt/zoto-viz"
     assert got["ssids"] == ["Home", "Guest"]
-    assert "Do not commit" in path.read_text(encoding="utf-8")
+    assert got["bind"] == "127.0.0.1"
+    assert got["port"] == 7020
+    assert got["insecure_lan"] is False
+    assert got["inhibit_screensaver"] is False
+    text = path.read_text(encoding="utf-8")
+    assert "Do not commit" in text
+    assert "inhibit_screensaver" in text
+    sysconfig.save(
+        {**cfg, "bind": "0.0.0.0", "insecure_lan": True, "inhibit_screensaver": True, "port": 7021},
+        path,
+    )
+    lan = sysconfig.load(path)
+    assert lan["bind"] == "0.0.0.0"
+    assert lan["port"] == 7021
+    assert lan["insecure_lan"] is True
+    assert lan["inhibit_screensaver"] is True
 
 
 def test_detect_prefers_usb_monitor_and_watch_file(tmp_path: Path, monkeypatch) -> None:
@@ -206,8 +221,49 @@ def test_write_systemd_override(tmp_path: Path) -> None:
     assert "ZOTO_VIZ_ROOT=/opt/zoto-viz" in text
     assert "ZOTO_VIZ_REPO_ROOT=/opt/zoto-viz" in text
     assert "WorkingDirectory=/opt/zoto-viz" in text
-    assert "ExecStart=/opt/zoto-viz/.venv/bin/python -m service.monitor" in text
+    assert "ExecStart=/opt/zoto-viz/.venv/bin/python -m service.monitor\n" in text
+    assert "--bind" not in text
     assert "do not copy" in text
+
+
+def test_listen_opts_and_resolve() -> None:
+    loop = sysconfig.listen_opts({})
+    assert loop["bind"] == "127.0.0.1"
+    assert loop["port"] == 7020
+    assert loop["insecure_lan"] is False
+    assert loop["inhibit_screensaver"] is False
+    lan = sysconfig.listen_opts({"bind": "0.0.0.0", "inhibit_screensaver": True, "port": "7021"})
+    assert lan["bind"] == "0.0.0.0"
+    assert lan["port"] == 7021
+    assert lan["insecure_lan"] is True
+    assert lan["inhibit_screensaver"] is True
+    yes = sysconfig.listen_opts({"insecure_lan": "yes", "bind": "127.0.0.1"})
+    assert yes["insecure_lan"] is True
+    cli = sysconfig.resolve_listen({"bind": "127.0.0.1"}, bind="0.0.0.0", insecure_lan=True, port=9)
+    assert cli["bind"] == "0.0.0.0"
+    assert cli["port"] == 9
+    assert cli["insecure_lan"] is True
+    bad_port = sysconfig.listen_opts({"port": 99999})
+    assert bad_port["port"] == 7020
+
+
+def test_write_systemd_override_lan_and_inhibit(tmp_path: Path) -> None:
+    drop = tmp_path / "override.conf"
+    got = sysconfig.write_systemd_override(
+        {
+            "root": "/opt/zoto-viz",
+            "bind": "0.0.0.0",
+            "insecure_lan": True,
+            "inhibit_screensaver": True,
+        },
+        drop,
+        inhibit_bin="/usr/bin/systemd-inhibit",
+    )
+    assert got == drop
+    text = drop.read_text(encoding="utf-8")
+    assert "systemd-inhibit --what=idle:sleep --who=zoto-viz --why=live-monitor --mode=block" in text
+    assert "python -m service.monitor\n" in text
+    assert "--bind" not in text
 
 
 def test_watch_file_not_dict_and_short_plan(tmp_path: Path, monkeypatch) -> None:
@@ -223,9 +279,10 @@ def test_watch_file_not_dict_and_short_plan(tmp_path: Path, monkeypatch) -> None
     cfg = sysconfig.merge({}, {"ssids": "A, B", "root": "/x", "hostname": "h", "iface": "wlan0", "monitor_iface": ""})
     assert cfg["ssids"] == ["A", "B"]
     lines = sysconfig.describe(cfg)
-    assert "A, B" in lines[-1]
+    assert any("A, B" in line for line in lines)
+    assert any("127.0.0.1:7020" in line for line in lines)
     empty = sysconfig.describe({"ssids": []})
-    assert "(none yet)" in empty[-1]
+    assert any("(none yet)" in line for line in empty)
 
 
 def test_write_systemd_skips_without_unit(tmp_path: Path, monkeypatch) -> None:

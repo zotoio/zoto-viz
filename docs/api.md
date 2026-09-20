@@ -1,6 +1,6 @@
 # HTTP / WebSocket API
 
-Monitor listens on loopback (`127.0.0.1:7020`). Non-loopback `--bind` needs `--insecure-lan`.
+Monitor listens on loopback (`127.0.0.1:7020`) unless `~/.zoto-viz/sys-config.yml` sets `bind` (or you pass `--bind`). Non-loopback bind needs `insecure_lan: true` / `--insecure-lan`.
 
 Host must be loopback (unless `--insecure-lan`). Browser `Origin` must also be loopback. Mutating methods (`POST` / `PUT` / `DELETE` / `PATCH`) need `X-Zoto-Viz-Csrf` matching the process token. `GET /api/session` mints the header and a `zoto-viz-csrf` cookie (cookie is optional; a stale cookie after a monitor restart is ignored).
 

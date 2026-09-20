@@ -1,4 +1,5 @@
-# User service: constant capture + discovery, serving the live UI on http://127.0.0.1:7020
+# User service: constant capture + discovery, serving the live UI (default http://127.0.0.1:7020).
+# Listen address and screensaver inhibit come from ~/.zoto-viz/sys-config.yml via the drop-in.
 #
 #   mkdir -p ~/.config/systemd/user
 #   cp systemd/zoto-viz-monitor.service ~/.config/systemd/user/

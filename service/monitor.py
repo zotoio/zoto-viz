@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """zoto-viz monitor: continuous capture + discovery, streamed to the Three.js UI over WebSocket.
 
-    python -m service.monitor                 # http://127.0.0.1:7020
+    python -m service.monitor                 # http://127.0.0.1:7020  (or bind from ~/.zoto-viz/sys-config.yml)
     python -m service.monitor --port 9000 --iface wlan0
     python -m service.monitor --bind 0.0.0.0 --insecure-lan   # LAN bind; anyone on the network can use the UI
 
@@ -53,9 +53,11 @@ from . import plugin_datasource as plugin_ds
 from . import plugin_instances
 from . import plugins
 from . import profiles
+from . import repo_sync
 from . import rf
 from . import sdm
 from . import sources
+from . import idle
 from . import sysconfig
 
 zotoviz = paths.load_cli()
@@ -1583,6 +1585,9 @@ def publish_state(state: State) -> dict:
     sources.apply(msg)
     sdm.apply(msg)
     msg["live"] = live.snapshot()
+    rev = repo_sync.repo_rev()
+    if rev:
+        msg["repoRev"] = rev
     return msg
 
 
@@ -1621,6 +1626,32 @@ async def sdm_poll_loop(app: web.Application) -> None:
         except Exception as e:  # noqa: BLE001
             log(f"sdm poll: {e}")
         await asyncio.sleep(4)
+
+
+async def repo_sync_loop(app: web.Application) -> None:
+    """Fast-forward the install checkout; bounce this process and the open UI."""
+    delay = repo_sync.startup_delay_s()
+    if repo_sync.disabled():
+        return
+    if delay > 0:
+        await asyncio.sleep(delay)
+    while True:
+        try:
+            info = await asyncio.to_thread(repo_sync.tick)
+            action = info.get("action")
+            if action == "pulled":
+                log(
+                    f"repo sync: pulled {(info.get('from') or '')[:7]}.."
+                    f"{(info.get('to') or '')[:7]} ({len(info.get('files') or [])} files)"
+                )
+            elif action == "error":
+                log(f"repo sync: {info.get('error') or 'pull failed'}")
+        except Exception as e:  # noqa: BLE001
+            log(f"repo sync: {e}")
+        wait = repo_sync.interval_s()
+        if wait <= 0:
+            return
+        await asyncio.sleep(wait)
 
 
 async def plugin_watch_loop(app: web.Application) -> None:
@@ -1779,6 +1810,7 @@ async def on_startup(app: web.Application) -> None:
         asyncio.create_task(local_drop_watch_loop(app)),
         asyncio.create_task(sources_poll_loop(app)),
         asyncio.create_task(sdm_poll_loop(app)),
+        asyncio.create_task(repo_sync_loop(app)),
     ]
 
 
@@ -1899,20 +1931,30 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--iface", action="append", metavar="IFACE",
                    help="capture only these interfaces (repeatable; default: every up interface except lo and veth*)")
-    p.add_argument("--bind", default="127.0.0.1")
+    p.add_argument("--bind", default=None,
+                   help="listen address (default: sys-config.yml bind, else 127.0.0.1)")
     p.add_argument("--insecure-lan", action="store_true",
                    help="allow --bind on a non-loopback address (no password; anyone who can reach the port can read captures and trigger scans)")
-    p.add_argument("--port", type=int, default=7020)
+    p.add_argument("--port", type=int, default=None, help="listen port (default: sys-config.yml port, else 7020)")
+    p.add_argument("--inhibit-screensaver", action="store_true",
+                   help="hold idle/sleep so the display does not blank (also sys-config.yml inhibit_screensaver)")
     p.add_argument("-f", "--filter", default="", help="BPF capture filter, e.g. 'not port 22'")
     p.add_argument("--fresh", action="store_true", help="ignore persisted state")
     p.add_argument("--wifi-keys", type=Path, default=WIFI_KEYS_FILE, metavar="FILE",
                    help="`SSID = passphrase` per line for decrypting monitor-mode radios (default: %(default)s)")
     args = p.parse_args()
-    if not access.bind_is_loopback(args.bind) and not args.insecure_lan:
-        sys.exit("[monitor] refusing non-loopback --bind (pass --insecure-lan to expose the UI on the LAN)")
+    cfg = sysconfig.ensure()
+    listen = sysconfig.resolve_listen(
+        cfg,
+        bind=args.bind,
+        port=args.port,
+        insecure_lan=args.insecure_lan,
+        inhibit_screensaver=args.inhibit_screensaver,
+    )
+    if args.bind is not None and not access.bind_is_loopback(args.bind) and not args.insecure_lan:
+        sys.exit("[monitor] refusing non-loopback --bind (pass --insecure-lan or set bind in ~/.zoto-viz/sys-config.yml)")
 
     iface, local_ip, cidr, gw = zotoviz.default_iface()
-    sysconfig.ensure()
     state = State(iface, local_ip, cidr, gw, only_ifaces=args.iface)
     if not state.ifaces:
         sys.exit(f"[monitor] no capturable interfaces" + (f" among {args.iface}" if args.iface else ""))
@@ -1924,9 +1966,13 @@ def main() -> None:
     if migrated.get("copied"):
         log("plugin src migrated: " + ", ".join(migrated["copied"]))
     plugins.seed()
-    log(f"UI: http://{args.bind}:{args.port}/   WS: /ws   JSON: /api/state, /api/logs, /api/traffic?ip=…, /api/payload, /api/rf/watch, /api/profiles")
-    if args.insecure_lan:
-        log("WARNING: --insecure-lan: the UI is reachable beyond loopback with no password")
+    log(f"UI: http://{listen['bind']}:{listen['port']}/   WS: /ws   JSON: /api/state, /api/logs, /api/traffic?ip=…, /api/payload, /api/rf/watch, /api/profiles")
+    if listen["insecure_lan"]:
+        log("WARNING: insecure-lan: the UI is reachable beyond loopback with no password")
+    hold = idle.ScreensaverHold()
+    if listen["inhibit_screensaver"]:
+        for line in hold.start():
+            log(line)
     if plugins.python_enabled():
         log("plugin Python: enabled (ZOTO_VIZ_PLUGIN_SERVICE) — only consented plugins are loaded")
     else:
@@ -1936,7 +1982,17 @@ def main() -> None:
         log(f"wifi watch: {', '.join(w['ssids']) or '(none)'}" + (" + other networks" if w["other"] else "")
             + f", {w['dwell']} s each" + ("" if w["rotate"] else ", rotation off"))
     # shutdown_timeout bounds the wait for in-flight requests; the unit gives us 10 s in total
-    web.run_app(make_app(state, args.filter, args.wifi_keys, insecure_lan=args.insecure_lan), host=args.bind, port=args.port, print=None, access_log=None, shutdown_timeout=3)
+    try:
+        web.run_app(
+            make_app(state, args.filter, args.wifi_keys, insecure_lan=listen["insecure_lan"]),
+            host=listen["bind"],
+            port=listen["port"],
+            print=None,
+            access_log=None,
+            shutdown_timeout=3,
+        )
+    finally:
+        hold.stop()
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 - `pnpm start` / `pnpm stop` / `pnpm restart` (also `:frontend`, `:backend`, `:both`)
 - After an agent turn that changed `service/*.py` or `zoto-viz`, a Cursor **stop** hook restarts the running monitor (`systemctl --user restart zoto-viz-monitor`, or `pnpm restart:backend`) so the new Python is loaded. Plugin `backend/service.py` hot-reloads without a bounce. Set `ZOTO_VIZ_NO_AUTO_RESTART=1` to skip.
+- A running install fast-forwards its checkout every 5 minutes (`ZOTO_VIZ_PULL_S` / `ZOTO_VIZ_NO_AUTO_PULL=1`). After a pull it rebuilds the packed UI if needed, restarts the backend, and reloads the open browser tab.
 - `cd web && pnpm test && pnpm build`
 - `.venv/bin/python3 -m pytest tests -q -o addopts=`
 - Do not commit `.venv`, `web/dist`, `data/`, pcaps, wifi-keys, `sys-config.yml`, `plugins/.runtime/`, `plugins/*.zip`, or `dist/`

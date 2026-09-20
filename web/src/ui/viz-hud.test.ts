@@ -202,6 +202,44 @@ describe("viz hud helpers", () => {
     expect(estimateTalkerParticles(talkers)).toBe(512);
   });
 
+  it("shows demo metric value for idle-backed frames", () => {
+    const state = minimalState();
+    const idleFrame = {
+      t: 0,
+      dt: 0,
+      audio: 0,
+      demo: true,
+      packets: [{ proto: "tcp", size: 1, field: 0.5 }],
+      rf: [],
+      talkers: [],
+      headlines: [],
+    };
+    expect(vizHudMetric("packet-tunnel", idleFrame, state)).toEqual({ label: "flows", value: "demo" });
+    expect(vizHudMetric("talker-storm", {
+      ...idleFrame,
+      talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
+    }, state)).toEqual({ label: "particles", value: "demo" });
+  });
+
+  it("shows demo only for the pack's idle-filled slice", () => {
+    const state = minimalState();
+    const mixed = {
+      t: 0,
+      dt: 0,
+      audio: 0,
+      demo: true,
+      demoSlices: { rf: true as const, headlines: true as const },
+      packets: [{ proto: "tcp", size: 1, field: 0.5 }],
+      rf: [{ ssid: "demo", rssi: 0.4, channel: 1 }],
+      talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
+      headlines: [{ id: "h1", label: "HN", text: "idle" }],
+    };
+    expect(vizHudMetric("packet-tunnel", mixed, state)).toEqual({ label: "flows", value: "3" });
+    expect(vizHudMetric("talker-storm", mixed, state)).toEqual({ label: "particles", value: "2" });
+    expect(vizHudMetric("rf-constellation", mixed, state)).toEqual({ label: "RF", value: "demo" });
+    expect(vizHudMetric("hn-rain", mixed, state)).toEqual({ label: "headlines", value: "demo" });
+  });
+
   it("picks pack-specific metrics from host state", () => {
     const state = minimalState();
     expect(vizHudMetric("packet-tunnel", null, state)).toEqual({ label: "flows", value: "3" });

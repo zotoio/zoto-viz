@@ -367,8 +367,6 @@ class Sampler:
             bits.append(f"{thermal['pkg_c']:.0f}°C")
         if thermal.get("rapl_w"):
             bits.append(f"{thermal['rapl_w']:.0f} W")
-        if not bits:
-            return view
         pkg = thermal.get("pkg_c")
         watts = thermal.get("rapl_w")
         for d in view.get("devices") or []:
@@ -377,12 +375,14 @@ class Sampler:
                 d["temp"] = pkg
             if ip != "cpu:host":
                 continue
-            aliases = list(d.get("aliases") or [])
-            for bit in bits:
-                if bit not in aliases:
-                    aliases.append(bit)
-            d["aliases"] = aliases
-            d["watts"] = watts
+            if bits:
+                aliases = list(d.get("aliases") or [])
+                for bit in bits:
+                    if bit not in aliases:
+                        aliases.append(bit)
+                d["aliases"] = aliases
+            if watts:
+                d["watts"] = watts
         return view
 
     def views(self, now: float) -> dict[str, dict[str, Any]]:

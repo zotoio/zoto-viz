@@ -16,6 +16,8 @@ viz:
     - uAudio
     - uAccent
     - uBg
+  idle:
+    fixture: host
 datasource:
   consumes:
     - sources

@@ -35,6 +35,7 @@ describe("viz merge gates", () => {
     // mirrors plugins/src/talker-storm/plugin.yml viz block
     const contract = parseVizContract({
       graphWalk: false,
+      idle: { fixture: "host" },
       maxBuffers: 1,
       maxBufferFloats: 8,
       maxParticles: 512,
@@ -58,7 +59,7 @@ describe("viz merge gates", () => {
       name: "Bad Walk",
       version: 1,
       capabilities: ["viz.read", "viz.write"],
-      viz: { graphWalk: true, maxParticles: 0 },
+      viz: { graphWalk: true, maxParticles: 0, idle: { fixture: "host" } },
     });
     expect(view.viz).toBeUndefined();
   });

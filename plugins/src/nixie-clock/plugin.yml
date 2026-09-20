@@ -9,6 +9,8 @@ capabilities:
   - config.read
 viz:
   graphWalk: false
+  idle:
+    fixture: host
   maxBuffers: 1
   maxBufferFloats: 16
   maxParticles: 0

@@ -17,15 +17,17 @@ import {
 } from "./viz-host";
 
 describe("viz contract", () => {
-  it("requires graphWalk false in schema parse", () => {
-    expect(parseVizContract({ graphWalk: false })).toBeDefined();
-    expect(parseVizContract({ graphWalk: true })).toBeUndefined();
+  it("requires graphWalk false and viz.idle in schema parse", () => {
+    expect(parseVizContract({ graphWalk: false, idle: { fixture: "host" } })).toBeDefined();
+    expect(parseVizContract({ graphWalk: false })).toBeUndefined();
+    expect(parseVizContract({ graphWalk: true, idle: { fixture: "host" } })).toBeUndefined();
     expect(parseVizContract(undefined)).toBeUndefined();
   });
 
   it("clamps buffer and particle caps", () => {
     const c = parseVizContract({
       graphWalk: false,
+      idle: { fixture: "host" },
       maxBuffers: 99,
       maxBufferFloats: 4,
       maxParticles: 99999,
@@ -36,7 +38,7 @@ describe("viz contract", () => {
   });
 
   it("attaches the fixed UBO layout", () => {
-    const c = parseVizContract({ graphWalk: false });
+    const c = parseVizContract({ graphWalk: false, idle: { fixture: "host" } });
     expect(c?.ubo).toEqual(VIZ_UBO);
     expect(c?.ubo.block).toBe("ZotoVizData");
     expect(c?.ubo.binding).toBe(0);
