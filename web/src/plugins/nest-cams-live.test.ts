@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstCamera, fixNestAnswerSdp, gridCameras, nestCamCaption, nestStillSrc, nestStreamFailover, parseNestLook, sdmSyncKey, streamableCameras } from "./nest-cams-live";
+import { firstCamera, fixNestAnswerSdp, gridCameras, nestCamCaption, nestIdleNote, nestShowEventTiles, nestStillSrc, nestStreamFailover, parseNestLook, sdmSyncKey, streamableCameras } from "./nest-cams-live";
 
 describe("nest cams live", () => {
   it("builds a same-origin still URL", () => {
@@ -40,6 +40,7 @@ describe("nest cams live", () => {
     ];
     expect(gridCameras(rows, "", 4).map((d) => d.label)).toEqual(["Verandah", "Carport", "Backyard", "Lounge"]);
     expect(gridCameras(rows, "Carport,Front", 4).map((d) => d.label)).toEqual(["Carport", "Front", "Verandah", "Backyard"]);
+    expect(gridCameras(rows, "", 6).map((d) => d.label)).toEqual(["Verandah", "Carport", "Backyard", "Lounge", "Front"]);
     expect(gridCameras(rows, "", 1).map((d) => d.id)).toEqual(["a"]);
     expect(nestCamCaption(rows[1]!)).toBe("Verandah · Lounge");
     expect(nestCamCaption(rows[4]!)).toBe("Lounge");
@@ -91,6 +92,15 @@ describe("nest cams live", () => {
   it("defaults live stream on and a 4-pane grid", () => {
     expect(parseNestLook(undefined)).toEqual({ live: true, pick: "", grid: 4 });
     expect(parseNestLook({ live: "0", pick: "Kitchen", grid: "1" })).toEqual({ live: false, pick: "Kitchen", grid: 1 });
-    expect(parseNestLook({ grid: "9" }).grid).toBe(4);
+    expect(parseNestLook({ grid: "9" }).grid).toBe(6);
+  });
+
+  it("keeps event stills when live is off, even on a multi-pane grid", () => {
+    expect(nestShowEventTiles(true, 4)).toBe(false);
+    expect(nestShowEventTiles(true, 1)).toBe(true);
+    expect(nestShowEventTiles(false, 4)).toBe(true);
+    expect(nestIdleNote(true, [])).toBe("");
+    expect(nestIdleNote(false, [{ device: "a", event_id: "e1" }])).toBe("");
+    expect(nestIdleNote(false, [])).toBe("Live stream off. No recent motion stills.");
   });
 });

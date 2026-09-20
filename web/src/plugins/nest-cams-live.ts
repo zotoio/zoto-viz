@@ -58,12 +58,23 @@ export function parsePicks(pick: string): string[] {
 export function clampNestGrid(raw: string | undefined): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return 4;
-  return Math.min(4, Math.max(1, Math.round(n)));
+  return Math.min(6, Math.max(1, Math.round(n)));
 }
 
 export function parseNestLook(cfg: Record<string, string> | undefined): NestLook {
   const live = cfg?.live !== "0" && cfg?.live !== "false";
   return { live, pick: (cfg?.pick ?? "").trim(), grid: clampNestGrid(cfg?.grid) };
+}
+
+/** Event stills sit under a 1-pane live view, or replace the wall when live is off. */
+export function nestShowEventTiles(live: boolean, grid: number): boolean {
+  return !live || grid < 2;
+}
+
+export function nestIdleNote(live: boolean, events: SdmEvent[]): string {
+  if (live) return "";
+  if (events.some((e) => e.device && e.event_id)) return "";
+  return "Live stream off. No recent motion stills.";
 }
 
 export function sdmSyncKey(sdm: SdmStatus | undefined, look: NestLook): string {
@@ -85,7 +96,7 @@ export function firstCamera(devices: SdmDevice[] | undefined, pick: string): Sdm
 
 /** Fill up to `grid` panes: named picks first (comma-separated), then remaining streamable cameras. */
 export function gridCameras(devices: SdmDevice[] | undefined, pick: string, grid: number): SdmDevice[] {
-  const n = Math.min(4, Math.max(0, Math.round(grid)));
+  const n = Math.min(6, Math.max(0, Math.round(grid)));
   if (n <= 0) return [];
   const rows = devices ?? [];
   const used = new Set<string>();
@@ -263,8 +274,8 @@ export class NestCamsLive {
     }
     const wanted = this.liveOn ? gridCameras(this.devices, this.pick, this.grid) : [];
     if (sdm.error) this.setNote(sdm.error);
-    else this.setNote("");
-    if (this.grid < 2) this.paintTiles(this.devices, events);
+    else this.setNote(nestIdleNote(this.liveOn, events));
+    if (nestShowEventTiles(this.liveOn, this.grid)) this.paintTiles(this.devices, events);
     else this.tiles.replaceChildren();
     if (wanted.length) void this.ensureWall(wanted);
     else this.stopAll();

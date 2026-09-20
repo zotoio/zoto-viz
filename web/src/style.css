@@ -187,6 +187,8 @@ body.stage-only .overlay { display: none !important; }
 #nest-cams .nest-cams-wall[data-count="2"] { grid-template-columns: 1fr 1fr; }
 #nest-cams .nest-cams-wall[data-count="3"],
 #nest-cams .nest-cams-wall[data-count="4"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+#nest-cams .nest-cams-wall[data-count="5"],
+#nest-cams .nest-cams-wall[data-count="6"] { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
 #nest-cams .nest-cams-wall figure {
   position: relative;
   margin: 0;
