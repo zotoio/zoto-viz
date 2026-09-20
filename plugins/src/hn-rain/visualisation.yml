@@ -36,4 +36,32 @@ config:
     label: title stills
     type: boolean
     default: true
-    hint: Composer 2.5 illustration for each HN headline, top-left. Uses CURSOR_API_KEY.
+    hint: Composer 2.5 illustration for each headline, top-left. Uses CURSOR_API_KEY.
+  - key: source
+    label: source
+    type: text
+    default: hn
+    hint: Host source id from Settings → Sources. Empty uses every live source.
+  - key: titleField
+    label: title field
+    type: text
+    default: title
+  - key: captionField
+    label: caption field
+    type: text
+    default: summary
+  - key: imageField
+    label: image field
+    type: text
+    default: image
+  - key: linkField
+    label: link field
+    type: text
+    default: link
+  - key: filter
+    label: filter
+    type: select
+    values:
+      - [all, all]
+      - [has-image, pictured]
+    default: all

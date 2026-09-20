@@ -1,4 +1,5 @@
 import type { FeedConfig } from "./feed";
+import type { ChatConfig } from "./chat";
 import type { ProfileSettings } from "../core/profiles";
 import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { EMPTY_LOOK, mergeAgentLook, normalizeAgentLook, type AgentLook } from "../graph/deco";
@@ -74,6 +75,7 @@ export interface AgentPatch {
   redact?: boolean;
   merge?: boolean;
   feed?: Partial<FeedConfig>;
+  chat?: Partial<ChatConfig>;
   show?: Partial<ViewShow>;
   filters?: Partial<ProfileSettings["filters"]>;
   anim?: Partial<DreamAnim>;
@@ -183,7 +185,7 @@ export function canvasJpeg(canvas: HTMLCanvasElement, maxEdge = 960, quality = 0
 const SHOW_KEYS = ["lan", "internet", "multicast", "offline", "labels", "cpuIdle"] as const;
 const ANIM_BOOL: (keyof DreamAnim)[] = [
   "follow", "cycle", "randomize", "skyAudio", "bgAudio", "gridAudio", "audioCamera", "camTheme", "audioNodes",
-  "audioPhysics", "audioParts", "autoTune", "mosaicSharedTheme",
+  "audioPhysics", "audioParts", "autoTune", "mosaicSharedTheme", "mosaicUniqueSkies",
 ];
 const BACKDROPS = new Set(BACKDROP_OPTIONS.map((o) => o.value));
 const SHAPES = new Set(FLOOR_SHAPES.map((o) => o.value));
@@ -231,6 +233,13 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
   const tiles = parseMosaicTiles(s.mosaicTiles);
   if (tiles.length) out.mosaicTiles = tiles;
   if (typeof s.mosaicMaxId === "string") out.mosaicMaxId = s.mosaicMaxId.trim().slice(0, 80);
+  if (s.mosaicSkies && typeof s.mosaicSkies === "object" && !Array.isArray(s.mosaicSkies)) {
+    const skies: NonNullable<DreamAnim["mosaicSkies"]> = {};
+    for (const [id, sky] of Object.entries(s.mosaicSkies as Record<string, unknown>)) {
+      if (typeof sky === "string" && BACKDROPS.has(sky as BackdropKind)) skies[id] = sky as BackdropKind;
+    }
+    if (Object.keys(skies).length) out.mosaicSkies = skies;
+  }
   if (typeof s.focus === "string" && FOCUSES.has(s.focus)) out.focus = s.focus as DreamAnim["focus"];
   if (typeof s.bgColor === "string") out.bgColor = s.bgColor;
   if (typeof s.gridColor === "string") out.gridColor = s.gridColor;
@@ -317,7 +326,12 @@ export function pickAgentSettings(patch: Record<string, unknown>, modeIds: strin
     const f = patch.feed as Record<string, unknown>;
     const feed: NonNullable<AgentPatch["feed"]> = {};
     if (typeof f.on === "boolean") feed.on = f.on;
-    if (f.source === "traffic" || f.source === "transcript" || f.source === "both") feed.source = f.source;
+    if (f.source === "transcript" || f.source === "both") {
+      out.chat = { ...out.chat, on: true };
+      feed.source = "traffic";
+    } else if (f.source === "traffic") {
+      feed.source = "traffic";
+    }
     if (f.layout === "ticker" || f.layout === "bars" || f.layout === "both") feed.layout = f.layout;
     if (f.scope === "lan" || f.scope === "selected" || f.scope === "any") feed.scope = f.scope;
     if (typeof f.modulate === "boolean") feed.modulate = f.modulate;
@@ -326,6 +340,14 @@ export function pickAgentSettings(patch: Record<string, unknown>, modeIds: strin
     const size = Number(f.textSize);
     if (Number.isFinite(size)) feed.textSize = Math.min(20, Math.max(10, size));
     if (Object.keys(feed).length) out.feed = feed;
+  }
+  if (patch.chat && typeof patch.chat === "object" && !Array.isArray(patch.chat)) {
+    const c = patch.chat as Record<string, unknown>;
+    const chat: NonNullable<AgentPatch["chat"]> = {};
+    if (typeof c.on === "boolean") chat.on = c.on;
+    const size = Number(c.textSize);
+    if (Number.isFinite(size)) chat.textSize = Math.min(20, Math.max(10, size));
+    if (Object.keys(chat).length) out.chat = { ...out.chat, ...chat };
   }
   if (patch.show && typeof patch.show === "object" && !Array.isArray(patch.show)) {
     const s = patch.show as Record<string, unknown>;
@@ -405,7 +427,8 @@ export function mergeAgentPatch(base: ProfileSettings, patch: AgentPatch): Profi
     mode: patch.mode ?? base.mode,
     redact: patch.redact ?? base.redact,
     merge: patch.merge ?? base.merge,
-    feed: { ...base.feed, ...patch.feed },
+    feed: { ...base.feed, ...patch.feed, source: "traffic" },
+    chat: { ...base.chat, ...patch.chat },
     show: { ...base.show, ...patch.show },
     filters: { ...base.filters, ...patch.filters },
     anim: { ...base.anim, ...patch.anim },

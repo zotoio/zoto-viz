@@ -1,10 +1,12 @@
 import type { PluginField, ModeOption } from "./modes";
 import type { ProfileSettings } from "./profiles";
-import { DEFAULT_DREAM, DREAM_BOUNDS, AUDIO_DRIVES, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type MosaicSize } from "../graph/scene";
+import { DEFAULT_DREAM, DREAM_BOUNDS, AUDIO_DRIVES, EDGE_GLOWS, FABRIC_DICE, FOCUS_MODES, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type MosaicSize } from "../graph/scene";
 import { FLOOR_SHAPES } from "../graph/floor";
-import type { BackdropKind } from "../graph/backdrop";
+import { CYCLE_SKIES, type BackdropKind } from "../graph/backdrop";
+import { assignMosaicSkies, mosaicIds, shouldUniqueMosaicSkies } from "../graph/mosaic";
+import { lookForMode } from "../plugins/plugin";
 import { VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
-import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, FEED_SOURCES, type FeedConfig } from "../ui/feed";
+import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, type FeedConfig } from "../ui/feed";
 
 export type Bound = { min: number; max: number; step: number };
 export type Rng = () => number;
@@ -15,7 +17,7 @@ export const DICE_HANDOFF =
 
 export const DICE_INCLUDE_KEYS = [
   "theme", "view", "mosaic", "feed",
-  "motion", "physics", "knobs", "show",
+  "motion", "style", "physics", "knobs", "show",
 ] as const;
 
 export type DiceIncludeKey = (typeof DICE_INCLUDE_KEYS)[number];
@@ -26,8 +28,9 @@ export const DICE_INCLUDE_META: { key: DiceIncludeKey; label: string; hint: stri
   { key: "theme", label: "theme", hint: "colour theme" },
   { key: "view", label: "view", hint: "catalog view (Topology, Talkers, …)" },
   { key: "mosaic", label: "mosaic", hint: "tile count and hero pane" },
-  { key: "feed", label: "feed", hint: "overlay on/off, layout, source, density" },
+  { key: "feed", label: "feed", hint: "packet overlay on/off, layout, density" },
   { key: "motion", label: "motion", hint: "orbit, sky, floor, labels, audio, theme / sky cycles" },
+  { key: "style", label: "graph style", hint: "2D / 3D fabric mesh and plane vs space layout — any graph plugin" },
   { key: "physics", label: "physics", hint: "magnets, gravity, strings, traffic sparks" },
   { key: "knobs", label: "knobs", hint: "per-view options and plugin fields (not prompts)" },
   { key: "show", label: "visibility", hint: "LAN / internet / multicast / offline / labels / CPU idle / merge names" },
@@ -58,7 +61,7 @@ export type DicePatch = Partial<Omit<DiceConfig, "include">> & { include?: Parti
 export const DEFAULT_DICE: DiceConfig = {
   include: {
     theme: true, view: true, mosaic: true, feed: true,
-    motion: true, physics: true, knobs: true, show: true,
+    motion: true, style: true, physics: true, knobs: true, show: true,
   },
   on: false,
   periodMin: 5,
@@ -346,10 +349,13 @@ export function shuffleAnim(
     const drives = ctx.audioDrives?.length ? ctx.audioDrives : AUDIO_DRIVES.map((o) => o.value);
     next.audioDrive = pickOther(drives, anim.audioDrive, rnd);
     next.edgeGlow = pickOther(EDGE_GLOWS.map((o) => o.value), anim.edgeGlow, rnd);
-    next.graphFabric = pickOther(FABRIC_OPTIONS.map((o) => o.value), anim.graphFabric, rnd);
     next.focus = pickOther(FOCUS_MODES.map((o) => o.value), anim.focus, rnd);
     next.themeCycle = pickOther(THEME_CYCLES.map((o) => o.value), anim.themeCycle, rnd);
     next.skyCycle = pickOther(SKY_CYCLES.map((o) => o.value), anim.skyCycle, rnd);
+  }
+  if (cfg.include.style) {
+    next.graphFabric = pickOther(FABRIC_DICE, anim.graphFabric, rnd);
+    next.graphSpace = pickOther(GRAPH_SPACE_OPTIONS.map((o) => o.value), anim.graphSpace, rnd);
   }
   if (cfg.include.physics) {
     snapGroup(rec, ANIM_NUM_PHYSICS, cfg, rnd);
@@ -377,7 +383,7 @@ function shuffleFeed(feed: FeedConfig, rnd: Rng, cfg: DiceConfig): FeedConfig {
     on: rnd() < 0.5,
     layout: pickOther(FEED_LAYOUTS.map((o) => o.value), feed.layout, rnd),
     scope: pickOther(FEED_SCOPES.map((o) => o.value), feed.scope, rnd),
-    source: pickOther(FEED_SOURCES.map((o) => o.value), feed.source, rnd),
+    source: "traffic",
     density: snapBound(diceFeedBound(cfg), rnd),
     textSize: snapBound({ min: 10, max: 20, step: 1 }, rnd),
     modulate: rnd() < 0.5,
@@ -387,6 +393,34 @@ function shuffleFeed(feed: FeedConfig, rnd: Rng, cfg: DiceConfig): FeedConfig {
 
 function diceOf(s: ProfileSettings): DiceConfig {
   return s.dice ?? DEFAULT_DICE;
+}
+
+function stampMosaicSkies(
+  anim: DreamAnim,
+  mode: string,
+  skies: BackdropKind[],
+  rnd: Rng,
+  catalog: string[],
+): DreamAnim {
+  if (anim.mosaic === "off") {
+    return { ...anim, mosaicUniqueSkies: false, mosaicSkies: {} };
+  }
+  const unique = shouldUniqueMosaicSkies(rnd);
+  let tiles = anim.mosaicTiles?.length ? anim.mosaicTiles : mosaicIds(anim.mosaic, mode, anim.hero);
+  if (!tiles.length && catalog.length) {
+    const n = Number(anim.mosaic) || 0;
+    const extra = anim.hero !== "off" ? 1 : 0;
+    const hero = catalog.includes(mode) ? mode : catalog[0]!;
+    tiles = [hero, ...catalog.filter((id) => id !== hero)].slice(0, Math.max(n + extra, 2));
+  }
+  const pool = skies.length ? skies : CYCLE_SKIES;
+  return {
+    ...anim,
+    mosaicUniqueSkies: unique,
+    mosaicSkies: unique
+      ? assignMosaicSkies(tiles, anim.backdrop, pool, (id) => lookForMode(id)?.backdrop)
+      : {},
+  };
 }
 
 /**
@@ -424,14 +458,19 @@ export function shuffleLook(s: ProfileSettings, ctx: ShuffleCtx, rnd: Rng = Math
     for (const key of SHOW_KEYS) show[key] = rnd() < 0.5;
     merge = rnd() < 0.5;
   }
-  const animOn = on.motion || on.physics || on.mosaic;
+  const animOn = on.motion || on.physics || on.mosaic || on.style;
+  const mode = on.view && modeIds.length ? pickOther(modeIds, s.mode, rnd) : s.mode;
+  let anim = animOn ? shuffleAnim(s.anim, ctx, rnd, cfg) : { ...s.anim };
+  if (animOn && (on.motion || on.mosaic)) {
+    anim = stampMosaicSkies(anim, mode, ctx.skies, rnd, modeIds);
+  }
   return {
     ...s,
     theme: on.theme && ctx.themes.length ? pickOther(ctx.themes, s.theme, rnd) : s.theme,
-    mode: on.view && modeIds.length ? pickOther(modeIds, s.mode, rnd) : s.mode,
+    mode,
     modeOptions,
     plugins,
-    anim: animOn ? shuffleAnim(s.anim, ctx, rnd, cfg) : s.anim,
+    anim,
     chrome: s.chrome,
     camera: s.camera,
     mic: s.mic,

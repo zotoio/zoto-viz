@@ -26,6 +26,8 @@ FACTS_MAX_TOKENS = 384
 FACTS_MIN_TOKENS = 64
 FACTS_MAX_TOKENS_CAP = 2048
 INJECT_CHARS = 900
+CHAT_WINDOW = 4
+CHAT_LINE = 160
 CONTENT_MAX = 8000
 HIGHLIGHT_LINE = 160
 _LOCK = threading.Lock()
@@ -108,16 +110,20 @@ def messages() -> list[dict[str, Any]]:
         row: dict[str, Any] = {"t": m.get("t") or 0, "role": role, "content": str(m.get("content") or "")[:CONTENT_MAX]}
         if thought.strip():
             row["thinking"] = thought
+        if isinstance(m.get("usage"), dict) and m["usage"]:
+            row["usage"] = m["usage"]
         out.append(row)
     return out
 
 
-def ui_messages() -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
+def ui_messages() -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     for m in messages()[-UI_MAX:]:
-        row: dict[str, str] = {"role": m["role"], "content": m["content"]}
+        row: dict[str, Any] = {"role": m["role"], "content": m["content"]}
         if m.get("thinking"):
             row["thinking"] = str(m["thinking"])
+        if isinstance(m.get("usage"), dict) and m["usage"]:
+            row["usage"] = m["usage"]
         out.append(row)
     return out
 
@@ -235,7 +241,7 @@ def maybe_roll(
         return roll
 
 
-def append_message(role: str, content: str, *, thinking: str = "") -> None:
+def append_message(role: str, content: str, *, thinking: str = "", usage: dict[str, Any] | None = None) -> None:
     if role not in ("user", "assistant"):
         return
     text = str(content or "")[:CONTENT_MAX]
@@ -257,6 +263,8 @@ def append_message(role: str, content: str, *, thinking: str = "") -> None:
         row: dict[str, Any] = {"t": time.time(), "role": role, "content": text}
         if thought.strip():
             row["thinking"] = thought
+        if isinstance(usage, dict) and usage:
+            row["usage"] = usage
         rows.append(row)
         dropped = max(0, len(rows) - CONV_MAX)
         if dropped:
@@ -281,33 +289,6 @@ def clear_conversation() -> None:
             if isinstance(m, dict) and str(m.get("kind") or "memory") != "highlight"
         ]
         _save_memories(rows)
-
-
-def pending_task() -> str:
-    with _LOCK:
-        raw = _read_json(conversation_file()).get("pending")
-    return str(raw or "").strip()[:CONTENT_MAX]
-
-
-def set_pending_task(text: str) -> None:
-    task = str(text or "").strip()[:CONTENT_MAX]
-    with _LOCK:
-        path = conversation_file()
-        data = _read_json(path)
-        if task:
-            data["pending"] = task
-        else:
-            data.pop("pending", None)
-        _write_json(path, data)
-
-
-def clear_pending_task() -> str:
-    with _LOCK:
-        path = conversation_file()
-        data = _read_json(path)
-        old = str(data.pop("pending", "") or "").strip()[:CONTENT_MAX]
-        _write_json(path, data)
-    return old
 
 
 def list_memories(*, kind: str | None = None) -> list[dict[str, Any]]:
@@ -481,9 +462,39 @@ def facts_window(*, query: str = "", max_tokens: int | None = None) -> str:
     return (header + "\n".join(lines))[: max(INJECT_CHARS, budget * 4)]
 
 
+def chat_window(*, skip_last_user: bool = True) -> str:
+    """Short discuss thread so the operator can keep talking. CoT is stripped. Current user line stays in ollama_tail."""
+    with _LOCK:
+        data = _read_json(conversation_file())
+        rows = data.get("messages") if isinstance(data.get("messages"), list) else []
+        rolls = _rolls_of(data)
+        through = _through(rows, rolls)
+    live = [m for m in rows[through:] if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
+    if skip_last_user and live and live[-1].get("role") == "user":
+        live = live[:-1]
+    picked = live[-CHAT_WINDOW:]
+    if not picked:
+        return ""
+    lines: list[str] = []
+    for m in picked:
+        role = "user" if m.get("role") == "user" else "assistant"
+        text = _scrub(_FENCE_ANY.sub(" ", str(m.get("content") or "")), False)
+        text = " ".join(text.split())
+        if not text:
+            continue
+        if len(text) > CHAT_LINE:
+            text = text[: CHAT_LINE - 1] + "…"
+        lines.append(f"- {role}: {text}")
+    if not lines:
+        return ""
+    return "Recent chat (discuss then act):\n" + "\n".join(lines)
+
+
 def inject_block(query: str, *, max_tokens: int | None = None) -> str:
-    body = facts_window(query=query, max_tokens=max_tokens)
-    return ("\n" + body) if body else ""
+    facts = facts_window(query=query, max_tokens=max_tokens)
+    chat = chat_window()
+    parts = [p for p in (facts, chat) if p]
+    return ("\n" + "\n".join(parts)) if parts else ""
 
 
 def _memory_texts_from_fence(blob: str) -> list[str]:

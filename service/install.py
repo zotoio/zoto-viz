@@ -10,7 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Iterable, Sequence, TextIO
 
@@ -52,6 +52,7 @@ _APT = {
     "dig": ["bind9-dnsutils"],
     "dot": ["graphviz"],
     "openssl": ["openssl"],
+    "iw": ["iw"],
     "python3-venv": ["python3-venv"],
 }
 _DNF = {
@@ -66,6 +67,7 @@ _DNF = {
     "dig": ["bind-utils"],
     "dot": ["graphviz"],
     "openssl": ["openssl"],
+    "iw": ["iw"],
 }
 _PACMAN = {
     "tshark": ["wireshark-cli"],
@@ -79,6 +81,7 @@ _PACMAN = {
     "dig": ["bind"],
     "dot": ["graphviz"],
     "openssl": ["openssl"],
+    "iw": ["iw"],
 }
 _WINGET = {
     "tshark": "Wireshark.Wireshark",
@@ -210,6 +213,85 @@ def parse_node_version(raw: str) -> tuple[int, int] | None:
         return None
 
 
+def _cmd_text(out: str, err: str) -> str:
+    return "\n".join(part.strip() for part in (out, err) if part and part.strip())
+
+
+def _env_home_root(home: Path, env_key: str, *parts: str, fallback: tuple[str, ...] | None = None) -> Path:
+    """Use $ENV only when it lives under this host home, or this is the real $HOME."""
+    raw = os.environ.get(env_key)
+    if raw:
+        p = Path(raw)
+        try:
+            p.resolve().relative_to(home.resolve())
+            return p.joinpath(*parts)
+        except (OSError, ValueError):
+            if home.resolve() == Path.home().resolve():
+                return p.joinpath(*parts)
+    if fallback:
+        return home.joinpath(*fallback)
+    return home.joinpath(*parts)
+
+
+def _node_bins(home: Path) -> list[Path]:
+    """nvm / fnm / volta bin dirs that may hold a Node 22+ the PATH node is missing."""
+    roots = [
+        _env_home_root(home, "NVM_DIR", "versions", "node", fallback=(".nvm", "versions", "node")),
+        _env_home_root(home, "FNM_DIR", "node-versions", fallback=(".local", "share", "fnm", "node-versions")),
+        _env_home_root(home, "VOLTA_HOME", "tools", "image", "node", fallback=(".volta", "tools", "image", "node")),
+    ]
+    bins: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        try:
+            kids = list(root.iterdir())
+        except OSError:
+            continue
+        for child in kids:
+            for cand in (child / "bin", child / "installation" / "bin", child):
+                node = cand / "node"
+                if not node.is_file():
+                    continue
+                key = str(cand.resolve()) if cand.exists() else str(cand)
+                if key in seen:
+                    continue
+                seen.add(key)
+                bins.append(cand)
+    return bins
+
+
+def _read_node_ver(run: Run, node: str | None = None) -> tuple[int, int] | None:
+    _code, out, err = run([node or "node", "-v"], None)
+    return parse_node_version(out or err)
+
+
+def prefer_node(host: Host, run: Run) -> tuple[Host, str]:
+    """If PATH Node is older than 22.12, use the newest nvm/fnm/volta 22+ bin."""
+    path_node = host.which("node")
+    have = _read_node_ver(run) if path_node else None
+    if have and have >= MIN_NODE:
+        return host, ""
+    best: tuple[tuple[int, int], Path] | None = None
+    for bindir in _node_bins(host.home):
+        ver = _read_node_ver(run, str(bindir / "node"))
+        if ver and ver >= MIN_NODE and (best is None or ver > best[0]):
+            best = (ver, bindir)
+    if not best:
+        return host, ""
+    ver, bindir = best
+    new_path = f"{bindir}{os.pathsep}{host.env_path}"
+
+    def which(name: str) -> str | None:
+        return shutil.which(name, path=new_path)
+
+    note = (
+        f"PATH Node is {('v%d.%d' % have) if have else 'missing'}; "
+        f"using v{ver[0]}.{ver[1]} at {bindir}. "
+        f"New shells still follow nvm default — run: nvm alias default {ver[0]}"
+    )
+    return replace(host, env_path=new_path, which=which), note
+
+
 def _run_capture(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
     try:
         proc = subprocess.run(
@@ -217,7 +299,7 @@ def _run_capture(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=600,
             check=False,
         )
     except FileNotFoundError:
@@ -367,8 +449,7 @@ def _node_check(host: Host, run: Run) -> Check:
             detail="not on PATH",
             manual=_manual_for("node", host, pkg_manager(host)),
         )
-    code, out, err = run(["node", "-v"], None)
-    parsed = parse_node_version(out or err)
+    parsed = _read_node_ver(run)
     if parsed is None:
         return Check(
             id="node",
@@ -459,6 +540,7 @@ def gather_checks(host: Host, run: Run | None = None) -> list[Check]:
                 ("avahi-browse", "avahi-utils"),
                 ("nbtscan", "nbtscan"),
                 ("dig", "bind9-dnsutils (`dig`)"),
+                ("iw", "iw (Wi-Fi link/scan)"),
             ]
         )
 
@@ -634,22 +716,24 @@ def build_plan(host: Host, checks: Sequence[Check], *, no_system: bool = False) 
             fn="pip_install",
         )
     )
-    steps.append(
-        PlanStep(
-            id="corepack",
-            summary="corepack enable && corepack prepare pnpm@latest --activate",
-            risk="local",
-            fn="setup_pnpm",
+    node_ok = next((c.ok for c in checks if c.id == "node"), False)
+    if node_ok:
+        steps.append(
+            PlanStep(
+                id="corepack",
+                summary="corepack enable && corepack prepare pnpm@latest --activate",
+                risk="local",
+                fn="setup_pnpm",
+            )
         )
-    )
-    steps.append(
-        PlanStep(
-            id="web",
-            summary="pnpm install && pnpm build in web/",
-            risk="local",
-            fn="web_build",
+        steps.append(
+            PlanStep(
+                id="web",
+                summary="pnpm install && pnpm build in web/",
+                risk="local",
+                fn="web_build",
+            )
         )
-    )
     steps.append(
         PlanStep(
             id="shim",
@@ -851,34 +935,77 @@ def pip_install(host: Host, run: Run) -> None:
         raise RuntimeError(err.strip() or "pip install failed")
 
 
+def _pnpm_works(host: Host, run: Run) -> bool:
+    pnpm = host.which("pnpm")
+    if not pnpm:
+        return False
+    code, out, err = run([pnpm, "-v"], None)
+    text = _cmd_text(out, err)
+    if code != 0 or "MODULE_NOT_FOUND" in text or "pnpm.cjs" in text:
+        return False
+    return True
+
+
 def setup_pnpm(host: Host, run: Run) -> None:
     corepack = host.which("corepack")
     if not corepack:
-        raise RuntimeError("corepack not on PATH (it ships with Node 16.13+). Reopen the terminal after installing Node.")
+        raise RuntimeError("corepack not on PATH (it ships with Node 16.13+). Reopen the terminal after installing Node 22.")
     enable = run([corepack, "enable"], host.root)
     if enable[0] != 0:
         sudo = _sudo_prefix(host)
         if sudo:
             enable = run([*sudo, corepack, "enable"], host.root)
         if enable[0] != 0:
-            raise RuntimeError((enable[2] or enable[1]).strip() or "corepack enable failed")
+            raise RuntimeError(_cmd_text(enable[1], enable[2]) or "corepack enable failed")
     prep = run([corepack, "prepare", "pnpm@latest", "--activate"], host.root)
     if prep[0] != 0:
-        raise RuntimeError((prep[2] or prep[1]).strip() or "corepack prepare pnpm failed")
+        raise RuntimeError(_cmd_text(prep[1], prep[2]) or "corepack prepare pnpm failed")
+    if _pnpm_works(host, run):
+        return
+    # Node 18 corepack looks for pnpm.cjs; Node 22 writes pnpm.mjs into the same cache.
+    retry = run([corepack, "prepare", "pnpm@latest", "--activate"], host.root)
+    if retry[0] != 0 or not _pnpm_works(host, run):
+        raise RuntimeError(
+            _cmd_text(retry[1], retry[2])
+            or "pnpm shim is broken (stale corepack cache). "
+            "Use Node 22.12+ and re-run: corepack prepare pnpm@latest --activate"
+        )
 
 
 def web_build(host: Host, run: Run) -> None:
     pnpm = host.which("pnpm")
     if not pnpm:
-        raise RuntimeError("pnpm not on PATH after corepack; reopen the terminal and re-run install")
+        raise RuntimeError("pnpm not on PATH after corepack; reopen the terminal (Node 22.12+) and re-run install")
+    if not _pnpm_works(host, run):
+        raise RuntimeError(
+            "pnpm does not run (often Node 18 + a Node 22 corepack cache). "
+            "nvm use 22 && corepack prepare pnpm@latest --activate"
+        )
     web = host.root / "web"
     inst = run([pnpm, "install"], web)
     if inst[0] != 0:
-        raise RuntimeError((inst[2] or inst[1]).strip() or "pnpm install failed")
+        raise RuntimeError(_cmd_text(inst[1], inst[2]) or "pnpm install failed")
     run([pnpm, "approve-builds", "esbuild"], web)  # pnpm 10+; ignore failure
-    build = run([pnpm, "build"], web)
-    if build[0] != 0:
-        raise RuntimeError((build[2] or build[1]).strip() or "pnpm build failed")
+    asb = run([pnpm, "asbuild"], web)
+    if asb[0] != 0:
+        if not (web / "node_modules" / ".bin" / "asc").is_file():
+            inst = run([pnpm, "install"], web)
+            if inst[0] != 0:
+                raise RuntimeError(_cmd_text(inst[1], inst[2]) or "pnpm install failed (assemblyscript)")
+            asb = run([pnpm, "asbuild"], web)
+        if asb[0] != 0:
+            raise RuntimeError("asbuild failed:\n" + (_cmd_text(asb[1], asb[2]) or "asc exit 1"))
+    tsc = run([pnpm, "exec", "tsc", "--noEmit"], web)
+    if tsc[0] != 0:
+        raise RuntimeError("tsc --noEmit failed:\n" + (_cmd_text(tsc[1], tsc[2]) or "tsc exit 1"))
+    vite = run([pnpm, "exec", "vite", "build"], web)
+    if vite[0] != 0:
+        raise RuntimeError("vite build failed:\n" + (_cmd_text(vite[1], vite[2]) or "vite exit 1"))
+    bridge = host.root / "service" / "cursor-bridge"
+    if (bridge / "package.json").is_file():
+        br = run([pnpm, "install"], bridge)
+        if br[0] != 0:
+            raise RuntimeError("cursor-bridge pnpm install failed:\n" + (_cmd_text(br[1], br[2]) or "exit 1"))
 
 
 def write_sysconfig() -> None:
@@ -1026,8 +1153,17 @@ def cli_install(
         emit("Python 3.12+ is required. Install it, then re-run zoto-viz install.")
         return 1
 
+    host, node_note = prefer_node(host, run)
+    if node_note:
+        os.environ["PATH"] = host.env_path
+        emit(node_note)
     checks = gather_checks(host, run)
     emit(format_checks(checks))
+    node_check = next((c for c in checks if c.id == "node"), None)
+    if node_check is not None and not node_check.ok:
+        emit("Node.js 22.12+ is required for the web UI (nvm default 18 is not enough).")
+        emit("Install Node 22 LTS or: nvm install 22 && nvm alias default 22")
+        return 1
     plan = build_plan(host, checks, no_system=no_system)
     system_steps = [s for s in plan if s.risk == "system"]
 

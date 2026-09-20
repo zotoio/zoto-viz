@@ -8,6 +8,7 @@ import { compileMatcher } from "../ui/settings";
 import { LookStage } from "../graph/look";
 import { fitText, isExchangeStart, noReplyExpected, portRole, roundRect } from "./arcade";
 import { markFrame } from "../core/fps";
+import { observeResize } from "../core/resize";
 
 /**
  * NetPong: Logstalgia ("Apache Pong") for one host on the network.
@@ -287,7 +288,7 @@ export class PongView {
       if (!e.shiftKey && isKnown(this.deviceAt(this.hover.host))) this.chooseSource(this.hover.host);
       else this.chooseTarget(this.hover.host);
     });
-    new ResizeObserver(() => this.fit()).observe(container);
+    observeResize(container, () => this.fit());
   }
 
   // ------------------------------------------------------------------ lifecycle

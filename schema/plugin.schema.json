@@ -87,6 +87,10 @@
       "pattern": "^[a-z][a-z0-9_-]{0,31}$",
       "description": "Optional catalog id to overlay when it differs from `id`."
     },
+    "instances": {
+      "$ref": "#/$defs/pluginInstances",
+      "description": "Named catalog rows that reuse this plugin tree with different source / field / filter defaults. View id is plugin:<id> when instance id equals the plugin id, otherwise plugin:<id>:<instance>."
+    },
     "datasource": {
       "type": "object",
       "additionalProperties": false,
@@ -185,6 +189,30 @@
       "type": "object",
       "additionalProperties": true,
       "description": "Free-form layout map. Keys used today (hints only): lanShell, internetShell."
+    },
+    "pluginInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 48 },
+        "hint": { "type": "string", "maxLength": 280 },
+        "source": { "type": "string", "maxLength": 32 },
+        "title": { "type": "string", "maxLength": 64 },
+        "caption": { "type": "string", "maxLength": 64 },
+        "image": { "type": "string", "maxLength": 64 },
+        "link": { "type": "string", "maxLength": 64 },
+        "filter": { "type": "string", "maxLength": 80 }
+      }
+    },
+    "pluginInstances": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/pluginInstance" }
     },
     "streamRef": {
       "description": "A monitor stream this plugin consumes or produces. Known names today (not a closed enum): devices, flows, packets, traffic, wifi, bluetooth, cpu, audio, feed, graph, hud, plugin_state, rf, sources. Objects may remap fields.",

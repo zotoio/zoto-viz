@@ -6,7 +6,7 @@ import { morphCopy, Select } from "./ui";
 export const VIZ_DEMO_PACKS = [
   "packet-tunnel", "rf-constellation", "talker-storm",
   "kefrens-bars", "roto-proto", "blob-mesh", "star-sines", "hn-rain", "hn-term",
-  "stereo-gram",
+  "stereo-gram", "nixie-clock",
 ] as const;
 export type VizDemoPackId = (typeof VIZ_DEMO_PACKS)[number];
 
@@ -21,6 +21,7 @@ const PACK_LABELS: Record<VizDemoPackId, string> = {
   "hn-rain": "HN",
   "hn-term": "term",
   "stereo-gram": "stereo",
+  "nixie-clock": "nixie",
 };
 
 const SKIP_WINDOW_MS = 1000;
@@ -96,6 +97,8 @@ export function vizHudMetric(
       return { label: "stories", value: String(frame?.headlines.length ?? 0) };
     case "stereo-gram":
       return { label: "orbs", value: String(Math.min(8, frame?.talkers.length ?? 0)) };
+    case "nixie-clock":
+      return { label: "nixie", value: "clock" };
   }
 }
 

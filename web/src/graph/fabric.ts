@@ -1,15 +1,48 @@
 import * as THREE from "three";
 import { mixFade } from "./morph";
 
-/** How the graph is drawn as a living surface. `off` keeps spheres + line segments. */
-export const FABRIC_KINDS = ["off", "tubes", "cloth", "ribbon"] as const;
+/** How the graph is drawn as a living surface. `auto` follows the plugin; `off` keeps spheres + lines. */
+export const FABRIC_KINDS = [
+  "auto", "off",
+  "tubes", "cloth", "crystals", "voxels", "neon", "beads", "pillars", "orbit", "wire", "lattice",
+  "ribbon", "dots", "constellation", "hex", "circuit", "ink", "map", "tiles", "mosaic",
+] as const;
 export type FabricKind = (typeof FABRIC_KINDS)[number];
 
 export const FABRIC_OPTIONS: { value: FabricKind; label: string; hint: string }[] = [
-  { value: "off", label: "off", hint: "classic spheres and line edges" },
-  { value: "tubes", label: "tubes", hint: "nodes and edges become a tubular mesh; same hover / selection / glow" },
-  { value: "cloth", label: "cloth", hint: "tubes plus triangle-cycle panels that billow as fabric" },
-  { value: "ribbon", label: "ribbon", hint: "flat ribbons along edges with disc knots at nodes" },
+  { value: "auto", label: "auto", hint: "plugin style.fabric, or classic spheres if the view does not pin one" },
+  { value: "off", label: "spheres", hint: "classic 3D spheres and line edges" },
+  { value: "tubes", label: "tubes", hint: "3D tubular mesh for nodes and edges" },
+  { value: "cloth", label: "cloth", hint: "3D tubes plus billowing triangle-cycle panels" },
+  { value: "crystals", label: "crystals", hint: "3D octahedron nodes on thin rods" },
+  { value: "voxels", label: "voxels", hint: "3D cubes linked by chunky tubes" },
+  { value: "neon", label: "neon", hint: "3D thin glowing tubes" },
+  { value: "beads", label: "beads", hint: "3D hubs with beads strung along edges" },
+  { value: "pillars", label: "pillars", hint: "3D extruded bars at nodes" },
+  { value: "orbit", label: "orbit", hint: "3D ring knots with thin links" },
+  { value: "wire", label: "wire", hint: "3D low-poly wireframe" },
+  { value: "lattice", label: "lattice", hint: "3D cubes, thin rods, and cycle faces" },
+  { value: "ribbon", label: "ribbon", hint: "2D flat ribbons with disc knots" },
+  { value: "dots", label: "dots", hint: "2D discs only — no edge mesh" },
+  { value: "constellation", label: "stars", hint: "2D small discs on hairline ribbons" },
+  { value: "hex", label: "hex", hint: "2D hex tiles with ribbons" },
+  { value: "circuit", label: "circuit", hint: "2D pads with right-angle traces" },
+  { value: "ink", label: "ink", hint: "2D fat brush-stroke ribbons" },
+  { value: "map", label: "map", hint: "2D wide discs with thin roads" },
+  { value: "tiles", label: "tiles", hint: "2D hexes with filled cycles, no rods" },
+  { value: "mosaic", label: "mosaic", hint: "2D hexes, ribbons, and cycle panels" },
+];
+
+/** Concrete styles dice / shuffle may pick (not `auto`). */
+export const FABRIC_DICE: FabricKind[] = FABRIC_KINDS.filter((k) => k !== "auto");
+
+export const GRAPH_SPACES = ["auto", "space", "plane"] as const;
+export type GraphSpace = (typeof GRAPH_SPACES)[number];
+
+export const GRAPH_SPACE_OPTIONS: { value: GraphSpace; label: string; hint: string }[] = [
+  { value: "auto", label: "auto", hint: "plugin style.flatten — LAN rings stay flat, other views keep their default" },
+  { value: "space", label: "3D", hint: "force a volumetric layout so any graph can fill space" },
+  { value: "plane", label: "2D", hint: "force a flat layout so any graph sits on a plane" },
 ];
 
 export function parseFabric(raw: unknown): FabricKind | undefined {
@@ -21,21 +54,37 @@ export function parseFabric(raw: unknown): FabricKind | undefined {
   return undefined;
 }
 
-export function fabricActive(kind: FabricKind | undefined): boolean {
-  return !!kind && kind !== "off";
+export function parseGraphSpace(raw: unknown): GraphSpace | undefined {
+  if (typeof raw === "string" && (GRAPH_SPACES as readonly string[]).includes(raw)) {
+    return raw as GraphSpace;
+  }
+  return undefined;
 }
 
-/** Plugin style wins; otherwise the settings / look pin. */
+export function fabricActive(kind: FabricKind | undefined): boolean {
+  return !!kind && kind !== "off" && kind !== "auto";
+}
+
+/**
+ * Settings / dice named style wins. `auto` (and unset) falls through to the
+ * plugin `style.fabric`. `off` forces classic spheres.
+ */
 export function resolveFabric(
   mode?: FabricKind | false | null,
   anim?: FabricKind | boolean | null,
 ): FabricKind {
-  if (mode && mode !== "off") return mode;
-  if (anim === true) return "tubes";
-  if (typeof anim === "string" && anim !== "off" && (FABRIC_KINDS as readonly string[]).includes(anim)) {
-    return anim;
-  }
+  const pinned = parseFabric(anim);
+  if (pinned && pinned !== "auto") return pinned;
+  const fallback = parseFabric(mode ?? undefined);
+  if (fallback && fallback !== "auto" && fallback !== "off") return fallback;
   return "off";
+}
+
+/** `auto` keeps the view's flatten flag; plane / space override any plugin. */
+export function resolveGraphFlatten(modeFlatten: boolean | undefined, space?: GraphSpace | null): boolean {
+  if (space === "plane") return true;
+  if (space === "space") return false;
+  return modeFlatten !== false;
 }
 
 /** Same boost the sphere instances use for selected / hovered / active / idle. */
@@ -190,19 +239,76 @@ function discIndexCount(): number {
   return NODE_LON * 3;
 }
 
+type NodeDraw = "hub" | "disc" | "hex" | "cube" | "octa" | "ring" | "pillar";
+type EdgeDraw = "tube" | "thin" | "ribbon" | "fat" | "bead" | "elbow" | "none";
+
+export type FabricProfile = { node: NodeDraw; edge: EdgeDraw; faces: boolean; glow?: number };
+
+const HEX_SIDES = 6;
+const RING_SEG = 8;
+const BEAD_N = 4;
+const OCTA_VERTS = 6;
+const OCTA_TRIS = 8;
+const CUBE_VERTS = 24;
+const CUBE_TRIS = 12;
+const PILLAR_VERTS = 24;
+const PILLAR_TRIS = 12;
+
+const FABRIC_PROFILE: Record<string, FabricProfile> = {
+  tubes: { node: "hub", edge: "tube", faces: false },
+  cloth: { node: "hub", edge: "tube", faces: true },
+  crystals: { node: "octa", edge: "thin", faces: false },
+  voxels: { node: "cube", edge: "tube", faces: false },
+  neon: { node: "hub", edge: "thin", faces: false, glow: 1.7 },
+  beads: { node: "hub", edge: "bead", faces: false },
+  pillars: { node: "pillar", edge: "thin", faces: false },
+  orbit: { node: "ring", edge: "thin", faces: false },
+  wire: { node: "octa", edge: "thin", faces: false },
+  lattice: { node: "cube", edge: "thin", faces: true },
+  ribbon: { node: "disc", edge: "ribbon", faces: false },
+  dots: { node: "disc", edge: "none", faces: false },
+  constellation: { node: "disc", edge: "ribbon", faces: false },
+  hex: { node: "hex", edge: "ribbon", faces: false },
+  circuit: { node: "cube", edge: "elbow", faces: false },
+  ink: { node: "disc", edge: "fat", faces: false },
+  map: { node: "disc", edge: "ribbon", faces: false },
+  tiles: { node: "hex", edge: "none", faces: true },
+  mosaic: { node: "hex", edge: "ribbon", faces: true },
+};
+
+export function fabricProfile(kind: FabricKind): FabricProfile | undefined {
+  return FABRIC_PROFILE[kind];
+}
+
+function nodeCapacity(draw: NodeDraw): { verts: number; indices: number } {
+  if (draw === "disc") return { verts: discVertCount(), indices: discIndexCount() };
+  if (draw === "hex") return { verts: HEX_SIDES + 1, indices: HEX_SIDES * 3 };
+  if (draw === "cube") return { verts: CUBE_VERTS, indices: CUBE_TRIS * 3 };
+  if (draw === "octa") return { verts: OCTA_VERTS, indices: OCTA_TRIS * 3 };
+  if (draw === "ring") return { verts: RING_SEG * 2, indices: RING_SEG * 6 };
+  if (draw === "pillar") return { verts: PILLAR_VERTS, indices: PILLAR_TRIS * 3 };
+  return { verts: nodeVertCount(), indices: nodeIndexCount() };
+}
+
+function edgeCapacity(draw: EdgeDraw): { verts: number; indices: number } {
+  if (draw === "none") return { verts: 0, indices: 0 };
+  if (draw === "ribbon" || draw === "fat") return { verts: ribbonVertCount(), indices: ribbonIndexCount() };
+  if (draw === "elbow") return { verts: ribbonVertCount() * 2, indices: ribbonIndexCount() * 2 };
+  if (draw === "bead") return { verts: OCTA_VERTS * BEAD_N, indices: OCTA_TRIS * 3 * BEAD_N };
+  return { verts: tubeVertCount(), indices: tubeIndexCount() };
+}
+
 export function fabricCapacity(kind: FabricKind, nNodes: number, nEdges: number, nFaces: number): { verts: number; indices: number } {
+  const spec = fabricProfile(kind);
+  if (!spec) return { verts: 0, indices: 0 };
   const nodes = Math.min(nNodes, MAX_NODES);
   const edges = Math.min(nEdges, MAX_EDGES);
-  const faces = kind === "cloth" ? Math.min(nFaces, MAX_FACES) : 0;
-  if (kind === "ribbon") {
-    return {
-      verts: nodes * discVertCount() + edges * ribbonVertCount(),
-      indices: nodes * discIndexCount() + edges * ribbonIndexCount(),
-    };
-  }
+  const faces = spec.faces ? Math.min(nFaces, MAX_FACES) : 0;
+  const n = nodeCapacity(spec.node);
+  const e = edgeCapacity(spec.edge);
   return {
-    verts: nodes * nodeVertCount() + edges * tubeVertCount() + faces * faceVertCount(),
-    indices: nodes * nodeIndexCount() + edges * tubeIndexCount() + faces * faceIndexCount(),
+    verts: nodes * n.verts + edges * e.verts + faces * faceVertCount(),
+    indices: nodes * n.indices + edges * e.indices + faces * faceIndexCount(),
   };
 }
 
@@ -382,14 +488,91 @@ function writeNodeDisc(w: Writer, n: FabricNodePose): void {
   }
 }
 
-function writeTube(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose): void {
+function writeNodeHex(w: Writer, n: FabricNodePose): void {
+  const s = Math.max(0.48, n.scale);
+  const c = writeVert(w, n.x, n.y, n.z, 0, 1, 0, n.r, n.g, n.b, 0.5, 0, n.glow, 0, 0, 0, n.opacity);
+  for (let j = 0; j < HEX_SIDES; j++) {
+    const u = j / HEX_SIDES;
+    const th = u * Math.PI * 2 + Math.PI / 6;
+    writeVert(w, n.x + Math.cos(th) * s, n.y, n.z + Math.sin(th) * s, 0, 1, 0, n.r, n.g, n.b, u, 0, n.glow, 0, 0, 0, n.opacity);
+  }
+  for (let j = 0; j < HEX_SIDES; j++) writeTri(w, c, c + 1 + j, c + 1 + ((j + 1) % HEX_SIDES));
+}
+
+function writeNodeBox(w: Writer, n: FabricNodePose, sx: number, sy: number, sz: number): void {
+  const hx = Math.max(0.22, sx), hy = Math.max(0.16, sy), hz = Math.max(0.22, sz);
+  const faces: { n: [number, number, number]; q: [number, number, number][] }[] = [
+    { n: [0, 0, 1], q: [[-hx, -hy, hz], [hx, -hy, hz], [hx, hy, hz], [-hx, hy, hz]] },
+    { n: [0, 0, -1], q: [[hx, -hy, -hz], [-hx, -hy, -hz], [-hx, hy, -hz], [hx, hy, -hz]] },
+    { n: [1, 0, 0], q: [[hx, -hy, hz], [hx, -hy, -hz], [hx, hy, -hz], [hx, hy, hz]] },
+    { n: [-1, 0, 0], q: [[-hx, -hy, -hz], [-hx, -hy, hz], [-hx, hy, hz], [-hx, hy, -hz]] },
+    { n: [0, 1, 0], q: [[-hx, hy, hz], [hx, hy, hz], [hx, hy, -hz], [-hx, hy, -hz]] },
+    { n: [0, -1, 0], q: [[-hx, -hy, -hz], [hx, -hy, -hz], [hx, -hy, hz], [-hx, -hy, hz]] },
+  ];
+  for (const face of faces) {
+    const base = w.vi;
+    const [nx, ny, nz] = face.n;
+    for (const [x, y, z] of face.q) {
+      writeVert(w, n.x + x, n.y + y, n.z + z, nx, ny, nz, n.r, n.g, n.b, 0.5, 0, n.glow, 0, 0, 0, n.opacity);
+    }
+    writeTri(w, base, base + 1, base + 2);
+    writeTri(w, base, base + 2, base + 3);
+  }
+}
+
+function writeNodeCube(w: Writer, n: FabricNodePose, squat = false): void {
+  const s = Math.max(0.32, n.scale * (squat ? 0.72 : 0.85));
+  writeNodeBox(w, n, s, squat ? s * 0.28 : s, s);
+}
+
+function writeNodeOcta(w: Writer, n: FabricNodePose, scale = 1): void {
+  const s = Math.max(0.28, n.scale * 0.95 * scale);
+  const pts: [number, number, number][] = [
+    [0, s, 0], [0, -s, 0], [s, 0, 0], [-s, 0, 0], [0, 0, s], [0, 0, -s],
+  ];
+  const tris: [number, number, number][] = [
+    [0, 2, 4], [0, 4, 3], [0, 3, 5], [0, 5, 2],
+    [1, 4, 2], [1, 3, 4], [1, 5, 3], [1, 2, 5],
+  ];
+  const base = w.vi;
+  for (const [x, y, z] of pts) {
+    const nx = x / s, ny = y / s, nz = z / s;
+    writeVert(w, n.x + x, n.y + y, n.z + z, nx, ny, nz, n.r, n.g, n.b, 0.5, 0, n.glow, 0, 0, 0, n.opacity);
+  }
+  for (const [a, b, c] of tris) writeTri(w, base + a, base + b, base + c);
+}
+
+function writeNodeRing(w: Writer, n: FabricNodePose): void {
+  const outer = Math.max(0.5, n.scale * 1.05);
+  const inner = outer * 0.55;
+  const base = w.vi;
+  for (let j = 0; j < RING_SEG; j++) {
+    const u = j / RING_SEG;
+    const th = u * Math.PI * 2;
+    const cx = Math.cos(th), sz = Math.sin(th);
+    writeVert(w, n.x + cx * inner, n.y, n.z + sz * inner, 0, 1, 0, n.r, n.g, n.b, u, 0, n.glow, 0, 0, 0, n.opacity);
+    writeVert(w, n.x + cx * outer, n.y, n.z + sz * outer, 0, 1, 0, n.r, n.g, n.b, u, 0, n.glow, 0, 0, 0, n.opacity);
+  }
+  for (let j = 0; j < RING_SEG; j++) {
+    const i0 = base + j * 2, i1 = i0 + 1, i2 = base + ((j + 1) % RING_SEG) * 2, i3 = i2 + 1;
+    writeTri(w, i0, i2, i1);
+    writeTri(w, i1, i2, i3);
+  }
+}
+
+function writeNodePillar(w: Writer, n: FabricNodePose): void {
+  const s = Math.max(0.28, n.scale * 0.55);
+  writeNodeBox(w, n, s, Math.max(0.7, n.scale * 1.35), s);
+}
+
+function writeTube(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose, radMul = 1): void {
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
   const { n, b: bin } = frame(dx, dy, dz);
   const base = w.vi;
   for (let s = 0; s < TUBE_ALONG; s++) {
     const t = s / (TUBE_ALONG - 1);
     const cx = a.x + dx * t, cy = a.y + dy * t, cz = a.z + dz * t;
-    const rad = Math.max(0.55, (a.scale * (1 - t) + b.scale * t) * 0.42);
+    const rad = Math.max(0.12, (a.scale * (1 - t) + b.scale * t) * 0.42 * radMul);
     const r = a.r + (b.r - a.r) * t;
     const g = a.g + (b.g - a.g) * t;
     const bl = a.b + (b.b - a.b) * t;
@@ -422,14 +605,14 @@ function writeTube(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdg
   }
 }
 
-function writeRibbon(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose): void {
+function writeRibbon(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose, widthMul = 1): void {
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
   const { b: bin } = frame(dx, dy, dz);
   const base = w.vi;
   for (let s = 0; s < RIBBON_ALONG; s++) {
     const t = s / (RIBBON_ALONG - 1);
     const cx = a.x + dx * t, cy = a.y + dy * t, cz = a.z + dz * t;
-    const half = Math.max(0.28, (a.scale * (1 - t) + b.scale * t) * 0.55);
+    const half = Math.max(0.12, (a.scale * (1 - t) + b.scale * t) * 0.55 * widthMul);
     const r = a.r * 0.4 + e.r0 * 0.6 + (e.r1 - e.r0) * t * 0.6;
     const g = a.g * 0.4 + e.g0 * 0.6 + (e.g1 - e.g0) * t * 0.6;
     const bl = a.b * 0.4 + e.b0 * 0.6 + (e.b1 - e.b0) * t * 0.6;
@@ -443,6 +626,71 @@ function writeRibbon(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricE
     writeTri(w, i0, i2, i1);
     writeTri(w, i1, i2, i3);
   }
+}
+
+function writeBeads(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose): void {
+  for (let i = 0; i < BEAD_N; i++) {
+    const t = (i + 1) / (BEAD_N + 1);
+    const bead: FabricNodePose = {
+      id: `${a.id}:${b.id}:${i}`,
+      x: a.x + (b.x - a.x) * t,
+      y: a.y + (b.y - a.y) * t,
+      z: a.z + (b.z - a.z) * t,
+      scale: Math.max(0.22, (a.scale * (1 - t) + b.scale * t) * 0.38),
+      r: a.r * (1 - t) + e.r0 * t,
+      g: a.g * (1 - t) + e.g0 * t,
+      b: a.b * (1 - t) + e.b0 * t,
+      glow: a.glow * (1 - t) + b.glow * t,
+      opacity: Math.min(a.opacity, b.opacity),
+      visible: true,
+    };
+    writeNodeOcta(w, bead, 1);
+  }
+}
+
+function writeElbow(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose): void {
+  const mid: FabricNodePose = {
+    ...a,
+    id: `${a.id}|${b.id}`,
+    x: b.x,
+    y: (a.y + b.y) * 0.5,
+    z: a.z,
+    scale: (a.scale + b.scale) * 0.5,
+    r: (a.r + b.r) * 0.5,
+    g: (a.g + b.g) * 0.5,
+    b: (a.b + b.b) * 0.5,
+    glow: (a.glow + b.glow) * 0.5,
+    opacity: Math.min(a.opacity, b.opacity),
+  };
+  writeRibbon(w, a, mid, e, 0.55);
+  writeRibbon(w, mid, b, e, 0.55);
+}
+
+function writeNodeKind(w: Writer, n: FabricNodePose, draw: NodeDraw, kind: FabricKind): void {
+  const squat = kind === "circuit";
+  if (draw === "disc") {
+    const scale = kind === "map" ? n.scale * 1.35 : kind === "constellation" ? n.scale * 0.55 : n.scale;
+    writeNodeDisc(w, scale === n.scale ? n : { ...n, scale });
+    return;
+  }
+  if (draw === "hex") { writeNodeHex(w, n); return; }
+  if (draw === "cube") { writeNodeCube(w, n, squat); return; }
+  if (draw === "octa") { writeNodeOcta(w, n); return; }
+  if (draw === "ring") { writeNodeRing(w, n); return; }
+  if (draw === "pillar") { writeNodePillar(w, n); return; }
+  writeNodeHub(w, n);
+}
+
+function writeEdgeKind(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose, draw: EdgeDraw, kind: FabricKind): void {
+  if (draw === "none") return;
+  if (draw === "bead") { writeBeads(w, a, b, e); return; }
+  if (draw === "elbow") { writeElbow(w, a, b, e); return; }
+  if (draw === "ribbon") {
+    writeRibbon(w, a, b, e, kind === "constellation" || kind === "map" ? 0.42 : 1);
+    return;
+  }
+  if (draw === "fat") { writeRibbon(w, a, b, e, 1.7); return; }
+  writeTube(w, a, b, e, draw === "thin" ? 0.38 : 1);
 }
 
 function baryIndex(i: number, j: number): number {
@@ -536,7 +784,7 @@ export class GraphFabric {
     if (this.kind === kind) return;
     this.kindFromN = this.kindN;
     this.kind = kind;
-    this.kindN = kind === "cloth" ? 1 : kind === "ribbon" ? 2 : 0;
+    this.kindN = Math.max(0, FABRIC_DICE.indexOf(kind));
     this.sig = "";
     this.mesh.visible = fabricActive(kind);
   }
@@ -549,7 +797,8 @@ export class GraphFabric {
     const visNodes = nodes.filter((n) => n.visible).slice(0, MAX_NODES);
     const visEdges = edges.filter((e) => e.visible).slice(0, MAX_EDGES);
     const byId = new Map(visNodes.map((n) => [n.id, n]));
-    const visFaces = this.kind === "cloth"
+    const spec = fabricProfile(this.kind);
+    const visFaces = spec?.faces
       ? faces.filter(([a, b, c]) => byId.has(a) && byId.has(b) && byId.has(c)).slice(0, MAX_FACES)
       : [];
     const sig = signature(this.kind, visNodes, visEdges) + ":" + visFaces.length;
@@ -604,23 +853,18 @@ export class GraphFabric {
   ): void {
     const cap = fabricCapacity(this.kind, nodes.length, edges.length, faces.length);
     const w = this.ensure(Math.max(cap.verts, 8), Math.max(cap.indices, 8));
-    if (this.kind === "ribbon") {
-      for (const n of nodes) writeNodeDisc(w, n);
-      for (const e of edges) {
-        const a = byId.get(e.a), b = byId.get(e.b);
-        if (a && b) writeRibbon(w, a, b, e);
-      }
-    } else {
-      for (const n of nodes) writeNodeHub(w, n);
-      for (const e of edges) {
-        const a = byId.get(e.a), b = byId.get(e.b);
-        if (a && b) writeTube(w, a, b, e);
-      }
-      if (this.kind === "cloth") {
-        for (const [ia, ib, ic] of faces) {
-          const a = byId.get(ia), b = byId.get(ib), c = byId.get(ic);
-          if (a && b && c) writeFace(w, a, b, c);
-        }
+    const spec = fabricProfile(this.kind);
+    if (!spec) return;
+    const glow = spec.glow ?? 1;
+    for (const n of nodes) writeNodeKind(w, glow === 1 ? n : { ...n, glow: n.glow * glow }, spec.node, this.kind);
+    for (const e of edges) {
+      const a = byId.get(e.a), b = byId.get(e.b);
+      if (a && b) writeEdgeKind(w, a, b, e, spec.edge, this.kind);
+    }
+    if (spec.faces) {
+      for (const [ia, ib, ic] of faces) {
+        const a = byId.get(ia), b = byId.get(ib), c = byId.get(ic);
+        if (a && b && c) writeFace(w, a, b, c);
       }
     }
     this.verts = w.vi;

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mosaicIds, mosaicIsGraph, mosaicPaneMode, mosaicTileTheme } from "./mosaic";
+import { assignMosaicSkies, mosaicAnimForTile, mosaicIds, mosaicIsGraph, mosaicPaneMode, mosaicShouldLift, mosaicTileTheme, shouldUniqueMosaicSkies } from "./mosaic";
 import { memory, setPluginModes, topology } from "../core/modes";
 import { themeById } from "../core/themes";
+import { DEFAULT_DREAM } from "./scene";
 
 afterEach(() => setPluginModes([]));
 
@@ -34,6 +35,46 @@ describe("mosaicPaneMode", () => {
     setPluginModes([{ ...memory, id: "plugin:memory", pluginId: "memory", label: "Mem wrap" }]);
     expect(mosaicPaneMode("plugin:memory").id).toBe("plugin:memory");
     expect(mosaicPaneMode("plugin:memory").label).toBe("Mem wrap");
+  });
+});
+
+describe("mosaicShouldLift", () => {
+  it("picks up from chrome or alt immediately", () => {
+    expect(mosaicShouldLift("chrome", null, "a")).toBe(true);
+    expect(mosaicShouldLift("alt", "a", "a")).toBe(true);
+  });
+
+  it("picks up a body drag only once the pointer is over another tile", () => {
+    expect(mosaicShouldLift("body", null, "a")).toBe(false);
+    expect(mosaicShouldLift("body", "a", "a")).toBe(false);
+    expect(mosaicShouldLift("body", "b", "a")).toBe(true);
+  });
+});
+
+describe("mosaic unique skies", () => {
+  it("is unique on a low roll and shared on a high roll", () => {
+    expect(shouldUniqueMosaicSkies(() => 0)).toBe(true);
+    expect(shouldUniqueMosaicSkies(() => 0.49)).toBe(true);
+    expect(shouldUniqueMosaicSkies(() => 0.5)).toBe(false);
+  });
+
+  it("gives every pane a different host sky and keeps plugin shaders", () => {
+    const skies = assignMosaicSkies(
+      ["plugin:a", "plugin:b", "plugin:c", "plugin:d"],
+      "aurora",
+      ["aurora", "space", "fire", "ocean", "matrix"],
+      (id) => id === "plugin:b" ? "plugin" : undefined,
+    );
+    expect(skies["plugin:b"]).toBe("plugin");
+    const host = ["plugin:a", "plugin:c", "plugin:d"].map((id) => skies[id]);
+    expect(new Set(host).size).toBe(3);
+    expect(host.includes("aurora")).toBe(false);
+  });
+
+  it("overrides a host wall sky per tile and keeps plugin shaders", () => {
+    const wall = { ...DEFAULT_DREAM, backdrop: "aurora" };
+    expect(mosaicAnimForTile(wall, "plugin:talkers", "fire").backdrop).toBe("fire");
+    expect(mosaicAnimForTile({ ...wall, backdrop: "plugin" }, "plugin:talkers", "fire").backdrop).toBe("plugin");
   });
 });
 

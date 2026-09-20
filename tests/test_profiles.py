@@ -112,6 +112,15 @@ def test_api_list_get_create_put_default_delete(tmp_path, monkeypatch) -> None:
         assert missing.status == 404
         default = await profiles.api_default(Req({"id": "user"}))
         assert default.status == 200
+        named = await profiles.api_create(Req({"id": "default", "settings": {"theme": "ember"}}))
+        assert named.status == 201
+        saved = await profiles.api_default(Req({"settings": {"theme": "paper", "dream": True}}))
+        assert saved.status == 200
+        assert json.loads(saved.body)["id"] == "default"
+        assert profiles._read()["profiles"]["default"]["settings"]["theme"] == "paper"
+        still = await profiles.api_default(Req({"id": "user"}))
+        assert still.status == 200
+        assert json.loads(still.body)["default"] == "user"
         refresh = await profiles.api_shipped(Req({"settings": {"theme": "midnight"}}))
         assert refresh.status == 200
         gone = await profiles.api_delete(Req(pid="user"))

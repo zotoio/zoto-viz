@@ -137,6 +137,8 @@ include `netpong`, `invaders`, `command`, `frogger`, `cpupong`, `doom`,
 `waves`, `orbits`, `helix`, `skyline`, `pacman`, `tetris`, `portal`, `carousel`).
 Optional `look` pins theme/sky/floor for that view — the settings drawer shows
 those pins under **This view**, along with `options` / `config`, arcade knobs, and a per-view **prompt** (stored on the active profile; prefixes AI Dynamic and rebuilds it after a short pause).
+
+Content plugins are **instances**, not copies. `plugin.yml` `instances:` (and `~/.zoto-viz/plugin-instances.yml`) add catalog rows that reuse the same tree with a host `source` and title / caption / image / filter defaults. View id is `plugin:<id>` when the instance id matches the plugin, otherwise `plugin:<id>:<instance>`. Carousel ships NASA IOTD plus APOD / Earth Observatory / Commons POTD / Met; HN Rain ships HN plus Lobsters / Guardian / Mastodon.
 The cog next to the view menu opens that tab. Network and system visibility live under
 **Graph**. Host and subnet filters live under **Privacy**.
 
@@ -166,6 +168,7 @@ CSRF skipped, Host still loopback). Tools:
 | `list_profiles` / `apply_profile` | Saved looks |
 | `list_memories` / `add_memory` / `delete_memory` | Curated chat memories |
 | `list_sources` / `set_source` / `delete_source` | Host RSS / HTTPS / local-file registry (`~/.zoto-viz/sources.yml`) |
+| `list_plugin_instances` / `set_plugin_instance` / `delete_plugin_instance` | Extra catalog rows that reuse a shipped plugin (`~/.zoto-viz/plugin-instances.yml`) |
 | `get_sdm` / `list_cameras` / `set_sdm` | Nest Device Access (`~/.zoto-viz/sdm.yml`; OAuth, Pub/Sub, WebRTC) |
 | `install_plugin_zip` | Write gitignored `plugins/<id>.zip` (see guards below) |
 

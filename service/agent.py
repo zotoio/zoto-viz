@@ -14,6 +14,7 @@ from typing import Any
 from aiohttp import ClientSession, ClientTimeout, web
 
 from . import cursor_agent
+from . import cursor_stats
 from . import live
 from . import memory
 from . import ollama_models
@@ -69,10 +70,10 @@ def set_ai_control(on: bool) -> None:
         pass
 
 SYSTEM = """You are the zoto-viz local operator. You run on this machine (Ollama or the Cursor SDK).
-You help the user understand LAN traffic, draft view plugins, and (only when AI Control is on) change UI settings, author GLSL skies, and pin photos or SVG onto the graph.
-Never invent packet contents. Prefer short, concrete observations. Answer directly — do not narrate a long reasoning pass.
-The monitor always confirms a new request before any work: it restates what you heard and waits for yes. After the operator says yes, do the work immediately — do not ask again. If they say no or give a different request, wait for a fresh yes. Never emit settings, plugins, shaders, photos, or SVG until that yes.
-Prior turns are not replayed. A sliding Facts window lists outcomes to reuse (token-capped). Chain of thought may show on the live feed for the current operation only — do not assume unread reasoning. When context pressure starts a new session, use Facts and the current screen HUD. Do not invent facts that are not in Facts or the snapshot. Memories persist across sessions.
+You help the user understand LAN traffic, discuss what they want next, then GENERATE new capabilities — view plugins, far-field skies, host datasources, and visualisation methods. Do not only cycle the existing catalog.
+Discuss first when the operator is exploring (what they want from a view, source, or look). Then ACT in the same turn when the ask is clear: invent and BUILD.
+Never invent packet contents. Prefer short, concrete observations. Answer the latest operator line directly — do not narrate a long reasoning pass, and do not restate the request and wait for yes. Continue from your last reply, Recent chat, and the Facts window.
+Prior turns are not replayed in full. A sliding Facts window lists outcomes to reuse (token-capped). Recent chat is a short discuss window so you can continue a thread. Chain of thought may show on the live feed for the current operation only — do not assume unread reasoning. When context pressure starts a new session, use Facts, Recent chat, and the current screen HUD. Do not invent facts that are not in Facts, Recent chat, or the snapshot. Memories persist across sessions.
 Each user turn may include a Screen HUD object (short keys): m mode, th theme, ch chrome, cam, sel selection, p panel, d dream, mg 0=no merge, rd redact, st stats, hide hidden layers, fd feed, q overlay lines. Use it to read what is on screen before analysing traffic or proposing settings.
 When the user states a lasting fact, preference, name, or device mapping, emit a fenced memory block with one short line (or JSON {"text":"..."}):
 ```memory
@@ -95,11 +96,11 @@ base: topology
 ```glsl sky/fragment.glsl
 vec3 color(vec3 dir, float t) { return uAccent; }
 ```
-Required: plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/, backend/service.py, datasource/, sky/. Graph bases include topology, talkers, protocols, wifi, bluetooth, cpu, sources (RSS / HTTP JSON / file / journal / kmsg — menu tag SRC, not NET), and SYS graphs memory, disk, gpu, sockets, cgroups, units, udev, bridge (all-systems CIC). style.fabric: tubes|cloth|ribbon draws nodes and edges as an animated mesh. Arcade engines: netpong, invaders, command, frogger, cpupong, doom, waves, orbits, helix, skyline, pacman, tetris, portal, carousel. doom shots are visual only. waves/orbits/helix/skyline/pacman/tetris/portal/carousel are 3D mesh stages. carousel shows RSS stills (NASA IOTD) on a spiral. Cursor SDK turns must also call MCP publish_local_plugin with that files tree so the view is installed. Ollama turns are installed by the monitor from the fences when AI Control is on. Always use a catalog-unique id (remint if taken).
+Required: plugin.yml (id, name, version; optional hint, capabilities, frontend.entry, backend.entry). Optional siblings: visualisation.yml (engine, base, look, style, layout — graph needs base), frontend/, backend/service.py, datasource/, sky/. Graph bases include topology, talkers, protocols, wifi, bluetooth, cpu, sources (RSS / HTTP JSON / file / journal / kmsg — menu tag SRC, not NET), and SYS graphs memory, disk, gpu, sockets, cgroups, units, udev, bridge (all-systems CIC). style.fabric / anim.graphFabric: auto|off|tubes|cloth|crystals|voxels|neon|beads|pillars|orbit|wire|lattice|ribbon|dots|constellation|hex|circuit|ink|map|tiles|mosaic. anim.graphSpace: auto|space|plane. Arcade engines: netpong, invaders, command, frogger, cpupong, doom, waves, orbits, helix, skyline, pacman, tetris, portal, carousel. doom shots are visual only. waves/orbits/helix/skyline/pacman/tetris/portal/carousel are 3D mesh stages. carousel shows RSS stills (NASA IOTD) on a spiral. Cursor SDK turns must also call MCP publish_local_plugin with that files tree so the view is installed. New host sources: MCP set_source (rss|http|file|journal|kmsg). Ollama turns are installed by the monitor from the fences when AI Control is on. Always use a catalog-unique id (remint if taken). When a mosaic wall wants unique skies (anim.mosaicUniqueSkies), each pane must have a sky no other pane has — invent a new plugin sky for a colliding pane rather than reuse a host sky, and set anim.mosaicSkies { "<viewId>": "<backdrop>" } (plugin tiles stay "plugin").
 If the user asks to change settings, the sky, or graph decorations and AI Control is off, refuse and explain how to enable it (header AI toggle).
 When AI Control is on, every applied change is saved on the profile named after the current model in ~/.zoto-viz/profiles.yml.
 When Control is on, prefer a contrasting theme (not a neighbour on the picker) and a clearly different sky, motion band, or physics field (gravity, swirl, magnets, stringAmt). Tiny nudges look like a glitch; the UI eases palettes and physics, so a bold jump still lands smoothly.
-Settings: emit a fenced JSON block. You may set profile fields except camera and microphone (operator-only, Settings → Privacy): theme, dream, chrome (top|left|right), mode (a view id from the HUD), redact, merge, feed (on, source traffic|transcript|both, layout ticker|bars|both, scope lan|selected|any, density 12-80, textSize 10-20, modulate), show (lan, internet, multicast, offline, labels, cpuIdle), filters (allowNames, blockNames, allowNets, blockNets), anim (sky, floor, camera motion, mosaic, mosaicTiles, mosaicTree, mosaicMaxId, mosaicSharedTheme, weights, physics — partAmt/partBusy/partQuiet/partPeak/partCap, magnets per type −1…1, gravity, swirl, spring, stringAmt, chargeAmt — same keys as Settings → Motion / Camera / Audio / Graph Look / Physics). Never set camera or mic. To change which views sit in mosaic tiles without rearranging the grid, set anim.mosaicTiles to view ids in leaf order. If the operator turned off Settings → Agent → AI mosaic layout, mosaic / hero / mosaicTree / mosaicMaxId are ignored — mosaicTiles still apply. modeOptions, arcade, plugins.
+Settings: emit a fenced JSON block. You may set profile fields except camera and microphone (operator-only, Settings → Privacy): theme, dream, chrome (top|left|right), mode (a view id from the HUD), redact, merge, feed (on, source traffic|transcript|both, layout ticker|bars|both, scope lan|selected|any, density 12-80, textSize 10-20, modulate), show (lan, internet, multicast, offline, labels, cpuIdle), filters (allowNames, blockNames, allowNets, blockNets), anim (sky, floor, camera motion, mosaic, mosaicTiles, mosaicTree, mosaicMaxId, mosaicSharedTheme, mosaicUniqueSkies, mosaicSkies, graphFabric, graphSpace, weights, physics — partAmt/partBusy/partQuiet/partPeak/partCap, magnets per type −1…1, gravity, swirl, spring, stringAmt, chargeAmt — same keys as Settings → Motion / Camera / Audio / Graph Look / Physics). Never set camera or mic. To change which views sit in mosaic tiles without rearranging the grid, set anim.mosaicTiles to view ids in leaf order. If the operator turned off Settings → Agent → AI mosaic layout, mosaic / hero / mosaicTree / mosaicMaxId are ignored — mosaicTiles still apply. modeOptions, arcade, plugins.
 ```settings
 {"theme":"matrix","dream":true,"anim":{"backdrop":"aurora","skySpeed":1.4},"show":{"multicast":false}}
 ```
@@ -443,90 +444,12 @@ def _last_user(messages: list[Any]) -> str:
     return user
 
 
-_YES = re.compile(
-    r"^\s*(?:yes|yeah|yep|yup|yea|yess+"
-    r"|correct|confirmed|affirmative"
-    r"|(?:ok(?:ay)?\s+)?yes"
-    r"|go\s+(?:ahead|on)|do\s+it|please\s+do|start"
-    r"|that(?:'s| is)\s+(?:right|correct|it)"
-    r"|sounds\s+(?:right|good))\s*[.!]?\s*$",
-    re.I,
-)
-_NO = re.compile(
-    r"^\s*(?:no|nope|nah|cancel|stop|wait|never\s*mind)(?:\s*[,.\-:]+\s*(.*))?\s*$",
-    re.I,
-)
-CONFIRMED = (
-    "The operator said yes to this request. Do the work now. "
-    "Do not ask if it is correct again.\n\n"
-)
-
-
-def is_confirm_yes(text: str) -> bool:
-    return bool(_YES.match((text or "").strip()))
-
-
-def confirm_revision(text: str) -> str | None:
-    """Rest after a leading no/cancel. Empty string means they only declined. None if not a no."""
-    m = _NO.match((text or "").strip())
-    if not m:
-        return None
-    return (m.group(1) or "").strip()
-
-
-def confirm_reply(task: str) -> str:
-    clipped = re.sub(r"\s+", " ", (task or "").strip())[:400]
-    if not clipped:
-        return "What should I do? Say the request, and I will confirm it before starting."
-    return f"You want me to: {clipped}. Is that correct? Say yes and I will start."
-
-
-def confirm_turn(user: str, *, poll: bool = False) -> tuple[str, str | None]:
-    """Park a new request until the operator says yes.
-
-    Returns (user_for_the_model, canned_reply). A canned reply means do not call the model.
-    """
-    text = (user or "").strip()
-    if poll:
-        return text, None
-    pending = memory.pending_task()
-    if not pending:
-        if not text:
-            return text, None
-        if is_confirm_yes(text):
-            return text, confirm_reply("")
-        memory.set_pending_task(text)
-        return text, confirm_reply(text)
-    if is_confirm_yes(text):
-        task = memory.clear_pending_task() or pending
-        return CONFIRMED + task, None
-    revised = confirm_revision(text)
-    if revised is not None:
-        if revised:
-            memory.set_pending_task(revised)
-            return text, confirm_reply(revised)
-        memory.clear_pending_task()
-        return text, "Okay — what should I do instead?"
-    memory.set_pending_task(text)
-    return text, confirm_reply(text)
-
-
 def _put_user(msgs: list[dict[str, Any]], text: str) -> None:
     for m in reversed(msgs):
         if m.get("role") == "user":
             m["content"] = text
             return
     msgs.append({"role": "user", "content": text})
-
-
-async def _stream_plain(req: web.Request, text: str) -> web.StreamResponse:
-    body = (json.dumps({"message": {"content": text}, "done": True}) + "\n").encode()
-    return web.Response(
-        body=body,
-        content_type="text/plain",
-        charset="utf-8",
-        headers={"Cache-Control": "no-store"},
-    )
 
 
 def _snapshot(state: Any, redact: bool) -> dict[str, Any]:
@@ -669,10 +592,12 @@ def _attach_image(msgs: list[dict[str, Any]], b64: str) -> None:
             return
 
 
-def _remember_reply(user: str, reply: str, *, redact: bool, thinking: str = "") -> None:
+def _remember_reply(
+    user: str, reply: str, *, redact: bool, thinking: str = "", usage: dict | None = None,
+) -> None:
     if not reply and not thinking:
         return
-    memory.append_message("assistant", reply, thinking=thinking)
+    memory.append_message("assistant", reply, thinking=thinking, usage=usage)
     if reply:
         memory.harvest(user, reply, redact=redact)
 
@@ -775,6 +700,30 @@ def _flatten_prompt(msgs: list[dict[str, Any]]) -> tuple[str, str]:
     return system, "\n\n".join(parts) or "Continue."
 
 
+def cursor_operator_turn(
+    *,
+    snap: dict[str, Any],
+    user: str,
+    view_note: str = "",
+    control: bool = False,
+) -> tuple[str, str]:
+    """Identity once (SDK resume holds it) + fresh HUD/facts for this turn. No transcript replay."""
+    identity = (
+        SYSTEM
+        + f"\n{live.prefix()}\n"
+        + f"AI Control is {'ON' if control else 'OFF'}. "
+        + "Use zoto-viz MCP tools for live LAN/UI state. Do not invent packet contents.\n"
+    )
+    snap_cap = 480 if view_note else 720
+    turn = (
+        f"LAN: {json.dumps(snap, ensure_ascii=False, separators=(',', ':'))[:snap_cap]}"
+        + memory.inject_block(user)
+        + (view_note or "")
+        + f"\n\n{user.strip() or 'Continue.'}"
+    )
+    return identity, turn
+
+
 async def _api_chat_cursor(req: web.Request, body: dict[str, Any], messages: list[Any]) -> web.StreamResponse:
     redact = bool(body.get("redact"))
     snap = _snapshot(req.app["state"], redact)
@@ -783,25 +732,29 @@ async def _api_chat_cursor(req: web.Request, body: dict[str, Any], messages: lis
     poll = bool(body.get("poll"))
     if user and not poll:
         memory.append_message("user", user)
-    work, canned = confirm_turn(user, poll=poll)
-    if canned is not None:
-        memory.append_message("assistant", canned)
-        return await _stream_plain(req, canned)
-    ollama_msgs = _chat_messages(
-        messages, snap=snap, user=work, view_note=view_note, redact=redact, has_image=False,
+    snap_cap = 480 if view_note else 720
+    extra = memory.estimate_tokens(
+        f"{SYSTEM}\n{live.prefix()}\nLAN:{json.dumps(snap, ensure_ascii=False, separators=(',', ':'))[:snap_cap]}"
     )
-    _put_user(ollama_msgs, work)
-    system, prompt = _flatten_prompt(ollama_msgs)
+    memory.maybe_roll(
+        extra_tokens=extra,
+        budget_tokens=_chat_budget(False),
+        keep=memory.ROLL_KEEP,
+        redact=redact,
+    )
+    system, prompt = cursor_operator_turn(
+        snap=snap, user=user, view_note=view_note, control=ai_control_on(),
+    )
     resp = web.StreamResponse(status=200, headers={"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"})
     await resp.prepare(req)
-    reply = await cursor_agent.stream_chat(
+    reply, stats = await cursor_agent.stream_chat(
         resp,
         model=_model(body),
         prompt=prompt,
         system=system,
         control=ai_control_on(),
     )
-    _remember_reply(work, reply, redact=redact)
+    _remember_reply(user, reply, redact=redact, usage=cursor_stats.usage_from_stats(stats))
     await resp.write_eof()
     return resp
 
@@ -835,14 +788,10 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
     poll = bool(body.get("poll"))
     if user and not poll:
         memory.append_message("user", user)
-    work, canned = confirm_turn(user, poll=poll)
-    if canned is not None:
-        memory.append_message("assistant", canned)
-        return await _stream_plain(req, canned)
     ollama_msgs = _chat_messages(
-        messages, snap=snap, user=work, view_note=view_note, redact=redact, has_image=bool(shot),
+        messages, snap=snap, user=user, view_note=view_note, redact=redact, has_image=bool(shot),
     )
-    _put_user(ollama_msgs, work)
+    _put_user(ollama_msgs, user)
     if shot:
         _attach_image(ollama_msgs, shot)
     think_so_far, content_so_far = _last_assistant() if poll else ("", "")
@@ -878,10 +827,10 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
                 buf, streamed, stalled = await _pipe_ollama(s, base, payload, resp)
                 if _ctx_overflow(buf) and not streamed:
                     payload["messages"] = _chat_messages(
-                        messages, snap=snap, user=work, view_note=view_note,
+                        messages, snap=snap, user=user, view_note=view_note,
                         redact=redact, has_image=False, force_roll=True, keep=2,
                     )
-                    _put_user(payload["messages"], work)
+                    _put_user(payload["messages"], user)
                     buf, streamed, stalled = await _pipe_ollama(s, base, payload, resp, hold_overflow=False)
             base_msgs = list(payload["messages"])
             combined = bytearray(buf)
@@ -899,7 +848,7 @@ async def api_chat(req: web.Request) -> web.StreamResponse:
         if not buf:
             await resp.write(json.dumps({"error": str(e), "done": True}).encode())
     thinking, reply = parse_ollama_chat(buf.decode("utf-8", "replace"))
-    _remember_reply(work, reply, redact=redact, thinking=thinking)
+    _remember_reply(user, reply, redact=redact, thinking=thinking)
     await resp.write_eof()
     return resp
 
@@ -908,6 +857,7 @@ async def api_history(req: web.Request) -> web.Response:
     """GET the persisted transcript. DELETE clears the log (memories stay)."""
     if req.method == "DELETE":
         memory.clear_conversation()
+        cursor_agent.clear_session()
         return web.json_response({"ok": True, "messages": []})
     return web.json_response({
         "ok": True,

@@ -66,13 +66,10 @@ describe("hn rain crawl look", () => {
     expect(hnRainCanvasSize(fake)).toEqual({ w: 1600, h: 900 });
   });
 
-  it("keeps NASA titles off the crawl", () => {
+  it("uses the headlines the host already bound", () => {
     expect(preferHnTitles([
-      { id: "nasa:0", label: "NASA image of the day", text: "Nebula" },
       { id: "hn:0", label: "Hacker News", text: "Jemalloc" },
-    ])).toEqual(["Jemalloc"]);
-    expect(preferHnTitles([
-      { id: "nasa:0", label: "NASA image of the day", text: "Nebula" },
-    ])).toEqual([]);
+      { id: "lobsters:0", label: "Lobsters", text: "Zig" },
+    ])).toEqual(["Jemalloc", "Zig"]);
   });
 });

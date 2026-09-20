@@ -125,6 +125,35 @@ describe("shuffleLook", () => {
     expect(next.anim.camGaze).toBeDefined();
     expect(next.anim.labelCount).toBeLessThanOrEqual(diceBound("labelCount", DREAM_BOUNDS.labelCount).max);
     expect(next.anim.partCap).toBeLessThanOrEqual(diceBound("partCap", DREAM_BOUNDS.partCap).max);
+    expect(next.anim.mosaicUniqueSkies).toBe(false);
+    expect(next.anim.mosaicSkies).toEqual({});
+  });
+
+  it("gives every mosaic pane a different sky on a low roll", () => {
+    const base = shippedSettings();
+    base.mode = "plugin:topology";
+    base.anim = {
+      ...base.anim,
+      mosaic: "4",
+      hero: "off",
+      mosaicTiles: ["plugin:topology", "plugin:talkers", "plugin:protocols", "plugin:wifi"],
+    };
+    base.dice = mergeDice(DEFAULT_DICE, { include: { mosaic: false } });
+    const next = shuffleLook(base, {
+      themes: ["nord"],
+      modes: [
+        { id: "plugin:topology" },
+        { id: "plugin:talkers" },
+        { id: "plugin:protocols" },
+        { id: "plugin:wifi" },
+      ],
+      plugins: [],
+      skies: ["aurora", "space", "fire", "ocean", "matrix"],
+    }, zero);
+    expect(next.anim.mosaicUniqueSkies).toBe(true);
+    const skies = Object.values(next.anim.mosaicSkies ?? {});
+    expect(skies.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(skies).size).toBe(skies.length);
   });
 
   it("skips groups the operator turned off", () => {

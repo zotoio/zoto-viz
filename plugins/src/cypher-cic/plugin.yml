@@ -1,0 +1,21 @@
+id: cypher-cic
+name: Cypher CIC
+version: 1
+hint: Neon command wall — host gauges, talkers, protocols, and RF as a multi-panel holodeck.
+description: Cypherpunk CIC. Selecting this view opens a center-hero mosaic — topology in the middle on a holodeck infograph of host gauges, talkers, protocols, and RF, flanked by talkers, protocols, watch, cores, memory, sockets, and GPU. Journal lines stay on the feed ticker.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  maxBuffers: 4
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts

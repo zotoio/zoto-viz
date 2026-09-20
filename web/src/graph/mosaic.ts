@@ -1,9 +1,10 @@
 import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize } from "./scene";
 import type { RenderHost } from "./render-host";
-import { allModes, hostEngine, modeById, viewCaption, type ViewMode } from "../core/modes";
+import { allModes, arcadeSlotFor, hostEngine, modeById, viewCaption, type ViewMode } from "../core/modes";
 import { lookForMode, mergeLook } from "../plugins/plugin";
 import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
+import { cycleSkyPool, type BackdropKind } from "./backdrop";
 import {
   assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
@@ -15,6 +16,62 @@ export { centerSplit } from "./mosaic-layout";
 export function mosaicTileTheme(shared: boolean, wall: Theme, used: Set<string>, prefer?: string | null): Theme {
   if (shared) return wall;
   return takeTheme(used, prefer);
+}
+
+const SHARED_SKY = new Set<BackdropKind>(["none", "plugin", "custom", "dynamic"]);
+
+/** Half of mosaic / dice rolls give every pane a sky no other pane has. */
+export function shouldUniqueMosaicSkies(rnd: () => number = Math.random): boolean {
+  return rnd() < 0.5;
+}
+
+/**
+ * Distinct host skies per tile. Plugin shaders stay on `plugin` (each zip is its own picture).
+ * Pins that would collide are replaced from `pool`.
+ */
+export function assignMosaicSkies(
+  ids: string[],
+  wall: BackdropKind,
+  pool: readonly BackdropKind[],
+  pin: (id: string) => BackdropKind | undefined = () => undefined,
+): Record<string, BackdropKind> {
+  const used = new Set<string>();
+  const out: Record<string, BackdropKind> = {};
+  const open: string[] = [];
+  for (const id of ids) {
+    const want = pin(id);
+    if (want === "plugin") {
+      out[id] = "plugin";
+      used.add(`plugin:${id}`);
+      continue;
+    }
+    if (want && !SHARED_SKY.has(want) && !used.has(want)) {
+      out[id] = want;
+      used.add(want);
+      continue;
+    }
+    open.push(id);
+  }
+  const choices = pool.filter((k) => !SHARED_SKY.has(k));
+  let wrap = 0;
+  for (const id of open) {
+    const pick = choices.find((k) => !used.has(k) && k !== wall) ?? choices.find((k) => !used.has(k));
+    const sky = pick ?? choices[wrap % Math.max(1, choices.length)] ?? wall;
+    if (pick) used.add(sky);
+    else wrap += 1;
+    out[id] = sky;
+  }
+  return out;
+}
+
+export function mosaicAnimForTile(
+  wall: DreamAnim,
+  id: string,
+  tileSky?: BackdropKind,
+): DreamAnim {
+  const merged = mergeLook(wall, lookForMode(id));
+  if (tileSky && merged.backdrop !== "plugin") return { ...merged, backdrop: tileSky };
+  return merged;
 }
 
 export function mosaicIds(size: MosaicSize, prefer?: string, hero: HeroPos = "off"): string[] {
@@ -32,8 +89,17 @@ export function mosaicIds(size: MosaicSize, prefer?: string, hero: HeroPos = "of
   return [heroId, ...pool.filter((id) => id !== heroId).slice(0, n)];
 }
 
+/** Graphs first so a dice / new wall is not mostly empty stills or arcade stages. */
+export function mosaicPanePool(): string[] {
+  const modes = allModes();
+  return [
+    ...modes.filter((m) => !m.standalone).map((m) => m.id),
+    ...modes.filter((m) => m.standalone).map((m) => m.id),
+  ];
+}
+
 function panePool(): string[] {
-  return allModes().map((m) => m.id);
+  return mosaicPanePool();
 }
 
 /**
@@ -57,11 +123,27 @@ function isGraph(id: string): boolean {
 }
 
 function arcadeKey(id: string): string {
-  return mosaicPaneMode(id).arcadeId ?? id;
+  return arcadeSlotFor(mosaicPaneMode(id)) ?? mosaicPaneMode(id).arcadeId ?? id;
+}
+
+/** Chrome / Alt picks the tile up; a body drag picks up once the pointer is over another tile. */
+export function mosaicShouldLift(
+  kind: "chrome" | "alt" | "body",
+  overId: string | null,
+  sourceId: string,
+): boolean {
+  if (kind === "chrome" || kind === "alt") return true;
+  return !!overId && overId !== sourceId;
 }
 
 interface ArcadeSlot {
-  view: { start(preferIp?: string | null): void; stop(): void; update(m: StateMsg): void; setTheme(t: Theme): void };
+  view: {
+    start(preferIp?: string | null): void;
+    stop(): void;
+    update(m: StateMsg): void;
+    setTheme(t: Theme): void;
+    setBind?(bind: Record<string, string>): void;
+  };
   el: HTMLElement;
 }
 
@@ -79,6 +161,8 @@ export interface MosaicLayoutPatch {
   tree: MosaicNode | null;
   maximized: string | null;
   tiles: string[];
+  uniqueSkies?: boolean;
+  skies?: Record<string, BackdropKind>;
 }
 
 /**
@@ -93,11 +177,13 @@ export class Mosaic {
   private panes = new Map<string, HTMLElement>();
   private themes = new Map<string, Theme>();
   private liveArcade = new Set<string>();
+  private tileArcade = new Map<string, ArcadeSlot>();
   private focused = "";
   private mainId = "";
   private tree: MosaicNode | null = null;
   private maximized: string | null = null;
   private splits = new Map<string, HTMLElement>();
+  private tileSkies = new Map<string, BackdropKind>();
 
   constructor(private cfg: {
     wall: HTMLElement;
@@ -105,6 +191,7 @@ export class Mosaic {
     main: NetScene;
     host?: RenderHost;
     arcade: Record<string, ArcadeSlot>;
+    spawnArcade?: (engine: string) => ArcadeSlot | null;
     optsFor: (m: ViewMode) => Record<string, string>;
     onFocus: (id: string) => void;
     onPromote: (id: string, theme: Theme | null) => void;
@@ -121,7 +208,17 @@ export class Mosaic {
   get mainMode(): string { return this.mainId; }
   get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
   get layout(): MosaicLayoutPatch {
-    return { tree: this.tree, maximized: this.maximized, tiles: this.tileIds };
+    return {
+      tree: this.tree,
+      maximized: this.maximized,
+      tiles: this.tileIds,
+      uniqueSkies: this.tileSkies.size > 1,
+      skies: Object.fromEntries(this.tileSkies),
+    };
+  }
+
+  paneSky(id: string): BackdropKind | undefined {
+    return this.tileSkies.get(id);
   }
   get layoutKey(): string {
     return `${this.size}:${this.hero}:${this.tileIds.join(",")}:${this.maximized ?? ""}`;
@@ -214,6 +311,7 @@ export class Mosaic {
     this.syncPanes(ids);
     this.placeTree();
     void this.cfg.wall.offsetHeight;
+    this.ingestSkyPlan(this.cfg.sync().anim, true);
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
     this.syncCompactLabels();
@@ -247,16 +345,19 @@ export class Mosaic {
 
   update(msg: StateMsg): void {
     for (const e of this.extras) e.scene.update(msg);
+    for (const slot of this.tileArcade.values()) slot.view.update(msg);
   }
 
   applyLooks(a: DreamAnim, pin = true): void {
+    this.ingestSkyPlan(a, false);
     if (!pin) {
       this.cfg.main.setAnim(a);
       for (const e of this.extras) e.scene.setAnim(a);
       return;
     }
-    this.cfg.main.setAnim(mergeLook(a, lookForMode(this.mainId || this.cfg.main.currentMode.id)));
-    for (const e of this.extras) e.scene.setAnim(mergeLook(a, lookForMode(e.id)));
+    const mainId = this.mainId || this.cfg.main.currentMode.id;
+    this.cfg.main.setAnim(this.animFor(mainId, a));
+    for (const e of this.extras) e.scene.setAnim(this.animFor(e.id, a));
   }
 
   setTheme(t: Theme, fade = false): void {
@@ -264,15 +365,10 @@ export class Mosaic {
   }
 
   teardownArcadeExcept(keep: string | null): void {
-    for (const id of this.liveArcade) {
+    for (const id of [...this.liveArcade]) {
       if (id === keep) continue;
-      const slot = this.cfg.arcade[arcadeKey(id)];
-      if (!slot) continue;
-      slot.view.stop();
-      slot.el.hidden = true;
-      slot.el.classList.remove("mosaic-live");
+      this.releaseArcade(id);
     }
-    this.liveArcade.clear();
     if (keep) this.liveArcade.add(keep);
   }
 
@@ -328,7 +424,13 @@ export class Mosaic {
   }
 
   private emitLayout(): void {
-    this.cfg.onLayout({ tree: this.tree, maximized: this.maximized, tiles: this.tileIds });
+    this.cfg.onLayout({
+      tree: this.tree,
+      maximized: this.maximized,
+      tiles: this.tileIds,
+      uniqueSkies: this.tileSkies.size > 1,
+      skies: Object.fromEntries(this.tileSkies),
+    });
   }
 
   private syncCompactLabels(): void {
@@ -406,14 +508,37 @@ export class Mosaic {
       }
       return;
     }
-    const slot = this.cfg.arcade[arcadeKey(id)];
+    const slot = this.ensureArcade(id);
+    if (!slot) return;
+    pane.appendChild(slot.el);
+    slot.el.hidden = false;
+    slot.el.classList.add("mosaic-live");
+    const bind = this.cfg.optsFor(mosaicPaneMode(id));
+    slot.view.setBind?.(bind);
+    slot.view.start();
+    const msg = this.cfg.sync().lastMsg;
+    if (msg) slot.view.update(msg);
+    this.liveArcade.add(id);
+  }
+
+  private ensureArcade(id: string): ArcadeSlot | null {
+    const have = this.tileArcade.get(id);
+    if (have) return have;
+    const engine = arcadeKey(id);
+    const slot = this.cfg.spawnArcade?.(engine) ?? null;
+    if (!slot) return null;
+    this.tileArcade.set(id, slot);
+    return slot;
+  }
+
+  private releaseArcade(id: string): void {
+    const slot = this.tileArcade.get(id);
     if (slot) {
-      pane.appendChild(slot.el);
-      slot.el.hidden = false;
-      slot.el.classList.add("mosaic-live");
-      slot.view.start();
-      this.liveArcade.add(id);
+      slot.view.stop();
+      slot.el.remove();
+      this.tileArcade.delete(id);
     }
+    this.liveArcade.delete(id);
   }
 
   private dropPane(id: string): void {
@@ -439,15 +564,7 @@ export class Mosaic {
         extra.scene.dispose();
         this.extras = this.extras.filter((e) => e.id !== id);
       }
-      if (this.liveArcade.has(id)) {
-        const slot = this.cfg.arcade[arcadeKey(id)];
-        if (slot) {
-          slot.view.stop();
-          slot.el.hidden = true;
-          slot.el.classList.remove("mosaic-live");
-        }
-        this.liveArcade.delete(id);
-      }
+      if (this.liveArcade.has(id) || this.tileArcade.has(id)) this.releaseArcade(id);
     }
     this.panes.get(id)?.remove();
     this.panes.delete(id);
@@ -550,7 +667,8 @@ export class Mosaic {
     const cap = document.createElement("span");
     cap.className = "mosaic-cap";
     cap.textContent = viewCaption(mosaicPaneMode(id));
-    cap.title = "drag to swap tiles";
+    cap.title = "drag onto another tile to swap views";
+    bar.title = cap.title;
     const tools = document.createElement("div");
     tools.className = "mosaic-tools";
     tools.append(
@@ -559,7 +677,8 @@ export class Mosaic {
       this.toolBtn("close", "close", "close and expand the neighbour", () => this.closeTile(id)),
     );
     bar.append(cap, tools);
-    this.bindDrag(cap, id);
+    this.bindSwapHandle(bar, id, "chrome");
+    this.bindPaneBodySwap(pane, id);
     pane.appendChild(bar);
     return pane;
   }
@@ -576,46 +695,88 @@ export class Mosaic {
     return b;
   }
 
-  private bindDrag(handle: HTMLElement, id: string): void {
+  private bindSwapHandle(handle: HTMLElement, id: string, kind: "chrome" | "alt"): void {
     handle.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
+      if ((e.target as HTMLElement).closest(".mosaic-tool")) return;
       e.preventDefault();
       e.stopPropagation();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      let dragging = false;
-      const ghost = document.createElement("div");
-      ghost.className = "mosaic-ghost";
-      ghost.textContent = viewCaption(mosaicPaneMode(id));
+      this.beginSwapDrag(id, e.clientX, e.clientY, kind);
+    });
+  }
+
+  /** Left-drag that leaves this tile (or Alt-drag) picks the view up to drop on another. */
+  private bindPaneBodySwap(pane: HTMLElement, id: string): void {
+    pane.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      const t = e.target as HTMLElement;
+      if (t.closest(".mosaic-tool, .mosaic-handle, .mosaic-chrome")) return;
+      if (e.altKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.beginSwapDrag(id, e.clientX, e.clientY, "alt");
+        return;
+      }
       const onMove = (ev: PointerEvent) => {
-        if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
-        if (!dragging) {
-          dragging = true;
-          document.body.appendChild(ghost);
-          document.body.classList.add("mosaic-dragging");
-        }
-        ghost.style.left = `${ev.clientX + 8}px`;
-        ghost.style.top = `${ev.clientY + 8}px`;
         const over = this.paneAt(ev.clientX, ev.clientY);
-        for (const [mid, pane] of this.panes) pane.classList.toggle("drop", mid === over && over !== id);
-      };
-      const onUp = (ev: PointerEvent) => {
+        if (!mosaicShouldLift("body", over, id)) return;
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
-        ghost.remove();
-        document.body.classList.remove("mosaic-dragging");
-        for (const pane of this.panes.values()) pane.classList.remove("drop");
-        if (!dragging || !this.tree) return;
-        const over = this.paneAt(ev.clientX, ev.clientY);
-        if (!over || over === id) return;
-        this.tree = swapLeaves(this.tree, id, over);
-        this.placeTree();
-        this.relayoutAll();
-        this.emitLayout();
+        t.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }));
+        this.beginSwapDrag(id, ev.clientX, ev.clientY, "body");
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp, { once: true });
     });
+  }
+
+  private beginSwapDrag(id: string, x0: number, y0: number, kind: "chrome" | "alt" | "body"): void {
+    const slop = kind === "body" ? 0 : 6;
+    let dragging = kind === "body";
+    const ghost = document.createElement("div");
+    ghost.className = "mosaic-ghost";
+    ghost.textContent = viewCaption(mosaicPaneMode(id));
+    if (dragging) {
+      document.body.appendChild(ghost);
+      document.body.classList.add("mosaic-dragging");
+      ghost.style.left = `${x0 + 8}px`;
+      ghost.style.top = `${y0 + 8}px`;
+      const over0 = this.paneAt(x0, y0);
+      for (const [mid, pane] of this.panes) pane.classList.toggle("drop", mid === over0 && over0 !== id);
+    }
+    const onMove = (ev: PointerEvent) => {
+      if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) < slop) return;
+      if (!dragging) {
+        if (!mosaicShouldLift(kind, this.paneAt(ev.clientX, ev.clientY), id) && kind !== "chrome" && kind !== "alt") return;
+        dragging = true;
+        document.body.appendChild(ghost);
+        document.body.classList.add("mosaic-dragging");
+      }
+      ghost.style.left = `${ev.clientX + 8}px`;
+      ghost.style.top = `${ev.clientY + 8}px`;
+      const over = this.paneAt(ev.clientX, ev.clientY);
+      for (const [mid, pane] of this.panes) pane.classList.toggle("drop", mid === over && over !== id);
+    };
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      ghost.remove();
+      document.body.classList.remove("mosaic-dragging");
+      for (const pane of this.panes.values()) pane.classList.remove("drop");
+      if (!dragging || !this.tree) return;
+      const over = this.paneAt(ev.clientX, ev.clientY);
+      if (!over || over === id) return;
+      this.tree = swapLeaves(this.tree, id, over);
+      this.placeTree();
+      this.relayoutAll();
+      this.emitLayout();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
   }
 
   private paneAt(x: number, y: number): string | null {
@@ -631,11 +792,41 @@ export class Mosaic {
     s.setActive(true);
     s.setFilters(st.filters);
     s.setNodeFilter(st.nodeFilter);
-    s.setAnim(mergeLook(st.anim, lookForMode(id)));
+    s.setAnim(this.animFor(id, st.anim));
     s.setDream(st.dreaming);
     s.setAliasMap(st.aliasMap);
     s.onSelect = this.cfg.main.onSelect;
     if (st.lastMsg) s.update(st.lastMsg);
+  }
+
+  private animFor(id: string, wall: DreamAnim): DreamAnim {
+    return mosaicAnimForTile(wall, id, this.tileSkies.get(id));
+  }
+
+  /** Dice / settings plan wins; a new wall with no plan rolls unique skies half the time. */
+  private ingestSkyPlan(a: DreamAnim, rollIfEmpty: boolean): void {
+    if (a.mosaicUniqueSkies === false) {
+      this.tileSkies.clear();
+      return;
+    }
+    const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
+    if (a.mosaicUniqueSkies === true || planned) {
+      const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
+      const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
+      return;
+    }
+    if (!rollIfEmpty || this.tileIds.length <= 1) return;
+    const stale = this.tileSkies.size > 0 && this.tileIds.some((id) => !this.tileSkies.has(id));
+    if (this.tileSkies.size && stale) {
+      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
+      return;
+    }
+    if (!this.tileSkies.size && shouldUniqueMosaicSkies()) {
+      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
+    }
   }
 
   private paintPanes(hero: Theme, fade = false): void {
@@ -650,7 +841,7 @@ export class Mosaic {
     }
     for (const id of this.liveArcade) {
       const t = mosaicTileTheme(shared, hero, used, lookForMode(id)?.theme);
-      this.cfg.arcade[arcadeKey(id)]?.view.setTheme(t);
+      this.tileArcade.get(id)?.view.setTheme(t);
       this.tintPane(id, t);
     }
   }
@@ -664,16 +855,11 @@ export class Mosaic {
   private teardown(): void {
     for (const e of this.extras) e.scene.dispose();
     this.extras = [];
-    for (const id of this.liveArcade) {
-      const slot = this.cfg.arcade[arcadeKey(id)];
-      if (!slot) continue;
-      slot.view.stop();
-      slot.el.hidden = true;
-      slot.el.classList.remove("mosaic-live");
-    }
+    for (const id of [...this.tileArcade.keys()]) this.releaseArcade(id);
     this.liveArcade.clear();
     this.panes.clear();
     this.themes.clear();
+    this.tileSkies.clear();
     this.splits.clear();
     this.mainId = "";
     this.tree = null;

@@ -3,7 +3,7 @@
 Two backends share the feed, memories, AI Control, and plugin install:
 
 - **Ollama** — any tag already on the machine, plus popular downloads (size / VRAM warning when the GPU is small). The monitor proxies `127.0.0.1:11434` (`ZOTO_VIZ_OLLAMA`).
-- **Cursor SDK** (`@cursor/sdk`) — hosted models from `Cursor.models.list()`, **Grok** by default. Needs `CURSOR_API_KEY` or a key pasted in Settings → Agent (stored `0600` at `~/.zoto-viz/cursor-key`).
+- **Cursor SDK** (`@cursor/sdk`) — hosted models from `Cursor.models.list()`, **Grok 4.6** by default. Needs `CURSOR_API_KEY` or a key pasted in Settings → Agent (stored `0600` at `~/.zoto-viz/cursor-key`). Chat is a resumed local agent (`Agent.create` / `Agent.resume`) with Cursor’s tool harness and zoto-viz MCP tools; the transcript is not replayed into the prompt. Session id is `~/.zoto-viz/agent/cursor-session.json` (cleared with the conversation). Each list / chat / still call appends tokens and billed cost to `~/.zoto-viz/cursor-stats.jsonl` (`0600`; override with `ZOTO_VIZ_CURSOR_STATS`). Header **debug** (key B) opens a side panel that tails the monitor log and Cursor token/cost lines. The API key is never written.
 
 Settings → Agent picks the backend and model. Conversation lives on the **feed**, not in Settings.
 
@@ -12,7 +12,7 @@ ollama pull gemma4
 # or: Settings → Agent → backend Ollama → pick a download → confirm if VRAM is tight
 ```
 
-Chat is **one log on the monitor**, shown on the feed. A new request is **not started until you confirm it**: the agent restates what you asked, asks if that is correct, and waits for **yes** (yeah / yep / go ahead also count). **No** or a restated request parks the new wording and asks again. Refresh, a second window, or a different screen continues the same transcript (`GET /api/ai/history`, file `~/.zoto-viz/agent/conversation.json`). **Clear conversation** in Settings → Agent drops the transcript only. **Memories** stay across sessions.
+Chat is **one log on the monitor**, shown on the feed (default source). Discuss a view, source, or look, then the agent **acts**: it invents and installs new capabilities (plugin trees, GLSL skies, host sources via MCP `set_source`, graph `style.fabric` / `graphSpace`) instead of only cycling the shipped catalog. Each user line goes to the model immediately; the next turn is the agent's reply. A short **Recent chat** window plus Facts rides the next prompt so a thread can continue without replaying the full transcript. Refresh, a second window, or a different screen continues the same transcript (`GET /api/ai/history`, file `~/.zoto-viz/agent/conversation.json`). **Clear conversation** in Settings → Agent drops the transcript only. **Memories** stay across sessions.
 
 The overlay keeps that full log, including chain-of-thought for the **current** operation. Future prompts do not replay prior replies or reasoning — they get a **sliding Facts window** (outcomes + curated memories, capped by tokens; override with `ZOTO_VIZ_FACTS_TOKENS`, default 384). When the live Ollama window would overflow (`num_ctx`) or grow past the current turn, the monitor **starts a new session**. Facts still inject. The on-screen transcript is not reset. If a turn stalls or stops mid-thought, the monitor silently continues it on the same stream (up to two nudges) until there is a user-facing reply. The UI polls again if that stream still ends on thought only — no extra user line.
 

@@ -6,7 +6,6 @@ import {
 describe("hn-term teletype", () => {
   it("prefers Hacker News rows and keeps the blurb", () => {
     const stories = preferHnStories([
-      { id: "nasa:0", label: "NASA", text: "Photo", summary: "Mars" },
       { id: "hn:0", label: "Hacker News", text: "Jemalloc", summary: "A new allocator." },
     ]);
     expect(stories).toEqual([{ title: "Jemalloc", body: "A new allocator." }]);

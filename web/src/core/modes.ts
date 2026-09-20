@@ -150,24 +150,25 @@ export function isSysBase(base: string | undefined): base is SysBase {
   return !!base && (SYS_BASES as readonly string[]).includes(base);
 }
 
-export function viewSource(m: Pick<ViewMode, "id" | "graphBase" | "arcadeId" | "pluginId" | "label">): ViewSource {
+export function viewSource(m: Pick<ViewMode, "id"> & Partial<Pick<ViewMode, "graphBase" | "arcadeId" | "pluginId" | "label">>): ViewSource {
   if (m.graphBase === "wifi") return "AIR";
   if (m.graphBase === "bluetooth") return "BT";
-  if (m.graphBase === "sources" || m.arcadeId === "carousel" || m.id === "carousel" || nasaStillView(m)) return "SRC";
+  if (m.graphBase === "sources" || m.arcadeId === "carousel" || m.id === "carousel" || m.pluginId === "carousel" || nasaStillView(m)) return "SRC";
   if (m.graphBase === "cpu" || m.arcadeId === "cpupong" || m.arcadeId === "doom" || m.id === "cpupong" || m.id === "doom" || m.id === "cpu") return "CPU";
   if (isSysBase(m.graphBase) || (m.id ? isSysBase(m.id) : false)) return "SYS";
   return "NET";
 }
 
-/** NASA Ring / Slides / Drift (and any catalog row whose id or label says NASA). */
-export function nasaStillView(m: Pick<ViewMode, "id" | "pluginId" | "label">): boolean {
+/** Carousel stills, plus legacy NASA-named catalog rows. */
+export function nasaStillView(m: Pick<ViewMode, "id"> & Partial<Pick<ViewMode, "pluginId" | "label">>): boolean {
+  if (m.pluginId === "carousel") return true;
   return /nasa/i.test(`${m.pluginId ?? ""} ${m.id ?? ""} ${m.label ?? ""}`);
 }
 
-/** Which arcade canvas to run. NASA views share the contain-fit slideshow stage. */
+/** Which arcade canvas to run. Stills instances share the contain-fit slideshow stage. */
 export function arcadeSlotFor(m: Pick<ViewMode, "id" | "standalone" | "arcadeId" | "pluginId" | "label">): string | null {
   if (m.standalone) return m.arcadeId ?? m.id ?? null;
-  if (nasaStillView(m)) return "carousel";
+  if (m.pluginId === "carousel" || nasaStillView(m)) return "carousel";
   return null;
 }
 
@@ -1584,7 +1585,7 @@ export const bridge: ViewMode = (() => {
   return {
     ...base,
     camera: [0, 420, 820],
-    nodeShape: (n) => (isSat(n) ? 4 : base.nodeShape?.(n) ?? 0),
+    nodeShape: (n, ctx) => (isSat(n) ? 4 : base.nodeShape?.(n, ctx) ?? 0),
     forceLabel: (n, ctx) => isSat(n) || !!base.forceLabel?.(n, ctx),
     overlays(ctx) {
       const out: Overlay[] = [];
@@ -1624,15 +1625,15 @@ export const ARCADE_ENGINES: ViewMode[] = [
 let pluginModes: ViewMode[] = [];
 
 /**
- * Unique `pluginId` values become catalog menu rows. A later compiled view with the
- * same pluginId is dropped here (plugin-on-plugin overlay is applied by the catalog
- * loader before this call).
+ * Unique view ids become catalog menu rows. Instances of one plugin tree
+ * (`plugin:carousel` vs `plugin:carousel:apod`) stay separate. A later compiled
+ * view with the same id is dropped (overlays are merged before compile).
  */
 export function pluginMenuRows(modes: ViewMode[]): ViewMode[] {
   const seen = new Set<string>();
   const rows: ViewMode[] = [];
   for (const m of modes) {
-    const key = m.pluginId ?? m.id;
+    const key = m.id;
     if (seen.has(key)) continue;
     seen.add(key);
     rows.push(m);

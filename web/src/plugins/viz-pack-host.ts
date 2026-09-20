@@ -6,6 +6,7 @@ import {
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoOrbs } from "../../../plugins/src/stereo-gram/frontend/orbs";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
+import { nixieCanvasSize, packNixieBuffer, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
 
 export interface VizPackHandlers {
   writeBuffer: (slot: number, data: number[]) => void;
@@ -191,6 +192,20 @@ export function runPackFrameHandler(
       handlers.writeBuffer(0, packStereoOrbs(frame.talkers, frame.t));
       handlers.writeUniform("uAccent", [0.95, 0.35, 0.72]);
       handlers.writeUniform("uBg", [0.06, 0.03, 0.1]);
+      break;
+    }
+    case "nixie-clock": {
+      const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
+      handlers.writeBuffer(0, packNixieBuffer(
+        new Date(),
+        parseNixieLook(opts),
+        frame.audio,
+        peak,
+        nixieCanvasSize(typeof document !== "undefined" ? document : null),
+      ));
+      handlers.writeUniform("uAudio", frame.audio);
+      handlers.writeUniform("uAccent", [1.0, 0.38, 0.06]);
+      handlers.writeUniform("uBg", [0.06, 0.03, 0.02]);
       break;
     }
   }

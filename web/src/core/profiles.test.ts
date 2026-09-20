@@ -174,7 +174,7 @@ function mockProfilesFetch(opts: { down?: () => boolean; shippedStatus?: number 
     if (path.endsWith("/api/profiles") && method === "GET") return jsonOk(profileList());
     if (path.includes("/api/profiles/") && method === "GET") return jsonOk({ settings: shippedSettings() });
     return jsonOk({});
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
 }
 
 describe("profiles availability", () => {
@@ -215,7 +215,7 @@ describe("profiles availability", () => {
         return jsonOk({});
       }
       return jsonOk({});
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     const tools = document.createElement("div");
     const store = new ProfileStore(
       { collect: shippedSettings, apply: () => {} },
@@ -255,5 +255,43 @@ describe("profiles availability", () => {
     expect(bar.hidden).toBe(true);
     expect(bar.textContent).not.toMatch(/Profiles file unavailable/);
     expect(applied).toEqual(["ember"]);
+  });
+
+  it("treats a concurrent user-profile create as success", async () => {
+    const warns: string[] = [];
+    const orig = console.warn;
+    console.warn = (...args: unknown[]) => { warns.push(args.map(String).join(" ")); };
+    try {
+      let listedUser = false;
+      globalThis.fetch = (async (url: string, init?: RequestInit) => {
+        const path = String(url);
+        const method = (init?.method || "GET").toUpperCase();
+        if (path.includes("/api/session")) return jsonOk({ csrf: "t" });
+        if (path.includes("/api/profiles/shipped") && method === "POST") return jsonOk({});
+        if (path.endsWith("/api/profiles") && method === "GET") {
+          const profiles = listedUser
+            ? [{ id: SHIPPED_ID, label: SHIPPED_LABEL, shipped: true }, { id: USER_ID, label: USER_ID, shipped: false }]
+            : [{ id: SHIPPED_ID, label: SHIPPED_LABEL, shipped: true }];
+          return jsonOk(profileList({ profiles, default: SHIPPED_ID, fresh: true }));
+        }
+        if (path.endsWith("/api/profiles") && method === "POST") {
+          listedUser = true;
+          return jsonOk({ error: "profile 'user' already exists" }, 409);
+        }
+        if (path.includes("/api/profiles/") && method === "GET") return jsonOk({ settings: shippedSettings() });
+        return jsonOk({});
+      }) as unknown as typeof fetch;
+      const store = new ProfileStore(
+        { collect: shippedSettings, apply: () => {} },
+        { value: "", el: document.createElement("div"), setOptions() {} },
+        document.createElement("div"),
+        document.createElement("div"),
+      );
+      await store.boot();
+      expect(store.available).toBe(true);
+      expect(warns.join("\n")).not.toMatch(/already exists/);
+    } finally {
+      console.warn = orig;
+    }
   });
 });

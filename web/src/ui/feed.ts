@@ -4,24 +4,19 @@ import { decodePacket, type FeedKind } from "../inspect/decode";
 import { idsOf, type Packet, type TrafficMsg } from "../core/types";
 import type { NetScene } from "../graph/scene";
 import { markFrame } from "../core/fps";
-import { fillMarkdown } from "./markdown";
-import { FEED_REVEAL_CPS, FEED_THINK_CPS, followScrollTop, revealStep } from "./feed-reveal";
+import { followScrollTop } from "./feed-reveal";
+import { bindFloatPanel } from "./float-drag";
+export type { ChatRole, TranscriptTurn } from "./chat";
 
 const POLL_MS = 800;
 const BAR_N = 20;
 const BAR_S = 1;
+const LINE_CAP = 400;
 
 export type FeedLayout = "ticker" | "bars" | "both";
 export type FeedScope = "lan" | "selected" | "any";
+/** Kept for stored profiles / MCP; the feed panel is always traffic. */
 export type FeedSource = "traffic" | "transcript" | "both";
-export type ChatRole = "you" | "think" | "agent";
-
-export interface FeedDisplay {
-  role: ChatRole;
-  shown: string;
-  want: string;
-  done: boolean;
-}
 
 export const FEED_LAYOUTS: { value: FeedLayout; label: string; hint: string }[] = [
   { value: "ticker", label: "ticker", hint: "decoded packet lines, newest at the bottom; older lines scroll up" },
@@ -29,16 +24,16 @@ export const FEED_LAYOUTS: { value: FeedLayout; label: string; hint: string }[] 
   { value: "both", label: "both", hint: "bars above a scrolling ticker" },
 ];
 
-export const FEED_SCOPES: { value: FeedScope; label: string; hint: string }[] = [
+export const FEED_SCOPES: { value: FeedScope; label: "LAN" | "selection" | "all"; hint: string }[] = [
   { value: "lan", label: "LAN", hint: "every local device" },
   { value: "selected", label: "selection", hint: "the selected node, or the LAN if none is picked" },
   { value: "any", label: "all", hint: "LAN plus internet hosts this capture can see" },
 ];
 
 export const FEED_SOURCES: { value: FeedSource; label: string; hint: string }[] = [
-  { value: "traffic", label: "traffic", hint: "decoded packets from the capture; newest at the bottom, older lines scroll up; agent thinking still streams here" },
-  { value: "transcript", label: "transcript", hint: "agent conversation and chain of thought; older lines scroll up" },
-  { value: "both", label: "both", hint: "packets mixed with the agent transcript; everything scrolls up" },
+  { value: "traffic", label: "traffic", hint: "decoded packets from the capture" },
+  { value: "transcript", label: "chat", hint: "legacy — opens the Chat panel instead" },
+  { value: "both", label: "both", hint: "legacy — feed stays traffic; chat is a separate panel" },
 ];
 
 export interface FeedConfig {
@@ -47,16 +42,14 @@ export interface FeedConfig {
   scope: FeedScope;
   source: FeedSource;
   density: number;
-  /** ticker / transcript type size in px */
   textSize: number;
   modulate: boolean;
-  /** RSS / HTTP / file headlines from the host sources registry. */
   includeSources: boolean;
 }
 
 export const DEFAULT_FEED: FeedConfig = {
   on: true,
-  layout: "both",
+  layout: "ticker",
   scope: "lan",
   source: "traffic",
   density: 36,
@@ -65,7 +58,21 @@ export const DEFAULT_FEED: FeedConfig = {
   includeSources: true,
 };
 
-/** Pixels to shift the graph optical center (positive = left). Half the overlay, and only when the view is tighter than 4× the feed. Chrome-right puts the feed on the left. */
+/** One-time split: old feed-as-chat source becomes a dedicated chat panel. */
+export const FEED_CHAT_SPLIT_MARK = "zoto-viz.feed.chat2";
+
+export function migrateFeedChatSplit(prefix: string): { chatOn?: boolean; source?: FeedSource } {
+  if (typeof localStorage === "undefined") return {};
+  if (localStorage.getItem(FEED_CHAT_SPLIT_MARK) === "1") return {};
+  localStorage.setItem(FEED_CHAT_SPLIT_MARK, "1");
+  const source = localStorage.getItem(`${prefix}.feed.source`);
+  if (source === "transcript" || source === "both") {
+    return { chatOn: true, source: "traffic" };
+  }
+  return {};
+}
+
+/** Pixels to shift the graph optical center (positive = left). Half the overlay, and only when the view is tighter than 4× the overlay. Chrome-right puts the overlay on the left. */
 export function feedViewShift(width: number, chrome = "top", viewWidth = 0): number {
   if (width <= 0 || viewWidth >= width * 4) return 0;
   const px = width * 0.5;
@@ -77,12 +84,6 @@ export function nearBottom(el: { scrollHeight: number; scrollTop: number; client
   return el.scrollHeight - el.scrollTop - el.clientHeight < slop;
 }
 
-export interface TranscriptTurn {
-  role: "user" | "assistant";
-  content: string;
-  thinking?: string;
-}
-
 interface Line {
   key: string;
   t: number;
@@ -92,9 +93,6 @@ interface Line {
   host?: string;
   peer?: string;
   count: number;
-  chat?: ChatRole;
-  want: string;
-  shown: string;
   el: HTMLDivElement;
   nEl: HTMLSpanElement;
 }
@@ -103,9 +101,9 @@ type Bucket = Record<FeedKind, number>;
 const KINDS: FeedKind[] = ["tls", "quic", "dns", "mdns", "http", "media", "ssdp", "dhcp", "remote", "plain", "wifi", "bt", "other"];
 
 /**
- * Right-hand live overlay: decoded capture headlines and agent think/reply on one ticker.
- * Every source appends at the bottom so older lines scroll up; new rows queue below
- * the viewport and the ticker scrolls until it catches up.
+ * Right-hand live overlay: decoded capture headlines and source titles.
+ * Chat lives on `#livechat`. Every source appends at the bottom so older lines
+ * scroll up; new rows queue below the viewport and the ticker scrolls until it catches up.
  */
 export class LiveFeed {
   readonly el: HTMLElement;
@@ -118,13 +116,7 @@ export class LiveFeed {
   private buckets: { t: number; bytes: Bucket }[] = [];
   private barPulse = 1;
   private lastBar = 0;
-  private streamLine: Line | null = null;
-  private streamRole: ChatRole | null = null;
-  private streamOpen = false;
-  private revealDone = true;
   private readonly ticker: HTMLDivElement;
-  private readonly composer: HTMLDivElement;
-  readonly ask: HTMLTextAreaElement;
   private readonly bars: HTMLCanvasElement;
   private readonly hint: HTMLDivElement;
   private raf = 0;
@@ -132,36 +124,21 @@ export class LiveFeed {
   private stickToBottom = true;
   private followTick = false;
   private lastScrollTop = 0;
-  private listenPin = false;
-  onSourceChange?: () => void;
-  /** Streamed think/reply text as it is painted (for TTS to follow the ticker). */
-  onDisplay?: (info: FeedDisplay) => void;
-  /** Return false to keep the draft (chat already in flight). */
-  onSend?: (text: string) => boolean | void;
-  onMicDown?: () => void;
-  onMicUp?: () => void;
 
   constructor(host: HTMLElement, private scene: NetScene) {
     this.el = host;
     this.el.className = "livefeed";
     this.el.innerHTML = `
+      <div class="float-handle">feed</div>
       <div class="feed-bars" hidden><canvas></canvas></div>
       <div class="feed-panel">
         <div class="feed-ticker" aria-label="live feed"></div>
-        <div class="feed-composer" hidden>
-          <textarea class="feed-ask" rows="2" placeholder="Ask about the LAN… then send" aria-label="message"></textarea>
-          <button type="button" class="btn feed-mic" title="hold to talk" aria-label="microphone">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z"/></svg>
-          </button>
-          <button type="button" class="btn primary feed-send">send</button>
-        </div>
       </div>
       <div class="feed-hint" aria-live="polite"></div>`;
     this.ticker = this.el.querySelector(".feed-ticker")!;
-    this.composer = this.el.querySelector(".feed-composer")!;
-    this.ask = this.el.querySelector(".feed-ask")!;
     this.bars = this.el.querySelector("canvas")!;
     this.hint = this.el.querySelector(".feed-hint")!;
+    bindFloatPanel(this.el, this.el.querySelector(".float-handle")!, "feed", { min: { w: 220, h: 160 } });
     this.ticker.addEventListener("click", (e) => {
       const row = (e.target as HTMLElement).closest<HTMLElement>("[data-host]");
       if (row?.dataset.host) this.scene.selectIp(row.dataset.host);
@@ -171,7 +148,6 @@ export class LiveFeed {
         this.lastScrollTop = this.ticker.scrollTop;
         return;
       }
-      // A growing backlog sits below the clip — that is not the user scrolling away.
       if (this.ticker.scrollTop < this.lastScrollTop - 1) this.stickToBottom = false;
       else if (nearBottom(this.ticker)) this.stickToBottom = true;
       this.lastScrollTop = this.ticker.scrollTop;
@@ -179,30 +155,7 @@ export class LiveFeed {
     this.ticker.addEventListener("wheel", (e) => {
       if (e.deltaY < 0) this.stickToBottom = false;
     }, { passive: true });
-    this.composer.querySelector(".feed-send")!.addEventListener("click", () => this.submitComposer());
-    this.composer.querySelector(".feed-mic")!.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      this.onMicDown?.();
-    });
-    this.composer.querySelector(".feed-mic")!.addEventListener("pointerup", () => this.onMicUp?.());
-    this.composer.querySelector(".feed-mic")!.addEventListener("pointerleave", () => this.onMicUp?.());
-    this.ask.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        this.submitComposer();
-      }
-    });
     this.loop = this.loop.bind(this);
-  }
-
-  private submitComposer(): void {
-    const text = this.ask.value.trim();
-    if (!text) return;
-    const accepted = this.onSend?.(text);
-    if (accepted === false) return;
-    this.ask.value = "";
-    this.stickToBottom = true;
-    this.pinLatest(true);
   }
 
   /** RSS / HTTP / file headlines from the host sources registry. */
@@ -244,14 +197,12 @@ export class LiveFeed {
       this.ticker.append(line.el);
       added = true;
     }
-    this.liftStream();
     this.trim();
     if (added) this.pinLatest(false);
   }
 
   setConfig(c: FeedConfig): void {
-    const prev = this.cfg.source;
-    this.cfg = { ...DEFAULT_FEED, ...c };
+    this.cfg = { ...DEFAULT_FEED, ...c, source: "traffic" };
     const size = Math.min(20, Math.max(10, this.cfg.textSize || DEFAULT_FEED.textSize));
     this.cfg.textSize = size;
     this.el.style.setProperty("--feed-size", `${size}px`);
@@ -260,41 +211,17 @@ export class LiveFeed {
     this.syncOverlay();
     if (c.on) this.start();
     else this.stop();
-    if (prev !== this.cfg.source) {
-      this.resetTicker();
-      this.onSourceChange?.();
-      this.syncOverlay();
-    }
     this.trim();
-    if (this.showsTranscript() && !this.showsTraffic()) this.hint.textContent = this.lines.length ? "" : "agent transcript…";
     this.pinLatest();
   }
 
-  showsTraffic(): boolean { return this.cfg.source !== "transcript"; }
-  showsTranscript(): boolean { return this.cfg.source !== "traffic"; }
-  /** Transcript-only overlay: chronological chat, newest at the bottom. */
-  chatLog(): boolean { return this.cfg.source === "transcript"; }
-
-  private hasAgentTrace(): boolean {
-    return this.el.classList.contains("thinking") || !!this.streamLine || this.lines.some((l) => l.chat);
-  }
-
-  /** Composer / history seed follow the source chip; live think/reply rows always land on the overlay. */
-  private acceptsChat(): boolean {
-    return this.cfg.on;
-  }
+  showsTraffic(): boolean { return true; }
 
   private syncOverlay(): void {
     const on = this.cfg.on;
-    const chat = this.showsTranscript();
-    const trace = on && this.hasAgentTrace();
-    this.el.classList.toggle("transcript", chat);
-    this.el.classList.toggle("chat-log", this.chatLog());
-    this.el.classList.toggle("trace", trace);
     this.el.hidden = !on;
-    this.composer.hidden = !on || !chat;
-    this.el.querySelector<HTMLElement>(".feed-bars")!.hidden = !on || this.cfg.layout === "ticker" || !this.showsTraffic();
-    this.ticker.hidden = !on || (this.cfg.layout === "bars" && !chat && !trace);
+    this.el.querySelector<HTMLElement>(".feed-bars")!.hidden = !on || this.cfg.layout === "ticker";
+    this.ticker.hidden = !on || this.cfg.layout === "bars";
   }
 
   /** Newest ticker lines for the agent HUD snapshot. */
@@ -305,117 +232,14 @@ export class LiveFeed {
     });
   }
 
-  /** Live agent tokens (and chain of thought) for the right-hand ticker. */
-  pushChat(role: ChatRole, chunk: string, stream = false): void {
-    if (!this.acceptsChat()) return;
-    const text = chunk ?? "";
-    if (!text) return;
-    if (role !== "think") this.dropPendingThink();
-    this.hint.textContent = "";
-    this.syncOverlay();
-    if (this.ticker.hidden) return;
-    if (stream && role === "think" && this.streamLine?.el.classList.contains("pending")) {
-      this.streamLine.el.classList.remove("pending");
-      this.writeStream(this.streamLine, text);
-      return;
-    }
-    if (stream && this.streamRole === role && this.streamLine) {
-      this.writeStream(this.streamLine, (this.streamLine.text + text).slice(0, CHAT_CAP));
-      return;
-    }
-    this.addChatLine(role, text, stream);
-  }
-
-  /** After the watchword: pin the transcript to the bottom and show that capture is live. */
-  setListening(on: boolean): void {
-    this.listenPin = on;
-    this.el.classList.toggle("listening", on);
-    if (on) {
-      this.stickToBottom = true;
-      this.hint.textContent = "listening… say send";
-      this.ask.placeholder = "Listening — say send to submit";
-      this.pinLatest(true);
-    } else {
-      this.ask.placeholder = "Ask about the LAN… then send";
-      if (this.hint.textContent === "listening… say send") {
-        this.hint.textContent = this.showsTranscript() && !this.showsTraffic() && !this.lines.length
-          ? "agent transcript…"
-          : "";
-      }
-    }
-    this.syncOverlay();
-  }
-
-  /** Header / composer wait state: a think row before the first token, gone if the model never thinks. */
-  setThinking(on: boolean): void {
-    const was = this.el.classList.contains("thinking");
-    this.el.classList.toggle("thinking", on);
-    this.el.setAttribute("aria-busy", on ? "true" : "false");
-    this.syncOverlay();
-    if (on) {
-      this.hint.textContent = "thinking…";
-      if (!was && this.acceptsChat() && !this.ticker.hidden
-          && !(this.streamRole === "think" && this.streamLine)) {
-        this.addChatLine("think", "thinking…", true);
-        this.streamLine?.el.classList.add("pending");
-        this.streamLine?.el.setAttribute("aria-live", "polite");
-      }
-      this.pinLatest();
-      return;
-    }
-    this.dropPendingThink();
-    this.syncOverlay();
-    if (this.hint.textContent === "thinking…") {
-      this.hint.textContent = this.showsTranscript() && !this.showsTraffic() && !this.lines.length
-        ? "agent transcript…"
-        : "";
-    }
-  }
-
-  seedTranscript(turns: TranscriptTurn[]): void {
-    if (!this.cfg.on || !this.showsTranscript()) return;
-    if (!turns.length) {
-      this.dropChatLines();
-      this.snapLatest();
-      if (!this.lines.length && !this.showsTraffic()) this.hint.textContent = "agent transcript…";
-      return;
-    }
-    // Live pushChat already owns the rows — do not wipe the visible ticker.
-    if (this.lines.some((l) => l.chat)) {
-      this.pinLatest(true);
-      return;
-    }
-    this.closeStream();
-    for (const m of turns) {
-      if (m.role === "user" && m.content) this.addChatLine("you", m.content, false);
-      if (m.role === "assistant") {
-        if (m.thinking?.trim()) this.addChatLine("think", m.thinking.trim(), false);
-        const said = (m.content || "").replace(/```memory\n[\s\S]*?```/gi, "").trim() || m.content;
-        if (said?.trim()) this.addChatLine("agent", said.trim(), false);
-      }
-    }
-    this.trim();
-    this.snapLatest();
-    if (!this.lines.length && !this.showsTraffic()) this.hint.textContent = "agent transcript…";
-    if (this.el.classList.contains("thinking") && !this.ticker.hidden) {
-      this.hint.textContent = "thinking…";
-      if (!(this.streamRole === "think" && this.streamLine)) {
-        this.addChatLine("think", "thinking…", true);
-        this.streamLine?.el.classList.add("pending");
-        this.streamLine?.el.setAttribute("aria-live", "polite");
-      }
-    }
-  }
-
   setGraphBase(base: string | undefined): void {
     const next = base ?? "";
     if (next === this.graphBase) return;
     this.graphBase = next;
-    if (this.showsTraffic()) this.resetTicker();
+    this.resetTicker();
   }
 
   private resetTicker(): void {
-    this.closeStream();
     this.lastT = 0;
     for (const l of this.lines) l.el.remove();
     this.lines = [];
@@ -423,160 +247,9 @@ export class LiveFeed {
     this.stickToBottom = true;
   }
 
-  private dropChatLines(): void {
-    this.closeStream();
-    this.lines = this.lines.filter((l) => {
-      if (!l.chat) return true;
-      l.el.remove();
-      return false;
-    });
-  }
-
-  private dropPendingThink(): void {
-    if (!this.streamLine?.el.classList.contains("pending")) return;
-    this.streamLine.el.remove();
-    this.lines = this.lines.filter((l) => l !== this.streamLine);
-    this.closeStream();
-  }
-
-  private writeStream(line: Line, text: string): void {
-    line.want = text.slice(0, CHAT_CAP);
-    line.text = line.want;
-    if (!line.want.startsWith(line.shown)) line.shown = "";
-    this.revealDone = false;
-    this.liftStream();
-  }
-
-  /** No more tokens for the in-flight think/reply — finish the typewriter and speak the tail. */
-  lockStream(): void {
-    this.streamOpen = false;
-    if (this.streamLine && this.streamLine.shown === this.streamLine.want) this.finishReveal();
-  }
-
-  /** Paint every buffered stream character (tests, or a hard catch-up). */
-  flushReveal(): void {
-    const line = this.streamLine;
-    if (!line) return;
-    line.shown = line.want;
-    this.paintShown(line);
-    if (!this.streamOpen) this.finishReveal();
-    else this.emitDisplay(false);
-  }
-
-  /** Advance the typewriter and follow-scroll by `dt` seconds. */
+  /** Advance follow-scroll by `dt` seconds. */
   stepClock(dt: number): void {
-    this.tickReveal(dt);
     this.tickFollow(dt);
-  }
-
-  /** Keep the in-flight think/reply as the latest (bottom) row so the ticker scrolls up to it. */
-  private liftStream(): void {
-    const line = this.streamLine;
-    if (!line) return;
-    if (this.lines[this.lines.length - 1] === line) {
-      if (this.ticker.lastElementChild !== line.el) this.ticker.append(line.el);
-      return;
-    }
-    this.lines = this.lines.filter((l) => l !== line);
-    this.lines.push(line);
-    this.ticker.append(line.el);
-  }
-
-  private closeStream(): void {
-    this.streamLine = null;
-    this.streamRole = null;
-    this.streamOpen = false;
-  }
-
-  private flushAndClose(): void {
-    const line = this.streamLine;
-    if (!line) return;
-    if (line.shown !== line.want) {
-      line.shown = line.want;
-      this.paintShown(line);
-    }
-    this.emitDisplay(true);
-    this.closeStream();
-    this.revealDone = true;
-  }
-
-  private paintShown(line: Line): void {
-    const tx = line.el.querySelector(".tx");
-    if (tx) paintChat(tx, line.chat, line.shown);
-    line.el.title = line.shown || line.want;
-  }
-
-  private emitDisplay(done: boolean): void {
-    const line = this.streamLine;
-    if (!line?.chat) return;
-    this.onDisplay?.({ role: line.chat, shown: line.shown, want: line.want, done });
-  }
-
-  private finishReveal(): void {
-    if (this.revealDone) return;
-    this.revealDone = true;
-    this.emitDisplay(true);
-    this.closeStream();
-  }
-
-  private tickReveal(dt: number): void {
-    const line = this.streamLine;
-    if (!line?.chat) return;
-    if (line.shown === line.want) {
-      if (!this.streamOpen) this.finishReveal();
-      return;
-    }
-    const cps = line.chat === "think" ? FEED_THINK_CPS : FEED_REVEAL_CPS;
-    const next = revealStep(line.want, line.shown, dt, cps);
-    if (next === line.shown) return;
-    line.shown = next;
-    this.paintShown(line);
-    this.emitDisplay(false);
-  }
-
-  private tickFollow(dt: number): void {
-    const following = this.el.classList.contains("thinking") || !!this.streamLine;
-    if (!this.listenPin && !this.stickToBottom && !following) return;
-    this.followTick = true;
-    this.ticker.scrollTop = followScrollTop(
-      this.ticker.scrollTop,
-      this.ticker.scrollHeight,
-      this.ticker.clientHeight,
-      dt,
-    );
-    this.lastScrollTop = this.ticker.scrollTop;
-    this.followTick = false;
-  }
-
-  private addChatLine(role: ChatRole, text: string, stream: boolean): void {
-    const clipped = text.slice(0, CHAT_CAP);
-    if (!clipped.trim()) return;
-    this.flushAndClose();
-    const live = stream && !(role === "think" && clipped === "thinking…");
-    const line = this.makeLine({
-      key: `chat:${role}:${this.lines.length}:${clipped.slice(0, 24)}`,
-      t: Date.now() / 1000,
-      color: CHAT_COLOR[role],
-      label: CHAT_LABEL[role],
-      text: clipped,
-      shown: live ? "" : clipped,
-      count: 1,
-      chat: role,
-    });
-    this.lines.push(line);
-    this.ticker.append(line.el);
-    if (stream) {
-      this.streamLine = line;
-      this.streamRole = role;
-      this.streamOpen = true;
-      this.revealDone = false;
-    }
-    this.liftStream();
-    this.trim();
-    if (role === "you" || role === "think" || role === "agent") this.stickToBottom = true;
-    this.pinLatest(true);
-    this.syncOverlay();
-    if (stream && !live) this.emitDisplay(false);
   }
 
   private start(): void {
@@ -595,7 +268,7 @@ export class LiveFeed {
 
   private query(): string | null {
     if (document.body.classList.contains("arcade")) return null;
-    if (!this.cfg.on || !this.showsTraffic()) return null;
+    if (!this.cfg.on) return null;
     const rf = this.graphBase === "wifi" ? "@wifi" : this.graphBase === "bluetooth" ? "@bluetooth" : "";
     if (this.graphBase === "cpu" || this.graphBase === "sources" || isSysBase(this.graphBase)) return null;
     if (this.cfg.scope === "selected") {
@@ -628,9 +301,7 @@ export class LiveFeed {
   private ingest(m: TrafficMsg): void {
     const pk = m.packets.slice().reverse();
     if (!pk.length) {
-      if (!this.lastT && !this.lines.length) {
-        this.hint.textContent = this.showsTranscript() ? "agent transcript…" : "waiting for packets…";
-      }
+      if (!this.lastT && !this.lines.length) this.hint.textContent = "waiting for packets…";
       return;
     }
     const newest = pk[pk.length - 1]![0];
@@ -666,52 +337,51 @@ export class LiveFeed {
     });
     this.lines.push(line);
     this.ticker.append(line.el);
-    this.liftStream();
     return true;
   }
 
   private trim(): void {
     const cap = Math.max(12, this.cfg.density);
     while (this.lines.length > cap) {
-      if (this.lines[0] === this.streamLine) break;
       const old = this.lines.shift();
       old?.el.remove();
     }
   }
 
-  /** Keep following the latest row. Live lines stay below the clip until `tickFollow` catches up. */
   private pinLatest(force = false): void {
     if (force) this.stickToBottom = true;
   }
 
-  /** Jump to the latest row for already-complete history (seed / empty reset). */
-  private snapLatest(): void {
-    this.stickToBottom = true;
+  private tickFollow(dt: number): void {
+    if (!this.stickToBottom) return;
     this.followTick = true;
-    this.ticker.scrollTop = this.ticker.scrollHeight;
+    this.ticker.scrollTop = followScrollTop(
+      this.ticker.scrollTop,
+      this.ticker.scrollHeight,
+      this.ticker.clientHeight,
+      dt,
+    );
     this.lastScrollTop = this.ticker.scrollTop;
     this.followTick = false;
   }
 
-  private makeLine(init: Omit<Line, "el" | "nEl" | "want" | "shown"> & { want?: string; shown?: string }): Line {
-    const want = (init.want ?? init.text).slice(0, CHAT_CAP);
-    const shown = init.shown ?? want;
+  private makeLine(init: Omit<Line, "el" | "nEl">): Line {
+    const text = init.text.slice(0, LINE_CAP);
     const el = document.createElement("div");
-    el.className = "row" + (init.chat ? ` chat ${init.chat}` : "");
-    if (init.chat) el.style.cursor = "default";
+    el.className = "row";
     el.dataset.host = init.host ?? "";
     el.style.setProperty("--c", init.color);
-    el.title = shown || want;
+    el.title = text;
     const k = document.createElement("span");
     k.className = "k";
     k.textContent = init.label;
     const tx = document.createElement("span");
     tx.className = "tx";
-    paintChat(tx, init.chat, shown);
+    tx.textContent = text;
     const nEl = document.createElement("span");
     nEl.className = "n";
     el.append(k, tx, nEl);
-    const line: Line = { ...init, text: want, want, shown, el, nEl };
+    const line: Line = { ...init, text, el, nEl };
     this.paintCount(line);
     return line;
   }
@@ -739,7 +409,6 @@ export class LiveFeed {
     const dt = this.lastTick ? Math.min(0.05, (ts - this.lastTick) / 1000) : 1 / 60;
     this.lastTick = ts;
     if (!this.cfg.on) return;
-    this.tickReveal(dt);
     this.tickFollow(dt);
     if (this.cfg.layout === "ticker") return;
     if (!this.cfg.modulate && ts - this.lastBar < 80) return;
@@ -812,17 +481,4 @@ function colorOf(k: FeedKind): string {
     dns: "#26a69a", mdns: "#ffca28", tls: "#7e57c2", quic: "#29b6f6", http: "#ef5350",
     dhcp: "#ffca28", ssdp: "#ffca28", media: "#26c6da", remote: "#ff7043", plain: "#ef5350", other: "#607d8b",
   } as Record<FeedKind, string>)[k];
-}
-
-const CHAT_CAP = 4000;
-const CHAT_COLOR: Record<ChatRole, string> = {
-  you: "#29b6f6",
-  think: "#90a4ae",
-  agent: "#66bb6a",
-};
-const CHAT_LABEL: Record<ChatRole, string> = { you: "you", think: "think", agent: "agent" };
-
-function paintChat(tx: Element, role: ChatRole | undefined, text: string): void {
-  if (role === "agent" || role === "think") fillMarkdown(tx, text);
-  else tx.textContent = text;
 }

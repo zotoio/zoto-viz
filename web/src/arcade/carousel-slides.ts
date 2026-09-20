@@ -1,4 +1,4 @@
-import { stripMarkup, type SourceHeadline, type SourceLive } from "../core/sources";
+import { parseSourceBind, sourceHeadlines, type SourceBind, type SourceHeadline, type SourceLive } from "../core/sources";
 
 export interface CarouselSlide {
   id: string;
@@ -8,35 +8,22 @@ export interface CarouselSlide {
   image?: string;
 }
 
-export function isNasaHeadline(h: Pick<SourceHeadline, "id" | "label">): boolean {
-  return /nasa/i.test(`${h.label} ${h.id}`);
-}
-
-/** NASA IOTD items only — other feeds stay off the carousel stage. */
+/** Bound source items — pictured rows stay on the stage. */
 export function headlinesFromSources(
   sources: Record<string, SourceLive> | undefined,
+  bind?: SourceBind | Record<string, string>,
 ): SourceHeadline[] {
-  const lives = Object.values(sources ?? {}).filter((l) => l && l.ok !== false && !l.paused && /nasa/i.test(`${l.label} ${l.id}`));
-  const out: SourceHeadline[] = [];
-  for (const live of lives) {
-    const label = live.label || live.id;
-    for (const [i, item] of (live.items ?? []).entries()) {
-      const title = (item.title || "").trim();
-      if (!title) continue;
-      const row: SourceHeadline = { id: `${live.id}:${i}`, label, text: title.slice(0, 240), kind: live.kind };
-      const body = item.summary ? stripMarkup(item.summary).slice(0, 400) : "";
-      if (body && body !== row.text) row.summary = body;
-      if (item.image?.startsWith("https://")) row.image = item.image.slice(0, 500);
-      out.push(row);
-    }
-  }
-  return out;
+  const parsed = bind && "titleField" in bind && typeof (bind as SourceBind).titleField === "string"
+    ? bind as SourceBind
+    : parseSourceBind(bind as Record<string, string> | undefined);
+  const next: SourceBind = { ...parsed, filter: parsed.filter && parsed.filter !== "all" ? parsed.filter : "has-image" };
+  return sourceHeadlines(sources, 16, next);
 }
 
-/** Pictured NASA headlines only. Empty when IOTD is down. */
+/** Pictured headlines only. Empty when the bound source has no stills. */
 export function carouselSlides(headlines: SourceHeadline[], cap = 12): CarouselSlide[] {
   const limit = Math.max(1, Math.min(16, cap | 0));
-  return headlines.filter((h) => isNasaHeadline(h) && !!h.image).slice(0, limit).map((h) => ({
+  return headlines.filter((h) => !!h.image).slice(0, limit).map((h) => ({
     id: h.id,
     title: h.text,
     label: h.label,
@@ -49,7 +36,7 @@ export function proxiedStill(url: string): string {
   return `/api/sources/image?url=${encodeURIComponent(url)}`;
 }
 
-/** Title plus optional IOTD blurb for the still on screen. */
+/** Title plus optional blurb for the still on screen. */
 export function carouselCaptionParts(slide: Pick<CarouselSlide, "title" | "caption">): { title: string; body: string } {
   const title = slide.title.trim();
   const body = (slide.caption ?? "").trim();
@@ -62,7 +49,7 @@ export function carouselCaption(slide: Pick<CarouselSlide, "title" | "caption">)
   return body ? `${title} — ${body}` : title;
 }
 
-/** All NASA captions on one crawl. Empty when there are no pictured stills. */
+/** All captions on one crawl. Empty when there are no pictured stills. */
 export function carouselTickerText(slides: CarouselSlide[]): string {
   return slides.map(carouselCaption).filter(Boolean).join("   ·   ");
 }

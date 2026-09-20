@@ -37,16 +37,10 @@ export function parseHnRainLook(cfg?: Record<string, string>): HnRainLook {
   return { tilt: Math.tan((deg * Math.PI) / 180), type, pace, pics };
 }
 
-export function isNasaHeadline(h: { id?: string; label?: string }): boolean {
-  return /nasa/i.test(`${h.id ?? ""} ${h.label ?? ""}`);
-}
-
 export function preferHnTitles(
   headlines: { id?: string; label?: string; text?: string }[],
 ): string[] {
-  const rest = headlines.filter((h) => !isNasaHeadline(h));
-  const hn = rest.filter((h) => /hn|hacker/i.test(`${h.id ?? ""} ${h.label ?? ""}`));
-  return (hn.length ? hn : rest).map((h) => h.text ?? "").filter(Boolean);
+  return headlines.map((h) => (h.text ?? "").trim()).filter(Boolean);
 }
 
 export function hnRainCanvasSize(doc?: Document | null): { w: number; h: number } {

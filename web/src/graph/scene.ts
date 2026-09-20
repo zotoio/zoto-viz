@@ -34,17 +34,19 @@ import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, shouldRunMic } from "../audio/want";
 import { markFrame, setFpsHint } from "../core/fps";
+import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
 import { PINCH_HOLD_MS, mouseWheelTick, pinchWheel, pointerCentroid, threeFingerZoomDelta, wheelCamMotion } from "./wheel-cam";
 import { decoHtml, EMPTY_LOOK, type AgentLook, type DecoAt } from "./deco";
 import {
   GraphFabric, edgeHighlightBright, fabricActive, graphFaces, nodeHighlightBoost,
-  resolveFabric, type FabricEdgePose, type FabricKind, type FabricNodePose,
+  resolveFabric, resolveGraphFlatten, type FabricEdgePose, type FabricKind, type FabricNodePose,
+  type GraphSpace,
 } from "./fabric";
 import { VIEW_MORPH_S, mixFade, mixShape } from "./morph";
 
-export { FABRIC_KINDS, FABRIC_OPTIONS, type FabricKind } from "./fabric";
+export { FABRIC_KINDS, FABRIC_OPTIONS, FABRIC_DICE, GRAPH_SPACE_OPTIONS, type FabricKind, type GraphSpace } from "./fabric";
 export { VIEW_MORPH_S } from "./morph";
 
 export const THEME_FADE_S = 1.8;
@@ -701,6 +703,8 @@ export interface DreamAnim {
   edgeGlowSpeed: number;
   /** draw the graph as an animated mesh (nodes + edges are the fabric) */
   graphFabric: FabricKind;
+  /** auto follows the view; plane / space force 2D or 3D layout for any plugin */
+  graphSpace: GraphSpace;
   /** simultaneous view wall: off, 2×2, 2×3, 2×4 */
   mosaic: MosaicSize;
   /** full-height hero pane for the current view; tiles keep the mosaic count */
@@ -713,6 +717,10 @@ export interface DreamAnim {
   mosaicTiles: string[];
   /** one header palette on every mosaic tile; off gives each view its own */
   mosaicSharedTheme: boolean;
+  /** When true, each mosaic pane gets a sky no other pane has. */
+  mosaicUniqueSkies?: boolean;
+  /** Per-tile host skies for a unique-sky wall (plugin shaders stay `plugin`). */
+  mosaicSkies?: Partial<Record<string, BackdropKind>>;
   /** what the camera frames: moving/busy nodes, movers only, or the whole graph as a box */
   focus: FocusMode;
   /** 0–2 traffic-spark density */
@@ -861,7 +869,8 @@ export const DEFAULT_DREAM: DreamAnim = {
   edgeGlow: "comet",
   edgeGlowAmt: 1,
   edgeGlowSpeed: 1,
-  graphFabric: "off",
+  graphFabric: "auto",
+  graphSpace: "auto",
   mosaic: "off",
   hero: "off",
   mosaicTree: null,
@@ -1388,8 +1397,7 @@ export class NetScene implements HostedView {
 
     this.onWinResize = () => this.relayout();
     window.addEventListener("resize", this.onWinResize);
-    this.ro = new ResizeObserver(() => this.relayout());
-    this.ro.observe(container);
+    this.ro = observeResize(container, () => this.relayout())!;
     const setPointer = (e: PointerEvent | MouseEvent) => {
       const r = this.inputEl.getBoundingClientRect();
       this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -1618,7 +1626,7 @@ export class NetScene implements HostedView {
 
   /** Pause / resume rendering and layout ticks (the data model keeps updating either way). */
   setActive(on: boolean): void {
-    if (on && !this.active) this.clock.getDelta(); // drop the idle time so the first frame back is not a jump
+    if (on && !this.active) this.lastFrameTs = 0; // drop the idle time so the first frame back is not a jump
     this.active = on;
     if (on && this.dreaming) this.captureDreamRest();
   }
@@ -2085,7 +2093,8 @@ export class NetScene implements HostedView {
       drag: 0.35 - 0.22 * ease, centerPull: a.centerPull,
       magnets: ROLES.map((r) => (byRole[r] ?? 0) * p),
       magnetCross: a.magnetCross, magnetRange: a.magnetRange, gravity: a.gravity, swirl: a.swirl, pulse: p,
-      spreadX: this.spreadX, spreadZ: this.spreadZ, flatten: this.mode.flatten !== false,
+      spreadX: this.spreadX, spreadZ: this.spreadZ,
+      flatten: resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace),
       moveK: Math.round(this.moveK(dt) * 1000) / 1000,
     };
     const last = this.lastLayoutParams;
@@ -3191,7 +3200,7 @@ export class NetScene implements HostedView {
 
   // ------------------------------------------------------------------ frame
 
-  private clock = new THREE.Clock();
+  private lastFrameTs = 0;
 
   private animate(ts: number): void {
     if (!this.host) this.raf = requestAnimationFrame(this.animate);
@@ -3201,7 +3210,8 @@ export class NetScene implements HostedView {
       this.resize();
       this.recoverSatelliteCamera();
     }
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const dt = this.lastFrameTs ? Math.min(0.05, (ts - this.lastFrameTs) / 1000) : 0;
+    this.lastFrameTs = ts;
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();

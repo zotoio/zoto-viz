@@ -1,5 +1,5 @@
 import type { Device, StateMsg } from "../core/types";
-import { sourceHeadlines } from "../core/sources";
+import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
 
 /** Target frame budget for viz plugin work (60 fps). */
@@ -322,9 +322,10 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
  * Build a decimated data frame from monitor state. Selection cost scales with
  * the output cap (top-K), not the full device / flow lists.
  */
-export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFrame {
+export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: SourceBind | Record<string, string>): VizDataFrame {
   const t = state.ts || Date.now() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
+  const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
   return {
     t,
     dt,
@@ -332,7 +333,7 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFr
     packets: packetSamples(state, VIZ_MAX_PACKET_SAMPLES),
     rf: rfBeacons(state, VIZ_MAX_RF_SAMPLES),
     talkers: topTalkers(state.devices, VIZ_MAX_TALKER_SAMPLES),
-    headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES).map((h) => ({
+    headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed).map((h) => ({
       id: h.id,
       label: h.label,
       text: h.text.slice(0, 240),

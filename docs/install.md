@@ -2,6 +2,8 @@
 
 Python 3.12+, Node.js 22.12+, and `tshark`. Linux also needs `iproute2`. macOS uses Homebrew for Wireshark / ChmodBPF. Optional discovery tools are listed in the README.
 
+If `nvm` is installed and `node -v` is still 18, `zoto-viz install` and `pnpm start` pick a 22.x from `~/.nvm` for that process. New terminals follow nvm’s default — pin them with `nvm alias default 22`. A Node 18 corepack cache looking for `pnpm.cjs` after a Node 22 prepare is repaired by re-running `corepack prepare pnpm@latest --activate` on Node 22.
+
 The CLI is the repo-root script `zoto-viz` (`#!/usr/bin/env python3`, no `.py`). On Windows use `zoto-viz.cmd` from the checkout, or `python zoto-viz …`.
 
 ## Automated install
@@ -42,7 +44,7 @@ Wi-Fi hopper sudo lines are Linux-only and never run automatically.
 Debian/Ubuntu:
 
 ```bash
-sudo apt install tshark arp-scan fping nmap avahi-utils nbtscan bind9-dnsutils graphviz openssl
+sudo apt install tshark iw arp-scan fping nmap avahi-utils nbtscan bind9-dnsutils graphviz openssl
 sudo usermod -aG wireshark $USER   # then log out and back in
 ```
 

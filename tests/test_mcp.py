@@ -170,8 +170,10 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
         "list_plugins", "set_plugin", "set_view", "set_agent",
         "roll_dice", "get_state", "get_traffic", "get_rf_watch", "set_rf_watch",
         "consent_plugin", "draft_plugin", "list_profiles", "apply_profile",
-        "list_memories", "add_memory", "delete_memory", "list_sources",
-        "set_source", "delete_source", "get_sdm", "list_cameras", "set_sdm",
+        "list_memories", "add_memory", "delete_memory",         "list_sources",
+        "set_source", "delete_source",
+        "list_plugin_instances", "set_plugin_instance", "delete_plugin_instance",
+        "get_sdm", "list_cameras", "set_sdm",
         "install_plugin_zip",
         "publish_local_plugin",
     } <= names

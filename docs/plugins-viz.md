@@ -106,9 +106,10 @@ budget.
 | `plugins/src/roto-proto/` | classic rotozoomer driven by protocol mix |
 | `plugins/src/blob-mesh/` | 90s metaballs from top talkers |
 | `plugins/src/star-sines/` | 3D sine-scroll starfield; pareidolia faces morph from the lanes |
-| `plugins/src/hn-rain/` | phosphor rain of Hacker News headlines |
+| `plugins/src/hn-rain/` | phosphor rain of a bound host source (HN by default; Lobsters / Guardian / Mastodon instances) |
 | `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
 | `plugins/src/stereo-gram/` | Magic Eye autostereogram — hidden torus + talker orbs |
+| `plugins/src/cypher-cic/` | Cypherpunk CIC wall — neon holodeck infograph of SYS + NET, center-hero mosaic |
 
 Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
 with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,

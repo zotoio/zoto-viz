@@ -1,4 +1,31 @@
 id: carousel
 name: Carousel
 version: 1
-hint: NASA Image of the Day stills fill the viewport. Each still slowly zooms and pans, then crossfades to the next. Large title and caption sit on the picture.
+hint: Pictured source stills fill the viewport. Each still slowly zooms and pans, then crossfades to the next. Large title and caption sit on the picture.
+description: One stills engine, many instances. Each instance picks a host source and the title / caption / image fields. NASA IOTD is the default row; APOD, Earth Observatory, Commons POTD, and Met highlights ship beside it.
+instances:
+  - id: carousel
+    name: NASA IOTD
+    hint: NASA Image of the Day stills. Ken Burns zoom, then a crossfade to the next picture.
+    source: nasa
+    filter: has-image
+  - id: apod
+    name: APOD
+    hint: NASA Astronomy Picture of the Day. Uses DEMO_KEY unless you put your own key on the apod source URL.
+    source: apod
+    filter: has-image
+  - id: earth-iotd
+    name: Earth Observatory
+    hint: NASA Earth Observatory image of the day.
+    source: earth-iotd
+    filter: has-image
+  - id: commons-potd
+    name: Commons POTD
+    hint: Wikimedia Commons picture of the day.
+    source: commons-potd
+    filter: has-image
+  - id: met
+    name: Met highlights
+    hint: Metropolitan Museum open-access highlights. The monitor expands object ids into stills.
+    source: met
+    filter: has-image

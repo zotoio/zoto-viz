@@ -143,6 +143,9 @@ describe("modes", () => {
     expect(allModes().map((m) => m.label)).toEqual(["Pulse", "LAN heat"]);
     expect(allModes().some((m) => m.id === "topology")).toBe(false);
     expect(pluginMenuRows([a, b, c])).toHaveLength(2);
+    const nasa = catalogRow("carousel", "NASA IOTD", { id: "plugin:carousel" });
+    const apod = catalogRow("carousel", "APOD", { id: "plugin:carousel:apod" });
+    expect(pluginMenuRows([nasa, apod]).map((m) => m.id)).toEqual(["plugin:carousel", "plugin:carousel:apod"]);
     expect(graphModes().every((m) => !m.standalone)).toBe(true);
   });
 

@@ -20,6 +20,7 @@ import * as THREE from "three";
 import type { SoftRect } from "./software-draw";
 import { cssHex } from "./software-draw";
 import { probeWebGL } from "./webgl";
+import { observeResize } from "../core/resize";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
@@ -114,8 +115,7 @@ export class RenderHost {
     });
     this.attach();
     this.syncSize();
-    this.ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => { this.dirty = true; }) : null;
-    this.ro?.observe(wall);
+    this.ro = observeResize(wall, () => { this.dirty = true; });
     this.frame = (ts: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(this.frame);

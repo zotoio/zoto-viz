@@ -34,8 +34,8 @@ def test_model_rejects_junk() -> None:
     assert agent._model({}) == "gemma4"
     assert agent._backend({"backend": "cursor"}) == "cursor"
     assert agent._backend({}) == "ollama"
-    assert agent._model({"backend": "cursor", "model": "grok-4.5"}) == "grok-4.5"
-    assert agent._model({"backend": "cursor", "model": "../../x"}) == "grok-4.5"
+    assert agent._model({"backend": "cursor", "model": "grok-4.6"}) == "grok-4.6"
+    assert agent._model({"backend": "cursor", "model": "../../x"}) == "grok-4.6"
 
 
 def test_flatten_prompt_for_cursor() -> None:
@@ -49,6 +49,22 @@ def test_flatten_prompt_for_cursor() -> None:
     assert "User: who is loud" in prompt
     assert "Assistant: nest" in prompt
     assert prompt.endswith("User: again")
+
+
+def test_cursor_operator_turn_is_current_request(monkeypatch) -> None:
+    monkeypatch.setattr(agent.live, "prefix", lambda: "Temper hush.")
+    identity, turn = agent.cursor_operator_turn(
+        snap={"n": 3},
+        user="list the loud hosts",
+        view_note="\nHUD: waves",
+        control=True,
+    )
+    assert "AI Control is ON" in identity
+    assert "Use zoto-viz MCP tools" in identity
+    assert "list the loud hosts" in turn
+    assert "HUD: waves" in turn
+    assert "Assistant:" not in turn
+    assert "User: list" not in turn
 
 
 def test_match_model_expands_short_tag() -> None:
@@ -240,49 +256,24 @@ def test_system_drafts_unified_plugin_tree() -> None:
     assert "eases palettes and physics" in prompt
     assert "Facts window" in prompt
     assert "Chain of thought" in prompt
-    assert "waits for yes" in prompt
-    assert "do not ask again" in prompt
+    assert "do not restate the request and wait for yes" in prompt
+    assert "You want me to" not in prompt
+    assert "GENERATE new capabilities" in prompt
+    assert "mosaicUniqueSkies" in prompt
+    assert "set_source" in prompt
+    assert "Recent chat" in prompt
 
 
-def test_confirm_yes_and_revision() -> None:
-    assert agent.is_confirm_yes("yes")
-    assert agent.is_confirm_yes("Yes!")
-    assert agent.is_confirm_yes("yeah")
-    assert agent.is_confirm_yes("that's right")
-    assert agent.is_confirm_yes("go ahead")
-    assert not agent.is_confirm_yes("yes please inspect the nest")
-    assert agent.confirm_revision("no") == ""
-    assert agent.confirm_revision("no, make it a carousel") == "make it a carousel"
-    assert agent.confirm_revision("who is loud") is None
-    assert "What should I do" in agent.confirm_reply("")
-    assert "Is that correct?" in agent.confirm_reply("show NASA stills")
-    assert "show NASA stills" in agent.confirm_reply("show NASA stills")
-
-
-def test_confirm_turn_no_clears_pending(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
-    _, canned = agent.confirm_turn("list talkers")
-    assert canned and "list talkers" in canned
-    assert memory.pending_task() == "list talkers"
-    _, canned = agent.confirm_turn("no")
-    assert canned and "instead" in canned
-    assert memory.pending_task() == ""
-    _, canned = agent.confirm_turn("yes")
-    assert canned and "What should I do" in canned
-    assert memory.pending_task() == ""
-    _, canned = agent.confirm_turn("hi", poll=True)
-    assert canned is None
-
-
-def test_api_chat_confirms_then_waits_for_yes(tmp_path, monkeypatch) -> None:
+def test_api_chat_sends_user_line(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(memory, "agent_dir", lambda: tmp_path / "agent")
     n = {"i": 0}
 
     async def fake_pipe(s, base, payload, resp, hold_overflow=True):
         n["i"] += 1
         last = str((payload.get("messages") or [{}])[-1].get("content") or "")
-        assert "Do the work now" in last
-        assert "who is the nest" in last
+        assert "who is loud on the LAN" in last
+        assert "Do the work now" not in last
+        assert "Is that correct?" not in last
         return bytearray(b'{"message":{"content":"the nest is loud"}}\n'), True, False
 
     class Tags:
@@ -323,23 +314,10 @@ def test_api_chat_confirms_then_waits_for_yes(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM())
     monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
     monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
-    first = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is loud on the LAN"}]})))
-    assert first.status == 200
-    assert n["i"] == 0
-    assert memory.pending_task() == "who is loud on the LAN"
-    ask = json.loads(first.body.split(b"\n")[0].decode())
-    assert "who is loud on the LAN" in ask["message"]["content"]
-    assert "Is that correct?" in ask["message"]["content"]
-    assert "Say yes" in ask["message"]["content"]
-    no = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "no, who is the nest"}]})))
-    assert n["i"] == 0
-    assert memory.pending_task() == "who is the nest"
-    assert "who is the nest" in json.loads(no.body.split(b"\n")[0].decode())["message"]["content"]
-    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "yes"}]})))
-    assert n["i"] == 1
-    assert memory.pending_task() == ""
-    assert memory.messages()[-1]["content"] == "the nest is loud"
+    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is loud on the LAN"}]})))
     assert out.status == 200
+    assert n["i"] == 1
+    assert memory.messages()[-1]["content"] == "the nest is loud"
 
 
 def test_api_draft_plugin(tmp_path, monkeypatch) -> None:
@@ -668,10 +646,7 @@ def test_api_chat_retries_overflow(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM())
     monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
     monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
-    parked = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "hi"}]})))
-    assert parked.status == 200
-    assert n["i"] == 0
-    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "yes"}]})))
+    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "hi"}]})))
     assert n["i"] == 2
     assert memory.messages()[-1]["content"] == "ok later"
     assert out.status == 200
@@ -747,10 +722,7 @@ def test_api_chat_nudges_incomplete(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM())
     monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
     monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
-    parked = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is the nest?"}]})))
-    assert parked.status == 200
-    assert n["i"] == 0
-    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "yes"}]})))
+    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is the nest?"}]})))
     assert n["i"] == 2
     assert any("Stop reasoning" in s for s in seen)
     assert memory.messages()[-1]["content"] == "kitchen speaker"
@@ -805,10 +777,7 @@ def test_api_chat_polls_until_reply(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM())
     monkeypatch.setattr(agent, "_pipe_ollama", fake_pipe)
     monkeypatch.setattr(agent.web, "StreamResponse", FakeResp)
-    parked = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is the nest?"}]})))
-    assert parked.status == 200
-    assert n["i"] == 0
-    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "yes"}]})))
+    out = asyncio.run(agent.api_chat(Req({"messages": [{"role": "user", "content": "who is the nest?"}]})))
     assert n["i"] == 3
     assert memory.messages()[-1]["content"] == "the nest is the kitchen speaker"
     assert out.status == 200

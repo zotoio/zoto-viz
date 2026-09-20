@@ -23,7 +23,7 @@ export function preferHnStillTitles(headlines: HnRainStillHeadline[]): HnRainSti
   return out;
 }
 
-/** Composer 2.5 only — NASA IOTD enclosures stay on the carousel plugin. */
+/** Composer 2.5 only — pictured source enclosures stay on the carousel plugin. */
 export function hnRainStillSrc(title: string): string {
   return `/api/plugins/hn-rain/still?title=${encodeURIComponent(title.slice(0, 240))}`;
 }

@@ -85,6 +85,10 @@ def test_sanitize_drops_junk() -> None:
         "mosaicMaxId": "plugin:talkers",
         "mosaicTiles": ["plugin:talkers", "plugin:topology", "plugin:talkers"],
         "mosaicSharedTheme": True,
+        "mosaicUniqueSkies": True,
+        "mosaicSkies": {"plugin:talkers": "fire", "plugin:topology": "ocean", "bad": "zzz"},
+        "graphFabric": "crystals",
+        "graphSpace": "space",
         "mosaicTree": {
             "type": "split", "dir": "h", "ratio": 0.9,
             "a": {"type": "leaf", "id": "plugin:talkers"},
@@ -94,6 +98,10 @@ def test_sanitize_drops_junk() -> None:
     assert wall["mosaicMaxId"] == "plugin:talkers"
     assert wall["mosaicTiles"] == ["plugin:talkers", "plugin:topology"]
     assert wall["mosaicSharedTheme"] is True
+    assert wall["mosaicUniqueSkies"] is True
+    assert wall["mosaicSkies"] == {"plugin:talkers": "fire", "plugin:topology": "ocean"}
+    assert wall["graphFabric"] == "crystals"
+    assert wall["graphSpace"] == "space"
     assert wall["mosaicTree"]["ratio"] == 0.88
     devices = live.sanitize_patch({"camera": "auto", "mic": "off", "theme": "ember"})
     assert devices["theme"] == "ember"

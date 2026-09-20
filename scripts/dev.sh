@@ -4,6 +4,28 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUN="$ROOT/.run"
+
+# nvm default is often 18; the UI needs 22.12+. Prefer an already-installed 22.
+prefer_node22() {
+  local raw major minor
+  if command -v node >/dev/null 2>&1; then
+    raw="$(node -v 2>/dev/null || true)"
+    raw="${raw#v}"
+    major="${raw%%.*}"
+    minor="${raw#*.}"
+    minor="${minor%%.*}"
+    if [[ "${major:-0}" -gt 22 || ( "${major:-0}" -eq 22 && "${minor:-0}" -ge 12 ) ]]; then
+      return 0
+    fi
+  fi
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh"
+    nvm use 22 >/dev/null 2>&1 || true
+  fi
+}
+prefer_node22
 BACKEND_PORT="${ZOTO_VIZ_PORT:-7020}"
 FRONTEND_PORT="${ZOTO_VIZ_FRONTEND_PORT:-5173}"
 BACKEND_BIND="${ZOTO_VIZ_BIND:-127.0.0.1}"

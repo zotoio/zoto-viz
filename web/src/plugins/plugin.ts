@@ -16,6 +16,13 @@ import {
   type ViewMode,
 } from "../core/modes";
 import {
+  configStoreId,
+  expandPluginInstances,
+  parsePluginId,
+  pluginViewId,
+} from "./instances";
+import type { PluginInstance } from "./instances";
+import {
   engineDispatch,
   mergeOverlayPins,
   partitionCatalog,
@@ -25,7 +32,7 @@ import {
 } from "./plugin-visualisation";
 import type { GNode, DreamAnim, EdgeGlow, AudioDrive, HeroPos, MosaicSize, ThemeCycle } from "../graph/scene";
 import { parseMosaicTiles } from "../graph/mosaic-layout";
-import { parseFabric, type FabricKind } from "../graph/fabric";
+import { parseFabric, type FabricKind, type GraphSpace } from "../graph/fabric";
 import { guardReadableAnim } from "../graph/readable";
 import type { BackdropKind } from "../graph/backdrop";
 import type { FloorShape } from "../graph/floor";
@@ -96,11 +103,13 @@ export interface PluginLook {
   edgeGlowAmt?: number;
   edgeGlowSpeed?: number;
   graphFabric?: FabricKind | boolean;
+  graphSpace?: GraphSpace;
   /** Open a mosaic wall of other catalog views when this plugin is selected. */
   mosaic?: MosaicSize;
   hero?: HeroPos;
   mosaicTiles?: string[];
   mosaicSharedTheme?: boolean;
+  mosaicUniqueSkies?: boolean;
 }
 
 export type PluginWall = {
@@ -128,6 +137,26 @@ export function pluginWallOwns(look: PluginLook | null | undefined, modeId: stri
   return !!wall && wall.mosaicTiles.includes(modeId);
 }
 
+/** True when this catalog row ships a plugin-sky fragment. */
+export function pluginHasSky(spec: { has_sky_shader?: boolean; shader_sha256?: string; look?: PluginLook } | null | undefined): boolean {
+  if (!spec) return false;
+  const backdrop = spec.look?.backdrop;
+  return (spec.has_sky_shader === true || !!spec.shader_sha256) && (backdrop === undefined || backdrop === "plugin");
+}
+
+/**
+ * Wall views keep extras on their own look, but the selected wall row's
+ * plugin sky wins over a sky-less hero tile (Syscon / Cypher CIC).
+ */
+export function pickPluginSkySpec<T extends { has_sky_shader?: boolean; shader_sha256?: string; look?: PluginLook }>(
+  selected: T | null,
+  pane: T | null,
+): T | null {
+  if (pluginHasSky(selected)) return selected;
+  if (pluginHasSky(pane)) return pane;
+  return pane ?? selected;
+}
+
 /** Catalog views whose look pins a multi-tile mosaic (Syscon and future walls). */
 export function catalogPluginWalls(): { modeId: string; wall: PluginWall }[] {
   const out: { modeId: string; wall: PluginWall }[] = [];
@@ -147,6 +176,9 @@ export interface PluginView {
   name: string;
   version: number;
   hint?: string;
+  /** Catalog row when this spec was expanded from plugin.yml instances. */
+  instanceId?: string;
+  instances?: PluginInstance[];
   /** Absent when the zip has no visualisation.yml and plugin.yml ships no engine. */
   engine?: PluginEngine;
   base?: string;
@@ -180,7 +212,7 @@ const LOOK_ANIM_KEYS = [
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
-  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric",
+  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric", "graphSpace",
 ] as const satisfies readonly (keyof PluginLook)[];
 
 let looks = new Map<string, PluginLook>();
@@ -211,9 +243,7 @@ export interface PluginList {
   pythonService?: boolean;
 }
 
-export const pluginViewId = (id: string) => `plugin:${id}`;
-export const parsePluginId = (modeId: string): string | null =>
-  modeId.startsWith("plugin:") ? modeId.slice("plugin:".length) : null;
+export { configStoreId, parsePluginId, parsePluginInstance, pluginViewId } from "./instances";
 
 /** Executable plugins (TypeScript, Python, and/or a custom sky shader) need a source-review consent. YAML-only views skip it. */
 export function pluginNeedsReview(spec: PluginView): boolean {
@@ -261,6 +291,7 @@ export function vizContractFor(spec: PluginView | null | undefined): VizPluginCo
 }
 
 const storeKey = (id: string, key: string) => `zoto-viz.plugin.${id}.${key}`;
+export type { PluginInstance } from "./instances";
 
 export function fieldDefault(f: PluginField): string {
   if (f.type === "boolean") return f.default === true || f.default === "true" || f.default === "1" ? "1" : "0";
@@ -272,11 +303,19 @@ export function fieldDefault(f: PluginField): string {
 
 export function loadPluginConfig(spec: PluginView, fields = spec.config): Record<string, string> {
   const out: Record<string, string> = {};
-  const viewId = pluginViewId(spec.id);
+  const storeId = configStoreId(spec);
+  const viewId = pluginViewId(spec.id, spec.instanceId);
   for (const f of fields ?? []) {
-    const saved = localStorage.getItem(storeKey(spec.id, f.key));
+    const saved = localStorage.getItem(storeKey(storeId, f.key));
     if (saved !== null) {
       out[f.key] = saved;
+      continue;
+    }
+    const pack = spec.instanceId && spec.instanceId !== spec.id
+      ? localStorage.getItem(storeKey(spec.id, f.key))
+      : null;
+    if (pack !== null) {
+      out[f.key] = pack;
       continue;
     }
     const legacy = localStorage.getItem(`zoto-viz.mode.${viewId}.${f.key}`);
@@ -290,7 +329,8 @@ export function writePluginConfig(id: string, values: Record<string, string>): v
 }
 
 export function collectPluginConfigs(specs: PluginView[]): Record<string, Record<string, string>> {
-  return Object.fromEntries(specs.map((s) => [s.id, loadPluginConfig(s, pluginViewKnobs(s))]));
+  const rows = specs.flatMap((s) => expandPluginInstances(s));
+  return Object.fromEntries(rows.map((s) => [configStoreId(s), loadPluginConfig(s, pluginViewKnobs(s))]));
 }
 
 export function applyPluginConfigs(raw: Record<string, Record<string, string>> | undefined): void {
@@ -329,7 +369,7 @@ function compileGraph(spec: PluginView): ViewMode {
 
   const mode: ViewMode = {
     ...base,
-    id: pluginViewId(spec.id),
+    id: pluginViewId(spec.id, spec.instanceId),
     label: spec.name,
     hint: spec.hint || base.hint,
     pluginId: spec.id,
@@ -341,7 +381,7 @@ function compileGraph(spec: PluginView): ViewMode {
     flatten: style.flatten ?? base.flatten,
     fabric: (() => {
       const f = parseFabric(style.fabric);
-      return f && f !== "off" ? f : undefined;
+      return f && f !== "off" && f !== "auto" ? f : undefined;
     })(),
     prepare(ctx) {
       maxBytes = 1;
@@ -432,7 +472,7 @@ function compileArcade(spec: PluginView): ViewMode {
   const base = hostEngine(engine) ?? ARCADE_ENGINES[0]!;
   return {
     ...base,
-    id: pluginViewId(spec.id),
+    id: pluginViewId(spec.id, spec.instanceId),
     label: spec.name,
     hint: spec.hint || base.hint,
     pluginId: spec.id,
@@ -519,12 +559,14 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
   for (const spec of rows) {
     const extra = overlays.get(spec.id);
     const merged = extra ? mergeOverlayPins(spec, extra) : spec;
-    if (merged.look) nextLooks.set(pluginViewId(merged.id), merged.look);
-    if (!merged.engine) continue;
-    try {
-      modes.push(compilePlugin(merged));
-    } catch (e) {
-      console.warn("zoto-viz plugin:", merged.file || merged.id, e);
+    for (const view of expandPluginInstances(merged)) {
+      if (view.look) nextLooks.set(pluginViewId(view.id, view.instanceId), view.look);
+      if (!view.engine) continue;
+      try {
+        modes.push(compilePlugin(view));
+      } catch (e) {
+        console.warn("zoto-viz plugin:", view.file || view.id, e);
+      }
     }
   }
   looks = nextLooks;

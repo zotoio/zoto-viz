@@ -1,8 +1,25 @@
 id: hn-rain
 name: HN Rain
 version: 1
-hint: Phosphor rain of Hacker News headlines plus a Composer still for each title.
-description: Matrix-style digital rain whose glyph stream is packed from Hacker News (or other host source) headlines. Packet field and audio change fall speed.
+hint: Phosphor rain of host-source headlines plus a Composer still for each title.
+description: Matrix-style digital rain packed from a host source (Hacker News by default). Instances retarget Lobsters, Guardian world, or a Mastodon tag without a second plugin tree.
+instances:
+  - id: hn-rain
+    name: HN Rain
+    hint: Phosphor rain of Hacker News headlines plus a Composer still for each title.
+    source: hn
+  - id: lobsters
+    name: Lobsters Rain
+    hint: Phosphor rain of Lobsters stories.
+    source: lobsters
+  - id: guardian
+    name: Guardian Rain
+    hint: Phosphor rain of Guardian world headlines.
+    source: guardian
+  - id: mastodon
+    name: Mastodon Rain
+    hint: Phosphor rain of Mastodon #space posts.
+    source: mastodon
 capabilities:
   - viz.read
   - viz.write

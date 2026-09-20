@@ -275,16 +275,17 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
 .mosaic-scene canvas { display: block; background: var(--scene-bg, var(--bg)); }
 .mosaic-chrome {
   position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3;
-  display: flex; align-items: center; gap: 6px; pointer-events: none;
+  display: flex; align-items: center; gap: 6px;
+  pointer-events: auto; cursor: grab;
 }
 .mosaic-cap {
   height: 22px; padding: 0 8px; margin: 0;
   background: var(--overlay); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
   font: 600 11px/22px inherit; letter-spacing: 0.04em; cursor: grab;
-  pointer-events: auto; user-select: none;
+  user-select: none;
 }
 .mosaic-pane.focus .mosaic-cap { border-color: var(--accent); color: var(--accent); }
-.mosaic-tools { margin-left: auto; display: flex; gap: 4px; pointer-events: auto; }
+.mosaic-tools { margin-left: auto; display: flex; gap: 4px; cursor: default; }
 .mosaic-tool {
   height: 22px; padding: 0 7px; margin: 0;
   background: var(--overlay); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
@@ -308,7 +309,6 @@ body.mosaic-dragging { cursor: grabbing; }
 body.mosaic #scene, body.mosaic .arcade { position: absolute; inset: 0; }
 body.mosaic .arcade.mosaic-live { display: block; }
 body.mosaic.arcade #scene { visibility: visible; }
-body.mosaic #livefeed { display: none; }
 
 /* ------------------------------------------------------------------ header: two rows */
 
@@ -603,8 +603,15 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
   box-shadow: 0 12px 32px var(--shadow); backdrop-filter: blur(10px);
   animation: menu-in 0.12s ease-out;
 }
-.settings-pop.drawer { flex-direction: row; align-items: stretch; }
-.settings-pop.drawer:not([hidden]) { display: flex; }
+.settings-pop.drawer { align-items: stretch; }
+.settings-pop.drawer:not([hidden]) {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  grid-template-rows: auto 1fr;
+}
+.settings-pop.drawer > .float-handle { grid-column: 1 / -1; }
+.settings-pop.drawer > .s-nav { grid-row: 2; grid-column: 1; }
+.settings-pop.drawer > .sbody { grid-row: 2; grid-column: 2; min-height: 0; }
 .settings-pop[hidden] { display: none; }
 .settings-pop .s-nav {
   display: flex; flex-direction: column; gap: 2px; padding: 8px 6px; width: 118px; flex: 0 0 118px;
@@ -1129,36 +1136,62 @@ body[data-chrome="right"] #foot { max-width: calc(100vw - var(--bar-w) - 360px);
 
 /* ------------------------------------------------------------------ live decoded feed (right of the graph) */
 
-#livefeed {
+#livefeed, #livechat {
   position: fixed; top: calc(var(--bar-h) + 12px); right: 12px; z-index: 6;
   width: min(300px, 30vw); max-height: calc(100vh - var(--bar-h) - 72px);
   display: flex; flex-direction: column; gap: 8px;
-  pointer-events: none;
+  pointer-events: auto;
   font-size: var(--feed-size, 12px); line-height: 1.35;
   text-shadow: var(--label-shadow);
 }
-#livefeed.transcript {
+#livechat, #livefeed.transcript {
   width: min(420px, 38vw);
   text-shadow: none;
 }
-#livefeed.chat-log {
+#livechat, #livefeed.chat-log {
   height: calc(100vh - var(--bar-h) - 72px);
 }
-#livefeed[hidden] { display: none; }
-body.arcade #livefeed { display: none; }
-body.arcade:has(#pacman:not([hidden])) #livefeed { display: block; }
+#livefeed[hidden], #livechat[hidden] { display: none; }
 body.arcade:has(#carousel:not([hidden])) #foot { display: none; }
-body.panel-open:not(.panel-wide) #livefeed { right: 344px; }
-body.panel-wide #livefeed { right: calc(24px + min(680px, 100vw - 24px)); }
+body.panel-open:not(.panel-wide) #livefeed,
+body.panel-open:not(.panel-wide) #livechat { right: 344px; }
+body.panel-wide #livefeed,
+body.panel-wide #livechat { right: calc(24px + min(680px, 100vw - 24px)); }
+body.debug-open:not(.panel-open) #livefeed,
+body.debug-open:not(.panel-open) #livechat { right: 456px; }
+body.debug-open.panel-open:not(.panel-wide) #livefeed,
+body.debug-open.panel-open:not(.panel-wide) #livechat { right: 788px; }
 body[data-chrome="left"] #livefeed,
-body[data-chrome="right"] #livefeed { top: 12px; max-height: calc(100vh - 84px); }
+body[data-chrome="left"] #livechat,
+body[data-chrome="right"] #livefeed,
+body[data-chrome="right"] #livechat { top: 12px; max-height: calc(100vh - 84px); }
+body[data-chrome="left"] #livechat,
+body[data-chrome="right"] #livechat,
 body[data-chrome="left"] #livefeed.chat-log,
 body[data-chrome="right"] #livefeed.chat-log { height: calc(100vh - 84px); }
-body[data-chrome="right"] #livefeed { right: auto; left: 12px; }
-body[data-chrome="right"].panel-open:not(.panel-wide) #livefeed { left: 344px; right: auto; }
-body[data-chrome="right"].panel-wide #livefeed { left: calc(24px + min(680px, 100vw - var(--bar-w) - 24px)); right: auto; }
+body[data-chrome="right"] #livefeed,
+body[data-chrome="right"] #livechat { right: auto; left: 12px; }
+body[data-chrome="right"].panel-open:not(.panel-wide) #livefeed,
+body[data-chrome="right"].panel-open:not(.panel-wide) #livechat { left: 344px; right: auto; }
+body[data-chrome="right"].panel-wide #livefeed,
+body[data-chrome="right"].panel-wide #livechat { left: calc(24px + min(680px, 100vw - var(--bar-w) - 24px)); right: auto; }
+body[data-chrome="right"].debug-open:not(.panel-open) #livefeed,
+body[data-chrome="right"].debug-open:not(.panel-open) #livechat { left: 456px; right: auto; }
+body[data-chrome="right"].debug-open.panel-open:not(.panel-wide) #livefeed,
+body[data-chrome="right"].debug-open.panel-open:not(.panel-wide) #livechat { left: 788px; right: auto; }
+body.feed-open.chat-open #livefeed:not(.floated) {
+  max-height: calc(42vh - 12px);
+  height: auto;
+}
+body.feed-open.chat-open #livechat:not(.floated) {
+  top: auto;
+  bottom: 72px;
+  height: calc(48vh - 24px);
+  max-height: none;
+}
 @media (max-width: 1100px) {
-  body.panel-wide #livefeed { display: none; }
+  body.panel-wide #livefeed:not(.floated),
+  body.panel-wide #livechat:not(.floated) { right: 12px; }
 }
 .livefeed .feed-bars {
   height: 160px; pointer-events: none;
@@ -1382,3 +1415,108 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
 .viz-hud-swap .field-btn .val { font-size: 10px; }
 body.mosaic .viz-hud { display: none; }
 body.arcade .viz-hud { display: none; }
+
+/* ------------------------------------------------------------------ debug panel (header toggle / key B) */
+
+#debuglog {
+  position: fixed; top: calc(var(--bar-h) + 12px); right: 12px; z-index: 6;
+  width: 432px; max-height: calc(100vh - var(--bar-h) - 60px);
+  display: flex; flex-direction: column; min-height: 0;
+  pointer-events: auto;
+  color: var(--fg);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 14px; backdrop-filter: blur(6px); box-shadow: 0 12px 32px var(--shadow);
+}
+#debuglog[hidden] { display: none; }
+#debuglog h2 { margin: 0 0 4px; font-size: 15px; padding-right: 20px; }
+#debuglog .sub { color: var(--muted); margin-bottom: 8px; }
+#debuglog h3 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+#debuglog .close { position: absolute; top: 8px; right: 10px; color: var(--muted); cursor: pointer; }
+body[data-chrome="left"] #debuglog,
+body[data-chrome="right"] #debuglog { top: 12px; max-height: calc(100vh - 24px); }
+body[data-chrome="right"] #debuglog { right: auto; left: 12px; }
+body.panel-open:not([data-chrome="right"]) #debuglog { right: 344px; }
+body[data-chrome="right"].panel-open #debuglog { left: 344px; }
+body.panel-wide #debuglog {
+  top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 28vh;
+}
+.debuglog-ticker {
+  min-height: 0; overflow-x: hidden; overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px; line-height: 1.4;
+  scrollbar-width: thin;
+}
+.debuglog-cursor { flex: 0 1 28%; max-height: 28%; }
+.debuglog-monitor { flex: 1 1 auto; }
+.debuglog-line { display: flex; gap: 10px; white-space: pre-wrap; word-break: break-word; }
+.debuglog-line .t { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.debuglog-line .tx { min-width: 0; }
+
+/* ------------------------------------------------------------------ floating panels (feed / debug / settings) */
+
+.float-panel { cursor: grab; touch-action: none; }
+.float-panel .feed-ticker,
+.float-panel .feed-ask,
+.float-panel .debuglog-ticker,
+.float-panel .sbody,
+.float-panel .s-nav-btn { cursor: auto; touch-action: auto; }
+.float-handle {
+  pointer-events: auto; cursor: grab; user-select: none; touch-action: none;
+  flex: 0 0 auto;
+  height: 22px; padding: 0 8px; margin: 0;
+  background: var(--overlay, var(--chip)); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px;
+  font: 600 11px/22px inherit; letter-spacing: 0.04em;
+}
+#debuglog h2.float-handle {
+  height: auto; margin: 0 20px 4px 0; padding: 0;
+  background: none; border: 0; font-size: 15px; line-height: 1.2;
+}
+.settings-pop .float-handle {
+  margin: 6px 8px 0; border-radius: 6px;
+}
+.float-resize {
+  position: absolute; right: 3px; bottom: 3px; z-index: 4;
+  width: 14px; height: 14px; pointer-events: auto; touch-action: none; cursor: nwse-resize;
+  background:
+    linear-gradient(135deg, transparent 50%, color-mix(in srgb, var(--fg) 45%, transparent) 50%);
+  border-radius: 2px;
+}
+.dragging, .dragging .float-handle { cursor: grabbing; }
+.resizing { cursor: nwse-resize; }
+#livefeed .float-handle,
+#livefeed .float-resize,
+#livechat .float-handle,
+#livechat .float-resize { pointer-events: auto; }
+#livefeed .float-handle,
+#livechat .float-handle {
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 5;
+  height: 28px;
+  line-height: 26px;
+  cursor: grab;
+}
+#livefeed.floated .float-resize,
+#livechat.floated .float-resize {
+  z-index: 6;
+}
+.floated {
+  left: var(--float-x, 12px) !important;
+  top: var(--float-y, 12px) !important;
+  right: auto !important;
+  bottom: auto !important;
+  box-sizing: border-box;
+}
+.floated.sized {
+  width: var(--float-w) !important;
+  height: var(--float-h) !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+#livefeed.floated,
+#livechat.floated {
+  overflow: visible;
+}

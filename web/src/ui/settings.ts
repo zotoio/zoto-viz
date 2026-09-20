@@ -1,16 +1,18 @@
 import { apiFetch } from "../core/http";
 import type { SourceKind, SourceLive, SourceRow } from "../core/sources";
 import { displayName, type Device, usefulName } from "../core/types";
+import { applyFloatRect, bindFloatPanel, readFloatRect } from "./float-drag";
 import { ColorField, GroupedChips, pinFlyout, Slider, Toggle, unpinFlyout } from "./ui";
 import { MAGNET_FIELDS } from "../graph/physics";
 import type { PluginField } from "../core/modes";
 import { assignTiles, equalize, leafIds, parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
-import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FabricKind, type FocusMode, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
+import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FabricKind, type FocusMode, type GraphSpace, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
 import { BACKDROP_OPTIONS, SKY_GROUP_TABS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
 import { invalidateSkyRecipe } from "../graph/sky-ai";
 import { FLOOR_SHAPES, type FloorShape } from "../graph/floor";
 import { themeById, toCssHex } from "../core/themes";
-import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, FEED_SOURCES, type FeedConfig, type FeedLayout, type FeedScope, type FeedSource } from "./feed";
+import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, FEED_SOURCES, migrateFeedChatSplit, type FeedConfig, type FeedLayout, type FeedScope, type FeedSource } from "./feed";
+import { DEFAULT_CHAT, type ChatConfig } from "./chat";
 import { liveCam } from "../camera/livecam";
 import { type CamPolicy } from "../camera/want";
 import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
@@ -34,6 +36,7 @@ const PANES: { id: string; label: string }[] = [
   { id: "camera", label: "Camera" },
   { id: "audio", label: "Audio" },
   { id: "feed", label: "Feed" },
+  { id: "chat", label: "Chat" },
   { id: "sources", label: "Sources" },
   { id: "privacy", label: "Privacy" },
   { id: "agent", label: "Agent" },
@@ -85,8 +88,10 @@ export class Settings {
   private activeCount = 0;
   private anim: DreamAnim;
   private feed: FeedConfig;
+  private chat: ChatConfig;
   private onAnimChange: (a: DreamAnim) => void = () => {};
   private onFeedChange: (c: FeedConfig) => void = () => {};
+  private onChatChange: (c: ChatConfig) => void = () => {};
   private animUi: {
     follow: Toggle; cycle: Toggle; randomize: Toggle;
     skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider; skyAi: Slider;
@@ -106,6 +111,7 @@ export class Settings {
     setFocus: (v: FocusMode) => void;
     setGlow: (v: EdgeGlow) => void;
     setFabric: (v: FabricKind) => void;
+    setSpace: (v: GraphSpace) => void;
     setMod: (key: "background" | "sky" | "floor" | "camera" | "nodes" | "skies" | "physics" | "particles", on: boolean) => void;
     skyPulse: Toggle; floorPulse: Toggle; bgPulse: Toggle;
     labels: Slider; shown: Slider; nodes: Slider; edges: Slider;
@@ -121,11 +127,11 @@ export class Settings {
     on: Toggle; modulate: Toggle;
     setLayout: (v: FeedLayout) => void;
     setScope: (v: FeedScope) => void;
-    setSource: (v: FeedSource) => void;
     dens: Slider;
     size: Slider;
   } | null = null;
-  private sourcesUi: { list: HTMLDivElement; include: Toggle } | null = null;
+  private chatUi: { on: Toggle; size: Slider } | null = null;
+  private sourcesUi: { list: HTMLDivElement; include: Toggle; instances: HTMLDivElement } | null = null;
   private readonly nav = document.createElement("nav");
   private readonly paneEls = new Map<string, HTMLDivElement>();
   private readonly navBtns = new Map<string, HTMLButtonElement>();
@@ -152,6 +158,7 @@ export class Settings {
   onCamPolicy?: (p: CamPolicy) => void;
   onMicPolicy?: (p: MicPolicy) => void;
   onPluginChange?: (id: string, values: Record<string, string>) => void;
+  onInstancesChange?: () => void;
   onClose?: () => void;
   onDice?: () => void;
   onDiceChange?: (c: DiceConfig) => void;
@@ -200,11 +207,18 @@ export class Settings {
       this.navBtns.set(p.id, b);
       this.nav.appendChild(b);
     }
-    this.pop.append(this.nav, this.body);
+    const handle = document.createElement("div");
+    handle.textContent = "settings";
+    this.pop.append(handle, this.nav, this.body);
     this.el.append(this.btn, this.pop);
+    bindFloatPanel(this.pop, handle, "settings", { pin: () => this.pinFloat(), min: { w: 360, h: 280 } });
 
     this.anim = loadAnim(cfg.storePrefix);
     this.feed = loadFeed(cfg.storePrefix);
+    this.chat = loadChat(cfg.storePrefix);
+    const split = migrateFeedChatSplit(cfg.storePrefix);
+    if (split.source) this.feed.source = split.source;
+    if (split.chatOn) this.chat.on = true;
     this.dice = loadDice(cfg.storePrefix);
     this.buildDevices();
     this.buildFilters();
@@ -442,6 +456,7 @@ export class Settings {
 
   get animSettings(): DreamAnim { return this.anim; }
   get feedSettings(): FeedConfig { return this.feed; }
+  get chatSettings(): ChatConfig { return this.chat; }
   get diceSettings(): DiceConfig { return this.dice; }
 
   private buildDice(): void {
@@ -824,7 +839,7 @@ export class Settings {
     });
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
-    mosaicHint.textContent = "Corner look / max / close on each tile. One theme paints every tile with the header palette. Drag a caption to swap. Drag the gutters to resize (saved). Close expands the neighbour.";
+    mosaicHint.textContent = "Corner look / max / close on each tile. One theme paints every tile with the header palette. Drag a tile onto another to swap views (caption, chrome, or drag the view across). Alt-drag picks the tile up. Drag the gutters to resize (saved). Close expands the neighbour.";
     const mosaicBtns = document.createElement("div");
     mosaicBtns.className = "sec-links";
     mosaicBtns.append(resetBtn, equalBtn);
@@ -861,6 +876,7 @@ export class Settings {
     });
     const glow = chips(EDGE_GLOWS, this.anim.edgeGlow, (v) => { this.anim.edgeGlow = v; this.persistAnim(); });
     const fabric = chips(FABRIC_OPTIONS, this.anim.graphFabric, (v) => { this.anim.graphFabric = v; this.persistAnim(); });
+    const space = chips(GRAPH_SPACE_OPTIONS, this.anim.graphSpace, (v) => { this.anim.graphSpace = v; this.persistAnim(); });
     const glowAmt = new Slider({
       label: "glow", title: "how bright the traveling edge highlight is",
       min: 20, max: 200, step: 5, value: Math.round(this.anim.edgeGlowAmt * 100),
@@ -945,12 +961,12 @@ export class Settings {
     camWrap.querySelector(".look-head")!.appendChild(camTheme.el);
     const graphBits = document.createElement("div");
     graphBits.className = "look-stack";
-    graphBits.append(labeled("glow", glow.el), labeled("fabric", fabric.el));
+    graphBits.append(labeled("glow", glow.el), labeled("style", fabric.el), labeled("space", space.el));
     const graphWrap = lookBlock("", graphBits, labels, shown, nodes, edges, glowAmt, glowSpeed);
     const lookSec = document.createElement("section");
     lookSec.className = "sec";
     lookSec.innerHTML = `<div class="sec-title">Look</div>
-      <div class="sec-hint">Label size, how many idle names stay on, node and edge scale, edge glow, and fabric mesh (nodes + edges become tubes / cloth / ribbon with the same highlight). Auto-tune eases those plus sparks, sky, and pixel density if the last 30 seconds average under 10 fps, then eases back on a 1-minute recovered average (fresh after a view change). Traffic sparks, magnets, gravity, and stringy edges live under Physics.</div>`;
+      <div class="sec-hint">Label size, idle names, node and edge scale, edge glow, and graph style. Style is a 2D or 3D mesh any graph plugin can use (\`style.fabric\` / Look → style); space forces a flat or volumetric layout. Dice → graph style rolls both. Auto-tune eases labels, sparks, glow, sky, and pixel density if the last 30 seconds average under 10 fps.</div>`;
     lookSec.append(autoTune.el, graphWrap);
 
     const magFmt = (v: number) => (Math.abs(v) < 3 ? "off" : v > 0 ? `attract ${v}%` : `repel ${-v}%`);
@@ -1151,7 +1167,7 @@ export class Settings {
     sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, mosaicWrap, grid);
     this.animUi = {
       follow, cycle, randomize, setSky, setShape,
-      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setMod,
+      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setSpace: space.set, setMod,
       skyPulse, floorPulse, bgPulse,
       skyOp, skyBr, skySp, skyEz, skyAi, gridOp, gridBr, gridSize, gridFollow, gridColor, bgColor, bgOp,
       yaw, pitch, pitchCycle, zoom, zoomCycle, cadence, camAudio, camChange, camGaze, camInertia, camEase, camTheme, sens,
@@ -1182,7 +1198,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Data sources</div>
-      <div class="sec-hint">RSS, public HTTPS JSON/text, local files under $HOME / ~/.zoto-viz, the user journal, and the kernel ring (/dev/kmsg). The monitor polls them; headlines can join the feed ticker. Remote URLs stay public-HTTPS only.</div>`;
+      <div class="sec-hint">RSS, public HTTPS JSON/text, local files under $HOME / ~/.zoto-viz, the user journal, and the kernel ring (/dev/kmsg). HTTP JSON can map list / title / caption / image fields. Views (carousel, rain, term) are instances of one plugin pointed at a source — do not fork a tree per feed.</div>`;
     const include = new Toggle({
       label: "headlines on feed",
       title: "show RSS / HTTP / file / journal / kmsg titles on the live feed ticker",
@@ -1208,18 +1224,21 @@ export class Settings {
       <label class="src-path" hidden>path <input name="path" placeholder="~/.zoto-viz/sources/notes.txt"></label>
       <label class="src-unit" hidden>unit <input name="unit" placeholder="optional, e.g. zoto-viz-monitor.service"></label>
       <label>interval <input name="interval" type="number" min="15" max="86400" value="300"> s</label>
+      <label class="src-fields" hidden>fields <textarea name="fields" rows="3" placeholder='{"list":"data","title":"title","image":"hdurl","filter":"has-image"}'></textarea></label>
       <button type="submit" class="btn primary">add</button>
       <div class="src-err" hidden></div>`;
     const typeSel = form.querySelector<HTMLSelectElement>("[name=type]")!;
     const urlLab = form.querySelector<HTMLLabelElement>(".src-url")!;
     const pathLab = form.querySelector<HTMLLabelElement>(".src-path")!;
     const unitLab = form.querySelector<HTMLLabelElement>(".src-unit")!;
+    const fieldsLab = form.querySelector<HTMLLabelElement>(".src-fields")!;
     const err = form.querySelector<HTMLElement>(".src-err")!;
     typeSel.addEventListener("change", () => {
       const kind = typeSel.value;
       urlLab.hidden = kind !== "rss" && kind !== "http";
       pathLab.hidden = kind !== "file";
       unitLab.hidden = kind !== "journal";
+      fieldsLab.hidden = kind !== "http";
     });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -1238,6 +1257,19 @@ export class Settings {
         const unit = String(fd.get("unit") || "").trim();
         if (unit) body.unit = unit;
       } else if (kind !== "kmsg") body.url = String(fd.get("url") || "").trim();
+      if (kind === "http") {
+        const raw = String(fd.get("fields") || "").trim();
+        if (raw) {
+          try {
+            const mapped = JSON.parse(raw) as unknown;
+            if (mapped && typeof mapped === "object" && !Array.isArray(mapped)) body.fields = mapped;
+          } catch {
+            err.textContent = "fields must be JSON";
+            err.hidden = false;
+            return;
+          }
+        }
+      }
       err.hidden = true;
       void apiFetch("/api/sources", {
         method: "POST",
@@ -1255,10 +1287,55 @@ export class Settings {
         void this.refreshSources();
       });
     });
-    sec.append(include.el, list, form);
+    const inst = document.createElement("form");
+    inst.className = "source-form";
+    inst.innerHTML = `
+      <div class="sec-title">View instances</div>
+      <div class="sec-hint">Reuse carousel, rain, or term with another source. Shipped rows stay; these extras live in ~/.zoto-viz/plugin-instances.yml.</div>
+      <label>plugin <select name="plugin">
+        <option value="carousel">carousel (stills)</option>
+        <option value="hn-rain">hn-rain</option>
+        <option value="hn-term">hn-term</option>
+      </select></label>
+      <label>id <input name="id" maxlength="32" placeholder="apod" autocomplete="off"></label>
+      <label>name <input name="name" maxlength="48" placeholder="APOD"></label>
+      <label>source <input name="source" maxlength="32" placeholder="apod"></label>
+      <button type="submit" class="btn primary">add view</button>
+      <div class="src-err" hidden></div>`;
+    const instList = document.createElement("div");
+    instList.className = "source-list";
+    const instErr = inst.querySelector<HTMLElement>(".src-err")!;
+    inst.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const fd = new FormData(inst);
+      const body = {
+        plugin: String(fd.get("plugin") || "").trim(),
+        id: String(fd.get("id") || "").trim(),
+        name: String(fd.get("name") || "").trim(),
+        source: String(fd.get("source") || "").trim(),
+      };
+      instErr.hidden = true;
+      void apiFetch("/api/plugin-instances", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }).then(async (r) => {
+        const data = await r.json().catch(() => ({})) as { error?: string };
+        if (!r.ok) {
+          instErr.textContent = data.error || r.statusText;
+          instErr.hidden = false;
+          return;
+        }
+        inst.reset();
+        void this.refreshInstances();
+        this.onInstancesChange?.();
+      });
+    });
+    sec.append(include.el, list, form, inst, instList);
     this.pane("sources").appendChild(sec);
-    this.sourcesUi = { list, include };
+    this.sourcesUi = { list, include, instances: instList };
     void this.refreshSources();
+    void this.refreshInstances();
   }
 
   private async refreshSources(): Promise<void> {
@@ -1318,15 +1395,57 @@ export class Settings {
     }
   }
 
+  private async refreshInstances(): Promise<void> {
+    const host = this.sourcesUi?.instances;
+    if (!host) return;
+    try {
+      const r = await apiFetch("/api/plugin-instances");
+      if (!r.ok) throw new Error(r.statusText);
+      const data = await r.json() as { instances?: { plugin: string; id: string; name?: string; source?: string }[] };
+      const rows = data.instances ?? [];
+      host.replaceChildren();
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "sec-hint";
+        empty.textContent = "No extra views yet. Shipped NASA / APOD / HN rows already use this machinery.";
+        host.appendChild(empty);
+        return;
+      }
+      for (const row of rows) {
+        const el = document.createElement("div");
+        el.className = "source-row";
+        const meta = document.createElement("span");
+        meta.className = "src-meta";
+        meta.textContent = `${row.plugin}:${row.id}${row.source ? ` · ${row.source}` : ""}${row.name ? ` · ${row.name}` : ""}`;
+        const drop = document.createElement("button");
+        drop.type = "button";
+        drop.className = "link";
+        drop.textContent = "remove";
+        drop.addEventListener("click", () => {
+          void apiFetch(`/api/plugin-instances/${encodeURIComponent(row.plugin)}/${encodeURIComponent(row.id)}`, {
+            method: "DELETE",
+          }).then(() => {
+            void this.refreshInstances();
+            this.onInstancesChange?.();
+          });
+        });
+        el.append(meta, drop);
+        host.appendChild(el);
+      }
+    } catch {
+      host.textContent = "Instance API unavailable (is the monitor running?)";
+    }
+  }
+
   /** Live decoded-traffic overlay on the right of the graph. */
   addLiveFeed(onChange: (c: FeedConfig) => void): void {
     this.onFeedChange = onChange;
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded capture or the agent transcript beside the graph. Agent thinking streams on the overlay even when source is traffic. Replies type onto the ticker and the viewport eases to the latest line. Header switch or F.</div>`;
+      <div class="sec-hint">Decoded packets beside the graph. Headlines from Sources can ride the ticker. Chat is a separate panel (header chat / C). Header feed / F shows or hides this overlay.</div>`;
     const on = new Toggle({
-      label: "show overlay",
+      label: "show feed",
       title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",
       checked: this.feed.on,
       onChange: (v) => this.setFeedOn(v),
@@ -1339,15 +1458,14 @@ export class Settings {
     });
     const layout = chips(FEED_LAYOUTS, this.feed.layout, (v) => { this.feed.layout = v; this.persistFeed(); });
     const scope = chips(FEED_SCOPES, this.feed.scope, (v) => { this.feed.scope = v; this.persistFeed(); });
-    const source = chips(FEED_SOURCES, this.feed.source, (v) => { this.feed.source = v; this.persistFeed(); });
     const dens = new Slider({
-      label: "lines", title: "how many decoded or transcript lines to keep",
+      label: "lines", title: "how many decoded lines to keep",
       min: 12, max: 80, step: 4, value: this.feed.density,
       format: (v) => `${v}`,
       onInput: (v) => { this.feed.density = v; this.persistFeed(); },
     });
     const size = new Slider({
-      label: "text", title: "ticker and agent transcript type size",
+      label: "text", title: "ticker type size",
       min: 10, max: 20, step: 0.5, value: this.feed.textSize,
       format: (v) => `${v}px`,
       onInput: (v) => { this.feed.textSize = v; this.persistFeed(); },
@@ -1357,10 +1475,37 @@ export class Settings {
     row.append(on.el, modulate.el);
     const bits = document.createElement("div");
     bits.className = "look-stack";
-    bits.append(labeled("layout", layout.el), labeled("source", source.el), labeled("scope", scope.el));
+    bits.append(labeled("layout", layout.el), labeled("scope", scope.el));
     sec.append(row, lookBlock("overlay", bits, dens, size));
-    this.feedUi = { on, modulate, setLayout: layout.set, setScope: scope.set, setSource: source.set, dens, size };
+    this.feedUi = { on, modulate, setLayout: layout.set, setScope: scope.set, dens, size };
     this.pane("feed").appendChild(sec);
+  }
+
+  /** Agent conversation overlay, independent of the packet feed. */
+  addChat(onChange: (c: ChatConfig) => void): void {
+    this.onChatChange = onChange;
+    const sec = document.createElement("section");
+    sec.className = "sec";
+    sec.innerHTML = `<div class="sec-title">Chat</div>
+      <div class="sec-hint">Talk with the local agent. Discuss a view or source, then ask it to build. Header chat / C. Watchword opens this panel.</div>`;
+    const on = new Toggle({
+      label: "show chat",
+      title: "agent conversation beside the scene (header chat switch or C)",
+      checked: this.chat.on,
+      onChange: (v) => this.setChatOn(v),
+    });
+    const size = new Slider({
+      label: "text", title: "chat type size",
+      min: 10, max: 20, step: 0.5, value: this.chat.textSize,
+      format: (v) => `${v}px`,
+      onInput: (v) => { this.chat.textSize = v; this.persistChat(); },
+    });
+    const row = document.createElement("div");
+    row.className = "sec-controls";
+    row.append(on.el);
+    sec.append(row, size.el);
+    this.chatUi = { on, size };
+    this.pane("chat").appendChild(sec);
   }
 
   filterText(): { allowNames: string; blockNames: string; allowNets: string; blockNets: string } {
@@ -1392,6 +1537,8 @@ export class Settings {
       mosaicMaxId: typeof a.mosaicMaxId === "string" ? a.mosaicMaxId : "",
       mosaicTiles: parseMosaicTiles(a.mosaicTiles),
       mosaicSharedTheme: !!a.mosaicSharedTheme,
+      mosaicUniqueSkies: a.mosaicUniqueSkies,
+      mosaicSkies: a.mosaicSkies,
     });
     this.syncAnimUi();
     this.syncTheme();
@@ -1399,10 +1546,20 @@ export class Settings {
   }
 
   /** Persist a live drag / close / max without resetting the tree. */
-  applyMosaicLayout(patch: { tree: DreamAnim["mosaicTree"]; maximized: string | null; tiles: string[] }): void {
+  applyMosaicLayout(patch: {
+    tree: DreamAnim["mosaicTree"];
+    maximized: string | null;
+    tiles: string[];
+    uniqueSkies?: boolean;
+    skies?: DreamAnim["mosaicSkies"];
+  }): void {
     this.anim.mosaicTree = parseMosaicNode(patch.tree);
     this.anim.mosaicMaxId = patch.maximized ?? "";
     this.anim.mosaicTiles = parseMosaicTiles(patch.tiles);
+    if (patch.uniqueSkies !== undefined) {
+      this.anim.mosaicUniqueSkies = patch.uniqueSkies;
+      this.anim.mosaicSkies = patch.skies ?? {};
+    }
     this.persistAnim();
     this.animUi?.syncTiles();
   }
@@ -1484,20 +1641,21 @@ export class Settings {
     this.persistFeed();
   }
 
-  /** Watchword: open the overlay on the agent transcript (pins to the latest line). */
+  /** Show or hide the agent chat panel. */
+  setChatOn(on: boolean): void {
+    this.chat.on = on;
+    if (this.chatUi) this.chatUi.on.checked = on;
+    this.persistChat();
+  }
+
+  /** Watchword: open the chat panel (pins to the latest line). */
   revealTranscript(): void {
-    if (this.feed.on && this.feed.source === "transcript") return;
-    this.feed.on = true;
-    this.feed.source = "transcript";
-    if (this.feedUi) {
-      this.feedUi.on.checked = true;
-      this.feedUi.setSource("transcript");
-    }
-    this.persistFeed();
+    if (this.chat.on) return;
+    this.setChatOn(true);
   }
 
   applyFeed(c: FeedConfig): void {
-    this.feed = { ...DEFAULT_FEED, ...c };
+    this.feed = { ...DEFAULT_FEED, ...c, source: "traffic" };
     this.feed.textSize = Math.min(20, Math.max(10, this.feed.textSize || DEFAULT_FEED.textSize));
     const ui = this.feedUi;
     if (ui) {
@@ -1505,12 +1663,22 @@ export class Settings {
       ui.modulate.checked = this.feed.modulate;
       ui.setLayout(this.feed.layout);
       ui.setScope(this.feed.scope);
-      ui.setSource(this.feed.source);
       ui.dens.value = this.feed.density;
       ui.size.value = this.feed.textSize;
     }
     if (this.sourcesUi) this.sourcesUi.include.checked = this.feed.includeSources !== false;
     this.persistFeed();
+  }
+
+  applyChat(c: ChatConfig): void {
+    this.chat = { ...DEFAULT_CHAT, ...c };
+    this.chat.textSize = Math.min(20, Math.max(10, this.chat.textSize || DEFAULT_CHAT.textSize));
+    const ui = this.chatUi;
+    if (ui) {
+      ui.on.checked = this.chat.on;
+      ui.size.value = this.chat.textSize;
+    }
+    this.persistChat();
   }
 
   applyDice(c: DiceConfig): void {
@@ -1592,6 +1760,7 @@ export class Settings {
     ui.setFocus(a.focus);
     ui.setGlow(a.edgeGlow);
     ui.setFabric(a.graphFabric);
+    ui.setSpace(a.graphSpace);
     ui.setMod("background", a.bgAudio);
     ui.setMod("sky", a.skyAudio);
     ui.setMod("skies", a.skyCycle !== "off");
@@ -1691,6 +1860,7 @@ export class Settings {
     localStorage.setItem(`${p}.anim.edgeGlowAmt`, String(a.edgeGlowAmt));
     localStorage.setItem(`${p}.anim.edgeGlowSpeed`, String(a.edgeGlowSpeed));
     localStorage.setItem(`${p}.anim.graphFabric`, a.graphFabric);
+    localStorage.setItem(`${p}.anim.graphSpace`, a.graphSpace);
     localStorage.setItem(`${p}.anim.mosaic`, a.mosaic);
     localStorage.setItem(`${p}.anim.hero`, a.hero);
     if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
@@ -1699,6 +1869,14 @@ export class Settings {
     if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
     else localStorage.removeItem(`${p}.anim.mosaicTiles`);
     localStorage.setItem(`${p}.anim.mosaicSharedTheme`, a.mosaicSharedTheme ? "1" : "0");
+    if (a.mosaicUniqueSkies === true) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "1");
+    else if (a.mosaicUniqueSkies === false) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "0");
+    else localStorage.removeItem(`${p}.anim.mosaicUniqueSkies`);
+    if (a.mosaicSkies && Object.keys(a.mosaicSkies).length) {
+      localStorage.setItem(`${p}.anim.mosaicSkies`, JSON.stringify(a.mosaicSkies));
+    } else {
+      localStorage.removeItem(`${p}.anim.mosaicSkies`);
+    }
     localStorage.setItem(`${p}.anim.focus`, a.focus);
     localStorage.setItem(`${p}.anim.partAmt`, String(a.partAmt));
     localStorage.setItem(`${p}.anim.partBusy`, String(a.partBusy));
@@ -1744,6 +1922,15 @@ export class Settings {
     this.cfg.onPersist?.();
   }
 
+  private persistChat(): void {
+    const p = this.cfg.storePrefix;
+    const c = this.chat;
+    localStorage.setItem(`${p}.chat.on`, c.on ? "1" : "0");
+    localStorage.setItem(`${p}.chat.textSize`, String(c.textSize));
+    this.onChatChange(c);
+    this.cfg.onPersist?.();
+  }
+
   private persistDice(): void {
     localStorage.setItem(`${this.cfg.storePrefix}.dice`, JSON.stringify(this.dice));
     this.onDiceChange?.(this.dice);
@@ -1754,20 +1941,34 @@ export class Settings {
 
   get isOpen(): boolean { return !this.pop.hidden; }
 
+  private pinFloat(): void {
+    if (this.pop.parentElement === document.body && this.pop.classList.contains("flyout")) return;
+    this.pop.classList.add("flyout");
+    this.pop.classList.remove("right");
+    document.body.appendChild(this.pop);
+    this.pop.style.position = "fixed";
+  }
+
   open(pane?: string): void {
     if (pane) this.showPane(pane);
     this.pop.hidden = false;
     this.el.classList.add("open");
     this.btn.setAttribute("aria-expanded", "true");
     this.syncViewCog();
-    const chrome = document.body.dataset.chrome;
-    if (chrome === "left" || chrome === "right") {
-      this.pop.classList.remove("right");
-      pinFlyout(this.pop, this.btn, chrome);
+    const saved = readFloatRect("settings");
+    if (this.pop.classList.contains("floated") || saved) {
+      this.pinFloat();
+      if (saved) applyFloatRect(this.pop, saved, { w: 360, h: 280 });
     } else {
-      unpinFlyout(this.pop, this.el);
-      const r = this.pop.getBoundingClientRect();
-      this.pop.classList.toggle("right", r.right > innerWidth - 8);
+      const chrome = document.body.dataset.chrome;
+      if (chrome === "left" || chrome === "right") {
+        this.pop.classList.remove("right");
+        pinFlyout(this.pop, this.btn, chrome);
+      } else {
+        unpinFlyout(this.pop, this.el);
+        const r = this.pop.getBoundingClientRect();
+        this.pop.classList.toggle("right", r.right > innerWidth - 8);
+      }
     }
     this.syncTheme();
     document.addEventListener("pointerdown", this.onDocDown, true);
@@ -1779,7 +1980,7 @@ export class Settings {
     this.el.classList.remove("open");
     this.btn.setAttribute("aria-expanded", "false");
     this.syncViewCog();
-    unpinFlyout(this.pop, this.el);
+    if (!this.pop.classList.contains("floated")) unpinFlyout(this.pop, this.el);
     document.removeEventListener("pointerdown", this.onDocDown, true);
     cancelAnimationFrame(this.meterRaf);
     this.meterRaf = 0;
@@ -1798,8 +1999,9 @@ export class Settings {
   };
 
   private onDocDown = (e: PointerEvent) => {
-    const t = e.target as Node;
+    const t = e.target as HTMLElement;
     if (this.viewCog?.contains(t)) return;
+    if (t.closest(".float-handle, .float-resize")) return;
     if (!this.el.contains(t) && !this.pop.contains(t)) this.close();
   };
 
@@ -1991,12 +2193,15 @@ function loadAnim(prefix: string): DreamAnim {
     edgeGlowAmt: n("edgeGlowAmt", d.edgeGlowAmt, B.edgeGlowAmt.min, B.edgeGlowAmt.max),
     edgeGlowSpeed: n("edgeGlowSpeed", d.edgeGlowSpeed, B.edgeGlowSpeed.min, B.edgeGlowSpeed.max),
     graphFabric: parseFabricKind(localStorage.getItem(`${prefix}.anim.graphFabric`)),
+    graphSpace: parseGraphSpaceKind(localStorage.getItem(`${prefix}.anim.graphSpace`)),
     mosaic: parseMosaic(localStorage.getItem(`${prefix}.anim.mosaic`)),
     hero: parseHero(localStorage.getItem(`${prefix}.anim.hero`)),
     mosaicTree: parseStoredTree(localStorage.getItem(`${prefix}.anim.mosaicTree`)),
     mosaicMaxId: localStorage.getItem(`${prefix}.anim.mosaicMaxId`)?.trim() ?? "",
     mosaicTiles: parseStoredTiles(localStorage.getItem(`${prefix}.anim.mosaicTiles`)),
     mosaicSharedTheme: localStorage.getItem(`${prefix}.anim.mosaicSharedTheme`) === "1",
+    mosaicUniqueSkies: parseStoredUniqueSkies(localStorage.getItem(`${prefix}.anim.mosaicUniqueSkies`)),
+    mosaicSkies: parseStoredSkies(localStorage.getItem(`${prefix}.anim.mosaicSkies`)),
     focus: parseFocus(localStorage.getItem(`${prefix}.anim.focus`)),
     partAmt: n("partAmt", d.partAmt, B.partAmt.min, B.partAmt.max),
     partBusy: n("partBusy", d.partBusy, B.partBusy.min, B.partBusy.max),
@@ -2034,6 +2239,10 @@ function parseFabricKind(raw: string | null): FabricKind {
   return FABRIC_OPTIONS.some((o) => o.value === raw) ? (raw as FabricKind) : DEFAULT_DREAM.graphFabric;
 }
 
+function parseGraphSpaceKind(raw: string | null): GraphSpace {
+  return GRAPH_SPACE_OPTIONS.some((o) => o.value === raw) ? (raw as GraphSpace) : DEFAULT_DREAM.graphSpace;
+}
+
 function parseMosaic(raw: string | null): MosaicSize {
   return MOSAIC_SIZES.some((o) => o.value === raw) ? (raw as MosaicSize) : DEFAULT_DREAM.mosaic;
 }
@@ -2050,6 +2259,29 @@ function parseStoredTree(raw: string | null): DreamAnim["mosaicTree"] {
 function parseStoredTiles(raw: string | null): string[] {
   if (!raw) return [];
   try { return parseMosaicTiles(JSON.parse(raw)); } catch { return []; }
+}
+
+function parseStoredUniqueSkies(raw: string | null): boolean | undefined {
+  if (raw === "1") return true;
+  if (raw === "0") return false;
+  return undefined;
+}
+
+function parseStoredSkies(raw: string | null): DreamAnim["mosaicSkies"] {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    const out: NonNullable<DreamAnim["mosaicSkies"]> = {};
+    for (const [id, sky] of Object.entries(parsed)) {
+      if (typeof sky === "string" && BACKDROP_OPTIONS.some((o) => o.value === sky)) {
+        out[id] = sky as BackdropKind;
+      }
+    }
+    return Object.keys(out).length ? out : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function parseFocus(raw: string | null): FocusMode {
@@ -2086,6 +2318,15 @@ function loadFeed(prefix: string): FeedConfig {
     textSize: n("textSize", d.textSize, 10, 20),
     modulate: localStorage.getItem(`${prefix}.feed.modulate`) !== "0",
     includeSources: localStorage.getItem(`${prefix}.feed.includeSources`) !== "0",
+  };
+}
+
+function loadChat(prefix: string): ChatConfig {
+  const d = DEFAULT_CHAT;
+  const size = clampNum(localStorage.getItem(`${prefix}.chat.textSize`), 10, 20, d.textSize);
+  return {
+    on: localStorage.getItem(`${prefix}.chat.on`) !== "0",
+    textSize: size,
   };
 }
 

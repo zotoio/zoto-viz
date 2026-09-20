@@ -7,8 +7,10 @@ import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
 import { mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
 import { Settings } from "../ui/settings";
-import { sourceHeadlines } from "../core/sources";
+import { parseSourceBind, sourceHeadlines } from "../core/sources";
 import { LiveFeed, feedViewShift } from "../ui/feed";
+import { ChatPanel } from "../ui/chat";
+import { DebugLog, readDebugOn } from "../ui/debug-log";
 import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
@@ -41,7 +43,9 @@ import {
   lookForMode,
   mergeLook,
   parsePluginId,
+  parsePluginInstance,
   pluginWall,
+  pickPluginSkySpec,
   catalogPluginWalls,
   attachPluginFrontend,
   fetchPluginSky,
@@ -54,7 +58,7 @@ import {
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
-import { VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
+import { buildVizFrame, VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
 import {
   TypeSafeHost,
   parseTypeSafeEnable,
@@ -65,7 +69,9 @@ import { runPackFrameHandler } from "../plugins/viz-pack-host";
 import { HnRainStills } from "../plugins/hn-rain-stills";
 import { NestCamsLive } from "../plugins/nest-cams-live";
 import { parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
+import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
+import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener, bindFps } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
@@ -76,6 +82,8 @@ import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
+
+ignoreResizeLoopError();
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -353,9 +361,21 @@ function syncFeedShift(): void {
   if (!feedCtl.feed) return;
   const sceneEl = $("scene");
   const feedEl = $("livefeed");
+  const chatEl = $("livechat");
   if (!sceneEl || !feedEl) return;
-  scene.setViewShift(feedViewShift(feedEl.offsetWidth, chrome, sceneEl.clientWidth), !feedShiftInited);
+  const docked = [feedEl, chatEl].filter((el): el is HTMLElement =>
+    !!el && !el.hidden && !el.classList.contains("floated"));
+  const skip = !!mosaic?.on || !docked.length;
+  const width = Math.max(0, ...docked.map((el) => el.offsetWidth));
+  scene.setViewShift(skip ? 0 : feedViewShift(width, chrome, sceneEl.clientWidth), !feedShiftInited);
   feedShiftInited = true;
+}
+
+function syncOverlayStack(): void {
+  const feedOn = !!feedCtl.feed && !$("livefeed")?.hidden;
+  const chatOn = !$("livechat")?.hidden;
+  document.body.classList.toggle("feed-open", feedOn);
+  document.body.classList.toggle("chat-open", chatOn);
 }
 const modeSel = new Select({
   id: "mode",
@@ -375,6 +395,7 @@ function onPluginFields(): void {
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   nestCams.setLook(opts);
+  if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
   if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
   else scene.setMode(m, opts);
   renderLegend(m, opts);
@@ -413,8 +434,8 @@ async function syncWifiWatch(): Promise<void> {
 function optsFor(m: ViewMode): Record<string, string> {
   const o = defaultOpts(m);
   if (m.pluginId) {
-    const spec = pluginSpecs.find((p) => p.id === m.pluginId);
-    if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options }, m.config)));
+    const spec = pluginSpecForMode(m.id);
+    if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
   } else {
     for (const opt of m.options ?? []) {
       const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
@@ -538,50 +559,76 @@ function applyPluginWall(modeId: string, flags: { keepLayout?: boolean; prevMode
 
 function pluginSpecForMode(modeId: string): PluginView | null {
   const id = parsePluginId(modeId);
-  return id ? pluginSpecs.find((p) => p.id === id) ?? null : null;
+  if (!id) return null;
+  const raw = pluginSpecs.find((p) => p.id === id);
+  if (!raw) return null;
+  const inst = parsePluginInstance(modeId);
+  if (!inst || inst === raw.id) return { ...raw, instanceId: inst || raw.id };
+  const row = (raw.instances ?? []).find((i) => i.id === inst);
+  return row ? applyInstance(raw, row) : { ...raw, instanceId: inst };
 }
 
-/** Mosaic extras keep their own look; the plugin sky binds to the main pane only. */
+/** Mosaic extras keep their own look; a wall row's plugin sky wins over a sky-less hero. */
 function skySpecForMode(modeId: string, fallback: PluginView | null): PluginView | null {
+  const selected = fallback ?? pluginSpecForMode(modeId);
   if (mosaic?.on) {
     const pane = mosaic.mainMode || mosaic.focusedId;
-    if (pane) return pluginSpecForMode(pane);
+    return pickPluginSkySpec(selected, pane ? pluginSpecForMode(pane) : null);
   }
-  return fallback ?? pluginSpecForMode(modeId);
+  return selected;
 }
 
-async function syncPluginSky(spec: PluginView | null): Promise<void> {
-  const look = spec ? (lookForMode(pluginViewId(spec.id)) ?? spec.look) : undefined;
-  const want = !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
+async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinPlugin: boolean): Promise<void> {
+  const look = spec ? (lookForMode(pluginViewId(spec.id, spec.instanceId)) ?? spec.look) : undefined;
+  const want = pinPlugin && !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
   const key = want && spec ? `${spec.id}:${spec.shader_sha256 || ""}` : "";
-  if (key && key === skyLoaded) return;
+  if (target === scene && key && key === skyLoaded) return;
   if (!want || !spec) {
-    if (skyLoaded) scene.setPluginShader(null);
-    skyLoaded = "";
+    if (target === scene && skyLoaded) {
+      scene.setPluginShader(null);
+      skyLoaded = "";
+    } else if (target !== scene) {
+      target.setPluginShader(null);
+    }
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
-    if (skyLoaded) scene.setPluginShader(null);
-    skyLoaded = "";
+    target.setPluginShader(null);
+    if (target === scene) skyLoaded = "";
     return;
   }
   try {
     const source = await fetchPluginSky(spec.id, spec.shader_sha256);
-    const err = scene.setPluginShader({ id: spec.id, source });
+    const err = target.setPluginShader({ id: spec.id, source });
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
       spec.sky_error = err;
       spec.sky_available = false;
-      scene.setPluginShader(null);
-      skyLoaded = "";
+      target.setPluginShader(null);
+      if (target === scene) skyLoaded = "";
       return;
     }
-    skyLoaded = key;
+    if (target === scene) skyLoaded = key;
   } catch (e) {
     console.warn("zoto-viz plugin sky:", e);
-    scene.setPluginShader(null);
-    skyLoaded = "";
+    target.setPluginShader(null);
+    if (target === scene) skyLoaded = "";
   }
+}
+
+async function syncPluginSky(spec: PluginView | null): Promise<void> {
+  if (mosaic?.on) {
+    for (const id of mosaic.tileIds) {
+      const target = mosaic.graphScene(id);
+      if (!target) continue;
+      const tileSky = mosaic.paneSky(id);
+      const pane = pluginSpecForMode(id);
+      const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
+      await loadPluginSkyOnto(target, pane, wantPlugin);
+    }
+    return;
+  }
+  await loadPluginSkyOnto(scene, spec, true);
 }
 
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
@@ -596,7 +643,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   applyPluginWall(m.id, { ...flags, prevMode });
   liveMode = m.id;
 
-  const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
+  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
   const paneSpec = skySpecForMode(m.id, spec);
   const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
   document.body.classList.toggle("stage-only", skyStage);
@@ -656,6 +703,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   scene.setStageOnly(next !== null || skyStage);
   if (activeArcade && activeArcade !== next) { arcade[activeArcade].view.stop(); arcade[activeArcade].el.hidden = true; }
   if (next && activeArcade !== next) { arcade[next].el.hidden = false; arcade[next].view.start(selectedIp); }
+  if (next === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
   activeArcade = next;
   syncFeedShift();
 
@@ -804,7 +852,7 @@ function feed(m: StateMsg): void {
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
         }, optsFor(mode));
       }
-    });
+    }, (state, prev, pulse) => buildVizFrame(state, prev, pulse, parseSourceBind(optsFor(mode))));
     if (frame) {
       vizFrameTs = frame.t;
       if (packId === "hn-rain" || packId === "hn-term") {
@@ -874,6 +922,14 @@ settings = new Settings({
   onPersist: () => touch(),
 });
 settings.onPluginChange = () => onPluginFields();
+settings.onInstancesChange = () => {
+  void (async () => {
+    pluginSpecs = await installPlugins();
+    modeSel.setOptions(viewSelectOptions());
+    settings.refreshMosaicSlots();
+    applyMode(modeSel.value);
+  })();
+};
 const showSec = settings.addSection(
   "Network",
   [netLan, netInternet, netMulticast, netOffline, mergeToggle],
@@ -943,6 +999,7 @@ scene.onCamTheme = (hex) => {
 };
 if (scene.dreamAnim.camTheme && scene.liveCamColor != null) scene.onCamTheme(scene.liveCamColor);
 const liveFeed = new LiveFeed($("livefeed"), scene);
+const liveChat = new ChatPanel($("livechat"));
 feedCtl.feed = liveFeed;
 liveFeed.setGraphBase(modeById(modeSel.value).graphBase);
 const feedToggle = new Toggle({
@@ -953,6 +1010,38 @@ const feedToggle = new Toggle({
   onChange: (on) => settings.setFeedOn(on),
 });
 $("feedBox").appendChild(feedToggle.el);
+const chatToggle = new Toggle({
+  id: "chat",
+  label: "chat",
+  title: "show the agent conversation on the right (key C)",
+  checked: settings.chatSettings.on,
+  onChange: (on) => settings.setChatOn(on),
+});
+$("chatBox").appendChild(chatToggle.el);
+const debugLog = new DebugLog($("debuglog"));
+const debugOn = readDebugOn();
+const debugToggle = new Toggle({
+  id: "debug",
+  label: "debug",
+  title: "debug panel: monitor log + Cursor tokens/cost (key B)",
+  checked: debugOn,
+});
+const debugSettings = new Toggle({
+  label: "backend logs",
+  title: "same as the header debug switch (key B)",
+  checked: debugOn,
+});
+function setDebug(on: boolean): void {
+  debugToggle.checked = on;
+  debugSettings.checked = on;
+  debugLog.setOn(on);
+}
+debugLog.onClose = () => setDebug(false);
+debugToggle.onChange = setDebug;
+debugSettings.onChange = setDebug;
+setDebug(debugOn);
+$("debugBox").appendChild(debugToggle.el);
+settings.addSection("Debug", [debugSettings], "Opens the debug panel (monitor log + Cursor tokens/cost in ~/.zoto-viz/cursor-stats.jsonl). Header debug or key B.");
 const camToggle = new Toggle({
   id: "camera",
   label: "cam",
@@ -980,29 +1069,37 @@ settings.bindPulse(() => scene.pulseNow);
 settings.addLiveFeed((c) => {
   liveFeed.setConfig(c);
   feedToggle.checked = c.on;
-  if (c.source !== "traffic") liveFeed.seedTranscript(agent.transcript());
+  syncOverlayStack();
+  syncFeedShift();
+});
+settings.addChat((c) => {
+  liveChat.setConfig(c);
+  chatToggle.checked = c.on;
+  if (c.on) liveChat.seedTranscript(agent.transcript());
+  syncOverlayStack();
   syncFeedShift();
 });
 liveFeed.setConfig(settings.feedSettings);
+liveChat.setConfig(settings.chatSettings);
+syncOverlayStack();
 syncFeedShift();
-const feedShiftRo = new ResizeObserver(() => syncFeedShift());
-feedShiftRo.observe($("livefeed"));
-feedShiftRo.observe($("scene"));
-liveFeed.onSourceChange = () => liveFeed.seedTranscript(agent.transcript());
-agent.onChat = (role, text, stream) => liveFeed.pushChat(role, text, stream);
-agent.onChatEnd = () => liveFeed.lockStream();
-liveFeed.onDisplay = (info) => agent.hearFeed(info);
+observeResize($("livefeed"), syncFeedShift);
+observeResize($("livechat"), syncFeedShift);
+observeResize($("scene"), syncFeedShift);
+agent.onChat = (role, text, stream) => liveChat.pushChat(role, text, stream);
+agent.onChatEnd = () => liveChat.lockStream();
+liveChat.onDisplay = (info) => agent.hearFeed(info);
 agent.onPhase = (phase) => {
-  liveFeed.setThinking(phase === "think");
+  liveChat.setThinking(phase === "think");
   if (phase === "heard") settings.revealTranscript();
-  liveFeed.setListening(phase === "heard");
+  liveChat.setListening(phase === "heard");
 };
-agent.onTranscript = () => liveFeed.seedTranscript(agent.transcript());
-agent.dictateInto = liveFeed.ask;
-liveFeed.onSend = (text) => agent.offerSend(text);
-liveFeed.onMicDown = () => agent.beginTalk();
-liveFeed.onMicUp = () => agent.endTalk();
-liveFeed.seedTranscript(agent.transcript());
+agent.onTranscript = () => liveChat.seedTranscript(agent.transcript());
+agent.dictateInto = liveChat.ask;
+liveChat.onSend = (text) => agent.offerSend(text);
+liveChat.onMicDown = () => agent.beginTalk();
+liveChat.onMicUp = () => agent.endTalk();
+liveChat.seedTranscript(agent.transcript());
 const privSec = settings.addSection("Privacy", [redactToggle]);
 $("settingsBox").appendChild(settings.el);
 settings.attachViewCog($("modeBox"));
@@ -1028,7 +1125,7 @@ agent.captureView = () => {
       cpuIdle: showToggles.cpuIdle.checked,
     },
     feed: settings.feedSettings,
-    feedLines: liveFeed.snapshot(3),
+    feedLines: [...liveChat.snapshot(2), ...liveFeed.snapshot(2)],
   });
   let canvas: HTMLCanvasElement | null = null;
   if (activeArcade) {
@@ -1339,6 +1436,7 @@ function collectSettings(): ProfileSettings {
     filters: settings.filterText(),
     anim: { ...settings.animSettings },
     feed: { ...settings.feedSettings },
+    chat: { ...settings.chatSettings },
     arcade,
     chrome: userChrome,
     plugins: collectPluginConfigs(pluginSpecs),
@@ -1382,6 +1480,7 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   paintAgentLook(s.agent ?? { decos: [] });
   settings.applyAnim(s.anim);
   settings.applyFeed(s.feed);
+  settings.applyChat(s.chat ?? settings.chatSettings);
   settings.applyDice(s.dice ?? settings.diceSettings);
   if (s.camera) settings.setCamPolicy(s.camera);
   if (s.mic) settings.setMicPolicy(s.mic);
@@ -1456,7 +1555,10 @@ async function rollDice(force: { view?: boolean } = {}): Promise<void> {
     let rolled = shuffleLook({ ...collectSettings(), dice }, {
       themes: THEMES.map((t) => t.id),
       modes: modes.map((m) => ({ id: m.id, options: m.options, config: m.config })),
-      plugins: pluginSpecs.map((s) => ({ id: s.id, fields: pluginViewKnobs(s) })),
+      plugins: allModes().filter((m) => m.pluginId).map((m) => {
+        const spec = pluginSpecForMode(m.id);
+        return { id: spec ? `${spec.id}${spec.instanceId && spec.instanceId !== spec.id ? `:${spec.instanceId}` : ""}` : m.pluginId!, fields: pluginViewKnobs({ ...(spec ?? { id: m.pluginId!, name: m.label, version: 1 }), options: m.options, config: m.config }, m.config) };
+      }),
       skies: cycleSkyPool(),
       audioDrives: (liveMic.micPolicy === "off"
         ? AUDIO_DRIVES.filter((d) => d.value !== "mic")
@@ -1488,7 +1590,7 @@ settings.onDice = () => { void rollDice(); };
 
 // the panel sits under the header; keep its offset in sync with the header's wrapped height
 const bar = $("bar");
-new ResizeObserver(() => syncChromeMetrics()).observe(bar);
+observeResize(bar, syncChromeMetrics);
 
 const LINK_KIND: Record<LinkStatus["kind"], string> = {
   wifi: "Wi-Fi", monitor: "monitor radio", bridge: "bridge", tunnel: "tunnel", ethernet: "Ethernet", gone: "gone",
@@ -1575,6 +1677,8 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "r" || e.key === "R") setRedaction(!redaction.enabled);
   if (e.key === "d" || e.key === "D") setDream(!dreamToggle.checked);
   if (e.key === "f" || e.key === "F") settings.setFeedOn(!settings.feedSettings.on);
+  if (e.key === "c" || e.key === "C") settings.setChatOn(!settings.chatSettings.on);
+  if (e.key === "b" || e.key === "B") setDebug(!debugToggle.checked);
   if (e.key === "l" || e.key === "L") setLabels(!sysLabels.checked);
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);
   const idx = e.key === "0" ? 9 : Number(e.key) - 1;

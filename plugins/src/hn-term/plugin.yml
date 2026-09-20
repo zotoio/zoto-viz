@@ -1,8 +1,8 @@
 id: hn-term
 name: HN Term
 version: 1
-hint: Greenscreen teletype — Hacker News headlines and article blurbs type in and scroll up.
-description: Stage-only CRT terminal. Host HN RSS titles plus descriptions type character-by-character, wrap, and roll up the screen like a phosphor console.
+hint: Greenscreen teletype — host-source headlines and blurbs type in and scroll up.
+description: Stage-only CRT terminal. Titles plus descriptions from a host source (Hacker News by default) type character-by-character. Change source under This view, or add a plugin instance instead of forking the tree.
 capabilities:
   - viz.read
   - viz.write

@@ -91,6 +91,13 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxParticles: 0,
     uniforms: ["uTime", "uAudio", "uAccent", "uBg"],
   })!,
+  "nixie-clock": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 16,
+    maxParticles: 0,
+    uniforms: ["uTime", "uAudio", "uAccent", "uBg"],
+  })!,
 };
 
 export interface DogfoodTickResult {

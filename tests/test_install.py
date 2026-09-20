@@ -96,6 +96,9 @@ def test_gather_checks_missing_tshark_has_manual(tmp_path: Path) -> None:
     assert any("apt install" in line for line in by_id["tshark"].manual)
     assert not by_id["nmap"].ok
     assert not by_id["nmap"].required
+    assert not by_id["iw"].ok
+    assert not by_id["iw"].required
+    assert any("apt install" in line and "iw" in line for line in by_id["iw"].manual)
 
 
 def test_gather_checks_windows_no_iproute(tmp_path: Path) -> None:
@@ -110,6 +113,7 @@ def test_gather_checks_windows_no_iproute(tmp_path: Path) -> None:
     ids = {c.id for c in inst.gather_checks(host, run)}
     assert "ip" not in ids
     assert "wireshark-group" not in ids
+    assert "iw" not in ids
     assert "tshark" in ids
 
 
@@ -127,6 +131,7 @@ def test_gather_checks_darwin_brew_and_bpf(tmp_path: Path, monkeypatch: pytest.M
     by_id = {c.id: c for c in checks}
     assert "ip" not in by_id
     assert "wireshark-group" not in by_id
+    assert "iw" not in by_id
     assert "avahi-browse" not in by_id
     assert by_id["brew"].ok
     assert not by_id["tshark"].ok
@@ -614,6 +619,71 @@ def test_tool_ok_exists_without_which(tmp_path: Path) -> None:
     )
     assert inst._tool_ok(host, "dumpcap") is True
     assert inst._tool_ok(host, "nope") is False
+
+
+def test_prefer_node_uses_nvm_when_path_is_18(tmp_path: Path) -> None:
+    bindir = tmp_path / "home" / ".nvm" / "versions" / "node" / "v22.23.2" / "bin"
+    bindir.mkdir(parents=True)
+    node = bindir / "node"
+    node.write_text("#!/bin/sh\n", encoding="utf-8")
+    node.chmod(0o755)
+    host = _host(tmp_path, which=lambda n: "/usr/bin/node" if n == "node" else None)
+
+    def run(cmd, cwd):
+        exe = str(cmd[0])
+        if exe.endswith("/node") and "v22.23.2" in exe:
+            return 0, "v22.23.2\n", ""
+        if cmd[:2] == ["node", "-v"]:
+            return 0, "v18.20.2\n", ""
+        return 1, "", "no"
+
+    new, note = inst.prefer_node(host, run)
+    assert "22.23" in note
+    assert "nvm alias default 22" in note
+    assert new.which("node") == str(node)
+
+
+def test_cli_old_node_stops_before_web(tmp_path: Path) -> None:
+    host = _host(tmp_path, which=lambda n: "/usr/bin/node" if n == "node" else None)
+
+    def run(cmd, cwd):
+        if cmd[:2] == ["node", "-v"]:
+            return 0, "v18.20.2\n", ""
+        raise AssertionError(f"should not run {cmd}")
+
+    buf = io.StringIO()
+    code = inst.cli_install(yes=True, no_system=True, host=host, run=run, stdin=io.StringIO(""), stdout=buf)
+    assert code == 1
+    assert "22.12" in buf.getvalue()
+    assert "web:" not in buf.getvalue()
+
+
+def test_setup_pnpm_retries_broken_cjs_shim(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    seen = {"v": 0}
+
+    def run(cmd, cwd):
+        if cmd and str(cmd[0]).endswith("pnpm") and cmd[-1] == "-v":
+            seen["v"] += 1
+            if seen["v"] == 1:
+                return 1, "", "Error: Cannot find module '.../pnpm/12.4.2/bin/pnpm.cjs'"
+            return 0, "10.18.0\n", ""
+        return 0, "", ""
+
+    inst.setup_pnpm(host, run)
+    assert seen["v"] >= 2
+
+
+def test_build_plan_skips_web_without_node(tmp_path: Path) -> None:
+    host = _host(tmp_path, which=lambda n: None)
+    checks = [
+        inst.Check("python", "Python", True, True, "ok"),
+        inst.Check("node", "Node", True, False, "v18", ()),
+    ]
+    ids = [s.id for s in inst.build_plan(host, checks, no_system=True)]
+    assert "venv" in ids
+    assert "web" not in ids
+    assert "corepack" not in ids
 
 
 def test_install_systemd_user_copies_unit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

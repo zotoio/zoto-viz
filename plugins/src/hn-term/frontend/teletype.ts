@@ -7,9 +7,7 @@ export type Story = { title: string; body: string };
 export function preferHnStories(
   headlines: { id?: string; label?: string; text?: string; summary?: string }[],
 ): Story[] {
-  const hn = headlines.filter((h) => /hn|hacker/i.test(`${h.id ?? ""} ${h.label ?? ""}`));
-  const src = hn.length ? hn : headlines;
-  return src
+  return headlines
     .map((h) => ({ title: (h.text ?? "").trim(), body: (h.summary ?? "").trim() }))
     .filter((s) => s.title || s.body);
 }

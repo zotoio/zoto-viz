@@ -136,7 +136,7 @@ export class AgentPanel {
   private pullBtn!: HTMLButtonElement;
   private warnEl!: HTMLDivElement;
   private cursorKey!: TextField;
-  private history: { role: "user" | "assistant"; content: string; thinking?: string }[] = [];
+  private history: { role: "user" | "assistant"; content: string; thinking?: string; usage?: Record<string, unknown> }[] = [];
   private hydrateP: Promise<void> | null = null;
   private logEpoch = 0;
   private noVoiceHint = false;
@@ -642,7 +642,7 @@ export class AgentPanel {
     }
   }
 
-  transcript(): { role: "user" | "assistant"; content: string; thinking?: string }[] {
+  transcript(): { role: "user" | "assistant"; content: string; thinking?: string; usage?: Record<string, unknown> }[] {
     return this.history.slice();
   }
 
@@ -666,7 +666,7 @@ export class AgentPanel {
         if (!csrfToken()) await bootSession();
         const r = await apiFetch("/api/ai/history");
         if (!r.ok) return;
-        const d = await r.json() as { messages?: { role?: string; content?: string; thinking?: string }[] };
+        const d = await r.json() as { messages?: { role?: string; content?: string; thinking?: string; usage?: Record<string, unknown> }[] };
         if (!Array.isArray(d.messages)) return;
         if (epoch !== this.logEpoch) return;
         this.history = d.messages
@@ -675,6 +675,7 @@ export class AgentPanel {
             role: m.role as "user" | "assistant",
             content: String(m.content || ""),
             thinking: m.thinking ? String(m.thinking) : undefined,
+            usage: m.usage && typeof m.usage === "object" ? m.usage : undefined,
           }));
         this.onTranscript?.();
       } catch { /* monitor may still be coming up */ }

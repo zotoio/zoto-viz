@@ -1,0 +1,21 @@
+id: nixie-clock
+name: Nixie Clock
+version: 1
+hint: IN-18 glow clock. Local time in stacked neon cathodes; LAN pulse flickers the tubes.
+description: Stage-only Nixie tubes showing the host clock. Six IN-18 cells (hours, minutes, seconds) with ghost digits, brass caps, and amber glow. 12/24-hour and seconds are This-view knobs. Talker pulse adds a faint flicker so the room still feels live.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 16
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts

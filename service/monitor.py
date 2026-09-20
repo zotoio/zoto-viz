@@ -37,8 +37,10 @@ from . import access
 from . import agent
 from . import agent_assets
 from . import cursor_agent
+from . import cursor_stats
 from . import hn_rain_stills
 from . import live
+from . import logbuf
 from . import mcp as plugin_mcp
 from . import plugin_local
 from . import plugin_migration
@@ -48,6 +50,7 @@ from . import forensics
 from . import hooks
 from . import paths
 from . import plugin_datasource as plugin_ds
+from . import plugin_instances
 from . import plugins
 from . import profiles
 from . import rf
@@ -109,6 +112,7 @@ TLS_PORTS = {"443", "8443", "853", "993", "995", "465", "5223", "5228"}
 
 def log(msg: str) -> None:
     print(f"[monitor] {time.strftime('%H:%M:%S')} {msg}", file=sys.stderr, flush=True)
+    logbuf.record(str(msg))
 
 
 def mac_from_eui64(ip: str) -> str:
@@ -1148,14 +1152,29 @@ def wrap_privileged(cmd: list[str]) -> list[str]:
 
     `sg -c` is not used: a quote in --filter would break that string. sudo's argv
     form (`sudo -n -- tshark …`) keeps every flag a separate argument.
+    Skip sudo when ``sudo -n`` cannot run (no cached credentials): a password
+    prompt would fail every restart and fill the log.
     """
     if os.geteuid() == 0 or zotoviz.group_active("wireshark"):
+        return cmd
+    if not zotoviz.sudo_n_ok():
         return cmd
     sudo = shutil.which("sudo")
     if not sudo:
         return cmd
     extra = ["-g", "wireshark"] if zotoviz.group_member("wireshark") else []
     return [sudo, "-n", *extra, "--"] + cmd
+
+
+async def _close_proc(proc: asyncio.subprocess.Process) -> None:
+    """Reap a child and close its pipes so asyncio does not GC them after the loop dies."""
+    with contextlib.suppress(Exception):
+        if proc.stdout:
+            proc.stdout.close()
+        if proc.stderr:
+            proc.stderr.close()
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(proc.wait(), 1)
 
 
 async def _kill_group(proc: asyncio.subprocess.Process) -> None:
@@ -1165,6 +1184,7 @@ async def _kill_group(proc: asyncio.subprocess.Process) -> None:
         await asyncio.wait_for(proc.wait(), 3)
     with contextlib.suppress(ProcessLookupError):
         os.killpg(proc.pid, signal.SIGKILL)
+    await _close_proc(proc)
 
 
 async def capture_loop(state: State, bpf: str, wifi_keys: Path) -> None:
@@ -1184,10 +1204,15 @@ async def capture_loop(state: State, bpf: str, wifi_keys: Path) -> None:
             + (f"; monitor-mode {', '.join(sorted(state.wlan))}: " + (f"decrypting {nkeys} network(s) from {wifi_keys}" if profile else f"no keys in {wifi_keys}, encrypted frames will not be read") if state.wlan else ""))
         # own process group so sudo/tshark/dumpcap die together on shutdown. The line limit
         # must hold a 64 KB GSO frame's payload as colon-separated hex (~190 KB); asyncio's default is 64 KiB.
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True,
-            limit=CAPTURE_LINE_LIMIT,
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True,
+                limit=CAPTURE_LINE_LIMIT,
+            )
+        except FileNotFoundError:
+            log(f"capture: {cmd[0]} not found on PATH; install tshark (`zoto-viz install --yes`)")
+            await asyncio.sleep(60)
+            continue
         assert proc.stdout
 
         async def watch_interfaces() -> None:
@@ -1238,12 +1263,17 @@ async def capture_loop(state: State, bpf: str, wifi_keys: Path) -> None:
         watcher.cancel()
         err = (await proc.stderr.read()).decode(errors="replace").strip() if proc.stderr else ""
         rc = await proc.wait()
+        await _close_proc(proc)
         if restarted_by_watcher:
             backoff = 1
         else:
             # the last stderr line is usually just "N packets captured"; the reason comes before it
             reasons = [l for l in err.splitlines() if l.strip() and not l.endswith("packets captured")]
-            log(f"tshark exited rc={rc} after {n} packets" + (f": {reasons[-1].strip()}" if reasons else ""))
+            reason = reasons[-1].strip() if reasons else ""
+            log(f"tshark exited rc={rc} after {n} packets" + (f": {reason}" if reason else ""))
+            low = reason.lower()
+            if any(s in low for s in ("password is required", "a terminal is required", "permission denied", "you do not have permission")):
+                log("capture: dumpcap needs the wireshark group (sudo usermod -aG wireshark $USER, then log out)")
             backoff = 2 if time.time() - t0 > 60 else min(backoff * 2, 60)
         await asyncio.sleep(backoff)
 
@@ -1294,6 +1324,7 @@ async def gateway_probe_loop(state: State) -> None:
         now = time.time()
         rtt: float | None = None
         if ping and state.gateway:
+            proc = None
             try:
                 proc = await asyncio.create_subprocess_exec(
                     ping, "-n", "-c", "1", "-W", str(GATEWAY_PING_WAIT_S), state.gateway,
@@ -1303,8 +1334,13 @@ async def gateway_probe_loop(state: State) -> None:
                 if proc.returncode == 0:
                     m = re.search(rb"time[=<]([\d.]+) ?ms", out)
                     rtt = float(m.group(1)) if m else 0.0
+            except asyncio.CancelledError:
+                if proc is not None:
+                    await _kill_group(proc)
+                raise
             except (OSError, asyncio.TimeoutError):
-                pass
+                if proc is not None:
+                    await _kill_group(proc)
         neigh = await asyncio.to_thread(neighbour_of, state.gateway)
         state.set_gateway_probe(now, rtt, neigh)
         st = state.gateway_status(now)["state"]
@@ -1361,9 +1397,16 @@ async def _bt_tshark_loop(state: State) -> None:
     backoff, warned = 2, False
     while True:
         cmd = wrap_privileged(bt_tshark_cmd())
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True,
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True,
+            )
+        except FileNotFoundError:
+            if not warned:
+                log(f"bluetooth0 capture unavailable ({cmd[0]} not found); names still come from bluetoothctl")
+                warned = True
+            await asyncio.sleep(60)
+            continue
         assert proc.stdout
         n = 0
         try:
@@ -1394,6 +1437,7 @@ async def _bt_tshark_loop(state: State) -> None:
             raise
         err = (await proc.stderr.read()).decode(errors="replace").strip() if proc.stderr else ""
         await proc.wait()
+        await _close_proc(proc)
         if n == 0 and not warned:
             log("bluetooth0 capture unavailable" + (f" ({err.splitlines()[-1][:160]})" if err else "") + "; names still come from bluetoothctl")
             warned = True
@@ -1421,21 +1465,27 @@ async def _bluetoothctl_scan(state: State) -> None:
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
     assert proc.stdout
-    now = time.time()
-    async for raw in proc.stdout:
-        rec = rf.parse_bluetoothctl_line(raw.decode(errors="replace"))
-        if not rec:
-            continue
-        addr = rec.get("addr", "")
-        if rec.get("name") or rec.get("paired") or rec.get("connected"):
-            state.radio.bt_named(addr, rec.get("name", ""), bool(rec.get("paired")), bool(rec.get("connected")))
-        if rec.get("rssi") or rec.get("name"):
-            state.radio.bt_frame(
-                now, 0, "hci0", addr, rec.get("name", ""), "", "", "",
-                "BTLE", rec.get("name") or "advertisement", rec.get("rssi", ""),
-            )
-            now = time.time()
-    await proc.wait()
+    try:
+        now = time.time()
+        async for raw in proc.stdout:
+            rec = rf.parse_bluetoothctl_line(raw.decode(errors="replace"))
+            if not rec:
+                continue
+            addr = rec.get("addr", "")
+            if rec.get("name") or rec.get("paired") or rec.get("connected"):
+                state.radio.bt_named(addr, rec.get("name", ""), bool(rec.get("paired")), bool(rec.get("connected")))
+            if rec.get("rssi") or rec.get("name"):
+                state.radio.bt_frame(
+                    now, 0, "hci0", addr, rec.get("name", ""), "", "", "",
+                    "BTLE", rec.get("name") or "advertisement", rec.get("rssi", ""),
+                )
+                now = time.time()
+        await proc.wait()
+    except asyncio.CancelledError:
+        await _kill_group(proc)
+        raise
+    finally:
+        await _close_proc(proc)
 
 
 # --------------------------------------------------------------------------- discovery
@@ -1768,6 +1818,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/api/session", api_session)
+    app.router.add_get("/api/logs", logbuf.api_logs)
     app.router.add_get("/api/state", api_state)
     app.router.add_get("/api/traffic", api_traffic)
     app.router.add_get("/api/payload", api_payload)
@@ -1802,6 +1853,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_get("/api/ai/cursor", cursor_agent.api_key)
     app.router.add_put("/api/ai/cursor", cursor_agent.api_key)
     app.router.add_delete("/api/ai/cursor", cursor_agent.api_key)
+    app.router.add_get("/api/ai/cursor-stats", cursor_stats.api_stats)
     app.router.add_get("/api/ai/history", agent.api_history)
     app.router.add_delete("/api/ai/history", agent.api_history)
     app.router.add_get("/api/ai/memories", agent.api_memories)
@@ -1827,6 +1879,11 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_post("/api/sources", sources.api_sources)
     app.router.add_put("/api/sources/{id}", sources.api_source)
     app.router.add_delete("/api/sources/{id}", sources.api_source)
+    app.router.add_get("/api/plugin-instances", plugin_instances.api_instances)
+    app.router.add_put("/api/plugin-instances", plugin_instances.api_instances)
+    app.router.add_post("/api/plugin-instances", plugin_instances.api_instances)
+    app.router.add_put("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
+    app.router.add_delete("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     if WEB_DIST.exists():
         app.router.add_static("/", WEB_DIST, show_index=False)
     app.on_startup.append(on_startup)
@@ -1867,7 +1924,7 @@ def main() -> None:
     if migrated.get("copied"):
         log("plugin src migrated: " + ", ".join(migrated["copied"]))
     plugins.seed()
-    log(f"UI: http://{args.bind}:{args.port}/   WS: /ws   JSON: /api/state, /api/traffic?ip=…, /api/payload, /api/rf/watch, /api/profiles")
+    log(f"UI: http://{args.bind}:{args.port}/   WS: /ws   JSON: /api/state, /api/logs, /api/traffic?ip=…, /api/payload, /api/rf/watch, /api/profiles")
     if args.insecure_lan:
         log("WARNING: --insecure-lan: the UI is reachable beyond loopback with no password")
     if plugins.python_enabled():

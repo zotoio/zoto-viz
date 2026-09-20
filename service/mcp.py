@@ -469,6 +469,60 @@ SET_SOURCE_TOOL: dict[str, Any] = {
             "interval": {"type": "number", "minimum": 15, "maximum": 86400},
             "enabled": {"type": "boolean"},
             "feed": {"type": "boolean", "description": "Show headlines on the live feed ticker"},
+            "fields": {
+                "type": "object",
+                "additionalProperties": {"type": ["string", "number"]},
+                "description": "JSON field map for type=http (list, title, caption, image, link, filter, expand)",
+            },
+        },
+    },
+}
+
+LIST_PLUGIN_INSTANCES_TOOL: dict[str, Any] = {
+    "name": "list_plugin_instances",
+    "description": (
+        "Operator plugin instances (~/.zoto-viz/plugin-instances.yml). "
+        "Each row reuses a shipped plugin tree with a source id and field picks."
+    ),
+    "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
+}
+
+SET_PLUGIN_INSTANCE_TOOL: dict[str, Any] = {
+    "name": "set_plugin_instance",
+    "description": (
+        "Create or update a plugin instance. plugin is a catalog id (carousel, hn-rain, hn-term). "
+        "id is the instance slug. Optional source / title / caption / image / link / filter "
+        "become This-view defaults. Does not duplicate the plugin tree."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["plugin", "id"],
+        "properties": {
+            "plugin": {"type": "string"},
+            "id": {"type": "string"},
+            "name": {"type": "string"},
+            "hint": {"type": "string"},
+            "source": {"type": "string"},
+            "title": {"type": "string"},
+            "caption": {"type": "string"},
+            "image": {"type": "string"},
+            "link": {"type": "string"},
+            "filter": {"type": "string"},
+        },
+    },
+}
+
+DELETE_PLUGIN_INSTANCE_TOOL: dict[str, Any] = {
+    "name": "delete_plugin_instance",
+    "description": "Remove one operator plugin instance. Shipped instances stay.",
+    "inputSchema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["plugin", "id"],
+        "properties": {
+            "plugin": {"type": "string"},
+            "id": {"type": "string"},
         },
     },
 }
@@ -558,6 +612,9 @@ def active_tools() -> list[dict[str, Any]]:
         LIST_SOURCES_TOOL,
         SET_SOURCE_TOOL,
         DELETE_SOURCE_TOOL,
+        LIST_PLUGIN_INSTANCES_TOOL,
+        SET_PLUGIN_INSTANCE_TOOL,
+        DELETE_PLUGIN_INSTANCE_TOOL,
         GET_SDM_TOOL,
         LIST_CAMERAS_TOOL,
         SET_SDM_TOOL,
@@ -853,6 +910,22 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             if not sources.delete(sid):
                 raise ValueError(f"unknown source {sid!r}")
             return _tool_text({"ok": True, "id": sid, **sources.config_payload()})
+        if name == "list_plugin_instances":
+            from . import plugin_instances
+            return _tool_text({"ok": True, **plugin_instances.config_payload()})
+        if name == "set_plugin_instance":
+            from . import plugin_instances
+            row = plugin_instances.upsert(args)
+            return _tool_text({"ok": True, "instance": row, **plugin_instances.config_payload()})
+        if name == "delete_plugin_instance":
+            from . import plugin_instances
+            plugin = str(args.get("plugin") or "").strip()
+            iid = str(args.get("id") or "").strip()
+            if not plugin or not iid:
+                raise ValueError("plugin and id required")
+            if not plugin_instances.delete(plugin, iid):
+                raise ValueError(f"unknown instance {plugin}:{iid}")
+            return _tool_text({"ok": True, "plugin": plugin, "id": iid, **plugin_instances.config_payload()})
         if name == "get_sdm":
             from . import sdm
             return _tool_text({"ok": True, **sdm.status_payload()})
@@ -992,7 +1065,7 @@ def handle_rpc(msg: dict[str, Any], app: web.Application | None = None) -> dict[
                 "(plugin.yml at the zip or src root; optional visualisation.yml, frontend/, backend/, datasource/, sky/). "
                 "publish_local_plugin writes ~/.zoto-viz/plugins/local/<id>.zip and hot-activates when safe. "
                 "list_profiles / apply_profile load saved looks. list_memories / add_memory / delete_memory "
-                "curate chat memories. list_sources / set_source / delete_source manage RSS, HTTPS, "
+                "curate chat memories. list_sources / set_source / delete_source manage RSS, HTTPS JSON (optional field maps), "
                 "local-file, user-journal, and kernel-ring feeds (~/.zoto-viz/sources.yml). get_sdm / list_cameras / set_sdm manage Nest "
                 "Device Access (OAuth, Pub/Sub, WebRTC; secrets in ~/.zoto-viz/sdm.yml). "
                 "Repo zip install does not git-add; the operator promotes."

@@ -1,4 +1,4 @@
-import { fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
+import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 
@@ -30,8 +30,8 @@ export function fillPluginFields(
     return;
   }
   const persist = () => {
-    writePluginConfig(spec.id, values);
-    onPersist(spec.id, values);
+    writePluginConfig(configStoreId(spec), values);
+    onPersist(configStoreId(spec), values);
   };
   const compact: PluginField[] = [];
   const notes: PluginField[] = [];

@@ -2,27 +2,13 @@ import { describe, expect, it } from "vitest";
 import { hnRainStillSrc, hnRainStillTitles, preferHnStillTitles, waitHnRainStill, warmHnRainStills } from "./hn-rain-stills";
 
 describe("hn rain stills", () => {
-  it("keeps HN titles in source order", () => {
+  it("keeps titles in source order", () => {
     const rows = preferHnStillTitles([
       { id: "lab:0", label: "Lab", text: "Notes" },
       { id: "hn:0", label: "Hacker News", text: "Jemalloc" },
       { id: "hn:1", label: "HN", text: "Waymo" },
     ]);
-    expect(rows.map((r) => r.text)).toEqual(["Jemalloc", "Waymo"]);
-  });
-
-  it("drops NASA titles so IOTD stills stay on carousel", () => {
-    const rows = preferHnStillTitles([
-      { id: "nasa:0", label: "NASA image of the day", text: "Nebula", image: "https://www.nasa.gov/a.jpg" },
-      { id: "hn:0", label: "Hacker News", text: "Jemalloc" },
-    ]);
-    expect(rows.map((r) => r.text)).toEqual(["Jemalloc"]);
-  });
-
-  it("does not fall back to NASA when HN is missing", () => {
-    expect(preferHnStillTitles([
-      { id: "nasa:0", label: "NASA image of the day", text: "Nebula", image: "https://www.nasa.gov/a.jpg" },
-    ])).toEqual([]);
+    expect(rows.map((r) => r.text)).toEqual(["Notes", "Jemalloc", "Waymo"]);
   });
 
   it("asks Composer 2.5 even when a source enclosure is present", () => {
@@ -37,13 +23,17 @@ describe("hn rain stills", () => {
       { id: "hn:1", label: "HN", text: "Waymo" },
       { id: "nasa:0", label: "NASA", text: "Nebula" },
     ]);
-    expect(titles).toEqual(["Jemalloc", "Waymo"]);
+    expect(titles).toEqual(["Jemalloc", "Waymo", "Nebula"]);
     const hits: string[] = [];
     warmHnRainStills(titles, (async (url) => {
       hits.push(String(url));
       return new Response("{}", { status: 202 });
     }) as typeof fetch);
-    expect(hits).toEqual([hnRainStillSrc("Jemalloc"), hnRainStillSrc("Waymo")]);
+    expect(hits).toEqual([
+      hnRainStillSrc("Jemalloc"),
+      hnRainStillSrc("Waymo"),
+      hnRainStillSrc("Nebula"),
+    ]);
   });
 
   it("retries a pending still until Composer returns SVG", async () => {

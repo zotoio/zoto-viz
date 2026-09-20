@@ -6,6 +6,7 @@ import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg,
 import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame } from "../core/fps";
 import { probeWebGL } from "../graph/webgl";
+import { observeResize } from "../core/resize";
 import { POLL_MS, REPLAY_S, isKnown } from "./arcade";
 
 /**
@@ -63,7 +64,7 @@ export abstract class Stage3D {
     this.container.addEventListener("pointerup", this.onPtrUp);
     this.container.addEventListener("pointerleave", this.onPtrUp);
     this.container.addEventListener("wheel", this.onWheel, { passive: false });
-    new ResizeObserver(() => this.fit()).observe(this.container);
+    observeResize(this.container, () => this.fit());
   }
 
   start(preferIp?: string | null): void {
@@ -170,7 +171,7 @@ export abstract class Stage3D {
     if (ok) {
       const r = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: "high-performance" });
       r.shadowMap.enabled = true;
-      r.shadowMap.type = THREE.PCFSoftShadowMap;
+      r.shadowMap.type = THREE.PCFShadowMap;
       r.outputColorSpace = THREE.SRGBColorSpace;
       r.toneMapping = THREE.ACESFilmicToneMapping;
       r.toneMappingExposure = 1.05;

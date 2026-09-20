@@ -1,4 +1,5 @@
 import { DEFAULT_FEED, type FeedConfig } from "../ui/feed";
+import { DEFAULT_CHAT, type ChatConfig } from "../ui/chat";
 import { allModes, defaultCatalogMode, defaultOpts } from "./modes";
 import { DEFAULT_DREAM, type DreamAnim } from "../graph/scene";
 import { guardReadableAnim } from "../graph/readable";
@@ -43,6 +44,7 @@ export interface ProfileSettings {
   filters: { allowNames: string; blockNames: string; allowNets: string; blockNets: string };
   anim: DreamAnim;
   feed: FeedConfig;
+  chat: ChatConfig;
   arcade: Record<string, string>;
   /** where the chrome sits: top header, or a wide left/right bar (the other side holds the inspect panel) */
   chrome: "top" | "left" | "right";
@@ -107,6 +109,7 @@ export function shippedSettings(): ProfileSettings {
     filters: { allowNames: "", blockNames: "", allowNets: "", blockNets: "" },
     anim: { ...DEFAULT_DREAM },
     feed: { ...DEFAULT_FEED },
+    chat: { ...DEFAULT_CHAT },
     arcade: {},
     chrome: "top",
     plugins: {},
@@ -125,6 +128,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
   const filters = s.filters && typeof s.filters === "object" ? s.filters as Record<string, unknown> : {};
   const anim = s.anim && typeof s.anim === "object" ? s.anim as DreamAnim : d.anim;
   const feed = s.feed && typeof s.feed === "object" ? s.feed as FeedConfig : d.feed;
+  const chat = s.chat && typeof s.chat === "object" ? s.chat as ChatConfig : d.chat;
   const modeOptions = s.modeOptions && typeof s.modeOptions === "object"
     ? s.modeOptions as Record<string, Record<string, string>>
     : d.modeOptions;
@@ -155,6 +159,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     feed: {
       ...d.feed,
       ...feed,
+      source: "traffic",
       includeSources: bool((feed as FeedConfig).includeSources, d.feed.includeSources),
       textSize: (() => {
         const n = Number((feed as FeedConfig).textSize);
@@ -163,6 +168,13 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
       density: (() => {
         const n = Number((feed as FeedConfig).density);
         return Number.isFinite(n) ? Math.min(80, Math.max(12, n)) : d.feed.density;
+      })(),
+    },
+    chat: {
+      on: bool((chat as ChatConfig).on, d.chat.on),
+      textSize: (() => {
+        const n = Number((chat as ChatConfig).textSize);
+        return Number.isFinite(n) ? Math.min(20, Math.max(10, n)) : d.chat.textSize;
       })(),
     },
     arcade: { ...arcade },
@@ -383,6 +395,10 @@ export class ProfileStore {
       });
       return await api<ProfileList>("/api/profiles");
     } catch (e) {
+      // Two tabs (or a race with another client) both create `user` on first boot.
+      if (String(e).includes("already exists")) {
+        return await api<ProfileList>("/api/profiles");
+      }
       console.warn("zoto-viz profiles user:", e);
       return data;
     }

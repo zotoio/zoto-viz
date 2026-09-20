@@ -52,19 +52,6 @@ def test_roll_abbreviates_and_keeps_ui_log(tmp_path: Path, monkeypatch) -> None:
     assert memory.ollama_tail() == []
 
 
-def test_pending_task_survives_log_writes(tmp_path: Path, monkeypatch) -> None:
-    _iso(tmp_path, monkeypatch)
-    assert memory.pending_task() == ""
-    memory.set_pending_task("show NASA stills")
-    memory.append_message("user", "show NASA stills")
-    assert memory.pending_task() == "show NASA stills"
-    assert memory.clear_pending_task() == "show NASA stills"
-    assert memory.pending_task() == ""
-    memory.set_pending_task("again")
-    memory.clear_conversation()
-    assert memory.pending_task() == ""
-
-
 def test_roll_through_tracks_trim(tmp_path: Path, monkeypatch) -> None:
     _iso(tmp_path, monkeypatch)
     monkeypatch.setattr(memory, "CONV_MAX", 6)
@@ -100,6 +87,14 @@ def test_append_and_ui_tail(tmp_path: Path, monkeypatch) -> None:
     rows = memory.messages()
     assert rows[-1]["thinking"] == "because it is idle"
     assert memory.ui_messages()[-1]["thinking"] == "because it is idle"
+    memory.append_message(
+        "assistant",
+        "ok",
+        usage={"model": "grok-4.6", "usage": {"inputTokens": 9, "outputTokens": 2, "totalTokens": 11},
+               "cost": {"chargedCents": 0.4}},
+    )
+    assert memory.ui_messages()[-1]["usage"]["usage"]["totalTokens"] == 11
+    assert memory.ui_messages()[-1]["usage"]["cost"]["chargedCents"] == 0.4
     d = _iso(tmp_path, monkeypatch)
     (d / "conversation.json").write_text(json.dumps({"messages": ["x", {"role": "user", "content": "ok"}]}), encoding="utf-8")
     assert memory.messages()[-1]["content"] == "ok"
@@ -171,6 +166,17 @@ def test_facts_window_slides_to_token_budget(tmp_path: Path, monkeypatch) -> Non
     assert wide.count("- ") >= tight.count("- ")
     injected = memory.inject_block("kitchen")
     assert injected.startswith("\nFacts")
+    memory.append_message("user", "want a new sky for talkers")
+    memory.append_message("assistant", "I can invent a plugin sky and publish it")
+    memory.append_message("user", "do it")
+    chat = memory.chat_window()
+    assert "Recent chat (discuss then act)" in chat
+    assert "want a new sky" in chat
+    assert "invent a plugin sky" in chat
+    assert "do it" not in chat
+    mixed = memory.inject_block("sky")
+    assert "Facts" in mixed
+    assert "Recent chat" in mixed
     memory.append_message("user", "who is loud?")
     memory.append_message("assistant", "the nest cam · thinking leftover", thinking="long chain of thought about bitrate")
     tail = memory.ollama_tail()

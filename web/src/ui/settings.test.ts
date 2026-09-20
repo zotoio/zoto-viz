@@ -29,6 +29,8 @@ describe("Settings panes", () => {
   it("puts Network and System on Graph, host filters on Privacy, and plugin copy on This view", () => {
     const s = new Settings({ storePrefix: "zoto-viz-test", onChange: () => {} });
     const labels = [...s.el.querySelectorAll(".s-nav-btn")].map((b) => b.textContent);
+    expect(s.el.querySelector(".float-handle")?.textContent).toBe("settings");
+    expect(s.el.querySelector(".float-resize")).toBeTruthy();
     expect(labels).toContain("This view");
     expect(labels).toContain("Graph");
     expect(labels).toContain("Physics");
@@ -48,12 +50,16 @@ describe("Settings panes", () => {
     sys.dataset.k = "sys";
     s.addSection("Network", [{ el: net }], "LAN nodes");
     s.addSection("System", [{ el: sys }], "CPU graphs");
+    const dbg = document.createElement("div");
+    dbg.dataset.k = "dbg";
+    s.addSection("Debug", [{ el: dbg }], "monitor stderr");
     const graph = s.host;
     expect(graph.querySelector("[data-k=net]")).toBe(net);
     expect(graph.querySelector("[data-k=sys]")).toBe(sys);
     expect(graph.textContent).toContain("LAN nodes");
     expect(graph.textContent).toContain("CPU graphs");
     expect(graph.textContent).not.toContain("Allow host patterns");
+    expect(s.el.querySelector('[data-pane="appearance"]')?.textContent).toMatch(/monitor stderr/);
     const privacy = s.privacyHost;
     expect(privacy.textContent).toContain("Network detail");
     expect(privacy.textContent).toContain("Allow host patterns");

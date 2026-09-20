@@ -28,6 +28,7 @@ export class CarouselView extends Stage3D {
   private shownId = "";
   private front: HTMLImageElement;
   private reduceMotion = false;
+  private bind: Record<string, string> = { source: "nasa", filter: "has-image" };
 
   constructor(container: HTMLElement, scene: NetScene) {
     super(container, scene);
@@ -47,7 +48,7 @@ export class CarouselView extends Stage3D {
     this.imgB.decoding = "async";
     this.capEl = document.createElement("figcaption");
     this.capEl.className = "carousel-caption";
-    this.capEl.setAttribute("aria-label", "NASA caption");
+    this.capEl.setAttribute("aria-label", "still caption");
     this.capTitle = document.createElement("strong");
     this.capTitle.className = "carousel-caption-title";
     this.capBody = document.createElement("span");
@@ -65,8 +66,18 @@ export class CarouselView extends Stage3D {
   protected query() { return null; }
   protected ingest(): void {}
 
+  setBind(bind: Record<string, string>): void {
+    const key = `${bind.source ?? ""}\u0001${bind.titleField ?? ""}\u0001${bind.imageField ?? ""}\u0001${bind.filter ?? ""}`;
+    const prev = `${this.bind.source ?? ""}\u0001${this.bind.titleField ?? ""}\u0001${this.bind.imageField ?? ""}\u0001${this.bind.filter ?? ""}`;
+    this.bind = { ...bind };
+    if (key !== prev) {
+      this.slideKey = "";
+      this.onSnapshot();
+    }
+  }
+
   protected onSnapshot(): void {
-    const next = carouselSlides(headlinesFromSources(this.msg?.sources), MAX_SLIDES);
+    const next = carouselSlides(headlinesFromSources(this.msg?.sources, this.bind), MAX_SLIDES);
     const key = next.map((s) => `${s.id}\u0001${s.image ?? ""}`).join("|");
     if (key === this.slideKey) return;
     this.slideKey = key;
@@ -170,7 +181,7 @@ export class CarouselView extends Stage3D {
   }
 
   private paintCaption(slide: CarouselSlide | undefined): void {
-    const { title, body } = carouselCaptionParts(slide ?? { title: "NASA image of the day · waiting for stills…" });
+    const { title, body } = carouselCaptionParts(slide ?? { title: "waiting for stills…" });
     this.capTitle.textContent = title;
     this.capBody.textContent = body;
     this.capBody.hidden = !body;

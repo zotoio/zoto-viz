@@ -106,6 +106,8 @@ def test_seed_defaults_and_crud() -> None:
     ids = {r["id"] for r in rows}
     assert "hn" in ids
     assert "nasa" in ids
+    assert "apod" in ids
+    assert "lobsters" in ids
     assert "journal" in ids
     assert "kmsg" in ids
     assert sources.sources_file().is_file()
@@ -115,6 +117,20 @@ def test_seed_defaults_and_crud() -> None:
     assert sources.delete("notes") is False
     lines = sources.headlines()
     assert isinstance(lines, list)
+
+
+def test_seed_content_sources_on_old_registry() -> None:
+    sources.save([sources.normalize({"id": "hn", "type": "rss", "url": "https://hnrss.org/frontpage"})])
+    sources.reset_for_tests()
+    ids = {r["id"] for r in sources.load()}
+    assert "hn" in ids
+    assert "apod" in ids
+    assert "earth-iotd" in ids
+    assert "met" in ids
+    assert "guardian" in ids
+    assert "mastodon" in ids
+    apod = next(r for r in sources.ensure() if r["id"] == "apod")
+    assert apod["fields"]["image"] == "hdurl"
 
 
 def test_api_image_requires_url() -> None:

@@ -24,7 +24,7 @@ git clone <this-repo> && cd zoto-viz
 Manual equivalent (Debian/Ubuntu):
 
 ```bash
-sudo apt install tshark arp-scan fping nmap avahi-utils nbtscan bind9-dnsutils graphviz openssl
+sudo apt install tshark iw arp-scan fping nmap avahi-utils nbtscan bind9-dnsutils graphviz openssl
 sudo usermod -aG wireshark $USER      # log out and back in
 ```
 
@@ -40,6 +40,7 @@ Then:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+# Node 22.12+ (nvm: nvm install 22 && nvm alias default 22)
 corepack enable && corepack prepare pnpm@latest --activate
 cd web && pnpm install && pnpm build && cd ..
 ./zoto-viz --help

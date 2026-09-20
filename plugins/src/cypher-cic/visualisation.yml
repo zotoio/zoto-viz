@@ -1,0 +1,54 @@
+engine: graph
+base: topology
+style:
+  flatten: false
+look:
+  theme: neon
+  backdrop: plugin
+  stageOnly: false
+  skyOpacity: 1
+  skyBright: 1.05
+  skySpeed: 0.32
+  skyAudio: false
+  gridShape: hex
+  gridOpacity: 0
+  themeCycle: "off"
+  edgeGlow: comet
+  edgeGlowAmt: 1.1
+  mosaic: "8"
+  hero: center
+  mosaicSharedTheme: true
+  mosaicTiles:
+    - plugin:topology
+    - plugin:talkers
+    - plugin:protocols
+    - plugin:watch
+    - plugin:cores
+    - plugin:memory
+    - plugin:sockets
+    - plugin:gpu
+config:
+  - key: rain
+    label: data rain
+    type: number
+    default: 1
+    min: 0
+    max: 2
+    step: 0.05
+    hint: Glyph rain and city streak density on the holodeck.
+  - key: glitch
+    label: glitch
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.05
+    hint: Chromatic tear and scan-fault amount. Alerts add more.
+  - key: hud
+    label: HUD ink
+    type: number
+    default: 0.92
+    min: 0.35
+    max: 1.2
+    step: 0.02
+    hint: Infograph panel weight. Does not dim the look slider.

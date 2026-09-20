@@ -27,6 +27,7 @@ from . import hooks
 from . import paths
 from . import plugin_backend as pb
 from . import plugin_sky as psky
+from . import plugin_instances as pins
 from . import plugin_zip as pz
 import yaml
 from aiohttp import web
@@ -821,7 +822,7 @@ def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str,
     catalog_dir = zips_dir if zips_dir.is_dir() else src_dir
     return _scan_payload(
         catalog_dir,
-        list(src["plugins"]) + list(zipped["plugins"]) + local_plugins,
+        pins.attach(list(src["plugins"]) + list(zipped["plugins"]) + local_plugins),
         list(src["errors"]) + list(zipped["errors"]) + local_errors,
     )
 

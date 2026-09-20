@@ -1,0 +1,41 @@
+engine: graph
+base: talkers
+look:
+  theme: ember
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 0.92
+  skyAudio: false
+  skySpeed: 0.08
+  gridOpacity: 0
+config:
+  - key: format
+    label: hours
+    type: select
+    values:
+      - [24, 24-hour]
+      - [12, 12-hour]
+    default: 24
+    hint: Local clock. 12-hour drops a leading zero.
+  - key: seconds
+    label: seconds
+    type: boolean
+    default: true
+    hint: Hide the last pair of tubes for a four-cell clock.
+  - key: glow
+    label: glow
+    type: number
+    default: 1
+    min: 0.4
+    max: 1.6
+    step: 0.05
+    hint: Neon brightness inside each tube.
+  - key: flicker
+    label: flicker
+    type: number
+    default: 0.22
+    min: 0
+    max: 1
+    step: 0.02
+    hint: Gas shimmer. LAN pulse adds a little more.

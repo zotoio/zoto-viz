@@ -5,17 +5,20 @@ import asyncio
 import json
 import os
 import shutil
+import time
 from pathlib import Path
 from typing import Any
 
 from aiohttp import web
 
+from . import cursor_stats
 from . import paths
 
-DEFAULT_MODEL = "grok-4.5"
+DEFAULT_MODEL = "grok-4.6"
 KEY_FILE = paths.user_dir() / "cursor-key"
 FALLBACK_MODELS: list[dict[str, str]] = [
-    {"id": "grok-4.5", "label": "Grok 4.5", "hint": "default"},
+    {"id": "grok-4.6", "label": "Grok 4.6", "hint": "default"},
+    {"id": "grok-4.5", "label": "Grok 4.5"},
     {"id": "grok-4", "label": "Grok 4"},
     {"id": "composer-2.5", "label": "Composer 2.5"},
     {"id": "gpt-5.4", "label": "GPT-5.4"},
@@ -72,20 +75,70 @@ def _env(key: str) -> dict[str, str]:
     env["CURSOR_API_KEY"] = key
     env["ZOTO_VIZ_MCP"] = os.environ.get("ZOTO_VIZ_MCP", "http://127.0.0.1:7020/mcp")
     env["ZOTO_VIZ_REPO_ROOT"] = str(paths.repo_root())
+    env["ZOTO_VIZ_CURSOR_STATS"] = str(cursor_stats.stats_path())
+    env["ZOTO_VIZ_CURSOR_SESSION"] = str(session_path())
     return env
 
 
-async def list_models(key: str) -> dict[str, Any]:
+def session_path() -> Path:
+    env = os.environ.get("ZOTO_VIZ_CURSOR_SESSION", "").strip()
+    if env:
+        return Path(env).expanduser()
+    return paths.agent_dir() / "cursor-session.json"
+
+
+def read_session() -> dict[str, Any]:
+    try:
+        data = json.loads(session_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def clear_session() -> None:
+    try:
+        session_path().unlink()
+    except FileNotFoundError:
+        pass
+
+
+def remember_session(row: dict[str, Any]) -> None:
+    agent_id = ""
+    stats = row.get("stats") if isinstance(row.get("stats"), dict) else {}
+    session = row.get("session") if isinstance(row.get("session"), dict) else {}
+    if isinstance(stats, dict):
+        agent_id = str(stats.get("agentId") or "")
+    if not agent_id and isinstance(session, dict):
+        agent_id = str(session.get("agentId") or "")
+    if not agent_id:
+        return
+    dest = session_path()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps({
+        "agentId": agent_id,
+        "model": str(session.get("model") or stats.get("model") or ""),
+        "t": time.time(),
+    }) + "\n", encoding="utf-8")
+    try:
+        os.chmod(dest, 0o600)
+    except OSError:
+        pass
+
+
+async def list_models(key: str, *, capture: bool = True) -> dict[str, Any]:
     cli = bridge_dir() / "cli.mjs"
     if not cli.is_file() or not key:
         return {"ok": False, "models": list(FALLBACK_MODELS), "default": DEFAULT_MODEL,
                 "error": "missing API key" if not key else "cursor-bridge missing"}
+    env = _env(key)
+    if not capture:
+        env["ZOTO_VIZ_CURSOR_STATS_SKIP"] = "list"
     try:
         proc = await asyncio.create_subprocess_exec(
             node_bin(), str(cli), "list",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=_env(key),
+            env=env,
             cwd=str(bridge_dir()),
         )
         out, err = await asyncio.wait_for(proc.communicate(), timeout=25)
@@ -98,6 +151,8 @@ async def list_models(key: str) -> dict[str, Any]:
         data = json.loads(out.decode("utf-8", "replace") or "{}")
     except json.JSONDecodeError:
         return {"ok": False, "models": list(FALLBACK_MODELS), "default": DEFAULT_MODEL, "error": "bad list json"}
+    if capture and isinstance(data, dict):
+        cursor_stats.ingest(data)
     rows = data.get("models") if isinstance(data, dict) else None
     models: list[dict[str, str]] = []
     if isinstance(rows, list):
@@ -134,7 +189,7 @@ async def enrich_status() -> dict[str, Any]:
     if not key:
         base["error"] = "set CURSOR_API_KEY or paste a key in Settings → Agent"
         return base
-    listed = await list_models(key)
+    listed = await list_models(key, capture=False)
     base.update(listed)
     base["configured"] = True
     return base
@@ -147,16 +202,20 @@ async def stream_chat(
     prompt: str,
     system: str,
     control: bool,
-) -> str:
-    """Run one Cursor SDK turn; write Ollama-shaped NDJSON onto ``resp``. Returns assistant text."""
+    reset: bool = False,
+) -> tuple[str, dict[str, Any]]:
+    """Run one Cursor SDK turn; write Ollama-shaped NDJSON onto ``resp``.
+
+    Returns assistant text and the last stats object (tokens / spend).
+    """
     key = read_key()
     if not key:
         await resp.write(json.dumps({"error": "Cursor API key missing", "done": True}).encode())
-        return ""
+        return "", {}
     cli = bridge_dir() / "cli.mjs"
     if not cli.is_file():
         await resp.write(json.dumps({"error": "cursor-bridge missing", "done": True}).encode())
-        return ""
+        return "", {}
     env = _env(key)
     env["ZOTO_VIZ_AI_CONTROL"] = "1" if control else "0"
     try:
@@ -171,13 +230,21 @@ async def stream_chat(
         )
     except OSError as e:
         await resp.write(json.dumps({"error": str(e), "done": True}).encode())
-        return ""
-    payload = json.dumps({"prompt": prompt, "system": system, "control": control}) + "\n"
+        return "", {}
+    payload = json.dumps({
+        "prompt": prompt,
+        "system": system,
+        "control": control,
+        "model": model or DEFAULT_MODEL,
+        "reset": reset,
+        "agentId": "" if reset else str(read_session().get("agentId") or ""),
+    }) + "\n"
     assert proc.stdin and proc.stdout
     proc.stdin.write(payload.encode())
     await proc.stdin.drain()
     proc.stdin.close()
     collected = ""
+    last_stats: dict[str, Any] = {}
     try:
         while True:
             line = await proc.stdout.readline()
@@ -189,6 +256,10 @@ async def stream_chat(
             except json.JSONDecodeError:
                 continue
             if isinstance(row, dict):
+                cursor_stats.ingest(row)
+                remember_session(row)
+                if isinstance(row.get("stats"), dict):
+                    last_stats = row["stats"]
                 msg = row.get("message") if isinstance(row.get("message"), dict) else {}
                 bit = str(msg.get("content") or "")
                 if bit:
@@ -200,7 +271,7 @@ async def stream_chat(
             await asyncio.wait_for(proc.wait(), timeout=8)
         except asyncio.TimeoutError:
             proc.kill()
-    return collected
+    return collected, last_stats
 
 
 async def api_key(req: web.Request) -> web.Response:

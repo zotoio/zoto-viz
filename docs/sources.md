@@ -11,18 +11,22 @@ Config: `~/.zoto-viz/sources.yml`. Local drop files: `~/.zoto-viz/sources/`.
 | type | Input | Notes |
 | --- | --- | --- |
 | `rss` | public `https://` URL | RSS 2.0 or Atom. Up to 20 items (title, HTML-stripped summary, enclosure / media image). |
-| `http` | public `https://` URL | JSON object/array, or text. 256 KB cap. |
+| `http` | public `https://` URL | JSON object/array, or text. 256 KB cap. Optional `fields` map (list / title / caption / image / link / filter / expand) projects JSON onto RSS-shaped `items[]`. |
 | `file` | path under `$HOME` or `~/.zoto-viz` | JSON if it parses, otherwise `{text}`. |
 | `journal` | optional user-unit name | `journalctl --user` (not the system journal). Optional `unit` filters to one user unit. |
 | `kmsg` | none | Live `/dev/kmsg` when the process can open it; otherwise `journalctl -k`. First run (and older registries) seed `journal` and `kmsg` next to HN / NASA. |
 
-Linux SYS graphs (not this registry) live on the 1 Hz snapshot as `views.memory`, `views.disk`, `views.gpu`, `views.sockets`, `views.cgroups`, `views.units`, `views.udev`, plus `views.bridge` (one schematic of those subsystems). CPU cores/load also carry `views.cpu.thermal` (package °C, RAPL/GPU watts when readable) so those views can tint cores and nudge sky brightness without a new menu row. **SYS Syscon** (`plugin:syscon`) is the 2×4 mosaic wall of those SYS graphs (it still wraps `views.bridge` as a catalog row).
+Linux SYS graphs (not this registry) live on the 1 Hz snapshot as `views.memory`, `views.disk`, `views.gpu`, `views.sockets`, `views.cgroups`, `views.units`, `views.udev`, plus `views.bridge` (one schematic of those subsystems). CPU cores/load also carry `views.cpu.thermal` (package °C, RAPL/GPU watts when readable) so those views can tint cores and nudge sky brightness without a new menu row. **SYS Syscon** (`plugin:syscon`) is the 2×4 mosaic wall of those SYS graphs (it still wraps `views.bridge` as a catalog row). **NET Cypher CIC** (`plugin:cypher-cic`) is the neon center-hero wall: topology on a holodeck infograph of host gauges, talkers, protocols, and RF, flanked by talkers / protocols / watch / cores / memory / sockets / GPU.
 
 Remote fetches reuse the agent-asset gate: HTTPS, port 443, public DNS, no private/loopback hosts. The browser never fetches source URLs.
 
 ## Defaults
 
-A first run seeds **Hacker News** (`hn`, hnrss.org), **NASA image of the day** (`nasa`), **User journal** (`journal`), and **Kernel ring** (`kmsg`). Existing registries that predate those last two gain them on the next load. Disable or remove them in Settings → Sources.
+A first run seeds **Hacker News** (`hn`), **NASA image of the day** (`nasa`), **APOD** (`apod`, NASA DEMO_KEY), **Earth Observatory** (`earth-iotd`), **Commons picture of the day** (`commons-potd`), **Met highlights** (`met`, object-id expand), **Lobsters** (`lobsters`), **Guardian world** (`guardian`, public test key), **Mastodon #space** (`mastodon`), **User journal** (`journal`), and **Kernel ring** (`kmsg`). Existing registries gain the new content rows (and journal / kmsg) on the next load. Disable them in Settings → Sources rather than deleting if you do not want them re-seeded.
+
+HTTP JSON field maps live on the source row. Example APOD: `title`, `explanation` → caption, `hdurl` / `url` → image, `media_type=image` filter. Met uses `list: objectIDs` plus `expand: https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}`.
+
+Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** are engines; Settings → This view picks `source` and field names. Shipped instances add extra VIEW rows (`plugin:carousel:apod`, `plugin:hn-rain:lobsters`, …). Operator extras: `~/.zoto-viz/plugin-instances.yml` or Settings → Sources → View instances.
 
 ## API / MCP
 
@@ -34,7 +38,10 @@ A first run seeds **Hacker News** (`hn`, hnrss.org), **NASA image of the day** (
 | `PUT /api/sources` | replace the list |
 | `PUT /api/sources/{id}` | upsert that id |
 | `DELETE /api/sources/{id}` | remove |
+| `GET/POST/PUT /api/plugin-instances` | operator view instances (`~/.zoto-viz/plugin-instances.yml`) |
+| `PUT/DELETE /api/plugin-instances/{plugin}/{id}` | upsert or remove one instance |
 | MCP `list_sources` / `set_source` / `delete_source` | same registry |
+| MCP `list_plugin_instances` / `set_plugin_instance` / `delete_plugin_instance` | view instances |
 
 `set_settings` `{ feed: { includeSources } }` shows or hides headlines on the ticker. Source rows themselves are not a live UI patch — they persist on the server.
 

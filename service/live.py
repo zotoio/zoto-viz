@@ -90,19 +90,24 @@ FLOOR_SHAPES = ("square", "hex", "triangle", "diamond", "circle")
 AUDIO_DRIVES = ("mic", "traffic", "node")
 THEME_CYCLES = ("off", "cadence", "audio")
 EDGE_GLOWS = ("off", "comet", "pulse")
-FABRIC_KINDS = ("off", "tubes", "cloth", "ribbon")
+FABRIC_KINDS = (
+    "auto", "off",
+    "tubes", "cloth", "crystals", "voxels", "neon", "beads", "pillars", "orbit", "wire", "lattice",
+    "ribbon", "dots", "constellation", "hex", "circuit", "ink", "map", "tiles", "mosaic",
+)
+GRAPH_SPACES = ("auto", "space", "plane")
 MOSAIC_SIZES = ("off", "4", "6", "8")
 HERO_POS = ("off", "left", "center", "right")
 FOCUS_MODES = ("activity", "motion", "cloud")
 DICE_INCLUDE = (
     "theme", "view", "mosaic", "feed",
-    "motion", "physics", "knobs", "show",
+    "motion", "style", "physics", "knobs", "show",
 )
 DICE_MOSAIC_MAX = ("4", "6", "8")
 ANIM_BOOL = (
     "follow", "cycle", "randomize", "skyAudio", "bgAudio", "gridAudio",
     "audioCamera", "camTheme", "audioNodes", "audioPhysics", "audioParts", "autoTune",
-    "mosaicSharedTheme",
+    "mosaicSharedTheme", "mosaicUniqueSkies",
 )
 # mirrors web/src/graph/scene.ts DREAM_BOUNDS (plus shared opacity/bright/magnet aliases)
 ANIM_NUM: dict[str, dict[str, float]] = {
@@ -166,6 +171,7 @@ ANIM_ENUM = {
     "skyCycle": THEME_CYCLES,
     "edgeGlow": EDGE_GLOWS,
     "graphFabric": FABRIC_KINDS,
+    "graphSpace": GRAPH_SPACES,
     "mosaic": MOSAIC_SIZES,
     "hero": HERO_POS,
     "focus": FOCUS_MODES,
@@ -344,7 +350,13 @@ def sanitize_patch(raw: Any) -> dict[str, Any]:
         out["merge"] = raw["merge"]
     feed = _feed(raw.get("feed"))
     if feed:
+        if feed.get("source") in ("transcript", "both"):
+            out["chat"] = {**out.get("chat", {}), "on": True}
+            feed["source"] = "traffic"
         out["feed"] = feed
+    chat = _chat(raw.get("chat"))
+    if chat:
+        out["chat"] = {**out.get("chat", {}), **chat}
     show = _bool_map(raw.get("show"), SHOW_KEYS)
     if show:
         out["show"] = show
@@ -484,6 +496,16 @@ def _anim(raw: Any) -> dict[str, Any]:
                 out["mosaicTiles"] = tiles
         elif key == "mosaicMaxId" and isinstance(v, str) and v.strip():
             out["mosaicMaxId"] = v.strip()[:80]
+        elif key == "mosaicSkies" and isinstance(v, dict):
+            skies: dict[str, str] = {}
+            for tid, sky in list(v.items())[:16]:
+                if not isinstance(tid, str) or not isinstance(sky, str):
+                    continue
+                kind = sky.strip()
+                if kind in BACKDROPS:
+                    skies[tid.strip()[:80]] = kind
+            if skies:
+                out["mosaicSkies"] = skies
         elif isinstance(v, str) and len(v) <= 48 and key not in ANIM_ENUM:
             out[key] = v
     return out
@@ -635,6 +657,7 @@ def features() -> dict[str, Any]:
             "mosaicTree": "split tree ({type, dir, ratio, a, b} or {type:leaf, id})",
             "mosaicTiles": "view ids in leaf order (AI may set these when mosaic layout is locked)",
             "mosaicMaxId": "maximized tile view id",
+            "mosaicSkies": "per-tile backdrop when mosaicUniqueSkies is on (plugin tiles stay plugin)",
         },
         "look": {
             "shader": "GLSL fragment (vec3 color or void main)",
@@ -644,7 +667,7 @@ def features() -> dict[str, Any]:
         },
         "sources": {
             "kinds": ["rss", "http", "file"],
-            "hint": "host RSS / HTTPS / local-file registry (~/.zoto-viz/sources.yml); list_sources / set_source / delete_source",
+            "hint": "host RSS / HTTPS / local-file registry (~/.zoto-viz/sources.yml); list_sources / set_source / delete_source; plugin instances reuse a view tree",
         },
         "sdm": {
             "hint": "Google Nest Device Access (~/.zoto-viz/sdm.yml). list_cameras / get_sdm / set_sdm. OAuth + Pub/Sub + WebRTC.",

@@ -23,6 +23,7 @@ from aiohttp import ClientError, ClientSession, ClientTimeout, web
 
 from . import agent_assets
 from . import paths
+from . import source_fields
 
 KINDS = ("rss", "http", "file", "journal", "kmsg")
 SYS_KINDS = ("journal", "kmsg")
@@ -56,6 +57,94 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "feed": True,
     },
     {
+        "id": "apod",
+        "type": "http",
+        "label": "Astronomy Picture of the Day",
+        "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count=8",
+        "interval": 3600,
+        "enabled": True,
+        "feed": True,
+        "fields": {
+            "title": "title",
+            "caption": "explanation",
+            "image": "hdurl",
+            "imageFallback": "url",
+            "link": "url",
+            "filter": "media_type=image",
+        },
+    },
+    {
+        "id": "earth-iotd",
+        "type": "rss",
+        "label": "Earth Observatory",
+        "url": "https://science.nasa.gov/feed/earth-observatory/image-of-the-day",
+        "interval": 3600,
+        "enabled": True,
+        "feed": True,
+    },
+    {
+        "id": "commons-potd",
+        "type": "rss",
+        "label": "Commons picture of the day",
+        "url": "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=atom",
+        "interval": 3600,
+        "enabled": True,
+        "feed": True,
+    },
+    {
+        "id": "met",
+        "type": "http",
+        "label": "Met highlights",
+        "url": "https://collectionapi.metmuseum.org/public/collection/v1/search?isHighlight=true&hasImages=true&q=art",
+        "interval": 3600,
+        "enabled": True,
+        "feed": True,
+        "fields": {
+            "list": "objectIDs",
+            "expand": "https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}",
+            "expandCap": 8,
+            "title": "title",
+            "caption": "artistDisplayName",
+            "image": "primaryImage",
+            "link": "objectURL",
+            "filter": "has-image",
+        },
+    },
+    {
+        "id": "lobsters",
+        "type": "rss",
+        "label": "Lobsters",
+        "url": "https://lobste.rs/rss",
+        "interval": 300,
+        "enabled": True,
+        "feed": True,
+    },
+    {
+        "id": "guardian",
+        "type": "http",
+        "label": "Guardian world",
+        "url": "https://content.guardianapis.com/search?section=world&show-fields=trailText,thumbnail&page-size=12&api-key=test",
+        "interval": 600,
+        "enabled": True,
+        "feed": True,
+        "fields": {
+            "list": "response.results",
+            "title": "webTitle",
+            "caption": "fields.trailText",
+            "image": "fields.thumbnail",
+            "link": "webUrl",
+        },
+    },
+    {
+        "id": "mastodon",
+        "type": "rss",
+        "label": "Mastodon #space",
+        "url": "https://mastodon.social/tags/space.rss",
+        "interval": 300,
+        "enabled": True,
+        "feed": True,
+    },
+    {
         "id": "journal",
         "type": "journal",
         "label": "User journal",
@@ -72,6 +161,11 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "feed": True,
     },
 ]
+# Re-add these ids on registries that predate them. hn / nasa stay operator-owned.
+SEED_SOURCE_IDS = frozenset({
+    "journal", "kmsg",
+    "apod", "earth-iotd", "commons-potd", "met", "lobsters", "guardian", "mastodon",
+})
 
 _rows: list[dict[str, Any]] = []
 _live: dict[str, dict[str, Any]] = {}
@@ -186,6 +280,13 @@ def normalize(raw: Any, *, taken: set[str] | None = None) -> dict[str, Any]:
     else:
         url = agent_assets.check_url(str(raw.get("url") or ""))
         row["url"] = url
+    fields = source_fields.normalize_fields(raw.get("fields"))
+    if fields:
+        expand = str(fields.get("expand") or "")
+        if expand:
+            sample = source_fields.subst(expand, {"id": "1"})
+            agent_assets.check_url(sample)
+        row["fields"] = fields
     return row
 
 
@@ -223,17 +324,17 @@ def load(*, seed: bool = True) -> list[dict[str, Any]]:
             continue
         taken.add(row["id"])
         out.append(row)
-    out = _seed_sys_kinds(out, taken, persist=p.is_file())
+    out = _seed_missing(out, taken, persist=p.is_file())
     _rows = out
     _loaded = True
     return list(_rows)
 
 
-def _seed_sys_kinds(rows: list[dict[str, Any]], taken: set[str], *, persist: bool) -> list[dict[str, Any]]:
-    """Add journal / kmsg once on existing registries that predate those kinds."""
+def _seed_missing(rows: list[dict[str, Any]], taken: set[str], *, persist: bool) -> list[dict[str, Any]]:
+    """Add journal / kmsg / content feeds once on registries that predate them."""
     added = False
     for raw in DEFAULT_SOURCES:
-        if raw["type"] not in SYS_KINDS or raw["id"] in taken:
+        if raw["id"] not in SEED_SOURCE_IDS or raw["id"] in taken:
             continue
         try:
             row = normalize(raw, taken=taken)
@@ -565,6 +666,37 @@ def _file_payload(path: Path) -> dict[str, Any]:
         return {"text": text[:MAX_BODY]}
 
 
+async def _projected_items(data: Any, fields: dict[str, Any]) -> list[dict[str, str]]:
+    payload = data
+    if fields.get("expand"):
+        records: list[Any] = []
+        for raw in source_fields.expand_ids(data, fields):
+            rec = raw if isinstance(raw, dict) else None
+            if rec is None:
+                rec = await _expand_one(str(fields["expand"]), raw)
+            if rec:
+                records.append(rec)
+        payload = records
+        mapped = dict(fields)
+        mapped.pop("list", None)
+        return source_fields.project_items(payload, mapped)
+    return source_fields.project_items(payload, fields)
+
+
+async def _expand_one(template: str, raw_id: Any) -> dict[str, Any] | None:
+    sid = str(raw_id or "").strip()
+    if not sid:
+        return None
+    url = source_fields.subst(template, {"id": sid})
+    try:
+        agent_assets.check_url(url)
+        body, _ = await _http_body(url)
+        data = json.loads(body)
+    except (ValueError, ClientError, json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 async def _http_body(url: str) -> tuple[str, str]:
     sess = await session()
     async with sess.get(url, allow_redirects=True, max_redirects=2) as r:
@@ -622,7 +754,14 @@ async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
     try:
         if kind == "file":
             path = check_file(str(row.get("path") or ""))
-            _record(row, ok=True, payload=_file_payload(path))
+            payload = _file_payload(path)
+            fields = row.get("fields") if isinstance(row.get("fields"), dict) else None
+            if fields and "json" in payload:
+                items = await _projected_items(payload["json"], fields)
+                if items:
+                    payload["items"] = items
+                    _schedule_prefetch(items)
+            _record(row, ok=True, payload=payload)
         elif kind == "journal":
             _record(row, ok=True, payload={"items": read_journal(row.get("unit"))})
         elif kind == "kmsg":
@@ -639,7 +778,14 @@ async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
                     data = json.loads(body)
                 except json.JSONDecodeError as e:
                     raise ValueError("invalid json") from e
-                _record(row, ok=True, payload={"json": data})
+                payload: dict[str, Any] = {"json": data}
+                fields = row.get("fields") if isinstance(row.get("fields"), dict) else None
+                if fields:
+                    items = await _projected_items(data, fields)
+                    if items:
+                        payload["items"] = items
+                        _schedule_prefetch(items)
+                _record(row, ok=True, payload=payload)
             else:
                 _record(row, ok=True, payload={"text": body[:MAX_BODY]})
     except (ValueError, ClientError, OSError, ET.ParseError) as e:

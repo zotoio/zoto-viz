@@ -10,7 +10,7 @@ import {
 } from "./carousel-slides";
 
 describe("carousel-slides", () => {
-  it("prefers NASA pictured headlines", () => {
+  it("keeps pictured headlines", () => {
     const slides = carouselSlides([
       { id: "hn:0", label: "Hacker News", text: "A story" },
       { id: "nasa:0", label: "NASA image of the day", text: "Nebula", image: "https://www.nasa.gov/a.jpg" },
@@ -21,14 +21,14 @@ describe("carousel-slides", () => {
     expect(slides[0]!.image).toContain("nasa.gov");
   });
 
-  it("stays empty when NASA stills are missing", () => {
+  it("stays empty when stills are missing", () => {
     expect(carouselSlides([
       { id: "hn:0", label: "Hacker News", text: "Only text" },
       { id: "nasa:0", label: "NASA image of the day", text: "Title only" },
     ])).toEqual([]);
   });
 
-  it("reads NASA items even when Hacker News is listed first", () => {
+  it("reads pictured items even when a text feed is listed first", () => {
     const headlines = headlinesFromSources({
       hn: {
         id: "hn", kind: "rss", label: "Hacker News", ok: true,

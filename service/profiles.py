@@ -234,12 +234,7 @@ async def api_get(request: web.Request) -> web.Response:
     return web.json_response(out)
 
 
-async def api_put(request: web.Request) -> web.Response:
-    pid = _canon_id(_id(request.match_info["id"]))
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({"error": "json body required"}, status=400)
+def _put_profile(pid: str, body: dict[str, Any]) -> web.Response:
     settings = _settings(body)
     try:
         doc = _read()
@@ -264,6 +259,17 @@ async def api_put(request: web.Request) -> web.Response:
     except OSError as e:
         return web.json_response({"error": str(e)}, status=500)
     return web.json_response({"id": pid, "label": p["label"], "shipped": False, "ok": True})
+
+
+async def api_put(request: web.Request) -> web.Response:
+    pid = _canon_id(_id(request.match_info["id"]))
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "json body required"}, status=400)
+    if not isinstance(body, dict):
+        return web.json_response({"error": "json body required"}, status=400)
+    return _put_profile(pid, body)
 
 
 async def api_create(request: web.Request) -> web.Response:
@@ -319,10 +325,17 @@ async def api_shipped(request: web.Request) -> web.Response:
 
 
 async def api_default(request: web.Request) -> web.Response:
+    """Set the startup profile, or save the profile named `default`.
+
+    `PUT /api/profiles/default` is both the startup-default route and a valid
+    profile id. A settings blob writes that profile; `{id}` still picks startup.
+    """
     try:
         body = await request.json()
     except Exception:
         return web.json_response({"error": "json body required"}, status=400)
+    if isinstance(body, dict) and isinstance(body.get("settings"), dict):
+        return _put_profile("default", body)
     pid = _canon_id(_id(str(body.get("id") or "")))
     try:
         doc = _read()

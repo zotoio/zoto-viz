@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
-  loadPluginConfig, lookForMode, mergeLook, parsePluginId, pluginHasFrontend, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
+  loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
   viewSelectOptions, writePluginConfig, type PluginView,
 } from "./plugin";
 import { pluginViewKnobs, toPluginView, VIEW_PROMPT_KEY } from "./plugin-visualisation";
@@ -410,5 +410,18 @@ describe("visualisation.yml", () => {
     expect(extras.some((o) => o.value === "plugin:heat")).toBe(true);
     expect(viewSelectOptions().some((o) => o.value === "pulse" || o.value === "topology")).toBe(false);
     applyPluginCatalog([]);
+  });
+
+  it("prefers a wall row's plugin sky over a sky-less mosaic hero", () => {
+    const wall = spec({
+      id: "cypher-cic", name: "Cypher CIC",
+      has_sky_shader: true, shader_sha256: "abc", look: { backdrop: "plugin" },
+    });
+    const hero = spec({ id: "topology", name: "Topology", look: { backdrop: "space" } });
+    expect(pluginHasSky(wall)).toBe(true);
+    expect(pluginHasSky(hero)).toBe(false);
+    expect(pickPluginSkySpec(wall, hero)?.id).toBe("cypher-cic");
+    expect(pickPluginSkySpec(hero, wall)?.id).toBe("cypher-cic");
+    expect(pickPluginSkySpec(hero, hero)?.id).toBe("topology");
   });
 });

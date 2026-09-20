@@ -9,6 +9,7 @@ from pathlib import Path
 from aiohttp import web
 
 from . import cursor_agent
+from . import cursor_stats
 from . import paths
 
 STILL_MODEL = "composer-2.5"
@@ -106,6 +107,7 @@ async def generate_svg(title: str) -> str:
             continue
         if not isinstance(row, dict):
             continue
+        cursor_stats.ingest(row)
         svg = extract_svg(str(row.get("svg") or row.get("text") or ""))
         if svg:
             break

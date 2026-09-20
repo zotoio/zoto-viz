@@ -10,6 +10,7 @@ Host must be loopback (unless `--insecure-lan`). Browser `Origin` must also be l
 | `GET /ws` | 1 Hz state snapshot |
 | `GET /api/session` | CSRF token, AI Control, plugin-Python flag |
 | `GET /api/state` | JSON snapshot |
+| `GET /api/logs?after=` | Recent `[monitor]` stderr lines (`seq`, `t`, `text`). `after` is the last seen seq |
 | `GET /api/traffic?ip=` | recent packets |
 | `GET /api/payload` | payload head for a packet |
 | `GET/PUT /api/rf/watch` | Wi-Fi SSID watch list |
@@ -27,13 +28,16 @@ Host must be loopback (unless `--insecure-lan`). Browser `Origin` must also be l
 | `GET/PUT/POST /api/sources` | Host RSS / HTTPS / local-file registry (`~/.zoto-viz/sources.yml`) |
 | `GET /api/sources/image?url=` | Same-origin JPEG/PNG proxy for RSS enclosure stills (NASA IOTD). HTTPS / public-IP gate, 24 MB cap |
 | `PUT/DELETE /api/sources/{id}` | Upsert or remove one source |
-| `GET/POST /mcp` | loopback MCP. Tools: `list_features`, `get_settings`, `set_settings`, `list_plugins`, `set_plugin`, `set_view`, `set_agent`, `roll_dice`, `get_state`, `get_traffic`, `get_rf_watch`, `set_rf_watch`, `consent_plugin`, `draft_plugin`, `list_profiles`, `apply_profile`, `list_memories`, `add_memory`, `delete_memory`, `list_sources`, `set_source`, `delete_source`, `get_sdm`, `list_cameras`, `set_sdm`, `install_plugin_zip`, `publish_local_plugin`. CSRF skipped; Host still loopback. Settings/plugin patches land on the open UI via WebSocket `live` |
+| `GET/PUT/POST /api/plugin-instances` | Extra catalog rows that reuse a shipped plugin (`~/.zoto-viz/plugin-instances.yml`) |
+| `PUT/DELETE /api/plugin-instances/{plugin}/{id}` | Upsert or remove one instance |
+| `GET/POST /mcp` | loopback MCP. Tools: `list_features`, `get_settings`, `set_settings`, `list_plugins`, `set_plugin`, `set_view`, `set_agent`, `roll_dice`, `get_state`, `get_traffic`, `get_rf_watch`, `set_rf_watch`, `consent_plugin`, `draft_plugin`, `list_profiles`, `apply_profile`, `list_memories`, `add_memory`, `delete_memory`, `list_sources`, `set_source`, `delete_source`, `list_plugin_instances`, `set_plugin_instance`, `delete_plugin_instance`, `get_sdm`, `list_cameras`, `set_sdm`, `install_plugin_zip`, `publish_local_plugin`. CSRF skipped; Host still loopback. Settings/plugin patches land on the open UI via WebSocket `live` |
 | `GET /api/ai/status` | Ollama reachability + installed/popular catalog (size/VRAM) + Cursor SDK models; temper/weather |
 | `POST /api/ai/ollama/pull` | `{name}` stream `ollama pull` (loopback) |
 | `GET/PUT/DELETE /api/ai/cursor` | Cursor API key (`~/.zoto-viz/cursor-key`; `CURSOR_API_KEY` env wins) |
+| `GET /api/ai/cursor-stats` | tail of `~/.zoto-viz/cursor-stats.jsonl` (`?tail=80`) — tokens / `rawCostCents` / `chargedCents` / API-key name; never the key |
 | `GET/PUT /api/ai/control` | server-side AI Control (`~/.zoto-viz/ai-control`; env `ZOTO_VIZ_AI_CONTROL` wins) |
 | `GET/PUT /api/ai/temper` | `{temper: 0–100, weather: hush\|drift\|pulse\|storm}` — Agent craziness + AI Dynamic rebuild odds |
-| `POST /api/ai/chat` | streaming chat. `{backend: "ollama"\|"cursor", model}`. A new user line is parked until the operator says **yes** (the monitor restates the request first; the model is not called). Ollama is loopback `think` off; Cursor SDK runs `@cursor/sdk` with MCP `publish_local_plugin`. Persists under `~/.zoto-viz/agent/`. Optional `view: { hud }`. Prompts carry a token-capped **Facts** window (outcomes + memories; `ZOTO_VIZ_FACTS_TOKENS`), not prior CoT. Overflow starts a **new session**. `{ poll: true }` is a UI retry that does not append another user line |
+| `POST /api/ai/chat` | streaming chat. `{backend: "ollama"\|"cursor", model}`. Each user line is sent to the model immediately; the reply is the next conversation turn. Ollama is loopback `think` off; Cursor SDK runs `@cursor/sdk` with MCP `publish_local_plugin`. Persists under `~/.zoto-viz/agent/`. Optional `view: { hud }`. Prompts carry a token-capped **Facts** window (outcomes + memories; `ZOTO_VIZ_FACTS_TOKENS`), not prior CoT. Overflow starts a **new session**. `{ poll: true }` is a UI retry that does not append another user line |
 | `GET /api/ai/history` | last ~80 turns (`thinking` when the model produced chain of thought) |
 | `DELETE /api/ai/history` | clear the transcript and outcome facts (curated memories stay) |
 | `GET/POST/DELETE /api/ai/memories` | curated memories for later lookup (`POST {text}`, `DELETE {id}`) |

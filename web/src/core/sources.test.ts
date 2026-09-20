@@ -40,6 +40,21 @@ describe("sourceHeadlines", () => {
     expect(sourceHeadlines(undefined)).toEqual([]);
   });
 
+  it("binds one source and pictured items", () => {
+    const sources: Record<string, SourceLive> = {
+      hn: {
+        id: "hn", kind: "rss", label: "HN", ok: true, feed: true,
+        items: [{ title: "One" }, { title: "Pic", image: "https://example.com/a.jpg" }],
+      },
+      nasa: {
+        id: "nasa", kind: "rss", label: "NASA", ok: true, feed: true,
+        items: [{ title: "Nebula", image: "https://www.nasa.gov/a.jpg" }],
+      },
+    };
+    expect(sourceHeadlines(sources, 8, { source: "nasa" }).map((h) => h.text)).toEqual(["Nebula"]);
+    expect(sourceHeadlines(sources, 8, { source: "hn", filter: "has-image" }).map((h) => h.text)).toEqual(["Pic"]);
+  });
+
   it("strips HTML from article blurbs", () => {
     expect(stripMarkup("<p>Hello&nbsp;<b>world</b> &amp; news</p>")).toBe("Hello world & news");
   });

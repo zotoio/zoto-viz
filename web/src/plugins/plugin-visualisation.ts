@@ -1,9 +1,10 @@
 import type { ModeOption, PluginField, ViewMode } from "../core/modes";
 import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { parseMosaicTiles } from "../graph/mosaic-layout";
-import { parseFabric } from "../graph/fabric";
+import { parseFabric, parseGraphSpace } from "../graph/fabric";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
+import { parseInstances } from "./instances";
 import type {
   PluginEngine,
   PluginLayout,
@@ -30,8 +31,8 @@ const LOOK_KEYS = [
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
-  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric",
-  "mosaic", "hero", "mosaicTiles", "mosaicSharedTheme",
+  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric", "graphSpace",
+  "mosaic", "hero", "mosaicTiles", "mosaicSharedTheme", "mosaicUniqueSkies",
 ] as const;
 
 export type CatalogRow = {
@@ -58,6 +59,7 @@ export type CatalogRow = {
   consent?: unknown;
   parts?: unknown;
   frontend?: unknown;
+  instances?: unknown;
   has_frontend?: unknown;
   has_sky?: unknown;
   has_sky_shader?: unknown;
@@ -184,6 +186,11 @@ export function parseLook(raw: unknown): PluginLook | undefined {
       if (f) look.graphFabric = f;
       continue;
     }
+    if (key === "graphSpace") {
+      const space = parseGraphSpace(v);
+      if (space) look.graphSpace = space;
+      continue;
+    }
     if (key === "mosaic") {
       if (v === "4" || v === "6" || v === "8") look.mosaic = v;
       continue;
@@ -199,6 +206,10 @@ export function parseLook(raw: unknown): PluginLook | undefined {
     }
     if (key === "mosaicSharedTheme") {
       if (typeof v === "boolean") look.mosaicSharedTheme = v;
+      continue;
+    }
+    if (key === "mosaicUniqueSkies") {
+      if (typeof v === "boolean") look.mosaicUniqueSkies = v;
       continue;
     }
     (look as Record<string, unknown>)[key] = v;
@@ -281,6 +292,7 @@ export function toPluginView(raw: unknown): PluginView {
     style: parseStyle(viz.style ?? row.style),
     layout: parseLayout(viz.layout ?? row.layout),
     look: parseLook(viz.look ?? row.look),
+    instances: parseInstances(row.instances),
   };
   if (asString(row.file)) spec.file = asString(row.file);
   if (row.runtime === "yaml" || row.runtime === "typescript") spec.runtime = row.runtime;

@@ -6,6 +6,7 @@ import { rIp, rName } from "../core/redact";
 import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
 import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame } from "../core/fps";
+import { observeResize } from "../core/resize";
 
 /**
  * Shared machinery for the arcade views (NetPong's siblings: Invaders, Command, Frogger). Each is a standalone
@@ -362,7 +363,7 @@ export abstract class ArcadeView {
     });
     this.canvas.addEventListener("pointerleave", () => { this.pointer = { x: -1, y: -1 }; });
     this.canvas.addEventListener("click", (e) => this.onClick(e));
-    new ResizeObserver(() => this.fit()).observe(container);
+    observeResize(container, () => this.fit());
   }
 
   // ---- lifecycle

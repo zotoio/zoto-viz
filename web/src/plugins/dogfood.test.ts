@@ -94,7 +94,7 @@ describe("viz dogfood gates", () => {
       t: 1.5,
       dt: 0,
       audio: 0,
-      packets: [] as { proto: string; field: number }[],
+      packets: [] as { proto: string; size: number; field: number }[],
       rf: [],
       talkers: [],
       headlines: [],
@@ -225,6 +225,7 @@ describe("viz dogfood gates", () => {
       "hn-rain",
       "hn-term",
       "stereo-gram",
+      "nixie-clock",
     ]));
 
     for (const pack of result.packs) {
