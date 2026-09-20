@@ -16,5 +16,7 @@ viz:
     - uBright
     - uAccent
     - uBg
+  idle:
+    fixture: host
 frontend:
   entry: frontend/index.ts

@@ -54,7 +54,10 @@ import {
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
-import { VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract } from "../plugins/viz-host";
+import {
+  VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
+  buildVizFrameForPlugin, defaultVizContract,
+} from "../plugins/viz-host";
 import {
   TypeSafeHost,
   parseTypeSafeEnable,
@@ -795,6 +798,10 @@ function feed(m: StateMsg): void {
   if (active?.capabilities?.includes("viz.read") || packId) {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
+    const idle = active?.viz?.idle;
+    const buildFrame = idle
+      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle)
+      : buildVizFrame;
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       sandbox.frame(f);
       if (packId) {
@@ -804,7 +811,7 @@ function feed(m: StateMsg): void {
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
         }, optsFor(mode));
       }
-    });
+    }, buildFrame);
     if (frame) {
       vizFrameTs = frame.t;
       if (packId === "hn-rain" || packId === "hn-term") {

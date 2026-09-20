@@ -18,7 +18,9 @@ import {
   VizBufferWriter,
   VizFrameBudget,
   buildVizFrame,
+  buildVizFrameForPlugin,
 } from "./viz-host";
+import type { StateMsg } from "../core/types";
 
 describe("hn rain pack", () => {
   it("packs uppercase headline bytes the sky can decode", () => {
@@ -87,18 +89,11 @@ describe("viz dogfood gates", () => {
     expect(delivered).toBe(0);
   });
 
-  it("packet-tunnel demo fallback animates buffer and bright with no packets", () => {
+  it("packet-tunnel host idle yields non-zero buffer and bright on empty state", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
     let bright = 0;
-    const frame = {
-      t: 1.5,
-      dt: 0,
-      audio: 0,
-      packets: [] as { proto: string; field: number }[],
-      rf: [],
-      talkers: [],
-      headlines: [],
-    };
+    const frame = buildVizFrameForPlugin(emptyState(), 0, 0, { fixture: "host" });
+    expect(frame.packets.length).toBeGreaterThan(0);
     runPackFrameHandler("packet-tunnel", frame, {
       writeBuffer: (slot, data) => { writer.writeBuffer(slot, data); },
       writeUniform: (name, value) => {
@@ -111,6 +106,19 @@ describe("viz dogfood gates", () => {
     expect(buf[0]).toBeGreaterThan(0.25);
     expect(buf[1]).toBeGreaterThan(0.25);
     expect(bright).toBeGreaterThan(0.4);
+  });
+
+  it("talker-storm host idle yields particles on empty state", () => {
+    const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["talker-storm"]);
+    const frame = buildVizFrameForPlugin(emptyState(), 0, 0, { fixture: "host" });
+    expect(frame.talkers.length).toBeGreaterThan(0);
+    runPackFrameHandler("talker-storm", frame, {
+      writeBuffer: (slot, data) => { writer.writeBuffer(slot, data); },
+      writeUniform: (name, value) => { writer.writeUniform(name, value); },
+      writeParticles: (data, stride) => { writer.writeParticles(data, stride); },
+    });
+    expect(writer.particleSnapshot().length).toBeGreaterThan(0);
+    expect(writer.snapshot(0)[0]).toBeGreaterThan(0);
   });
 
   it("packet-tunnel prefers live packets over demo fallback", () => {
@@ -260,6 +268,15 @@ describe("viz dogfood over-budget honesty", () => {
     expect(result.allWithinBudgetOrHonestSkips).toBe(true);
   });
 
+  it("empty StateMsg dogfood tick still delivers idle-backed frames", () => {
+    const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
+    const budget = new VizFrameBudget();
+    const tick = dogfoodTick("packet-tunnel", emptyState(), 0, 0, budget, writer);
+    expect(tick.delivered).toBe(true);
+    expect(tick.frame?.packets.length).toBeGreaterThan(0);
+    expect(writer.snapshot(0)[0]).toBeGreaterThan(0);
+  });
+
   it("records skips when build is injected slow — never silent green", () => {
     const fatLan = fatLanFixture();
     const packId = "talker-storm";
@@ -282,3 +299,21 @@ describe("viz dogfood over-budget honesty", () => {
     expect(vizHudMetric(packId, hud.frame, hud.state).label).toBe("particles");
   });
 });
+
+function emptyState(): StateMsg {
+  return {
+    type: "state",
+    ts: 10,
+    iface: "",
+    interfaces: [],
+    network: "",
+    local_ip: "",
+    gateway: "",
+    uptime: 0,
+    stats: {
+      pps: 0, bps: 0, devices: 0, online: 0, flows: 0, active_flows: 0, packets: 0, bytes: 0,
+    },
+    devices: [],
+    flows: [],
+  };
+}

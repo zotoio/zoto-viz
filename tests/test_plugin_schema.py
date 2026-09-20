@@ -251,19 +251,47 @@ def test_viz_contract_in_schema() -> None:
 def test_viz_plugin_yml_validates() -> None:
     for pid in ("packet-tunnel", "rf-constellation", "talker-storm",
                 "kefrens-bars", "roto-proto", "blob-mesh", "star-sines", "hn-rain", "hn-term",
-                "stereo-gram"):
+                "stereo-gram", "syscon"):
         doc = plugins.load_file(ROOT / "plugins" / "src" / pid / "plugin.yml")
         assert doc["viz"]["graphWalk"] is False
+        assert doc["viz"]["idle"]["fixture"] == "host"
         assert "viz.read" in doc["capabilities"]
 
 
 def test_viz_block_required_with_viz_caps() -> None:
-    with pytest.raises(ValueError, match="viz block is required"):
+    with pytest.raises(ValueError, match=r"viz"):
         plugins.validate_doc({
             "id": "bad-viz",
             "name": "Bad",
             "version": 1,
             "capabilities": ["viz.read"],
+        })
+
+
+def test_viz_idle_host_fixture_in_schema() -> None:
+    text = SCHEMA_PATH.read_text(encoding="utf-8")
+    assert "vizIdle" in text
+    assert '"fixture"' in text
+    _validator().validate({
+        "id": "idle-pack",
+        "name": "Idle",
+        "version": 1,
+        "capabilities": ["viz.read", "viz.write"],
+        "viz": {
+            "graphWalk": False,
+            "idle": {"fixture": "host"},
+        },
+    })
+
+
+def test_viz_idle_required_with_viz_caps() -> None:
+    with pytest.raises(ValueError, match=r"idle"):
+        plugins.validate_doc({
+            "id": "no-idle",
+            "name": "No Idle",
+            "version": 1,
+            "capabilities": ["viz.write"],
+            "viz": {"graphWalk": False},
         })
 
 

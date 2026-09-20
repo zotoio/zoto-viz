@@ -1,5 +1,6 @@
 import type { Device, StateMsg } from "../core/types";
 import { sourceHeadlines } from "../core/sources";
+import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
 
 /** Target frame budget for viz plugin work (60 fps). */
@@ -38,6 +39,15 @@ export const VIZ_UBO_GLSL = `uniform vec4 ${VIZ_UBO.threeUniform}[${VIZ_UBO.tota
 
 export type VizSkyUniform = (typeof PLUGIN_SKY_UNIFORMS)[number];
 
+export type VizIdleInline = Pick<VizDataFrame, "packets" | "rf" | "talkers" | "headlines"> & {
+  audio?: number;
+};
+
+/** `fixture: host` uses {@link buildIdleVizFrame}; inline carries static demo slices. */
+export type VizIdleConfig =
+  | { fixture: "host" }
+  | { inline: VizIdleInline };
+
 export interface VizPluginContract {
   maxBuffers: number;
   maxBufferFloats: number;
@@ -45,6 +55,7 @@ export interface VizPluginContract {
   graphWalk: false;
   uniforms: VizSkyUniform[];
   ubo: typeof VIZ_UBO;
+  idle: VizIdleConfig;
 }
 
 export interface VizPacketSample {
@@ -188,9 +199,120 @@ export function defaultVizContract(overrides?: Partial<Omit<VizPluginContract, "
     maxBufferFloats: VIZ_DEFAULT_MAX_BUFFER_FLOATS,
     maxParticles: VIZ_DEFAULT_MAX_PARTICLES,
     uniforms: [...PLUGIN_SKY_UNIFORMS],
+    idle: { fixture: "host" },
     ...overrides,
     graphWalk: false,
     ubo: VIZ_UBO,
+  };
+}
+
+function parsePacketSample(raw: unknown): VizPacketSample | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const row = raw as Record<string, unknown>;
+  const proto = typeof row.proto === "string" ? row.proto : "";
+  const size = typeof row.size === "number" ? row.size : Number(row.size);
+  const field = typeof row.field === "number" ? row.field : Number(row.field);
+  if (!proto || !Number.isFinite(size) || !Number.isFinite(field)) return null;
+  return { proto, size, field: clamp01(field) };
+}
+
+function parseRfBeacon(raw: unknown): VizRfBeacon | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const row = raw as Record<string, unknown>;
+  const ssid = typeof row.ssid === "string" ? row.ssid : "";
+  const rssi = typeof row.rssi === "number" ? row.rssi : Number(row.rssi);
+  const channel = typeof row.channel === "number" ? row.channel : Number(row.channel);
+  if (!ssid || !Number.isFinite(rssi) || !Number.isFinite(channel)) return null;
+  return { ssid, rssi: clamp01(rssi), channel };
+}
+
+function parseTalkerSample(raw: unknown): VizTalkerSample | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === "string" ? row.id : "";
+  const rate = typeof row.rate === "number" ? row.rate : Number(row.rate);
+  const role = typeof row.role === "string" ? row.role : "";
+  if (!id || !Number.isFinite(rate) || !role) return null;
+  return { id, rate, role };
+}
+
+function parseHeadline(raw: unknown): VizHeadline | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === "string" ? row.id : "";
+  const label = typeof row.label === "string" ? row.label : "";
+  const text = typeof row.text === "string" ? row.text : "";
+  if (!id || !label || !text) return null;
+  const out: VizHeadline = { id, label, text: text.slice(0, 240) };
+  if (typeof row.kind === "string") out.kind = row.kind;
+  if (typeof row.summary === "string") out.summary = row.summary;
+  if (typeof row.image === "string") out.image = row.image;
+  return out;
+}
+
+function parseSlice<T>(raw: unknown, parse: (row: unknown) => T | null): T[] {
+  if (!Array.isArray(raw)) return [];
+  const out: T[] = [];
+  for (const row of raw) {
+    const item = parse(row);
+    if (item) out.push(item);
+  }
+  return out;
+}
+
+/** Parse plugin.yml ``viz.idle`` — host fixture or inline demo seed. */
+export function parseVizIdle(raw: unknown): VizIdleConfig | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const doc = raw as Record<string, unknown>;
+  if (doc.fixture === "host") return { fixture: "host" };
+  const inline: VizIdleInline = {
+    packets: parseSlice(doc.packets, parsePacketSample),
+    rf: parseSlice(doc.rf, parseRfBeacon),
+    talkers: parseSlice(doc.talkers, parseTalkerSample),
+    headlines: parseSlice(doc.headlines, parseHeadline),
+  };
+  if (typeof doc.audio === "number" && Number.isFinite(doc.audio)) {
+    inline.audio = clamp01(doc.audio);
+  }
+  const hasSlice = inline.packets.length > 0 || inline.rf.length > 0
+    || inline.talkers.length > 0 || inline.headlines.length > 0;
+  return hasSlice ? { inline } : undefined;
+}
+
+function idleSeedFrame(live: VizDataFrame, idle: VizIdleConfig): VizDataFrame {
+  if (idle.fixture === "host") return buildIdleVizFrame(live.t, live.dt);
+  const seed = idle.inline;
+  return {
+    t: live.t,
+    dt: live.dt,
+    audio: seed.audio ?? 0.12,
+    packets: seed.packets,
+    rf: seed.rf,
+    talkers: seed.talkers,
+    headlines: seed.headlines,
+    sys: live.sys,
+  };
+}
+
+/**
+ * Merge idle demo slices into a live frame. Non-empty live slices always win;
+ * idle fills only empty packets / rf / talkers / headlines.
+ */
+export function mergeVizIdleFrame(live: VizDataFrame, idle: VizIdleConfig): VizDataFrame {
+  const needsPackets = live.packets.length === 0;
+  const needsRf = live.rf.length === 0;
+  const needsTalkers = live.talkers.length === 0;
+  const needsHeadlines = live.headlines.length === 0;
+  if (!needsPackets && !needsRf && !needsTalkers && !needsHeadlines) return live;
+
+  const seed = idleSeedFrame(live, idle);
+  return {
+    ...live,
+    audio: live.audio > 0 ? live.audio : seed.audio,
+    packets: needsPackets ? seed.packets : live.packets,
+    rf: needsRf ? seed.rf : live.rf,
+    talkers: needsTalkers ? seed.talkers : live.talkers,
+    headlines: needsHeadlines ? seed.headlines : live.headlines,
   };
 }
 
@@ -199,13 +321,15 @@ export function parseVizContract(raw: unknown): VizPluginContract | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const doc = raw as Record<string, unknown>;
   if (doc.graphWalk !== false) return undefined;
+  const idle = parseVizIdle(doc.idle);
+  if (!idle) return undefined;
   const uniforms = Array.isArray(doc.uniforms)
     ? doc.uniforms.filter((u): u is VizSkyUniform => typeof u === "string" && SKY_UNIFORM_SET.has(u))
     : [...PLUGIN_SKY_UNIFORMS];
   const maxBuffers = clampInt(doc.maxBuffers, 1, VIZ_UBO.slotCount, VIZ_DEFAULT_MAX_BUFFERS);
   const maxBufferFloats = clampInt(doc.maxBufferFloats, 4, VIZ_UBO.slotFloats, VIZ_DEFAULT_MAX_BUFFER_FLOATS);
   const maxParticles = clampInt(doc.maxParticles, 0, 8192, 0);
-  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO };
+  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO, idle };
 }
 
 function clampInt(raw: unknown, lo: number, hi: number, fallback: number): number {
@@ -342,6 +466,16 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFr
     })),
     sys: extractSysTelemetry(state),
   };
+}
+
+/** Build a live frame and merge idle demo slices when monitor traffic is absent. */
+export function buildVizFrameForPlugin(
+  state: StateMsg,
+  prevTs: number,
+  audio: number,
+  idle: VizIdleConfig,
+): VizDataFrame {
+  return mergeVizIdleFrame(buildVizFrame(state, prevTs, audio), idle);
 }
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */

@@ -9,6 +9,7 @@ import {
   VizFrameBudget,
   bindVizWriterCore,
   buildVizFrame,
+  buildVizFrameForPlugin,
   parseVizContract,
   type VizDataFrame,
   type VizFrameBudgetStats,
@@ -27,6 +28,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 16,
     maxParticles: 0,
     uniforms: ["uTime", "uBright", "uAccent", "uBg"],
+    idle: { fixture: "host" },
   })!,
   "rf-constellation": parseVizContract({
     graphWalk: false,
@@ -34,6 +36,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 32,
     maxParticles: 0,
     uniforms: ["uTime", "uAudio", "uAccent", "uBg", "uOpacity"],
+    idle: { fixture: "host" },
   })!,
   "talker-storm": parseVizContract({
     graphWalk: false,
@@ -41,6 +44,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 8,
     maxParticles: 512,
     uniforms: ["uTime", "uBright", "uAudio"],
+    idle: { fixture: "host" },
   })!,
   "kefrens-bars": parseVizContract({
     graphWalk: false,
@@ -48,6 +52,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 32,
     maxParticles: 0,
     uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+    idle: { fixture: "host" },
   })!,
   "roto-proto": parseVizContract({
     graphWalk: false,
@@ -55,6 +60,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 8,
     maxParticles: 0,
     uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+    idle: { fixture: "host" },
   })!,
   "blob-mesh": parseVizContract({
     graphWalk: false,
@@ -62,6 +68,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 32,
     maxParticles: 0,
     uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+    idle: { fixture: "host" },
   })!,
   "star-sines": parseVizContract({
     graphWalk: false,
@@ -69,6 +76,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 16,
     maxParticles: 0,
     uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+    idle: { fixture: "host" },
   })!,
   "hn-rain": parseVizContract({
     graphWalk: false,
@@ -76,6 +84,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 64,
     maxParticles: 0,
     uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg"],
+    idle: { fixture: "host" },
   })!,
   "hn-term": parseVizContract({
     graphWalk: false,
@@ -83,6 +92,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 64,
     maxParticles: 0,
     uniforms: ["uTime", "uAudio", "uAccent", "uBg"],
+    idle: { fixture: "host" },
   })!,
   "stereo-gram": parseVizContract({
     graphWalk: false,
@@ -90,6 +100,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     maxBufferFloats: 32,
     maxParticles: 0,
     uniforms: ["uTime", "uAudio", "uAccent", "uBg"],
+    idle: { fixture: "host" },
   })!,
 };
 
@@ -142,11 +153,13 @@ export function dogfoodTick(
   buildSpy?: { calls: number },
   build: typeof buildVizFrame = buildVizFrame,
 ): DogfoodTickResult {
+  const contract = DEMO_PACK_CONTRACTS[packId];
+  const idleBuild = (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, contract.idle);
   let buildCalls = 0;
   const wrappedBuild = (s: StateMsg, pt: number, a: number) => {
     buildCalls++;
     if (buildSpy) buildSpy.calls++;
-    return build(s, pt, a);
+    return build === buildVizFrame ? idleBuild(s, pt, a) : build(s, pt, a);
   };
 
   const handlers: DogfoodHostHandlers = {

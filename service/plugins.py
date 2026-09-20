@@ -505,6 +505,13 @@ def _check_semantics(doc: dict[str, Any]) -> None:
             raise ValueError("viz block is required when viz.read or viz.write is declared")
         if viz.get("graphWalk") is not False:
             raise ValueError("viz.graphWalk must be false")
+        idle = viz.get("idle")
+        if not isinstance(idle, dict):
+            raise ValueError("viz.idle is required when viz.read or viz.write is declared")
+        if idle.get("fixture") == "host":
+            pass
+        elif not any(idle.get(k) for k in ("packets", "rf", "talkers", "headlines")):
+            raise ValueError("viz.idle must be { fixture: host } or an inline demo seed")
     elif isinstance(viz, dict) and viz.get("graphWalk") is not False:
         raise ValueError("viz.graphWalk must be false when viz block is present")
     if isinstance(viz, dict) and needs_viz and viz.get("ubo") is not None:

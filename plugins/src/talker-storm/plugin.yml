@@ -14,5 +14,7 @@ viz:
     - uTime
     - uBright
     - uAudio
+  idle:
+    fixture: host
 frontend:
   entry: frontend/index.ts
