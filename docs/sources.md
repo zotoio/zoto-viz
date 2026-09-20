@@ -22,13 +22,13 @@ Remote fetches reuse the agent-asset gate: HTTPS, port 443, public DNS, no priva
 
 ## Defaults
 
-A first run seeds **Hacker News** (`hn`), **NASA image of the day** (`nasa`), **APOD** (`apod`, [NASA DEMO_KEY](https://api.nasa.gov/)), **Earth Observatory** (`earth-iotd`), **Commons picture of the day** (`commons-potd`), **Met highlights** (`met`, object-id expand), **Lobsters** (`lobsters`), **Guardian world** (`guardian`, replace `api-key=test` with a key from [Guardian Open Platform](https://open-platform.theguardian.com/access/)), **Mastodon #space** (`mastodon`), **User journal** (`journal`), and **Kernel ring** (`kmsg`). Existing registries gain the new content rows (and journal / kmsg) on the next load. Disable them in Settings → Sources rather than deleting if you do not want them re-seeded.
+A first run seeds **Hacker News** (`hn`), **NASA image of the day** (`nasa`), **APOD** (`apod`, [NASA DEMO_KEY](https://api.nasa.gov/), last eight days — not the random `count=` archive draw), **Earth Observatory** (`earth-iotd`), **Commons picture of the day** (`commons-potd`), **Met highlights** (`met`, object-id expand), **Lobsters** (`lobsters`), **Guardian world** (`guardian`, public world RSS; a leftover `api-key=test` Open Platform URL rewrites once), **Mastodon #space** (`mastodon`), **User journal** (`journal`), and **Kernel ring** (`kmsg`). Existing registries gain the new content rows (and journal / kmsg) on the next load; stale shipped Guardian / APOD URLs rewrite once. Disable them in Settings → Sources rather than deleting if you do not want them re-seeded.
 
 Views that still need a key or OAuth stay out of **dice** until they work: **Nest cams** ([Device Access](https://developers.google.com/nest/device-access), [console](https://console.nest.google.com/device-access)) and any view bound to Guardian while `api-key=test`. Settings → Sources shows the signup links on those rows.
 
 HTTP JSON field maps live on the source row. Example APOD: `title`, `explanation` → caption, `hdurl` / `url` → image, `media_type=image` filter. Met uses `list: objectIDs` plus `expand: https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}`.
 
-Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** are engines; Settings → This view picks `source` and field names. Shipped instances add extra VIEW rows (`plugin:carousel:apod`, `plugin:hn-rain:lobsters`, …). Operator extras: `~/.zoto-viz/plugin-instances.yml` or Settings → Sources → View instances.
+Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** are engines; Settings → This view picks `source` and field names. Shipped instances add extra VIEW rows (`plugin:carousel:apod`, `plugin:hn-rain:lobsters`, …). Operator extras: `~/.zoto-viz/plugin-instances.yml` or Settings → Sources → View instances. HN Rain Composer stills save as SVG under `~/.zoto-viz/images` (slug + hash), not the git checkout.
 
 ## API / MCP
 

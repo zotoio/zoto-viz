@@ -30,6 +30,10 @@ function repoRoot() {
   return process.env.ZOTO_VIZ_REPO_ROOT || process.cwd();
 }
 
+function imagesDir() {
+  return process.env.ZOTO_VIZ_IMAGES || `${process.env.HOME}/.zoto-viz/images`;
+}
+
 function pickDefault(ids) {
   const grok = ids.find((id) => /^grok/i.test(id));
   return grok || (ids.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : ids[0] || DEFAULT_MODEL);
@@ -256,7 +260,7 @@ async function still() {
     {
       apiKey: process.env.CURSOR_API_KEY,
       model: { id: model },
-      local: { cwd: repoRoot(), settingSources: [] },
+      local: { cwd: imagesDir(), settingSources: [] },
     },
   );
   const text = typeof result?.result === "string"

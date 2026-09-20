@@ -74,6 +74,11 @@ def test_sanitize_drops_junk() -> None:
     assert p["show"] == {"lan": False}
     assert p["plugins"]["command"]["prompt"] == "harbour"
     assert "exec" not in p
+    chat = live.sanitize_patch({"chat": {"on": True, "textSize": 14, "nope": 1}})["chat"]
+    assert chat == {"on": True, "textSize": 14}
+    migrated = live.sanitize_patch({"feed": {"source": "transcript", "on": True}})
+    assert migrated["feed"]["source"] == "traffic"
+    assert migrated["chat"]["on"] is True
     full = {f"k{i}": True for i in range(30)}
     full.update({"gravity": 1.5, "swirl": 0.4, "mosaic": "4", "hero": "left", "stringAmt": 0.8})
     anim = live.sanitize_patch({"anim": full})["anim"]

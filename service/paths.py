@@ -77,6 +77,13 @@ def agent_dir() -> Path:
     return d
 
 
+def images_dir() -> Path:
+    """HN Rain / feed stills: ``~/.zoto-viz/images``."""
+    d = user_dir() / "images"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def agent_plugins_dir() -> Path:
     """Legacy user-dir agent-plugin tree. Does not create the directory."""
     return user_dir() / "agent-plugins"

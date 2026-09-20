@@ -7,7 +7,7 @@ import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
 import { mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
 import { Settings, makeViewCogButton } from "../ui/settings";
-import { parseSourceBind, sourceHeadlines } from "../core/sources";
+import { illustratedSourceBind, parseSourceBind, sourceHeadlines } from "../core/sources";
 import { bindSourceOf, viewAuthBlock, type AuthCtx } from "../core/auth-setup";
 import { LiveFeed, feedViewShift } from "../ui/feed";
 import { ChatPanel } from "../ui/chat";
@@ -33,6 +33,7 @@ import { PacmanView } from "../arcade/pacman";
 import { TetrisView } from "../arcade/tetris";
 import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
+import { spawnArcade } from "../arcade/spawn";
 import { Mosaic } from "../graph/mosaic";
 import { RenderHost } from "../graph/render-host";
 import {
@@ -162,6 +163,8 @@ let activeArcade: string | null = null;
 (window as unknown as { zotoviz: NetScene; znetviz: NetScene }).zotoviz = scene;
 (window as unknown as { znetviz: NetScene }).znetviz = scene; // one-release alias
 let mosaic: Mosaic | null = null;
+let lastRaw: StateMsg | null = null;
+let typeSafeKeyOn = false;
 
 const themeSel = new Select({
   id: "theme",
@@ -652,13 +655,18 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
 
 async function syncPluginSky(spec: PluginView | null): Promise<void> {
   if (mosaic?.on) {
-    for (const id of mosaic.tileIds) {
-      const target = mosaic.graphScene(id);
-      if (!target) continue;
-      const tileSky = mosaic.paneSky(id);
-      const pane = pluginSpecForMode(id);
-      const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
-      await loadPluginSkyOnto(target, pane, wantPlugin);
+    mosaic.markSkyPending();
+    try {
+      for (const id of mosaic.tileIds) {
+        const target = mosaic.graphScene(id);
+        if (!target) continue;
+        const tileSky = mosaic.paneSky(id);
+        const pane = pluginSpecForMode(id);
+        const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
+        await loadPluginSkyOnto(target, pane, wantPlugin);
+      }
+    } finally {
+      mosaic.settlePanes();
     }
     return;
   }
@@ -815,8 +823,6 @@ function setLabels(on: boolean): void {
 sysLabels.onChange = setLabels;
 const showToggles = { lan: netLan, internet: netInternet, multicast: netMulticast, offline: netOffline, labels: sysLabels, cpuIdle: sysCpuIdle };
 // "merge names" is a data transform rather than a visibility filter: the last raw snapshot is re-fed through it
-let lastRaw: StateMsg | null = null;
-let typeSafeKeyOn = false;
 const mergeToggle = new Toggle({
   id: "mergeNames", label: "merge names", title: "collapse internet hosts that share a hostname (CDN aliases). LAN devices with the same factory name stay separate — Wi-Fi+Ethernet of one box is already folded by MAC",
   checked: localStorage.getItem("zoto-viz.merge") === "1",
@@ -890,7 +896,9 @@ function feed(m: StateMsg): void {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
-    const bind = parseSourceBind(optsFor(mode));
+    const bind = packId === "hn-rain" || packId === "hn-term"
+      ? illustratedSourceBind(optsFor(mode))
+      : parseSourceBind(optsFor(mode));
     const buildFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
@@ -1004,6 +1012,7 @@ mosaic = new Mosaic({
   main: scene,
   host: renderHost,
   arcade,
+  spawnArcade: (engine) => spawnArcade(engine, scene),
   optsFor,
   onFocus: (id) => mosaic?.focus(id),
   onPromote: (id, theme) => {

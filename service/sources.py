@@ -14,12 +14,15 @@ import subprocess
 import threading
 import time
 import xml.etree.ElementTree as ET
+from datetime import date, timedelta
 from html import unescape
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlparse, urlunparse
 
 import yaml
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
+from yarl import URL
 
 from . import agent_assets
 from . import paths
@@ -28,7 +31,7 @@ from . import source_fields
 KINDS = ("rss", "http", "file", "journal", "kmsg")
 SYS_KINDS = ("journal", "kmsg")
 ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
-MAX_BODY = 256_000
+MAX_BODY = 1_500_000
 MAX_ITEMS = 80
 MAX_TITLE = 240
 MAX_SUMMARY = 400
@@ -67,7 +70,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "id": "apod",
         "type": "http",
         "label": "Astronomy Picture of the Day",
-        "url": f"https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count={APOD_COUNT}",
+        "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY",
         "interval": 3600,
         "enabled": True,
         "feed": True,
@@ -128,19 +131,12 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
     },
     {
         "id": "guardian",
-        "type": "http",
+        "type": "rss",
         "label": "Guardian world",
-        "url": f"https://content.guardianapis.com/search?section=world&show-fields=trailText,thumbnail&page-size={GUARDIAN_PAGE}&api-key=test",
+        "url": "https://www.theguardian.com/world/rss",
         "interval": 600,
         "enabled": True,
         "feed": True,
-        "fields": {
-            "list": "response.results",
-            "title": "webTitle",
-            "caption": "fields.trailText",
-            "image": "fields.thumbnail",
-            "link": "webUrl",
-        },
     },
     {
         "id": "mastodon",
@@ -332,8 +328,13 @@ def load(*, seed: bool = True) -> list[dict[str, Any]]:
         taken.add(row["id"])
         out.append(row)
     out = _seed_missing(out, taken, persist=p.is_file())
-    if _raise_feed_depth(out) and p.is_file():
+    raised = _raise_feed_depth(out)
+    refreshed = _refresh_shipped(out)
+    if (raised or refreshed) and p.is_file():
         _dump(out)
+        if refreshed:
+            for row in out:
+                _due.pop(row["id"], None)
     _rows = out
     _loaded = True
     return list(_rows)
@@ -385,6 +386,47 @@ def _seed_missing(rows: list[dict[str, Any]], taken: set[str], *, persist: bool)
     if added and persist:
         _dump(rows)
     return rows
+
+
+def _refresh_shipped(rows: list[dict[str, Any]]) -> bool:
+    """Rewrite known-stale default URLs. Operator-customized rows stay put."""
+    changed = False
+    for row in rows:
+        sid = str(row.get("id") or "")
+        url = str(row.get("url") or "")
+        if sid == "apod" and "api.nasa.gov/planetary/apod" in url and "count=" in url:
+            row["url"] = "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY"
+            changed = True
+        if (
+            sid == "guardian"
+            and "content.guardianapis.com" in url
+            and "api-key=test" in url
+        ):
+            row["type"] = "rss"
+            row["url"] = "https://www.theguardian.com/world/rss"
+            row.pop("fields", None)
+            changed = True
+    return changed
+
+
+def resolve_fetch_url(url: str) -> str:
+    """APOD ``count=`` is a random archive draw — prefer the last eight days."""
+    raw = (url or "").strip()
+    if "api.nasa.gov/planetary/apod" not in raw:
+        return raw
+    parsed = urlparse(raw)
+    q = {k: (v[-1] if v else "") for k, v in parse_qs(parsed.query, keep_blank_values=True).items()}
+    if q.get("start_date") or q.get("date"):
+        q.pop("count", None)
+        return urlunparse(parsed._replace(query=urlencode(q)))
+    key = q.get("api_key") or "DEMO_KEY"
+    end = date.today()
+    start = end - timedelta(days=7)
+    return urlunparse(parsed._replace(query=urlencode({
+        "api_key": key,
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+    })))
 
 
 def ensure() -> list[dict[str, Any]]:
@@ -509,19 +551,28 @@ def clean_image_url(url: str) -> str:
 
 def _image_score(url: str) -> int:
     m = _WIKI_PX.search(url)
-    return int(m.group(1)) if m else 0
+    score = int(m.group(1)) if m else 0
+    if "/iotd/" in url or "/eo/images/" in url:
+        score += 10_000
+    return score
 
 
 def pick_image_url(*blobs: str) -> str:
     found: list[str] = []
     for blob in blobs:
+        raw = (blob or "").strip()
+        if raw.startswith("https://") and not any(c in raw for c in " \t\n<>\"'"):
+            url = clean_image_url(raw) or raw[:MAX_IMAGE_URL]
+            if url and url not in found:
+                found.append(url)
+            continue
         for hit in _IMG_HREF.finditer(blob or ""):
             url = clean_image_url(hit.group(0))
             if url and url not in found:
                 found.append(url)
     if not found:
         return ""
-    return max(found, key=_image_score)
+    return max(enumerate(found), key=lambda iv: (_image_score(iv[1]), iv[0]))[1]
 
 
 def _item_image(it: ET.Element) -> str:
@@ -538,8 +589,16 @@ def _item_image(it: ET.Element) -> str:
             continue
         if typ.startswith("image/") or medium == "image" or _IMG_HREF.match(url):
             enclosed.append(url)
-    blob = _inner(_child(it, "description", "summary", "content"))
-    return pick_image_url(*enclosed, blob)
+        elif not typ and not medium:
+            enclosed.append(url)
+    blobs: list[str] = []
+    for child in list(it):
+        local = (child.tag or "").split("}")[-1].lower()
+        if local in {"description", "summary", "content", "encoded"}:
+            blobs.append(_inner(child))
+    if not blobs:
+        blobs.append(_inner(_child(it, "description", "summary", "content")))
+    return pick_image_url(*enclosed, *blobs)
 
 
 def parse_rss(body: str) -> dict[str, Any]:
@@ -552,11 +611,12 @@ def parse_rss(body: str) -> dict[str, Any]:
         ch = root.find("channel") if root.find("channel") is not None else root
         title = _text(_child(ch, "title"))
         for it in list(ch.findall("item"))[:MAX_ITEMS]:
+            summary = _plain(_inner(_child(it, "description", "summary")))[:MAX_SUMMARY]
             row = {
-                "title": _text(_child(it, "title"))[:MAX_TITLE],
+                "title": (_text(_child(it, "title")) or summary)[:MAX_TITLE],
                 "link": _text(_child(it, "link"))[:500],
                 "published": _text(_child(it, "pubDate", "published"))[:80],
-                "summary": _plain(_inner(_child(it, "description", "summary")))[:MAX_SUMMARY],
+                "summary": summary,
             }
             image = _item_image(it)
             if image:
@@ -564,16 +624,18 @@ def parse_rss(body: str) -> dict[str, Any]:
             items.append(row)
     else:
         title = _text(_child(root, "title"))
-        for it in list(root.findall("{http://www.w3.org/2005/Atom}entry") or root.findall("entry"))[:MAX_ITEMS]:
+        entries = list(root.findall("{http://www.w3.org/2005/Atom}entry") or root.findall("entry"))
+        for it in entries[-MAX_ITEMS:]:
             link_el = _child(it, "link")
             href = ""
             if link_el is not None:
                 href = (link_el.attrib.get("href") or _text(link_el))[:500]
+            summary = _plain(_inner(_child(it, "summary", "content")))[:MAX_SUMMARY]
             row = {
-                "title": _text(_child(it, "title"))[:MAX_TITLE],
+                "title": (_text(_child(it, "title")) or summary)[:MAX_TITLE],
                 "link": href,
                 "published": _text(_child(it, "updated", "published"))[:80],
-                "summary": _plain(_inner(_child(it, "summary", "content")))[:MAX_SUMMARY],
+                "summary": summary,
             }
             image = _item_image(it)
             if image:
@@ -778,16 +840,42 @@ async def _expand_one(template: str, raw_id: Any) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _url_key(url: str) -> str:
+    return unquote((url or "").strip())
+
+
 async def _http_body(url: str) -> tuple[str, str]:
+    """GET a public URL. Stops on encoding-only redirect loops (NASA WordPress %2C)."""
     sess = await session()
-    async with sess.get(url, allow_redirects=True, max_redirects=2) as r:
-        if r.status >= 400:
-            raise ValueError(f"http {r.status}")
-        raw = await r.read()
-        if len(raw) > MAX_BODY:
-            raise ValueError("response too large")
-        ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-        return raw.decode("utf-8", errors="replace"), ctype
+    current = resolve_fetch_url(url)
+    seen: set[str] = set()
+    for _ in range(6):
+        key = _url_key(current)
+        if key in seen:
+            raise ValueError("too many redirects")
+        seen.add(key)
+        async with sess.get(URL(current, encoded=True), allow_redirects=False) as r:
+            ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            loc = (r.headers.get("Location") or "").strip()
+            if r.status in (301, 302, 303, 307, 308) and loc:
+                nxt = urljoin(str(r.url), loc)
+                if _url_key(nxt) == key:
+                    raw = await r.read()
+                    if raw:
+                        if len(raw) > MAX_BODY:
+                            raise ValueError("response too large")
+                        return raw.decode("utf-8", errors="replace"), ctype
+                    current = nxt
+                    continue
+                current = nxt
+                continue
+            if r.status >= 400:
+                raise ValueError(f"http {r.status}")
+            raw = await r.read()
+            if len(raw) > MAX_BODY:
+                raise ValueError("response too large")
+            return raw.decode("utf-8", errors="replace"), ctype
+    raise ValueError("too many redirects")
 
 
 async def session() -> ClientSession:
@@ -848,12 +936,12 @@ async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
         elif kind == "kmsg":
             _record(row, ok=True, payload={"items": read_kmsg()})
         elif kind == "rss":
-            body, _ = await _http_body(str(row["url"]))
+            body, _ = await _http_body(resolve_fetch_url(str(row["url"])))
             parsed = parse_rss(body)
             _record(row, ok=True, payload=parsed)
             _schedule_prefetch(parsed.get("items") or [])
         else:
-            body, ctype = await _http_body(str(row["url"]))
+            body, ctype = await _http_body(resolve_fetch_url(str(row["url"])))
             if "json" in ctype or body.lstrip().startswith(("{", "[")):
                 try:
                     data = json.loads(body)
@@ -877,6 +965,7 @@ async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
 async def poll(now: float | None = None) -> dict[str, dict[str, Any]]:
     """Fetch sources whose interval has elapsed. Safe to call often."""
     t = time.time() if now is None else now
+    due: list[dict[str, Any]] = []
     for row in ensure():
         if not row.get("enabled", True):
             _live.setdefault(row["id"], {
@@ -884,15 +973,17 @@ async def poll(now: float | None = None) -> dict[str, dict[str, Any]]:
                 "ok": True, "ts": t, "feed": bool(row.get("feed", True)), "paused": True,
             })
             continue
-        due = _due.get(row["id"], 0)
-        if t < due:
+        if t < _due.get(row["id"], 0):
             continue
-        await fetch_one(row)
-        wait = int(row.get("interval") or DEFAULT_INTERVAL)
-        live = _live.get(row["id"]) or {}
-        if not live.get("ok"):
-            wait = min(wait, 30)
-        _due[row["id"]] = t + wait
+        due.append(row)
+    if due:
+        await asyncio.gather(*(fetch_one(row) for row in due), return_exceptions=True)
+        for row in due:
+            wait = int(row.get("interval") or DEFAULT_INTERVAL)
+            live = _live.get(row["id"]) or {}
+            if not live.get("ok"):
+                wait = min(wait, 30)
+            _due[row["id"]] = t + wait
     return snapshot()
 
 
