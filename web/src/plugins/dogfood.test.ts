@@ -12,6 +12,7 @@ import {
   runPackFrameHandler,
   runPackSwapPreserve,
 } from "./dogfood-runner";
+import { packetTunnelFields } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
 import { packHnRainBuffer, packHnTermBuffer, packStereoOrbs } from "./viz-pack-host";
 import {
   VIZ_FRAME_BUDGET_MS,
@@ -121,7 +122,7 @@ describe("viz dogfood gates", () => {
     expect(writer.snapshot(0)[0]).toBeGreaterThan(0);
   });
 
-  it("packet-tunnel prefers live packets over demo fallback", () => {
+  it("packet-tunnel prefers live packets over host idle", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
     let bright = 0;
     const frame = buildVizFrame(fatLan, 0, 0.1);
