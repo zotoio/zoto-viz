@@ -20,7 +20,7 @@ Host must be loopback (unless `--insecure-lan`). Browser `Origin` must also be l
 | `PUT /api/plugins/{id}/consent` | `{kind: "reviewed" \| "authored"}` after source review |
 | `GET /api/plugins/{id}/module.js` | compiled TypeScript (`?h=` cache-bust; 404 if missing). CSP locked down. Consent is a UI/sandbox gate, not HTTP 403 |
 | `GET /api/plugins/{id}/sky/fragment.glsl` | custom far-field shader (`?h=` cache-bust; 403 without consent) |
-| `GET /api/plugins/hn-rain/still` | Composer 2.5 SVG still for an HN title (`202` while queued, cached under `~/.zoto-viz/agent/stills`) |
+| `GET /api/plugins/hn-rain/still` | Composer 2.5 SVG still for an HN title (`202` while queued, saved under `~/.zoto-viz/images`) |
 | `GET/POST /api/sdm` | Nest Device Access status / config + PCM `code` (`~/.zoto-viz/sdm.yml`) |
 | `GET /api/sdm/devices` | SDM `devices.list` |
 | `POST /api/sdm/devices/{id}/webrtc` | Forward WebRTC offer / extend / stop |

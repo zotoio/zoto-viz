@@ -1,4 +1,4 @@
-"""Composer 2.5 stills for HN Rain titles. Cached under ~/.zoto-viz/agent/stills."""
+"""Composer 2.5 stills for HN Rain titles. Saved under ~/.zoto-viz/images."""
 from __future__ import annotations
 
 import asyncio
@@ -23,9 +23,12 @@ _worker: asyncio.Task[None] | None = None
 
 
 def stills_dir() -> Path:
-    d = paths.agent_dir() / "stills"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return paths.images_dir()
+
+
+def title_slug(title: str) -> str:
+    raw = re.sub(r"[^a-z0-9]+", "-", (title or "").strip().lower()).strip("-")
+    return (raw or "still")[:80]
 
 
 def title_key(title: str) -> str:
@@ -47,8 +50,7 @@ def cached_path(key: str) -> Path:
     return stills_dir() / f"{key}.svg"
 
 
-def read_cached(title: str) -> str | None:
-    p = cached_path(title_key(title))
+def _read_svg(p: Path) -> str | None:
     if not p.is_file():
         return None
     try:
@@ -58,13 +60,26 @@ def read_cached(title: str) -> str | None:
     return extract_svg(raw)
 
 
+def read_cached(title: str) -> str | None:
+    key = title_key(title)
+    hit = _read_svg(cached_path(key))
+    if hit:
+        return hit
+    legacy = paths.agent_dir() / "stills" / f"{key}.svg"
+    return _read_svg(legacy)
+
+
 def write_cached(title: str, svg: str) -> Path:
     clean = extract_svg(svg)
     if not clean:
         raise ValueError("svg required")
-    p = cached_path(title_key(title))
-    p.write_text(clean, encoding="utf-8")
-    return p
+    dest = stills_dir()
+    hashed = dest / f"{title_key(title)}.svg"
+    hashed.write_text(clean, encoding="utf-8")
+    slug = dest / f"{title_slug(title)}.svg"
+    if slug.resolve() != hashed.resolve():
+        slug.write_text(clean, encoding="utf-8")
+    return slug
 
 
 def reset_queue() -> None:

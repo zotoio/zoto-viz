@@ -21,12 +21,16 @@ def test_extract_svg_from_composer_fences() -> None:
 def test_title_key_is_stable() -> None:
     assert hn_rain_stills.title_key("Jemalloc") == hn_rain_stills.title_key("  JEMALLOC ")
     assert hn_rain_stills.title_key("Jemalloc") != hn_rain_stills.title_key("Waymo")
+    assert hn_rain_stills.title_slug("Exfiltrate weights?") == "exfiltrate-weights"
 
 
 def test_cache_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(hn_rain_stills, "stills_dir", lambda: tmp_path)
     svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>'
-    hn_rain_stills.write_cached("Jemalloc", svg)
+    dest = hn_rain_stills.write_cached("Jemalloc", svg)
+    assert dest.name == "jemalloc.svg"
+    assert dest.read_text(encoding="utf-8") == svg
+    assert (tmp_path / f"{hn_rain_stills.title_key('Jemalloc')}.svg").is_file()
     assert hn_rain_stills.read_cached("jemalloc") == svg
     assert hn_rain_stills.read_cached("missing") is None
 

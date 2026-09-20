@@ -75,6 +75,7 @@ def _env(key: str) -> dict[str, str]:
     env["CURSOR_API_KEY"] = key
     env["ZOTO_VIZ_MCP"] = os.environ.get("ZOTO_VIZ_MCP", "http://127.0.0.1:7020/mcp")
     env["ZOTO_VIZ_REPO_ROOT"] = str(paths.repo_root())
+    env["ZOTO_VIZ_IMAGES"] = str(paths.images_dir())
     env["ZOTO_VIZ_CURSOR_STATS"] = str(cursor_stats.stats_path())
     env["ZOTO_VIZ_CURSOR_SESSION"] = str(session_path())
     return env

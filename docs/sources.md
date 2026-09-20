@@ -28,7 +28,7 @@ Views that still need a key or OAuth stay out of **dice** until they work: **Nes
 
 HTTP JSON field maps live on the source row. Example APOD: `title`, `explanation` → caption, `hdurl` / `url` → image, `media_type=image` filter. Met uses `list: objectIDs` plus `expand: https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}`.
 
-Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** are engines; Settings → This view picks `source` and field names. Shipped instances add extra VIEW rows (`plugin:carousel:apod`, `plugin:hn-rain:lobsters`, …). Operator extras: `~/.zoto-viz/plugin-instances.yml` or Settings → Sources → View instances.
+Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** are engines; Settings → This view picks `source` and field names. Shipped instances add extra VIEW rows (`plugin:carousel:apod`, `plugin:hn-rain:lobsters`, …). Operator extras: `~/.zoto-viz/plugin-instances.yml` or Settings → Sources → View instances. HN Rain Composer stills save as SVG under `~/.zoto-viz/images` (slug + hash), not the git checkout.
 
 ## API / MCP
 

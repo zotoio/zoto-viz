@@ -48,6 +48,7 @@ def test_plugins_and_profiles_paths() -> None:
     assert paths.sys_config_file().name == "sys-config.yml"
     assert paths.agent_dir().name == "agent"
     assert paths.agent_plugins_dir().name == "agent-plugins"
+    assert paths.images_dir().name == "images"
 
 
 def test_plugin_dirs_resolve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

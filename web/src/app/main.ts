@@ -162,6 +162,8 @@ let activeArcade: string | null = null;
 (window as unknown as { zotoviz: NetScene; znetviz: NetScene }).zotoviz = scene;
 (window as unknown as { znetviz: NetScene }).znetviz = scene; // one-release alias
 let mosaic: Mosaic | null = null;
+let lastRaw: StateMsg | null = null;
+let typeSafeKeyOn = false;
 
 const themeSel = new Select({
   id: "theme",
@@ -817,8 +819,6 @@ function setLabels(on: boolean): void {
 sysLabels.onChange = setLabels;
 const showToggles = { lan: netLan, internet: netInternet, multicast: netMulticast, offline: netOffline, labels: sysLabels, cpuIdle: sysCpuIdle };
 // "merge names" is a data transform rather than a visibility filter: the last raw snapshot is re-fed through it
-let lastRaw: StateMsg | null = null;
-let typeSafeKeyOn = false;
 const mergeToggle = new Toggle({
   id: "mergeNames", label: "merge names", title: "collapse internet hosts that share a hostname (CDN aliases). LAN devices with the same factory name stay separate — Wi-Fi+Ethernet of one box is already folded by MAC",
   checked: localStorage.getItem("zoto-viz.merge") === "1",
