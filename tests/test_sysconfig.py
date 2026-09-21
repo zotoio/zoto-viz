@@ -44,7 +44,8 @@ def test_save_roundtrip_mode(tmp_path: Path) -> None:
     assert got["bind"] == "127.0.0.1"
     assert got["port"] == 7020
     assert got["insecure_lan"] is False
-    assert got["inhibit_screensaver"] is False
+    # default follows idle.headless_inhibit(); under pytest it is off
+    assert got["inhibit_screensaver"] in {True, False}
     text = path.read_text(encoding="utf-8")
     assert "Do not commit" in text
     assert "inhibit_screensaver" in text

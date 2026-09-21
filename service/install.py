@@ -24,6 +24,7 @@ Run = Callable[[list[str], Path | None], tuple[int, str, str]]
 
 # tool id -> apt / dnf / pacman / winget / brew
 _BREW = {
+    "gh": ["gh"],
     "tshark": ["wireshark"],
     "dumpcap": ["wireshark"],
     "nmap": ["nmap"],
@@ -41,6 +42,7 @@ DARWIN_TSHARK = (
 )
 
 _APT = {
+    "gh": ["gh"],
     "tshark": ["tshark"],
     "dumpcap": ["tshark"],
     "ip": ["iproute2"],
@@ -90,6 +92,7 @@ _WINGET = {
     "dot": "Graphviz.Graphviz",
     "node": "OpenJS.NodeJS.LTS",
     "openssl": "ShiningLight.OpenSSL",
+    "gh": "GitHub.cli",
 }
 
 
@@ -402,6 +405,17 @@ def _manual_for(tool: str, host: Host, mgr: str | None) -> tuple[str, ...]:
         return (
             "brew install --cask wireshark-chmodbpf",
             "Log out and back in so /dev/bpf* is readable (access_bpf group).",
+        )
+    if tool == "gh":
+        if mgr == "brew":
+            return ("brew install gh", "Then: gh auth login")
+        if mgr == "apt":
+            return ("sudo apt install gh", "Then: gh auth login")
+        if mgr == "winget":
+            return ("winget install -e --id GitHub.cli", "Then: gh auth login")
+        return (
+            "Install GitHub CLI from https://cli.github.com/",
+            "Then: gh auth login  (device flow for private plugin catalog)",
         )
     return (f"Install '{tool}' using your OS package manager, then reopen the terminal.",)
 

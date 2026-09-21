@@ -272,6 +272,81 @@ accepted as `plugin.yml`). With AI Control on and `install: true` it writes
 `{id} is live at plugins/src/{id}/; share with zoto-viz plugin pack {id} -o dist/{id}.zip`.
 It never packs or commits. See [Ollama agent](/agent).
 
+## Remote plugin catalog (private GitHub repo)
+
+The monitor can poll a **private** GitHub repo for plugin zips. Manifest and
+assets are never fetched via unauthenticated raw URLs — auth uses, in order:
+
+1. **GitHub CLI (`gh`)** — default on operator laptops (`gh auth login`; token
+   stays in the `gh` credential store, never in zoto-viz config)
+2. **SSH deploy key** (read-only) — headless/kiosk fallback (`git sparse-checkout`)
+3. **`GITHUB_TOKEN` / `ZOTO_VIZ_PLUGIN_CATALOG_TOKEN`** — last resort env only
+
+Configure in `~/.zoto-viz/sys-config.yml`:
+
+```yaml
+plugin_catalog:
+  repo: your-org/zoto-viz-plugins      # owner/name (required to enable)
+  ref: main                            # branch when not using a release
+  release: latest                      # or a tag name; plugin zips as release assets
+  manifest_path: manifest.json
+  interval: 3600                       # seconds (default 1 h)
+  auth: gh                             # gh | ssh | token | off
+  deploy_key: ~/.zoto-viz/plugin-catalog_deploy_key
+```
+
+Env overrides: `ZOTO_VIZ_PLUGIN_CATALOG_REPO`, `ZOTO_VIZ_PLUGIN_CATALOG_INTERVAL`,
+`ZOTO_VIZ_PLUGIN_CATALOG_AUTH`, `ZOTO_VIZ_NO_PLUGIN_CATALOG=1` to disable.
+
+### Manifest format
+
+Schema: `schema/plugin-catalog-manifest.schema.json`. Example:
+`examples/plugin-catalog/manifest.json`.
+
+```json
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "my-view",
+      "version": 2,
+      "url": "my-view-2.zip",
+      "sha256": "<64-char hex>",
+      "description": "Short label for logs"
+    }
+  ]
+}
+```
+
+Optional manifest fields: `min_app`, `size`, `published_at`, and later `signature`
+(Ed25519/minisign — not verified yet).
+
+### Install path and consent
+
+On each poll (startup + interval) the monitor:
+
+1. Fetches the manifest with `gh api` / `gh release download` (or ssh/token fallback)
+2. Compares versions to locally installed plugins (`~/.zoto-viz/plugins/local/` and catalog scan)
+3. For newer entries: downloads the zip, **verifies sha256** (mandatory), writes
+   `~/.zoto-viz/plugins/local/<id>.zip`, unpacks, and hot-loads the catalog row
+4. Skips failures with a log line; auth/checksum errors fail closed
+
+Remote zips use the same local zip path as `publish_local_plugin` (`origin: local`).
+They **do not** auto-consent — TypeScript/Python/GLSL still need
+`consent_plugin` before code runs. `autoconsent` stays limited to src/local
+authoring flows.
+
+### Publishing to a private repo
+
+1. Pack: `./zoto-viz plugin pack <id> -o dist/<id>-<version>.zip`
+2. `sha256sum dist/<id>-<version>.zip` and add/update the manifest entry
+3. Create a GitHub Release (or commit manifest on the default branch)
+4. Upload the zip as a release asset named `<id>-<version>.zip`
+5. Bump `version` in the manifest entry
+
+On laptops: `gh auth login` once. On headless hosts: install a read-only deploy
+key at `deploy_key` and set `auth: ssh`. Never commit PATs to sys-config or git.
+
 ## First-startup migration
 
 On first start after upgrade, unknown plugins still sitting in the old user-dir

@@ -9,7 +9,8 @@ Listen and display keys (optional; defaults keep today's loopback-only monitor):
 - ``bind`` — ``127.0.0.1`` (default) or ``0.0.0.0`` / a LAN IP
 - ``port`` — ``7020``
 - ``insecure_lan`` — required acknowledgement when ``bind`` is not loopback
-- ``inhibit_screensaver`` — hold idle/sleep so the display does not blank
+- ``inhibit_screensaver`` — hold idle/sleep so the display does not blank (default on
+  for live monitor; off when ``ZOTO_VIZ_HEADLESS`` / ``ZOTO_VIZ_NO_SCREENSAVER_INHIBIT`` / CI / pytest)
 """
 from __future__ import annotations
 
@@ -37,7 +38,7 @@ HEADER = (
     "# bind: 127.0.0.1                 # 0.0.0.0 or a LAN IP to listen beyond loopback\n"
     "# port: 7020\n"
     "# insecure_lan: false             # required when bind is not loopback (no password)\n"
-    "# inhibit_screensaver: false      # hold idle/sleep so the display does not blank\n"
+    "# inhibit_screensaver: true       # hold idle/sleep so the display does not blank (default on)\n"
 )
 REPO = Path(__file__).resolve().parents[1]
 Run = Callable[[list[str]], str]
@@ -102,6 +103,14 @@ def _bind(raw: Any) -> str:
     return str(raw or "").strip() or DEFAULT_BIND
 
 
+def _inhibit_screensaver(raw: dict[str, Any]) -> bool:
+    from . import idle
+
+    if "inhibit_screensaver" not in raw:
+        return idle.default_inhibit_enabled()
+    return _bool(raw.get("inhibit_screensaver"))
+
+
 def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
     """Resolved listen / display keys. Missing file → loopback defaults."""
     raw = cfg or {}
@@ -111,7 +120,7 @@ def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
         "bind": bind,
         "port": _port(raw.get("port")),
         "insecure_lan": True if not loopback else _bool(raw.get("insecure_lan")),
-        "inhibit_screensaver": _bool(raw.get("inhibit_screensaver")),
+        "inhibit_screensaver": _inhibit_screensaver(raw),
     }
 
 
@@ -121,7 +130,7 @@ def resolve_listen(
     bind: str | None = None,
     port: int | None = None,
     insecure_lan: bool = False,
-    inhibit_screensaver: bool = False,
+    inhibit_screensaver: bool | None = None,
 ) -> dict[str, Any]:
     """CLI values win when set; otherwise sys-config; otherwise loopback defaults."""
     opts = listen_opts(cfg)
@@ -130,11 +139,15 @@ def resolve_listen(
     lan = bool(insecure_lan or opts["insecure_lan"])
     if not access.bind_is_loopback(resolved_bind):
         lan = True
+    if inhibit_screensaver is not None:
+        saver = bool(inhibit_screensaver)
+    else:
+        saver = bool(opts["inhibit_screensaver"])
     return {
         "bind": resolved_bind,
         "port": resolved_port,
         "insecure_lan": lan,
-        "inhibit_screensaver": bool(inhibit_screensaver or opts["inhibit_screensaver"]),
+        "inhibit_screensaver": saver,
     }
 
 

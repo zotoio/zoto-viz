@@ -9,6 +9,8 @@ Subcommands
   all        discover -> capture -> analyse -> graph
   plugin     validate / list / pack / add (src catalog + contrib zips)
   install    prereq check, dry-run plan, venv, PATH shim, sys-config (+ hopper hints)
+  bootstrap  consent-gated prereq install (gh, tshark, venv, pnpm, screensaver tools)
+  doctor     report missing tools; --fix runs bootstrap
 
 All external tools are invoked via subprocess so each step can also be run by hand.
 """
@@ -740,6 +742,18 @@ def _run_install(args: argparse.Namespace) -> None:
     )
 
 
+def _run_bootstrap(args: argparse.Namespace) -> None:
+    from service.bootstrap import cli_bootstrap
+
+    sys.exit(cli_bootstrap(dry_run=args.dry_run, yes=args.yes, fix=args.fix))
+
+
+def _run_doctor(args: argparse.Namespace) -> None:
+    from service.bootstrap import cli_bootstrap
+
+    sys.exit(cli_bootstrap(dry_run=not args.fix, yes=args.yes, fix=args.fix))
+
+
 def _add_plugin_parser(sub) -> None:
     try:
         from service import plugins
@@ -795,6 +809,20 @@ def main() -> None:
     ins.add_argument("-y", "--yes", action="store_true", help="accept system-step risk and apply without prompts")
     ins.add_argument("--no-system", action="store_true", help="never run sudo/winget/group changes")
     ins.set_defaults(fn=_run_install)
+
+    boot = sub.add_parser(
+        "bootstrap",
+        help="check missing tools and install with consent (gh, capture, venv, pnpm)",
+    )
+    boot.add_argument("-n", "--dry-run", action="store_true", help="print plan only")
+    boot.add_argument("-y", "--yes", action="store_true", help="accept all install prompts")
+    boot.add_argument("--fix", action="store_true", help="attempt fixes for missing items")
+    boot.set_defaults(fn=_run_bootstrap)
+
+    doc = sub.add_parser("doctor", help="report prerequisite health; --fix runs bootstrap")
+    doc.add_argument("--fix", action="store_true", help="attempt fixes (same as bootstrap --fix)")
+    doc.add_argument("-y", "--yes", action="store_true", help="accept install prompts when fixing")
+    doc.set_defaults(fn=_run_doctor)
 
     args = p.parse_args()
     if args.cmd == "plugin":

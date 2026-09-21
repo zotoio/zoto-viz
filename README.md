@@ -19,7 +19,7 @@ git clone <this-repo> && cd zoto-viz
 # Windows: python zoto-viz install --dry-run
 ```
 
-`--yes` attempts OS packages and capture permissions (you accept that risk). `--no-system` never does. Open a new terminal afterwards so `zoto-viz` is on PATH.
+`--yes` attempts OS packages and capture permissions (you accept that risk). `--no-system` never does. `./zoto-viz doctor` reports missing tools; `./zoto-viz bootstrap` installs them with consent (including `gh` for private plugin catalogs). Open a new terminal afterwards so `zoto-viz` is on PATH.
 
 Manual equivalent (Debian/Ubuntu):
 
@@ -50,7 +50,7 @@ pnpm start            # backend :7020 + Vite :5173  (pnpm stop / pnpm restart)
 
 `pnpm start:backend`, `pnpm start:frontend`, `pnpm stop:backend`, `pnpm restart:frontend` (and `:both`) target one side. Logs: `.run/backend.log`, `.run/frontend.log`. A Cursor stop hook restarts the backend when `service/*.py` is newer than the running monitor.
 
-User data: `~/.zoto-viz/` (migrated from `~/.z-netviz` if present). Loopback only; `--bind 0.0.0.0` needs `--insecure-lan`.
+User data: `~/.zoto-viz/` (migrated from `~/.z-netviz` if present). Loopback only; `--bind 0.0.0.0` needs `--insecure-lan`. The live monitor inhibits screensaver/idle sleep by default (`--no-inhibit-screensaver` or `ZOTO_VIZ_HEADLESS=1` to disable).
 
 ```bash
 zoto-viz install          # also writes sys-config.yml + systemd override (ZOTO_VIZ_REPO_ROOT)
