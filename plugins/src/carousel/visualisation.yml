@@ -2,38 +2,42 @@ engine: carousel
 look:
   theme: ember
   backdrop: none
-  themeCycle: "off"
+  themeCycle: 'off'
 config:
-  - key: source
-    label: source
-    type: text
-    default: nasa
-    hint: Host source id from Settings → Sources. Empty uses every live source.
-  - key: titleField
-    label: title field
-    type: text
-    default: title
-    hint: Item key for the large caption title (RSS title, or a JSON field name).
-  - key: captionField
-    label: caption field
-    type: text
-    default: summary
-    hint: Item key for the blurb under the title.
-  - key: imageField
-    label: image field
-    type: text
-    default: image
-    hint: Item key for the still URL.
-  - key: linkField
-    label: link field
-    type: text
-    default: link
-    hint: Item key for the article URL.
-  - key: filter
-    label: filter
-    type: select
-    values:
-      - [has-image, pictured]
-      - [all, all]
-    default: has-image
-    hint: Pictured keeps only items with an HTTPS still.
+- key: source
+  label: source
+  type: text
+  default: nasa
+  hint: "Host source id from Settings \u2192 Sources. Empty uses every live source."
+- key: titleField
+  label: title field
+  type: text
+  default: title
+  hint: Item key for the large caption title (RSS title, or a JSON field name).
+- key: captionField
+  label: caption field
+  type: text
+  default: summary
+  hint: Item key for the blurb under the title.
+- key: imageField
+  label: image field
+  type: text
+  default: image
+  hint: Item key for the still URL.
+- key: linkField
+  label: link field
+  type: text
+  default: link
+  hint: Item key for the article URL.
+- key: filter
+  label: filter
+  type: select
+  values:
+  - - has-image
+    - pictured
+  - - all
+    - all
+  default: has-image
+  hint: Pictured keeps only items with an HTTPS still.
+idle:
+  fixture: host

@@ -2,4 +2,6 @@ engine: helix
 look:
   theme: ice
   backdrop: none
-  themeCycle: "off"
+  themeCycle: 'off'
+idle:
+  fixture: host

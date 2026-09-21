@@ -11,3 +11,5 @@ look:
   gridOpacity: 0.14
   edgeGlow: comet
   graphFabric: cloth
+idle:
+  fixture: host

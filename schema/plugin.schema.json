@@ -266,7 +266,8 @@
         "style": { "$ref": "#/$defs/style" },
         "layout": { "$ref": "#/$defs/layout" },
         "options": { "$ref": "#/$defs/freeMap" },
-        "config": { "$ref": "#/$defs/freeMap" }
+        "config": { "$ref": "#/$defs/freeMap" },
+        "idle": { "$ref": "#/$defs/vizIdle" }
       }
     },
     "sky": {

@@ -1,14 +1,18 @@
 engine: graph
 base: drone-show
 options:
-  - key: form
-    label: formation
-    default: sphere
-    values:
-      - [sphere, sphere]
-      - [helix, helix]
-      - [rings, rings]
-      - [wave, wave]
+- key: form
+  label: formation
+  default: sphere
+  values:
+  - - sphere
+    - sphere
+  - - helix
+    - helix
+  - - rings
+    - rings
+  - - wave
+    - wave
 look:
   theme: neon
   backdrop: space
@@ -26,3 +30,5 @@ style:
   nodeColor: heat
   labels: top
   flatten: false
+idle:
+  fixture: host

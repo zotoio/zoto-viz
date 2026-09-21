@@ -6,4 +6,6 @@ look:
   theme: neon
   backdrop: none
   gridShape: hex
-  themeCycle: "off"
+  themeCycle: 'off'
+idle:
+  fixture: host

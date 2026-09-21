@@ -2,4 +2,6 @@ engine: tetris
 look:
   theme: phosphor
   backdrop: none
-  themeCycle: "off"
+  themeCycle: 'off'
+idle:
+  fixture: host

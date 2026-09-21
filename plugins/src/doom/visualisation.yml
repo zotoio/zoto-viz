@@ -2,4 +2,6 @@ engine: doom
 look:
   theme: tactical
   backdrop: none
-  themeCycle: "off"
+  themeCycle: 'off'
+idle:
+  fixture: host

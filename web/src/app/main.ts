@@ -90,6 +90,7 @@ import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
+import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -852,7 +853,9 @@ function feed(m: StateMsg): void {
   const feedT0 = performance.now();
   lastRaw = m;
   applyLive(m);
-  let shown = m;
+  const curMode = modeById(liveMode || modeSel.value);
+  const curSpec = curMode.pluginId ? pluginSpecForMode(curMode.id) : null;
+  let shown = withGoldenIfIdle(m, pluginIdleOf(curSpec));
   if (mergeToggle.checked) {
     const c = collapseByName(m);
     scene.setAliasMap(c.map);

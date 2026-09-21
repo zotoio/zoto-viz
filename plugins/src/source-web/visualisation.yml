@@ -7,3 +7,5 @@ look:
   skyOpacity: 0.35
   skyBright: 0.7
   gridOpacity: 0.15
+idle:
+  fixture: host

@@ -1,1 +1,3 @@
 engine: command
+idle:
+  fixture: host
