@@ -2,4 +2,6 @@ engine: skyline
 look:
   theme: dusk
   backdrop: none
-  themeCycle: "off"
+  themeCycle: 'off'
+idle:
+  fixture: host

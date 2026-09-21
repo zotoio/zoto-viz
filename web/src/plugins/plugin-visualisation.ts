@@ -3,6 +3,7 @@ import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, parseGraphSpace } from "../graph/fabric";
 import { parseGraphLayout, parseGraphLinks } from "../graph/graph-layouts";
+import { parsePluginIdle } from "./fixtures/golden-state";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
@@ -291,6 +292,7 @@ export function toPluginView(raw: unknown): PluginView {
   if (!Number.isFinite(version) || version < 1) throw new Error("plugin version is required");
 
   const engine = parseEngine(viz.engine ?? row.engine);
+  const idle = parsePluginIdle(viz.idle);
   const spec: PluginView = {
     id,
     name,
@@ -305,6 +307,7 @@ export function toPluginView(raw: unknown): PluginView {
     look: parseLook(viz.look ?? row.look),
     instances: parseInstances(row.instances),
   };
+  if (idle) spec.idle = idle;
   if (asString(row.file)) spec.file = asString(row.file);
   if (row.runtime === "yaml" || row.runtime === "typescript") spec.runtime = row.runtime;
   if (asString(row.entry)) spec.entry = asString(row.entry);

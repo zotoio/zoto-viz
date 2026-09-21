@@ -121,7 +121,7 @@ describe("pickAgentSettings", () => {
     expect(p.mode).toBe("talkers");
     expect(p.redact).toBe(true);
     expect(p.merge).toBe(true);
-    expect(p.feed).toEqual({ on: true, source: "transcript", layout: "ticker", scope: "selected", density: 80, textSize: 20 });
+    expect(p.feed).toEqual({ on: true, source: "traffic", layout: "ticker", scope: "selected", density: 80, textSize: 20 });
     expect(p.show).toEqual({ internet: false, lan: true, cpuIdle: false });
     expect(p.plugins).toBeUndefined();
     expect(p.anim).toEqual({ backdrop: "matrix", skySpeed: 2, follow: true });

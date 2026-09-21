@@ -120,6 +120,21 @@ EXTRA_VIEWS = (
 )
 
 
+def test_every_shipped_plugin_has_golden_idle() -> None:
+    """Menu plugins must declare a host golden mock so empty boards never gate screenshots."""
+    for pid in _src_ids():
+        doc = plugins.load_file(SRC / pid / "plugin.yml")
+        caps = doc.get("capabilities") or []
+        needs_viz = any(c in caps for c in ("viz.read", "viz.write"))
+        viz_yml = plugins._visualisation_doc(SRC / pid) or {}
+        if needs_viz:
+            idle = (doc.get("viz") or {}).get("idle") or {}
+            assert idle.get("fixture") == "host", f"{pid}: viz.idle.fixture must be host"
+        elif viz_yml.get("engine"):
+            idle = viz_yml.get("idle") or {}
+            assert idle.get("fixture") == "host", f"{pid}: visualisation.idle.fixture must be host"
+
+
 def test_former_modes_are_menu_plugins() -> None:
     result = plugins.scan(PLUGINS)
     by_id = {p["id"]: p for p in result["plugins"]}
