@@ -15,7 +15,7 @@ import { DebugLog, readDebugOn } from "../ui/debug-log";
 import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { liveSound } from "../audio/sound";
-import { PluginSfx } from "../audio/plugin-sfx";
+import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -848,6 +848,7 @@ let lastLiveSeq = 0;
 let lastRepoRev = "";
 function applyLive(m: StateMsg): void {
   const rev = m.repoRev || "";
+  if (rev) setBackroomsSampleRev(rev);
   if (rev && lastRepoRev && rev !== lastRepoRev) {
     location.reload();
     return;

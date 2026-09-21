@@ -61,6 +61,9 @@ describe("backrooms shipped pack", () => {
 
   it("keeps a yellow corridor luma on fresh idle time (not near-black)", () => {
     expect(FRAG).toContain("vec3(0.97, 0.94, 0.70)");
+    expect(FRAG).toContain("max(hit - 8.0, 0.0)");
+    expect(FRAG).toContain("vec3(0.95, 0.92, 0.68)");
+    expect(FRAG).toContain("mix(0.006 * sin(gait), 0.03, peek)");
     expect(FRAG).toContain("rotY(yaw) * rotX(-pitch) * vd");
     expect(FRAG).toContain("chroma");
     expect(FRAG).not.toContain("floor(uv.y * 30.0)");
@@ -72,7 +75,7 @@ describe("backrooms shipped pack", () => {
     expect(FRAG).toContain("gone * turnDir");
     expect(FRAG).toContain("4.0 * ceil((sFlee - 2.0) * 0.25) + 2.0");
     expect(FRAG).toContain("room(ro)");
-    expect(FRAG).toContain("hide * 0.20");
+    expect(FRAG).toContain("hide * 0.10");
     expect(FRAG).toContain("knLft");
     expect(FRAG).toContain("peek * (-hide)");
     expect(FRAG).toContain("bobAmp * abs(sin(gait)) * (1.0 - freeze)");

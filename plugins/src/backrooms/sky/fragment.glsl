@@ -66,20 +66,20 @@ float creature(vec3 p, vec3 c, float t, float leanX, float face, float grin) {
   vec3 wrL = elL + vec3(0.05, 0.02 * sl, 0.52);
   vec3 elR = sh + vec3(-0.14, -0.05 + 0.04 * sr, 0.44);
   vec3 wrR = elR + vec3(-0.05, -0.02 + 0.03 * sr, 0.54);
-  d = smin(d, cap(q, sh, elL, 0.018), 0.012);
-  d = smin(d, cap(q, elL, wrL, 0.015), 0.010);
-  d = smin(d, cap(q, sh, elR, 0.018), 0.012);
-  d = smin(d, cap(q, elR, wrR, 0.015), 0.010);
+  d = smin(d, cap(q, sh, elL, 0.022), 0.012);
+  d = smin(d, cap(q, elL, wrL, 0.018), 0.010);
+  d = smin(d, cap(q, sh, elR, 0.022), 0.012);
+  d = smin(d, cap(q, elR, wrR, 0.018), 0.010);
   float knLft = 0.28 + 0.42 * max(sl, 0.0);
   float knRgt = 0.22 + 0.48 * max(sr, 0.0);
   vec3 knL = hip + vec3(0.07, -0.70 + 0.20 * max(sl, 0.0), knLft);
   vec3 ftL = knL + vec3(0.03, -0.72 + 0.10 * max(-sl, 0.0), -0.10 + 0.20 * sl);
   vec3 knR = hip + vec3(-0.08, -0.66 + 0.18 * max(sr, 0.0), knRgt);
   vec3 ftR = knR + vec3(-0.02, -0.74 + 0.12 * max(-sr, 0.0), -0.08 + 0.18 * sr);
-  d = smin(d, cap(q, hip, knL, 0.022), 0.012);
-  d = smin(d, cap(q, knL, ftL, 0.018), 0.010);
-  d = smin(d, cap(q, hip, knR, 0.022), 0.012);
-  d = smin(d, cap(q, knR, ftR, 0.018), 0.010);
+  d = smin(d, cap(q, hip, knL, 0.028), 0.012);
+  d = smin(d, cap(q, knL, ftL, 0.024), 0.010);
+  d = smin(d, cap(q, hip, knR, 0.028), 0.012);
+  d = smin(d, cap(q, knR, ftR, 0.024), 0.010);
   return d;
 }
 
@@ -147,23 +147,22 @@ void main() {
   z = ro.z;
   float atTurn = peekOn * smoothstep(0.0, 0.7, gone);
   float yaw = 1.5708 * turnDir * atTurn;
-  yaw += hide * 0.18 * peek;
+  yaw += hide * 0.08 * peek;
   yaw += 0.012 * sin(gait * 0.35) * (1.0 - freeze) * (1.0 - atTurn * 0.35);
-  float pitch = mix(0.10 + 0.010 * sin(gait), -0.10, peek);
-  pitch += 0.022 * sprint;
+  float pitch = mix(0.006 * sin(gait), 0.03, peek);
 
   float grin = peek;
   float approach = peekOn * smoothstep(peekPh, peekPh + 0.07, phA) * (1.0 - atTurn);
   float leanX = peek * (-hide) * (0.42 + 0.05 * sin(t * 3.1));
   vec3 cTuck = vec3(hide * 1.32, 0.0, z - 2.55);
-  vec3 cReach = vec3(hide * 0.20, 0.0, z - 1.08);
+  vec3 cReach = vec3(hide * 0.10, 0.0, z - 0.82);
   vec3 cpos = mix(cTuck, cReach, approach);
   cpos = mix(cpos, vec3(hide * 1.16, 0.0, -sTurn - 0.2), atTurn);
   cpos.z -= (1.0 - peekOn) * 22.0;
   float face = atan(x - cpos.x, z - cpos.z) - hide * 0.12 * peek;
 
   vec3 rd = normalize(rotY(yaw) * rotX(-pitch) * vd);
-  float far = mix(44.0, 38.0, threat);
+  float far = mix(56.0, 48.0, threat);
   float hit = 0.02;
   vec3 p = ro;
   for (int i = 0; i < 52; i++) {
@@ -235,9 +234,10 @@ void main() {
   }
   col *= 1.0 - sh * vec3(0.5, 0.42, 0.28);
 
-  float fogK = mix(0.046, 0.030, threat);
-  float fog = 1.0 - exp(-hit * fogK);
-  vec3 fogc = vec3(0.95, 0.92, 0.68) * (0.58 + 0.42 * fill);
+  float fogK = mix(0.022, 0.016, threat);
+  float fog = 1.0 - exp(-max(hit - 8.0, 0.0) * fogK);
+  vec3 fogc = vec3(0.95, 0.92, 0.68) * (0.62 + 0.38 * fill);
+  col *= mix(1.0, 0.78, smoothstep(22.0, 50.0, hit));
   col = mix(col, fogc, fog);
   if (hit > far - 1.0) col = fogc;
 

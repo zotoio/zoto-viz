@@ -84,7 +84,7 @@ export function backroomsRoarLevel(t: number): number {
 }
 
 /** CC0 Freesound recordings — see `web/public/sfx/backrooms/ATTRIBUTION.md`. */
-export const BACKROOMS_SAMPLE_URLS = {
+export const BACKROOMS_SAMPLE_PATHS = {
   buzz: "/sfx/backrooms/buzz.mp3",
   fluoro: "/sfx/backrooms/fluoro.mp3",
   screech: "/sfx/backrooms/screech.mp3",
@@ -92,7 +92,38 @@ export const BACKROOMS_SAMPLE_URLS = {
   pant: "/sfx/backrooms/pant.mp3",
 } as const;
 
-type SampleId = keyof typeof BACKROOMS_SAMPLE_URLS;
+type SampleId = keyof typeof BACKROOMS_SAMPLE_PATHS;
+
+let liveSampleRev = "";
+
+function bakedSampleRev(): string {
+  const env = import.meta.env.VITE_ZOTO_REV;
+  return typeof env === "string" && env ? env : "dev";
+}
+
+/** Checkout SHA baked at build, or the live `repoRev` once the monitor reports it. */
+export function backroomsSampleRev(): string {
+  return liveSampleRev || bakedSampleRev();
+}
+
+/** Host `repoRev` — a new commit changes `?v=` so browsers drop the old mp3 cache. */
+export function setBackroomsSampleRev(rev: string): void {
+  const next = rev.trim();
+  if (!next || next === liveSampleRev) return;
+  liveSampleRev = next;
+}
+
+export function backroomsSampleUrl(id: SampleId, rev = backroomsSampleRev()): string {
+  return `${BACKROOMS_SAMPLE_PATHS[id]}?v=${encodeURIComponent(rev)}`;
+}
+
+export const BACKROOMS_SAMPLE_URLS = {
+  buzz: backroomsSampleUrl("buzz"),
+  fluoro: backroomsSampleUrl("fluoro"),
+  screech: backroomsSampleUrl("screech"),
+  roar: backroomsSampleUrl("roar"),
+  pant: backroomsSampleUrl("pant"),
+} as const;
 
 export class PluginSfx {
   private ctx: AudioContext | null = null;
@@ -106,6 +137,7 @@ export class PluginSfx {
   private loops: AudioBufferSourceNode[] = [];
   private lastScreech = 0;
   private lastRoar = 0;
+  private loadedRev = "";
   private hydrate: Promise<void> | null = null;
 
   setRoar(level: number): void {
@@ -119,6 +151,7 @@ export class PluginSfx {
       return;
     }
     this.ensure();
+    this.loadSamples();
     const sampled = this.buffers.size > 0;
     this.fadeAll(
       roarAmp(L.roar) * (sampled ? 1.15 : 1),
@@ -148,6 +181,7 @@ export class PluginSfx {
     this.screechGain = null;
     this.pantGain = null;
     this.pantLfo = null;
+    this.loadedRev = "";
     this.hydrate = null;
     if (ctx) void ctx.close();
   }
@@ -230,13 +264,23 @@ export class PluginSfx {
   }
 
   private loadSamples(): void {
-    if (this.hydrate || !this.ctx) return;
+    if (!this.ctx) return;
+    const rev = backroomsSampleRev();
+    if (this.hydrate && this.loadedRev === rev) return;
+    if (this.hydrate && this.loadedRev !== rev) {
+      for (const src of this.loops) {
+        try { src.stop(); } catch { /* already stopped */ }
+      }
+      this.loops = [];
+      this.buffers.clear();
+    }
     const ctx = this.ctx;
+    this.loadedRev = rev;
     this.hydrate = (async () => {
       await Promise.all(
-        (Object.keys(BACKROOMS_SAMPLE_URLS) as SampleId[]).map(async (id) => {
+        (Object.keys(BACKROOMS_SAMPLE_PATHS) as SampleId[]).map(async (id) => {
           try {
-            const res = await fetch(BACKROOMS_SAMPLE_URLS[id]);
+            const res = await fetch(backroomsSampleUrl(id, rev), { cache: "reload" });
             if (!res.ok) return;
             const raw = await res.arrayBuffer();
             this.buffers.set(id, await ctx.decodeAudioData(raw.slice(0)));

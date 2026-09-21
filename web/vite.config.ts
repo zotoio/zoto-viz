@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -6,7 +7,22 @@ import { defineConfig } from "vite";
 const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+function gitShortRev(): string {
+  try {
+    const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    }).trim();
+    return sha || "dev";
+  } catch {
+    return "dev";
+  }
+}
+
 export default defineConfig({
+  define: {
+    "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
+  },
   server: {
     port: 5173,
     fs: { allow: [repoRoot] },

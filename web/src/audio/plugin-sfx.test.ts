@@ -3,9 +3,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  BACKROOMS_SAMPLE_PATHS,
   BACKROOMS_SAMPLE_URLS,
   backroomsPhase,
   backroomsRoarLevel,
+  backroomsSampleRev,
+  backroomsSampleUrl,
   backroomsSfxLevels,
   roarAmp,
   PluginSfx,
@@ -51,11 +54,16 @@ describe("plugin sfx roar", () => {
   });
 
   it("ships the CC0 Backrooms samples next to ATTRIBUTION", () => {
+    expect(Object.keys(BACKROOMS_SAMPLE_PATHS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant"]);
     expect(Object.keys(BACKROOMS_SAMPLE_URLS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant"]);
     const publicRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../public");
-    for (const url of Object.values(BACKROOMS_SAMPLE_URLS)) {
-      expect(existsSync(resolve(publicRoot, url.replace(/^\//, "")))).toBe(true);
+    const rev = backroomsSampleRev();
+    expect(rev).toMatch(/^(dev|[0-9a-f]{7,40})$/);
+    for (const [id, path] of Object.entries(BACKROOMS_SAMPLE_PATHS)) {
+      expect(existsSync(resolve(publicRoot, path.replace(/^\//, "")))).toBe(true);
+      expect(BACKROOMS_SAMPLE_URLS[id as keyof typeof BACKROOMS_SAMPLE_URLS]).toBe(`${path}?v=${rev}`);
     }
+    expect(backroomsSampleUrl("buzz", "aaa")).not.toBe(backroomsSampleUrl("buzz", "bbb"));
     expect(existsSync(resolve(publicRoot, "sfx/backrooms/ATTRIBUTION.md"))).toBe(true);
   });
 
