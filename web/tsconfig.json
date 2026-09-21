@@ -10,5 +10,6 @@
     "isolatedModules": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/orbs.ts", "../plugins/src/syscon/frontend/telemetry.ts", "../plugins/src/nixie-clock/frontend/tubes.ts"]
+  "include": ["src", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/orbs.ts", "../plugins/src/syscon/frontend/telemetry.ts", "../plugins/src/nixie-clock/frontend/tubes.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }
