@@ -77,6 +77,17 @@ export function backroomsRoarLevel(t: number): number {
   return backroomsSfxLevels(t).roar;
 }
 
+/** CC0 Freesound recordings — see `web/public/sfx/backrooms/ATTRIBUTION.md`. */
+export const BACKROOMS_SAMPLE_URLS = {
+  buzz: "/sfx/backrooms/buzz.mp3",
+  fluoro: "/sfx/backrooms/fluoro.mp3",
+  screech: "/sfx/backrooms/screech.mp3",
+  roar: "/sfx/backrooms/roar.mp3",
+  pant: "/sfx/backrooms/pant.mp3",
+} as const;
+
+type SampleId = keyof typeof BACKROOMS_SAMPLE_URLS;
+
 export class PluginSfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -85,6 +96,11 @@ export class PluginSfx {
   private screechGain: GainNode | null = null;
   private pantGain: GainNode | null = null;
   private pantLfo: OscillatorNode | null = null;
+  private buffers = new Map<SampleId, AudioBuffer>();
+  private loops: AudioBufferSourceNode[] = [];
+  private lastScreech = 0;
+  private lastRoar = 0;
+  private hydrate: Promise<void> | null = null;
 
   setRoar(level: number): void {
     this.setBackrooms(0, { roar: level, screech: 0, pant: 0, buzz: 0 });
@@ -97,7 +113,14 @@ export class PluginSfx {
       return;
     }
     this.ensure();
-    this.fadeAll(roarAmp(L.roar), 0.032 * L.buzz, 0.11 * L.screech, 0.14 * L.pant);
+    const sampled = this.buffers.size > 0;
+    this.fadeAll(
+      roarAmp(L.roar) * (sampled ? 1.15 : 1),
+      (sampled ? 0.22 : 0.032) * L.buzz,
+      (sampled ? 0.42 : 0.11) * L.screech,
+      (sampled ? 0.32 : 0.14) * L.pant,
+    );
+    this.fireEdges(L);
   }
 
   silence(): void {
@@ -106,6 +129,11 @@ export class PluginSfx {
 
   dispose(): void {
     this.silence();
+    for (const src of this.loops) {
+      try { src.stop(); } catch { /* already stopped */ }
+    }
+    this.loops = [];
+    this.buffers.clear();
     const ctx = this.ctx;
     this.ctx = null;
     this.master = null;
@@ -114,6 +142,7 @@ export class PluginSfx {
     this.screechGain = null;
     this.pantGain = null;
     this.pantLfo = null;
+    this.hydrate = null;
     if (ctx) void ctx.close();
   }
 
@@ -138,22 +167,18 @@ export class PluginSfx {
     const roarGain = ctx.createGain();
     roarGain.gain.value = 0;
     roarGain.connect(master);
-    this.wireRoar(ctx, roarGain);
 
     const buzzGain = ctx.createGain();
     buzzGain.gain.value = 0;
     buzzGain.connect(master);
-    this.wireBuzz(ctx, buzzGain);
 
     const screechGain = ctx.createGain();
     screechGain.gain.value = 0;
     screechGain.connect(master);
-    this.wireScreech(ctx, screechGain);
 
     const pantGain = ctx.createGain();
     pantGain.gain.value = 0;
     pantGain.connect(master);
-    this.wirePant(ctx, pantGain);
 
     this.ctx = ctx;
     this.master = master;
@@ -162,6 +187,71 @@ export class PluginSfx {
     this.screechGain = screechGain;
     this.pantGain = pantGain;
     void ctx.resume();
+    this.loadSamples();
+  }
+
+  private fireEdges(L: BackroomsSfxLevels): void {
+    if (L.screech > 0.35 && this.lastScreech <= 0.35) {
+      this.playOnce("screech", this.screechGain);
+    }
+    if (L.roar > 0.28 && this.lastRoar <= 0.28) {
+      this.playOnce("roar", this.roarGain);
+    }
+    this.lastScreech = L.screech;
+    this.lastRoar = L.roar;
+  }
+
+  private playOnce(id: SampleId, dest: GainNode | null): void {
+    const ctx = this.ctx;
+    const buf = this.buffers.get(id);
+    if (!ctx || !dest || !buf) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(dest);
+    src.start();
+  }
+
+  private startLoop(id: SampleId, dest: GainNode): void {
+    const ctx = this.ctx;
+    const buf = this.buffers.get(id);
+    if (!ctx || !buf) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(dest);
+    src.start();
+    this.loops.push(src);
+  }
+
+  private loadSamples(): void {
+    if (this.hydrate || !this.ctx) return;
+    const ctx = this.ctx;
+    this.hydrate = (async () => {
+      await Promise.all(
+        (Object.keys(BACKROOMS_SAMPLE_URLS) as SampleId[]).map(async (id) => {
+          try {
+            const res = await fetch(BACKROOMS_SAMPLE_URLS[id]);
+            if (!res.ok) return;
+            const raw = await res.arrayBuffer();
+            this.buffers.set(id, await ctx.decodeAudioData(raw.slice(0)));
+          } catch {
+            /* keep synth fallback */
+          }
+        }),
+      );
+      if (!this.ctx) return;
+      if (this.buzzGain) {
+        if (this.buffers.has("buzz")) this.startLoop("buzz", this.buzzGain);
+        if (this.buffers.has("fluoro")) this.startLoop("fluoro", this.buzzGain);
+        if (!this.buffers.has("buzz") && !this.buffers.has("fluoro")) this.wireBuzz(ctx, this.buzzGain);
+      }
+      if (this.pantGain) {
+        if (this.buffers.has("pant")) this.startLoop("pant", this.pantGain);
+        else this.wirePant(ctx, this.pantGain);
+      }
+      if (this.roarGain && !this.buffers.has("roar")) this.wireRoar(ctx, this.roarGain);
+      if (this.screechGain && !this.buffers.has("screech")) this.wireScreech(ctx, this.screechGain);
+    })();
   }
 
   private wireRoar(ctx: AudioContext, dest: GainNode): void {

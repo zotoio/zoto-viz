@@ -1,5 +1,15 @@
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { backroomsPhase, backroomsRoarLevel, backroomsSfxLevels, roarAmp, PluginSfx } from "./plugin-sfx";
+import {
+  BACKROOMS_SAMPLE_URLS,
+  backroomsPhase,
+  backroomsRoarLevel,
+  backroomsSfxLevels,
+  roarAmp,
+  PluginSfx,
+} from "./plugin-sfx";
 
 function firstPeekCycle(): number {
   for (let c = 0; c < 80; c++) {
@@ -33,6 +43,15 @@ describe("plugin sfx roar", () => {
     expect(backroomsSfxLevels(0).buzz).toBe(1);
     expect(backroomsPhase(0.20 / 0.040).flee).toBeLessThan(0.05);
     expect(backroomsPhase(0.55 / 0.040).flee).toBeGreaterThan(0.9);
+  });
+
+  it("ships the CC0 Backrooms samples next to ATTRIBUTION", () => {
+    expect(Object.keys(BACKROOMS_SAMPLE_URLS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant"]);
+    const publicRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../public");
+    for (const url of Object.values(BACKROOMS_SAMPLE_URLS)) {
+      expect(existsSync(resolve(publicRoot, url.replace(/^\//, "")))).toBe(true);
+    }
+    expect(existsSync(resolve(publicRoot, "sfx/backrooms/ATTRIBUTION.md"))).toBe(true);
   });
 
   it("accepts levels without throwing when Web Audio is missing", () => {
