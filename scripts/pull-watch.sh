@@ -215,7 +215,10 @@ apply_updates() {
     "$(py)" -m pip install -r "$ROOT/requirements.txt"
   fi
   log "pnpm --dir web build"
-  pnpm --dir "$ROOT/web" build
+  if ! pnpm --dir "$ROOT/web" build; then
+    log "error: web build failed — packed UI not updated"
+    return 1
+  fi
 }
 
 load_plugin_views() {
@@ -280,7 +283,7 @@ tick() {
   after="$(git rev-parse HEAD)"
   files="$(git diff --name-only "$before" "$after")"
   log "changed $(echo "$files" | grep -c . || true) files"
-  apply_updates "$files"
+  apply_updates "$files" || return 1
   restart_services
   log "wait ${RELOAD_WAIT_S}s before browser reload"
   sleep "$RELOAD_WAIT_S"
@@ -307,6 +310,10 @@ if [[ "$ONCE" -eq 1 ]]; then
 fi
 log "watching $ROOT every ${INTERVAL}s"
 while true; do
-  tick || log "tick failed"
+  # `tick || log` turns off set -e inside tick; apply_updates uses an
+  # explicit `return 1` so a failed build still stops before restart.
+  if ! tick; then
+    log "tick failed"
+  fi
   sleep "$INTERVAL"
 done

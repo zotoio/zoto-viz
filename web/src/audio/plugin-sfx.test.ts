@@ -1,6 +1,3 @@
-import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   BACKROOMS_SAMPLE_PATHS,
@@ -13,6 +10,13 @@ import {
   roarAmp,
   PluginSfx,
 } from "./plugin-sfx";
+
+/** Vite copies `web/public/sfx/backrooms` into dist — glob so tsc stays browser-only. */
+const shippedSfx = import.meta.glob("../../public/sfx/backrooms/*", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
 
 function firstPeekCycle(): number {
   for (let c = 0; c < 80; c++) {
@@ -56,15 +60,22 @@ describe("plugin sfx roar", () => {
   it("ships the CC0 Backrooms samples next to ATTRIBUTION", () => {
     expect(Object.keys(BACKROOMS_SAMPLE_PATHS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant"]);
     expect(Object.keys(BACKROOMS_SAMPLE_URLS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant"]);
-    const publicRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../public");
+    const names = Object.keys(shippedSfx).map((p) => p.split("/").pop() || p);
+    expect(names).toEqual(expect.arrayContaining([
+      "buzz.mp3",
+      "fluoro.mp3",
+      "screech.mp3",
+      "roar.mp3",
+      "pant.mp3",
+      "ATTRIBUTION.md",
+    ]));
     const rev = backroomsSampleRev();
     expect(rev).toMatch(/^(dev|[0-9a-f]{7,40})$/);
     for (const [id, path] of Object.entries(BACKROOMS_SAMPLE_PATHS)) {
-      expect(existsSync(resolve(publicRoot, path.replace(/^\//, "")))).toBe(true);
+      expect(names).toContain(`${id}.mp3`);
       expect(BACKROOMS_SAMPLE_URLS[id as keyof typeof BACKROOMS_SAMPLE_URLS]).toBe(`${path}?v=${rev}`);
     }
     expect(backroomsSampleUrl("buzz", "aaa")).not.toBe(backroomsSampleUrl("buzz", "bbb"));
-    expect(existsSync(resolve(publicRoot, "sfx/backrooms/ATTRIBUTION.md"))).toBe(true);
   });
 
   it("accepts levels without throwing when Web Audio is missing", () => {
