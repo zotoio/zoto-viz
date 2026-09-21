@@ -126,6 +126,8 @@ describe("pickAgentSettings", () => {
     expect(p.plugins).toBeUndefined();
     expect(p.anim).toEqual({ backdrop: "matrix", skySpeed: 2, follow: true });
     expect(p.filters).toEqual({ allowNames: "nest" });
+    expect(pickAgentSettings({ sound: true }, ["talkers"]).sound).toBe(true);
+    expect(pickAgentSettings({ sound: false }, ["talkers"]).sound).toBe(false);
     const g = pickAgentSettings({
       anim: { graphFabric: "tubes", graphSpace: "space", graphLayout: "globe", graphLinks: "both", focus: "selection" },
     }, ["talkers"]);

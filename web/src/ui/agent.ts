@@ -8,6 +8,7 @@ import { WakeStream } from "../audio/wake-stream";
 import { includeView, VIEW_KEY, type ViewCapture } from "./capture";
 import { askUserMedia, clearMediaDismiss } from "./media-ask";
 import { micCaptureAllowed } from "../audio/want";
+import { soundAllowed } from "../audio/sound";
 import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
 import { isNasaStillUrl } from "../core/nasa-stills";
 
@@ -235,7 +236,7 @@ export class AgentPanel {
 
     const voice = new Toggle({
       label: "speak replies",
-      title: "read agent replies through the speakers (ElevenLabs / Kokoro / Piper stream, else espeak); say zoto stop to halt until the watchword again",
+      title: "read agent replies through the speakers (ElevenLabs / Kokoro / Piper stream, else espeak). Header sound must be on. Say zoto stop to halt until the watchword again",
       checked: localStorage.getItem(VOICE_KEY) !== "0",
       onChange: (on) => localStorage.setItem(VOICE_KEY, on ? "1" : "0"),
     });
@@ -929,6 +930,13 @@ export class AgentPanel {
     void apiFetch("/api/ai/speak", { method: "DELETE" });
   }
 
+  /** Cut speaker output without muting until the watchword (header sound Off). */
+  hushOutput(): void {
+    this.resetSpeech();
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    void apiFetch("/api/ai/speak", { method: "DELETE" });
+  }
+
   /** Cut TTS now and keep it off until the watchword is heard again. */
   private haltSpeak(): void {
     this.speakMuted = true;
@@ -1138,7 +1146,7 @@ export class AgentPanel {
 
   /** Feed typewriter: speak each sentence as it is painted. */
   hearFeed(info: { role: string; shown: string; done: boolean }): void {
-    if (!this.liveVoice || this.speakMuted || info.role !== "agent") {
+    if (!this.liveVoice || this.speakMuted || !soundAllowed() || info.role !== "agent") {
       if (info.role === "agent" && info.done) {
         this.displayCaughtUp = true;
         this.signalSpeech();
@@ -1158,7 +1166,7 @@ export class AgentPanel {
   }
 
   private voiceEnabled(): boolean {
-    if (this.speakMuted) return false;
+    if (this.speakMuted || !soundAllowed()) return false;
     try { return localStorage.getItem(VOICE_KEY) !== "0"; }
     catch { return true; }
   }
@@ -1216,7 +1224,7 @@ export class AgentPanel {
   }
 
   private async speak(reply: string, chain = false): Promise<void> {
-    if (this.speakMuted || localStorage.getItem(VOICE_KEY) === "0") return;
+    if (this.speakMuted || !soundAllowed() || localStorage.getItem(VOICE_KEY) === "0") return;
     const text = spokenText(reply);
     if (!text) return;
     if (STREAM_TTS.has(this.ttsEngine) || !(await this.speakBrowser(text, chain))) {

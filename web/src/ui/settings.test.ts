@@ -64,8 +64,10 @@ describe("Settings panes", () => {
     expect(privacy.textContent).toContain("Network detail");
     expect(privacy.textContent).toContain("Allow host patterns");
     expect(privacy.textContent).toContain("Devices");
+    expect(privacy.textContent).toMatch(/sound/);
+    expect(privacy.textContent).toMatch(/starts off/);
     expect(privacy.textContent).toMatch(/AI and dice cannot/);
-    expect(dicePane?.textContent).toMatch(/camera, microphone/);
+    expect(dicePane?.textContent).toMatch(/camera, microphone, sound/);
     expect(dicePane?.textContent).toMatch(/Nest cams/);
     expect(dicePane?.textContent).toMatch(/Guardian/);
     s.bindView(null);

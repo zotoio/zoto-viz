@@ -102,4 +102,14 @@ describe("cpu doom maze", () => {
     sfx.stop();
     expect(sfx.ready).toBe(false);
   });
+
+  it("does not open AudioContext while sound is off", async () => {
+    const { liveSound } = await import("../audio/sound");
+    liveSound.setOn(false, false);
+    const sfx = new DoomSfx();
+    sfx.resume();
+    sfx.fire();
+    expect(sfx.ready).toBe(false);
+    sfx.stop();
+  });
 });

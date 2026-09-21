@@ -1,8 +1,8 @@
 id: backrooms
 name: Backrooms
-version: 1
-hint: Liminal yellow corridor — look up, spot the thing, turn and run. Roar syncs to sky time.
-description: Stage-only liminal sequence on the plugin sky. A fluorescent carpet maze cycles through glance, spot, and flee beats locked to host audio at uTime × 0.040. Works on a fresh board via the host idle fixture — no local zip or stills required.
+version: 31
+hint: Level 0 yellow halls and a few wide empty rooms. When the walker is seen it charges; the cam stops, turns, and sprints the other way.
+description: Found-footage run through damp yellow halls. Far down the corridor a tall thing walks the floor. The moment it is visible it runs at the camera. The cam stops, turns, and sprints the other way, sometimes checking a side hall.
 capabilities:
   - viz.read
   - viz.write

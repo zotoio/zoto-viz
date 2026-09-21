@@ -54,7 +54,7 @@ Never use MCP to `git add` / `git commit`. Camera and microphone are operator-on
 
 `set_settings` is the same whitelist as an in-app ` ```settings ` fence:
 
-- `theme`, `mode` (`plugin:<id>`), `chrome` (top/left/right), `dream`, `redact`, `merge`, `autoconsent` (auto-grant consent for shipped src + local plugins; not contrib zips)
+- `theme`, `mode` (`plugin:<id>`), `chrome` (top/left/right), `dream`, `redact`, `merge`, `autoconsent` (auto-grant consent for shipped src + local plugins; not contrib zips), `sound` (speaker output: plugin SFX, arcade, spoken replies; starts off)
 - `feed` `{on, source, layout, scope, modulate, includeSources, density, textSize}`
 - `show`, `filters`, `anim` (motion / physics / mosaic / sky / audio, including `mosaicTiles`, `mosaicTree`, `mosaicSharedTheme`, `mosaicUniqueSkies`, `mosaicSkies`, `graphFabric`, `graphSpace`, `graphLayout`, `graphLinks`)
 - `plugins` / `modeOptions` / `arcade`, `agent` `{clear, shader, shaderPhoto, decos}`

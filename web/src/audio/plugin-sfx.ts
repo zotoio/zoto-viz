@@ -1,3 +1,5 @@
+import { soundAllowed } from "./sound";
+
 /** Low creature roar for viz plugins. Host-side so the sandboxed iframe never owns audio. */
 
 export function roarAmp(level: number): number {
@@ -41,7 +43,7 @@ export class PluginSfx {
 
   setRoar(level: number): void {
     this.level = Math.max(0, Math.min(1, level));
-    if (this.level <= 0.008) {
+    if (!soundAllowed() || this.level <= 0.008) {
       this.fade(0);
       return;
     }

@@ -1,12 +1,12 @@
 engine: graph
-base: topology
+base: talkers
 look:
-  theme: amber
+  theme: ember
   backdrop: plugin
   stageOnly: true
   skyOpacity: 1
-  skyBright: 1.05
-  skySpeed: 1
+  skyBright: 1.25
   skyAudio: false
+  skySpeed: 1
   gridOpacity: 0
-  chrome: false
+  mosaic: "off"

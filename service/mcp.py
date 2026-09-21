@@ -142,7 +142,7 @@ LIST_FEATURES_TOOL: dict[str, Any] = {
     "description": (
         "Catalog of every MCP-settable zoto-viz key: theme, view, feed, show, filters, "
         "anim (motion/physics/mosaic/sky/audio), plugins, agent look, dice, temper/weather, "
-        "plus state, RF watch, consent, draft, profiles, memories, sources, and Nest cameras."
+        "sound, plus state, RF watch, consent, draft, profiles, memories, sources, and Nest cameras."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -176,6 +176,10 @@ def _settings_schema() -> dict[str, Any]:
             "autoconsent": {
                 "type": "boolean",
                 "description": "Auto-grant source-review consent for shipped plugins/src and ~/.zoto-viz/plugins/local zips (not contrib zips).",
+            },
+            "sound": {
+                "type": "boolean",
+                "description": "Speaker output (plugin SFX, arcade, spoken replies). Starts off.",
             },
             "temper": {"type": "integer", "minimum": live.TEMPER_MIN, "maximum": live.TEMPER_MAX},
             "weather": {"type": "string", "enum": list(live.WEATHERS)},
@@ -249,7 +253,7 @@ SET_SETTINGS_TOOL: dict[str, Any] = {
     "name": "set_settings",
     "description": (
         "Patch the open live UI. Same whitelist as an agent ```settings``` fence: theme, dream, "
-        "mode, chrome, redact, merge, autoconsent, feed, show, filters, anim (motion, physics, "
+        "mode, chrome, redact, merge, autoconsent, sound (speaker output; starts off), feed, show, filters, anim (motion, physics, "
         "mosaic / mosaicTiles / mosaicTree, sky, audio), modeOptions, arcade, plugins, agent look (shader/photos/SVG), "
         "dice (on / periodMin / include groups + ceilings), shuffle (one-shot dice), plus temper, weather, control, model. "
         "Camera and microphone are operator-only (Settings → Privacy)."

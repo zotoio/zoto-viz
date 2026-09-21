@@ -13,7 +13,7 @@ export type Rng = () => number;
 
 /** Chat line after a dice roll so the local agent takes over from the new look. */
 export const DICE_HANDOFF =
-  "Operator rolled the dice. Visual settings in the dice pool are a fresh random seed (theme, view, mosaic, feed, motion, physics, knobs) with a soft ceiling on labels, sparks, mosaic tiles, and node-count knobs so the frame stays usable. Privacy filters, camera, microphone, chrome placement, and prompts stay. Groups left off were not rolled. Dream cycling and AI Control follow the dice settings. Take over from this look — keep, rewrite, or surprise. Leave those ceilings unless the operator asks for more.";
+  "Operator rolled the dice. Visual settings in the dice pool are a fresh random seed (theme, view, mosaic, feed, motion, physics, knobs) with a soft ceiling on labels, sparks, mosaic tiles, and node-count knobs so the frame stays usable. Privacy filters, camera, microphone, sound, chrome placement, and prompts stay. Groups left off were not rolled. Dream cycling and AI Control follow the dice settings. Take over from this look — keep, rewrite, or surprise. Leave those ceilings unless the operator asks for more.";
 
 export const DICE_INCLUDE_KEYS = [
   "theme", "view", "mosaic", "feed",
@@ -428,7 +428,7 @@ function stampMosaicSkies(
 
 /**
  * Random theme, catalog view, mosaic, feed, every view's knobs, motion, and physics.
- * Leaves chrome, camera, microphone, privacy filters, prompts, agent decorations, and the dice config itself.
+ * Leaves chrome, camera, microphone, sound, privacy filters, prompts, agent decorations, and the dice config itself.
  */
 /** Plugin skies hide the graph. The header die always asks for a new view. */
 export function diceLookForRoll(
@@ -477,6 +477,7 @@ export function shuffleLook(s: ProfileSettings, ctx: ShuffleCtx, rnd: Rng = Math
     chrome: s.chrome,
     camera: s.camera,
     mic: s.mic,
+    sound: s.sound,
     merge,
     show,
     feed: on.feed ? shuffleFeed(s.feed ?? DEFAULT_FEED, rnd, cfg) : s.feed,

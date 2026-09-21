@@ -25,6 +25,9 @@ describe("profiles", () => {
     expect(s.dice.include.theme).toBe(true);
     expect(s.dice.mosaicMax).toBe("6");
     expect(s.autosave).toBe(true);
+    expect(s.sound).toBe(false);
+    expect(normalizeSettings({ theme: "ember" }).sound).toBe(false);
+    expect(normalizeSettings({ sound: true }).sound).toBe(true);
     expect(normalizeSettings({ theme: "ember" }).autosave).toBe(true);
     expect(normalizeSettings({ autosave: false }).autosave).toBe(true);
   });

@@ -14,12 +14,14 @@ hooks load in-process behind consent + ``ZOTO_VIZ_PLUGIN_SERVICE``.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +49,12 @@ _ESBUILD = REPO / "web" / "node_modules" / ".bin" / "esbuild"
 # id -> (js sha256, bundle bytes, cache key, entry path, plugin sha256)
 _bundles: dict[str, tuple[str, bytes, str, Path, str]] = {}
 _compile_runs = 0
+_scan_lock = threading.Lock()
+_scan_memo: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {}
+_scan_builds = 0
+_WATCH_NAMES = frozenset({"plugin.yml", "plugin.yaml", "visualisation.yml", "visualisation.yaml"})
+_WATCH_SUFFIX = frozenset({".ts", ".tsx", ".js", ".mjs", ".glsl", ".py", ".zip", ".yml", ".yaml"})
+_WATCH_SKIP_DIRS = frozenset({"node_modules", "__pycache__", ".git"})
 _SCHEMA_KEYS = frozenset({"$ref", "$schema", "$id", "title", "description"})
 
 
@@ -167,6 +175,20 @@ def reset_bundles() -> None:
     global _compile_runs
     _bundles.clear()
     _compile_runs = 0
+    reset_scan_memo()
+
+
+def reset_scan_memo() -> None:
+    """Drop the catalog mtime memo. Tests call this via ``reset_bundles``."""
+    global _scan_builds
+    with _scan_lock:
+        _scan_memo.clear()
+        _scan_builds = 0
+
+
+def scan_builds() -> int:
+    """How many times the catalog was actually built (memo misses). Tests use this."""
+    return _scan_builds
 
 
 def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = None) -> dict[str, Any]:
@@ -727,6 +749,97 @@ def _scan_payload(dir_path: Path, plugins: list[dict[str, Any]], errors: list[di
     }
 
 
+def _file_token(path: Path) -> tuple[str, int, int]:
+    try:
+        st = path.stat()
+        return (str(path), int(st.st_mtime_ns), int(st.st_size))
+    except OSError:
+        return (str(path), -1, -1)
+
+
+def _iter_watch_files(root: Path):
+    if not root.is_dir():
+        return
+    stack = [root]
+    while stack:
+        cur = stack.pop()
+        try:
+            children = list(cur.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            name = child.name
+            if name in _WATCH_SKIP_DIRS or (name.startswith(".") and name != ".runtime"):
+                continue
+            try:
+                if child.is_dir():
+                    stack.append(child)
+                    continue
+                if child.is_file() and (child.suffix.lower() in _WATCH_SUFFIX or name in _WATCH_NAMES):
+                    yield child
+            except OSError:
+                continue
+
+
+def _dir_token(root: Path) -> list[tuple[str, int, int]]:
+    return sorted(_file_token(p) for p in _iter_watch_files(root))
+
+
+def _catalog_token(root: Path | None) -> tuple[Any, ...]:
+    """Cheap mtime/size fingerprint so unchanged catalogs skip zip unpack + esbuild."""
+    parts: list[Any] = [python_enabled()]
+    layout = _catalog_layout(root)
+    if layout is not None:
+        src_dir, zips_dir, runtime_dir = layout
+        parts.extend(_dir_token(src_dir))
+        parts.extend(_file_token(z) for z in _zip_files(zips_dir))
+        parts.extend(_dir_token(runtime_dir))
+        local_dir = paths.plugin_local_dir()
+        parts.extend(_file_token(z) for z in _zip_files(local_dir))
+        parts.extend(_dir_token(paths.plugin_local_runtime_dir()))
+    else:
+        zips_dir, runtime_dir, mode = _scan_roots(root)
+        if mode == "zips":
+            parts.extend(_file_token(z) for z in _zip_files(zips_dir))
+            parts.extend(_dir_token(runtime_dir))
+        else:
+            parts.extend(_dir_token(zips_dir))
+    parts.append(_file_token(CONSENT_FILE))
+    return tuple(parts)
+
+
+def _memo_key(root: Path | None) -> str:
+    if root is None:
+        return "__default__"
+    try:
+        return str(Path(root).resolve())
+    except OSError:
+        return str(root)
+
+
+def _copy_scan(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **result,
+        "plugins": [dict(p) for p in (result.get("plugins") or [])],
+        "errors": [dict(e) for e in (result.get("errors") or [])],
+    }
+
+
+def _scan_uncached(root: Path | None = None) -> dict[str, Any]:
+    """Build the catalog from src trees plus non-colliding zips, or a YAML tree."""
+    global _scan_builds
+    _scan_builds += 1
+    layout = _catalog_layout(root)
+    if layout is not None:
+        src_dir, zips_dir, runtime_dir = layout
+        if root is None or src_dir.is_dir():
+            return _scan_catalog(src_dir, zips_dir, runtime_dir)
+    zips_dir, runtime_dir, mode = _scan_roots(root)
+    if mode == "zips":
+        return _scan_zips(zips_dir, runtime_dir)
+    return _scan_trees(zips_dir)
+
+
 def _attach_runtime(
     doc: dict[str, Any],
     path: Path,
@@ -868,16 +981,20 @@ def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str,
 
 
 def scan(root: Path | None = None) -> dict[str, Any]:
-    """Build the catalog from src trees plus non-colliding zips, or a YAML tree."""
-    layout = _catalog_layout(root)
-    if layout is not None:
-        src_dir, zips_dir, runtime_dir = layout
-        if root is None or src_dir.is_dir():
-            return _scan_catalog(src_dir, zips_dir, runtime_dir)
-    zips_dir, runtime_dir, mode = _scan_roots(root)
-    if mode == "zips":
-        return _scan_zips(zips_dir, runtime_dir)
-    return _scan_trees(zips_dir)
+    """Build the catalog from src trees plus non-colliding zips, or a YAML tree.
+
+    Unchanged trees reuse the last result (mtime/size token) so the monitor watch
+    loop and ``GET /api/plugins`` do not re-run esbuild on the event loop.
+    """
+    key = _memo_key(root)
+    token = _catalog_token(root)
+    with _scan_lock:
+        hit = _scan_memo.get(key)
+        if hit and hit[0] == token:
+            return _copy_scan(hit[1])
+        result = _scan_uncached(root)
+        _scan_memo[key] = (_catalog_token(root), result)
+        return _copy_scan(result)
 
 
 def api_list(_: web.Request) -> web.Response:
@@ -885,6 +1002,18 @@ def api_list(_: web.Request) -> web.Response:
         return web.json_response(scan())
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_list_http(request: web.Request) -> web.Response:
+    return await asyncio.to_thread(api_list, request)
+
+
+async def api_module_http(request: web.Request) -> web.StreamResponse:
+    return await asyncio.to_thread(api_module, request)
+
+
+async def api_sky_http(request: web.Request) -> web.StreamResponse:
+    return await asyncio.to_thread(api_sky, request)
 
 
 def python_allow(spec: dict[str, Any]) -> bool:
@@ -900,7 +1029,7 @@ async def api_consent(req: web.Request) -> web.Response:
     if not isinstance(body, dict):
         return web.json_response({"error": "object required"}, status=400)
     kind = str(body.get("kind") or "")
-    found = _plugin_row(pid)
+    found = await asyncio.to_thread(_plugin_row, pid)
     if not found:
         return web.json_response({"error": "unknown plugin"}, status=404)
     if not needs_review(found):
@@ -909,7 +1038,7 @@ async def api_consent(req: web.Request) -> web.Response:
         grant_consent(found, kind)
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=400)
-    hooks.sync(scan().get("plugins") or [], allow=python_allow)
+    await asyncio.to_thread(lambda: hooks.sync(scan().get("plugins") or [], allow=python_allow))
     return web.json_response({"ok": True, "kind": kind, "needed": True})
 
 

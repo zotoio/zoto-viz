@@ -169,7 +169,7 @@ CSRF skipped). Host must be loopback unless `insecure_lan` is on. Tools:
 
 | Tool | Role |
 | --- | --- |
-| `list_features` | Catalog of every settable key (theme, view, feed, show, filters, anim/physics/mosaic/sky, plugins, agent look, dice) |
+| `list_features` | Catalog of every settable key (theme, view, feed, show, filters, anim/physics/mosaic/sky, plugins, agent look, dice, sound) |
 | `get_settings` | Startup profile + live temper/weather + queued UI patch |
 | `set_settings` | Patch the open UI (same whitelist as an agent ` ```settings ` fence): theme, view, feed, show, filters, anim, plugins, agent look, dice on/periodMin/include/ceilings, shuffle/dice, plus temper/weather/control |
 | `list_plugins` | Each catalog view's options, config, and prompt, with current profile values |

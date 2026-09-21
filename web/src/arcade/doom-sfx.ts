@@ -1,3 +1,5 @@
+import { soundAllowed } from "../audio/sound";
+
 /**
  * Synthesized CPU Doom SFX. Original envelopes — not ripped from any WAD.
  */
@@ -11,6 +13,7 @@ export class DoomSfx {
   get ready(): boolean { return this.ctx !== null && this.ctx.state !== "closed"; }
 
   resume(): void {
+    if (!soundAllowed()) return;
     if (typeof AudioContext === "undefined") return;
     if (!this.ctx || this.ctx.state === "closed") {
       const ctx = new AudioContext();
@@ -33,6 +36,7 @@ export class DoomSfx {
   }
 
   fire(): void {
+    if (!soundAllowed()) return;
     const ctx = this.ctx, out = this.master, noise = this.noise;
     if (!ctx || !out || !noise || ctx.state !== "running") return;
     const t = ctx.currentTime;
@@ -63,6 +67,7 @@ export class DoomSfx {
   }
 
   boom(dist = 1): void {
+    if (!soundAllowed()) return;
     const ctx = this.ctx, out = this.master, noise = this.noise;
     if (!ctx || !out || !noise || ctx.state !== "running") return;
     const t = ctx.currentTime;
@@ -93,6 +98,7 @@ export class DoomSfx {
   }
 
   gib(dist = 1): void {
+    if (!soundAllowed()) return;
     const ctx = this.ctx, out = this.master, noise = this.noise;
     if (!ctx || !out || !noise || ctx.state !== "running") return;
     const t = ctx.currentTime;
@@ -124,7 +130,7 @@ export class DoomSfx {
   }
 
   step(now: number, moving: boolean): void {
-    if (!moving) return;
+    if (!moving || !soundAllowed()) return;
     if (now - this.lastStep < 0.36) return;
     this.lastStep = now;
     const ctx = this.ctx, out = this.master, noise = this.noise;

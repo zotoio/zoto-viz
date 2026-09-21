@@ -133,6 +133,9 @@ def test_sanitize_drops_junk() -> None:
     assert devices["theme"] == "ember"
     assert "camera" not in devices
     assert "mic" not in devices
+    assert live.sanitize_patch({"sound": True})["sound"] is True
+    assert live.sanitize_patch({"sound": False})["sound"] is False
+    assert "sound" not in live.sanitize_patch({"sound": "on"})
     look = live.sanitize_patch({"agent": {"shader": "vec3 color(vec3 d, float t) { return uAccent; }", "clear": False}, "shuffle": True})
     assert look["shuffle"] is True
     assert "color" in look["agent"]["shader"]

@@ -75,6 +75,7 @@ export interface AgentPatch {
   redact?: boolean;
   merge?: boolean;
   autoconsent?: boolean;
+  sound?: boolean;
   feed?: Partial<FeedConfig>;
   chat?: Partial<ChatConfig>;
   show?: Partial<ViewShow>;
@@ -343,6 +344,7 @@ export function pickAgentSettings(patch: Record<string, unknown>, modeIds: strin
   if (typeof patch.redact === "boolean") out.redact = patch.redact;
   if (typeof patch.merge === "boolean") out.merge = patch.merge;
   if (typeof patch.autoconsent === "boolean") out.autoconsent = patch.autoconsent;
+  if (typeof patch.sound === "boolean") out.sound = patch.sound;
   if (patch.feed && typeof patch.feed === "object" && !Array.isArray(patch.feed)) {
     const f = patch.feed as Record<string, unknown>;
     const feed: NonNullable<AgentPatch["feed"]> = {};
@@ -444,6 +446,7 @@ export function mergeAgentPatch(base: ProfileSettings, patch: AgentPatch): Profi
     dream: patch.dream ?? base.dream,
     camera: base.camera,
     mic: base.mic,
+    sound: patch.sound ?? base.sound,
     chrome: patch.chrome ?? base.chrome,
     mode: patch.mode ?? base.mode,
     redact: patch.redact ?? base.redact,

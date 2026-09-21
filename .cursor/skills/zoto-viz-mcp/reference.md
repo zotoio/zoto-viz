@@ -27,7 +27,7 @@ Mutating REST (`PUT /api/plugins/{id}/consent`, `PUT /api/ai/control`) needs `X-
 | --- | --- | --- |
 | `list_features` | — | Every settable key. Call first when unsure. |
 | `get_settings` | — | Startup profile + queued `live` patch. |
-| `set_settings` | whitelist object | Theme, `mode`, `anim`, `feed`, `show`, `filters`, `plugins`, `agent`, `dice`, `shuffle`, `temper`, `weather`, `control`, `model`, `autoconsent`. No camera/mic. |
+| `set_settings` | whitelist object | Theme, `mode`, `anim`, `feed`, `show`, `filters`, `plugins`, `agent`, `dice`, `shuffle`, `temper`, `weather`, `control`, `model`, `autoconsent`, `sound` (speakers; starts off). No camera/mic. |
 | `set_view` | `mode` | Catalog id, e.g. `plugin:syscon`. |
 | `list_plugins` | `id?` | Options / config / prompt. |
 | `set_plugin` | `id`, `values` | `id` is bare (`cypher-cic` not `plugin:cypher-cic`). Values are strings (`"1"` / `"0"` for bools). |

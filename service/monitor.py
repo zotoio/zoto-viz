@@ -110,6 +110,8 @@ DEVICE_OFFLINE_S = 600     # devices silent this long are shown as offline
 RATE_WINDOW_S = 5          # bytes/s smoothing window
 DISCOVERY_EVERY_S = 60
 PERSIST_EVERY_S = 30
+_PUBLISH_CACHE_S = 0.75
+_publish_memo: tuple[float, dict] | None = None
 TLS_PORTS = {"443", "8443", "853", "993", "995", "465", "5223", "5228"}
 
 
@@ -1581,14 +1583,24 @@ async def housekeeping_loop(state: State) -> None:
 
 
 def publish_state(state: State) -> dict:
-    """1 Hz snapshot after plugin service hooks have had a chance to decorate it."""
-    msg = plugin_ds.apply_snapshot(hooks.on_snapshot(state.snapshot(time.time())))
+    """1 Hz snapshot after plugin service hooks have had a chance to decorate it.
+
+    Reuse the last payload for a short window so a Vite reconnect storm
+    (``/ws`` + ``GET /api/state`` + the broadcast tick) does not rebuild
+    thousands of devices on the event loop three times and starve curl.
+    """
+    global _publish_memo
+    now = time.time()
+    if _publish_memo and now - _publish_memo[0] < _PUBLISH_CACHE_S:
+        return _publish_memo[1]
+    msg = plugin_ds.apply_snapshot(hooks.on_snapshot(state.snapshot(now)))
     sources.apply(msg)
     sdm.apply(msg)
     msg["live"] = live.snapshot()
     rev = repo_sync.repo_rev()
     if rev:
         msg["repoRev"] = rev
+    _publish_memo = (now, msg)
     return msg
 
 
@@ -1601,7 +1613,7 @@ async def local_drop_watch_loop(app: web.Application) -> None:
     while True:
         try:
             from . import plugin_local
-            plugin_local.sync_local_drop()
+            await asyncio.to_thread(plugin_local.sync_local_drop)
         except Exception as e:  # noqa: BLE001
             log(f"local plugin watch: {e}")
         await asyncio.sleep(0.5)
@@ -1655,11 +1667,18 @@ async def repo_sync_loop(app: web.Application) -> None:
         await asyncio.sleep(wait)
 
 
+def _sync_plugin_services() -> None:
+    """Catalog + in-process backends. Runs in a worker — scan() is multi-second."""
+    hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
+
+
 async def plugin_watch_loop(app: web.Application) -> None:
     """Reload plugin Python when YAML or the service module's mtime changes."""
+    # on_startup already compiled the catalog; do not rescan the instant we bind.
+    await asyncio.sleep(2.5)
     while True:
         try:
-            hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
+            await asyncio.to_thread(_sync_plugin_services)
         except Exception as e:  # noqa: BLE001
             log(f"plugin watch: {e}")
         await asyncio.sleep(2.5)
@@ -1793,8 +1812,11 @@ async def on_startup(app: web.Application) -> None:
     pool = ThreadPoolExecutor(max_workers=20)
     app["pool"] = pool
     hooks.bind(lambda pid: hooks.Host(pid, state=state))
+    # Compile the catalog before the port listens. scan() is GIL-heavy (~7s);
+    # running it after bind (even in a worker thread) starves HTTP so curl
+    # connects and hangs with 0 bytes. The watch loop then hits the mtime memo.
     try:
-        hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
+        _sync_plugin_services()
     except Exception as e:  # noqa: BLE001
         log(f"plugin service load: {e}")
     app["tasks"] = [
@@ -1870,9 +1892,9 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     from . import typesafe_proxy
     app.router.add_get("/api/typesafe/status", typesafe_proxy.api_status)
     app.router.add_post("/api/typesafe/sense", typesafe_proxy.api_sense)
-    app.router.add_get("/api/plugins", plugins.api_list)
-    app.router.add_get("/api/plugins/{id}/module.js", plugins.api_module)
-    app.router.add_get("/api/plugins/{id}/sky/fragment.glsl", plugins.api_sky)
+    app.router.add_get("/api/plugins", plugins.api_list_http)
+    app.router.add_get("/api/plugins/{id}/module.js", plugins.api_module_http)
+    app.router.add_get("/api/plugins/{id}/sky/fragment.glsl", plugins.api_sky_http)
     app.router.add_get("/api/plugins/hn-rain/still", hn_rain_stills.api_still)
     app.router.add_put("/api/plugins/{id}/consent", plugins.api_consent)
     app.router.add_get("/mcp", plugin_mcp.api_mcp)

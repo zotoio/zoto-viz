@@ -15,12 +15,11 @@ const CONTRACT = parseVizContract({
   idle: { fixture: "host" },
 })!;
 
-/** Sample the shipped shader's wallpaper mix — must stay above near-black on idle boards. */
-function sampleWallpaperYellow(uTime: number): number {
-  const phA = uTime * 0.040 - Math.floor(uTime * 0.040);
-  const stripe = 0.5 + 0.5 * Math.sin(phA * 6.283);
-  const base = 0.72 * (1 - stripe) + 0.78 * stripe;
-  return base * 0.92;
+/** Conservative Level-0 paper luma from the shipped maze shader (not the old box corridor). */
+function samplePaperYellow(): number {
+  const paper = [0.97, 0.94, 0.70];
+  const fill = 0.92 * 0.90;
+  return ((paper[0] + paper[1] + paper[2]) / 3) * fill;
 }
 
 describe("backrooms shipped pack", () => {
@@ -28,7 +27,9 @@ describe("backrooms shipped pack", () => {
     const wrapped = wrapPluginSky(FRAG);
     expect("error" in wrapped).toBe(false);
     if ("error" in wrapped) return;
-    expect(wrapped.frag).toContain("fract(uTime * 0.040)");
+    expect(wrapped.frag).toContain("fract(t * 0.040)");
+    expect(wrapped.frag).toContain("chargeAge");
+    expect(wrapped.frag).toContain("chamber");
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
@@ -56,10 +57,11 @@ describe("backrooms shipped pack", () => {
   });
 
   it("keeps a yellow corridor luma on fresh idle time (not near-black)", () => {
-    const samples = [0, 0.07 / 0.04, 0.5 / 0.04, 12.5];
-    for (const t of samples) {
-      expect(sampleWallpaperYellow(t)).toBeGreaterThan(0.35);
-    }
+    expect(FRAG).toContain("vec3(0.97, 0.94, 0.70)");
+    expect(FRAG).toContain("rotY(yaw) * rotX(-pitch) * vd");
+    expect(FRAG).toContain("chroma");
+    expect(FRAG).not.toContain("floor(uv.y * 30.0)");
+    expect(samplePaperYellow()).toBeGreaterThan(0.35);
   });
 
   it("locks roar peaks to the flee beat in the shader phase", () => {

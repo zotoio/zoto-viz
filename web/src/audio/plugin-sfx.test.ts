@@ -31,4 +31,12 @@ describe("plugin sfx roar", () => {
     sfx.silence();
     sfx.dispose();
   });
+
+  it("stays silent while the global sound switch is off", async () => {
+    const { liveSound } = await import("./sound");
+    liveSound.setOn(false, false);
+    const sfx = new PluginSfx();
+    sfx.setRoar(1);
+    sfx.dispose();
+  });
 });

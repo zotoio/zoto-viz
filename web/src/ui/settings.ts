@@ -17,6 +17,7 @@ import { liveCam } from "../camera/livecam";
 import { type CamPolicy } from "../camera/want";
 import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
+import { liveSound } from "../audio/sound";
 import { fillPluginFields } from "../plugins/plugin-ui";
 import type { PluginLook, PluginView } from "../plugins/plugin";
 import type { SdmDevice } from "../plugins/nest-cams-look";
@@ -182,7 +183,7 @@ export class Settings {
     look?: PluginLook | null;
     extras?: HTMLElement[];
   } | null = null;
-  private deviceUi: { cam: Toggle; mic: Toggle } | null = null;
+  private deviceUi: { cam: Toggle; mic: Toggle; sound: Toggle } | null = null;
   private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
   private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
   private meterRaf = 0;
@@ -201,6 +202,7 @@ export class Settings {
   } | null = null;
   onCamPolicy?: (p: CamPolicy) => void;
   onMicPolicy?: (p: MicPolicy) => void;
+  onSoundPolicy?: (on: boolean) => void;
   onPluginChange?: (id: string, values: Record<string, string>) => void;
   onInstancesChange?: () => void;
   onClose?: () => void;
@@ -271,6 +273,7 @@ export class Settings {
     this.buildSources();
     document.body.classList.toggle("cam-off", liveCam.camPolicy === "off");
     document.body.classList.toggle("mic-off", liveMic.micPolicy === "off");
+    document.body.classList.toggle("sound-off", !liveSound.soundOn);
 
     this.btn.addEventListener("click", () => (this.isOpen ? this.close() : this.open()));
     this.pop.addEventListener("keydown", (e) => { if (e.key === "Escape") { this.close(); this.btn.focus(); } });
@@ -363,7 +366,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Devices</div>
-      <div class="sec-hint">Operator-only. Off stops the webcam or microphone so the OS light goes out. AI and dice cannot change these. Header cam / mic are the same switches.</div>`;
+      <div class="sec-hint">Cam and mic are operator-only — Off stops them so the OS light goes out. AI and dice cannot change those. Sound is speaker output (plugin SFX, arcade, spoken replies) and starts off. Header cam / mic / sound are the same switches.</div>`;
     const cam = new Toggle({
       label: "cam",
       title: "On starts the webcam only for live sky, gaze, or live colour. Off stops it and does not open the camera.",
@@ -376,11 +379,17 @@ export class Settings {
       checked: liveMic.micPolicy === "auto",
       onChange: (on) => this.setMicPolicy(on ? "auto" : "off"),
     });
+    const sound = new Toggle({
+      label: "sound",
+      title: "On allows plugin SFX, arcade sounds, and spoken replies. Off keeps the speakers silent. Starts off.",
+      checked: liveSound.soundOn,
+      onChange: (on) => this.setSoundOn(on),
+    });
     const row = document.createElement("div");
     row.className = "sec-controls";
-    row.append(cam.el, mic.el);
+    row.append(cam.el, mic.el, sound.el);
     sec.append(row);
-    this.deviceUi = { cam, mic };
+    this.deviceUi = { cam, mic, sound };
     this.pane("privacy").appendChild(sec);
   }
 
@@ -407,6 +416,14 @@ export class Settings {
     if (this.deviceUi) this.deviceUi.mic.checked = p === "auto";
     document.body.classList.toggle("mic-off", p === "off");
     this.onMicPolicy?.(p);
+    this.cfg.onChange();
+  }
+
+  setSoundOn(on: boolean): void {
+    liveSound.setOn(on);
+    if (this.deviceUi) this.deviceUi.sound.checked = on;
+    document.body.classList.toggle("sound-off", !on);
+    this.onSoundPolicy?.(on);
     this.cfg.onChange();
   }
 
@@ -600,7 +617,7 @@ export class Settings {
       <span class="sec-links">
         <button type="button" class="link roll" title="one-shot roll (does not change the header switch)">roll now</button>
       </span></div>
-      <div class="sec-hint">A roll randomizes the groups you leave on. Privacy filters, camera, microphone, chrome placement, and prompts always stay. Views that still need a key or OAuth (Nest cams, Guardian until you replace api-key=test) stay out of the roll. Soft ceilings apply only to a roll — Settings sliders still go to the full range.</div>`;
+      <div class="sec-hint">A roll randomizes the groups you leave on. Privacy filters, camera, microphone, sound, chrome placement, and prompts always stay. Views that still need a key or OAuth (Nest cams, Guardian until you replace api-key=test) stay out of the roll. Soft ceilings apply only to a roll — Settings sliders still go to the full range.</div>`;
     const includeList = document.createElement("div");
     includeList.className = "sec-controls dice-include";
     const include = {} as Record<DiceIncludeKey, Toggle>;

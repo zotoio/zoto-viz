@@ -14,6 +14,7 @@ import { ChatPanel } from "../ui/chat";
 import { DebugLog, readDebugOn } from "../ui/debug-log";
 import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
+import { liveSound } from "../audio/sound";
 import { PluginSfx, backroomsRoarLevel } from "../audio/plugin-sfx";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
@@ -1160,6 +1161,21 @@ settings.onMicPolicy = (p) => {
   else agent.armWake();
 };
 $("micBox").appendChild(micToggle.el);
+const soundToggle = new Toggle({
+  id: "sound",
+  label: "sound",
+  title: "speakers on / off — same as Settings → Privacy. Off silences plugin SFX, arcade, and spoken replies. Starts off",
+  checked: liveSound.soundOn,
+  onChange: (on) => settings.setSoundOn(on),
+});
+settings.onSoundPolicy = (on) => {
+  soundToggle.checked = on;
+  if (!on) {
+    pluginSfx.silence();
+    agent.hushOutput();
+  }
+};
+$("soundBox").appendChild(soundToggle.el);
 settings.bindPulse(() => scene.pulseNow);
 settings.addLiveFeed((c) => {
   liveFeed.setConfig(c);
@@ -1597,6 +1613,7 @@ function collectSettings(): ProfileSettings {
     plugins: collectPluginConfigs(pluginSpecs),
     camera: liveCam.camPolicy,
     mic: liveMic.micPolicy,
+    sound: liveSound.soundOn,
     agent: sceneAgentLook(),
     dice: { ...settings.diceSettings, include: { ...settings.diceSettings.include } },
     autosave: true,
@@ -1641,6 +1658,7 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   settings.applyDice(s.dice ?? settings.diceSettings);
   if (s.camera) settings.setCamPolicy(s.camera);
   if (s.mic) settings.setMicPolicy(s.mic);
+  settings.setSoundOn(!!s.sound);
   if (activeArcade) {
     arcade[activeArcade].view.stop();
     arcade[activeArcade].el.hidden = true;

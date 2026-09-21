@@ -358,7 +358,7 @@ def reset_for_tests() -> None:
     _seq = 0
     _patch = None
     _loaded = True
-    _autoconsent = None
+    _autoconsent = False
 
 
 def sanitize_patch(raw: Any) -> dict[str, Any]:
@@ -382,6 +382,8 @@ def sanitize_patch(raw: Any) -> dict[str, Any]:
         out["merge"] = raw["merge"]
     if isinstance(raw.get("autoconsent"), bool):
         out["autoconsent"] = raw["autoconsent"]
+    if isinstance(raw.get("sound"), bool):
+        out["sound"] = raw["sound"]
     feed = _feed(raw.get("feed"))
     if feed:
         if feed.get("source") in ("transcript", "both"):
@@ -689,7 +691,7 @@ def features() -> dict[str, Any]:
     """Catalog of MCP-settable keys."""
     return {
         "settings": [
-            "theme", "dream", "mode", "chrome", "redact", "merge", "autoconsent",
+            "theme", "dream", "mode", "chrome", "redact", "merge", "autoconsent", "sound",
             "feed", "chat", "show", "filters", "anim", "modeOptions", "arcade", "plugins",
             "agent", "dice", "shuffle", "temper", "weather", "control", "model",
             "sources",
@@ -733,6 +735,7 @@ def features() -> dict[str, Any]:
             "hint": "Google Nest Device Access (~/.zoto-viz/sdm.yml). list_cameras / get_sdm / set_sdm. OAuth + Pub/Sub + WebRTC.",
         },
         "shuffle": {"type": "boolean", "hint": "roll_dice — groups on Settings → Dice"},
+        "sound": {"type": "boolean", "default": False, "hint": "speaker output: plugin SFX, arcade, spoken replies. Starts off."},
         "dice": {
             "roll_dice": "one-shot roll; respects include + ceilings on Settings → Dice",
             "on": {"type": "boolean", "default": False, "hint": "header dice repeat switch"},

@@ -195,6 +195,8 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
     assert "theme" in feat["dice"]["include"]["keys"]
     assert "camera" not in feat["settings"]
     assert "mic" not in feat["settings"]
+    assert "sound" in feat["settings"]
+    assert feat["sound"]["default"] is False
     assert "camera" not in feat["dice"]["include"]["keys"]
     assert "mic" not in feat["dice"]["include"]["keys"]
     got = json.loads(plugin_mcp.call_tool("get_settings", {})["content"][0]["text"])

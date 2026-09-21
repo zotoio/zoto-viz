@@ -74,6 +74,7 @@ describe("shuffleLook", () => {
     base.filters = { allowNames: "nest", blockNames: "", allowNets: "", blockNets: "" };
     base.chrome = "left";
     base.camera = "off";
+    base.sound = true;
     base.plugins = { topology: { rank: "rate", prompt: "keep me" } };
     const next = shuffleLook(base, {
       themes: ["nord", "matrix"],
@@ -109,6 +110,7 @@ describe("shuffleLook", () => {
     expect(next.chrome).toBe("left");
     expect(next.camera).toBe("off");
     expect(next.mic).toBe("auto");
+    expect(next.sound).toBe(true);
     expect(next.merge).toBe(false);
     expect(next.show.lan).toBe(false);
     expect(next.feed.on).toBe(false);

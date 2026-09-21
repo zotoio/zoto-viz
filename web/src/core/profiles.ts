@@ -54,6 +54,8 @@ export interface ProfileSettings {
   plugins: Record<string, Record<string, string>>;
   camera: "auto" | "off";
   mic: "auto" | "off";
+  /** Speaker output: plugin SFX, arcade, spoken replies. Starts off. */
+  sound: boolean;
   /** GLSL / photos / SVG the local agent pinned on this profile */
   agent: AgentLook;
   /** Header dice: which groups to roll and the soft ceilings. */
@@ -118,6 +120,7 @@ export function shippedSettings(): ProfileSettings {
     plugins: {},
     camera: "auto",
     mic: "auto",
+    sound: false,
     agent: { ...EMPTY_LOOK },
     dice: { ...DEFAULT_DICE, include: { ...DEFAULT_DICE.include } },
     autosave: true,
@@ -186,6 +189,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     plugins: { ...plugins },
     camera: s.camera === "off" ? "off" : d.camera,
     mic: s.mic === "off" ? "off" : d.mic,
+    sound: bool(s.sound, d.sound),
     agent: normalizeAgentLook(s.agent),
     dice: normalizeDice(s.dice),
     autosave: true,

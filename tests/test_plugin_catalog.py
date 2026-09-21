@@ -248,3 +248,24 @@ def test_scan_yaml_tree_fallback(tmp_path: Path) -> None:
     assert result["plugins"][0].get("origin") is None
     assert "zip" not in result["plugins"][0]
     assert not result["errors"]
+
+
+def test_scan_memo_hits_until_files_change(tmp_path: Path) -> None:
+    """Unchanged trees must not rebuild — a full scan on the event loop hung curl."""
+    (tmp_path / "solo.yml").write_text(
+        _MIN_YML.format(pid="solo", name="Solo", version=1), encoding="utf-8",
+    )
+    plugins.reset_bundles()
+    first = plugins.scan(tmp_path)
+    assert [p["id"] for p in first["plugins"]] == ["solo"]
+    builds = plugins.scan_builds()
+    assert builds >= 1
+    again = plugins.scan(tmp_path)
+    assert [p["id"] for p in again["plugins"]] == ["solo"]
+    assert plugins.scan_builds() == builds
+    (tmp_path / "duo.yml").write_text(
+        _MIN_YML.format(pid="duo", name="Duo", version=1), encoding="utf-8",
+    )
+    changed = plugins.scan(tmp_path)
+    assert {p["id"] for p in changed["plugins"]} == {"solo", "duo"}
+    assert plugins.scan_builds() == builds + 1
