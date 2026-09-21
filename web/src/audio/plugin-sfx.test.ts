@@ -39,7 +39,9 @@ describe("plugin sfx roar", () => {
     const c = firstPeekCycle();
     const peekT = (c + backroomsPhase((c + 0.42) / 0.040).peekPh + 0.04) / 0.040;
     expect(backroomsPhase(peekT).peek).toBeGreaterThan(0.3);
+    expect(backroomsPhase(peekT).roar).toBeGreaterThan(0.5);
     expect(backroomsSfxLevels(peekT).screech).toBeGreaterThan(0.4);
+    expect(backroomsSfxLevels(peekT).roar).toBeGreaterThan(0.5);
     expect(backroomsRoarLevel(0.2)).toBeLessThan(0.2);
   });
 
@@ -51,15 +53,49 @@ describe("plugin sfx roar", () => {
     expect(backroomsPhase(freezeT).flee).toBeLessThan(0.25);
     const fleeT = (c + ph.peekPh + 0.22) / 0.040;
     expect(backroomsPhase(fleeT).flee).toBeGreaterThan(0.9);
+    expect(backroomsPhase(fleeT).roar).toBeLessThan(0.15);
+    expect(backroomsPhase(fleeT).close).toBeGreaterThan(0.5);
+    expect(backroomsSfxLevels(fleeT).pant).toBeGreaterThan(0.3);
+    expect(backroomsSfxLevels(fleeT).buzz).toBeLessThan(0.35);
+    expect(backroomsSfxLevels(freezeT).buzz).toBeLessThan(0.55);
     const pantT = (c + 0.80) / 0.040;
     expect(backroomsSfxLevels(pantT).pant).toBeGreaterThan(0.3);
-    expect(backroomsSfxLevels(0).buzz).toBe(1);
+    let emptyT = 0;
+    for (let e = 0; e < 80; e++) {
+      const t = (e + 0.12) / 0.040;
+      if (!backroomsPhase(t).peekOn) {
+        emptyT = t;
+        break;
+      }
+    }
+    expect(backroomsPhase(emptyT).peekOn).toBe(false);
+    expect(backroomsSfxLevels(emptyT).buzz).toBe(1);
     expect(backroomsPhase(0.20 / 0.040).flee).toBeLessThan(0.05);
   });
 
+  it("plays a brief music-box phrase on hashed empty halls, not next to the creature", () => {
+    let hit = 0;
+    let quiet = 0;
+    for (let c = 0; c < 48; c++) {
+      for (let ph = 0.04; ph < 0.9; ph += 0.04) {
+        const t = (c + ph) / 0.040;
+        const p = backroomsPhase(t);
+        const L = backroomsSfxLevels(t);
+        if (p.boxOn && L.box > 0.35) hit += 1;
+        if (!p.boxOn) {
+          expect(L.box).toBe(0);
+          quiet += 1;
+        }
+        if (p.freeze > 0.6 || p.close > 0.7) expect(L.box).toBeLessThan(0.25);
+      }
+    }
+    expect(hit).toBeGreaterThan(3);
+    expect(quiet).toBeGreaterThan(10);
+  });
+
   it("ships the CC0 Backrooms samples next to ATTRIBUTION", () => {
-    expect(Object.keys(BACKROOMS_SAMPLE_PATHS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant"]);
-    expect(Object.keys(BACKROOMS_SAMPLE_URLS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant"]);
+    expect(Object.keys(BACKROOMS_SAMPLE_PATHS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant", "box"]);
+    expect(Object.keys(BACKROOMS_SAMPLE_URLS)).toEqual(["buzz", "fluoro", "screech", "roar", "pant", "box"]);
     const names = Object.keys(shippedSfx).map((p) => p.split("/").pop() || p);
     expect(names).toEqual(expect.arrayContaining([
       "buzz.mp3",
@@ -67,6 +103,7 @@ describe("plugin sfx roar", () => {
       "screech.mp3",
       "roar.mp3",
       "pant.mp3",
+      "box.mp3",
       "ATTRIBUTION.md",
     ]));
     const rev = backroomsSampleRev();

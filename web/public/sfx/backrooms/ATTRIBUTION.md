@@ -10,5 +10,6 @@ copyrighted; these are original Freesound uploads released as CC0.
 | `screech.mp3` | [BlackAKay — Bacteria backrooms Scream](https://freesound.org/people/BlackAKay/sounds/691939/) (author’s take on the Kane Pixels bacteria) | CC0; credit requested |
 | `roar.mp3` | [CVLTIV8R — Creature Monster Alien Vocal FX](https://freesound.org/people/CVLTIV8R/sounds/803044/) | CC0 |
 | `pant.mp3` | [Lashim — Quick running breathing and panting](https://freesound.org/people/Lashim/sounds/609482/) | CC0 |
+| `box.mp3` | [dansayshi — CreepyMusicBox](https://freesound.org/people/dansayshi/sounds/473638/) (original tinkly phrase; film music-box cues stay copyrighted) | CC0 |
 
 Previews pulled from `cdn.freesound.org` HQ MP3s. Synth oscillators remain as a fallback if a file fails to decode.

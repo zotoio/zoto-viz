@@ -39,64 +39,124 @@ float room(vec3 p) {
 }
 
 float teeth(vec3 q, vec3 head, float grin) {
-  vec3 jaw = head + vec3(0.0, -0.04, 0.10);
-  float   d = cap(q, jaw + vec3(-0.055, 0.01, 0.0), jaw + vec3(-0.06, -0.07, 0.04), 0.010);
-  d = min(d, cap(q, jaw + vec3(-0.028, 0.02, 0.01), jaw + vec3(-0.03, -0.085, 0.05), 0.011));
-  d = min(d, cap(q, jaw + vec3(0.0, 0.02, 0.014), jaw + vec3(0.0, -0.095, 0.055), 0.012));
-  d = min(d, cap(q, jaw + vec3(0.028, 0.02, 0.01), jaw + vec3(0.03, -0.085, 0.05), 0.011));
-  d = min(d, cap(q, jaw + vec3(0.055, 0.01, 0.0), jaw + vec3(0.06, -0.07, 0.04), 0.010));
-  return mix(1e3, d, grin);
-}
-
-float creature(vec3 p, vec3 c, float t, float leanX, float face, float grin) {
-  vec3 q = rotY(-face) * (p - c);
-  float gait = t * 2.15;
-  float sl = sin(gait);
-  float sr = sin(gait + 3.55);
-  float lurch = 0.12 * sin(gait * 0.47 + 0.8);
-  vec3 hip = vec3(0.08 * sl + lurch, 1.36 + 0.07 * abs(sl) + 0.04 * sr, 0.05 * sl);
-  vec3 sh = hip + vec3(lurch * 0.45, 0.62, 0.08 + 0.05 * sl);
-  vec3 head = sh + vec3(leanX, 0.30, 0.10);
-  float d = cap(q, hip, sh, 0.050);
-  d = smin(d, cap(q, sh, head, 0.032), 0.020);
-  d = smin(d, cap(q, head, head + vec3(leanX * 0.10, 0.14, 0.04), 0.058), 0.016);
-  d = smin(d, cap(q, head + vec3(0.0, -0.02, 0.08), head + vec3(0.0, -0.08, 0.15), mix(0.016, 0.068, grin)), 0.02);
-  d = min(d, teeth(q, head, grin));
-  vec3 elL = sh + vec3(0.15, -0.02 + 0.04 * sl, 0.46);
-  vec3 wrL = elL + vec3(0.05, 0.02 * sl, 0.52);
-  vec3 elR = sh + vec3(-0.14, -0.05 + 0.04 * sr, 0.44);
-  vec3 wrR = elR + vec3(-0.05, -0.02 + 0.03 * sr, 0.54);
-  d = smin(d, cap(q, sh, elL, 0.022), 0.012);
-  d = smin(d, cap(q, elL, wrL, 0.018), 0.010);
-  d = smin(d, cap(q, sh, elR, 0.022), 0.012);
-  d = smin(d, cap(q, elR, wrR, 0.018), 0.010);
-  float knLft = 0.28 + 0.42 * max(sl, 0.0);
-  float knRgt = 0.22 + 0.48 * max(sr, 0.0);
-  vec3 knL = hip + vec3(0.07, -0.70 + 0.20 * max(sl, 0.0), knLft);
-  vec3 ftL = knL + vec3(0.03, -0.72 + 0.10 * max(-sl, 0.0), -0.10 + 0.20 * sl);
-  vec3 knR = hip + vec3(-0.08, -0.66 + 0.18 * max(sr, 0.0), knRgt);
-  vec3 ftR = knR + vec3(-0.02, -0.74 + 0.12 * max(-sr, 0.0), -0.08 + 0.18 * sr);
-  d = smin(d, cap(q, hip, knL, 0.028), 0.012);
-  d = smin(d, cap(q, knL, ftL, 0.024), 0.010);
-  d = smin(d, cap(q, hip, knR, 0.028), 0.012);
-  d = smin(d, cap(q, knR, ftR, 0.024), 0.010);
+  vec3 jaw = head + vec3(0.0, -0.05, 0.08);
+  float w = 0.12 + 0.06 * grin;
+  float d = cap(q, jaw + vec3(-w, 0.0, 0.01), jaw + vec3(w, 0.0, 0.01), 0.014 + 0.012 * grin);
+  for (int i = 0; i < 9; i++) {
+    float u = (float(i) - 4.0) * 0.25;
+    float x = u * w;
+    float len = 0.06 + 0.05 * grin + 0.018 * (1.0 - abs(u));
+    d = min(d, cap(q, jaw + vec3(x, 0.014, 0.02), jaw + vec3(x * 1.06, -len, 0.055), 0.0042));
+  }
   return d;
 }
 
-float map(vec3 p, vec3 c, float t, float leanX, float face, float grin) {
-  return min(room(p), creature(p, c, t, leanX, face, grin));
+vec2 stepFoot(float u, float stride) {
+  float st = 1.0 - step(0.5, u);
+  float sw = clamp((u - 0.5) * 2.0, 0.0, 1.0);
+  float z = mix(mix(-0.04, 0.48, sw), 0.48 - u, st) * stride;
+  float y = 0.18 * sin(3.1416 * sw) * (1.0 - st);
+  return vec2(y, z);
 }
 
-float tube(vec3 p, float t, float aud) {
+float creature(vec3 p, vec3 c, float t, float leanX, float face, float grin, float rch) {
+  vec3 q = rotY(-face) * (p - c);
+  float stride = 0.88;
+  float along = dot(c.xz, vec2(sin(face), cos(face)));
+  float phase = along / stride;
+  float uL = fract(phase);
+  float uR = fract(phase + 0.5);
+  vec2 fL = stepFoot(uL, stride);
+  vec2 fR = stepFoot(uR, stride);
+  float sl = sin(6.2832 * uL);
+  float sr = sin(6.2832 * uR);
+  float lurch = 0.10 * sin(phase * 0.47);
+  vec3 hip = vec3(0.03 * sl + lurch, 1.62 + 0.05 * max(fL.x, fR.x), 0.0);
+  vec3 sh = hip + vec3(lurch * 0.30, 0.34, 0.04 + 0.03 * sl);
+  vec3 head = sh + vec3(leanX, 0.22, 0.07);
+  float d = cap(q, hip, sh, 0.058);
+  d = smin(d, length(q - mix(hip, sh, 0.42)) - 0.078, 0.055);
+  d = smin(d, length(q - hip) - 0.062, 0.04);
+  d = smin(d, cap(q, sh, head, 0.038), 0.028);
+  d = smin(d, length(q - (head + vec3(leanX * 0.06, 0.06, 0.03))) - 0.074, 0.032);
+  d = min(d, teeth(q, head, max(grin, 0.72)));
+  d = min(d, length(q - (head + vec3(0.048, 0.05, 0.056))) - 0.015);
+  d = min(d, length(q - (head + vec3(-0.048, 0.05, 0.056))) - 0.015);
+  vec3 elL = sh + vec3(mix(0.16, 0.09, rch), mix(-0.04, 0.07, rch) + 0.04 * sl, mix(0.44, 0.80, rch));
+  vec3 wrL = elL + vec3(mix(0.06, 0.03, rch), 0.01 * sl, mix(0.50, 0.86, rch));
+  vec3 elR = sh + vec3(mix(-0.15, -0.09, rch), mix(-0.07, 0.06, rch) + 0.04 * sr, mix(0.42, 0.78, rch));
+  vec3 wrR = elR + vec3(mix(-0.06, -0.03, rch), -0.02 + 0.03 * sr, mix(0.52, 0.88, rch));
+  d = smin(d, cap(q, sh, elL, 0.036), 0.028);
+  d = smin(d, cap(q, elL, wrL, 0.028), 0.022);
+  d = smin(d, length(q - elL) - 0.048, 0.03);
+  d = smin(d, length(q - wrL) - 0.032, 0.02);
+  d = smin(d, cap(q, sh, elR, 0.036), 0.028);
+  d = smin(d, cap(q, elR, wrR, 0.028), 0.022);
+  d = smin(d, length(q - elR) - 0.046, 0.03);
+  d = smin(d, length(q - wrR) - 0.032, 0.02);
+  float tw = sin(t * 13.2);
+  float fl = mix(0.62, 1.02, rch);
+  float spr = mix(1.0, 1.7, rch);
+  d = min(d, cap(q, wrL, wrL + vec3(0.06 * spr, 0.04, fl + 0.07 * tw), 0.007));
+  d = min(d, cap(q, wrL, wrL + vec3(0.01, 0.06, mix(0.70, 1.10, rch) + 0.05 * sin(t * 11.0)), 0.008));
+  d = min(d, cap(q, wrL, wrL + vec3(-0.05 * spr, 0.03, mix(0.58, 0.96, rch) + 0.06 * sin(t * 9.4)), 0.006));
+  d = min(d, cap(q, wrR, wrR + vec3(-0.06 * spr, 0.02, mix(0.64, 1.04, rch) + 0.07 * sin(t * 12.1)), 0.007));
+  d = min(d, cap(q, wrR, wrR + vec3(-0.01, 0.05, mix(0.72, 1.12, rch) + 0.05 * tw), 0.008));
+  d = min(d, cap(q, wrR, wrR + vec3(0.05 * spr, 0.01, mix(0.56, 0.94, rch) + 0.06 * sin(t * 10.2)), 0.006));
+  float knLft = 0.28 + 0.52 * step(0.5, uL);
+  float knRgt = 0.28 + 0.52 * step(0.5, uR);
+  vec3 ftL = vec3(0.055, fL.x, fL.y);
+  vec3 knL = vec3(0.05, 0.78 + 0.12 * step(0.5, uL), mix(0.0, fL.y, 0.42) + knLft);
+  vec3 ftR = vec3(-0.055, fR.x, fR.y);
+  vec3 knR = vec3(-0.05, 0.78 + 0.12 * step(0.5, uR), mix(0.0, fR.y, 0.42) + knRgt);
+  d = smin(d, cap(q, hip, knL, 0.032), 0.026);
+  d = smin(d, cap(q, knL, ftL, 0.022), 0.018);
+  d = smin(d, length(q - knL) - 0.052, 0.03);
+  d = smin(d, cap(q, hip, knR, 0.032), 0.026);
+  d = smin(d, cap(q, knR, ftR, 0.022), 0.018);
+  d = smin(d, length(q - knR) - 0.050, 0.03);
+  d = min(d, cap(q, ftL, ftL + vec3(0.0, 0.0, 0.035), 0.009));
+  d = min(d, cap(q, ftR, ftR + vec3(0.0, 0.0, 0.035), 0.009));
+  d += (n2(q.xz * 4.4 + q.y * 3.1) - 0.48) * 0.024;
+  d += (n2(q.xy * 6.2 + t * 0.11) - 0.5) * 0.010;
+  return max(d, 0.02 - room(vec3(p.x, 1.2, p.z)));
+}
+
+void keepHall(inout vec3 p, float keep) {
+  for (int k = 0; k < 3; k++) {
+    float hd = room(p);
+    if (hd < keep) {
+      vec2 g = vec2(
+        room(p + vec3(0.03, 0.0, 0.0)) - room(p - vec3(0.03, 0.0, 0.0)),
+        room(p + vec3(0.0, 0.0, 0.03)) - room(p - vec3(0.0, 0.0, 0.03))
+      );
+      p.xz += (g / max(length(g), 1e-4)) * (keep - hd);
+    }
+  }
+}
+
+float map(vec3 p, vec3 c, float t, float leanX, float face, float grin, float rch) {
+  return min(room(p), creature(p, c, t, leanX, face, grin, rch));
+}
+
+float tube(vec3 p, float t, float aud, float near) {
   vec2 id = floor(p.xz * 0.5);
   vec2 f = fract(p.xz * 0.5) - 0.5;
   float panel = (1.0 - smoothstep(0.14, 0.26, abs(f.x))) * (1.0 - smoothstep(0.07, 0.14, abs(f.y)));
   float dead = step(h22(id), 0.14);
-  float buzz = 0.72 + 0.28 * sin(t * 63.0 + h22(id) * 33.0);
-  float tick = floor(t * (8.0 + aud * 18.0));
-  float strobe = mix(0.1, 1.0, step(0.09, h11(tick + h22(id) * 19.0)));
-  float black = step(0.97, h11(floor(t * 1.8)));
-  return panel * (1.0 - dead) * buzz * strobe * (1.0 - black * 0.85);
+  float seed = h22(id);
+  float buzz = 0.97 + 0.03 * sin(t * 63.0 + seed * 33.0);
+  float period = 5.5 + seed * 14.0;
+  float localT = t + seed * 47.0;
+  float slot = floor(localT / period);
+  float ph = fract(localT / period);
+  float willFlick = step(0.86, h11(slot + seed * 17.0));
+  float flick = 1.0 - 0.58 * willFlick * smoothstep(0.0, 0.018, ph) * smoothstep(0.09, 0.03, ph);
+  float tick = floor(t * (10.0 + aud * 14.0));
+  float sync = mix(0.16, 1.0, step(0.22, h11(tick)));
+  float black = step(0.91, h11(floor(t * 2.4)));
+  float scare = mix(1.0, sync * (1.0 - black * 0.80), near);
+  return panel * (1.0 - dead) * buzz * flick * scare;
 }
 
 float band(float ph, float a, float b) {
@@ -111,8 +171,13 @@ void main() {
 
   float phA = fract(t * 0.040);
   float cycle = floor(t * 0.040);
-  float peekOn = step(0.42, h11(cycle + 17.0));
-  float peekPh = 0.26 + 0.05 * h11(cycle + 9.0);
+  float seed = h11(cycle + 17.0);
+  float beat = floor(seed * 4.0);
+  float peekOn = step(1.0, beat);
+  float isPeek = 1.0 - step(0.5, abs(beat - 1.0));
+  float isStag = 1.0 - step(0.5, abs(beat - 2.0));
+  float isRake = 1.0 - step(0.5, abs(beat - 3.0));
+  float peekPh = 0.22 + 0.12 * h11(cycle + 9.0);
   float peek = peekOn * band(phA, peekPh, peekPh + 0.08);
   float freeze = peekOn * smoothstep(peekPh, peekPh + 0.015, phA) * smoothstep(peekPh + 0.12, peekPh + 0.085, phA);
   float fleePh = peekPh + 0.12;
@@ -120,8 +185,15 @@ void main() {
   float sprint = peekOn * smoothstep(fleePh, fleePh + 0.04, phA) * smoothstep(0.86, 0.70, phA);
   float phRun = phA - peekOn * clamp(phA - peekPh, 0.0, 0.10);
   float threat = max(max(peek * 0.95, sprint * 0.75), freeze * 0.8);
-  float s = (cycle + phRun) * 62.0 + sprint * 5.1;
-  float sFlee = (cycle + peekPh) * 62.0;
+  float charge = isStag * (1.0 - freeze) * smoothstep(peekPh + 0.06, peekPh + 0.16, phA);
+  float creaRate = 50.0;
+  float camRate = creaRate * 1.5;
+  float minGap = 8.0;
+  float lead = 24.0 + 20.0 * h11(cycle + 3.0);
+  float s0 = (cycle + phRun) * camRate;
+  float close = peekOn * (1.0 - freeze) * max(max(flee, sprint), charge);
+  float s = s0 + sprint * 7.5 + close * 18.0;
+  float sFlee = (cycle + peekPh) * camRate;
   float sTurn = 4.0 * ceil((sFlee - 2.0) * 0.25) + 2.0;
   float sLock = mix(1.0e5, sTurn, peekOn);
   float gone = peekOn * max(s - sTurn, 0.0);
@@ -129,44 +201,41 @@ void main() {
   float turnDir = -hide;
   float z = -min(s, sLock);
   float x = gone * turnDir;
-  float gait = s * 2.15;
-  float bobAmp = mix(0.010, 0.028, max(threat, flee));
+  float gait = s * mix(2.15, 2.85, close);
+  float bobAmp = mix(0.010, 0.036, max(max(threat, flee), close));
   float bob = bobAmp * abs(sin(gait)) * (1.0 - freeze);
   vec3 ro = vec3(x, 1.46 + bob, z);
-  for (int k = 0; k < 3; k++) {
-    float hd = room(ro);
-    if (hd < 0.22) {
-      vec2 g = vec2(
-        room(ro + vec3(0.03, 0.0, 0.0)) - room(ro - vec3(0.03, 0.0, 0.0)),
-        room(ro + vec3(0.0, 0.0, 0.03)) - room(ro - vec3(0.0, 0.0, 0.03))
-      );
-      ro.xz += (g / max(length(g), 1e-4)) * (0.24 - hd);
-    }
-  }
+  keepHall(ro, 0.22);
   x = ro.x;
   z = ro.z;
   float atTurn = peekOn * smoothstep(0.0, 0.7, gone);
-  float yaw = 1.5708 * turnDir * atTurn;
-  yaw += hide * 0.08 * peek;
-  yaw += 0.012 * sin(gait * 0.35) * (1.0 - freeze) * (1.0 - atTurn * 0.35);
-  float pitch = mix(0.006 * sin(gait), 0.03, peek);
-
-  float grin = peek;
-  float approach = peekOn * smoothstep(peekPh, peekPh + 0.07, phA) * (1.0 - atTurn);
-  float leanX = peek * (-hide) * (0.42 + 0.05 * sin(t * 3.1));
-  vec3 cTuck = vec3(hide * 1.32, 0.0, z - 2.55);
-  vec3 cReach = vec3(hide * 0.10, 0.0, z - 0.82);
-  vec3 cpos = mix(cTuck, cReach, approach);
-  cpos = mix(cpos, vec3(hide * 1.16, 0.0, -sTurn - 0.2), atTurn);
-  cpos.z -= (1.0 - peekOn) * 22.0;
+  float grin = peek * max(isPeek, isRake * 0.55);
+  float approach = charge * (1.0 - atTurn);
+  float rake = isRake * peek;
+  float leanX = (isPeek * peek + rake) * (-hide) * (0.42 + 0.05 * sin(t * 3.1));
+  float gap = max(minGap, mix(lead, minGap, approach));
+  vec3 cpos = vec3(hide * mix(1.32, 0.10, approach), 0.0, z - gap);
+  cpos = mix(cpos, vec3(hide * 1.16, 0.0, -sTurn - minGap), atTurn);
+  cpos.z -= (1.0 - peekOn) * mix(22.0, 14.0, step(0.86, h11(cycle + 21.0)));
+  vec3 cKeep = vec3(cpos.x, 1.2, cpos.z);
+  keepHall(cKeep, mix(0.30, 0.11, peek));
+  cpos.xz = cKeep.xz;
   float face = atan(x - cpos.x, z - cpos.z) - hide * 0.12 * peek;
+  float roar = peekOn * smoothstep(peekPh, peekPh + 0.02, phA) * smoothstep(peekPh + 0.10, peekPh + 0.07, phA);
+  float seeYaw = atan(-(cpos.x - x), -(cpos.z - z));
+  float faceTravel = peekOn * smoothstep(peekPh + 0.18, peekPh + 0.24, phA);
+  float glance = peekOn * step(peekPh, phA) * (1.0 - faceTravel);
+  float travelYaw = 1.5708 * turnDir * smoothstep(0.0, 0.2, gone);
+  float yaw = mix(travelYaw, seeYaw, glance);
+  yaw += 0.012 * sin(gait * 0.35) * (1.0 - freeze) * (1.0 - glance);
+  float pitch = mix(0.006 * sin(gait), 0.03, glance);
 
   vec3 rd = normalize(rotY(yaw) * rotX(-pitch) * vd);
   float far = mix(56.0, 48.0, threat);
   float hit = 0.02;
   vec3 p = ro;
   for (int i = 0; i < 52; i++) {
-    float d = map(p, cpos, t, leanX, face, grin);
+    float d = map(p, cpos, t, leanX, face, grin, approach);
     hit += d;
     p = ro + rd * hit;
     if (d < 0.002 * (1.0 + hit) || hit > far) break;
@@ -174,12 +243,12 @@ void main() {
 
   vec3 e = vec3(0.014, 0.0, 0.0);
   vec3 n = normalize(vec3(
-    map(p + e.xyy, cpos, t, leanX, face, grin) - map(p - e.xyy, cpos, t, leanX, face, grin),
-    map(p + e.yxy, cpos, t, leanX, face, grin) - map(p - e.yxy, cpos, t, leanX, face, grin),
-    map(p + e.yyx, cpos, t, leanX, face, grin) - map(p - e.yyx, cpos, t, leanX, face, grin)
+    map(p + e.xyy, cpos, t, leanX, face, grin, approach) - map(p - e.xyy, cpos, t, leanX, face, grin, approach),
+    map(p + e.yxy, cpos, t, leanX, face, grin, approach) - map(p - e.yxy, cpos, t, leanX, face, grin, approach),
+    map(p + e.yyx, cpos, t, leanX, face, grin, approach) - map(p - e.yyx, cpos, t, leanX, face, grin, approach)
   ));
 
-  float isC = 1.0 - smoothstep(0.02, 0.08, creature(p, cpos, t, leanX, face, grin));
+  float isC = 1.0 - smoothstep(0.02, 0.08, creature(p, cpos, t, leanX, face, grin, approach));
   float isFl = 1.0 - smoothstep(0.05, 0.16, p.y);
   float isCe = smoothstep(2.28, 2.62, p.y);
 
@@ -195,10 +264,14 @@ void main() {
   vec3 col = mix(paper, carpet, isFl);
   col = mix(col, ceilc, isCe);
 
-  float L = tube(p, t, aud);
-  float Lceil = tube(vec3(p.x, 2.5, p.z), t, aud);
+  float hush = max(close, max(peek, freeze));
+  float L = tube(p, t, aud, hush);
+  float Lceil = tube(vec3(p.x, 2.5, p.z), t, aud, hush);
+  L *= 1.0 - 0.62 * hush;
+  Lceil *= 1.0 - 0.58 * hush;
   float fill = 0.96 + 0.32 * Lceil + 0.06 * aud + 0.07 * threat;
-  fill *= 0.90 + 0.10 * (0.72 + 0.28 * sin(t * 58.0));
+  fill *= mix(1.0, 0.90 + 0.10 * (0.72 + 0.28 * sin(t * 58.0)), hush);
+  fill *= 1.0 - 0.22 * hush;
   col += vec3(1.08, 1.06, 0.82) * Lceil * (0.35 + 0.9 * isCe + 0.45 * isFl);
   float dif = 0.35 + 0.65 * max(0.0, n.y);
   col *= vec3(1.04, 1.02, 0.80) * (fill * dif);
@@ -208,27 +281,29 @@ void main() {
   float ndl = max(0.0, dot(n, lgt));
   float wrap = clamp(dot(n, lgt) * 0.55 + 0.45, 0.0, 1.0);
   float rim = pow(1.0 - max(0.0, dot(n, -rd)), 2.4);
-  vec3 skin = vec3(0.11, 0.11, 0.12);
-  vec3 flesh = vec3(0.2, 0.2, 0.21);
+  vec3 skin = vec3(0.14, 0.11, 0.10);
+  vec3 flesh = vec3(0.26, 0.16, 0.13);
   vec3 ccol = mix(skin, flesh, wrap);
-  ccol *= (0.2 + 0.7 * wrap) * (0.4 + 0.55 * fill);
+  ccol *= (0.22 + 0.68 * wrap) * (0.4 + 0.55 * fill);
+  ccol *= 0.82 + 0.22 * n2(p.xz * 7.5 + p.y * 4.0);
   ccol += vec3(0.55, 0.55, 0.5) * Lceil * ndl * 0.18;
   ccol += vec3(0.28, 0.28, 0.3) * rim * 0.14;
-  vec3 hd = cpos + rotY(face) * vec3(leanX, 2.28, 0.16);
-  vec3 toEye = p - hd;
-  float eyes = exp(-dot(toEye - vec3(0.04, -0.02, 0.06), toEye - vec3(0.04, -0.02, 0.06)) * 90.0);
-  eyes += exp(-dot(toEye - vec3(-0.04, -0.02, 0.06), toEye - vec3(-0.04, -0.02, 0.06)) * 90.0);
-  ccol += vec3(0.55, 0.52, 0.42) * eyes * 0.28;
   vec3 qTooth = rotY(-face) * (p - cpos);
-  float isTooth = 1.0 - smoothstep(0.006, 0.022, teeth(qTooth, vec3(leanX, 2.28, 0.12), grin));
-  ccol = mix(ccol, vec3(0.93, 0.88, 0.70), isTooth * grin);
+  vec3 hd = vec3(leanX, 2.18, 0.10);
+  float isTooth = 1.0 - smoothstep(0.003, 0.012, teeth(qTooth, hd, max(grin, 0.72)));
+  ccol = mix(ccol, vec3(0.97, 0.96, 0.92), isTooth);
+  float isEye = 1.0 - smoothstep(0.006, 0.018, min(
+    length(qTooth - (hd + vec3(0.048, 0.05, 0.056))),
+    length(qTooth - (hd + vec3(-0.048, 0.05, 0.056)))
+  ));
+  ccol = mix(ccol, vec3(0.98, 0.98, 0.97), isEye);
   float cAlpha = 0.72 + 0.22 * wrap;
   col = mix(col, ccol, isC * cAlpha);
 
   float sh = 0.0;
   float foot = length(p.xz - cpos.xz);
   if (foot < 1.6 && p.y < 0.55) {
-    float oc = creature(vec3(p.x, 0.42, p.z), cpos, t, leanX, face, grin);
+    float oc = creature(vec3(p.x, 0.42, p.z), cpos, t, leanX, face, grin, approach);
     sh = (1.0 - smoothstep(0.12, 1.25, foot)) * (1.0 - smoothstep(0.08, 0.9, oc));
     sh *= 0.62 * (1.0 - smoothstep(0.02, 0.5, p.y));
   }

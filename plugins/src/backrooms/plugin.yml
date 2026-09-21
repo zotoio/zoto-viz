@@ -1,8 +1,8 @@
 id: backrooms
 name: Backrooms
-version: 48
-hint: Level 0 yellow halls, horizon look to the vanishing point. Long-legged thing grins from a pillar, then staggers in with bendy knees and arms out. Cam freezes, cuts 90° at a junction. Tube buzz and entity scream (sound on).
-description: Found-footage jog through damp yellow halls. The runner stays on hall centerlines and only turns at junctions — never through a wall. A long-legged creature can lean a toothy grin from a pillar, then stagger toward you with buckling knees and arms outstretched. That freeze is the beat — then the runner cuts into a side hall and keeps going forward. Fluorescent buzz and creature vocals are recorded CC0 samples (header sound must be on).
+version: 65
+hint: Level 0 yellow halls. Distant until it charges, arms and fingers out. Roar — look, turn, run. Sound on.
+description: Found-footage jog through damp yellow halls. The runner stays on hall centerlines and only turns at junctions, at one-and-a-half times the creature's walk, always away from it. A long-legged organic thing — mottled flesh, no nose, white eyes, a wide sharp toothy grin, bulbous joints, flinger claws — waits far down the hall ahead, then on a stagger beat runs at you with arms and fingers outstretched and never closer than two pillars. It stays in the halls (pushed off walls, limbs clipped) and may grin from a pillar or rake from the dark. When it roars you look, then turn 90° and run; you never follow it. Timing and which beat you get is hashed per loop. Fluorescent buzz, a brief distant music box, and creature vocals are recorded CC0 samples (header sound must be on) — not ripped film scores.
 capabilities:
   - viz.read
   - viz.write

@@ -40,22 +40,40 @@ export function backroomsPhase(t: number): {
   flee: number;
   sprint: number;
   threat: number;
+  close: number;
+  roar: number;
+  boxOn: boolean;
+  box: number;
 } {
   const phA = fract(t * 0.040);
   const cycle = Math.floor(t * 0.040);
-  const peekOn = h11(cycle + 17) > 0.42;
-  const peekPh = 0.26 + 0.05 * h11(cycle + 9);
+  const seed = h11(cycle + 17);
+  const beat = Math.floor(seed * 4);
+  const peekOn = beat >= 1;
+  const peekPh = 0.22 + 0.12 * h11(cycle + 9);
   const peek = peekOn ? band(phA, peekPh, peekPh + 0.08) : 0;
   const freeze = peekOn
     ? smoothstep(peekPh, peekPh + 0.015, phA) * smoothstep(peekPh + 0.12, peekPh + 0.085, phA)
     : 0;
   const fleePh = peekPh + 0.12;
+  const roar = peekOn
+    ? smoothstep(peekPh, peekPh + 0.02, phA) * smoothstep(peekPh + 0.10, peekPh + 0.07, phA)
+    : 0;
   const flee = peekOn ? smoothstep(fleePh, fleePh + 0.06, phA) : 0;
   const sprint = peekOn
     ? smoothstep(fleePh, fleePh + 0.04, phA) * smoothstep(0.86, 0.70, phA)
     : 0;
   const threat = Math.max(peek * 0.95, sprint * 0.75, freeze * 0.8);
-  return { phA, cycle, peekOn, turnOn: flee > 0.5, peekPh, peek, freeze, flee, sprint, threat };
+  const lead = 8 + 4 + 20 * h11(cycle + 3);
+  const close = peekOn
+    ? Math.max(flee, sprint, smoothstep(18, 10, lead)) * (1 - freeze)
+    : 0;
+  const boxOn = h11(cycle + 41) > 0.52;
+  const boxPh = 0.05 + 0.32 * h11(cycle + 43);
+  const box = boxOn
+    ? band(phA, boxPh, boxPh + 0.14) * (1 - smoothstep(0.12, 0.45, Math.max(close, peek, freeze)))
+    : 0;
+  return { phA, cycle, peekOn, turnOn: flee > 0.5, peekPh, peek, freeze, flee, sprint, threat, close, roar, boxOn, box };
 }
 
 export type BackroomsSfxLevels = {
@@ -63,18 +81,21 @@ export type BackroomsSfxLevels = {
   screech: number;
   pant: number;
   buzz: number;
+  box: number;
 };
 
 /** Fluorescent bed, peek screech, close roar, pant after the sprint. */
 export function backroomsSfxLevels(t: number): BackroomsSfxLevels {
   const p = backroomsPhase(t);
-  const pant = smoothstep(0.72, 0.78, p.phA) * smoothstep(0.98, 0.88, p.phA);
+  const winded = smoothstep(0.72, 0.78, p.phA) * smoothstep(0.98, 0.88, p.phA);
+  const pant = Math.max(winded, p.close * 0.85, p.sprint * 0.55);
   const chirp = h11(Math.floor(t * 0.72) + p.cycle * 3.1) > 0.93 ? 0.35 : 0;
   return {
-    roar: Math.max(p.peek * 0.45, p.flee * 0.35, p.threat * 0.25),
+    roar: p.roar,
     screech: Math.max(p.peek * 0.92, p.flee * 0.25 * (1 - p.sprint), chirp),
     pant,
-    buzz: 1,
+    buzz: 1 - Math.max(p.close, p.peek, p.freeze) * 0.84,
+    box: p.box,
   };
 }
 
@@ -90,6 +111,7 @@ export const BACKROOMS_SAMPLE_PATHS = {
   screech: "/sfx/backrooms/screech.mp3",
   roar: "/sfx/backrooms/roar.mp3",
   pant: "/sfx/backrooms/pant.mp3",
+  box: "/sfx/backrooms/box.mp3",
 } as const;
 
 type SampleId = keyof typeof BACKROOMS_SAMPLE_PATHS;
@@ -123,6 +145,7 @@ export const BACKROOMS_SAMPLE_URLS = {
   screech: backroomsSampleUrl("screech"),
   roar: backroomsSampleUrl("roar"),
   pant: backroomsSampleUrl("pant"),
+  box: backroomsSampleUrl("box"),
 } as const;
 
 export class PluginSfx {
@@ -132,22 +155,24 @@ export class PluginSfx {
   private buzzGain: GainNode | null = null;
   private screechGain: GainNode | null = null;
   private pantGain: GainNode | null = null;
+  private boxGain: GainNode | null = null;
   private pantLfo: OscillatorNode | null = null;
   private buffers = new Map<SampleId, AudioBuffer>();
   private loops: AudioBufferSourceNode[] = [];
   private lastScreech = 0;
   private lastRoar = 0;
+  private lastBox = 0;
   private loadedRev = "";
   private hydrate: Promise<void> | null = null;
 
   setRoar(level: number): void {
-    this.setBackrooms(0, { roar: level, screech: 0, pant: 0, buzz: 0 });
+    this.setBackrooms(0, { roar: level, screech: 0, pant: 0, buzz: 0, box: 0 });
   }
 
   setBackrooms(t: number, levels?: BackroomsSfxLevels): void {
     const L = levels ?? backroomsSfxLevels(t);
-    if (!soundAllowed() || (L.roar + L.screech + L.pant + L.buzz) <= 0.008) {
-      this.fadeAll(0, 0, 0, 0);
+    if (!soundAllowed() || (L.roar + L.screech + L.pant + L.buzz + L.box) <= 0.008) {
+      this.fadeAll(0, 0, 0, 0, 0);
       return;
     }
     this.ensure();
@@ -158,12 +183,13 @@ export class PluginSfx {
       (sampled ? 0.22 : 0.032) * L.buzz,
       (sampled ? 0.42 : 0.11) * L.screech,
       (sampled ? 0.32 : 0.14) * L.pant,
+      (sampled ? 0.30 : 0) * L.box,
     );
     this.fireEdges(L);
   }
 
   silence(): void {
-    this.fadeAll(0, 0, 0, 0);
+    this.fadeAll(0, 0, 0, 0, 0);
   }
 
   dispose(): void {
@@ -180,13 +206,15 @@ export class PluginSfx {
     this.buzzGain = null;
     this.screechGain = null;
     this.pantGain = null;
+    this.boxGain = null;
     this.pantLfo = null;
+    this.lastBox = 0;
     this.loadedRev = "";
     this.hydrate = null;
     if (ctx) void ctx.close();
   }
 
-  private fadeAll(roar: number, buzz: number, screech: number, pant: number): void {
+  private fadeAll(roar: number, buzz: number, screech: number, pant: number, box: number): void {
     const ctx = this.ctx;
     if (!ctx) return;
     void ctx.resume();
@@ -195,6 +223,7 @@ export class PluginSfx {
     this.buzzGain?.gain.setTargetAtTime(buzz, now, 0.18);
     this.screechGain?.gain.setTargetAtTime(screech, now, 0.04);
     this.pantGain?.gain.setTargetAtTime(pant, now, 0.12);
+    this.boxGain?.gain.setTargetAtTime(box, now, 0.16);
   }
 
   private ensure(): void {
@@ -220,12 +249,17 @@ export class PluginSfx {
     pantGain.gain.value = 0;
     pantGain.connect(master);
 
+    const boxGain = ctx.createGain();
+    boxGain.gain.value = 0;
+    boxGain.connect(master);
+
     this.ctx = ctx;
     this.master = master;
     this.roarGain = roarGain;
     this.buzzGain = buzzGain;
     this.screechGain = screechGain;
     this.pantGain = pantGain;
+    this.boxGain = boxGain;
     void ctx.resume();
     this.loadSamples();
   }
@@ -237,18 +271,23 @@ export class PluginSfx {
     if (L.roar > 0.28 && this.lastRoar <= 0.28) {
       this.playOnce("roar", this.roarGain);
     }
+    if (L.box > 0.28 && this.lastBox <= 0.28) {
+      this.playOnce("box", this.boxGain, 6.6);
+    }
     this.lastScreech = L.screech;
     this.lastRoar = L.roar;
+    this.lastBox = L.box;
   }
 
-  private playOnce(id: SampleId, dest: GainNode | null): void {
+  private playOnce(id: SampleId, dest: GainNode | null, seconds?: number): void {
     const ctx = this.ctx;
     const buf = this.buffers.get(id);
     if (!ctx || !dest || !buf) return;
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(dest);
-    src.start();
+    if (seconds && seconds > 0) src.start(0, 0, seconds);
+    else src.start();
   }
 
   private startLoop(id: SampleId, dest: GainNode): void {
