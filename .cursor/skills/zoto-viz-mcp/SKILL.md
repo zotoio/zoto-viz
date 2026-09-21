@@ -44,7 +44,7 @@ If curl fails, start the backend (`scripts/dev.sh start backend` or `systemctl -
 | **New shipped plugin** (git) | Write `plugins/src/<id>/`, `./zoto-viz plugin validate`, then `consent_plugin` + `set_view` |
 | **New local experiment** | `publish_local_plugin` `{files}` → `~/.zoto-viz/plugins/local/<id>.zip` |
 | **Contrib zip in checkout** | `install_plugin_zip` `{zip_b64}` → gitignored `plugins/<id>.zip` |
-| TS / GLSL / Python will not run | `consent_plugin` `{id, kind: "authored"\|"reviewed"}` |
+| TS / GLSL / Python will not run | `consent_plugin` `{id, kind: "authored"\|"reviewed"}` — or `set_settings` `{autoconsent: true}` for dogfood (src + local only; see [viz-test](../zoto/viz-test/SKILL.md)) |
 | RSS / file / journal headlines | `list_sources` / `set_source` |
 | Extra catalog row on a shipped plugin | `set_plugin_instance` (do not copy the tree) |
 
@@ -54,7 +54,7 @@ Never use MCP to `git add` / `git commit`. Camera and microphone are operator-on
 
 `set_settings` is the same whitelist as an in-app ` ```settings ` fence:
 
-- `theme`, `mode` (`plugin:<id>`), `chrome` (top/left/right), `dream`, `redact`, `merge`
+- `theme`, `mode` (`plugin:<id>`), `chrome` (top/left/right), `dream`, `redact`, `merge`, `autoconsent` (auto-grant consent for shipped src + local plugins; not contrib zips)
 - `feed` `{on, source, layout, scope, modulate, includeSources, density, textSize}`
 - `show`, `filters`, `anim` (motion / physics / mosaic / sky / audio, including `mosaicTiles`, `mosaicTree`, `mosaicSharedTheme`, `mosaicUniqueSkies`, `mosaicSkies`, `graphFabric`, `graphSpace`, `graphLayout`, `graphLinks`)
 - `plugins` / `modeOptions` / `arcade`, `agent` `{clear, shader, shaderPhoto, decos}`

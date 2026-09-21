@@ -173,6 +173,10 @@ def _settings_schema() -> dict[str, Any]:
             "chrome": {"type": "string", "enum": list(live.CHROME)},
             "redact": {"type": "boolean"},
             "merge": {"type": "boolean"},
+            "autoconsent": {
+                "type": "boolean",
+                "description": "Auto-grant source-review consent for shipped plugins/src and ~/.zoto-viz/plugins/local zips (not contrib zips).",
+            },
             "temper": {"type": "integer", "minimum": live.TEMPER_MIN, "maximum": live.TEMPER_MAX},
             "weather": {"type": "string", "enum": list(live.WEATHERS)},
             "control": {"type": "boolean", "description": "Server AI Control"},
@@ -245,7 +249,7 @@ SET_SETTINGS_TOOL: dict[str, Any] = {
     "name": "set_settings",
     "description": (
         "Patch the open live UI. Same whitelist as an agent ```settings``` fence: theme, dream, "
-        "mode, chrome, redact, merge, feed, show, filters, anim (motion, physics, "
+        "mode, chrome, redact, merge, autoconsent, feed, show, filters, anim (motion, physics, "
         "mosaic / mosaicTiles / mosaicTree, sky, audio), modeOptions, arcade, plugins, agent look (shader/photos/SVG), "
         "dice (on / periodMin / include groups + ceilings), shuffle (one-shot dice), plus temper, weather, control, model. "
         "Camera and microphone are operator-only (Settings → Privacy)."

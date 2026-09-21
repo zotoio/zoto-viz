@@ -27,7 +27,7 @@ Mutating REST (`PUT /api/plugins/{id}/consent`, `PUT /api/ai/control`) needs `X-
 | --- | --- | --- |
 | `list_features` | — | Every settable key. Call first when unsure. |
 | `get_settings` | — | Startup profile + queued `live` patch. |
-| `set_settings` | whitelist object | Theme, `mode`, `anim`, `feed`, `show`, `filters`, `plugins`, `agent`, `dice`, `shuffle`, `temper`, `weather`, `control`, `model`. No camera/mic. |
+| `set_settings` | whitelist object | Theme, `mode`, `anim`, `feed`, `show`, `filters`, `plugins`, `agent`, `dice`, `shuffle`, `temper`, `weather`, `control`, `model`, `autoconsent`. No camera/mic. |
 | `set_view` | `mode` | Catalog id, e.g. `plugin:syscon`. |
 | `list_plugins` | `id?` | Options / config / prompt. |
 | `set_plugin` | `id`, `values` | `id` is bare (`cypher-cic` not `plugin:cypher-cic`). Values are strings (`"1"` / `"0"` for bools). |
@@ -52,6 +52,7 @@ Mutating REST (`PUT /api/plugins/{id}/consent`, `PUT /api/ai/control`) needs `X-
 | Tool | Arguments | Writes |
 | --- | --- | --- |
 | `consent_plugin` | `id`, `kind`: `authored` \| `reviewed` | `~/.zoto-viz/plugin-consent.yml` |
+| `set_settings` | `{autoconsent: true}` | Dogfood: auto-consent shipped `plugins/src` + local zips only (see viz-test skill) |
 | `draft_plugin` | `files` or `yaml`, `install?` | `plugins/src/<id>/` only when Control on and `install: true` |
 | `publish_local_plugin` | `zip_b64` \| `files` \| `description`, `id?`, `overwrite?`, `activate?` | `~/.zoto-viz/plugins/local/<id>.zip` |
 | `install_plugin_zip` | `zip_b64`, `overwrite?`, `force?` | `plugins/<id>.zip` + `plugins/.runtime/<id>/` |

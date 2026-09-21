@@ -41,6 +41,8 @@ export interface ProfileSettings {
   show: { lan: boolean; internet: boolean; multicast: boolean; offline: boolean; labels: boolean; cpuIdle: boolean };
   merge: boolean;
   redact: boolean;
+  /** Auto-grant plugin consent for shipped src and local zips (not contrib zips). */
+  autoconsent: boolean;
   filters: { allowNames: string; blockNames: string; allowNets: string; blockNets: string };
   anim: DreamAnim;
   feed: FeedConfig;
@@ -106,6 +108,7 @@ export function shippedSettings(): ProfileSettings {
     show: { lan: true, internet: true, multicast: true, offline: true, labels: true, cpuIdle: true },
     merge: false,
     redact: false,
+    autoconsent: false,
     filters: { allowNames: "", blockNames: "", allowNets: "", blockNets: "" },
     anim: { ...DEFAULT_DREAM },
     feed: { ...DEFAULT_FEED },
@@ -149,6 +152,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     },
     merge: bool(s.merge, d.merge),
     redact: bool(s.redact, d.redact),
+    autoconsent: bool(s.autoconsent, d.autoconsent),
     filters: {
       allowNames: str(filters.allowNames),
       blockNames: str(filters.blockNames),

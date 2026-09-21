@@ -198,6 +198,7 @@ _weather = DEFAULT_WEATHER
 _seq = 0
 _patch: dict[str, Any] | None = None
 _loaded = False
+_autoconsent: bool | None = None
 
 
 def _file() -> Path:
@@ -318,6 +319,8 @@ def queue_patch(patch: dict[str, Any]) -> dict[str, Any]:
         extra["temper"] = set_temper(patch["temper"])["temper"]
     if "weather" in patch:
         extra["weather"] = set_weather(patch["weather"])["weather"]
+    if "autoconsent" in patch:
+        set_autoconsent(bool(patch["autoconsent"]))
     body = {k: v for k, v in patch.items() if k not in {"temper", "weather"}}
     merged = {**body, **extra} if extra else body
     if merged:
@@ -331,13 +334,31 @@ def _bump(patch: dict[str, Any]) -> None:
     _patch = patch
 
 
+def autoconsent_on() -> bool:
+    """Operator toggle: auto-grant consent for shipped src and local plugins."""
+    global _autoconsent
+    if _autoconsent is not None:
+        return _autoconsent
+    try:
+        from . import profiles
+        return bool(profiles.current_settings().get("autoconsent"))
+    except Exception:
+        return False
+
+
+def set_autoconsent(on: bool) -> None:
+    global _autoconsent
+    _autoconsent = bool(on)
+
+
 def reset_for_tests() -> None:
-    global _temper, _weather, _seq, _patch, _loaded
+    global _temper, _weather, _seq, _patch, _loaded, _autoconsent
     _temper = DEFAULT_TEMPER
     _weather = DEFAULT_WEATHER
     _seq = 0
     _patch = None
     _loaded = True
+    _autoconsent = None
 
 
 def sanitize_patch(raw: Any) -> dict[str, Any]:
@@ -359,6 +380,8 @@ def sanitize_patch(raw: Any) -> dict[str, Any]:
         out["redact"] = raw["redact"]
     if isinstance(raw.get("merge"), bool):
         out["merge"] = raw["merge"]
+    if isinstance(raw.get("autoconsent"), bool):
+        out["autoconsent"] = raw["autoconsent"]
     feed = _feed(raw.get("feed"))
     if feed:
         if feed.get("source") in ("transcript", "both"):
@@ -666,7 +689,7 @@ def features() -> dict[str, Any]:
     """Catalog of MCP-settable keys."""
     return {
         "settings": [
-            "theme", "dream", "mode", "chrome", "redact", "merge",
+            "theme", "dream", "mode", "chrome", "redact", "merge", "autoconsent",
             "feed", "chat", "show", "filters", "anim", "modeOptions", "arcade", "plugins",
             "agent", "dice", "shuffle", "temper", "weather", "control", "model",
             "sources",

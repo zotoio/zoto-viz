@@ -218,6 +218,7 @@ def python_enabled() -> bool:
 
 
 CONSENT_ARTEFACTS = ("frontend", "backend", "collector", "shader")
+AUTOCONSENT_ORIGINS = frozenset({"src", "local"})
 _ARTEFACT_FIELD = {
     "frontend": "hash",
     "backend": "backend_sha256",
@@ -277,10 +278,42 @@ def consent_kind(doc: dict[str, Any]) -> str | None:
     return kind if kind in {"reviewed", "authored"} else None
 
 
+def autoconsent_enabled() -> bool:
+    """True when the operator enabled auto-consent (profile or live MCP patch)."""
+    from . import live
+    return live.autoconsent_on()
+
+
+def autoconsent_eligible(doc: dict[str, Any]) -> bool:
+    """Only shipped src trees and operator-installed local zips — not contrib zips."""
+    return str(doc.get("origin") or "").strip().lower() in AUTOCONSENT_ORIGINS
+
+
+def autoconsent_kind(doc: dict[str, Any]) -> str:
+    if str(doc.get("origin") or "").strip().lower() == "src":
+        return "authored"
+    return "reviewed"
+
+
+def maybe_autoconsent(doc: dict[str, Any]) -> bool:
+    """Grant consent for eligible catalog rows when auto-consent is on. Returns True when granted."""
+    if not needs_review(doc) or not autoconsent_enabled() or not autoconsent_eligible(doc):
+        return False
+    if consent_kind(doc) in {"reviewed", "authored"}:
+        return False
+    grant_consent(doc, autoconsent_kind(doc))
+    return True
+
+
 def consented(doc: dict[str, Any]) -> bool:
     if not needs_review(doc):
         return True
-    return consent_kind(doc) in {"reviewed", "authored"}
+    kind = consent_kind(doc)
+    if kind in {"reviewed", "authored"}:
+        return True
+    if maybe_autoconsent(doc):
+        return True
+    return False
 
 
 def consented_for(doc: dict[str, Any], hashes: dict[str, str] | None = None) -> bool:
