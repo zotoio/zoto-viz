@@ -26,6 +26,22 @@ python zoto-viz install --yes
 
 `install` always prints a prerequisite table. Missing tools get copy-pasteable manual commands (`apt` / `dnf` / `pacman` / `brew` / `winget`, or a download URL). System steps (package installs, `usermod -aG wireshark`, `brew install --cask wireshark-chmodbpf`) are skipped unless you pass `--yes` or type `y` at the risk prompt. `--no-system` never runs them.
 
+### Bootstrap / doctor
+
+For interactive, consent-gated fixes (GitHub CLI, `gh auth login`, capture
+tools, venv, pnpm, screensaver backends):
+
+```bash
+./zoto-viz doctor              # report only
+./zoto-viz doctor --fix        # offer to install missing items one-by-one
+./zoto-viz bootstrap --dry-run # plan without changes
+./zoto-viz bootstrap -y        # accept all install prompts (use after reading the plan)
+```
+
+Never silent-installs: each step asks unless `--yes` or non-interactive dry-run.
+Private plugin catalog access needs `gh auth login` (device flow) when using
+`auth: gh`. Packet capture needs `tshark` / Wireshark CLI.
+
 Local steps (idempotent):
 
 1. `.venv` + `pip install -r requirements.txt`
@@ -70,7 +86,14 @@ pnpm start            # backend :7020 + Vite :5173
 
 Windows (manual): install Python 3.12 (Add to PATH), Node.js 22 LTS, and Wireshark with Npcap. Then `python zoto-viz install --no-system`.
 
-The monitor binds **127.0.0.1** by default. Set `bind` / `port` / `insecure_lan` in `~/.zoto-viz/sys-config.yml` (or pass `--bind` + `--insecure-lan`) to listen on a LAN address — no password; anyone who can reach the port can read captures and trigger scans. `inhibit_screensaver: true` holds idle/sleep so the display does not blank (`systemd-inhibit` on Linux, `caffeinate` on macOS, plus `xset s off` when an X display is reachable). Do not expose the Ollama proxy on the LAN.
+The monitor binds **127.0.0.1** by default. Set `bind` / `port` / `insecure_lan` in `~/.zoto-viz/sys-config.yml` (or pass `--bind` + `--insecure-lan`) to listen on a LAN address — no password; anyone who can reach the port can read captures and trigger scans.
+
+**Screensaver / idle inhibit** is **on by default** for the live monitor so kiosk
+displays stay awake. Disable with `--no-inhibit-screensaver`, `inhibit_screensaver: false`
+in sys-config, or `ZOTO_VIZ_HEADLESS=1` / `ZOTO_VIZ_NO_SCREENSAVER_INHIBIT=1` for CI
+and headless runs. Backends: Linux `systemd-inhibit` (+ optional `xdg-screensaver`
+and `xset` on X11), macOS `caffeinate -dimsu`, Windows `SetThreadExecutionState`.
+Do not expose the Ollama proxy on the LAN.
 
 The monitor also serves a loopback MCP endpoint at `http://127.0.0.1:7020/mcp` for the live UI (theme, view, motion, physics, mosaic, plugins, dice), LAN state, RF watch, profiles, memories, plugin consent/draft, and contrib zip install. See [Plugins](/plugins). Installing a zip that ships `backend/` or `datasource/` reloads that Python in-process. Checkout `service/*.py` changes are picked up by restarting the monitor (Cursor stop hook, `pnpm restart:backend`, or `systemctl --user restart zoto-viz-monitor`). A running install also `git pull --ff-only`s the checkout every 5 minutes (`ZOTO_VIZ_PULL_S`, `ZOTO_VIZ_NO_AUTO_PULL=1` to skip). A fast-forward rebuilds `web/` when it changed, restarts the monitor, and hard-reloads the open UI. Dirty trees and missing remotes are left alone.
 

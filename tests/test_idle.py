@@ -72,8 +72,97 @@ def test_screensaver_hold_caffeinate_when_no_systemd() -> None:
         popen=lambda *a, **k: child,
         run=lambda *a, **k: subprocess.CompletedProcess(a[0], 1),
         display="",
+        platform="linux",
     )
     notes = hold.start()
     assert any("caffeinate" in n for n in notes)
     hold.stop()
     assert child.terminated
+
+
+def test_screensaver_hold_darwin_prefers_caffeinate() -> None:
+    child = _Proc()
+    hold = idle.ScreensaverHold(
+        which=lambda n: {
+            "caffeinate": "/usr/bin/caffeinate",
+            "systemd-inhibit": "/usr/bin/systemd-inhibit",
+        }.get(n),
+        popen=lambda *a, **k: child,
+        run=lambda *a, **k: subprocess.CompletedProcess(a[0], 0),
+        platform="darwin",
+    )
+    notes = hold.start()
+    assert any("caffeinate" in n for n in notes)
+    assert hold._child is child
+
+
+def test_screensaver_hold_xdg_suspend() -> None:
+    child = _Proc()
+    runner = _Run()
+
+    def run(cmd, **_k):
+        runner.calls.append(list(cmd))
+        if len(cmd) >= 2 and cmd[-2] == "suspend":
+            return subprocess.CompletedProcess(cmd, 0, stdout="cookie123\n")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    hold = idle.ScreensaverHold(
+        which=lambda n: {
+            "systemd-inhibit": "/usr/bin/systemd-inhibit",
+            "xdg-screensaver": "/usr/bin/xdg-screensaver",
+        }.get(n),
+        popen=lambda *a, **k: child,
+        run=run,
+        display=":0",
+        platform="linux",
+    )
+    notes = hold.start()
+    assert any("xdg-screensaver" in n for n in notes)
+    hold.stop()
+    assert ["/usr/bin/xdg-screensaver", "resume", "cookie123"] in runner.calls
+
+
+class _WinHold:
+    started = False
+    stopped = False
+
+    def start(self):
+        self.started = True
+        return ["screensaver: windows mock"]
+
+    def stop(self):
+        self.stopped = True
+
+
+def test_screensaver_hold_windows() -> None:
+    win = _WinHold()
+    hold = idle.ScreensaverHold(platform="windows", windows_hold=win)
+    notes = hold.start()
+    assert win.started
+    assert "windows mock" in notes[0]
+    hold.stop()
+    assert win.stopped
+
+
+def test_default_inhibit_enabled(monkeypatch) -> None:
+    monkeypatch.delenv("ZOTO_VIZ_HEADLESS", raising=False)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    assert idle.default_inhibit_enabled() is True
+    monkeypatch.setenv("ZOTO_VIZ_HEADLESS", "1")
+    assert idle.default_inhibit_enabled() is False
+
+
+def test_screensaver_tool_check_linux() -> None:
+    ok, detail, manual = idle.screensaver_tool_check("linux")
+    # CI may or may not have systemd-inhibit
+    if ok:
+        assert "systemd-inhibit" in detail
+    else:
+        assert manual
+
+
+def test_screensaver_tool_check_darwin() -> None:
+    ok, detail, _manual = idle.screensaver_tool_check("darwin")
+    if ok:
+        assert "caffeinate" in detail

@@ -58,6 +58,7 @@ from . import rf
 from . import sdm
 from . import sources
 from . import idle
+from . import plugin_catalog
 from . import sysconfig
 
 zotoviz = paths.load_cli()
@@ -1811,6 +1812,7 @@ async def on_startup(app: web.Application) -> None:
         asyncio.create_task(sources_poll_loop(app)),
         asyncio.create_task(sdm_poll_loop(app)),
         asyncio.create_task(repo_sync_loop(app)),
+        asyncio.create_task(plugin_catalog.poll_loop()),
     ]
 
 
@@ -1936,8 +1938,12 @@ def main() -> None:
     p.add_argument("--insecure-lan", action="store_true",
                    help="allow --bind on a non-loopback address (no password; anyone who can reach the port can read captures and trigger scans)")
     p.add_argument("--port", type=int, default=None, help="listen port (default: sys-config.yml port, else 7020)")
-    p.add_argument("--inhibit-screensaver", action="store_true",
-                   help="hold idle/sleep so the display does not blank (also sys-config.yml inhibit_screensaver)")
+    p.add_argument(
+        "--inhibit-screensaver",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="hold idle/sleep so the display does not blank (default on; off when headless/CI; sys-config.yml)",
+    )
     p.add_argument("-f", "--filter", default="", help="BPF capture filter, e.g. 'not port 22'")
     p.add_argument("--fresh", action="store_true", help="ignore persisted state")
     p.add_argument("--wifi-keys", type=Path, default=WIFI_KEYS_FILE, metavar="FILE",

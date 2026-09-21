@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zoto.io/schema/plugin-catalog-manifest.schema.json",
+  "title": "zoto-viz remote plugin catalog manifest",
+  "type": "object",
+  "required": ["plugins"],
+  "additionalProperties": true,
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "published_at": { "type": "string", "format": "date-time" },
+    "signature": {
+      "type": "string",
+      "description": "Optional Ed25519/minisign signature for future verification"
+    },
+    "plugins": {
+      "type": "array",
+      "minItems": 0,
+      "items": { "$ref": "#/$defs/pluginEntry" }
+    }
+  },
+  "$defs": {
+    "pluginEntry": {
+      "type": "object",
+      "required": ["id", "version", "url", "sha256", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "version": { "type": "integer", "minimum": 1 },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Release asset name or repo-relative path to the plugin zip"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "description": { "type": "string", "maxLength": 280 },
+        "min_app": { "type": "string" },
+        "size": { "type": "integer", "minimum": 0 },
+        "published_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
