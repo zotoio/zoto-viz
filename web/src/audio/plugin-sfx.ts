@@ -1,6 +1,6 @@
 import { soundAllowed } from "./sound";
 
-/** Low creature roar for viz plugins. Host-side so the sandboxed iframe never owns audio. */
+/** Low creature roar plus Backrooms bed (buzz / screech / pant). Host-side so the iframe never owns audio. */
 
 export function roarAmp(level: number): number {
   const x = Math.max(0, Math.min(1, level));
@@ -11,49 +11,97 @@ function clamp01(x: number): number {
   return x < 0 ? 0 : x > 1 ? 1 : x;
 }
 
+function fract(x: number): number {
+  return x - Math.floor(x);
+}
+
+function h11(n: number): number {
+  return fract(Math.sin(n) * 43758.5453123);
+}
+
 function smoothstep(e0: number, e1: number, x: number): number {
   const t = clamp01((x - e0) / (e1 - e0));
   return t * t * (3 - 2 * t);
-}
-
-function hold(ph: number, a: number, b: number): number {
-  return smoothstep(0, a, ph) * smoothstep(b + 0.12, b, ph);
 }
 
 function band(ph: number, a: number, b: number): number {
   return smoothstep(a, a + 0.07, ph) * smoothstep(b + 0.10, b, ph);
 }
 
-/** Locked to `plugin:backrooms` sky (`uTime` × 0.040). Roar on glance, spot, and the turn-and-run. */
+/** Locked to `plugin:backrooms` sky (`uTime` × 0.040). Walk-in, 90° cut, sprint. */
+export function backroomsPhase(t: number): {
+  phA: number;
+  cycle: number;
+  peekOn: boolean;
+  turnOn: boolean;
+  peekPh: number;
+  peek: number;
+  flee: number;
+  sprint: number;
+  threat: number;
+} {
+  const phA = fract(t * 0.040);
+  const cycle = Math.floor(t * 0.040);
+  const peekOn = h11(cycle + 17) > 0.68;
+  const peekPh = 0.34 + 0.05 * h11(cycle + 9);
+  const peek = peekOn ? band(phA, peekPh, peekPh + 0.07) : 0;
+  const fleePh = 0.40;
+  const flee = smoothstep(fleePh, fleePh + 0.07, phA);
+  const sprint = smoothstep(fleePh, fleePh + 0.04, phA) * smoothstep(0.86, 0.70, phA);
+  const threat = Math.max(peek * 0.9, sprint * 0.75, flee * 0.45);
+  return { phA, cycle, peekOn, turnOn: flee > 0.5, peekPh, peek, flee, sprint, threat };
+}
+
+export type BackroomsSfxLevels = {
+  roar: number;
+  screech: number;
+  pant: number;
+  buzz: number;
+};
+
+/** Fluorescent bed, peek screech, close roar, pant after the sprint. */
+export function backroomsSfxLevels(t: number): BackroomsSfxLevels {
+  const p = backroomsPhase(t);
+  const pant = smoothstep(0.72, 0.78, p.phA) * smoothstep(0.98, 0.88, p.phA);
+  const chirp = h11(Math.floor(t * 0.72) + p.cycle * 3.1) > 0.93 ? 0.35 : 0;
+  return {
+    roar: Math.max(p.peek * 0.45, p.flee * 0.35, p.threat * 0.25),
+    screech: Math.max(p.peek * 0.92, p.flee * 0.25 * (1 - p.sprint), chirp),
+    pant,
+    buzz: 1,
+  };
+}
+
+/** @deprecated use backroomsSfxLevels — kept for the close-creature roar gate. */
 export function backroomsRoarLevel(t: number): number {
-  const phA = t * 0.040 - Math.floor(t * 0.040);
-  const seen = smoothstep(0.11, 0.145, phA);
-  const come = seen * (1 - smoothstep(0.20, 0.26, phA));
-  const lookUp = hold(phA, 0.04, 0.10) * (1 - seen);
-  const turned = smoothstep(0.16, 0.22, phA);
-  const flee = Math.max(band(phA, 0.16, 0.88), turned);
-  const spot = come * (1 - turned);
-  return Math.max(spot * 0.55, flee);
+  return backroomsSfxLevels(t).roar;
 }
 
 export class PluginSfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  private level = 0;
+  private roarGain: GainNode | null = null;
+  private buzzGain: GainNode | null = null;
+  private screechGain: GainNode | null = null;
+  private pantGain: GainNode | null = null;
+  private pantLfo: OscillatorNode | null = null;
 
   setRoar(level: number): void {
-    this.level = Math.max(0, Math.min(1, level));
-    if (!soundAllowed() || this.level <= 0.008) {
-      this.fade(0);
+    this.setBackrooms(0, { roar: level, screech: 0, pant: 0, buzz: 0 });
+  }
+
+  setBackrooms(t: number, levels?: BackroomsSfxLevels): void {
+    const L = levels ?? backroomsSfxLevels(t);
+    if (!soundAllowed() || (L.roar + L.screech + L.pant + L.buzz) <= 0.008) {
+      this.fadeAll(0, 0, 0, 0);
       return;
     }
     this.ensure();
-    this.fade(roarAmp(this.level));
+    this.fadeAll(roarAmp(L.roar), 0.032 * L.buzz, 0.11 * L.screech, 0.14 * L.pant);
   }
 
   silence(): void {
-    this.level = 0;
-    this.fade(0);
+    this.fadeAll(0, 0, 0, 0);
   }
 
   dispose(): void {
@@ -61,24 +109,62 @@ export class PluginSfx {
     const ctx = this.ctx;
     this.ctx = null;
     this.master = null;
+    this.roarGain = null;
+    this.buzzGain = null;
+    this.screechGain = null;
+    this.pantGain = null;
+    this.pantLfo = null;
     if (ctx) void ctx.close();
   }
 
-  private fade(amp: number): void {
+  private fadeAll(roar: number, buzz: number, screech: number, pant: number): void {
     const ctx = this.ctx;
-    const master = this.master;
-    if (!ctx || !master) return;
+    if (!ctx) return;
     void ctx.resume();
-    master.gain.setTargetAtTime(amp, ctx.currentTime, 0.09);
+    const now = ctx.currentTime;
+    this.roarGain?.gain.setTargetAtTime(roar, now, 0.09);
+    this.buzzGain?.gain.setTargetAtTime(buzz, now, 0.18);
+    this.screechGain?.gain.setTargetAtTime(screech, now, 0.04);
+    this.pantGain?.gain.setTargetAtTime(pant, now, 0.12);
   }
 
   private ensure(): void {
     if (this.ctx || typeof AudioContext === "undefined") return;
     const ctx = new AudioContext();
     const master = ctx.createGain();
-    master.gain.value = 0;
+    master.gain.value = 1;
     master.connect(ctx.destination);
 
+    const roarGain = ctx.createGain();
+    roarGain.gain.value = 0;
+    roarGain.connect(master);
+    this.wireRoar(ctx, roarGain);
+
+    const buzzGain = ctx.createGain();
+    buzzGain.gain.value = 0;
+    buzzGain.connect(master);
+    this.wireBuzz(ctx, buzzGain);
+
+    const screechGain = ctx.createGain();
+    screechGain.gain.value = 0;
+    screechGain.connect(master);
+    this.wireScreech(ctx, screechGain);
+
+    const pantGain = ctx.createGain();
+    pantGain.gain.value = 0;
+    pantGain.connect(master);
+    this.wirePant(ctx, pantGain);
+
+    this.ctx = ctx;
+    this.master = master;
+    this.roarGain = roarGain;
+    this.buzzGain = buzzGain;
+    this.screechGain = screechGain;
+    this.pantGain = pantGain;
+    void ctx.resume();
+  }
+
+  private wireRoar(ctx: AudioContext, dest: GainNode): void {
     const noise = ctx.createBufferSource();
     const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -101,10 +187,9 @@ export class PluginSfx {
     growl.connect(growlGain);
     growlGain.connect(lp.frequency);
     noise.connect(lp);
-    lp.connect(master);
+    lp.connect(dest);
     noise.start();
     growl.start();
-
     for (const hz of [32, 47, 63]) {
       const osc = ctx.createOscillator();
       osc.type = "sine";
@@ -112,12 +197,105 @@ export class PluginSfx {
       const g = ctx.createGain();
       g.gain.value = hz < 40 ? 0.55 : 0.22;
       osc.connect(g);
-      g.connect(master);
+      g.connect(dest);
       osc.start();
     }
+  }
 
-    this.ctx = ctx;
-    this.master = master;
-    void ctx.resume();
+  private wireBuzz(ctx: AudioContext, dest: GainNode): void {
+    for (const hz of [60, 119.7, 240]) {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = hz;
+      const g = ctx.createGain();
+      g.gain.value = hz < 80 ? 0.22 : hz < 150 ? 0.12 : 0.04;
+      osc.connect(g);
+      g.connect(dest);
+      osc.start();
+    }
+    const hiss = ctx.createBufferSource();
+    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    hiss.buffer = buf;
+    hiss.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "bandpass";
+    hp.frequency.value = 4200;
+    hp.Q.value = 0.7;
+    const hg = ctx.createGain();
+    hg.gain.value = 0.08;
+    hiss.connect(hp);
+    hp.connect(hg);
+    hg.connect(dest);
+    hiss.start();
+  }
+
+  private wireScreech(ctx: AudioContext, dest: GainNode): void {
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = 2760;
+    const vib = ctx.createOscillator();
+    vib.type = "sine";
+    vib.frequency.value = 17;
+    const vg = ctx.createGain();
+    vg.gain.value = 90;
+    vib.connect(vg);
+    vg.connect(osc.frequency);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 3100;
+    bp.Q.value = 6;
+    osc.connect(bp);
+    bp.connect(dest);
+    osc.start();
+    vib.start();
+    const noise = ctx.createBufferSource();
+    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noise.buffer = buf;
+    noise.loop = true;
+    const nbp = ctx.createBiquadFilter();
+    nbp.type = "highpass";
+    nbp.frequency.value = 1800;
+    const ng = ctx.createGain();
+    ng.gain.value = 0.22;
+    noise.connect(nbp);
+    nbp.connect(ng);
+    ng.connect(dest);
+    noise.start();
+  }
+
+  private wirePant(ctx: AudioContext, dest: GainNode): void {
+    const noise = ctx.createBufferSource();
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < data.length; i++) {
+      last = 0.6 * last + 0.4 * (Math.random() * 2 - 1);
+      data[i] = last;
+    }
+    noise.buffer = buf;
+    noise.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 720;
+    bp.Q.value = 0.9;
+    const lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 3.4;
+    const lg = ctx.createGain();
+    lg.gain.value = 0.55;
+    const shaped = ctx.createGain();
+    shaped.gain.value = 0.45;
+    lfo.connect(lg);
+    lg.connect(shaped.gain);
+    noise.connect(bp);
+    bp.connect(shaped);
+    shaped.connect(dest);
+    noise.start();
+    lfo.start();
+    this.pantLfo = lfo;
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import FRAG from "../../../plugins/src/backrooms/sky/fragment.glsl?raw";
-import { backroomsRoarLevel } from "../audio/plugin-sfx";
+import { backroomsPhase, backroomsSfxLevels } from "../audio/plugin-sfx";
 import type { StateMsg } from "../core/types";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
@@ -28,8 +28,10 @@ describe("backrooms shipped pack", () => {
     expect("error" in wrapped).toBe(false);
     if ("error" in wrapped) return;
     expect(wrapped.frag).toContain("fract(t * 0.040)");
-    expect(wrapped.frag).toContain("chargeAge");
+    expect(wrapped.frag).toContain("leanX");
+    expect(wrapped.frag).toContain("1.5708 * turnDir * flee");
     expect(wrapped.frag).toContain("chamber");
+    expect(wrapped.frag).not.toContain("3.1416 * flee");
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
@@ -64,10 +66,15 @@ describe("backrooms shipped pack", () => {
     expect(samplePaperYellow()).toBeGreaterThan(0.35);
   });
 
-  it("locks roar peaks to the flee beat in the shader phase", () => {
-    const fleeT = 0.5 / 0.04;
-    expect(backroomsRoarLevel(fleeT)).toBeGreaterThan(0.7);
-    const stareT = 0.07 / 0.04;
-    expect(backroomsRoarLevel(stareT)).toBeLessThan(0.2);
+  it("cuts 90 and keeps running forward away from the creature", () => {
+    expect(FRAG).toContain("-min(s, sFlee)");
+    expect(FRAG).toContain("gone * turnDir");
+    expect(FRAG).toContain("bobAmp * abs(sin(gait))");
+    expect(FRAG).not.toContain("3.1416 * flee");
+    expect(FRAG).not.toContain("0.05 * sin(t * 0.77)");
+    const jog = backroomsPhase(0.2 / 0.040);
+    expect(jog.flee).toBeLessThan(0.05);
+    expect(backroomsPhase(0.55 / 0.040).flee).toBeGreaterThan(0.9);
+    expect(backroomsSfxLevels(0.5).buzz).toBe(1);
   });
 });

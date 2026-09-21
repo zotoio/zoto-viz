@@ -15,7 +15,7 @@ import { DebugLog, readDebugOn } from "../ui/debug-log";
 import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { liveSound } from "../audio/sound";
-import { PluginSfx, backroomsRoarLevel } from "../audio/plugin-sfx";
+import { PluginSfx } from "../audio/plugin-sfx";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -339,7 +339,7 @@ addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
-  if (mode.pluginId === "backrooms") pluginSfx.setRoar(backroomsRoarLevel(scene.skyTime()));
+  if (mode.pluginId === "backrooms") pluginSfx.setBackrooms(scene.skyTime());
   else pluginSfx.silence();
 });
 addPresentListener(markPresent);

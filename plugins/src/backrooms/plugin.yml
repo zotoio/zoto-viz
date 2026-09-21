@@ -1,8 +1,8 @@
 id: backrooms
 name: Backrooms
-version: 31
-hint: Level 0 yellow halls and a few wide empty rooms. When the walker is seen it charges; the cam stops, turns, and sprints the other way.
-description: Found-footage run through damp yellow halls. Far down the corridor a tall thing walks the floor. The moment it is visible it runs at the camera. The cam stops, turns, and sprints the other way, sometimes checking a side hall.
+version: 38
+hint: Level 0 yellow halls. A skinny thing walks the hall at you; when it gets close the cam cuts 90° and keeps running forward.
+description: Found-footage jog through damp yellow halls. A skinny creature stays on the path and walks toward the lens. When it is close the runner cuts into a side hall and keeps running forward — never reversing down the same corridor. Speed rises on the sprint. After that the runner pants; fluorescent tubes buzz; the thing screeches now and then.
 capabilities:
   - viz.read
   - viz.write

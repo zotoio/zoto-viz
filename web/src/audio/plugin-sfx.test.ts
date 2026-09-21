@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { backroomsRoarLevel, roarAmp, PluginSfx } from "./plugin-sfx";
+import { backroomsPhase, backroomsRoarLevel, backroomsSfxLevels, roarAmp, PluginSfx } from "./plugin-sfx";
+
+function firstPeekCycle(): number {
+  for (let c = 0; c < 80; c++) {
+    const t = (c + 0.42) / 0.040;
+    if (backroomsPhase(t).peekOn) return c;
+  }
+  throw new Error("no peek cycle");
+}
 
 describe("plugin sfx roar", () => {
   it("keeps the roar quiet and squares the attack", () => {
@@ -10,23 +18,27 @@ describe("plugin sfx roar", () => {
     expect(roarAmp(-1)).toBe(0);
   });
 
-  it("rises when the Backrooms creature is close", () => {
-    let peak = 0;
-    for (let i = 0; i < 400; i++) peak = Math.max(peak, backroomsRoarLevel(i * 0.05));
-    expect(peak).toBeGreaterThan(0.4);
-    expect(backroomsRoarLevel(0)).toBeGreaterThanOrEqual(0);
+  it("rises when the Backrooms creature peeks", () => {
+    const c = firstPeekCycle();
+    const peekT = (c + backroomsPhase((c + 0.42) / 0.040).peekPh + 0.04) / 0.040;
+    expect(backroomsPhase(peekT).peek).toBeGreaterThan(0.3);
+    expect(backroomsSfxLevels(peekT).screech).toBeGreaterThan(0.4);
+    expect(backroomsRoarLevel(0.2)).toBeLessThan(0.2);
   });
 
-  it("roars on the turn-and-run after a corridor spot", () => {
-    const fleeT = 0.50 / 0.040;
-    expect(backroomsRoarLevel(fleeT)).toBeGreaterThan(0.7);
-    const stareT = 0.07 / 0.040;
-    expect(backroomsRoarLevel(stareT)).toBeLessThan(0.2);
+  it("pants after the flee sprint and keeps a fluorescent bed", () => {
+    const pantT = 0.80 / 0.040;
+    expect(backroomsPhase(pantT).flee).toBeGreaterThan(0.9);
+    expect(backroomsSfxLevels(pantT).pant).toBeGreaterThan(0.3);
+    expect(backroomsSfxLevels(0).buzz).toBe(1);
+    expect(backroomsPhase(0.20 / 0.040).flee).toBeLessThan(0.05);
+    expect(backroomsPhase(0.55 / 0.040).flee).toBeGreaterThan(0.9);
   });
 
   it("accepts levels without throwing when Web Audio is missing", () => {
     const sfx = new PluginSfx();
     sfx.setRoar(0.8);
+    sfx.setBackrooms(1.2);
     sfx.setRoar(0);
     sfx.silence();
     sfx.dispose();
@@ -37,6 +49,7 @@ describe("plugin sfx roar", () => {
     liveSound.setOn(false, false);
     const sfx = new PluginSfx();
     sfx.setRoar(1);
+    sfx.setBackrooms(12);
     sfx.dispose();
   });
 });
