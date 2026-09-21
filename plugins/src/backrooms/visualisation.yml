@@ -1,0 +1,12 @@
+engine: graph
+base: topology
+look:
+  theme: amber
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.05
+  skySpeed: 1
+  skyAudio: false
+  gridOpacity: 0
+  chrome: false

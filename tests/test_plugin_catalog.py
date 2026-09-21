@@ -117,6 +117,7 @@ EXTRA_VIEWS = (
     "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
     "memory", "disk", "gpu", "sockets", "cgroups", "units", "udev", "syscon",
     "cypher-cic",
+    "backrooms",
 )
 
 

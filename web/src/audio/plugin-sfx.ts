@@ -22,7 +22,7 @@ function band(ph: number, a: number, b: number): number {
   return smoothstep(a, a + 0.07, ph) * smoothstep(b + 0.10, b, ph);
 }
 
-/** Locked to `plugins` local Backrooms sky (`uTime`). Roar on glance, spot, and the turn-and-run. */
+/** Locked to `plugin:backrooms` sky (`uTime` × 0.040). Roar on glance, spot, and the turn-and-run. */
 export function backroomsRoarLevel(t: number): number {
   const phA = t * 0.040 - Math.floor(t * 0.040);
   const seen = smoothstep(0.11, 0.145, phA);

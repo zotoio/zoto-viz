@@ -110,6 +110,7 @@ budget.
 | `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
 | `plugins/src/stereo-gram/` | Magic Eye autostereogram — hidden torus + talker orbs |
 | `plugins/src/cypher-cic/` | Cypherpunk CIC wall — neon holodeck infograph of SYS + NET, center-hero mosaic |
+| `plugins/src/backrooms/` | Liminal yellow corridor — glance / spot / flee sequence synced to host roar |
 
 Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
 with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,

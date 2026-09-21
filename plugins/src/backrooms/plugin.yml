@@ -1,0 +1,24 @@
+id: backrooms
+name: Backrooms
+version: 1
+hint: Liminal yellow corridor — look up, spot the thing, turn and run. Roar syncs to sky time.
+description: Stage-only liminal sequence on the plugin sky. A fluorescent carpet maze cycles through glance, spot, and flee beats locked to host audio at uTime × 0.040. Works on a fresh board via the host idle fixture — no local zip or stills required.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 1
+  maxBufferFloats: 8
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+    - uBright
+    - uOpacity
+frontend:
+  entry: frontend/index.ts
