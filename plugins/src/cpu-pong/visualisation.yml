@@ -4,3 +4,5 @@ look:
   backdrop: none
   gridShape: circle
   themeCycle: 'off'
+idle:
+  fixture: host

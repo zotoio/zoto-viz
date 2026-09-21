@@ -1,2 +1,4 @@
 engine: graph
 base: talkers
+idle:
+  fixture: host

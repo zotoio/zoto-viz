@@ -4,7 +4,7 @@ look:
   theme: nord
   backdrop: none
   gridShape: diamond
-  gridColor: "#4c566a"
+  gridColor: '#4c566a'
   bgOpacity: 0.9
   skyAudio: false
   gridAudio: true
@@ -15,11 +15,14 @@ layout:
   lanShell: 360
   internetShell: 520
 config:
-  - key: top
-    label: max nodes
-    type: number
-    default: 32
-    min: 8
-    max: 64
-    step: 4
-    hint: Keep this host, then named / connected advertisers, then the most recently heard. BLE random addresses otherwise flood the graph.
+- key: top
+  label: max nodes
+  type: number
+  default: 32
+  min: 8
+  max: 64
+  step: 4
+  hint: Keep this host, then named / connected advertisers, then the most recently
+    heard. BLE random addresses otherwise flood the graph.
+idle:
+  fixture: host

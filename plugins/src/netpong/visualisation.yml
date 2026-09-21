@@ -1,1 +1,3 @@
 engine: netpong
+idle:
+  fixture: host

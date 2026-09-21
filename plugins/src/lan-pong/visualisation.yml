@@ -8,5 +8,7 @@ look:
   bgAudio: true
   skyAudio: true
   gridAudio: false
-  themeCycle: "off"
-  skyCycle: "off"
+  themeCycle: 'off'
+  skyCycle: 'off'
+idle:
+  fixture: host

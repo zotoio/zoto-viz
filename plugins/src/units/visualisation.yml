@@ -6,4 +6,6 @@ look:
   theme: tactical
   backdrop: none
   gridShape: square
-  themeCycle: "off"
+  themeCycle: 'off'
+idle:
+  fixture: host

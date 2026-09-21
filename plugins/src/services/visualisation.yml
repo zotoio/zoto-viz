@@ -1,2 +1,4 @@
 engine: graph
 base: services
+idle:
+  fixture: host

@@ -2,4 +2,6 @@ engine: pacman
 look:
   theme: neon
   backdrop: none
-  themeCycle: "off"
+  themeCycle: 'off'
+idle:
+  fixture: host

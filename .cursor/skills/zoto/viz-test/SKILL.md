@@ -11,12 +11,36 @@ description: >-
 
 Systematically cycle every catalog VIEW on a running monitor and **fail** any view that shows only sky/floor/backdrop when the pack should render data. Screenshots and DOM checks are evidence; `sky_available` and HUD labels alone are not.
 
+**Standing rule:** every shipped plugin declares a **golden mock** (idle/sim/demo) so empty boards still paint meaningful content. Change-gated screenshots must never depend on live traffic.
+
 ## Preconditions
 
 1. Monitor UI is up: `http://127.0.0.1:7020/` (or the Vite dev port).
 2. Use a **visible browser** when an operator is watching (screenshots alone are not enough for live dogfood).
 3. Load the catalog: `GET http://127.0.0.1:7020/api/plugins` (or `list_plugins` via MCP). Every row is a `plugin:<id>` mode to test.
 4. Drive the UI in `plugin:<id>` mode — one view at a time.
+
+## Golden mock (required per plugin)
+
+Before cycling views, confirm each catalog id ships a verifiable golden set:
+
+| Plugin kind | Where to look | Pass bar |
+| --- | --- | --- |
+| **Demo / viz packs** (`viz.read` / `viz.write`) | `plugin.yml` → `viz.idle.fixture: host` | Host `buildIdleVizFrame()` seeds packets / RF / talkers / headlines when live slices are empty (`web/src/plugins/fixtures/idle-viz-frame.ts`) |
+| **Graph / arcade menu plugins** | `visualisation.yml` → `idle.fixture: host` | Host `goldenLanFixture()` merges LAN / CPU / source demo when capture is quiet (`web/src/plugins/fixtures/golden-lan-state.ts`) |
+| **Inline custom seed** | `plugin.yml` → `viz.idle` inline slices | Non-empty `packets` / `rf` / `talkers` / `headlines` arrays in YAML |
+
+Quick audit:
+
+```bash
+# every shipped src plugin — viz.idle or visualisation.idle must be host
+rg -l 'fixture: host' plugins/src/**/plugin.yml plugins/src/**/visualisation.yml
+pytest tests/test_plugin_catalog.py -k golden_idle
+```
+
+CI gate: `test_every_shipped_plugin_has_golden_idle` in `tests/test_plugin_catalog.py`.
+
+When live capture is empty, the VIEW test **Pass** bar is the golden set above. **Fail** on near-black `(≈5,10,22)`, chrome-only, or sky/floor/backdrop alone.
 
 ## Hard controls (every view)
 
@@ -42,8 +66,7 @@ For **each** catalog `plugin:<id>`:
    - images, stills, or video frames
    - game playfield / arcade canvas
    - idle or demo packets on the feed or stage
-4. **Fail** — sky, floor, stereogram, or backdrop **alone** when the pack should show data. Empty board, black canvas `(≈5,10,22)`, or mock data that never painted = **Fail**.
-5. **Stereogram / sky occlusion** — if a stereogram layer or full-screen sky hides the viz underneath, that is **Fail** for data-bearing packs.
+4. **Fail** — sky, floor, or backdrop **alone** when the pack should show data. Empty board, black canvas, chrome-only HUD, or golden mock that never painted = **Fail**.
 
 ## After the 10-second wait
 
@@ -61,8 +84,8 @@ Sample WebGL pixels (center + a side) per [.cursor/rules/verify-screens.mdc](../
 
 | Result | When |
 | --- | --- |
-| **Pass** | Data/imagery visible after 10s; HUD matches; no blocking console/log errors |
-| **Fail** | Sky/floor only, occlusion, empty board, wrong view label, or errors — note the `plugin:<id>` and evidence |
+| **Pass** | Data/imagery visible after 10s (live or golden mock); HUD matches; no blocking console/log errors |
+| **Fail** | Sky/floor only, empty board, wrong view label, or errors — note the `plugin:<id>` and evidence |
 | **Skip** | Operator explicitly excludes a view (document why) |
 
 Do not declare the run complete while any required view is **Fail**. Fix or file an issue, then re-run the failed ids.
@@ -71,4 +94,4 @@ Do not declare the run complete while any required view is **Fail**. Fix or file
 
 - Drive views and settings: [zoto-viz-mcp](../zoto-viz-mcp/SKILL.md)
 - Pixel and sky traps after live patches: [.cursor/rules/verify-screens.mdc](../../rules/verify-screens.mdc)
-- Plugin layout and consent: `docs/plugins.md`, `docs/plugins-viz.md`
+- Plugin layout, viz.idle contract, and consent: `docs/plugins.md`, `docs/plugins-viz.md`

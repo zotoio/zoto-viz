@@ -1,1 +1,3 @@
 engine: frogger
+idle:
+  fixture: host

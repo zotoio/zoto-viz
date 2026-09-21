@@ -40,6 +40,7 @@ import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
 import { PluginSandbox, pluginModuleUrl } from "./host";
+import type { PluginIdleConfig } from "./fixtures/golden-state";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
@@ -195,6 +196,8 @@ export interface PluginView {
   entry?: string;
   frontend?: { entry?: string };
   capabilities?: PluginCapability[];
+  /** visualisation.yml idle golden mock — graph / arcade when capture is quiet. */
+  idle?: PluginIdleConfig;
   viz?: VizPluginContract;
   typesafe?: TypeSafeContract;
   hash?: string;

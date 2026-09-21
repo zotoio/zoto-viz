@@ -1,2 +1,4 @@
 engine: graph
 base: watch
+idle:
+  fixture: host

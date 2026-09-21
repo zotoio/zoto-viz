@@ -10,29 +10,38 @@ look:
 style:
   labels: none
 config:
-  - key: live
-    label: live stream
-    type: boolean
-    default: true
-    hint: WebRTC video on the wall. Off keeps motion stills only.
-  - key: stills
-    label: motion stills
-    type: boolean
-    default: false
-    hint: Recent Pub/Sub motion JPEGs under the wall. Always shown when live is off.
-  - key: grid
-    label: layout
-    type: select
-    default: auto
-    hint: All sizes the wall to the cameras you picked (up to six). 2×2 is four panes. 3×2 is six.
-    values:
-      - [auto, all]
-      - [1, 1]
-      - [2, 2]
-      - [4, 2×2]
-      - [6, 3×2]
-  - key: pick
-    label: cameras
-    type: text
-    default: ""
-    hint: Comma-separated labels or ids. Empty means every camera that can stream. Named cameras are not padded with extras.
+- key: live
+  label: live stream
+  type: boolean
+  default: true
+  hint: WebRTC video on the wall. Off keeps motion stills only.
+- key: stills
+  label: motion stills
+  type: boolean
+  default: false
+  hint: Recent Pub/Sub motion JPEGs under the wall. Always shown when live is off.
+- key: grid
+  label: layout
+  type: select
+  default: auto
+  hint: "All sizes the wall to the cameras you picked (up to six). 2\xD72 is four\
+    \ panes. 3\xD72 is six."
+  values:
+  - - auto
+    - all
+  - - 1
+    - 1
+  - - 2
+    - 2
+  - - 4
+    - "2\xD72"
+  - - 6
+    - "3\xD72"
+- key: pick
+  label: cameras
+  type: text
+  default: ''
+  hint: Comma-separated labels or ids. Empty means every camera that can stream. Named
+    cameras are not padded with extras.
+idle:
+  fixture: host

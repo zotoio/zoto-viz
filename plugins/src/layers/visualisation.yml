@@ -1,2 +1,4 @@
 engine: graph
 base: layers
+idle:
+  fixture: host
