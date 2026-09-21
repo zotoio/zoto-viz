@@ -39,13 +39,16 @@ float room(vec3 p) {
 }
 
 float teeth(vec3 q, vec3 head, float grin) {
-  vec3 jaw = head + vec3(0.0, -0.04, 0.10);
-  float   d = cap(q, jaw + vec3(-0.055, 0.01, 0.0), jaw + vec3(-0.06, -0.07, 0.04), 0.010);
-  d = min(d, cap(q, jaw + vec3(-0.028, 0.02, 0.01), jaw + vec3(-0.03, -0.085, 0.05), 0.011));
-  d = min(d, cap(q, jaw + vec3(0.0, 0.02, 0.014), jaw + vec3(0.0, -0.095, 0.055), 0.012));
-  d = min(d, cap(q, jaw + vec3(0.028, 0.02, 0.01), jaw + vec3(0.03, -0.085, 0.05), 0.011));
-  d = min(d, cap(q, jaw + vec3(0.055, 0.01, 0.0), jaw + vec3(0.06, -0.07, 0.04), 0.010));
-  return mix(1e3, d, grin);
+  vec3 jaw = head + vec3(0.0, -0.05, 0.08);
+  float w = 0.12 + 0.06 * grin;
+  float d = cap(q, jaw + vec3(-w, 0.0, 0.01), jaw + vec3(w, 0.0, 0.01), 0.014 + 0.012 * grin);
+  for (int i = 0; i < 9; i++) {
+    float u = (float(i) - 4.0) * 0.25;
+    float x = u * w;
+    float len = 0.06 + 0.05 * grin + 0.018 * (1.0 - abs(u));
+    d = min(d, cap(q, jaw + vec3(x, 0.014, 0.02), jaw + vec3(x * 1.06, -len, 0.055), 0.0042));
+  }
+  return d;
 }
 
 vec2 stepFoot(float u, float stride) {
@@ -76,8 +79,9 @@ float creature(vec3 p, vec3 c, float t, float leanX, float face, float grin, flo
   d = smin(d, length(q - hip) - 0.062, 0.04);
   d = smin(d, cap(q, sh, head, 0.038), 0.028);
   d = smin(d, length(q - (head + vec3(leanX * 0.06, 0.06, 0.03))) - 0.074, 0.032);
-  d = smin(d, cap(q, head + vec3(0.0, -0.02, 0.08), head + vec3(0.0, -0.08, 0.15), mix(0.022, 0.072, grin)), 0.028);
-  d = min(d, teeth(q, head, grin));
+  d = min(d, teeth(q, head, max(grin, 0.72)));
+  d = min(d, length(q - (head + vec3(0.048, 0.05, 0.056))) - 0.015);
+  d = min(d, length(q - (head + vec3(-0.048, 0.05, 0.056))) - 0.015);
   vec3 elL = sh + vec3(mix(0.16, 0.09, rch), mix(-0.04, 0.07, rch) + 0.04 * sl, mix(0.44, 0.80, rch));
   vec3 wrL = elL + vec3(mix(0.06, 0.03, rch), 0.01 * sl, mix(0.50, 0.86, rch));
   vec3 elR = sh + vec3(mix(-0.15, -0.09, rch), mix(-0.07, 0.06, rch) + 0.04 * sr, mix(0.42, 0.78, rch));
@@ -115,7 +119,20 @@ float creature(vec3 p, vec3 c, float t, float leanX, float face, float grin, flo
   d = min(d, cap(q, ftR, ftR + vec3(0.0, 0.0, 0.035), 0.009));
   d += (n2(q.xz * 4.4 + q.y * 3.1) - 0.48) * 0.024;
   d += (n2(q.xy * 6.2 + t * 0.11) - 0.5) * 0.010;
-  return d;
+  return max(d, 0.02 - room(vec3(p.x, 1.2, p.z)));
+}
+
+void keepHall(inout vec3 p, float keep) {
+  for (int k = 0; k < 3; k++) {
+    float hd = room(p);
+    if (hd < keep) {
+      vec2 g = vec2(
+        room(p + vec3(0.03, 0.0, 0.0)) - room(p - vec3(0.03, 0.0, 0.0)),
+        room(p + vec3(0.0, 0.0, 0.03)) - room(p - vec3(0.0, 0.0, 0.03))
+      );
+      p.xz += (g / max(length(g), 1e-4)) * (keep - hd);
+    }
+  }
 }
 
 float map(vec3 p, vec3 c, float t, float leanX, float face, float grin, float rch) {
@@ -188,16 +205,7 @@ void main() {
   float bobAmp = mix(0.010, 0.036, max(max(threat, flee), close));
   float bob = bobAmp * abs(sin(gait)) * (1.0 - freeze);
   vec3 ro = vec3(x, 1.46 + bob, z);
-  for (int k = 0; k < 3; k++) {
-    float hd = room(ro);
-    if (hd < 0.22) {
-      vec2 g = vec2(
-        room(ro + vec3(0.03, 0.0, 0.0)) - room(ro - vec3(0.03, 0.0, 0.0)),
-        room(ro + vec3(0.0, 0.0, 0.03)) - room(ro - vec3(0.0, 0.0, 0.03))
-      );
-      ro.xz += (g / max(length(g), 1e-4)) * (0.24 - hd);
-    }
-  }
+  keepHall(ro, 0.22);
   x = ro.x;
   z = ro.z;
   float atTurn = peekOn * smoothstep(0.0, 0.7, gone);
@@ -209,6 +217,9 @@ void main() {
   vec3 cpos = vec3(hide * mix(1.32, 0.10, approach), 0.0, z - gap);
   cpos = mix(cpos, vec3(hide * 1.16, 0.0, -sTurn - minGap), atTurn);
   cpos.z -= (1.0 - peekOn) * mix(22.0, 14.0, step(0.86, h11(cycle + 21.0)));
+  vec3 cKeep = vec3(cpos.x, 1.2, cpos.z);
+  keepHall(cKeep, mix(0.30, 0.11, peek));
+  cpos.xz = cKeep.xz;
   float face = atan(x - cpos.x, z - cpos.z) - hide * 0.12 * peek;
   float roar = peekOn * smoothstep(peekPh, peekPh + 0.02, phA) * smoothstep(peekPh + 0.10, peekPh + 0.07, phA);
   float seeYaw = atan(-(cpos.x - x), -(cpos.z - z));
@@ -277,14 +288,15 @@ void main() {
   ccol *= 0.82 + 0.22 * n2(p.xz * 7.5 + p.y * 4.0);
   ccol += vec3(0.55, 0.55, 0.5) * Lceil * ndl * 0.18;
   ccol += vec3(0.28, 0.28, 0.3) * rim * 0.14;
-  vec3 hd = cpos + rotY(face) * vec3(leanX, 2.18, 0.14);
-  vec3 toEye = p - hd;
-  float eyes = exp(-dot(toEye - vec3(0.04, -0.02, 0.06), toEye - vec3(0.04, -0.02, 0.06)) * 90.0);
-  eyes += exp(-dot(toEye - vec3(-0.04, -0.02, 0.06), toEye - vec3(-0.04, -0.02, 0.06)) * 90.0);
-  ccol += vec3(0.55, 0.52, 0.42) * eyes * 0.28;
   vec3 qTooth = rotY(-face) * (p - cpos);
-  float isTooth = 1.0 - smoothstep(0.006, 0.022, teeth(qTooth, vec3(leanX, 2.18, 0.10), grin));
-  ccol = mix(ccol, vec3(0.93, 0.88, 0.70), isTooth * grin);
+  vec3 hd = vec3(leanX, 2.18, 0.10);
+  float isTooth = 1.0 - smoothstep(0.003, 0.012, teeth(qTooth, hd, max(grin, 0.72)));
+  ccol = mix(ccol, vec3(0.97, 0.96, 0.92), isTooth);
+  float isEye = 1.0 - smoothstep(0.006, 0.018, min(
+    length(qTooth - (hd + vec3(0.048, 0.05, 0.056))),
+    length(qTooth - (hd + vec3(-0.048, 0.05, 0.056)))
+  ));
+  ccol = mix(ccol, vec3(0.98, 0.98, 0.97), isEye);
   float cAlpha = 0.72 + 0.22 * wrap;
   col = mix(col, ccol, isC * cAlpha);
 

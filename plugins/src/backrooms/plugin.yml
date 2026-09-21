@@ -1,8 +1,8 @@
 id: backrooms
 name: Backrooms
-version: 63
+version: 65
 hint: Level 0 yellow halls. Distant until it charges, arms and fingers out. Roar — look, turn, run. Sound on.
-description: Found-footage jog through damp yellow halls. The runner stays on hall centerlines and only turns at junctions, at one-and-a-half times the creature's walk, always away from it. A long-legged organic thing — mottled flesh, bulbous joints, flinger claws — waits far down the hall ahead, then on a stagger beat runs at you with arms and fingers outstretched and never closer than two pillars. It may grin from a pillar or rake from the dark. When it roars you look, then turn 90° and run; you never follow it. Timing and which beat you get is hashed per loop. Fluorescent buzz, a brief distant music box, and creature vocals are recorded CC0 samples (header sound must be on) — not ripped film scores.
+description: Found-footage jog through damp yellow halls. The runner stays on hall centerlines and only turns at junctions, at one-and-a-half times the creature's walk, always away from it. A long-legged organic thing — mottled flesh, no nose, white eyes, a wide sharp toothy grin, bulbous joints, flinger claws — waits far down the hall ahead, then on a stagger beat runs at you with arms and fingers outstretched and never closer than two pillars. It stays in the halls (pushed off walls, limbs clipped) and may grin from a pillar or rake from the dark. When it roars you look, then turn 90° and run; you never follow it. Timing and which beat you get is hashed per loop. Fluorescent buzz, a brief distant music box, and creature vocals are recorded CC0 samples (header sound must be on) — not ripped film scores.
 capabilities:
   - viz.read
   - viz.write

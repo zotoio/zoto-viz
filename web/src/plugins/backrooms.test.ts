@@ -32,6 +32,9 @@ describe("backrooms shipped pack", () => {
     expect(wrapped.frag).toContain("1.5708 * turnDir");
     expect(wrapped.frag).toContain("faceTravel");
     expect(wrapped.frag).toContain("teeth");
+    expect(wrapped.frag).toContain("for (int i = 0; i < 9; i++)");
+    expect(wrapped.frag).toContain("vec3(0.98, 0.98, 0.97)");
+    expect(wrapped.frag).not.toContain("mix(0.022, 0.072, grin)");
     expect(wrapped.frag).toContain("chamber");
     expect(wrapped.frag).toContain("mix(0.62, 1.02, rch)");
     expect(wrapped.frag).toContain("floor(seed * 4.0)");
@@ -77,7 +80,12 @@ describe("backrooms shipped pack", () => {
     expect(FRAG).toContain("-min(s, sLock)");
     expect(FRAG).toContain("gone * turnDir");
     expect(FRAG).toContain("4.0 * ceil((sFlee - 2.0) * 0.25) + 2.0");
-    expect(FRAG).toContain("room(ro)");
+    expect(FRAG).toContain("keepHall(ro, 0.22)");
+    expect(FRAG).toContain("keepHall(cKeep, mix(0.30, 0.11, peek))");
+    expect(FRAG).toContain("max(d, 0.02 - room(vec3(p.x, 1.2, p.z)))");
+    expect(FRAG).toContain("max(grin, 0.72)");
+    expect(FRAG).toContain("0.0042");
+    expect(FRAG).not.toContain("head + vec3(0.0, -0.08, 0.15)");
     expect(FRAG).toContain("mix(1.32, 0.10, approach)");
     expect(FRAG).toContain("mix(lead, minGap, approach)");
     expect(FRAG).toContain("24.0 + 20.0 * h11(cycle + 3.0)");
