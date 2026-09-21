@@ -222,6 +222,7 @@ export interface StateMsg {
     temper?: number;
     weather?: string;
     prefix?: string;
+    autoconsent?: boolean;
   };
   /** Install checkout HEAD — UI hard-reloads when this changes after a repo sync. */
   repoRev?: string;

@@ -54,7 +54,10 @@ def test_autoconsent_patch() -> None:
     assert live.autoconsent_on() is False
     snap = live.queue_patch({"autoconsent": True})
     assert live.autoconsent_on() is True
+    assert snap["autoconsent"] is True
     assert snap["patch"]["autoconsent"] is True
+    live.queue_patch({"mode": "plugin:wifi"})
+    assert live.snapshot()["autoconsent"] is True
     cleaned = live.sanitize_patch({"autoconsent": True, "exec": "nope"})
     assert cleaned == {"autoconsent": True}
 

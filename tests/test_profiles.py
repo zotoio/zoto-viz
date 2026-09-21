@@ -8,7 +8,7 @@ import pytest
 import yaml
 from aiohttp import web
 
-from service import profiles
+from service import live, profiles
 
 
 class Req:
@@ -171,5 +171,25 @@ def test_agent_model_meta(tmp_path, monkeypatch) -> None:
         doc = profiles._read()
         assert doc["profiles"]["gemma4-latest"]["model"] == "gemma4"
         assert doc["profiles"]["gemma4-latest"]["label"] == "gemma4"
+
+    asyncio.run(run())
+
+
+def test_profile_put_syncs_autoconsent(tmp_path, monkeypatch) -> None:
+    _iso(tmp_path, monkeypatch)
+
+    async def run() -> None:
+        live.reset_for_tests()
+        created = await profiles.api_create(Req({
+            "id": "user",
+            "settings": {"autoconsent": False},
+            "make_default": True,
+        }))
+        assert created.status == 201
+        live.set_autoconsent(True)
+        assert live.autoconsent_on() is True
+        put = await profiles.api_put(Req({"settings": {"autoconsent": False}}, pid="user"))
+        assert put.status == 200
+        assert live.autoconsent_on() is False
 
     asyncio.run(run())

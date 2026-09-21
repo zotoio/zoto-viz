@@ -258,6 +258,9 @@ def _put_profile(pid: str, body: dict[str, Any]) -> web.Response:
         _write(doc)
     except OSError as e:
         return web.json_response({"error": str(e)}, status=500)
+    if pid == str(doc.get("default") or SHIPPED_ID) and isinstance(settings.get("autoconsent"), bool):
+        from . import live
+        live.set_autoconsent(bool(settings["autoconsent"]))
     return web.json_response({"id": pid, "label": p["label"], "shipped": False, "ok": True})
 
 

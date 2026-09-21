@@ -860,6 +860,10 @@ function applyLive(m: StateMsg): void {
     return;
   }
   if (live.temper != null || live.weather) agent.syncTemper({ temper: live.temper, weather: live.weather });
+  if (typeof live.autoconsent === "boolean") {
+    setAutoconsent(live.autoconsent);
+    autoconsentToggle.checked = live.autoconsent;
+  }
   if (live.patch && Object.keys(live.patch).length) void applyAgentPatch(live.patch);
 }
 

@@ -273,6 +273,7 @@ def state() -> dict[str, Any]:
         "p": meta["p"],
         "tickMs": meta["tick_ms"],
         "weatherLabel": meta["label"],
+        "autoconsent": autoconsent_on(),
     }
 
 
