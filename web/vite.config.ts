@@ -1,11 +1,15 @@
 /// <reference types="vitest/config" />
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export default defineConfig({
   server: {
     port: 5173,
+    fs: { allow: [repoRoot] },
     proxy: {
       "/ws": { target: `ws://127.0.0.1:${monitorPort}`, ws: true },
       "/api": { target: `http://127.0.0.1:${monitorPort}` },
@@ -13,7 +17,7 @@ export default defineConfig({
   },
   // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same
   // bytes in with `?inline` (no Node fs types in the browser tsconfig)
-  assetsInclude: ["**/*.wasm"],
+  assetsInclude: ["**/*.wasm", "**/*.glsl"],
   build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
   test: {
     environment: "happy-dom",

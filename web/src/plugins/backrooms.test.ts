@@ -1,14 +1,10 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import FRAG from "../../../plugins/src/backrooms/sky/fragment.glsl?raw";
 import { backroomsRoarLevel } from "../audio/plugin-sfx";
+import type { StateMsg } from "../core/types";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { buildVizFrameForPlugin, parseVizContract } from "./viz-host";
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../../plugins/src/backrooms");
-const FRAG = readFileSync(join(ROOT, "sky/fragment.glsl"), "utf8");
 
 const CONTRACT = parseVizContract({
   graphWalk: false,
@@ -37,7 +33,22 @@ describe("backrooms shipped pack", () => {
   });
 
   it("idle host fixture still feeds frames on an empty board", () => {
-    const frame = buildVizFrameForPlugin({ devices: [], flows: [], feed: [] }, 0, 0, CONTRACT.idle);
+    const empty: StateMsg = {
+      type: "state",
+      ts: 0,
+      iface: "",
+      interfaces: [],
+      network: "",
+      local_ip: "",
+      gateway: "",
+      uptime: 0,
+      stats: {
+        pps: 0, bps: 0, devices: 0, online: 0, flows: 0, active_flows: 0, packets: 0, bytes: 0,
+      },
+      devices: [],
+      flows: [],
+    };
+    const frame = buildVizFrameForPlugin(empty, 0, 0, CONTRACT.idle);
     expect(frame.demo).toBe(true);
     expect(frame.talkers.length).toBeGreaterThan(0);
     expect(frame.audio).toBeGreaterThan(0);
