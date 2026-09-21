@@ -74,6 +74,7 @@ export interface AgentPatch {
   mode?: string;
   redact?: boolean;
   merge?: boolean;
+  autoconsent?: boolean;
   feed?: Partial<FeedConfig>;
   chat?: Partial<ChatConfig>;
   show?: Partial<ViewShow>;
@@ -341,6 +342,7 @@ export function pickAgentSettings(patch: Record<string, unknown>, modeIds: strin
   if (typeof patch.mode === "string" && modeIds.includes(patch.mode)) out.mode = patch.mode;
   if (typeof patch.redact === "boolean") out.redact = patch.redact;
   if (typeof patch.merge === "boolean") out.merge = patch.merge;
+  if (typeof patch.autoconsent === "boolean") out.autoconsent = patch.autoconsent;
   if (patch.feed && typeof patch.feed === "object" && !Array.isArray(patch.feed)) {
     const f = patch.feed as Record<string, unknown>;
     const feed: NonNullable<AgentPatch["feed"]> = {};
@@ -446,6 +448,7 @@ export function mergeAgentPatch(base: ProfileSettings, patch: AgentPatch): Profi
     mode: patch.mode ?? base.mode,
     redact: patch.redact ?? base.redact,
     merge: patch.merge ?? base.merge,
+    autoconsent: patch.autoconsent ?? base.autoconsent,
     feed: { ...base.feed, ...patch.feed, source: "traffic" },
     chat: { ...base.chat, ...patch.chat },
     show: { ...base.show, ...patch.show },

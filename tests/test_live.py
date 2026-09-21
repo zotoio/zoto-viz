@@ -49,6 +49,16 @@ def test_weather_and_patch_seq() -> None:
     assert nxt["band"] == "keen"
 
 
+def test_autoconsent_patch() -> None:
+    live.reset_for_tests()
+    assert live.autoconsent_on() is False
+    snap = live.queue_patch({"autoconsent": True})
+    assert live.autoconsent_on() is True
+    assert snap["patch"]["autoconsent"] is True
+    cleaned = live.sanitize_patch({"autoconsent": True, "exec": "nope"})
+    assert cleaned == {"autoconsent": True}
+
+
 def test_sanitize_drops_junk() -> None:
     p = live.sanitize_patch({
         "theme": "matrix",

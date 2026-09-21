@@ -1,10 +1,11 @@
 ---
 name: zoto-viz-test
 description: >-
-  Visually verify every zoto-viz VIEW/plugin on a running monitor: dice off,
-  wait for real graph/data (not sky/floor alone), DOM + screenshot + console +
-  logs. Use when dogfooding packs, after plugin/sky/idle changes, when the user
-  asks to cycle views, screenshot views, or check empty-board / mock data paint.
+  Visually verify every zoto-viz VIEW/plugin on a running monitor: enable
+  autoconsent, dice off, wait for real graph/data (not sky/floor alone), DOM +
+  screenshot + console + logs. Use when dogfooding packs, after plugin/sky/idle
+  changes, when the user asks to cycle views, screenshot views, or check
+  empty-board / mock data paint.
 ---
 
 # zoto-viz visual VIEW test
@@ -15,10 +16,21 @@ Systematically cycle every catalog VIEW on a running monitor and **fail** any vi
 
 ## Preconditions
 
-1. Monitor UI is up: `http://127.0.0.1:7020/` (or the Vite dev port).
+1. Monitor UI is up: `http://127.0.0.1:7020/` (or the Vite dev port) and `POST /mcp` on loopback.
 2. **Visible computer-use Chrome (required).** When testing zoto-viz (or any UI) in a browser, drive the **visible computer-use Chrome** session so the operator can watch. Headless capture is optional supplementary evidence only — never a substitute for operator-facing verification.
 3. Load the catalog: `GET http://127.0.0.1:7020/api/plugins` (or `list_plugins` via MCP). Every row is a `plugin:<id>` mode to test.
-4. Drive the UI in `plugin:<id>` mode — one view at a time.
+4. **Enable autoconsent** before cycling views — one MCP call so code/GLSL packs are not blocked by the consent dialog:
+
+```json
+{"name":"set_settings","arguments":{"autoconsent":true}}
+```
+
+This auto-grants consent for **shipped** `plugins/src/<id>/` trees (`authored`) and **local** `~/.zoto-viz/plugins/local/*.zip` packs (`reviewed`). It does **not** consent arbitrary contrib zips in `plugins/*.zip` — those still need `consent_plugin`. Persist via Settings → Privacy → **auto-consent plugins**, or leave the MCP patch applied for the session.
+
+5. **TypeScript plugins** — if any view ships `frontend/`, ensure Settings → Agent → **allow TypeScript plugins** is on.
+6. Drive the UI in `plugin:<id>` mode — one view at a time.
+
+See also: [zoto-viz-mcp](../zoto-viz-mcp/SKILL.md) for tool schemas and [reference.md](../zoto-viz-mcp/reference.md).
 
 ## Golden mock (required per plugin)
 
@@ -50,7 +62,7 @@ Apply once before cycling; re-check if settings drift:
 | --- | --- |
 | **Dice** | **OFF** — header repeat dice and one-shot `roll_dice` must not advance views during the run |
 | Dream / AI auto-cycle | **OFF** — no `dream` rotation or agent-driven view shuffle |
-| Consent | **Granted** for code/GLSL packs (`consent_plugin` with `authored` or `reviewed` as needed) |
+| **Autoconsent** | **ON** for dogfood — `set_settings` `{autoconsent: true}` (src + local only; contrib zips still need `consent_plugin`) |
 
 Use MCP `set_settings` or the in-app controls. See [zoto-viz-mcp](../zoto-viz-mcp/SKILL.md) for tool names and curl recipes.
 
@@ -68,6 +80,8 @@ For **each** catalog `plugin:<id>`:
    - idle or demo packets on the feed or stage
 4. **Fail** — sky, floor, or backdrop **alone** when the pack should show data. Empty board, black canvas, chrome-only HUD, or golden mock that never painted = **Fail**.
 
+If a pack was just edited in git (`plugins/src/`), reload or `set_settings` `{ "reloadPlugins": true }` before verifying — DevTools hot patches are not the shipped screen.
+
 ## After the 10-second wait
 
 On each view, capture and inspect:
@@ -80,6 +94,25 @@ On each view, capture and inspect:
 
 Sample WebGL pixels (center + a side) per [.cursor/rules/verify-screens.mdc](../../rules/verify-screens.mdc).
 
+## Consent without autoconsent
+
+When autoconsent must stay **off** (normal operator use):
+
+```json
+{"name":"consent_plugin","arguments":{"id":"<id>","kind":"authored"}}
+```
+
+Use `authored` for first-party src trees; `reviewed` for local zips you examined but did not write. Then `set_view`.
+
+## Failure triage
+
+| Symptom | Check |
+| --- | --- |
+| Black / near-black sky | Consent (`consent_plugin` or autoconsent), shader compile (`sky_error`), `look.backdrop` = `plugin` |
+| Consent modal blocks UI | `autoconsent: true` or manual `consent_plugin` |
+| TS plugin empty | Agent → allow TypeScript plugins; `spec.consent` on `/api/plugins` |
+| Wrong view label | `set_view` mode string vs mosaic tile focus |
+
 ## Reporting
 
 | Result | When |
@@ -89,6 +122,12 @@ Sample WebGL pixels (center + a side) per [.cursor/rules/verify-screens.mdc](../
 | **Skip** | Operator explicitly excludes a view (document why) |
 
 Do not declare the run complete while any required view is **Fail**. Fix or file an issue, then re-run the failed ids.
+
+## Hard rules
+
+- Do not declare done on a black or swapped view.
+- Autoconsent does not weaken hash invalidation: stale consent still fails until re-granted (autoconsent re-grants only for eligible origins).
+- Contrib zips (`origin: zip`) are never auto-consented — explicit `consent_plugin` required.
 
 ## Related
 

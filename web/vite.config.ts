@@ -21,6 +21,7 @@ export default defineConfig({
   build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
   test: {
     environment: "happy-dom",
+    setupFiles: ["src/test/setup.ts"],
     include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",

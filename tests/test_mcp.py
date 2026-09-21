@@ -221,6 +221,9 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
     schema = next(t for t in listed["result"]["tools"] if t["name"] == "set_settings")["inputSchema"]
     assert "gravity" in schema["properties"]["anim"]["properties"]
     assert "mosaic" in schema["properties"]["anim"]["properties"]
+    assert schema["properties"]["autoconsent"]["type"] == "boolean"
+    auto = json.loads(plugin_mcp.call_tool("set_settings", {"autoconsent": True})["content"][0]["text"])
+    assert auto["applied"]["autoconsent"] is True
 
 
 def test_list_plugins_includes_prompt_knob(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

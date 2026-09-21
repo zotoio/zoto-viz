@@ -238,6 +238,40 @@ def test_python_enabled_and_consent(tmp_path: Path, monkeypatch) -> None:
     assert (tmp_path / "plugin-consent.yml").stat().st_mode & 0o777 == 0o600
 
 
+def test_autoconsent_flag(tmp_path: Path, monkeypatch) -> None:
+    from service import live
+
+    monkeypatch.setattr(plugins, "CONSENT_FILE", tmp_path / "plugin-consent.yml")
+    live.reset_for_tests()
+    src_ts = {
+        "id": "pulse",
+        "version": 1,
+        "runtime": "typescript",
+        "hash": "abc",
+        "origin": "src",
+    }
+    zip_ts = {**src_ts, "id": "contrib", "origin": "zip"}
+    local_ts = {**src_ts, "id": "local-pack", "origin": "local"}
+
+    assert plugins.consented(src_ts) is False
+    assert plugins.consented(zip_ts) is False
+
+    live.set_autoconsent(True)
+    assert plugins.consented(src_ts) is True
+    assert plugins.consent_kind(src_ts) == "authored"
+    assert plugins.consented(zip_ts) is False
+    assert plugins.consented(local_ts) is True
+    assert plugins.consent_kind(local_ts) == "reviewed"
+
+    live.set_autoconsent(False)
+    stale = {**src_ts, "hash": "def"}
+    assert plugins.consented(stale) is False
+
+    live.set_autoconsent(True)
+    assert plugins.consented(stale) is True
+    assert plugins.consent_kind(stale) == "authored"
+
+
 def test_api_consent(tmp_path: Path, monkeypatch) -> None:
     import asyncio
 

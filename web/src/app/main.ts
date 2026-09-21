@@ -89,6 +89,7 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
@@ -495,6 +496,19 @@ let tsWatchHash = "";
 async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   if (!spec || !pluginNeedsReview(spec)) return true;
   if (spec.consent) return true;
+  if (autoconsentEnabled() && autoconsentEligible(spec)) {
+    const kind = autoconsentKind(spec);
+    try {
+      await grantPluginConsent(spec.id, kind);
+      spec.consent = kind;
+      if (spec.hash) consentHash(spec.id, spec.hash);
+      if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+      return true;
+    } catch (e) {
+      console.warn("zoto-viz plugin autoconsent:", e);
+      return false;
+    }
+  }
   const kind = await askPluginReview(spec);
   if (!kind) return false;
   try {
@@ -1181,7 +1195,18 @@ liveChat.onSend = (text) => agent.offerSend(text);
 liveChat.onMicDown = () => agent.beginTalk();
 liveChat.onMicUp = () => agent.endTalk();
 liveChat.seedTranscript(agent.transcript());
-const privSec = settings.addSection("Privacy", [redactToggle]);
+const autoconsentToggle = new Toggle({
+  id: "autoconsent",
+  label: "auto-consent plugins",
+  className: "warn",
+  title: "when on, shipped plugins/src and ~/.zoto-viz/plugins/local zips are consented automatically — not contrib zips dropped into plugins/",
+  checked: autoconsentEnabled(),
+  onChange: (on) => {
+    setAutoconsent(on);
+    touch();
+  },
+});
+const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle]);
 $("settingsBox").appendChild(settings.el);
 settings.attachViewCog($("modeBox"), () => bindThisView(modeSel.value));
 agent.mountSettings(settings.agentHost());
@@ -1562,6 +1587,7 @@ function collectSettings(): ProfileSettings {
     },
     merge: mergeToggle.checked,
     redact: redactToggle.checked,
+    autoconsent: autoconsentEnabled(),
     filters: settings.filterText(),
     anim: { ...settings.animSettings },
     feed: { ...settings.feedSettings },
@@ -1605,6 +1631,8 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   mergeToggle.checked = s.merge;
   localStorage.setItem("zoto-viz.merge", s.merge ? "1" : "0");
   setRedaction(s.redact);
+  setAutoconsent(s.autoconsent);
+  autoconsentToggle.checked = s.autoconsent;
   settings.setFilterText(s.filters);
   paintAgentLook(s.agent ?? { decos: [] });
   settings.applyAnim(s.anim);
