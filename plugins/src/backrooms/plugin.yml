@@ -1,8 +1,8 @@
 id: backrooms
 name: Backrooms
-version: 38
-hint: Level 0 yellow halls. A skinny thing walks the hall at you; when it gets close the cam cuts 90° and keeps running forward.
-description: Found-footage jog through damp yellow halls. A skinny creature stays on the path and walks toward the lens. When it is close the runner cuts into a side hall and keeps running forward — never reversing down the same corridor. Speed rises on the sprint. After that the runner pants; fluorescent tubes buzz; the thing screeches now and then.
+version: 44
+hint: Level 0 yellow halls. A skinny thing leans a toothy grin from a pillar; the cam freezes, then cuts 90° at a junction and runs. Recorded tube buzz and entity scream (sound on).
+description: Found-footage jog through damp yellow halls. The runner stays on hall centerlines and only turns at junctions — never through a wall. While you walk, the creature can pop its head from behind a pillar at an angle and grin. That freeze is the beat — then the runner cuts into a side hall and keeps going forward. Fluorescent buzz and creature vocals are recorded CC0 samples (header sound must be on).
 capabilities:
   - viz.read
   - viz.write

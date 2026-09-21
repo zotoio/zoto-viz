@@ -36,13 +36,18 @@ describe("plugin sfx roar", () => {
     expect(backroomsRoarLevel(0.2)).toBeLessThan(0.2);
   });
 
-  it("pants after the flee sprint and keeps a fluorescent bed", () => {
-    const pantT = 0.80 / 0.040;
-    expect(backroomsPhase(pantT).flee).toBeGreaterThan(0.9);
+  it("freezes on the pillar grin then pants after the cut", () => {
+    const c = firstPeekCycle();
+    const ph = backroomsPhase((c + 0.5) / 0.040);
+    const freezeT = (c + ph.peekPh + 0.04) / 0.040;
+    expect(backroomsPhase(freezeT).freeze).toBeGreaterThan(0.5);
+    expect(backroomsPhase(freezeT).flee).toBeLessThan(0.25);
+    const fleeT = (c + ph.peekPh + 0.22) / 0.040;
+    expect(backroomsPhase(fleeT).flee).toBeGreaterThan(0.9);
+    const pantT = (c + 0.80) / 0.040;
     expect(backroomsSfxLevels(pantT).pant).toBeGreaterThan(0.3);
     expect(backroomsSfxLevels(0).buzz).toBe(1);
     expect(backroomsPhase(0.20 / 0.040).flee).toBeLessThan(0.05);
-    expect(backroomsPhase(0.55 / 0.040).flee).toBeGreaterThan(0.9);
   });
 
   it("ships the CC0 Backrooms samples next to ATTRIBUTION", () => {

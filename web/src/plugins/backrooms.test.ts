@@ -29,7 +29,8 @@ describe("backrooms shipped pack", () => {
     if ("error" in wrapped) return;
     expect(wrapped.frag).toContain("fract(t * 0.040)");
     expect(wrapped.frag).toContain("leanX");
-    expect(wrapped.frag).toContain("1.5708 * turnDir * flee");
+    expect(wrapped.frag).toContain("1.5708 * turnDir * atTurn");
+    expect(wrapped.frag).toContain("teeth");
     expect(wrapped.frag).toContain("chamber");
     expect(wrapped.frag).not.toContain("3.1416 * flee");
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
@@ -66,15 +67,17 @@ describe("backrooms shipped pack", () => {
     expect(samplePaperYellow()).toBeGreaterThan(0.35);
   });
 
-  it("cuts 90 and keeps running forward away from the creature", () => {
-    expect(FRAG).toContain("-min(s, sFlee)");
+  it("peeks a toothy grin from a pillar, freezes, then cuts 90 forward", () => {
+    expect(FRAG).toContain("-min(s, sLock)");
     expect(FRAG).toContain("gone * turnDir");
-    expect(FRAG).toContain("bobAmp * abs(sin(gait))");
+    expect(FRAG).toContain("4.0 * ceil((sFlee - 2.0) * 0.25) + 2.0");
+    expect(FRAG).toContain("room(ro)");
+    expect(FRAG).toContain("hide * 1.08");
+    expect(FRAG).toContain("peek * (-hide)");
+    expect(FRAG).toContain("bobAmp * abs(sin(gait)) * (1.0 - freeze)");
     expect(FRAG).not.toContain("3.1416 * flee");
-    expect(FRAG).not.toContain("0.05 * sin(t * 0.77)");
-    const jog = backroomsPhase(0.2 / 0.040);
+    const jog = backroomsPhase(0.12 / 0.040);
     expect(jog.flee).toBeLessThan(0.05);
-    expect(backroomsPhase(0.55 / 0.040).flee).toBeGreaterThan(0.9);
     expect(backroomsSfxLevels(0.5).buzz).toBe(1);
   });
 });

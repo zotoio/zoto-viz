@@ -17,6 +17,6 @@ zoto.onFrame = (frame) => {
     const x = Math.sin(n) * 43758.5453123;
     return x - Math.floor(x);
   };
-  const peekOn = hash(cycle + 17) > 0.68 ? 1 : 0;
+  const peekOn = hash(cycle + 17) > 0.42 ? 1 : 0;
   zoto.writeBuffer(0, [phA, frame.audio, peekOn, 0]);
 };

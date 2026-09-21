@@ -28,7 +28,7 @@ function band(ph: number, a: number, b: number): number {
   return smoothstep(a, a + 0.07, ph) * smoothstep(b + 0.10, b, ph);
 }
 
-/** Locked to `plugin:backrooms` sky (`uTime` × 0.040). Walk-in, 90° cut, sprint. */
+/** Locked to `plugin:backrooms` sky (`uTime` × 0.040). Pillar peek, freeze, 90° cut. */
 export function backroomsPhase(t: number): {
   phA: number;
   cycle: number;
@@ -36,20 +36,26 @@ export function backroomsPhase(t: number): {
   turnOn: boolean;
   peekPh: number;
   peek: number;
+  freeze: number;
   flee: number;
   sprint: number;
   threat: number;
 } {
   const phA = fract(t * 0.040);
   const cycle = Math.floor(t * 0.040);
-  const peekOn = h11(cycle + 17) > 0.68;
-  const peekPh = 0.34 + 0.05 * h11(cycle + 9);
-  const peek = peekOn ? band(phA, peekPh, peekPh + 0.07) : 0;
-  const fleePh = 0.40;
-  const flee = smoothstep(fleePh, fleePh + 0.07, phA);
-  const sprint = smoothstep(fleePh, fleePh + 0.04, phA) * smoothstep(0.86, 0.70, phA);
-  const threat = Math.max(peek * 0.9, sprint * 0.75, flee * 0.45);
-  return { phA, cycle, peekOn, turnOn: flee > 0.5, peekPh, peek, flee, sprint, threat };
+  const peekOn = h11(cycle + 17) > 0.42;
+  const peekPh = 0.26 + 0.05 * h11(cycle + 9);
+  const peek = peekOn ? band(phA, peekPh, peekPh + 0.08) : 0;
+  const freeze = peekOn
+    ? smoothstep(peekPh, peekPh + 0.015, phA) * smoothstep(peekPh + 0.12, peekPh + 0.085, phA)
+    : 0;
+  const fleePh = peekPh + 0.12;
+  const flee = peekOn ? smoothstep(fleePh, fleePh + 0.06, phA) : 0;
+  const sprint = peekOn
+    ? smoothstep(fleePh, fleePh + 0.04, phA) * smoothstep(0.86, 0.70, phA)
+    : 0;
+  const threat = Math.max(peek * 0.95, sprint * 0.75, freeze * 0.8);
+  return { phA, cycle, peekOn, turnOn: flee > 0.5, peekPh, peek, freeze, flee, sprint, threat };
 }
 
 export type BackroomsSfxLevels = {

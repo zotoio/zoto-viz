@@ -110,7 +110,7 @@ budget.
 | `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
 | `plugins/src/stereo-gram/` | Magic Eye autostereogram — hidden torus + talker orbs |
 | `plugins/src/cypher-cic/` | Cypherpunk CIC wall — neon holodeck infograph of SYS + NET, center-hero mosaic |
-| `plugins/src/backrooms/` | Liminal yellow halls — walk-in, 90° forward cut, host buzz / screech / pant |
+| `plugins/src/backrooms/` | Liminal yellow halls — pillar peek + toothy grin, freeze, 90° junction cut (no wall-clip); CC0 tube-buzz + entity scream |
 
 Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
 with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,
