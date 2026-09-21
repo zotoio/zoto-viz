@@ -1,4 +1,6 @@
 engine: graph
 base: protocols
+idle:
+  fixture: host
 look:
   backdrop: plugin

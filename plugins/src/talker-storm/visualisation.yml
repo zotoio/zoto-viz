@@ -1,4 +1,6 @@
 engine: graph
 base: talkers
+idle:
+  fixture: host
 look:
   backdrop: plugin

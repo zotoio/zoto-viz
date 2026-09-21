@@ -1,5 +1,7 @@
 engine: graph
 base: talkers
+idle:
+  fixture: host
 look:
   theme: neon
   backdrop: plugin

@@ -1,4 +1,6 @@
 engine: graph
 base: wifi
+idle:
+  fixture: host
 look:
   backdrop: plugin

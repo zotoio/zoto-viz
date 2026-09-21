@@ -16,7 +16,7 @@ Systematically cycle every catalog VIEW on a running monitor and **fail** any vi
 ## Preconditions
 
 1. Monitor UI is up: `http://127.0.0.1:7020/` (or the Vite dev port).
-2. Use a **visible browser** when an operator is watching (screenshots alone are not enough for live dogfood).
+2. **Visible computer-use Chrome (required).** When testing zoto-viz (or any UI) in a browser, drive the **visible computer-use Chrome** session so the operator can watch. Headless capture is optional supplementary evidence only — never a substitute for operator-facing verification.
 3. Load the catalog: `GET http://127.0.0.1:7020/api/plugins` (or `list_plugins` via MCP). Every row is a `plugin:<id>` mode to test.
 4. Drive the UI in `plugin:<id>` mode — one view at a time.
 

@@ -1,5 +1,7 @@
 engine: graph
 base: bridge
+idle:
+  fixture: host
 style:
   flatten: false
 look:
