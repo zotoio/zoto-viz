@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Fast-forward the checkout once a minute. On new commits: rebuild if needed,
-# restart the live monitor + Vite, hard-reload the zoto-viz Chrome tab, then
-# autoconsent and load plugin views that landed in the pull (single VIEW or mosaic).
+# Fast-forward the checkout once a minute. On new commits: full web rebuild,
+# restart the live monitor + Vite, wait 10s, hard-reload the zoto-viz Chrome
+# tab, then autoconsent and load plugin views that landed in the pull.
 #
 #   bash scripts/pull-watch.sh          # loop
 #   bash scripts/pull-watch.sh --once   # one pass
 #
 # Env: ZOTO_VIZ_PULL_WATCH_S (default 60), ZOTO_VIZ_PORT (7020),
-# ZOTO_VIZ_FRONTEND_PORT (5173), ZOTO_VIZ_CHROME_DEBUG (9222, comma-separated).
+# ZOTO_VIZ_FRONTEND_PORT (5173), ZOTO_VIZ_CHROME_DEBUG (9222, comma-separated),
+# ZOTO_VIZ_RELOAD_WAIT_S (default 10).
 # Dirty trees, merges, and missing upstream are skipped (never reset).
 # Set ZOTO_VIZ_NO_AUTO_PULL=1 on the monitor if you want this script to be
 # the only puller (the process already pulls every 5 minutes).
@@ -40,6 +41,7 @@ prefer_node22
 INTERVAL="${ZOTO_VIZ_PULL_WATCH_S:-60}"
 PORT="${ZOTO_VIZ_PORT:-7020}"
 FRONT="${ZOTO_VIZ_FRONTEND_PORT:-5173}"
+RELOAD_WAIT_S="${ZOTO_VIZ_RELOAD_WAIT_S:-10}"
 MCP="http://127.0.0.1:${PORT}/mcp"
 UNIT="zoto-viz-monitor"
 ONCE=0
@@ -192,27 +194,18 @@ PY
 }
 
 restart_services() {
-  local did=0
-  if systemctl --user is-active --quiet "$UNIT" 2>/dev/null; then
+  if systemctl --user list-unit-files "$UNIT.service" --no-legend 2>/dev/null | grep -q . \
+    || systemctl --user is-active --quiet "$UNIT" 2>/dev/null; then
     log "restart $UNIT"
     systemctl --user restart "$UNIT"
-    did=1
-  fi
-  if [[ -f "$ROOT/.run/frontend.pid" || -f "$ROOT/.run/backend.pid" ]]; then
-    if systemctl --user is-active --quiet "$UNIT" 2>/dev/null; then
-      log "restart vite frontend"
-      bash "$ROOT/scripts/dev.sh" restart frontend
-    else
-      log "restart backend + frontend"
-      bash "$ROOT/scripts/dev.sh" restart both
-    fi
-    did=1
-  elif [[ $did -eq 0 ]]; then
-    log "restart backend + frontend (nothing was marked running)"
+    log "restart vite frontend"
+    bash "$ROOT/scripts/dev.sh" restart frontend
+  else
+    log "restart backend + frontend"
     bash "$ROOT/scripts/dev.sh" restart both
-    did=1
   fi
   wait_port "$PORT" 40 || log "warn: :$PORT not up after restart"
+  wait_port "$FRONT" 20 || log "warn: :$FRONT not up after restart"
 }
 
 apply_updates() {
@@ -221,10 +214,8 @@ apply_updates() {
     log "pip install -r requirements.txt"
     "$(py)" -m pip install -r "$ROOT/requirements.txt"
   fi
-  if grep -E '^(web/|plugins/src/)' <<<"$files" >/dev/null; then
-    log "pnpm --dir web build"
-    pnpm --dir "$ROOT/web" build
-  fi
+  log "pnpm --dir web build"
+  pnpm --dir "$ROOT/web" build
 }
 
 load_plugin_views() {
@@ -291,6 +282,8 @@ tick() {
   log "changed $(echo "$files" | grep -c . || true) files"
   apply_updates "$files"
   restart_services
+  log "wait ${RELOAD_WAIT_S}s before browser reload"
+  sleep "$RELOAD_WAIT_S"
   if reload_chrome; then
     log "reloaded Chrome tab"
   else

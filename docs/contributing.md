@@ -3,7 +3,7 @@
 - `pnpm start` / `pnpm stop` / `pnpm restart` (also `:frontend`, `:backend`, `:both`)
 - After an agent turn that changed `service/*.py` or `zoto-viz`, a Cursor **stop** hook restarts the running monitor (`systemctl --user restart zoto-viz-monitor`, or `pnpm restart:backend`) so the new Python is loaded. Plugin `backend/service.py` hot-reloads without a bounce. Set `ZOTO_VIZ_NO_AUTO_RESTART=1` to skip.
 - A running install fast-forwards its checkout every 5 minutes (`ZOTO_VIZ_PULL_S` / `ZOTO_VIZ_NO_AUTO_PULL=1`). After a pull it rebuilds the packed UI if needed, restarts the backend, and reloads the open browser tab.
-- `pnpm pull:watch` (`scripts/pull-watch.sh`) does the same once a minute as a sidecar: `git pull --ff-only`, rebuild, restart monitor + Vite, hard-reload the Chrome tab (CDP on 9222 or xdotool), then autoconsent and load plugin views that landed in the pull. Dirty trees are skipped. `--once` is one pass. Set `ZOTO_VIZ_NO_AUTO_PULL=1` on the monitor if this script should be the only puller.
+- `pnpm pull:watch` (`scripts/pull-watch.sh`) does the same once a minute as a sidecar: `git pull --ff-only`, full `web/` rebuild, restart monitor + Vite, wait 10s, hard-reload the Chrome tab (CDP on 9222 or xdotool), then autoconsent and load plugin views that landed in the pull. Dirty trees are skipped. `--once` is one pass. Set `ZOTO_VIZ_NO_AUTO_PULL=1` on the monitor if this script should be the only puller.
 - `cd web && pnpm test && pnpm build`
 - `.venv/bin/python3 -m pytest tests -q -o addopts=`
 - Do not commit `.venv`, `web/dist`, `data/`, pcaps, wifi-keys, `sys-config.yml`, `plugins/.runtime/`, `plugins/*.zip`, or `dist/`
