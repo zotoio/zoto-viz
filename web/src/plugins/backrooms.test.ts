@@ -72,7 +72,8 @@ describe("backrooms shipped pack", () => {
     expect(FRAG).toContain("gone * turnDir");
     expect(FRAG).toContain("4.0 * ceil((sFlee - 2.0) * 0.25) + 2.0");
     expect(FRAG).toContain("room(ro)");
-    expect(FRAG).toContain("hide * 1.08");
+    expect(FRAG).toContain("hide * 0.20");
+    expect(FRAG).toContain("knLft");
     expect(FRAG).toContain("peek * (-hide)");
     expect(FRAG).toContain("bobAmp * abs(sin(gait)) * (1.0 - freeze)");
     expect(FRAG).not.toContain("3.1416 * flee");

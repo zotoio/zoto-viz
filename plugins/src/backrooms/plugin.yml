@@ -1,8 +1,8 @@
 id: backrooms
 name: Backrooms
-version: 44
-hint: Level 0 yellow halls. A skinny thing leans a toothy grin from a pillar; the cam freezes, then cuts 90° at a junction and runs. Recorded tube buzz and entity scream (sound on).
-description: Found-footage jog through damp yellow halls. The runner stays on hall centerlines and only turns at junctions — never through a wall. While you walk, the creature can pop its head from behind a pillar at an angle and grin. That freeze is the beat — then the runner cuts into a side hall and keeps going forward. Fluorescent buzz and creature vocals are recorded CC0 samples (header sound must be on).
+version: 45
+hint: Level 0 yellow halls. Long-legged thing grins from a pillar, then staggers in with bendy knees and arms out. Cam freezes, cuts 90° at a junction. Tube buzz and entity scream (sound on).
+description: Found-footage jog through damp yellow halls. The runner stays on hall centerlines and only turns at junctions — never through a wall. A long-legged creature can lean a toothy grin from a pillar, then stagger toward you with buckling knees and arms outstretched. That freeze is the beat — then the runner cuts into a side hall and keeps going forward. Fluorescent buzz and creature vocals are recorded CC0 samples (header sound must be on).
 capabilities:
   - viz.read
   - viz.write
