@@ -151,6 +151,8 @@ export const BACKROOMS_SAMPLE_URLS = {
 export class PluginSfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** 0–1 master for the Backrooms bed; UI stores 0–100. */
+  private masterVolume = 1;
   private roarGain: GainNode | null = null;
   private buzzGain: GainNode | null = null;
   private screechGain: GainNode | null = null;
@@ -192,6 +194,20 @@ export class PluginSfx {
     this.fadeAll(0, 0, 0, 0, 0);
   }
 
+  /** Master volume for all Backrooms beds (0–1). */
+  setMasterVolume(level: number): void {
+    const v = Math.min(1, Math.max(0, Number.isFinite(level) ? level : 1));
+    this.masterVolume = v;
+    const ctx = this.ctx;
+    if (ctx && this.master) {
+      this.master.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
+    }
+  }
+
+  masterVolumeLevel(): number {
+    return this.masterVolume;
+  }
+
   dispose(): void {
     this.silence();
     for (const src of this.loops) {
@@ -230,7 +246,7 @@ export class PluginSfx {
     if (this.ctx || typeof AudioContext === "undefined") return;
     const ctx = new AudioContext();
     const master = ctx.createGain();
-    master.gain.value = 1;
+    master.gain.value = this.masterVolume;
     master.connect(ctx.destination);
 
     const roarGain = ctx.createGain();

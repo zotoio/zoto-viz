@@ -1342,6 +1342,26 @@ export class Backdrop {
   }
 
   /** Advance the sky by wall-clock time `t` (seconds); the animation clock itself runs at the eased speed. */
+  /**
+   * Plugin skies treat vDir as a camera-local ray (Shadertoy-style). Parent the
+   * dome to the camera so fragment.glsl yaw locks stay level; world skies stay
+   * origin-locked so orbiting the graph still pans the backdrop.
+   */
+  syncCamera(camera: THREE.Camera): void {
+    const plugin = !!(this.pluginMat && this.mesh.material === this.pluginMat);
+    if (plugin) {
+      this.mesh.position.copy(camera.position);
+      this.mesh.quaternion.copy(camera.quaternion);
+      this.fadeMesh.position.copy(camera.position);
+      this.fadeMesh.quaternion.copy(camera.quaternion);
+    } else {
+      this.mesh.position.set(0, 0, 0);
+      this.mesh.quaternion.identity();
+      this.fadeMesh.position.set(0, 0, 0);
+      this.fadeMesh.quaternion.identity();
+    }
+  }
+
   tick(t: number): void {
     const dt = this.lastT === null ? 0 : Math.min(0.25, Math.max(0, t - this.lastT)); // a hidden tab resumes without a leap
     this.lastT = t;

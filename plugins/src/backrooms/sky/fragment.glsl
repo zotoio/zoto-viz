@@ -10,18 +10,8 @@ float cap(vec3 p, vec3 a, vec3 b, float r) {
   float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-4), 0.0, 1.0);
   return length(pa - ba * h) - r;
 }
-float smin(float a, float b, float k) {
-  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-  return mix(b, a, h) - k * h * (1.0 - h);
-}
-mat3 rotY(float a) {
-  float c = cos(a), s = sin(a);
-  return mat3(c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c);
-}
-mat3 rotX(float a) {
-  float c = cos(a), s = sin(a);
-  return mat3(1.0, 0.0, 0.0, 0.0, c, -s, 0.0, s, c);
-}
+float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+mat3 rotY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c); }
 
 float room(vec3 p) {
   vec2 q = abs(mod(p.xz + 2.0, 4.0) - 2.0);
@@ -123,12 +113,12 @@ float creature(vec3 p, vec3 c, float t, float leanX, float face, float grin, flo
 }
 
 void keepHall(inout vec3 p, float keep) {
-  for (int k = 0; k < 3; k++) {
+  for (int k = 0; k < 5; k++) {
     float hd = room(p);
     if (hd < keep) {
       vec2 g = vec2(
-        room(p + vec3(0.03, 0.0, 0.0)) - room(p - vec3(0.03, 0.0, 0.0)),
-        room(p + vec3(0.0, 0.0, 0.03)) - room(p - vec3(0.0, 0.0, 0.03))
+        room(p + vec3(0.035, 0.0, 0.0)) - room(p - vec3(0.035, 0.0, 0.0)),
+        room(p + vec3(0.0, 0.0, 0.035)) - room(p - vec3(0.0, 0.0, 0.035))
       );
       p.xz += (g / max(length(g), 1e-4)) * (keep - hd);
     }
@@ -159,10 +149,6 @@ float tube(vec3 p, float t, float aud, float near) {
   return panel * (1.0 - dead) * buzz * flick * scare;
 }
 
-float band(float ph, float a, float b) {
-  return smoothstep(a, a + 0.07, ph) * smoothstep(b + 0.10, b, ph);
-}
-
 void main() {
   float t = uTime;
   float aud = clamp(uAudio, 0.0, 1.0);
@@ -175,26 +161,22 @@ void main() {
   float beat = floor(seed * 4.0);
   float peekOn = step(1.0, beat);
   float isPeek = 1.0 - step(0.5, abs(beat - 1.0));
-  float isStag = 1.0 - step(0.5, abs(beat - 2.0));
   float isRake = 1.0 - step(0.5, abs(beat - 3.0));
   float peekPh = 0.22 + 0.12 * h11(cycle + 9.0);
-  float peek = peekOn * band(phA, peekPh, peekPh + 0.08);
+  float peek = peekOn * smoothstep(peekPh, peekPh + 0.07, phA) * smoothstep(peekPh + 0.18, peekPh + 0.08, phA);
   float freeze = peekOn * smoothstep(peekPh, peekPh + 0.015, phA) * smoothstep(peekPh + 0.12, peekPh + 0.085, phA);
   float fleePh = peekPh + 0.12;
   float flee = peekOn * smoothstep(fleePh, fleePh + 0.06, phA);
   float sprint = peekOn * smoothstep(fleePh, fleePh + 0.04, phA) * smoothstep(0.86, 0.70, phA);
   float phRun = phA - peekOn * clamp(phA - peekPh, 0.0, 0.10);
   float threat = max(max(peek * 0.95, sprint * 0.75), freeze * 0.8);
-  float charge = isStag * (1.0 - freeze) * smoothstep(peekPh + 0.06, peekPh + 0.16, phA);
-  float creaRate = 50.0;
-  float camRate = creaRate * 1.5;
+  float charge = (1.0 - step(0.5, abs(beat - 2.0))) * (1.0 - freeze) * smoothstep(peekPh + 0.06, peekPh + 0.16, phA);
+  float camRate = 75.0;
   float minGap = 8.0;
   float lead = 24.0 + 20.0 * h11(cycle + 3.0);
-  float s0 = (cycle + phRun) * camRate;
   float close = peekOn * (1.0 - freeze) * max(max(flee, sprint), charge);
-  float s = s0 + sprint * 7.5 + close * 18.0;
-  float sFlee = (cycle + peekPh) * camRate;
-  float sTurn = 4.0 * ceil((sFlee - 2.0) * 0.25) + 2.0;
+  float s = (cycle + phRun) * camRate + sprint * 7.5 + close * 18.0;
+  float sTurn = 4.0 * ceil(((cycle + peekPh) * camRate - 2.0) * 0.25) + 2.0;
   float sLock = mix(1.0e5, sTurn, peekOn);
   float gone = peekOn * max(s - sTurn, 0.0);
   float hide = mix(-1.0, 1.0, step(0.5, h11(cycle + 8.0)));
@@ -202,40 +184,48 @@ void main() {
   float z = -min(s, sLock);
   float x = gone * turnDir;
   float gait = s * mix(2.15, 2.85, close);
-  float bobAmp = mix(0.010, 0.036, max(max(threat, flee), close));
-  float bob = bobAmp * abs(sin(gait)) * (1.0 - freeze);
+  float bob = mix(0.010, 0.036, max(max(threat, flee), close)) * abs(sin(gait)) * (1.0 - freeze);
   vec3 ro = vec3(x, 1.46 + bob, z);
-  keepHall(ro, 0.22);
+  keepHall(ro, 0.36);
   x = ro.x;
   z = ro.z;
   float atTurn = peekOn * smoothstep(0.0, 0.7, gone);
   float grin = peek * max(isPeek, isRake * 0.55);
-  float approach = charge * (1.0 - atTurn);
-  float rake = isRake * peek;
-  float leanX = (isPeek * peek + rake) * (-hide) * (0.42 + 0.05 * sin(t * 3.1));
+  float spotted = peekOn * smoothstep(peekPh - 0.01, peekPh + 0.03, phA);
+  float approach = (1.0 - atTurn) * max(charge, spotted * (1.0 - freeze) * max(max(flee, sprint), peek));
+  float hands = clamp(max(approach, spotted * (0.72 + 0.28 * close)), 0.0, 1.0);
+  float leanX = (isPeek * peek + isRake * peek) * (-hide) * (0.42 + 0.05 * sin(t * 3.1));
   float gap = max(minGap, mix(lead, minGap, approach));
   vec3 cpos = vec3(hide * mix(1.32, 0.10, approach), 0.0, z - gap);
   cpos = mix(cpos, vec3(hide * 1.16, 0.0, -sTurn - minGap), atTurn);
   cpos.z -= (1.0 - peekOn) * mix(22.0, 14.0, step(0.86, h11(cycle + 21.0)));
   vec3 cKeep = vec3(cpos.x, 1.2, cpos.z);
-  keepHall(cKeep, mix(0.30, 0.11, peek));
+  keepHall(cKeep, 0.40);
   cpos.xz = cKeep.xz;
   float face = atan(x - cpos.x, z - cpos.z) - hide * 0.12 * peek;
-  float roar = peekOn * smoothstep(peekPh, peekPh + 0.02, phA) * smoothstep(peekPh + 0.10, peekPh + 0.07, phA);
   float seeYaw = atan(-(cpos.x - x), -(cpos.z - z));
-  float faceTravel = peekOn * smoothstep(peekPh + 0.18, peekPh + 0.24, phA);
-  float glance = peekOn * step(peekPh, phA) * (1.0 - faceTravel);
-  float travelYaw = 1.5708 * turnDir * smoothstep(0.0, 0.2, gone);
-  float yaw = mix(travelYaw, seeYaw, glance);
-  yaw += 0.012 * sin(gait * 0.35) * (1.0 - freeze) * (1.0 - glance);
-  float pitch = mix(0.006 * sin(gait), 0.03, glance);
+  float faceTravel = peekOn * smoothstep(peekPh + 0.12, peekPh + 0.24, phA);
+  float glance = peekOn * smoothstep(peekPh - 0.02, peekPh + 0.08, phA) * (1.0 - faceTravel);
+  float travelYaw = 1.5708 * turnDir * smoothstep(0.0, 0.38, gone);
+  float walkCam = (1.0 - glance) * (1.0 - faceTravel);
+  float drift = 0.04 * sin(t * 0.37) + 0.018 * sin(t * 0.91 + 1.7);
+  float yaw = mix(walkCam * (seeYaw * 0.16 + drift), seeYaw, glance);
+  yaw = mix(yaw, travelYaw, smoothstep(0.0, 1.0, max(faceTravel, atTurn * 0.85)));
+  float shake = mix(0.006, 0.011, 1.0 - walkCam);
+  yaw += shake * (sin(t * 22.3) + 0.55 * sin(t * 37.1)) * (1.0 - freeze);
+  yaw += 0.003 * walkCam * sin(gait * 0.9);
+  ro.x += 0.0025 * walkCam * sin(t * 15.1);
+  ro.y += 0.0016 * walkCam * sin(t * 21.4 + 0.7);
+  keepHall(ro, 0.36);
+  x = ro.x; z = ro.z;
 
-  vec3 rd = normalize(rotY(yaw) * rotX(-pitch) * vd);
+  // Yaw-only aim (no pitch). Dome is camera-locked so vd is local (-Z forward).
+  vec3 rd = normalize(rotY(yaw) * vd);
   float far = mix(56.0, 48.0, threat);
   float hit = 0.02;
   vec3 p = ro;
   for (int i = 0; i < 52; i++) {
-    float d = map(p, cpos, t, leanX, face, grin, approach);
+    float d = map(p, cpos, t, leanX, face, grin, hands);
     hit += d;
     p = ro + rd * hit;
     if (d < 0.002 * (1.0 + hit) || hit > far) break;
@@ -243,12 +233,12 @@ void main() {
 
   vec3 e = vec3(0.014, 0.0, 0.0);
   vec3 n = normalize(vec3(
-    map(p + e.xyy, cpos, t, leanX, face, grin, approach) - map(p - e.xyy, cpos, t, leanX, face, grin, approach),
-    map(p + e.yxy, cpos, t, leanX, face, grin, approach) - map(p - e.yxy, cpos, t, leanX, face, grin, approach),
-    map(p + e.yyx, cpos, t, leanX, face, grin, approach) - map(p - e.yyx, cpos, t, leanX, face, grin, approach)
+    map(p + e.xyy, cpos, t, leanX, face, grin, hands) - map(p - e.xyy, cpos, t, leanX, face, grin, hands),
+    map(p + e.yxy, cpos, t, leanX, face, grin, hands) - map(p - e.yxy, cpos, t, leanX, face, grin, hands),
+    map(p + e.yyx, cpos, t, leanX, face, grin, hands) - map(p - e.yyx, cpos, t, leanX, face, grin, hands)
   ));
 
-  float isC = 1.0 - smoothstep(0.02, 0.08, creature(p, cpos, t, leanX, face, grin, approach));
+  float isC = 1.0 - smoothstep(0.02, 0.08, creature(p, cpos, t, leanX, face, grin, hands));
   float isFl = 1.0 - smoothstep(0.05, 0.16, p.y);
   float isCe = smoothstep(2.28, 2.62, p.y);
 
@@ -303,7 +293,7 @@ void main() {
   float sh = 0.0;
   float foot = length(p.xz - cpos.xz);
   if (foot < 1.6 && p.y < 0.55) {
-    float oc = creature(vec3(p.x, 0.42, p.z), cpos, t, leanX, face, grin, approach);
+    float oc = creature(vec3(p.x, 0.42, p.z), cpos, t, leanX, face, grin, hands);
     sh = (1.0 - smoothstep(0.12, 1.25, foot)) * (1.0 - smoothstep(0.08, 0.9, oc));
     sh *= 0.62 * (1.0 - smoothstep(0.02, 0.5, p.y));
   }

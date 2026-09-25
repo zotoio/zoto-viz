@@ -10,3 +10,13 @@ look:
   skySpeed: 1
   gridOpacity: 0
   mosaic: "off"
+config:
+  - key: volume
+    label: sound volume
+    type: number
+    default: 100
+    min: 0
+    max: 100
+    step: 1
+    hint: Master level for the Backrooms sound bed (buzz, fluoro, screech, roar, pant, box). Header sound must be on.
+

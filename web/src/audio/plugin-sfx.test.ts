@@ -133,3 +133,17 @@ describe("plugin sfx roar", () => {
     sfx.dispose();
   });
 });
+
+describe("PluginSfx master volume", () => {
+  it("clamps and stores 0–1 master volume", () => {
+    const sfx = new PluginSfx();
+    sfx.setMasterVolume(0.42);
+    expect(sfx.masterVolumeLevel()).toBeCloseTo(0.42);
+    sfx.setMasterVolume(2);
+    expect(sfx.masterVolumeLevel()).toBe(1);
+    sfx.setMasterVolume(-1);
+    expect(sfx.masterVolumeLevel()).toBe(0);
+    sfx.dispose();
+  });
+});
+

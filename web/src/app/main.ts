@@ -339,8 +339,11 @@ addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
-  if (mode.pluginId === "backrooms") pluginSfx.setBackrooms(scene.skyTime());
-  else pluginSfx.silence();
+  if (mode.pluginId === "backrooms") {
+    const raw = Number(currentOpts.volume ?? "100");
+    pluginSfx.setMasterVolume((Number.isFinite(raw) ? raw : 100) / 100);
+    pluginSfx.setBackrooms(scene.skyTime());
+  } else pluginSfx.silence();
 });
 addPresentListener(markPresent);
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {

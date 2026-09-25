@@ -1668,6 +1668,16 @@ export class NetScene implements HostedView {
   /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
   setStageOnly(on: boolean): void {
     this.stageOnly = on;
+    if (on) {
+      // Keep horizon level so FPS plugin skies (Backrooms) are not floor-biased by the graph orbit cam.
+      const t = this.controls.target;
+      _off.copy(this.camera.position).sub(t);
+      _sph.setFromVector3(_off);
+      _sph.phi = Math.PI * 0.5;
+      this.camera.position.copy(t).add(_off.setFromSpherical(_sph));
+      this.camera.lookAt(t);
+      this.controls.update();
+    }
     this.applyGraphMarks();
     this.particles.visible = !on;
     this.arrows.visible = !on && graphLinksArrows(this.anim.graphLinks);
@@ -3445,6 +3455,7 @@ export class NetScene implements HostedView {
     this.easePhys(dt);
     const wall = ts / 1000;
     this.backdrop.tick(wall);
+    this.backdrop.syncCamera(this.camera);
     if (!this.satellite && this.anim.backdrop === "dynamic") ensureSkyRecipe(this.anim.skyAiMin * 60_000);
     this.applyLook(dt);
     if (this.pruneCpuIdle(wall)) {
@@ -3459,9 +3470,14 @@ export class NetScene implements HostedView {
         this.frameCamera(dt);
         this.controls.update();
         this.followUserCameraCoast();
-        if (this.dreaming && !this.userOwnsCamera() && !this.cameraGoalDir) {
-          this.stepDream(dt);
-          this.camera.lookAt(this.controls.target);
+        // Hold a level horizon for FPS plugin skies; skip dream pitch nod.
+        if (!this.userOwnsCamera()) {
+          const t = this.controls.target;
+          _off.copy(this.camera.position).sub(t);
+          _sph.setFromVector3(_off);
+          _sph.phi = Math.PI * 0.5;
+          this.camera.position.copy(t).add(_off.setFromSpherical(_sph));
+          this.camera.lookAt(t);
         }
         if (this.viewMorphT < 1) {
           this.viewMorphT = Math.min(1, this.viewMorphT + dt / VIEW_MORPH_S);
