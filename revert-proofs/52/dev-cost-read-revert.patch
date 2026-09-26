@@ -1,0 +1,14 @@
+--- a/web/src/core/viz-dev-tile-cost.ts
++++ b/web/src/core/viz-dev-tile-cost.ts
+@@ -5,7 +5,10 @@ let wallBuildReads = 0;
+ 
+ /** Dev-only `?vizTileCostTicks=`; read once per wall build, never per frame. */
+ export function readDevTileCostOnWallBuild(search: string): void {
+-  wallBuildReads++;
++  if (wallBuildReads > 0) {
++    return;
++  }
++  wallBuildReads++;
+   if (!import.meta.env.DEV) {
+     devTileCostTicks = null;
+     setVizBuildCostTicksInjector(undefined);

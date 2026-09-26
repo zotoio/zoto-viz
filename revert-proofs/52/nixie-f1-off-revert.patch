@@ -1,0 +1,12 @@
+--- a/web/src/plugins/nixie-wall-broadcast.ts
++++ b/web/src/plugins/nixie-wall-broadcast.ts
+@@ -84,8 +84,8 @@ export function createNixieWallBroadcast(tileIds: readonly string[]): NixieWallBr
+         const timeChanged = look.seconds
+           ? parts.s !== tile.lastUploadS || parts.m !== tile.lastUploadM || parts.h !== tile.lastUploadH
+           : parts.m !== tile.lastUploadM || parts.h !== tile.lastUploadH;
+         const first = tile.lastUploadH < 0;
+-        if (first || timeChanged) {
++        if (frameIndex % 60 === 0) {
+           tile.lastUploadH = parts.h;
+           tile.lastUploadM = parts.m;
+           tile.lastUploadS = parts.s;

@@ -1,0 +1,11 @@
+--- a/web/src/plugins/viz-pack-host.ts
++++ b/web/src/plugins/viz-pack-host.ts
+@@ -31,7 +31,7 @@
+ /** Parse nixie look when tracked option values change (no per-frame key stringify). */
+ export function syncNixiePackScope(opts?: Record<string, string> | null): void {
+   let changed = false;
+-  for (let i = 0; i < NIXIE_LOOK_KEYS.length; i++) {
++  for (let i = 0; i < 3; i++) {
+     const key = NIXIE_LOOK_KEYS[i]!;
+     const v = nixieOptRaw(opts, key);
+     if (nixieOptSlots[i] !== v) {

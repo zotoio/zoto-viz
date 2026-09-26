@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
+index 87253ad..308bac3 100644
+--- a/web/src/plugins/viz-pack-host.ts
++++ b/web/src/plugins/viz-pack-host.ts
+@@ -53,6 +53,7 @@ function nixieOptRaw(opts: Record<string, string> | null | undefined, key: Nixie
+ 
+ /** Parse nixie look when tracked option values change (no per-frame key stringify). */
+ export function syncNixiePackScope(opts?: Record<string, string> | null): void {
++  JSON.stringify(opts);
+   let changed = false;
+   for (let i = 0; i < NIXIE_LOOK_KEYS.length; i++) {
+     const key = NIXIE_LOOK_KEYS[i]!;

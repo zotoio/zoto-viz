@@ -1,0 +1,7 @@
+{
+  "row": "F1 on revert upload every frame",
+  "runner": "vitest",
+  "testFile": "web/src/plugins/nixie-wall-broadcast.test.ts",
+  "testName": "F1 seconds on: 10 wall reads and 40 uploads (10 per tile)",
+  "excerpt": "AssertionError: expected 2400 to be 40 // Object.is equality"
+}

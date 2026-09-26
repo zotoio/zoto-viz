@@ -1,0 +1,7 @@
+{
+  "row": "hn-term revert performance.now crawl clock",
+  "runner": "vitest",
+  "testFile": "web/src/plugins/dogfood.test.ts",
+  "testName": "fat-LAN live soak: count-based delivery and skip honesty on simulated clock",
+  "excerpt": "AssertionError: expected \"spy\" to be called 0 times, but got 1 times"
+}

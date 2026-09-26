@@ -1,0 +1,7 @@
+{
+  "row": "F4 dev read once per wall build revert",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-dev-tile-cost.test.ts",
+  "testName": "F4 dev: flag read once per wall build, not per frame",
+  "excerpt": "AssertionError: expected 1 to be 2 // Object.is equality"
+}

@@ -1,0 +1,6 @@
+{
+  "row": "N1 revert per-frame parseNixieLook in pack-host",
+  "testName": "N1: 600 frames \u2014 format at [0,60,\u2026,540], one formatter, stable buffer",
+  "excerpt": "AssertionError: expected { hour12: false, seconds: true, \u2026(3) } to be { hour12: false, seconds: true, \u2026(3) } // Object.is equality",
+  "testFile": "web/src/plugins/nixie-wall-clock.test.ts"
+}

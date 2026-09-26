@@ -1,0 +1,7 @@
+{
+  "row": "N12 revert hour12 blank tens digit",
+  "runner": "vitest",
+  "testFile": "web/src/plugins/nixie-wall-clock.test.ts",
+  "testName": "N12: reachable 12-hour tile \u2014 blank tens for hours 1\u20139",
+  "excerpt": "AssertionError: expected [ 1, 1, 0, 5 ] to deeply equal [ -1, 1, 0, 5 ]"
+}

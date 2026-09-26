@@ -1,0 +1,7 @@
+{
+  "row": "M1 revert epoch frame.t as viz clock",
+  "runner": "vitest",
+  "testFile": "web/src/app/main-viz-deliver.test.ts",
+  "testName": "M1: mainVizDeliver monotonic dt sequence [0,16,17,17,16] ms",
+  "excerpt": "AssertionError: expected [ +0, 16, 17, 17, 16 ] to deeply equal [ +0, 16, 17, 17, 16 ]"
+}

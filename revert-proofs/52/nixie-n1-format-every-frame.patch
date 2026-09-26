@@ -1,0 +1,15 @@
+diff --git a/web/src/plugins/nixie-wall-broadcast.ts b/web/src/plugins/nixie-wall-broadcast.ts
+index dbd2254..f5220df 100644
+--- a/web/src/plugins/nixie-wall-broadcast.ts
++++ b/web/src/plugins/nixie-wall-broadcast.ts
+@@ -22,9 +22,9 @@ export class SharedNixieWallSecond {
+   /** Advance shared wall parts; increments {@link wallReads} once per new wall second. */
+   syncWallSecond(wallMs: number, timeZone?: string): { h: number; m: number; s: number } {
+     const sec = Math.floor(wallMs / 1000);
++    this.wallReads++;
+     if (sec !== this.lastSec || this.lastSec < 0) {
+       this.lastSec = sec;
+-      this.wallReads++;
+       const parts = wallPartsFromMs(wallMs, timeZone);
+       this.cachedH = parts.h;
+       this.cachedM = parts.m;
