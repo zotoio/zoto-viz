@@ -2,5 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_pack_pr_boundary.py",
   "testName": "test_fetch_pull_changed_files_rejects_non_array_page",
-  "description": "Non-array pulls/files API page raises ValueError (fail closed)."
+  "description": "Non-array pulls/files API page raises ValueError (fail closed).",
+  "entryPoint": ""
 }

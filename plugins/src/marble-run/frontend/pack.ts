@@ -8,12 +8,17 @@ import {
   type MarbleOptions,
 } from "./config";
 import { jarIndexForRouteKey, MarbleSim, SIM_DT, trackPieceCount } from "./sim";
-import { marbleWorkBudget } from "./work-budget";
+import { marbleWorkBudget, resetMarbleWorkBudgetFromHost } from "./work-budget";
 
 export type { VizDataFrame, VizPacketSample };
 
 export { MARBLE_DATA_MAPPING, ZOTO_FAIL_RGB };
-export { marbleWorkBudget, setMarbleWorkBudgetFromHost } from "./work-budget";
+export {
+  CONSERVATIVE_MARBLE_WORK_BUDGET,
+  marbleWorkBudget,
+  resetMarbleWorkBudgetFromHost,
+  setMarbleWorkBudgetFromHost,
+} from "./work-budget";
 
 export type MarbleIngestStats = {
   consumedPackets: number;

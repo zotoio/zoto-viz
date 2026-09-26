@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/work-budget-policy.ts b/web/src/plugins/work-budget-policy.ts
-index d0b5bcf..4dd566a 100644
+index d0b5bcf..883d8d6 100644
 --- a/web/src/plugins/work-budget-policy.ts
 +++ b/web/src/plugins/work-budget-policy.ts
 @@ -18,10 +18,18 @@ export const WORK_BUDGET_LIMITED_NOTE =
@@ -22,15 +22,6 @@ index d0b5bcf..4dd566a 100644
      for (const key of MANIFEST_WORK_BUDGET_KEYS) {
        if (typeof ceilingsCache[key] !== "number") {
          throw new Error(`host policy missing ${key}`);
-@@ -45,7 +53,7 @@ export function ingestCatalogWorkBudget(raw: unknown): {
- } {
-   const parsed = parseManifestWorkBudgetShape(raw);
-   const ceilings = hostWorkBudgetCeilings();
--  const budget = clampManifestWorkBudgetToCeilings(parsed, ceilings);
-+  const budget = parsed;
-   const limitedNote = workBudgetExceedsCeilings(parsed, ceilings) ? WORK_BUDGET_LIMITED_NOTE : undefined;
-   return { budget, limitedNote };
- }
 @@ -55,3 +63,13 @@ export function assertWorkBudgetInstallAllowed(raw: unknown): void {
    const reason = workBudgetInstallBlockedReason(parsed, hostWorkBudgetCeilings(), 10);
    if (reason) throw new Error(reason);
@@ -38,7 +29,7 @@ index d0b5bcf..4dd566a 100644
 +
 +export function assertWorkBudgetOverHostCeiling(raw: unknown): void {
 +  const parsed = parseManifestWorkBudgetShape(raw);
-+  const ceilings = hostWorkBudgetCeilings();
++  const ceilings = { ...hostWorkBudgetCeilings(), maxDrawCalls: 999999 };
 +  for (const key of MANIFEST_WORK_BUDGET_KEYS) {
 +    if (parsed[key] > ceilings[key]) {
 +      throw new Error(`workBudget.${key} must be at most ${ceilings[key]} (got ${parsed[key]})`);

@@ -371,12 +371,16 @@ ROWS: list[Row] = [
         "work-budget-pack-policy-ignored",
         "pytest",
         "tests/test_manifest_work_budget.py",
-        "test_policy_path_is_host_install_not_pack",
+        "test_install_blocks_despite_pack_bundled_policy_ceilings",
         "Install guard uses host policy, not pack-bundled ceilings JSON.",
-        "service/manifest_work_budget.py",
+        "service/work_budget_policy.py",
         lambda t: replace_once(
             t,
+            'def resolve_work_budget_policy_path(pack_root: Path | None = None) -> Path:\n'
+            '    """Host install policy only (pack_root ignored in production)."""\n'
             "    return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH",
+            'def resolve_work_budget_policy_path(pack_root: Path | None = None) -> Path:\n'
+            '    """Host install policy only (pack_root ignored in production)."""\n'
             "    return (pack_root or paths.repo_root()) / WORK_BUDGET_CEILINGS_REL_PATH",
         ),
         entry_point="resolve_work_budget_policy_path (install/catalog policy load)",
@@ -385,7 +389,7 @@ ROWS: list[Row] = [
         "work-budget-catalog-clamp-not-block",
         "pytest",
         "tests/test_manifest_work_budget.py",
-        "test_catalog_clamps_without_blocking",
+        "test_catalog_clamps_over_ceiling_pack_stays_loaded",
         "Catalog load clamps over-ceiling workBudget instead of rejecting.",
         "service/manifest_work_budget.py",
         lambda t: replace_once(
@@ -393,21 +397,49 @@ ROWS: list[Row] = [
             "    clamped = clamp_manifest_work_budget_at_runtime(parsed)\n    note = WORK_BUDGET_LIMITED_NOTE if work_budget_exceeds_ceilings(parsed) else None\n    return clamped, note",
             "    if work_budget_exceeds_ceilings(parsed):\n        raise ValueError(WORK_BUDGET_LIMITED_NOTE)\n    return parsed, None",
         ),
-        entry_point="service.plugins._visualisation_doc (catalog scan)",
+        entry_point="service.plugins._attach_visualisation (catalog scan)",
     ),
     Row(
         "work-budget-policy-parity-hardcode",
         "pytest",
         "tests/test_manifest_work_budget.py",
-        "test_ts_and_python_share_policy_fixture",
-        "TS and Python validators read the same host policy file.",
+        "test_parity_fixture_both_validators_reject_over_raised_ceiling",
+        "Python validator reads the same host policy file as TS (parity fixture).",
         "service/manifest_work_budget.py",
         lambda t: replace_once(
             t,
-            "    return load_work_budget_ceilings()\n",
-            '    return {"maxDrawCalls": 1, "maxTriangles": 1, "maxInstances": 1, "maxGpuBytes": 1, "maxSimStepsPerFrame": 1, "maxPacketsPerFrame": 1}\n',
+            "    ceilings = host_work_budget_ceilings()\n    for key in manifest_work_budget_keys():",
+            '    ceilings = {**host_work_budget_ceilings(), "maxDrawCalls": 999999}\n    for key in manifest_work_budget_keys():',
         ),
-        entry_point="manifest_work_budget_ceilings → clamp_manifest_work_budget_at_runtime",
+        entry_point="assert_work_budget_over_host_ceiling",
+    ),
+    Row(
+        "work-budget-policy-parity-hardcode-ts",
+        "vitest",
+        "web/src/plugins/work-budget-catalog.test.ts",
+        "parity fixture rejected by TS after raising host policy ceiling",
+        "TS validator reads the same host policy file as Python (parity fixture).",
+        "web/src/plugins/work-budget-policy.ts",
+        lambda t: replace_once(
+            t,
+            "  const ceilings = hostWorkBudgetCeilings();\n  for (const key of MANIFEST_WORK_BUDGET_KEYS) {",
+            "  const ceilings = { ...hostWorkBudgetCeilings(), maxDrawCalls: 999999 };\n  for (const key of MANIFEST_WORK_BUDGET_KEYS) {",
+        ),
+        entry_point="assertWorkBudgetOverHostCeiling",
+    ),
+    Row(
+        "work-budget-lowered-ceiling-ui-note",
+        "vitest",
+        "web/src/plugins/work-budget-catalog.test.ts",
+        "lowered ceiling row: installed over-ceiling pack stays loaded and pack info shows the limited note",
+        "Pack info sec-hint shows workBudgetLimited after policy is lowered under an installed pack.",
+        "web/src/plugins/plugin-ui.ts",
+        lambda t: replace_once(
+            t,
+            "  if (spec.workBudgetLimited) {\n    return `${base}. ${spec.workBudgetLimited}`;\n  }",
+            "  if (false && spec.workBudgetLimited) {\n    return `${base}. ${spec.workBudgetLimited}`;\n  }",
+        ),
+        entry_point="fillPluginFields → pluginPackMetaLine (.sec-hint)",
     ),
     Row(
         "work-budget-install-ten-x-block",
@@ -439,7 +471,15 @@ def excerpt(stdout: str, stderr: str) -> str:
     blob = (stdout + "\n" + stderr).strip()
     for line in blob.splitlines():
         s = line.strip()
-        if "AssertionError" in s or "expected" in s or "Error:" in s or "FAILED" in s:
+        if "AssertionError" in s:
+            return s[:240]
+    for line in blob.splitlines():
+        s = line.strip()
+        if "assert" in s.lower() and ("expected" in s or "==" in s or "is True" in s or "is False" in s):
+            return s[:240]
+    for line in blob.splitlines():
+        s = line.strip()
+        if "expected" in s or "Error:" in s or "FAILED" in s:
             return s[:240]
     lines = [ln for ln in blob.splitlines() if ln.strip()]
     return lines[-1][:240] if lines else "(no output)"

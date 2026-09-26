@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testFile": "tests/test_manifest_work_budget.py",
-  "testName": "test_ts_and_python_share_policy_fixture",
-  "description": "TS and Python validators read the same host policy file.",
-  "entryPoint": "manifest_work_budget_ceilings \u2192 clamp_manifest_work_budget_at_runtime"
+  "testName": "test_parity_fixture_both_validators_reject_over_raised_ceiling",
+  "description": "Python validator reads the same host policy file as TS (parity fixture).",
+  "entryPoint": "assert_work_budget_over_host_ceiling"
 }

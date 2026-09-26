@@ -38,7 +38,7 @@ def _guard_work_budget_install(runtime: Path) -> None:
     if isinstance(raw, dict) and "workBudget" in raw:
         from service.manifest_work_budget import assert_work_budget_install_allowed
 
-        assert_work_budget_install_allowed(raw["workBudget"])
+        assert_work_budget_install_allowed(raw["workBudget"], pack_root=runtime)
 _primed = False
 
 

@@ -2,5 +2,6 @@
   "runner": "vitest",
   "testFile": "web/src/plugins/viz-build-gates.test.ts",
   "testName": "headline decimation counts eligibility before output cap",
-  "description": "Headline eligible count uses full source list before applying VIZ_MAX_HEADLINE_SAMPLES cap."
+  "description": "Headline eligible count uses full source list before applying VIZ_MAX_HEADLINE_SAMPLES cap.",
+  "entryPoint": ""
 }

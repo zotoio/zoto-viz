@@ -1,6 +1,8 @@
+diff --git a/scripts/pack_boundary_safe_io.py b/scripts/pack_boundary_safe_io.py
+index a7466d4..061bd64 100644
 --- a/scripts/pack_boundary_safe_io.py
 +++ b/scripts/pack_boundary_safe_io.py
-@@ -55,7 +55,7 @@
+@@ -55,7 +55,7 @@ def lstat_pr_head_path(root: Path, rel_path: str) -> str | None:
          return None
      except OSError as exc:
          return f"cannot lstat {rel_path!r}: {exc}"

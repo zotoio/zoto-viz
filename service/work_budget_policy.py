@@ -20,14 +20,25 @@ def work_budget_ceilings_path() -> Path:
     return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH
 
 
-def load_work_budget_ceilings() -> dict[str, int]:
+def _read_ceilings_file(path: Path) -> dict[str, int]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path} must be a mapping")
+    return {str(k): int(v) for k, v in raw.items()}
+
+
+def resolve_work_budget_policy_path(pack_root: Path | None = None) -> Path:
+    """Host install policy only (pack_root ignored in production)."""
+    return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH
+
+
+def load_work_budget_ceilings(pack_root: Path | None = None) -> dict[str, int]:
+    path = resolve_work_budget_policy_path(pack_root)
+    if pack_root is not None:
+        return _read_ceilings_file(path)
     global _CEILINGS
     if _CEILINGS is None:
-        path = work_budget_ceilings_path()
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ValueError(f"{path} must be a mapping")
-        _CEILINGS = {str(k): int(v) for k, v in raw.items()}
+        _CEILINGS = _read_ceilings_file(path)
     return dict(_CEILINGS)
 
 

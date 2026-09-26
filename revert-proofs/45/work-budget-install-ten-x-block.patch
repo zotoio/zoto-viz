@@ -1,126 +1,83 @@
 diff --git a/service/manifest_work_budget.py b/service/manifest_work_budget.py
-index 9692f1e..2822d21 100644
+index 1f8a7a9..462bfd7 100644
 --- a/service/manifest_work_budget.py
 +++ b/service/manifest_work_budget.py
-@@ -1,11 +1,19 @@
--"""Shared visualisation.yml workBudget validation (#45); reads plugins/sdk/manifest-work-budget.schema.json."""
-+"""visualisation.yml workBudget — shape parse, host clamp, install guard (#45)."""
- from __future__ import annotations
+@@ -11,6 +11,7 @@ from service.work_budget_policy import (
+     WORK_BUDGET_LIMITED_NOTE,
+     load_work_budget_ceilings,
+     reset_work_budget_ceilings_cache,
++    resolve_work_budget_policy_path,
+ )
  
- import json
- from pathlib import Path
- from typing import Any
+ REPO = paths.repo_root()
+@@ -37,8 +38,12 @@ def manifest_work_budget_keys() -> tuple[str, ...]:
+     return tuple(str(k) for k in required)
  
--REPO = Path(__file__).resolve().parents[1]
-+from service import paths
-+from service.work_budget_policy import (
-+    WORK_BUDGET_CEILINGS_REL_PATH,
-+    WORK_BUDGET_LIMITED_NOTE,
-+    load_work_budget_ceilings,
-+    reset_work_budget_ceilings_cache,
-+)
+ 
+-def manifest_work_budget_ceilings() -> dict[str, int]:
+-    return load_work_budget_ceilings()
++def host_work_budget_ceilings() -> dict[str, int]:
++    return load_work_budget_ceilings(None)
 +
-+REPO = paths.repo_root()
- SCHEMA_PATH = REPO / "plugins" / "sdk" / "manifest-work-budget.schema.json"
- 
- _SCHEMA: dict[str, Any] | None = None
-@@ -30,57 +38,41 @@ def manifest_work_budget_keys() -> tuple[str, ...]:
- 
- 
- def manifest_work_budget_ceilings() -> dict[str, int]:
--    schema = _load_schema()
--    props = schema.get("properties")
--    if not isinstance(props, dict):
--        raise ValueError("manifest workBudget schema missing properties")
--    out: dict[str, int] = {}
--    for key in manifest_work_budget_keys():
--        field = props.get(key)
--        if not isinstance(field, dict) or "maximum" not in field:
--            raise ValueError(f"manifest workBudget schema missing maximum for {key!r}")
--        out[key] = int(field["maximum"])
--    return out
-+    return load_work_budget_ceilings()
++
++def manifest_work_budget_ceilings(pack_root: Path | None = None) -> dict[str, int]:
++    return load_work_budget_ceilings(pack_root)
  
  
  def _field_label(path: str, key: str) -> str:
-     return f"{path}.{key}" if path else key
- 
- 
--def _plain_range_reason(path: str, key: str, ceiling: int) -> str:
--    return f"{_field_label(path, key)} must be a whole number from 0 to {ceiling}"
-+def _plain_whole_number_reason(path: str, key: str) -> str:
-+    return f"{_field_label(path, key)} must be a whole number that is at least 0"
- 
- 
--def validate_manifest_work_budget(raw: Any, path: str = "workBudget") -> dict[str, int]:
--    """Validate workBudget; raise ValueError with a plain-language reason."""
-+def parse_manifest_work_budget_shape(raw: Any, path: str = "workBudget") -> dict[str, int]:
-     if not isinstance(raw, dict):
-         raise ValueError(f"{path} must be a mapping of cap names to whole numbers")
--    ceilings = manifest_work_budget_ceilings()
-     allowed = set(manifest_work_budget_keys())
-     for key in raw:
-         if key not in allowed:
-             raise ValueError(f"{path} does not allow {key}")
-     out: dict[str, int] = {}
-     for key in manifest_work_budget_keys():
--        ceiling = ceilings[key]
-         if key not in raw:
-             raise ValueError(f"{_field_label(path, key)} is required")
-         value = raw[key]
-         if isinstance(value, bool) or not isinstance(value, (int, float)):
--            raise ValueError(_plain_range_reason(path, key, ceiling))
-+            raise ValueError(_plain_whole_number_reason(path, key))
-         if isinstance(value, float) and not value.is_integer():
--            raise ValueError(_plain_range_reason(path, key, ceiling))
-+            raise ValueError(_plain_whole_number_reason(path, key))
-         n = int(value)
-         if n < 0:
-             raise ValueError(f"{_field_label(path, key)} must be at least 0")
--        if n > ceiling:
--            raise ValueError(f"{_field_label(path, key)} must be at most {ceiling} (got {n})")
-         out[key] = n
-     return out
+@@ -73,7 +78,7 @@ def parse_manifest_work_budget_shape(raw: Any, path: str = "workBudget") -> dict
  
  
  def clamp_manifest_work_budget_at_runtime(budget: dict[str, int]) -> dict[str, int]:
--    """Host clamp so manifests that passed an older schema still cannot exceed ceilings."""
-     ceilings = manifest_work_budget_ceilings()
+-    ceilings = manifest_work_budget_ceilings()
++    ceilings = host_work_budget_ceilings()
      out: dict[str, int] = {}
      for key in manifest_work_budget_keys():
-@@ -92,3 +84,35 @@ def clamp_manifest_work_budget_at_runtime(budget: dict[str, int]) -> dict[str, i
-         n = max(0, n)
-         out[key] = min(n, ceilings[key])
-     return out
-+
-+
-+def work_budget_exceeds_ceilings(budget: dict[str, int]) -> bool:
-+    ceilings = manifest_work_budget_ceilings()
-+    return any(budget.get(k, 0) > ceilings[k] for k in manifest_work_budget_keys())
-+
-+
-+def ingest_catalog_work_budget(raw: Any) -> tuple[dict[str, int], str | None]:
-+    """Catalog load: never reject for over-ceiling; clamp and optional operator note."""
+         raw = budget.get(key, 0)
+@@ -87,32 +92,35 @@ def clamp_manifest_work_budget_at_runtime(budget: dict[str, int]) -> dict[str, i
+ 
+ 
+ def work_budget_exceeds_ceilings(budget: dict[str, int]) -> bool:
+-    ceilings = manifest_work_budget_ceilings()
++    ceilings = host_work_budget_ceilings()
+     return any(budget.get(k, 0) > ceilings[k] for k in manifest_work_budget_keys())
+ 
+ 
+ def ingest_catalog_work_budget(raw: Any) -> tuple[dict[str, int], str | None]:
+-    """Catalog load: never reject for over-ceiling; clamp and optional operator note."""
+     parsed = parse_manifest_work_budget_shape(raw)
+     clamped = clamp_manifest_work_budget_at_runtime(parsed)
+     note = WORK_BUDGET_LIMITED_NOTE if work_budget_exceeds_ceilings(parsed) else None
+     return clamped, note
+ 
+ 
+-def assert_work_budget_install_allowed(raw: Any) -> None:
+-    """New install/update: block only when any field exceeds 10× host ceiling."""
++def assert_work_budget_over_host_ceiling(raw: Any) -> None:
 +    parsed = parse_manifest_work_budget_shape(raw)
-+    clamped = clamp_manifest_work_budget_at_runtime(parsed)
-+    note = WORK_BUDGET_LIMITED_NOTE if work_budget_exceeds_ceilings(parsed) else None
-+    return clamped, note
-+
-+
-+def assert_work_budget_install_allowed(raw: Any) -> None:
-+    """New install/update: block only when any field exceeds 10× host ceiling."""
-+    parsed = parse_manifest_work_budget_shape(raw)
-+    ceilings = manifest_work_budget_ceilings()
-+    mult = 10
++    ceilings = host_work_budget_ceilings()
 +    for key in manifest_work_budget_keys():
-+        limit = ceilings[key] * mult
-+        if False and parsed[key] > limit:
++        if parsed[key] > ceilings[key]:
 +            raise ValueError(
-+                f"workBudget.{key} is far above what this monitor allows "
-+                f"(at most {limit}; the pack asked for {parsed[key]})"
++                f"workBudget.{key} must be at most {ceilings[key]} (got {parsed[key]})"
 +            )
 +
 +
-+def resolve_work_budget_policy_path(pack_root: Path | None = None) -> Path:
-+    """Always host install policy — never a path inside a pack tree."""
-+    return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH
++def assert_work_budget_install_allowed(raw: Any, pack_root: Path | None = None) -> None:
+     parsed = parse_manifest_work_budget_shape(raw)
+-    ceilings = manifest_work_budget_ceilings()
++    ceilings = manifest_work_budget_ceilings(pack_root)
+     mult = 10
+     for key in manifest_work_budget_keys():
+         limit = ceilings[key] * mult
+-        if parsed[key] > limit:
++        if False and parsed[key] > limit:
+             raise ValueError(
+                 f"workBudget.{key} is far above what this monitor allows "
+                 f"(at most {limit}; the pack asked for {parsed[key]})"
+             )
+-
+-
+-def resolve_work_budget_policy_path(pack_root: Path | None = None) -> Path:
+-    """Always host install policy — never a path inside a pack tree."""
+-    return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH

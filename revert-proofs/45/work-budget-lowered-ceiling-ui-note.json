@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/work-budget-catalog.test.ts",
+  "testName": "lowered ceiling row: installed over-ceiling pack stays loaded and pack info shows the limited note",
+  "description": "Pack info sec-hint shows workBudgetLimited after policy is lowered under an installed pack.",
+  "entryPoint": "fillPluginFields \u2192 pluginPackMetaLine (.sec-hint)"
+}
