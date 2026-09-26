@@ -1,4 +1,4 @@
-## Revert proof (manual `246fd8a` verification)
+## Revert proof (manual `25bdbb9` verification)
 
 Hand-run: `git apply` one-line patch, anchored single test. Count line proves exactly one test ran.
 
@@ -10,6 +10,7 @@ Hand-run: `git apply` one-line patch, anchored single test. Count line proves ex
 | `ci-test-needs-real-workflow` | `1 passed in 0.02s` | E       AssertionError: assert 1 == 0 · `1 failed in 0.03s` |
 | `ci-test-needs-valid-fixture` | `1 passed in 0.02s` | E       AssertionError: assert ['broken'] == [] · `1 failed in 0.02s` |
 | `dogfood-count-gate-ok` | `Tests  1 passed | 18 skipped (19)` | AssertionError: expected false to be true // Object.is equality · `Tests  1 failed | 18 skipped (19)` |
+| `fat-lan-output-and-work-gates-combined` | `Tests  1 passed | 8 skipped (9)` | AssertionError: expected 300 to be +0 // Object.is equality · `Tests  1 failed | 8 skipped (9)` |
 | `flow-work-scales-4-4x-gate` | `Tests  1 passed | 7 skipped (8)` | AssertionError: expected true to be false // Object.is equality · `Tests  1 failed | 7 skipped (8)` |
 | `headline-decimation-eligibility-before-cap` | `Tests  1 passed | 7 skipped (8)` | AssertionError: expected 64 to be greater than 64 · `Tests  1 failed | 7 skipped (8)` |
 | `incomplete-pull-files-vs-changed-files` | `1 passed in 0.03s` | tests/test_pack_pr_boundary.py:388: AssertionError · `1 failed in 0.04s` |
