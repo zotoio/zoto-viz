@@ -1,0 +1,5 @@
+{
+  "row": "H1 revert A",
+  "test": "web/src/plugins/dogfood-tile-hud.test.ts H2 50 ms at 2×2",
+  "excerpt": "AssertionError: expected 'limited' to be 'over_budget'"
+}

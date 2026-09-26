@@ -87,7 +87,14 @@ export function runTileBudgetAttempts(
   try {
     for (let i = 0; i < attempts; i++) {
       const cost = costForAttempt(i);
-      const result = registry.deliver(tileId, () => ({ frame: build(), costTicks: cost }), () => {});
+      const tick = registry.currentTick();
+      const result = registry.deliver(
+        tileId,
+        () => ({ frame: build(), costTicks: cost }),
+        () => {},
+        { tick },
+      );
+      registry.advanceTick();
       debtTrace.push(result.debt);
       if (result.delivered) {
         delivered++;

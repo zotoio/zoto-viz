@@ -1,0 +1,11 @@
+--- a/web/src/plugins/viz-tile-hud.ts
++++ b/web/src/plugins/viz-tile-hud.ts
+@@ -31,7 +31,7 @@ export function tileSkipsInHudWindow(
+ export function tileHudSkipRatePerSec(
+   samples: readonly VizTileHudSample[],
+   nowTick: number,
+-  inclusiveLower = false,
++  inclusiveLower = true,
+ ): number {
+   return tileSkipsInHudWindow(samples, nowTick, inclusiveLower);
+ }

@@ -1,6 +1,8 @@
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
 import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
+import { tileHudChrome } from "../plugins/viz-tile-hud";
+import { TILE_LIMITED_SHARING_TOOLTIP, formatHudSkipsPerSec } from "./viz-copy";
 import { morphCopy, Select } from "./ui";
 
 /** First-party demoscene viz packs that share the host UBO frame. */
@@ -76,9 +78,16 @@ export interface VizHudTick {
   tileBudget?: VizTileBudgetStats;
 }
 
-export function tileHudSkipLabel(tile: VizTileBudgetStats, skipRate: number): string {
-  if (tile.shedding && tile.debt > 0) return "share limit";
-  return formatSkipRate(skipRate);
+export function tileHudSkipLabel(
+  tile: VizTileBudgetStats,
+  skipRate: number,
+  activeTiles = 1,
+  nowTick = 0,
+): string {
+  const chrome = tileHudChrome(tile, nowTick, activeTiles);
+  if (chrome.limitedLabel) return chrome.limitedLabel;
+  if (chrome.state === "over_budget") return formatSkipRate(skipRate);
+  return formatHudSkipsPerSec(skipRate);
 }
 
 /** Shedding tiles keep the last delivered frame on screen (never blank). */
@@ -290,9 +299,16 @@ export class VizHud {
     while (this.skipSamples.length && this.skipSamples[0].t < cutoff) this.skipSamples.shift();
 
     const rate = skipRatePerSec(this.skipSamples, now);
-    this.skipEl.textContent = tileBudget
-      ? tileHudSkipLabel(tileBudget, rate)
-      : formatSkipRate(rate);
+    if (tileBudget) {
+      const chrome = tileHudChrome(tileBudget, Math.round(now * 300), 1);
+      this.skipEl.textContent = chrome.limitedLabel ?? formatSkipRate(rate);
+      this.skipEl.title = chrome.limitedLabel ? TILE_LIMITED_SHARING_TOOLTIP : this.skipEl.title;
+      this.skipEl.classList.toggle("viz-hud-skip-limited", Boolean(chrome.limitedLabel));
+      this.skipEl.classList.toggle("viz-hud-skip-fail", chrome.useFailTone);
+    } else {
+      this.skipEl.textContent = formatSkipRate(rate);
+      this.skipEl.classList.remove("viz-hud-skip-limited", "viz-hud-skip-fail");
+    }
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
   }
 }

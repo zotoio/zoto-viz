@@ -554,6 +554,8 @@ export class VizFrameBudget {
     tile.shareLimitedSkips = 0;
     tile.shedding = false;
     tile.lastDeliveredFrame = null;
+    tile.lastBuildCostTicks = null;
+    tile.hudSamples.length = 0;
   }
 }
 

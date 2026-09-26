@@ -19,6 +19,7 @@ import {
   runTileBudgetAttempts,
 } from "./dogfood-tile-budget";
 import {
+  VIZ_CLOCK_STEP_TICKS,
   VIZ_COST_SPIKE_500MS,
   VIZ_COST_TICKS_20MS,
   VIZ_COST_TICKS_4MS,
@@ -133,8 +134,11 @@ describe("tile frame budget rows", () => {
     const reg = freshTileRegistry(["t0"]);
     runTileBudgetAttempts(reg, "t0", 5, () => VIZ_COST_TICKS_50MS);
     expect(reg.getTile("t0").debt).toBeGreaterThan(0);
+    const before = reg.getTile("t0");
+    before.hudSamples.push({ tick: 1000, kind: "skip" });
     syncVizTileScope(["t0", "t1", "t2", "t3"]);
     expect(reg.getTile("t0").debt).toBe(0);
+    expect(reg.getTile("t0").hudSamples).toEqual([]);
     expect(reg.getTile("t0").share).toBe(1252);
     runTileBudgetAttempts(reg, "t0", 1, () => VIZ_COST_TICKS_50MS);
     const debtBefore = reg.getTile("t0").debt;
@@ -147,13 +151,15 @@ describe("tile frame budget rows", () => {
     expect(reg.getTile("t0").share).toBe(1252);
   });
 
-  it("R8: HUD share-limit label and shedding keeps last frame", () => {
+  it("R8: HUD over-budget skip rate and shedding keeps last frame", () => {
     const reg = freshTileRegistry(["t0"]);
     const f1 = frame(1);
-    reg.deliver("t0", () => ({ frame: f1, costTicks: VIZ_COST_TICKS_50MS }), () => {});
+    reg.deliver("t0", () => ({ frame: f1, costTicks: VIZ_COST_TICKS_50MS }), () => {}, { tick: 0 });
+    reg.advanceTick();
+    reg.deliver("t0", () => ({ frame: frame(2), costTicks: VIZ_COST_TICKS_4MS }), () => {}, { tick: reg.currentTick() });
+    reg.advanceTick();
     const tile = reg.getTile("t0");
-    expect(tileHudSkipLabel(tile, 0)).toBe("share limit");
-    reg.deliver("t0", () => ({ frame: frame(2), costTicks: VIZ_COST_TICKS_4MS }), () => {});
+    expect(tileHudSkipLabel(tile, 55, 1, VIZ_CLOCK_STEP_TICKS)).toMatch(/^skips /);
     const shown = tileHudDisplayFrame(reg.getTile("t0"), null);
     expect(shown).toBe(f1);
     expect(shown?.t).toBe(1);
