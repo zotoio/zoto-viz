@@ -395,7 +395,9 @@ function resolvePackets(frame: VizDataFrame): VizDataFrame["packets"] {
 }
 
 function talkersStructureKey(talkers: VizDataFrame["talkers"], seed: number, maxStations: number): string {
-  const ids = talkers.map((t) => t.id).sort();
+  const ids = talkers
+    .map((t) => `${t.id}\0${t.role}`)
+    .sort();
   return `${ids.join("\0")}|${seed}|${maxStations}`;
 }
 

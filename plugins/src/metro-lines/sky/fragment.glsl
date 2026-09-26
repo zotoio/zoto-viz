@@ -179,9 +179,9 @@ void main() {
     float bannerH = 0.028;
     float bannerY = board.y + bh - bannerH;
     float bannerInside = step(bannerY, p.y) * step(p.y, bannerY + bannerH) * step(abs(p.x), 0.92);
-    col = mix(col, ZOTO_FAIL, bannerInside * step(0.5, disruptions) * 0.82);
     float inside = step(board.y, p.y) * step(p.y, board.y + bh) * step(abs(p.x), 0.92);
     col = mix(col, mix(vec3(0.08, 0.1, 0.14), vec3(0.12, 0.14, 0.2), night), inside * 0.92);
+    col = mix(col, ZOTO_FAIL, bannerInside * step(0.5, disruptions) * 0.82);
     float scroll = reduced > 0.5 ? 0.0 : tickPhase;
     for (int i = 0; i < 40; i++) {
       float ch = slotF(5, i);
