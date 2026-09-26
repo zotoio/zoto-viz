@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-scope-note-slider.test.ts",
   "testName": "^duplicate slot shared config > plugin field persist > layout change mid-drag keeps slider focus, value, and one write on release$",
   "description": "Layout change during a range drag must not rebuild the drawer; slider keeps focus/value and persists once on change.",
-  "redOutput": ""
+  "redOutput": "AssertionError: expected \"rebuildViewDrawerContent\" to not be called at all, but actually been called 1 times"
 }

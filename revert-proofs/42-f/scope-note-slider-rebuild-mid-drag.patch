@@ -1,11 +1,12 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1768,6 +1768,9 @@ export class Settings {
+@@ -1768,6 +1768,10 @@ export class Settings {
      if (this.shouldSyncPackScopeNoteAfterLayout(prevTiles, this.anim.mosaicTiles)) {
        this.syncPackScopeNoteFromAnim();
      }
-+    if (this.viewBind?.spec) {
++    if (this.viewPluginDirty && this.viewBind?.spec) {
++      this.viewDrawerKey = null;
 +      this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
 +    }
      if (this.viewPluginDirty && this.isOpen && this.activePane === "view") {
