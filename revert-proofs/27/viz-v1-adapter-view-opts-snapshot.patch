@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-v1-frame-adapter.ts b/web/src/plugins/viz-v1-frame-adapter.ts
+index bbdd3d4..e7de2ce 100644
+--- a/web/src/plugins/viz-v1-frame-adapter.ts
++++ b/web/src/plugins/viz-v1-frame-adapter.ts
+@@ -278,6 +278,7 @@ export class VizV1FrameAdapter {
+   }
+ 
+   deliver(v2: VizDataFrame): void {
++    if (this.viewOpts) this.viewOpts = { ...this.viewOpts };
+     if (this.packs.size === 0) return;
+     if (!this.work) {
+       const maxTalkers = Math.max(...[...this.packs.values()].map((p) => p.budget.maxTalkers));

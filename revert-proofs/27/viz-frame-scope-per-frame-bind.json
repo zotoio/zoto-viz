@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/viz-frame-scope.test.ts",
+  "testName": "VizFrameScopeCache > parses source bind once per scope sync, not on 300 frame ticks",
+  "description": "One-line production revert: readBindForFrameTick re-parses source bind on every frame tick."
+}

@@ -1,0 +1,14 @@
+diff --git a/web/src/app/viz-frame-scope.ts b/web/src/app/viz-frame-scope.ts
+index 0000000..0000000 100644
+--- a/web/src/app/viz-frame-scope.ts
++++ b/web/src/app/viz-frame-scope.ts
+@@ -35,6 +35,9 @@ export class VizFrameScopeCache {
+ 
+   /** Called on each viz frame tick from main — must not parse options or call optsFor. */
+   readBindForFrameTick(): SourceBind {
++    if (this.bindOpts) {
++      this.sourceBind = this.deps.parseSourceBind(this.bindOpts);
++    }
+     return this.sourceBind;
+   }
+ }

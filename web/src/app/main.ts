@@ -102,6 +102,7 @@ import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { vizV1FrameAdapter } from "../plugins/viz-v1-frame-adapter";
+import { VizFrameScopeCache } from "./viz-frame-scope";
 import {
   beginCypherCicPanelSession,
   endCypherCicPanelSession,
@@ -444,18 +445,14 @@ scene.afterLook = () => {
   scene.setPluginUboBuffer(vizWriter.ubo);
 };
 let v1AdapterPackId: string | null = null;
-let vizSourceBind = parseSourceBind({});
-let vizSourceBindOpts: Record<string, string> | null = null;
+const vizFrameScope = new VizFrameScopeCache({
+  parseSourceBind,
+  illustratedSourceBind,
+  syncAdapterViewOpts: (opts) => vizV1FrameAdapter.syncViewOpts(opts),
+});
 
-/** Parse viz source bind and adapter view opts once per scope sync (not each frame). */
 function syncVizFrameScope(m: ViewMode, opts: Record<string, string>): void {
-  vizV1FrameAdapter.syncViewOpts(opts);
-  if (vizSourceBindOpts === opts) return;
-  vizSourceBindOpts = opts;
-  const demoPack = normalizeVizDemoPackId(m.pluginId);
-  vizSourceBind = demoPack === "hn-rain" || demoPack === "hn-term"
-    ? illustratedSourceBind(opts)
-    : parseSourceBind(opts);
+  vizFrameScope.sync(m, opts);
 }
 
 function syncV1PackAdapter(spec: PluginView | null): void {
@@ -1087,7 +1084,7 @@ function feed(m: StateMsg): void {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
-    const bind = vizSourceBind;
+    const bind = vizFrameScope.readBindForFrameTick();
     const useV1Adapter = vizV1FrameAdapter.hasV1Packs() || active?.viz?.contract === 1;
     const buildLiveFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(

@@ -1,0 +1,27 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/app/viz-frame-scope.test.ts (1 test | 1 failed) 8ms
+   ❯ VizFrameScopeCache (1)
+     × parses source bind once per scope sync, not on 300 frame ticks 4ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:29:59
+   Duration  526ms (environment 75%, transform 17%, import 3%, tests 2%, setup 2%, worker 1%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/viz-frame-scope.test.ts > VizFrameScopeCache > parses source bind once per scope sync, not on 300 frame ticks
+AssertionError: expected "vi.fn()" to be called 1 times, but got 301 times
+ ❯ src/app/viz-frame-scope.test.ts:30:29
+     28|
+     29|     expect(optsFor).toHaveBeenCalledTimes(1);
+     30|     expect(parseSourceBind).toHaveBeenCalledTimes(1);
+       |                             ^
+     31|
+     32|     const opts2 = { bind: "wan" };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
