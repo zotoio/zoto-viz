@@ -232,6 +232,15 @@ describe("VizFrameBudget", () => {
     expect(budget.stats.overBudget).toBe(1);
   });
 
+  it("tracks present-to-present p95", () => {
+    const budget = new VizFrameBudget();
+    budget.markPresent(0);
+    for (let i = 1; i <= 20; i++) budget.markPresent(i * 10);
+    expect(budget.stats.p95Ms).toBeGreaterThanOrEqual(10);
+    budget.reset();
+    expect(budget.stats.p95Ms).toBe(0);
+  });
+
   it("resets present baseline on reset()", () => {
     const budget = new VizFrameBudget();
     budget.markPresent(0);

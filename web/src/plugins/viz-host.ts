@@ -56,6 +56,8 @@ export interface VizPluginContract {
   uniforms: VizSkyUniform[];
   ubo: typeof VIZ_UBO;
   idle: VizIdleConfig;
+  /** When true, host delivers rAF present timestamps (and optional sky clock) to the sandbox. */
+  presentTick?: boolean;
 }
 
 export type {
@@ -138,6 +140,7 @@ export interface VizParticleWriteResult extends VizBufferWriteResult {
 
 export interface VizFrameBudgetStats {
   lastMs: number;
+  p95Ms: number;
   overBudget: number;
   skipped: number;
   total: number;
@@ -296,7 +299,8 @@ export function parseVizContract(raw: unknown): VizPluginContract | undefined {
   const maxBuffers = clampInt(doc.maxBuffers, 1, VIZ_UBO.slotCount, VIZ_DEFAULT_MAX_BUFFERS);
   const maxBufferFloats = clampInt(doc.maxBufferFloats, 4, VIZ_UBO.slotFloats, VIZ_DEFAULT_MAX_BUFFER_FLOATS);
   const maxParticles = clampInt(doc.maxParticles, 0, 8192, 0);
-  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO, idle };
+  const presentTick = doc.presentTick === true;
+  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO, idle, presentTick };
 }
 
 function clampInt(raw: unknown, lo: number, hi: number, fallback: number): number {
@@ -447,6 +451,12 @@ export function buildVizFrameForPlugin(
   return mergeVizIdleFrame(buildVizFrame(state, prevTs, audio, bind), idle);
 }
 
+function percentile(sorted: number[], p: number): number {
+  if (!sorted.length) return 0;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1));
+  return sorted[idx]!;
+}
+
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
 export class VizFrameBudget {
   private _lastMs = 0;
@@ -455,6 +465,7 @@ export class VizFrameBudget {
   private _total = 0;
   private _lastBuilt: VizDataFrame | null = null;
   private _lastPresent = -1;
+  private readonly _presentMs: number[] = [];
   private readonly now: () => number;
 
   constructor(now: () => number = () => performance.now()) {
@@ -462,8 +473,10 @@ export class VizFrameBudget {
   }
 
   get stats(): VizFrameBudgetStats {
+    const sorted = [...this._presentMs].sort((a, b) => a - b);
     return {
       lastMs: this._lastMs,
+      p95Ms: percentile(sorted, 0.95),
       overBudget: this._overBudget,
       skipped: this._skipped,
       total: this._total,
@@ -494,7 +507,10 @@ export class VizFrameBudget {
    */
   markPresent(ts: number): void {
     if (this._lastPresent >= 0) {
-      const over = this.record(ts - this._lastPresent);
+      const dt = ts - this._lastPresent;
+      this._presentMs.push(dt);
+      if (this._presentMs.length > 180) this._presentMs.shift();
+      const over = this.record(dt);
       if (over) this._skipped++;
     }
     this._lastPresent = ts;
@@ -530,6 +546,7 @@ export class VizFrameBudget {
     this._total = 0;
     this._lastBuilt = null;
     this._lastPresent = -1;
+    this._presentMs.length = 0;
   }
 }
 

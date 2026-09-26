@@ -26,6 +26,7 @@ export type ParentMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
+  | { source: "zoto-viz-host"; type: "present"; ts: number; skyT?: number }
   | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
 
 export interface PluginHostHandlers {
@@ -136,6 +137,22 @@ export class PluginSandbox {
     if (!this.caps.includes("viz.read")) return;
     this.iframe?.contentWindow?.postMessage(
       { source: "zoto-viz-host", type: "frame", frame: data } satisfies ParentMsg,
+      "*",
+    );
+  }
+
+  /** rAF present time (ms) for viz.write packs with ``viz.presentTick``. */
+  present(ts: number, skyT?: number): void {
+    if (!this.caps.includes("viz.write")) return;
+    this.iframe?.contentWindow?.postMessage(
+      { source: "zoto-viz-host", type: "present", ts, skyT } satisfies ParentMsg,
+      "*",
+    );
+  }
+
+  pushConfig(config: Record<string, string>): void {
+    this.iframe?.contentWindow?.postMessage(
+      { source: "zoto-viz-host", type: "config", config } satisfies ParentMsg,
       "*",
     );
   }

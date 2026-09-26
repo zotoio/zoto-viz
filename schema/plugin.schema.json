@@ -499,6 +499,11 @@
           "const": false,
           "description": "Must be false. Enforced at validate time and runtime."
         },
+        "presentTick": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true with viz.write, the host delivers rAF present timestamps to the sandbox so the pack can advance simulation on its own clock."
+        },
         "uniforms": {
           "type": "array",
           "maxItems": 6,

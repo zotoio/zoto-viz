@@ -476,6 +476,66 @@ def api_sky(req: web.Request) -> web.StreamResponse:
     return resp
 
 
+_ASSET_SUFFIX = frozenset({
+    ".mp3", ".wav", ".ogg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".md", ".txt",
+})
+
+
+def _plugin_asset_root(row: dict[str, Any]) -> Path | None:
+    raw = str(row.get("file") or "").strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    if not path.is_file() and not path.is_dir():
+        return None
+    return _plugin_home(path)
+
+
+def api_asset(req: web.Request) -> web.StreamResponse:
+    """Serve a pack-local asset after consent (src plugins are always allowed)."""
+    pid = req.match_info["id"]
+    rel = str(req.match_info.get("path") or "")
+    row = _plugin_row(pid)
+    if not row:
+        return web.json_response({"error": "unknown plugin"}, status=404)
+    origin = str(row.get("origin") or "zip").strip().lower()
+    if origin != "src" and not consented(row):
+        err = str(row.get("sky_error") or psky.AWAITING_REVIEW)
+        return web.json_response({"error": err}, status=403)
+    root = _plugin_asset_root(row)
+    if not root:
+        return web.json_response({"error": "no plugin home"}, status=404)
+    root_resolved = root.resolve()
+    safe = Path(rel)
+    if safe.is_absolute() or ".." in safe.parts:
+        return web.json_response({"error": "invalid path"}, status=400)
+    target = (root / safe).resolve()
+    try:
+        if not target.is_relative_to(root_resolved):
+            return web.json_response({"error": "invalid path"}, status=400)
+    except AttributeError:
+        if not str(target).startswith(str(root_resolved)):
+            return web.json_response({"error": "invalid path"}, status=400)
+    if target.suffix.lower() not in _ASSET_SUFFIX:
+        return web.json_response({"error": "unsupported type"}, status=400)
+    if not target.is_file():
+        return web.json_response({"error": "not found"}, status=404)
+    ctype = "application/octet-stream"
+    suf = target.suffix.lower()
+    if suf == ".mp3":
+        ctype = "audio/mpeg"
+    elif suf in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        ctype = f"image/{suf.lstrip('.')}"
+    body = target.read_bytes()
+    resp = web.Response(body=body, content_type=ctype)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    digest = str(row.get("sha256") or row.get("shader_sha256") or "")
+    if digest:
+        resp.headers["ETag"] = f'"{digest}"'
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
+
+
 _validator = None
 
 
@@ -1014,6 +1074,10 @@ async def api_module_http(request: web.Request) -> web.StreamResponse:
 
 async def api_sky_http(request: web.Request) -> web.StreamResponse:
     return await asyncio.to_thread(api_sky, request)
+
+
+async def api_asset_http(request: web.Request) -> web.StreamResponse:
+    return await asyncio.to_thread(api_asset, request)
 
 
 def python_allow(spec: dict[str, Any]) -> bool:

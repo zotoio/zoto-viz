@@ -57,6 +57,7 @@ export type CatalogRow = {
   viz?: unknown;
   typesafe?: unknown;
   hash?: unknown;
+  sha256?: unknown;
   service?: unknown;
   consent?: unknown;
   origin?: unknown;
@@ -326,6 +327,7 @@ export function toPluginView(raw: unknown): PluginView {
   const typesafeContract = parseTypeSafeContract(row.typesafe);
   if (typesafeContract) spec.typesafe = typesafeContract;
   if (asString(row.hash)) spec.hash = asString(row.hash);
+  else if (asString(row.sha256)) spec.hash = asString(row.sha256);
   if (asString(row.service)) spec.service = asString(row.service);
   if (row.consent === "reviewed" || row.consent === "authored" || row.consent === null) spec.consent = row.consent;
   if (row.origin === "src" || row.origin === "zip" || row.origin === "local") spec.origin = row.origin;
@@ -335,6 +337,7 @@ export function toPluginView(raw: unknown): PluginView {
   if (typeof row.has_backend === "boolean") spec.has_backend = row.has_backend;
   if (typeof row.has_datasource === "boolean") spec.has_datasource = row.has_datasource;
   if (asString(row.shader_sha256)) spec.shader_sha256 = asString(row.shader_sha256);
+  if (asString(row.sha256)) spec.sha256 = asString(row.sha256);
   if (typeof row.sky_available === "boolean") spec.sky_available = row.sky_available;
   if (asString(row.sky_error)) spec.sky_error = asString(row.sky_error);
   return spec;

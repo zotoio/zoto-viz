@@ -18,7 +18,6 @@ import { liveSound } from "../audio/sound";
 import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
 import {
   backroomsOptions as backroomsOptionsNow,
-  backroomsSlots,
   parseBackroomsOptions,
   setBackroomsOptions,
 } from "../../../plugins/src/backrooms/frontend/director";
@@ -349,6 +348,10 @@ addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
+  const active = mode.pluginId
+    ? pluginSpecs.find((p) => p.id === mode.pluginId) ?? null
+    : null;
+  if (active?.viz?.presentTick) sandbox.present(ts, scene.skyTime());
   if (mode.pluginId === "backrooms") {
     const br = backroomsViewOptions();
     pluginSfx.setMasterVolume(br.volume);
@@ -374,16 +377,6 @@ let stereoBins: number[] = [];
 let stereoBinsAt = 0;
 scene.afterLook = () => {
   const mode = modeById(modeSel.value);
-  if (mode.pluginId === "backrooms" && vizWriter) {
-    // The director owns camera, creature and maze on the sky clock; the sound bed reads the same track.
-    backroomsViewOptions();
-    scene.setHeard(false);
-    const drive = backroomsSlots(scene.skyTime(), new Date(), innerWidth / Math.max(1, innerHeight));
-    vizWriter.writeBuffer(0, drive.slot0);
-    vizWriter.writeBuffer(1, drive.slot1);
-    scene.setPluginUboBuffer(vizWriter.ubo);
-    return;
-  }
   if (mode.pluginId !== "stereo-gram" || !vizWriter) {
     scene.setHeard(false);
     return;
@@ -488,6 +481,9 @@ function onPluginFields(): void {
   const m = modeById(modeSel.value);
   const opts = optsFor(m);
   currentOpts = opts;
+  if (m.pluginId && pluginHasFrontend(pluginSpecForMode(m.id))) {
+    sandbox.pushConfig(opts);
+  }
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   nestCams.setLook(opts);
   if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);

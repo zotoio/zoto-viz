@@ -201,6 +201,7 @@ export interface PluginView {
   viz?: VizPluginContract;
   typesafe?: TypeSafeContract;
   hash?: string;
+  sha256?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;
   /** Catalog provenance: src (shipped), zip (contrib), or local (~/.zoto-viz/plugins/local). */
