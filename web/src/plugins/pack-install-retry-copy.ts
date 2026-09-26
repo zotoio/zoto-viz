@@ -31,3 +31,18 @@ export function packRetrySuccessHistoryMessage(name: string | undefined, version
   const ver = String(version).trim() || "2";
   return `${label} v${ver} installed`;
 }
+
+export function packUnreadableBlockRecordsNotice(count: number): string {
+  const n = Math.max(0, Math.floor(count));
+  if (n <= 0) return "";
+  if (n === 1) {
+    return (
+      "1 blocked install record couldn't be read. That pack stays blocked until you use Retry "
+      + "or remove the damaged file under ~/.zoto-viz/plugins/local/blocks/."
+    );
+  }
+  return (
+    `${n} blocked install records couldn't be read. Those packs stay blocked until you use Retry `
+    + "or remove the damaged files under ~/.zoto-viz/plugins/local/blocks/."
+  );
+}

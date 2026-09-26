@@ -970,11 +970,14 @@ def _materialize_zip_plugin(
     rel: str,
     *,
     zip_version: str | int | None = None,
+    pack_id: str | None = None,
 ) -> pz.UnpackResult | None:
-    from .pack_zip_blocks import catalog_row_for_block, zip_block_for_sha
+    from .pack_zip_blocks import catalog_row_for_block, zip_block_for_pack, zip_block_for_sha
 
     zip_sha = pz.plugin_sha256(zip_path)
     persisted = zip_block_for_sha(zip_sha)
+    if persisted is None and pack_id:
+        persisted = zip_block_for_pack(pack_id)
     cache_key = zip_block_cache_key(zip_path)
     if persisted is not None:
         row = catalog_row_for_block(persisted, rel=rel)
@@ -1076,7 +1079,18 @@ def _scan_zips(
             errors.append({"file": rel, "error": str(e)})
             continue
         zip_version = preview.get("version")
-        unpacked = _materialize_zip_plugin(zip_path, dest, errors, rel, zip_version=zip_version)
+        if origin != "src":
+            from .pack_zip_blocks import (
+                catalog_row_for_store_unreadable,
+                zip_blocks_store_dir_unreadable,
+            )
+
+            if zip_blocks_store_dir_unreadable():
+                errors.append(catalog_row_for_store_unreadable(rel=rel, pack_id=pid))
+                continue
+        unpacked = _materialize_zip_plugin(
+            zip_path, dest, errors, rel, zip_version=zip_version, pack_id=pid,
+        )
         if dest.exists():
             yml = dest / "plugin.yml"
             doc = load_file(yml)
@@ -1187,6 +1201,14 @@ def api_list(_: web.Request) -> web.Response:
             merged_errors.extend(records)
             result = {**result, "errors": merged_errors}
         notices = drain_install_notices()
+        from .pack_install_retry import format_unreadable_block_records_notice
+        from .pack_zip_blocks import unreadable_block_record_count
+
+        unreadable_n = unreadable_block_record_count()
+        if unreadable_n:
+            msg = format_unreadable_block_records_notice(unreadable_n)
+            if msg:
+                notices = [*notices, {"error": "pack_block_record_unreadable", "message": msg}]
         if notices:
             result = {**result, "installNotices": notices}
         return web.json_response(result)

@@ -1,0 +1,20 @@
+diff --git a/service/pack_zip_blocks.py b/service/pack_zip_blocks.py
+index 0000000..0000000 100644
+--- a/service/pack_zip_blocks.py
++++ b/service/pack_zip_blocks.py
+@@ -133,12 +133,8 @@ def _read_pack_block_file(pack_id: str) -> dict[str, str] | None:
+     try:
+         raw = json.loads(path.read_text(encoding="utf-8"))
+     except (OSError, json.JSONDecodeError):
+-        _UNREADABLE_PACKS.add(pack_id)
+-        row = _row_unreadable(pack_id)
+-        _BY_PACK[pack_id] = row
+-        return row
++        return None
+     if not isinstance(raw, dict):
+-        _UNREADABLE_PACKS.add(pack_id)
+-        row = _row_unreadable(pack_id)
+-        _BY_PACK[pack_id] = row
+-        return row
++        return None
+     row = {k: str(v) for k, v in raw.items()}

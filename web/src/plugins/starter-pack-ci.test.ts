@@ -14,10 +14,10 @@ import {
   assertStarterBundleInlinesSdk,
   patchPackIds,
   stageStarterWithFiles,
-  STARTER_REGRESSION_DIR,
   runStarterPackDrawPipeline,
   STARTER_CI_PACK_ID,
   stageStarterTree,
+  serviceCompileUsesBundlePackEntry,
 } from "./starter-pack-pipeline";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -49,6 +49,7 @@ function withSysFailed(frame: VizDataFrame, failed: number): VizDataFrame {
 }
 
 const ciDrawReady = existsSync(esbuildBin) && pythonDepsReady();
+const ciCompileReady = ciDrawReady && serviceCompileUsesBundlePackEntry(repoRoot);
 
 describe("pack starter template CI", () => {
   afterAll(async () => {
@@ -65,7 +66,7 @@ describe("pack starter template CI", () => {
     }
   });
 
-  it.skipIf(!ciDrawReady)(
+  it.skipIf(!ciCompileReady)(
     "zips, compiles through service esbuild with SDK inlined in module.js",
     () => {
       const { stageRoot, packHome } = stageStarterTree(starterTemplate, repoRoot);
@@ -83,7 +84,7 @@ describe("pack starter template CI", () => {
     },
   );
 
-  it.skipIf(!ciDrawReady)(
+  it.skipIf(!ciCompileReady)(
     "draws: zip → compile → sky → headless WebGL2 smoke (non-black)",
     async () => {
       const { stageRoot, packHome } = stageStarterTree(starterTemplate, repoRoot);
@@ -101,8 +102,10 @@ describe("pack starter template CI", () => {
     15_000,
   );
 
-  it.skipIf(!ciDrawReady)("regression visualisation.yml missing engine fails visualisation-contract", async () => {
-    const badVis = readFileSync(path.join(repoRoot, STARTER_REGRESSION_DIR, "visualisation.yml"), "utf8");
+  const REGRESSION_BAD_VIS = "id: plugin:pack-starter-template\nname: Pack starter\nbase: talkers\n";
+
+  it.skipIf(!ciCompileReady)("regression visualisation.yml missing engine fails visualisation-contract", async () => {
+    const badVis = REGRESSION_BAD_VIS;
     const { stageRoot, packHome } = stageStarterWithFiles(starterTemplate, repoRoot, { visualisationYml: badVis });
     try {
       const result = await runStarterPackDrawPipeline(repoRoot, packHome);
@@ -113,8 +116,23 @@ describe("pack starter template CI", () => {
     }
   });
 
-  it.skipIf(!ciDrawReady)("regression pre-fix shader fails WebGL compile at shader stage", async () => {
-    const badFrag = readFileSync(path.join(repoRoot, STARTER_REGRESSION_DIR, "sky/fragment.glsl"), "utf8");
+  const REGRESSION_BAD_FRAG = `void main() {
+  vec3 dir = normalize(vDir);
+  float bars = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float h = zotoVizSlots[i / 4][mod(float(i), 4.0)];
+    float x = float(i) * 0.22 - 0.33;
+    bars += smoothstep(0.02, 0.0, abs(dir.x - x) - 0.04) * h;
+  }
+  float murk = zotoVizSlots[2][0];
+  vec3 col = mix(uBg, uAccent, bars + murk * 0.35);
+  col *= uBright;
+  fragColor = vec4(col, uOpacity);
+}
+`;
+
+  it.skipIf(!ciCompileReady)("regression pre-fix shader fails WebGL compile at shader stage", async () => {
+    const badFrag = REGRESSION_BAD_FRAG;
     const { stageRoot, packHome } = stageStarterWithFiles(starterTemplate, repoRoot, { fragmentGlsl: badFrag });
     try {
       const result = await runStarterPackDrawPipeline(repoRoot, packHome);

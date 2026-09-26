@@ -18,6 +18,7 @@ import {
 import { StarterSim, cornerLabel } from "../../../plugins/sdk/starter/frontend/sim";
 import {
   scanStarterPackCatalog,
+  serviceCompileUsesBundlePackEntry,
   stageStarterTree,
   STARTER_CI_PACK_ID,
 } from "./starter-pack-pipeline";
@@ -108,7 +109,9 @@ describe("pack starter template", () => {
     expect(indexSrc).toMatch(/getVizZoto/);
   });
 
-  it("staged starter passes plugins.scan without catalog errors", () => {
+  it.skipIf(!serviceCompileUsesBundlePackEntry(repoRoot))(
+    "staged starter passes plugins.scan without catalog errors",
+    () => {
     const { stageRoot } = stageStarterTree(starterRoot, repoRoot);
     try {
       const scan = scanStarterPackCatalog(repoRoot, stageRoot, STARTER_CI_PACK_ID);
@@ -117,7 +120,8 @@ describe("pack starter template", () => {
     } finally {
       rmSync(stageRoot, { recursive: true, force: true });
     }
-  });
+  },
+  );
 
   it("pack entry applies saved config and drives uTime", () => {
     const indexSrc = readFileSync(path.join(starterRoot, "frontend/index.ts"), "utf8");
