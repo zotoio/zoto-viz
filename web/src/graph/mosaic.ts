@@ -13,6 +13,7 @@ import {
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
 import { releasePanelView } from "./panel-view-lifecycle";
+import { dropMosaicTileWriter } from "./mosaic-viz-feed";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -206,6 +207,8 @@ export class Mosaic {
     onPromote: (id: string, theme: Theme | null) => void;
     onLayout: (patch: MosaicLayoutPatch) => void;
     onCloseLast: () => void;
+    /** Live tile picker (consent, setMode, sky sync). When set, pane chrome uses this instead of bare assignViews. */
+    onPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
     paneCog?: (id: string) => HTMLButtonElement;
     sync: () => MosaicSync;
   }) {}
@@ -715,6 +718,7 @@ export class Mosaic {
 
   private dropPane(id: string): void {
     releasePanelView(id);
+    dropMosaicTileWriter(id);
     if (id === this.mainId) {
       const next = this.extras.find((e) => isGraph(e.id));
       if (next) {
@@ -850,7 +854,12 @@ export class Mosaic {
       const fromId = [...this.panes.entries()].find(([, el]) => el === pane)?.[0] ?? id;
       const toId = pick.value;
       if (fromId === toId) return;
-      if (!this.setPaneView(fromId, toId)) fillViewSelect(pick, fromId);
+      if (this.cfg.onPanePick) {
+        const ret = this.cfg.onPanePick(fromId, toId);
+        const fail = () => fillViewSelect(pick, fromId);
+        if (ret instanceof Promise) void ret.then((ok) => { if (ok === false) fail(); });
+        else if (ret === false) fail();
+      } else if (!this.setPaneView(fromId, toId)) fillViewSelect(pick, fromId);
     });
     const tools = document.createElement("div");
     tools.className = "mosaic-tools";

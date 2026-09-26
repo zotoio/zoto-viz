@@ -168,6 +168,9 @@ export class PluginSandbox {
     iframe.src = pluginSandboxFrameUrl();
     document.body.appendChild(iframe);
     this.iframe = iframe;
+    if (iframe.srcdoc) {
+      throw new Error("plugin sandbox must not use srcdoc under page CSP");
+    }
     if (import.meta.env.MODE === "test") {
       await Promise.resolve();
     } else {

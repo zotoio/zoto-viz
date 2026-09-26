@@ -106,6 +106,7 @@ import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsen
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
+import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import {
   mosaicHeaderPreApply, mosaicPanePickPreApply, revertModeSelection,
 } from "./apply-mode-mosaic";
@@ -999,11 +1000,12 @@ function feed(m: StateMsg): void {
     || pluginSpecs.find((p) => p.id === tsWatchId)
     || null;
   const packId = normalizeVizDemoPackId(active?.id ?? mode.pluginId);
+  const mosaicDemoPacks = mosaic?.on && mosaic.tileIds.some((id) => normalizeVizDemoPackId(modeById(id).pluginId));
   const packPanelId = mosaic?.on
     ? (mosaic.focusedId || mosaic.mainMode || mosaic.tileIds[0] || "main")
     : "main";
   syncPanelPackSub(packPanelId, !!(packId && (active?.capabilities?.includes("viz.read") || packId)));
-  if (active?.capabilities?.includes("viz.read") || packId) {
+  if (active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks) {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
@@ -1016,12 +1018,16 @@ function feed(m: StateMsg): void {
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       sandbox.frame(f);
-      if (packId) {
-        runPackFrameHandler(packId, f, {
-          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, optsFor(mode));
+      if (packId || mosaic?.on) {
+        if (mosaic?.on) {
+          deliverMosaicDemoPacks(mosaic, f, modeById, pluginSpecForMode, optsFor);
+        } else if (packId) {
+          runPackFrameHandler(packId, f, {
+            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+          }, optsFor(mode));
+        }
       }
     }, buildFrame);
     if (frame) {
@@ -1139,6 +1145,7 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
+  onPanePick: (from, to) => pickMosaicPane(from, to),
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
