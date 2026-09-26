@@ -94,6 +94,7 @@ function rollbackFailedSwitch(
   );
   if (mosaicSnap) host.restoreMosaicSnap(mosaicSnap, prevMode);
   host.reapplyCommittedModeSurfaces(prevMode);
+  host.applyViewLook();
   host.syncModeHud(kept, host.pluginSpecForMode(prevMode));
   host.onConsentDeclined();
   host.modeSel.focus();
@@ -157,6 +158,7 @@ export function applyModeImpl(host: ApplyModeHost, id: string, flags: ApplyModeF
       host.mosaicSetSizeForMode(m.id);
     }
     if (!host.mosaicHasTile(m.id)) {
+      if (!mosaicSnap) mosaicSnap = host.captureMosaicSnap();
       const slot = host.mosaicFocusSlot();
       if (!slot || !host.mosaicSetPaneView(slot, m.id)) {
         rollbackFailedSwitch(host, prevMode, m, prevPresent, mosaicSnap);
