@@ -347,6 +347,8 @@ async function flush(): Promise<void> {
       continue;
     }
     if (w.audio && (await queryMicPermissionState()) === "granted") {
+      // Pulse re-open after reload: browser permission is enough; skip the in-page sheet.
+      // Watchword / agent paths still show the sheet — embeds can report "granted" with no dialog.
       if (w.reason === "pulse microphone") {
         const stream = await captureOne({ audio: w.audio, video: w.video });
         if (stream && !waiterAllowed(w)) {
