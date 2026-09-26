@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/duplicate-slot-scope-note-slider.test.ts",
+  "testName": "^duplicate slot shared config > plugin field persist > drawer rebuild mid-drag keeps unsaved range value$",
+  "description": "Unsaved slider draft survives a forced drawer rebuild.",
+  "redOutput": ""
+}

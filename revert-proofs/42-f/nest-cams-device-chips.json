@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/ui/settings.test.ts",
+  "testName": "^Settings panes > nest-cams drawer shows device chips from setNestDevices$",
+  "description": "setNestDevices must refresh nest-cams camera chips in the view drawer.",
+  "redOutput": ""
+}

@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
-  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > same drawer node, unsaved field, n=1→2→3→2→1 via slot picker, note text and focus preserved$",
+  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > same drawer node, unsaved field, n=1\u21922\u21923\u21922\u21921 via slot picker, note text and focus preserved$",
   "description": "Key the view drawer by mosaic tile slot position instead of drawerKeyFor(view, pack).",
-  "redOutput": "AssertionError: expected 'plugin:settings-fixture!2' to be 'plugin:settings-fixture' // Object.is equality"
+  "redOutput": "AssertionError: expected 3 to be 4 // Object.is equality"
 }

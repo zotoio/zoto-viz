@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
-  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > same drawer node, unsaved field, n=1→2→3→2→1 via slot picker, note text and focus preserved$",
+  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > same drawer node, unsaved field, n=1\u21922\u21923\u21922\u21921 via slot picker, note text and focus preserved$",
   "description": "Show pack scope note when only one pack tile remains (shared < 1 threshold).",
   "redOutput": "AssertionError: expected [ <div …(1)></div> ] to have a length of +0 but got 1"
 }

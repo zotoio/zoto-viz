@@ -1,12 +1,12 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 3b59712..7f0cb0d 100644
+index d97c72c..a488711 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -2174,6 +2174,7 @@ export class Settings {
+@@ -2245,6 +2245,7 @@ export class Settings {
    private tickMeter = (): void => {
      if (!this.isOpen) return;
      this.meterRaf = requestAnimationFrame(this.tickMeter);
-+    if (this.activePane === "view" && this.viewBind?.spec) recordPackScopeNoteRecount();
++    if (this.activePane === "view" && this.viewBind?.spec) this.syncPackScopeNoteFromAnim();
      const ui = this.audioUi;
      if (!ui || this.activePane !== "audio") return;
      const p = this.pulseNow();

@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index d97c72c..ab3f102 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -475,7 +475,7 @@ export class Settings {
+     if (!host) return;
+     const modeForKey = modeIdForDrawerKey?.trim() || this.viewFocusId.trim() || spec?.id || "";
+     const nextKey = spec && modeForKey ? drawerKeyForModeId(modeForKey) : null;
+-    if (nextKey && nextKey === this.viewDrawerKey && host.querySelector('.plugin-layer[data-layer="view"]')) {
++    if (false && nextKey && nextKey === this.viewDrawerKey && host.querySelector('.plugin-layer[data-layer="view"]')) {
+       return;
+     }
+     this.viewDrawerKey = nextKey;

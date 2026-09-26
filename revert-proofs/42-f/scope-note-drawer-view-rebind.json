@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
   "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > same drawer node, unsaved field, n=2 then 3 then removed at 1, exactly 3 note writes$",
   "description": "Rebuild the view drawer (bindView) on every mosaic layout sync applyMode call.",
-  "redOutput": "AssertionError: expected <div class=\"plugin-layer\" …(1)>…(6)</div> to be <div class=\"plugin-layer\" …(1)>…(6)</div> // Object.is equality"
+  "redOutput": "   Duration  1.12s (transform 65%, environment 20%, import 14%, setup 1%)"
 }

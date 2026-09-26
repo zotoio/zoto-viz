@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-shared-config.test.ts",
   "testName": "^duplicate slot shared config > scope note when two tiles share one store > hides the shared scope note when the pack is on only one tile$",
   "description": "Show pack scope note when only one pack tile is on the wall (all 1 copy).",
-  "redOutput": "AssertionError: expected 'Changes apply to all 1 Settings fixtu…' to be null"
+  "redOutput": "AssertionError: expected 'Changes apply to all 1 Settings fixtu\u2026' to be null"
 }

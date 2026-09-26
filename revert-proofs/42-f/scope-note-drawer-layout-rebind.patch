@@ -1,14 +1,14 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 3b59712..19ec5c4 100644
+index d97c72c..1e841fb 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1738,6 +1738,9 @@ export class Settings {
-     this.persistAnim();
-     this.animUi?.syncTiles();
-     this.syncPackScopeNoteFromAnim();
+@@ -1735,6 +1735,9 @@ export class Settings {
+     if (this.shouldSyncPackScopeNoteAfterLayout(prevTiles, this.anim.mosaicTiles)) {
+       this.syncPackScopeNoteFromAnim();
+     }
 +    if (this.viewBind?.spec) {
 +      this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
 +    }
    }
  
-   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
+   private shouldSyncPackScopeNoteAfterLayout(prevTiles: string[], nextTiles: string[]): boolean {

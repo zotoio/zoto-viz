@@ -1,0 +1,12 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -474,7 +474,7 @@ export class Settings {
+       return;
+     }
+     this.viewDrawerKey = nextKey;
+-    const draftValues = this.viewPluginDirty ? { ...this.viewPluginDraft } : undefined;
++    const draftValues = undefined;
+     this.viewPluginDirty = false;
+     this.viewPluginDraft = {};
+     this.pop.removeAttribute("data-view-plugin-dirty");
