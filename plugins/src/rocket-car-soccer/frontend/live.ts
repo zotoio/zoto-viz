@@ -1,5 +1,5 @@
 /**
- * Live monitor → visible match effects. Mirrors `liveMapping` in plugin.yml.
+ * Live monitor → visible match effects. See `RCS_LIVE_MAPPING` below (host schema has no liveMapping key yet).
  * Uses the host {@link VizDataFrame} contract only — no invented frame fields.
  */
 

@@ -91,18 +91,21 @@ describe("rocket-car-soccer pack", () => {
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
-  it("declares liveMapping, caps, and viz contract in plugin.yml", () => {
+  it("declares viz contract in plugin.yml and caps/mapping in pack source", () => {
     expect(PLUGIN).toMatch(/config\.read/);
-    expect(PLUGIN).toMatch(/liveMapping:/);
-    expect(PLUGIN).toMatch(/maxCars:\s*6/);
-    expect(PLUGIN).toMatch(/maxParticles:\s*48/);
-    expect(PLUGIN).toMatch(/maxTrailSegments:\s*24/);
-    expect(PLUGIN).toMatch(/maxPhysicsSubsteps:\s*4/);
     expect(PLUGIN).toMatch(/maxBuffers:\s*3/);
     expect(PLUGIN).toMatch(/maxBufferFloats:\s*64/);
+    expect(PLUGIN).not.toMatch(/liveMapping:/);
+    expect(RCS_CAPS).toEqual({
+      maxCars: 6,
+      maxTeam: 3,
+      maxParticles: 48,
+      maxTrailSegments: 24,
+      maxPhysicsSubsteps: 4,
+    });
     for (const row of RCS_LIVE_MAPPING) {
-      expect(PLUGIN).toContain(row.field);
-      expect(PLUGIN).toContain(row.effect);
+      expect(row.field.length).toBeGreaterThan(0);
+      expect(row.effect.length).toBeGreaterThan(0);
     }
   });
 

@@ -4,7 +4,7 @@ Self-playing boost-car arena visual for zoto-viz. Original procedural stadium, t
 
 ## Layout
 
-- `plugin.yml` — id `rocket-car-soccer`, `liveMapping`, hard `caps`, viz contract (3×64-float buffers)
+- `plugin.yml` — id `rocket-car-soccer`, viz contract (3×64-float buffers), datasource streams
 - `visualisation.yml` — stage-only look, presets, seed, min director cut seconds
 - `frontend/match.ts` — fixed-timestep sim (accumulator + max 4 substeps @ 120 Hz), replay ring (no re-sim)
 - `frontend/live.ts` — monitor fields → boost / goal pulse / Zoto Fail alerts
@@ -54,7 +54,7 @@ Python schema + shader stamp (when available):
 python -m service.plugins validate plugins/src/rocket-car-soccer
 ```
 
-## Limits (plugin.yml `caps`)
+## Limits (`RCS_CAPS` in `frontend/pack.ts`)
 
 - Max 6 cars (3 per team)
 - 48 pooled particles / 24 trail segments
