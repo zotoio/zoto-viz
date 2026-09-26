@@ -1,5 +1,6 @@
 import type { Mosaic } from "../graph/mosaic";
 import { consentBlockMessage, mosaicFocusSlot, mosaicSwapFrom } from "./apply-mode-mosaic";
+import { clearConsentPendingForPane, registerConsentPending } from "./consent-pending-panes";
 
 export type SwitchPaneViewResult =
   | { ok: true; paneId: string; viewId: string }
@@ -21,6 +22,8 @@ export type SwitchPaneViewOpts = {
   mountView: (viewId: string) => void | Promise<void>;
   /** Persist mosaicTiles / refresh settings after a successful swap. */
   persistLayout: () => void;
+  /** Catalog plugin id when `toViewId` is a plugin view (for consent-resume). */
+  pluginId?: string | null;
 };
 
 const paneSwitchGen = new Map<string, number>();
@@ -97,6 +100,15 @@ export async function switchPaneView(
     }
     const msg = consentBlockMessage(opts.spec);
     mosaic.setPaneNotice(slot.paneId, msg);
+    const pid = opts.pluginId?.trim();
+    if (pid && slot.swap) {
+      registerConsentPending({
+        paneId: slot.paneId,
+        toViewId: slot.toViewId,
+        fromViewId: opts.fromViewId,
+        pluginId: pid,
+      });
+    }
     return { ok: false, reason: msg };
   }
 
@@ -118,6 +130,7 @@ export async function switchPaneView(
   }
 
   mosaic.setPaneNotice(slot.toViewId, null);
+  clearConsentPendingForPane(slot.paneId);
   mosaic.focus(slot.toViewId);
   await opts.mountView(slot.toViewId);
   opts.persistLayout();

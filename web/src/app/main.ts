@@ -108,6 +108,8 @@ import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import { revertModeSelection } from "./apply-mode-mosaic";
+import { hasConsentPending } from "./consent-pending-panes";
+import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
 
 ignoreResizeLoopError();
@@ -793,14 +795,55 @@ async function runMosaicPaneSwitch(toViewId: string, fromViewId?: string): Promi
   if (!mosaic?.on) return { ok: false, reason: "Mosaic is off." };
   const pm = modeById(toViewId);
   const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
-  return switchPaneView(mosaic, toViewId, {
+  const pluginId = pm.pluginId ? (parsePluginId(pm.id) ?? pm.pluginId) : null;
+  const result = await switchPaneView(mosaic, toViewId, {
     fromViewId,
     ensureReviewed: () => ensureReviewed(spec),
     spec,
+    pluginId,
     teardownView: teardownMosaicPanelView,
     mountView: mountMosaicPanelView,
     persistLayout: persistMosaicPickLayout,
   });
+  if (hasConsentPending()) ensureConsentPendingWatch();
+  return result;
+}
+
+function pluginIsConsented(pluginId: string): boolean {
+  const spec = pluginSpecs.find((p) => p.id === pluginId);
+  if (!spec) return false;
+  return !pluginNeedsReview(spec) || !!spec.consent;
+}
+
+async function resumeMosaicConsentPending(): Promise<void> {
+  if (!mosaic?.on) return;
+  await resumePendingConsentPaneSwitches(pluginIsConsented, (pending) =>
+    runMosaicPaneSwitch(pending.toViewId, pending.fromViewId),
+  );
+}
+
+async function refreshPluginCatalogAndResume(): Promise<void> {
+  pluginSpecs = await installPlugins();
+  modeSel.setOptions(viewSelectOptions());
+  settings.refreshMosaicSlots();
+  await resumeMosaicConsentPending();
+}
+
+let consentCatalogWatch = 0;
+function ensureConsentPendingWatch(): void {
+  if (consentCatalogWatch) return;
+  consentCatalogWatch = window.setInterval(() => {
+    void (async () => {
+      if (!hasConsentPending()) {
+        window.clearInterval(consentCatalogWatch);
+        consentCatalogWatch = 0;
+        return;
+      }
+      try {
+        await refreshPluginCatalogAndResume();
+      } catch { /* monitor down */ }
+    })();
+  }, 1500);
 }
 
 async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}): Promise<void> {
@@ -1668,9 +1711,7 @@ async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
     return;
   }
   if (patch.reloadPlugins === true) {
-    pluginSpecs = await installPlugins();
-    modeSel.setOptions(viewSelectOptions());
-    settings.refreshMosaicSlots();
+    await refreshPluginCatalogAndResume();
   }
   const p = pickAgentSettings(patch, allModes().map((m) => m.id));
   if (p.dice) {
