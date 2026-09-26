@@ -22,8 +22,17 @@ export interface VizPresentTick {
    * `tileId` for per-tile simulation state until that decision lands.
    */
   tileId: string;
-  /** Optional secondary clock in seconds (e.g. sky shader time); omit when unused. */
+  /**
+   * Host sky clock in seconds (`scene.skyTime()`): monotonic (never decreases), global
+   * across views, always sent on present ticks. Frame deltas are clamped to 0.25 s;
+   * the clock follows the motion speed slider like the sky shader `uTime`.
+   */
   pluginClock?: number;
+  /**
+   * Stage viewport width/height (w/h) for layout; sandbox iframe is 0×0 so packs
+   * must not use `innerWidth`/`innerHeight` alone.
+   */
+  aspect?: number;
 }
 
 export interface VizPacketSample {
