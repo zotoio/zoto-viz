@@ -60,6 +60,18 @@ def test_save_roundtrip_mode(tmp_path: Path) -> None:
     assert lan["inhibit_screensaver"] is True
 
 
+def test_viz_frame_opts_defaults() -> None:
+    assert sysconfig.viz_frame_opts({}) == {"links": True, "linksMax": 64}
+
+
+def test_viz_frame_opts_override(tmp_path: Path) -> None:
+    path = tmp_path / "sys-config.yml"
+    sysconfig.save({"root": "/x", "viz_frame_links": False, "viz_frame_links_max": 8}, path)
+    got = sysconfig.load(path)
+    assert got["vizFrame"]["links"] is False
+    assert got["vizFrame"]["linksMax"] == 8
+
+
 def test_detect_prefers_usb_monitor_and_watch_file(tmp_path: Path, monkeypatch) -> None:
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()

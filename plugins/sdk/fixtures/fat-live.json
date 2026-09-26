@@ -200,5 +200,6 @@
     "sockets": 0,
     "failed": 0,
     "udev": 0
-  }
+  },
+  "contract": 2
 }

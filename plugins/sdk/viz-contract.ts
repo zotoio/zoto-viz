@@ -4,7 +4,7 @@
  */
 
 /** Bump when frame slice shapes or semantics change. */
-export const VIZ_CONTRACT_VERSION = 1;
+export const VIZ_CONTRACT_VERSION = 2;
 
 export interface VizPacketSample {
   /** Uppercased protocol label from the decimated capture slice (e.g. TCP, UDP). */
@@ -24,6 +24,15 @@ export interface VizRfBeacon {
   channel: number;
 }
 
+export interface VizLinkSample {
+  /** Talker id for the source host (same id space as `talkers[].id`). */
+  src: string;
+  /** Talker id for the destination host. */
+  dst: string;
+  /** Directional packet rate over the frame window (packets/s). */
+  rate: number;
+}
+
 export interface VizTalkerSample {
   /** Stable talker id (often IP or alias). */
   id: string;
@@ -31,6 +40,8 @@ export interface VizTalkerSample {
   rate: number;
   /** Role bucket: gateway, internet, lan, self, etc. */
   role: string;
+  /** Per-host failed-connection ratio 0..1 (RST/refused over SYN attempts in the window). */
+  failed?: number;
 }
 
 export interface VizHeadline {
@@ -74,6 +85,8 @@ export interface VizSysTelemetry {
 
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */
 export interface VizDataFrame {
+  /** Present on v2 frames; omitted on legacy v1-shaped frames. Matches {@link VIZ_CONTRACT_VERSION}. */
+  contract?: number;
   /** Monotonic frame time in seconds. */
   t: number;
   /** Delta since the previous delivered frame in seconds. */
@@ -86,6 +99,10 @@ export interface VizDataFrame {
   rf: VizRfBeacon[];
   /** Top talkers by rate from the LAN slice. */
   talkers: VizTalkerSample[];
+  /** Directional host-pair rates (v2); omitted when link collection is disabled. */
+  links?: VizLinkSample[];
+  /** Count of pair rows dropped by the top-N cap (v2). */
+  linksDropped?: number;
   /** Headlines from bound sources (HN, RSS, etc.). */
   headlines: VizHeadline[];
   /** True when any slice was filled from viz.idle (host fixture or inline seed). */

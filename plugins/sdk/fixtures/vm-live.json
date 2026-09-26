@@ -51,6 +51,11 @@
       "id": "host-03",
       "rate": 64,
       "role": "internet"
+    },
+    {
+      "id": "host-192",
+      "rate": 40,
+      "role": "lan"
     }
   ],
   "headlines": [
@@ -564,5 +569,6 @@
     "packets": true,
     "rf": true,
     "talkers": true
-  }
+  },
+  "contract": 2
 }

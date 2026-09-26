@@ -1,6 +1,7 @@
 import type { Device, StateMsg } from "../core/types";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
+import { applyVizFrameContractV2, resolveVizFrameCollectOpts } from "./viz-frame-collect";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
 
 /** Target frame budget for viz plugin work (60 fps). */
@@ -61,6 +62,7 @@ export interface VizPluginContract {
 export type {
   VizDataFrame,
   VizHeadline,
+  VizLinkSample,
   VizPacketSample,
   VizRfBeacon,
   VizSysTelemetry,
@@ -414,6 +416,19 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
  * the output cap (top-K), not the full device / flow lists.
  */
 export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: SourceBind | Record<string, string>): VizDataFrame {
+  return applyVizFrameContractV2(
+    buildVizFrameCore(state, prevTs, audio, bind),
+    state,
+    resolveVizFrameCollectOpts(state),
+  );
+}
+
+function buildVizFrameCore(
+  state: StateMsg,
+  prevTs = 0,
+  audio = 0,
+  bind?: SourceBind | Record<string, string>,
+): VizDataFrame {
   const t = state.ts || Date.now() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
@@ -444,7 +459,8 @@ export function buildVizFrameForPlugin(
   idle: VizIdleConfig,
   bind?: SourceBind | Record<string, string>,
 ): VizDataFrame {
-  return mergeVizIdleFrame(buildVizFrame(state, prevTs, audio, bind), idle);
+  const merged = mergeVizIdleFrame(buildVizFrameCore(state, prevTs, audio, bind), idle);
+  return applyVizFrameContractV2(merged, state, resolveVizFrameCollectOpts(state));
 }
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */

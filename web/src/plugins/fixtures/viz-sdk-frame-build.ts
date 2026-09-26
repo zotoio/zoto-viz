@@ -197,6 +197,10 @@ export function scrubMapForFrame(state: StateMsg, frame: VizDataFrame): Map<stri
   for (const t of frame.talkers) {
     if (!isPlaceholderId(t.id)) assignPlaceholder(map, t.id);
   }
+  for (const l of frame.links ?? []) {
+    assignPlaceholder(map, l.src);
+    assignPlaceholder(map, l.dst);
+  }
   for (const b of frame.rf) assignPlaceholder(map, b.ssid);
   for (const h of frame.headlines) {
     if (stringHasSensitive(h.id, hostnames)) assignPlaceholder(map, h.id);
@@ -212,6 +216,7 @@ export function scrubVizDataFrame(
   const hostnames = state ? collectHostnameTokens(state) : new Set<string>();
   return {
     ...frame,
+    ...(frame.contract != null ? { contract: frame.contract } : {}),
     packets: frame.packets.map((p) => ({
       ...p,
       proto: scrubStringIfSensitive(p.proto, map, hostnames),
@@ -224,7 +229,16 @@ export function scrubVizDataFrame(
       id: scrubStructuralId(t.id, map),
       rate: t.rate,
       role: t.role,
+      ...(t.failed != null ? { failed: t.failed } : {}),
     })),
+    ...(frame.links?.length ? {
+      links: frame.links.map((l) => ({
+        src: map.get(l.src) ?? scrubString(l.src, map),
+        dst: map.get(l.dst) ?? scrubString(l.dst, map),
+        rate: l.rate,
+      })),
+    } : {}),
+    ...(frame.linksDropped != null ? { linksDropped: frame.linksDropped } : {}),
     headlines: frame.headlines.map((h) => ({
       ...h,
       id: scrubStringIfSensitive(h.id, map, hostnames),
@@ -259,6 +273,7 @@ function trimDevice(d: Device): Device {
     ...(d.cpu != null ? { cpu: d.cpu } : {}),
     ...(d.ssid != null ? { ssid: d.ssid } : {}),
     ...(d.chan != null ? { chan: d.chan } : {}),
+    ...(d.conn_fail != null ? { conn_fail: d.conn_fail } : {}),
   };
 }
 
