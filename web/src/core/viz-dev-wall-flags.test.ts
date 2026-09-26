@@ -108,6 +108,7 @@ describe("dev viz wall flags", () => {
   it("F5 (iii) bad tile cost: 5011 — no LIMITED on 2×2", () => {
     vi.stubEnv("DEV", true);
     applyDevVizWallFlagsOnBuild("?vizTileCostTicks=5011", TILES_2X2);
+    expect(vizBuildCostTicksForTile(TILES_2X2[0]!, 0)).toBeUndefined();
     expectNoLimitedAfterSoak(TILES_2X2);
   });
 
