@@ -1,4 +1,4 @@
-import type { VizDataFrame, VizPacketSample } from "./viz-contract";
+import type { VizDataFrame, VizPacketSample } from "../../../sdk/viz-contract";
 import {
   MARBLE_DATA_MAPPING,
   ZOTO_FAIL_RGB,

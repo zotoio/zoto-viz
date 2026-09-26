@@ -28,7 +28,7 @@ import {
   MR_MARBLES_PER_SLOT,
   MR_MARBLE_FLOATS,
 } from "../../../plugins/src/marble-run/frontend/pack";
-import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../plugins/src/marble-run/frontend/viz-contract";
+import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../plugins/sdk/viz-contract";
 import { jarIndexForRouteKey, MarbleSim, SIM_DT, trackPieceCount } from "../../../plugins/src/marble-run/frontend/sim";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
 import { toPluginView } from "./plugin-visualisation";

@@ -1,6 +1,6 @@
 /** Marble Run — sandbox drives sim + sky buffers (no host-specific hooks). */
 
-import type { VizDataFrame } from "./viz-contract";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { parseMarbleOptions } from "./config";
 import { disposeMarblePack, ingestFrame, packMarbleSlots, setMarbleOptions } from "./pack";
 
