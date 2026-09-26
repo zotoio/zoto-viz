@@ -7,5 +7,13 @@
     "service/monitor.py"
   ],
   "packEntryGlob": "plugins/src/*/frontend/index.ts",
-  "reachExempt": ["scripts/revert-proof.mjs"]
+  "reachExempt": [
+    "scripts/revert-proof.mjs",
+    "scripts/revert-proof-lib.mjs",
+    "scripts/revert-proof-vitest-runner.mjs",
+    "scripts/revert-proof-vitest-overlay.mjs",
+    "scripts/revert-proof-node-assert.mjs",
+    "scripts/revert-proof-node-assert-strict.mjs",
+    "scripts/revert_proof_pytest_plugin.py"
+  ]
 }

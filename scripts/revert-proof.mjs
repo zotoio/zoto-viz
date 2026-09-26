@@ -9,24 +9,30 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  TEST_PATH_RE,
   allowTypeErrorEnabled,
-  buildPytestArgv,
+  assertEditablePythonResolvesInWorktree,
+  assertWorkspaceLinksInWorktree,
   assessPytestSelection,
   assessVitestSelection,
+  assertRedValue,
+  buildPytestArgv,
   classifyPatchedPytest,
   classifyPatchedVitest,
-  escapeVitestTestNamePattern,
   parsePytestPluginJson,
   parseTimeoutSec,
   parseVitestJsonReport,
-  patchTouchesTestFiles,
+  pytestArgvUsesNodeIdNotK,
   pytestNodeId,
+  pythonEnvForWorktree,
+  rejectPatchedVitestGreen,
   resolveVitestProject,
   sanitizeReportText,
+  validatePatchProductionReachable,
   validatePatchStructure,
+  validatePatchTouchesOnlyProduction,
   validatePrNumber,
   validatePythonModule,
+  validateRowMeta,
   validateTestFileRel,
   vitestTestNamePattern,
 } from "./revert-proof-lib.mjs";
@@ -39,13 +45,6 @@ function revertProofScriptsDir(wtRoot) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_TIMEOUT_SEC = 120;
-
-export {
-  escapeVitestTestNamePattern,
-  patchTouchesTestFiles,
-  pytestNodeId,
-  vitestTestNamePattern,
-};
 
 const DEP_EXCLUDE = ["node_modules", "web/node_modules", ".venv"];
 
@@ -177,410 +176,6 @@ function listRows(mainRoot, prNumber, onlySlug) {
   });
 }
 
-function pathsTouchedByPatch(patchText) {
-  const paths = new Set();
-  for (const line of patchText.split("\n")) {
-    if (line.startsWith("+++ ") || line.startsWith("--- ")) {
-      const p = line.slice(4).replace(/^\w+\//, "").trim();
-      if (p === "/dev/null") continue;
-      paths.add(p);
-    }
-  }
-  return [...paths];
-}
-
-function validateMeta(meta, slug) {
-  for (const key of ["runner", "testFile", "testName", "description"]) {
-    if (!meta[key] || typeof meta[key] !== "string") {
-      throw new Error(`row ${slug}: sidecar JSON missing string field "${key}"`);
-    }
-  }
-  if (meta.runner !== "vitest" && meta.runner !== "pytest") {
-    throw new Error(`row ${slug}: runner must be vitest or pytest`);
-  }
-}
-
-export function validatePatchTouchesOnlyProduction(patchText, slug) {
-  if (patchTouchesTestFiles(patchText)) {
-    throw new Error(
-      `row ${slug}: patch touches test files (only production reverts allowed)`,
-    );
-  }
-}
-
-const PRODUCTION_CONFIG_NAME = "revert-proof-production.json";
-
-const REACH_EXEMPT = new Set(["scripts/revert-proof.mjs"]);
-
-const JS_EXT = [".ts", ".tsx", ".js", ".mjs", ".cjs", ".jsx"];
-const PY_EXT = [".py"];
-
-function normRel(p) {
-  return p.replace(/\\/g, "/");
-}
-
-function isExcludedProductionTestPath(rel) {
-  const p = normRel(rel);
-  return (
-    TEST_PATH_RE.test(p) ||
-    /(?:^|\/)(?:tests\/|__tests__\/|fixtures\/|revert-proof\/)/.test(p) ||
-    /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) ||
-    /\/test_[^/]*\.py$/.test(p)
-  );
-}
-
-function loadProductionConfig(wtRoot) {
-  const configPath = path.join(wtRoot, "scripts", PRODUCTION_CONFIG_NAME);
-  let raw = {
-    scanRoots: ["web/src", "plugins", "service", "packages"],
-    entryPoints: ["web/src/app/main.ts", "web/index.html", "service/monitor.py"],
-    packEntryGlob: "plugins/src/*/frontend/index.ts",
-  };
-  if (fs.existsSync(configPath)) {
-    raw = { ...raw, ...JSON.parse(fs.readFileSync(configPath, "utf8")) };
-  }
-  for (const p of raw.reachExempt ?? []) {
-    REACH_EXEMPT.add(normRel(p));
-  }
-  const entryPoints = new Set(
-    (raw.entryPoints ?? []).map((e) => normRel(e)),
-  );
-  const packGlob = raw.packEntryGlob ?? "";
-  if (packGlob.includes("*")) {
-    const [prefix, suffix] = packGlob.split("*");
-    const midDir = path.join(wtRoot, prefix);
-    const tail = suffix.replace(/^\//, "");
-    if (fs.existsSync(midDir)) {
-      for (const ent of fs.readdirSync(midDir, { withFileTypes: true })) {
-        if (!ent.isDirectory()) continue;
-        const candidate = normRel(path.join(prefix, ent.name, tail));
-        if (fs.existsSync(path.join(wtRoot, candidate))) {
-          entryPoints.add(candidate);
-        }
-      }
-    }
-  }
-  return {
-    scanRoots: (raw.scanRoots ?? []).map((r) => normRel(r)),
-    entryPoints,
-  };
-}
-
-function walkProductionFiles(wtRoot, scanRoots) {
-  const files = [];
-  const skipDir = new Set([
-    "node_modules",
-    ".git",
-    "dist",
-    "coverage",
-    "__pycache__",
-    ".venv",
-  ]);
-  function walk(absDir, relDir) {
-    if (!fs.existsSync(absDir)) return;
-    for (const ent of fs.readdirSync(absDir, { withFileTypes: true })) {
-      if (skipDir.has(ent.name)) continue;
-      const rel = relDir ? `${relDir}/${ent.name}` : ent.name;
-      const abs = path.join(absDir, ent.name);
-      if (ent.isDirectory()) {
-        if (isExcludedProductionTestPath(rel)) continue;
-        walk(abs, rel);
-        continue;
-      }
-      if (isExcludedProductionTestPath(rel)) continue;
-      if (
-        JS_EXT.some((e) => ent.name.endsWith(e)) ||
-        PY_EXT.some((e) => ent.name.endsWith(e))
-      ) {
-        files.push(normRel(rel));
-      }
-    }
-  }
-  for (const root of scanRoots) {
-    walk(path.join(wtRoot, root), root);
-  }
-  return files;
-}
-
-function readPackageNameMap(wtRoot) {
-  const map = new Map();
-  function addPkg(pkgDir, relDir) {
-    const pkgPath = path.join(pkgDir, "package.json");
-    if (!fs.existsSync(pkgPath)) return;
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-      if (!pkg.name) return;
-      let main = pkg.main ?? pkg.module;
-      if (!main && pkg.exports) {
-        const exp =
-          typeof pkg.exports === "string"
-            ? pkg.exports
-            : pkg.exports["."];
-        if (typeof exp === "string") main = exp;
-        else if (exp?.import) main = exp.import;
-        else if (exp?.default) main = exp.default;
-      }
-      if (!main) main = "index.js";
-      const resolved = normRel(path.join(relDir, main.replace(/^\.\//, "")));
-      map.set(pkg.name, resolved);
-    } catch {
-      /* ignore */
-    }
-  }
-  addPkg(path.join(wtRoot, "web"), "web");
-  const packagesDir = path.join(wtRoot, "packages");
-  if (fs.existsSync(packagesDir)) {
-    for (const ent of fs.readdirSync(packagesDir, { withFileTypes: true })) {
-      if (ent.isDirectory()) {
-        addPkg(path.join(packagesDir, ent.name), `packages/${ent.name}`);
-      }
-    }
-  }
-  return map;
-}
-
-function resolveJsFile(wtRoot, fromRel, spec) {
-  const fromDir = path.dirname(fromRel);
-  let target;
-  if (spec.startsWith(".")) {
-    target = normRel(path.join(fromDir, spec));
-  } else if (spec.startsWith("@/") || spec.startsWith("~/")) {
-    return null;
-  } else if (!spec.startsWith("@") && !spec.includes("/")) {
-    return null;
-  } else {
-    const pkgMap = readPackageNameMap(wtRoot);
-    const bare = spec.split("/")[0].startsWith("@")
-      ? spec.split("/").slice(0, 2).join("/")
-      : spec.split("/")[0];
-    const mapped = pkgMap.get(bare);
-    if (!mapped) return null;
-    if (spec === bare) {
-      target = mapped;
-    } else {
-      const sub = spec.slice(bare.length + 1);
-      target = normRel(path.join(path.dirname(mapped), sub));
-    }
-  }
-  return materializeModulePath(wtRoot, target);
-}
-
-function materializeModulePath(wtRoot, base) {
-  const rel = normRel(base);
-  const candidates = [rel];
-  if (rel.endsWith(".js")) {
-    candidates.push(rel.slice(0, -3));
-  }
-  for (const stem of candidates) {
-    const abs = path.join(wtRoot, stem);
-    if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
-      return stem;
-    }
-    for (const ext of JS_EXT) {
-      if (fs.existsSync(`${abs}${ext}`)) {
-        return `${stem}${ext}`;
-      }
-    }
-    for (const ext of JS_EXT) {
-      const idx = path.join(abs, `index${ext}`);
-      if (fs.existsSync(idx)) {
-        return normRel(path.join(stem, `index${ext}`));
-      }
-    }
-  }
-  return null;
-}
-
-const JS_IMPORT_RE =
-  /\bfrom\s+['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)|\bimport\s+['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-
-function jsImportsInFile(wtRoot, relFile) {
-  const abs = path.join(wtRoot, relFile);
-  if (!fs.existsSync(abs)) return [];
-  const text = fs.readFileSync(abs, "utf8");
-  const specs = new Set();
-  let m;
-  JS_IMPORT_RE.lastIndex = 0;
-  while ((m = JS_IMPORT_RE.exec(text))) {
-    const spec = m[1] || m[2] || m[3] || m[4];
-    if (spec) specs.add(spec);
-  }
-  const resolved = [];
-  for (const spec of specs) {
-    const r = resolveJsFile(wtRoot, relFile, spec);
-    if (r) resolved.push(r);
-  }
-  return resolved;
-}
-
-function pyModuleToPath(wtRoot, moduleName, fromRel) {
-  const parts = moduleName.split(".");
-  if (moduleName.startsWith(".")) {
-    const fromDir = path.dirname(fromRel);
-    const level = moduleName.match(/^\.+/)?.[0].length ?? 0;
-    const rest = moduleName.slice(level).replace(/\./g, "/");
-    let dir = fromDir;
-    for (let i = 1; i < level; i++) {
-      dir = path.dirname(dir);
-    }
-    const base = rest ? path.join(dir, rest) : dir;
-    return materializePyPath(wtRoot, normRel(base));
-  }
-  if (parts[0] === "service") {
-    const base = normRel(path.join("service", parts.slice(1).join("/")));
-    return materializePyPath(wtRoot, base);
-  }
-  const rootMod = normRel(parts.join("/"));
-  return materializePyPath(wtRoot, rootMod);
-}
-
-function materializePyPath(wtRoot, base) {
-  const rel = normRel(base);
-  const abs = path.join(wtRoot, rel);
-  if (fs.existsSync(`${abs}.py`)) return `${rel}.py`;
-  if (fs.existsSync(path.join(abs, "__init__.py"))) {
-    return normRel(path.join(rel, "__init__.py"));
-  }
-  return null;
-}
-
-const PY_FROM_IMPORT_RE =
-  /^\s*from\s+(\.+[\w.]*|\w+(?:\.\w+)*)\s+import\s+([^#\n]+)/gm;
-const PY_IMPORT_RE = /^\s*import\s+([\w.]+)/gm;
-
-function pyRelativeImportTarget(wtRoot, fromRel, levelPrefix, rest, importName) {
-  const fromDir = path.dirname(fromRel);
-  let dir = fromDir;
-  const level = levelPrefix.length;
-  for (let i = 1; i < level; i++) {
-    dir = path.dirname(dir);
-  }
-  if (rest) {
-    return pyModuleToPath(wtRoot, `${levelPrefix}${rest}`, fromRel);
-  }
-  if (!importName || importName === "*") {
-    return materializePyPath(wtRoot, normRel(dir));
-  }
-  const base = path.join(dir, importName.replace(/\./g, "/"));
-  return materializePyPath(wtRoot, normRel(base));
-}
-
-function pyImportsInFile(wtRoot, relFile) {
-  const abs = path.join(wtRoot, relFile);
-  if (!fs.existsSync(abs)) return [];
-  const text = fs.readFileSync(abs, "utf8");
-  const resolved = [];
-  let m;
-  PY_FROM_IMPORT_RE.lastIndex = 0;
-  while ((m = PY_FROM_IMPORT_RE.exec(text))) {
-    const mod = m[1];
-    const names = m[2]
-      .split(",")
-      .map((part) => part.trim().split(/\s+as\s+/)[0].trim())
-      .filter(Boolean);
-    if (mod.startsWith(".")) {
-      const levelPrefix = mod.match(/^\.+/)?.[0] ?? ".";
-      const rest = mod.slice(levelPrefix.length).replace(/\./g, "/");
-      if (rest) {
-        const r = pyModuleToPath(wtRoot, mod, relFile);
-        if (r) resolved.push(r);
-      } else {
-        for (const name of names) {
-          const r = pyRelativeImportTarget(wtRoot, relFile, levelPrefix, "", name);
-          if (r) resolved.push(r);
-        }
-      }
-      continue;
-    }
-    const r = pyModuleToPath(wtRoot, mod, relFile);
-    if (r) resolved.push(r);
-  }
-  PY_IMPORT_RE.lastIndex = 0;
-  while ((m = PY_IMPORT_RE.exec(text))) {
-    const mod = m[1];
-    if (!mod) continue;
-    const r = pyModuleToPath(wtRoot, mod, relFile);
-    if (r) resolved.push(r);
-  }
-  return resolved;
-}
-
-function buildProductionImporterGraph(wtRoot) {
-  const config = loadProductionConfig(wtRoot);
-  const productionFiles = walkProductionFiles(wtRoot, config.scanRoots);
-  const productionSet = new Set(productionFiles);
-  /** @type {Map<string, Set<string>>} */
-  const importers = new Map();
-
-  for (const file of productionFiles) {
-    const deps = file.endsWith(".py")
-      ? pyImportsInFile(wtRoot, file)
-      : jsImportsInFile(wtRoot, file);
-    for (const dep of deps) {
-      if (!productionSet.has(dep)) continue;
-      if (!importers.has(dep)) importers.set(dep, new Set());
-      importers.get(dep).add(file);
-    }
-  }
-  return { importers, entryPoints: config.entryPoints };
-}
-
-/** @type {null | { root: string, graph: ReturnType<typeof buildProductionImporterGraph> }} */
-let productionGraphCache = null;
-
-function getProductionGraph(wtRoot) {
-  const root = fs.realpathSync(wtRoot);
-  if (!productionGraphCache || productionGraphCache.root !== root) {
-    productionGraphCache = {
-      root,
-      graph: buildProductionImporterGraph(wtRoot),
-    };
-  }
-  return productionGraphCache.graph;
-}
-
-export function isRevertTargetReachableFromProduction(wtRoot, relFile) {
-  const file = normRel(relFile);
-  const { importers, entryPoints } = getProductionGraph(wtRoot);
-  if (entryPoints.has(file)) {
-    return true;
-  }
-  const seen = new Set();
-  let queue = [...(importers.get(file) ?? [])];
-  while (queue.length > 0) {
-    const cur = queue.shift();
-    if (entryPoints.has(cur)) {
-      return true;
-    }
-    if (seen.has(cur)) continue;
-    seen.add(cur);
-    for (const up of importers.get(cur) ?? []) {
-      if (!seen.has(up)) {
-        queue.push(up);
-      }
-    }
-  }
-  return false;
-}
-
-export function validatePatchProductionReachable(patchText, slug, wtRoot) {
-  loadProductionConfig(wtRoot);
-  for (const touched of pathsTouchedByPatch(patchText)) {
-    const file = normRel(touched);
-    if (isExcludedProductionTestPath(file)) {
-      continue;
-    }
-    if (REACH_EXEMPT.has(file)) {
-      continue;
-    }
-    if (!isRevertTargetReachableFromProduction(wtRoot, file)) {
-      throw new Error(
-        `row ${slug}: revert target unreachable from production: ${file}`,
-      );
-    }
-  }
-}
-
 function tscBin(wtRoot) {
   const bin = path.join(wtRoot, "web", "node_modules", ".bin", "tsc");
   if (!fs.existsSync(bin)) {
@@ -588,8 +183,6 @@ function tscBin(wtRoot) {
   }
   return bin;
 }
-
-const SKIP_WALK = new Set([".git", "node_modules", ".venv", "revert-proofs"]);
 
 function pnpmInstallOffline(cwd) {
   const r = spawnSync(
@@ -605,75 +198,6 @@ function pnpmInstallOffline(cwd) {
     throw new Error(
       `pnpm install --offline --frozen-lockfile failed in ${cwd} (no fallback to linking node_modules): ${r.stderr || r.stdout}`,
     );
-  }
-}
-
-function findNodeModulesRoots(wtRoot) {
-  const roots = [];
-  function walk(dir, depth) {
-    if (depth > 6) {
-      return;
-    }
-    const nm = path.join(dir, "node_modules");
-    if (fs.existsSync(nm)) {
-      roots.push(nm);
-    }
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (!ent.isDirectory() || ent.name === "node_modules" || SKIP_WALK.has(ent.name)) {
-        continue;
-      }
-      walk(path.join(dir, ent.name), depth + 1);
-    }
-  }
-  walk(wtRoot, 0);
-  return roots;
-}
-
-function checkSymlinkInsideWorktree(linkPath, wtReal) {
-  let st;
-  try {
-    st = fs.lstatSync(linkPath);
-  } catch {
-    return;
-  }
-  if (!st.isSymbolicLink()) {
-    return;
-  }
-  const real = fs.realpathSync(linkPath);
-  if (real === wtReal || real.startsWith(`${wtReal}${path.sep}`)) {
-    return;
-  }
-  throw new Error(
-    `workspace link ${linkPath} resolves outside worktree: ${real}`,
-  );
-}
-
-export function assertWorkspaceLinksInWorktree(wtRoot) {
-  const wtReal = fs.realpathSync(wtRoot);
-  for (const nmRoot of findNodeModulesRoots(wtRoot)) {
-    for (const name of fs.readdirSync(nmRoot)) {
-      if (name === ".pnpm" || name === ".bin" || name === ".cache") {
-        continue;
-      }
-      const full = path.join(nmRoot, name);
-      if (name.startsWith("@")) {
-        let scopeStat;
-        try {
-          scopeStat = fs.statSync(full);
-        } catch {
-          continue;
-        }
-        if (!scopeStat.isDirectory()) {
-          checkSymlinkInsideWorktree(full, wtReal);
-          continue;
-        }
-        for (const pkg of fs.readdirSync(full)) {
-          checkSymlinkInsideWorktree(path.join(full, pkg), wtReal);
-        }
-        continue;
-      }
-      checkSymlinkInsideWorktree(full, wtReal);
-    }
   }
 }
 
@@ -745,14 +269,6 @@ function venvPython(mainRoot) {
   return "python3";
 }
 
-export function pythonEnvForWorktree(wtRoot) {
-  return {
-    ...process.env,
-    PYTHONPATH: wtRoot,
-    PYTHONDONTWRITEBYTECODE: "1",
-  };
-}
-
 function clearPythonBytecodeCaches(wtRoot) {
   function walk(dir) {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -770,38 +286,6 @@ function clearPythonBytecodeCaches(wtRoot) {
     }
   }
   walk(wtRoot);
-}
-
-export function assertEditablePythonResolvesInWorktree(
-  wtRoot,
-  python,
-  moduleName = "service",
-) {
-  validatePythonModule(moduleName);
-  const r = spawnSync(
-    python,
-    [
-      "-c",
-      `import ${moduleName},os;print(os.path.realpath(${moduleName}.__file__))`,
-    ],
-    {
-      cwd: wtRoot,
-      env: pythonEnvForWorktree(wtRoot),
-      encoding: "utf8",
-    },
-  );
-  if (r.status !== 0) {
-    throw new Error(
-      `python import check for ${moduleName} failed: ${r.stderr || r.stdout}`,
-    );
-  }
-  const resolved = r.stdout.trim();
-  const wtReal = fs.realpathSync(wtRoot);
-  if (resolved !== wtReal && !resolved.startsWith(`${wtReal}${path.sep}`)) {
-    throw new Error(
-      `editable Python package ${moduleName} resolves outside worktree (${resolved})`,
-    );
-  }
 }
 
 let pythonIsolationChecked = false;
@@ -1017,6 +501,9 @@ async function runPytest(
   const args = buildPytestArgv(nodeId, REVERT_PROOF_PYTEST_PLUGIN_MODULE, {
     includeNoCov: pytestSupportsNoCov(python),
   });
+  if (!pytestArgvUsesNodeIdNotK(args)) {
+    throw new Error(`row ${slug}: pytest argv must select by node id, never -k`);
+  }
   const scriptsDir = revertProofScriptsDir(wtRoot);
   const baseEnv = pythonEnvForWorktree(wtRoot);
   const pythonPath = [scriptsDir, baseEnv.PYTHONPATH].filter(Boolean).join(path.delimiter);
@@ -1210,17 +697,9 @@ function metaRunnerCount(run) {
   return run.counts.executed;
 }
 
-export function rejectPatchedVitestGreen(kind, slug) {
-  if (kind === "green") {
-    throw new Error(
-      `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
-    );
-  }
-}
-
 async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   const { slug, patchPath, patchText, meta } = row;
-  validateMeta(meta, slug);
+  validateRowMeta(meta, slug);
   validateTestFileRel(meta.testFile, wtRoot);
   validatePatchStructure(patchText, slug);
   validatePatchTouchesOnlyProduction(patchText, slug);
@@ -1328,8 +807,11 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       const failedWithoutMeta =
         target?.status === "failed" && target.revertProofAssertion !== true;
       if (failedWithoutMeta) {
+        const hint = /^AssertionError\b/.test(target.failureMessage ?? "")
+          ? "for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from \"vitest\", not a separate chai package"
+          : "non-assertion error";
         throw new Error(
-          `row ${slug}: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package)`,
+          `row ${slug}: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; ${hint})`,
         );
       }
       throw new Error(
@@ -1349,6 +831,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       );
     }
   }
+  assertRedValue(slug, meta.red, patched.counts.selection.target.failureMessage);
 
   const failureText = vitestFailureSnippet(patched.reportPath, patched.output);
 
@@ -1438,7 +921,6 @@ function parseArgs(argv) {
 async function mainAsync() {
   worktreeJsDepsReady = false;
   pythonIsolationChecked = false;
-  productionGraphCache = null;
 
   const { prNumber, row: onlySlug } = parseArgs(process.argv);
   validatePrNumber(prNumber);
