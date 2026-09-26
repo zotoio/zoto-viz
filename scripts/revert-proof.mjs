@@ -1324,6 +1324,14 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
     });
     rejectPatchedVitestGreen(kind, slug);
     if (kind === "build break" || kind === "not single assertion failure") {
+      const target = patched.counts.selection?.target;
+      const failedWithoutMeta =
+        target?.status === "failed" && target.revertProofAssertion !== true;
+      if (failedWithoutMeta) {
+        throw new Error(
+          `row ${slug}: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package)`,
+        );
+      }
       throw new Error(
         `row ${slug}: patch breaks build or fails without assertion (proves nothing)`,
       );

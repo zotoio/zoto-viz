@@ -283,6 +283,48 @@ describe("widget", () => {
 `,
   );
 
+  fs.writeFileSync(
+    path.join(root, "web", "revert-proof", "expect-red-control.test.ts"),
+    `import { describe, expect, it } from "vitest";
+import { value } from "../../packages/rp-widget/index.js";
+
+describe("expect red control", () => {
+  it("expect(1).toBe(0) after revert", () => {
+    expect(value()).toBe(1);
+  });
+});
+`,
+  );
+
+  fs.writeFileSync(
+    path.join(root, "web", "revert-proof", "node-assert-red-control.test.ts"),
+    `import assert from "node:assert/strict";
+import { describe, it } from "vitest";
+import { value } from "../../packages/rp-widget/index.js";
+
+describe("node assert red control", () => {
+  it("assert.strictEqual after revert", () => {
+    assert.strictEqual(value(), 1);
+  });
+});
+`,
+  );
+
+  fs.writeFileSync(
+    path.join(root, "web", "revert-proof", "plain-object-fake.test.ts"),
+    `import { describe, it } from "vitest";
+import { value } from "../../packages/rp-widget/index.js";
+
+describe("plain object fake", () => {
+  it("throws plain object on mismatch", () => {
+    if (value() !== 1) {
+      throw { name: "AssertionError", message: "expected 1 to be 0" };
+    }
+  });
+});
+`,
+  );
+
   fs.mkdirSync(path.join(root, "service"), { recursive: true });
   fs.writeFileSync(path.join(root, "service", "__init__.py"), "");
   fs.writeFileSync(path.join(root, "service", "live.py"), "SERVICE_LIVE = 1\n");
@@ -526,6 +568,54 @@ describe("revert-proof runner (fixture repo)", () => {
     assertNoRevertProofWorktrees(root);
   });
 
+  it("(f) real expect() failure is RED with revertProofAssertion meta", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "expect-red", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/expect-red-control.test.ts",
+      testName: "expect red control > expect(1).toBe(0) after revert",
+      description: "Positive control: vitest expect AssertionError",
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "expect-red"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    expect(r.stderr + r.stdout).not.toMatch(/mismatched chai copy/i);
+    assertNoRevertProofWorktrees(root);
+  });
+
+  it("(g) node:assert strictEqual failure is RED", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "node-assert-red", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/node-assert-red-control.test.ts",
+      testName: "node assert red control > assert.strictEqual after revert",
+      description: "Positive control: node:assert AssertionError",
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "node-assert-red"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    assertNoRevertProofWorktrees(root);
+  });
+
+  it("(vitest-plain-object) plain object AssertionError shape is rejected without meta", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "plain-object-fake", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/plain-object-fake.test.ts",
+      testName: "plain object fake > throws plain object on mismatch",
+      description: "Fake assertion object must not count as red",
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "plain-object-fake"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).toMatch(
+      /row plain-object-fake.*revertProofAssertion is not true.*mismatched chai copy/i,
+    );
+    assertNoRevertProofWorktrees(root);
+  });
+
   it("(a) correct revert row produces red output and exit 0", () => {
     const root = mkFixture();
     writeRow(root, "99", "valid-revert", goodPatch, {
@@ -750,7 +840,7 @@ describe("widget", () => {
     assertCheckoutUnchanged(root, before);
   });
 
-  it("(f) filter matching two tests is rejected", () => {
+  it("(filter-two) filter matching two tests is rejected", () => {
     const root = mkFixture();
     fs.writeFileSync(
       path.join(root, "web", "revert-proof", "widget.test.ts"),
@@ -788,7 +878,7 @@ describe("widget", () => {
     assertCheckoutUnchanged(root, before);
   });
 
-  it("(g) hanging test is rejected as timeout", () => {
+  it("(hang-timeout) hanging test is rejected as timeout", () => {
     const root = mkFixture();
     const hangTest = `import { describe, it } from "vitest";
 describe("hang", () => {
