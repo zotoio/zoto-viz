@@ -364,6 +364,7 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
   pointer-events: none;
 }
 .mosaic-pane[data-demo-data="1"]::after,
+.mosaic-scene[data-demo-data="1"]::after,
 #scene[data-demo-data="1"]::after {
   content: "Demo data";
   position: absolute;

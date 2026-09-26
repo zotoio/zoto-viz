@@ -40,3 +40,49 @@ export function paintFeedState(input: FeedPaintInput): HostIdleMergeResult {
   }
   return mergeHostIdleForViews(input.raw, requests);
 }
+
+export type FeedPaintScene = {
+  update(msg: StateMsg): void;
+  setAliasMap(map: Map<string, string>): void;
+};
+
+export type ApplyFeedSlotPaintsInput = {
+  result: HostIdleMergeResult;
+  mergeNames: boolean;
+  collapseByName: (msg: StateMsg) => { msg: StateMsg; map: Map<string, string> };
+  heroScene: FeedPaintScene;
+  mosaicOn: boolean;
+  mosaicTileIds: readonly string[];
+  graphScene: (tileSlot: string) => FeedPaintScene | null | undefined;
+  arcadeViews: ReadonlyArray<{ update(msg: StateMsg): void }>;
+};
+
+/** Paint path shared with `main.ts` feed() — per-slot state, no cross-tile golden leak. */
+export function applyFeedSlotPaints(input: ApplyFeedSlotPaintsInput): StateMsg {
+  const paintSlot = (slot: string): StateMsg => {
+    const raw = input.result.slotPaints.get(slot) ?? input.result.slotPaints.get("hero")!;
+    if (!input.mergeNames) return raw;
+    return input.collapseByName(raw).msg;
+  };
+  const aliasFor = (slot: string): Map<string, string> => {
+    const raw = input.result.slotPaints.get(slot) ?? input.result.slotPaints.get("hero")!;
+    return input.mergeNames ? input.collapseByName(raw).map : new Map();
+  };
+
+  const heroPaint = paintSlot("hero");
+  input.heroScene.setAliasMap(aliasFor("hero"));
+  input.heroScene.update(heroPaint);
+
+  if (input.mosaicOn) {
+    for (const tileSlot of input.mosaicTileIds) {
+      const scene = input.graphScene(tileSlot);
+      if (!scene || scene === input.heroScene) continue;
+      scene.setAliasMap(aliasFor(tileSlot));
+      scene.update(paintSlot(tileSlot));
+    }
+  }
+
+  for (const view of input.arcadeViews) view.update(heroPaint);
+
+  return heroPaint;
+}
