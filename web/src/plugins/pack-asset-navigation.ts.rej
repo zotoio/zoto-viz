@@ -1,8 +1,0 @@
---- web/src/plugins/pack-asset-navigation.ts
-+++ web/src/plugins/pack-asset-navigation.ts
-@@ -25,5 +25,4 @@ export function clearPackNavigationStopped(tileId: string): void {
- 
- /** User-initiated pack load (view pick, re-add after stop, page reload). */
- export function beginUserPackLoadSession(tileId: string): void {
--  clearPackNavigationStopped(tileId);
- }
