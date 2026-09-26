@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
-import { defaultVizContract } from "./viz-host";
+import { VIZ_CONTRACT_VERSION, defaultVizContract } from "./viz-host";
 
 describe("hash consent and TypeScript allow", () => {
   afterEach(() => {
@@ -40,6 +40,31 @@ describe("hash consent and TypeScript allow", () => {
 });
 
 describe("PluginSandbox", () => {
+  it("sends contractVersion on sandbox init", async () => {
+    const posted: { type?: string; contractVersion?: number }[] = [];
+    const create = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, "createElement").mockImplementation((tagName, options) => {
+      const el = create(tagName, options);
+      if (String(tagName).toLowerCase() === "iframe") {
+        Object.defineProperty(el, "contentWindow", {
+          configurable: true,
+          get: () => ({
+            postMessage: (msg: unknown) => {
+              posted.push(msg as { type?: string; contractVersion?: number });
+            },
+          }),
+        });
+      }
+      return el;
+    });
+    const box = new PluginSandbox();
+    await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
+    createSpy.mockRestore();
+    const init = posted.find((m) => m.type === "init");
+    expect(init?.contractVersion).toBe(VIZ_CONTRACT_VERSION);
+    box.unload();
+  });
+
   it("loads srcdoc, ticks, and unloads", async () => {
     const box = new PluginSandbox();
     const styles: Record<string, unknown>[] = [];
