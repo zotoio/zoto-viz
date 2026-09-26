@@ -10,6 +10,7 @@ from scripts.check_pack_pr_boundary import (
     HOST_REVIEW_FAIL_MESSAGE,
     evaluate_pack_pr,
     pack_py_test_path,
+    paths_from_name_status,
     run_check,
     run_host_change_gate,
     validate_catalog_py_change,
@@ -246,3 +247,25 @@ def test_catalog_non_id_edit_rejected() -> None:
         "EXTRA_VIEWS", "EXTRA_VIEWSRenamed"
     )
     assert validate_catalog_py_change(CATALOG_EXTRA_VIEWS_TAIL, head, pack)
+
+
+def test_name_status_includes_rename_source_and_dest() -> None:
+    text = "R100\tweb/src/plugins/viz-host.ts\tplugins/src/foo/frontend/host.ts\n"
+    assert paths_from_name_status(text) == [
+        "plugins/src/foo/frontend/host.ts",
+        "web/src/plugins/viz-host.ts",
+    ]
+
+
+def test_committed_event_timestamp_uses_committer_date() -> None:
+    from scripts.check_pack_pr_boundary import _committed_event_timestamp
+
+    ts = _committed_event_timestamp(
+        {
+            "commit": {
+                "committer": {"date": "2026-09-26T15:00:00Z"},
+            }
+        }
+    )
+    assert ts is not None
+    assert ts.year == 2026

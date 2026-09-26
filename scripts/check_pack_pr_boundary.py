@@ -467,14 +467,29 @@ def run_check(
     return 0, lines
 
 
-def git_diff_name_only(base: str, head: str) -> list[str]:
+def git_diff_changed_paths(base: str, head: str) -> list[str]:
     proc = subprocess.run(
-        ["git", "diff", "--name-only", f"{base}...{head}"],
+        ["git", "diff", "--name-status", "-M", f"{base}...{head}"],
         check=True,
         capture_output=True,
         text=True,
     )
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    return paths_from_name_status(proc.stdout)
+
+
+def paths_from_name_status(text: str) -> list[str]:
+    paths: set[str] = set()
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        status = parts[0]
+        if status.startswith(("R", "C")) and len(parts) >= 3:
+            paths.add(parts[1])
+            paths.add(parts[2])
+        elif len(parts) >= 2:
+            paths.add(parts[1])
+    return sorted(paths)
 
 
 def git_show(ref: str, path: str) -> str | None:
@@ -604,15 +619,33 @@ def load_pr_review_context(
 def last_push_at_from_timeline(timeline: list[dict]) -> datetime | None:
     latest: datetime | None = None
     for item in timeline:
-        if item.get("event") != "committed":
+        event = item.get("event")
+        if event == "head_ref_force_pushed":
+            created = item.get("created_at")
+            if not created:
+                continue
+            ts = parse_github_timestamp(created)
+        elif event == "committed":
+            ts = _committed_event_timestamp(item)
+            if ts is None:
+                continue
+        else:
             continue
-        created = item.get("created_at")
-        if not created:
-            continue
-        ts = parse_github_timestamp(created)
         if latest is None or ts > latest:
             latest = ts
     return latest
+
+
+def _committed_event_timestamp(item: dict) -> datetime | None:
+    created = item.get("created_at")
+    if created:
+        return parse_github_timestamp(created)
+    commit = item.get("commit") or {}
+    for role in ("committer", "author"):
+        date = (commit.get(role) or {}).get("date")
+        if date:
+            return parse_github_timestamp(date)
+    return None
 
 
 def host_reviewed_labeled_at(
@@ -732,7 +765,7 @@ def main(argv: list[str] | None = None) -> int:
         if HOST_CHANGE_LABEL in labels:
             return 0
 
-    changed = git_diff_name_only(args.base, args.head)
+    changed = git_diff_changed_paths(args.base, args.head)
     contents: dict[str, tuple[str | None, str | None]] = {}
     for path in changed:
         if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):

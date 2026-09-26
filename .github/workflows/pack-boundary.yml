@@ -20,7 +20,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          python3 scripts/check_pack_pr_boundary.py \
+          if ! git show "${{ github.event.pull_request.base.sha }}:scripts/check_pack_pr_boundary.py" \
+            > /tmp/check_pack_pr_boundary.py 2>/dev/null; then
+            cp scripts/check_pack_pr_boundary.py /tmp/check_pack_pr_boundary.py
+          fi
+          python3 /tmp/check_pack_pr_boundary.py \
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}" \
             --repo "${{ github.repository }}" \
