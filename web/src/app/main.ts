@@ -101,6 +101,7 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import { vizV1FrameAdapter } from "../plugins/viz-v1-frame-adapter";
 import {
   beginCypherCicPanelSession,
   endCypherCicPanelSession,
@@ -442,7 +443,21 @@ scene.afterLook = () => {
   for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
   scene.setPluginUboBuffer(vizWriter.ubo);
 };
+let v1AdapterPackId: string | null = null;
+
+function syncV1PackAdapter(spec: PluginView | null): void {
+  if (v1AdapterPackId) {
+    vizV1FrameAdapter.unregister(v1AdapterPackId);
+    v1AdapterPackId = null;
+  }
+  if (spec?.viz?.contract === 1) {
+    vizV1FrameAdapter.register(spec.id);
+    v1AdapterPackId = spec.id;
+  }
+}
+
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
+  syncV1PackAdapter(spec);
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
   const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
@@ -1060,13 +1075,14 @@ function feed(m: StateMsg): void {
     const bind = packId === "hn-rain" || packId === "hn-term"
       ? illustratedSourceBind(optsFor(mode))
       : parseSourceBind(optsFor(mode));
+    const useV1Adapter = vizV1FrameAdapter.hasV1Packs() || active?.viz?.contract === 1;
     const buildLiveFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
         s,
         pt,
         a,
         idle,
-        active?.viz?.contract ?? 1,
+        useV1Adapter ? 2 : (active?.viz?.contract ?? 1),
         bind,
       )
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
@@ -1084,10 +1100,14 @@ function feed(m: StateMsg): void {
       }
       : buildLiveFrame;
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
-      if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-      sandbox.frame(f);
+      if (vizV1FrameAdapter.hasV1Packs()) vizV1FrameAdapter.deliver(f);
+      const pluginFrame = active?.viz?.contract === 1 && active.id
+        ? vizV1FrameAdapter.frameFor(active.id) ?? f
+        : f;
+      if (packId === "stereo-gram") pluginFrame.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
+      sandbox.frame(pluginFrame);
       if (packId) {
-        runPackFrameHandler(packId, f, {
+        runPackFrameHandler(packId, pluginFrame, {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),

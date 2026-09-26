@@ -1,0 +1,10 @@
+--- a/web/src/plugins/viz-v1-frame-adapter.ts
++++ b/web/src/plugins/viz-v1-frame-adapter.ts
+@@ -166,7 +166,6 @@
+ 
+ function copyWorkIntoPack(work: VizDataFrame, slot: V1PackSlot): void {
+   const { budget, frame, talkersBuf, packetsBuf, rfBuf, headlinesBuf, sysBuf } = slot;
+-  rebindTalkersFromPool(slot);
+   frame.contract = 1;
+   frame.t = work.t;
+   frame.dt = work.dt;

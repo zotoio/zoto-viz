@@ -1,0 +1,30 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/plugins/viz-v1-frame-adapter.test.ts (6 tests | 1 failed | 5 skipped) 21ms
+   ❯ VizV1FrameAdapter (5)
+     × gives each pack the same frame instance every deliver and different instances across packs 20ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/plugins/viz-v1-frame-adapter.test.ts > VizV1FrameAdapter > gives each pack the same frame instance every deliver and different instances across packs
+AssertionError: expected { contract: 1, t: +0, dt: +0, …(6) } not to be { contract: 1, t: +0, dt: +0, …(6) } // Object.is equality
+
+Compared values have no visual difference.
+
+ ❯ src/plugins/viz-v1-frame-adapter.test.ts:50:19
+     48|     const a = adapter.register("pack-a");
+     49|     const b = adapter.register("pack-b");
+     50|     expect(a).not.toBe(b);
+       |                   ^
+     51|     for (let i = 0; i < 300; i++) {
+     52|       adapter.deliver(sampleV2(i));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  19:07:12
+   Duration  604ms (environment 60%, transform 31%, tests 4%, setup 2%, import 2%, worker 1%)
+
