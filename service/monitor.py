@@ -34,6 +34,7 @@ from typing import Iterable
 from aiohttp import WSCloseCode, web
 
 from . import access
+from . import pack_assets
 from . import agent
 from . import agent_assets
 from . import cursor_agent
@@ -1808,59 +1809,13 @@ async def index(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(idx)
 
 
-_SANDBOX_BOOTSTRAP_HTML_ASSET = re.compile(
-    r'(?P<attr>src|href)="(?P<url>/assets/(?:plugin-sandbox|preload-helper)-[\w-]+\.js)"',
-)
-_SANDBOX_BOOTSTRAP_JS_IMPORT = re.compile(
-    r'(?P<q>["\'])(?P<url>\./(?:preload-helper|plugin-sandbox)-[\w-]+\.js)(?P=q)',
-)
-
-
-def _inject_sandbox_bootstrap_html(body: str, sat: str) -> str:
-    def repl(match: re.Match[str]) -> str:
-        url = access.append_sandbox_asset_query(match.group("url"), sat)
-        return f'{match.group("attr")}="{url}"'
-
-    return _SANDBOX_BOOTSTRAP_HTML_ASSET.sub(repl, body)
-
-
-def _inject_sandbox_bootstrap_js(body: str, sat: str) -> str:
-    def repl(match: re.Match[str]) -> str:
-        q = match.group("q")
-        path = "/assets/" + match.group("url")[2:]
-        url = access.append_sandbox_asset_query(path, sat)
-        return f"{q}{url}{q}"
-
-    return _SANDBOX_BOOTSTRAP_JS_IMPORT.sub(repl, body)
-
-
 async def api_plugin_sandbox_html(request: web.Request) -> web.Response:
-    """Inject the session asset token into bootstrap script URLs for opaque-origin loads."""
-    path = WEB_DIST / "plugin-sandbox.html"
-    if not path.is_file():
-        return web.Response(status=404, text="plugin-sandbox.html missing (run pnpm build)")
-    if not access.sandbox_asset_token_ok(request):
-        return web.json_response({"error": "forbidden origin"}, status=403)
-    sat = access.read_sandbox_asset_token(request)
-    body = _inject_sandbox_bootstrap_html(path.read_text(encoding="utf-8"), sat)
-    return web.Response(text=body, content_type="text/html", charset="utf-8")
-
-
-async def api_sandbox_bootstrap_js(request: web.Request) -> web.Response:
-    """Serve sandbox bootstrap chunks with ``sat`` on relative static imports."""
-    if not access.sandbox_asset_token_ok(request):
-        return web.json_response({"error": "forbidden origin"}, status=403)
-    sat = access.read_sandbox_asset_token(request)
-    name = (request.path or "").rsplit("/", 1)[-1]
-    if not re.fullmatch(r"(?:plugin-sandbox|preload-helper)-[\w-]+\.js", name):
-        return web.Response(status=404)
-    file_path = WEB_DIST / "assets" / name
-    if not file_path.is_file():
-        return web.Response(status=404)
-    body = file_path.read_text(encoding="utf-8")
-    if name.startswith("plugin-sandbox-"):
-        body = _inject_sandbox_bootstrap_js(body, sat)
-    return web.Response(text=body, content_type="application/javascript", charset="utf-8")
+    """Legacy path — redirect callers to token-in-path pack assets."""
+    token = request.app.get("sandbox_asset_token") or ""
+    if not token:
+        return web.json_response({"error": "unavailable"}, status=503)
+    loc = access.pack_asset_url(token, pack_assets.PACK_ID_SANDBOX, "plugin-sandbox.html")
+    raise web.HTTPFound(location=loc)
 
 
 async def on_startup(app: web.Application) -> None:
@@ -1998,10 +1953,9 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_post("/api/plugin-instances", plugin_instances.api_instances)
     app.router.add_put("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     app.router.add_delete("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
+    app.router.add_get(r"/pack-assets/{token}/{pack_id}/{tail:.+}", pack_assets.api_pack_assets)
     if WEB_DIST.exists():
         app.router.add_get("/plugin-sandbox.html", api_plugin_sandbox_html)
-        app.router.add_get(r"/assets/plugin-sandbox-{hash:[\w-]+}.js", api_sandbox_bootstrap_js)
-        app.router.add_get(r"/assets/preload-helper-{hash:[\w-]+}.js", api_sandbox_bootstrap_js)
         app.router.add_static("/", WEB_DIST, show_index=False)
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
@@ -2072,12 +2026,13 @@ def main() -> None:
             + f", {w['dwell']} s each" + ("" if w["rotate"] else ", rotation off"))
     # shutdown_timeout bounds the wait for in-flight requests; the unit gives us 10 s in total
     try:
+        app = make_app(state, args.filter, args.wifi_keys, insecure_lan=listen["insecure_lan"])
         web.run_app(
-            make_app(state, args.filter, args.wifi_keys, insecure_lan=listen["insecure_lan"]),
+            app,
             host=listen["bind"],
             port=listen["port"],
             print=None,
-            access_log=None,
+            access_log=access.sandbox_access_log(app),
             shutdown_timeout=3,
         )
     finally:

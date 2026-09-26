@@ -681,7 +681,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     applyPackFeedPaneNotice(mosaic, tileId, spec.name);
   } catch (e) {
     const reason = classifySandboxBootError(e);
-    logSandboxBootFailureOnce(tileId, reason);
+    logSandboxBootFailureOnce(tileId, reason, spec?.id);
     markSandboxStartupFailed(tileId);
     applyPackFeedPaneNotice(mosaic, tileId, spec?.name ?? spec?.id ?? "Pack");
     sandbox.unload();

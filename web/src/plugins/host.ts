@@ -23,20 +23,27 @@ const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
 ]);
 
-export function appendSandboxAssetQuery(url: string, token?: string): string {
-  const sat = token ?? sandboxAssetToken();
-  if (!sat) return url;
-  const u = new URL(url, location.origin);
-  u.searchParams.set("sat", sat);
-  return `${u.pathname}${u.search}`;
+const PACK_ASSETS_PREFIX = "/pack-assets/";
+const SANDBOX_PACK = "_sandbox";
+
+/** Same-origin pack asset URL with the session token in the path (never query). */
+export function packAssetUrl(packId: string, ...parts: string[]): string {
+  const token = sandboxAssetToken();
+  if (!token) {
+    return `${PACK_ASSETS_PREFIX}${encodeURIComponent(packId)}/${parts.map((p) => encodeURIComponent(p)).join("/")}`;
+  }
+  const segs = [
+    encodeURIComponent(token),
+    encodeURIComponent(packId),
+    ...parts.map((p) => encodeURIComponent(p)),
+  ];
+  return `${PACK_ASSETS_PREFIX}${segs.join("/")}`;
 }
 
 /** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
 export function pluginSandboxFrameUrl(): string {
-  const base = import.meta.env.BASE_URL || "/";
-  const root = base.endsWith("/") ? base : `${base}/`;
-  const href = new URL("plugin-sandbox.html", `${location.origin}${root}`).href;
-  return appendSandboxAssetQuery(href);
+  const href = `${location.origin}${packAssetUrl(SANDBOX_PACK, "plugin-sandbox.html")}`;
+  return href;
 }
 
 export function hostAllows(type: string, caps: string[]): boolean {
@@ -113,12 +120,11 @@ export function pluginModuleUrl(id: string, hash?: string): string {
   return base;
 }
 
-/** Pack module URL for opaque-origin sandbox fetches (session asset token). */
-export function pluginModuleSandboxUrl(id: string, hash?: string, token?: string): string {
-  return appendSandboxAssetQuery(
-    `${location.origin}${pluginModuleUrl(id, hash)}`,
-    token,
-  );
+/** Pack module URL for opaque-origin sandbox import (token in path). */
+export function pluginModuleSandboxUrl(id: string, hash?: string): string {
+  let url = `${location.origin}${packAssetUrl(id, "module.js")}`;
+  if (hash) url += `?h=${encodeURIComponent(hash)}`;
+  return url;
 }
 
 /** @deprecated Legacy inline bootstrap kept for tests that assert SDK shape. */
@@ -184,17 +190,7 @@ export class PluginSandbox {
     hash?: string,
     viz?: VizPluginContract,
   ): Promise<void> {
-    const rel = pluginModuleUrl(id, hash);
-    let r: Response;
-    try {
-      r = await fetch(rel);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(`module fetch failed (network/CORS): ${msg}`);
-    }
-    if (!r.ok) throw new Error(`module ${r.status}`);
-    const js = await r.text();
-    await this.load(id, js, caps, config, viz);
+    await this.loadModuleUrl(pluginModuleSandboxUrl(id, hash), caps, config, viz);
   }
 
   async loadModuleUrl(
@@ -307,7 +303,7 @@ function recordSandboxBoot(type: HostMsg["type"]): void {
 function waitPluginMsg(
   iframe: HTMLIFrameElement,
   type: HostMsg["type"],
-  onReject?: (err: Error) => void,
+  onReject?: (fail: (err: Error) => void) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const fail = (err: Error) => {

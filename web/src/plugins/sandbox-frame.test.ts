@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleSandboxHostMessage, type SandboxZoto, type VizPresentTick } from "./sandbox-frame";
+import { handleSandboxHostMessage, redactSandboxAssetPath, type SandboxZoto, type VizPresentTick } from "./sandbox-frame";
 
 function stubZoto(over: Partial<SandboxZoto> = {}): SandboxZoto {
   return {
@@ -50,5 +50,23 @@ describe("sandbox-frame present tick", () => {
       stubZoto({ onPresent }),
     );
     expect(onPresent).not.toHaveBeenCalled();
+  });
+});
+
+describe("sandbox asset path redaction", () => {
+  it("strips session token from import error text", () => {
+    const tok = "secret-session-token-value";
+    const msg = `TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:7020/pack-assets/${tok}/demo/module.js`;
+    expect(redactSandboxAssetPath(msg, tok)).not.toContain(tok);
+    expect(redactSandboxAssetPath(msg, tok)).toContain("<sandbox-token>");
+  });
+});
+
+describe("sandbox asset path redaction", () => {
+  it("strips session token from import error text", () => {
+    const tok = "secret-session-token-value";
+    const msg = `TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:7020/pack-assets/${tok}/demo/module.js`;
+    expect(redactSandboxAssetPath(msg, tok)).not.toContain(tok);
+    expect(redactSandboxAssetPath(msg, tok)).toContain("<sandbox-token>");
   });
 });

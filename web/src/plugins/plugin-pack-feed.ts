@@ -1,6 +1,20 @@
 /** Mosaic tile copy: sandbox boot failure vs running pack with an empty viz feed. */
 
+import { sandboxAssetToken } from "../core/http";
+
 export const NO_PACK_FEED = "NO PACK FEED";
+const TOKEN_REDACT = "<sandbox-token>";
+const PACK_ASSETS = "/pack-assets/";
+
+export function redactSandboxTokenInText(text: string, token?: string): string {
+  const sat = (token ?? sandboxAssetToken()).trim();
+  if (!text || !sat) return text;
+  return text
+    .split(sat)
+    .join(TOKEN_REDACT)
+    .split(`${PACK_ASSETS}${sat}/`)
+    .join(`${PACK_ASSETS}${TOKEN_REDACT}/`);
+}
 
 export function formatSandboxStartupFailure(packName: string): string {
   const name = packName.trim() || "Pack";
@@ -8,17 +22,19 @@ export function formatSandboxStartupFailure(packName: string): string {
 }
 
 export function classifySandboxBootError(err: unknown): string {
+  let msg: string;
   if (err instanceof Error) {
-    const msg = err.message;
-    if (/sandbox frame-ready timeout/i.test(msg)) return `sandbox frame-ready timeout: ${msg}`;
-    if (/sandbox ready timeout/i.test(msg)) return `sandbox ready timeout: ${msg}`;
-    if (/module \d{3}/i.test(msg)) return `module.js HTTP ${msg}`;
-    if (/failed to fetch/i.test(msg)) return `module.js fetch failed (network/CORS): ${msg}`;
-    if (/CORS/i.test(msg)) return `module.js blocked (CORS): ${msg}`;
-    return msg;
+    msg = err.message;
+    if (/sandbox frame-ready timeout/i.test(msg)) return `sandbox frame-ready timeout: ${redactSandboxTokenInText(msg)}`;
+    if (/sandbox ready timeout/i.test(msg)) return `sandbox ready timeout: ${redactSandboxTokenInText(msg)}`;
+    if (/module \d{3}/i.test(msg)) return `module.js HTTP ${redactSandboxTokenInText(msg)}`;
+    if (/failed to fetch/i.test(msg)) return `module.js fetch failed (network/CORS): ${redactSandboxTokenInText(msg)}`;
+    if (/CORS/i.test(msg)) return `module.js blocked (CORS): ${redactSandboxTokenInText(msg)}`;
+    return redactSandboxTokenInText(msg);
   }
-  if (typeof err === "string" && err.trim()) return err.trim();
-  return String(err);
+  if (typeof err === "string" && err.trim()) msg = err.trim();
+  else msg = String(err);
+  return redactSandboxTokenInText(msg);
 }
 
 type TileRow = {
@@ -99,11 +115,16 @@ export function noteSandboxPackWrite(tileId: string): void {
   r.sawWrite = true;
 }
 
-/** Log the underlying boot failure once per tile (timeout / HTTP / CORS). */
-export function logSandboxBootFailureOnce(tileId: string, reason: string): void {
+/** Log the underlying boot failure once per tile (timeout / HTTP / CORS). Never log the session token. */
+export function logSandboxBootFailureOnce(tileId: string, reason: string, packId?: string): void {
   if (bootLogged.has(tileId)) return;
   bootLogged.add(tileId);
-  console.warn(`zoto-viz plugin sandbox boot (${tileId}): ${reason}`);
+  const safe = redactSandboxTokenInText(reason);
+  const pack = (packId ?? "").trim();
+  const prefix = pack
+    ? `zoto-viz plugin sandbox boot (${tileId}, pack=${pack})`
+    : `zoto-viz plugin sandbox boot (${tileId})`;
+  console.warn(`${prefix}: ${safe}`);
 }
 
 export type PaneNoticeRecipe = "default" | "fail";

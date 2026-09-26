@@ -11,6 +11,11 @@ export function sandboxAssetToken(): string {
   return sandboxAssetTokenValue;
 }
 
+/** Vitest: seed session asset token without /api/session. */
+export function setSandboxAssetTokenForTests(token: string): void {
+  sandboxAssetTokenValue = token;
+}
+
 export function noteCsrf(r: Response): void {
   const t = r.headers?.get?.("X-Zoto-Viz-Csrf");
   if (t) csrf = t;

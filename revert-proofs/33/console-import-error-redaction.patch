@@ -1,0 +1,19 @@
+diff --git a/web/src/plugins/plugin-pack-feed.ts b/web/src/plugins/plugin-pack-feed.ts
+index 815191a..2c3e041 100644
+--- a/web/src/plugins/plugin-pack-feed.ts
++++ b/web/src/plugins/plugin-pack-feed.ts
+@@ -7,13 +7,7 @@ const TOKEN_REDACT = "<sandbox-token>";
+ const PACK_ASSETS = "/pack-assets/";
+ 
+ export function redactSandboxTokenInText(text: string, token?: string): string {
+-  const sat = (token ?? sandboxAssetToken()).trim();
+-  if (!text || !sat) return text;
+-  return text
+-    .split(sat)
+-    .join(TOKEN_REDACT)
+-    .split(`${PACK_ASSETS}${sat}/`)
+-    .join(`${PACK_ASSETS}${TOKEN_REDACT}/`);
++  return text;
+ }
+ 
+ export function formatSandboxStartupFailure(packName: string): string {

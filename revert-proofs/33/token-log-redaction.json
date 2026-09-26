@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_access_sandbox_token.py",
+  "testName": "SandboxAssetTokenOriginTests::test_access_and_app_logs_redact_token",
+  "description": "Access log must redact the sandbox session token path segment (revert prints raw token).",
+  "timeoutSec": 60
+}

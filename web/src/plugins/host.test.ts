@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
+import { setSandboxAssetTokenForTests } from "../core/http";
+import {
+  PluginSandbox,
+  consentHash,
+  hashConsented,
+  hostAllows,
+  packAssetUrl,
+  pluginModuleSandboxUrl,
+  pluginModuleUrl,
+  setTsPluginsAllowed,
+  tsPluginsAllowed,
+} from "./host";
 
 describe("hash consent and TypeScript allow", () => {
   afterEach(() => {
@@ -38,29 +49,33 @@ describe("hash consent and TypeScript allow", () => {
   });
 });
 
+describe("pack asset URLs", () => {
+  afterEach(() => setSandboxAssetTokenForTests(""));
+
+  it("puts the session token in the path segment", () => {
+    setSandboxAssetTokenForTests("sess-tok-abc");
+    const url = packAssetUrl("pulse-ts", "module.js");
+    expect(url).toBe("/pack-assets/sess-tok-abc/pulse-ts/module.js");
+    expect(url).not.toContain("?");
+    expect(pluginModuleSandboxUrl("pulse-ts", "deadbeef")).toContain("/pack-assets/sess-tok-abc/pulse-ts/module.js?h=deadbeef");
+  });
+});
+
 describe("PluginSandbox module load", () => {
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
     vi.restoreAllMocks();
+    setSandboxAssetTokenForTests("");
   });
 
-  it("fetches /plugins/<id>/module.js then loads the bootstrap frame", async () => {
-    const orig = globalThis.fetch;
-    const seen: string[] = [];
-    globalThis.fetch = vi.fn(async (url: string) => {
-      seen.push(String(url));
-      return { ok: true, text: async () => "globalThis.fromHost = true;" } as Response;
-    }) as typeof fetch;
+  it("loads pack-assets module.js in the bootstrap frame", async () => {
+    setSandboxAssetTokenForTests("sess-tok-abc");
     const box = new PluginSandbox();
     expect(pluginModuleUrl("pulse", "deadbeef")).toBe("/api/plugins/pulse/module.js?h=deadbeef");
     const boot = box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
     await boot;
-    expect(seen).toEqual(["/api/plugins/pulse/module.js?h=deadbeef"]);
     const iframe = document.querySelector("iframe");
-    expect(iframe?.src).toContain("plugin-sandbox.html");
+    expect(iframe?.src).toContain("/pack-assets/sess-tok-abc/_sandbox/plugin-sandbox.html");
     box.unload();
-    globalThis.fetch = (async () => ({ ok: false, status: 404, text: async () => "" }) as Response) as typeof fetch;
-    await expect(box.loadModule("missing", ["graph.read"], {})).rejects.toThrow(/module 404/);
-    globalThis.fetch = orig;
   });
 });

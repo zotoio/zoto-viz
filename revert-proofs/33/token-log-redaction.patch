@@ -1,0 +1,12 @@
+diff --git a/service/access.py b/service/access.py
+index d5496de..cb71b9b 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -218,6 +218,6 @@ def sandbox_access_log(app: web.Application):
+         remote = request.remote or "-"
+         request_line = f"{request.method} {request.path_qs} {getattr(response, 'status', '?')}"
+         line = f'{remote} - "{request_line}" {time:.4f}s'
+-        print(redact_sandbox_token(line, sat), flush=True)
++        print(line, flush=True)
+ 
+     return log

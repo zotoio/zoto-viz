@@ -20,7 +20,14 @@ const PACKS = [
   { mode: "plugin:talker-storm", label: "talker-storm" },
   { mode: "plugin:blob-mesh", label: "blob-mesh" },
   { mode: "plugin:marble-run", label: "marble-run" },
+  { mode: "plugin:sandbox-fixture-multi", label: "sandbox-fixture-multi", multiFile: true },
 ];
+
+function packAssetUrl(base, token, packId, ...parts) {
+  const root = base.replace(/\/?$/, "/");
+  const segs = [encodeURIComponent(token), encodeURIComponent(packId), ...parts.map((p) => encodeURIComponent(p))];
+  return `${root}pack-assets/${segs.join("/")}`;
+}
 
 function sandboxJsName() {
   const html = readFileSync(path.join(webRoot, "../dist/plugin-sandbox.html"), "utf8");
@@ -99,15 +106,32 @@ async function main() {
   let bootstrapJsStatus = null;
   let moduleJsStatus = null;
   if (jsName) {
-    const boot = await fetch(`${base}assets/${jsName}?sat=${encodeURIComponent(sat)}`, {
+    const boot = await fetch(packAssetUrl(base, sat, "_sandbox", jsName), {
       headers: { Origin: "null", Host: "127.0.0.1:7020" },
     });
     bootstrapJsStatus = boot.status;
   }
 
+  const multiMod = await fetch(packAssetUrl(base, sat, "sandbox-fixture-multi", "module.js"), {
+    headers: { Origin: "null", Host: "127.0.0.1:7020" },
+  });
+  const multiHelper = await fetch(packAssetUrl(base, sat, "sandbox-fixture-multi", "helper.js"), {
+    headers: { Origin: "null", Host: "127.0.0.1:7020" },
+  });
+  assert.equal(multiMod.status, 200, `fixture module.js ${multiMod.status}`);
+  assert.equal(multiHelper.status, 200, `fixture helper.js ${multiHelper.status}`);
+  assert.equal(multiMod.headers.get("referrer-policy"), "no-referrer");
+
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  const diag = { cspViolations: [], corsConsole: [], bootstrapJsStatus, moduleJsStatus, jsName };
+  const diag = { cspViolations: [], corsConsole: [], bootstrapJsStatus, moduleJsStatus, jsName, pack403: [] };
+
+  page.on("response", (resp) => {
+    const u = resp.url();
+    if (u.includes("/pack-assets/") && resp.status() === 403) {
+      diag.pack403.push({ url: u.replace(/\/pack-assets\/[^/]+/, "/pack-assets/<sandbox-token>"), status: 403 });
+    }
+  });
 
   page.on("console", (msg) => {
     const t = msg.text();
@@ -131,6 +155,9 @@ async function main() {
     await page.reload({ waitUntil: "networkidle", timeout: WAIT_MS });
     try {
       await waitForDraw(page, pack.label);
+      if (pack.multiFile) {
+        assert.equal(diag.pack403.length, 0, JSON.stringify(diag.pack403));
+      }
     } catch (err) {
       diag.cspViolations = await page.evaluate(() => window.__zotoCspViolations ?? []);
       diag.moduleJsStatus = moduleJsStatus;

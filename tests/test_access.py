@@ -18,7 +18,10 @@ def test_bind_is_loopback() -> None:
     assert access.new_token()
     sat = access.new_sandbox_asset_token()
     assert len(sat) >= 22
-    assert "sat=" in access.append_sandbox_asset_query("/assets/x.js", sat)
+    url = access.pack_asset_url(sat, "pulse-ts", "module.js")
+    assert url.startswith("/pack-assets/")
+    assert sat in url
+    assert "?" not in url
 
 
 def test_header_hostname() -> None:
@@ -85,12 +88,10 @@ def test_host_origin_csrf_helpers() -> None:
     assert not access.origin_ok(FakeReq(origin="null", path="/api/profiles"))
     assert access.origin_ok(FakeReq(
         origin="null",
-        path="/plugin-sandbox.html",
-        query={"sat": "sat-token"},
+        path=access.pack_asset_url("sat-token", "_sandbox", "plugin-sandbox.html"),
         sandbox_asset_token="sat-token",
     ))
-    assert access.sandbox_static_bootstrap_path("/plugin-sandbox.html")
-    assert access.sandbox_plugin_asset_path("/api/plugins/pulse/module.js")
+    assert access.parse_pack_assets_path("/pack-assets/tok/pid/module.js")
     assert access.origin_ok(FakeReq(host="lan.box:7020", origin="http://lan.box:7020", lan=True))
     assert not access.origin_ok(FakeReq(host="lan.box:7020", origin="http://other.box", lan=True))
     assert access.csrf_ok(FakeReq(cookie="tok", header="tok"))

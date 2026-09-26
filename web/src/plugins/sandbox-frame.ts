@@ -21,16 +21,37 @@ type HostBoot = {
   sandboxAssetToken?: string;
 };
 
-function moduleSrcWithAssetToken(src: string, token?: string): string {
-  if (!token || src.startsWith("blob:")) return src;
+const PACK_ASSETS = "/pack-assets/";
+const TOKEN_REDACT = "<sandbox-token>";
+
+function moduleSrcForSandbox(src: string, token?: string): string {
+  if (src.startsWith("blob:")) return src;
   try {
     const u = new URL(src, location.href);
     if (u.protocol !== "http:" && u.protocol !== "https:") return src;
-    u.searchParams.set("sat", token);
+    if (u.pathname.startsWith(PACK_ASSETS)) return u.href;
+    const api = u.pathname.match(/^\/api\/plugins\/([^/]+)\/module\.js$/);
+    if (api && token) {
+      const packId = decodeURIComponent(api[1]);
+      const segs = [encodeURIComponent(token), encodeURIComponent(packId), "module.js"];
+      u.pathname = `${PACK_ASSETS}${segs.join("/")}`;
+      u.search = "";
+      return u.href;
+    }
     return u.href;
   } catch {
     return src;
   }
+}
+
+/** Redact session token segments before posting to the host console. */
+export function redactSandboxAssetPath(text: string, token?: string): string {
+  if (!text || !token) return text;
+  return text
+    .split(token)
+    .join(TOKEN_REDACT)
+    .split(`/pack-assets/${token}/`)
+    .join(`/pack-assets/${TOKEN_REDACT}/`);
 }
 
 type HostMsg =
@@ -131,10 +152,11 @@ window.addEventListener("message", async (ev) => {
   if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") return;
   applyInit(d);
   try {
-    await import(/* @vite-ignore */ d.moduleSrc);
+    await import(/* @vite-ignore */ moduleSrcForSandbox(d.moduleSrc, d.sandboxAssetToken));
     send("ready");
   } catch (e) {
-    send("log", String(e));
+    const raw = String(e);
+    send("log", redactSandboxAssetPath(raw, d.sandboxAssetToken));
   }
 });
 

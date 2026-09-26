@@ -10,35 +10,33 @@ import hmac
 import ipaddress
 import re
 import secrets
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from aiohttp import web
 
 COOKIE = "zoto-viz-csrf"
 HEADER = "X-Zoto-Viz-Csrf"
-SANDBOX_ASSET_QUERY = "sat"
+PACK_ASSETS_PREFIX = "/pack-assets/"
+SANDBOX_TOKEN_REDACT = "<sandbox-token>"
 MUTATE = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
-_PLUGIN_SANDBOX_ASSET = re.compile(
-    r"^/api/plugins/([^/]+)/(module\.js|sky/fragment\.glsl)$",
-)
-_SANDBOX_BOOTSTRAP = re.compile(
-    r"^/(?:plugin-sandbox\.html|assets/plugin-sandbox-[\w-]+\.js|assets/preload-helper-[\w-]+\.js)$",
+_PACK_ASSETS = re.compile(
+    r"^/pack-assets/([^/]+)/([^/]+)/(.+)$",
 )
 
 
-def sandbox_static_bootstrap_path(path: str) -> bool:
-    """Production sandbox iframe bootstrap (opaque origin) — not pack code."""
-    return bool(_SANDBOX_BOOTSTRAP.match(path.rstrip("/") or "/"))
+def parse_pack_assets_path(path: str) -> tuple[str, str, str] | None:
+    p = path.split("?", 1)[0].rstrip("/") or "/"
+    m = _PACK_ASSETS.match(p)
+    if not m:
+        return None
+    return m.group(1), m.group(2), m.group(3)
 
 
-def sandbox_plugin_asset_path(path: str) -> bool:
-    return bool(_PLUGIN_SANDBOX_ASSET.match(path.rstrip("/") or "/"))
-
-
-def sandbox_plugin_asset_id(path: str) -> str | None:
-    m = _PLUGIN_SANDBOX_ASSET.match(path.rstrip("/") or "/")
-    return m.group(1) if m else None
+def pack_asset_url(token: str, pack_id: str, *parts: str) -> str:
+    segs = [quote(token, safe=""), quote(pack_id, safe="")]
+    segs.extend(quote(part, safe="") for part in parts)
+    return f"{PACK_ASSETS_PREFIX}{'/'.join(segs)}"
 
 
 def new_token() -> str:
@@ -51,7 +49,8 @@ def new_sandbox_asset_token() -> str:
 
 
 def read_sandbox_asset_token(request: web.Request) -> str:
-    return (request.query.get(SANDBOX_ASSET_QUERY) or "").strip()
+    parsed = parse_pack_assets_path(request.path or "")
+    return parsed[0] if parsed else ""
 
 
 def sandbox_asset_token_ok(request: web.Request) -> bool:
@@ -62,35 +61,38 @@ def sandbox_asset_token_ok(request: web.Request) -> bool:
     return hmac.compare_digest(got, expected)
 
 
-def append_sandbox_asset_query(path_or_url: str, token: str) -> str:
-    """Append ``sat`` for sandbox iframe subresource URLs (in-memory token only)."""
-    if not token:
-        return path_or_url
-    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+def redact_sandbox_token(text: str, token: str) -> str:
+    if not text or not token:
+        return text
+    out = text.replace(token, SANDBOX_TOKEN_REDACT)
+    out = out.replace(f"/pack-assets/{token}/", f"/pack-assets/{SANDBOX_TOKEN_REDACT}/")
+    return out
 
-    parsed = urlparse(path_or_url)
-    q = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    q[SANDBOX_ASSET_QUERY] = token
-    return urlunparse(parsed._replace(query=urlencode(q)))
+
+def redact_request_path(path: str, token: str) -> str:
+    parsed = parse_pack_assets_path(path or "")
+    if not parsed or not token:
+        return path
+    got, pack_id, tail = parsed
+    if got != token:
+        return path
+    return pack_asset_url(SANDBOX_TOKEN_REDACT, pack_id, *tail.split("/"))
 
 
 def sandbox_null_origin_allowed(request: web.Request) -> bool:
-    """Opaque-origin GET/HEAD only with a valid session asset token."""
+    """Opaque-origin GET/HEAD only with a valid session asset token on /pack-assets/…"""
     if request.method not in {"GET", "HEAD"}:
+        return False
+    if not parse_pack_assets_path(request.path or ""):
         return False
     if not sandbox_asset_token_ok(request):
         return False
-    path = request.path or ""
-    if sandbox_static_bootstrap_path(path):
+    _token, pack_id, _tail = parse_pack_assets_path(request.path or "")  # type: ignore[misc]
+    if pack_id == "_sandbox":
         return True
-    if not sandbox_plugin_asset_path(path):
-        return False
-    pid = sandbox_plugin_asset_id(path)
-    if not pid:
-        return False
     from . import plugins
 
-    row = plugins._plugin_row(pid)
+    row = plugins._plugin_row(pack_id)
     if not row:
         return False
     return plugins.consented(row)
@@ -100,6 +102,10 @@ def attach_sandbox_cors(resp: web.StreamResponse) -> None:
     resp.headers["Access-Control-Allow-Origin"] = "null"
     vary = resp.headers.get("Vary", "")
     resp.headers["Vary"] = "Origin" if not vary else f"{vary}, Origin"
+
+
+def attach_sandbox_referrer_policy(resp: web.StreamResponse) -> None:
+    resp.headers["Referrer-Policy"] = "no-referrer"
 
 
 def bind_is_loopback(bind: str) -> bool:
@@ -192,7 +198,26 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
     origin_raw = request.headers.get("Origin", "").strip()
     if origin_raw == "null" and sandbox_null_origin_allowed(request):
         attach_sandbox_cors(resp)
+    if parse_pack_assets_path(request.path or ""):
+        attach_sandbox_referrer_policy(resp)
+    elif (request.path or "").rstrip("/") == "/plugin-sandbox.html":
+        attach_sandbox_referrer_policy(resp)
     attach_csrf(request, resp)
     if request.method in MUTATE:
-        print(f"[monitor] {request.method} {request.path_qs} -> {getattr(resp, 'status', '?')}", flush=True)
+        sat = request.app.get("sandbox_asset_token") or ""
+        safe = redact_request_path(request.path or "", sat)
+        print(f"[monitor] {request.method} {safe} -> {getattr(resp, 'status', '?')}", flush=True)
     return resp
+
+
+def sandbox_access_log(app: web.Application):
+    """Access log handler that redacts the sandbox asset token path segment."""
+
+    def log(request: web.Request, response: web.StreamResponse, time: float) -> None:
+        sat = app.get("sandbox_asset_token") or ""
+        remote = request.remote or "-"
+        request_line = f"{request.method} {request.path_qs} {getattr(response, 'status', '?')}"
+        line = f'{remote} - "{request_line}" {time:.4f}s'
+        print(redact_sandbox_token(line, sat), flush=True)
+
+    return log

@@ -2,15 +2,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   NO_PACK_FEED,
   applyPackFeedPaneNotice,
+  classifySandboxBootError,
   formatSandboxStartupFailure,
   logSandboxBootFailureOnce,
   markSandboxStartupFailed,
   markSandboxStartupOk,
   noteSandboxFrameTick,
   packFeedPaneNotice,
+  redactSandboxTokenInText,
   resetPluginPackFeedState,
   setTileExpectsVizFeed,
 } from "./plugin-pack-feed";
+import { setSandboxAssetTokenForTests } from "../core/http";
 
 describe("plugin pack feed notices", () => {
   afterEach(() => resetPluginPackFeedState());
@@ -40,6 +43,24 @@ describe("plugin pack feed notices", () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toMatch(/sandbox frame-ready timeout/);
     warn.mockRestore();
+  });
+
+  it("redacts session token from boot failure console lines", () => {
+    setSandboxAssetTokenForTests("super-secret-session-token");
+    const raw = `Failed to fetch ${location.origin}/pack-assets/super-secret-session-token/demo/module.js`;
+    const reason = classifySandboxBootError(new Error(raw));
+    expect(reason).not.toContain("super-secret-session-token");
+    expect(reason).toContain("<sandbox-token>");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logSandboxBootFailureOnce("plugin:demo", reason, "demo");
+    expect(warn.mock.calls[0]?.[0]).toMatch(/pack=demo/);
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain("super-secret-session-token");
+    warn.mockRestore();
+    setSandboxAssetTokenForTests("");
+  });
+
+  it("redactSandboxTokenInText handles path segments", () => {
+    expect(redactSandboxTokenInText("/pack-assets/abc/pid/x", "abc")).toBe("/pack-assets/<sandbox-token>/pid/x");
   });
 
   it("applyPackFeedPaneNotice uses fail styling on mosaic tiles", () => {

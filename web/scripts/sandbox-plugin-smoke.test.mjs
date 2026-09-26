@@ -31,6 +31,11 @@ async function fetchSessionToken() {
   return data.sandboxAssetToken;
 }
 
+function packAssetUrl(token, packId, ...parts) {
+  const segs = [encodeURIComponent(token), encodeURIComponent(packId), ...parts.map((p) => encodeURIComponent(p))];
+  return `${monitor}pack-assets/${segs.join("/")}`;
+}
+
 function formatDiag(diag) {
   return JSON.stringify(diag, null, 2);
 }
@@ -48,7 +53,7 @@ async function main() {
     boot: [],
   };
 
-  const bootstrapUrl = `${monitor}assets/${jsName}?sat=${encodeURIComponent(sat)}`;
+  const bootstrapUrl = packAssetUrl(sat, "_sandbox", jsName);
   const mod = await fetch(bootstrapUrl, {
     headers: { Origin: "null", Host: "127.0.0.1:7020" },
   });
@@ -73,7 +78,7 @@ async function main() {
     });
   });
 
-  const sandboxHtml = `${monitor}plugin-sandbox.html?sat=${encodeURIComponent(sat)}`;
+  const sandboxHtml = packAssetUrl(sat, "_sandbox", "plugin-sandbox.html");
   await page.setContent(`<!doctype html><meta charset="utf-8"><iframe id="sb" sandbox="allow-scripts"></iframe>
 <script>
   window.__sandboxBoot = [];
@@ -113,6 +118,7 @@ async function main() {
   diag.cspViolations = await page.evaluate(() => window.__zotoCspViolations ?? []);
   assert.equal(diag.bootstrapJsStatus, 200, formatDiag(diag));
   assert.equal(diag.bootstrapJsCors, "null");
+  assert.equal(mod.headers.get("referrer-policy"), "no-referrer");
   assert.ok(diag.boot.includes("frame-ready"), diag.boot.join(","));
 
   const srcdocViolations = diag.cspViolations.filter((v) =>

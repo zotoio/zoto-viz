@@ -1,0 +1,27 @@
+diff --git a/service/access.py b/service/access.py
+index d5496de..1e7b932 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -198,9 +198,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+     origin_raw = request.headers.get("Origin", "").strip()
+     if origin_raw == "null" and sandbox_null_origin_allowed(request):
+         attach_sandbox_cors(resp)
+-    if parse_pack_assets_path(request.path or ""):
+-        attach_sandbox_referrer_policy(resp)
+-    elif (request.path or "").rstrip("/") == "/plugin-sandbox.html":
++    if (request.path or "").rstrip("/") == "/plugin-sandbox.html":
+         attach_sandbox_referrer_policy(resp)
+     attach_csrf(request, resp)
+     if request.method in MUTATE:
+diff --git a/service/pack_assets.py b/service/pack_assets.py
+index 14e4cd7..a7d25c1 100644
+--- a/service/pack_assets.py
++++ b/service/pack_assets.py
+@@ -50,7 +50,6 @@ def _resolve_plugin_file(home: Path, relpath: str) -> Path | None:
+ 
+ 
+ def apply_pack_asset_headers(resp: web.StreamResponse) -> None:
+-    access.attach_sandbox_referrer_policy(resp)
+     resp.headers["X-Content-Type-Options"] = "nosniff"
+ 
+ 
