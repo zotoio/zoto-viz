@@ -1,19 +1,23 @@
-"""Plugin id pattern: lowercase slug (shared with block-store filenames)."""
+"""Plugin id pattern: lowercase slug (schema is the single source)."""
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
 import yaml
 
 from service import plugins
-
-PACK_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+from service.pack_id import PACK_ID_RE, pack_id_pattern_from_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "plugins" / "src"
-STARTER = ROOT / "plugins" / "sdk" / "starter"
+
+
+def test_pack_id_regex_matches_schema_file() -> None:
+    import json
+
+    schema = json.loads((ROOT / "schema" / "plugin.schema.json").read_text(encoding="utf-8"))
+    assert pack_id_pattern_from_schema() == schema["properties"]["id"]["pattern"]
 
 
 def _collect_shipped_ids() -> list[tuple[str, Path]]:
@@ -23,19 +27,14 @@ def _collect_shipped_ids() -> list[tuple[str, Path]]:
             doc = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
             pid = str(doc.get("id") or yml.parent.name)
             out.append((pid, yml.parent))
-    if STARTER.is_dir():
-        for yml in STARTER.rglob("plugin.yml"):
-            doc = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
-            pid = str(doc.get("id") or yml.parent.name)
-            out.append((pid, yml))
     return out
 
 
-def test_shipped_and_starter_pack_ids_match_lowercase_slug_pattern() -> None:
+def test_shipped_pack_ids_match_schema_pattern() -> None:
     rows = _collect_shipped_ids()
-    assert rows, "expected plugins/src and/or starter plugin.yml trees"
-    bad = [(pid, loc) for pid, loc in rows if not PACK_ID_PATTERN.fullmatch(pid)]
-    assert not bad, f"pack ids outside {PACK_ID_PATTERN.pattern!r}: {bad!r}"
+    assert rows, "expected plugins/src plugin.yml trees"
+    bad = [(pid, loc) for pid, loc in rows if not PACK_ID_RE.fullmatch(pid)]
+    assert not bad, f"pack ids outside {PACK_ID_RE.pattern!r}: {bad!r}"
 
 
 @pytest.mark.parametrize(
