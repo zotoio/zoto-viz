@@ -2,7 +2,7 @@
 
  RUN  v5.0.0 /workspace/web
 
- × src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 frames / 2 tiles: one RT, one quad graph, zero per-frame allocations 3ms
+ × src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 frames / 2 tiles: one RT, one quad graph, reused mirror scratch rects 4ms
    → Cannot read properties of undefined (reading 'reset')
    → Cannot read properties of undefined (reading 'reset')
  × src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 steady frames: 0 setSize; one resize: exactly 1 setSize 1ms
@@ -14,63 +14,98 @@
  × src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > teardown disposes RT, geometry, and material; single tile creates nothing 0ms
    → Cannot read properties of undefined (reading 'reset')
    → Cannot read properties of undefined (reading 'reset')
+ × src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > three tiles on one pack: one render target and one presenter 0ms
+   → Cannot read properties of undefined (reading 'reset')
+   → Cannot read properties of undefined (reading 'reset')
  × src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > two pack keys get two targets; dropping one duplicate leaves the other 0ms
    → Cannot read properties of undefined (reading 'reset')
    → Cannot read properties of undefined (reading 'reset')
+ × src/graph/pack-mirror-lifecycle.test.ts > sandbox bitmap GPU scope sync > ten 2↔1 tile toggles balance creates/disposes; one tile leaves no sandbox GPU 0ms
+   → Cannot read properties of undefined (reading 'reset')
+   → syncSandboxBitmapGpuScopes is not a function
  × src/graph/pack-mirror-lifecycle.test.ts > PackTexturePresenter > constructs quad resources once 0ms
    → Cannot read properties of undefined (reading 'reset')
+ × src/graph/pack-mirror-lifecycle.test.ts > PackTexturePresenter > keeps material.version stable over 300 draws with the same texture 0ms
+   → Cannot read properties of undefined (reading 'reset')
 
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
 
- FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 frames / 2 tiles: one RT, one quad graph, zero per-frame allocations
+ FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 frames / 2 tiles: one RT, one quad graph, reused mirror scratch rects
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 steady frames: 0 setSize; one resize: exactly 1 setSize
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > samples=4 only when context antialias is true
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > teardown disposes RT, geometry, and material; single tile creates nothing
+ FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > three tiles on one pack: one render target and one presenter
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > two pack keys get two targets; dropping one duplicate leaves the other
 TypeError: Cannot read properties of undefined (reading 'reset')
- ❯ src/graph/pack-mirror-lifecycle.test.ts:55:44
-     53|
-     54| describe("PackMirrorSession resource lifecycle", () => {
-     55|   beforeEach(() => packMirrorResourceStats.reset());
+ ❯ src/graph/pack-mirror-lifecycle.test.ts:85:44
+     83|
+     84| describe("PackMirrorSession resource lifecycle", () => {
+     85|   beforeEach(() => packMirrorResourceStats.reset());
        |                                            ^
-     56|   afterEach(() => packMirrorResourceStats.reset());
-     57|
+     86|   afterEach(() => packMirrorResourceStats.reset());
+     87|
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/16]⎯
 
- FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 frames / 2 tiles: one RT, one quad graph, zero per-frame allocations
+ FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 frames / 2 tiles: one RT, one quad graph, reused mirror scratch rects
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > 300 steady frames: 0 setSize; one resize: exactly 1 setSize
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > samples=4 only when context antialias is true
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > teardown disposes RT, geometry, and material; single tile creates nothing
+ FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > three tiles on one pack: one render target and one presenter
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackMirrorSession resource lifecycle > two pack keys get two targets; dropping one duplicate leaves the other
 TypeError: Cannot read properties of undefined (reading 'reset')
- ❯ src/graph/pack-mirror-lifecycle.test.ts:56:43
-     54| describe("PackMirrorSession resource lifecycle", () => {
-     55|   beforeEach(() => packMirrorResourceStats.reset());
-     56|   afterEach(() => packMirrorResourceStats.reset());
+ ❯ src/graph/pack-mirror-lifecycle.test.ts:86:43
+     84| describe("PackMirrorSession resource lifecycle", () => {
+     85|   beforeEach(() => packMirrorResourceStats.reset());
+     86|   afterEach(() => packMirrorResourceStats.reset());
        |                                           ^
-     57|
-     58|   it("300 frames / 2 tiles: one RT, one quad graph, zero per-frame all…
+     87|
+     88|   it("300 frames / 2 tiles: one RT, one quad graph, reused mirror scra…
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/16]⎯
+
+ FAIL  src/graph/pack-mirror-lifecycle.test.ts > sandbox bitmap GPU scope sync > ten 2↔1 tile toggles balance creates/disposes; one tile leaves no sandbox GPU
+TypeError: Cannot read properties of undefined (reading 'reset')
+ ❯ src/graph/pack-mirror-lifecycle.test.ts:182:29
+    180| describe("sandbox bitmap GPU scope sync", () => {
+    181|   beforeEach(() => {
+    182|     packMirrorResourceStats.reset();
+       |                             ^
+    183|     syncSandboxBitmapGpuScopes(new Map());
+    184|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/16]⎯
+
+ FAIL  src/graph/pack-mirror-lifecycle.test.ts > sandbox bitmap GPU scope sync > ten 2↔1 tile toggles balance creates/disposes; one tile leaves no sandbox GPU
+TypeError: syncSandboxBitmapGpuScopes is not a function
+ ❯ src/graph/pack-mirror-lifecycle.test.ts:185:19
+    183|     syncSandboxBitmapGpuScopes(new Map());
+    184|   });
+    185|   afterEach(() => syncSandboxBitmapGpuScopes(new Map()));
+       |                   ^
+    186|
+    187|   it("ten 2↔1 tile toggles balance creates/disposes; one tile leaves n…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/16]⎯
 
  FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackTexturePresenter > constructs quad resources once
+ FAIL  src/graph/pack-mirror-lifecycle.test.ts > PackTexturePresenter > keeps material.version stable over 300 draws with the same texture
 TypeError: Cannot read properties of undefined (reading 'reset')
- ❯ src/graph/pack-mirror-lifecycle.test.ts:130:44
-    128|
-    129| describe("PackTexturePresenter", () => {
-    130|   beforeEach(() => packMirrorResourceStats.reset());
+ ❯ src/graph/pack-mirror-lifecycle.test.ts:201:44
+    199|
+    200| describe("PackTexturePresenter", () => {
+    201|   beforeEach(() => packMirrorResourceStats.reset());
        |                                            ^
-    131|   it("constructs quad resources once", () => {
-    132|     const p = new PackTexturePresenter();
+    202|   it("constructs quad resources once", () => {
+    203|     const p = new PackTexturePresenter();
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/16]⎯
 
 
  Test Files  1 failed (1)
-      Tests  6 failed (6)
-   Start at  18:34:32
-   Duration  471ms (environment 65%, transform 19%, import 11%, setup 2%, tests 2%, worker 1%)
+      Tests  9 failed (9)
+   Start at  18:39:51
+   Duration  468ms (environment 65%, transform 19%, import 10%, tests 3%, setup 2%, worker 1%)
 
 
 === pack-mirror-readback.test.ts (26b9927 production over current harness) ===
@@ -78,52 +113,52 @@ TypeError: Cannot read properties of undefined (reading 'reset')
  RUN  v5.0.0 /workspace/web
 
 stderr | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=host
-6:34:34 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+6:39:53 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 
 stderr | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=host
-6:34:34 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+6:39:53 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 
- × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=host 220ms
+ × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=host 232ms
    → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
- × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=host 82ms
+ × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=host 80ms
    → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 stderr | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=host
-6:34:34 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+6:39:53 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 
 stderr | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=host
-6:34:34 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+6:39:53 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 
- × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=host 79ms
+ × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=host 76ms
    → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 stderr | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=sandbox
-6:34:34 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+6:39:53 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 
 stderr | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=sandbox
-6:34:34 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+6:39:53 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 
- × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=host 81ms
+ × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=host 75ms
    → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
- × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=sandbox 79ms
+ × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=sandbox 74ms
    → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 stderr | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=sandbox
-6:34:34 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+6:39:54 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 
+ × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=sandbox 75ms
+   → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+ × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=sandbox 70ms
+   → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 stderr | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=sandbox
-6:34:34 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
+6:39:54 PM [vite] (client) [Unhandled error] SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 
- × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=sandbox 77ms
-   → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
- × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=sandbox 72ms
-   → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
- × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=sandbox 74ms
+ × src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=sandbox 75ms
    → SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not provide an export named 'PACK_MSAA_SAMPLES'
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
@@ -151,6 +186,6 @@ Error: SyntaxError: The requested module '/src/graph/pack-mirror-gl.ts' does not
 
  Test Files  1 failed (1)
       Tests  8 failed (8)
-   Start at  18:34:33
-   Duration  1.37s (tests 81%, import 16%, transform 2%, setup 1%)
+   Start at  18:39:52
+   Duration  1.38s (tests 83%, import 14%, transform 2%)
 

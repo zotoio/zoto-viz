@@ -1,11 +1,11 @@
---- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:04:11.037969692 +0000
-+++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:14:49.656160266 +0000
-@@ -91,7 +91,7 @@
-   ): { x: number; y: number; w: number; h: number } {
-     const innerTd = opts.letterbox ? letterboxInnerRect(dst, contentAspect) : { x: 0, y: 0, w: dst.w, h: dst.h };
+--- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:38:23.494464985 +0000
++++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:39:26.375139894 +0000
+@@ -130,7 +130,7 @@
+         return t;
+       })();
      const ix = dst.x + innerTd.x;
 -    const iy = dst.y + (dst.h - innerTd.y - innerTd.h);
 +    const iy = dst.y + innerTd.y;
      const iw = innerTd.w;
      const ih = innerTd.h;
-     if (fill && opts.letterbox) {
+     const innerAbs = this.scratch.innerAbs;

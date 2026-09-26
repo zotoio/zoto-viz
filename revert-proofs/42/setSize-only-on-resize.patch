@@ -1,6 +1,6 @@
---- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:04:11.037969692 +0000
-+++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:14:49.651736017 +0000
-@@ -168,8 +168,14 @@
+--- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:38:23.494464985 +0000
++++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:39:26.370720025 +0000
+@@ -218,8 +218,14 @@
        return this.rt;
      }
      if (pw !== this.pw || ph !== this.ph) {

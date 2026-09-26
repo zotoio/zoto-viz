@@ -79,3 +79,16 @@ export function letterboxInnerRect(
   }
   return { x: (bw - w) / 2, y: (bh - h) / 2, w, h };
 }
+
+export function letterboxInnerRectInto(
+  box: { w: number; h: number },
+  contentAspect: number,
+  out: { x: number; y: number; w: number; h: number },
+): { x: number; y: number; w: number; h: number } {
+  const inner = letterboxInnerRect(box, contentAspect);
+  out.x = inner.x;
+  out.y = inner.y;
+  out.w = inner.w;
+  out.h = inner.h;
+  return out;
+}

@@ -107,7 +107,10 @@ describe("pack mirror SwiftShader readback", () => {
           mirrorTopLeft: number[];
           letterboxBar: number[];
           contentNonEmpty: boolean;
+          glRenderer: string;
         };
+        console.log(`[pack-mirror-readback] dpr=${c.dpr} aa=${c.antialias} path=${c.path} renderer=${result.glRenderer}`);
+        expect(result.glRenderer.toLowerCase()).toContain("swiftshader");
         expect(result.contentNonEmpty).toBe(true);
         expect(result.primaryTopLeft[0]).toBeGreaterThan(40);
         expect(result.mirrorTopLeft[0]).toBeGreaterThan(40);

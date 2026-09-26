@@ -1,0 +1,11 @@
+--- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:39:29.830404675 +0000
++++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:39:41.115368748 +0000
+@@ -391,7 +391,7 @@
+ /** Drop sandbox GPU mirrors when a pack falls below two tiles (same rule as host pack mirrors). */
+ export function syncSandboxBitmapGpuScopes(scopes: ReadonlyMap<string, number>): void {
+   for (const [pluginId] of sandboxGpu) {
+-    if ((scopes.get(pluginId) ?? 0) < 2) teardownSandboxBitmapGl(pluginId);
++    if ((scopes.get(pluginId) ?? 0) < 2) { /* teardown removed */ }
+   }
+ }
+ 

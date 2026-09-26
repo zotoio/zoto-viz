@@ -23,6 +23,7 @@ export type PackMirrorReadbackResult = {
   letterboxBar: [number, number, number, number];
   contentNonEmpty: boolean;
   msaaSamples: number;
+  glRenderer: string;
 };
 
 function readPixel(
@@ -94,9 +95,14 @@ export async function runPackMirrorReadbackInPage(
   rd.setClearColor(0x222233, 1);
   rd.clear(true, true, true);
 
-  const gl = rd.getContext() as WebGL2RenderingContext;
+  const gl = rd.getContext() as WebGL2RenderingContext | null;
+  if (!gl) throw new Error("WebGL2 canvas context unavailable");
   const attrs = gl.getContextAttributes();
   if (!attrs) throw new Error("WebGL context attributes unavailable");
+  const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+  if (!dbg) throw new Error("WEBGL_debug_renderer_info unavailable");
+  const glRenderer = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
+  if (!glRenderer) throw new Error("GL renderer string empty");
   const pw = Math.max(2, Math.round(primaryBox.w * input.dpr));
   const ph = Math.max(2, Math.round(primaryBox.h * input.dpr));
 
@@ -183,6 +189,7 @@ export async function runPackMirrorReadbackInPage(
     letterboxBar,
     contentNonEmpty,
     msaaSamples: sessionSamples,
+    glRenderer,
   };
 }
 

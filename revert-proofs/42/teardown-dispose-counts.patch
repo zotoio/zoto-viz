@@ -1,6 +1,6 @@
---- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:04:11.037969692 +0000
-+++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:14:49.654302316 +0000
-@@ -135,7 +135,6 @@
+--- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:38:23.494464985 +0000
++++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:39:26.372858346 +0000
+@@ -185,7 +185,6 @@
      this.ph = 0;
      this.samples = -1;
      this.rendered = false;
@@ -8,7 +8,7 @@
    }
  
    ensure(pw: number, ph: number, antialias: boolean): THREE.WebGLRenderTarget | null {
-@@ -282,7 +281,6 @@
+@@ -334,7 +333,6 @@
      this.texture = null;
      this.tw = 0;
      this.th = 0;

@@ -29,12 +29,16 @@ import {
   paintLetterboxBarsThree,
   resetSandboxBitmapGl,
   sandboxBitmapGl,
+  syncSandboxBitmapGpuScopes,
+  type LetterboxBarScratch,
+  type MirrorRect,
 } from "./pack-mirror-gl";
 
 type PackMirrorViewMeta = HostedView & {
   packCoalesceGroupKey?: string;
   isPackMirrorPrimary?: boolean;
   packCoalesceTileCount?: number;
+  packSandboxMirrorPluginId?: string;
 };
 
 function packMirrorMeta(view: HostedView): PackMirrorViewMeta {
@@ -77,6 +81,14 @@ export class SoftwareGpu {
 
 export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
+function copyViewBox(dst: SoftRect, out: MirrorRect): MirrorRect {
+  out.x = dst.x;
+  out.y = dst.y;
+  out.w = dst.w;
+  out.h = dst.h;
+  return out;
+}
+
 export class RenderHost {
   readonly renderer: HostGpu;
   readonly canvas: HTMLCanvasElement;
@@ -93,6 +105,17 @@ export class RenderHost {
   private disposed = false;
   private pr: number;
   readonly packMirrors = new PackMirrorRegistry();
+  private readonly letterboxScratch = {
+    box: { x: 0, y: 0, w: 0, h: 0 },
+    inner: { x: 0, y: 0, w: 0, h: 0 },
+    innerAbs: { x: 0, y: 0, w: 0, h: 0 },
+    bars: [
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+    ] as LetterboxBarScratch,
+  };
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean; antialias?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -168,6 +191,14 @@ export class RenderHost {
           scopes.set(key, { tileCount, antialias });
         }
         this.packMirrors.syncScopes(scopes);
+        const sandboxScopes = new Map<string, number>();
+        for (const v of this.views) {
+          const meta = packMirrorMeta(v);
+          const pluginId = meta.packSandboxMirrorPluginId;
+          const tileCount = meta.packCoalesceTileCount ?? 0;
+          if (pluginId && tileCount >= 2) sandboxScopes.set(pluginId, tileCount);
+        }
+        syncSandboxBitmapGpuScopes(sandboxScopes);
       }
       const mirrorRank = (v: HostedView) => (packMirrorMeta(v).isPackMirrorPrimary ? 0 : 1);
       this.views.sort((a, b) => mirrorRank(a) - mirrorRank(b));
@@ -212,19 +243,22 @@ export class RenderHost {
     const src = this.viewBox(primary);
     if (!dst || !src || dst.w < 2 || dst.h < 2) return null;
     const aspect = src.w / Math.max(1, src.h);
+    const box = copyViewBox(dst, this.letterboxScratch.box);
     const inner = letterboxInnerRect(dst, aspect);
-    inner.x += dst.x;
-    inner.y += dst.y;
-    const box = { ...dst };
+    this.letterboxScratch.inner.x = inner.x + dst.x;
+    this.letterboxScratch.inner.y = inner.y + dst.y;
+    this.letterboxScratch.inner.w = inner.w;
+    this.letterboxScratch.inner.h = inner.h;
+    const innerPaint = this.letterboxScratch.inner;
     if (this.software) {
       const ctx = this.ctx2d;
       if (!ctx) return null;
       const pr = this.pr;
       ctx.setTransform(pr, 0, 0, pr, 0, 0);
-      paintLetterboxBars(ctx, box, inner, fill);
+      paintLetterboxBars(ctx, box, innerPaint, fill);
       ctx.save();
       ctx.beginPath();
-      ctx.rect(inner.x, inner.y, inner.w, inner.h);
+      ctx.rect(innerPaint.x, innerPaint.y, innerPaint.w, innerPaint.h);
       ctx.clip();
       ctx.drawImage(
         this.canvas,
@@ -232,10 +266,10 @@ export class RenderHost {
         src.y * pr,
         src.w * pr,
         src.h * pr,
-        inner.x,
-        inner.y,
-        inner.w,
-        inner.h,
+        innerPaint.x,
+        innerPaint.y,
+        innerPaint.w,
+        innerPaint.h,
       );
       ctx.restore();
       return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
@@ -261,17 +295,20 @@ export class RenderHost {
   ): Viewport | null {
     const dst = this.viewBox(mirror);
     if (!dst || dst.w < 2 || dst.h < 2) return null;
+    const box = copyViewBox(dst, this.letterboxScratch.box);
     const inner = letterboxInnerRect(dst, aspect);
-    inner.x += dst.x;
-    inner.y += dst.y;
-    const box = { ...dst };
+    this.letterboxScratch.inner.x = inner.x + dst.x;
+    this.letterboxScratch.inner.y = inner.y + dst.y;
+    this.letterboxScratch.inner.w = inner.w;
+    this.letterboxScratch.inner.h = inner.h;
+    const innerPaint = this.letterboxScratch.inner;
     if (this.software) {
       const ctx = this.ctx2d;
       if (!ctx) return null;
       const pr = this.pr;
       ctx.setTransform(pr, 0, 0, pr, 0, 0);
-      paintLetterboxBars(ctx, box, inner, fill);
-      ctx.drawImage(bitmap, inner.x, inner.y, inner.w, inner.h);
+      paintLetterboxBars(ctx, box, innerPaint, fill);
+      ctx.drawImage(bitmap, innerPaint.x, innerPaint.y, innerPaint.w, innerPaint.h);
       return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
     }
     const rd = this.renderer as THREE.WebGLRenderer;
@@ -292,21 +329,27 @@ export class RenderHost {
   ): Viewport | null {
     const dst = this.viewBox(mirror);
     if (!dst || dst.w < 2 || dst.h < 2) return null;
+    const box = copyViewBox(dst, this.letterboxScratch.box);
     const inner = letterboxInnerRect(dst, aspect);
-    inner.x += dst.x;
-    inner.y += dst.y;
-    const box = { ...dst };
+    const innerAbs = this.letterboxScratch.innerAbs;
+    innerAbs.x = dst.x + inner.x;
+    innerAbs.y = dst.y + inner.y;
+    innerAbs.w = inner.w;
+    innerAbs.h = inner.h;
     if (this.software) {
       const ctx = this.ctx2d;
       if (!ctx) return null;
       const pr = this.pr;
       ctx.setTransform(pr, 0, 0, pr, 0, 0);
-      paintLetterboxBars(ctx, box, inner, fill);
+      this.letterboxScratch.inner.x = innerAbs.x;
+      this.letterboxScratch.inner.y = innerAbs.y;
+      this.letterboxScratch.inner.w = innerAbs.w;
+      this.letterboxScratch.inner.h = innerAbs.h;
+      paintLetterboxBars(ctx, box, this.letterboxScratch.inner, fill);
       return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
     }
     const rd = this.renderer as THREE.WebGLRenderer;
-    const innerAbs = { x: dst.x + inner.x, y: dst.y + inner.y, w: inner.w, h: inner.h };
-    paintLetterboxBarsThree(rd, fill, dst, innerAbs);
+    paintLetterboxBarsThree(rd, fill, dst, innerAbs, this.letterboxScratch.bars);
     const pr = rd.getPixelRatio();
     return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
   }

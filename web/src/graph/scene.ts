@@ -1586,6 +1586,11 @@ export class NetScene implements HostedView {
     return this.packCoalesce?.tileCount ?? 0;
   }
 
+  get packSandboxMirrorPluginId(): string | undefined {
+    if (this.packCoalesce?.mirrorKind !== "sandboxSurface") return undefined;
+    return this.packCoalesce.pluginId;
+  }
+
   get usesPackMirrorRt(): boolean {
     return this.isPackMirrorPrimary && this.packCoalesceTileCount >= 2;
   }

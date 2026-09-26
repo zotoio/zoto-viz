@@ -1,7 +1,9 @@
 import * as THREE from "three";
 import type { SurfaceLetterboxFill } from "./letterbox-fill";
-import { letterboxFillHex, letterboxInnerRect, paintLetterboxBars } from "./letterbox-fill";
+import { letterboxFillHex, letterboxInnerRectInto, paintLetterboxBars } from "./letterbox-fill";
 import type { WebGLRenderer } from "three";
+
+export type MirrorRect = { x: number; y: number; w: number; h: number };
 
 export type MirrorRenderer = Pick<
   WebGLRenderer,
@@ -18,12 +20,16 @@ export type MirrorRenderer = Pick<
 
 export const PACK_MSAA_SAMPLES = 4;
 
+export type LetterboxBarScratch = [MirrorRect, MirrorRect, MirrorRect, MirrorRect];
+
 /** Counting hooks for lifecycle tests (no timing). */
 export const packMirrorResourceStats = {
   renderTargetCreated: 0,
   renderTargetSetSize: 0,
   renderTargetDisposed: 0,
   presenterCreated: 0,
+  textureCreated: 0,
+  textureDisposed: 0,
   geometryDisposed: 0,
   materialDisposed: 0,
   reset(): void {
@@ -31,6 +37,8 @@ export const packMirrorResourceStats = {
     this.renderTargetSetSize = 0;
     this.renderTargetDisposed = 0;
     this.presenterCreated = 0;
+    this.textureCreated = 0;
+    this.textureDisposed = 0;
     this.geometryDisposed = 0;
     this.materialDisposed = 0;
   },
@@ -40,18 +48,29 @@ export const packMirrorResourceStats = {
 export function paintLetterboxBarsThree(
   renderer: MirrorRenderer,
   fill: SurfaceLetterboxFill,
-  box: { x: number; y: number; w: number; h: number },
-  inner: { x: number; y: number; w: number; h: number },
+  box: MirrorRect,
+  inner: MirrorRect,
+  bars: LetterboxBarScratch,
 ): void {
   const hex = letterboxFillHex(fill);
   renderer.setScissorTest(true);
   renderer.setClearColor(hex, 1);
-  const bars = [
-    { x: box.x, y: inner.y + inner.h, w: box.w, h: Math.max(0, box.y + box.h - inner.y - inner.h) },
-    { x: box.x, y: box.y, w: box.w, h: Math.max(0, inner.y - box.y) },
-    { x: box.x, y: inner.y, w: Math.max(0, inner.x - box.x), h: inner.h },
-    { x: inner.x + inner.w, y: inner.y, w: Math.max(0, box.x + box.w - inner.x - inner.w), h: inner.h },
-  ];
+  bars[0].x = box.x;
+  bars[0].y = inner.y + inner.h;
+  bars[0].w = box.w;
+  bars[0].h = Math.max(0, box.y + box.h - inner.y - inner.h);
+  bars[1].x = box.x;
+  bars[1].y = box.y;
+  bars[1].w = box.w;
+  bars[1].h = Math.max(0, inner.y - box.y);
+  bars[2].x = box.x;
+  bars[2].y = inner.y;
+  bars[2].w = Math.max(0, inner.x - box.x);
+  bars[2].h = inner.h;
+  bars[3].x = inner.x + inner.w;
+  bars[3].y = inner.y;
+  bars[3].w = Math.max(0, box.x + box.w - inner.x - inner.w);
+  bars[3].h = inner.h;
   for (const b of bars) {
     if (b.w < 1 || b.h < 1) continue;
     renderer.setViewport(b.x, b.y, b.w, b.h);
@@ -67,6 +86,17 @@ export class PackTexturePresenter {
   readonly geometry = new THREE.PlaneGeometry(2, 2);
   readonly material = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
   readonly mesh: THREE.Mesh;
+  readonly scratch = {
+    innerTd: { x: 0, y: 0, w: 0, h: 0 },
+    innerAbs: { x: 0, y: 0, w: 0, h: 0 },
+    out: { x: 0, y: 0, w: 0, h: 0 },
+    bars: [
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+    ] as LetterboxBarScratch,
+  };
 
   constructor() {
     packMirrorResourceStats.presenterCreated += 1;
@@ -84,28 +114,48 @@ export class PackTexturePresenter {
   draw(
     renderer: MirrorRenderer,
     texture: THREE.Texture,
-    dst: { x: number; y: number; w: number; h: number },
+    dst: MirrorRect,
     fill: SurfaceLetterboxFill | null,
     contentAspect: number,
-    opts: { letterbox: boolean; flipY?: boolean },
-  ): { x: number; y: number; w: number; h: number } {
-    const innerTd = opts.letterbox ? letterboxInnerRect(dst, contentAspect) : { x: 0, y: 0, w: dst.w, h: dst.h };
+    opts: { letterbox: boolean },
+  ): MirrorRect {
+    const innerTd = opts.letterbox
+      ? letterboxInnerRectInto(dst, contentAspect, this.scratch.innerTd)
+      : (() => {
+        const t = this.scratch.innerTd;
+        t.x = 0;
+        t.y = 0;
+        t.w = dst.w;
+        t.h = dst.h;
+        return t;
+      })();
     const ix = dst.x + innerTd.x;
     const iy = dst.y + (dst.h - innerTd.y - innerTd.h);
     const iw = innerTd.w;
     const ih = innerTd.h;
+    const innerAbs = this.scratch.innerAbs;
+    innerAbs.x = ix;
+    innerAbs.y = iy;
+    innerAbs.w = iw;
+    innerAbs.h = ih;
     if (fill && opts.letterbox) {
-      paintLetterboxBarsThree(renderer, fill, dst, { x: ix, y: iy, w: iw, h: ih });
+      paintLetterboxBarsThree(renderer, fill, dst, innerAbs, this.scratch.bars);
     }
-    texture.flipY = opts.flipY ?? false;
-    this.material.map = texture;
-    this.material.needsUpdate = true;
+    if (this.material.map !== texture) {
+      this.material.map = texture;
+      this.material.needsUpdate = true;
+    }
     renderer.setScissorTest(true);
     renderer.setViewport(ix, iy, iw, ih);
     renderer.setScissor(ix, iy, iw, ih);
     renderer.setRenderTarget(null);
     renderer.render(this.scene, this.camera);
-    return { x: ix, y: iy, w: iw, h: ih };
+    const out = this.scratch.out;
+    out.x = ix;
+    out.y = iy;
+    out.w = iw;
+    out.h = ih;
+    return out;
   }
 }
 
@@ -251,15 +301,14 @@ export class PackMirrorRegistry {
   presentPack(
     key: string,
     renderer: MirrorRenderer,
-    dst: { x: number; y: number; w: number; h: number },
-    opts: { letterbox: boolean; fill: SurfaceLetterboxFill | null; aspect: number; flipY?: boolean },
-  ): { x: number; y: number; w: number; h: number } | null {
+    dst: MirrorRect,
+    opts: { letterbox: boolean; fill: SurfaceLetterboxFill | null; aspect: number },
+  ): MirrorRect | null {
     const session = this.sessions.get(key);
     const rt = session?.target;
     if (!rt || !session?.rendered) return null;
     return session.presenter.draw(renderer, rt.texture, dst, opts.fill, opts.aspect, {
       letterbox: opts.letterbox,
-      flipY: opts.flipY,
     });
   }
 
@@ -278,7 +327,10 @@ export class SandboxBitmapGl {
   uploadCount = 0;
 
   dispose(): void {
-    this.texture?.dispose();
+    if (this.texture) {
+      this.texture.dispose();
+      packMirrorResourceStats.textureDisposed += 1;
+    }
     this.texture = null;
     this.tw = 0;
     this.th = 0;
@@ -288,10 +340,14 @@ export class SandboxBitmapGl {
   ensureTexture(w: number, h: number): THREE.Texture | null {
     if (w < 2 || h < 2) return null;
     if (this.texture && w === this.tw && h === this.th) return this.texture;
-    this.texture?.dispose();
+    if (this.texture) {
+      this.texture.dispose();
+      packMirrorResourceStats.textureDisposed += 1;
+    }
     this.tw = w;
     this.th = h;
     this.texture = new THREE.Texture();
+    packMirrorResourceStats.textureCreated += 1;
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
     return this.texture;
@@ -301,7 +357,6 @@ export class SandboxBitmapGl {
     const tex = this.ensureTexture(bitmap.width, bitmap.height);
     if (!tex) return null;
     tex.image = bitmap;
-    tex.flipY = true;
     tex.needsUpdate = true;
     this.uploadCount += 1;
     return tex;
@@ -311,14 +366,18 @@ export class SandboxBitmapGl {
     renderer: MirrorRenderer,
     texture: THREE.Texture,
     fill: SurfaceLetterboxFill,
-    dst: { x: number; y: number; w: number; h: number },
+    dst: MirrorRect,
     aspect: number,
-  ): { x: number; y: number; w: number; h: number } {
-    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true, flipY: false });
+  ): MirrorRect {
+    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true });
   }
 }
 
 const sandboxGpu = new Map<string, SandboxBitmapGl>();
+
+export function sandboxBitmapGpuCount(): number {
+  return sandboxGpu.size;
+}
 
 export function sandboxBitmapGl(pluginId: string): SandboxBitmapGl {
   let gpu = sandboxGpu.get(pluginId);
@@ -327,6 +386,13 @@ export function sandboxBitmapGl(pluginId: string): SandboxBitmapGl {
     sandboxGpu.set(pluginId, gpu);
   }
   return gpu;
+}
+
+/** Drop sandbox GPU mirrors when a pack falls below two tiles (same rule as host pack mirrors). */
+export function syncSandboxBitmapGpuScopes(scopes: ReadonlyMap<string, number>): void {
+  for (const [pluginId] of sandboxGpu) {
+    if ((scopes.get(pluginId) ?? 0) < 2) teardownSandboxBitmapGl(pluginId);
+  }
 }
 
 export function resetSandboxBitmapGl(): void {

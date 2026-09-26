@@ -6,6 +6,9 @@ import {
   PackMirrorSession,
   PackTexturePresenter,
   packMirrorResourceStats,
+  sandboxBitmapGl,
+  sandboxBitmapGpuCount,
+  syncSandboxBitmapGpuScopes,
 } from "./pack-mirror-gl";
 import { surfaceLetterboxFill } from "./letterbox-fill";
 
@@ -51,16 +54,52 @@ function simulateTwoTileFrame(
   });
 }
 
+function simulateThreeTileFrame(
+  reg: PackMirrorRegistry,
+  rd: THREE.WebGLRenderer,
+  key: string,
+  antialias: boolean,
+  box = { w: 64, h: 48 },
+): void {
+  reg.beginFrame();
+  const { scene, camera } = emptyScene();
+  reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias);
+  reg.presentPack(key, rd, { x: 0, y: 0, w: box.w, h: box.h }, {
+    letterbox: false,
+    fill: null,
+    aspect: box.w / box.h,
+  });
+  reg.presentPack(key, rd, { x: 70, y: 0, w: 50, h: 40 }, {
+    letterbox: true,
+    fill: surfaceLetterboxFill(0x0a1020, 0.25),
+    aspect: box.w / box.h,
+  });
+  reg.presentPack(key, rd, { x: 130, y: 0, w: 50, h: 40 }, {
+    letterbox: true,
+    fill: surfaceLetterboxFill(0x0a1020, 0.25),
+    aspect: box.w / box.h,
+  });
+}
+
 describe("PackMirrorSession resource lifecycle", () => {
   beforeEach(() => packMirrorResourceStats.reset());
   afterEach(() => packMirrorResourceStats.reset());
 
-  it("300 frames / 2 tiles: one RT, one quad graph, zero per-frame allocations", () => {
+  it("300 frames / 2 tiles: one RT, one quad graph, reused mirror scratch rects", () => {
     const reg = new PackMirrorRegistry();
     const rd = stubRenderer(false);
     reg.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
     expect(packMirrorResourceStats.presenterCreated).toBe(1);
-    for (let i = 0; i < 300; i++) simulateTwoTileFrame(reg, rd, "plugin:pack", false);
+    const session = reg.sessionFor("plugin:pack")!;
+    const barsRef = session.presenter.scratch.bars;
+    const innerRef = session.presenter.scratch.innerTd;
+    const outRef = session.presenter.scratch.out;
+    for (let i = 0; i < 300; i++) {
+      simulateTwoTileFrame(reg, rd, "plugin:pack", false);
+      expect(session.presenter.scratch.bars).toBe(barsRef);
+      expect(session.presenter.scratch.innerTd).toBe(innerRef);
+      expect(session.presenter.scratch.out).toBe(outRef);
+    }
     expect(packMirrorResourceStats.renderTargetCreated).toBe(1);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
     expect(packMirrorResourceStats.presenterCreated).toBe(1);
@@ -103,6 +142,18 @@ describe("PackMirrorSession resource lifecycle", () => {
     packMirrorResourceStats.reset();
     reg.syncScopes(new Map([["plugin:lonely", { tileCount: 1, antialias: false }]]));
     expect(packMirrorResourceStats.renderTargetCreated).toBe(0);
+    expect(packMirrorResourceStats.presenterCreated).toBe(0);
+    reg.dispose();
+  });
+
+  it("three tiles on one pack: one render target and one presenter", () => {
+    const reg = new PackMirrorRegistry();
+    reg.syncScopes(new Map([["plugin:trio", { tileCount: 3, antialias: false }]]));
+    expect(packMirrorResourceStats.presenterCreated).toBe(1);
+    const rd = stubRenderer(false);
+    simulateThreeTileFrame(reg, rd, "plugin:trio", false);
+    expect(packMirrorResourceStats.renderTargetCreated).toBe(1);
+    expect(packMirrorResourceStats.presenterCreated).toBe(1);
     reg.dispose();
   });
 
@@ -126,11 +177,44 @@ describe("PackMirrorSession resource lifecycle", () => {
   });
 });
 
+describe("sandbox bitmap GPU scope sync", () => {
+  beforeEach(() => {
+    packMirrorResourceStats.reset();
+    syncSandboxBitmapGpuScopes(new Map());
+  });
+  afterEach(() => syncSandboxBitmapGpuScopes(new Map()));
+
+  it("ten 2↔1 tile toggles balance creates/disposes; one tile leaves no sandbox GPU", () => {
+    for (let i = 0; i < 10; i++) {
+      syncSandboxBitmapGpuScopes(new Map([["plugin:sandbox", 2]]));
+      const gpu = sandboxBitmapGl("plugin:sandbox");
+      gpu.ensureTexture(32, 24);
+      syncSandboxBitmapGpuScopes(new Map([["plugin:sandbox", 1]]));
+    }
+    expect(packMirrorResourceStats.textureCreated).toBe(packMirrorResourceStats.textureDisposed);
+    expect(packMirrorResourceStats.presenterCreated).toBe(packMirrorResourceStats.materialDisposed);
+    expect(sandboxBitmapGpuCount()).toBe(0);
+  });
+});
+
 describe("PackTexturePresenter", () => {
   beforeEach(() => packMirrorResourceStats.reset());
   it("constructs quad resources once", () => {
     const p = new PackTexturePresenter();
     expect(packMirrorResourceStats.presenterCreated).toBe(1);
+    p.dispose();
+  });
+
+  it("keeps material.version stable over 300 draws with the same texture", () => {
+    const p = new PackTexturePresenter();
+    const rd = stubRenderer(false);
+    const tex = new THREE.Texture();
+    p.draw(rd, tex, { x: 0, y: 0, w: 10, h: 10 }, null, 1, { letterbox: false });
+    const v0 = p.material.version;
+    for (let i = 0; i < 299; i++) {
+      p.draw(rd, tex, { x: 0, y: 0, w: 10, h: 10 }, null, 1, { letterbox: false });
+    }
+    expect(p.material.version).toBe(v0);
     p.dispose();
   });
 });
