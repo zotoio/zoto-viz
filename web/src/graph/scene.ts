@@ -34,6 +34,7 @@ import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
+import { claimPanelRaf, releasePanelView } from "./panel-view-lifecycle";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import { observeResize } from "../core/resize";
@@ -1045,6 +1046,8 @@ export interface SceneOpts {
   satellite?: boolean;
   /** draw through a shared context (one canvas for the whole wall) instead of owning a canvas */
   host?: RenderHost;
+  /** mosaic tile id (`plugin:…`) for lifecycle / leak tests */
+  panelId?: string;
 }
 
 export class NetScene implements HostedView {
@@ -1195,6 +1198,8 @@ export class NetScene implements HostedView {
   private readonly dragVel = new THREE.Vector3();
   private readonly baseFov = 55;
   private readonly satellite: boolean;
+  private panelId: string | null;
+  private releasePanelRaf: (() => void) | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
   private compactLabels = false;
   private raf = 0;
@@ -1262,6 +1267,8 @@ export class NetScene implements HostedView {
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
     this.paneFps = new PaneFps(container);
     this.satellite = !!opts.satellite;
+    this.panelId = opts.panelId ?? null;
+    if (this.panelId) this.releasePanelRaf = claimPanelRaf(this.panelId);
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
     if (this.host) {
@@ -3995,9 +4002,21 @@ export class NetScene implements HostedView {
     return base / Math.sqrt(Math.max(1, this.spreadX));
   }
 
+  /** Mosaic tile id moved onto the main scene element — retarget rAF lease. */
+  retargetPanel(panelId: string | null): void {
+    this.releasePanelRaf?.();
+    this.releasePanelRaf = null;
+    if (this.panelId) releasePanelView(this.panelId);
+    this.panelId = panelId;
+    if (panelId) this.releasePanelRaf = claimPanelRaf(panelId);
+  }
+
   dispose(): void {
     this.active = false;
     cancelAnimationFrame(this.raf);
+    this.releasePanelRaf?.();
+    this.releasePanelRaf = null;
+    if (this.panelId) releasePanelView(this.panelId);
     this.ro.disconnect();
     window.removeEventListener("resize", this.onWinResize);
     window.removeEventListener("pointerup", this.onCamPtrLost);
