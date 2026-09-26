@@ -73,8 +73,8 @@ per display frame (mosaic panes may share one iframe). Fields:
 | --- | --- |
 | `frameMs` | rAF timestamp (ms) |
 | `tileId` | **pack id** (not instance / mosaic slot). Reserved until Andrew decides one-sandbox-per-tile vs per-pack; re-scoped with `aspect` in **contract v3** (after #27). |
-| `pluginClock` | host sky clock in seconds — monotonic, global, always sent; frame dt clamped to 0.25 s; follows the motion speed slider |
-| `aspect?` | **w/h of the stage tile** the sandbox draws into (contract **v3**, with `tileId`). Not iframe size — do not use `innerWidth`/`innerHeight` alone. |
+| `pluginClock` | host sky clock in seconds — monotonic, global, always sent; per-frame `dt` clamped to **0.25 s before** speed scaling; rate follows the motion slider and scene pulse (up to **2.4×** at full pulse) |
+| `aspect?` | **w/h of the stage tile** the sandbox draws into (contract **v3**, with `tileId`). Not iframe size — do not use `innerWidth`/`innerHeight` alone. In mosaic, host currently sends the **main camera** aspect while reserved. |
 
 ```ts
 import type { VizZoto } from "../../plugins/sdk/viz-zoto";

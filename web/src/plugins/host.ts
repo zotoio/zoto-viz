@@ -121,14 +121,20 @@ export class PluginSandbox {
       let settled = false;
       const finish = () => {
         if (settled) return;
+        if (this.iframe !== iframe) {
+          settled = true;
+          resolve();
+          return;
+        }
         settled = true;
-        this.iframe?.contentWindow?.postMessage(
+        this.iframe.contentWindow?.postMessage(
           {
             source: "zoto-viz-host",
             type: "init",
             caps: this.caps,
             config,
             viz,
+            contractVersion: VIZ_CONTRACT_VERSION,
           } satisfies ParentMsg,
           "*",
         );

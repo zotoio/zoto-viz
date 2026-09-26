@@ -16,11 +16,14 @@ import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
+import { deliverPluginPresentTick } from "../plugins/viz-present-tick";
 import {
-  deliverPluginPresentTick,
-  presentDriveBindingForPlugin,
-  type PresentDriveBinding,
-} from "../plugins/viz-present-tick";
+  activePluginSpec,
+  capturePresentDriveBeforeLiveModeCommit,
+  presentDrive,
+  refreshPluginDriveState,
+  restorePresentDriveAfterModeRollback,
+} from "./present-drive-app";
 import { shouldPushSandboxPluginConfig } from "../plugins/viz-sandbox-config";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
@@ -345,22 +348,19 @@ const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
-let activePluginSpec: PluginView | null = null;
-let presentDrive: PresentDriveBinding | null = null;
-
 function stagePresentAspect(): number {
   const a = scene.camera.aspect;
   return Number.isFinite(a) && a > 0 ? a : 16 / 9;
 }
 
-function refreshPluginDriveState(spec: PluginView | null, _modeId: string): void {
-  activePluginSpec = spec;
-  presentDrive = presentDriveBindingForPlugin(
-    sandbox,
-    spec,
-    () => scene.skyTime(),
-    stagePresentAspect,
-  );
+const presentDriveDeps = {
+  sandbox,
+  pluginClock: () => scene.skyTime(),
+  stageAspect: stagePresentAspect,
+};
+
+function refreshPluginDriveForMode(spec: PluginView | null, modeId: string): void {
+  refreshPluginDriveState(spec, modeId, presentDriveDeps);
 }
 
 addPresentListener((ts) => {
@@ -415,7 +415,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
     vizHud.resetSkipBaseline();
   }
   if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
-  refreshPluginDriveState(spec ?? activePluginSpec, modeSel.value);
+  refreshPluginDriveForMode(spec ?? activePluginSpec, modeSel.value);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
@@ -765,12 +765,11 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   localStorage.setItem("zoto-viz.mode", m.id);
   touch();
   applyPluginWall(m.id, { ...flags, prevMode });
-  liveMode = m.id;
 
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  const prevPresentSpec = activePluginSpec;
-  const prevPresentMode = liveMode;
-  refreshPluginDriveState(spec, m.id);
+  const { prevPresentSpec, prevPresentMode } = capturePresentDriveBeforeLiveModeCommit(liveMode);
+  liveMode = m.id;
+  refreshPluginDriveForMode(spec, m.id);
   const paneSpec = skySpecForMode(m.id, spec);
   const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
   document.body.classList.toggle("stage-only", skyStage);
@@ -786,9 +785,12 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
       modeSel.value = prevMode || modeSel.value;
       liveMode = prevMode;
       localStorage.setItem("zoto-viz.mode", modeSel.value);
-      refreshPluginDriveState(
-        prevPresentMode ? pluginSpecForMode(prevPresentMode) ?? prevPresentSpec : prevPresentSpec,
-        prevPresentMode || modeSel.value,
+      restorePresentDriveAfterModeRollback(
+        prevPresentSpec,
+        prevPresentMode,
+        modeSel.value,
+        (id) => pluginSpecForMode(id) ?? null,
+        presentDriveDeps,
       );
       return;
     }
@@ -814,6 +816,13 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
         modeSel.value = prevMode || modeSel.value;
         liveMode = prevMode;
         localStorage.setItem("zoto-viz.mode", modeSel.value);
+        restorePresentDriveAfterModeRollback(
+          prevPresentSpec,
+          prevPresentMode,
+          modeSel.value,
+          (id) => pluginSpecForMode(id) ?? null,
+          presentDriveDeps,
+        );
         return;
       }
     }

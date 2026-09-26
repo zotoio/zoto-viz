@@ -48,6 +48,8 @@ describe("deliverPluginPresentTick", () => {
     deliverPluginPresentTick(binding, 20);
     const presents = spy.mock.calls.filter((c) => (c[0] as { type?: string }).type === "present");
     expect(presents).toHaveLength(2);
+    const last = presents.at(-1)?.[0] as { tick?: { aspect?: number } };
+    expect(last?.tick?.aspect).toBe(1.6);
     spy.mockRestore();
     sandbox.unload();
   });
