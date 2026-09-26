@@ -8,12 +8,35 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  TEST_PATH_RE,
+  allowTypeErrorEnabled,
+  buildPytestArgv,
+  classifyPatchedPytest,
+  classifyPatchedVitest,
+  escapeVitestTestNamePattern,
+  parsePytestJunit,
+  parseTimeoutSec,
+  patchTouchesTestFiles,
+  pytestNodeId,
+  resolveVitestProject,
+  sanitizeReportText,
+  validatePatchStructure,
+  validatePrNumber,
+  validatePythonModule,
+  validateTestFileRel,
+  vitestTestNamePattern,
+} from "./revert-proof-lib.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_TIMEOUT_SEC = 120;
 
-const TEST_PATH_RE =
-  /(?:^|\/)(?:tests\/|.*\.test\.ts$|.*\.spec\.ts$|test_[^/]*\.py$)/;
+export {
+  escapeVitestTestNamePattern,
+  patchTouchesTestFiles,
+  pytestNodeId,
+  vitestTestNamePattern,
+};
 
 const DEP_EXCLUDE = ["node_modules", "web/node_modules", ".venv"];
 
@@ -126,35 +149,6 @@ function pathsTouchedByPatch(patchText) {
   return [...paths];
 }
 
-export function patchTouchesTestFiles(patchText) {
-  return pathsTouchedByPatch(patchText).some((p) => TEST_PATH_RE.test(p));
-}
-
-/** Escape a literal for vitest `-t` (RegExp); does not add anchors. */
-export function escapeVitestTestNamePattern(testName) {
-  return testName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-}
-
-/**
- * Vitest `-t` matches `fullTestName` (`describe > … > test`), not the short title alone.
- * Anchor so a prefix cannot select multiple tests.
- */
-export function vitestTestNamePattern(fullTestName) {
-  return `^${escapeVitestTestNamePattern(fullTestName)}$`;
-}
-
-/** Pytest node id: `file.py::Class::test` or `file.py::test[param]` (never `-k`). */
-export function pytestNodeId(testFile, testName) {
-  const file = testFile.replace(/\\/g, "/");
-  if (testName.includes("/")) {
-    throw new Error("testName must be the pytest node suffix, not a file path");
-  }
-  if (testName.startsWith(`${file}::`)) {
-    return testName;
-  }
-  return `${file}::${testName}`;
-}
-
 function validateMeta(meta, slug) {
   for (const key of ["runner", "testFile", "testName", "description"]) {
     if (!meta[key] || typeof meta[key] !== "string") {
@@ -166,7 +160,7 @@ function validateMeta(meta, slug) {
   }
 }
 
-function validatePatchTouchesOnlyProduction(patchText, slug) {
+export function validatePatchTouchesOnlyProduction(patchText, slug) {
   if (patchTouchesTestFiles(patchText)) {
     throw new Error(
       `row ${slug}: patch touches test files (only production reverts allowed)`,
@@ -174,22 +168,334 @@ function validatePatchTouchesOnlyProduction(patchText, slug) {
   }
 }
 
-function resolveVitest(wtRoot, testFile) {
-  const rel = testFile.replace(/\\/g, "/");
-  const rootBin = path.join(wtRoot, "node_modules", ".bin", "vitest");
-  const webBin = path.join(wtRoot, "web", "node_modules", ".bin", "vitest");
-  if (!rel.startsWith("web/") && fs.existsSync(rootBin)) {
-    return { bin: rootBin, cwd: wtRoot };
-  }
-  if (fs.existsSync(webBin)) {
-    return { bin: webBin, cwd: path.join(wtRoot, "web") };
-  }
-  if (fs.existsSync(rootBin)) {
-    return { bin: rootBin, cwd: wtRoot };
-  }
-  throw new Error(
-    `vitest not found under ${wtRoot} (run pnpm install --offline in the worktree first)`,
+const PRODUCTION_CONFIG_NAME = "revert-proof-production.json";
+
+const REACH_EXEMPT = new Set(["scripts/revert-proof.mjs"]);
+
+const JS_EXT = [".ts", ".tsx", ".js", ".mjs", ".cjs", ".jsx"];
+const PY_EXT = [".py"];
+
+function normRel(p) {
+  return p.replace(/\\/g, "/");
+}
+
+function isExcludedProductionTestPath(rel) {
+  const p = normRel(rel);
+  return (
+    TEST_PATH_RE.test(p) ||
+    /(?:^|\/)(?:tests\/|__tests__\/|fixtures\/|revert-proof\/)/.test(p) ||
+    /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) ||
+    /\/test_[^/]*\.py$/.test(p)
   );
+}
+
+function loadProductionConfig(wtRoot) {
+  const configPath = path.join(wtRoot, "scripts", PRODUCTION_CONFIG_NAME);
+  let raw = {
+    scanRoots: ["web/src", "plugins", "service", "packages"],
+    entryPoints: ["web/src/app/main.ts", "web/index.html", "service/monitor.py"],
+    packEntryGlob: "plugins/src/*/frontend/index.ts",
+  };
+  if (fs.existsSync(configPath)) {
+    raw = { ...raw, ...JSON.parse(fs.readFileSync(configPath, "utf8")) };
+  }
+  for (const p of raw.reachExempt ?? []) {
+    REACH_EXEMPT.add(normRel(p));
+  }
+  const entryPoints = new Set(
+    (raw.entryPoints ?? []).map((e) => normRel(e)),
+  );
+  const packGlob = raw.packEntryGlob ?? "";
+  if (packGlob.includes("*")) {
+    const [prefix, suffix] = packGlob.split("*");
+    const midDir = path.join(wtRoot, prefix);
+    const tail = suffix.replace(/^\//, "");
+    if (fs.existsSync(midDir)) {
+      for (const ent of fs.readdirSync(midDir, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue;
+        const candidate = normRel(path.join(prefix, ent.name, tail));
+        if (fs.existsSync(path.join(wtRoot, candidate))) {
+          entryPoints.add(candidate);
+        }
+      }
+    }
+  }
+  return {
+    scanRoots: (raw.scanRoots ?? []).map((r) => normRel(r)),
+    entryPoints,
+  };
+}
+
+function walkProductionFiles(wtRoot, scanRoots) {
+  const files = [];
+  const skipDir = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "coverage",
+    "__pycache__",
+    ".venv",
+  ]);
+  function walk(absDir, relDir) {
+    if (!fs.existsSync(absDir)) return;
+    for (const ent of fs.readdirSync(absDir, { withFileTypes: true })) {
+      if (skipDir.has(ent.name)) continue;
+      const rel = relDir ? `${relDir}/${ent.name}` : ent.name;
+      const abs = path.join(absDir, ent.name);
+      if (ent.isDirectory()) {
+        if (isExcludedProductionTestPath(rel)) continue;
+        walk(abs, rel);
+        continue;
+      }
+      if (isExcludedProductionTestPath(rel)) continue;
+      if (
+        JS_EXT.some((e) => ent.name.endsWith(e)) ||
+        PY_EXT.some((e) => ent.name.endsWith(e))
+      ) {
+        files.push(normRel(rel));
+      }
+    }
+  }
+  for (const root of scanRoots) {
+    walk(path.join(wtRoot, root), root);
+  }
+  return files;
+}
+
+function readPackageNameMap(wtRoot) {
+  const map = new Map();
+  function addPkg(pkgDir, relDir) {
+    const pkgPath = path.join(pkgDir, "package.json");
+    if (!fs.existsSync(pkgPath)) return;
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+      if (!pkg.name) return;
+      let main = pkg.main ?? pkg.module;
+      if (!main && pkg.exports) {
+        const exp =
+          typeof pkg.exports === "string"
+            ? pkg.exports
+            : pkg.exports["."];
+        if (typeof exp === "string") main = exp;
+        else if (exp?.import) main = exp.import;
+        else if (exp?.default) main = exp.default;
+      }
+      if (!main) main = "index.js";
+      const resolved = normRel(path.join(relDir, main.replace(/^\.\//, "")));
+      map.set(pkg.name, resolved);
+    } catch {
+      /* ignore */
+    }
+  }
+  addPkg(path.join(wtRoot, "web"), "web");
+  const packagesDir = path.join(wtRoot, "packages");
+  if (fs.existsSync(packagesDir)) {
+    for (const ent of fs.readdirSync(packagesDir, { withFileTypes: true })) {
+      if (ent.isDirectory()) {
+        addPkg(path.join(packagesDir, ent.name), `packages/${ent.name}`);
+      }
+    }
+  }
+  return map;
+}
+
+function resolveJsFile(wtRoot, fromRel, spec) {
+  const fromDir = path.dirname(fromRel);
+  let target;
+  if (spec.startsWith(".")) {
+    target = normRel(path.join(fromDir, spec));
+  } else if (spec.startsWith("@/") || spec.startsWith("~/")) {
+    return null;
+  } else if (!spec.startsWith("@") && !spec.includes("/")) {
+    return null;
+  } else {
+    const pkgMap = readPackageNameMap(wtRoot);
+    const bare = spec.split("/")[0].startsWith("@")
+      ? spec.split("/").slice(0, 2).join("/")
+      : spec.split("/")[0];
+    const mapped = pkgMap.get(bare);
+    if (!mapped) return null;
+    if (spec === bare) {
+      target = mapped;
+    } else {
+      const sub = spec.slice(bare.length + 1);
+      target = normRel(path.join(path.dirname(mapped), sub));
+    }
+  }
+  return materializeModulePath(wtRoot, target);
+}
+
+function materializeModulePath(wtRoot, base) {
+  const rel = normRel(base);
+  const candidates = [rel];
+  if (rel.endsWith(".js")) {
+    candidates.push(rel.slice(0, -3));
+  }
+  for (const stem of candidates) {
+    const abs = path.join(wtRoot, stem);
+    if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+      return stem;
+    }
+    for (const ext of JS_EXT) {
+      if (fs.existsSync(`${abs}${ext}`)) {
+        return `${stem}${ext}`;
+      }
+    }
+    for (const ext of JS_EXT) {
+      const idx = path.join(abs, `index${ext}`);
+      if (fs.existsSync(idx)) {
+        return normRel(path.join(stem, `index${ext}`));
+      }
+    }
+  }
+  return null;
+}
+
+const JS_IMPORT_RE =
+  /\bfrom\s+['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)|\bimport\s+['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+function jsImportsInFile(wtRoot, relFile) {
+  const abs = path.join(wtRoot, relFile);
+  if (!fs.existsSync(abs)) return [];
+  const text = fs.readFileSync(abs, "utf8");
+  const specs = new Set();
+  let m;
+  JS_IMPORT_RE.lastIndex = 0;
+  while ((m = JS_IMPORT_RE.exec(text))) {
+    const spec = m[1] || m[2] || m[3] || m[4];
+    if (spec) specs.add(spec);
+  }
+  const resolved = [];
+  for (const spec of specs) {
+    const r = resolveJsFile(wtRoot, relFile, spec);
+    if (r) resolved.push(r);
+  }
+  return resolved;
+}
+
+function pyModuleToPath(wtRoot, moduleName, fromRel) {
+  const parts = moduleName.split(".");
+  if (moduleName.startsWith(".")) {
+    const fromDir = path.dirname(fromRel);
+    const level = moduleName.match(/^\.+/)?.[0].length ?? 0;
+    const rest = moduleName.slice(level).replace(/\./g, "/");
+    let dir = fromDir;
+    for (let i = 1; i < level; i++) {
+      dir = path.dirname(dir);
+    }
+    const base = rest ? path.join(dir, rest) : dir;
+    return materializePyPath(wtRoot, normRel(base));
+  }
+  if (parts[0] === "service") {
+    const base = normRel(path.join("service", parts.slice(1).join("/")));
+    return materializePyPath(wtRoot, base);
+  }
+  const rootMod = normRel(parts.join("/"));
+  return materializePyPath(wtRoot, rootMod);
+}
+
+function materializePyPath(wtRoot, base) {
+  const rel = normRel(base);
+  const abs = path.join(wtRoot, rel);
+  if (fs.existsSync(`${abs}.py`)) return `${rel}.py`;
+  if (fs.existsSync(path.join(abs, "__init__.py"))) {
+    return normRel(path.join(rel, "__init__.py"));
+  }
+  return null;
+}
+
+const PY_IMPORT_RE =
+  /^\s*(?:from\s+(\.+[\w.]*|[\w.]+)\s+import|import\s+([\w.]+))/gm;
+
+function pyImportsInFile(wtRoot, relFile) {
+  const abs = path.join(wtRoot, relFile);
+  if (!fs.existsSync(abs)) return [];
+  const text = fs.readFileSync(abs, "utf8");
+  const resolved = [];
+  let m;
+  PY_IMPORT_RE.lastIndex = 0;
+  while ((m = PY_IMPORT_RE.exec(text))) {
+    const mod = m[1] || m[2];
+    if (!mod) continue;
+    const r = pyModuleToPath(wtRoot, mod, relFile);
+    if (r) resolved.push(r);
+  }
+  return resolved;
+}
+
+function buildProductionImporterGraph(wtRoot) {
+  const config = loadProductionConfig(wtRoot);
+  const productionFiles = walkProductionFiles(wtRoot, config.scanRoots);
+  const productionSet = new Set(productionFiles);
+  /** @type {Map<string, Set<string>>} */
+  const importers = new Map();
+
+  for (const file of productionFiles) {
+    const deps = file.endsWith(".py")
+      ? pyImportsInFile(wtRoot, file)
+      : jsImportsInFile(wtRoot, file);
+    for (const dep of deps) {
+      if (!productionSet.has(dep)) continue;
+      if (!importers.has(dep)) importers.set(dep, new Set());
+      importers.get(dep).add(file);
+    }
+  }
+  return { importers, entryPoints: config.entryPoints };
+}
+
+/** @type {null | { root: string, graph: ReturnType<typeof buildProductionImporterGraph> }} */
+let productionGraphCache = null;
+
+function getProductionGraph(wtRoot) {
+  const root = fs.realpathSync(wtRoot);
+  if (!productionGraphCache || productionGraphCache.root !== root) {
+    productionGraphCache = {
+      root,
+      graph: buildProductionImporterGraph(wtRoot),
+    };
+  }
+  return productionGraphCache.graph;
+}
+
+export function isRevertTargetReachableFromProduction(wtRoot, relFile) {
+  const file = normRel(relFile);
+  const { importers, entryPoints } = getProductionGraph(wtRoot);
+  if (entryPoints.has(file)) {
+    return true;
+  }
+  const seen = new Set();
+  let queue = [...(importers.get(file) ?? [])];
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (entryPoints.has(cur)) {
+      return true;
+    }
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    for (const up of importers.get(cur) ?? []) {
+      if (!seen.has(up)) {
+        queue.push(up);
+      }
+    }
+  }
+  return false;
+}
+
+export function validatePatchProductionReachable(patchText, slug, wtRoot) {
+  for (const touched of pathsTouchedByPatch(patchText)) {
+    const file = normRel(touched);
+    if (isExcludedProductionTestPath(file)) {
+      continue;
+    }
+    if (REACH_EXEMPT.has(file)) {
+      continue;
+    }
+    if (!isRevertTargetReachableFromProduction(wtRoot, file)) {
+      throw new Error(
+        `row ${slug}: revert target unreachable from production: ${file}`,
+      );
+    }
+  }
 }
 
 function tscBin(wtRoot) {
@@ -201,26 +507,6 @@ function tscBin(wtRoot) {
 }
 
 const SKIP_WALK = new Set([".git", "node_modules", ".venv", "revert-proofs"]);
-
-function findPnpmLockRoots(wtRoot) {
-  const roots = [];
-  function walk(dir) {
-    const base = path.basename(dir);
-    if (SKIP_WALK.has(base)) {
-      return;
-    }
-    if (fs.existsSync(path.join(dir, "pnpm-lock.yaml"))) {
-      roots.push(dir);
-    }
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (ent.isDirectory()) {
-        walk(path.join(dir, ent.name));
-      }
-    }
-  }
-  walk(wtRoot);
-  return roots;
-}
 
 function pnpmInstallOffline(cwd) {
   const r = spawnSync(
@@ -260,7 +546,7 @@ function findNodeModulesRoots(wtRoot) {
   return roots;
 }
 
-function checkSymlinkInsideWorktree(linkPath, wtReal) {
+function checkSymlinkInsideWorktree(linkPath, wtReal, mainReal) {
   let st;
   try {
     st = fs.lstatSync(linkPath);
@@ -271,15 +557,23 @@ function checkSymlinkInsideWorktree(linkPath, wtReal) {
     return;
   }
   const real = fs.realpathSync(linkPath);
-  if (real !== wtReal && !real.startsWith(`${wtReal}${path.sep}`)) {
-    throw new Error(
-      `workspace link ${linkPath} resolves outside worktree: ${real}`,
-    );
+  if (real === wtReal || real.startsWith(`${wtReal}${path.sep}`)) {
+    return;
   }
+  if (
+    mainReal &&
+    (real === mainReal || real.startsWith(`${mainReal}${path.sep}`))
+  ) {
+    return;
+  }
+  throw new Error(
+    `workspace link ${linkPath} resolves outside worktree: ${real}`,
+  );
 }
 
-export function assertWorkspaceLinksInWorktree(wtRoot) {
+export function assertWorkspaceLinksInWorktree(wtRoot, mainRoot) {
   const wtReal = fs.realpathSync(wtRoot);
+  const mainReal = mainRoot ? fs.realpathSync(mainRoot) : null;
   for (const nmRoot of findNodeModulesRoots(wtRoot)) {
     for (const name of fs.readdirSync(nmRoot)) {
       if (name === ".pnpm" || name === ".bin" || name === ".cache") {
@@ -294,15 +588,15 @@ export function assertWorkspaceLinksInWorktree(wtRoot) {
           continue;
         }
         if (!scopeStat.isDirectory()) {
-          checkSymlinkInsideWorktree(full, wtReal);
+          checkSymlinkInsideWorktree(full, wtReal, mainReal);
           continue;
         }
         for (const pkg of fs.readdirSync(full)) {
-          checkSymlinkInsideWorktree(path.join(full, pkg), wtReal);
+          checkSymlinkInsideWorktree(path.join(full, pkg), wtReal, mainReal);
         }
         continue;
       }
-      checkSymlinkInsideWorktree(full, wtReal);
+      checkSymlinkInsideWorktree(full, wtReal, mainReal);
     }
   }
 }
@@ -331,21 +625,40 @@ function findPnpmInstallRoots(wtRoot, rows) {
   return roots;
 }
 
+function vitestBinsPresent(wtRoot) {
+  const rootBin = path.join(wtRoot, "node_modules", ".bin", "vitest");
+  const webBin = path.join(wtRoot, "web", "node_modules", ".bin", "vitest");
+  return fs.existsSync(rootBin) || fs.existsSync(webBin);
+}
+
 function ensureJsDepsInWorktree(wtRoot, rows) {
   if (worktreeJsDepsReady) {
     return;
   }
-  for (const dir of findPnpmInstallRoots(wtRoot, rows)) {
-    pnpmInstallOffline(dir);
+  const needsVitest = rows.some((r) => r.meta.runner === "vitest");
+  const skipInstall = process.env.REVERT_PROOF_SKIP_PNPM_INSTALL === "1";
+  const installRoots = needsVitest ? findPnpmInstallRoots(wtRoot, rows) : [];
+  if (installRoots.length > 0 && (!skipInstall || !vitestBinsPresent(wtRoot))) {
+    for (const dir of installRoots) {
+      pnpmInstallOffline(dir);
+    }
+  } else if (needsVitest && !vitestBinsPresent(wtRoot)) {
+    throw new Error(
+      "REVERT_PROOF_SKIP_PNPM_INSTALL=1 but vitest is missing in the worktree",
+    );
   }
-  if (rows.some((r) => r.meta.runner === "vitest")) {
-    assertWorkspaceLinksInWorktree(wtRoot);
+  if (needsVitest && process.env.REVERT_PROOF_SKIP_PNPM_INSTALL !== "1") {
+    assertWorkspaceLinksInWorktree(wtRoot, mainCheckoutRoot());
   }
   worktreeJsDepsReady = true;
 }
 
 function venvPython(mainRoot) {
+  if (process.env.REVERT_PROOF_PYTHON) {
+    return process.env.REVERT_PROOF_PYTHON;
+  }
   const candidates = [
+    path.join(mainRoot, ".venv", "bin", "python3"),
     path.join(mainRoot, ".venv", "bin", "python"),
     path.join(mainRoot, ".venv", "Scripts", "python.exe"),
   ];
@@ -354,10 +667,10 @@ function venvPython(mainRoot) {
       return c;
     }
   }
-  return "python";
+  return "python3";
 }
 
-function pythonEnvForWorktree(wtRoot) {
+export function pythonEnvForWorktree(wtRoot) {
   return {
     ...process.env,
     PYTHONPATH: wtRoot,
@@ -389,6 +702,7 @@ export function assertEditablePythonResolvesInWorktree(
   python,
   moduleName = "service",
 ) {
+  validatePythonModule(moduleName);
   const r = spawnSync(
     python,
     [
@@ -539,52 +853,26 @@ function countVitestExecuted(report) {
   return { executed, passed, failed, suiteError: null, failedAssertions };
 }
 
-function isVitestAssertionFailure(failedAssertions) {
-  if (!failedAssertions.length) return false;
-  const text = failedAssertions
-    .flatMap((f) => f.messages)
-    .join("\n");
-  return (
-    /AssertionError|expect\(|Expected|Received|toBe|toEqual/i.test(text) ||
-    failedAssertions.some((f) => f.messages.length > 0)
-  );
-}
-
-function parsePytestJunit(xmlText) {
-  const cases = [];
-  const caseRe = /<testcase\b([^>]*)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
-  let m;
-  while ((m = caseRe.exec(xmlText))) {
-    const attrs = m[1];
-    const body = m[2] ?? "";
-    const nameM = attrs.match(/\bname="([^"]*)"/);
-    const name = nameM ? nameM[1] : "";
-    if (/<skipped\b/.test(body)) continue;
-    let outcome = "passed";
-    if (/<failure\b/.test(body)) outcome = "failed";
-    else if (/<error\b/.test(body)) outcome = "error";
-    cases.push({ name, outcome, body });
-  }
-  const collectionErrors = /<collection errors="(\d+)"/.exec(xmlText);
-  if (collectionErrors && Number(collectionErrors[1]) > 0) {
-    return { executed: 0, cases, collectionError: true };
-  }
-  return { executed: cases.length, cases, collectionError: false };
-}
-
 async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
-  const { bin, cwd } = resolveVitest(wtRoot, meta.testFile);
+  const { bin, cwd, config } = resolveVitestProject(wtRoot, meta);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
   const testPattern = vitestTestNamePattern(meta.testName);
+  const testFileAbs = path.join(wtRoot, meta.testFile);
+  const testFileArg = path.relative(cwd, testFileAbs).replace(/\\/g, "/");
+  const configArg =
+    config && path.isAbsolute(config)
+      ? path.relative(cwd, config).split(path.sep).join("/") || config
+      : config;
   const args = [
     "run",
     "--config",
-    path.join(wtRoot, "scripts", "vitest.config.mjs"),
-    meta.testFile,
+    configArg,
     "-t",
     testPattern,
     "--reporter=json",
     `--outputFile=${jsonOut}`,
+    "--",
+    testFileArg,
   ];
   const result = await runProcess(bin, args, {
     cwd,
@@ -622,15 +910,18 @@ async function runPytest(
   const xmlOut = path.join(artifactsDir, `${slug}-${phase}-pytest.xml`);
   const python = venvPython(mainRoot);
   const nodeId = pytestNodeId(meta.testFile, meta.testName);
-  const args = ["-m", "pytest", nodeId, `--junitxml=${xmlOut}`];
+  const args = buildPytestArgv(nodeId, xmlOut);
   const result = await runProcess(python, args, {
     cwd: wtRoot,
     env: { ...pythonEnvForWorktree(wtRoot), FORCE_COLOR: "0" },
     timeoutMs,
   });
-  let parsed = { executed: 0, cases: [], collectionError: false };
+  const exitCode = result.exitCode ?? 1;
+  let parsed = { executed: 0, cases: [], collectionError: exitCode !== 0 };
   if (fs.existsSync(xmlOut)) {
-    parsed = parsePytestJunit(fs.readFileSync(xmlOut, "utf8"));
+    parsed = parsePytestJunit(fs.readFileSync(xmlOut, "utf8"), exitCode);
+  } else if (exitCode !== 0) {
+    parsed = { executed: 0, cases: [], collectionError: true };
   }
   return {
     command: `python -m pytest ${nodeId}`,
@@ -785,47 +1076,25 @@ export function rejectPatchedVitestGreen(kind, slug) {
   }
 }
 
-function classifyPatchedVitest(run) {
-  if (run.counts.suiteError) {
-    return "build break";
-  }
-  if (run.counts.failed !== 1) {
-    return "not single assertion failure";
-  }
-  if (!isVitestAssertionFailure(run.counts.failedAssertions)) {
-    return "build break";
-  }
-  return "assertion";
-}
-
-function classifyPatchedPytest(run) {
-  if (run.counts.collectionError) return "build break";
-  const cases = run.counts.cases ?? [];
-  if (cases.length !== 1) return "not single test";
-  const c = cases[0];
-  if (c.outcome === "error") return "build break";
-  if (c.outcome === "failed") return "assertion";
-  if (c.outcome === "passed") return "green";
-  return "unknown";
-}
-
 async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   const { slug, patchPath, meta } = row;
   validateMeta(meta, slug);
+  validateTestFileRel(meta.testFile, wtRoot);
   const patchText = fs.readFileSync(patchPath, "utf8");
+  validatePatchStructure(patchText, slug);
   validatePatchTouchesOnlyProduction(patchText, slug);
+  validatePatchProductionReachable(patchText, slug, wtRoot);
 
-  const timeoutMs = (meta.timeoutSec ?? DEFAULT_TIMEOUT_SEC) * 1000;
+  const timeoutSec = parseTimeoutSec(meta.timeoutSec, slug);
+  const timeoutMs = timeoutSec * 1000;
   const testLabel = `${meta.testFile} :: ${meta.testName}`;
 
   resetWorktree(wtRoot);
 
   if (meta.runner === "pytest") {
-    ensurePythonIsolation(
-      mainRoot,
-      wtRoot,
-      meta.pythonModule ?? "service",
-    );
+    const mod = meta.pythonModule ?? "service";
+    validatePythonModule(mod);
+    ensurePythonIsolation(mainRoot, wtRoot, mod);
   }
 
   const baseline = await runTestPhase(
@@ -840,13 +1109,27 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   if (baseline.timedOut) {
     throw new Error(`row ${slug}: baseline timed out`);
   }
-  assertExactlyOneTest(slug, "baseline", baseline);
+  try {
+    assertExactlyOneTest(slug, "baseline", baseline);
+  } catch (err) {
+    const snippet = trimFailureOutput(baseline.output || "");
+    const base = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      snippet ? `${base}\n--- baseline output ---\n${snippet}` : base,
+    );
+  }
   if (meta.runner === "vitest") {
     if (baseline.counts.failed > 0 || baseline.counts.passed !== 1) {
-      throw new Error(`row ${slug}: baseline test must PASS`);
+      const snippet = trimFailureOutput(baseline.output || "");
+      throw new Error(
+        `row ${slug}: baseline test must PASS${snippet ? `\n--- baseline output ---\n${snippet}` : ""}`,
+      );
     }
   } else if (baseline.counts.cases?.[0]?.outcome !== "passed") {
-    throw new Error(`row ${slug}: baseline test must PASS`);
+    const snippet = trimFailureOutput(baseline.output || "");
+    throw new Error(
+      `row ${slug}: baseline test must PASS${snippet ? `\n--- baseline output ---\n${snippet}` : ""}`,
+    );
   }
 
   try {
@@ -863,8 +1146,8 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   if (meta.runner === "vitest") {
     const tsc = runTscCheck(wtRoot);
     if (!tsc.ok && !tsc.skipped) {
-      if (meta.allowTypeError) {
-        tscNote = `allowTypeError: ${meta.allowTypeErrorReason ?? meta.allowTypeError ?? "yes"}`;
+      if (allowTypeErrorEnabled(meta)) {
+        tscNote = `allowTypeError: ${meta.allowTypeErrorReason ?? "yes"}`;
       } else {
         throw new Error(
           `row ${slug}: patch breaks build (tsc --noEmit -p web failed; proves nothing)`,
@@ -895,7 +1178,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   assertExactlyOneTest(slug, "patched", patched);
 
   if (meta.runner === "vitest") {
-    const kind = classifyPatchedVitest(patched);
+    const kind = classifyPatchedVitest({ counts: patched.counts });
     rejectPatchedVitestGreen(kind, slug);
     if (kind === "build break" || kind === "not single assertion failure") {
       throw new Error(
@@ -903,7 +1186,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       );
     }
   } else {
-    const kind = classifyPatchedPytest(patched);
+    const kind = classifyPatchedPytest({ counts: patched.counts });
     if (kind === "green") {
       throw new Error(
         `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
@@ -971,7 +1254,7 @@ function buildReport(results, errors) {
   }
   for (const e of errors) {
     lines.push(
-      `| ${escapeCell(e.slug)} | | | | **ERROR: ${escapeCell(e.message)}** |`,
+      `| ${escapeCell(e.slug)} | | | | **ERROR: ${escapeCell(sanitizeReportText(e.message))}** |`,
     );
   }
   lines.push("");
@@ -979,7 +1262,7 @@ function buildReport(results, errors) {
     lines.push(`### ${r.slug}`);
     lines.push("");
     lines.push("```");
-    lines.push(r.failureOutput || "(no output captured)");
+    lines.push(sanitizeReportText(r.failureOutput || "(no output captured)"));
     lines.push("```");
     lines.push("");
   }
@@ -1004,8 +1287,10 @@ function parseArgs(argv) {
 async function mainAsync() {
   worktreeJsDepsReady = false;
   pythonIsolationChecked = false;
+  productionGraphCache = null;
 
   const { prNumber, row: onlySlug } = parseArgs(process.argv);
+  validatePrNumber(prNumber);
   const mainRoot = mainCheckoutRoot();
   const before = checkoutSnapshot(mainRoot);
 

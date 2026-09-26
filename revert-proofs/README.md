@@ -13,7 +13,7 @@ Every regression test in a PR should prove it actually catches a production bug.
 {
   "runner": "vitest",
   "testFile": "scripts/widget.test.ts",
-  "testName": "returns one",
+  "testName": "widget > returns one",
   "description": "One-line summary of what the patch reverts",
   "timeoutSec": 120,
   "allowTypeError": false,
@@ -41,6 +41,8 @@ Optional: `node scripts/revert-proof.mjs <pr-number> --row <slug>`.
 
 Uncommitted changes in your checkout are **not** included in proofs (you get a warning). Each row must pass exactly one test on the unpatched tree, then fail that same test on an assertion after the production revert. Transform/import/collection failures and `tsc` breaks (unless `allowTypeError`) are rejected as “proves nothing”.
 
+Patches must touch **production-reachable** code: for each changed file, the runner walks production importers (under `web/src`, `plugins`, `service`, `packages`, etc., excluding tests/fixtures) up to configured entry points (`scripts/revert-proof-production.json`). Otherwise the row fails with `revert target unreachable from production: <file>` (test-only helpers do not count).
+
 4. Paste `revert-proofs/<pr-number>/REPORT.md` into the PR body.
 
 ## Isolation
@@ -67,4 +69,6 @@ pnpm revert-proof:selftest
 
 ## Pytest rows
 
-Use `"runner": "pytest"` with `testFile` / `testName` (`-k`). Outcomes are read from JUnit XML (`failed` vs `error`).
+Use `"runner": "pytest"` with `testFile` / `testName` (pytest node id `file::test`, never `-k`). Outcomes use JUnit XML plus pytest exit code (`failure` with assert/AssertionError vs `error`).
+
+Optional `project` on vitest rows: `"web"` or `"scripts"` (default inferred from `testFile` prefix).

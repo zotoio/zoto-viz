@@ -1,0 +1,10 @@
+{
+  "scanRoots": ["web/src", "plugins", "service", "packages"],
+  "entryPoints": [
+    "web/index.html",
+    "web/src/app/main.ts",
+    "service/monitor.py"
+  ],
+  "packEntryGlob": "plugins/src/*/frontend/index.ts",
+  "reachExempt": ["scripts/revert-proof.mjs"]
+}
