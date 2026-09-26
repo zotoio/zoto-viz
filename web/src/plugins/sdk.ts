@@ -5,8 +5,8 @@ import { VIZ_PLUGIN_SDK } from "./viz-sdk";
 export const PLUGIN_SDK = `
 const allowed = new Set(JSON.parse(document.currentScript.dataset.caps || "[]"));
 const parent = window.parent;
-function send(type, payload, transfer) {
-  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, "*", transfer || []);
+function send(type, payload) {
+  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, "*");
 }
 window.zoto = {
   onTick: null,

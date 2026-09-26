@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/host-three-pixel-materials.test.ts",
-  "testName": "^host pixel-sized materials \\(counting GL\\) > PointsMaterial sizeAttenuation true at pr 1\\.5 css size 4: uploaded size 4, scale devH/2$",
-  "expectedRed": "expected 6 to be 4 // Object.is equality",
-  "description": "World-space points must not multiply size by layout DPR; Three uploads size*rendererPr with scale devH/2."
-}
