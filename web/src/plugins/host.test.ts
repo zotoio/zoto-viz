@@ -53,6 +53,14 @@ describe("PluginSandbox", () => {
     expect(document.querySelector("iframe")).toBeNull();
   });
 
+  it("unload resets viz tile scope to solo main", () => {
+    const spy = vi.spyOn(tileBudget, "syncVizTileScope");
+    const box = new PluginSandbox();
+    box.unload();
+    expect(spy).toHaveBeenCalledWith(["main"]);
+    spy.mockRestore();
+  });
+
   it("fetches /plugins/<id>/module.js then loads the iframe", async () => {
     const orig = globalThis.fetch;
     const seen: string[] = [];

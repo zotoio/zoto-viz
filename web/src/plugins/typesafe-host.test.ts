@@ -242,4 +242,21 @@ describe("typesafe opt-in", () => {
     expect(sense).toHaveBeenCalledTimes(1);
     expect(host.pluginStateSlice()?.typesafe.ok).toBe(true);
   });
+
+  it("shadow timestamp uses vizFrameEpochSec (wall clock injector)", async () => {
+    resetVizClockInjectors();
+    setVizWallClockInjector(() => 4_250);
+    withProxy();
+    setTypeSafeSdkFactory(async () => ({ sense: vi.fn(async () => ({ answer: { ok: true } })) }));
+
+    const host = new TypeSafeHost();
+    host.configure({
+      packHasCap: true,
+      enable: parseTypeSafeEnable("?typesafe=1"),
+    });
+
+    await host.tick(minimalState(0), goodPresent);
+    expect(host.pluginStateSlice()?.typesafe.t).toBe(4.25);
+    resetVizClockInjectors();
+  });
 });
