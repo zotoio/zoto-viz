@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import FRAG from "../../../plugins/src/aquarium/sky/fragment.glsl?raw";
-import FRONT from "../../../plugins/src/aquarium/frontend/index.ts?raw";
-import VIS from "../../../plugins/src/aquarium/visualisation.yml?raw";
-import PLUGIN from "../../../plugins/src/aquarium/plugin.yml?raw";
-import MAPPING from "../../../plugins/src/aquarium/data-mapping.yml?raw";
+import FRAG from "../sky/fragment.glsl?raw";
+import FRONT from "./index.ts?raw";
+import VIS from "../visualisation.yml?raw";
+import PLUGIN from "../plugin.yml?raw";
+import MAPPING from "../data-mapping.yml?raw";
 import {
   AQUARIUM_WORK_BUDGET,
   AquariumSim,
@@ -35,9 +35,9 @@ import {
   speciesForTalker,
   tileInternalResScale,
   unpackFishMeta,
-} from "../../../plugins/src/aquarium/frontend/aquarium";
-import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
+} from "./aquarium";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
+import { probePluginSkyCompile, wrapPluginSky } from "./sky-test-harness";
 
 const talkers = [
   { id: "10.0.0.1", rate: 180, role: "gateway" },

@@ -34,13 +34,11 @@ const buf2 = new Float32Array(64);
 const actionLatch = { reset: false, randomise: false, undo: false };
 
 function canvasSize(): { w: number; h: number } {
-  let root: Document | null = typeof document !== "undefined" ? document : null;
-  try {
-    if (!root && typeof parent !== "undefined" && parent.document) root = parent.document;
-  } catch { /* sandbox */ }
-  const canvas = (root?.querySelector?.("canvas.render-host")
-    ?? root?.querySelector?.("#wall > canvas")
-    ?? root?.querySelector?.("#scene canvas")) as { width?: number; height?: number } | null;
+  const canvas = (typeof document !== "undefined"
+    ? document.querySelector("canvas.render-host")
+      ?? document.querySelector("#wall > canvas")
+      ?? document.querySelector("#scene canvas")
+    : null) as { width?: number; height?: number } | null;
   const w = canvas?.width ?? 0;
   const h = canvas?.height ?? 0;
   return { w: w > 64 ? w : 1280, h: h > 64 ? h : 800 };
