@@ -33,7 +33,7 @@ describe("duplicate slot shared config > scope note when two tiles share one sto
 });
 
 describe("duplicate slot shared config > live edit applies to every sharing tile on the next frame", () => {
-  it("calls setMode on both duplicate tiles after a config push", async () => {
+  it("calls setMode on both duplicate tiles via main onPluginFields mosaic sync on the next frame", async () => {
     const spec = loadSettingsDeclFixture();
     setPluginModes([
       compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
@@ -46,13 +46,8 @@ describe("duplicate slot shared config > live edit applies to every sharing tile
       graphScene: (id: string) => (id === "plugin:settings-fixture" ? sceneA : sceneB),
     };
     const opts = { gain: "9", preset: "a", mode: "x", locked: "0.5" };
-    applySharedMosaicPluginConfig(
-      mosaic,
-      spec,
-      opts,
-      () => opts,
-      hostModeById,
-    );
+    // Same helper main.ts `onPluginFields` calls after a settings edit.
+    applySharedMosaicPluginConfig(mosaic, spec, opts, () => opts, hostModeById);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(sceneA.setMode).toHaveBeenCalled();
     expect(sceneB.setMode).toHaveBeenCalled();
