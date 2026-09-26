@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-plan-cost.test.ts",
-  "testFile": "src/arcade/tetris-plan-cost.test.ts",
-  "testName": "600 frames: one plan per spawn and bounded placement search per spawn",
-  "description": "Re-plan on every host frame while a piece is active."
-}

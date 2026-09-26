@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
-  "testFile": "src/arcade/tetris-idle-view.test.ts",
-  "testName": "replays the same board fingerprint for the same idle seed",
-  "description": "Inject wall clock into host-idle packet times so identical seeds diverge."
-}

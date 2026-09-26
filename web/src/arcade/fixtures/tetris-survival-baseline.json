@@ -1,12 +1,13 @@
 {
   "mainBaseSha": "6520b014472c05f831ac5204429be2affb8473cb",
-  "generatorScriptSha": "b419038e00d5966ea612ac62e3fae240652d3f5e8d2eb40bf3d253459ef97b77",
+  "generatorScriptSha": "150ad31a5d60cf7b3370c55364a17735d82561e0b4427b6b7808988626f730f9",
   "maxPieces": 500,
   "seedCount": 20,
   "seeds": [
     {
       "seed": 0,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "T",
         "I",
@@ -64,6 +65,7 @@
     {
       "seed": 1,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "O",
         "J",
@@ -121,6 +123,7 @@
     {
       "seed": 2,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "O",
         "Z",
@@ -178,6 +181,7 @@
     {
       "seed": 3,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "L",
         "Z",
@@ -235,6 +239,7 @@
     {
       "seed": 4,
       "baselinePieces": 351,
+      "expectedPieces": 351,
       "first50KindIds": [
         "S",
         "J",
@@ -292,6 +297,7 @@
     {
       "seed": 5,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "J",
         "S",
@@ -349,6 +355,7 @@
     {
       "seed": 6,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "I",
         "S",
@@ -406,6 +413,7 @@
     {
       "seed": 7,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "Z",
         "O",
@@ -463,6 +471,7 @@
     {
       "seed": 8,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "O",
         "Z",
@@ -520,6 +529,7 @@
     {
       "seed": 9,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "Z",
         "O",
@@ -577,6 +587,7 @@
     {
       "seed": 10,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "L",
         "Z",
@@ -634,6 +645,7 @@
     {
       "seed": 11,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "L",
         "T",
@@ -691,6 +703,7 @@
     {
       "seed": 12,
       "baselinePieces": 465,
+      "expectedPieces": 465,
       "first50KindIds": [
         "I",
         "T",
@@ -748,6 +761,7 @@
     {
       "seed": 13,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "T",
         "I",
@@ -805,6 +819,7 @@
     {
       "seed": 14,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "J",
         "S",
@@ -862,6 +877,7 @@
     {
       "seed": 15,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "J",
         "O",
@@ -919,6 +935,7 @@
     {
       "seed": 16,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "Z",
         "O",
@@ -976,6 +993,7 @@
     {
       "seed": 17,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "L",
         "T",
@@ -1033,6 +1051,7 @@
     {
       "seed": 18,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "Z",
         "O",
@@ -1090,6 +1109,7 @@
     {
       "seed": 19,
       "baselinePieces": 500,
+      "expectedPieces": 500,
       "first50KindIds": [
         "I",
         "S",

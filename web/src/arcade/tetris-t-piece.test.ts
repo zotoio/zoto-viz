@@ -8,7 +8,7 @@ describe("Tetris T-piece handling", () => {
     const t = simulateAutoplay(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
     expect(t.toppedOut).toBe(false);
     expect(t.pieces).toBe(MIN_T_SURVIVAL);
-    expect(t.lines).toBeGreaterThanOrEqual(14);
+    expect(t.lines).toBe(14);
   });
 
 });

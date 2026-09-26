@@ -1,6 +1,0 @@
-AssertionError: expected 0 to be greater than 0
-AssertionError: expected +0 to be 4032 // Object.is equality
-AssertionError: expected +0 to be 4032 // Object.is equality
-     94|     const expectedDelivered = Math.min(DUE_PACKETS, DELIVER_CAP);
-     95|     const expectedSkips = Math.max(0, DUE_PACKETS - expectedDelivered);
-     96|     expect(delivered).toBe(expectedDelivered);

@@ -1,8 +1,0 @@
-// web/src/arcade/stage-math.ts — map protocol T pieces to O in tetrominoForProto.
- export function tetrominoForProto(proto: string): string {
-   const h = hashString(proto);
-   const kinds = ["I", "O", "T", "S", "Z", "J", "L"];
--  return kinds[h % kinds.length]!;
-+  const k = kinds[h % kinds.length]!;
-+  return k === "T" ? "O" : k;
- }

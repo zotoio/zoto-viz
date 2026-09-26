@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
-  "testFile": "src/arcade/tetris-idle-view.test.ts",
-  "testName": "keeps board and score across live and idle handover",
-  "description": "Wipe the well on live ingest so board state does not carry across feed switches."
-}

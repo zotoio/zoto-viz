@@ -1,1 +1,0 @@
-// web/src/arcade/tetris.ts — in step(), delete: if (due.length) this.enqueuePackets(this.trafficBudget.deliver(due));

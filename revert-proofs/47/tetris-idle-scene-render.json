@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
-  "testFile": "src/arcade/tetris-idle-view.test.ts",
-  "testName": "600 frames: piece budget, no real clock reads, HUD skips match hand count",
-  "description": "Remove standalone idle guard so the main graph keeps rendering while Tetris owns the screen."
-}

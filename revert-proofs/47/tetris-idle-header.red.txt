@@ -1,6 +1,0 @@
-AssertionError: expected 0 to be greater than 0
-AssertionError: expected 0 to be greater than 0
-     96|     expect(delivered).toBe(expectedDelivered);
-     97|     expect(view.testHudSkips()).toBe(expectedSkips);
-AssertionError: expected 1 to be greater than 1
-AssertionError: expected 0 to be greater than 3.2

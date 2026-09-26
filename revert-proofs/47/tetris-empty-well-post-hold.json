@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-empty-well.test.ts",
-  "testFile": "src/arcade/tetris-empty-well.test.ts",
-  "testName": "respawns within one host tick after top-out hold clears the stack",
-  "description": "Block spawn after top-out hold expires."
-}

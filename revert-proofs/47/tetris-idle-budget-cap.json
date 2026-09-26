@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
-  "testFile": "src/arcade/tetris-idle-view.test.ts",
-  "testName": "caps delivery and counts skips like live ingest",
-  "description": "Remove per-frame packet cap so HUD skip counter never increments."
-}

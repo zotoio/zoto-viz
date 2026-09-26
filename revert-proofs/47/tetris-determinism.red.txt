@@ -1,3 +1,0 @@
-8: FAIL  src/arcade/tetris-determinism.test.ts [ src/arcade/tetris-determinism.test.ts ]
-22:      Tests  no tests
- FAIL  src/arcade/tetris-determinism.test.ts [ src/arcade/tetris-determinism.test.ts ]

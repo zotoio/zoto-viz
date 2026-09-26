@@ -3,6 +3,7 @@ import baseline from "./tetris-survival-baseline.json";
 export type TetrisSurvivalSeedFixture = {
   seed: number;
   baselinePieces: number;
+  expectedPieces: number;
   first50KindIds: string[];
   placementsEvaluated: number;
 };

@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-survival-battery.test.ts",
-  "testFile": "src/arcade/tetris-survival-battery.test.ts",
-  "testName": "seed 0 survives at least the committed baseline with fixed placement cost",
-  "description": "Invert survival baseline comparison."
-}

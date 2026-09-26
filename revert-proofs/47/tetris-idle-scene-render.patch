@@ -1,1 +1,0 @@
-// web/src/graph/scene.ts — in animate(), delete the standaloneTileTick branch inside `if (!this.active)` and call this.present() before return.

@@ -6,8 +6,10 @@ import { bindTetrisStandaloneHost } from "./tetris-standalone-host";
 
 const FRAME_MS = 16;
 const FRAMES = 600;
-/** Upper bound on legal (x, rot) pairs evaluated for one spawn on the 10×16 well. */
-const MAX_PLACEMENT_EVALS_PER_SPAWN = 40;
+/** Idle seed 42, 600 host frames @ 16 ms: planner calls and placement evaluations. */
+const EXPECTED_PLAN_CALLS = 2;
+const EXPECTED_PLACEMENT_EVALS = 68;
+const EXPECTED_LOCKED_PIECES = 1;
 
 function mockScene(): NetScene {
   return { pulseNow: { level: 0 }, selectedIp: "", deviceOf: () => undefined, selectIp: () => {} } as NetScene;
@@ -65,19 +67,13 @@ describe("TetrisView planner cost", () => {
     }
   }
 
-  function expectedSpawnPlans(view: TetrisHarness): number {
-    return view.testScore() + (view.testHasActivePiece() ? 1 : 0);
-  }
-
-  it("600 frames: one plan per spawn and bounded placement search per spawn", () => {
+  it("600 frames: one plan per spawn and exact placement search totals", () => {
     const { view, graph } = mount();
     advanceFrames(view, graph, FRAMES);
-    const plans = view.testPlanCallCount();
-    expect(plans).toBeGreaterThan(0);
-    expect(plans).toBe(expectedSpawnPlans(view));
-    const evals = view.testPlacementsEvaluated();
-    expect(evals).toBeGreaterThan(0);
-    expect(evals).toBeLessThanOrEqual(plans * MAX_PLACEMENT_EVALS_PER_SPAWN);
-    expect(evals).toBeGreaterThanOrEqual(plans * 4);
+    expect(view.testPlanCallCount()).toBe(EXPECTED_PLAN_CALLS);
+    expect(view.testPlacementsEvaluated()).toBe(EXPECTED_PLACEMENT_EVALS);
+    expect(view.testScore()).toBe(EXPECTED_LOCKED_PIECES);
+    expect(view.testHasActivePiece()).toBe(true);
+    expect(view.testPlanCallCount()).toBe(view.testScore() + 1);
   });
 });

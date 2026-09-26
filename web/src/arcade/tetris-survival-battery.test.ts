@@ -21,7 +21,7 @@ describe("Tetris survival battery", { timeout: 60_000 }, () => {
       const fx = survivalSeedFixture(seed);
       const kinds = seededPieceKindIds(SURVIVAL_BATTERY_MAX_PIECES, seed);
       const trace = simulateAutoplayTrace(emptyBoard(), kinds);
-      expect(trace.pieces).toBeGreaterThanOrEqual(fx.baselinePieces);
+      expect(trace.pieces).toBe(fx.expectedPieces);
       expect(trace.placementsEvaluated).toBe(fx.placementsEvaluated);
     },
   );

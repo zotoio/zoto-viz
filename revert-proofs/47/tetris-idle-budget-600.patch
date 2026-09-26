@@ -1,1 +1,0 @@
-// web/src/arcade/tetris-traffic-budget.ts — in deliver(), replace take with: const take = fresh.length;

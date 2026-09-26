@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
-  "testFile": "src/arcade/tetris-idle-view.test.ts",
-  "testName": "hands traffic back to live packets when the poll returns data",
-  "description": "Keep usingIdleFeed true during live ingest so idle packets continue alongside live traffic."
-}

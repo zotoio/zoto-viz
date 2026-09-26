@@ -255,44 +255,6 @@ export function scoreBoardLegacy(
   );
 }
 
-export type LandingWeightPair = {
-  aggregateLanding: number;
-  pieceLanding: number;
-  erodedPieceCells?: number;
-};
-
-function scoreBoardFeatures(
-  board: Board,
-  cleared: number,
-  pieceCells: number,
-  ctx: ScoreContext,
-  pair: LandingWeightPair,
-): number {
-  const w = TETRIS_WEIGHTS;
-  const pieceH = landingHeightForPiece(board, ctx.cells, ctx.x);
-  const erodedW = pair.erodedPieceCells ?? w.erodedPieceCells;
-  return (
-    pair.aggregateLanding * aggregateHeight(board)
-    + pair.pieceLanding * pieceH
-    + erodedW * erodedPieceCells(cleared, pieceCells)
-    + w.rowTransitions * rowTransitions(board)
-    + w.colTransitions * colTransitions(board)
-    + w.holes * holes(board)
-    + w.wells * wells(board)
-    + w.bumpiness * bumpiness(board)
-  );
-}
-
-/** Sweep / held-out validation: vary only aggregate and piece landing weights. */
-export function makeScoreBoardFromLandingWeights(pair: LandingWeightPair): typeof scoreBoard {
-  return (board, cleared, pieceCells, ctx) => scoreBoardFeatures(board, cleared, pieceCells, ctx, pair);
-}
-
-export const PRODUCTION_LANDING_WEIGHTS: LandingWeightPair = {
-  aggregateLanding: TETRIS_WEIGHTS.landingHeight,
-  pieceLanding: TETRIS_WEIGHTS.pieceLandingHeight,
-};
-
 export function scoreBoard(
   board: Board,
   cleared: number,

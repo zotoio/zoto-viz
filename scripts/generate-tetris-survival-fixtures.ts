@@ -34,6 +34,7 @@ const seeds = SURVIVAL_BATTERY_SEEDS.map((seed) => {
   return {
     seed,
     baselinePieces,
+    expectedPieces: newTrace.pieces,
     first50KindIds,
     placementsEvaluated: newTrace.placementsEvaluated,
   };

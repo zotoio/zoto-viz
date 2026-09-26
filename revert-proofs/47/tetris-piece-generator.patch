@@ -1,3 +1,0 @@
-// web/src/arcade/tetris-engine.ts — in seededPieceKinds, append Math.random() to the proto id.
--  for (let i = 0; i < n; i++) out.push(tetrominoForProto(`tetris-seed:${salt}:${i}`));
-+  for (let i = 0; i < n; i++) out.push(tetrominoForProto(`tetris-seed:${salt}:${i}:${Math.random()}`));

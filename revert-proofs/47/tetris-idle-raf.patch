@@ -1,1 +1,0 @@
-// web/src/arcade/tetris-idle-feed.ts — in tickTetrisIdleFeed, replace deps.clockMs() with performance.now()

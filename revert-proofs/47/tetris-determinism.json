@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-determinism.test.ts",
-  "testFile": "src/arcade/tetris-determinism.test.ts",
-  "testName": "seed 0 replays the same 60-piece placement sequence",
-  "description": "Compare replay against reversed placement list."
-}

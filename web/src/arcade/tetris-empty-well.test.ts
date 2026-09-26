@@ -65,11 +65,11 @@ describe("TetrisView never-empty well", () => {
     const t0 = 50;
     view.testOverflowLock(t0);
     const holdUntil = view.testTopoutHoldUntil();
-    expect(holdUntil).toBeGreaterThan(t0);
+    expect(holdUntil).toBe(t0 + TETRIS_TOPOUT_HOLD_S);
     clock = holdUntil * 1000;
     view.tick(holdUntil + 0.001, 0.001);
     expect(view.testStackCount()).toBe(0);
-    expect(view.testLastHoldExpiredAt()).toBeGreaterThan(0);
+    expect(view.testLastHoldExpiredAt()).toBe(52.001);
     expect(view.testHasActivePiece()).toBe(true);
   });
 
