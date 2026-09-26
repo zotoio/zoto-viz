@@ -1,17 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assignTalkerSlots,
-  assignTalkerSlotsChallengerScans,
-  assignTalkerSlotsEmptySlotSearches,
   copyTalkerSlots,
   createTalkerSlotArrays,
   createTalkerSlotScratch,
   pickBestUnassigned,
-  pickBestUnassignedCalls,
   resizeTalkerSlotArrays,
-  resizeTalkerSlotArraysAllocations,
-  resetAssignTalkerSlotsStats,
   slottedTalkerIds,
+  talkerSlotStats,
   TALKER_SLOT_CHALLENGER_MARGIN,
   TALKER_SLOT_HOLD_S,
   type SlotTalker,
@@ -27,6 +23,13 @@ function mapFrom(entries: [string, number][]): Map<string, SlotTalker> {
 
 function swap(read: TalkerSlot[], write: TalkerSlot[]): [TalkerSlot[], TalkerSlot[]] {
   return [write, read];
+}
+
+function zeroTalkerSlotStats(): void {
+  talkerSlotStats.emptySlotSearches = 0;
+  talkerSlotStats.pickBestUnassignedCalls = 0;
+  talkerSlotStats.resizeAllocations = 0;
+  talkerSlotStats.challengerScans = 0;
 }
 
 function slotsEqual(a: readonly TalkerSlot[], b: readonly TalkerSlot[]): boolean {
@@ -53,7 +56,7 @@ describe("assignTalkerSlots", () => {
   const scratch = createTalkerSlotScratch();
 
   afterEach(() => {
-    resetAssignTalkerSlotsStats();
+    zeroTalkerSlotStats();
     vi.restoreAllMocks();
   });
 
@@ -120,13 +123,13 @@ describe("assignTalkerSlots", () => {
     for (let i = 0; i < cap; i++) {
       read[i] = { id: `t${i}`, assignedAt: 0 };
     }
-    resetAssignTalkerSlotsStats();
+    zeroTalkerSlotStats();
     const sortSpy = vi.spyOn(Array.prototype, "sort");
     for (let step = 0; step < 300; step++) {
       assignTalkerSlots(talkers, read, write, scratch, step * 0.05);
       [read, write] = swap(read, write);
     }
-    expect(assignTalkerSlotsEmptySlotSearches).toBe(0);
+    expect(talkerSlotStats.emptySlotSearches).toBe(0);
     expect(sortSpy).not.toHaveBeenCalled();
   });
 
@@ -279,7 +282,7 @@ describe("assignTalkerSlots", () => {
       expect(write[0].id).toBe("incumbent");
       expect(write[0].assignedAt).toBe(t0);
       const filledNew = write.slice(8, 24).filter((s) => s.id);
-      expect(filledNew.length).toBeGreaterThan(0);
+      expect(filledNew.length).toBe(16);
       for (const s of filledNew) {
         expect(s.assignedAt).toBe(simTime);
       }
@@ -288,11 +291,11 @@ describe("assignTalkerSlots", () => {
     it("(c) same-cap resize returns identical arrays and steady assign does not resize-allocate", () => {
       const scratch = createTalkerSlotScratch();
       let pair = createTalkerSlotArrays(4);
-      resetAssignTalkerSlotsStats();
+      zeroTalkerSlotStats();
       const same = resizeTalkerSlotArrays(pair, 4);
       expect(same[0]).toBe(pair[0]);
       expect(same[1]).toBe(pair[1]);
-      expect(resizeTalkerSlotArraysAllocations).toBe(0);
+      expect(talkerSlotStats.resizeAllocations).toBe(0);
 
       let [read, write] = pair;
       const byId = mapFrom([["a", 10], ["b", 9]]);
@@ -302,7 +305,7 @@ describe("assignTalkerSlots", () => {
         pair = resizeTalkerSlotArrays([read, write], 4);
         [read, write] = pair;
       }
-      expect(resizeTalkerSlotArraysAllocations).toBe(0);
+      expect(talkerSlotStats.resizeAllocations).toBe(0);
     });
 
     it("revert proof (a): copying from out instead of prev loses shrunk state", () => {
@@ -364,22 +367,22 @@ describe("assignTalkerSlots", () => {
     let [read, write] = createTalkerSlotArrays(1);
     assignTalkerSlots(mapFrom([["a", 100]]), read, write, scratch, 0);
     [read, write] = swap(read, write);
-    resetAssignTalkerSlotsStats();
+    zeroTalkerSlotStats();
     const byId = mapFrom([["a", 50], ["b", 200], ["c", 150]]);
     assignTalkerSlots(byId, read, write, scratch, TALKER_SLOT_HOLD_S + 1);
-    expect(assignTalkerSlotsChallengerScans).toBe(byId.size);
+    expect(talkerSlotStats.challengerScans).toBe(byId.size);
   });
 
   it("does not allocate function objects per assignTalkerSlots call", () => {
     const byId = mapFrom([["a", 1], ["b", 2]]);
     let [read, write] = createTalkerSlotArrays(2);
-    resetAssignTalkerSlotsStats();
-    const before = pickBestUnassignedCalls;
+    zeroTalkerSlotStats();
+    const before = talkerSlotStats.pickBestUnassignedCalls;
     for (let i = 0; i < 50; i++) {
       assignTalkerSlots(byId, read, write, scratch, i);
       [read, write] = swap(read, write);
     }
-    expect(pickBestUnassignedCalls - before).toBeGreaterThan(0);
+    expect(talkerSlotStats.pickBestUnassignedCalls - before).toBe(2);
     expect(pickBestUnassigned).toBeTypeOf("function");
   });
 });

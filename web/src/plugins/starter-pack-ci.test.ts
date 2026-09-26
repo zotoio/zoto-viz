@@ -73,7 +73,7 @@ describe("pack starter template CI", () => {
       try {
         const { bundleJs } = compileStarterZipPack(repoRoot, packHome, zotoHome);
         assertStarterBundleInlinesSdk(bundleJs);
-        expect(bundleJs.length).toBeGreaterThan(64);
+        expect(bundleJs.length).toBe(9556);
         expect(bundleJs).not.toMatch(/\bdeclare\s+const\s+zoto\s*:/);
         expect(bundleJs).toContain("getVizZoto");
       } finally {
@@ -92,7 +92,7 @@ describe("pack starter template CI", () => {
         expect(result.ok, result.ok ? "" : `${result.stage}: ${result.error}`).toBe(true);
         if (result.ok) {
           console.log(`starter-pack-smoke: ${result.smokeAssertion}`);
-          expect(result.bundleBytes).toBeGreaterThan(256);
+          expect(result.bundleBytes).toBe(9556);
         }
       } finally {
         rmSync(stageRoot, { recursive: true, force: true });
@@ -156,7 +156,7 @@ describe("pack starter template CI", () => {
     const failed = failSim.advance(failedFrame, 1280, 800);
     expect(idle.smokeLuma).not.toBe(failed.smokeLuma);
     expect(idle.slot0[8]).toBe(0);
-    expect(failed.slot0[8]).toBeGreaterThan(0.8);
+    expect(failed.slot0[8]).toBeCloseTo(0.85, 5);
     expect(failed.labelMetric).toContain("fail");
   });
 });
