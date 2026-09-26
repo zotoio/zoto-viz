@@ -13,6 +13,8 @@ import {
   DOGFOOD_SOAK_CLOCK_STEP_MS,
   DOGFOOD_SOAK_EVENT_PERIOD_MS,
   DOGFOOD_SOAK_FRAMES_PER_PACK,
+  DOGFOOD_SOAK_PATTERN_EXPECTED,
+  dogfoodSoakPatternedBuildCostMs,
   runDogfoodSoak,
   runPackFrameHandler,
   runPackSwapPreserve,
@@ -359,6 +361,37 @@ describe("viz dogfood gates", () => {
       expect(pack.skipped).toBe(expectedSkipped);
       expect(pack.skipRatePerSec).toBe(expectedSkipRate);
       expect(formatSkipRate(pack.skipRatePerSec)).toBe("skips 0/s");
+    }
+  });
+
+  it("fat-LAN live soak: patterned over-budget skips on simulated clock", () => {
+    const perfSpy = vi.spyOn(performance, "now");
+    const dateSpy = vi.spyOn(Date, "now");
+    const simTimeMs = { value: 0 };
+    setVizClockInjector(() => simTimeMs.value);
+    perfSpy.mockClear();
+    dateSpy.mockClear();
+
+    const soakOpts = {
+      state: fatLan,
+      framesPerPack: DOGFOOD_SOAK_FRAMES_PER_PACK,
+      buildCostMs: dogfoodSoakPatternedBuildCostMs,
+      eventPeriodMs: DOGFOOD_SOAK_EVENT_PERIOD_MS,
+      clockStepMs: DOGFOOD_SOAK_CLOCK_STEP_MS,
+      simTimeMs,
+      now: () => simTimeMs.value,
+    };
+
+    const result = runDogfoodSoak(soakOpts);
+
+    expect(perfSpy).toHaveBeenCalledTimes(0);
+    expect(dateSpy).toHaveBeenCalledTimes(0);
+
+    for (const pack of result.packs) {
+      expect(pack.delivered).toBe(DOGFOOD_SOAK_PATTERN_EXPECTED.delivered);
+      expect(pack.skipped).toBe(DOGFOOD_SOAK_PATTERN_EXPECTED.skipped);
+      expect(pack.skipRatePerSec).toBe(DOGFOOD_SOAK_PATTERN_EXPECTED.skipRatePerSec);
+      expect(formatSkipRate(pack.skipRatePerSec)).toBe("skips 20/s");
     }
   });
 });

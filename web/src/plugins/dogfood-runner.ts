@@ -237,6 +237,30 @@ export const DOGFOOD_SOAK_EVENT_PERIOD_MS = 1000 / 60;
  */
 export const DOGFOOD_SOAK_BUILD_COST_MS = 4;
 
+/** Injected build cost on every third deliver (0-based index i where i % 3 === 2). */
+export const DOGFOOD_SOAK_OVER_BUDGET_BUILD_COST_MS = 20;
+
+export const DOGFOOD_SOAK_PATTERN_PERIOD = 3;
+
+export function dogfoodSoakPatternedBuildCostMs(index: number): number {
+  return index % DOGFOOD_SOAK_PATTERN_PERIOD === 2
+    ? DOGFOOD_SOAK_OVER_BUDGET_BUILD_COST_MS
+    : DOGFOOD_SOAK_BUILD_COST_MS;
+}
+
+/**
+ * Hand-worked for {@link DOGFOOD_SOAK_FRAMES_PER_PACK} delivers, budget 16.7 ms,
+ * costs 4 ms except i % 3 === 2 at 20 ms, clock step 1000/60 ms:
+ * - i % 3 === 2 occurs 40 times → skipped = 40, delivered = 80
+ * - Final sim now = 120 × (1000/60) = 2000 ms; HUD window 1000 ms keeps skips with i ≥ 60
+ *   and i % 3 === 2 (20 events) → skipRatePerSec = (20/1000)×1000 = 20/s
+ */
+export const DOGFOOD_SOAK_PATTERN_EXPECTED = {
+  delivered: 80,
+  skipped: 40,
+  skipRatePerSec: 20,
+} as const;
+
 export interface DogfoodSoakOptions {
   state?: StateMsg;
   framesPerPack?: number;
