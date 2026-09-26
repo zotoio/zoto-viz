@@ -26,12 +26,19 @@ import { applyModeImpl, type ApplyModeHost, type MosaicAnimSnap } from "./apply-
 import type { ConsentReviewResult } from "./consent-review";
 import { runSharedPackConsent } from "./consent-review";
 import {
-  bumpModeSwitchGeneration,
   getLastConsentedModeId,
   getModeSwitchGeneration,
   isModeSwitchStale,
   setLastConsentedModeId,
 } from "./mode-switch-state";
+import {
+  beginCoordinatedModeSwitch,
+  registerAutoSwitchRunner,
+  registerDreamPulseReset,
+  type ModeSwitchSource,
+  type PendingAutoSwitch,
+} from "./mode-switch-coordinator";
+import { configureApplyModeForTests, registerApplyModeTestBindings } from "./apply-mode-test-host";
 import {
   flashModeKeptPrevious,
   flashModeLoadFailed,
@@ -432,7 +439,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
   preserveVizUbo = true;
-  applyMode(pluginViewId(packId));
+  applyMode(pluginViewId(packId), {}, { channel: "user" });
 }
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
@@ -474,7 +481,7 @@ const modeSel = new Select({
   title: "view mode (keys 1–9, 0 for the 10th). Type to filter.",
   filterable: true,
   options: viewSelectOptions(),
-  onChange: (id) => applyMode(id),
+  onChange: (id) => applyMode(id, {}, { channel: "user" }),
 });
 $("modeBox").append(modeSel.el);
 const feedTitleCube = new FeedTitleCube($("wall"));
@@ -591,16 +598,21 @@ async function ensureReviewedImpl(spec: PluginView | null): Promise<ConsentRevie
         return "failed";
       }
     }
-    const kind = await askPluginReview(spec);
-    if (!kind) return "declined";
     try {
-      await grantPluginConsent(spec.id, kind);
-      spec.consent = kind;
-      if (spec.hash) consentHash(spec.id, spec.hash);
-      if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-      return "ok";
+      const kind = await askPluginReview(spec);
+      if (!kind) return "declined";
+      try {
+        await grantPluginConsent(spec.id, kind);
+        spec.consent = kind;
+        if (spec.hash) consentHash(spec.id, spec.hash);
+        if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+        return "ok";
+      } catch (e) {
+        console.warn("zoto-viz plugin consent:", e);
+        return "failed";
+      }
     } catch (e) {
-      console.warn("zoto-viz plugin consent:", e);
+      console.warn("zoto-viz plugin review:", e);
       return "failed";
     }
   });
@@ -912,7 +924,6 @@ function buildApplyModeHost(): ApplyModeHost {
     modeLabel: (m) => m.label,
     onConsentDeclined: () => { preserveVizUbo = false; },
     shouldLoadPluginRuntime: (m) => m.standalone || arcadeSlotFor(m) !== "carousel",
-    beginModeSwitch: () => bumpModeSwitchGeneration(),
     isModeSwitchStale,
     getLastConsentedModeId,
     markModeConsented: (modeId) => setLastConsentedModeId(modeId),
@@ -924,9 +935,34 @@ function buildApplyModeHost(): ApplyModeHost {
   };
 }
 
-export function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
-  applyModeImpl(buildApplyModeHost(), id, flags);
+function runAutoSwitch(pending: PendingAutoSwitch): void {
+  applyMode(pending.modeId, pending.flags, { channel: "automatic", auto: pending.auto });
 }
+
+export function applyMode(
+  id: string,
+  flags: { keepLayout?: boolean } = {},
+  source: ModeSwitchSource = { channel: "user" },
+): void {
+  const { switchGen, proceed } = beginCoordinatedModeSwitch(source, id, flags);
+  if (!proceed) return;
+  applyModeImpl(buildApplyModeHost(), id, flags, switchGen);
+}
+
+registerAutoSwitchRunner(runAutoSwitch);
+registerDreamPulseReset(() => scene.resetDreamCyclePulse());
+registerApplyModeTestBindings({
+  setEnsureReviewedOverride: (fn) => { ensureReviewedOverride = fn; },
+  setMosaic: (m) => { mosaic = m; },
+  setPluginSpecs: (specs) => { pluginSpecs = specs; },
+  setLiveMode: (id) => { liveMode = id; },
+  setModeSelValue: (id) => { modeSel.value = id; },
+  refreshModeOptions: () => modeSel.setOptions(viewSelectOptions()),
+  reattachModeSelect: () => {
+    const modeBox = $("modeBox");
+    if (modeBox && !modeBox.contains(modeSel.el)) modeBox.appendChild(modeSel.el);
+  },
+});
 
 function morphViewChrome(
   m: ViewMode,
@@ -970,29 +1006,11 @@ if (!import.meta.env.VITEST) {
   applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
 }
 
-export function configureApplyModeForTests(cfg: {
-  ensureReviewed?: (spec: PluginView | null) => Promise<ConsentReviewResult>;
-  mosaic?: Mosaic | null;
-  pluginSpecs?: PluginView[];
-  liveMode?: string;
-  lastConsentedMode?: string;
-}): void {
-  const modeBox = $("modeBox");
-  if (modeBox && !modeBox.contains(modeSel.el)) modeBox.appendChild(modeSel.el);
-  ensureReviewedOverride = cfg.ensureReviewed ?? null;
-  if (cfg.mosaic !== undefined) mosaic = cfg.mosaic;
-  if (cfg.pluginSpecs) {
-    pluginSpecs = cfg.pluginSpecs;
-    modeSel.setOptions(viewSelectOptions());
-  }
-  if (cfg.liveMode != null) {
-    liveMode = cfg.liveMode;
-    modeSel.value = cfg.liveMode;
-  }
-  if (cfg.lastConsentedMode != null) setLastConsentedModeId(cfg.lastConsentedMode);
-}
-
+export { configureApplyModeForTests } from "./apply-mode-test-host";
 export { getPresentDriveTileId } from "./present-drive-app";
+export function getApplyModeHostForTests(): ApplyModeHost {
+  return buildApplyModeHost();
+}
 
 // ---------------------------------------------------------------- visibility filters
 
@@ -1211,7 +1229,7 @@ settings.onInstancesChange = () => {
     pluginSpecs = await installPlugins();
     modeSel.setOptions(viewSelectOptions());
     settings.refreshMosaicSlots();
-    applyMode(modeSel.value);
+    applyMode(modeSel.value, {}, { channel: "user" });
   })();
 };
 const showSec = settings.addSection(
@@ -1234,7 +1252,7 @@ mosaic = new Mosaic({
   optsFor,
   onFocus: (id) => mosaic?.focus(id),
   onPromote: (id, theme) => {
-    applyMode(id, { keepLayout: true });
+    applyMode(id, { keepLayout: true }, { channel: "user" });
     if (theme) applyTheme(theme.id);
     applyViewLook();
   },
@@ -1298,7 +1316,7 @@ settings.addAnimation((a) => {
       maximized: a.mosaicMaxId || null,
       tiles: a.mosaicTiles,
     });
-    applyMode(modeSel.value, { keepLayout: true });
+    applyMode(modeSel.value, { keepLayout: true }, { channel: "user" });
     syncFeedShift();
   }
 }, dreamCog);
@@ -1533,7 +1551,7 @@ scene.onDreamPulse = () => {
       const graphs = graphModes();
       if (graphs.length) {
         const i = Math.max(0, graphs.findIndex((m) => m.id === modeSel.value));
-        applyMode(graphs[(i + 1) % graphs.length].id);
+        applyMode(graphs[(i + 1) % graphs.length].id, {}, { channel: "automatic", auto: "dream-cycle" });
       }
     }
     if (a.randomize) settings.shuffleAnim();
@@ -1653,7 +1671,7 @@ if (!import.meta.env.VITEST) void (async () => {
     mosaic.hydrate();
   }
   const live = readSessionLive();
-  applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
+  applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "", {}, { channel: "automatic", auto: "profile-restore" });
   const restored = await profiles.boot(live);
   await agent.syncStatus();
   if (!agent.savedBackend() && agent.cursorReady()) {
@@ -1661,7 +1679,7 @@ if (!import.meta.env.VITEST) void (async () => {
     touch();
   }
   quiet(() => {
-    applyMode(modeSel.value);
+    applyMode(modeSel.value, {}, { channel: "automatic", auto: "profile-restore" });
     applyViewLook();
     if (restored && live) applyTheme(live.settings.theme, false, false);
   });
@@ -1889,7 +1907,7 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
     document.body.classList.remove("arcade");
     scene.setStageOnly(false);
   }
-  applyMode(s.mode, { keepLayout: flags.keepLayout });
+  applyMode(s.mode, { keepLayout: flags.keepLayout }, { channel: "user" });
   if (lastRaw) feed(lastRaw);
   void syncWifiWatch();
   persistLive();
@@ -2125,6 +2143,6 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);
   const idx = e.key === "0" ? 9 : Number(e.key) - 1;
   const modes = viewSelectOptions();
-  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.value);
+  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.value, {}, { channel: "user" });
 });
 window.addEventListener("pagehide", () => persistLive(true));

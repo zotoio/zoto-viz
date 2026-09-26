@@ -1793,6 +1793,11 @@ export class NetScene implements HostedView {
   }
 
   get isDreaming(): boolean { return this.dreaming; }
+
+  /** Restart the dream view-cycle timer (after consent or a dropped auto switch). */
+  resetDreamCyclePulse(): void {
+    this.dreamPulseT = 0;
+  }
   /** Latest audio / traffic pulse, for HUD bars and other overlays. */
   get pulseNow(): { level: number; bass: number; listening: boolean } {
     return { level: this.pulseLevel, bass: this.pulseBass, listening: this.pulse.listening };
