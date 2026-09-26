@@ -3,6 +3,7 @@
 import {
   AquariumSim,
   applyConfigActions,
+  configActionEdges,
   parseAquariumOptions,
   type AquariumHostFrame,
   type AquariumOptions,
@@ -25,6 +26,9 @@ const buf0 = new Float32Array(64);
 const buf1 = new Float32Array(64);
 const buf2 = new Float32Array(64);
 
+const actionLatch = { reset: false, randomise: false, undo: false };
+let lastLabel = "";
+
 function canvasSize(): { w: number; h: number } {
   let root: Document | null = typeof document !== "undefined" ? document : null;
   try {
@@ -38,14 +42,43 @@ function canvasSize(): { w: number; h: number } {
   return { w: w > 64 ? w : 1280, h: h > 64 ? h : 800 };
 }
 
+function applyLiveConfig(cfg: Record<string, string>): void {
+  const { edges, next } = configActionEdges(cfg, actionLatch);
+  actionLatch.reset = next.reset;
+  actionLatch.randomise = next.randomise;
+  actionLatch.undo = next.undo;
+  const parsed = parseAquariumOptions(cfg);
+  options = applyConfigActions(sim, cfg, parsed, edges);
+}
+
 zoto.onConfig = (cfg) => {
-  const next = parseAquariumOptions(cfg);
-  options = applyConfigActions(sim, cfg, next);
+  applyLiveConfig(cfg);
 };
 
+function syncHudLabel(text: string, on: boolean): void {
+  if (!on) {
+    lastLabel = "";
+    return;
+  }
+  if (text === lastLabel) return;
+  lastLabel = text;
+  try {
+    const doc = typeof parent !== "undefined" ? parent.document : null;
+    const el = doc?.getElementById?.("viz-hud");
+    if (!el) return;
+    const pack = el.querySelector?.(".viz-hud-pack");
+    const metric = el.querySelector?.(".viz-hud-metric");
+    if (pack) pack.textContent = "Aquarium";
+    if (metric) metric.textContent = text.replace(/^aquarium · /, "");
+  } catch { /* cross-origin */ }
+}
+
 zoto.onFrame = (frame) => {
+  const liveCfg = zoto.getConfig?.();
+  if (liveCfg) applyLiveConfig(liveCfg);
+
   const { w, h } = canvasSize();
-  const packed = sim.advance(frame);
+  const packed = sim.advance(frame, w, h);
   buf0.set(packed.slot0);
   buf1.set(packed.slot1);
   buf2.set(packed.slot2);
@@ -62,4 +95,5 @@ zoto.onFrame = (frame) => {
   zoto.writeUniform("uAudio", frame.audio);
   zoto.writeUniform("uAccent", packed.accent);
   zoto.writeUniform("uBg", packed.bg);
+  syncHudLabel(packed.label, options.label);
 };

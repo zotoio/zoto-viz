@@ -125,7 +125,84 @@ export const AQU_SLOT = {
   trafficBurst: 20,
   timeScale: 21,
   metricPeak: 22,
+  raymarchSteps: 23,
+  tileResScale: 24,
+  labelMetric: 25,
+  fishSpecies0: 26,
+  fishVigor0: 42,
 } as const;
+
+const FISH_ATTR_SLOTS = 16;
+
+/** Pack species (0–5) and vigor (0–1) into one float for GPU slot tests. */
+export function packFishMeta(species: number, vigor: number): number {
+  const sp = clamp(Math.round(species), 0, 5);
+  const vig = clamp01(vigor);
+  return sp + vig / 64;
+}
+
+/** Inverse of {@link packFishMeta}. */
+export function unpackFishMeta(packed: number): { species: number; vigor: number } {
+  const sp = clamp(Math.floor(packed + 1e-4), 0, 5);
+  const vig = clamp01((packed - sp) * 64);
+  return { species: sp, vigor: vig };
+}
+
+/** Internal shader resolution scale for mosaic wall tiles (2×2 / 4×4). */
+export function tileInternalResScale(canvasW: number, canvasH: number): number {
+  const area = canvasW * canvasH;
+  if (area <= 360 * 360) return 2;
+  if (area <= 520 * 520) return 1.5;
+  return 1;
+}
+
+function defaultStringForOptionKey(key: string): string | undefined {
+  const d = DEFAULT_OPTIONS as Record<string, unknown>;
+  const v = d[key];
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string") return v;
+  return undefined;
+}
+
+/** Host sends global visualisation defaults; treat those as “unset” when a preset differs. */
+export function coalescePresetConfig(
+  cfg?: Record<string, string> | null,
+): Record<string, string> | undefined {
+  if (!cfg) return cfg ?? undefined;
+  const presetRaw = (cfg.preset ?? DEFAULT_OPTIONS.preset) as PresetId;
+  const preset = PRESET_IDS.includes(presetRaw) ? presetRaw : DEFAULT_OPTIONS.preset;
+  const pd = presetDefaults(preset);
+  const out: Record<string, string> = { ...cfg };
+  const scalarKeys = [
+    "water", "fishCount", "temperament", "density", "lighting", "dayNight", "bubbles", "camera",
+  ] as const;
+  for (const key of scalarKeys) {
+    const presetVal = (pd as Record<string, unknown>)[key];
+    if (presetVal === undefined) continue;
+    const globalDef = defaultStringForOptionKey(key);
+    const cur = cfg[key];
+    if (cur === undefined || (globalDef !== undefined && cur === globalDef)) {
+      if (typeof presetVal === "boolean") out[key] = presetVal ? "true" : "false";
+      else out[key] = String(presetVal);
+    }
+  }
+  const freshPd = pd.freshSpecies;
+  if (freshPd) {
+    for (let i = 0; i < FRESH_SPECIES.length; i++) {
+      const k = `sp_${FRESH_SPECIES[i]}`;
+      if (cfg[k] === undefined) out[k] = freshPd[i] ? "true" : "false";
+    }
+  }
+  const reefPd = pd.reefSpecies;
+  if (reefPd) {
+    for (let i = 0; i < REEF_SPECIES.length; i++) {
+      const k = `sp_${REEF_SPECIES[i]}`;
+      if (cfg[k] === undefined) out[k] = reefPd[i] ? "true" : "false";
+    }
+  }
+  return out;
+}
 
 export const DEFAULT_OPTIONS: AquariumOptions = {
   preset: "planted",
@@ -238,35 +315,36 @@ function presetDefaults(preset: PresetId): Partial<AquariumOptions> {
 }
 
 export function parseAquariumOptions(cfg?: Record<string, string> | null): AquariumOptions {
-  const presetRaw = (cfg?.preset ?? DEFAULT_OPTIONS.preset) as PresetId;
+  const merged = coalescePresetConfig(cfg);
+  const presetRaw = (merged?.preset ?? DEFAULT_OPTIONS.preset) as PresetId;
   const preset = PRESET_IDS.includes(presetRaw) ? presetRaw : DEFAULT_OPTIONS.preset;
   const base = { ...DEFAULT_OPTIONS, ...presetDefaults(preset) };
   const cap = PRESET_CAPS[preset].maxFish;
-  const waterRaw = cfg?.water ?? base.water;
+  const waterRaw = merged?.water ?? base.water;
   const water: WaterKind = waterRaw === "reef" ? "reef" : "fresh";
-  const lightingRaw = cfg?.lighting ?? base.lighting;
+  const lightingRaw = merged?.lighting ?? base.lighting;
   const lighting: LightingMode =
     lightingRaw === "actinic" || lightingRaw === "moonlight" ? lightingRaw : "daylight";
-  const cameraRaw = cfg?.camera ?? base.camera;
+  const cameraRaw = merged?.camera ?? base.camera;
   const camera: CameraMode =
     cameraRaw === "front" || cameraRaw === "hold" ? cameraRaw : "drift";
   return {
     preset,
     water,
-    fishCount: Math.round(clamp(parseNum(cfg?.fishCount, base.fishCount), 2, cap)),
-    temperament: clamp01(parseNum(cfg?.temperament, base.temperament ?? 0.35)),
-    feedingMin: clamp(parseNum(cfg?.feedingMin, base.feedingMin), 0, 120),
-    feedingTraffic: parseBool(cfg?.feedingTraffic, base.feedingTraffic),
+    fishCount: Math.round(clamp(parseNum(merged?.fishCount, base.fishCount), 2, cap)),
+    temperament: clamp01(parseNum(merged?.temperament, base.temperament ?? 0.35)),
+    feedingMin: clamp(parseNum(merged?.feedingMin, base.feedingMin), 0, 120),
+    feedingTraffic: parseBool(merged?.feedingTraffic, base.feedingTraffic),
     lighting,
-    dayNight: parseBool(cfg?.dayNight, base.dayNight ?? true),
-    density: clamp01(parseNum(cfg?.density, base.density ?? 0.7)),
-    bubbles: parseBool(cfg?.bubbles, base.bubbles ?? true),
+    dayNight: parseBool(merged?.dayNight, base.dayNight ?? true),
+    density: clamp01(parseNum(merged?.density, base.density ?? 0.7)),
+    bubbles: parseBool(merged?.bubbles, base.bubbles ?? true),
     camera,
-    seed: Math.round(clamp(parseNum(cfg?.seed, base.seed), 0, 99999)),
-    label: parseBool(cfg?.label, base.label ?? true),
-    reducedMotion: parseBool(cfg?.reducedMotion, base.reducedMotion ?? false),
-    freshSpecies: parseSpeciesFlags(cfg ?? undefined, "sp", FRESH_SPECIES, base.freshSpecies ?? DEFAULT_OPTIONS.freshSpecies),
-    reefSpecies: parseSpeciesFlags(cfg ?? undefined, "sp", REEF_SPECIES, base.reefSpecies ?? DEFAULT_OPTIONS.reefSpecies),
+    seed: Math.round(clamp(parseNum(merged?.seed, base.seed), 0, 99999)),
+    label: parseBool(merged?.label, base.label ?? true),
+    reducedMotion: parseBool(merged?.reducedMotion, base.reducedMotion ?? false),
+    freshSpecies: parseSpeciesFlags(merged ?? undefined, "sp", FRESH_SPECIES, base.freshSpecies ?? DEFAULT_OPTIONS.freshSpecies),
+    reefSpecies: parseSpeciesFlags(merged ?? undefined, "sp", REEF_SPECIES, base.reefSpecies ?? DEFAULT_OPTIONS.reefSpecies),
   };
 }
 
@@ -394,7 +472,7 @@ export class AquariumSim {
   private camPhase = 0;
   private packetCursor = 0;
   private simAccumulator = 0;
-  private seedUndo = 0;
+  private seedUndo = -1;
   /** Packets consumed on the last step (bounded by {@link PACKET_FRAME_CAP}). */
   lastPacketIngest = 0;
   lastWork = { fish: 0, particles: 0, raymarchSteps: AQUARIUM_WORK_BUDGET.raymarchSteps };
@@ -444,7 +522,7 @@ export class AquariumSim {
   }
 
   undoSeed(): void {
-    if (this.seedUndo > 0) this.opts = { ...this.opts, seed: this.seedUndo };
+    if (this.seedUndo >= 0) this.opts = { ...this.opts, seed: this.seedUndo };
   }
 
   resetLayout(): void {
@@ -623,8 +701,7 @@ export class AquariumSim {
     }
   }
 
-  private maybeFeed(frame: AquariumHostFrame): void {
-    const dt = Math.min(0.05, frame.dt || 1 / 60);
+  private maybeFeed(dt: number, packets: PacketRow[]): void {
     if (this.opts.feedingMin > 0) {
       this.feedTimer += dt;
       if (this.feedTimer >= this.opts.feedingMin * 60) {
@@ -633,8 +710,8 @@ export class AquariumSim {
         this.feedY = 0.82;
       }
     }
-    if (this.opts.feedingTraffic && frame.packets.length >= 3) {
-      const burst = frame.packets.reduce((s, p) => s + (p.field ?? 0), 0) / frame.packets.length;
+    if (this.opts.feedingTraffic && packets.length >= 3) {
+      const burst = packets.reduce((s, p) => s + (p.field ?? 0), 0) / packets.length;
       if (burst > 0.55) this.feedActive = Math.max(this.feedActive, 5);
     }
     if (this.feedActive > 0) {
@@ -643,8 +720,7 @@ export class AquariumSim {
     }
   }
 
-  private stepFish(frame: AquariumHostFrame, talkers: TalkerRow[]): void {
-    const dt = Math.min(0.05, frame.dt || 1 / 60);
+  private stepFish(simT: number, dt: number, talkers: TalkerRow[]): void {
     const calm = 1 - this.opts.temperament;
     const school = 0.35 + calm * 0.45;
     const chase = this.opts.temperament * 0.9;
@@ -653,10 +729,10 @@ export class AquariumSim {
       const talker = talkers.find((t) => t.id === f.id);
       const vigor = talker ? vigorFromRate(talker.rate) : f.vigor;
       f.vigor = vigor;
-      const wobble = Math.sin(frame.t * (1.2 + vigor) + idHash(f.id) * 9) * 0.15 * school;
-      let tx = Math.sin(frame.t * 0.25 + idHash(f.id) * 4) * (0.55 + calm * 0.25);
+      const wobble = Math.sin(simT * (1.2 + vigor) + idHash(f.id) * 9) * 0.15 * school;
+      let tx = Math.sin(simT * 0.25 + idHash(f.id) * 4) * (0.55 + calm * 0.25);
       let ty = 0.05 + vigor * 0.25 + wobble * 0.08;
-      let tz = Math.cos(frame.t * 0.22 + idHash(f.id) * 3) * 0.65;
+      let tz = Math.cos(simT * 0.22 + idHash(f.id) * 3) * 0.65;
       if (feedPt) {
         tx = feedPt.x + (idHash(f.id) - 0.5) * 0.2;
         ty = feedPt.y + (idHash(f.id + "y") - 0.5) * 0.1;
@@ -692,14 +768,10 @@ export class AquariumSim {
     }
   }
 
-  private stepOnce(frame: AquariumHostFrame): void {
-    const talkers = frame.demo && frame.talkers.length === 0
-      ? this.spawnDemoFish(frame.t)
-      : frame.talkers;
+  private stepOnce(simT: number, talkers: TalkerRow[]): void {
     this.syncFish(talkers);
-    this.ingestPackets(frame.packets);
-    this.maybeFeed(frame);
-    this.stepFish(frame, talkers);
+    this.maybeFeed(FIXED_SIM_DT, []);
+    this.stepFish(simT, FIXED_SIM_DT, talkers);
     const motion = this.opts.reducedMotion || this.opts.camera === "hold";
     const camRate = motion ? 0 : 0.35;
     this.camPhase += FIXED_SIM_DT * camRate;
@@ -721,10 +793,15 @@ export class AquariumSim {
   }
 
   step(frame: AquariumHostFrame): void {
+    const talkers = frame.demo && frame.talkers.length === 0
+      ? this.spawnDemoFish(frame.t)
+      : frame.talkers;
+    this.ingestPackets(frame.packets);
+    this.maybeFeed(Math.min(0.05, frame.dt || FIXED_SIM_DT), frame.packets);
     this.simAccumulator += Math.min(0.1, frame.dt || FIXED_SIM_DT);
     let steps = 0;
     while (this.simAccumulator >= FIXED_SIM_DT && steps < MAX_SIM_CATCHUP_STEPS) {
-      this.stepOnce(frame);
+      this.stepOnce(frame.t, talkers);
       this.simAccumulator -= FIXED_SIM_DT;
       steps++;
     }
@@ -777,6 +854,30 @@ export class AquariumSim {
     let peak = 0;
     for (const t of this.lastTalkers) peak = Math.max(peak, t.rate);
     s0[AQU_SLOT.metricPeak] = clamp01(peak / 220);
+    s0[AQU_SLOT.raymarchSteps] = AQUARIUM_WORK_BUDGET.raymarchSteps;
+    s0[AQU_SLOT.tileResScale] = tileInternalResScale(canvasW, canvasH);
+    const failedVis = frameFailed(this.lastSys);
+    const labelMetric = !o.label
+      ? 0
+      : this.lastDemo
+        ? 2
+        : failedVis > FAIL_MURK_THRESHOLD
+          ? 3
+          : this.lastTalkers.length
+            ? 1
+            : 0;
+    s0[AQU_SLOT.labelMetric] = labelMetric;
+    for (let i = 0; i < FISH_ATTR_SLOTS; i++) {
+      s0[AQU_SLOT.fishSpecies0 + i] = 0;
+      s0[AQU_SLOT.fishVigor0 + i] = 0;
+    }
+    let fishIdx = 0;
+    for (const f of this.fish.values()) {
+      if (fishIdx >= FISH_ATTR_SLOTS) break;
+      s0[AQU_SLOT.fishSpecies0 + fishIdx] = f.species;
+      s0[AQU_SLOT.fishVigor0 + fishIdx] = f.vigor;
+      fishIdx++;
+    }
 
     const s1 = this.slot1;
     s1.fill(0);
@@ -786,7 +887,7 @@ export class AquariumSim {
       s1[fi++] = f.x;
       s1[fi++] = f.y;
       s1[fi++] = f.z;
-      s1[fi++] = f.species / 6 + f.vigor * 0.15;
+      s1[fi++] = f.yaw;
     }
 
     const s2 = this.slot2;
@@ -845,7 +946,7 @@ export class AquariumSim {
   private lastTraffic = 0;
   private lastTalkers: TalkerRow[] = [];
 
-  advance(frame: AquariumHostFrame): ReturnType<AquariumSim["pack"]> {
+  advance(frame: AquariumHostFrame, canvasW = 1280, canvasH = 800): ReturnType<AquariumSim["pack"]> {
     this.lastSys = frame.sys;
     this.lastDemo = !!frame.demo;
     this.lastT = frame.t;
@@ -855,7 +956,7 @@ export class AquariumSim {
     for (const p of frame.packets) traffic += p.field;
     this.lastTraffic = frame.packets.length ? traffic / frame.packets.length : 0;
     this.step(frame);
-    return this.pack();
+    return this.pack(canvasW, canvasH);
   }
 
   tileSubscriptions(): number {
@@ -901,21 +1002,47 @@ export function fishIdStable(
   return true;
 }
 
+export type ConfigActionEdges = {
+  resetSettings?: boolean;
+  randomise?: boolean;
+  undoRandom?: boolean;
+};
+
 /** Config side-effects (randomise / undo / reset) — still driven only via config.read. */
 export function applyConfigActions(
   sim: AquariumSim,
   cfg: Record<string, string> | undefined,
   next: AquariumOptions,
+  edges: ConfigActionEdges = {},
 ): AquariumOptions {
   let opts = next;
-  if (parseBool(cfg?.resetSettings, false)) {
+  if (edges.resetSettings) {
     opts = parseAquariumOptions({ preset: next.preset });
     sim.resetLayout();
   }
-  if (parseBool(cfg?.randomise, false)) sim.randomiseSeed();
-  if (parseBool(cfg?.undoRandom, false)) sim.undoSeed();
+  if (edges.randomise) sim.randomiseSeed();
+  if (edges.undoRandom) sim.undoSeed();
+  opts = { ...opts, seed: sim.getOptions().seed };
   sim.setOptions(opts);
   return opts;
+}
+
+/** Rising-edge detect for persisted boolean toggles in visualisation.yml. */
+export function configActionEdges(
+  cfg: Record<string, string> | undefined,
+  prev: { reset: boolean; randomise: boolean; undo: boolean },
+): { edges: ConfigActionEdges; next: typeof prev } {
+  const reset = parseBool(cfg?.resetSettings, false);
+  const randomise = parseBool(cfg?.randomise, false);
+  const undo = parseBool(cfg?.undoRandom, false);
+  return {
+    edges: {
+      resetSettings: reset && !prev.reset,
+      randomise: randomise && !prev.randomise,
+      undoRandom: undo && !prev.undo,
+    },
+    next: { reset, randomise, undo },
+  };
 }
 
 export function assertWorkBudgetUnderCaps(

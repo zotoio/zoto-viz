@@ -20,9 +20,15 @@ import {
   assertWorkBudgetUnderCaps,
   failureVisuals,
   packNameCheck,
+  applyConfigActions,
+  coalescePresetConfig,
+  configActionEdges,
+  packFishMeta,
   parseAquariumOptions,
   scanPackTrademarks,
   speciesForTalker,
+  tileInternalResScale,
+  unpackFishMeta,
 } from "../../../plugins/src/aquarium/frontend/aquarium";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
@@ -224,6 +230,57 @@ describe("aquarium shipped pack", () => {
   it("gateway maps to largest freshwater species when enabled", () => {
     const o = parseAquariumOptions({ preset: "planted", sp_discus: "true" });
     expect(speciesForTalker("gw", "gateway", o)).toBe(4);
+  });
+
+  it("packs and unpacks fish species and vigor without overlap", () => {
+    for (const species of [0, 1, 3, 4, 5]) {
+      for (const vigor of [0, 0.12, 0.5, 1]) {
+        const packed = packFishMeta(species, vigor);
+        const out = unpackFishMeta(packed);
+        expect(out.species).toBe(species);
+        expect(out.vigor).toBeCloseTo(vigor, 5);
+      }
+    }
+  });
+
+  it("reef_lagoon preset applies reef water despite global fresh default in host cfg", () => {
+    const hostLike = {
+      preset: "reef_lagoon",
+      water: "fresh",
+      lighting: "daylight",
+      fishCount: "12",
+      temperament: "0.35",
+      density: "0.72",
+    };
+    const o = parseAquariumOptions(coalescePresetConfig(hostLike));
+    expect(o.water).toBe("reef");
+    expect(o.lighting).toBe("actinic");
+  });
+
+  it("passes canvas size into packed slots for shader UVs", () => {
+    const sim = new AquariumSim(DEFAULT_OPTIONS);
+    sim.advance(frame(), 320, 240);
+    expect(sim.slot0[12]).toBe(320);
+    expect(sim.slot0[13]).toBe(240);
+    expect(tileInternalResScale(320, 240)).toBe(2);
+    expect(sim.slot0[24]).toBe(2);
+  });
+
+  it("randomise seed survives applyConfigActions when host cfg still has old seed", () => {
+    const sim = new AquariumSim(parseAquariumOptions({ seed: "100" }));
+    const cfg = { seed: "100", randomise: "true" };
+    const { edges } = configActionEdges(cfg, { reset: false, randomise: false, undo: false });
+    const next = applyConfigActions(sim, cfg, parseAquariumOptions(cfg), edges);
+    expect(next.seed).not.toBe(100);
+    expect(sim.getOptions().seed).toBe(next.seed);
+  });
+
+  it("stores per-fish yaw and species in slots for the sky", () => {
+    const sim = new AquariumSim(parseAquariumOptions({ preset: "planted", fishCount: "3" }));
+    sim.advance(frame({ t: 4, dt: 0.05 }));
+    expect(sim.slot1[3]).not.toBe(0);
+    expect(sim.slot0[26]).toBeGreaterThanOrEqual(0);
+    expect(sim.slot0[42]).toBeGreaterThan(0);
   });
 
   it("20× tile mount/unmount frees subscriptions and records zero extra GL contexts on 4×4", () => {
