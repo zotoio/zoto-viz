@@ -10,7 +10,7 @@ export default {
   root: repoRoot,
   cacheDir: path.join(repoRoot, "web", "node_modules", ".vite"),
   test: {
-    environment: "node",
+    environment: "happy-dom",
     include: [
       path.join(repoRoot, "web", "src", "**/*.test.ts"),
       path.join(scriptsDir, "**/*.test.ts"),
