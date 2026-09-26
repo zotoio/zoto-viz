@@ -476,6 +476,14 @@ function metaRunnerCount(run) {
   return run.counts.executed;
 }
 
+export function rejectPatchedVitestGreen(kind, slug) {
+  if (kind === "green") {
+    throw new Error(
+      `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
+    );
+  }
+}
+
 function classifyPatchedVitest(run) {
   if (run.counts.suiteError) {
     return "build break";
@@ -555,11 +563,7 @@ async function runRow(wtRoot, row, artifactsDir) {
 
   if (meta.runner === "vitest") {
     const kind = classifyPatchedVitest(patched);
-    if (kind === "green") {
-      throw new Error(
-        `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
-      );
-    }
+    rejectPatchedVitestGreen(kind, slug);
     if (kind === "build break" || kind === "not single assertion failure") {
       throw new Error(
         `row ${slug}: patch breaks build or fails without assertion (proves nothing)`,
