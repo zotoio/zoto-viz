@@ -1,12 +1,12 @@
---- a/web/src/graph/render-host.ts	2026-09-26 18:38:48.990441820 +0000
-+++ b/web/src/graph/render-host.ts	2026-09-26 18:39:26.376173408 +0000
-@@ -315,8 +315,8 @@
-     const gpu = sandboxBitmapGl(pluginId);
-     const tex = gpu.uploadFrame(bitmap);
-     if (!tex) return null;
--    const rect = gpu.present(rd, tex, fill, dst, aspect);
-     bitmap.close();
-+    const rect = gpu.present(rd, tex, fill, dst, aspect);
-     const pr = rd.getPixelRatio();
-     return { x: rect.x * pr, y: rect.y * pr, w: rect.w * pr, h: rect.h * pr };
-   }
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 8fc720b..4d21d47 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -312,6 +312,7 @@ export class RenderHost {
+       const pr = rd.getPixelRatio();
+       const tex = gpu.uploadFrame(bitmap);
+       if (!tex) return null;
++      bitmap.close();
+       gpu.present(rd, tex, fill, dst, aspect);
+       return this.writeFbViewport(dst, pr);
+     } finally {
