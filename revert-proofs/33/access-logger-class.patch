@@ -1,0 +1,13 @@
+diff --git a/service/monitor.py b/service/monitor.py
+index fc1f07d..fb568d8 100644
+--- a/service/monitor.py
++++ b/service/monitor.py
+@@ -2055,7 +2055,7 @@ def main() -> None:
+             host=listen["bind"],
+             port=listen["port"],
+             print=None,
+-            access_log=None,
++            access_log_class=access.RedactingAccessLogger,
+             shutdown_timeout=3,
+         )
+     finally:
