@@ -33,8 +33,8 @@ import {
   type DeviceRect,
   type DeviceRectMut,
   asCssRect,
-  cssRectTopFromBottomLeft,
-  toDeviceRectInto,
+  deviceRectBottomLeftCssInto,
+  deviceRectTopLeftCssInto,
 } from "./pack-mirror-rect";
 import { renderHostMirrorTelemetry } from "./render-host-telemetry";
 
@@ -424,20 +424,11 @@ export class RenderHost {
     rd.render(scene, camera);
   };
 
-  private canvasDeviceHeight(): number {
-    return Math.max(1, this.canvas.height);
-  }
-
   private writeFbViewport(box: SoftRect, pr: number): Viewport {
-    const cssTop = this.software
-      ? asCssRect(box)
-      : cssRectTopFromBottomLeft(box, this.h);
-    return toDeviceRectInto(
-      cssTop,
-      pr,
-      this.canvasDeviceHeight(),
-      this.fbViewport,
-    );
+    if (this.software) {
+      return deviceRectTopLeftCssInto(box, pr, this.fbViewport);
+    }
+    return deviceRectBottomLeftCssInto(box, pr, this.fbViewport);
   }
 
   private sortViewsForMirror(): void {

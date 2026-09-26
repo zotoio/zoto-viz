@@ -80,7 +80,6 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
-import { runPackFrameHandler } from "../plugins/viz-pack-host";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -105,9 +104,7 @@ import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsen
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { mosaicTileViewId, mosaicWallUsesView } from "../graph/mosaic-tile-id";
-import {
-  deliverCoalescedMosaicPacks,
-} from "../graph/mosaic-pack-coalesce";
+import { deliverVizPluginFrame } from "./viz-frame-tick";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -1037,25 +1034,19 @@ function feed(m: StateMsg): void {
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-      if (mosaic?.on && mosaicDemoPacks) {
-        deliverCoalescedMosaicPacks({
-          mosaic,
-          frame: f,
-          modeById: (id) => modeById(mosaicTileViewId(id)),
-          pluginSpecForMode,
-          optsFor,
-          budget: { stats: vizBudget.stats },
-        });
-      } else {
-        sandbox.frame(f);
-        if (packId) {
-          runPackFrameHandler(packId, f, {
-            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-          }, optsFor(mode));
-        }
-      }
+      deliverVizPluginFrame({
+        frame: f,
+        sandbox,
+        mosaic,
+        mosaicDemoPacks: !!mosaicDemoPacks,
+        packId,
+        activeMode: mode,
+        modeById,
+        mosaicTileViewId,
+        pluginSpecForMode,
+        optsFor,
+        budgetStats: vizBudget.stats,
+      });
     }, buildFrame);
     if (frame) {
       vizFrameTs = frame.t;

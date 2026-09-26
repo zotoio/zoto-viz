@@ -26,7 +26,7 @@ describe("letterbox fill", () => {
       ctx,
       { x: 0, y: 0, w: 80, h: 60 },
       { x: 20, y: 10, w: 40, h: 40 },
-      { css: "rgb(0, 0, 0)", grain: 0 },
+      { css: "rgb(0, 0, 0)", grain: 0, hex: 0 },
     );
     expect(rects.length).toBe(0);
   });

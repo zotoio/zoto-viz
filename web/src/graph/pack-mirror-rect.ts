@@ -40,17 +40,16 @@ export function deviceRect(x: number, y: number, w: number, h: number): DeviceRe
   return { x, y, w, h, __unit: "device" };
 }
 
-function deviceEdgesFromCss(
+function writeDeviceEdgesFromCss(
   r: CssRect,
   pixelRatio: number,
-): { x0: number; x1: number; y0: number; y1: number } {
-  const pr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : pixelRatio;
-  return {
-    x0: Math.round(r.x * pr),
-    x1: Math.round((r.x + r.w) * pr),
-    y0: Math.round(r.y * pr),
-    y1: Math.round((r.y + r.h) * pr),
-  };
+  out: { x0: number; x1: number; y0: number; y1: number },
+): void {
+  const pr = pixelRatio;
+  out.x0 = Math.round(r.x * pr);
+  out.x1 = Math.round((r.x + r.w) * pr);
+  out.y0 = Math.round(r.y * pr);
+  out.y1 = Math.round((r.y + r.h) * pr);
 }
 
 function writeDeviceRectFromEdges(
@@ -69,14 +68,59 @@ function writeDeviceRectFromEdges(
 }
 
 /** Device pixels (GL bottom-left) for viewport, scissor, readPixels, and blit — per-edge `Math.round`. */
+const deviceEdgeScratch = { x0: 0, x1: 0, y0: 0, y1: 0 };
+
 export function toDeviceRectInto(
   r: CssRect,
   pixelRatio: number,
   canvasDeviceHeight: number,
   out: DeviceRectMut,
 ): DeviceRect {
-  const { x0, x1, y0, y1 } = deviceEdgesFromCss(r, pixelRatio);
-  return writeDeviceRectFromEdges(x0, x1, y0, y1, canvasDeviceHeight, out);
+  writeDeviceEdgesFromCss(r, pixelRatio, deviceEdgeScratch);
+  return writeDeviceRectFromEdges(
+    deviceEdgeScratch.x0,
+    deviceEdgeScratch.x1,
+    deviceEdgeScratch.y0,
+    deviceEdgeScratch.y1,
+    canvasDeviceHeight,
+    out,
+  );
+}
+
+/** Top-left CSS box → top-left device pixels (Canvas2D `getImageData`). */
+export function deviceRectTopLeftCssInto(
+  box: CssRectLoose,
+  pixelRatio: number,
+  out: DeviceRectMut,
+): DeviceRect {
+  const pr = pixelRatio;
+  const x0 = Math.round(cssBoxDim(box.x) * pr);
+  const x1 = Math.round((cssBoxDim(box.x) + cssBoxDim(box.w)) * pr);
+  const y0 = Math.round(cssBoxDim(box.y) * pr);
+  const y1 = Math.round((cssBoxDim(box.y) + cssBoxDim(box.h)) * pr);
+  out.x = x0;
+  out.y = y0;
+  out.w = x1 - x0;
+  out.h = y1 - y0;
+  return out as DeviceRect;
+}
+
+/** Bottom-left CSS box → GL bottom-left device pixels (no Y flip). */
+export function deviceRectBottomLeftCssInto(
+  box: CssRectLoose,
+  pixelRatio: number,
+  out: DeviceRectMut,
+): DeviceRect {
+  const pr = pixelRatio;
+  const x0 = Math.round(cssBoxDim(box.x) * pr);
+  const x1 = Math.round((cssBoxDim(box.x) + cssBoxDim(box.w)) * pr);
+  const y0 = Math.round(cssBoxDim(box.y) * pr);
+  const y1 = Math.round((cssBoxDim(box.y) + cssBoxDim(box.h)) * pr);
+  out.x = x0;
+  out.y = y0;
+  out.w = x1 - x0;
+  out.h = y1 - y0;
+  return out as DeviceRect;
 }
 
 /** Device RT size from CSS tile edges (shared with adjacent tiles at non-integer DPR). */

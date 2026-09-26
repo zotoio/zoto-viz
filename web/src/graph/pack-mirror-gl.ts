@@ -275,7 +275,7 @@ export class PackMirrorRegistry {
   private readonly drawLetterboxScratch = { letterbox: false };
 
   beginFrame(): void {
-    this.sessions.forEach((s) => { s.rendered = false; });
+    for (const s of this.sessions.values()) s.rendered = false;
   }
 
   /** Allocate / free mirrors only when tile count crosses 2 for a pack key. */

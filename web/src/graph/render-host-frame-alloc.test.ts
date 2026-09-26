@@ -35,6 +35,7 @@ import * as THREE from "three";
 import { RenderHost, type HostedView } from "./render-host";
 import { renderHostMirrorTelemetry } from "./render-host-telemetry";
 import { surfaceLetterboxFill } from "./letterbox-fill";
+import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 
 type MirrorMetaView = HostedView & {
   packCoalesceGroupKey?: string;
@@ -85,6 +86,7 @@ describe("RenderHost frame allocations", () => {
 
   beforeEach(() => {
     renderHostMirrorTelemetry.reset();
+    packMirrorSizeStats.reset();
     wall = document.createElement("div");
     document.body.appendChild(wall);
     scene = new THREE.Scene();
@@ -166,5 +168,13 @@ describe("RenderHost frame allocations", () => {
     expect(renderHostMirrorTelemetry.viewSortRuns).toBe(1);
     expect(renderHostMirrorTelemetry.getContextAttributesCalls).toBe(1);
     expect(renderHostMirrorTelemetry.scopeFingerprintBuilds).toBe(0);
+  });
+
+  it("300 frames at 2×4 pr 1.5: zero render-path object allocations after warm-up", () => {
+    host.advanceFrame(0);
+    packMirrorSizeStats.reset();
+    for (let f = 0; f < 300; f++) host.advanceFrame(f + 1);
+    expect(packMirrorSizeStats.deviceSizeAllocated).toBe(0);
+    expect(packMirrorSizeStats.converterEdgeObjectsAllocated).toBe(0);
   });
 });

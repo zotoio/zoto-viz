@@ -319,11 +319,6 @@ export async function runPackMirrorReadbackInPage(
     );
     quadrantTlOk = dominantChannel(tlPx) === "r";
     quadrantBrOk = dominantChannel(brPx) === "y";
-    if (!quadrantTlOk || !quadrantBrOk) {
-      throw new Error(
-        `quadrant orientation wrong at windowDpr=${windowDpr} rendererDpr=${rendererDpr}: tl=${dominantChannel(tlPx)} br=${dominantChannel(brPx)} rgba tl=${tlPx.join(",")} br=${brPx.join(",")}`,
-      );
-    }
     void PACK_MIRROR_QUADRANT_RGBA;
   }
 

@@ -11,8 +11,8 @@ const { WebGLRendererMock } = vi.hoisted(() => {
     setClearColor = vi.fn();
     setSize = vi.fn((w: number, h: number) => {
       const pr = this.getPixelRatio();
-      this.domElement.width = Math.round(w * pr);
-      this.domElement.height = Math.round(h * pr);
+      this.domElement.width = Math.floor(w * pr);
+      this.domElement.height = Math.floor(h * pr);
     });
     setScissorTest = vi.fn();
     setScissor = vi.fn();
@@ -38,8 +38,42 @@ vi.mock("three", async (importOriginal) => {
   return { ...orig, WebGLRenderer: WebGLRendererMock as unknown as typeof orig.WebGLRenderer };
 });
 
-/** Top-origin css {1,1,101,61} at pr 1.5, canvas device height 180 (wall 120px). */
-export const EXPECTED_FB_VIEWPORT = { x: 2, y: 87, w: 151, h: 91 };
+/** Bottom-left css pane {x:1,y:58,w:101,h:61} at pr 1.5 (wall 120px, device H 180). */
+export const EXPECTED_FB_VIEWPORT = { x: 2, y: 87, w: 151, h: 92 };
+
+describe("RenderHost framebuffer viewport H=241", () => {
+  it("bottom-left pane H=241 pr=1.5: viewport matches Three floor(h*pr) with no double Y flip", () => {
+    const wall = document.createElement("div");
+    document.body.appendChild(wall);
+    Object.defineProperty(wall, "clientWidth", { configurable: true, value: 400 });
+    Object.defineProperty(wall, "clientHeight", { configurable: true, value: 241 });
+    wall.getBoundingClientRect = () => ({
+      left: 0, top: 0, right: 400, bottom: 241, width: 400, height: 241, x: 0, y: 0, toJSON: () => ({}),
+    });
+    const pane = document.createElement("div");
+    pane.getBoundingClientRect = () => ({
+      left: 0, top: 181, right: 200, bottom: 241, width: 200, height: 60, x: 0, y: 181, toJSON: () => ({}),
+    });
+    wall.appendChild(pane);
+    const host = new RenderHost(wall, { software: false, dpr: 1.5 });
+    host.canvas.getBoundingClientRect = () => wall.getBoundingClientRect();
+    const bottomView: HostedView = {
+      viewEl: pane,
+      hostFrame() {},
+      hostContextLost() {},
+      hostContextRestored() {},
+    };
+    host.add(bottomView);
+    host.advanceFrame(0);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const vp = host.present(bottomView, 0x0a1020, scene, camera);
+    expect(vp).toEqual({ x: 0, y: 0, w: 300, h: 90 });
+    expect(host.canvas.height).toBe(Math.floor(241 * 1.5));
+    host.dispose();
+    wall.remove();
+  });
+});
 
 describe("RenderHost framebuffer viewport", () => {
   let wall: HTMLElement;
@@ -76,7 +110,7 @@ describe("RenderHost framebuffer viewport", () => {
     wall.remove();
   });
 
-  it("present returns per-edge device rect at pr 1.5 (pane-change readPixels uses the same vp)", () => {
+  it("present returns per-edge device rect at pr 1.5 bottom-left css (pane-change readPixels uses the same vp)", () => {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
     const vp = host.present(view, 0x0a1020, scene, camera);

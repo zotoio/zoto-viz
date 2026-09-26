@@ -112,8 +112,8 @@ describe("pack mirror SwiftShader readback", () => {
 
 /** QE browser zoom ↔ harness `windowDpr` (renderer uses min(windowDpr, 1.5)). */
 const ZOOM_CASES = [
-  { label: "100% zoom", windowDpr: 1, rendererDpr: 1, stubWindowDpr: false },
-  { label: "150% zoom", windowDpr: 1.5, rendererDpr: 1.5, stubWindowDpr: false },
+  { label: "100% zoom", windowDpr: 1, rendererDpr: 1, stubWindowDpr: true },
+  { label: "150% zoom", windowDpr: 1.5, rendererDpr: 1.5, stubWindowDpr: true },
   { label: "200% zoom", windowDpr: 2, rendererDpr: 1.5, stubWindowDpr: true },
 ] as const;
 
@@ -122,12 +122,13 @@ async function runQuadrantCase(
   c: { windowDpr: number; rendererDpr: number; stubWindowDpr: boolean },
 ): Promise<void> {
   if (c.stubWindowDpr) {
-    await page.evaluateOnNewDocument(() => {
+    const dpr = c.windowDpr;
+    await page.evaluateOnNewDocument((wDpr) => {
       Object.defineProperty(window, "devicePixelRatio", {
         configurable: true,
-        get: () => 2,
+        get: () => wDpr,
       });
-    });
+    }, dpr);
   }
   let pageError = "";
   page.on("pageerror", (err) => { pageError = String(err); });
@@ -137,11 +138,12 @@ async function runQuadrantCase(
     if (pageError) throw new Error(pageError);
     const state = await page.evaluate(() => ({
       err: (window as unknown as { __readbackError?: string }).__readbackError,
-      ok: (window as unknown as { __readbackOk?: { quadrantTlOk?: boolean } }).__readbackOk,
+      ok: (window as unknown as { __readbackOk?: { quadrantTlOk?: boolean; quadrantBrOk?: boolean } }).__readbackOk,
     }));
     if (state.err) throw new Error(state.err);
     if (state.ok) {
       expect(state.ok.quadrantTlOk).toBe(true);
+      expect(state.ok.quadrantBrOk).toBe(true);
       return;
     }
     await new Promise((r) => setTimeout(r, 100));

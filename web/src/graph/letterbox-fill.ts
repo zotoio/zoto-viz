@@ -3,6 +3,8 @@ export type SurfaceLetterboxFill = {
   css: string;
   /** 0–1 grain strength mixed into bar fill */
   grain: number;
+  /** Packed RGB for Three.js `setClearColor` (avoids per-frame css parse). */
+  hex: number;
 };
 
 export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLetterboxFill {
@@ -17,10 +19,12 @@ export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLet
     b = Math.min(255, Math.round(b + lift * 255));
   }
   const css = `rgb(${r}, ${g}, ${b})`;
-  return { css, grain: Math.min(1, Math.max(0, grain)) };
+  const hex = (r << 16) | (g << 8) | b;
+  return { css, grain: Math.min(1, Math.max(0, grain)), hex };
 }
 
 export function letterboxFillHex(fill: SurfaceLetterboxFill): number {
+  if (Number.isFinite(fill.hex)) return fill.hex;
   const m = fill.css.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   if (!m) return 0x010101;
   return (parseInt(m[1], 10) << 16) | (parseInt(m[2], 10) << 8) | parseInt(m[3], 10);

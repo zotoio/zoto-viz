@@ -1590,8 +1590,13 @@ export class NetScene implements HostedView {
     return this.isPackMirrorPrimary && this.packCoalesceTileCount >= 2;
   }
 
+  private cachedLetterboxFill: SurfaceLetterboxFill | null = null;
+
   surfaceLetterboxFill(): SurfaceLetterboxFill {
-    return surfaceLetterboxFill(this.clearHex, 0.25);
+    if (!this.cachedLetterboxFill) {
+      this.cachedLetterboxFill = surfaceLetterboxFill(this.clearHex, 0.25);
+    }
+    return this.cachedLetterboxFill;
   }
 
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
