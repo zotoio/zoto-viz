@@ -35,7 +35,7 @@ import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
 import { vizClockMs } from "../core/viz-clock";
-import { resetVizClockStep, vizClockStepSec } from "./scene-standalone";
+import { vizClockStepSec } from "./scene-standalone";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import { observeResize } from "../core/resize";
