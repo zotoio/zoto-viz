@@ -313,6 +313,23 @@ def test_typesafe_capability_in_schema() -> None:
     })
 
 
+def test_plugin_config_field_section_validates() -> None:
+    _validator().validate({
+        "id": "sections-demo",
+        "name": "Sections",
+        "version": 1,
+        "config": [
+            {
+                "key": "gain",
+                "label": "gain",
+                "type": "number",
+                "default": 1,
+                "section": "Motion",
+            },
+        ],
+    })
+
+
 def test_viz_graph_walk_true_fails_schema() -> None:
     with pytest.raises(ValidationError):
         _validator().validate({

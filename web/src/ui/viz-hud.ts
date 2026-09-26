@@ -1,13 +1,12 @@
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
-import { fractalHudCaption } from "../../../plugins/src/fractal-zoom/frontend/drive";
 import { morphCopy, Select } from "./ui";
 
 /** First-party demoscene viz packs that share the host UBO frame. */
 export const VIZ_DEMO_PACKS = [
   "packet-tunnel", "rf-constellation", "talker-storm",
   "kefrens-bars", "roto-proto", "blob-mesh", "star-sines", "hn-rain", "hn-term",
-  "stereo-gram", "nixie-clock", "fractal-zoom",
+  "stereo-gram", "nixie-clock",
 ] as const;
 export type VizDemoPackId = (typeof VIZ_DEMO_PACKS)[number];
 
@@ -23,7 +22,6 @@ const PACK_LABELS: Record<VizDemoPackId, string> = {
   "hn-term": "term",
   "stereo-gram": "stereo",
   "nixie-clock": "nixie",
-  "fractal-zoom": "fractal",
 };
 
 const SKIP_WINDOW_MS = 1000;
@@ -123,8 +121,6 @@ function vizHudMetricLive(
       return { label: "talkers", value: String(frame?.talkers.length ?? 0) };
     case "nixie-clock":
       return { label: "nixie", value: "clock" };
-    case "fractal-zoom":
-      return { label: "view", value: fractalHudCaption };
   }
 }
 

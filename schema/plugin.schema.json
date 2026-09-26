@@ -193,7 +193,7 @@
       "description": "Graph wrap target when engine is graph. Known values today: topology, talkers, services, protocols, layers, drone-show, watch, wifi, bluetooth, cpu, cores, load, sources, memory, disk, gpu, sockets, cgroups, units, udev, bridge. Open so new wrap targets do not need a schema bump."
     },
     "freeMap": {
-      "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims.",
+      "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims. Config array entries may include section (string) for grouped settings UI.",
       "type": ["object", "array"],
       "additionalProperties": true
     },

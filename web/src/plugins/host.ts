@@ -140,7 +140,7 @@ export class PluginSandbox {
     );
   }
 
-  /** Push persisted view config so plugins with config.read see live slider changes. */
+  /** Push persisted tile config so plugins with config.read see live slider changes. */
   setConfig(config: Record<string, string>): void {
     if (!this.caps.includes("config.read")) return;
     this.iframe?.contentWindow?.postMessage(

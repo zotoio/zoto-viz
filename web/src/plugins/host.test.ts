@@ -39,6 +39,20 @@ describe("hash consent and TypeScript allow", () => {
 });
 
 describe("PluginSandbox", () => {
+  it("posts config updates to the iframe when config.read is allowed", async () => {
+    const box = new PluginSandbox();
+    const posted: unknown[] = [];
+    await box.load("cfg-pack", "globalThis.ok = true;", ["config.read"], { a: "1" });
+    const win = document.querySelector("iframe")?.contentWindow as Window & {
+      postMessage: (data: unknown) => void;
+    };
+    const orig = win.postMessage.bind(win);
+    win.postMessage = (data) => { posted.push(data); orig(data); };
+    box.setConfig({ a: "2", b: "on" });
+    expect(posted.some((m) => (m as { type?: string }).type === "config")).toBe(true);
+    box.unload();
+  });
+
   it("loads srcdoc, ticks, and unloads", async () => {
     const box = new PluginSandbox();
     const styles: Record<string, unknown>[] = [];

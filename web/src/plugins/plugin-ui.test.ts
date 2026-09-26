@@ -47,6 +47,24 @@ describe("fillPluginFields", () => {
     expect(host.textContent).not.toMatch(/no extra settings/);
   });
 
+  it("groups config fields by plugin.yml section and marks non-default values", () => {
+    const host = document.createElement("div");
+    const spec: PluginView = {
+      id: "demo", name: "Demo", version: 1, engine: "graph",
+      config: [
+        { key: "a", label: "a", type: "number", default: 1, min: 0, max: 10, section: "Alpha" },
+        { key: "b", label: "b", type: "boolean", default: false, section: "Beta" },
+      ],
+    };
+    fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
+    expect(host.querySelectorAll("details.sec-collapsible").length).toBe(2);
+    localStorage.setItem("zoto-viz.plugin.demo.a", "3");
+    const host2 = document.createElement("div");
+    fillPluginFields(host2, spec, spec.config!, () => {}, { skipEmpty: true });
+    expect(host2.querySelector(".field-dirty")).toBeTruthy();
+    localStorage.removeItem("zoto-viz.plugin.demo.a");
+  });
+
   it("renders nest-cams layout and camera chips instead of a pane slider", () => {
     const host = document.createElement("div");
     fillPluginFields(host, { id: "nest-cams", name: "Nest cams", version: 1, engine: "graph" }, [

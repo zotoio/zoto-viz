@@ -1,8 +1,6 @@
 import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
-import { applyFractalConfigActions, fractalFieldBaseline } from "./fractal-config-ui";
-import { fractalPresetConfig } from "../../../plugins/src/fractal-zoom/frontend/config-mutation";
 import { mountNestCamFields } from "./nest-cams-ui";
 import type { SdmDevice } from "./nest-cams-look";
 
@@ -10,13 +8,10 @@ function appendFieldControl(
   row: HTMLElement,
   f: PluginField,
   values: Record<string, string>,
-  spec: PluginView,
   persist: () => void,
-  remount: () => void,
 ): void {
   const current = values[f.key] ?? fieldDefault(f);
-  const baseline = spec.id === "fractal-zoom" ? fractalFieldBaseline(values, f.key) : undefined;
-  const dirty = baseline !== undefined && String(current) !== String(baseline);
+  const dirty = String(current) !== String(fieldDefault(f));
   const wrap = (el: HTMLElement) => {
     if (dirty) el.classList.add("field-dirty");
     el.setAttribute("data-field-key", f.key);
@@ -36,16 +31,7 @@ function appendFieldControl(
       title: f.hint,
       options: f.values.map(([value, label]) => ({ value, label })),
       value: current,
-      onChange: (v) => {
-        values[f.key] = v;
-        if (spec.id === "fractal-zoom" && f.key === "preset" && v !== "custom") {
-          Object.assign(values, fractalPresetConfig(v), { preset: v });
-          persist();
-          remount();
-          return;
-        }
-        persist();
-      },
+      onChange: (v) => { values[f.key] = v; persist(); },
     });
     wrap(s.el);
   } else if (f.type === "number") {
@@ -81,14 +67,6 @@ export function fillPluginFields(
   opts?: { skipEmpty?: boolean; devices?: SdmDevice[] },
 ): void {
   const values = loadPluginConfig(spec, fields);
-  let mount = host.querySelector<HTMLElement>(":scope > .plugin-fields-mount");
-  if (!mount) {
-    mount = document.createElement("div");
-    mount.className = "plugin-fields-mount";
-    host.append(mount);
-  } else {
-    mount.replaceChildren();
-  }
   const head = document.createElement("div");
   head.className = "sec";
   const title = document.createElement("div");
@@ -100,27 +78,22 @@ export function fillPluginFields(
   head.append(title, meta);
   let knobs = fields;
   if (spec.id === "nest-cams") {
-    knobs = mountNestCamFields(mount, spec, fields, values, opts?.devices ?? [], onPersist);
+    knobs = mountNestCamFields(host, spec, fields, values, opts?.devices ?? [], onPersist);
   } else {
-    mount.append(head);
+    host.append(head);
   }
   if (!knobs.length) {
     if (!opts?.skipEmpty && spec.id !== "nest-cams") {
       const empty = document.createElement("div");
       empty.className = "sec";
       empty.innerHTML = `<div class="sec-hint">This plugin has no extra settings.</div>`;
-      mount.append(empty);
+      host.append(empty);
     }
     return;
   }
-  const remount = () => {
-    fillPluginFields(host, spec, fields, onPersist, opts);
-  };
   const persist = () => {
-    const changed = applyFractalConfigActions(spec, values);
     writePluginConfig(configStoreId(spec), values);
     onPersist(configStoreId(spec), values);
-    if (changed) remount();
   };
   const compact: PluginField[] = [];
   const notes: PluginField[] = [];
@@ -136,8 +109,8 @@ export function fillPluginFields(
       if (!groups.has(s)) groups.set(s, []);
       groups.get(s)!.push(f);
     }
-    for (const [section, fields] of groups) {
-      const container = section && section !== "Presets"
+    for (const [section, sectionFields] of groups) {
+      const container = section
         ? document.createElement("details")
         : document.createElement("div");
       if (container instanceof HTMLDetailsElement) {
@@ -148,27 +121,21 @@ export function fillPluginFields(
         container.append(sum);
       } else {
         container.className = "sec";
-        if (section) {
-          const title = document.createElement("div");
-          title.className = "sec-title";
-          title.textContent = section;
-          container.append(title);
-        }
       }
       const row = document.createElement("div");
       row.className = "sec-controls";
-      for (const f of fields) appendFieldControl(row, f, values, spec, persist, remount);
+      for (const f of sectionFields) appendFieldControl(row, f, values, persist);
       container.append(row);
-      mount.append(container);
+      host.append(container);
     }
   } else if (compact.length) {
     const sec = document.createElement("div");
     sec.className = "sec";
     const row = document.createElement("div");
     row.className = "sec-controls";
-    for (const f of compact) appendFieldControl(row, f, values, spec, persist, remount);
+    for (const f of compact) appendFieldControl(row, f, values, persist);
     sec.append(row);
-    mount.append(sec);
+    host.append(sec);
   }
   for (const f of notes) {
     const current = values[f.key] ?? fieldDefault(f);
@@ -190,7 +157,7 @@ export function fillPluginFields(
     ta.value = current;
     ta.addEventListener("input", () => { values[f.key] = ta.value; persist(); });
     wrap.append(cap, ta);
-    mount.append(wrap);
+    host.append(wrap);
   }
 }
 
