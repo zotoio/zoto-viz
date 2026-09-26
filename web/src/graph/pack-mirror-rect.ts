@@ -76,10 +76,12 @@ export function deviceSizeFromCssBox(
   pixelRatio: number,
 ): { pw: number; ph: number } {
   const pr = pixelRatio;
-  const x0 = Math.round(box.x * pr);
-  const x1 = Math.round((box.x + box.w) * pr);
-  const y0 = Math.round(box.y * pr);
-  const y1 = Math.round((box.y + box.h) * pr);
+  const bx = box.x ?? 0;
+  const by = box.y ?? 0;
+  const x0 = Math.round(bx * pr);
+  const x1 = Math.round((bx + box.w) * pr);
+  const y0 = Math.round(by * pr);
+  const y1 = Math.round((by + box.h) * pr);
   return {
     pw: Math.max(2, x1 - x0),
     ph: Math.max(2, y1 - y0),

@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
+  "testName": "^PackMirrorSession resource lifecycle > renderPrimary without x/y: 0 renderTargetSetSize over 300 frames$",
+  "description": "deviceSizeFromCssBox treats missing x/y as 0 so RT setSize is stable when only w/h are passed."
+}

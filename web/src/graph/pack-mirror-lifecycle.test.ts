@@ -34,7 +34,7 @@ function simulateTwoTileFrame(
   rd: THREE.WebGLRenderer,
   key: string,
   antialias: boolean,
-  box = { w: 64, h: 48 },
+  box = { x: 0, y: 0, w: 64, h: 48 },
 ): void {
   reg.beginFrame();
   const { scene, camera } = emptyScene();
@@ -56,7 +56,7 @@ function simulateThreeTileFrame(
   rd: THREE.WebGLRenderer,
   key: string,
   antialias: boolean,
-  box = { w: 64, h: 48 },
+  box = { x: 0, y: 0, w: 64, h: 48 },
 ): void {
   reg.beginFrame();
   const { scene, camera } = emptyScene();
@@ -103,13 +103,26 @@ describe("PackMirrorSession resource lifecycle", () => {
     reg.dispose();
   });
 
+  it("renderPrimary without x/y: 0 renderTargetSetSize over 300 frames", () => {
+    const reg = new PackMirrorRegistry();
+    const rd = stubRenderer(false);
+    reg.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
+    for (let i = 0; i < 300; i++) {
+      simulateTwoTileFrame(reg, rd, "plugin:pack", false, { w: 64, h: 48 });
+    }
+    expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
+    reg.dispose();
+  });
+
   it("300 steady frames: 0 setSize; one resize: exactly 1 setSize", () => {
     const session = new PackMirrorSession();
     const rd = stubRenderer(false);
     const { scene, camera } = emptyScene();
-    for (let i = 0; i < 300; i++) session.renderPack(rd, scene, camera, 64, 48, 0x0a1020, false);
+    const size64 = { x: 0, y: 0, w: 64, h: 48 };
+    for (let i = 0; i < 300; i++) session.renderPack(rd, scene, camera, size64, 64, 48, 0x0a1020, false);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
-    session.renderPack(rd, scene, camera, 96, 72, 0x0a1020, false);
+    const size96 = { x: 0, y: 0, w: 96, h: 72 };
+    session.renderPack(rd, scene, camera, size96, 96, 72, 0x0a1020, false);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(1);
     session.dispose();
   });

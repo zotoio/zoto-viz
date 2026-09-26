@@ -1,5 +1,4 @@
 diff --git a/web/src/graph/pack-mirror-rect.ts b/web/src/graph/pack-mirror-rect.ts
-index 65636be..4a69a39 100644
 --- a/web/src/graph/pack-mirror-rect.ts
 +++ b/web/src/graph/pack-mirror-rect.ts
 @@ -35,7 +35,7 @@ function deviceEdgesFromCss(
@@ -17,6 +16,6 @@ index 65636be..4a69a39 100644
  ): { pw: number; ph: number } {
 -  const pr = pixelRatio;
 +  const pr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : pixelRatio;
-   const x0 = Math.round(box.x * pr);
-   const x1 = Math.round((box.x + box.w) * pr);
-   const y0 = Math.round(box.y * pr);
+   const bx = box.x ?? 0;
+   const by = box.y ?? 0;
+   const x0 = Math.round(bx * pr);
