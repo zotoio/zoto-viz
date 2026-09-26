@@ -1,8 +1,8 @@
 # PR #42 split A — revert proof report
 
 - **Base:** `6520b014472c05f831ac5204429be2affb8473cb` (`main`)
-- **Stack A head:** `4134e0099a8027fba7a74aac279ac49c328d0390` (`cursor/wall-duplicate-pack-tiles-d355`)
-- **Stack A2 head:** `9f7f854` (`cursor/pack-mirror-readback-harness-d355`, draft on A)
+- **Stack A head:** `0add9cb` (`cursor/wall-duplicate-pack-tiles-d355`)
+- **Stack A2 head:** `34a2cf3` (`cursor/pack-mirror-readback-harness-d355`, draft on A)
 
 ## Size (vs `origin/main`, excluding `revert-proofs/`)
 
@@ -11,7 +11,16 @@
 | 42-A (production + unit tests) | ~3448 |
 | 42-A2 (readback harness delta on A) | ~1111 |
 
-Letterbox-bottom-left row **removed** (centred letterbox makes both `iy` formulas equal).
+## Letterbox 16:9 on 1:1 mirror (UX Pro)
+
+| Stack | Test | Revert row |
+|-------|------|------------|
+| A unit | `pack-mirror-letterbox-16x9.test.ts` @ pr **1** and **1.5** — inner `setViewport`, `zotoSurfacePanelClearHex()` bar `setClearColor`, first scene row device Y | `pack-mirror-letterbox-16x9` (stretch fill) |
+| A2 harness | `pack-mirror-readback.test.ts` letterbox SwiftShader @ pr **1** / **1.5** — bar centre rgba vs panel token; `expect` only | `pack-mirror-letterbox-16x9-readback` (same stretch patch) |
+
+**Unpatched (A, pr 1):** `Tests 1 passed`
+
+**Patched (A, pr 1):** `AssertionError: expected undefined to deeply equal { x: 0, y: 21.875, w: 100, h: 56.25 }` (stretch uses full-tile viewport; centred inner vp missing)
 
 ## Build / typecheck
 
@@ -22,11 +31,11 @@ Letterbox-bottom-left row **removed** (centred letterbox makes both `iy` formula
 
 | Suite | Result |
 |-------|--------|
-| vitest run #1 | 703 passed, 3 skipped (706 tests); 121 files passed, 2 skipped |
-| vitest run #2 | 703 passed, 3 skipped (706 tests); 121 files passed, 2 skipped |
+| vitest run #1 | 705 passed, 3 skipped (708 tests) (+2 letterbox 16:9 unit) |
+| vitest run #2 | (re-run at release gate) |
 | pytest | 432 passed, 1 failed (`test_node_harness_session_and_tools` — known env) |
 
-Readback matrix (12 SwiftShader cases + 3 browser zoom rows) runs on **A2** only (`pack-mirror-readback.test.ts`).
+Readback on **A2**: 12 matrix + 3 zoom + **2** letterbox16x9 rows (`pack-mirror-readback.test.ts`).
 
 ## Revert rows (A)
 
@@ -34,6 +43,7 @@ Each patch: `git apply --check` clean (no fuzz) at A head; anchored vitest goes 
 
 | Row | Assertion (patched run) |
 |-----|-------------------------|
+| `pack-mirror-letterbox-16x9` | `expected undefined to deeply equal { x: 0, y: 21.875, w: 100, h: 56.25 }` (stretch revert) |
 | `pack-mirror-capture-rounding` | `AssertionError: expected { x: 1, y: 87, w: 152, h: 92 } to deeply equal { x: 2, y: 87, w: 151, h: 92 }` (floor/ceil on `deviceRectBottomLeftCssInto`) |
 | `pack-mirror-tile-edge-shared` | `expected 152 to be 151` (`aOut.x + aOut.w` vs `bOut.x`) |
 | `pack-mirror-device-size-into` | lifecycle / Into row fails on `renderTargetSetSize` or size identity |
@@ -59,6 +69,7 @@ Each patch: `git apply --check` clean (no fuzz) at A head; anchored vitest goes 
 | Row | Assertion (patched run) |
 |-----|-------------------------|
 | `pack-mirror-device-pixel-ratio` | `expect(state.ok.quadrantTlOk).toBe(true)` → **false** at 200% zoom (`rendererDpr` follows `windowDpr` instead of capped renderer DPR) |
+| `pack-mirror-letterbox-16x9-readback` | `expect(rgbaNear(topBarRgba, expectedBarRgba)).toBe(true)` → **false** after stretch (bar samples scene green) |
 
 ## Converter sanity (unchanged)
 
