@@ -1,14 +1,14 @@
 
  RUN  v5.0.0 /workspace/web
 
- ❯ src/plugins/viz-host.test.ts (28 tests | 1 failed | 27 skipped) 8ms
+ ❯ src/plugins/viz-host.test.ts (28 tests | 1 failed | 27 skipped) 9ms
    ❯ viz contract version negotiation (5)
      × delivers v1 talker lifetime counts for v1 packs even when flow rates exist 7ms
 
  Test Files  1 failed (1)
       Tests  1 failed | 27 skipped (28)
-   Start at  19:24:59
-   Duration  613ms (environment 61%, transform 30%, import 3%, setup 2%, tests 2%, worker 1%)
+   Start at  19:29:55
+   Duration  587ms (environment 61%, transform 32%, import 2%, tests 2%, setup 1%, worker 1%)
 
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯

@@ -1,0 +1,27 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/app/viz-frame-host-tick.test.ts (1 test | 1 failed) 8ms
+   ❯ vizFrameHostPerFrameTick (1)
+     × uses scope-synced bind for 300 frame ticks without extra optsFor or parseSourceBind 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/viz-frame-host-tick.test.ts > vizFrameHostPerFrameTick > uses scope-synced bind for 300 frame ticks without extra optsFor or parseSourceBind
+AssertionError: expected "optsForMode" to be called 1 times, but got 302 times
+ ❯ src/app/viz-frame-host-tick.test.ts:39:21
+     37|     for (let i = 0; i < 300; i++) tick();
+     38|
+     39|     expect(optsSpy).toHaveBeenCalledTimes(1);
+       |                     ^
+     40|     expect(parseSourceBind).toHaveBeenCalledTimes(1);
+     41|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:35:30
+   Duration  1.08s (transform 59%, environment 29%, import 10%, setup 1%, tests 1%)
+

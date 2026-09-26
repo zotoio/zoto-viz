@@ -1,14 +1,14 @@
 
  RUN  v5.0.0 /workspace/web
 
- ❯ src/app/cypher-cic-settings.test.ts (1 test | 1 failed) 28ms
+ ❯ src/app/cypher-cic-settings.test.ts (1 test | 1 failed) 27ms
    ❯ cypher-cic saved settings (1)
-     × leaves persisted feed and chat toggles unchanged after session-only collapse 27ms
+     × leaves persisted feed and chat toggles unchanged after session-only collapse 26ms
 
  Test Files  1 failed (1)
       Tests  1 failed (1)
-   Start at  19:24:30
-   Duration  1.29s (transform 63%, environment 21%, import 13%, tests 2%, setup 1%)
+   Start at  19:29:28
+   Duration  1.35s (transform 62%, environment 20%, import 14%, tests 2%, setup 1%)
 
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯

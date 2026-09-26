@@ -1,14 +1,14 @@
 
  RUN  v5.0.0 /workspace/web
 
- ❯ src/ui/viz-hud.test.ts (24 tests | 1 failed | 23 skipped) 12ms
+ ❯ src/ui/viz-hud.test.ts (24 tests | 1 failed | 23 skipped) 8ms
    ❯ viz hud helpers (24)
-     × uses DEGRADED prefix on strip failure badge 11ms
+     × uses DEGRADED prefix on strip failure badge 6ms
 
  Test Files  1 failed (1)
       Tests  1 failed | 23 skipped (24)
-   Start at  19:24:33
-   Duration  754ms (transform 50%, environment 37%, import 9%, tests 2%, setup 1%)
+   Start at  19:29:31
+   Duration  749ms (transform 44%, environment 43%, import 11%, tests 1%, setup 1%)
 
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯

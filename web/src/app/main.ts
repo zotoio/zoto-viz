@@ -102,7 +102,9 @@ import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { vizV1FrameAdapter } from "../plugins/viz-v1-frame-adapter";
+import { optsForMode } from "./mode-opts";
 import { VizFrameScopeCache } from "./viz-frame-scope";
+import { vizFrameHostPerFrameTick } from "./viz-frame-host-tick";
 import {
   beginCypherCicPanelSession,
   endCypherCicPanelSession,
@@ -585,17 +587,7 @@ async function syncWifiWatch(): Promise<void> {
 }
 
 function optsFor(m: ViewMode): Record<string, string> {
-  const o = defaultOpts(m);
-  if (m.pluginId) {
-    const spec = pluginSpecForMode(m.id);
-    if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
-  } else {
-    for (const opt of m.options ?? []) {
-      const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
-      if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
-    }
-  }
-  return o;
+  return optsForMode(m, pluginSpecForMode);
 }
 
 function arcadeControls(m: ViewMode): HTMLElement[] {
@@ -1084,7 +1076,12 @@ function feed(m: StateMsg): void {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
-    const bind = vizFrameScope.readBindForFrameTick();
+    const { bind, packOpts: vizPackOpts } = vizFrameHostPerFrameTick({
+      mode,
+      currentOpts,
+      scope: vizFrameScope,
+      optsFor,
+    });
     const useV1Adapter = vizV1FrameAdapter.hasV1Packs() || active?.viz?.contract === 1;
     const buildLiveFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
@@ -1121,7 +1118,7 @@ function feed(m: StateMsg): void {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, currentOpts);
+        }, vizPackOpts);
       }
     }, buildFrame);
     if (frame) {

@@ -1,14 +1,14 @@
 
  RUN  v5.0.0 /workspace/web
 
- ❯ src/plugins/viz-host.test.ts (28 tests | 1 failed | 27 skipped) 15ms
+ ❯ src/plugins/viz-host.test.ts (28 tests | 1 failed | 27 skipped) 10ms
    ❯ viz contract version negotiation (5)
-     × treats missing viz.contract as v1 14ms
+     × treats missing viz.contract as v1 9ms
 
  Test Files  1 failed (1)
       Tests  1 failed | 27 skipped (28)
-   Start at  19:24:54
-   Duration  704ms (environment 60%, transform 32%, tests 3%, setup 2%, import 2%, worker 1%)
+   Start at  19:29:51
+   Duration  634ms (environment 58%, transform 35%, import 2%, setup 2%, tests 2%, worker 1%)
 
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯

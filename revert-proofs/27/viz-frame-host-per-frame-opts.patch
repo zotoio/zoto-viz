@@ -1,0 +1,22 @@
+diff --git a/web/src/app/viz-frame-host-tick.ts b/web/src/app/viz-frame-host-tick.ts
+index 0000000..0000000 100644
+--- a/web/src/app/viz-frame-host-tick.ts
++++ b/web/src/app/viz-frame-host-tick.ts
+@@ -1,4 +1,4 @@
+-import type { SourceBind } from "../core/sources";
++import { parseSourceBind, type SourceBind } from "../core/sources";
+ import type { ViewMode } from "../core/modes";
+ import type { VizFrameScopeCache } from "./viz-frame-scope";
+ 
+@@ -16,8 +16,9 @@ export function vizFrameHostPerFrameTick(input: VizFrameHostPerFrameInput): {
+   bind: SourceBind;
+   packOpts: Record<string, string>;
+ } {
++  const opts = input.optsFor(input.mode);
+   return {
+-    bind: input.scope.readBindForFrameTick(),
+-    packOpts: input.currentOpts,
++    bind: parseSourceBind(opts),
++    packOpts: opts,
+   };
+ }

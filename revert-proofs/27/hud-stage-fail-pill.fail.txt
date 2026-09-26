@@ -1,14 +1,14 @@
 
  RUN  v5.0.0 /workspace/web
 
- ❯ src/ui/viz-hud.test.ts (24 tests | 1 failed | 23 skipped) 19ms
+ ❯ src/ui/viz-hud.test.ts (24 tests | 1 failed | 23 skipped) 17ms
    ❯ viz hud helpers (24)
-     × shows DEGRADED stage pill matching strip badge text 17ms
+     × shows DEGRADED stage pill matching strip badge text 16ms
 
  Test Files  1 failed (1)
       Tests  1 failed | 23 skipped (24)
-   Start at  19:24:48
-   Duration  827ms (environment 43%, transform 42%, import 10%, tests 3%, setup 1%)
+   Start at  19:29:46
+   Duration  737ms (environment 46%, transform 39%, import 10%, tests 3%, setup 1%, worker 1%)
 
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
