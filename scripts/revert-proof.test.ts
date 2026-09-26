@@ -5,8 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const scriptPath = path.join(repoRoot, "scripts", "revert-proof.mjs");
+const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptsDir, "..");
+/** Resolved beside this test file so git-worktree proofs exercise the tree under test. */
+const scriptPath = path.join(scriptsDir, "revert-proof.mjs");
 
 type RowMeta = {
   runner: string;

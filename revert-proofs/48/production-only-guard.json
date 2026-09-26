@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "scripts/revert-proof.test.ts",
-  "testName": "(c) patch touching test files",
+  "testName": "patch touching test files is rejected",
   "description": "Disable production-only patch validation"
 }

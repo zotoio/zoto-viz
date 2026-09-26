@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "scripts/revert-proof.test.ts",
-  "testName": "(b) noop patch stays green",
+  "testName": "noop patch stays green fails",
   "description": "Remove stays-green failure guard so noop reverts are accepted"
 }
