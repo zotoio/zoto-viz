@@ -342,19 +342,25 @@ function syncTalkerHosts(st: SimState, live: RcsLiveDrive, dt: number): void {
   }
 }
 
-function tryStartCelebration(st: SimState, packetEnergy: number): boolean {
-  if (st.simTime - st.lastCelebrationAt < RCS_GOAL_CELEBRATION_COOLDOWN_SEC) return false;
-  st.lastCelebrationAt = st.simTime;
+function spawnCelebrationBurst(st: SimState, packetEnergy: number): void {
   st.celebrationT = 1.0;
   const size = clamp(0.15 + packetEnergy * 0.65, 0.15, 1);
   const count = Math.max(8, Math.floor(RCS_CAPS.maxParticles * size));
   particlePool.burst(count, st.ball.pos.x, st.ball.pos.y, st.ball.pos.z, 3 + size * 4, () => rng(st));
+}
+
+function tryStartCelebration(st: SimState, packetEnergy: number): boolean {
+  if (st.simTime - st.lastCelebrationAt < RCS_GOAL_CELEBRATION_COOLDOWN_SEC) return false;
+  st.lastCelebrationAt = st.simTime;
+  spawnCelebrationBurst(st, packetEnergy);
   return true;
 }
 
 function applyLive(st: SimState, live: RcsLiveDrive, dt: number): void {
   st.live = live;
-  syncTalkerHosts(st, live, dt);
+  if (st.phase !== PHASE_REPLAY) {
+    syncTalkerHosts(st, live, dt);
+  }
 
   const targetFail = live.failAlert;
   if (targetFail > 0) {
@@ -493,6 +499,7 @@ function carBall(st: SimState): void {
 }
 
 function checkGoal(st: SimState): boolean {
+  if (st.phase !== PHASE_PLAY) return false;
   const b = st.ball.pos;
   if (Math.abs(b.z) > GOAL_W * 0.45 || b.y > GOAL_H) return false;
   if (b.x > GOAL_X) {
@@ -512,7 +519,8 @@ function goalCelebrate(st: SimState): void {
   if (options.replay) {
     st.replayIdx = Math.max(0, st.historyHead - 90);
   }
-  tryStartCelebration(st, 1);
+  st.lastCelebrationAt = st.simTime;
+  spawnCelebrationBurst(st, 1);
 }
 
 function physicsStep(st: SimState, dt: number): void {
@@ -543,7 +551,7 @@ function sampleReplay(st: SimState, t: number): Snap | null {
   const start = Math.max(0, st.replayIdx);
   if (end <= start) return st.historyPrealloc[end % HISTORY_LEN] ?? null;
   const u = clamp(t, 0, 1);
-  const idx = Math.floor(start + (end - start) * (1 - u));
+  const idx = Math.floor(start + (end - start) * u);
   return st.historyPrealloc[idx % HISTORY_LEN] ?? null;
 }
 
@@ -617,13 +625,18 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
 
   if (!replayActive && st.phase !== PHASE_GOAL && st.kickoff <= 0) {
     const histCam = { yaw: 0.75, pitch: -0.4, dist: 32 };
-    while (st.accum >= RCS_FIXED_DT && substeps < RCS_CAPS.maxPhysicsSubsteps) {
+    const burstCap =
+      dt >= 0.25
+        ? Math.min(120, Math.ceil((Math.max(0, dt) * speed) / RCS_FIXED_DT))
+        : RCS_CAPS.maxPhysicsSubsteps;
+    while (st.accum >= RCS_FIXED_DT && substeps < burstCap) {
       physicsStep(st, RCS_FIXED_DT);
       pushHistory(st, histCam);
       st.accum -= RCS_FIXED_DT;
       substeps++;
+      if (st.phase === PHASE_GOAL) break;
     }
-    if (substeps >= RCS_CAPS.maxPhysicsSubsteps && st.accum >= RCS_FIXED_DT) {
+    if (substeps >= burstCap && st.accum >= RCS_FIXED_DT) {
       st.accum = Math.min(st.accum, RCS_FIXED_DT);
     }
   } else {
@@ -796,7 +809,11 @@ export function enforceRcsCaps(opts: RcsOptions): RcsOptions {
 }
 
 export function maxSubstepsFor(dt: number): number {
-  return Math.min(RCS_CAPS.maxPhysicsSubsteps, Math.ceil((dt * (options.gameSpeed / 100)) / RCS_FIXED_DT));
+  const speed = options.gameSpeed / 100;
+  if (dt >= 0.25) {
+    return Math.min(120, Math.ceil((Math.max(0, dt) * speed) / RCS_FIXED_DT));
+  }
+  return Math.min(RCS_CAPS.maxPhysicsSubsteps, Math.ceil((dt * speed) / RCS_FIXED_DT));
 }
 
 export function rcsPoolStats(): { particleAllocs: number; trailAllocs: number } {
@@ -923,6 +940,27 @@ export function rcsLastCelebrationAt(): number {
 
 export function rcsCarAssignedAt(carIdx: number): number {
   return state?.carAssignedAt.get(carIdx) ?? -1;
+}
+
+export function rcsScoreNow(): [number, number] {
+  if (!state) return [0, 0];
+  return [state.score[0], state.score[1]];
+}
+
+/** Test hook: ball rolling into the blue (positive x) goal mouth. */
+export function rcsTestPlaceBallForGoal(blueTeamScores: boolean): void {
+  if (!state) resetRcsSim(options.seed);
+  const st = state!;
+  st.kickoff = 0;
+  st.phase = PHASE_PLAY;
+  st.accum = RCS_FIXED_DT * 2;
+  const r = BALL_R * (options.ballSize / 100);
+  st.ball.pos = {
+    x: blueTeamScores ? GOAL_X + 0.08 : -GOAL_X - 0.08,
+    y: r + 0.05,
+    z: 0,
+  };
+  st.ball.vel = { x: blueTeamScores ? 0.5 : -0.5, y: 0, z: 0 };
 }
 
 export { RCS_CAPS };

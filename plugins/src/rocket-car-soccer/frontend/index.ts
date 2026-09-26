@@ -25,6 +25,7 @@ declare const zoto: {
 
 let opts: RcsOptions = parseRcsOptions(zoto.getConfig?.());
 let lastDice = "none";
+let lastCfgSig = "";
 let mounted = false;
 
 function ensureMounted(): void {
@@ -82,13 +83,26 @@ function applyConfig(cfg: Record<string, string>): void {
   zoto.writeUniform("uOpacity", 1);
 }
 
-zoto.onConfig = (cfg) => applyConfig(cfg);
+function pollHostConfig(): void {
+  const cfg = zoto.getConfig?.();
+  if (!cfg) return;
+  const sig = JSON.stringify(cfg);
+  if (sig === lastCfgSig) return;
+  lastCfgSig = sig;
+  applyConfig({ ...cfg });
+}
+
+zoto.onConfig = (cfg) => {
+  lastCfgSig = JSON.stringify(cfg);
+  applyConfig(cfg);
+};
 
 zoto.onFrame = (frame) => {
   ensureMounted();
-  const dt = frame.dt > 0 && frame.dt < 0.2 ? frame.dt : 1 / 60;
+  pollHostConfig();
+  const feedDt = frame.dt > 0 && frame.dt < 0.2 ? frame.dt : frame.dt >= 0.25 ? frame.dt : 1 / 60;
   const aspect = 16 / 9;
-  const out = rcsTick(frame, frame.t, dt, aspect);
+  const out = rcsTick(frame, frame.t, feedDt, aspect);
   zoto.writeBuffer(0, out.slot0);
   zoto.writeBuffer(1, out.slot1);
   zoto.writeBuffer(2, out.slot2);
@@ -97,6 +111,7 @@ zoto.onFrame = (frame) => {
 };
 
 applyConfig(zoto.getConfig?.() ?? {});
+lastCfgSig = JSON.stringify(zoto.getConfig?.() ?? {});
 
 /** Test hook: simulate pack teardown when the view unmounts. */
 export function rcsFrontendTeardown(): ReturnType<typeof rcsUnmount> {

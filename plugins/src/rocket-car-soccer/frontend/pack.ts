@@ -209,6 +209,34 @@ function hexNorm(raw: string | undefined, def: string): string {
   return def;
 }
 
+/** Defaults from visualisation.yml the host sends for untouched This-view fields. */
+const RCS_VIZ_FORM_DEFAULTS: Record<string, string> = {
+  preset: "broadcast",
+  seed: "42",
+  dice: "none",
+  teamSize: "3",
+  teamOrange: "#ff8c32",
+  teamBlue: "#3aa7ff",
+  theme: "day",
+  aggress: "55",
+  gameSpeed: "100",
+  trail: "soft",
+  camera: "director",
+  minCutSec: "4",
+  explode: "shockwave",
+  replay: "true",
+  matchSec: "300",
+  ballSize: "100",
+  particles: "70",
+  reducedMotion: "false",
+};
+
+function hostStillOnFormDefault(key: string, raw: string | undefined): boolean {
+  if (raw === undefined || raw === "") return true;
+  const def = RCS_VIZ_FORM_DEFAULTS[key];
+  return def !== undefined && raw.trim() === def;
+}
+
 export function parseRcsOptions(o: Record<string, string | undefined> = {}): RcsOptions {
   let base = { ...RCS_DEFAULTS };
   const presetRaw = o.preset?.trim();
@@ -218,22 +246,44 @@ export function parseRcsOptions(o: Record<string, string | undefined> = {}): Rcs
   }
   return {
     preset,
-    teamSize: Math.round(num(o.teamSize, base.teamSize, 2, RCS_MAX_TEAM)),
-    seed: Math.round(num(o.seed, base.seed, 1, 999999)),
-    teamOrange: hexNorm(o.teamOrange, base.teamOrange),
-    teamBlue: hexNorm(o.teamBlue, base.teamBlue),
-    theme: pick(o.theme, ["day", "night", "neon"] as const, base.theme),
-    aggress: num(o.aggress, base.aggress, 0, 100),
-    gameSpeed: num(o.gameSpeed, base.gameSpeed, 25, 200),
-    trail: pick(o.trail, ["soft", "sharp", "spark"] as const, base.trail),
-    camera: pick(o.camera, ["broadcast", "ballcam", "director", "orbit"] as const, base.camera),
-    minCutSec: num(o.minCutSec, base.minCutSec, RCS_MIN_DIRECTOR_CUT_SEC, 12),
-    explode: pick(o.explode, ["confetti", "shockwave", "embers"] as const, base.explode),
-    replay: bool(o.replay, base.replay),
-    matchSec: Math.round(num(o.matchSec, base.matchSec, 60, 900)),
-    ballSize: num(o.ballSize, base.ballSize, 70, 140),
-    particles: Math.round(num(o.particles, base.particles, 0, 100)),
-    reducedMotion: bool(o.reducedMotion, base.reducedMotion),
+    teamSize: hostStillOnFormDefault("teamSize", o.teamSize)
+      ? base.teamSize
+      : Math.round(num(o.teamSize, base.teamSize, 2, RCS_MAX_TEAM)),
+    seed: hostStillOnFormDefault("seed", o.seed)
+      ? base.seed
+      : Math.round(num(o.seed, base.seed, 1, 999999)),
+    teamOrange: hostStillOnFormDefault("teamOrange", o.teamOrange)
+      ? base.teamOrange
+      : hexNorm(o.teamOrange, base.teamOrange),
+    teamBlue: hostStillOnFormDefault("teamBlue", o.teamBlue)
+      ? base.teamBlue
+      : hexNorm(o.teamBlue, base.teamBlue),
+    theme: hostStillOnFormDefault("theme", o.theme) ? base.theme : pick(o.theme, ["day", "night", "neon"] as const, base.theme),
+    aggress: hostStillOnFormDefault("aggress", o.aggress) ? base.aggress : num(o.aggress, base.aggress, 0, 100),
+    gameSpeed: hostStillOnFormDefault("gameSpeed", o.gameSpeed)
+      ? base.gameSpeed
+      : num(o.gameSpeed, base.gameSpeed, 25, 200),
+    trail: hostStillOnFormDefault("trail", o.trail) ? base.trail : pick(o.trail, ["soft", "sharp", "spark"] as const, base.trail),
+    camera: hostStillOnFormDefault("camera", o.camera)
+      ? base.camera
+      : pick(o.camera, ["broadcast", "ballcam", "director", "orbit"] as const, base.camera),
+    minCutSec: hostStillOnFormDefault("minCutSec", o.minCutSec)
+      ? base.minCutSec
+      : num(o.minCutSec, base.minCutSec, RCS_MIN_DIRECTOR_CUT_SEC, 12),
+    explode: hostStillOnFormDefault("explode", o.explode)
+      ? base.explode
+      : pick(o.explode, ["confetti", "shockwave", "embers"] as const, base.explode),
+    replay: hostStillOnFormDefault("replay", o.replay) ? base.replay : bool(o.replay, base.replay),
+    matchSec: hostStillOnFormDefault("matchSec", o.matchSec)
+      ? base.matchSec
+      : Math.round(num(o.matchSec, base.matchSec, 60, 900)),
+    ballSize: hostStillOnFormDefault("ballSize", o.ballSize) ? base.ballSize : num(o.ballSize, base.ballSize, 70, 140),
+    particles: hostStillOnFormDefault("particles", o.particles)
+      ? base.particles
+      : Math.round(num(o.particles, base.particles, 0, 100)),
+    reducedMotion: hostStillOnFormDefault("reducedMotion", o.reducedMotion)
+      ? base.reducedMotion
+      : bool(o.reducedMotion, base.reducedMotion),
   };
 }
 

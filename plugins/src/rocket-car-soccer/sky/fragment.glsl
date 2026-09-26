@@ -73,6 +73,15 @@ float drawInt(vec2 uv, float val, float scale) {
   return max(a, b);
 }
 
+float drawMmSs(vec2 uv, float secs, float scale) {
+  float m = floor(clamp(secs, 0.0, 5999.0) / 60.0);
+  float s = floor(mod(secs, 60.0));
+  float dm = drawInt(uv - vec2(-0.2 * scale, 0.0), m, scale * 0.82);
+  float ds = drawInt(uv + vec2(0.16 * scale, 0.0), s, scale * 0.82);
+  float colon = 1.0 - smoothstep(0.015, 0.04, length(uv - vec2(-0.02 * scale, 0.0)));
+  return max(max(dm, ds), colon * 0.75);
+}
+
 float scene(vec3 p) {
   float mark = sl(0, 0.0);
   float carN = mark > 0.5 ? sl(0, 27.0) : 4.0;
@@ -170,7 +179,7 @@ void main() {
   col = mix(col, vec3(1.0, 0.55, 0.2), dO * 0.95);
   col = mix(col, vec3(0.35, 0.7, 1.0), dB * 0.95);
 
-  float clk = drawInt(hud - vec2(0.0, 0.62), floor(clockS), 0.45);
+  float clk = drawMmSs(hud - vec2(0.0, 0.62), floor(clockS), 0.38);
   col = mix(col, vec3(0.92), clk * 0.85);
 
   if (demoF > 0.5) {

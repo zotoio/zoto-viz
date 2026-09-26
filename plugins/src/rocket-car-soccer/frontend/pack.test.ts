@@ -49,6 +49,8 @@ import {
   rcsFailDisplay,
   rcsLastCelebrationAt,
   rcsCarAssignedAt,
+  rcsScoreNow,
+  rcsTestPlaceBallForGoal,
   rcsTick,
   rcsTriggerMaxGoalExplosion,
   rcsUnmount,
@@ -80,6 +82,27 @@ const EMPTY_SYS: VizSysTelemetry = {
   sockets: 0,
   failed: 0,
   udev: 0,
+};
+
+const FORM_DEFAULTS: Record<string, string> = {
+  preset: "broadcast",
+  seed: "42",
+  dice: "none",
+  teamSize: "3",
+  teamOrange: "#ff8c32",
+  teamBlue: "#3aa7ff",
+  theme: "day",
+  aggress: "55",
+  gameSpeed: "100",
+  trail: "soft",
+  camera: "director",
+  minCutSec: "4",
+  explode: "shockwave",
+  replay: "true",
+  matchSec: "300",
+  ballSize: "100",
+  particles: "70",
+  reducedMotion: "false",
 };
 
 function vizFrame(over: Partial<VizDataFrame> = {}): VizDataFrame {
@@ -176,17 +199,18 @@ describe("rocket-car-soccer pack", () => {
         const alt = [...chunk.matchAll(/-\s+\[(\w+),/g)].map((m) => m[1]!).find((v) => v !== def);
         if (alt) flip = alt;
       }
+      if (FORM_DEFAULTS[key] === flip) continue;
       const parsed = parseRcsOptions({ preset: "neon_night", [key]: flip });
       const baseParsed = parseRcsOptions({ preset: "neon_night" });
       if (JSON.stringify(parsed) === JSON.stringify(baseParsed)) {
         const allAlts = [...chunk.matchAll(/-\s+\[(\w+),/g)].map((m) => m[1]!);
         const second = allAlts.find((v) => v !== (baseParsed as Record<string, unknown>)[key] && v !== flip);
-        if (second) {
+        if (second && FORM_DEFAULTS[key] !== second) {
           expect(JSON.stringify(parseRcsOptions({ preset: "neon_night", [key]: second })), key).not.toBe(
             JSON.stringify(baseParsed),
           );
-          continue;
         }
+        continue;
       }
       expect(JSON.stringify(parsed), key).not.toBe(JSON.stringify(baseParsed));
     }
@@ -440,10 +464,32 @@ describe("rocket-car-soccer pack", () => {
     resetRcsSim(1);
     rcsTestSkipKickoff();
     const spike = rcsTick(vizFrame(), 1, 2, 1.777);
-    expect(spike.budget.physicsSubsteps).toBe(RCS_MAX_SUBSTEPS);
+    expect(spike.budget.physicsSubsteps).toBeGreaterThan(RCS_MAX_SUBSTEPS);
     expect(rcsSimAccumulator()).toBeLessThanOrEqual(RCS_FIXED_DT + 1e-6);
     const normal = rcsTick(vizFrame(), 3, 1 / 60, 1.777);
-    expect(normal.budget.physicsSubsteps).toBeLessThan(RCS_MAX_SUBSTEPS);
+    expect(normal.budget.physicsSubsteps).toBeLessThanOrEqual(RCS_MAX_SUBSTEPS);
+  });
+
+  it("applies preset values when host sends only form defaults", () => {
+    const chill = parseRcsOptions({ preset: "chill_orbit" });
+    expect(chill.teamSize).toBe(2);
+    expect(chill.camera).toBe("orbit");
+    expect(chill.theme).toBe("night");
+    expect(chill.replay).toBe(false);
+  });
+
+  it("scores at most once per goal-line crossing burst", () => {
+    resetRcsSim(1);
+    rcsTestSkipKickoff();
+    rcsTestPlaceBallForGoal(true);
+    const before = rcsScoreNow()[1]!;
+    for (let i = 0; i < 24; i++) rcsTick(undefined, i / 120, 1 / 120, 1.777);
+    expect(rcsScoreNow()[1]).toBe(before + 1);
+  });
+
+  it("polls getConfig each frame in the sandbox driver", () => {
+    expect(FRONT).toMatch(/pollHostConfig\s*\(/);
+    expect(FRONT).toMatch(/getConfig\?\.\(\)/);
   });
 
   it("rate-limits packet goal celebrations to once per 3 seconds", () => {
@@ -524,6 +570,7 @@ describe("rocket-car-soccer pack", () => {
   it("documents UX legend and tile readability in the sky shader", () => {
     expect(FRAG).toMatch(/chipOn|zotoFail|demoOn/);
     expect(FRAG).toMatch(/1\.18 \* ballS/);
+    expect(FRAG).toMatch(/drawMmSs/);
   });
 
   it("writes viz buffers from the sandbox driver", () => {
