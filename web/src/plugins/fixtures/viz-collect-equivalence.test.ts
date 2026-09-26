@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildCollectEquivalenceState,
   captureCollectEquivalenceFrame,
-  COLLECT_EQUIVALENCE_FLOW_COUNT,
   COLLECT_EQUIVALENCE_FRAMES,
   frameTalkersForCollectEquivalence,
   type CollectEquivalenceFrame,
