@@ -1,7 +1,30 @@
+import { vizWallMs } from "../core/viz-clock";
 import type { MonoMs } from "../core/viz-time";
 
 /** Reused wall parts for every nixie tile on the wall (one formatter path). */
 export const nixieWallPartsScratch = { h: 0, m: 0, s: 0 };
+
+/** One `Date` for real wall display: `setTime` each frame, field reads once per wall second. */
+const realWallDate = new Date(0);
+let realWallBooted = false;
+let realWallLastSecKey = -1;
+
+export function bootNixieRealWallClock(): void {
+  realWallBooted = true;
+}
+
+export function resetNixieRealWallClockForTests(): void {
+  realWallLastSecKey = -1;
+  realWallBooted = false;
+  nixieWallPartsScratch.h = 0;
+  nixieWallPartsScratch.m = 0;
+  nixieWallPartsScratch.s = 0;
+}
+
+/** Test hook: the singleton wall `Date` (same instance every frame after boot). */
+export function nixieRealWallDateSingleton(): Date {
+  return realWallDate;
+}
 
 /** Real wall clock: local `Date` fields (no epoch math for display). */
 export function localWallPartsFromDate(d: Date): { h: number; m: number; s: number } {
@@ -9,11 +32,17 @@ export function localWallPartsFromDate(d: Date): { h: number; m: number; s: numb
 }
 
 export function fillRealWallPartsScratch(wallMs?: number): typeof nixieWallPartsScratch {
-  const d = wallMs !== undefined ? new Date(wallMs) : new Date();
-  const p = localWallPartsFromDate(d);
-  nixieWallPartsScratch.h = p.h;
-  nixieWallPartsScratch.m = p.m;
-  nixieWallPartsScratch.s = p.s;
+  if (!realWallBooted) bootNixieRealWallClock();
+  const ms = wallMs !== undefined ? Number(wallMs) : Number(vizWallMs());
+  realWallDate.setTime(ms);
+  const secKey = Math.floor(ms / 1000);
+  if (secKey !== realWallLastSecKey) {
+    realWallLastSecKey = secKey;
+    const p = localWallPartsFromDate(realWallDate);
+    nixieWallPartsScratch.h = p.h;
+    nixieWallPartsScratch.m = p.m;
+    nixieWallPartsScratch.s = p.s;
+  }
   return nixieWallPartsScratch;
 }
 

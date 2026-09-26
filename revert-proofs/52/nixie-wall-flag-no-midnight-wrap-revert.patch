@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/nixie-wall-parts.ts b/web/src/plugins/nixie-wall-parts.ts
+--- a/web/src/plugins/nixie-wall-parts.ts
++++ b/web/src/plugins/nixie-wall-parts.ts
+@@ -70,7 +70,6 @@ export function devWallFlagClockActive(): boolean {
+ export function fillDevWallFlagPartsScratch(mono: MonoMs): typeof nixieWallPartsScratch {
+   const elapsed = Math.floor((Number(mono) - Number(flagAnchorMono)) / 1000);
+   let total = flagStartH * 3600 + flagStartM * 60 + elapsed;
+-  total = ((total % 86_400) + 86_400) % 86_400;
+   nixieWallPartsScratch.h = Math.floor(total / 3600);
+   nixieWallPartsScratch.m = Math.floor((total % 3600) / 60);
+   nixieWallPartsScratch.s = total % 60;

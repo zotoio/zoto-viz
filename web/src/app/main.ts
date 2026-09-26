@@ -98,6 +98,7 @@ import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
+import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
 import {
   bindMosaicTileBudgetLines,
   mosaicTileBudgetLines,
@@ -1112,6 +1113,7 @@ setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
   const bootScope = mosaic && mosaic.on ? mosaic.tileIds : ["main"];
   const bootKey = (bootScope.length ? bootScope : ["main"]).join("\0");
   vizTileScopeKey = bootKey;
+  bootNixieRealWallClock();
   applyDevVizWallFlagsOnBuild(location.search, bootScope.length ? bootScope : ["main"]);
 }
 
