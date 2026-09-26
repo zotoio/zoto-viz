@@ -7,8 +7,8 @@ import {
 } from "./tile-health";
 import { applyTileExemptReset, graceUntilFrom, tileHealthExempt } from "./tile-health-exempt";
 
-function rgbaFill(r: number, g: number, b: number): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(16 * 16 * 4);
+function rgbaFill(r: number, g: number, b: number): Uint8Array {
+  const out = new Uint8Array(16 * 16 * 4);
   for (let i = 0; i < 16 * 16; i++) {
     out[i * 4] = r;
     out[i * 4 + 1] = g;

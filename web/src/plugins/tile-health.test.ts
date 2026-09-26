@@ -13,8 +13,8 @@ import {
 } from "./tile-health";
 import { readTileHealErrors, writeTileHealErrors } from "./tile-health-monitor";
 
-function rgbaFill(r: number, g: number, b: number, n = 16 * 16): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(n * 4);
+function rgbaFill(r: number, g: number, b: number, n = 16 * 16): Uint8Array {
+  const out = new Uint8Array(n * 4);
   for (let i = 0; i < n; i++) {
     out[i * 4] = r;
     out[i * 4 + 1] = g;
@@ -24,8 +24,8 @@ function rgbaFill(r: number, g: number, b: number, n = 16 * 16): Uint8ClampedArr
   return out;
 }
 
-function noisyPatch(): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(16 * 16 * 4);
+function noisyPatch(): Uint8Array {
+  const out = new Uint8Array(16 * 16 * 4);
   for (let i = 0; i < 16 * 16; i++) {
     const v = (i * 37 + (i % 5) * 11) % 40;
     out[i * 4] = 8 + v;

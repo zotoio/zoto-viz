@@ -22,6 +22,9 @@ export const TILE_HEAL_PIN_COUNT = 3;
 export const TILE_HEAL_BACKOFF_BASE_MS = 2000;
 export const TILE_HEAL_FALLBACK_MODE = "plugin:topology";
 
+/** 16×16 RGBA sample (WebGL PBO and 2D canvas paths both use Uint8Array). */
+export type TilePatchBytes = Uint8Array;
+
 export type HealStep =
   | "resend-frame"
   | "restart-pack"
@@ -51,7 +54,7 @@ export interface TileHealthSignals {
 }
 
 export interface TileEmptyInput {
-  patch: Uint8Array | Uint8ClampedArray;
+  patch: TilePatchBytes;
   signals: TileHealthSignals;
   lastCheckPictureSerial: number;
 }
@@ -69,7 +72,7 @@ export function classifyTileEmpty(input: TileEmptyInput): EmptyReason | null {
 }
 
 export function patchIsNearUniform(
-  data: Uint8Array | Uint8ClampedArray,
+  data: TilePatchBytes,
   spreadThreshold = TILE_UNIFORM_SPREAD,
   stdThreshold = TILE_UNIFORM_STDDEV,
 ): boolean {
@@ -96,13 +99,13 @@ export function patchIsNearUniform(
 export class TilePatchSampler {
   readonly canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null = null;
-  private readonly buf: Uint8ClampedArray;
+  private readonly buf: TilePatchBytes;
 
   constructor(size = TILE_PATCH) {
     this.canvas = document.createElement("canvas");
     this.canvas.width = size;
     this.canvas.height = size;
-    this.buf = new Uint8ClampedArray(size * size * 4);
+    this.buf = new Uint8Array(size * size * 4);
   }
 
   private ensureCtx(): CanvasRenderingContext2D | null {
@@ -112,7 +115,7 @@ export class TilePatchSampler {
     return this.ctx;
   }
 
-  get scratchBuffer(): Uint8ClampedArray {
+  get scratchBuffer(): TilePatchBytes {
     return this.buf;
   }
 
@@ -122,7 +125,7 @@ export class TilePatchSampler {
     sy: number,
     sw: number,
     sh: number,
-  ): Uint8ClampedArray {
+  ): TilePatchBytes {
     const ctx = this.ensureCtx();
     const s = this.canvas.width;
     if (!ctx) return this.buf;
@@ -301,6 +304,6 @@ export function patchOrigin(vp: Viewport, patch = TILE_PATCH): { x: number; y: n
 }
 
 /** When true, an empty check was skipped (async read pending) — must not advance the empty streak. */
-export function isSkippedHealthSample(patch: Uint8Array | null | undefined): boolean {
+export function isSkippedHealthSample(patch: TilePatchBytes | null | undefined): boolean {
   return patch == null;
 }

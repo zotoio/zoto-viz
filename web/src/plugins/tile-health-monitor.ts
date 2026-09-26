@@ -8,6 +8,7 @@ import {
   TILE_LOAD_GRACE_MS,
   TILE_PATCH,
   TilePatchSampler,
+  type TilePatchBytes,
   freshTileHealthState,
   resetTileHealthProgress,
   stepTileHealth,
@@ -228,7 +229,7 @@ export class TileHealthMonitor {
     tileId: string,
     now: number,
     sc: NetScene,
-    patch: Uint8Array | Uint8ClampedArray,
+    patch: TilePatchBytes,
   ): void {
     const prev = this.stateFor(tileId);
     const spec = this.deps.packFor(tileId);
@@ -259,7 +260,7 @@ export class TileHealthMonitor {
     if (outcome.heal) void this.deps.onHeal(tileId, outcome.heal, outcome.state);
   }
 
-  private sampleScene(sc: NetScene, now: number): Uint8Array | Uint8ClampedArray | null {
+  private sampleScene(sc: NetScene, now: number): TilePatchBytes | null {
     const vp = sc.lastViewport;
     if (!vp || vp.w < 4 || vp.h < 4) return null;
     const host = this.deps.host;
