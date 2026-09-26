@@ -42,7 +42,6 @@ describe("mosaic pack coalesce", () => {
       rf: [],
       headlines: [],
     } as VizDataFrame;
-    const metrics = { onFrameCalls: 0, drawCalls: 0 };
     const budget = { stats: { lastMs: 1, overBudget: 0, skipped: 3, total: 4 } };
     const spy = vi.spyOn(packHost, "runPackFrameHandler").mockImplementation((_packId, _frame, handlers) => {
       handlers.writeBuffer(0, [1, 2, 3]);
@@ -57,12 +56,48 @@ describe("mosaic pack coalesce", () => {
       }) as never,
       optsFor: () => ({}),
       budget,
-      metrics,
     });
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(metrics.onFrameCalls).toBe(1);
-    expect(metrics.drawCalls).toBe(1);
     expect(uboBySlot.size).toBe(2);
     expect(budget.stats.skipped).toBe(3);
+  });
+
+  it("fan-out: one pack onFrame and one sandbox onFrame, UBO drawn on every duplicate tile", () => {
+    const uboBySlot: string[] = [];
+    const mosaic = {
+      tileIds: ["plugin:star-sines", "plugin:star-sines!1"],
+      graphScene: (slot: string) => ({
+        setPluginUboBuffer: () => { uboBySlot.push(slot); },
+        setPluginUniform: () => true,
+        setPackCoalesce: () => {},
+      }),
+    };
+    const onSandboxFrame = vi.fn();
+    const onFrameSpy = vi.spyOn(packHost, "runPackFrameHandler").mockImplementation((_packId, _frame, handlers) => {
+      handlers.writeBuffer(0, [1, 2, 3]);
+    });
+    deliverCoalescedMosaicPacks({
+      mosaic,
+      frame: {
+        t: 1,
+        audio: 0.1,
+        packets: [],
+        talkers: [],
+        rf: [],
+        headlines: [],
+      } as VizDataFrame,
+      modeById: (id) => ({ pluginId: "star-sines", id }) as never,
+      pluginSpecForMode: () => ({
+        id: "star-sines",
+        viz: { maxBuffers: 1, maxBufferFloats: 32, maxParticles: 0, uniforms: [] },
+      }) as never,
+      optsFor: () => ({}),
+      budget: { stats: { lastMs: 0, overBudget: 0, skipped: 0, total: 0 } },
+      onSandboxFrame,
+    });
+    expect(onFrameSpy).toHaveBeenCalledTimes(1);
+    expect(onSandboxFrame).toHaveBeenCalledTimes(1);
+    expect(uboBySlot.filter((s) => s === "plugin:star-sines")).toHaveLength(2);
+    expect(uboBySlot).toContain("plugin:star-sines!1");
   });
 });

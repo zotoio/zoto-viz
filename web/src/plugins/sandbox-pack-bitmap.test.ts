@@ -166,6 +166,64 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     box.unload();
   });
 
+  it("closes the first bitmap when a second arrives before the host draws", () => {
+    const lane = sandboxBitmapLane("pack-queue");
+    const a = mockBitmap();
+    const b = mockBitmap();
+    lane.ingest(a, lane.generation);
+    lane.ingest(b, lane.generation);
+    expect(a.close).toHaveBeenCalledOnce();
+    expect(lane.peek()).toBe(b);
+    expect(lane.openCount()).toBe(1);
+    lane.teardown();
+  });
+
+  it("closes a bitmap delivered after lane teardown", () => {
+    const lane = sandboxBitmapLane("pack-late");
+    const staleGen = lane.generation;
+    lane.teardown();
+    const bmp = mockBitmap();
+    lane.ingest(bmp, staleGen);
+    expect(bmp.close).toHaveBeenCalledOnce();
+    expect(lane.peek()).toBeNull();
+  });
+
+  it("closes an async bitmap ingested with a stale generation after teardown", () => {
+    const lane = sandboxBitmapLane("async");
+    const staleGen = lane.generation;
+    lane.teardown();
+    const bmp = mockBitmap();
+    lane.ingest(bmp, staleGen);
+    expect(bmp.close).toHaveBeenCalledOnce();
+    expect(lane.peek()).toBeNull();
+  });
+
+  it("rejects spoofed publishBitmap (wrong source window) and closes the bitmap", async () => {
+    const box = new PluginSandbox();
+    const seen: ImageBitmap[] = [];
+    box.handlers = { publishBitmap: (_id, bmp) => seen.push(bmp) };
+    await box.load("secure", "globalThis.ok = true;", ["viz.write"], {});
+    const bmp = mockBitmap();
+    box["onMessage"]({
+      source: window,
+      data: { source: "zoto-viz-plugin", type: "publishBitmap", payload: { bitmap: bmp } },
+    } as MessageEvent);
+    expect(seen).toHaveLength(0);
+    expect(bmp.close).toHaveBeenCalledOnce();
+    box.unload();
+  });
+
+  it("keeps failure placeholder until a successful publish, then clears it", () => {
+    const lane = sandboxBitmapLane("pack-sticky");
+    lane.markPublishFailed();
+    expect(lane.shouldShowFailurePlaceholder()).toBe(true);
+    const bmp = mockBitmap();
+    lane.ingest(bmp, lane.generation);
+    expect(lane.shouldShowFailurePlaceholder()).toBe(false);
+    lane.finishHostFrame();
+    lane.teardown();
+  });
+
   it("routes publishBitmapFailed from the sandbox iframe message", async () => {
     const box = new PluginSandbox();
     const lane = sandboxBitmapLane("pulse");

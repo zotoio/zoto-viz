@@ -77,8 +77,14 @@ function makeStrip(): MosaicTileHudStrip {
 export class MosaicTileHudLayer {
   private strips = new Map<string, MosaicTileHudStrip>();
 
-  sync(tileSlotIds: readonly string[], paneFor: (slot: string) => HTMLElement | null): void {
-    const want = new Set(tileSlotIds);
+  sync(
+    tileSlotIds: readonly string[],
+    paneFor: (slot: string) => HTMLElement | null,
+    packFor?: (slot: string) => VizDemoPackId | null,
+  ): void {
+    const want = new Set(
+      tileSlotIds.filter((slot) => !packFor || packFor(slot)),
+    );
     for (const id of [...this.strips.keys()]) {
       if (!want.has(id)) {
         this.strips.get(id)!.detach();
@@ -86,6 +92,7 @@ export class MosaicTileHudLayer {
       }
     }
     for (const slot of tileSlotIds) {
+      if (packFor && !packFor(slot)) continue;
       const pane = paneFor(slot);
       if (!pane) continue;
       let strip = this.strips.get(slot);

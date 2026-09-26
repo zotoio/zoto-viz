@@ -166,8 +166,13 @@ export class PluginSandbox {
 
   private onMessage = (ev: MessageEvent): void => {
     if (!this.iframe) return;
-    if (ev.source !== this.iframe.contentWindow) return;
     const d = ev.data as HostMsg | undefined;
+    if (ev.source !== this.iframe.contentWindow) {
+      if (d?.type === "publishBitmap" && d.payload?.bitmap instanceof ImageBitmap) {
+        d.payload.bitmap.close();
+      }
+      return;
+    }
     if (!d || typeof d !== "object" || d.source !== "zoto-viz-plugin" || typeof d.type !== "string") return;
     if (!hostAllows(d.type, this.caps)) return;
     if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);

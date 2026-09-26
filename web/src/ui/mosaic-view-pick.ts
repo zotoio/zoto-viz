@@ -74,7 +74,7 @@ function promptDuplicateChoice(viewId: string, tileSlotIds: readonly string[]): 
       const b = document.createElement("button");
       b.type = "button";
       b.className = "mosaic-pick-btn";
-      b.textContent = `Move from tile ${tileN}`;
+      b.textContent = `Swap with tile ${tileN}`;
       b.addEventListener("click", () => done({ kind: "move", tileIndex: tileN }));
       return b;
     });

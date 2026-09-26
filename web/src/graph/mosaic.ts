@@ -474,10 +474,9 @@ export class Mosaic {
   }
 
   /** Change one pane to a catalog view id (allocates a tile slot; duplicates need an explicit pick). */
-  setPaneView(fromSlot: string, viewId: string): boolean {
-    if (!this.tree || !viewId || mosaicTileViewId(fromSlot) === viewId) return false;
-    void this.pickPaneView(fromSlot, viewId);
-    return true;
+  setPaneView(fromSlot: string, viewId: string): Promise<boolean> {
+    if (!this.tree || !viewId || mosaicTileViewId(fromSlot) === viewId) return Promise.resolve(false);
+    return this.pickPaneView(fromSlot, viewId);
   }
 
   async pickPaneView(fromSlot: string, viewId: string): Promise<boolean> {

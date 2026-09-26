@@ -5,7 +5,13 @@ import { mosaicPlacedTileIndices, mosaicTileViewId } from "./mosaic-tile-id";
 import { normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { runPackFrameHandler, type VizPackHandlers } from "../plugins/viz-pack-host";
 import type { PluginView } from "../plugins/plugin";
-import { bindVizWriterCore, type VizBufferWriter, type VizDataFrame, type VizFrameBudgetStats } from "../plugins/viz-host";
+import {
+  bindVizWriterCore,
+  VizFrameBudget,
+  type VizBufferWriter,
+  type VizDataFrame,
+  type VizFrameBudgetStats,
+} from "../plugins/viz-host";
 import { vizContractFor } from "../plugins/plugin";
 
 export type PackGroupKey = string;
@@ -60,9 +66,16 @@ export function primaryTileIndex(tileSlotIds: readonly string[], viewId: string)
 }
 
 const groupWriters = new Map<PackGroupKey, VizBufferWriter>();
+const packBudgets = new Map<PackGroupKey, VizFrameBudget>();
 
 export function resetMosaicPackCoalesceWriters(): void {
   groupWriters.clear();
+  packBudgets.clear();
+}
+
+/** Per-pack handler timing for mosaic HUD (skip rate still follows the shared viz budget). */
+export function mosaicPackHudStats(key: PackGroupKey): VizFrameBudgetStats | null {
+  return packBudgets.get(key)?.stats ?? null;
 }
 
 function writerForGroup(key: PackGroupKey, spec: PluginView | null): VizBufferWriter | null {
@@ -76,11 +89,6 @@ function writerForGroup(key: PackGroupKey, spec: PluginView | null): VizBufferWr
   return w;
 }
 
-export type MosaicPackCoalesceMetrics = {
-  onFrameCalls: number;
-  drawCalls: number;
-};
-
 export type MosaicPackBudget = {
   stats: VizFrameBudgetStats;
 };
@@ -93,9 +101,7 @@ export function deliverCoalescedMosaicPacks(input: {
   optsFor: (m: ViewMode) => Record<string, string>;
   budget: MosaicPackBudget;
   onSandboxFrame?: (pluginId: string, frame: VizDataFrame) => void;
-  metrics?: MosaicPackCoalesceMetrics;
 }): void {
-  const metrics = input.metrics ?? { onFrameCalls: 0, drawCalls: 0 };
   const groups = mosaicPackGroups(input.mosaic.tileIds, input.modeById);
   for (const group of groups) {
     const primary = input.mosaic.graphScene(group.primarySlot);
@@ -119,11 +125,15 @@ export function deliverCoalescedMosaicPacks(input: {
       },
     };
 
-    metrics.onFrameCalls += 1;
+    let budget = packBudgets.get(group.key);
+    if (!budget) {
+      budget = new VizFrameBudget();
+      packBudgets.set(group.key, budget);
+    }
+    const t0 = performance.now();
     runPackFrameHandler(group.packId, input.frame, handlers, input.optsFor(mode));
+    budget.record(performance.now() - t0);
     if (group.pluginId) input.onSandboxFrame?.(group.pluginId, input.frame);
-
-    metrics.drawCalls += 1;
 
     const ubo = writer.ubo;
     for (const slot of group.slots) {

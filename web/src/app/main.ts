@@ -104,8 +104,12 @@ import { PluginSandbox, consentHash, hashConsented, tsPluginsAllowed } from "../
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { paintFeedState } from "./feed-paint";
-import { mosaicTileViewId } from "../graph/mosaic-tile-id";
-import { deliverCoalescedMosaicPacks, mosaicPackGroups } from "../graph/mosaic-pack-coalesce";
+import { mosaicTileViewId, mosaicWallUsesView } from "../graph/mosaic-tile-id";
+import {
+  deliverCoalescedMosaicPacks,
+  mosaicPackGroups,
+  mosaicPackHudStats,
+} from "../graph/mosaic-pack-coalesce";
 import { laneRegistry, sandboxBitmapLane } from "../plugins/sandbox-bitmap";
 import { ensurePackReviewed } from "./pack-consent";
 import { MosaicTileHudLayer } from "../ui/mosaic-tile-hud";
@@ -574,9 +578,20 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   return ensurePackReviewed(spec);
 }
 
+function syncSandboxDuplicateTiles(): void {
+  const loaded = sandbox.loadedPluginId;
+  if (!loaded || !mosaic?.on) {
+    sandbox.setDuplicateTileCount(0);
+    return;
+  }
+  const n = mosaic.tileIds.filter((id) => modeById(mosaicTileViewId(id)).pluginId === loaded).length;
+  sandbox.setDuplicateTileCount(n);
+}
+
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
+    syncSandboxDuplicateTiles();
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
@@ -607,6 +622,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     if (m.pluginId === spec.id) {
       vizHud.setActive(spec.id, spec.name);
     }
+    syncSandboxDuplicateTiles();
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
     console.warn("zoto-viz plugin runtime:", e);
@@ -727,8 +743,9 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
         const target = mosaic.graphScene(id);
         if (!target) continue;
         const tileSky = mosaic.paneSky(id);
-        const pane = pluginSpecForMode(id);
-        const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
+        const viewId = mosaicTileViewId(id);
+        const pane = pluginSpecForMode(viewId);
+        const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(viewId)?.backdrop === "plugin"));
         await loadPluginSkyOnto(target, pane, wantPlugin);
       }
     } finally {
@@ -1022,7 +1039,6 @@ function feed(m: StateMsg): void {
     const buildFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
-    const coalesceMetrics = { onFrameCalls: 0, drawCalls: 0 };
     const sandboxedPacks = new Set<string>();
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
@@ -1035,7 +1051,6 @@ function feed(m: StateMsg): void {
           pluginSpecForMode,
           optsFor,
           budget: { stats: vizBudget.stats },
-          metrics: coalesceMetrics,
           onSandboxFrame: (pluginId) => {
             if (sandboxedPacks.has(pluginId)) return;
             sandboxedPacks.add(pluginId);
@@ -1055,13 +1070,20 @@ function feed(m: StateMsg): void {
     }, buildFrame);
     if (mosaic?.on && mosaicDemoPacks) {
       const wall = mosaic;
-      mosaicTileHud.sync(wall.tileIds, (slot) => wall.paneElement(slot) ?? null);
+      mosaicTileHud.sync(
+        wall.tileIds,
+        (slot) => wall.paneElement(slot) ?? null,
+        (slot) => normalizeVizDemoPackId(modeById(mosaicTileViewId(slot)).pluginId),
+      );
       const now = performance.now();
       for (const group of mosaicPackGroups(wall.tileIds, (id) => modeById(mosaicTileViewId(id)))) {
         if (!group.packId) continue;
         const spec = pluginSpecForMode(mosaicTileViewId(group.primarySlot));
+        const packStats = mosaicPackHudStats(group.key);
         mosaicTileHud.tickForPack(group.packId, spec?.name ?? group.packId, group.slots, {
-          stats: vizBudget.stats,
+          stats: packStats
+            ? { ...vizBudget.stats, lastMs: packStats.lastMs, total: packStats.total, overBudget: packStats.overBudget }
+            : vizBudget.stats,
           frame: vizBudget.lastBuilt,
           state: shown,
           now,
@@ -1180,7 +1202,10 @@ mosaic = new Mosaic({
     if (theme) applyTheme(theme.id);
     applyViewLook();
   },
-  onLayout: (patch) => settings.applyMosaicLayout(patch),
+  onLayout: (patch) => {
+    settings.applyMosaicLayout(patch);
+    syncSandboxDuplicateTiles();
+  },
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
@@ -1228,6 +1253,7 @@ settings.addAnimation((a) => {
     mosaic!.setTheme(scene.currentTheme);
   } else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
   const key = `${a.mosaic}:${a.hero}:${(a.mosaicTiles?.length ? a.mosaicTiles : []).join(",")}:${a.mosaicMaxId ?? ""}`;
+  if (a.mosaic === "off") mosaicTileHud.clear();
   if (key !== mosaic!.layoutKey) {
     if (a.mosaic !== "off" && activeArcade) {
       arcade[activeArcade].view.stop();
@@ -1698,11 +1724,17 @@ async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
   const lockLayout = !aiMosaicLayoutOn();
   if (lockLayout && p.anim) p.anim = stripMosaicLayout(p.anim);
   const cur = collectSettings();
-  if (lockLayout && mosaic?.on && p.mode && !mosaic.tileIds.includes(p.mode)) {
-    const tiles = [...mosaic.tileIds];
-    const at = Math.max(0, tiles.indexOf(mosaic.focusedId));
-    tiles[at] = p.mode;
-    p.anim = { ...p.anim, mosaicTiles: tiles };
+  if (lockLayout && mosaic?.on && p.mode && typeof p.mode === "string") {
+    const viewId = p.mode;
+    if (!mosaicWallUsesView(mosaic.tileIds, viewId)) {
+      const tiles = [...mosaic.tileIds];
+      const at = Math.max(0, tiles.indexOf(mosaic.focusedId));
+      const from = tiles[at] ?? tiles[0];
+      if (from) {
+        tiles[at] = viewId;
+        p.anim = { ...p.anim, mosaicTiles: tiles };
+      }
+    }
   }
   const next = mergeAgentPatch(cur, p);
   applySettings(next, { keepLayout: lockLayout });
