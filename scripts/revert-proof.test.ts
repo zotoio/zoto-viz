@@ -525,6 +525,43 @@ describe("revert-proof runner (fixture repo)", () => {
     assertCheckoutUnchanged(root, before);
   });
 
+  it("(j2) describe title containing literal ' > ' selects exactly one test", () => {
+    const root = mkFixture();
+    fs.writeFileSync(
+      path.join(root, "web", "revert-proof", "widget.test.ts"),
+      `import { describe, expect, it } from "vitest";
+import { value } from "../../packages/rp-widget/index.js";
+
+describe("widget > alpha", () => {
+  it("returns one", () => {
+    expect(value()).toBe(1);
+  });
+});
+
+describe("widget", () => {
+  it("returns one", () => {
+    expect(value()).toBe(1);
+  });
+});
+`,
+    );
+    runGit(root, ["add", "web/revert-proof/widget.test.ts"]);
+    runGit(root, ["commit", "-m", "describe title with gt"]);
+    writeRow(root, "99", "describe-gt", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "widget > alpha > returns one",
+      description: "Describe title contains literal > separator",
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "describe-gt"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    assertNoRevertProofWorktrees(root);
+    assertCheckoutUnchanged(root, before);
+  });
+
   it("(j) testName with regex metacharacters selects exactly one test", () => {
     const root = mkFixture();
     fs.writeFileSync(
@@ -532,10 +569,7 @@ describe("revert-proof runner (fixture repo)", () => {
       `import { describe, expect, it } from "vitest";
 import { value } from "../../packages/rp-widget/index.js";
 
-describe("widget", () => {
-  it("returns one", () => {
-    expect(value()).toBe(1);
-  });
+describe("widget (beta)", () => {
   it("talkers[].failed", () => {
     expect(value()).toBe(1);
   });
@@ -547,7 +581,7 @@ describe("widget", () => {
     writeRow(root, "99", "regex-title", goodPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "widget > talkers[].failed",
+      testName: "widget (beta) > talkers[].failed",
       description: "Bracket title must not be treated as RegExp",
     });
     commitRevertProofs(root);
@@ -1013,8 +1047,11 @@ const wrongOuterContextPatch = `--- a/packages/rp-widget/index.js
 describe("vitest testName escaping", () => {
   it("escapes and anchors fullTestName for -t", async () => {
     const mod = await import("./revert-proof.mjs");
-    expect(mod.vitestTestNamePattern("widget > talkers[].failed")).toBe(
-      "^widget > talkers\\[\\]\\.failed$",
+    expect(mod.vitestTestNamePattern("widget > alpha > returns one")).toBe(
+      "^widget > alpha > returns one$",
+    );
+    expect(mod.vitestTestNamePattern("widget (beta) > talkers[].failed")).toBe(
+      "^widget \\(beta\\) > talkers\\[\\]\\.failed$",
     );
     expect(mod.escapeVitestTestNamePattern("a(b)*+?")).toBe("a\\(b\\)\\*\\+\\?");
   });

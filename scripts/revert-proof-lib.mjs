@@ -110,10 +110,9 @@ export function escapeVitestTestNamePattern(testName) {
   return testName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
-/** Vitest `-t` is a RegExp; anchor the full `describe > … > test` name. */
+/** Vitest `-t` is a RegExp; anchor the sidecar full name verbatim (` > ` segments included). */
 export function vitestTestNamePattern(fullTestName) {
-  const normalized = fullTestName.replace(/\s*>\s*/g, " > ").trim();
-  return `^${escapeVitestTestNamePattern(normalized)}$`;
+  return `^${escapeVitestTestNamePattern(fullTestName)}$`;
 }
 
 export function pytestNodeId(testFile, testName) {

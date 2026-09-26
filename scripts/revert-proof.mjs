@@ -958,7 +958,13 @@ function countVitestExecuted(report) {
         continue;
       }
       executed += 1;
-      const fullName = t.fullName || t.title;
+      // Vitest 5's JSON reporter flattens nested names with spaces in
+      // `fullName`. Rebuild the sidecar's `describe > … > test` form from
+      // the structured fields so literal ` > ` text in a title stays intact.
+      const fullName =
+        Array.isArray(t.ancestorTitles) && typeof t.title === "string"
+          ? [...t.ancestorTitles, t.title].join(" > ")
+          : t.fullName || t.title;
       ranTests.push({ fullName, status: t.status });
       if (t.status === "passed") passed += 1;
       if (t.status === "failed") {
@@ -973,13 +979,6 @@ function countVitestExecuted(report) {
   return { executed, passed, failed, suiteError: null, failedAssertions, ranTests };
 }
 
-function normalizeVitestFullName(name) {
-  return String(name)
-    .replace(/\s*>\s*/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function assertVitestTestSelection(slug, phase, meta, counts) {
   const ran = counts.ranTests ?? [];
   if (ran.length !== 1) {
@@ -987,14 +986,10 @@ function assertVitestTestSelection(slug, phase, meta, counts) {
       `row ${slug}: ${phase} must run exactly 1 test (got ${ran.length})`,
     );
   }
-  const expected = meta.testName.replace(/\s*>\s*/g, " > ").trim();
   const ranName = ran[0].fullName;
-  if (
-    ranName !== expected &&
-    normalizeVitestFullName(ranName) !== normalizeVitestFullName(meta.testName)
-  ) {
+  if (ranName !== meta.testName) {
     throw new Error(
-      `row ${slug}: ${phase} ran "${ranName}" but sidecar expects "${expected}"`,
+      `row ${slug}: ${phase} ran "${ranName}" but sidecar expects "${meta.testName}"`,
     );
   }
 }
