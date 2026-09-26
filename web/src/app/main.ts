@@ -72,7 +72,7 @@ import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
 import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
-  buildVizFrameForPlugin, defaultVizContract,
+  buildVizFrameForPlugin, buildVizFrameForV1AdapterDelivery, defaultVizContract,
 } from "../plugins/viz-host";
 import {
   TypeSafeHost,
@@ -452,9 +452,14 @@ const vizFrameScope = new VizFrameScopeCache({
   illustratedSourceBind,
   syncAdapterViewOpts: (opts) => vizV1FrameAdapter.syncViewOpts(opts),
 });
+const vizHostPerFrameInput = {
+  mode: modeById("topology"),
+  currentOpts: {} as Record<string, string>,
+  scope: vizFrameScope,
+};
 
-function syncVizFrameScope(m: ViewMode, opts: Record<string, string>): void {
-  vizFrameScope.sync(m, opts);
+export function syncVizFrameScope(m: ViewMode, opts: Record<string, string>, effectivePluginId?: string): void {
+  vizFrameScope.sync(m, opts, effectivePluginId);
 }
 
 function syncV1PackAdapter(spec: PluginView | null): void {
@@ -547,7 +552,7 @@ function onPluginFields(): void {
   const m = modeById(modeSel.value);
   const opts = optsFor(m);
   currentOpts = opts;
-  syncVizFrameScope(m, opts);
+  syncVizFrameScope(m, opts, (m.pluginId ?? tsWatchId) || undefined);
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   nestCams.setLook(opts);
   if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
@@ -823,6 +828,7 @@ function applyCypherCicPanelSession(m: ViewMode): void {
       settings.setFeedOn(end.restoreFeed, { persist: false });
       settings.setChatOn(end.restoreChat, { persist: false });
       cypherCicPanelSession = null;
+      settings.clearCypherCicPanelPersistOverrides();
     }
     return;
   }
@@ -832,6 +838,7 @@ function applyCypherCicPanelSession(m: ViewMode): void {
     settings.chatSettings.on,
   );
   cypherCicPanelSession = begin.session;
+  settings.setCypherCicPanelPersistOverrides(begin.session.feedOn, begin.session.chatOn);
   if (begin.hideFeed) settings.setFeedOn(false, { persist: false });
   if (begin.hideChat) settings.setChatOn(false, { persist: false });
 }
@@ -842,7 +849,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const opts = optsFor(m);
   const prevMode = liveMode;
   currentOpts = opts;
-  syncVizFrameScope(m, opts);
+  syncVizFrameScope(m, opts, (m.pluginId ?? tsWatchId) || undefined);
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   modeSel.value = m.id;
   localStorage.setItem("zoto-viz.mode", m.id);
@@ -1076,24 +1083,22 @@ function feed(m: StateMsg): void {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
-    const { bind, packOpts: vizPackOpts } = vizFrameHostPerFrameTick({
-      mode,
-      currentOpts,
-      scope: vizFrameScope,
-      optsFor,
-    });
+    vizHostPerFrameInput.mode = mode;
+    vizHostPerFrameInput.currentOpts = currentOpts;
+    const { bind, packOpts: vizPackOpts } = vizFrameHostPerFrameTick(vizHostPerFrameInput);
     const useV1Adapter = vizV1FrameAdapter.hasV1Packs() || active?.viz?.contract === 1;
-    const buildLiveFrame = idle
-      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
-        s,
-        pt,
-        a,
-        idle,
-        useV1Adapter ? 2 : (active?.viz?.contract ?? 1),
-        bind,
-      )
-      : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
-    void ensureVizDevFixtureLoaded();
+    const buildLiveFrame = useV1Adapter
+      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForV1AdapterDelivery(s, pt, a, idle, bind)
+      : idle
+        ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
+          s,
+          pt,
+          a,
+          idle,
+          active?.viz?.contract ?? 1,
+          bind,
+        )
+        : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
     const useDevFixture = import.meta.env.DEV && !!vizFixtureQueryRaw();
     const buildFrame = useDevFixture
       ? (s: StateMsg, pt: number, a: number) => {
@@ -1628,6 +1633,7 @@ settings.prependSection(
   profileHost,
 );
 uiReady = true;
+if (import.meta.env.DEV) void ensureVizDevFixtureLoaded();
 applyViewLook();
 void (async () => {
   const session = await bootSession();

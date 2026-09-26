@@ -20,4 +20,27 @@ describe("cypher-cic saved settings", () => {
     expect(localStorage.getItem(`${prefix}.feed.on`)).toBe("1");
     expect(localStorage.getItem(`${prefix}.chat.on`)).toBe("1");
   });
+
+  it("keeps saved on toggles when feed layout changes during a cypher-cic session collapse", () => {
+    const prefix = "zoto-viz.test";
+    localStorage.setItem(`${prefix}.feed.on`, "1");
+    localStorage.setItem(`${prefix}.chat.on`, "1");
+    localStorage.setItem(`${prefix}.feed.layout`, "list");
+    const snap = new Map<string, string | null>();
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)!;
+      snap.set(key, localStorage.getItem(key));
+    }
+    const settings = new Settings({ storePrefix: prefix, onChange: () => {} });
+    settings.setCypherCicPanelPersistOverrides(true, true);
+    settings.setFeedOn(false, { persist: false });
+    settings.setChatOn(false, { persist: false });
+    settings.applyFeed({ ...settings.feedSettings, layout: "grid" });
+    settings.clearCypherCicPanelPersistOverrides();
+    settings.setFeedOn(true, { persist: false });
+    settings.setChatOn(true, { persist: false });
+    expect(localStorage.getItem(`${prefix}.feed.on`)).toBe("1");
+    expect(localStorage.getItem(`${prefix}.chat.on`)).toBe("1");
+    expect(localStorage.getItem(`${prefix}.feed.layout`)).toBe("grid");
+  });
 });

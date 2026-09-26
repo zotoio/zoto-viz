@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { StateMsg } from "../core/types";
 import type { VizDataFrame } from "./viz-host";
 import {
   VizV1FrameAdapter,
   convertVizFrameV2ToV1,
   defaultV1WorkBudget,
 } from "./viz-v1-frame-adapter";
+import { buildVizFrameForV1AdapterDelivery } from "./viz-host";
 
 function sampleV2(t: number, talkerCount = 6): VizDataFrame {
   const talkers = Array.from({ length: talkerCount }, (_, i) => ({
@@ -80,6 +82,30 @@ describe("VizV1FrameAdapter", () => {
     adapter.syncViewOpts(next);
     expect(adapter.viewOptsSnapshot()).toBe(next);
     expect(adapter.viewOptsSnapshot()).not.toBe(opts);
+  });
+
+  it("maps lifetime talker counts through the host v1 delivery build and adapter", () => {
+    const state: StateMsg = {
+      ts: 100,
+      devices: [
+        { ip: "192.168.1.3", packets: 209, bytes: 1, role: "lan" },
+        { ip: "192.168.1.1", packets: 208, bytes: 1, role: "lan" },
+        { ip: "192.168.1.2", packets: 50, bytes: 1, role: "lan" },
+      ],
+      flows: [
+        { a: "192.168.1.3", b: "192.168.1.1", packets: 100, bytes: 1000, rate_pkt_ab: 273, rate_pkt_ba: 0 },
+        { a: "192.168.1.2", b: "192.168.1.1", packets: 50, bytes: 500, rate_pkt_ab: 202.8, rate_pkt_ba: 0 },
+      ],
+      sources: [],
+    };
+    const hostFrame = buildVizFrameForV1AdapterDelivery(state, 0, 0, { fixture: "host" });
+    const adapter = new VizV1FrameAdapter();
+    const packFrame = adapter.register("probe");
+    adapter.deliver(hostFrame);
+    expect(packFrame.talkers[0]?.id).toBe("192.168.1.3");
+    expect(packFrame.talkers[0]?.rate).toBe(209);
+    expect(packFrame.talkers[1]?.rate).toBe(208);
+    expect(packFrame.talkers[2]?.rate).toBe(50);
   });
 
   it("restores full talker list after a pack splices talkers out", () => {

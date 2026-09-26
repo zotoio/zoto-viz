@@ -183,6 +183,10 @@ export function isSkipPulsing(now: number, pulseUntil: number): boolean {
  * CPU-only demoscene HUD: pack name, one primary metric, rolling skip rate, and
  * pack swap controls. Lives in `#viz-hud` over the scene (no extra GPU pass).
  */
+function setHudText(el: HTMLElement, text: string): void {
+  if (el.textContent !== text) el.textContent = text;
+}
+
 export class VizHud {
   readonly root: HTMLElement;
   private readonly packEl: HTMLElement;
@@ -301,8 +305,8 @@ export class VizHud {
     if (!this.activeId) return;
     const { stats, frame, state, now } = input;
     const metric = vizHudMetric(this.activeId, frame, state);
-    this.metricLabelEl.textContent = metric.label;
-    this.metricValueEl.textContent = metric.value;
+    setHudText(this.metricLabelEl, metric.label);
+    setHudText(this.metricValueEl, metric.value);
 
     if (this.skipNeedsSync) {
       this.lastSkipped = stats.skipped;
@@ -318,22 +322,22 @@ export class VizHud {
     const cutoff = now - SKIP_WINDOW_MS;
     while (this.skipSamples.length && this.skipSamples[0].t < cutoff) this.skipSamples.shift();
 
-    this.skipEl.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, now));
+    setHudText(this.skipEl, formatSkipRate(skipRatePerSec(this.skipSamples, now)));
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
 
     const failBadge = vizFrameFailureBadge(frame);
     if (failBadge) {
       this.degradedEl.hidden = false;
       this.degradedSepAfter.hidden = false;
-      this.degradedEl.textContent = failBadge;
+      setHudText(this.degradedEl, failBadge);
       this.stageFailEl.hidden = false;
-      this.stageFailEl.textContent = failBadge;
+      setHudText(this.stageFailEl, failBadge);
     } else {
       this.degradedEl.hidden = true;
       this.degradedSepAfter.hidden = true;
-      this.degradedEl.textContent = "";
+      setHudText(this.degradedEl, "");
       this.stageFailEl.hidden = true;
-      this.stageFailEl.textContent = "⚠ DEGRADED";
+      setHudText(this.stageFailEl, "⚠ DEGRADED");
     }
   }
 }

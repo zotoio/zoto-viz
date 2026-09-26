@@ -1799,6 +1799,28 @@ export class Settings {
     this.persistDice();
   }
 
+  /** While cypher-cic hides feed/chat, persist layout fields without clobbering saved on toggles. */
+  setCypherCicPanelPersistOverrides(feedOn: boolean, chatOn: boolean): void {
+    this.cypherCicPersistFeedOn = feedOn;
+    this.cypherCicPersistChatOn = chatOn;
+  }
+
+  clearCypherCicPanelPersistOverrides(): void {
+    this.cypherCicPersistFeedOn = undefined;
+    this.cypherCicPersistChatOn = undefined;
+  }
+
+  private cypherCicPersistFeedOn: boolean | undefined;
+  private cypherCicPersistChatOn: boolean | undefined;
+
+  private persistedFeedOn(): boolean {
+    return this.cypherCicPersistFeedOn ?? this.feed.on;
+  }
+
+  private persistedChatOn(): boolean {
+    return this.cypherCicPersistChatOn ?? this.chat.on;
+  }
+
   /** Show or hide the right-hand activity list. Syncs the cog toggle and persists unless `persist` is false. */
   setFeedOn(on: boolean, opts?: { persist?: boolean }): void {
     this.feed.on = on;
@@ -2087,7 +2109,7 @@ export class Settings {
   private persistFeed(): void {
     const p = this.cfg.storePrefix;
     const c = this.feed;
-    localStorage.setItem(`${p}.feed.on`, c.on ? "1" : "0");
+    localStorage.setItem(`${p}.feed.on`, this.persistedFeedOn() ? "1" : "0");
     localStorage.setItem(`${p}.feed.layout`, c.layout);
     localStorage.setItem(`${p}.feed.scope`, c.scope);
     localStorage.setItem(`${p}.feed.source`, c.source);
@@ -2102,7 +2124,7 @@ export class Settings {
   private persistChat(): void {
     const p = this.cfg.storePrefix;
     const c = this.chat;
-    localStorage.setItem(`${p}.chat.on`, c.on ? "1" : "0");
+    localStorage.setItem(`${p}.chat.on`, this.persistedChatOn() ? "1" : "0");
     localStorage.setItem(`${p}.chat.textSize`, String(c.textSize));
     this.onChatChange(c);
     this.cfg.onPersist?.();

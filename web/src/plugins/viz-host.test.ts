@@ -88,6 +88,16 @@ describe("viz contract version negotiation", () => {
     });
   });
 
+  it("blocks string viz.contract values", () => {
+    const r = parseVizContractResult({ ...base, contract: "2" });
+    expect(r?.state).toBe("Blocked");
+  });
+
+  it("blocks boolean viz.contract values", () => {
+    const r = parseVizContractResult({ ...base, contract: true });
+    expect(r?.state).toBe("Blocked");
+  });
+
   it("delivers v1 talker lifetime counts for v1 packs even when flow rates exist", () => {
     const state = minimalState();
     const frame = buildVizFrameForPlugin(state, 0, 0, { fixture: "host" }, 1);

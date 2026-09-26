@@ -50,7 +50,7 @@ Each frame the host sends a **decimated** `VizDataFrame` (see
 
 | Field | Source | Cap |
 | --- | --- | --- |
-| `contract` | `VIZ_CONTRACT_VERSION` (2) on every delivered frame; also on plugin `init` `viz.contract` | — |
+| `contract` | `1` on v1 plugin frames (lifetime talker counts); `2` on host v2 frames and plugin `init` when the pack declares contract 2 | — |
 | `t`, `dt` | monitor timestamp | — |
 | `audio` | scene pulse bass 0..1 | — |
 | `packets[]` | flow proto tallies | 32 |
@@ -63,6 +63,8 @@ Each frame the host sends a **decimated** `VizDataFrame` (see
 
 When `~/.zoto-viz/sys-config.yml` sets `viz_frame_links: false`, the host still
 stamps `contract` but omits `links[]`, `linksDropped`, and `talkers[].failed`.
+When link collection is **on** but no pairs qualify, the host sends **`links: []`**
+(empty array), not a missing key.
 Optional keys: `viz_frame_links` (default `true`), `viz_frame_links_max` (1..256,
 default `64`). Resolved into `state.host.vizFrame` on each `/api/state` snapshot.
 

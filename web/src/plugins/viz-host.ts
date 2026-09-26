@@ -302,12 +302,14 @@ export function mergeVizIdleFrame(live: VizDataFrame, idle: VizIdleConfig): VizD
 
 function parsePackContractVersion(raw: unknown): PackVizContractVersion | "missing" | { blocked: string } {
   if (raw === undefined || raw === null) return "missing";
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+  if (typeof raw !== "number") {
     return { blocked: "viz.contract must be a whole number (1 or 2)." };
   }
-  if (n === 1 || n === 2) return n as PackVizContractVersion;
-  return { blocked: `viz.contract ${n} is not supported; use 1 or 2.` };
+  if (!Number.isFinite(raw) || !Number.isInteger(raw)) {
+    return { blocked: "viz.contract must be a whole number (1 or 2)." };
+  }
+  if (raw === 1 || raw === 2) return raw as PackVizContractVersion;
+  return { blocked: `viz.contract ${raw} is not supported; use 1 or 2.` };
 }
 
 /** Parse plugin.yml ``viz`` block into a normalized contract or a blocked reason. */
@@ -507,6 +509,20 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: Sou
   );
 }
 
+/** Host build used when v1 packs are registered: lifetime talker rates, contract 1 input to the v1 adapter. */
+export function buildVizFrameForV1AdapterDelivery(
+  state: StateMsg,
+  prevTs: number,
+  audio: number,
+  idle: VizIdleConfig | undefined,
+  bind?: SourceBind | Record<string, string>,
+): VizDataFrame {
+  if (idle) return buildVizFrameForPlugin(state, prevTs, audio, idle, 1, bind);
+  const merged = buildVizFrameCore(state, prevTs, audio, bind, true);
+  merged.contract = 1;
+  return merged;
+}
+
 function buildVizFrameCore(
   state: StateMsg,
   prevTs = 0,
@@ -550,7 +566,10 @@ export function buildVizFrameForPlugin(
     buildVizFrameCore(state, prevTs, audio, bind, version < 2),
     idle,
   );
-  if (version < 2) return { ...merged, contract: 1 };
+  if (version < 2) {
+    merged.contract = 1;
+    return merged;
+  }
   return applyVizFrameContractV2(merged, state, resolveVizFrameCollectOpts(state));
 }
 

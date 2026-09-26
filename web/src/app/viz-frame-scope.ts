@@ -24,11 +24,11 @@ export class VizFrameScopeCache {
     this.sourceBind = {};
   }
 
-  sync(mode: ViewMode, opts: Record<string, string>): void {
+  sync(mode: ViewMode, opts: Record<string, string>, effectivePluginId?: string): void {
     this.deps.syncAdapterViewOpts(opts);
     if (this.bindOpts === opts) return;
     this.bindOpts = opts;
-    const demoPack = normalizeVizDemoPackId(mode.pluginId);
+    const demoPack = normalizeVizDemoPackId(effectivePluginId ?? mode.pluginId);
     this.sourceBind = demoPack === "hn-rain" || demoPack === "hn-term"
       ? this.deps.illustratedSourceBind(opts)
       : this.deps.parseSourceBind(opts);

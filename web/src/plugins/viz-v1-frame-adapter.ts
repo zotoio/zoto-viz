@@ -95,8 +95,14 @@ export function convertVizFrameV2ToV1(
   dest.audio = src.audio;
   if (src.demo !== undefined) dest.demo = src.demo;
   else delete dest.demo;
-  if (src.demoSlices) dest.demoSlices = { ...src.demoSlices };
-  else delete dest.demoSlices;
+  if (src.demoSlices) {
+    if (!dest.demoSlices) dest.demoSlices = {};
+    const ds = dest.demoSlices;
+    ds.packets = src.demoSlices.packets;
+    ds.rf = src.demoSlices.rf;
+    ds.talkers = src.demoSlices.talkers;
+    ds.headlines = src.demoSlices.headlines;
+  } else delete dest.demoSlices;
   delete dest.links;
   delete dest.linksDropped;
   delete dest.spectrum;
@@ -173,8 +179,14 @@ function copyWorkIntoPack(work: VizDataFrame, slot: V1PackSlot): void {
   frame.audio = work.audio;
   if (work.demo !== undefined) frame.demo = work.demo;
   else delete frame.demo;
-  if (work.demoSlices) frame.demoSlices = { ...work.demoSlices };
-  else delete frame.demoSlices;
+  if (work.demoSlices) {
+    if (!frame.demoSlices) frame.demoSlices = {};
+    const ds = frame.demoSlices;
+    ds.packets = work.demoSlices.packets;
+    ds.rf = work.demoSlices.rf;
+    ds.talkers = work.demoSlices.talkers;
+    ds.headlines = work.demoSlices.headlines;
+  } else delete frame.demoSlices;
   delete frame.links;
   delete frame.linksDropped;
   delete frame.spectrum;
@@ -242,6 +254,7 @@ export class VizV1FrameAdapter {
   private readonly packs = new Map<string, V1PackSlot>();
   private work: V1PackSlot | null = null;
   private workTalkers: VizTalkerSample[] = preallocateTalkers(VIZ_MAX_TALKER_SAMPLES);
+  private maxTalkersRegistered = 0;
   /** View option snapshot from scope sync; stable between delivers until replaced. */
   private viewOpts: Readonly<Record<string, string>> | null = null;
   /** Incremented once per deliver when at least one v1 pack is registered (tests). */
@@ -265,12 +278,18 @@ export class VizV1FrameAdapter {
   register(packId: string, budget: VizV1WorkBudget = defaultV1WorkBudget()): VizDataFrame {
     const slot = allocV1PackFrame(budget);
     this.packs.set(packId, slot);
+    this.maxTalkersRegistered = Math.max(this.maxTalkersRegistered, budget.maxTalkers);
     return slot.frame;
   }
 
   unregister(packId: string): void {
     this.packs.delete(packId);
-    if (this.packs.size === 0) this.work = null;
+    if (this.packs.size === 0) {
+      this.work = null;
+      this.maxTalkersRegistered = 0;
+    } else {
+      this.maxTalkersRegistered = Math.max(...[...this.packs.values()].map((p) => p.budget.maxTalkers));
+    }
   }
 
   frameFor(packId: string): VizDataFrame | undefined {
@@ -279,12 +298,11 @@ export class VizV1FrameAdapter {
 
   deliver(v2: VizDataFrame): void {
     if (this.packs.size === 0) return;
+    const maxTalkers = this.maxTalkersRegistered;
     if (!this.work) {
-      const maxTalkers = Math.max(...[...this.packs.values()].map((p) => p.budget.maxTalkers));
       this.work = allocV1PackFrame(defaultV1WorkBudget({ maxTalkers }));
     }
     const work = this.work;
-    const maxTalkers = Math.max(...[...this.packs.values()].map((p) => p.budget.maxTalkers));
     convertVizFrameV2ToV1(v2, work.frame, this.workTalkers, maxTalkers);
     this.convertCalls++;
     for (const slot of this.packs.values()) copyWorkIntoPack(work.frame, slot);

@@ -76,8 +76,8 @@ export function buildIdleVizFrame(t: number, dt = 0): VizDataFrame {
     audio: 0.12 + 0.04 * Math.sin(phase),
     packets: DEMO_PACKETS as VizPacketSample[],
     rf: DEMO_RF as VizRfBeacon[],
-    talkers: [...DEMO_TALKERS],
-    links: [...DEMO_LINKS],
+    talkers: DEMO_TALKERS.slice(),
+    links: DEMO_LINKS.slice(),
     headlines: DEMO_HEADLINES as VizHeadline[],
     sys: EMPTY_SYS_TELEMETRY,
   };
@@ -86,11 +86,9 @@ export function buildIdleVizFrame(t: number, dt = 0): VizDataFrame {
 /** Failure demo variant — use in tests/fixtures only, not the default idle feed. */
 export function buildIdleVizFrameFailed(t: number, dt = 0): VizDataFrame {
   const base = buildIdleVizFrame(t, dt);
-  return {
-    ...base,
-    talkers: demoTalkersWithFailed(),
-    sys: { ...EMPTY_SYS_TELEMETRY, failed: IDLE_VIZ_FAILED_SYS },
-  };
+  base.talkers = PINNED_FAILED_TALKERS.slice();
+  base.sys = { ...EMPTY_SYS_TELEMETRY, failed: IDLE_VIZ_FAILED_SYS };
+  return base;
 }
 
 /** Expected HUD DEGRADED copy for {@link buildIdleVizFrameFailed} (strip + stage pill). */

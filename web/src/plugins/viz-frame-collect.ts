@@ -49,11 +49,12 @@ function directionalPacketRate(flow: Flow, ab: boolean): number {
 const talkerIdsScratch = new Set<string>();
 let talkerIdsCacheKey = "";
 const failGaugeScratch = new Map<string, number>();
+const talkersFailedScratch: VizTalkerSample[] = [];
+for (let i = 0; i < 32; i++) talkersFailedScratch.push({ id: "", rate: 0, role: "" });
 
 function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string> {
-  const key = talkers.length <= 8
-    ? talkers.map((t) => t.id).join("\0")
-    : `${talkers.length}\0${[...talkers.map((t) => t.id)].sort().join("\0")}`;
+  let key = `${talkers.length}\0`;
+  for (let i = 0; i < talkers.length; i++) key += `${talkers[i]!.id}\0`;
   if (key !== talkerIdsCacheKey) {
     talkerIdsScratch.clear();
     for (const t of talkers) talkerIdsScratch.add(t.id);
@@ -65,7 +66,7 @@ function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string>
 function talkersWithConnFailed(
   frameTalkers: readonly VizTalkerSample[],
   devices: readonly Device[],
-): VizTalkerSample[] {
+): readonly VizTalkerSample[] {
   failGaugeScratch.clear();
   let any = false;
   for (const d of devices) {
@@ -74,35 +75,68 @@ function talkersWithConnFailed(
       failGaugeScratch.set(d.ip, clamp01(d.conn_fail));
     }
   }
-  if (!any) return [...frameTalkers];
-  const out: VizTalkerSample[] = [];
-  for (const t of frameTalkers) {
+  if (!any) return frameTalkers;
+  const n = frameTalkers.length;
+  talkersFailedScratch.length = n;
+  for (let i = 0; i < n; i++) {
+    const t = frameTalkers[i]!;
+    let slot = talkersFailedScratch[i];
+    if (!slot) {
+      slot = { id: "", rate: 0, role: "" };
+      talkersFailedScratch[i] = slot;
+    }
+    slot.id = t.id;
+    slot.rate = t.rate;
+    slot.role = t.role;
     const live = failGaugeScratch.get(t.id);
-    if (live !== undefined) out.push({ ...t, failed: live });
-    else out.push({ ...t });
+    if (live !== undefined) slot.failed = live;
+    else delete slot.failed;
   }
-  return out;
+  return talkersFailedScratch;
 }
 
 type LinkCandidate = { src: string; dst: string; rate: number };
 
 const linkAggScratch = new Map<string, LinkCandidate>();
+const linkCandidatePool: LinkCandidate[] = [];
+for (let i = 0; i < 128; i++) linkCandidatePool.push({ src: "", dst: "", rate: 0 });
+let linkCandidatePoolUsed = 0;
 
 function linkPairKey(src: string, dst: string): string {
   return `${src}\0${dst}`;
 }
 
-function* linkCandidates(flows: Flow[], talkerIds: ReadonlySet<string>): Generator<LinkCandidate> {
+function borrowLinkCandidate(src: string, dst: string, rate: number): LinkCandidate {
+  const slot = linkCandidatePool[linkCandidatePoolUsed];
+  if (slot) {
+    slot.src = src;
+    slot.dst = dst;
+    slot.rate = rate;
+  } else {
+    linkCandidatePool.push({ src, dst, rate });
+  }
+  linkCandidatePoolUsed++;
+  return linkCandidatePool[linkCandidatePoolUsed - 1]!;
+}
+
+function resetLinkCandidatePool(): void {
+  linkCandidatePoolUsed = 0;
+}
+
+function scanLinkCandidates(flows: Flow[], talkerIds: ReadonlySet<string>): void {
+  resetLinkCandidatePool();
   for (const fl of flows) {
     const aIn = talkerIds.has(fl.a);
     const bIn = talkerIds.has(fl.b);
     if (!aIn || !bIn) continue;
     const ab = directionalPacketRate(fl, true);
-    if (ab > 0 && fl.a !== fl.b) yield { src: fl.a, dst: fl.b, rate: ab };
+    if (ab > 0 && fl.a !== fl.b) borrowLinkCandidate(fl.a, fl.b, ab);
     const ba = directionalPacketRate(fl, false);
-    if (ba > 0 && fl.a !== fl.b) yield { src: fl.b, dst: fl.a, rate: ba };
+    if (ba > 0 && fl.a !== fl.b) borrowLinkCandidate(fl.b, fl.a, ba);
   }
 }
+
+const linksResultScratch: VizLinkSample[] = [];
 
 /**
  * Aggregate directional host-pair rates for the monitor smoothing window (~5 s).
@@ -114,16 +148,26 @@ export function collectVizLinks(
   maxLinks: number,
 ): { links: VizLinkSample[]; linksDropped: number } {
   linkAggScratch.clear();
-  for (const cand of linkCandidates(flows, talkerIds)) {
+  scanLinkCandidates(flows, talkerIds);
+  for (let i = 0; i < linkCandidatePoolUsed; i++) {
+    const cand = linkCandidatePool[i]!;
     const key = linkPairKey(cand.src, cand.dst);
     const prev = linkAggScratch.get(key);
     if (prev) prev.rate += cand.rate;
-    else linkAggScratch.set(key, { src: cand.src, dst: cand.dst, rate: cand.rate });
+    else linkAggScratch.set(key, cand);
   }
   const total = linkAggScratch.size;
   const top = topKByScore(linkAggScratch.values(), maxLinks, (l) => l.rate);
-  const links = top.map((l) => ({ src: l.src, dst: l.dst, rate: l.rate }));
-  return { links, linksDropped: Math.max(0, total - links.length) };
+  linksResultScratch.length = top.length;
+  for (let i = 0; i < top.length; i++) {
+    const l = top[i]!;
+    const slot = linksResultScratch[i] ?? { src: "", dst: "", rate: 0 };
+    slot.src = l.src;
+    slot.dst = l.dst;
+    slot.rate = l.rate;
+    linksResultScratch[i] = slot;
+  }
+  return { links: linksResultScratch, linksDropped: Math.max(0, total - top.length) };
 }
 
 /** Stamp contract v2 and optional link / failed enrichment when collection is enabled. */
@@ -132,14 +176,15 @@ export function applyVizFrameContractV2(
   state: StateMsg,
   opts: VizFrameCollectOpts,
 ): VizDataFrame {
-  const out: VizDataFrame = { ...frame, contract: VIZ_CONTRACT_VERSION };
-  if (!opts.linksEnabled) return out;
-  const talkerIds = syncTalkerIds(out.talkers);
+  frame.contract = VIZ_CONTRACT_VERSION;
+  if (!opts.linksEnabled) return frame;
+  const talkerIds = syncTalkerIds(frame.talkers);
   const { links, linksDropped } = collectVizLinks(state.flows, talkerIds, opts.maxLinks);
-  out.talkers = talkersWithConnFailed(out.talkers, state.devices);
-  if (links.length > 0) out.links = links;
-  if (linksDropped > 0) out.linksDropped = linksDropped;
-  return out;
+  frame.talkers = talkersWithConnFailed(frame.talkers, state.devices) as VizTalkerSample[];
+  frame.links = links;
+  if (linksDropped > 0) frame.linksDropped = linksDropped;
+  else delete frame.linksDropped;
+  return frame;
 }
 
 /** Assert every link endpoint is a current talker id (shared by tests). */

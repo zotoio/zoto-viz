@@ -91,5 +91,6 @@
     "talkers": true,
     "headlines": true
   },
-  "contract": 2
+  "contract": 2,
+  "links": []
 }

@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as sources from "../core/sources";
 import type { ViewMode } from "../core/modes";
 import * as modeOpts from "./mode-opts";
 import { optsForMode } from "./mode-opts";
 import { VizFrameScopeCache } from "./viz-frame-scope";
-import { vizFrameHostPerFrameTick, vizFrameHostScopeSync } from "./viz-frame-host-tick";
+import { vizFrameHostPerFrameTick } from "./viz-frame-host-tick";
 
 const mode: ViewMode = {
   id: "topology",
@@ -26,12 +26,14 @@ describe("vizFrameHostPerFrameTick", () => {
       syncAdapterViewOpts: () => {},
     });
 
-    let currentOpts = vizFrameHostScopeSync(mode, scope, optsFor);
+    let currentOpts = optsFor(mode);
+    scope.sync(mode, currentOpts);
     expect(optsSpy).toHaveBeenCalledTimes(1);
     expect(parseSourceBind).toHaveBeenCalledTimes(1);
 
+    const tickInput = { mode, currentOpts, scope };
     const tick = () => {
-      vizFrameHostPerFrameTick({ mode, currentOpts, scope, optsFor });
+      vizFrameHostPerFrameTick(tickInput);
     };
     tick(); // frame 0
     for (let i = 0; i < 300; i++) tick();
@@ -39,7 +41,8 @@ describe("vizFrameHostPerFrameTick", () => {
     expect(optsSpy).toHaveBeenCalledTimes(1);
     expect(parseSourceBind).toHaveBeenCalledTimes(1);
 
-    currentOpts = vizFrameHostScopeSync(mode, scope, optsFor);
+    currentOpts = optsFor(mode);
+    scope.sync(mode, currentOpts);
     expect(optsSpy).toHaveBeenCalledTimes(2);
     expect(parseSourceBind).toHaveBeenCalledTimes(2);
   });

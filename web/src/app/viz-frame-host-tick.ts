@@ -6,7 +6,6 @@ export type VizFrameHostPerFrameInput = {
   mode: ViewMode;
   currentOpts: Record<string, string>;
   scope: VizFrameScopeCache;
-  optsFor: (m: ViewMode) => Record<string, string>;
 };
 
 /**
@@ -21,15 +20,4 @@ export function vizFrameHostPerFrameTick(input: VizFrameHostPerFrameInput): {
     bind: input.scope.readBindForFrameTick(),
     packOpts: input.currentOpts,
   };
-}
-
-/** Scope sync path: optsFor once, then parse bind into scope (applyMode / onPluginFields). */
-export function vizFrameHostScopeSync(
-  mode: ViewMode,
-  scope: VizFrameScopeCache,
-  optsFor: (m: ViewMode) => Record<string, string>,
-): Record<string, string> {
-  const opts = optsFor(mode);
-  scope.sync(mode, opts);
-  return opts;
 }
