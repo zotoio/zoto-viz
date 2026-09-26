@@ -1,151 +1,188 @@
 import { describe, expect, it } from "vitest";
 import {
+  assessPytestSelection,
+  assessVitestSelection,
   classifyPatchedPytest,
   classifyPatchedVitest,
-  isPytestAssertionBody,
-  isVitestAssertionFailure,
-  isVitestJunitSkipped,
-  parsePytestJunit,
-  vitestJunitFailureType,
+  parsePytestPluginJson,
+  parseVitestJsonReport,
 } from "./revert-proof-lib.mjs";
 
-const vitestCounts = (failed = 1) => ({
-  executed: 1,
-  passed: failed ? 0 : 1,
-  failed,
+const vitestSelection = (
+  tests: { fullName: string; status: string; revertProofAssertion?: boolean }[],
+  testName: string,
+) => ({
   suiteError: null,
-  failedAssertions: [],
-  ranTests: [{ fullName: "suite > test", status: failed ? "failed" : "passed" }],
+  selection: assessVitestSelection(
+    tests.map((t) => ({
+      fullName: t.fullName,
+      status: t.status,
+      revertProofAssertion: t.revertProofAssertion === true,
+    })),
+    testName,
+  ),
 });
 
-describe("strict Vitest red classification", () => {
-  it("accepts one JUnit AssertionError", () => {
-    const junitXml =
-      '<testsuite><testcase name="test"><failure type="AssertionError">expected 1 to be 2</failure></testcase></testsuite>';
-    expect(isVitestAssertionFailure([], junitXml)).toBe(true);
+describe("vitest JSON selection by full name", () => {
+  it("requires target passed/failed and all others skipped", () => {
+    const tests = [
+      { fullName: "widget > returns one", status: "failed", revertProofAssertion: true },
+      { fullName: "widget > helper ok", status: "skipped", revertProofAssertion: false },
+    ];
+    const sel = assessVitestSelection(tests, "widget > returns one");
+    expect(sel.ok).toBe(true);
+  });
+
+  it("rejects when target is skipped (it.skipIf / ctx.skip)", () => {
+    const tests = [
+      { fullName: "widget > returns one", status: "skipped", revertProofAssertion: false },
+      { fullName: "widget > helper ok", status: "skipped", revertProofAssertion: false },
+    ];
+    const sel = assessVitestSelection(tests, "widget > returns one");
+    expect(sel.ok).toBe(false);
+    expect(sel.reason).toBe("target skipped");
+  });
+
+  it("rejects when another test executed", () => {
+    const tests = [
+      { fullName: "widget > returns one", status: "failed", revertProofAssertion: true },
+      { fullName: "widget > helper ok", status: "passed", revertProofAssertion: false },
+    ];
+    const sel = assessVitestSelection(tests, "widget > returns one");
+    expect(sel.ok).toBe(false);
+    expect(sel.reason).toBe("other tests not skipped");
+  });
+});
+
+describe("strict Vitest red from task.meta only", () => {
+  it("accepts revertProofAssertion meta", () => {
     expect(
-      classifyPatchedVitest({ counts: vitestCounts(), junitXml }),
+      classifyPatchedVitest({
+        counts: vitestSelection(
+          [{ fullName: "suite > test", status: "failed", revertProofAssertion: true }],
+          "suite > test",
+        ),
+      }),
     ).toBe("assertion");
   });
 
-  it("rejects assertion-looking text without the JUnit type", () => {
-    const junitXml =
-      '<testsuite><testcase name="test"><failure message="AssertionError">not typed</failure></testcase></testsuite>';
-    expect(isVitestAssertionFailure([], junitXml)).toBe(false);
+  it("(b) rejects assertion-looking failure without meta flag", () => {
     expect(
-      classifyPatchedVitest({ counts: vitestCounts(), junitXml }),
+      classifyPatchedVitest({
+        counts: vitestSelection(
+          [{ fullName: "suite > test", status: "failed", revertProofAssertion: false }],
+          "suite > test",
+        ),
+      }),
     ).toBe("build break");
   });
 
-  it("rejects non-assertion exception types", () => {
-    const junitXml =
-      '<testsuite><testcase name="test"><failure type="RangeError">Expected 1 to be 2</failure></testcase></testsuite>';
-    expect(vitestJunitFailureType(junitXml)).toBe("RangeError");
+  it("(c) rejects plain-object style failures without meta flag", () => {
     expect(
-      classifyPatchedVitest({ counts: vitestCounts(), junitXml }),
+      classifyPatchedVitest({
+        counts: vitestSelection(
+          [{ fullName: "d > t", status: "failed", revertProofAssertion: false }],
+          "d > t",
+        ),
+      }),
     ).toBe("build break");
   });
 
   it("reports a passing patched test as green", () => {
-    expect(classifyPatchedVitest({ counts: vitestCounts(0) })).toBe("green");
-  });
-
-  it("does not count skipped JUnit cases as failures", () => {
-    const junitXml = `<testsuite>
-      <testcase name="filtered"><skipped/></testcase>
-      <testcase name="test"><failure type="AssertionError">no</failure></testcase>
-    </testsuite>`;
-    expect(vitestJunitFailureType(junitXml)).toBe("AssertionError");
-  });
-
-  it("recognizes body and attribute skip encodings", () => {
-    expect(isVitestJunitSkipped("", "<skipped/>")).toBe(true);
-    expect(isVitestJunitSkipped(' status="pending"', "")).toBe(true);
-    expect(isVitestJunitSkipped(' skipped="true"', "")).toBe(true);
-    expect(isVitestJunitSkipped(' status="failed"', "<failure/>")).toBe(false);
+    expect(
+      classifyPatchedVitest({
+        counts: vitestSelection(
+          [{ fullName: "suite > test", status: "passed", revertProofAssertion: false }],
+          "suite > test",
+        ),
+      }),
+    ).toBe("green");
   });
 });
 
-describe("strict pytest red classification", () => {
-  it("accepts AssertionError type or message", () => {
-    expect(
-      isPytestAssertionBody('<failure type="AssertionError">no</failure>'),
-    ).toBe(true);
-    expect(
-      isPytestAssertionBody('<failure message="AssertionError: no">no</failure>'),
-    ).toBe(true);
-    expect(
-      isPytestAssertionBody('<failure message="assert 1 == 2">no</failure>'),
-    ).toBe(true);
-  });
-
-  it("rejects assertion words in exception bodies and tracebacks", () => {
-    expect(
-      isPytestAssertionBody(
-        '<failure message="service.ProbeError: bad"># AssertionError</failure>',
-      ),
-    ).toBe(false);
-    expect(
-      isPytestAssertionBody(
-        '<failure message="TypeError: boom">assert False\nTypeError: boom</failure>',
-      ),
-    ).toBe(false);
-  });
-
-  it("classifies errors and non-assertion failures as build breaks", () => {
+describe("strict pytest red from plugin JSON only", () => {
+  it("(a) rejects ProbeError even when traceback mentions AssertionError", () => {
+    const nodeId = "tests/test_x.py::test_y";
+    const tests = [
+      {
+        nodeid: nodeId,
+        outcome: "failed",
+        revertProofAssertion: false,
+      },
+    ];
+    expect(assessPytestSelection(tests, nodeId).ok).toBe(true);
     expect(
       classifyPatchedPytest({
         counts: {
           collectionError: false,
-          cases: [{ name: "t", outcome: "error", body: "AttributeError" }],
+          selection: assessPytestSelection(tests, nodeId),
         },
       }),
     ).toBe("build break");
+  });
+
+  it("accepts revertProofAssertion from plugin JSON", () => {
+    const nodeId = "tests/test_x.py::test_y";
+    const tests = [
+      {
+        nodeid: nodeId,
+        outcome: "failed",
+        revertProofAssertion: true,
+      },
+    ];
     expect(
       classifyPatchedPytest({
         counts: {
           collectionError: false,
-          cases: [
+          selection: assessPytestSelection(tests, nodeId),
+        },
+      }),
+    ).toBe("assertion");
+  });
+});
+
+describe("pytest plugin JSON parsing", () => {
+  it("parses tests array from plugin output", () => {
+    const parsed = parsePytestPluginJson(
+      JSON.stringify({
+        tests: [
+          { nodeid: "t.py::test_a", outcome: "passed", revertProofAssertion: false },
+          { nodeid: "t.py::test_b", outcome: "skipped", revertProofAssertion: false },
+        ],
+      }),
+      0,
+    );
+    expect(parsed.tests).toHaveLength(2);
+    expect(assessPytestSelection(parsed.tests, "t.py::test_a").ok).toBe(true);
+    expect(assessPytestSelection(parsed.tests, "t.py::test_b").reason).toBe(
+      "target skipped",
+    );
+  });
+
+  it("treats missing JSON on nonzero exit as collection error", () => {
+    const parsed = parsePytestPluginJson("", 2);
+    expect(parsed.collectionError).toBe(true);
+  });
+});
+
+describe("vitest JSON report parsing", () => {
+  it("rebuilds fullName from ancestorTitles and reads meta", () => {
+    const report = {
+      testResults: [
+        {
+          assertionResults: [
             {
-              name: "t",
-              outcome: "failed",
-              body: '<failure message="AttributeError: boom"/>',
+              ancestorTitles: ["widget > alpha"],
+              title: "returns one",
+              status: "failed",
+              meta: { revertProofAssertion: true },
             },
           ],
         },
-      }),
-    ).toBe("build break");
-  });
-});
-
-describe("pytest JUnit execution counts", () => {
-  it("keeps a self-closing pass before a failure", () => {
-    const parsed = parsePytestJunit(
-      `<testsuite>
-        <testcase name="pass"/>
-        <testcase name="fail"><failure message="assert 1 == 2"/></testcase>
-      </testsuite>`,
-      1,
-    );
-    expect(parsed.executed).toBe(2);
-    expect(parsed.cases.map((test) => test.outcome)).toEqual(["passed", "failed"]);
-  });
-
-  it("excludes skipped cases from the executed count", () => {
-    const parsed = parsePytestJunit(
-      `<testsuite>
-        <testcase name="pass"/>
-        <testcase name="skip"><skipped/></testcase>
-      </testsuite>`,
-      0,
-    );
-    expect(parsed.executed).toBe(1);
-    expect(parsed.cases[0]?.name).toBe("pass");
-  });
-
-  it("treats a nonzero run without cases as collection failure", () => {
-    const parsed = parsePytestJunit("", 2);
-    expect(parsed.executed).toBe(0);
-    expect(parsed.collectionError).toBe(true);
+      ],
+    };
+    const parsed = parseVitestJsonReport(report);
+    expect(parsed.tests[0]?.fullName).toBe("widget > alpha > returns one");
+    expect(parsed.tests[0]?.revertProofAssertion).toBe(true);
   });
 });
