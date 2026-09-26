@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
-import logging
 import re
 from urllib.parse import quote, unquote, urlparse
 
 from aiohttp import web
-from aiohttp.abc import AbstractAccessLogger
 
 from . import pack_asset_tokens
 
@@ -220,9 +218,6 @@ def host_ok(request: web.Request) -> bool:
 
 def pack_asset_csp_origin(request: web.Request) -> str:
     """Origin for sandbox CSP script-src (never raw untrusted Host fragments)."""
-    configured = request.app.get("http_public_origin")
-    if configured:
-        return str(configured).rstrip("/")
     from .request_guard import validated_http_origin
 
     return validated_http_origin(request)
@@ -285,28 +280,3 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
         safe = redact_request_path(request.path or "", sat) if sat else request.path
         print(f"[monitor] {request.method} {safe} -> {getattr(resp, 'status', '?')}", flush=True)
     return resp
-
-
-class RedactingAccessLogger(AbstractAccessLogger):
-    """aiohttp access logger that redacts pack-asset session tokens in the request line."""
-
-    def log(self, request, response, time):  # noqa: ANN001
-        if request is None:
-            self.logger.info("-")
-            return
-        path_qs = request.path_qs
-        token = read_sandbox_asset_token(request)
-        if token:
-            path_qs = redact_sandbox_token(path_qs, token)
-        self.logger.info(
-            '%s "%s %s" %s %.6f',
-            request.remote or "-",
-            request.method,
-            path_qs,
-            getattr(response, "status", "-"),
-            time,
-        )
-
-
-def sandbox_access_log_factory(_app: web.Application) -> logging.Logger:
-    return logging.getLogger("aiohttp.access")

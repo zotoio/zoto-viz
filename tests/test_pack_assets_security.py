@@ -166,25 +166,25 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
             "has_frontend": True,
             "file": str(home / "plugin.yml"),
         }
-        tails = (
-            "../secret.txt",
-            "frontend/../../secret.txt",
-            "..%2fsecret.txt",
-            "%2e%2e%2fsecret.txt",
-            "%252e%252e%252fsecret.txt",
-            "frontend%2f..%2f..%2fsecret.txt",
-            "..\\secret.txt",
-            "%5c..%5csecret.txt",
-            "//etc/passwd",
+        tails: tuple[tuple[str, int], ...] = (
+            ("../secret.txt", 403),
+            ("frontend/../../secret.txt", 403),
+            ("..%2fsecret.txt", 404),
+            ("%2e%2e%2fsecret.txt", 404),
+            ("%252e%252e%252fsecret.txt", 404),
+            ("frontend%2f..%2f..%2fsecret.txt", 404),
+            ("..\\secret.txt", 404),
+            ("%5c..%5csecret.txt", 404),
+            ("//etc/passwd", 404),
         )
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "traversal-pack" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
-                for tail in tails:
+                for tail, want_status in tails:
                     resp = await self.client.get(
                         pack_url_raw("traversal-pack", tail),
                         headers=NULL,
                     )
-                    assert resp.status in {403, 404}, tail
+                    assert resp.status == want_status, tail
                     body = await resp.text()
                     assert "leak" not in body and "root:" not in body, tail
 
@@ -206,7 +206,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
             with patch.object(plugins, "consented", lambda _doc: True):
                 for tail in ("escape.js", "escape-dir/outside-leak.txt"):
                     resp = await self.client.get(pack_url_raw("symlink-pack", tail), headers=NULL)
-                    assert resp.status in {403, 404}, tail
+                    assert resp.status == 404, tail
                     assert "outside-secret" not in await resp.text()
 
     async def test_dotfile_under_pack_is_403(self) -> None:
@@ -244,23 +244,26 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
         home = Path(tempfile.mkdtemp())
         fe = home / "frontend"
         fe.mkdir()
+        (home / "plugin.yml").write_text(
+            "id: sandbox-fixture-multi\nfrontend:\n  entry: frontend/module.js\n  bundle: false\n",
+            encoding="utf-8",
+        )
         (fe / "module.js").write_text('import "./helper.js";\nexport {};\n', encoding="utf-8")
         (fe / "helper.js").write_text("export function pulse() { return 1; }\n", encoding="utf-8")
         (fe / "fixture.json").write_text('{"bright": true}\n', encoding="utf-8")
-        row = {"id": "sandbox-fixture-multi", "has_frontend": True, "file": str(home / "plugin.yml")}
+        row = {
+            "id": "sandbox-fixture-multi",
+            "has_frontend": True,
+            "file": str(home / "plugin.yml"),
+            "frontend": {"entry": "frontend/module.js", "bundle": False},
+        }
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "sandbox-fixture-multi" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
-                with patch.object(
-                    plugins,
-                    "module_response",
-                    lambda _pid: web.Response(
-                        text='import "./helper.js";\nexport {};\n',
-                        content_type="text/javascript",
-                    ),
-                ):
-                    mod = await self.client.get(pack_url("sandbox-fixture-multi", "module.js"), headers=NULL)
-                    helper = await self.client.get(pack_url("sandbox-fixture-multi", "helper.js"), headers=NULL)
-                    fixture = await self.client.get(pack_url("sandbox-fixture-multi", "fixture.json"), headers=NULL)
+                plugins.reset_bundles()
+                plugins.compile_typescript(row, home / "plugin.yml", None)
+                mod = await self.client.get(pack_url("sandbox-fixture-multi", "module.js"), headers=NULL)
+                helper = await self.client.get(pack_url("sandbox-fixture-multi", "helper.js"), headers=NULL)
+                fixture = await self.client.get(pack_url("sandbox-fixture-multi", "fixture.json"), headers=NULL)
         assert mod.status == 200
         assert helper.status == 200
         assert fixture.status == 200
@@ -268,33 +271,3 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
         assert "./helper.js" in body
         assert "export function pulse" in (await helper.text())
         assert "bright" in (await fixture.text())
-
-    async def test_token_absent_from_access_log_line(self) -> None:
-        import logging
-
-        row = {"id": "demo-pack", "has_frontend": True}
-        tok = mint("demo-pack")
-        path = pack_url("demo-pack", "module.js", token=tok)
-        captured: list[str] = []
-        log = logging.getLogger("aiohttp.access.security")
-        handler = logging.Handler()
-        handler.emit = lambda record: captured.append(record.getMessage())  # type: ignore[method-assign]
-        log.addHandler(handler)
-        log.setLevel(logging.INFO)
-        logger = access.RedactingAccessLogger(log, "%s")
-        req = type(
-            "Req",
-            (),
-            {
-                "remote": "127.0.0.1",
-                "method": "GET",
-                "path": path.split("?", 1)[0],
-                "path_qs": path,
-                "version": type("V", (), {"major": 1, "minor": 1})(),
-            },
-        )()
-        logger.log(req, web.Response(text="ok"), 0.001)
-        log.removeHandler(handler)
-        joined = "\n".join(captured)
-        assert tok not in joined
-        assert access.SANDBOX_TOKEN_REDACT in joined

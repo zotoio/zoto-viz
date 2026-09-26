@@ -1054,9 +1054,6 @@ async def api_consent(req: web.Request) -> web.Response:
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=400)
     await asyncio.to_thread(lambda: hooks.sync(scan().get("plugins") or [], allow=python_allow))
-    from . import live
-    pid = str(found.get("id") or "")
-    live.queue_patch({"pluginConsent": {"id": pid, "kind": kind}})
     return web.json_response({"ok": True, "kind": kind, "needed": True})
 
 

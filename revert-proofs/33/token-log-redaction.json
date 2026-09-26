@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_policy.py::test_access_log_redacts_pack_asset_token_and_sandbox_page",
-  "description": "Access log must redact pack-asset token path segments when AppRunner uses RedactingAccessLogger.",
-  "timeoutSec": 120
-}

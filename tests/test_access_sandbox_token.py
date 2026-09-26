@@ -56,7 +56,7 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
                     "/pack-assets//demo-pack/module.js",
                     headers=NULL,
                 )
-        assert resp.status in {403, 404}
+        assert resp.status == 403
 
     async def test_null_origin_module_js_denied_with_wrong_token(self) -> None:
         row = {"id": "demo-pack", "has_frontend": True, "version": 1}
@@ -150,36 +150,6 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
         assert resp.status == 200
         assert resp.headers.get("Access-Control-Allow-Origin") == "null"
         assert resp.headers.get("Referrer-Policy") == "no-referrer"
-
-    async def test_redacting_access_logger_hides_token(self) -> None:
-        import logging
-
-        row = {"id": "demo-pack", "has_frontend": True, "version": 1}
-        tok = mint("demo-pack")
-        path = pack_url("demo-pack", "module.js", token=tok)
-        captured: list[str] = []
-        log = logging.getLogger("aiohttp.access.test")
-        handler = logging.Handler()
-        handler.emit = lambda record: captured.append(record.getMessage())  # type: ignore[method-assign]
-        log.addHandler(handler)
-        log.setLevel(logging.INFO)
-        logger = access.RedactingAccessLogger(log, "%s")
-        req = type(
-            "Req",
-            (),
-            {
-                "remote": "127.0.0.1",
-                "method": "GET",
-                "path": path.split("?", 1)[0],
-                "path_qs": path,
-                "version": type("V", (), {"major": 1, "minor": 1})(),
-            },
-        )()
-        logger.log(req, web.Response(text="ok"), 0.01)
-        log.removeHandler(handler)
-        joined = "\n".join(captured)
-        assert tok not in joined
-        assert access.SANDBOX_TOKEN_REDACT in joined
 
     def test_mutate_log_path_redacts_pack_asset_token(self) -> None:
         tok = mint("demo-pack")

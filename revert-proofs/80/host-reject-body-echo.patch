@@ -1,0 +1,12 @@
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -340,7 +340,8 @@
+ 
+     if not _lookup_allowed(request.app, key):
+         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
+-        return _host_reject_response()
++        body = f"{HOST_REJECT_BODY} ({raw_host})"
++        return web.Response(status=400, text=body, content_type="text/plain")
+ 
+     scheme = request.scheme or "http"
+     request["validated_http_origin"] = f"{scheme}://{key}".rstrip("/")

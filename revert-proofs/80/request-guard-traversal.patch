@@ -1,9 +1,8 @@
-diff --git a/service/request_guard.py b/service/request_guard.py
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -252,11 +252,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
-             host_hdr = f"{host}:{p}"
-         request["validated_http_origin"] = f"{scheme}://{host_hdr}".rstrip("/")
+@@ -345,13 +345,6 @@
+     scheme = request.scheme or "http"
+     request["validated_http_origin"] = f"{scheme}://{key}".rstrip("/")
  
 -    raw_path = getattr(request, "raw_path", None) or request.path or "/"
 -    _norm_path, path_err = decode_request_path(raw_path)

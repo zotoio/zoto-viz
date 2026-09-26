@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from aiohttp import web
 from yarl import URL
 
-from service import access, monitor, pack_assets, request_guard
+from service import monitor, pack_assets, request_guard
 
 
 @asynccontextmanager
@@ -17,7 +17,8 @@ async def make_app_server(
     *,
     allowed_hosts: list[str] | None = None,
     web_dist=None,
-    access_log_class=access.RedactingAccessLogger,
+    bind: str = "127.0.0.1",
+    insecure_lan: bool = False,
 ) -> AsyncIterator[tuple[str, int, web.AppRunner]]:
     state = MagicMock()
     orig_dist = monitor.WEB_DIST
@@ -28,23 +29,24 @@ async def make_app_server(
     app = monitor.make_app(
         state,
         "",
-        bind="127.0.0.1",
+        bind=bind,
         port=7020,
         allowed_hosts=allowed_hosts or [],
         setup_request_guard=False,
+        insecure_lan=insecure_lan,
     )
     app.on_startup.clear()
     app.on_shutdown.clear()
     app.on_cleanup.clear()
-    runner = web.AppRunner(app, access_log_class=access_log_class)
+    request_guard.reset_interface_lookup_counter()
+    runner = web.AppRunner(app, access_log=monitor.run_app_kwargs()["access_log"])
     await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", 0)
+    site = web.TCPSite(runner, bind if bind not in {"0.0.0.0", "::"} else "127.0.0.1", 0)
     await site.start()
     port = int(site._server.sockets[0].getsockname()[1])
-    request_guard.reset_interface_lookup_counter()
     request_guard.configure_request_guard(
         app,
-        bind="127.0.0.1",
+        bind=bind,
         port=port,
         allowed_hosts=allowed_hosts or [],
     )

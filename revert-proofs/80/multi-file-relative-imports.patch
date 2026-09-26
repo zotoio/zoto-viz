@@ -1,8 +1,6 @@
-diff --git a/service/plugins.py b/service/plugins.py
-index b71893f..8f09ca6 100644
 --- a/service/plugins.py
 +++ b/service/plugins.py
-@@ -216,15 +216,6 @@ def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = Non
+@@ -216,15 +216,6 @@
      if cached and cached[2] == key:
          return {"hash": cached[0], "capabilities": caps, "bytes": len(cached[1]), "cached": True}
      global _compile_runs

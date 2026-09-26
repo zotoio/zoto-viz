@@ -32,8 +32,8 @@ def _run(headers_for_port: Callable[[int], dict[str, str]], status: int, body_ha
     ("headers_for_port", "status", "body_has"),
     [
         (lambda p: {"Host": f"LOCALHOST:{p}"}, 200, None),
-        (lambda p: {"Host": f"localhost.:{p}"}, 400, None),
-        (lambda _p: {"Host": "127.0.0.1"}, 400, None),
+        (lambda p: {"Host": f"localhost.:{p}"}, 400, HOST_REJECT_BODY),
+        (lambda _p: {"Host": "127.0.0.1"}, 400, HOST_REJECT_BODY),
         (
             lambda p: {
                 "Host": f"evil.example:{p}",
@@ -43,7 +43,7 @@ def _run(headers_for_port: Callable[[int], dict[str, str]], status: int, body_ha
             HOST_REJECT_BODY,
         ),
         (lambda p: {"Host": f"[::1]:{p}"}, 200, None),
-        (lambda p: {"Host": f"[fe80::1%eth0]:{p}"}, 400, None),
+        (lambda p: {"Host": f"[fe80::1%eth0]:{p}"}, 400, HOST_REJECT_BODY),
     ],
     ids=[
         "case_fold_localhost",

@@ -1914,7 +1914,6 @@ def make_app(
     allowed_hosts: list[str] | None = None,
     setup_request_guard: bool = True,
     insecure_lan: bool = False,
-    http_public_origin: str | None = None,
 ) -> web.Application:
     from . import pack_asset_frames
 
@@ -1922,6 +1921,7 @@ def make_app(
         middlewares=[request_guard.middleware, static_path_guard, access.middleware],
         client_max_size=agent.MAX_BODY,
     )
+    request_guard.register_response_prepare_hook(app)
     if setup_request_guard:
         request_guard.configure_request_guard(
             app, bind=bind, port=port, allowed_hosts=allowed_hosts or [],
@@ -1930,7 +1930,6 @@ def make_app(
     app["csrf"] = access.new_token()
     app["pack_asset_secret"] = access.new_pack_asset_secret()
     app["insecure_lan"] = insecure_lan
-    app["http_public_origin"] = http_public_origin
     pack_asset_frames.registry_for_app(app)
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
@@ -2015,6 +2014,11 @@ def make_app(
     return app
 
 
+def run_app_kwargs() -> dict:
+    """Shared ``web.run_app`` options (production and tests)."""
+    return {"print": None, "access_log": None, "shutdown_timeout": 3}
+
+
 def main() -> None:
     from . import typesafe_proxy
 
@@ -2078,29 +2082,17 @@ def main() -> None:
             + f", {w['dwell']} s each" + ("" if w["rotate"] else ", rotation off"))
     # shutdown_timeout bounds the wait for in-flight requests; the unit gives us 10 s in total
     try:
-        origin = None
-        if listen["insecure_lan"]:
-            origin = f"http://{listen['bind']}:{listen['port']}"
-        cfg_hosts = cfg.get("allowed_hosts") if isinstance(cfg, dict) else None
-        extra_hosts = cfg_hosts if isinstance(cfg_hosts, list) else []
+        extra_hosts = [str(h) for h in (listen.get("allowed_hosts") or [])]
         app = make_app(
             state,
             args.filter,
             args.wifi_keys,
             bind=str(listen["bind"]),
             port=int(listen["port"]),
-            allowed_hosts=[str(h) for h in extra_hosts],
+            allowed_hosts=extra_hosts,
             insecure_lan=listen["insecure_lan"],
-            http_public_origin=origin,
         )
-        web.run_app(
-            app,
-            host=listen["bind"],
-            port=listen["port"],
-            print=None,
-            access_log=None,
-            shutdown_timeout=3,
-        )
+        web.run_app(app, host=listen["bind"], port=listen["port"], **run_app_kwargs())
     finally:
         hold.stop()
 

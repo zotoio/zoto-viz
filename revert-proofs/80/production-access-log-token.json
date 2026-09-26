@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_policy.py::test_production_access_log_never_records_pack_asset_token",
+  "red": "assert 1 == 0",
+  "description": "Production run_app_kwargs must keep access_log=None so pack-asset tokens never appear in aiohttp access logs.",
+  "timeoutSec": 60
+}

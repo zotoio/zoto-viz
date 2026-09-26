@@ -75,12 +75,13 @@ class PackAssetsSandboxCspTests(AioHTTPTestCase):
         class _Req:
             scheme = "http"
             headers = {"Host": "192.168.1.50:7020"}
-            app = {"insecure_lan": True, "http_public_origin": "http://192.168.1.50:7020"}
+            app = {"insecure_lan": True}
+            validated_http_origin = "http://192.168.1.50:7020"
 
-            def __getattr__(self, name: str):
-                if name == "host":
-                    return self.headers["Host"]
-                raise AttributeError(name)
+            def get(self, key: str, default=None):  # noqa: ANN001
+                if key == "validated_http_origin":
+                    return self.validated_http_origin
+                return default
 
         csp = pack_assets.sandbox_csp_for_token(_Req(), "sess-tok")
         assert "http://192.168.1.50:7020/pack-assets/sess-tok/" in csp

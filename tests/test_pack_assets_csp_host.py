@@ -27,7 +27,7 @@ async def _injected_host_blocked() -> None:
                 assert resp.status == 400
                 csp = resp.headers.get("Content-Security-Policy") or ""
                 assert "connect-src *" not in csp
-                assert csp == ""
+                assert "frame-ancestors 'self'" in csp
 
 
 def test_injected_host_fragment_does_not_widen_csp() -> None:

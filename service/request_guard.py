@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 import re
 import socket
+import subprocess
 import time
 from typing import Callable, Iterable
 
@@ -125,9 +127,7 @@ def normalize_host_header_key(
     if host.endswith("."):
         return None
     if not port_str:
-        if tls and bound_port == 443:
-            port_str = "443"
-        elif not tls and bound_port == 80:
+        if not tls and bound_port == 80:
             port_str = "80"
         else:
             return None
@@ -147,6 +147,32 @@ def normalize_host_header_key(
     return _canonical_key(host, port)
 
 
+def query_os_interface_addresses() -> list[str]:
+    """IP address strings from local interfaces (stub only this in tests, not ``local_interface_hosts``)."""
+    try:
+        proc = subprocess.run(
+            ["ip", "-j", "addr"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return []
+        data = json.loads(proc.stdout or "[]")
+        addrs: list[str] = []
+        for iface in data:
+            for info in iface.get("addr_info") or []:
+                if info.get("family") not in ("inet", "inet6"):
+                    continue
+                local = info.get("local")
+                if local:
+                    addrs.append(str(local))
+        return addrs
+    except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return []
+
+
 def local_interface_hosts(port: int) -> set[str]:
     global _interface_lookup_calls
     _interface_lookup_calls += 1
@@ -155,15 +181,17 @@ def local_interface_hosts(port: int) -> set[str]:
     out.add(_canonical_key("127.0.0.1", port))
     out.add(_canonical_key("::1", port))
     seen: set[str] = set()
-    try:
-        for info in socket.getaddrinfo(None, 0, socket.AF_UNSPEC, socket.SOCK_DGRAM):
-            addr = info[4][0]
-            if addr in seen or addr == "0.0.0.0":
+    for addr in query_os_interface_addresses():
+        if addr in seen or addr in {"0.0.0.0", "::"}:
+            continue
+        seen.add(addr)
+        try:
+            ip = ipaddress.ip_address(addr)
+            if ip.is_loopback or ip.is_link_local:
                 continue
-            seen.add(addr)
-            out.add(_canonical_key(addr, port))
-    except OSError:
-        pass
+        except ValueError:
+            continue
+        out.add(_canonical_key(addr, port))
     return out
 
 
@@ -230,6 +258,23 @@ def _refresh_allowed_hosts(app: web.Application) -> frozenset[str]:
     return allowed
 
 
+def _host_reject_response() -> web.Response:
+    resp = web.Response(status=400, text=HOST_REJECT_BODY, content_type="text/plain")
+    attach_frame_embed_policy(resp)
+    return resp
+
+
+def register_response_prepare_hook(app: web.Application) -> None:
+    if app.get("request_guard_prepare_hook"):
+        return
+
+    async def _on_prepare(_request: web.Request, response: web.StreamResponse) -> None:
+        attach_frame_embed_policy(response)
+
+    app.on_response_prepare.append(_on_prepare)
+    app["request_guard_prepare_hook"] = True
+
+
 def configure_request_guard(
     app: web.Application,
     *,
@@ -283,25 +328,19 @@ def _lookup_allowed(app: web.Application, key: str) -> bool:
 async def middleware(request: web.Request, handler):  # noqa: ANN001
     port = int(request.app.get("request_guard_port") or 7020)
     hosts = _host_header_values(request)
-    if not hosts:
-        _log.warning("rejected Host header (missing)")
-        return web.Response(status=400, text="bad request", content_type="text/plain")
-    if len(hosts) != 1:
-        _log.warning("rejected Host header (duplicate)")
-        return web.Response(status=400, text="bad request", content_type="text/plain")
+    if not hosts or len(hosts) != 1:
+        return _host_reject_response()
 
     raw_host = hosts[0].strip()
     tls = bool(request.secure)
     key = normalize_host_header_key(raw_host, port, tls=tls)
     if key is None:
         _log.warning("rejected Host header (format): %s", escape_log_host(raw_host))
-        return web.Response(status=400, text="bad request", content_type="text/plain")
+        return _host_reject_response()
 
     if not _lookup_allowed(request.app, key):
         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
-        resp = web.Response(status=400, text=HOST_REJECT_BODY, content_type="text/plain")
-        attach_frame_embed_policy(resp)
-        return resp
+        return _host_reject_response()
 
     scheme = request.scheme or "http"
     request["validated_http_origin"] = f"{scheme}://{key}".rstrip("/")
@@ -317,5 +356,8 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
         resp = await handler(request)
     except web.HTTPException as exc:
         resp = exc
+    except Exception:
+        _log.exception("unhandled error in request handler")
+        resp = web.Response(status=500, text="internal server error", content_type="text/plain")
     attach_frame_embed_policy(resp)
     return resp
