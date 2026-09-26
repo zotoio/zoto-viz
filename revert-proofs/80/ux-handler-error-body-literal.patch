@@ -1,0 +1,14 @@
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -21,10 +21,7 @@
+     "Open it by its IP address, or add this name to `allowed_hosts` in the server config."
+ )
+ 
+-HANDLER_ERROR_BODY = (
+-    "zoto-viz ran into a problem with this request. "
+-    "Reload to try again. If it keeps happening, check the server log."
+-)
++HANDLER_ERROR_BODY = ""
+ 
+ _HOST_FORBIDDEN_CHARS = re.compile(r'[;,\s"\']')
+ _HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")

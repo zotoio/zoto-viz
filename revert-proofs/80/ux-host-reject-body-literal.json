@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_host_reject_400_body_malformed_and_disallowed",
+  "red": "AssertionError: assert '' == 'This zoto-viz server doesn't accept the address it was opened with. Open it by its IP address, or add this name to `allowed_hosts` in the server config.'",
+  "description": "Host reject/malformed 400 UX copy must match the agreed literal exactly.",
+  "timeoutSec": 120
+}
