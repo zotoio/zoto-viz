@@ -312,6 +312,21 @@ def test_name_status_includes_rename_source_and_dest() -> None:
     ]
 
 
+def test_pull_files_rename_counts_one_changed_file() -> None:
+    pages = [
+        [
+            {
+                "filename": "plugins/src/demo-pack/plugin.yml",
+                "previous_filename": "plugins/src/demo-pack/plugin.old.yml",
+                "status": "renamed",
+            }
+        ]
+    ]
+    paths = paths_from_pull_files_pages(pages)
+    assert paths == ["plugins/src/demo-pack/plugin.yml"]
+    assert validate_pull_changed_files_complete(paths, 1) is None
+
+
 def test_paths_from_pull_files_fixture_includes_rename_and_host_script() -> None:
     import json
     from pathlib import Path

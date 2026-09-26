@@ -14,12 +14,11 @@ import {
   buildVizFrameForPlugin,
   FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
   parseVizContract,
-  takeVizBuildWorkSnapshot,
-  type VizBuildWorkCounters,
   type VizDataFrame,
   type VizFrameBudgetStats,
   type VizPluginContract,
 } from "./viz-host";
+import { takeVizBuildWorkSnapshot, type VizBuildWorkCounters } from "./viz-build-counters";
 import { runPackFrameHandler, type VizPackHandlers } from "./viz-pack-host";
 
 export { runPackFrameHandler };

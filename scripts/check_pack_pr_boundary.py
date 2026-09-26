@@ -612,16 +612,27 @@ def fetch_issue_labels(repo: str, issue_number: int, token: str) -> set[str]:
 
 
 def paths_from_pull_files_pages(pages: list[list[dict]]) -> list[str]:
-    """Collect paths from mocked or real pulls/{n}/files API pages."""
+    """Collect current paths from pulls/{n}/files pages (one row per changed file)."""
+    paths: list[str] = []
+    for page in pages:
+        for row in page:
+            filename = row.get("filename")
+            if filename:
+                paths.append(str(filename))
+    return sorted(set(paths))
+
+
+def paths_from_pull_files_pages_with_renames(pages: list[list[dict]]) -> list[str]:
+    """All path strings on a page, including rename predecessors (for boundary scans)."""
     paths: set[str] = set()
     for page in pages:
         for row in page:
             filename = row.get("filename")
             if filename:
-                paths.add(filename)
+                paths.add(str(filename))
             previous = row.get("previous_filename")
             if previous:
-                paths.add(previous)
+                paths.add(str(previous))
     return sorted(paths)
 
 

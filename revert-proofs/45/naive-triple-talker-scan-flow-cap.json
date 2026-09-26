@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/plugins/viz-build-gates.test.ts",
-  "testName": "naive triple talker scan fails k=2 flow cap",
+  "testName": "viz build count gates > naive triple talker scan fails k=2 flow cap",
   "description": "flowWorkWithinCap enforces flows \u00d7 VIZ_BUILD_FLOW_WORK_MULT work ceiling.",
   "entryPoint": ""
 }

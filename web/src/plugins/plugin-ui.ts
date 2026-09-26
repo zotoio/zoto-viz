@@ -1,3 +1,4 @@
+import { WORK_BUDGET_LIMITED_NOTE } from "../../../plugins/sdk/work-budget-limited-note";
 import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
 
 /** Pack info `.sec-hint` line (id / version / engine + optional workBudget note). */

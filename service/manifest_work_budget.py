@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,19 @@ def _plain_whole_number_reason(path: str, key: str) -> str:
     return f"{_field_label(path, key)} must be a whole number that is at least 0"
 
 
+def runtime_work_budget_int(value: Any) -> int:
+    """Clamp-side coercion: non-finite or invalid → 0 (matches TS clamp)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    if not math.isfinite(value):
+        return 0
+    try:
+        n = int(value)
+    except (OverflowError, ValueError):
+        return 0
+    return max(0, n)
+
+
 def parse_manifest_work_budget_shape(raw: Any, path: str = "workBudget") -> dict[str, int]:
     if not isinstance(raw, dict):
         raise ValueError(f"{path} must be a mapping of cap names to whole numbers")
@@ -68,9 +82,14 @@ def parse_manifest_work_budget_shape(raw: Any, path: str = "workBudget") -> dict
         value = raw[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(_plain_whole_number_reason(path, key))
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError(_plain_whole_number_reason(path, key))
         if isinstance(value, float) and not value.is_integer():
             raise ValueError(_plain_whole_number_reason(path, key))
-        n = int(value)
+        try:
+            n = int(value)
+        except (OverflowError, ValueError):
+            raise ValueError(_plain_whole_number_reason(path, key)) from None
         if n < 0:
             raise ValueError(f"{_field_label(path, key)} must be at least 0")
         out[key] = n
@@ -81,12 +100,7 @@ def clamp_manifest_work_budget_at_runtime(budget: dict[str, int]) -> dict[str, i
     ceilings = host_work_budget_ceilings()
     out: dict[str, int] = {}
     for key in manifest_work_budget_keys():
-        raw = budget.get(key, 0)
-        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-            n = 0
-        else:
-            n = int(raw)
-        n = max(0, n)
+        n = runtime_work_budget_int(budget.get(key, 0))
         out[key] = min(n, ceilings[key])
     return out
 

@@ -2,6 +2,7 @@
  * Host workBudget ceilings — fixed path under the install root (never pack-relative).
  */
 import hostCeilings from "../../../service/policy/work-budget-ceilings.json";
+import { WORK_BUDGET_LIMITED_NOTE } from "../../../plugins/sdk/work-budget-limited-note";
 import {
   clampManifestWorkBudgetToCeilings,
   type ManifestWorkBudget,
@@ -14,8 +15,7 @@ import {
 /** Relative to zoto-viz install root (see service/paths.repo_root). */
 export const HOST_WORK_BUDGET_CEILINGS_PATH = "service/policy/work-budget-ceilings.json";
 
-export const WORK_BUDGET_LIMITED_NOTE =
-  "This pack asks for more work per frame than this version allows, so it's been limited.";
+export { WORK_BUDGET_LIMITED_NOTE };
 
 let ceilingsCache: ManifestWorkBudget | null = null;
 let vitestPolicyOverride: ManifestWorkBudget | null = null;
@@ -47,13 +47,17 @@ export function resolveHostWorkBudgetPolicyPath(_packRoot?: string): string {
   return HOST_WORK_BUDGET_CEILINGS_PATH;
 }
 
+export function hostClampManifestWorkBudget(budget: ManifestWorkBudget): ManifestWorkBudget {
+  return clampManifestWorkBudgetToCeilings(budget, hostWorkBudgetCeilings());
+}
+
 export function ingestCatalogWorkBudget(raw: unknown): {
   budget: ManifestWorkBudget;
   limitedNote?: string;
 } {
   const parsed = parseManifestWorkBudgetShape(raw);
   const ceilings = hostWorkBudgetCeilings();
-  const budget = clampManifestWorkBudgetToCeilings(parsed, ceilings);
+  const budget = hostClampManifestWorkBudget(parsed);
   const limitedNote = workBudgetExceedsCeilings(parsed, ceilings) ? WORK_BUDGET_LIMITED_NOTE : undefined;
   return { budget, limitedNote };
 }

@@ -96,6 +96,12 @@ describe("workBudget catalog host path (#45)", () => {
     expect(maxSteps).toBeLessThanOrEqual(4);
   });
 
+  it("within-ceiling pack info shows no workBudget limited note", () => {
+    const spec = toPluginView(marbleCatalogRow(hostWorkBudgetCeilings()));
+    expect(spec.workBudgetLimited).toBeUndefined();
+    expect(pluginPackMetaLine(spec)).toBe("marble-run · v1 · graph / protocols");
+  });
+
   it("lowered ceiling row: installed over-ceiling pack stays loaded and pack info shows the limited note", () => {
     const policy = JSON.parse(readFileSync(POLICY_PATH, "utf-8")) as ManifestWorkBudget;
     const lowered = { ...policy, maxPacketsPerFrame: 2 };

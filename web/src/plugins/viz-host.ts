@@ -1,4 +1,5 @@
 import type { Device, StateMsg } from "../core/types";
+import { vizClockMs } from "../core/viz-clock";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
@@ -36,21 +37,6 @@ export const VIZ_MAX_PACKET_SAMPLES = 32;
 export const VIZ_MAX_RF_SAMPLES = 24;
 export const VIZ_MAX_TALKER_SAMPLES = 24;
 export const VIZ_MAX_HEADLINE_SAMPLES = 64;
-
-export {
-  VIZ_BUILD_FLOW_SCALE_MAX,
-  VIZ_BUILD_FLOW_WORK_MULT,
-  assertFlowWorkScaleBounded,
-  flowWorkWithinCap,
-  simulateNaiveTripleTalkerScanWork,
-  takeVizBuildWorkSnapshot,
-  type VizBuildWorkCounters,
-} from "./viz-build-counters";
-export {
-  encodedVizFrameBytes,
-  takeVizDecimationDropStats,
-  type VizDecimationDropStats,
-} from "./viz-decimation-stats";
 
 /** Seeded fat-LAN JSON frame ceiling — update only when contract output shape changes. */
 export const FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING = 28_500;
@@ -510,7 +496,8 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
     bumpPacketObject();
     return { proto, size: count, field: packetField(count) };
   };
-  const rows = top.length <= 1 ? top.map(mapRow) : [...top].sort((a, b) => b.count - a.count).map(mapRow);
+  if (top.length > 1) top.sort((a, b) => b.count - a.count);
+  const rows = top.map(mapRow);
   recordPacketDecimation(eligible, rows.length);
   return rows;
 }
@@ -527,7 +514,7 @@ function buildVizFrameCore(
 ): VizDataFrame {
   resetVizBuildCounters();
   resetVizDecimationDropStats();
-  const t = state.ts || Date.now() / 1000;
+  const t = state.ts || vizClockMs() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
   const headlineEligible = sourceHeadlines(

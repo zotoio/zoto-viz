@@ -59,24 +59,23 @@ _SCHEMA_KEYS = frozenset({"$ref", "$schema", "$id", "title", "description"})
 
 
 def deref_schema(raw: dict[str, Any], origin: Path) -> dict[str, Any]:
-    """Follow a one-line sibling `$ref` shim (view/agent-plugin → plugin.schema.json)."""
+    """Resolve file `$ref` shims (including nested refs with title/description wrappers)."""
     ref = raw.get("$ref")
-    if (
-        not isinstance(ref, str)
-        or not ref.endswith(".json")
-        or "://" in ref
-        or "#" in ref
-    ):
+    if not isinstance(ref, str) or "://" in ref or "#" in ref:
         return raw
-    if any(key not in _SCHEMA_KEYS for key in raw):
+    if not ref.endswith(".json"):
         return raw
     target = (origin.parent / ref).resolve()
-    if target.parent != origin.parent.resolve() or not target.is_file():
+    if not target.is_file():
         raise ValueError(f"unresolved schema $ref {ref!r}")
     loaded = yaml.safe_load(target.read_text(encoding="utf-8"))
     if not isinstance(loaded, dict):
         raise ValueError(f"{target.name} is not a mapping")
-    return loaded
+    merged = deref_schema(loaded, target.parent)
+    overlay = {k: v for k, v in raw.items() if k != "$ref"}
+    if overlay:
+        return {**merged, **overlay}
+    return merged
 
 
 def _plugin_home(path: Path) -> Path:

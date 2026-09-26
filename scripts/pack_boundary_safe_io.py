@@ -102,11 +102,12 @@ class WorkflowSafePrinter:
             return " " + line
         return line
 
-    def write_lines(self, lines: list[str], *, stream: object = sys.stdout) -> None:
+    def write_lines(self, lines: list[str], *, stream: object | None = None) -> None:
+        out = stream if stream is not None else sys.stdout
         self.begin()
         try:
             for line in lines:
-                print(self.escape_line(line), file=stream, flush=True)
+                print(self.escape_line(line), file=out, flush=True)
         finally:
             self.end()
 

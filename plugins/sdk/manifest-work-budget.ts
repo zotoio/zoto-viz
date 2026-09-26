@@ -59,10 +59,13 @@ export function parseManifestWorkBudgetShape(raw: unknown, path = "workBudget"):
   for (const key of MANIFEST_WORK_BUDGET_KEYS) {
     const value = rec[key];
     if (value === undefined) {
-      throw new Error(`${fieldLabel(path, key)} is required`);
+      throw new TypeError(`${fieldLabel(path, key)} is required`);
+    }
+    if (typeof value === "boolean") {
+      throw new TypeError(plainWholeNumberReason(path, key));
     }
     if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new Error(plainWholeNumberReason(path, key));
+      throw new TypeError(plainWholeNumberReason(path, key));
     }
     if (!Number.isInteger(value)) {
       throw new Error(plainWholeNumberReason(path, key));

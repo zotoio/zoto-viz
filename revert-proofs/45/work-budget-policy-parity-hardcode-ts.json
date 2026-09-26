@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/plugins/work-budget-catalog.test.ts",
-  "testName": "parity fixture rejected by TS after raising host policy ceiling",
+  "testName": "workBudget catalog host path (#45) > parity fixture rejected by TS after raising host policy ceiling",
   "description": "TS validator reads the same host policy file as Python (parity fixture).",
   "entryPoint": "assertWorkBudgetOverHostCeiling"
 }

@@ -5,16 +5,18 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
-  FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
-  VIZ_MAX_PACKET_SAMPLES,
-  VIZ_MAX_TALKER_SAMPLES,
   assertFlowWorkScaleBounded,
-  assertVizFrameOutputCaps,
-  buildVizFrame,
   flowWorkWithinCap,
   simulateNaiveTripleTalkerScanWork,
   takeVizBuildWorkSnapshot,
-  takeVizDecimationDropStats,
+} from "./viz-build-counters";
+import { encodedVizFrameBytes, takeVizDecimationDropStats } from "./viz-decimation-stats";
+import {
+  FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
+  VIZ_MAX_PACKET_SAMPLES,
+  VIZ_MAX_TALKER_SAMPLES,
+  assertVizFrameOutputCaps,
+  buildVizFrame,
 } from "./viz-host";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -86,24 +88,23 @@ describe("viz build count gates", () => {
     expect(frame.packets.length).toBeLessThanOrEqual(VIZ_MAX_PACKET_SAMPLES);
     expect(drops.talkersDropped).toBe(drops.talkersEligible - drops.talkersKept);
     expect(drops.packetsDropped).toBe(drops.packetsEligible - drops.packetsKept);
-    assertVizFrameOutputCaps(frame, {
-      checkDecimation: true,
-      encodedByteCeiling: FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
-    });
+    assertVizFrameOutputCaps(frame, { checkDecimation: true });
+    expect(encodedVizFrameBytes(frame)).toBeLessThanOrEqual(FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING);
   });
 
   it.todo("devicePacketRateMap Map reuse stable over 300 builds (#27 contract v2)");
 
   it.todo("viz links ≤ maxLinks with linksDropped matching cuts (#27 contract v2)");
 
-  it("production bundle excludes counter instrumentation", () => {
-    const env = { ...process.env, VITEST: "true", ZOTO_VIZ_GATE_BUILD: "1" };
-    execFileSync("pnpm", ["build"], { cwd: webRoot, stdio: "pipe", env });
-    const dist = path.join(webRoot, "dist", "assets");
-    const js = readdirSync(dist).filter((f) => f.endsWith(".js"));
-    expect(js.length).toBeGreaterThan(0);
-    const blob = js.map((f) => readFileSync(path.join(dist, f), "utf8")).join("\n");
-    expect(blob).not.toMatch(/function bumpFlowVisit\(/);
-    expect(blob).not.toContain("function bumpRateCall(");
-  });
+  it(
+    "production bundle excludes counter instrumentation",
+    () => {
+      execFileSync("bash", [path.join(webRoot, "..", "scripts", "check-viz-gate-bundle.sh")], {
+        cwd: webRoot,
+        stdio: "pipe",
+        timeout: 120_000,
+      });
+    },
+    120_000,
+  );
 });

@@ -27,3 +27,4 @@ sys-config.yml
 plugins/.runtime/
 plugins/*.zip
 dist/
+web/dist-gate-check/

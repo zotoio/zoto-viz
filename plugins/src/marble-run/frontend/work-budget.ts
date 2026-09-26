@@ -1,11 +1,17 @@
 /** Host-passed workBudget caps (set by the monitor before the pack runs). */
 
-import type { ManifestWorkBudget } from "../../../sdk/manifest-work-budget";
-
-export type MarbleWorkBudget = ManifestWorkBudget;
+/** Host-injected caps only (no pack-relative SDK import). */
+export type MarbleWorkBudget = {
+  maxDrawCalls: number;
+  maxTriangles: number;
+  maxInstances: number;
+  maxGpuBytes: number;
+  maxSimStepsPerFrame: number;
+  maxPacketsPerFrame: number;
+};
 
 /** Tightest caps before the host passes a clamped manifest budget (never unlimited). */
-export const CONSERVATIVE_MARBLE_WORK_BUDGET: ManifestWorkBudget = {
+export const CONSERVATIVE_MARBLE_WORK_BUDGET: MarbleWorkBudget = {
   maxDrawCalls: 0,
   maxTriangles: 0,
   maxInstances: 0,
@@ -16,7 +22,7 @@ export const CONSERVATIVE_MARBLE_WORK_BUDGET: ManifestWorkBudget = {
 
 let cached: MarbleWorkBudget | null = null;
 
-export function setMarbleWorkBudgetFromHost(budget: ManifestWorkBudget): void {
+export function setMarbleWorkBudgetFromHost(budget: MarbleWorkBudget): void {
   cached = budget;
 }
 

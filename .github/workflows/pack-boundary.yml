@@ -1,14 +1,6 @@
 name: pack-boundary
 
 on:
-  pull_request:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - labeled
-      - unlabeled
-      - ready_for_review
   pull_request_target:
     types:
       - opened
@@ -29,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
       - name: Log checked-out base revision
         env:
@@ -62,16 +54,3 @@ jobs:
           PACK_BOUNDARY_EVENT_LABEL_NAME: ${{ github.event.label.name }}
           PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ${{ github.event.pull_request.updated_at }}
         run: python3 scripts/check_pack_pr_boundary.py --secure-ci
-
-  pack-boundary-preview:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
-          persist-credentials: false
-      - name: Preview pack-boundary (informational only)
-        run: |
-          echo "pack-boundary-preview: informational job; branch protection must require"
-          echo "pack-boundary (pull_request_target), not this preview job."

@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/plugins/viz-build-gates.test.ts",
-  "testName": "production bundle excludes counter instrumentation",
+  "testName": "viz build count gates > production bundle excludes counter instrumentation",
   "description": "Child pnpm build must not inherit VITEST=true for __VIZ_BUILD_COUNTERS__ define.",
   "entryPoint": ""
 }

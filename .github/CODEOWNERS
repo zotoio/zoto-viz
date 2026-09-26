@@ -1,3 +1,2 @@
-# Host CI and scripts — belt-and-braces (branch protection may require review separately).
-/.github/ @wyvern8
-/scripts/ @wyvern8
+# Host CI and branch-protection workflows require maintainer review.
+/.github/ @zotoio/maintainers

@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/plugins/dogfood.test.ts",
-  "testName": "fat-LAN count gate: deterministic delivery and build work budgets",
+  "testName": "viz dogfood gates > fat-LAN count gate: deterministic delivery and build work budgets",
   "description": "runDogfoodCountGate aggregates per-pack delivery and work budget success.",
   "entryPoint": ""
 }

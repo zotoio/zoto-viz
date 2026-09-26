@@ -9,9 +9,17 @@ from service import paths
 
 WORK_BUDGET_CEILINGS_REL_PATH = "service/policy/work-budget-ceilings.json"
 
-WORK_BUDGET_LIMITED_NOTE = (
-    "This pack asks for more work per frame than this version allows, so it's been limited."
-)
+_NOTE_PATH = paths.repo_root() / "plugins" / "sdk" / "work-budget-limited-note.json"
+
+
+def _load_limited_note() -> str:
+    raw = json.loads(_NOTE_PATH.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not isinstance(raw.get("note"), str):
+        raise ValueError(f"{_NOTE_PATH} must contain a string note")
+    return raw["note"]
+
+
+WORK_BUDGET_LIMITED_NOTE = _load_limited_note()
 
 _CEILINGS: dict[str, int] | None = None
 
