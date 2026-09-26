@@ -24,7 +24,7 @@ import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
 import { finishSandboxBitmapHostFrame, paintPackMirrorPlaceholder } from "../plugins/sandbox-bitmap";
-import { PackMirrorGl } from "./pack-mirror-gl";
+import { PackMirrorGl, resetSandboxBitmapGl, sandboxBitmapGl } from "./pack-mirror-gl";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
@@ -141,6 +141,7 @@ export class RenderHost {
       }
       this.canvasRect = this.canvas.getBoundingClientRect();
       harvestGpu();
+      if (!this.software) this.packMirrorGl.beginFrame();
       const mirrorRank = (v: HostedView) => ((v as { packMirrorPrimary?: unknown }).packMirrorPrimary ? 1 : 0);
       this.views.sort((a, b) => mirrorRank(a) - mirrorRank(b));
       for (const v of this.views) v.hostFrame(ts);
@@ -220,8 +221,10 @@ export class RenderHost {
     const sy = Math.round(src.y * pr);
     const sw = Math.round(src.w * pr);
     const sh = Math.round(src.h * pr);
-    this.packMirrorGl.captureFromScreen(gl, sx, sy, sw, sh);
-    return this.packMirrorGl.blitToViewport(gl, rd, fill, dst, pr, aspect);
+    if (!this.packMirrorGl.hasCapture()) {
+      this.packMirrorGl.capturePrimaryFromDefault(gl, rd, sx, sy, sw, sh);
+    }
+    return this.packMirrorGl.blitDuplicateToDefault(gl, rd, fill, dst, pr, aspect);
   }
 
   /**
@@ -232,6 +235,7 @@ export class RenderHost {
     bitmap: ImageBitmap,
     fill: SurfaceLetterboxFill,
     aspect: number,
+    pluginId: string,
   ): Viewport | null {
     const dst = this.viewBox(mirror);
     if (!dst || dst.w < 2 || dst.h < 2) return null;
@@ -252,34 +256,9 @@ export class RenderHost {
     const rd = this.renderer as THREE.WebGLRenderer;
     if (!gl) return null;
     const pr = rd.getPixelRatio();
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
-    const fbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-    const ix = Math.round(inner.x * pr);
-    const iy = Math.round(inner.y * pr);
-    const iw = Math.round(inner.w * pr);
-    const ih = Math.round(inner.h * pr);
-    const dX = Math.round(dst.x * pr);
-    const dY = Math.round(dst.y * pr);
-    const dW = Math.round(dst.w * pr);
-    const dH = Math.round(dst.h * pr);
-    rd.setScissorTest(true);
-    rd.setViewport(dX, dY, dW, dH);
-    rd.setScissor(dX, dY, dW, dH);
-    rd.setClearColor(letterboxFillHex(fill), 1);
-    rd.clear(true, false, false);
-    gl.blitFramebuffer(0, 0, bitmap.width, bitmap.height, ix, iy, ix + iw, iy + ih, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-    gl.deleteFramebuffer(fbo);
-    gl.deleteTexture(tex);
-    return { x: ix, y: iy, w: iw, h: ih };
+    const gpu = sandboxBitmapGl(pluginId);
+    gpu.uploadFrame(gl, rd, bitmap);
+    return gpu.blitToDefault(gl, rd, fill, dst, pr, aspect);
   }
 
   /** Surface letterbox only (no bitmap yet, no publish failure). */
@@ -415,6 +394,11 @@ export class RenderHost {
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.views = [];
+    const gl = this.gl;
+    if (gl) {
+      this.packMirrorGl.dispose(gl);
+      resetSandboxBitmapGl(gl);
+    }
     this.renderer.forceContextLoss();
     this.renderer.dispose();
     this.canvas.remove();

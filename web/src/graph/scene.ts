@@ -1590,7 +1590,9 @@ export class NetScene implements HostedView {
           })()
           : 16 / 9;
         if (lane.peek()) {
-          this.lastVp = this.host.presentBitmapMirror(this, lane.peek()!, fill, aspect);
+          const bmp = lane.peek()!;
+          this.lastVp = this.host.presentBitmapMirror(this, bmp, fill, aspect, this.packCoalesce.pluginId!);
+          if (!this.software) lane.clearPendingAfterGpuUpload();
         } else if (lane.shouldShowFailurePlaceholder()) {
           this.lastVp = this.host.presentSandboxMirrorPlaceholder(
             this,

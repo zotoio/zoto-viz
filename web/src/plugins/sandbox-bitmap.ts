@@ -59,8 +59,16 @@ export class SandboxBitmapLane {
   ): boolean {
     const bitmap = this.pending;
     if (!bitmap) return false;
-    host.presentBitmapMirror(mirror, bitmap, fill, aspect);
+    host.presentBitmapMirror(mirror, bitmap, fill, aspect, this.pluginId);
     return true;
+  }
+
+  /** GPU path closed the bitmap during upload; drop the handle without a second close. */
+  clearPendingAfterGpuUpload(): void {
+    if (!this.pending) return;
+    this.open.delete(this.pending);
+    this.pending = null;
+    this.stats.closed += 1;
   }
 
   finishHostFrame(): void {
