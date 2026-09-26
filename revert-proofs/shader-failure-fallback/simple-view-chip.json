@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-host.test.ts",
+  "testName": "tile shader fallback host > simple-view-chip",
+  "redValue": 0
+}

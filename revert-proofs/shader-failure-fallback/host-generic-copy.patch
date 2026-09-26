@@ -1,0 +1,11 @@
+diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
+--- a/web/src/graph/tile-shader-fallback.ts
++++ b/web/src/graph/tile-shader-fallback.ts
+@@ -32,7 +32,6 @@ export class TileShaderFallback {
+     this.chip.className = SHADER_FALLBACK_CHIP_CLASS;
+     this.chip.textContent = "Simple view";
+     if (this.hasPackFallback) this.root.appendChild(this.chip);
+-    mount.appendChild(this.root);
+     const generic = genericShaderFallbackMessage(opts.packName);
+     this.writeText(this.hasPackFallback ? "" : generic);
+   }

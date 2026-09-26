@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/tile-shader-build.ts b/web/src/graph/tile-shader-build.ts
+index d111eed..da44968 100644
+--- a/web/src/graph/tile-shader-build.ts
++++ b/web/src/graph/tile-shader-build.ts
+@@ -24,7 +24,6 @@ export class TileShaderLatch {
+    * stays latched off — no further compileShader / linkProgram / getShaderInfoLog.
+    */
+   build(gl: WebGL2RenderingContext, frag: string, log: (msg: string) => void): TileShaderBuildResult {
+-    if (this.failed) return { ok: false, log: "latched" };
+     const vertSh = gl.createShader(gl.VERTEX_SHADER);
+     const fragSh = gl.createShader(gl.FRAGMENT_SHADER);
+     if (!vertSh || !fragSh) {
