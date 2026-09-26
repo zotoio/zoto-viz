@@ -481,13 +481,21 @@ export class Mosaic {
   }
 
   /** Inline consent / error copy over the tile (never a silent dark pane). */
-  setPaneNotice(id: string, text: string | null | undefined): void {
+  setPaneNotice(
+    id: string,
+    text: string | null | undefined,
+    recipe: "default" | "fail" = "default",
+  ): void {
     const pane = this.panes.get(id);
     if (!pane) return;
-    this.paintPaneNotice(pane, text);
+    this.paintPaneNotice(pane, text, recipe);
   }
 
-  private paintPaneNotice(pane: HTMLElement, text: string | null | undefined): void {
+  private paintPaneNotice(
+    pane: HTMLElement,
+    text: string | null | undefined,
+    recipe: "default" | "fail" = "default",
+  ): void {
     const existing = pane.querySelector(".mosaic-pane-notice");
     if (!text) {
       existing?.remove();
@@ -498,6 +506,7 @@ export class Mosaic {
       el.className = "mosaic-pane-notice";
       pane.appendChild(el);
     }
+    el.classList.toggle("mosaic-pane-notice-fail", recipe === "fail");
     el.textContent = text;
   }
 

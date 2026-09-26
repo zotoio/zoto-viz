@@ -112,6 +112,17 @@ import {
   clearVizDrive,
   noteHostDirect,
 } from "../plugins/viz-drive";
+import {
+  applyPackFeedPaneNotice,
+  classifySandboxBootError,
+  clearTilePackFeed,
+  logSandboxBootFailureOnce,
+  markSandboxStartupFailed,
+  markSandboxStartupOk,
+  markSandboxUnloaded,
+  noteSandboxFrameTick,
+  setTileExpectsVizFeed,
+} from "../plugins/plugin-pack-feed";
 import { revertModeSelection } from "./apply-mode-mosaic";
 import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
@@ -622,31 +633,41 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     : "main";
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
+    markSandboxUnloaded(tileId);
     clearVizDrive(tileId);
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
+    applyPackFeedPaneNotice(mosaic, tileId, null);
     return;
   }
   if (!tsPluginsAllowed()) {
     sandbox.unload();
+    markSandboxUnloaded(tileId);
     clearVizDrive(tileId);
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
+    applyPackFeedPaneNotice(mosaic, tileId, null);
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
     sandbox.unload();
+    markSandboxUnloaded(tileId);
     clearVizDrive(tileId);
     bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
+    applyPackFeedPaneNotice(mosaic, tileId, null);
     return;
   }
+  clearTilePackFeed(tileId);
+  const expectsViz = !!(spec.capabilities?.includes("viz.read") || spec.capabilities?.includes("viz.write"));
+  setTileExpectsVizFeed(tileId, expectsViz);
   try {
     sandbox.setActiveTile(tileId);
     await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    markSandboxStartupOk(tileId);
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
@@ -657,11 +678,20 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
       vizHud.setActive(spec.id, spec.name);
     }
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
+    applyPackFeedPaneNotice(mosaic, tileId, spec.name);
   } catch (e) {
-    console.warn("zoto-viz plugin runtime:", e);
+    const reason = classifySandboxBootError(e);
+    logSandboxBootFailureOnce(tileId, reason);
+    markSandboxStartupFailed(tileId);
+    applyPackFeedPaneNotice(mosaic, tileId, spec?.name ?? spec?.id ?? "Pack");
     sandbox.unload();
     scene.clearPluginStyle();
   }
+}
+
+function pluginExpectsVizFeed(spec: PluginView | null | undefined): boolean {
+  if (!spec) return false;
+  return !!(spec.capabilities?.includes("viz.read") || spec.capabilities?.includes("viz.write"));
 }
 
 async function refreshTsPlugin(): Promise<void> {
@@ -1106,6 +1136,7 @@ function feed(m: StateMsg): void {
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       sandbox.frame(f);
+      noteSandboxFrameTick(sandbox.activeTileId);
       if (packId || mosaic?.on) {
         if (mosaic?.on) {
           deliverMosaicDemoPacks(mosaic, f, modeById, pluginSpecForMode, optsFor);
@@ -1128,6 +1159,9 @@ function feed(m: StateMsg): void {
         const pics = parseHnRainLook(optsFor(mode)).pics && !mosaic?.on;
         feedTitleCube.setActive(pics);
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
+      }
+      if (pluginHasFrontend(active) && pluginExpectsVizFeed(active)) {
+        applyPackFeedPaneNotice(mosaic, sandbox.activeTileId, active?.name ?? null);
       }
     }
     vizHud.tick({

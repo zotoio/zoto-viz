@@ -2,6 +2,22 @@ import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
 import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
 
+/** Test hook: shorten sandbox handshake waits. */
+let sandboxMsgTimeoutMs = 15_000;
+let sandboxBootWaitInTests = false;
+
+export function setSandboxMsgTimeoutMs(ms: number): void {
+  sandboxMsgTimeoutMs = Math.max(1, ms | 0);
+}
+
+export function setSandboxBootWaitInTests(on: boolean): void {
+  sandboxBootWaitInTests = on;
+}
+
+export function sandboxMsgTimeoutForTests(): number {
+  return sandboxMsgTimeoutMs;
+}
+
 const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
 ]);
@@ -93,6 +109,7 @@ export class PluginSandbox {
   private caps: string[] = [];
   private vizContract: VizPluginContract | undefined;
   private moduleBlobUrl: string | null = null;
+  private bootReject: ((err: Error) => void) | null = null;
   handlers: PluginHostHandlers = {};
   /** Mosaic tile or `main` receiving sandbox plugin writes. */
   activeTileId = "main";
@@ -108,6 +125,7 @@ export class PluginSandbox {
 
   unload(): void {
     setSandboxReady(false);
+    this.bootReject = null;
     if (this.moduleBlobUrl) {
       URL.revokeObjectURL(this.moduleBlobUrl);
       this.moduleBlobUrl = null;
@@ -147,7 +165,13 @@ export class PluginSandbox {
     viz?: VizPluginContract,
   ): Promise<void> {
     const rel = pluginModuleUrl(id, hash);
-    const r = await fetch(rel);
+    let r: Response;
+    try {
+      r = await fetch(rel);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`module fetch failed (network/CORS): ${msg}`);
+    }
     if (!r.ok) throw new Error(`module ${r.status}`);
     const js = await r.text();
     await this.load(id, js, caps, config, viz);
@@ -180,10 +204,10 @@ export class PluginSandbox {
     if (iframe.srcdoc) {
       throw new Error("plugin sandbox must not use srcdoc under page CSP");
     }
-    if (import.meta.env.MODE === "test") {
+    if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
       await Promise.resolve();
     } else {
-      await waitPluginMsg(iframe, "frame-ready");
+      await waitPluginMsg(iframe, "frame-ready", (fail) => { this.bootReject = fail; });
     }
     iframe.contentWindow?.postMessage({
       source: "zoto-viz-host",
@@ -193,11 +217,12 @@ export class PluginSandbox {
       viz,
       moduleSrc,
     } satisfies ParentMsg, "*");
-    if (import.meta.env.MODE === "test") {
+    if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
       await Promise.resolve();
     } else {
-      await waitPluginMsg(iframe, "ready");
+      await waitPluginMsg(iframe, "ready", (fail) => { this.bootReject = fail; });
     }
+    this.bootReject = null;
   }
 
   tick(nodes: { id: string; rate: number; role: string }[]): void {
@@ -229,6 +254,12 @@ export class PluginSandbox {
       if (d.type === "ready") setSandboxReady(true);
       return;
     }
+    if (d.type === "log" && this.bootReject) {
+      const fail = this.bootReject;
+      this.bootReject = null;
+      fail(new Error(String(d.payload ?? "sandbox module load failed")));
+      return;
+    }
     if (!hostAllows(d.type, this.caps)) return;
     if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);
     if (d.type === "setNodeColor") this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
@@ -252,12 +283,22 @@ function recordSandboxBoot(type: HostMsg["type"]): void {
   w.__zotoSandboxBoot = [...(w.__zotoSandboxBoot ?? []), type];
 }
 
-function waitPluginMsg(iframe: HTMLIFrameElement, type: HostMsg["type"]): Promise<void> {
+function waitPluginMsg(
+  iframe: HTMLIFrameElement,
+  type: HostMsg["type"],
+  onReject?: (err: Error) => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
+    const fail = (err: Error) => {
+      window.clearTimeout(timer);
+      window.removeEventListener("message", onMsg);
+      reject(err);
+    };
+    onReject?.(fail);
     const timer = window.setTimeout(() => {
       window.removeEventListener("message", onMsg);
       reject(new Error(`sandbox ${type} timeout`));
-    }, 15000);
+    }, sandboxMsgTimeoutMs);
     const onMsg = (ev: MessageEvent) => {
       if (ev.source !== iframe.contentWindow) return;
       const d = ev.data as HostMsg | undefined;
