@@ -91,8 +91,17 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
         reg.register("ab", frame)
         reg.register("a", frame)
         tok = pack_asset_tokens.mint_pack_asset_token(SECRET, "ab", "c", frame)
-        row = {"id": "c", "has_frontend": True}
-        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "c" else None):
+        row_c = {"id": "c", "has_frontend": True}
+        row_bc = {"id": "bc", "has_frontend": True}
+
+        def plugin_row(pid: str):
+            if pid == "c":
+                return row_c
+            if pid == "bc":
+                return row_bc
+            return None
+
+        with patch.object(plugins, "_plugin_row", plugin_row):
             with patch.object(plugins, "consented", lambda _doc: True):
                 with patch.object(plugins, "module_response", lambda _pid: web.Response(text="export {};", content_type="text/javascript")):
                     ok = await self.client.get(

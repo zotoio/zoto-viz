@@ -1,7 +1,8 @@
 diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index 4ee88c2..a0c8b99 100644
 --- a/web/src/app/main.ts
 +++ b/web/src/app/main.ts
-@@ -667,12 +667,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
+@@ -667,15 +667,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
    setTileExpectsVizFeed(tileId, expectsViz);
    try {
      sandbox.setActiveTile(tileId);
@@ -16,3 +17,5 @@ diff --git a/web/src/app/main.ts b/web/src/app/main.ts
 -    );
 +    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
      markSandboxStartupOk(tileId);
+     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
+     preserveVizUbo = false;

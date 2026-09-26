@@ -1,7 +1,8 @@
 diff --git a/service/access.py b/service/access.py
+index b5b7152..ce1b5db 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -62,24 +62,8 @@ def pack_asset_token_ok(request: web.Request) -> bool:
+@@ -65,26 +65,8 @@ def pack_asset_token_ok(request: web.Request) -> bool:
      parsed = parse_pack_assets_path(request.path or "")
      if not parsed:
          return False
@@ -28,3 +29,5 @@ diff --git a/service/access.py b/service/access.py
 +    token, _pack_id, _tail = parsed
 +    return bool(token)
  
+ 
+ def redact_sandbox_token(text: str, token: str) -> str:
