@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
-  "testName": "^viz link index R7 syncTalkerIds production path > runs collect-time prune at the start of every collectVizLinks pass$",
-  "description": "Revert collectVizLinks entry prune (stale indexed pairs survive when talker membership shrinks).",
-  "patchedAssertion": "AssertionError: expected false to be true // Object.is equality"
-}

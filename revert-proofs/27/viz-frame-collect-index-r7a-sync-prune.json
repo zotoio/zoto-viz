@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
-  "testName": "^viz link index R7 syncTalkerIds production path > runs sync-time prune when the talker list is rebuilt$",
-  "description": "Revert syncTalkerIds rebuild prune (stale links survive talker-list swap without this call).",
-  "patchedAssertion": "AssertionError: expected false to be true // Object.is equality"
-}

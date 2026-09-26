@@ -62,16 +62,6 @@ const talkerIdsScratch = new Set<string>();
 const talkerIdsCached: string[] = [];
 let talkerIdsSetRebuilds = 0;
 
-/** Test-only: set when syncTalkerIds rebuild prunes the link index (R7a gate). */
-export let vizCollectSyncTalkerPruneRan = false;
-/** Test-only: set when collectVizLinks prunes at frame entry (R7b gate). */
-export let vizCollectEntryPruneRan = false;
-
-export function resetVizCollectTestHooks(): void {
-  vizCollectSyncTalkerPruneRan = false;
-  vizCollectEntryPruneRan = false;
-}
-
 const failGaugeScratch = new Map<string, number>();
 
 function compareLinkPair(a: LinkCandidate, b: LinkCandidate): number {
@@ -104,7 +94,6 @@ function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string>
     talkerIdsScratch.clear();
     for (let i = 0; i < talkerIdsCached.length; i++) talkerIdsScratch.add(talkerIdsCached[i]!);
     talkerIdsSetRebuilds++;
-    vizCollectSyncTalkerPruneRan = true;
     pruneLinksOutsideTalkers(talkerIdsScratch);
   }
   return talkerIdsScratch;
@@ -260,7 +249,6 @@ export function collectVizLinks(
   maxLinks: number,
 ): { links: VizLinkSample[]; linksDropped: number } {
   lastNewPairSetCount = 0;
-  vizCollectEntryPruneRan = true;
   pruneLinksOutsideTalkers(talkerIds);
   zeroLinkRatesForFrame();
   for (let fi = 0; fi < flows.length; fi++) {
