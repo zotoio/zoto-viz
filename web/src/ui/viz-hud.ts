@@ -187,6 +187,7 @@ export class VizHud {
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
   private readonly degradedEl: HTMLElement;
+  private readonly degradedSepAfter: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
@@ -244,7 +245,19 @@ export class VizHud {
       el.textContent = "·";
       return el;
     };
-    line.append(this.packEl, sep(), metric, sep(), this.skipEl, sep(), this.degradedEl, sep(), this.swapRow);
+    this.degradedSepAfter = sep();
+    this.degradedSepAfter.hidden = true;
+    line.append(
+      this.packEl,
+      sep(),
+      metric,
+      sep(),
+      this.skipEl,
+      sep(),
+      this.degradedEl,
+      this.degradedSepAfter,
+      this.swapRow,
+    );
     root.append(line);
 
     parent.append(root);
@@ -297,9 +310,11 @@ export class VizHud {
     const failBadge = vizFrameFailureBadge(frame);
     if (failBadge) {
       this.degradedEl.hidden = false;
+      this.degradedSepAfter.hidden = false;
       this.degradedEl.textContent = failBadge;
     } else {
       this.degradedEl.hidden = true;
+      this.degradedSepAfter.hidden = true;
       this.degradedEl.textContent = "";
     }
   }
