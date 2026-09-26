@@ -108,8 +108,9 @@ describe("backrooms shipped pack", () => {
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
-  it("leaves the drive buffer to the host", () => {
-    expect(FRONT).not.toMatch(/writeBuffer\s*\(/);
+  it("drives buffers from onPresent when presentTick is enabled", () => {
+    expect(FRONT).toMatch(/onPresent/);
+    expect(FRONT).toMatch(/writeBuffer\s*\(/);
   });
 
   it("fits the plugin buffer contract", () => {

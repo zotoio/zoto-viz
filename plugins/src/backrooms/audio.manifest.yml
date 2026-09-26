@@ -1,0 +1,19 @@
+# Pack-local SFX — served from /api/plugins/backrooms/asset/<path>
+required:
+  - sfx/buzz.mp3
+  - sfx/fluoro.mp3
+  - sfx/screech.mp3
+  - sfx/roar.mp3
+  - sfx/pant.mp3
+  - sfx/box.mp3
+loops:
+  buzz: sfx/buzz.mp3
+  fluoro: sfx/fluoro.mp3
+  pant: sfx/pant.mp3
+one_shots:
+  screech: sfx/screech.mp3
+  roar: sfx/roar.mp3
+  box: sfx/box.mp3
+heartbeat:
+  enabled: true
+  rate_hz: 1.15

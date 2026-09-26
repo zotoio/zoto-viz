@@ -8,6 +8,7 @@ capabilities:
   - viz.write
 viz:
   graphWalk: false
+  presentTick: true
   idle:
     fixture: host
   maxBuffers: 2
