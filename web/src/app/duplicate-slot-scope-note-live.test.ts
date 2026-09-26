@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setPluginModes } from "../core/modes";
 import { compilePlugin } from "../plugins/plugin";
 import { countTilesSharingConfigStore } from "../plugins/instances";
+import { packLastTileDiscardMessage } from "../plugins/pack-shared-copy";
+import { resetPluginConfigWriteMetrics, readPluginConfigWriteMetrics } from "../plugins/plugin-config-write-metrics";
 import {
   readPackScopeNoteMetrics,
   resetPackScopeNoteMetrics,
@@ -9,7 +11,9 @@ import {
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import { Settings } from "../ui/settings";
+import { readViewDrawerModuleMetrics, resetViewDrawerModuleMetrics } from "../ui/view-drawer-module";
 import { hostModeById } from "./host-mode";
+import { applyWallLayoutPatch } from "./mosaic-wall-layout";
 import {
   applyMosaicTiles,
   mountDuplicateSlotMosaicHarness,
@@ -19,7 +23,16 @@ import {
 const PACK = "plugin:settings-fixture";
 
 describe("duplicate slot shared config > scope note follows live tile count while drawer stays open", () => {
-  beforeEach(() => localStorage.clear());
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
 
   function drawerRoot(s: Settings): HTMLElement {
     return s.drawerEl;
@@ -30,7 +43,9 @@ describe("duplicate slot shared config > scope note follows live tile count whil
   }
 
   function scopeNoteCount(s: Settings): number | null {
-    const text = scopeNotes(s)[0]?.textContent ?? "";
+    const notes = scopeNotes(s);
+    if (!notes.length) return null;
+    const text = notes[0]?.textContent ?? "";
     const m = /all (\d+)/.exec(text);
     return m ? Number(m[1]) : null;
   }
@@ -94,6 +109,10 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     gain.value = "7";
     gain.dispatchEvent(new Event("input", { bubbles: true }));
 
+    resetViewDrawerModuleMetrics();
+    resetPackScopeNoteMetrics();
+    resetPluginConfigWriteMetrics();
+
     assertDrawerEditingStable(settings, viewLayer, gain, "7");
     expect(scopeNotes(settings)).toHaveLength(0);
 
@@ -104,16 +123,13 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(scopeNotes(settings)[0]?.textContent).toBe(
       `Changes apply to all 2 ${spec.name} tiles on this wall`,
     );
-    expect(scopeNoteCount(settings)).toBe(2);
 
     pickMosaicSlot(settings, 2, PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     assertDrawerEditingStable(settings, viewLayer, gain, "7");
-    expect(scopeNotes(settings)).toHaveLength(1);
     expect(scopeNotes(settings)[0]?.textContent).toBe(
       `Changes apply to all 3 ${spec.name} tiles on this wall`,
     );
-    expect(scopeNoteCount(settings)).toBe(3);
 
     pickMosaicSlot(settings, 2, "plugin:topology");
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -121,7 +137,6 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(scopeNotes(settings)[0]?.textContent).toBe(
       `Changes apply to all 2 ${spec.name} tiles on this wall`,
     );
-    expect(scopeNoteCount(settings)).toBe(2);
 
     pickMosaicSlot(settings, 1, "plugin:memory");
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -131,6 +146,74 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     const wall = packWallScopeFromAnim(settings.animSettings);
     expect(countTilesSharingConfigStore(spec, wall.tileModeIds)).toBe(1);
     expect(readPackScopeNoteMetrics().textWrites).toBe(4);
+    expect(readViewDrawerModuleMetrics().createElementCalls).toBe(0);
+    expect(readViewDrawerModuleMetrics().rebuilds).toBe(0);
+
+    const tilesAtTwo = [...settings.animSettings.mosaicTiles];
+    resetPackScopeNoteMetrics();
+    resetViewDrawerModuleMetrics();
+    applyWallLayoutPatch(settings, {
+      tree: {
+        type: "split",
+        dir: "v",
+        ratio: 0.5,
+        a: { type: "leaf", id: tilesAtTwo[0]! },
+        b: { type: "leaf", id: tilesAtTwo[1]! },
+      },
+      maximized: null,
+      tiles: tilesAtTwo,
+    });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    assertDrawerEditingStable(settings, viewLayer, gain, "7");
+    expect(readPackScopeNoteMetrics().textWrites).toBe(0);
+    expect(readViewDrawerModuleMetrics()).toEqual({ createElementCalls: 0, rebuilds: 0 });
+
+    applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:disk"]);
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    settings.openView(`${PACK}!2`);
+    gain.focus();
+    gain.value = "7";
+    gain.dispatchEvent(new Event("input", { bubbles: true }));
+    resetPluginConfigWriteMetrics();
+    const layoutCtl = settings.drawerEl.querySelectorAll<HTMLSelectElement>(".mosaic-slot")[2]!;
+    pickMosaicSlot(settings, 2, "plugin:topology");
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    assertDrawerEditingStable(settings, viewLayer, gain, "7");
+    expect(settings.viewFocus).toBe(PACK);
+    expect(readPluginConfigWriteMetrics().writes).toBe(0);
+    expect(scopeNoteCount(settings)).toBe(2);
+
+    applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:disk"]);
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    settings.openView(`${PACK}!1`);
+    gain.focus();
+    gain.value = "9";
+    gain.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(settings.viewPluginFieldDirty).toBe(true);
+    resetPluginConfigWriteMetrics();
+    pickMosaicSlot(settings, 1, "plugin:memory");
+    pickMosaicSlot(settings, 0, "plugin:topology");
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    expect(settings.isOpen).toBe(false);
+    expect(readPluginConfigWriteMetrics().writes).toBe(0);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(settings.viewDrawerStatusMessages()).toHaveLength(1);
+    expect(settings.viewDrawerStatusMessages()[0]?.textContent).toBe(packLastTileDiscardMessage(spec.name));
+    expect(settings.viewDrawerStatusMessages()[0]?.classList.contains("fail")).toBe(false);
+    expect(document.activeElement).toBe(settings.lastMosaicLayoutControl);
+    expect(document.activeElement).not.toBe(document.body);
+
+    applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:disk"]);
+    bindThisView(PACK);
+    settings.openView(PACK);
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    settings.clearViewDrawerStatus();
+    pickMosaicSlot(settings, 0, "plugin:memory");
+    pickMosaicSlot(settings, 1, "plugin:disk");
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    expect(settings.isOpen).toBe(false);
+    expect(settings.viewDrawerStatusMessages()).toHaveLength(0);
+    expect(document.activeElement).toBe(settings.lastMosaicLayoutControl);
 
     settings.el.remove();
   });

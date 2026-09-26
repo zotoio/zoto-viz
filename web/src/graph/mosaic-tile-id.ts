@@ -64,3 +64,18 @@ export function allocateMosaicTileSlot(viewId: string, existing: readonly string
   while (existing.includes(mosaicTileSlotId(viewId, n))) n += 1;
   return mosaicTileSlotId(viewId, n);
 }
+
+/** Stable identity for an open view drawer (pack + catalog view, not tile slot position). */
+export type DrawerKey = string & { readonly __drawerKeyBrand: unique symbol };
+
+/** Single entry point: drawer ownership is keyed by view + pack, never by mosaic tile index. */
+export function drawerKeyFor(viewId: string, packId: string | null): DrawerKey {
+  const view = mosaicTileViewId(viewId);
+  const pack = packId?.trim() ?? "";
+  return `${view}\0${pack}` as DrawerKey;
+}
+
+export function drawerKeyForModeId(modeId: string): DrawerKey {
+  const parsed = parseMosaicSlotId(modeId);
+  return drawerKeyFor(parsed.viewId, parsed.packId);
+}

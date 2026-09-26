@@ -26,6 +26,14 @@ import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import { recordPackScopeNoteRecount } from "../plugins/pack-scope-note-metrics";
 import type { PackWallScope } from "../plugins/instances";
+import { packLastTileDiscardMessage } from "../plugins/pack-shared-copy";
+import { drawerKeyForModeId, type DrawerKey } from "../graph/mosaic-tile-id";
+import {
+  countPackTiles,
+  firstPackTileInReadingOrder,
+  tileSlotOnWall,
+} from "../app/mosaic-view-drawer-layout";
+import { rebuildViewDrawerContent } from "./view-drawer-module";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
@@ -178,6 +186,11 @@ export class Settings {
   private viewMosaicSec: HTMLElement | null = null;
   private viewCog: HTMLButtonElement | null = null;
   private viewFocusId = "";
+  private viewDrawerKey: DrawerKey | null = null;
+  private viewPluginDirty = false;
+  private readonly viewDrawerStatusEl: HTMLDivElement;
+  private lastMosaicSlotEl: HTMLSelectElement | null = null;
+  private readonly mosaicLayoutFocusReturn: HTMLButtonElement;
   private nestDevices: SdmDevice[] = [];
   private nestDeviceKey = "";
   private viewBind: {
@@ -261,7 +274,15 @@ export class Settings {
     const handle = document.createElement("div");
     handle.textContent = "settings";
     this.pop.append(handle, this.nav, this.body);
-    this.el.append(this.btn, this.pop);
+    this.viewDrawerStatusEl = document.createElement("div");
+    this.viewDrawerStatusEl.className = "view-drawer-status sec-hint";
+    this.viewDrawerStatusEl.setAttribute("role", "status");
+    this.viewDrawerStatusEl.hidden = true;
+    this.mosaicLayoutFocusReturn = document.createElement("button");
+    this.mosaicLayoutFocusReturn.type = "button";
+    this.mosaicLayoutFocusReturn.className = "mosaic-layout-focus-return";
+    this.mosaicLayoutFocusReturn.tabIndex = 0;
+    this.el.append(this.viewDrawerStatusEl, this.mosaicLayoutFocusReturn, this.btn, this.pop);
     bindFloatPanel(this.pop, handle, "settings", { pin: () => this.pinFloat(), min: { w: 360, h: 280 } });
 
     this.anim = loadAnim(cfg.storePrefix);
@@ -325,6 +346,11 @@ export class Settings {
   }
 
   get viewFocus(): string { return this.viewFocusId; }
+
+  /** Used by host applyMode to skip drawer rebuild when pack + view are unchanged. */
+  viewDrawerOpenWithSpec(): boolean {
+    return this.isOpen && this.activePane === "view" && !!this.viewBind?.spec;
+  }
 
   private syncViewCog(): void {
     const on = this.isOpen && this.activePane === "view";
@@ -437,70 +463,37 @@ export class Settings {
     this.pulseNow = fn;
   }
 
-  bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null, extras?: HTMLElement[]): void {
+  bindView(
+    spec: PluginView | null,
+    fields?: PluginField[],
+    look?: PluginLook | null,
+    extras?: HTMLElement[],
+    modeIdForDrawerKey?: string,
+  ): void {
     this.viewBind = { spec, fields, look, extras };
     const host = this.viewHost;
     if (!host) return;
-    host.replaceChildren();
-    if (spec) {
-      const layers = packLayerNames(spec);
-      host.append(pluginLayer(
-        "pack",
-        spec.name,
-        `Plugin pack · ${layers.join(" · ")}. Datasource, backend, and frontend are reusable; this tab is the selected view. Wall composes other views.`,
-      ));
+    const modeForKey = modeIdForDrawerKey?.trim() || this.viewFocusId.trim() || spec?.id || "";
+    const nextKey = spec && modeForKey ? drawerKeyForModeId(modeForKey) : null;
+    if (nextKey && nextKey === this.viewDrawerKey && host.querySelector('.plugin-layer[data-layer="view"]')) {
+      return;
     }
-    if (look && Object.keys(look).length) {
-      const front = pluginLayer(
-        "frontend",
-        "Frontend",
-        spec
-          ? `Look pins from ${spec.name}'s visualisation — they override matching Motion / Appearance controls while this view is selected.`
-          : "Look pins from the plugin pack — they override matching Motion / Appearance controls while selected.",
-      );
-      const row = document.createElement("div");
-      row.className = "pin-chips";
-      for (const [k, v] of Object.entries(look)) {
-        if (v === undefined) continue;
-        const c = document.createElement("span");
-        c.className = "pin-chip";
-        c.textContent = `${k}: ${String(v)}`;
-        row.appendChild(c);
-      }
-      front.append(row);
-      host.append(front);
-    }
-    const extra = extras?.filter(Boolean) ?? [];
-    if (spec) {
-      const view = pluginLayer(
-        "view",
-        "View",
-        spec.instanceId && spec.instanceId !== spec.id
-          ? `Instance ${spec.instanceId} of ${spec.id}. Corner cog on a mosaic tile opens that tile's view.`
-          : "This catalog row. Corner cog on a mosaic tile opens that tile's view.",
-      );
-      fillPluginFields(view, spec, pluginViewKnobs(spec, fields), (id, values) => {
+    this.viewDrawerKey = nextKey;
+    this.viewPluginDirty = false;
+    rebuildViewDrawerContent(host, {
+      spec,
+      fields,
+      look,
+      extras,
+      wallScope: packWallScopeFromAnim(this.anim),
+      viewMosaicSec: this.viewMosaicSec,
+      onPluginPersist: (id, values) => {
         this.onPluginChange?.(id, values);
         this.cfg.onPersist?.();
-      }, { skipEmpty: extra.length > 0, devices: this.nestDevices, wallScope: packWallScopeFromAnim(this.anim) });
-      if (extra.length) {
-        const sec = document.createElement("div");
-        sec.className = "sec";
-        const row = document.createElement("div");
-        row.className = "sec-controls";
-        for (const el of extra) row.appendChild(el);
-        sec.append(row);
-        const prompt = view.querySelector(".view-prompt");
-        if (prompt) view.insertBefore(sec, prompt);
-        else view.append(sec);
-      }
-      host.append(view);
-    } else if (!look && !extra.length && !this.viewMosaicSec) {
-      const empty = document.createElement("div");
-      empty.className = "sec";
-      empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu or on a mosaic tile opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
-      host.append(empty);
-    }
+        this.viewPluginDirty = false;
+      },
+      onPluginFieldInput: () => { this.viewPluginDirty = true; },
+    });
     this.attachViewMosaic();
   }
 
@@ -1728,6 +1721,7 @@ export class Settings {
     uniqueSkies?: boolean;
     skies?: DreamAnim["mosaicSkies"];
   }): void {
+    const prevTiles = [...this.anim.mosaicTiles];
     this.anim.mosaicTree = parseMosaicNode(patch.tree);
     this.anim.mosaicMaxId = patch.maximized ?? "";
     this.anim.mosaicTiles = parseMosaicTiles(patch.tiles);
@@ -1737,8 +1731,75 @@ export class Settings {
     }
     this.persistAnim();
     this.animUi?.syncTiles();
+    this.onMosaicLayoutDrawerChange(prevTiles, this.anim.mosaicTiles);
     this.syncPackScopeNoteFromAnim();
   }
+
+  private onMosaicLayoutDrawerChange(prevTiles: string[], nextTiles: string[]): void {
+    if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec?.id) return;
+    const packId = this.viewBind.spec.id;
+    const focus = this.viewFocusId;
+    const nextCount = countPackTiles(nextTiles, packId);
+    if (nextCount === 0) {
+      const unsaved = this.viewPluginDirty;
+      const msg = unsaved ? packLastTileDiscardMessage(this.viewBind.spec.name) : null;
+      this.teardownViewDrawerAfterLastPackTile(msg);
+      return;
+    }
+    if (focus && !tileSlotOnWall(focus, nextTiles)) {
+      const nextFocus = firstPackTileInReadingOrder(nextTiles, packId);
+      if (nextFocus) this.retargetViewFocus(nextFocus);
+    }
+  }
+
+  private retargetViewFocus(slotModeId: string): void {
+    this.viewFocusId = slotModeId;
+    this.animUi?.syncTiles();
+    this.syncViewCog();
+  }
+
+  private teardownViewDrawerAfterLastPackTile(discardMessage: string | null): void {
+    const layoutControl = this.lastMosaicSlotEl;
+    if (discardMessage) this.showViewDrawerStatus(discardMessage);
+    else this.clearViewDrawerStatus();
+    this.viewPluginDirty = false;
+    this.viewDrawerKey = null;
+    this.viewFocusId = "";
+    this.pop.hidden = true;
+    this.el.classList.remove("open");
+    this.btn.setAttribute("aria-expanded", "false");
+    this.syncViewCog();
+    document.removeEventListener("pointerdown", this.onDocDown, true);
+    cancelAnimationFrame(this.meterRaf);
+    this.meterRaf = 0;
+    this.onClose?.();
+    if (layoutControl) {
+      const label = layoutControl.getAttribute("aria-label");
+      if (label) this.mosaicLayoutFocusReturn.setAttribute("aria-label", label);
+    }
+    this.mosaicLayoutFocusReturn.focus();
+  }
+
+  showViewDrawerStatus(message: string): void {
+    this.viewDrawerStatusEl.textContent = message;
+    this.viewDrawerStatusEl.hidden = false;
+    this.viewDrawerStatusEl.classList.remove("fail");
+  }
+
+  clearViewDrawerStatus(): void {
+    this.viewDrawerStatusEl.textContent = "";
+    this.viewDrawerStatusEl.hidden = true;
+  }
+
+  /** Visible status lines (normal tone) after the drawer closes. */
+  viewDrawerStatusMessages(): HTMLElement[] {
+    return this.viewDrawerStatusEl.hidden ? [] : [this.viewDrawerStatusEl];
+  }
+
+  get viewPluginFieldDirty(): boolean { return this.viewPluginDirty; }
+
+  /** Focus return target for the mosaic slot that last drove a layout change. */
+  get lastMosaicLayoutControl(): HTMLElement { return this.mosaicLayoutFocusReturn; }
 
   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
 
@@ -1779,6 +1840,7 @@ export class Settings {
       sel.setAttribute("aria-label", cap.textContent);
       fillViewSelect(sel, cur);
       sel.addEventListener("change", () => {
+        this.lastMosaicSlotEl = sel;
         const from = ids[i] ?? "";
         const to = sel.value;
         if (!from || from === to) return;
@@ -2160,6 +2222,7 @@ export class Settings {
 
   close(): void {
     this.viewFocusId = "";
+    this.viewDrawerKey = null;
     this.pop.hidden = true;
     this.el.classList.remove("open");
     this.btn.setAttribute("aria-expanded", "false");

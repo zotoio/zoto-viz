@@ -11,7 +11,7 @@ export function fillPluginFields(
   spec: PluginView,
   fields: PluginField[],
   onPersist: (id: string, values: Record<string, string>) => void,
-  opts?: { skipEmpty?: boolean; devices?: SdmDevice[]; wallScope?: PackWallScope },
+  opts?: { skipEmpty?: boolean; devices?: SdmDevice[]; wallScope?: PackWallScope; onFieldInput?: () => void },
 ): void {
   const values = loadPluginConfig(spec, fields);
   const head = document.createElement("div");
@@ -83,8 +83,12 @@ export function fillPluginFields(
           max,
           step: f.step ?? 1,
           value: Number(current),
-          onInput: (v) => { values[f.key] = String(v); persist(); },
+          onInput: (v) => {
+            values[f.key] = String(v);
+            opts?.onFieldInput?.();
+          },
         });
+        sl.el.querySelector("input")?.addEventListener("change", () => persist());
         row.append(sl.el);
       } else {
         const tf = new TextField({

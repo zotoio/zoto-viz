@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateMosaicTileSlot,
+  drawerKeyFor,
+  drawerKeyForModeId,
   mosaicPlacedTileIndices,
   mosaicTileSlotId,
   mosaicTileViewId,
@@ -23,6 +25,13 @@ describe("mosaic tile slot ids", () => {
     const tiles = ["plugin:a", "plugin:b", "plugin:a!1"];
     expect(mosaicPlacedTileIndices(tiles, "plugin:a")).toEqual([1, 3]);
     expect(mosaicWallUsesView(tiles, "plugin:b")).toBe(true);
+  });
+
+  it("drawerKeyFor ignores tile slot suffix (pack + view only)", () => {
+    expect(drawerKeyFor("plugin:settings-fixture!2", "settings-fixture")).toBe(
+      drawerKeyFor("plugin:settings-fixture", "settings-fixture"),
+    );
+    expect(drawerKeyForModeId("plugin:settings-fixture!1")).toBe(drawerKeyForModeId("plugin:settings-fixture"));
   });
 
   it("parseMosaicSlotId splits pack and numeric slot", () => {
