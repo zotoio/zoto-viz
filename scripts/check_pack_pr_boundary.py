@@ -15,6 +15,12 @@ PACK_SRC_RE = re.compile(r"^plugins/src/([^/]+)/")
 ALLOWED_SCHEMA_PATH = "tests/test_plugin_schema.py"
 ALLOWED_TSCONFIG_PATH = "web/tsconfig.json"
 VIZ_VALIDATE_FUNC = "test_viz_plugin_yml_validates"
+CSP_SANDBOX_CONFIG_PATHS = frozenset(
+    {
+        "web/index.html",
+        "web/src/plugins/host.ts",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -40,6 +46,39 @@ def is_pack_test_file(path: str, pack: str) -> bool:
     if stem.endswith(".test"):
         stem = stem[: -len(".test")]
     return stem == pack or stem.startswith(f"{pack}-")
+
+
+def is_allowed_multipack_web_src(path: str, packs: set[str]) -> bool:
+    return any(is_pack_test_file(path, pack) for pack in packs)
+
+
+def is_multipack_forbidden_host_path(path: str, packs: set[str]) -> bool:
+    """Host/sensitive paths that must not ride along with a multi-pack PR."""
+    if path.startswith("service/"):
+        return True
+    if path.startswith("plugins/sdk/"):
+        return True
+    if path in CSP_SANDBOX_CONFIG_PATHS:
+        return True
+    if path.startswith("web/src/"):
+        return not is_allowed_multipack_web_src(path, packs)
+    return False
+
+
+def evaluate_multipack_pr(changed_files: list[str], packs: set[str]) -> list[Violation]:
+    violations: list[Violation] = []
+    for path in sorted(changed_files):
+        if not is_multipack_forbidden_host_path(path, packs):
+            continue
+        violations.append(
+            Violation(
+                path,
+                "multi-pack PR cannot change host, service, sdk, CSP/sandbox, "
+                "or web/src (except that pack's plugin tests) without the "
+                "host-change label",
+            )
+        )
+    return violations
 
 
 def _plugin_tuple_from_viz_test(tree: ast.Module) -> ast.Tuple | None:
@@ -265,9 +304,19 @@ def run_check(
         return 0, lines
 
     if len(packs) > 1:
+        pack_list = ", ".join(sorted(packs))
+        violations = evaluate_multipack_pr(changed_files, packs)
+        if violations:
+            lines.append(
+                "pack-boundary: multi-pack PR "
+                f"({pack_list}) with forbidden host changes; FAILED"
+            )
+            for v in violations:
+                lines.append(f"  {v.path}: {v.reason}")
+            return 1, lines
         lines.append(
             "pack-boundary: not a pack PR "
-            f"(multiple pack folders: {', '.join(sorted(packs))}); check passed."
+            f"(multiple pack folders: {pack_list}); check passed."
         )
         return 0, lines
 

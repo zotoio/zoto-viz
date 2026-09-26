@@ -85,6 +85,30 @@ def test_two_pack_folders_not_a_pack_pr() -> None:
     assert any("multiple pack folders" in line for line in lines)
 
 
+def test_multi_pack_with_host_web_src_fails() -> None:
+    files = [
+        "plugins/src/ant-colony/plugin.yml",
+        "plugins/src/metro-lines/plugin.yml",
+        "web/src/plugins/viz-host.ts",
+    ]
+    code, lines = run_check(files, {})
+    assert code == 1
+    assert any("multi-pack PR" in line for line in lines)
+    assert any("viz-host.ts" in line for line in lines)
+
+
+def test_multi_pack_with_each_pack_test_still_passes() -> None:
+    files = [
+        "plugins/src/ant-colony/plugin.yml",
+        "plugins/src/metro-lines/plugin.yml",
+        "web/src/plugins/ant-colony.test.ts",
+        "web/src/plugins/metro-lines.test.ts",
+    ]
+    code, lines = run_check(files, {})
+    assert code == 0
+    assert any("multiple pack folders" in line for line in lines)
+
+
 def test_host_only_pr_passes() -> None:
     files = ["web/src/plugins/viz-host.ts", "service/foo.py"]
     code, lines = run_check(files, {})
