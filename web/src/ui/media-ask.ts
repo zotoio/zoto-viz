@@ -7,6 +7,7 @@
 
 import { probeWebGL } from "../graph/webgl";
 import { micCaptureAllowed } from "../audio/want";
+import { queryMicPermissionState } from "../audio/mic-permission";
 import { currentCamPolicy } from "../camera/want";
 
 export type MediaAskKind = "mic" | "cam";
@@ -343,6 +344,16 @@ async function flush(): Promise<void> {
     }
     if (!navigator.mediaDevices?.getUserMedia) {
       w.resolve(null);
+      continue;
+    }
+    if (w.audio && (await queryMicPermissionState()) === "granted") {
+      const stream = await captureOne({ audio: w.audio, video: w.video });
+      if (stream && !waiterAllowed(w)) {
+        for (const t of stream.getTracks()) t.stop();
+        w.resolve(null);
+        continue;
+      }
+      w.resolve(stream);
       continue;
     }
     // Permissions API "granted" is not an accept — Cursor Simple Browser
