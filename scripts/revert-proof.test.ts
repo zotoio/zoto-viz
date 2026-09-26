@@ -1056,7 +1056,10 @@ describe("vitest testName escaping", () => {
     expect(mod.escapeVitestTestNamePattern("a(b)*+?")).toBe("a\\(b\\)\\*\\+\\?");
     expect(
       mod.vitestJunitTestNames(
-        `<testsuite><testcase name="widget &gt; alpha &gt; returns one"/></testsuite>`,
+        `<testsuite>
+<testcase name="other &gt; filtered"><skipped/></testcase>
+<testcase name="widget &gt; alpha &gt; returns one"/>
+</testsuite>`,
       ),
     ).toEqual([["widget > alpha > returns one"]]);
     expect(

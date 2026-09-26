@@ -998,9 +998,10 @@ function decodeXmlAttribute(value) {
 
 export function vitestJunitTestNames(xmlText) {
   const names = [];
-  const testcaseRe = /<testcase\b([^>]*?)(?:\/>|>[\s\S]*?<\/testcase>)/g;
+  const testcaseRe = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
   let testcase;
   while ((testcase = testcaseRe.exec(xmlText ?? ""))) {
+    if (/<skipped\b/.test(testcase[2] ?? "")) continue;
     const attrs = {};
     const attrRe = /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
     let attr;
