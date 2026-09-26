@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "isolation guards > (link-guard-main) rejects symlinks into the main checkout",
   "description": "Skip unscoped packages in the workspace link check",
-  "red": "TBD"
+  "red": "AssertionError: expected [Function] to throw an error"
 }

@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "patchTouchesTestFiles > flags tests paths",
   "description": "Stop treating tests/ as a test path",
-  "red": "TBD"
+  "red": "AssertionError: expected false to be true // Object.is equality"
 }

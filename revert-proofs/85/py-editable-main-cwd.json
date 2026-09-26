@@ -2,6 +2,6 @@
   "runner": "vitest",
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (py-editable) editable install row goes red only with worktree isolation",
-  "description": "Stop pointing PYTHONPATH at the worktree",
+  "description": "Run pytest rows from the main checkout instead of the worktree",
   "red": "TBD"
 }

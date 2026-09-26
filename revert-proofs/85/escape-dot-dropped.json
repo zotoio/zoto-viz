@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "vitest testName escaping > escapes and anchors fullTestName for -t",
   "description": "Stop escaping `.` in the -t pattern",
-  "red": "TBD"
+  "red": "AssertionError: expected '^widget \\(beta\\) > talkers\\[\\].failed$' to be '^widget \\(beta\\) > talkers\\[\\]\\.faile…' // Object.is equality"
 }

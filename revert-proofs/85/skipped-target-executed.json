@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (d) row pointing at skipped test is rejected on baseline",
   "description": "Treat a skipped target as executed",
-  "red": "TBD"
+  "red": "AssertionError: expected 'row skipped-target: baseline ran 0 te…' to contain 'row skipped-target: baseline test sel…'"
 }

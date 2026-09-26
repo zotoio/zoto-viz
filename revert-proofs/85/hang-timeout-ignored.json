@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (hang-timeout) hanging test is rejected as timeout",
   "description": "Stop reporting baseline timeouts",
-  "red": "TBD"
+  "red": "AssertionError: expected 'row hang: baseline test selection fai…' to contain 'row hang: baseline timed out'"
 }

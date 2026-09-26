@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (e) multi-test-file row runs exactly one test in a file with many tests",
   "description": "Stop passing the -t name filter to vitest",
-  "red": "TBD"
+  "red": "AssertionError: row multi-file: baseline test selection failed (other tests not skipped; never a pass)"
 }

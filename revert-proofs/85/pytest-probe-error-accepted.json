@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof-lib guards > (pytest-probe-error) failed without revertProofAssertion meta is build break",
   "description": "Classify every pytest failure as assertion red",
-  "red": "TBD"
+  "red": "AssertionError: expected 'assertion' to be 'build break' // Object.is equality"
 }

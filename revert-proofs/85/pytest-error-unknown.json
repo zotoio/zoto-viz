@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof-lib guards > (pytest-error-tag) error outcome is not assertion red",
   "description": "Drop the pytest error-outcome classification",
-  "red": "TBD"
+  "red": "AssertionError: expected 'unknown' to be 'build break' // Object.is equality"
 }

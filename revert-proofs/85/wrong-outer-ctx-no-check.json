@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (c3) patch with wrong outer context is rejected by git apply --check",
   "description": "Skip git apply --check before applying",
-  "red": "TBD"
+  "red": "AssertionError: expected 'row wrong-outer-ctx: git apply failed…' to contain 'row wrong-outer-ctx: git apply --chec…'"
 }

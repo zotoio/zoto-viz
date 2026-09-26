@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (f) real expect() failure is RED with revertProofAssertion meta",
   "description": "Drop chai Assertion throw-site branding in the runner",
-  "red": "TBD"
+  "red": "AssertionError [ERR_ASSERTION]: row expect-red: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from \"vitest\", not a separate chai package)"
 }
