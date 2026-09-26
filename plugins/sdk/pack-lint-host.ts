@@ -187,7 +187,7 @@ export function extractModuleSpecifiers(source: string): string[] {
     /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g,
     /\brequire\s*\(\s*`([^`]+)`\s*\)/g,
     /\bimport\.meta\.glob\s*\(\s*["']([^"']+)["']/g,
-    /\bimport\.meta\.glob\s*\(\s*`([^`]+)`\s*\)/g,
+    /\bimport\.meta\.glob\s*\(\s*`([^`]+)`/g,
     /\bimport\.meta\.glob\s*\(\s*\[([^\]]+)\]/g,
   ];
   for (const re of patterns) {

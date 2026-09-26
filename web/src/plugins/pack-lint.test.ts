@@ -135,9 +135,7 @@ const HOST_PASS_FIXTURES: { label: string; run: () => ReturnType<typeof scanHost
     label: "inline /api/plugins/<id>/module.js import()",
     run: () => scanHostLintFixture(
       "web/src/plugins/host.ts",
-      `export async function load(id: string) {
-        return import("/api/plugins/" + id + "/module.js?h=abc");
-      }`,
+      "export async function load(id: string) {\n        return import(`/api/plugins/${id}/module.js?h=abc`);\n      }",
       repoRoot,
     ),
   },
