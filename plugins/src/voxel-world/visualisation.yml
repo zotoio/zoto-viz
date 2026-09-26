@@ -1,0 +1,134 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: dusk
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.12
+  skyAudio: false
+  skySpeed: 1
+  gridOpacity: 0
+config:
+  - key: preset
+    label: preset
+    type: select
+    default: classic
+    values:
+      - [classic, Classic]
+      - [snowy, Snowy Peaks]
+      - [desert, Desert]
+      - [night, Night Torches]
+      - [archipelago, Archipelago]
+      - [custom, Custom]
+    hint: Bundled looks. Custom keeps your sliders; other presets overwrite related fields when selected.
+  - key: seed
+    label: world seed
+    type: number
+    default: 4242
+    min: 1
+    max: 999999
+    step: 1
+    hint: Terrain and vegetation hash. Same seed reproduces the same hills and hamlet.
+  - key: biome
+    label: biome mix
+    type: select
+    default: temperate
+    values:
+      - [temperate, temperate]
+      - [boreal, boreal]
+      - [arid, arid]
+      - [islands, islands]
+    hint: Shifts sea level, tree cover, and beach width.
+  - key: viewDist
+    label: view distance
+    type: number
+    default: 40
+    min: 16
+    max: 48
+    step: 2
+    hint: Hard-capped ray distance in blocks (48 max on wall tiles).
+  - key: timeOfDay
+    label: time of day
+    type: number
+    default: 14
+    min: 0
+    max: 24
+    step: 0.25
+    hint: Local sun position. 0/24 is midnight; 12 is noon.
+  - key: cycleSpeed
+    label: day cycle speed
+    type: number
+    default: 0
+    min: 0
+    max: 4
+    step: 0.05
+    hint: Hours advanced per real minute. 0 freezes time (unless preset animates).
+  - key: weather
+    label: weather
+    type: select
+    default: clear
+    values:
+      - [clear, clear]
+      - [rain, rain]
+      - [snow, snow]
+    hint: Precipitation particles and sky dimming.
+  - key: camera
+    label: camera mode
+    type: select
+    default: fly
+    values:
+      - [fly, cinematic fly]
+      - [walk, first-person walk]
+      - [orbit, orbit village]
+    hint: Smooth paths with reduced-motion override (slow orbit / static).
+  - key: cameraSpeed
+    label: camera speed
+    type: number
+    default: 1
+    min: 0.2
+    max: 2.5
+    step: 0.05
+    hint: Movement multiplier. Capped for wall mosaic safety.
+  - key: fog
+    label: fog density
+    type: number
+    default: 0.55
+    min: 0
+    max: 1
+    step: 0.02
+    hint: Atmospheric perspective toward the horizon.
+  - key: textureStyle
+    label: texture style
+    type: select
+    default: crisp
+    values:
+      - [crisp, crisp pixels]
+      - [smooth, soft pixels]
+      - [painterly, painterly]
+    hint: Procedural 16×16 face shading inside the shader.
+  - key: mobs
+    label: mob count
+    type: number
+    default: 3
+    min: 0
+    max: 6
+    step: 1
+    hint: Blocky animals wandering near the camera path (hard cap 6).
+  - key: clouds
+    label: block clouds
+    type: boolean
+    default: true
+    hint: Voxel-style cloud layers.
+  - key: palette
+    label: colour palette
+    type: select
+    default: verdant
+    values:
+      - [verdant, verdant]
+      - [sunset, sunset]
+      - [alpine, alpine]
+      - [candy, candy]
+    hint: Overall colour grading.

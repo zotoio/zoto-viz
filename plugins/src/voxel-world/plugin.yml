@@ -1,0 +1,25 @@
+id: voxel-world
+name: Voxel World
+version: 1
+hint: Blocky procedural voxel terrain — fly, walk, or orbit a tiny village. All textures are generated in the shader; no external assets.
+description: Stage-only blocky voxel landscape with seeded hills, beaches, snow caps, shallow caves, trees, flowers, ore specks, day/night sky, block clouds, distance fog, corner ambient occlusion, shimmering water, torch glow at night, and optional wandering animals. Camera modes include cinematic flyover, first-person walk, and orbit around a procedural hamlet. Every knob lives in This view settings (and MCP set_plugin).
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 2
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+    - uBright
+    - uOpacity
+frontend:
+  entry: frontend/index.ts

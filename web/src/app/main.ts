@@ -22,6 +22,15 @@ import {
   parseBackroomsOptions,
   setBackroomsOptions,
 } from "../../../plugins/src/backrooms/frontend/director";
+import {
+  parseVoxelWorldOptions,
+  randomiseVoxelWorldOptions,
+  resetVoxelWorldOptions,
+  setVoxelWorldOptions,
+  undoVoxelWorldOptions,
+  voxelSlots,
+  voxelWorldOptions,
+} from "../../../plugins/src/voxel-world/frontend/world";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -358,6 +367,26 @@ addPresentListener((ts) => {
 addPresentListener(markPresent);
 let brOptsSrc: Record<string, string> | null = null;
 let brOptsJson = "";
+let voxOptsSrc: Record<string, string> | null = null;
+let voxOptsJson = "";
+
+function voxelReducedMotion(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Voxel World view config → director options. */
+function voxelViewOptions(): ReturnType<typeof parseVoxelWorldOptions> {
+  if (voxOptsSrc !== currentOpts) {
+    voxOptsSrc = currentOpts;
+    const json = JSON.stringify(currentOpts);
+    if (json !== voxOptsJson) {
+      voxOptsJson = json;
+      setVoxelWorldOptions(parseVoxelWorldOptions(currentOpts));
+    }
+  }
+  return voxelWorldOptions();
+}
+
 /** Backrooms view config (UI sliders / toggles, MCP set_plugin) → director options, re-parsed only when they change. */
 function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
   if (brOptsSrc !== currentOpts) {
@@ -379,6 +408,16 @@ scene.afterLook = () => {
     backroomsViewOptions();
     scene.setHeard(false);
     const drive = backroomsSlots(scene.skyTime(), new Date(), innerWidth / Math.max(1, innerHeight));
+    vizWriter.writeBuffer(0, drive.slot0);
+    vizWriter.writeBuffer(1, drive.slot1);
+    scene.setPluginUboBuffer(vizWriter.ubo);
+    return;
+  }
+  if (mode.pluginId === "voxel-world" && vizWriter) {
+    voxelViewOptions();
+    scene.setHeard(false);
+    const aspect = innerWidth / Math.max(1, innerHeight);
+    const drive = voxelSlots(scene.skyTime(), aspect, voxelReducedMotion(), scene.heardSpectrum(1).level);
     vizWriter.writeBuffer(0, drive.slot0);
     vizWriter.writeBuffer(1, drive.slot1);
     scene.setPluginUboBuffer(vizWriter.ubo);
@@ -540,7 +579,65 @@ function optsFor(m: ViewMode): Record<string, string> {
   return o;
 }
 
+function voxelWorldControls(): HTMLElement[] {
+  const randomise = document.createElement("button");
+  randomise.type = "button";
+  randomise.className = "link";
+  randomise.textContent = "randomise";
+  randomise.title = "Random world knobs (undo restores the previous set)";
+  randomise.addEventListener("click", () => {
+    randomiseVoxelWorldOptions();
+    const spec = pluginSpecForMode("plugin:voxel-world");
+    if (!spec) return;
+    const fields = pluginViewKnobs(spec, spec.config);
+    const parsed = parseVoxelWorldOptions(loadPluginConfig(spec, fields));
+    writePluginConfig(configStoreId(spec), {
+      ...loadPluginConfig(spec, fields),
+      preset: parsed.preset,
+      seed: String(parsed.seed),
+      biome: parsed.biome,
+      viewDist: String(parsed.viewDist),
+      timeOfDay: String(parsed.timeOfDay),
+      cycleSpeed: String(parsed.cycleSpeed),
+      weather: parsed.weather,
+      camera: parsed.camera,
+      cameraSpeed: String(parsed.cameraSpeed),
+      fog: String(parsed.fog),
+      textureStyle: parsed.textureStyle,
+      mobs: String(parsed.mobs),
+      clouds: parsed.clouds ? "1" : "0",
+      palette: parsed.palette,
+    });
+    onPluginFields();
+    bindThisView("plugin:voxel-world");
+  });
+  const undo = document.createElement("button");
+  undo.type = "button";
+  undo.className = "link";
+  undo.textContent = "undo";
+  undo.title = "Undo the last randomise";
+  undo.addEventListener("click", () => {
+    if (!undoVoxelWorldOptions()) return;
+    onPluginFields();
+    bindThisView("plugin:voxel-world");
+  });
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "link";
+  reset.textContent = "reset";
+  reset.title = "Restore Classic defaults";
+  reset.addEventListener("click", () => {
+    resetVoxelWorldOptions();
+    const spec = pluginSpecForMode("plugin:voxel-world");
+    if (spec) writePluginConfig(configStoreId(spec), {});
+    onPluginFields();
+    bindThisView("plugin:voxel-world");
+  });
+  return [randomise, undo, reset];
+}
+
 function arcadeControls(m: ViewMode): HTMLElement[] {
+  if (m.pluginId === "voxel-world") return voxelWorldControls();
   const slot = arcade[m.arcadeId ?? ""];
   return slot ? [...slot.view.controls] : [];
 }
