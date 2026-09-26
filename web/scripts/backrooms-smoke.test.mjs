@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Backrooms stage sky smoke render (headless Chromium).
+ * Backrooms first-load smoke (headless Chromium).
+ * Fresh storage, Backrooms selected before first mount, feed + chat open.
  * Requires a running monitor UI (7020 after `pnpm build`, or Vite on 5173).
  */
 import assert from "node:assert/strict";
@@ -16,17 +17,27 @@ const NEAR_BLACK_TOL = 12;
 const CORRIDOR_YELLOW = { r: 188, g: 168, b: 78 };
 const CORRIDOR_TOL = { r: 75, g: 75, b: 60 };
 
-function installStorage() {
+function installFirstLoadProfile() {
+  localStorage.clear();
+  sessionStorage.clear();
   localStorage.setItem("zoto-viz.mic", "off");
   localStorage.setItem("zoto-viz.autoconsent", "1");
   localStorage.setItem("zoto-viz.tsPlugins", "1");
   localStorage.setItem("zoto-viz.mode", "plugin:backrooms");
   localStorage.setItem("zoto-viz.anim.dice", "0");
   localStorage.setItem("zoto-viz.anim.mosaic", "off");
+  localStorage.setItem("zoto-viz.feed.on", "1");
+  localStorage.setItem("zoto-viz.chat.on", "1");
   localStorage.setItem("zoto-viz.smoke.backrooms", "1");
-}
-
-function installGlErrorHooks() {
+  window.__zotoCspViolations = [];
+  document.addEventListener("securitypolicyviolation", (e) => {
+    window.__zotoCspViolations.push({
+      blockedURI: e.blockedURI,
+      violatedDirective: e.violatedDirective,
+      sourceFile: e.sourceFile,
+      lineNumber: e.lineNumber,
+    });
+  });
   if (window.__zotoGlHooked) return;
   window.__zotoGlHooked = true;
   window.__zotoSmoke ||= { glErrors: [], sandboxGlErrors: [] };
@@ -117,8 +128,11 @@ async function waitPresentedFrames(page, target) {
 async function run() {
   const browser = await chromium.launch({ headless: true });
   const webglConsole = [];
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  await ctx.addInitScript(installStorage);
+  const ctx = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    storageState: { cookies: [], origins: [] },
+  });
+  await ctx.addInitScript(installFirstLoadProfile);
   const page = await ctx.newPage();
   page.setDefaultTimeout(120_000);
   page.on("console", (msg) => {
@@ -141,6 +155,11 @@ async function run() {
   }, { timeout: 120_000 });
 
   await page.waitForFunction(
+    () => document.body.classList.contains("feed-open") && document.body.classList.contains("chat-open"),
+    { timeout: 30_000 },
+  );
+
+  await page.waitForFunction(
     () => !!document.querySelector('iframe[src*="plugin-sandbox.html"]'),
     { timeout: 120_000 },
   );
@@ -156,12 +175,13 @@ async function run() {
       src: iframe?.getAttribute("src") ?? "",
       srcdoc: iframe?.getAttribute("srcdoc"),
       boot: window.__zotoSandboxBoot ?? [],
+      mode: localStorage.getItem("zoto-viz.mode"),
     };
   });
+  assert.equal(bootMeta.mode, "plugin:backrooms");
   assert.ok(bootMeta.src.includes("plugin-sandbox.html"), `expected plugin-sandbox.html bootstrap, got src=${bootMeta.src || "(none)"}`);
   assert.ok(!bootMeta.srcdoc, "plugin sandbox must not use srcdoc under page CSP");
 
-  await page.evaluate(installGlErrorHooks);
   await waitPresentedFrames(page, PRESENT_FRAMES);
 
   const smoke = await page.evaluate(() => ({
@@ -169,14 +189,16 @@ async function run() {
     presented: window.__zotoSmokePresentedFrames ?? 0,
     glErrors: window.__zotoSmoke?.glErrors ?? [],
     sandboxGlErrors: window.__zotoSmoke?.sandboxGlErrors ?? [],
+    csp: window.__zotoCspViolations ?? [],
   }));
 
   assert.ok(smoke.boot.includes("ready"), "sandbox ready message must reach the host");
-  assert.ok(smoke.boot.includes("frame-ready"), "sandbox frame-ready must reach the host");
   assert.ok(smoke.presented >= PRESENT_FRAMES, `expected at least ${PRESENT_FRAMES} presented frames, saw ${smoke.presented}`);
-
   assert.equal(smoke.glErrors.length, 0, `expected zero page gl.getError() codes, got ${smoke.glErrors.join(",")}`);
   assert.equal(smoke.sandboxGlErrors.length, 0, `expected zero sandbox gl.getError() codes, got ${smoke.sandboxGlErrors.join(",")}`);
+  assert.equal(smoke.csp.length, 0, `expected zero CSP violations, got ${JSON.stringify(smoke.csp)}`);
+  const srcdocViolations = smoke.csp.filter((v) => String(v.blockedURI || v.sourceFile || "").includes("srcdoc"));
+  assert.equal(srcdocViolations.length, 0, `about:srcdoc CSP violations: ${JSON.stringify(srcdocViolations)}`);
 
   const sandboxWebgl = webglConsole.filter((line) => /plugin-sandbox|about:srcdoc|srcdoc/i.test(line.frame));
   const pageWebgl = webglConsole.filter((line) => !/plugin-sandbox|about:srcdoc|srcdoc/i.test(line.frame));

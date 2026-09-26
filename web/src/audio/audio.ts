@@ -68,7 +68,9 @@ export class AudioPulse {
     this.awaitingClick = false;
     this.starting = true;
     try {
-      const stream = await askUserMedia({ audio: true, video: false }, "pulse microphone");
+      const stream = fromUserGesture
+        ? await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(() => null)
+        : await askUserMedia({ audio: true, video: false }, "pulse microphone");
       if (!stream) return;
       if (!this.wanted) {
         for (const t of stream.getTracks()) t.stop();

@@ -69,6 +69,20 @@ describe("mic boot with Permissions API", () => {
     expect(pulse.awaitingClick).toBe(false);
   });
 
+  it("does not call getUserMedia on load when permission is prompt (even with mediaAccept)", async () => {
+    const gum = vi.fn(async () => ({ getTracks: () => [{ stop: () => {} }] }));
+    vi.stubGlobal("navigator", {
+      permissions: { query: vi.fn(async () => ({ state: "prompt" })) },
+      mediaDevices: { getUserMedia: gum },
+    });
+    localStorage.setItem("zoto-viz.mediaAccept", JSON.stringify({ mic: true, cam: false }));
+    const pulse = new AudioPulse();
+    await pulse.enable();
+    expect(gum).not.toHaveBeenCalled();
+    expect(pulse.awaitingClick).toBe(true);
+    localStorage.removeItem("zoto-viz.mediaAccept");
+  });
+
   it("resumes capture after an explicit user resume when permission is prompt", async () => {
     const gum = vi.fn(async () => ({ getTracks: () => [{ stop: () => {} }] }));
     vi.stubGlobal("navigator", {

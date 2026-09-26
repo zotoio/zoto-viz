@@ -108,7 +108,7 @@ import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import { revertModeSelection } from "./apply-mode-mosaic";
-import { resolveRestoredViewMode } from "./boot-view-restore";
+import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
@@ -1203,6 +1203,13 @@ settings.addSection(
   [sysCpuIdle, sysLabels],
   "CPU graphs: idle processes fade, or hide at once. Labels apply to every graph.",
 );
+const MOSAIC_FOCUS_KEY = "zoto-viz.mosaicFocus";
+function persistMosaicFocus(id: string | null | undefined): void {
+  const v = id?.trim();
+  if (!v) return;
+  try { localStorage.setItem(MOSAIC_FOCUS_KEY, v); } catch { /* ignore */ }
+}
+
 mosaic = new Mosaic({
   wall: $("wall"),
   sceneEl: $("scene"),
@@ -1211,7 +1218,10 @@ mosaic = new Mosaic({
   arcade,
   spawnArcade: (engine) => spawnArcade(engine, scene),
   optsFor,
-  onFocus: (id) => mosaic?.focus(id),
+  onFocus: (id) => {
+    mosaic?.focus(id);
+    persistMosaicFocus(id);
+  },
   onPromote: (id, theme) => {
     applyMode(id, { keepLayout: true });
     if (theme) applyTheme(theme.id);
@@ -1632,6 +1642,14 @@ void (async () => {
   localStorage.setItem("zoto-viz.mode", bootMode);
   liveMode = bootMode;
   if (settings.animSettings.mosaic !== "off") {
+    const bootTiles = reconcileMosaicTilesWithMode(
+      settings.animSettings.mosaicTiles,
+      bootMode,
+      localStorage.getItem(MOSAIC_FOCUS_KEY),
+    );
+    if (bootTiles.join("\0") !== settings.animSettings.mosaicTiles.join("\0")) {
+      settings.applyAnim({ ...settings.animSettings, mosaicTiles: bootTiles });
+    }
     mosaic.setSize(settings.animSettings.mosaic, bootMode, settings.animSettings.hero, {
       tree: settings.animSettings.mosaicTree,
       maximized: settings.animSettings.mosaicMaxId || null,

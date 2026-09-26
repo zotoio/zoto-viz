@@ -1,4 +1,5 @@
 import { relativeLuminance } from "../core/themes";
+import { bindDefaultFramebufferForRead } from "./pane-change";
 
 /**
  * Non-blocking probe of the framebuffer's luminance behind the labels.
@@ -57,6 +58,7 @@ export class LumaProbe {
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
     }
     try {
+      bindDefaultFramebufferForRead(gl);
       gl.readPixels(x, y, s, s, gl.RGBA, gl.UNSIGNED_BYTE, 0);
       this.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     } catch {

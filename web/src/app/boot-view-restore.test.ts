@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveRestoredViewMode, viewMountState } from "./boot-view-restore";
+import {
+  reconcileMosaicTilesWithMode,
+  resolveRestoredViewMode,
+  viewMountState,
+} from "./boot-view-restore";
 import { parsePluginId } from "../plugins/plugin";
 
 describe("resolveRestoredViewMode", () => {
@@ -9,6 +13,16 @@ describe("resolveRestoredViewMode", () => {
       localMode: "plugin:talkers",
       fallback: "topology",
     })).toBe("plugin:backrooms");
+  });
+});
+
+describe("reconcileMosaicTilesWithMode", () => {
+  it("replaces the focused slot when mode is missing from tiles", () => {
+    expect(reconcileMosaicTilesWithMode(
+      ["plugin:topology", "plugin:wifi"],
+      "plugin:backrooms",
+      "plugin:topology",
+    )).toEqual(["plugin:backrooms", "plugin:wifi"]);
   });
 });
 

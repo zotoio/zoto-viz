@@ -2559,8 +2559,9 @@ export class NetScene implements HostedView {
    * Asynchronous: the probe is fenced and harvested a frame or two later, never stalling the GPU.
    */
   private captureBackdropLuma(): void {
-    const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
+    const gl = (this.host?.gl ?? this.renderer.getContext()) as WebGL2RenderingContext | null;
     if (!gl || typeof gl.fenceSync !== "function") return;
+    if (gl.isContextLost()) return;
     if (this.host) {
       const vp = this.lastVp;
       if (!vp) return;
