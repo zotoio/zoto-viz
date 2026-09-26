@@ -5,6 +5,7 @@
 
 let clockMs: () => number = () => performance.now();
 let buildCostMs: ((deliverIndex: number) => number) | undefined;
+let buildCostTicks: ((deliverIndex: number) => number) | undefined;
 
 /** Wall time in ms for viz budget / HUD (not rAF present timestamps). */
 export function vizClockMs(): number {
@@ -31,7 +32,18 @@ export function vizBuildCostMs(deliverIndex: number): number | undefined {
   return buildCostMs?.(deliverIndex);
 }
 
+export function setVizBuildCostTicksInjector(
+  inject: ((deliverIndex: number) => number) | undefined,
+): void {
+  buildCostTicks = inject;
+}
+
+export function vizBuildCostTicks(deliverIndex: number): number | undefined {
+  return buildCostTicks?.(deliverIndex);
+}
+
 export function resetVizClockInjectors(): void {
   clockMs = () => performance.now();
   buildCostMs = undefined;
+  buildCostTicks = undefined;
 }

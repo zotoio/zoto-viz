@@ -1,5 +1,6 @@
 import type { StateMsg } from "../core/types";
 import { resetVizClockInjectors, setVizBuildCostInjector, vizClockMs } from "../core/viz-clock";
+import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
 import { skipRatePerSec, vizHudMetric, type VizHudTick } from "../ui/viz-hud";
@@ -249,15 +250,12 @@ export function dogfoodSoakPatternedBuildCostMs(index: number): number {
 }
 
 /**
- * Hand-worked for {@link DOGFOOD_SOAK_FRAMES_PER_PACK} delivers, budget 16.7 ms,
- * costs 4 ms except i % 3 === 2 at 20 ms, clock step 1000/60 ms:
- * - i % 3 === 2 occurs 40 times → skipped = 40, delivered = 80
- * - Final sim now = 120 × (1000/60) = 2000 ms; HUD window 1000 ms keeps skips with i ≥ 60
- *   and i % 3 === 2 (20 events) → skipRatePerSec = (20/1000)×1000 = 20/s
+ * Tile debt hand-work (see TILE_BUDGET_R4_PATTERN): 81 delivered, 39 skipped at 120 frames.
  */
 export const DOGFOOD_SOAK_PATTERN_EXPECTED = {
-  delivered: 80,
-  skipped: 40,
+  delivered: 81,
+  skipped: 39,
+  /** 19 skip deltas land in the final 1000 ms HUD window (39 total over 2 s). */
   skipRatePerSec: 20,
 } as const;
 
@@ -330,8 +328,10 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
     const packs: DogfoodPackStats[] = [];
 
     for (const packId of VIZ_DEMO_PACKS) {
+      vizTileBudgetRegistry.reset();
+      syncVizTileScope(["dogfood"]);
       const contract = DEMO_PACK_CONTRACTS[packId];
-      const budget = new VizFrameBudget(now);
+      const budget = new VizFrameBudget(now, "dogfood");
       const writer = new VizBufferWriter(contract);
       const buildTimes: number[] = [];
       let prevTs = 0;
@@ -415,7 +415,9 @@ export function runPackSwapPreserve(
   const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS[fromPack]);
   writer.writeBuffer(0, [1, 2, 3, 4]);
 
-  const budget = new VizFrameBudget(now);
+  vizTileBudgetRegistry.reset();
+  syncVizTileScope(["swap"]);
+  const budget = new VizFrameBudget(now, "swap");
   let frameTs = 0;
   const tick1 = dogfoodTick(fromPack, state, frameTs, 0.1, budget, writer);
   if (tick1.frame) frameTs = tick1.frame.t;

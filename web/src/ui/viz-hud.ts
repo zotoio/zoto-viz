@@ -1,5 +1,6 @@
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
+import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
 import { morphCopy, Select } from "./ui";
 
 /** First-party demoscene viz packs that share the host UBO frame. */
@@ -72,6 +73,21 @@ export interface VizHudTick {
   frame: VizDataFrame | null;
   state: StateMsg;
   now: number;
+  tileBudget?: VizTileBudgetStats;
+}
+
+export function tileHudSkipLabel(tile: VizTileBudgetStats, skipRate: number): string {
+  if (tile.shedding && tile.debt > 0) return "share limit";
+  return formatSkipRate(skipRate);
+}
+
+/** Shedding tiles keep the last delivered frame on screen (never blank). */
+export function tileHudDisplayFrame(
+  tile: VizTileBudgetStats,
+  built: VizDataFrame | null,
+): VizDataFrame | null {
+  if (tile.shedding && tile.lastDeliveredFrame) return tile.lastDeliveredFrame;
+  return built ?? tile.lastDeliveredFrame;
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -253,8 +269,9 @@ export class VizHud {
 
   tick(input: VizHudTick): void {
     if (!this.activeId) return;
-    const { stats, frame, state, now } = input;
-    const metric = vizHudMetric(this.activeId, frame, state);
+    const { stats, frame, state, now, tileBudget } = input;
+    const displayFrame = tileBudget ? tileHudDisplayFrame(tileBudget, frame) : frame;
+    const metric = vizHudMetric(this.activeId, displayFrame, state);
     this.metricLabelEl.textContent = metric.label;
     this.metricValueEl.textContent = metric.value;
 
@@ -272,7 +289,10 @@ export class VizHud {
     const cutoff = now - SKIP_WINDOW_MS;
     while (this.skipSamples.length && this.skipSamples[0].t < cutoff) this.skipSamples.shift();
 
-    this.skipEl.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, now));
+    const rate = skipRatePerSec(this.skipSamples, now);
+    this.skipEl.textContent = tileBudget
+      ? tileHudSkipLabel(tileBudget, rate)
+      : formatSkipRate(rate);
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
   }
 }

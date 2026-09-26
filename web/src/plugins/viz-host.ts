@@ -1,5 +1,6 @@
 import type { Device, StateMsg } from "../core/types";
-import { vizBuildCostMs, vizClockMs } from "../core/viz-clock";
+import { vizBuildCostMs, vizBuildCostTicks, vizClockMs } from "../core/viz-clock";
+import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
@@ -457,9 +458,11 @@ export class VizFrameBudget {
   private _lastBuilt: VizDataFrame | null = null;
   private _lastPresent = -1;
   private readonly now: () => number;
+  private readonly tileId: string;
 
-  constructor(now: () => number = vizClockMs) {
+  constructor(now: () => number = vizClockMs, tileId = "main") {
     this.now = now;
+    this.tileId = tileId;
   }
 
   get stats(): VizFrameBudgetStats {
@@ -512,18 +515,29 @@ export class VizFrameBudget {
     onFrame: (frame: VizDataFrame) => void,
     build: (state: StateMsg, prevTs: number, audio: number) => VizDataFrame = buildVizFrame,
   ): VizDataFrame | null {
-    const t0 = this.now();
-    const frame = build(state, prevTs, audio);
-    this._lastBuilt = frame;
-    const injected = vizBuildCostMs(this._total);
-    const elapsed = injected ?? this.now() - t0;
-    const over = this.record(elapsed);
-    if (over) {
-      this._skipped++;
+    const deliverIndex = this._total++;
+    const tickInject = vizBuildCostTicks(deliverIndex);
+    const msInject = vizBuildCostMs(deliverIndex);
+    const result = vizTileBudgetRegistry.deliver(
+      this.tileId,
+      () => {
+        const t0 = this.now();
+        const frame = build(state, prevTs, audio);
+        const elapsed = this.now() - t0;
+        const costTicks = tickInject ?? msToVizTicks(msInject ?? elapsed);
+        this._lastMs = msInject ?? elapsed;
+        return { frame, costTicks };
+      },
+      (frame) => onFrame(frame),
+    );
+    const tile = vizTileBudgetRegistry.getTile(this.tileId);
+    this._skipped = tile.skipped;
+    if (!result.delivered) {
+      this._lastBuilt = tile.lastDeliveredFrame;
       return null;
     }
-    onFrame(frame);
-    return frame;
+    this._lastBuilt = result.frame;
+    return result.frame;
   }
 
   reset(): void {
@@ -533,6 +547,13 @@ export class VizFrameBudget {
     this._total = 0;
     this._lastBuilt = null;
     this._lastPresent = -1;
+    const tile = vizTileBudgetRegistry.getTile(this.tileId);
+    tile.debt = 0;
+    tile.skipped = 0;
+    tile.delivered = 0;
+    tile.shareLimitedSkips = 0;
+    tile.shedding = false;
+    tile.lastDeliveredFrame = null;
   }
 }
 
