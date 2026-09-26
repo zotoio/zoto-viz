@@ -1,7 +1,7 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-survival-battery.test.ts -t \"seed 0 survives at least the committed baseline with fixed placement cost\"",
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-survival-battery.test.ts -t \"^Tetris survival battery > seed 0 survives at least the committed baseline with fixed placement cost$\"",
   "testFile": "src/arcade/tetris-survival-battery.test.ts",
-  "testName": "seed 0 survives at least the committed baseline with fixed placement cost",
+  "testName": "^Tetris survival battery > seed 0 survives at least the committed baseline with fixed placement cost$",
   "description": "Shift survival battery salt so placementsEvaluated no longer match fixtures.",
   "excerpt": "AssertionError: expected 17131 to be 17109 // Object.is equality"
 }

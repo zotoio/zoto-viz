@@ -1,7 +1,7 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-empty-well.test.ts -t \"frame 0: active piece and Demo data label on idle feed\"",
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-empty-well.test.ts -t \"^TetrisView never-empty well > frame 0: active piece and Demo data label on idle feed$\"",
   "testFile": "src/arcade/tetris-empty-well.test.ts",
-  "testName": "frame 0: active piece and Demo data label on idle feed",
+  "testName": "^TetrisView never-empty well > frame 0: active piece and Demo data label on idle feed$",
   "description": "Skip opening spawn on idle-seeded queue.",
   "excerpt": "AssertionError: expected false to be true // Object.is equality"
 }

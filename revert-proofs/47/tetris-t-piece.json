@@ -1,7 +1,7 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-t-piece.test.ts -t \"survives a long all-T sequence with line clears\"",
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-t-piece.test.ts -t \"^Tetris T-piece handling > survives a long all-T sequence with line clears$\"",
   "testFile": "src/arcade/tetris-t-piece.test.ts",
-  "testName": "survives a long all-T sequence with line clears",
+  "testName": "^Tetris T-piece handling > survives a long all-T sequence with line clears$",
   "description": "Score T pieces as O during all-T survival.",
   "excerpt": "AssertionError: expected true to be false // Object.is equality"
 }

@@ -1,7 +1,7 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-empty-well.test.ts -t \"respawns within one host tick after top-out hold clears the stack\"",
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-empty-well.test.ts -t \"^TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack$\"",
   "testFile": "src/arcade/tetris-empty-well.test.ts",
-  "testName": "respawns within one host tick after top-out hold clears the stack",
+  "testName": "^TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack$",
   "description": "Block respawn after top-out hold until lastHoldExpiredAt is set.",
   "excerpt": "AssertionError: expected false to be true // Object.is equality"
 }

@@ -1,7 +1,7 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-piece-generator.test.ts -t \"seed 0 first 50 kind ids match fixture\"",
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-piece-generator.test.ts -t \"^Tetris survival piece generator > seed 0 first 50 kind ids match fixture$\"",
   "testFile": "src/arcade/tetris-piece-generator.test.ts",
-  "testName": "seed 0 first 50 kind ids match fixture",
+  "testName": "^Tetris survival piece generator > seed 0 first 50 kind ids match fixture$",
   "description": "Break deterministic proto ids with Math.random in seededPieceKinds.",
   "excerpt": "AssertionError: expected [ 'I', 'Z', 'L', 'O', 'O', 'I', \u2026(44) ] to deeply equal [ 'T', 'I', 'Z', 'L', 'J', 'O', \u2026(44) ]"
 }

@@ -1,7 +1,7 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts -t \"600 frames: piece budget, no real clock reads, HUD skips match hand count\"",
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts -t \"^TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count$\"",
   "testFile": "src/arcade/tetris-idle-view.test.ts",
-  "testName": "600 frames: piece budget, no real clock reads, HUD skips match hand count",
+  "testName": "^TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count$",
   "description": "Read performance.now() in idle feed tick.",
   "excerpt": "AssertionError: expected \"now\" to not be called at all, but actually been called 600 times"
 }

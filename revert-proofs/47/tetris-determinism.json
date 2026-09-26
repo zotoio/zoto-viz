@@ -1,7 +1,7 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-determinism.test.ts -t \"seed 0 replays the same 60-piece placement sequence\"",
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-determinism.test.ts -t \"^Tetris placement determinism > seed 0 replays the same 60-piece placement sequence$\"",
   "testFile": "src/arcade/tetris-determinism.test.ts",
-  "testName": "seed 0 replays the same 60-piece placement sequence",
+  "testName": "^Tetris placement determinism > seed 0 replays the same 60-piece placement sequence$",
   "description": "Nudge every other autoplay placement on the x axis.",
   "excerpt": "AssertionError: expected [ '0,0,0', '0,1,1', '1,1,1', \u2026(57) ] to deeply equal [ '1,0,0', '5,0,0', '4,0,1', \u2026(56) ]"
 }
