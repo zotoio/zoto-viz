@@ -188,6 +188,117 @@ def test_overwrite_and_same_sha(
     assert forced["version"] == 2
 
 
+GOOD_INSTALL_VIZ = (
+    "engine: graph\n"
+    "settings:\n"
+    "  presetField: preset\n"
+    "  presets:\n"
+    "    - id: a\n"
+    "      label: A\n"
+    "      values: {gain: 1, preset: a}\n"
+    "config:\n"
+    "  - key: preset\n"
+    "    type: select\n"
+    "    values: [[a, A]]\n"
+    "  - key: gain\n"
+    "    type: number\n"
+    "    min: 0\n"
+    "    max: 10\n"
+)
+
+
+def test_invalid_zip_leaves_no_drop_zone_or_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    raw = _zip({
+        "plugin.yml": "id: ghost-pack\nname: Ghost\nversion: 1\n",
+        "visualisation.yml": (
+            "engine: graph\n"
+            "settings:\n"
+            "  presets:\n"
+            "    - id: a\n"
+            "      label: A\n"
+            "      values: {gain: 1}\n"
+            "config:\n"
+            "  - key: gain\n"
+            "    type: number\n"
+            "    min: 0\n"
+            "    max: 10\n"
+        ),
+    })
+    with pytest.raises(ValueError, match="presetField"):
+        plugin_local.install_local_zip(raw)
+    assert not (paths.plugin_local_dir() / "ghost-pack.zip").is_file()
+    assert not (paths.plugin_local_runtime_dir() / "ghost-pack").is_dir()
+
+
+def test_invalid_overwrite_keeps_previous_pack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
+        "visualisation.yml": GOOD_INSTALL_VIZ,
+    })
+    plugin_local.install_local_zip(good)
+    bad = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
+        "visualisation.yml": (
+            "engine: graph\n"
+            "settings:\n"
+            "  presets:\n"
+            "    - id: a\n"
+            "      label: A\n"
+            "      values: {gain: 1}\n"
+            "config:\n"
+            "  - key: gain\n"
+            "    type: number\n"
+            "    min: 0\n"
+            "    max: 10\n"
+        ),
+    })
+    with pytest.raises(ValueError):
+        plugin_local.install_local_zip(bad, overwrite=True)
+    plugins.validate_plugin_home(paths.plugin_local_runtime_dir() / "keep-pack")
+
+
+def test_fixed_zip_reinstalls_without_overwrite_after_failed_overwrite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
+        "visualisation.yml": GOOD_INSTALL_VIZ,
+    })
+    plugin_local.install_local_zip(good)
+    bad = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+        "visualisation.yml": (
+            "engine: graph\n"
+            "settings:\n"
+            "  presets:\n"
+            "    - id: a\n"
+            "      label: A\n"
+            "      values: {gain: 1}\n"
+            "config:\n"
+            "  - key: gain\n"
+            "    type: number\n"
+            "    min: 0\n"
+            "    max: 10\n"
+        ),
+    })
+    with pytest.raises(ValueError, match="presetField"):
+        plugin_local.install_local_zip(bad, overwrite=True)
+    fixed = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+        "visualisation.yml": GOOD_INSTALL_VIZ,
+    })
+    info = plugin_local.install_local_zip(fixed, overwrite=True)
+    assert info["wrote"] is True
+    plugins.validate_plugin_home(paths.plugin_local_runtime_dir() / "keep-pack")
+
+
 def test_install_rejects_invalid_merged_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
 ) -> None:

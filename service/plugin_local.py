@@ -268,6 +268,33 @@ def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
     return info
 
 
+def _validate_zip_tree(zip_path: Path) -> None:
+    """Unpack to a temp tree and run full merged validation (no install side effects)."""
+    with tempfile.TemporaryDirectory(prefix="zoto-plugin-stage.") as tmp:
+        stage = Path(tmp)
+        pz.unpack_zip(zip_path, stage)
+        plugins.validate_plugin_home(stage)
+
+
+def _install_unpacked_tree(zip_path: Path, runtime: Path) -> pz.UnpackResult:
+    """Validate on a staging tree, then replace the runtime directory."""
+    with tempfile.TemporaryDirectory(prefix="zoto-plugin-stage.") as tmp:
+        stage = Path(tmp)
+        unpacked = pz.unpack_zip(zip_path, stage)
+        plugins.validate_plugin_home(stage)
+        if runtime.exists():
+            shutil.rmtree(runtime)
+        shutil.copytree(stage, runtime)
+        return pz.UnpackResult(
+            dest=runtime,
+            sha256=unpacked.sha256,
+            unpacked=unpacked.unpacked,
+            plugin=unpacked.plugin,
+            parts=unpacked.parts,
+            members=unpacked.members,
+        )
+
+
 def install_local_zip(
     raw: bytes,
     *,
@@ -290,8 +317,8 @@ def install_local_zip(
         runtime = paths.plugin_local_runtime_dir(create=True) / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
-            unpacked = pz.unpack_zip(dest, runtime)
-            plugins.validate_plugin_home(runtime)
+            _validate_zip_tree(dest)
+            unpacked = _install_unpacked_tree(dest, runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
                 info["remintedFrom"] = reminted_from
@@ -300,11 +327,11 @@ def install_local_zip(
             raise ValueError(
                 f"plugin {pid!r} already exists in the local drop zone (pass overwrite: true)"
             )
+        _validate_zip_tree(tmp_path)
         staged = dest.with_name(dest.name + ".tmp")
         shutil.copy2(tmp_path, staged)
         os.replace(staged, dest)
-        unpacked = pz.unpack_zip(dest, runtime)
-        plugins.validate_plugin_home(runtime)
+        unpacked = _install_unpacked_tree(dest, runtime)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -337,8 +364,8 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
         else:
             shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
-    unpacked = pz.unpack_zip(dest, runtime)
-    plugins.validate_plugin_home(runtime)
+    _validate_zip_tree(dest)
+    unpacked = _install_unpacked_tree(dest, runtime)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from

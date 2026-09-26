@@ -25,6 +25,9 @@ describe("plugin settings a11y", () => {
     expect(wrap.querySelector(".plugin-settings-announcer")).toBe(announcer);
     host.querySelector<HTMLButtonElement>('[data-toolbar-action="randomise"]')?.click();
     await vi.waitFor(() => expect(announcer?.textContent).toBe("Randomised"));
+    host.querySelector<HTMLButtonElement>('[data-toolbar-action="randomise"]')?.click();
+    expect(announcer?.textContent).toBe("");
+    await vi.waitFor(() => expect(announcer?.textContent).toBe("Randomised"));
   });
 
   it("restores focus to the toolbar button after randomise", () => {
@@ -50,6 +53,19 @@ describe("plugin settings a11y", () => {
       const sel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]');
       expect(document.activeElement).toBe(sel);
     });
+  });
+
+  it("undo restores prior preset from the toolbar snapshot", () => {
+    const spec = loadSettingsDeclFixture();
+    clearUndoRing(configStoreId(spec));
+    const { host } = mountPanel();
+    fillPluginFields(host, spec, spec.config ?? [], () => {});
+    const presetSel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')!;
+    expect(presetSel.value).toBe("a");
+    host.querySelector<HTMLButtonElement>('[data-toolbar-action="randomise"]')?.click();
+    expect(presetSel.value).toBe("custom");
+    host.querySelector<HTMLButtonElement>('[data-toolbar-action="undo"]')?.click();
+    expect(presetSel.value).toBe("a");
   });
 
   it("falls back to randomise when undo empties the ring", () => {

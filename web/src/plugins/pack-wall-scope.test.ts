@@ -4,6 +4,14 @@ import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import { packScopeNoteText } from "./instances";
 import { packWallScopeFromAnim } from "./pack-wall-scope";
 
+function mosaicPackSpec() {
+  return {
+    ...loadSettingsDeclFixture(),
+    id: "settings-mosaic",
+    instances: [{ id: "tile-a" }, { id: "tile-b" }],
+  };
+}
+
 describe("pack wall scope (production-shaped)", () => {
   const spec = loadSettingsDeclFixture();
 
@@ -18,12 +26,13 @@ describe("pack wall scope (production-shaped)", () => {
   });
 
   it("hides shared scope note when base pack and instance tile share a pack id but not storage", () => {
+    const mosaic = mosaicPackSpec();
     const scope = packWallScopeFromAnim({
       ...DEFAULT_DREAM,
       mosaic: "4",
       mosaicTiles: ["plugin:settings-mosaic", "plugin:settings-mosaic:tile-a"],
     });
-    expect(packScopeNoteText(spec, scope)).toBeNull();
+    expect(packScopeNoteText(mosaic, scope)).toBeNull();
   });
 
   it("shows shared note when wallScope lists two tiles with the same config store", () => {

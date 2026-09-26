@@ -71,6 +71,7 @@ import {
   type PluginView,
 } from "../plugins/plugin";
 import { packConfigValues } from "../plugins/plugin-settings";
+import { pluginOptsFromSpec } from "./plugin-mode-opts";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import {
   hudCaptionFromOpts,
@@ -630,12 +631,7 @@ function optsFor(m: ViewMode): Record<string, string> {
   const o = defaultOpts(m);
   if (m.pluginId) {
     const spec = pluginSpecForMode(m.id);
-    if (spec) {
-      Object.assign(o, packConfigValues(loadPluginConfigCached(
-        spec,
-        pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config),
-      )));
-    }
+    if (spec) Object.assign(o, pluginOptsFromSpec(m, spec));
   } else {
     for (const opt of m.options ?? []) {
       const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);

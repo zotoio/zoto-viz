@@ -50,6 +50,12 @@ export function parsePluginInstance(modeId: string): string | null {
   return i >= 0 ? rest.slice(i + 1) || null : null;
 }
 
+/** Mosaic tile view id without duplicate-tile slot suffix (`!n`, #42). */
+export function mosaicTileViewId(modeId: string): string {
+  const bang = modeId.lastIndexOf("!");
+  return bang > 0 ? modeId.slice(0, bang) : modeId;
+}
+
 /** localStorage namespace for plugin config (per catalog instance row). */
 export function configStoreId(spec: Pick<PluginView, "id" | "instanceId">): string {
   return spec.instanceId && spec.instanceId !== spec.id ? `${spec.id}:${spec.instanceId}` : spec.id;
@@ -66,9 +72,10 @@ export type PackWallScope = {
 };
 
 export function configStoreIdForMode(modeId: string): string | null {
-  const packId = parsePluginId(modeId);
+  const canonical = mosaicTileViewId(modeId);
+  const packId = parsePluginId(canonical);
   if (!packId) return null;
-  const inst = parsePluginInstance(modeId);
+  const inst = parsePluginInstance(canonical);
   return inst && inst !== packId ? `${packId}:${inst}` : packId;
 }
 

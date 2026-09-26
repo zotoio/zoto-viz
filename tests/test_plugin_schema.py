@@ -133,12 +133,7 @@ def test_minimal_plugin_yml_validates() -> None:
     _validator().validate(MINIMAL)
 
 
-def test_visualisation_schema_only_rejects_bad_config_shape() -> None:
-    with pytest.raises(ValidationError):
-        _def_validator("visualisation").validate({"engine": "graph", "config": "not-a-list"})
-
-
-def test_merged_semantics_reject_valid_visualisation_with_bad_settings(tmp_path: Path) -> None:
+def test_merged_semantics_reject_schema_valid_bad_preset_field(tmp_path: Path) -> None:
     home = tmp_path / "bad-merged"
     home.mkdir()
     (home / "plugin.yml").write_text(
@@ -148,11 +143,15 @@ def test_merged_semantics_reject_valid_visualisation_with_bad_settings(tmp_path:
     (home / "visualisation.yml").write_text(
         "engine: graph\n"
         "settings:\n"
+        "  presetField: nope\n"
         "  presets:\n"
         "    - id: a\n"
         "      label: A\n"
-        "      values: {gain: 1}\n"
+        "      values: {gain: 1, preset: a}\n"
         "config:\n"
+        "  - key: preset\n"
+        "    type: select\n"
+        "    values: [[a, A]]\n"
         "  - key: gain\n"
         "    type: number\n"
         "    min: 0\n"

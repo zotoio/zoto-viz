@@ -1,9 +1,10 @@
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import { fillPluginFields } from "./plugin-ui";
 
 describe("preset select keyboard", () => {
-  it("uses a native select with preset options and arrow-key navigation", () => {
+  it("uses a native select with preset options and arrow-key navigation", async () => {
     const spec = loadSettingsDeclFixture();
     const host = document.createElement("div");
     document.body.append(host);
@@ -19,14 +20,11 @@ describe("preset select keyboard", () => {
     sel!.focus();
     expect(document.activeElement).toBe(sel);
 
-    const start = sel!.selectedIndex;
-    sel!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, code: "ArrowDown" }));
-    sel!.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", bubbles: true, code: "ArrowDown" }));
-    if (sel!.selectedIndex === start && start < sel!.options.length - 1) {
-      sel!.selectedIndex = start + 1;
-    }
-    sel!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, code: "Enter" }));
-    sel!.dispatchEvent(new Event("change", { bubbles: true }));
+    sel!.focus();
+    expect(document.activeElement).toBe(sel);
+    const start = sel!.value;
+    await userEvent.selectOptions(sel!, "b");
+    expect(sel!.value).not.toBe(start);
     const picked = sel!.value;
     expect(host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')?.value).toBe(picked);
 

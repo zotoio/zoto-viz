@@ -51,6 +51,7 @@ function refreshPluginHudCaption(
 }
 
 function placeSettingsAnnouncer(host: HTMLElement, announcer: HTMLElement): void {
+  if (announcer.parentElement && !host.contains(announcer)) return;
   const parent = host.parentElement;
   if (!parent) {
     if (host.contains(announcer)) announcer.remove();

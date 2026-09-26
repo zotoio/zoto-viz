@@ -721,9 +721,8 @@ def _visualisation_validator():
 
 def _validate_visualisation_yaml(viz: dict[str, Any]) -> None:
     """JSON Schema for visualisation.yml (legacy list ``options`` checked in semantics)."""
-    payload = dict(viz)
-    opts = payload.get("options")
-    errors = sorted(_visualisation_validator().iter_errors(payload), key=lambda e: list(e.path))
+    opts = viz.get("options")
+    errors = sorted(_visualisation_validator().iter_errors(viz), key=lambda e: list(e.path))
     if errors:
         bits = []
         for err in errors:

@@ -32,7 +32,7 @@ describe("SandboxConfigBatcher", () => {
     expect(posts).toEqual(['pack-a:{"gain":"3"}', 'pack-a:{"gain":"3"}']);
   });
 
-  it("does not post when schedule is called with an empty config object", () => {
+  it("posts when schedule is called with an empty config object", () => {
     const posts: string[] = [];
     const batcher = new SandboxConfigBatcher(
       (packId, config) => posts.push(`${packId}:${JSON.stringify(config)}`),

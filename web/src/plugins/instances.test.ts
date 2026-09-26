@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { applyInstance, configStoreId, expandPluginInstances, parsePluginId, parsePluginInstance, pluginViewId } from "./instances";
+import {
+  applyInstance,
+  configStoreId,
+  configStoreIdForMode,
+  expandPluginInstances,
+  mosaicTileViewId,
+  parsePluginId,
+  parsePluginInstance,
+  pluginViewId,
+} from "./instances";
 import type { PluginView } from "./plugin";
 
 const pack = (over: Partial<PluginView> = {}): PluginView => ({
@@ -15,6 +24,12 @@ const pack = (over: Partial<PluginView> = {}): PluginView => ({
 });
 
 describe("plugin instances", () => {
+  it("strips mosaic duplicate-tile slot suffix for config store lookup", () => {
+    expect(mosaicTileViewId("plugin:carousel!2")).toBe("plugin:carousel");
+    expect(configStoreIdForMode("plugin:carousel:apod!1")).toBe("carousel:apod");
+    expect(configStoreIdForMode("plugin:carousel!0")).toBe("carousel");
+  });
+
   it("keeps the primary view id and namespaces extras", () => {
     expect(pluginViewId("carousel")).toBe("plugin:carousel");
     expect(pluginViewId("carousel", "carousel")).toBe("plugin:carousel");

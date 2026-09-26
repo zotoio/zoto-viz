@@ -86,6 +86,15 @@ describe("2x2 mosaic preset isolation (configStoreId)", () => {
 });
 
 describe("pack scope note", () => {
+  it("scope note uses config store not pack id on mosaic walls", () => {
+    const mosaic = mosaicPack();
+    const scope = {
+      mosaicOn: true,
+      tileModeIds: ["plugin:settings-mosaic", "plugin:settings-mosaic:tile-a"],
+    };
+    expect(packScopeNoteText(mosaic, scope)).toBeNull();
+  });
+
   it("counts tiles sharing the same config store id", () => {
     const spec = fixtureView();
     expect(countTilesSharingConfigStore(spec, [])).toBe(0);

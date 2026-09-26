@@ -183,6 +183,21 @@ describe("Settings panes", () => {
     expect(s.isOpen).toBe(false);
   });
 
+  it("keeps plugin settings announcer on the view pane after randomise", () => {
+    const s = new Settings({ storePrefix: "zoto-plugin-ann-rand", onChange: () => {} });
+    const spec = loadSettingsDeclFixture();
+    s.bindView(spec, spec.config);
+    const pane = s.el.querySelector('[data-pane="view"]')!;
+    const announcer = pane.querySelector(":scope > .plugin-settings-announcer");
+    const viewHost = [...pane.children].find(
+      (el) => !el.classList.contains("plugin-settings-announcer"),
+    ) as HTMLElement;
+    expect(announcer).toBeTruthy();
+    viewHost.querySelector<HTMLButtonElement>('[data-toolbar-action="randomise"]')?.click();
+    expect(pane.querySelector(":scope > .plugin-settings-announcer")).toBe(announcer);
+    expect(viewHost.contains(announcer)).toBe(false);
+  });
+
   it("mounts plugin settings announcer on the view pane outside the view layer", () => {
     const s = new Settings({ storePrefix: "zoto-plugin-announcer", onChange: () => {} });
     const spec = loadSettingsDeclFixture();

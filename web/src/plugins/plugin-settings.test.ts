@@ -333,6 +333,30 @@ describe("instance defaults", () => {
   });
 });
 
+describe("preset matching with text fields", () => {
+  it("treats custom text as matching when preset fields align (1f59fae)", () => {
+    const spec: PluginView = {
+      id: "pond-match",
+      name: "Pond",
+      version: 1,
+      settings: {
+        presetField: "preset",
+        presets: [
+          { id: "a", label: "Pond A", values: { preset: "a", label: "Pond A", gain: 3 } },
+        ],
+      },
+      config: [
+        { key: "preset", label: "preset", type: "select", values: [["a", "A"]], default: "a" },
+        { key: "label", label: "label", type: "text", default: "Pond" },
+        { key: "gain", label: "gain", type: "number", min: 0, max: 10, default: 1 },
+      ],
+    };
+    const fields = spec.config!;
+    const values: Record<string, string> = { preset: "a", label: "My custom label", gain: "3" };
+    expect(isCustomConfig(spec, fields, values)).toBe(false);
+  });
+});
+
 describe("boolean presets", () => {
   it("matches toggle values stored as 1/0", () => {
     const spec = fixtureSpec();
@@ -456,17 +480,22 @@ describe("catalog revision cache", () => {
     expect(loadPluginConfigCached(bumped, bumpedFields).gain).toBe("9");
   });
 
-  it("cached reads after bumpPluginCatalogRevision pick up new defaults", () => {
+  it("cached reads after bumpPluginCatalogRevision pick up new instance defaults", () => {
     localStorage.clear();
-    const spec = fixtureSpec();
-    const fields = fixtureFields(spec);
-    loadPluginConfigCached(spec, fields);
-    const bumped = {
-      ...spec,
-      config: (spec.config ?? []).map((f) => (f.key === "gain" ? { ...f, default: 7 } : f)),
+    const base: PluginView = {
+      ...fixtureSpec(),
+      id: "inst-cache-pack",
+      instances: [{ id: "tile-a", defaults: { gain: "2" } }],
     };
+    const spec = expandPluginInstances(base).find((s) => s.instanceId === "tile-a")!;
+    const fields = fixtureFields(spec);
+    expect(loadPluginConfigCached(spec, fields).gain).toBe("2");
+    const bumped = expandPluginInstances({
+      ...base,
+      instances: [{ id: "tile-a", defaults: { gain: "8" } }],
+    }).find((s) => s.instanceId === "tile-a")!;
     bumpPluginCatalogRevision();
-    expect(loadPluginConfigCached(bumped, fixtureFields(bumped)).gain).toBe("7");
+    expect(loadPluginConfigCached(bumped, fields).gain).toBe("8");
   });
 });
 
