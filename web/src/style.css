@@ -97,6 +97,12 @@ body[data-softgl] .brand::after {
 .tetris-idle-label.is-visible {
   opacity: 1;
 }
+.tetris-skip-hud {
+  margin-left: 6px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
 #carousel .carousel-still {
   position: absolute;
   inset: var(--bar-h) 0 0 0;

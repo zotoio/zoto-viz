@@ -21,8 +21,15 @@ import {
   TETRIS_DEFAULT_IDLE_SEED,
   TETRIS_IDLE_TOPOUT_SEED,
 } from "../plugins/fixtures/host-idle-traffic";
+import { tickTetrisIdleFeed } from "./tetris-idle-feed";
 import { TetrisIdleScheduler } from "./tetris-idle-scheduler";
 import { TetrisTrafficBudget } from "./tetris-traffic-budget";
+import { formatSkipRate, skipRatePerSec } from "../ui/viz-hud";
+
+export interface TetrisViewDeps {
+  clockMs?: () => number;
+  trafficBudget?: TetrisTrafficBudget;
+}
 
 const KEY_WHO = "zoto-viz.tetris.who";
 const COLS = 10;
@@ -64,13 +71,19 @@ export class TetrisView extends Stage3D {
   private idleSeed = TETRIS_DEFAULT_IDLE_SEED;
   private usingIdleFeed = true;
   private topoutPrefilled = false;
+  private readonly clockMs: () => number;
   private readonly idleScheduler: TetrisIdleScheduler;
-  private readonly trafficBudget = new TetrisTrafficBudget();
+  private readonly trafficBudget: TetrisTrafficBudget;
   private readonly idleLabel: HTMLElement;
+  private readonly skipHud: HTMLElement;
+  private readonly skipSamples: { t: number; n: number }[] = [];
+  private lastHudSkips = 0;
   private lockedPieces = 0;
 
-  constructor(container: HTMLElement, scene: NetScene) {
+  constructor(container: HTMLElement, scene: NetScene, deps: TetrisViewDeps = {}) {
     super(container, scene);
+    this.clockMs = deps.clockMs ?? vizClockMs;
+    this.trafficBudget = deps.trafficBudget ?? new TetrisTrafficBudget();
     this.picker = new DevicePicker({
       id: "tetrisWho", caption: "well", key: KEY_WHO,
       title: "whose traffic drops as pieces",
@@ -80,9 +93,12 @@ export class TetrisView extends Stage3D {
     this.idleLabel = document.createElement("span");
     this.idleLabel.className = DEMO_LABEL_CLASS;
     this.idleLabel.textContent = DEMO_DATA_LABEL;
-    this.controls = [this.picker.el, this.idleLabel];
+    this.skipHud = document.createElement("span");
+    this.skipHud.className = `${DEMO_LABEL_CLASS} tetris-skip-hud`;
+    this.skipHud.textContent = formatSkipRate(0);
+    this.controls = [this.picker.el, this.idleLabel, this.skipHud];
     this.idleSeed = parseTetrisIdleSeedFromSearch(typeof location !== "undefined" ? location.search : "");
-    this.idleScheduler = new TetrisIdleScheduler(this.idleSeed, vizClockMs());
+    this.idleScheduler = new TetrisIdleScheduler(this.idleSeed, this.clockMs());
     this.camOrbit.radius = 24;
     this.camOrbit.phi = 1.18;
     this.camOrbit.theta = Math.PI / 2;
@@ -107,17 +123,17 @@ export class TetrisView extends Stage3D {
 
   protected onTrafficPollEmpty(): void {
     this.usingIdleFeed = true;
-    this.idleScheduler.notePollEmpty(vizClockMs());
-    this.syncIdleLabel();
+    this.idleScheduler.notePollEmpty(this.clockMs());
+    this.syncIdleChrome();
   }
 
   protected ingest(fresh: Packet[], _first: number, _newest: number): void {
     if (fresh.length) {
       this.usingIdleFeed = false;
-      this.idleScheduler.noteLiveTraffic(vizClockMs());
+      this.idleScheduler.noteLiveTraffic(this.clockMs());
     }
     this.enqueuePackets(this.trafficBudget.deliver(fresh));
-    this.syncIdleLabel();
+    this.syncIdleChrome();
   }
 
   private enqueuePackets(fresh: Packet[]): void {
@@ -130,14 +146,25 @@ export class TetrisView extends Stage3D {
     }
   }
 
-  private syncIdleLabel(): void {
-    const clock = vizClockMs();
+  private syncIdleChrome(): void {
+    const clock = this.clockMs();
     const show = this.usingIdleFeed && !this.idleScheduler.isLiveExclusive(clock);
     this.idleLabel.classList.toggle("is-visible", show);
-    if (!show) return;
-    this.idleLabel.textContent = this.idleSeed === TETRIS_IDLE_TOPOUT_SEED
-      ? `${DEMO_DATA_LABEL} · top-out`
-      : DEMO_DATA_LABEL;
+    if (show) {
+      this.idleLabel.textContent = this.idleSeed === TETRIS_IDLE_TOPOUT_SEED
+        ? `${DEMO_DATA_LABEL} · top-out`
+        : DEMO_DATA_LABEL;
+    }
+    this.syncSkipHud(clock, show);
+  }
+
+  private syncSkipHud(clockMs: number, idleVisible: boolean): void {
+    const skips = this.trafficBudget.hudSkips;
+    const delta = skips - this.lastHudSkips;
+    if (delta > 0) this.skipSamples.push({ t: clockMs, n: delta });
+    this.lastHudSkips = skips;
+    this.skipHud.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, clockMs));
+    this.skipHud.classList.toggle("is-visible", idleVisible && skips > 0);
   }
 
   protected step(now: number, dt: number): void {
@@ -150,15 +177,20 @@ export class TetrisView extends Stage3D {
       this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
       return;
     }
-    const clock = vizClockMs();
+    const clock = this.clockMs();
     if (this.usingIdleFeed) {
       if (this.idleSeed === TETRIS_IDLE_TOPOUT_SEED && !this.topoutPrefilled && this.stack.length === 0) {
         this.prefillTopoutDemoBoard();
         this.topoutPrefilled = true;
       }
-      const due = this.idleScheduler.tick(clock);
-      if (due.length) this.enqueuePackets(this.trafficBudget.deliver(due));
+      tickTetrisIdleFeed({
+        clockMs: this.clockMs,
+        scheduler: this.idleScheduler,
+        budget: this.trafficBudget,
+        enqueue: (pk) => this.enqueuePackets(pk),
+      }, this.usingIdleFeed);
     }
+    this.syncSkipHud(clock, this.usingIdleFeed && !this.idleScheduler.isLiveExclusive(clock));
     if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);
     this.autoplayStep(dt);
     const aimed = this.active && this.plan
@@ -382,8 +414,8 @@ export class TetrisView extends Stage3D {
     this.idleSeed = seed >>> 0;
     this.usingIdleFeed = true;
     this.topoutPrefilled = false;
-    this.idleScheduler.reset(this.idleSeed, vizClockMs());
-    this.syncIdleLabel();
+    this.idleScheduler.reset(this.idleSeed, this.clockMs());
+    this.syncIdleChrome();
   }
 
   testScore(): number {
@@ -396,6 +428,14 @@ export class TetrisView extends Stage3D {
 
   testHudSkips(): number {
     return this.trafficBudget.hudSkips;
+  }
+
+  testRecordCount(): number {
+    return this.trafficBudget.recordCount;
+  }
+
+  testHudSkipLine(): string {
+    return this.skipHud.textContent ?? "";
   }
 
   testIdleScheduler(): TetrisIdleScheduler {
@@ -447,7 +487,9 @@ export class TetrisView extends Stage3D {
     this.lockedPieces = 0;
     this.usingIdleFeed = true;
     this.trafficBudget.reset();
-    this.idleScheduler.reset(this.idleSeed, vizClockMs());
-    this.syncIdleLabel();
+    this.skipSamples.length = 0;
+    this.lastHudSkips = 0;
+    this.idleScheduler.reset(this.idleSeed, this.clockMs());
+    this.syncIdleChrome();
   }
 }

@@ -7,6 +7,7 @@ import { goldenLanFixture } from "../plugins/fixtures/golden-lan-state";
 import { hostIdlePacketsDueByMs, TETRIS_IDLE_TOPOUT_SEED } from "../plugins/fixtures/host-idle-traffic";
 import { withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { TetrisView } from "./tetris";
+import { tickTetrisIdleFeed } from "./tetris-idle-feed";
 import { TETRIS_LIVE_QUIET_MS, TetrisIdleScheduler } from "./tetris-idle-scheduler";
 import { TETRIS_TOPOUT_HOLD_S } from "./tetris-topout";
 import { TETRIS_MAX_PACKETS_PER_FRAME, TetrisTrafficBudget } from "./tetris-traffic-budget";
@@ -95,6 +96,8 @@ describe("TetrisView host idle feed", () => {
     const expectedSkips = Math.max(0, DUE_PACKETS - expectedDelivered);
     expect(delivered).toBe(expectedDelivered);
     expect(view.testHudSkips()).toBe(expectedSkips);
+    expect(view.testRecordCount()).toBe(DUE_PACKETS);
+    expect(view.testHudSkipLine()).toMatch(/^skips /);
     expect(view.testScore()).toBeGreaterThan(beforePieces);
   });
 
@@ -177,5 +180,28 @@ describe("TetrisTrafficBudget", () => {
     const taken = b.deliver(batch);
     expect(taken.length).toBe(TETRIS_MAX_PACKETS_PER_FRAME);
     expect(b.hudSkips).toBe(4);
+    expect(b.recordCount).toBe(12);
+  });
+});
+
+describe("tickTetrisIdleFeed", () => {
+  it("uses injected clock and budget without reading wall time", () => {
+    const nowSpy = vi.spyOn(performance, "now");
+    let clock = 0;
+    const budget = new TetrisTrafficBudget();
+    const scheduler = new TetrisIdleScheduler(42, 0);
+    const enqueued: Packet[][] = [];
+    for (let i = 0; i < FRAMES; i++) {
+      clock += FRAME_MS;
+      tickTetrisIdleFeed({
+        clockMs: () => clock,
+        scheduler,
+        budget,
+        enqueue: (pk) => enqueued.push(pk),
+      }, true);
+    }
+    expect(nowSpy).not.toHaveBeenCalled();
+    expect(budget.recordCount).toBe(DUE_PACKETS);
+    nowSpy.mockRestore();
   });
 });
