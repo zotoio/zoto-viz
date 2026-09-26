@@ -1,5 +1,7 @@
+import type { VizDataFrame } from "../../../sdk/viz-contract";
+
 declare const zoto: {
-  onFrame: ((frame: { t: number }) => void) | null;
+  onFrame: ((frame: VizDataFrame) => void) | null;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };
 

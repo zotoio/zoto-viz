@@ -1,7 +1,9 @@
+import type { VizDataFrame } from "../../../sdk/viz-contract";
+
 let frames = 0;
 
 declare const zoto: {
-  onFrame: ((frame: { t: number }) => void) | null;
+  onFrame: ((frame: VizDataFrame) => void) | null;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
   reportDrawState: (drawing: boolean) => void;
 };
