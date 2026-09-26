@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { VizDataFrame, VizSysTelemetry } from "../../../sdk/viz-contract";
 import {
   RCS_CAPS,
@@ -52,6 +52,7 @@ import {
   rcsScoreNow,
   rcsTestPlaceBallForGoal,
   rcsTick,
+  rcsTickSlotBuffersForTest,
   rcsTriggerMaxGoalExplosion,
   rcsUnmount,
   rcsWorkBudgetAtPreset,
@@ -487,9 +488,22 @@ describe("rocket-car-soccer pack", () => {
     expect(rcsScoreNow()[1]).toBe(before + 1);
   });
 
-  it("polls getConfig each frame in the sandbox driver", () => {
+  it("polls host config by reference in the sandbox driver", () => {
     expect(FRONT).toMatch(/pollHostConfig\s*\(/);
-    expect(FRONT).toMatch(/getConfig\?\.\(\)/);
+    expect(FRONT).toMatch(/cfg === lastCfgRef/);
+    expect(FRONT).not.toMatch(/JSON\.stringify\(cfg\)/);
+  });
+
+  it("reuses tick slot buffer instances across 300 frames", () => {
+    resetRcsSim(1);
+    const a = rcsTickSlotBuffersForTest();
+    for (let i = 0; i < 300; i++) {
+      rcsTick(vizFrame({ demo: true }), i / 60, 1 / 60, 1.777);
+    }
+    const b = rcsTickSlotBuffersForTest();
+    expect(b.slot0).toBe(a.slot0);
+    expect(b.slot1).toBe(a.slot1);
+    expect(b.slot2).toBe(a.slot2);
   });
 
   it("rate-limits packet goal celebrations to once per 3 seconds", () => {
@@ -607,4 +621,129 @@ describe("rocket-car-soccer pack", () => {
       expect(js).not.toMatch(/viz-contract/);
     },
   );
+
+  const hostFormDefaults = (): Record<string, string> => ({
+    preset: "broadcast",
+    seed: "42",
+    dice: "none",
+    teamSize: "3",
+    theme: "day",
+    camera: "director",
+    aggress: "55",
+    gameSpeed: "100",
+    trail: "soft",
+    minCutSec: "4",
+    explode: "shockwave",
+    replay: "true",
+    matchSec: "300",
+    ballSize: "100",
+    particles: "70",
+    reducedMotion: "false",
+    teamOrange: "#ff8c32",
+    teamBlue: "#3aa7ff",
+  });
+
+  it("does not JSON.stringify config on unchanged 300 onFrame polls", async () => {
+    vi.resetModules();
+    const hostCfg = hostFormDefaults();
+    const g = globalThis as unknown as {
+      zoto: {
+        onFrame: ((frame: VizDataFrame) => void) | null;
+        onConfig: ((cfg: Record<string, string>) => void) | null;
+        getConfig?: () => Record<string, string>;
+        writeBuffer: (slot: number, data: number[]) => void;
+        writeUniform: (name: string, value: number | [number, number, number]) => void;
+        writeParticles: (data: number[], stride?: number) => void;
+      };
+    };
+    g.zoto = {
+      onFrame: null,
+      onConfig: null,
+      getConfig: () => hostCfg,
+      writeBuffer: () => {},
+      writeUniform: () => {},
+      writeParticles: () => {},
+    };
+    const stringifySpy = vi.spyOn(JSON, "stringify");
+    await import("./index");
+    stringifySpy.mockClear();
+    for (let i = 0; i < 300; i++) {
+      g.zoto.onFrame!({
+        t: i / 60,
+        dt: 1 / 60,
+        audio: 0,
+        packets: [],
+        rf: [],
+        talkers: [],
+        headlines: [],
+        demo: true,
+      });
+    }
+    expect(stringifySpy).toHaveBeenCalledTimes(0);
+    stringifySpy.mockRestore();
+  });
+
+  it("randomise does not mutate the host config object", async () => {
+    vi.resetModules();
+    const hostCfg = hostFormDefaults();
+    const g = globalThis as unknown as {
+      zoto: {
+        onFrame: ((frame: VizDataFrame) => void) | null;
+        onConfig: ((cfg: Record<string, string>) => void) | null;
+        getConfig?: () => Record<string, string>;
+        writeBuffer: (slot: number, data: number[]) => void;
+        writeUniform: (name: string, value: number | [number, number, number]) => void;
+        writeParticles: (data: number[], stride?: number) => void;
+      };
+    };
+    g.zoto = {
+      onFrame: null,
+      onConfig: null,
+      getConfig: () => hostCfg,
+      writeBuffer: () => {},
+      writeUniform: () => {},
+      writeParticles: () => {},
+    };
+    const mod = await import("./index");
+    mod.rcsTestResetDriverStateForTest();
+    const snap = { ...hostCfg, teamSize: "3", camera: "director" };
+    hostCfg.dice = "randomise";
+    g.zoto.onConfig!(hostCfg);
+    expect(hostCfg.teamSize).toBe(snap.teamSize);
+    expect(hostCfg.camera).toBe(snap.camera);
+    expect(hostCfg.trail).toBe(snap.trail);
+  });
+
+  it("randomise pushes one undo and undo restores prior options", async () => {
+    vi.resetModules();
+    const hostCfg = hostFormDefaults();
+    const g = globalThis as unknown as {
+      zoto: {
+        onFrame: ((frame: VizDataFrame) => void) | null;
+        onConfig: ((cfg: Record<string, string>) => void) | null;
+        getConfig?: () => Record<string, string>;
+        writeBuffer: (slot: number, data: number[]) => void;
+        writeUniform: (name: string, value: number | [number, number, number]) => void;
+        writeParticles: (data: number[], stride?: number) => void;
+      };
+    };
+    g.zoto = {
+      onFrame: null,
+      onConfig: null,
+      getConfig: () => hostCfg,
+      writeBuffer: () => {},
+      writeUniform: () => {},
+      writeParticles: () => {},
+    };
+    const mod = await import("./index");
+    mod.rcsTestResetDriverStateForTest();
+    const before = { ...mod.rcsFrontendOptionsForTest() };
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
+    expect(mod.rcsFrontendUndoDepthForTest()).toBe(1);
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
+    expect(mod.rcsFrontendUndoDepthForTest()).toBe(0);
+    expect(mod.rcsFrontendOptionsForTest().teamSize).toBe(before.teamSize);
+    expect(mod.rcsFrontendOptionsForTest().camera).toBe(before.camera);
+    expect(mod.rcsFrontendOptionsForTest().aggress).toBe(before.aggress);
+  });
 });

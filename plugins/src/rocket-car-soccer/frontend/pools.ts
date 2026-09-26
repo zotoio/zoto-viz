@@ -11,12 +11,14 @@ export interface PoolSlot {
 export class InstancedPool {
   readonly cap: number;
   readonly slots: PoolSlot[];
+  private readonly packScratch: number[];
   /** Count of `new`/`push` style growth after warm-up — must stay 0. */
   allocsAfterWarm = 0;
   private warmed = false;
 
   constructor(cap: number) {
     this.cap = cap;
+    this.packScratch = new Array(cap * 4).fill(0);
     this.slots = new Array(cap);
     for (let i = 0; i < cap; i++) {
       this.slots[i] = { x: 0, y: 0, z: 0, w: 0, active: false };
@@ -59,13 +61,24 @@ export class InstancedPool {
   }
 
   pack(stride = 4): number[] {
-    const out: number[] = [];
+    this.packInto(this.packScratch, stride);
+    return this.packScratch;
+  }
+
+  /** Write active slots into `out`; sets `out.length` to bytes written (no new array). */
+  packInto(out: number[], stride = 4): number {
+    let w = 0;
     for (const s of this.slots) {
       if (!s.active) continue;
-      out.push(s.x, s.y, s.z, s.w);
-      if (out.length >= this.cap * stride) break;
+      if (w + stride > out.length) break;
+      out[w] = s.x;
+      out[w + 1] = s.y;
+      out[w + 2] = s.z;
+      out[w + 3] = s.w;
+      w += stride;
     }
-    return out;
+    out.length = w;
+    return w;
   }
 
   burst(count: number, fx: number, fy: number, fz: number, spread: number, rng: () => number): number {

@@ -102,6 +102,12 @@ let state: SimState | null = null;
 const particlePool = new InstancedPool(RCS_CAPS.maxParticles);
 const trailPool = new InstancedPool(RCS_CAPS.maxTrailSegments);
 
+const tickSlot0 = new Array<number>(RCS_SLOT0_FLOATS).fill(0);
+const tickSlot1 = new Array<number>(RCS_SLOT1_FLOATS).fill(0);
+const tickSlot2 = new Array<number>(RCS_SLOT2_FLOATS).fill(0);
+const tickParticles = new Array<number>(RCS_CAPS.maxParticles * 4).fill(0);
+const tickTrails = new Array<number>(RCS_CAPS.maxTrailSegments * 4).fill(0);
+
 let mountCount = 0;
 let gpuPrograms = 0;
 let gpuContexts = 0;
@@ -331,8 +337,9 @@ function syncTalkerHosts(st: SimState, live: RcsLiveDrive, dt: number): void {
     const mix = live.demo ? 0.55 : boost;
     c.boost = clamp(c.boost + mix * dt * 0.8, 0, BOOST_MAX);
   }
-  for (const [talkerId, idx] of [...st.hostToCar.entries()]) {
+  for (const talkerId of st.hostToCar.keys()) {
     if (seen.has(talkerId)) continue;
+    const idx = st.hostToCar.get(talkerId)!;
     st.hostToCar.delete(talkerId);
     st.carToHost[idx] = null;
     st.carAssignedAt.delete(idx);
@@ -696,7 +703,12 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
         : clamp((st.phase === PHASE_GOAL ? st.phaseT / 1.2 : st.celebrationT) * 0.22, 0, 0.22)
       : 0;
 
-  const slot0 = new Array<number>(RCS_SLOT0_FLOATS).fill(0);
+  const slot0 = tickSlot0;
+  const slot1 = tickSlot1;
+  const slot2 = tickSlot2;
+  slot0.fill(0);
+  slot1.fill(0);
+  slot2.fill(0);
   slot0[RCS_SLOT.mark] = 1;
   slot0[RCS_SLOT.camX] = cam.x;
   slot0[RCS_SLOT.camY] = cam.y;
@@ -731,7 +743,6 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
   slot0[RCS_SLOT.presetCode] = presetCode(options.preset);
   slot0[RCS_SLOT.hudSeed] = options.seed % 997;
 
-  const slot1 = new Array<number>(RCS_SLOT1_FLOATS).fill(0);
   slot1[RCS_BALL_BASE] = st.ball.pos.x;
   slot1[RCS_BALL_BASE + 1] = st.ball.pos.y;
   slot1[RCS_BALL_BASE + 2] = st.ball.pos.z;
@@ -752,15 +763,15 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
     slot1[o + 8] = c.onGround ? 1 : 0;
   }
 
-  const slot2 = new Array<number>(RCS_SLOT2_FLOATS).fill(0);
-  const crowd = particlePool.pack(4);
-  for (let i = 0; i < Math.min(16, crowd.length / 4); i++) {
+  particlePool.packInto(tickParticles, 4);
+  for (let i = 0; i < 16; i++) {
     const b = i * 4;
-    slot2[b] = crowd[b] ?? 0;
-    slot2[b + 1] = crowd[b + 1] ?? 0;
-    slot2[b + 2] = crowd[b + 2] ?? 0;
-    slot2[b + 3] = crowd[b + 3] ?? 0;
+    slot2[b] = tickParticles[b] ?? 0;
+    slot2[b + 1] = tickParticles[b + 1] ?? 0;
+    slot2[b + 2] = tickParticles[b + 2] ?? 0;
+    slot2[b + 3] = tickParticles[b + 3] ?? 0;
   }
+  trailPool.packInto(tickTrails, 4);
 
   const budget: RcsWorkBudget = {
     drawCalls: 8 + Math.ceil(particlePool.activeCount() / 16),
@@ -773,8 +784,8 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
     slot0,
     slot1,
     slot2,
-    particles: particlePool.pack(4),
-    trails: trailPool.pack(4),
+    particles: tickParticles,
+    trails: tickTrails,
     budget,
   };
 }
@@ -940,6 +951,14 @@ export function rcsLastCelebrationAt(): number {
 
 export function rcsCarAssignedAt(carIdx: number): number {
   return state?.carAssignedAt.get(carIdx) ?? -1;
+}
+
+export function rcsTickSlotBuffersForTest(): {
+  slot0: number[];
+  slot1: number[];
+  slot2: number[];
+} {
+  return { slot0: tickSlot0, slot1: tickSlot1, slot2: tickSlot2 };
 }
 
 export function rcsScoreNow(): [number, number] {

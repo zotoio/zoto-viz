@@ -8,6 +8,7 @@ import {
   pushRcsUndo,
   randomizeRcsOptions,
   RCS_DEFAULTS,
+  rcsUndoStackDepthForTest as packUndoDepth,
   themeBgAccent,
   type RcsOptions,
 } from "./pack";
@@ -23,9 +24,9 @@ declare const zoto: {
   writeParticles: (data: number[], stride?: number) => void;
 };
 
-let opts: RcsOptions = parseRcsOptions(zoto.getConfig?.());
+let opts: RcsOptions = parseRcsOptions({});
 let lastDice = "none";
-let lastCfgSig = "";
+let lastCfgRef: Record<string, string> | undefined;
 let mounted = false;
 
 function ensureMounted(): void {
@@ -36,12 +37,13 @@ function ensureMounted(): void {
 }
 
 function applyConfig(cfg: Record<string, string>): void {
-  const dice = cfg.dice ?? "none";
+  const local = { ...cfg };
+  const dice = local.dice ?? "none";
   if (dice !== lastDice) {
     if (dice === "randomise") {
       pushRcsUndo(opts);
       const rnd = randomizeRcsOptions((opts.seed ^ 0x5a5a) >>> 0, opts);
-      Object.assign(cfg, {
+      Object.assign(local, {
         teamSize: String(rnd.teamSize),
         theme: rnd.theme,
         camera: rnd.camera,
@@ -58,18 +60,18 @@ function applyConfig(cfg: Record<string, string>): void {
     } else if (dice === "undo") {
       const prev = popRcsUndo();
       if (prev) {
-        for (const [k, v] of Object.entries(prev)) cfg[k] = String(v);
-        cfg.dice = "none";
+        for (const [k, v] of Object.entries(prev)) local[k] = String(v);
+        local.dice = "none";
       }
     } else if (dice === "reset") {
       clearRcsUndo();
-      for (const [k, v] of Object.entries(RCS_DEFAULTS)) cfg[k] = String(v);
-      cfg.preset = "broadcast";
-      cfg.dice = "none";
+      for (const [k, v] of Object.entries(RCS_DEFAULTS)) local[k] = String(v);
+      local.preset = "broadcast";
+      local.dice = "none";
     }
-    lastDice = dice;
+    lastDice = local.dice ?? "none";
   }
-  opts = setRcsOptions(cfg);
+  opts = setRcsOptions(local);
   const theme = themeBgAccent(opts.theme);
   const orange = hexToRgb(opts.teamOrange);
   const blue = hexToRgb(opts.teamBlue);
@@ -85,16 +87,14 @@ function applyConfig(cfg: Record<string, string>): void {
 
 function pollHostConfig(): void {
   const cfg = zoto.getConfig?.();
-  if (!cfg) return;
-  const sig = JSON.stringify(cfg);
-  if (sig === lastCfgSig) return;
-  lastCfgSig = sig;
-  applyConfig({ ...cfg });
+  if (!cfg || cfg === lastCfgRef) return;
+  lastCfgRef = cfg;
+  applyConfig(cfg);
 }
 
 zoto.onConfig = (cfg) => {
-  lastCfgSig = JSON.stringify(cfg);
-  applyConfig(cfg);
+  lastCfgRef = cfg;
+  applyConfig({ ...cfg });
 };
 
 zoto.onFrame = (frame) => {
@@ -110,8 +110,13 @@ zoto.onFrame = (frame) => {
   zoto.writeUniform("uAudio", frame.audio);
 };
 
-applyConfig(zoto.getConfig?.() ?? {});
-lastCfgSig = JSON.stringify(zoto.getConfig?.() ?? {});
+const bootCfg = zoto.getConfig?.();
+if (bootCfg) {
+  lastCfgRef = bootCfg;
+  applyConfig(bootCfg);
+} else {
+  applyConfig({});
+}
 
 /** Test hook: simulate pack teardown when the view unmounts. */
 export function rcsFrontendTeardown(): ReturnType<typeof rcsUnmount> {
@@ -121,4 +126,21 @@ export function rcsFrontendTeardown(): ReturnType<typeof rcsUnmount> {
 
 export function rcsFrontendMounted(): boolean {
   return mounted;
+}
+
+export function rcsFrontendOptionsForTest(): RcsOptions {
+  return opts;
+}
+
+export function rcsTestResetDriverStateForTest(): void {
+  lastDice = "none";
+  clearRcsUndo();
+}
+
+export function rcsTestApplyHostConfigForTest(cfg: Record<string, string>): void {
+  applyConfig({ ...cfg });
+}
+
+export function rcsFrontendUndoDepthForTest(): number {
+  return packUndoDepth();
 }

@@ -380,3 +380,11 @@ export function popRcsUndo(): RcsOptions | null {
 export function clearRcsUndo(): void {
   undoStack = [];
 }
+
+export function rcsUndoStackDepthForTest(): number {
+  return undoStack.length;
+}
+
+export function clearRcsUndoForTest(): void {
+  undoStack = [];
+}
