@@ -1,0 +1,18 @@
+diff --git a/web/src/graph/pack-mirror-rect.ts b/web/src/graph/pack-mirror-rect.ts
+--- a/web/src/graph/pack-mirror-rect.ts
++++ b/web/src/graph/pack-mirror-rect.ts
+@@ -118,14 +118,6 @@
+     pixelRatio,
+     out,
+   );
+-  if (canvasDevicePx !== undefined) {
+-    const cap = canvasDevicePx;
+-    const y1 = out.y + out.h;
+-    if (y1 > cap) {
+-      out.y = Math.floor(topY * pixelRatio);
+-      out.h = Math.max(0, cap - out.y);
+-    }
+-  }
+   return out as DeviceRect;
+ }
+ 

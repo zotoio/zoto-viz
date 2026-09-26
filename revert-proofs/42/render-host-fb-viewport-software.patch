@@ -1,0 +1,28 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 60f6cb2..24666f4 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -33,8 +33,8 @@ import {
+   type DeviceRect,
+   type DeviceRectMut,
+   asCssRect,
+-  deviceRectBottomLeftCssInto,
+-  deviceRectTopLeftCssInto,
++  cssRectTopFromBottomLeft,
++  toDeviceRectInto,
+ } from "./pack-mirror-rect";
+ import { renderHostMirrorTelemetry } from "./render-host-telemetry";
+ 
+@@ -425,10 +425,8 @@ export class RenderHost {
+   };
+ 
+   private writeFbViewport(box: SoftRect, pr: number): Viewport {
+-    if (this.software) {
+-      return deviceRectTopLeftCssInto(box, pr, this.fbViewport);
+-    }
+-    return deviceRectBottomLeftCssInto(box, pr, this.fbViewport);
++    const cssTop = cssRectTopFromBottomLeft(box, this.h);
++    return toDeviceRectInto(cssTop, pr, Math.max(1, this.canvas.height), this.fbViewport);
+   }
+ 
+   private sortViewsForMirror(): void {

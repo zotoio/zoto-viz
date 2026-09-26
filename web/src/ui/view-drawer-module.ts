@@ -3,27 +3,7 @@ import type { PluginLook, PluginView } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import { fillPluginFields } from "../plugins/plugin-ui";
 import type { PackWallScope } from "../plugins/instances";
-
-let createElementCalls = 0;
-let rebuilds = 0;
-
-export function resetViewDrawerModuleMetrics(): void {
-  createElementCalls = 0;
-  rebuilds = 0;
-}
-
-export function readViewDrawerModuleMetrics(): { createElementCalls: number; rebuilds: number } {
-  return { createElementCalls, rebuilds };
-}
-
-export function recordViewDrawerRebuild(): void {
-  rebuilds += 1;
-}
-
-function createEl<K extends keyof HTMLElementTagNameMap>(tag: K): HTMLElementTagNameMap[K] {
-  createElementCalls += 1;
-  return document.createElement(tag);
-}
+import type { SdmDevice } from "../plugins/nest-cams-look";
 
 function packLayerNames(spec: PluginView): string[] {
   const layers: string[] = [];
@@ -35,13 +15,13 @@ function packLayerNames(spec: PluginView): string[] {
 }
 
 function pluginLayer(id: string, title: string, hint: string): HTMLElement {
-  const wrap = createEl("div");
+  const wrap = document.createElement("div");
   wrap.className = "plugin-layer";
   wrap.dataset.layer = id;
-  const h = createEl("div");
+  const h = document.createElement("div");
   h.className = "sec-title";
   h.textContent = title;
-  const p = createEl("div");
+  const p = document.createElement("div");
   p.className = "sec-hint";
   p.textContent = hint;
   wrap.append(h, p);
@@ -54,16 +34,28 @@ export type ViewDrawerBuildInput = {
   look?: PluginLook | null;
   extras?: HTMLElement[];
   wallScope?: PackWallScope;
+  devices?: SdmDevice[];
+  draftValues?: Record<string, string>;
   onPluginPersist: (id: string, values: Record<string, string>) => void;
-  onPluginFieldInput?: () => void;
+  onPluginFieldInput?: (key: string, value: string) => void;
   viewMosaicSec: HTMLElement | null;
 };
 
 /** Build view drawer DOM under `host` (replaces children). */
 export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawerBuildInput): void {
-  recordViewDrawerRebuild();
   host.replaceChildren();
-  const { spec, fields, look, extras, wallScope, onPluginPersist, onPluginFieldInput, viewMosaicSec } = input;
+  const {
+    spec,
+    fields,
+    look,
+    extras,
+    wallScope,
+    devices,
+    draftValues,
+    onPluginPersist,
+    onPluginFieldInput,
+    viewMosaicSec,
+  } = input;
   if (spec) {
     const layers = packLayerNames(spec);
     host.append(pluginLayer(
@@ -80,11 +72,11 @@ export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawer
         ? `Look pins from ${spec.name}'s visualisation — they override matching Motion / Appearance controls while this view is selected.`
         : "Look pins from the plugin pack — they override matching Motion / Appearance controls while selected.",
     );
-    const row = createEl("div");
+    const row = document.createElement("div");
     row.className = "pin-chips";
     for (const [k, v] of Object.entries(look)) {
       if (v === undefined) continue;
-      const c = createEl("span");
+      const c = document.createElement("span");
       c.className = "pin-chip";
       c.textContent = `${k}: ${String(v)}`;
       row.appendChild(c);
@@ -103,13 +95,15 @@ export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawer
     );
     fillPluginFields(view, spec, pluginViewKnobs(spec, fields), onPluginPersist, {
       skipEmpty: extra.length > 0,
+      devices,
       wallScope,
+      draftValues,
       onFieldInput: onPluginFieldInput,
     });
     if (extra.length) {
-      const sec = createEl("div");
+      const sec = document.createElement("div");
       sec.className = "sec";
-      const row = createEl("div");
+      const row = document.createElement("div");
       row.className = "sec-controls";
       for (const el of extra) row.appendChild(el);
       sec.append(row);
@@ -119,7 +113,7 @@ export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawer
     }
     host.append(view);
   } else if (!look && !extra.length && !viewMosaicSec) {
-    const empty = createEl("div");
+    const empty = document.createElement("div");
     empty.className = "sec";
     empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu or on a mosaic tile opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
     host.append(empty);

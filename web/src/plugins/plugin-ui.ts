@@ -1,6 +1,5 @@
 import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
 import { packScopeNoteText, type PackWallScope } from "./instances";
-import { recordPackScopeNoteTextWrite } from "./pack-scope-note-metrics";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
@@ -11,9 +10,15 @@ export function fillPluginFields(
   spec: PluginView,
   fields: PluginField[],
   onPersist: (id: string, values: Record<string, string>) => void,
-  opts?: { skipEmpty?: boolean; devices?: SdmDevice[]; wallScope?: PackWallScope; onFieldInput?: () => void },
+  opts?: {
+    skipEmpty?: boolean;
+    devices?: SdmDevice[];
+    wallScope?: PackWallScope;
+    draftValues?: Record<string, string>;
+    onFieldInput?: (key: string, value: string) => void;
+  },
 ): void {
-  const values = loadPluginConfig(spec, fields);
+  const values = { ...loadPluginConfig(spec, fields), ...opts?.draftValues };
   const head = document.createElement("div");
   head.className = "sec";
   const title = document.createElement("div");
@@ -85,7 +90,7 @@ export function fillPluginFields(
           value: Number(current),
           onInput: (v) => {
             values[f.key] = String(v);
-            opts?.onFieldInput?.();
+            opts?.onFieldInput?.(f.key, String(v));
           },
         });
         sl.el.querySelector("input")?.addEventListener("change", () => persist());
@@ -139,7 +144,6 @@ function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWall
   const note = document.createElement("div");
   note.className = "sec-hint plugin-pack-scope-note";
   note.textContent = text;
-  recordPackScopeNoteTextWrite();
   const layer = viewLayerForScopeNote(host);
   const anchor = layer.querySelector(".sec-title");
   if (anchor?.parentElement === layer && anchor.nextSibling) {
@@ -154,17 +158,11 @@ export function syncPackScopeNote(root: HTMLElement, spec: PluginView, wall?: Pa
   const text = packScopeNoteText(spec, wall);
   const existing = root.querySelector(".plugin-pack-scope-note");
   if (!text) {
-    if (existing) {
-      existing.remove();
-      recordPackScopeNoteTextWrite();
-    }
+    existing?.remove();
     return;
   }
   if (existing instanceof HTMLElement) {
-    if (existing.textContent !== text) {
-      existing.textContent = text;
-      recordPackScopeNoteTextWrite();
-    }
+    if (existing.textContent !== text) existing.textContent = text;
     return;
   }
   mountPackScopeNote(viewLayerForScopeNote(root), spec, wall);

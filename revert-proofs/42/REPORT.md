@@ -1,180 +1,110 @@
-## Revert proof
+# PR #42 split A — revert proof report
 
-| row | test | revert description | command | result |
-| --- | --- | --- | --- | --- |
-| context-restore-antialias | src/graph/render-host-context-restore-antialias.test.ts :: RenderHost context restore antialias > re-reads getContextAttributes after webglcontextrestored before the next pack present | Refresh contextAntialias cache on webglcontextrestored, not only at GL creation. | web/node_modules/.bin/vitest run src/graph/render-host-context-restore-antialias.test.ts -t "RenderHost context restore antialias > re-reads getContextAttributes after webglcontextrestored before the next pack present" | RED (expected) |
-| letterbox-bottom-left | src/graph/pack-mirror-letterbox.test.ts :: pack mirror letterbox > places letterbox inner viewport with bottom-left origin | Letterbox inner rect uses bottom-left GL coordinates. | web/node_modules/.bin/vitest run src/graph/pack-mirror-letterbox.test.ts -t "pack mirror letterbox > places letterbox inner viewport with bottom-left origin" | RED (expected) |
-| material-needs-update | src/graph/pack-mirror-lifecycle.test.ts :: PackTexturePresenter > keeps material.version stable over 300 draws with the same texture | Material needsUpdate only when map reference changes. | web/node_modules/.bin/vitest run src/graph/pack-mirror-lifecycle.test.ts -t "PackTexturePresenter > keeps material.version stable over 300 draws with the same texture" | RED (expected) |
-| mirror-frame-scope-sync | src/graph/render-host-frame-alloc.test.ts :: RenderHost frame allocations > 300 frames at 2×4 in-page mirror: one scope sync, stable viewBox, present arg identity | mirrorScopeDirty flag instead of per-frame fingerprint strings for pack scope sync. | web/node_modules/.bin/vitest run src/graph/render-host-frame-alloc.test.ts -t "RenderHost frame allocations > 300 frames at 2×4 in-page mirror: one scope sync, stable viewBox, present arg identity" | RED (expected) |
-| one-mirror-per-pack | src/graph/pack-mirror-lifecycle.test.ts :: PackMirrorSession resource lifecycle > two pack keys get two targets; dropping one duplicate leaves the other | Separate mirror session per pack group key. | web/node_modules/.bin/vitest run src/graph/pack-mirror-lifecycle.test.ts -t "PackMirrorSession resource lifecycle > two pack keys get two targets; dropping one duplicate leaves the other" | RED (expected) |
-| present-pack-args-identity | src/graph/render-host-frame-alloc.test.ts :: RenderHost frame allocations > 300 frames at 2×4 in-page mirror: one scope sync, stable viewBox, present arg identity | Hoisted packDrawOpts / packMirrorPresentOpts instead of per-frame option literals in present paths. | web/node_modules/.bin/vitest run src/graph/render-host-frame-alloc.test.ts -t "RenderHost frame allocations > 300 frames at 2×4 in-page mirror: one scope sync, stable viewBox, present arg identity" | RED (expected) |
-| renderer-gate-ci-env | src/graph/pack-mirror-renderer-gate.test.ts :: pack mirror renderer gate > CI web job exports ZOTO_VIZ_EXPECT_RENDERER for SwiftShader readback | CI sets ZOTO_VIZ_EXPECT_RENDERER explicitly instead of inferring SwiftShader from CI/VM. | web/node_modules/.bin/vitest run src/graph/pack-mirror-renderer-gate.test.ts -t "pack mirror renderer gate > CI web job exports ZOTO_VIZ_EXPECT_RENDERER for SwiftShader readback" | RED (expected) |
-| samples-gated-on-antialias | src/graph/pack-mirror-lifecycle.test.ts :: PackMirrorSession resource lifecycle > samples=4 only when context antialias is true | MSAA samples follow context antialias flag. | web/node_modules/.bin/vitest run src/graph/pack-mirror-lifecycle.test.ts -t "PackMirrorSession resource lifecycle > samples=4 only when context antialias is true" | RED (expected) |
-| setSize-only-on-resize | src/graph/pack-mirror-lifecycle.test.ts :: PackMirrorSession resource lifecycle > 300 steady frames: 0 setSize; one resize: exactly 1 setSize | RenderTarget uses setSize on resize instead of reallocating every frame. | web/node_modules/.bin/vitest run src/graph/pack-mirror-lifecycle.test.ts -t "PackMirrorSession resource lifecycle > 300 steady frames: 0 setSize; one resize: exactly 1 setSize" | RED (expected) |
-| teardown-dispose-counts | src/graph/pack-mirror-lifecycle.test.ts :: PackMirrorSession resource lifecycle > teardown disposes RT, geometry, and material; single tile creates nothing | Dropping below two tiles disposes RT and quad resources. | web/node_modules/.bin/vitest run src/graph/pack-mirror-lifecycle.test.ts -t "PackMirrorSession resource lifecycle > teardown disposes RT, geometry, and material; single tile creates nothing" | RED (expected) |
+- **Base:** `6520b014472c05f831ac5204429be2affb8473cb` (`main`)
+- **Stack A head:** `0add9cb` (`cursor/wall-duplicate-pack-tiles-d355`)
+- **Stack A2 head:** `34a2cf3` (`cursor/pack-mirror-readback-harness-d355`, draft on A)
 
-### context-restore-antialias
+## Size (vs `origin/main`, excluding `revert-proofs/`)
 
-```
-AssertionError: expected 1 to be 2 // Object.is equality
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/render-host-context-restore-antialias.test.ts:94:65
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+| PR | Approx. insertions |
+|----|-------------------|
+| 42-A (production + unit tests) | ~3448 |
+| 42-A2 (readback harness delta on A) | ~1111 |
 
-### letterbox-bottom-left
+## Letterbox 16:9 on 1:1 mirror (UX Pro)
 
-```
-AssertionError: expected 'import * as THREE from "three";\nimpo…' to contain 'const iy = dst.y + (dst.h - innerTd.y…'
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/pack-mirror-letterbox.test.ts:11:17
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+| Stack | Test | Revert row |
+|-------|------|------------|
+| A unit | `pack-mirror-letterbox-16x9.test.ts` @ pr **1** and **1.5** — inner `setViewport`, `zotoSurfacePanelClearHex()` bar `setClearColor`, first scene row device Y | `pack-mirror-letterbox-16x9` (stretch fill) |
+| A2 harness | `pack-mirror-readback.test.ts` letterbox SwiftShader @ pr **1** / **1.5** — bar centre rgba vs panel token; `expect` only | `pack-mirror-letterbox-16x9-readback` (same stretch patch) |
 
-### material-needs-update
+**Unpatched (A, pr 1):** `Tests 1 passed`
 
-```
-AssertionError: expected 300 to be 1 // Object.is equality
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/pack-mirror-lifecycle.test.ts:194:32
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+**Patched (A, pr 1):** `AssertionError: expected undefined to deeply equal { x: 0, y: 21.875, w: 100, h: 56.25 }` (stretch uses full-tile viewport; centred inner vp missing)
 
-### mirror-frame-scope-sync
+## Build / typecheck
 
-```
-AssertionError: expected 301 to be +0 // Object.is equality
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/render-host-frame-alloc.test.ts:168:62
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+- `pnpm build` (main `tsc` + `tsconfig.test.json` + vite): **pass** on A head
+- `tsc` projects: **0 errors** on A head
 
-### one-mirror-per-pack
+## Test suites (A head, node 22)
 
-```
-AssertionError: expected 1 to be 2 // Object.is equality
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/pack-mirror-lifecycle.test.ts:167:57
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+| Suite | Result |
+|-------|--------|
+| vitest run #1 | 705 passed, 3 skipped (708 tests) (+2 letterbox 16:9 unit) |
+| vitest run #2 | (re-run at release gate) |
+| pytest | 432 passed, 1 failed (`test_node_harness_session_and_tools` — known env) |
 
-### present-pack-args-identity
+Readback on **A2**: 12 matrix + 3 zoom + **2** letterbox16x9 rows (`pack-mirror-readback.test.ts`).
 
-```
-AssertionError: expected { letterbox: false, fill: null, …(1) } to be { letterbox: false, fill: null, …(1) } // Object.is equality
+## Lifecycle `deviceSizeAllocated` (A, vs #73 on 4527885)
 
-If it should pass with deep equality, replace "toBe" with "toStrictEqual"
+| Check | Evidence |
+|-------|----------|
+| Root cause | **Not** letterbox grain — per-frame `deviceSizeFromCssBox()` in `renderPrimary` (allocating `{pw,ph}` each frame). Frame-alloc row sees **~300** `deviceSizeAllocated`; lifecycle guards **0** in the 300-frame loop (line ~102). |
+| Fix | `deviceSizeFromCssBoxInto(box, pr, devicePackSizeScratch)` + stable `lastRenderDeviceSize`; lifecycle uses cached `getSurfaceLetterboxFill` (not `surfaceLetterboxFill` per frame). |
+| Revert row | `pack-mirror-device-size-into` → `deviceSizeAllocated` ≫ 0 over 300 frames |
 
-Expected: { letterbox: false, fill: null, …(1) }
-Received: serializes to the same string
+## Typecheck (QE)
 
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/render-host-frame-alloc.test.ts:160:22
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+- `pnpm exec tsc --noEmit` and `tsc -p tsconfig.test.json --noEmit`: **0 errors**; browser `tsconfig.json` keeps `types: ["vite/client"]` only; test project uses `vitest/globals` (no `@types/node` in either config).
 
-### renderer-gate-ci-env
+## Items 7–8: origin-branded rects (Platform Architect A)
 
-```
-AssertionError: expected 'name: ci\n\non:\n  push:\n  pull_requ…' to match /ZOTO_VIZ_EXPECT_RENDERER:\s*swiftshad…/
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/pack-mirror-renderer-gate.test.ts:29:16
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+| Check | Evidence |
+|-------|----------|
+| `DeviceRect` top-left; `GlRect` bottom-left only via `toGlRectInto` | `pack-mirror-rect.ts`, `render-host.writeFbViewport`, `pane-change` (`ProbeRect = GlRect`, `CanvasChangeProbe` → `DeviceRect`) |
+| `CanvasDeviceHeight` from `RenderHost` (`canvas.height` on resize) | `render-host.ts` `refreshCanvasDeviceHeight` |
+| `@ts-expect-error` boundary guards | `pack-mirror-rect.boundary.ts` (double flip, GlRect on probe, plain number canvas height) |
+| H=241 bottom row `GlRect` | `render-host-fb-viewport.test.ts` → `{ x: 0, y: 0, w: 300, h: 90, __unit: "gl" }` |
+| Revert row | `render-host-fb-viewport-h241` → `y: -1` (drop canvas-height clamp on host viewBox) |
 
-### samples-gated-on-antialias
+## Letterbox fill / software bars (Performance Pedant B)
 
-```
-AssertionError: expected +0 to be 4 // Object.is equality
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/pack-mirror-lifecycle.test.ts:125:27
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+| Check | Evidence |
+|-------|----------|
+| Fill once per `clearHex` (`css` + `hex` + baked `pattern`) | `getSurfaceLetterboxFill` / `scene.ts` `surfaceLetterboxFill()`; GPU uses `fill.hex` in `paintLetterboxBarsThree` |
+| 300 frames same instance, 0 `match`, 1 rebuild on theme change | `letterbox-fill-cache.test.ts` |
+| Software bars: scratch tuple, 0 `Math.random` / hot-path strings | `paintLetterboxBarsInto` + `letterbox-grain-stable.test.ts` |
+| Probe stability (2 identical frames → 0 changes) | `letterbox-grain-stable.test.ts` samples top bar centre in **device** space; grain uses fixed-seed tile — probe rect avoids jitter pixels |
+| Revert rows | `letterbox-fill-cache` (rebuild every call); `letterbox-grain-stable` (per-frame `Math.random` jitter → probe fires ~299/300) |
 
-### setSize-only-on-resize
+## Revert rows (A)
 
-```
-AssertionError: expected +0 to be 1 // Object.is equality
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/pack-mirror-lifecycle.test.ts:113:57
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+Each patch: `git apply --check` clean (no fuzz) at A head; anchored vitest goes **red**.
 
-### teardown-dispose-counts
+| Row | Assertion (patched run) |
+|-----|-------------------------|
+| `letterbox-fill-cache` | `letterboxFillStats.rebuilds` ≫ 1 over 300 frames |
+| `letterbox-grain-stable` | `Math.random` called; probe change on 2nd identical frame |
+| `pack-mirror-letterbox-16x9` | `expected undefined to deeply equal { x: 0, y: 21.875, w: 100, h: 56.25 }` (stretch revert) |
+| `pack-mirror-capture-rounding` | `AssertionError: expected { x: 1, y: 87, w: 152, h: 92 } to deeply equal { x: 2, y: 87, w: 151, h: 92 }` (floor/ceil on `deviceRectBottomLeftCssInto`) |
+| `pack-mirror-tile-edge-shared` | `expected 152 to be 151` (`aOut.x + aOut.w` vs `bOut.x`) |
+| `pack-mirror-device-size-into` | lifecycle / Into row fails on `renderTargetSetSize` or size identity |
+| `pack-mirror-device-size-origin` | `expected N to be +0` on `renderTargetSetSize` (NaN `w` without `cssBoxDim` / finite guard) |
+| `mosaic-boot-primary-pack` | primary pack id mismatch on 4-pack boot |
+| `mosaic-sandbox-frame` | `expected "spy" to be called 10 times` → **0** (`sandbox.frame` skipped when mosaic demo coalesce) |
+| `render-host-fb-viewport-software` | `expected 270 to be +0` (`lastVp.y` on software tile0 — GL flip regression) |
+| `render-host-fb-viewport-h241` | bottom row `GlRect` `y: -1` instead of `{ x: 0, y: 0, w: 300, h: 90, __unit: "gl" }` |
+| `render-host-frame-alloc-objects` | `expected N to be +0` on `converterEdgeObjectsAllocated` |
+| `mirror-frame-scope-sync` | extra `scopeSyncRuns` / fingerprint path |
+| `present-pack-args-identity` | `presentPack` opts / viewport identity break |
+| `material-needs-update` | material update / draw regression |
+| `pack-mirror-rt-viewport-dpr` | RT viewport uses device `pw/ph` instead of CSS `cssSize` |
+| `pack-mirror-texture-flip-y` | `flipY` revert |
+| `one-mirror-per-pack` | registry allocation |
+| `setSize-only-on-resize` | per-frame `setSize` |
+| `teardown-dispose-counts` | dispose counts |
+| `context-restore-antialias` | antialias restore |
+| `samples-gated-on-antialias` | MSAA gate |
 
-```
-AssertionError: expected +0 to be 1 // Object.is equality
-    at /tmp/revert-proof-wt-workspace-115312/web/src/graph/pack-mirror-lifecycle.test.ts:136:54
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-115312/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
+## Revert rows (A2 only)
+
+| Row | Assertion (patched run) |
+|-----|-------------------------|
+| `pack-mirror-device-pixel-ratio` | `expect(state.ok.quadrantTlOk).toBe(true)` → **false** at 200% zoom (`rendererDpr` follows `windowDpr` instead of capped renderer DPR) |
+| `pack-mirror-letterbox-16x9-readback` | `expect(rgbaNear(topBarRgba, expectedBarRgba)).toBe(true)` → **false** after stretch (bar samples scene green) |
+
+## Converter sanity (unchanged)
+
+- 100k random tile pairs × pr ∈ {1, 1.25, 1.5, 1.75, 2}: **0** gaps/overlaps on shared edges (`toDeviceRectInto` / top-left GL readback path).

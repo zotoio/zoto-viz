@@ -24,7 +24,6 @@ import type { SdmDevice } from "../plugins/nest-cams-look";
 import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
-import { recordPackScopeNoteRecount } from "../plugins/pack-scope-note-metrics";
 import type { PackWallScope } from "../plugins/instances";
 import { packLastTileDiscardMessage } from "../plugins/pack-shared-copy";
 import { drawerKeyForModeId, type DrawerKey } from "../graph/mosaic-tile-id";
@@ -188,9 +187,10 @@ export class Settings {
   private viewFocusId = "";
   private viewDrawerKey: DrawerKey | null = null;
   private viewPluginDirty = false;
+  private viewPluginDraft: Record<string, string> = {};
   private readonly viewDrawerStatusEl: HTMLDivElement;
   private lastMosaicSlotEl: HTMLSelectElement | null = null;
-  private readonly mosaicLayoutFocusReturn: HTMLButtonElement;
+  private lastMosaicSlotPaneIndex = 0;
   private nestDevices: SdmDevice[] = [];
   private nestDeviceKey = "";
   private viewBind: {
@@ -278,11 +278,7 @@ export class Settings {
     this.viewDrawerStatusEl.className = "view-drawer-status sec-hint";
     this.viewDrawerStatusEl.setAttribute("role", "status");
     this.viewDrawerStatusEl.hidden = true;
-    this.mosaicLayoutFocusReturn = document.createElement("button");
-    this.mosaicLayoutFocusReturn.type = "button";
-    this.mosaicLayoutFocusReturn.className = "mosaic-layout-focus-return";
-    this.mosaicLayoutFocusReturn.tabIndex = 0;
-    this.el.append(this.viewDrawerStatusEl, this.mosaicLayoutFocusReturn, this.btn, this.pop);
+    this.el.append(this.viewDrawerStatusEl, this.btn, this.pop);
     bindFloatPanel(this.pop, handle, "settings", { pin: () => this.pinFloat(), min: { w: 360, h: 280 } });
 
     this.anim = loadAnim(cfg.storePrefix);
@@ -479,20 +475,31 @@ export class Settings {
       return;
     }
     this.viewDrawerKey = nextKey;
+    const draftValues = this.viewPluginDirty ? { ...this.viewPluginDraft } : undefined;
     this.viewPluginDirty = false;
+    this.viewPluginDraft = {};
+    this.pop.removeAttribute("data-view-plugin-dirty");
     rebuildViewDrawerContent(host, {
       spec,
       fields,
       look,
       extras,
+      devices: this.nestDevices,
+      draftValues,
       wallScope: packWallScopeFromAnim(this.anim),
       viewMosaicSec: this.viewMosaicSec,
       onPluginPersist: (id, values) => {
         this.onPluginChange?.(id, values);
         this.cfg.onPersist?.();
         this.viewPluginDirty = false;
+        this.viewPluginDraft = {};
+        this.pop.removeAttribute("data-view-plugin-dirty");
       },
-      onPluginFieldInput: () => { this.viewPluginDirty = true; },
+      onPluginFieldInput: (key, value) => {
+        this.viewPluginDirty = true;
+        this.viewPluginDraft[key] = value;
+        this.pop.dataset.viewPluginDirty = "1";
+      },
     });
     this.attachViewMosaic();
   }
@@ -505,6 +512,13 @@ export class Settings {
     this.animUi?.syncTiles();
   }
 
+  private focusMosaicSlotSelect(paneIndex: number): void {
+    const slots = this.viewMosaicSec?.querySelectorAll<HTMLSelectElement>(".mosaic-slot");
+    const sel = slots?.[paneIndex];
+    sel?.focus();
+    if (sel) this.lastMosaicSlotEl = sel;
+  }
+
   /** Refresh Nest camera chips when Device Access lists devices. */
   setNestDevices(devices: SdmDevice[]): void {
     const key = devices.map((d) => d.id).join("|");
@@ -512,6 +526,7 @@ export class Settings {
     this.nestDeviceKey = key;
     this.nestDevices = devices;
     if (this.viewBind?.spec?.id === "nest-cams") {
+      this.viewDrawerKey = null;
       this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
     }
   }
@@ -1767,10 +1782,21 @@ export class Settings {
   }
 
   private teardownViewDrawerAfterLastPackTile(discardMessage: string | null): void {
-    const layoutControl = this.lastMosaicSlotEl;
-    if (discardMessage) this.showViewDrawerStatus(discardMessage);
-    else this.clearViewDrawerStatus();
+    if (discardMessage) {
+      this.showViewDrawerStatus(discardMessage);
+      this.viewPluginDirty = false;
+      this.viewPluginDraft = {};
+      this.pop.removeAttribute("data-view-plugin-dirty");
+      this.viewDrawerKey = null;
+      this.viewFocusId = "";
+      this.syncViewCog();
+      this.focusMosaicSlotSelect(this.lastMosaicSlotPaneIndex);
+      return;
+    }
+    this.clearViewDrawerStatus();
     this.viewPluginDirty = false;
+    this.viewPluginDraft = {};
+    this.pop.removeAttribute("data-view-plugin-dirty");
     this.viewDrawerKey = null;
     this.viewFocusId = "";
     this.pop.hidden = true;
@@ -1781,11 +1807,7 @@ export class Settings {
     cancelAnimationFrame(this.meterRaf);
     this.meterRaf = 0;
     this.onClose?.();
-    if (layoutControl) {
-      const label = layoutControl.getAttribute("aria-label");
-      if (label) this.mosaicLayoutFocusReturn.setAttribute("aria-label", label);
-    }
-    this.mosaicLayoutFocusReturn.focus();
+    this.focusMosaicSlotSelect(this.lastMosaicSlotPaneIndex);
   }
 
   showViewDrawerStatus(message: string): void {
@@ -1799,21 +1821,10 @@ export class Settings {
     this.viewDrawerStatusEl.hidden = true;
   }
 
-  /** Visible status lines (normal tone) after the drawer closes. */
-  viewDrawerStatusMessages(): HTMLElement[] {
-    return this.viewDrawerStatusEl.hidden ? [] : [this.viewDrawerStatusEl];
-  }
-
-  get viewPluginFieldDirty(): boolean { return this.viewPluginDirty; }
-
-  /** Focus return target for the mosaic slot that last drove a layout change. */
-  get lastMosaicLayoutControl(): HTMLElement { return this.mosaicLayoutFocusReturn; }
-
   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
 
   private syncPackScopeNoteFromAnim(): void {
     if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec || !this.viewHost) return;
-    recordPackScopeNoteRecount();
     const wall = packWallScopeFromAnim(this.anim);
     syncPackScopeNote(this.viewHost, this.viewBind.spec, wall);
   }
@@ -1849,6 +1860,7 @@ export class Settings {
       fillViewSelect(sel, cur);
       sel.addEventListener("change", () => {
         this.lastMosaicSlotEl = sel;
+        this.lastMosaicSlotPaneIndex = i;
         const from = ids[i] ?? "";
         const to = sel.value;
         if (!from || from === to) return;
@@ -1860,7 +1872,9 @@ export class Settings {
           if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
           this.persistAnim();
         }
+        if (!this.isOpen) return;
         this.animUi?.syncTiles();
+        if (!this.viewPluginDirty) this.focusMosaicSlotSelect(i);
       });
       row.append(cap, sel);
       host.appendChild(row);
@@ -2190,9 +2204,6 @@ export class Settings {
   private storeKey(key: string): string { return `${this.cfg.storePrefix}.filter.${key}`; }
 
   get isOpen(): boolean { return !this.pop.hidden; }
-
-  /** Settings flyout drawer (`settings-pop`); hosts the view pane while open. */
-  get drawerEl(): HTMLDivElement { return this.pop; }
 
   private pinFloat(): void {
     if (this.pop.parentElement === document.body && this.pop.classList.contains("flyout")) return;

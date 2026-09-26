@@ -1,13 +1,13 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index a74fcfc..6640499 100644
+index 60f6cb2..3e2a2de 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -403,7 +403,7 @@ export class RenderHost {
+@@ -408,7 +408,7 @@ export class RenderHost {
      this.packDrawOpts.letterbox = false;
      this.packDrawOpts.fill = null;
      this.packDrawOpts.aspect = box.w / Math.max(1, box.h);
--    this.packMirrors.presentPack(packKey, rd, this.packDrawViewport, this.packDrawOpts);
-+    this.packMirrors.presentPack(packKey, rd, this.packDrawViewport, { letterbox: false, fill: null, aspect: box.w / Math.max(1, box.h) });
+-    this.packMirrors.presentPack(packKey, rd, asCssRect(this.packDrawViewport), this.packDrawOpts);
++    this.packMirrors.presentPack(packKey, rd, asCssRect(this.packDrawViewport), { letterbox: false, fill: null, aspect: box.w / Math.max(1, box.h) });
    };
  
    private readonly runTimedViewDraw = (): void => {

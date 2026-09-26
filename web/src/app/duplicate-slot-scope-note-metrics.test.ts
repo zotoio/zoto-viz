@@ -1,9 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DREAM } from "../graph/scene";
-import {
-  readPackScopeNoteMetrics,
-  resetPackScopeNoteMetrics,
-} from "../plugins/pack-scope-note-metrics";
+import * as pluginUi from "../plugins/plugin-ui";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { Settings } from "../ui/settings";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
@@ -11,7 +8,16 @@ import { applyWallLayoutPatch } from "./mosaic-wall-layout";
 const PACK = "plugin:settings-fixture";
 
 describe("duplicate slot shared config > pack scope note write budget", () => {
-  beforeEach(() => localStorage.clear());
+  let syncSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    syncSpy = vi.spyOn(pluginUi, "syncPackScopeNote");
+  });
+
+  afterEach(() => {
+    syncSpy.mockRestore();
+  });
 
   async function openFixtureDrawer(settings: Settings): Promise<void> {
     const spec = loadSettingsDeclFixture();
@@ -21,10 +27,10 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
     settings.bindView(spec, spec.config);
     settings.openView(PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    resetPackScopeNoteMetrics();
+    syncSpy.mockClear();
   }
 
-  it("five layout patches with unchanged duplicate count: 5 recounts and 0 text writes", async () => {
+  it("five layout patches with unchanged duplicate count: 0 syncs", async () => {
     const settings = new Settings({ storePrefix: "zoto-scope-note-writes", onChange: () => {} });
     settings.addAnimation(() => {}, { el: document.createElement("div") });
     document.body.append(settings.el);
@@ -70,11 +76,11 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
       applyWallLayoutPatch(settings, patch);
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
     }
-    expect(readPackScopeNoteMetrics()).toEqual({ recounts: 5, textWrites: 0 });
+    expect(syncSpy).toHaveBeenCalledTimes(0);
     settings.el.remove();
   });
 
-  it("600 steady frames with drawer open: 0 recounts and 0 writes; one tile-count change: 1 and 1", async () => {
+  it("600 steady frames with drawer open: 0 syncs; one tile-count change: 1 sync", async () => {
     const settings = new Settings({ storePrefix: "zoto-scope-note-steady", onChange: () => {} });
     settings.addAnimation(() => {}, { el: document.createElement("div") });
     document.body.append(settings.el);
@@ -83,12 +89,12 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
     for (let i = 0; i < 600; i++) {
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
     }
-    expect(readPackScopeNoteMetrics()).toEqual({ recounts: 0, textWrites: 0 });
+    expect(syncSpy).toHaveBeenCalledTimes(0);
 
     const threeTiles = [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"];
     applyWallLayoutPatch(settings, { tree: null, maximized: null, tiles: threeTiles });
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(readPackScopeNoteMetrics()).toEqual({ recounts: 1, textWrites: 1 });
+    expect(syncSpy).toHaveBeenCalledTimes(1);
 
     settings.el.remove();
   });

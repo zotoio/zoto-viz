@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic.test.ts",
+  "testName": "^mosaic boot primary pack tile > boot with 4 packs: primary tile shows the primary pack id exactly$",
+  "description": "Tree-only mosaic boot must refresh leaf ids from mosaicIds(prefer) so tile 0 matches the primary pack view."
+}

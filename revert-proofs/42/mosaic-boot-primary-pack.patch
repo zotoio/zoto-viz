@@ -1,0 +1,14 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -124,9 +124,7 @@ export function assignParsedMosaicTree(
+   hero: HeroPos = "off",
+   explicitTiles: readonly string[] = [],
+ ): MosaicNode {
+-  const cur = leafIds(parsed);
+   const tiles = parseMosaicTiles(explicitTiles);
+-  const bootIds = mosaicBootLeafIds(size, prefer, hero, tiles, cur);
+-  return assignTiles(parsed, tiles.length ? tiles : bootIds ?? cur);
++  return tiles.length ? assignTiles(parsed, tiles) : parsed;
+ }
+ 

@@ -1,7 +1,8 @@
 diff --git a/web/src/graph/pack-mirror-rect.ts b/web/src/graph/pack-mirror-rect.ts
+index 4a021a8..d4bc7fa 100644
 --- a/web/src/graph/pack-mirror-rect.ts
 +++ b/web/src/graph/pack-mirror-rect.ts
-@@ -86,10 +86,10 @@ export function deviceSizeFromCssBoxInto(
+@@ -130,18 +130,18 @@ export function deviceSizeFromCssBoxInto(
    out: DeviceSizeMut,
  ): DeviceSizeMut {
    const pr = pixelRatio;
@@ -16,3 +17,13 @@ diff --git a/web/src/graph/pack-mirror-rect.ts b/web/src/graph/pack-mirror-rect.
    const x0 = Math.round(bx * pr);
    const x1 = Math.round((bx + bw) * pr);
    const y0 = Math.round(by * pr);
+   const y1 = Math.round((by + bh) * pr);
+   const pw = x1 - x0;
+   const ph = y1 - y0;
+-  out.pw = Number.isFinite(pw) ? Math.max(2, pw) : 2;
+-  out.ph = Number.isFinite(ph) ? Math.max(2, ph) : 2;
++  out.pw = Math.max(2, pw);
++  out.ph = Math.max(2, ph);
+   return out;
+ }
+ 

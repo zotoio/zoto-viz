@@ -7,6 +7,7 @@ import { bindThisView, type BindThisViewDeps } from "./host-view-bind";
 import { rebindViewDrawerOnApplyMode } from "./host-apply-mode-rebind";
 import { createMosaicPanePickHandler } from "./host-mosaic-pane-pick";
 import { syncSettingsAnimToMosaic } from "./settings-mosaic-anim-sync";
+import { settingsViewDrawerRoot } from "./duplicate-slot-scope-note-test-dom";
 
 export function stubNetSceneForMosaic(): NetScene {
   return {
@@ -119,7 +120,7 @@ export function applyMosaicTiles(settings: Settings, mosaic: Mosaic, tiles: stri
 
 /** Drive layout like the drawer's `.mosaic-slot` picker (main `onMosaicPanePick`). */
 export function pickMosaicSlot(settings: Settings, paneIndex: number, toViewId: string): void {
-  const sel = settings.drawerEl.querySelectorAll<HTMLSelectElement>(".mosaic-slot")[paneIndex];
+  const sel = settingsViewDrawerRoot(settings).querySelectorAll<HTMLSelectElement>(".mosaic-slot")[paneIndex];
   if (!sel) throw new Error(`missing mosaic-slot pane ${paneIndex}`);
   sel.value = toViewId;
   sel.dispatchEvent(new Event("change", { bubbles: true }));

@@ -1,17 +1,17 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index a74fcfc..213c382 100644
+index 60f6cb2..bc07ee9 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -113,7 +113,7 @@ export class RenderHost {
+@@ -121,7 +121,7 @@ export class RenderHost {
    };
-   private readonly fbViewport: Viewport = { x: 0, y: 0, w: 0, h: 0 };
+   private readonly fbViewport: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
    private readonly packScopeScratch = new Map<string, { tileCount: number; antialias: boolean }>();
 -  private mirrorScopeDirty = true;
 +  private mirrorScopeFingerprint = "";
    private contextAntialias = false;
    private readonly viewBoxScratch: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
    private readonly viewBoxScratchB: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
-@@ -238,7 +238,7 @@ export class RenderHost {
+@@ -245,7 +245,7 @@ export class RenderHost {
  
    /** Pack-mirror tile metadata changed without add/remove (mosaic coalesce). */
    markMirrorScopeDirty(): void {
@@ -20,11 +20,10 @@ index a74fcfc..213c382 100644
    }
  
    /** Run one animation frame (tests / dogfood). */
-@@ -437,10 +437,27 @@ export class RenderHost {
+@@ -440,10 +440,26 @@ export class RenderHost {
      });
    }
  
-+
 +  private buildMirrorScopeFingerprint(): string {
 +    renderHostMirrorTelemetry.scopeFingerprintBuilds += 1;
 +    const parts: string[] = [];

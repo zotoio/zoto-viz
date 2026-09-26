@@ -21,7 +21,6 @@ import {
   parsePluginId,
   pluginViewId,
 } from "./instances";
-import { recordPluginConfigWrite } from "./plugin-config-write-metrics";
 import type { PluginInstance } from "./instances";
 import {
   engineDispatch,
@@ -334,7 +333,6 @@ export function loadPluginConfig(spec: PluginView, fields = spec.config): Record
 }
 
 export function writePluginConfig(id: string, values: Record<string, string>): void {
-  recordPluginConfigWrite();
   for (const [k, v] of Object.entries(values)) localStorage.setItem(storeKey(id, k), v);
 }
 

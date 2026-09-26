@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-letterbox.test.ts",
-  "testName": "pack mirror letterbox > places letterbox inner viewport with bottom-left origin",
-  "description": "Letterbox inner rect uses bottom-left GL coordinates."
-}
