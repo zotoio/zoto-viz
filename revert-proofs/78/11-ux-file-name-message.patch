@@ -1,10 +1,14 @@
 diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index 95e84c7..0a72464 100644
 --- a/service/pack_safe_zip.py
 +++ b/service/pack_safe_zip.py
-@@ -86,5 +86,4 @@
+@@ -86,8 +86,7 @@ class _CountingReader:
  
  
  def zip_entry_error(member: str, detail: str) -> str:
 -    rel = member.replace("\\", "/")
 -    return f"zip entry {rel!r}: {detail}"
 +    return detail
+ 
+ 
+ def member_dedupe_key(rel: str) -> str:

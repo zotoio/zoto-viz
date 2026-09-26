@@ -1,10 +1,13 @@
 diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index 95e84c7..33bf8cc 100644
 --- a/service/pack_safe_zip.py
 +++ b/service/pack_safe_zip.py
-@@ -221,4 +221,4 @@
+@@ -221,7 +221,7 @@ def _read_all_members(zf: zipfile.ZipFile) -> dict[str, bytes]:
          except (zipfile.BadZipFile, zipfile.LargeZipFile, EOFError, zlib.error, RuntimeError, NotImplementedError) as e:
              raise ValueError(zip_entry_error(info.filename, str(e))) from e
          actual = len(data)
 -        if actual != claimed:
 +        if actual > claimed:
              raise ValueError(zip_entry_error(rel, f"inflated {actual} bytes, declared {claimed}"))
+         compressed = int(info.compress_size) or 1
+         if actual > compressed * _MAX_COMPRESSION_RATIO:

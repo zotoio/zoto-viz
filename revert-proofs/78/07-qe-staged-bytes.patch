@@ -1,7 +1,8 @@
 diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index 95e84c7..2721436 100644
 --- a/service/pack_safe_zip.py
 +++ b/service/pack_safe_zip.py
-@@ -149,7 +149,7 @@
+@@ -152,7 +152,7 @@ def write_pack_zip_to_staging(staging: Path, read: PackZipRead, *, zip_sha256: s
      staging = Path(staging).resolve()
      staging.mkdir(parents=True, exist_ok=True)
      for rel, data in read.members.items():

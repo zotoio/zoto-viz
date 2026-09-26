@@ -1,9 +1,13 @@
 diff --git a/service/plugin_install.py b/service/plugin_install.py
+index a9d2001..08be74f 100644
 --- a/service/plugin_install.py
 +++ b/service/plugin_install.py
-@@ -91,4 +91,4 @@
+@@ -91,7 +91,7 @@ def set_start_runtime_hook(hook: Callable[[Path, dict[str, Any], str | None], No
  
  
  def ordered_validators() -> list[InstallValidator]:
 -    return sorted(_builtin_validators() + list(_extra_validators), key=lambda v: v.order)
 +    return sorted(_builtin_validators() + list(_extra_validators), key=lambda v: -v.order)
+ 
+ 
+ @dataclass
