@@ -1,0 +1,7 @@
+{
+  "runner": "pnpm --dir web exec tsc --noEmit",
+  "testFile": "src/core/fps-mono-guard.ts",
+  "testName": "tsc unused @ts-expect-error when markFrame accepts number",
+  "description": "Widen markFrame to number so WallMs guard directive is unused.",
+  "excerpt": "src/core/fps-mono-guard.ts(9,1): error TS2578: Unused '@ts-expect-error' directive."
+}

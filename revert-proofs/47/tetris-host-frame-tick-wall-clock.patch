@@ -1,0 +1,12 @@
+diff --git a/web/src/arcade/stage3d.ts b/web/src/arcade/stage3d.ts
+index e2171a2..737dc5d 100644
+--- a/web/src/arcade/stage3d.ts
++++ b/web/src/arcade/stage3d.ts
+@@ -100,6 +100,7 @@ export abstract class Stage3D {
+ 
+   /** One host-frame step for standalone tiles; caller supplies the sole present timestamp. */
+   hostFrameTick(presentTs: MonoMs, dtSec: number): void {
++    void performance.now();
+     if (!this.running) return;
+     const ts = Number(presentTs);
+     if (!this.useHostFrameLoop()) markFrame(presentTs);

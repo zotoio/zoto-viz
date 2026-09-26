@@ -1,0 +1,7 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-tile-sky.test.ts -t \"^Tetris standalone tile sky > well stage keeps lit sky signature while graph idles$\"",
+  "testFile": "src/arcade/tetris-tile-sky.test.ts",
+  "testName": "^Tetris standalone tile sky > well stage keeps lit sky signature while graph idles$",
+  "description": "Drop static lit backdrop on Tetris standalone bind (flat none token).",
+  "excerpt": "AssertionError: expected 'flat:none' to be 'lit:space' // Object.is equality"
+}
