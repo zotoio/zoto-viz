@@ -128,4 +128,4 @@ export function cycleColonyTeardown(times = 20): void {
 }
 
 export { parseAntColonyLook, ANT_DATA_MAPPING, ANT_WORK_BUDGET } from "./config";
-export { AntColonySim, createColony, PG_CELLS } from "./colony";
+export { AntColonySim, createColony, PG_CELLS, type ChamberSnapshot } from "./colony";

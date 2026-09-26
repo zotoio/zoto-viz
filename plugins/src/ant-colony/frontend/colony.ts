@@ -75,11 +75,38 @@ interface Ant {
   crumb: number;
   soldier: number;
   alive: number;
+  /** Soldier swarm anchor — always a stable host id, never a list index. */
+  hostId: string;
 }
+
+const DEMO_HOST_IDS = [
+  "demo-h0", "demo-h1", "demo-h2", "demo-h3", "demo-h4", "demo-h5",
+] as const;
+
+export type ChamberSnapshot = {
+  id: string;
+  x: number;
+  y: number;
+  heat: number;
+  fail: number;
+};
 
 function hash01(seed: number, n: number): number {
   const x = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453;
   return x - Math.floor(x);
+}
+
+function hashHostId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = Math.imul(31, h) + id.charCodeAt(i);
+  return Math.abs(h);
+}
+
+function talkerIdSetKey(talkers: VizSlice["talkers"]): string {
+  if (talkers.length === 0) return "";
+  const ids = talkers.map((t) => t.id);
+  ids.sort();
+  return ids.join("\0");
 }
 
 function presetIndex(p: AntColonyLook["preset"]): number {
@@ -105,8 +132,11 @@ function soilIndex(s: AntColonyLook["soilStyle"]): number {
 export class AntColonySim {
   private readonly phero: Float32Array;
   private readonly pheroTmp: Float32Array;
+  private readonly chamberById = new Map<string, Chamber>();
   private readonly chambers: Chamber[] = [];
   private readonly tunnels: Tunnel[] = [];
+  private talkerIdKey = "";
+  private failureHostId: string | null = null;
   private readonly ants: Ant[];
   private acc = 0;
   private simT = 0;
@@ -129,7 +159,7 @@ export class AntColonySim {
     this.phero = new Float32Array(PG_CELLS);
     this.pheroTmp = new Float32Array(PG_CELLS);
     this.ants = Array.from({ length: MAX_ANT_INSTANCES }, () => ({
-      tunnel: 0, u: 0, speed: 0.2, phase: 0, crumb: 0.2, soldier: 0, alive: 0,
+      tunnel: 0, u: 0, speed: 0.2, phase: 0, crumb: 0.2, soldier: 0, alive: 0, hostId: "",
     }));
   }
 
@@ -139,8 +169,11 @@ export class AntColonySim {
       cancelAnimationFrame(this.raf);
     }
     this.raf = null;
+    this.chamberById.clear();
     this.chambers.length = 0;
     this.tunnels.length = 0;
+    this.talkerIdKey = "";
+    this.failureHostId = null;
     this.phero.fill(0);
     for (const a of this.ants) a.alive = 0;
   }
@@ -158,41 +191,102 @@ export class AntColonySim {
     return this.allocAfterWarm;
   }
 
-  private layoutChambers(talkers: VizSlice["talkers"], seed: number): void {
-    this.chambers.length = 0;
-    const n = Math.min(MAX_CHAMBERS, Math.max(3, talkers.length || 6));
-    for (let i = 0; i < n; i++) {
-      const talker = talkers[i];
-      const ang = i * 2.399963 + hash01(seed, i) * 0.4;
-      const rad = 0.18 + (i / n) * 0.42 + hash01(seed, i + 19) * 0.08;
-      const rate = talker?.rate ?? 40 + hash01(seed, i + 3) * 80;
-      this.chambers.push({
-        id: talker?.id ?? `nest-${i}`,
-        x: 0.5 + Math.cos(ang) * rad,
-        y: 0.42 + Math.sin(ang) * rad * 0.72,
-        r: 0.045 + Math.min(0.05, rate / 4000),
-        heat: Math.min(1, rate / 220),
-        fail: 0,
-      });
+  private effectiveTalkers(talkers: VizSlice["talkers"]): VizSlice["talkers"] {
+    if (talkers.length > 0) {
+      return talkers.slice(0, MAX_CHAMBERS);
     }
-    // Queen chamber at center
-    this.chambers[0]!.r = Math.max(this.chambers[0]!.r, 0.075);
-    this.chambers[0]!.heat = Math.max(this.chambers[0]!.heat, 0.35);
+    return DEMO_HOST_IDS.map((id, i) => ({
+      id,
+      rate: 48 + i * 12,
+      role: i === 0 ? "gateway" : "lan",
+    }));
+  }
+
+  private hostPosition(id: string, seed: number): { x: number; y: number } {
+    const hid = hashHostId(id);
+    const ang = hash01(seed, hid) * 6.2831853;
+    const rad = 0.2 + hash01(seed, hid + 91) * 0.32;
+    return {
+      x: 0.5 + Math.cos(ang) * rad,
+      y: 0.42 + Math.sin(ang) * rad * 0.72,
+    };
+  }
+
+  private applyTalkerToChamber(ch: Chamber, talker: VizSlice["talkers"][number]): void {
+    ch.heat = Math.min(1, talker.rate / 220);
+    ch.r = 0.045 + Math.min(0.05, talker.rate / 4000);
+    if (talker.role === "gateway") {
+      ch.r = Math.max(ch.r, 0.075);
+      ch.heat = Math.max(ch.heat, 0.35);
+    }
+  }
+
+  private rebuildChamberList(): void {
+    this.chambers.length = 0;
+    const sorted = [...this.chamberById.values()].sort((a, b) => a.id.localeCompare(b.id));
+    for (const ch of sorted) this.chambers.push(ch);
+  }
+
+  /** Sync chambers when the set of host ids changes; positions are pinned per id. */
+  private syncChambers(talkers: VizSlice["talkers"], seed: number): void {
+    const live = this.effectiveTalkers(talkers);
+    const key = talkerIdSetKey(live);
+    const incoming = new Set(live.map((t) => t.id));
+
+    for (const id of [...this.chamberById.keys()]) {
+      if (!incoming.has(id)) this.chamberById.delete(id);
+    }
+
+    for (const t of live) {
+      let ch = this.chamberById.get(t.id);
+      if (!ch) {
+        const pos = this.hostPosition(t.id, seed);
+        ch = { id: t.id, x: pos.x, y: pos.y, r: 0.05, heat: 0, fail: 0 };
+        this.chamberById.set(t.id, ch);
+      }
+      this.applyTalkerToChamber(ch, t);
+    }
+
+    this.talkerIdKey = key;
+    this.rebuildChamberList();
+  }
+
+  private updateChamberRates(talkers: VizSlice["talkers"]): void {
+    const live = this.effectiveTalkers(talkers);
+    for (const t of live) {
+      const ch = this.chamberById.get(t.id);
+      if (ch) this.applyTalkerToChamber(ch, t);
+    }
+  }
+
+  private pickFailureHost(talkers: VizSlice["talkers"]): string | null {
+    const live = this.effectiveTalkers(talkers);
+    if (live.length === 0) return null;
+    const gateway = live.find((t) => t.role === "gateway");
+    if (gateway) return gateway.id;
+    let best = live[0]!;
+    for (const t of live) if (t.rate > best.rate) best = t;
+    return best.id;
+  }
+
+  private chamberIndexForId(id: string): number {
+    return this.chambers.findIndex((c) => c.id === id);
   }
 
   private layoutTunnels(packets: VizSlice["packets"], seed: number): void {
     this.tunnels.length = 0;
     const c = this.chambers.length;
     if (c < 2) return;
+    const ids = this.chambers.map((ch) => ch.id);
     const want = Math.min(MAX_TUNNELS, Math.max(4, packets.length || 6));
     for (let i = 0; i < want; i++) {
       const pkt = packets[i];
-      const a = Math.floor(hash01(seed, i * 2) * c) % c;
-      let b = Math.floor(hash01(seed, i * 2 + 1) * c) % c;
-      if (a === b) b = (b + 1) % c;
+      const ia = Math.floor(hash01(seed, i * 2 + hashHostId(ids[i % ids.length]!)) * c) % c;
+      let ib = Math.floor(hash01(seed, i * 2 + 1 + hashHostId(ids[(i + 1) % ids.length]!)) * c) % c;
+      if (ia === ib) ib = (ib + 1) % c;
       const rate = pkt ? pkt.field : 0.25 + hash01(seed, i + 40) * 0.5;
       const grow = this.look.mapFlows ? Math.min(1, 0.35 + rate * 0.8) : 0.6;
-      this.tunnels.push({ a, b, grow, rate });
+      this.tunnels.push({ a: ia, b: ib, grow, rate });
     }
   }
 
@@ -215,11 +309,16 @@ export class AntColonySim {
       const pkt = frame.packets[i % Math.max(1, frame.packets.length)];
       ant.crumb = this.look.mapBytes && pkt ? 0.15 + pkt.field * 0.65 : 0.25;
       ant.soldier = 0;
+      ant.hostId = "";
       ant.alive = 1;
       alive++;
     }
+    for (const ch of this.chambers) ch.fail = 0;
     const fail = frame.sys?.failed ?? 0;
-    if (this.look.mapFailures && fail > 0.02) {
+    this.failureHostId = this.pickFailureHost(frame.talkers);
+    if (this.look.mapFailures && fail > 0.02 && this.failureHostId) {
+      const anchor = this.chamberById.get(this.failureHostId);
+      if (anchor) anchor.fail = Math.min(1, fail);
       const soldiers = Math.min(24, Math.ceil(fail * 28));
       for (let s = 0; s < soldiers && s < cap; s++) {
         const ant = this.ants[s]!;
@@ -228,8 +327,8 @@ export class AntColonySim {
         ant.speed = 0.08;
         ant.soldier = 1;
         ant.crumb = 0.1;
+        ant.hostId = this.failureHostId;
         ant.alive = 1;
-        this.chambers[0]!.fail = Math.min(1, fail);
       }
     }
     if (alive === 0) {
@@ -315,16 +414,41 @@ export class AntColonySim {
       this.growTunnels(step);
       this.simT += step;
     }
-    const bucket = Math.min(MAX_CHAMBERS, Math.max(3, frame.talkers.length || 6));
-    if (bucket !== this.chambers.length) {
-      this.layoutChambers(frame.talkers, this.look.seed);
+    const live = this.effectiveTalkers(frame.talkers);
+    const key = talkerIdSetKey(live);
+    if (key !== this.talkerIdKey) {
+      this.syncChambers(frame.talkers, this.look.seed);
       this.layoutTunnels(frame.packets, this.look.seed);
+    } else {
+      this.updateChamberRates(frame.talkers);
     }
     this.spawnAnts(frame);
   }
 
+  /** Light-test: stable host-keyed chamber layout. */
+  chamberSnapshot(): ChamberSnapshot[] {
+    return this.chambers.map((c) => ({
+      id: c.id, x: c.x, y: c.y, heat: c.heat, fail: c.fail,
+    }));
+  }
+
+  failureAnchorHostId(): string | null {
+    return this.failureHostId;
+  }
+
+  /** First packed soldier ant position (shader slot), if any. */
+  soldierMarkerPosition(): { x: number; y: number } | null {
+    const anchor = this.failureHostId ? this.chamberById.get(this.failureHostId) : undefined;
+    if (!anchor) return null;
+    return { x: anchor.x, y: anchor.y };
+  }
+
   packLabelText(frame: VizSlice): string {
-    const metric = frame.demo ? "demo" : `${Math.round((frame.talkers[0]?.rate ?? 0))} pkt/s`;
+    const lead = this.effectiveTalkers(frame.talkers).reduce(
+      (best, t) => (t.rate > best.rate ? t : best),
+      { id: "", rate: 0, role: "" },
+    );
+    const metric = frame.demo ? "demo" : `${Math.round(lead.rate)} pkt/s`;
     const preset = this.look.preset.replace("-", " ");
     const extra = this.look.label ? ` · ${this.look.label}` : "";
     return `ant colony · ${preset} · ${metric}${extra}`;
@@ -357,9 +481,11 @@ export class AntColonySim {
     meta[META.camZ] = camMode === "cutaway" ? 1.1 : 1.35;
     meta[META.day] = day;
     meta[META.rain] = this.look.rain ? 1 : 0;
-    meta[META.fail] = frame.sys?.failed ?? this.chambers[0]?.fail ?? 0;
+    const failHost = this.failureHostId ? this.chamberById.get(this.failureHostId) : undefined;
+    meta[META.fail] = frame.sys?.failed ?? failHost?.fail ?? 0;
     meta[META.demo] = frame.demo ? 1 : 0;
-    meta[META.metric] = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 240);
+    const leadRate = this.effectiveTalkers(frame.talkers).reduce((m, t) => Math.max(m, t.rate), 0);
+    meta[META.metric] = Math.min(1, leadRate / 240);
     meta[META.preset] = presetIndex(this.look.preset);
     meta[META.reduced] = this.look.reducedMotion ? 1 : 0;
     meta[META.soil] = soilIndex(this.look.soilStyle);
@@ -416,7 +542,14 @@ export class AntColonySim {
       let x = 0.5;
       let y = 0.5;
       let heading = 0;
-      if (tunnel) {
+      if (ant.soldier > 0.5 && ant.hostId) {
+        const ch = this.chamberById.get(ant.hostId);
+        if (ch) {
+          x = ch.x + Math.sin(ant.phase) * 0.02;
+          y = ch.y + Math.cos(ant.phase * 1.1) * 0.02;
+          heading = 0;
+        }
+      } else if (tunnel) {
         const ca = this.chambers[tunnel.a];
         const cb = this.chambers[tunnel.b];
         if (ca && cb) {
