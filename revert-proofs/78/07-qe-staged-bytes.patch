@@ -1,13 +1,12 @@
 diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
 --- a/service/pack_safe_zip.py
 +++ b/service/pack_safe_zip.py
-@@ -133,9 +133,6 @@
-         out = staging / rel
+@@ -149,7 +149,7 @@
+     staging = Path(staging).resolve()
+     staging.mkdir(parents=True, exist_ok=True)
+     for rel, data in read.members.items():
+-        out = (staging / rel).resolve()
++        out = (staging.parent / rel).resolve()
+         if staging not in out.parents and out != staging:
+             raise ValueError(zip_entry_error(rel, "path escapes staging directory"))
          out.parent.mkdir(parents=True, exist_ok=True)
-         out.write_bytes(data)
--        digest = hashlib.sha256(out.read_bytes()).hexdigest()
--        if digest != read.member_sha256[rel]:
--            raise ValueError(zip_entry_error(rel, "staged bytes do not match zip entry"))
- 
- 
- def _parse_plugin_yml(raw: bytes) -> dict[str, Any]:

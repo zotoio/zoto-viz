@@ -1,12 +1,54 @@
-diff --git a/service/plugin_install.py b/service/plugin_install.py
---- a/service/plugin_install.py
-+++ b/service/plugin_install.py
-@@ -520,6 +520,8 @@
-     name = str(doc.get("name") or doc.get("id") or "Plugin")
-     try:
-         pack_zip = pack_read or psz.read_pack_zip(zip_path)
-+        if pack_read is None:
-+            psz.read_pack_zip(zip_path)
-     except ValueError as e:
-         _rollback_blocked_install(runtime, dest_zip, old_zip_bytes, old_runtime_hash)
-         fail = InstallFailure("zip_safety", REASON_ZIP_UNSAFE, blocked_message(name, str(e)))
+diff --git a/service/plugin_local.py b/service/plugin_local.py
+--- a/service/plugin_local.py
++++ b/service/plugin_local.py
+@@ -360,13 +360,7 @@
+         )
+         if not pipeline.get("ok"):
+             return _finish(pipeline, activate=False)
+-        unpacked = pz.UnpackResult(
+-            dest=runtime,
+-            sha256=str(pipeline["sha256"]),
+-            unpacked=bool(pipeline.get("wrote", True)),
+-            plugin=doc,
+-            parts=tuple(pipeline.get("parts") or pack_read.parts),
+-            members=pack_read.members_sorted,
+-        )
++        unpacked = pz.unpack_zip(dest, runtime)
+         info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
+         if reminted_from:
+             info["remintedFrom"] = reminted_from
+@@ -423,13 +417,7 @@
+     )
+     if not pipeline.get("ok"):
+         return _finish(pipeline, activate=False)
+-    unpacked = pz.UnpackResult(
+-        dest=runtime,
+-        sha256=str(pipeline["sha256"]),
+-        unpacked=bool(pipeline.get("wrote", True)),
+-        plugin=doc,
+-        parts=tuple(pipeline.get("parts") or pack_read.parts),
+-        members=pack_read.members_sorted,
+-    )
++    unpacked = pz.unpack_zip(dest, runtime)
+     info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
+     if reminted_from:
+         info["remintedFrom"] = reminted_from
+diff --git a/service/mcp.py b/service/mcp.py
+--- a/service/mcp.py
++++ b/service/mcp.py
+@@ -724,13 +724,7 @@
+         if not pipeline.get("ok"):
+             _refresh_plugin_python(pipeline)
+             return pipeline
+-        unpacked = pz.UnpackResult(
+-            dest=runtime,
+-            sha256=str(pipeline["sha256"]),
+-            unpacked=bool(pipeline.get("wrote", True)),
+-            plugin=doc,
+-            parts=tuple(pipeline.get("parts") or pack_read.parts),
+-            members=pack_read.members_sorted,
+-        )
++        unpacked = pz.unpack_zip(dest, runtime)
+         info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
+         if reminted_from:
+             info["remintedFrom"] = reminted_from

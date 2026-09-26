@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import paths
 from . import pack_safe_zip as psz
 from . import plugin_zip as pz
 from .pack_boundary import PackBundleBoundaryError
@@ -479,6 +478,16 @@ def install_zip_to_runtime(
     pid = str(doc["id"])
     incoming = sha256 or pz.plugin_sha256(zip_path)
     if not force and should_skip_unchanged_zip(dest_zip, runtime, incoming):
+        if pack_read is not None:
+            final = pz.UnpackResult(
+                dest=runtime,
+                sha256=incoming,
+                unpacked=False,
+                plugin=doc,
+                parts=pack_read.parts,
+                members=pack_read.members_sorted,
+            )
+            return success_result(doc, dest_zip, final, wrote=False)
         unpacked = pz.unpack_zip(dest_zip, runtime)
         return success_result(doc, dest_zip, unpacked, wrote=False)
     lock = _lock_for_pack(pid)
@@ -528,7 +537,12 @@ def _install_zip_to_runtime_locked(
     try:
         cleanup_staging_for_pack(parent, pid)
         staging = new_staging_dir(parent, pid)
-        psz.write_pack_zip_to_staging(staging, pack_zip)
+        try:
+            psz.write_pack_zip_to_staging(staging, pack_zip, zip_sha256=sha256)
+        except (ValueError, OSError) as e:
+            _rollback_blocked_install(runtime, dest_zip, old_zip_bytes, old_runtime_hash)
+            fail = InstallFailure("zip_safety", REASON_ZIP_UNSAFE, blocked_message(name, str(e)))
+            return blocked_result(fail, pack_id=pid, sha256=sha256, zip_path=rel)
         ctx = InstallContext(
             staging=staging,
             runtime=runtime,

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import io
 import json
+import struct
 import zipfile
 from pathlib import Path
 
@@ -15,8 +16,7 @@ from service import paths
 from service import plugin_install as pi
 from service import plugin_local
 from service import plugin_zip as pz
-from service.pack_install_copy import REASON_ZIP_UNSAFE
-from service.pack_safe_zip import MANIFEST_MEMBER_MAX_BYTES, PackZipRead, read_pack_zip
+from service.pack_install_copy import REASON_ZIP_UNSAFE, blocked_message
 
 MINIMAL = "id: sample\nname: Sample\nversion: 1\n"
 VIZ = "engine: graph\nbase: topology\n"
@@ -25,6 +25,11 @@ PEDANT_PLUGIN_YML = MINIMAL
 PEDANT_VIZ = VIZ
 PEDANT_ARCHIVE_BYTES_READ = 312
 PEDANT_CENTRAL_DIRECTORY_PARSES = 1
+
+DUPLICATE_ZIP_MSG = (
+    "Plugin was blocked. zip entry './plugin.yml': duplicate name "
+    "(same as 'plugin.yml' after normalization) Nothing was installed and the current wall is unchanged."
+)
 
 
 def _zip_bytes(files: dict[str, bytes | str]) -> bytes:
@@ -58,6 +63,19 @@ def _reset() -> None:
     reset_wall_notices_for_tests()
 
 
+@pytest.fixture
+def cd_parse_counter(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    ticks: list[int] = []
+    real = zipfile.ZipFile._RealGetContents
+
+    def wrapped(self: zipfile.ZipFile) -> None:
+        ticks.append(1)
+        return real(self)
+
+    monkeypatch.setattr(zipfile.ZipFile, "_RealGetContents", wrapped)
+    return ticks
+
+
 def _duplicate_name_zip() -> bytes:
     return _zip_bytes(
         {
@@ -80,11 +98,37 @@ def _plugin_yml_exact_bytes(total: int) -> str:
     return prefix + ("x" * pad_len) + "\n"
 
 
-def test_qe_duplicate_name_rejected_before_staging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _read_pack_err(path: Path) -> str | None:
+    try:
+        psz.read_pack_zip(path)
+        return None
+    except ValueError as exc:
+        return str(exc)
+
+
+def _assert_one_cd_parse(ticks: list[int], fn) -> None:
+    before = len(ticks)
+    fn()
+    assert len(ticks) - before == 1
+
+
+def test_qe_duplicate_name_rejected_before_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _repo(tmp_path, monkeypatch)
+    staging_writes: list[int] = []
+    real_write = psz.write_pack_zip_to_staging
+
+    def spy(*args, **kwargs) -> None:
+        staging_writes.append(1)
+        return real_write(*args, **kwargs)
+
+    monkeypatch.setattr(psz, "write_pack_zip_to_staging", spy)
     good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
     first = plugin_local.publish_local({"zip_b64": base64.b64encode(good).decode()})
     assert first["ok"] is True
+    staging_writes.clear()
     dest = paths.plugin_local_dir() / "sample.zip"
     runtime = paths.plugin_local_runtime_dir() / "sample"
     old_zip = dest.read_bytes()
@@ -96,22 +140,25 @@ def test_qe_duplicate_name_rejected_before_staging(tmp_path: Path, monkeypatch: 
     )
     assert blocked["ok"] is False
     assert blocked["error"] == REASON_ZIP_UNSAFE
-    assert blocked["message"].count("was blocked.") == 1
-    assert "duplicate name" in blocked["message"]
+    assert blocked["message"] == DUPLICATE_ZIP_MSG
     assert dest.read_bytes() == old_zip
     assert pi.runtime_tree_hash(runtime) == old_hash
-    assert not pi.list_staging_dirs(paths.plugin_local_runtime_dir())
+    assert staging_writes == []
 
 
-def test_qe_staged_bytes_match_and_outside_staging_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_qe_staged_bytes_match_and_outside_staging_untouched(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _repo(tmp_path, monkeypatch)
     good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
     zip_path = tmp_path / "in.zip"
     zip_path.write_bytes(good)
-    read = read_pack_zip(zip_path)
+    read = psz.read_pack_zip(zip_path)
     dest = paths.plugin_local_dir(create=True) / "sample.zip"
     runtime = paths.plugin_local_runtime_dir(create=True) / "sample"
-    probe = runtime.parent / "outside-staging.probe"
+    parent = runtime.parent
+    probe = parent / "outside-staging.probe"
     probe.write_bytes(b"untouched")
     before_probe = probe.read_bytes()
 
@@ -125,7 +172,7 @@ def test_qe_staged_bytes_match_and_outside_staging_untouched(tmp_path: Path, mon
         pack_read=read,
     )
     assert result["ok"] is True
-    assert pi.list_staging_dirs(runtime.parent) == []
+    assert pi.list_staging_dirs(parent) == []
     for rel, digest in read.member_sha256.items():
         on_disk = runtime / rel
         assert hashlib.sha256(on_disk.read_bytes()).hexdigest() == digest
@@ -142,7 +189,11 @@ def test_qe_staged_bytes_match_and_outside_staging_untouched(tmp_path: Path, mon
         sha256=pz.plugin_sha256(bad_path),
     )
     assert blocked["ok"] is False
-    assert "zip entry" in blocked["message"]
+    want = blocked_message(
+        "Sample",
+        psz.zip_entry_error("../escape.yml", "illegal zip path '../escape.yml'"),
+    )
+    assert blocked["message"] == want
 
 
 def test_qe_size_cap_uses_inflated_bytes_exact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -154,59 +205,134 @@ def test_qe_size_cap_uses_inflated_bytes_exact(monkeypatch: pytest.MonkeyPatch, 
     path = tmp_path / "big.zip"
     path.write_bytes(z)
     with pytest.raises(ValueError) as exc:
-        read_pack_zip(path)
+        psz.read_pack_zip(path)
     assert str(exc.value) == f"zip entry 'payload.txt': uncompressed size exceeds {remaining}"
 
 
+def _patch_cd_uncompressed_size(blob: bytes, member: str, declared: int) -> bytes:
+    name = member.encode("utf-8")
+    sig = b"PK\x01\x02"
+    data = bytearray(blob)
+    pos = 0
+    while True:
+        idx = data.find(sig, pos)
+        if idx < 0:
+            raise ValueError("central directory header not found")
+        name_len = struct.unpack_from("<H", data, idx + 28)[0]
+        name_start = idx + 46
+        entry_name = bytes(data[name_start : name_start + name_len])
+        if entry_name.replace(b"\\", b"/") == name:
+            struct.pack_into("<I", data, idx + 24, declared)
+            return bytes(data)
+        pos = idx + 1
+    raise ValueError(f"member {member!r} not in central directory")
+
+
+def test_qe_cd_declared_size_larger_than_actual(tmp_path: Path) -> None:
+    z = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    patched = _patch_cd_uncompressed_size(z, "visualisation.yml", 10_000)
+    path = tmp_path / "lie.zip"
+    path.write_bytes(patched)
+    with pytest.raises(ValueError) as exc:
+        psz.read_pack_zip(path)
+    assert str(exc.value) == "zip entry 'visualisation.yml': inflated 29 bytes, declared 10000"
+
+
 def test_pa_manifest_read_cap_65536_exact(tmp_path: Path) -> None:
-    assert MANIFEST_MEMBER_MAX_BYTES == 65_536
+    assert psz.MANIFEST_MEMBER_MAX_BYTES == 65_536
     ok_body = _plugin_yml_exact_bytes(65_536)
     assert len(ok_body.encode("utf-8")) == 65_536
     ok_path = tmp_path / "ok.zip"
     ok_path.write_bytes(_zip_bytes({"plugin.yml": ok_body, "visualisation.yml": VIZ}))
-    read_pack_zip(ok_path)
+    assert _read_pack_err(ok_path) is None
+    read = psz.read_pack_zip(ok_path)
+    assert len(read.members["plugin.yml"]) == 65_536
 
     bad_body = _plugin_yml_exact_bytes(65_537)
     assert len(bad_body.encode("utf-8")) == 65_537
     bad_path = tmp_path / "bad.zip"
     bad_path.write_bytes(_zip_bytes({"plugin.yml": bad_body}))
-    with pytest.raises(ValueError) as exc:
-        read_pack_zip(bad_path)
-    assert "zip entry 'plugin.yml'" in str(exc.value)
-    assert "65536 byte manifest read cap" in str(exc.value)
-
-
-def test_pedant_exact_zip_read_and_single_cd_parse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _repo(tmp_path, monkeypatch)
-    fixture = tmp_path / "pedant.zip"
-    fixture.write_bytes(_pedant_zip())
-    calls = 0
-    real_read = psz.read_pack_zip
-
-    def counting_read(path: Path) -> PackZipRead:
-        nonlocal calls
-        calls += 1
-        return real_read(path)
-
-    monkeypatch.setattr(psz, "read_pack_zip", counting_read)
-    dest = paths.plugin_local_dir(create=True) / "sample.zip"
-    runtime = paths.plugin_local_runtime_dir(create=True) / "sample"
-    read = real_read(fixture)
-    result = pi.install_zip_to_runtime(
-        fixture,
-        dest,
-        runtime,
-        read.plugin,
-        rel=str(dest),
-        sha256=pz.plugin_sha256(fixture),
-        upgrade=False,
+    assert _read_pack_err(bad_path) == (
+        "zip entry 'plugin.yml': exceeds 65536 byte manifest read cap"
     )
-    assert result["ok"] is True
-    assert calls == 1
+
+
+def test_pa_manifest_stream_stops_at_65537_bytes_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    reads: list[int] = []
+    real_read = psz._read_member_bytes
+
+    def counting(zf, info, cap):  # type: ignore[no-untyped-def]
+        out = real_read(zf, info, cap)
+        reads.append(len(out))
+        return out
+
+    monkeypatch.setattr(psz, "_read_member_bytes", counting)
+    huge = _plugin_yml_exact_bytes(65_537)
+    path = tmp_path / "huge.zip"
+    path.write_bytes(_zip_bytes({"plugin.yml": huge}))
+    with pytest.raises(ValueError):
+        psz.read_pack_zip(path)
+    assert reads == [65_537]
+
+
+def test_pedant_single_cd_parse_web_adopt_mcp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cd_parse_counter: list[int],
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    fixture = _pedant_zip()
+    b64 = base64.b64encode(fixture).decode()
+
+    def web() -> None:
+        out = plugin_local.publish_local({"zip_b64": b64})
+        assert out["ok"] is True
+
+    _assert_one_cd_parse(cd_parse_counter, web)
     last = pi.last_install_pack_read_for_tests()
     assert last is not None
     assert last.stats.archive_bytes_read == PEDANT_ARCHIVE_BYTES_READ
     assert last.stats.central_directory_parses == PEDANT_CENTRAL_DIRECTORY_PARSES
+
+    drop = _local() / "pedant-drop.zip"
+    drop.write_bytes(fixture)
+
+    def adopt() -> None:
+        out = plugin_local.adopt_local_zip_file(drop, activate=False)
+        assert out["ok"] is True
+
+    _assert_one_cd_parse(cd_parse_counter, adopt)
+
+    def mcp() -> None:
+        raw = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": b64, "force": True})
+        payload = json.loads(raw["content"][0]["text"])
+        assert payload["ok"] is True
+
+    _assert_one_cd_parse(cd_parse_counter, mcp)
+
+
+def test_pedant_single_cd_parse_remint_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cd_parse_counter: list[int],
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    first = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    assert plugin_local.publish_local({"zip_b64": base64.b64encode(first).decode()})["ok"] is True
+    second = _zip_bytes(
+        {
+            "plugin.yml": MINIMAL,
+            "visualisation.yml": "engine: graph\nbase: topology\nextra: 1\n",
+        },
+    )
+
+    def remint_install() -> None:
+        out = plugin_local.publish_local({"zip_b64": base64.b64encode(second).decode()})
+        assert out["ok"] is True
+        assert out.get("remintedFrom") == "sample"
+        assert out["id"] == "sample-2"
+
+    _assert_one_cd_parse(cd_parse_counter, remint_install)
 
 
 def test_ux_zip_error_names_file_all_entry_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -220,9 +346,156 @@ def test_ux_zip_error_names_file_all_entry_points(tmp_path: Path, monkeypatch: p
     scan = plugin_local.adopt_local_zip_file(drop, activate=True)
     mcp = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": b64, "force": True})
     mcp_payload = json.loads(mcp["content"][0]["text"])
-    assert web.get("ok") is False
-    assert "./plugin.yml" in web.get("message") or "plugin.yml" in web.get("message")
-    assert scan.get("message") == web.get("message")
-    assert mcp_payload.get("message") == web.get("message")
+    for payload in (web, scan, mcp_payload):
+        assert payload.get("ok") is False
+        assert payload.get("message") == DUPLICATE_ZIP_MSG
+
+
+def _patch_cd_field(blob: bytes, member: str, *, flag_bits: int | None = None, compress_type: int | None = None) -> bytes:
+    name = member.encode("utf-8")
+    sig = b"PK\x01\x02"
+    data = bytearray(blob)
+    pos = 0
+    while True:
+        idx = data.find(sig, pos)
+        if idx < 0:
+            raise ValueError("central directory header not found")
+        name_len = struct.unpack_from("<H", data, idx + 28)[0]
+        name_start = idx + 46
+        entry_name = bytes(data[name_start : name_start + name_len])
+        if entry_name.replace(b"\\", b"/") == name:
+            if flag_bits is not None:
+                struct.pack_into("<H", data, idx + 8, flag_bits)
+            if compress_type is not None:
+                struct.pack_into("<H", data, idx + 10, compress_type)
+            return bytes(data)
+        pos = idx + 1
+    raise ValueError(f"member {member!r} not in central directory")
+
+
+def _zip_crc_mismatch() -> bytes:
+    z = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    data = bytearray(z)
+    marker = b"visualisation.yml"
+    start = data.index(marker)
+    data[start + len(marker)] ^= 0xFF
+    return bytes(data)
+
+
+def _zip_encrypted_member() -> bytes:
+    z = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    return _patch_cd_field(z, "plugin.yml", flag_bits=0x1)
+
+
+def _zip_unsupported_compression() -> bytes:
+    z = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    return _patch_cd_field(z, "plugin.yml", compress_type=9)
+
+
+def _zip_name_mismatch() -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("plugin.yml", MINIMAL)
+        zf.writestr("visualisation.yml", VIZ)
+    data = bytearray(buf.getvalue())
+    data = data.replace(b"visualisation.yml", b"visualisatioX.yml", 1)
+    return bytes(data)
+
+
+def _assert_zip_unsafe_all_entry_points(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    blob: bytes,
+    needle: str,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    b64 = base64.b64encode(blob).decode()
+    web = plugin_local.publish_local({"zip_b64": b64})
+    drop = _local() / "unsafe.zip"
+    drop.write_bytes(blob)
+    scan = plugin_local.adopt_local_zip_file(drop, activate=True)
+    mcp = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": b64, "force": True})
+    mcp_payload = json.loads(mcp["content"][0]["text"])
     for label, payload in (("web", web), ("scan", scan), ("mcp", mcp_payload)):
-        assert payload.get("message", "").count("was blocked.") == 1, label
+        assert payload.get("ok") is False, label
+        assert payload.get("error") == REASON_ZIP_UNSAFE, label
+        assert needle in payload.get("message", ""), label
+
+
+def test_zip_crc_mismatch_all_entry_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _assert_zip_unsafe_all_entry_points(
+        tmp_path,
+        monkeypatch,
+        _zip_crc_mismatch(),
+        "zip entry 'visualisation.yml'",
+    )
+
+
+def test_zip_encrypted_all_entry_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _assert_zip_unsafe_all_entry_points(
+        tmp_path,
+        monkeypatch,
+        _zip_encrypted_member(),
+        "zip entry 'plugin.yml': encrypted entries are not allowed",
+    )
+
+
+def test_zip_unsupported_compression_all_entry_points(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _assert_zip_unsafe_all_entry_points(
+        tmp_path,
+        monkeypatch,
+        _zip_unsupported_compression(),
+        "zip entry 'plugin.yml': unsupported compression method",
+    )
+
+
+def test_zip_name_mismatch_all_entry_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _assert_zip_unsafe_all_entry_points(
+        tmp_path,
+        monkeypatch,
+        _zip_name_mismatch(),
+        "zip entry",
+    )
+
+
+def test_zip_ratio_limit_rejects_23mb_zeros(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pz, "MAX_ZIP_BYTES", 30_000_000)
+    payload = b"\x00" * 23_000_000
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("plugin.yml", MINIMAL)
+        zf.writestr("visualisation.yml", VIZ)
+        zf.writestr("zeros.txt", payload)
+    z = buf.getvalue()
+    path = tmp_path / "zeros.zip"
+    path.write_bytes(z)
+    with pytest.raises(ValueError) as exc:
+        psz.read_pack_zip(path)
+    assert "compression ratio exceeds" in str(exc.value)
+
+
+def test_zip_entry_cap_counts_directory_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pz, "MAX_FILES", 25_000)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("plugin.yml", MINIMAL)
+        zf.writestr("visualisation.yml", VIZ)
+        for i in range(24_999):
+            zf.mkdir(f"d{i}")
+    path = tmp_path / "dirs.zip"
+    path.write_bytes(buf.getvalue())
+    with pytest.raises(ValueError) as exc:
+        psz.read_pack_zip(path)
+    assert str(exc.value) == "zip has more than 25000 entries"
+
+
+def test_zip_rejects_drive_relative_name(tmp_path: Path) -> None:
+    z = _zip_bytes({"plugin.yml": MINIMAL, "C:evil.yml": b"x\n"})
+    path = tmp_path / "drive.zip"
+    path.write_bytes(z)
+    with pytest.raises(ValueError) as exc:
+        psz.read_pack_zip(path)
+    assert "zip entry 'C:evil.yml'" in str(exc.value)

@@ -1,0 +1,9 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -91,4 +91,4 @@
+ 
+ 
+ def ordered_validators() -> list[InstallValidator]:
+-    return sorted(_builtin_validators() + list(_extra_validators), key=lambda v: v.order)
++    return sorted(_builtin_validators() + list(_extra_validators), key=lambda v: -v.order)

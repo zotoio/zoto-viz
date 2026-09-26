@@ -683,9 +683,15 @@ def install_catalog_zip(
         doc = plugins.validate_doc(pack_read.plugin)
         pid = str(doc["id"])
         dest = paths.plugin_zips_dir() / f"{pid}.zip"
-        raw, doc, dest, reminted_from = plugin_local.remint_zip(raw, dest, overwrite=overwrite)
+        pack_read, doc, dest, reminted_from = plugin_local.remint_pack_read(
+            pack_read,
+            dest,
+            overwrite=overwrite,
+            incoming_sha=pz.plugin_sha256(tmp_path),
+        )
         pid = str(doc["id"])
-        tmp_path.write_bytes(raw)
+        if reminted_from:
+            tmp_path.write_bytes(pz.pack_bytes_from_members(pack_read.members))
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
@@ -698,7 +704,7 @@ def install_catalog_zip(
         dirty = pmg.dirty_tree_paths(pid)
         if dirty and not force:
             raise pmg.DirtyTreeError(dirty, pid)
-        if dest.is_file() and not overwrite and not force:
+        if dest.is_file() and not overwrite:
             raise ValueError(f"plugin {pid!r} already exists (pass overwrite: true)")
         dest.parent.mkdir(parents=True, exist_ok=True)
         from .plugin_install import install_zip_to_runtime
@@ -718,7 +724,14 @@ def install_catalog_zip(
         if not pipeline.get("ok"):
             _refresh_plugin_python(pipeline)
             return pipeline
-        unpacked = pz.unpack_zip(dest, runtime)
+        unpacked = pz.UnpackResult(
+            dest=runtime,
+            sha256=str(pipeline["sha256"]),
+            unpacked=bool(pipeline.get("wrote", True)),
+            plugin=doc,
+            parts=tuple(pipeline.get("parts") or pack_read.parts),
+            members=pack_read.members_sorted,
+        )
         info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
         if reminted_from:
             info["remintedFrom"] = reminted_from

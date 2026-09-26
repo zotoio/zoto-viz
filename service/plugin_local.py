@@ -6,6 +6,7 @@ TypeScript / Python / GLSL still install, but need consent before they run.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -77,34 +78,47 @@ def _id_claimed(pid: str) -> bool:
     return pid in pmg.catalog_ids()
 
 
-def remint_zip(raw: bytes, dest: Path, *, overwrite: bool = False) -> tuple[bytes, dict[str, Any], Path, str | None]:
-    """Keep ``id`` only when dest is free, same-sha, or an explicit overwrite.
+def remint_pack_read(
+    read: psz.PackZipRead,
+    dest: Path,
+    *,
+    overwrite: bool = False,
+    incoming_sha: str | None = None,
+) -> tuple[psz.PackZipRead, dict[str, Any], Path, str | None]:
+    """Adjust id/remint using already-parsed members (no extra zip CD parse)."""
+    doc = plugins.validate_doc(read.plugin)
+    pid = str(doc["id"])
+    dest = Path(dest)
+    incoming = incoming_sha or hashlib.sha256(pz.pack_bytes_from_members(read.members)).hexdigest()
+    if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+        return read, doc, dest, None
+    if dest.is_file() and overwrite:
+        return read, doc, dest, None
+    if not _id_claimed(pid):
+        return read, doc, dest, None
+    nxt = unique_id(pid)
+    if nxt == pid:
+        return read, doc, dest, None
+    members = pz.rewrite_plugin_members(read.members, nxt)
+    doc = dict(doc)
+    doc["id"] = nxt
+    new_read = psz.pack_read_from_members(members, compressed_bytes=read.compressed_bytes, stats=read.stats)
+    return new_read, doc, dest.with_name(f"{nxt}.zip"), pid
 
-    Otherwise rewrite ``plugin.yml`` to the next free id so a new plugin never
-    collides with src / contrib / local.
-    """
+
+def remint_zip(raw: bytes, dest: Path, *, overwrite: bool = False) -> tuple[bytes, dict[str, Any], Path, str | None]:
+    """Legacy byte-oriented remint (parses the zip once). Prefer ``remint_pack_read``."""
     fd, tmp_name = tempfile.mkstemp(prefix="zoto-remint.", suffix=".zip")
     os.close(fd)
     tmp = Path(tmp_name)
     try:
         tmp.write_bytes(raw)
-        doc = plugins.validate_doc(pz.inspect_zip(tmp).plugin)
-        pid = str(doc["id"])
-        incoming = pz.plugin_sha256(tmp)
-        dest = Path(dest)
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
-            return raw, doc, dest, None
-        if dest.is_file() and overwrite:
-            return raw, doc, dest, None
-        if not _id_claimed(pid):
-            return raw, doc, dest, None
-        nxt = unique_id(pid)
-        if nxt == pid:
-            return raw, doc, dest, None
-        rewritten = pz.rewrite_plugin_id(raw, nxt)
-        doc = dict(doc)
-        doc["id"] = nxt
-        return rewritten, doc, dest.with_name(f"{nxt}.zip"), pid
+        read = psz.read_pack_zip(tmp)
+        pack_read, doc, out_dest, reminted = remint_pack_read(
+            read, dest, overwrite=overwrite, incoming_sha=pz.plugin_sha256(tmp),
+        )
+        raw_out = pz.pack_bytes_from_members(pack_read.members)
+        return raw_out, doc, out_dest, reminted
     finally:
         tmp.unlink(missing_ok=True)
 
@@ -312,9 +326,15 @@ def install_local_zip(
         doc = plugins.validate_doc(pack_read.plugin)
         pid = str(doc["id"])
         dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
-        raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=overwrite)
+        pack_read, doc, dest, reminted_from = remint_pack_read(
+            pack_read,
+            dest,
+            overwrite=overwrite,
+            incoming_sha=pz.plugin_sha256(tmp_path),
+        )
         pid = str(doc["id"])
-        tmp_path.write_bytes(raw)
+        if reminted_from:
+            tmp_path.write_bytes(pz.pack_bytes_from_members(pack_read.members))
         runtime = paths.plugin_local_runtime_dir(create=True) / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
@@ -340,7 +360,14 @@ def install_local_zip(
         )
         if not pipeline.get("ok"):
             return _finish(pipeline, activate=False)
-        unpacked = pz.unpack_zip(dest, runtime)
+        unpacked = pz.UnpackResult(
+            dest=runtime,
+            sha256=str(pipeline["sha256"]),
+            unpacked=bool(pipeline.get("wrote", True)),
+            plugin=doc,
+            parts=tuple(pipeline.get("parts") or pack_read.parts),
+            members=pack_read.members_sorted,
+        )
         info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -360,9 +387,15 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     doc = plugins.validate_doc(pack_read.plugin)
     pid = str(doc["id"])
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
-    raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=dest.is_file())
+    pack_read, doc, dest, reminted_from = remint_pack_read(
+        pack_read,
+        dest,
+        overwrite=dest.is_file(),
+        incoming_sha=pz.plugin_sha256(path),
+    )
     pid = str(doc["id"])
     if reminted_from:
+        raw = pz.pack_bytes_from_members(pack_read.members)
         dest.write_bytes(raw)
         if path.resolve() != dest.resolve() and path.resolve().parent == dest.resolve().parent:
             path.unlink(missing_ok=True)
@@ -390,7 +423,14 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     )
     if not pipeline.get("ok"):
         return _finish(pipeline, activate=False)
-    unpacked = pz.unpack_zip(dest, runtime)
+    unpacked = pz.UnpackResult(
+        dest=runtime,
+        sha256=str(pipeline["sha256"]),
+        unpacked=bool(pipeline.get("wrote", True)),
+        plugin=doc,
+        parts=tuple(pipeline.get("parts") or pack_read.parts),
+        members=pack_read.members_sorted,
+    )
     info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
     if reminted_from:
         info["remintedFrom"] = reminted_from
@@ -440,7 +480,11 @@ def sync_local_drop() -> list[dict[str, Any]]:
             results.append({"ok": False, "error": "src_owns_id", "id": e.plugin_id, "path": str(z)})
         except PackInstallStoreFault as e:
             results.append({"ok": False, "error": REASON_PACK_INSTALL_FAULT, "message": fault_message(str(e)), "path": str(z)})
-        except (ValueError, OSError) as e:
+        except ValueError as e:
+            blocked = _zip_blocked_result(e)
+            blocked["path"] = str(z)
+            results.append(blocked)
+        except OSError as e:
             results.append({"ok": False, "error": str(e), "path": str(z)})
     gone = [key for key in _seen if key not in current]
     if gone:

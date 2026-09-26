@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import posixpath
 import shutil
 import stat
@@ -245,26 +246,35 @@ def pack_files(files: dict[str, bytes], dest: Path) -> str:
 
 def rewrite_plugin_id(raw: bytes, new_id: str) -> bytes:
     """Return a new zip whose ``plugin.yml`` ``id`` is ``new_id``."""
+    fd, tmp_name = tempfile.mkstemp(prefix="zoto-rewrite-src.", suffix=".zip")
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        tmp.write_bytes(raw)
+        return pack_bytes_from_members(rewrite_plugin_members(_extract_files(tmp), new_id))
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def rewrite_plugin_members(members: dict[str, bytes], new_id: str) -> dict[str, bytes]:
     pid = str(new_id or "").strip()
     if not pid:
         raise ValueError("plugin id is required")
-    fd, src_name = tempfile.mkstemp(prefix="zoto-rewrite-src.", suffix=".zip")
-    os.close(fd)
-    src = Path(src_name)
-    fd, dest_name = tempfile.mkstemp(prefix="zoto-rewrite-dst.", suffix=".zip")
+    doc = _parse_plugin_yml(members[REQUIRED_MEMBER])
+    doc["id"] = pid
+    out = dict(members)
+    out[REQUIRED_MEMBER] = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).encode("utf-8")
+    return out
+
+
+def pack_bytes_from_members(members: dict[str, bytes]) -> bytes:
+    fd, dest_name = tempfile.mkstemp(prefix="zoto-pack.", suffix=".zip")
     os.close(fd)
     dest = Path(dest_name)
-    dest.unlink(missing_ok=True)
     try:
-        src.write_bytes(raw)
-        files = _extract_files(src)
-        doc = _parse_plugin_yml(files[REQUIRED_MEMBER])
-        doc["id"] = pid
-        files[REQUIRED_MEMBER] = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).encode("utf-8")
-        pack_files(files, dest)
+        pack_files(members, dest)
         return dest.read_bytes()
     finally:
-        src.unlink(missing_ok=True)
         dest.unlink(missing_ok=True)
 
 
@@ -281,36 +291,6 @@ def _parse_plugin_yml(raw: bytes) -> dict[str, Any]:
 def _extract_files(path: Path) -> dict[str, bytes]:
     read = psz.read_pack_zip(Path(path))
     return dict(read.members)
-
-
-def _read_members(zf: zipfile.ZipFile) -> dict[str, bytes]:
-    files: dict[str, bytes] = {}
-    total = 0
-    for info in zf.infolist():
-        if info.is_dir():
-            continue
-        if _is_symlink(info):
-            raise ValueError(f"symlink zip member {info.filename!r}")
-        rel = _safe_name(info.filename)
-        if not rel:
-            continue
-        if not _allowed_member(rel):
-            raise ValueError(f"disallowed path {rel!r}")
-        claimed = info.file_size
-        if claimed < 0 or total + claimed > MAX_UNCOMPRESSED_BYTES:
-            raise ValueError("uncompressed zip too large")
-        data = zf.read(info)
-        total += len(data)
-        if total > MAX_UNCOMPRESSED_BYTES:
-            raise ValueError("uncompressed zip too large")
-        files[rel] = data
-        if len(files) > MAX_FILES:
-            raise ValueError(f"zip has more than {MAX_FILES} files")
-    if not files:
-        raise ValueError("empty zip")
-    if len(files) > MAX_FILES:
-        raise ValueError(f"zip has more than {MAX_FILES} files")
-    return files
 
 
 def _read_src_files(src: Path) -> dict[str, bytes]:
@@ -358,6 +338,8 @@ def _list_tree_members(root: Path) -> list[str]:
 
 def _safe_name(name: str) -> str:
     n = name.replace("\\", "/")
+    if re.match(r"^[A-Za-z]:", n):
+        raise ValueError(f"absolute zip path {name!r}")
     if n.startswith("/") or n.startswith("//") or (len(n) >= 3 and n[1] == ":" and n[2] == "/"):
         raise ValueError(f"absolute zip path {name!r}")
     while n.startswith("./"):

@@ -51,16 +51,20 @@ def _reset_install_state() -> None:
     plugin_local.reset_watch_for_tests()
 
 
-def test_register_install_validator_runs_in_order() -> None:
+def test_register_install_validator_runs_in_order(tmp_path: Path) -> None:
     seen: list[str] = []
 
-    def second(_ctx: InstallContext) -> None:
-        seen.append("second")
-        raise InstallBlocked(REASON_SCHEMA_INVALID, "second fail", validator="second")
+    def early(_ctx: InstallContext) -> None:
+        seen.append("early")
 
-    register_install_validator(InstallValidator("second", 25, second))
-    staging = Path("/tmp/staging-x")
-    staging.mkdir(exist_ok=True)
+    def late(_ctx: InstallContext) -> None:
+        seen.append("late")
+        raise InstallBlocked(REASON_SCHEMA_INVALID, "late fail", validator="late")
+
+    register_install_validator(InstallValidator("early", 15, early))
+    register_install_validator(InstallValidator("late", 35, late))
+    staging = tmp_path / "staging"
+    staging.mkdir()
     (staging / "plugin.yml").write_text(MINIMAL, encoding="utf-8")
     yml = MINIMAL.encode("utf-8")
     pack_zip = PackZipRead(
@@ -75,19 +79,52 @@ def test_register_install_validator_runs_in_order() -> None:
     )
     ctx = InstallContext(
         staging=staging,
-        runtime=Path("."),
-        dest_zip=Path("."),
+        runtime=tmp_path / "runtime",
+        dest_zip=tmp_path / "z.zip",
         doc={"id": "x", "name": "X"},
         sha256="abc",
         upgrade=False,
         rel="z.zip",
-        zip_path=Path("."),
+        zip_path=tmp_path / "z.zip",
         pack_zip=pack_zip,
     )
+    assert [v.name for v in pi.ordered_validators()] == [
+        "zip_safety",
+        "early",
+        "schema",
+        "bundle_boundary",
+        "late",
+        "sdk_contract",
+    ]
     first, all_fail = pi.run_staging_validators(ctx)
+    assert seen == ["early", "late"]
     assert first is not None
-    assert first.validator == "second"
+    assert first.validator == "late"
     assert len(all_fail) == 1
+
+
+def test_remint_stages_validated_plugin_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    first = _zip({"plugin.yml": MINIMAL, "visualisation.yml": "engine: graph\nbase: topology\n"})
+    assert plugin_local.publish_local({"zip_b64": __import__("base64").b64encode(first).decode()})["ok"] is True
+    staged_ids: list[str] = []
+
+    def capture_id(ctx: InstallContext) -> None:
+        yml = (ctx.staging / "plugin.yml").read_text(encoding="utf-8")
+        doc = __import__("yaml").safe_load(yml)
+        staged_ids.append(str(doc["id"]))
+
+    register_install_validator(InstallValidator("capture", 5, capture_id))
+    second = _zip(
+        {
+            "plugin.yml": MINIMAL,
+            "visualisation.yml": "engine: graph\nbase: topology\nnote: second\n",
+        },
+    )
+    out = plugin_local.publish_local({"zip_b64": __import__("base64").b64encode(second).decode()})
+    assert out["ok"] is True
+    assert out["id"] == "sample-2"
+    assert staged_ids == ["sample-2"]
 
 
 def test_blocked_update_keeps_old_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
