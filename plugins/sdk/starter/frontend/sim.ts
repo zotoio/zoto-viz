@@ -103,7 +103,7 @@ export class StarterSim {
       const slot = this.talkerSlots[i];
       s0[i] = slot ? Math.min(1, slot.rate / 200) : 0;
     }
-    s0[3] = murk;
+    s0[8] = murk;
     s0[4] = frame.demo ? 1 : 0;
     s0[5] = tileW;
     s0[6] = tileH;
@@ -157,6 +157,6 @@ function liveMetric(frame: VizDataFrame, slotted: number): string {
 }
 
 export function cornerLabel(displayName: string, metric: string, demo: boolean): string {
-  const tail = demo ? "demo" : metric;
-  return `${displayName} · ${tail}`;
+  const metricPart = demo ? `${metric} · demo` : metric;
+  return `${displayName} · ${metricPart}`;
 }

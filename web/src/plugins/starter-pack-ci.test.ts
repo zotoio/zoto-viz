@@ -13,10 +13,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-  VIZ_FIXTURE_GOLDEN_LIVE_FAILED,
-  VIZ_FIXTURE_IDLE,
-} from "../../../plugins/sdk/viz-fixtures";
+import type { VizDataFrame } from "../../../plugins/sdk/viz-contract";
+import { VIZ_FIXTURE_IDLE } from "../../../plugins/sdk/viz-fixtures";
 import { scanPackLintFixture } from "../../../plugins/sdk/pack-lint";
 import { StarterSim } from "../../../plugins/sdk/starter/frontend/sim";
 
@@ -148,6 +146,13 @@ print(runtime)
   );
 }
 
+function withSysFailed(frame: VizDataFrame, failed: number): VizDataFrame {
+  return {
+    ...frame,
+    sys: { ...(frame.sys ?? {}), failed },
+  };
+}
+
 describe("pack starter template CI", () => {
   it("is lint-clean as a shipped plugins/src pack (no baseline entry)", () => {
     const { stageRoot, packHome } = stageStarterTree();
@@ -175,11 +180,20 @@ describe("pack starter template CI", () => {
   );
 
   it("idle vs idle-failed failure visuals differ (starter sim)", () => {
+    const idleFrame = VIZ_FIXTURE_IDLE;
+    const failedFrame = withSysFailed(idleFrame, 0.85);
     const idleSim = new StarterSim({ displayName: "Starter" });
     const failSim = new StarterSim({ displayName: "Starter" });
-    const idle = idleSim.advance(VIZ_FIXTURE_IDLE, 1280, 800);
-    const failed = failSim.advance(VIZ_FIXTURE_GOLDEN_LIVE_FAILED, 1280, 800);
+    for (let i = 0; i < 90; i++) {
+      const dt = 1 / 60;
+      idleSim.advance({ ...idleFrame, t: i * dt, dt }, 1280, 800);
+      failSim.advance({ ...failedFrame, t: i * dt, dt }, 1280, 800);
+    }
+    const idle = idleSim.advance(idleFrame, 1280, 800);
+    const failed = failSim.advance(failedFrame, 1280, 800);
     expect(idle.smokeLuma).not.toBe(failed.smokeLuma);
-    expect(idle.slot0[3]).toBeLessThan(failed.slot0[3]);
+    expect(idle.slot0[8]).toBe(0);
+    expect(failed.slot0[8]).toBeGreaterThan(0.8);
+    expect(failed.labelMetric).toContain("fail");
   });
 });

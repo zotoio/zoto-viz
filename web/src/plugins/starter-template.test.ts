@@ -41,7 +41,28 @@ describe("pack starter template", () => {
   it("corner label uses displayName from config", () => {
     const o = parseStarterOptions({ displayName: "Koi" });
     expect(cornerLabel(o.displayName, "idle", false)).toBe("Koi · idle");
+    expect(cornerLabel(o.displayName, "fail", true)).toBe("Koi · fail · demo");
     expect(parseStarterOptions({})).toEqual(DEFAULT_OPTIONS);
+  });
+
+  it("four talker bars and murk use separate slot0 indices", () => {
+    const sim = new StarterSim({ displayName: "Starter" });
+    const frame = {
+      ...STARTER_DEMO_FRAME,
+      talkers: [
+        { id: "t0", rate: 200, role: "lan" },
+        { id: "t1", rate: 160, role: "lan" },
+        { id: "t2", rate: 120, role: "lan" },
+        { id: "t3", rate: 80, role: "lan" },
+      ],
+      sys: { ...STARTER_DEMO_FRAME.sys!, failed: 0.5 },
+    };
+    for (let i = 0; i < 90; i++) {
+      sim.advance({ ...frame, t: i / 60, dt: 1 / 60 }, 1280, 800);
+    }
+    const packed = sim.advance(frame, 1280, 800);
+    expect(packed.slot0[3]).toBeCloseTo(80 / 200, 5);
+    expect(packed.slot0[8]).toBe(0.5);
   });
 
   it("teardown counts slots and motion listener", () => {
