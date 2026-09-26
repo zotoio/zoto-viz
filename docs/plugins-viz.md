@@ -76,6 +76,9 @@ per display frame (mosaic panes may share one iframe). Fields:
 | `pluginClock?` | optional secondary clock (e.g. sky time in seconds) |
 
 ```ts
+import type { VizZoto } from "../../plugins/sdk/viz-zoto";
+
+const zoto = globalThis.zoto as VizZoto;
 zoto.onPresent = (tick) => {
   zoto.writeBuffer(0, [tick.pluginClock ?? 0]);
 };

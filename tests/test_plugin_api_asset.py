@@ -56,6 +56,54 @@ def test_asset_private_no_cache_without_matching_digest(tmp_path: Path, monkeypa
     assert resp.headers.get("ETag")
 
 
+def test_asset_get_does_not_autoconsent(tmp_path: Path, monkeypatch) -> None:
+    from service import live
+
+    live.reset_for_tests()
+    monkeypatch.setattr(plugins, "CONSENT_FILE", tmp_path / "plugin-consent.yml")
+    live.set_autoconsent(True)
+    home = _pack_home(tmp_path)
+    (home / "assets" / "tone.mp3").write_bytes(b"x")
+    row = {
+        "id": "demo-pack",
+        "file": str(home / "plugin.yml"),
+        "origin": "zip",
+        "consent": None,
+        "capabilities": ["viz.write"],
+        "version": 1,
+        "has_sky_shader": True,
+        "hash": "abc",
+    }
+    monkeypatch.setattr(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None)
+    resp = plugins.api_asset(_req("demo-pack", "tone.mp3"))
+    assert resp.status == 403
+    assert not (tmp_path / "plugin-consent.yml").exists()
+
+
+def test_disabled_plugin_asset_forbidden(tmp_path: Path, monkeypatch) -> None:
+    home = _pack_home(tmp_path)
+    (home / "assets" / "tone.mp3").write_bytes(b"x")
+    row = {
+        "id": "demo-pack",
+        "file": str(home / "plugin.yml"),
+        "origin": "src",
+        "disabled": True,
+    }
+    monkeypatch.setattr(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None)
+    resp = plugins.api_asset(_req("demo-pack", "tone.mp3"))
+    assert resp.status == 403
+
+
+def test_asset_over_size_cap_returns_413(tmp_path: Path, monkeypatch) -> None:
+    home = _pack_home(tmp_path)
+    (home / "assets" / "tone.mp3").write_bytes(b"x")
+    row = {"id": "demo-pack", "file": str(home / "plugin.yml"), "origin": "src"}
+    monkeypatch.setattr(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None)
+    monkeypatch.setattr(plugins, "_MAX_ASSET_BYTES", 0)
+    resp = plugins.api_asset(_req("demo-pack", "tone.mp3"))
+    assert resp.status == 413
+
+
 def test_zip_asset_requires_stored_consent(tmp_path: Path, monkeypatch) -> None:
     home = _pack_home(tmp_path)
     (home / "assets" / "tone.mp3").write_bytes(b"x")
