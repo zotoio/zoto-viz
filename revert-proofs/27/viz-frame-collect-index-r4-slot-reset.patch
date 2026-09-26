@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+index 037f527..e8fd3c3 100644
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -227,7 +227,7 @@ function zeroLinkRatesForFrame(): void {
+       slot.rate = 0;
+       const meta = linkSlotMeta[idx]!;
+       meta.idleZeroFrames++;
+-      if (meta.idleZeroFrames >= VIZ_LINK_IDLE_DROP_FRAMES) toDrop.push({ src, dst, idx });
++      if (false) toDrop.push({ src, dst, idx });
+     }
+   }
+   for (let i = 0; i < toDrop.length; i++) {

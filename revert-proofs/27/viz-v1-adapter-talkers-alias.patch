@@ -1,13 +1,12 @@
 diff --git a/web/src/plugins/viz-v1-frame-adapter.ts b/web/src/plugins/viz-v1-frame-adapter.ts
-index 37a70eb..fa83170 100644
+index 37a70eb..f95e0f6 100644
 --- a/web/src/plugins/viz-v1-frame-adapter.ts
 +++ b/web/src/plugins/viz-v1-frame-adapter.ts
-@@ -235,7 +235,7 @@ function copyWorkIntoPack(work: VizDataFrame, slot: V1PackSlot): void {
-   }
+@@ -172,7 +172,6 @@ function rebindTalkersFromPool(slot: V1PackSlot): void {
  
-   const tn = Math.min(work.talkers.length, budget.maxTalkers);
--  talkersBuf.length = tn;
-+  talkersBuf.length = tn > 0 ? tn - 1 : 0;
-   for (let i = 0; i < tn; i++) {
-     const d = talkersBuf[i]!;
-     const s = work.talkers[i]!;
+ function copyWorkIntoPack(work: VizDataFrame, slot: V1PackSlot): void {
+   const { budget, frame, talkersBuf, packetsBuf, rfBuf, headlinesBuf, sysBuf } = slot;
+-  rebindTalkersFromPool(slot);
+   frame.contract = 1;
+   frame.t = work.t;
+   frame.dt = work.dt;

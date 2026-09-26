@@ -1,13 +1,14 @@
 diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
-index 9c63711..f264806 100644
+index 037f527..3fc8a61 100644
 --- a/web/src/plugins/viz-frame-collect.ts
 +++ b/web/src/plugins/viz-frame-collect.ts
-@@ -143,7 +143,7 @@ export function collectVizLinks(
-   talkerIds: ReadonlySet<string>,
-   maxLinks: number,
- ): { links: VizLinkSample[]; linksDropped: number } {
--  zeroLinkRatesForFrame();
+@@ -218,6 +218,9 @@ function linkSlotForPair(src: string, dst: string): LinkCandidate {
+ }
+ 
+ function zeroLinkRatesForFrame(): void {
++  linkBySrcDst.clear();
++  linkPool.length = 0;
 +  linkPoolHighWater = 0;
-   for (let fi = 0; fi < flows.length; fi++) {
-     const fl = flows[fi]!;
-     const aIn = talkerIds.has(fl.a);
+   lastZeroPassVisitCount = 0;
+   const toDrop: { src: string; dst: string; idx: number }[] = [];
+   for (const [src, byDst] of linkBySrcDst) {

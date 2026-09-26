@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
+  "testName": "^viz link index R2 tie-break > returns identical top links for two arrival orders of the same 400 flows$",
+  "description": "Revert tie-break polarity in topKByScore."
+}

@@ -1,0 +1,18 @@
+diff --git a/web/src/plugins/viz-link-render.ts b/web/src/plugins/viz-link-render.ts
+index ce18530..a1a723c 100644
+--- a/web/src/plugins/viz-link-render.ts
++++ b/web/src/plugins/viz-link-render.ts
+@@ -4,11 +4,9 @@ export function vizLinkRecordIdentity(src: string, dst: string): string {
+ }
+ 
+ /** Stable render key from endpoints only (no slot / rank). */
++let vizLinkRenderKeySeq = 0;
+ export function vizLinkRenderKey(src: string, dst: string): string {
+-  let h = 2166136261;
+-  for (let i = 0; i < src.length; i++) h = Math.imul(h ^ src.charCodeAt(i), 16777619);
+-  for (let i = 0; i < dst.length; i++) h = Math.imul(h ^ dst.charCodeAt(i), 16777619);
+-  return (h >>> 0).toString(16).padStart(8, "0");
++  return `${src}\0${dst}#${vizLinkRenderKeySeq++}`;
+ }
+ 
+ const LINK_PALETTE = [

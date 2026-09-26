@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+index 037f527..d761005 100644
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -6,7 +6,7 @@ import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
+ export const VIZ_DEFAULT_MAX_LINKS = 64;
+ 
+ /** Consecutive zero-rate frames before a pair is dropped from the link index (inclusive at this count). */
+-export const VIZ_LINK_IDLE_DROP_FRAMES = 3600;
++export const VIZ_LINK_IDLE_DROP_FRAMES = 1;
+ 
+ /** Resolved from monitor `host.vizFrame` in {@link StateMsg} (sys-config.yml). */
+ export interface VizFrameCollectOpts {

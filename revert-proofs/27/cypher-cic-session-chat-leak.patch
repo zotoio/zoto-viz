@@ -1,0 +1,20 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index a490f35..db6864d 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1819,11 +1819,10 @@ export class Settings {
+   }
+ 
+   private chatOnForPersistence(): boolean {
+-    return this.chat.on;
+-  }
+-
+-  clearCypherCicPanelPersistOverrides(): void {
+-    this.setCypherCicPanelCollapsed(false);
++    if (!this.cypherCicPanelCollapsed) return this.chat.on;
++    const p = this.cfg.storePrefix;
++    const raw = localStorage.getItem(`${p}.chat.on`);
++    return raw !== "0";
+   }
+ 
+   /** Show or hide the right-hand activity list. Syncs the cog toggle and persists unless `persist` is false. */

@@ -1,6 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/ui/viz-hud.test.ts",
+  "testFile": "src/ui/viz-hud.test.ts",
   "testName": "^viz\\ hud\\ helpers\\ >\\ hides\\ HUD\\ separator\\ after\\ DEGRADED\\ badge\\ when\\ failure\\ gauges\\ are\\ zero$",
-  "description": "One-line production revert: leave degradedSepAfter hidden when failBadge is shown."
+  "description": "One-line production revert: leave degradedSepAfter hidden when failBadge is shown.",
+  "patchedAssertion": "AssertionError: expected 3 to be 4 // Object.is equality"
 }

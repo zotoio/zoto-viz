@@ -1,6 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/plugins/viz-host.test.ts",
+  "testFile": "src/plugins/viz-host.test.ts",
   "testName": "^viz\\ contract\\ version\\ negotiation\\ >\\ blocks\\ unknown\\ viz\\.contract\\ with\\ a\\ plain\\-language\\ reason$",
-  "description": "One-line production revert: parseVizContractResult accepts any integer contract version."
+  "description": "One-line production revert: parseVizContractResult accepts any integer contract version.",
+  "patchedAssertion": "AssertionError: expected { state: 'ready', contract: { \u2026(8) } } to deeply equal { state: 'Blocked', \u2026(1) }"
 }

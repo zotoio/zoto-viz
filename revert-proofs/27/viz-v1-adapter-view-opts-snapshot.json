@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/plugins/viz-v1-frame-adapter.test.ts",
+  "testFile": "src/plugins/viz-v1-frame-adapter.test.ts",
   "testName": "^VizV1FrameAdapter\\ >\\ keeps\\ the\\ same\\ view\\ options\\ object\\ across\\ delivers\\ until\\ syncViewOpts\\ replaces\\ it$",
   "description": "One-line production revert: deliver shallow-copies viewOpts every frame so snapshot identity drifts."
 }

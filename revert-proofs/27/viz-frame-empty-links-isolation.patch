@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/viz-frame-pack-deliver.ts b/web/src/plugins/viz-frame-pack-deliver.ts
-index 6aa78ac..afd9787 100644
+index 712782e..afd9787 100644
 --- a/web/src/plugins/viz-frame-pack-deliver.ts
 +++ b/web/src/plugins/viz-frame-pack-deliver.ts
 @@ -13,10 +13,6 @@ export function deliverVizFrameToPackTiles(
@@ -8,8 +8,8 @@ index 6aa78ac..afd9787 100644
    for (const tile of tiles) {
 -    try {
 -      tile.onFrame(frame);
--    } catch {
--      /* strict-mode mutation of frozen contract slices (e.g. links.push) must not abort other tiles */
+-    } catch (err) {
+-      console.error("[viz-frame-pack-deliver] tile onFrame threw", tile.tileId, err);
 -    }
 +    tile.onFrame(frame);
    }

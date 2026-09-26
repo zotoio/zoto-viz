@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
+  "testName": "^viz link index R1 pruning > zeroing pass visits exactly 200 slots after 200\u2192400\u2192200 flows when endpoints leave talkers$",
+  "description": "Revert: stop reusing talker-id Set when membership unchanged (forces new Map.set calls)."
+}

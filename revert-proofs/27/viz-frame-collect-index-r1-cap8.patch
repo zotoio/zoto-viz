@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+index 037f527..9c7ff9f 100644
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -252,7 +252,7 @@ function topLinkIndices(active: number[], maxLinks: number): number[] {
+   const tieBreak = (ia: number, ib: number) => compareLinkPair(linkPool[ia]!, linkPool[ib]!);
+   const picked = topKByScore(
+     active,
+-    maxLinks,
++    active.length,
+     (idx) => linkPool[idx]!.rate,
+     () => false,
+     tieBreak,

@@ -1,0 +1,67 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+index 037f527..62ad7fc 100644
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -88,7 +88,7 @@ function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string>
+       }
+     }
+   }
+-  if (!same) {
++  if (true) {
+     talkerIdsCached.length = talkers.length;
+     for (let i = 0; i < talkers.length; i++) talkerIdsCached[i] = talkers[i]!.id;
+     talkerIdsScratch.clear();
+@@ -99,10 +99,6 @@ function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string>
+   return talkerIdsScratch;
+ }
+ 
+-export function readTalkerIdSetRebuildCount(): number {
+-  return talkerIdsSetRebuilds;
+-}
+-
+ function talkersWithConnFailed(
+   frameTalkers: VizTalkerSample[],
+   devices: readonly Device[],
+@@ -146,24 +142,6 @@ const collectResultScratch: { links: VizLinkSample[]; linksDropped: number } = {
+ let lastZeroPassVisitCount = 0;
+ let lastNewPairSetCount = 0;
+ 
+-export function readVizLinkZeroPassVisitCount(): number {
+-  return lastZeroPassVisitCount;
+-}
+-
+-export function readVizLinkIndexEntryCount(): number {
+-  let n = 0;
+-  for (const byDst of linkBySrcDst.values()) n += byDst.size;
+-  return n;
+-}
+-
+-export function readVizLinkPoolLength(): number {
+-  return linkPool.length;
+-}
+-
+-export function readVizLinkLastNewPairSetCount(): number {
+-  return lastNewPairSetCount;
+-}
+-
+ function resetSlotMeta(idx: number): void {
+   let meta = linkSlotMeta[idx];
+   if (!meta) {
+@@ -333,17 +311,3 @@ export function applyVizFrameContractV2(
+   else delete frame.linksDropped;
+   return frame;
+ }
+-
+-export function readLinkSlotGeneration(src: string, dst: string): number | undefined {
+-  const byDst = linkBySrcDst.get(src);
+-  const idx = byDst?.get(dst);
+-  if (idx === undefined) return undefined;
+-  return linkSlotMeta[idx]?.generation;
+-}
+-
+-export function readLinkSlotIdleZeroFrames(src: string, dst: string): number | undefined {
+-  const byDst = linkBySrcDst.get(src);
+-  const idx = byDst?.get(dst);
+-  if (idx === undefined) return undefined;
+-  return linkSlotMeta[idx]?.idleZeroFrames;
+-}

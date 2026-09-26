@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
+  "testName": "^viz link index R7 syncTalkerIds production path > rebinds talker membership through applyVizFrameContractV2 when the talker list changes$",
+  "description": "Revert prune-on-talker-change in syncTalkerIds."
+}

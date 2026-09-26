@@ -1,6 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/plugins/viz-host.test.ts",
+  "testFile": "src/plugins/viz-host.test.ts",
   "testName": "^viz\\ contract\\ version\\ negotiation\\ >\\ delivers\\ v1\\ talker\\ lifetime\\ counts\\ for\\ v1\\ packs\\ even\\ when\\ flow\\ rates\\ exist$",
-  "description": "One-line production revert: v1 packs run through applyVizFrameContractV2 (contract stamped v2)."
+  "description": "One-line production revert: v1 packs run through applyVizFrameContractV2 (contract stamped v2).",
+  "patchedAssertion": "AssertionError: expected 2 to be 1 // Object.is equality"
 }

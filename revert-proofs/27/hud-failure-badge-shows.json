@@ -1,6 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/ui/viz-hud.test.ts",
+  "testFile": "src/ui/viz-hud.test.ts",
   "testName": "^viz\\ hud\\ helpers\\ >\\ shows\\ DEGRADED\\ strip\\ badge\\ from\\ talker\\ TCP\\ failure\\ ratio$",
-  "description": "One-line production revert: return null instead of the DEGRADED strip string in vizFrameFailureBadge."
+  "description": "One-line production revert: return null instead of the DEGRADED strip string in vizFrameFailureBadge.",
+  "patchedAssertion": "AssertionError: expected '' to be '\u26a0 DEGRADED 55% TCP \u00b7 2 units' // Object.is equality"
 }

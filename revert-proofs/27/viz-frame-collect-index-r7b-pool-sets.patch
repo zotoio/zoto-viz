@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+index 037f527..ade2595 100644
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -88,7 +88,7 @@ function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string>
+       }
+     }
+   }
+-  if (!same) {
++  if (true) {
+     talkerIdsCached.length = talkers.length;
+     for (let i = 0; i < talkers.length; i++) talkerIdsCached[i] = talkers[i]!.id;
+     talkerIdsScratch.clear();

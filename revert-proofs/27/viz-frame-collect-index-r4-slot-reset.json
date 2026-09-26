@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
+  "testName": "^viz link index R4 reset on reuse > gives a reused slot a fresh rate after idle drop and a new pair$",
+  "description": "Revert idle backstop (never drop indexed pairs)."
+}
