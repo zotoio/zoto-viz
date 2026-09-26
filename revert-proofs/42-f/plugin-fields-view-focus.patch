@@ -1,8 +1,8 @@
 diff --git a/web/src/app/plugin-fields-from-settings.ts b/web/src/app/plugin-fields-from-settings.ts
-index 90e431d..28c7e66 100644
+index 90e431d..1a1efd5 100644
 --- a/web/src/app/plugin-fields-from-settings.ts
 +++ b/web/src/app/plugin-fields-from-settings.ts
-@@ -4,9 +4,8 @@ import type { Settings } from "../ui/settings";
+@@ -5,8 +5,7 @@ import type { Settings } from "../ui/settings";
  import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
  
  export function resolveSettingsTargetModeId(settings: Settings, fallbackModeId: () => string): string {
