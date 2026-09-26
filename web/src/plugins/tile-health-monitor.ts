@@ -9,7 +9,6 @@ import {
   TILE_PATCH,
   TilePatchSampler,
   freshTileHealthState,
-  patchOrigin,
   resetTileHealthProgress,
   stepTileHealth,
   type HealStep,
@@ -211,8 +210,8 @@ export class TileHealthMonitor {
 
     const sc = this.deps.sceneFor(tileId);
     if (!sc) return;
-    const patch = this.sampleScene(sc);
-    if (!patch) return;
+    const patch = this.sampleScene(sc, now);
+    if (!patch) return; // async GL read pending — not empty
     const spec = this.deps.packFor(tileId);
     const packId = spec?.id ?? tileId;
     const dataArriving = this.vizDeliverGen > 0;
@@ -241,7 +240,7 @@ export class TileHealthMonitor {
     if (outcome.heal) void this.deps.onHeal(tileId, outcome.heal, outcome.state);
   }
 
-  private sampleScene(sc: NetScene): Uint8ClampedArray | null {
+  private sampleScene(sc: NetScene, now: number): Uint8Array | null {
     const vp = sc.lastViewport;
     if (!vp || vp.w < 4 || vp.h < 4) return null;
     const host = this.deps.host;
@@ -256,9 +255,8 @@ export class TileHealthMonitor {
       return this.sampler.sample2d(host.canvas, sx, sy, sw, sh);
     }
     const gl = host.gl;
-    if (!gl || gl.isContextLost()) return this.sampler.scratchBuffer;
-    const { x, y } = patchOrigin(vp);
-    return this.sampler.sampleGl(gl, x, y);
+    if (!gl || gl.isContextLost?.()) return null;
+    return sc.tileHealthRgba(gl, now);
   }
 
   private labelFor(tileId: string): HTMLSpanElement {

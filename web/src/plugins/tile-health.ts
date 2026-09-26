@@ -51,7 +51,7 @@ export interface TileHealthSignals {
 }
 
 export interface TileEmptyInput {
-  patch: Uint8ClampedArray;
+  patch: Uint8Array | Uint8ClampedArray;
   signals: TileHealthSignals;
   lastCheckPictureSerial: number;
 }
@@ -131,11 +131,6 @@ export class TilePatchSampler {
     return this.buf;
   }
 
-  sampleGl(gl: WebGL2RenderingContext, x: number, y: number): Uint8ClampedArray {
-    const s = this.canvas.width;
-    gl.readPixels(x, y, s, s, gl.RGBA, gl.UNSIGNED_BYTE, this.buf);
-    return this.buf;
-  }
 }
 
 export function healMessage(reason: EmptyReason, step: HealStep, emptyMs: number): string {
@@ -293,4 +288,9 @@ export function patchOrigin(vp: Viewport, patch = TILE_PATCH): { x: number; y: n
   const x = Math.max(0, Math.min(vp.w - patch, Math.floor(vp.x + (vp.w - patch) / 2)));
   const y = Math.max(0, Math.min(vp.h - patch, Math.floor(vp.y + (vp.h - patch) / 2)));
   return { x, y };
+}
+
+/** When true, an empty check was skipped (async read pending) — must not advance the empty streak. */
+export function isSkippedHealthSample(patch: Uint8Array | null | undefined): boolean {
+  return patch == null;
 }

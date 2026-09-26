@@ -2574,6 +2574,16 @@ export class NetScene implements HostedView {
     this.sampledLuma = this.lumaProbe.value;
   }
 
+  /**
+   * Shared async 16×16 RGBA with {@link LumaProbe} (no synchronous readPixels).
+   * Null while a PBO read is still in flight — tile-health must skip that check.
+   */
+  tileHealthRgba(gl: WebGL2RenderingContext, now = performance.now()): Uint8Array | null {
+    const vp = this.lastVp;
+    if (!vp || vp.w < 4 || vp.h < 4) return null;
+    return this.lumaProbe.sampleForHealth(gl, vp, now);
+  }
+
   /** Ease sky/floor dimming and blending toward the visibility tool's fix. Overlay only. */
   private easeVisibility(dt: number): void {
     const want = this.lastVis?.fix;
