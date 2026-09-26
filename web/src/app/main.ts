@@ -1073,7 +1073,10 @@ function feed(m: StateMsg): void {
     const focusRs = focusedRenderScene().renderScaleState;
     const packGov = focusRs.hasGovernor;
     const renderScale = packGov ? (govOn ? focusRs.renderScale : 1) : null;
-    const budgetStats = packGov ? focusRs.stats() : vizBudget.stats;
+    const hostStats = vizBudget.stats;
+    const budgetStats = packGov
+      ? { ...focusRs.stats(), skipped: hostStats.skipped }
+      : hostStats;
     vizHud.tick({
       packId,
       packName: active?.name ?? packId ?? "",

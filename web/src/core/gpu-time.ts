@@ -45,7 +45,7 @@ export function harvestGpu(): void {
     p.gl.deleteQuery(p.query);
     pending.splice(i, 1);
     if (ns > 0) p.done(ns / 1e6);
-    if (free.length < POOL_SIZE) free.push(p.query);
+    // Deleted queries must not re-enter the pool — allocate fresh in timeGpu().
   }
 }
 

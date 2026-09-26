@@ -1546,6 +1546,7 @@ export class NetScene implements HostedView, RenderScalePane {
 
   applyRenderScale(scale: number): void {
     this.backdrop.setPluginRenderScale(scale);
+    this.syncTuneDpr();
   }
 
   setPluginSkyContract(uniforms: readonly string[] | undefined): void {
@@ -2014,7 +2015,10 @@ export class NetScene implements HostedView, RenderScalePane {
 
   private syncTuneDpr(): void {
     const k = this.tune?.dprK ?? 0;
-    const want = this.baseDpr + (1 - this.baseDpr) * k;
+    const govScale = hostRenderScaleGovernorEnabled() && this.renderScaleState.hasGovernor
+      ? this.renderScaleState.renderScale
+      : 1;
+    const want = (this.baseDpr + (1 - this.baseDpr) * k) * govScale;
     if (Math.abs(want - this.lastTuneDpr) < 0.04) return;
     this.lastTuneDpr = want;
     if (this.host) {
@@ -2040,9 +2044,7 @@ export class NetScene implements HostedView, RenderScalePane {
       this.paneFps.setRenderScaleBadge(enabled ? scale : null);
       return;
     }
-    const line = formatVizBudgetOverlay(vizBudgetOverlayFromStats(rs.stats(), scale, enabled));
-    this.paneFps.setBudgetLine(line);
-    this.paneFps.setRenderScaleBadge(null);
+    this.paneFps.setBudgetLine(formatVizBudgetOverlay(vizBudgetOverlayFromStats(rs.stats(), scale, enabled)));
   }
 
   private applyWeights(): void {
@@ -3982,7 +3984,12 @@ export class NetScene implements HostedView, RenderScalePane {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (w < 2 || h < 2) return;
     const firstBox = this.viewW < 2 || this.viewH < 2 || !Number.isFinite(this.camera.aspect);
-    if (w === this.viewW && h === this.viewH && !firstBox) return;
+    const dpr = this.host?.pixelRatio
+      ?? (this.renderer instanceof SoftwareGpu ? this.renderer.getPixelRatio() : (this.renderer as THREE.WebGLRenderer).getPixelRatio());
+    if (w === this.viewW && h === this.viewH && !firstBox) {
+      this.backdrop.setViewport(w, h, dpr);
+      return;
+    }
     this.viewW = w;
     this.viewH = h;
     this.camera.aspect = w / h;
@@ -4000,8 +4007,6 @@ export class NetScene implements HostedView, RenderScalePane {
       }
     }
     this.labelLayer.setSize(w, h);
-    const dpr = this.host?.pixelRatio
-      ?? (this.renderer instanceof SoftwareGpu ? this.renderer.getPixelRatio() : (this.renderer as THREE.WebGLRenderer).getPixelRatio());
     this.backdrop.setViewport(w, h, dpr);
     this.applyViewShift();
     this.updateSpread();

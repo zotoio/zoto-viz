@@ -112,12 +112,12 @@ export class PaneFps {
 
   /** Compact adaptive render-scale readout on mosaic tiles. */
   setRenderScaleBadge(scale: number | null): void {
-    this.budgetLine = null;
     if (scale == null) {
       this.fpsSuffix = "";
-      this.paint(performance.now());
+      if (!this.budgetLine) this.paint(performance.now());
       return;
     }
+    this.budgetLine = null;
     const s = scale >= 0.999 ? "1" : scale.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
     this.fpsSuffix = ` · ${s}`;
     this.paint(performance.now());

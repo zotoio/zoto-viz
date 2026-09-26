@@ -520,7 +520,6 @@ export function buildVizFrameForPlugin(
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
 export class VizFrameBudget {
-  private _lastMs = 0;
   private _p95Ms = 0;
   private _overBudget = 0;
   private _skipped = 0;
@@ -536,6 +535,8 @@ export class VizFrameBudget {
   private gpuSampleStart = 0;
   private _gpuAvailable = false;
   private _timingSource: VizBudgetTimingSource = "cpu";
+  private _lastCpuMs = 0;
+  private _lastGpuMs = 0;
   private readonly scratch = new Float32Array(BUDGET_SAMPLE_CAP);
 
   constructor(now: () => number = () => performance.now()) {
@@ -544,8 +545,9 @@ export class VizFrameBudget {
 
   get stats(): VizFrameBudgetStats {
     const active = this.activeSamples();
+    const lastMs = active.source === "gpu" ? this._lastGpuMs : this._lastCpuMs;
     return {
-      lastMs: this._lastMs,
+      lastMs,
       p95Ms: this._p95Ms,
       overBudget: this._overBudget,
       skipped: this._skipped,
@@ -565,7 +567,7 @@ export class VizFrameBudget {
   noteGpuMs(ms: number): void {
     if (!Number.isFinite(ms) || ms <= 0) return;
     this.pushRing(this.gpuSamples, ms, "gpu");
-    this._lastMs = ms;
+    this._lastGpuMs = ms;
     this.refreshP95();
   }
 
@@ -577,7 +579,7 @@ export class VizFrameBudget {
   /** Record a measured duration; returns true when over budget. */
   record(ms: number): boolean {
     this._total++;
-    this._lastMs = ms;
+    this._lastCpuMs = ms;
     this.pushRing(this.cpuSamples, ms, "cpu");
     this.refreshP95();
     if (ms > VIZ_FRAME_BUDGET_MS) {
@@ -675,7 +677,8 @@ export class VizFrameBudget {
   }
 
   reset(): void {
-    this._lastMs = 0;
+    this._lastCpuMs = 0;
+    this._lastGpuMs = 0;
     this._p95Ms = 0;
     this._overBudget = 0;
     this._skipped = 0;
