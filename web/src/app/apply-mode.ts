@@ -10,7 +10,7 @@ import {
   flashModeLoadFailed,
 } from "./mode-switch-message";
 import { settleConsentAndDrainAuto } from "./mode-switch-coordinator";
-import { throwIfAborted } from "./mode-switch-attempt";
+import { commitModeSwitchAttempt, throwIfAborted } from "./mode-switch-attempt";
 import {
   capturePresentDriveBeforeLiveModeCommit,
   restorePresentDriveAfterModeRollback,
@@ -191,6 +191,7 @@ function scheduleConsentFinalize(
         settleConsentAndDrainAuto("failed", m.id);
         return;
       }
+      commitModeSwitchAttempt(signal);
       settleConsentAndDrainAuto(result);
       host.focusModePicker();
       return;
