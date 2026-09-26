@@ -9,6 +9,8 @@
     "scripts/pack-guardrails-split-manifest.json",
     "scripts/create-pack-guardrails-split-branches.sh",
     "plugins/sdk/**",
+    "plugins/src/pack-lint-legacy-probe/**",
+    "revert-proofs/56/**",
     "service/pack_boundary.py",
     "service/pack_lint_mask.py",
     "service/pack_sdk_contract.py",
