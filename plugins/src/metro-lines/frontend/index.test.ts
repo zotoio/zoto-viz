@@ -29,12 +29,31 @@ import {
 import { probePluginSkyCompile, wrapPluginSky } from "./sky-probe";
 import { buildIdleVizFrame } from "./test-fixtures";
 
-const packRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const frontendDir = path.dirname(fileURLToPath(import.meta.url));
+const packRoot = path.resolve(frontendDir, "..");
+const INDEX_SRC = readFileSync(path.join(frontendDir, "index.ts"), "utf8");
 const FRAG = readFileSync(path.join(packRoot, "sky/fragment.glsl"), "utf8");
 const PLUGIN = readFileSync(path.join(packRoot, "plugin.yml"), "utf8");
 const VIS = readFileSync(path.join(packRoot, "visualisation.yml"), "utf8");
 
 const PRESETS = ["classic_map", "night_network", "disruptions_only", "minimal"] as const;
+
+function extractOnFrameHandlerBody(source: string): string {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1 ");
+  const assign = code.match(/zoto\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{/);
+  if (!assign || assign.index === undefined) return "";
+  const open = assign.index + assign[0].length - 1;
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    const ch = code[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return code.slice(open + 1, i);
+    }
+  }
+  return "";
+}
 
 function liveFrame(over: Partial<VizDataFrame> = {}): VizDataFrame {
   return {
@@ -53,6 +72,12 @@ describe("metro-lines pack", () => {
   beforeEach(() => {
     resetMetroHostRegistry();
     releaseMetroSim();
+  });
+
+  it("onFrame never calls getConfig (pack lint get-config-in-on-frame)", () => {
+    const body = extractOnFrameHandlerBody(INDEX_SRC);
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).not.toMatch(/\bgetConfig\s*\(/);
   });
 
   it("wraps and compiles the schematic sky", () => {
