@@ -1,6 +1,8 @@
---- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:38:23.494464985 +0000
-+++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:39:26.372858346 +0000
-@@ -185,7 +185,6 @@
+diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
+index 7a1ba64..2d3dc4e 100644
+--- a/web/src/graph/pack-mirror-gl.ts
++++ b/web/src/graph/pack-mirror-gl.ts
+@@ -184,7 +184,6 @@ export class PackMirrorSession {
      this.ph = 0;
      this.samples = -1;
      this.rendered = false;
@@ -8,11 +10,3 @@
    }
  
    ensure(pw: number, ph: number, antialias: boolean): THREE.WebGLRenderTarget | null {
-@@ -334,7 +333,6 @@
-     this.texture = null;
-     this.tw = 0;
-     this.th = 0;
--    this.presenter.dispose();
-   }
- 
-   ensureTexture(w: number, h: number): THREE.Texture | null {
