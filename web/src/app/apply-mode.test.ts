@@ -27,7 +27,9 @@ import {
   flashModeKeptPrevious,
   flashModeLoadFailed,
   initModeSwitchStatusStrip,
+  modeSwitchStatusStacksAboveModals,
 } from "./mode-switch-message";
+import { askUserMedia, resetMediaAsk } from "../ui/media-ask";
 import {
   getLastConsentedModeId as readLastConsentedModeId,
   resetModeSwitchStateForTests,
@@ -117,6 +119,7 @@ function buildHost(
   vizHud.setActive("stereo-gram", "Stereo");
 
   let live = "plugin:stereo-gram";
+  let skyPromptPack = "";
   const rotoSpec: PluginView = {
     id: "roto-proto",
     name: "Roto",
@@ -136,7 +139,11 @@ function buildHost(
   };
 
   const bindThisView = vi.fn();
-  const host: ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud } = {
+  const host: ApplyModeHost & {
+    bindThisViewSpy: ReturnType<typeof vi.fn>;
+    vizHud: VizHud;
+    skyPromptPack: () => string;
+  } = {
     modeById: (id) => modes[id]!,
     optsFor: () => ({}),
     getLiveMode: () => live,
@@ -148,7 +155,7 @@ function buildHost(
     skySpecForMode: (_id, fb) => fb,
     refreshPluginDrive: (spec, modeId) => refreshPluginDriveState(spec, modeId, presentDriveDeps),
     presentDriveDeps,
-    applySkyPrompt: () => {},
+    applySkyPrompt: (m) => { skyPromptPack = m.pluginId ?? m.id; },
     reapplyCommittedModeSurfaces: (modeId) => {
       bindThisView(modeId);
       const spec = specs[modeId] ?? null;
@@ -193,9 +200,10 @@ function buildHost(
       if (kind === "declined") return flashModeKeptPrevious(kept);
       return flashModeLoadFailed(declined.label, kept);
     },
-    focusModePicker: () => { modeSel.focus(); },
+    focusModePicker: () => { modeSel.focusWithRing(); },
     bindThisViewSpy: bindThisView,
     vizHud,
+    skyPromptPack: () => skyPromptPack,
     ...overrides,
   };
   return host;
@@ -263,6 +271,7 @@ describe("applyModeImpl rollback", () => {
     resetModeSwitchAttemptForTests();
     resetPackConsentForTests();
     resetModeSwitchCoordinatorForTests();
+    resetMediaAsk();
     clearModeSwitchStatus();
   });
 
@@ -425,7 +434,7 @@ describe("applyModeImpl rollback", () => {
     const host = buildHost({ ensureReviewed: async (_spec, _signal) => "aborted" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
     expect(isModeSwitchStatusVisible()).toBe(false);
   });
 
@@ -490,7 +499,57 @@ describe("applyModeImpl rollback", () => {
     runApplyUser(host, "plugin:stereo-gram");
     await flushMicrotasks();
     expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
+    expect(host.modeSel.el.classList.contains("focus-return")).toBe(true);
     expect(document.getElementById("modeSwitchStatus")?.textContent).toBe("");
+  });
+
+  it("held consent keeps picker label and sky prompt on previous pack until commit", async () => {
+    const consent = deferConsentForPack("packet-tunnel");
+    const host = buildHost({ ensureReviewed: consent.ensureReviewed });
+    runApply(host, "plugin:packet-tunnel");
+    await consent.whenPending();
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(host.modeSel.el.querySelector(".val .txt")?.textContent).toBe("Stereo");
+    expect(host.skyPromptPack()).toBe("stereo-gram");
+    expect(hudPackLabel()).toBe("Stereo");
+    consent.resolve("ok");
+    await vi.waitFor(() => {
+      expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+      expect(host.skyPromptPack()).toBe("packet-tunnel");
+      expect(hudPackLabel()).toBe("Tunnel");
+    });
+  });
+
+  it("decline does not surface mic prompt gated behind pack consent", async () => {
+    resetMediaAsk();
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn(async () => ({ getTracks: () => [] })) },
+    });
+    const consent = deferConsentForPack("packet-tunnel");
+    const host = buildHost({ ensureReviewed: consent.ensureReviewed });
+    const micPending = askUserMedia({ audio: true }, "pulse microphone");
+    runApply(host, "plugin:packet-tunnel");
+    await consent.whenPending();
+    await Promise.resolve();
+    expect(document.querySelector("[data-media-ask]")).toBeNull();
+    consent.resolve("declined");
+    await flushMicrotasks();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(document.querySelector("[data-media-ask]")).toBeNull();
+    await expect(micPending).resolves.toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("commit focuses picker with visible focus ring", async () => {
+    const consent = deferConsentForPack("packet-tunnel");
+    const host = buildHost({ ensureReviewed: consent.ensureReviewed });
+    runApply(host, "plugin:packet-tunnel");
+    await consent.whenPending();
+    consent.resolve("ok");
+    await vi.waitFor(() => {
+      expect(host.modeSel.el.classList.contains("focus-return")).toBe(true);
+      expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
+    });
   });
 
   it("held scene: last consented pack keeps present ticks while B consent pending", async () => {

@@ -967,7 +967,7 @@ function buildApplyModeHost(): ApplyModeHost {
       if (kind === "declined") return flashModeKeptPrevious(keptLabel);
       return flashModeLoadFailed(declined.label, keptLabel, () => applyMode(declined.id));
     },
-    focusModePicker: () => { modeSel.focus(); },
+    focusModePicker: () => { modeSel.focusWithRing(); },
   };
 }
 

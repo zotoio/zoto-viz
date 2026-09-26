@@ -158,9 +158,6 @@ export function askPluginReview(
     body.append(p1, p2, p3);
     const row = document.createElement("div");
     row.className = "ask-actions";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); finish(null); }
-    };
     const finish = (kind: "reviewed" | "authored" | null) => {
       document.body.classList.remove("modal-open");
       modal.remove();
@@ -193,9 +190,19 @@ export function askPluginReview(
     sheet.append(head, body, row);
     modal.append(back, sheet);
     back.addEventListener("click", () => finish(null));
+<<<<<<< HEAD
+=======
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); finish(null); }
+      if (e.key === "Enter" && !e.repeat && document.activeElement === cancel) {
+        e.preventDefault();
+        finish(null);
+      }
+    };
+>>>>>>> 8bf90a4 (fix(web): UX Pro consent baseline (held scene, status, mic gate, focus))
     document.addEventListener("keydown", onKey, true);
     document.body.classList.add("modal-open");
     document.body.appendChild(modal);
-    reviewed.focus();
+    cancel.focus();
   });
 }
