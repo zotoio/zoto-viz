@@ -1,4 +1,4 @@
-## Revert proof (manual `3386b56` verification)
+## Revert proof (manual `b595974` verification)
 
 | row | red excerpt | green |
 | --- | --- | --- |
