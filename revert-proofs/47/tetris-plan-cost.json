@@ -1,0 +1,7 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-plan-cost.test.ts -t \"600 frames: one plan per spawn and exact placement search totals\"",
+  "testFile": "src/arcade/tetris-plan-cost.test.ts",
+  "testName": "600 frames: one plan per spawn and exact placement search totals",
+  "description": "Re-plan on every host frame while a piece is active.",
+  "excerpt": "AssertionError: expected 601 to be 2 // Object.is equality"
+}

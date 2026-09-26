@@ -1,0 +1,13 @@
+diff --git a/web/src/arcade/tetris-engine.ts b/web/src/arcade/tetris-engine.ts
+index a0f983b..fd15def 100644
+--- a/web/src/arcade/tetris-engine.ts
++++ b/web/src/arcade/tetris-engine.ts
+@@ -362,7 +362,7 @@ export function simulateAutoplay(
+   let lines = 0;
+   let pieces = 0;
+   for (const kind of kinds) {
+-    const plan = bestPlacement(board, kind, scoreFn);
++    const plan = bestPlacement(board, kind === "T" ? "O" : kind, scoreFn);
+     if (!plan) return { lines, toppedOut: true, pieces };
+     const cells = cellsFor(kind, plan.rot);
+     lockCells(board, cells, plan.x, plan.y);

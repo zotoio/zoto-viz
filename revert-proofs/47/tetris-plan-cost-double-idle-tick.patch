@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/scene.ts b/web/src/graph/scene.ts
+index 4f6529b..7696587 100644
+--- a/web/src/graph/scene.ts
++++ b/web/src/graph/scene.ts
+@@ -3503,6 +3503,7 @@ export class NetScene implements HostedView {
+     if (!this.standaloneTileTick) return;
+     const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
+     this.standaloneTileTick(dtSec);
++    this.standaloneTileTick(dtSec);
+   }
+ 
+   private animate(ts: number): void {

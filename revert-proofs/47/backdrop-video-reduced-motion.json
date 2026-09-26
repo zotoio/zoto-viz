@@ -1,0 +1,7 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/graph/backdrop.test.ts -t \"pauses and resumes photo video when prefers-reduced-motion toggles\"",
+  "testFile": "src/graph/backdrop.test.ts",
+  "testName": "pauses and resumes photo video when prefers-reduced-motion toggles",
+  "description": "Ignore prefers-reduced-motion for photo video slots.",
+  "excerpt": "AssertionError: expected \"pause\" to be called at least once"
+}
