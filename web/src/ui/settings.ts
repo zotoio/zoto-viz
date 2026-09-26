@@ -23,7 +23,8 @@ import type { PluginLook, PluginView } from "../plugins/plugin";
 import type { SdmDevice } from "../plugins/nest-cams-look";
 import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
-import { packWallScopeFromAnim, type PackWallScope } from "../plugins/pack-wall-scope";
+import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
+import type { PackWallScope } from "../plugins/instances";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
