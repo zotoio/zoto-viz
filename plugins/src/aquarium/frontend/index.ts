@@ -1,16 +1,21 @@
 /** Photoreal aquarium — host frame drives fish, packets, and SYS murk. */
 
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 import {
   AquariumSim,
   applyConfigActions,
   configActionEdges,
   parseAquariumOptions,
-  type AquariumHostFrame,
   type AquariumOptions,
 } from "./aquarium";
 
+type AquariumFrame = Pick<
+  VizDataFrame,
+  "t" | "dt" | "audio" | "talkers" | "packets" | "demo" | "sys"
+>;
+
 declare const zoto: {
-  onFrame: ((frame: AquariumHostFrame) => void) | null;
+  onFrame: ((frame: AquariumFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[] | Float32Array) => void;

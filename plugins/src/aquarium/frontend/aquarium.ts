@@ -3,6 +3,7 @@
  * Procedural only; no bundled assets.
  */
 
+import type { VizDataFrame, VizPacketSample, VizTalkerSample } from "../../../sdk/viz-contract";
 import {
   assignTalkerSlots,
   slottedTalkerIds,
@@ -48,16 +49,11 @@ export interface AquariumOptions {
   reefSpecies: number[];
 }
 
-/** Host VizDataFrame slice — no extra fields beyond the real contract. */
-export type AquariumHostFrame = {
-  t: number;
-  dt: number;
-  audio: number;
-  talkers: { id: string; rate: number; role: string }[];
-  packets: { proto: string; size: number; field: number }[];
-  sys?: { failed: number };
-  demo?: boolean;
-};
+/** Host {@link VizDataFrame} slices the aquarium reads (type-only SDK contract). */
+export type AquariumHostFrame = Pick<
+  VizDataFrame,
+  "t" | "dt" | "audio" | "talkers" | "packets" | "demo" | "sys"
+>;
 
 export const FAIL_MURK_THRESHOLD = 0.35;
 export const PACKET_FRAME_CAP = 8;
@@ -446,8 +442,8 @@ export function vigorFromRate(rate: number): number {
   return clamp01(rate / 220);
 }
 
-export type TalkerRow = AquariumHostFrame["talkers"][number];
-export type PacketRow = AquariumHostFrame["packets"][number];
+export type TalkerRow = VizTalkerSample;
+export type PacketRow = VizPacketSample;
 
 interface FishBody {
   id: string;
