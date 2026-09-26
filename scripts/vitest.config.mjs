@@ -11,7 +11,10 @@ export default {
   cacheDir: path.join(repoRoot, "web", "node_modules", ".vite"),
   test: {
     environment: "node",
-    include: [path.join(scriptsDir, "**/*.test.ts")],
+    include: [
+      path.join(repoRoot, "web", "src", "**/*.test.ts"),
+      path.join(scriptsDir, "**/*.test.ts"),
+    ],
     testTimeout: 120_000,
     fileParallelism: false,
   },
