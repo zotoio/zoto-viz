@@ -1,0 +1,15 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 48c5704..e77882a 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -266,7 +266,9 @@ export class RenderHost {
+   }
+ 
+   driveShaderFallback(tileId: string, frame: VizDataFrame): void {
+-    this.tileSlot(tileId).fallback?.frame(frame);
++    const slot = this.tileSlot(tileId);
++    slot.packFallbackFn?.(frame);
++    slot.fallback?.frame(frame);
+   }
+ 
+   get gfxWallNotice(): GfxWallNotice {

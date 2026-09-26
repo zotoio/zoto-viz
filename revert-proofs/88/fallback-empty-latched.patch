@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
+index 1d182a2..2c58d4b 100644
+--- a/web/src/graph/tile-shader-fallback.ts
++++ b/web/src/graph/tile-shader-fallback.ts
+@@ -74,7 +74,6 @@ export class TileShaderFallback {
+     try {
+       const next = this.fallbackText(frame);
+       if (!next.trim()) {
+-        this.latchGeneric();
+         return;
+       }
+       if (next !== this.lastWritten) this.writeText(next);

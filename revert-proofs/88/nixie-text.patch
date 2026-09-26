@@ -1,0 +1,32 @@
+diff --git a/plugins/src/nixie-clock/frontend/tubes.ts b/plugins/src/nixie-clock/frontend/tubes.ts
+index 00b97a7..5d705ea 100644
+--- a/plugins/src/nixie-clock/frontend/tubes.ts
++++ b/plugins/src/nixie-clock/frontend/tubes.ts
+@@ -83,6 +83,8 @@ export function nixieClockParts(
+ }
+ 
+ /** Build a fallback line; caller owns scratch + cache (one closure per tile). */
++let nixieFallbackKey = -1;
++let nixieFallbackCached = "";
+ export function formatNixieFallbackLine(
+   date: Date,
+   look: NixieLook,
+@@ -93,12 +95,14 @@ export function formatNixieFallbackLine(
+   const key = look.seconds
+     ? scratch.h * 3600 + scratch.m * 60 + scratch.s
+     : scratch.h * 3600 + scratch.m * 60;
+-  if (key === cache.key) return cache.text;
+-  cache.key = key;
++  if (key === nixieFallbackKey) return nixieFallbackCached;
++  nixieFallbackKey = key;
+   const parts = [nixiePair(scratch.h), nixiePair(scratch.m)];
+   if (look.seconds) parts.push(nixiePair(scratch.s));
+-  cache.text = parts.join(" ");
+-  return cache.text;
++  nixieFallbackCached = parts.join(" ");
++  cache.key = key;
++  cache.text = nixieFallbackCached;
++  return nixieFallbackCached;
+ }
+ 
+ export function packNixieBuffer(

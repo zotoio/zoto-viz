@@ -1,0 +1,34 @@
+diff --git a/web/src/plugins/viz-pack-fallback.ts b/web/src/plugins/viz-pack-fallback.ts
+index bdd3708..5f124cb 100644
+--- a/web/src/plugins/viz-pack-fallback.ts
++++ b/web/src/plugins/viz-pack-fallback.ts
+@@ -3,23 +3,11 @@ import type { VizPackFallbackText } from "../graph/tile-shader-fallback";
+ import { formatNixieFallbackLine, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+ import { packetTunnelFallbackText } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
+ 
+-function nixiePackFallback(look?: Record<string, string> | null): VizPackFallbackText {
+-  const parsed = parseNixieLook(look);
+-  const scratch = { h: 0, m: 0, s: 0 };
+-  const cache = { key: -1, text: "" };
+-  const date = new Date(0);
+-  return (frame: VizDataFrame) => {
+-    date.setTime(frame.t * 1000);
+-    return formatNixieFallbackLine(date, parsed, scratch, cache);
+-  };
+-}
++const PACK_FALLBACK: Partial<Record<string, VizPackFallbackText>> = {
++  "nixie-clock": (frame) => formatNixieFallbackLine(new Date(frame.t * 1000), parseNixieLook(), {h:0,m:0,s:0}, {key:-1,text:""}),
++  "packet-tunnel": (frame) => packetTunnelFallbackText(frame),
++};
+ 
+-/** One closure per tile at mount; `look` is parsed once for nixie-clock. */
+-export function packFallbackText(
+-  packId: string,
+-  look?: Record<string, string> | null,
+-): VizPackFallbackText | undefined {
+-  if (packId === "nixie-clock") return nixiePackFallback(look);
+-  if (packId === "packet-tunnel") return (frame) => packetTunnelFallbackText(frame);
+-  return undefined;
++export function packFallbackText(packId: string, _look?: Record<string, string> | null): VizPackFallbackText | undefined {
++  return PACK_FALLBACK[packId];
+ }
