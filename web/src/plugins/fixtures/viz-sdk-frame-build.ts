@@ -233,8 +233,8 @@ export function scrubVizDataFrame(
     })),
     ...(frame.links?.length ? {
       links: frame.links.map((l) => ({
-        src: map.get(l.src) ?? scrubString(l.src, map),
-        dst: map.get(l.dst) ?? scrubString(l.dst, map),
+        src: scrubStructuralId(l.src, map),
+        dst: scrubStructuralId(l.dst, map),
         rate: l.rate,
       })),
     } : {}),
