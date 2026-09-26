@@ -4,19 +4,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
 
-export type PackLintRule =
-  | "sandbox-escape"
-  | "host-import"
-  | "cross-pack-import"
-  | "inline-zoto-declare"
-  | "get-config-in-on-frame";
-
-export interface PackLintViolation {
-  /** Repo-relative path (plugins/src/...) */
-  file: string;
-  rule: PackLintRule;
-}
+export type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
 
 const PACKS_ROOT = "plugins/src";
 const SDK_ROOT = "plugins/sdk";
@@ -178,6 +168,16 @@ function lintPackSource(
   });
 }
 
+import { scanWebSrc } from "./pack-lint-host";
+
+export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
+  const merged = [...scanPluginsSrc(repoRoot), ...scanWebSrc(repoRoot)];
+  merged.sort((a, b) => (a.file === b.file ? a.rule.localeCompare(b.rule) : a.file.localeCompare(b.file)));
+  return merged;
+}
+
+export { scanHostLintFixture, scanWebSrc } from "./pack-lint-host";
+
 export function scanPluginsSrc(repoRoot: string): PackLintViolation[] {
   const packsRoot = path.join(repoRoot, PACKS_ROOT);
   const violations: PackLintViolation[] = [];
@@ -201,8 +201,6 @@ export function scanPackLintFixture(
   return lintPackSource(repoRel, text, packId, repoRoot);
 }
 
-export type PackLintBaseline = { violations: PackLintViolation[] };
-
 export function loadBaseline(repoRoot: string): PackLintBaseline {
   const p = path.join(repoRoot, SDK_ROOT, "pack-lint-baseline.json");
   return JSON.parse(fs.readFileSync(p, "utf8")) as PackLintBaseline;
@@ -217,14 +215,32 @@ export function assertBaselineGuard(
   return { newViolations, ok: newViolations.length === 0 };
 }
 
-/** Count baseline violations per pack id for reporting. */
+/** Count baseline violations per pack id for reporting (plugins/src only). */
 export function baselineCountsByPack(baseline: PackLintBaseline): Record<string, Partial<Record<PackLintRule, number>>> {
   const out: Record<string, Partial<Record<PackLintRule, number>>> = {};
   for (const v of baseline.violations) {
     const m = v.file.match(/^plugins\/src\/([^/]+)\//);
-    const pack = m?.[1] ?? "(unknown)";
+    if (!m) continue;
+    const pack = m[1]!;
     out[pack] ??= {};
     out[pack][v.rule] = (out[pack][v.rule] ?? 0) + 1;
   }
   return out;
+}
+
+/** Total baseline hits per rule (pack + host). */
+export function baselineCountsByRule(baseline: PackLintBaseline): Partial<Record<PackLintRule, number>> {
+  const out: Partial<Record<PackLintRule, number>> = {};
+  for (const v of baseline.violations) {
+    out[v.rule] = (out[v.rule] ?? 0) + 1;
+  }
+  return out;
+}
+
+/** Host files baselined for `host-imports-pack-src`. */
+export function baselineHostPackImports(baseline: PackLintBaseline): string[] {
+  return baseline.violations
+    .filter((v) => v.rule === "host-imports-pack-src")
+    .map((v) => v.file)
+    .sort();
 }

@@ -79,6 +79,70 @@
     {
       "file": "plugins/src/talker-storm/frontend/index.ts",
       "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "web/src/app/main.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/audio/plugin-sfx.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/backrooms.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/cypher-cic.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/dogfood.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/hn-rain-crawl.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/hn-rain-stills.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/hn-term-teletype.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/marble-run.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/nixie-clock.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/stereo-ai.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/stereo-frame.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/stereo-recipe.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/syscon-telemetry.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-fixtures.test.ts",
+      "rule": "host-imports-pack-src"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-host.ts",
+      "rule": "host-imports-pack-src"
     }
   ]
 }
