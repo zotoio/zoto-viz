@@ -1,24 +1,14 @@
---- a/service/access.py
-+++ b/service/access.py
-@@ -77,20 +77,9 @@ def pack_asset_token_ok(request: web.Request) -> bool:
-     frame_id, _mac = parsed_tok
-     reg = pack_asset_frames.registry_for_app(request.app)
-     live = reg.is_live(sid, frame_id)
--    if pack_asset_tokens.verify_pack_asset_token(
--        secret,
--        pack_id,
--        token,
--        session_id=sid,
--        frame_live=live,
--    ):
--        return True
--    # Sandbox bootstrap token is minted for ``_sandbox`` but CSP only allows that path prefix.
--    if pack_id == "_sandbox":
--        return False
-     return pack_asset_tokens.verify_pack_asset_token(
-         secret,
--        "_sandbox",
-+        pack_id,
-         token,
-         session_id=sid,
-         frame_live=live,
+diff --git a/service/pack_assets.py b/service/pack_assets.py
+index b91d376..d128700 100644
+--- a/service/pack_assets.py
++++ b/service/pack_assets.py
+@@ -216,9 +216,6 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
+     parsed = access.parse_pack_assets_path(request.path or "")
+     if not parsed:
+         return _pack_not_found()
+-    if not access.pack_asset_token_ok(request):
+-        return _pack_token_invalid()
+-
+     _token, pack_id, raw_tail = parsed
+     if not _pack_id_ok(pack_id):
+         return _pack_not_found()
