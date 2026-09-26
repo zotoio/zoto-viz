@@ -1,0 +1,24 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index cf8f533..da4bff0 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -313,7 +313,6 @@ export class RenderHost {
+     pluginId: string,
+     releaseBitmap = true,
+   ): Viewport | null {
+-    try {
+       if (!this.viewBoxInto(mirror, this.viewBoxScratch)) return null;
+       const dst = this.viewBoxScratch;
+       if (dst.w < 2 || dst.h < 2) return null;
+@@ -341,10 +340,8 @@ export class RenderHost {
+       const tex = gpu.uploadFrame(bitmap);
+       if (!tex) return null;
+       gpu.present(rd, tex, fill, dst, aspect);
+-      return this.writeFbViewport(dst, pr);
+-    } finally {
+       if (releaseBitmap) bitmap.close();
+-    }
++      return this.writeFbViewport(dst, pr);
+   }
+ 
+   /** Surface letterbox only (no bitmap yet, no publish failure). */

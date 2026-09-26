@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/sandbox-bitmap-ownership.test.ts",
+  "testName": "SandboxBitmapLane bitmap ownership > closed equals created on sub-2px guard and on normal present (one close each)",
+  "description": "Scene presents via lane.drawMirror so the host owns a single close; lane clearPendingAfterPresent does not double-close."
+}
