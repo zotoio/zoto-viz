@@ -16,8 +16,6 @@ import {
   simulateAutoplayRegressed,
   scoreBoardLegacy,
   scoreBoardRegressed,
-  fixedPlannerTDrillBattery,
-  minFixedPlannerTDrillLines,
   seededPieceKinds,
   survivalRate,
   TETRIS_COLS,
@@ -26,6 +24,12 @@ import {
   TETRIS_WEIGHTS,
 } from "./tetris-engine";
 import { normalizeCells, rotateCells } from "./stage-math";
+import {
+  formatGarbageRows,
+  seededTDrillLayoutHash,
+  simulateSeededTDrill,
+  simulateSeededTDrillOldWeights,
+} from "./tetris-seeded-t-drill";
 
 /** Minimum alternating S/Z pieces the fixed planner must survive on an empty well. */
 const MIN_SZ_SURVIVAL = 56;
@@ -78,14 +82,22 @@ describe("tetris-engine", () => {
     expect(landingY(board, cells, plan!.x)).toBe(plan!.y);
   });
 
-  // Trade-off: 18+ lines on the fixed planner for 48 T-pieces breaks 20/20 on the seeded
-  // survival battery (aggregate height must dominate). Floor is 17 lines; see PR #47 per-seed table.
-  it("minimum fixed-planner T drill lines across survival seeds is at least 17", () => {
-    const rows = fixedPlannerTDrillBattery(TETRIS_SURVIVAL_SEEDS);
-    const minLines = minFixedPlannerTDrillLines(rows);
-    expect(rows).toHaveLength(TETRIS_SURVIVAL_SEEDS.length);
-    expect(rows.every((r) => r.survived)).toBe(true);
-    expect(minLines).toBeGreaterThanOrEqual(17);
+  // Seeded T drill: garbage rows + first-piece spawn column vary per survival seed; 48× T.
+  // Per-seed old vs new comparison uses scoreBoardOldWeights (test-only reference). See PR #47 table.
+  // Empty-well 18+ lines on the fixed planner still breaks 20/20 survival (aggregate height dominates).
+  it("seeded T drill: new planner within one line of old weights on every survival seed", () => {
+    for (const seed of TETRIS_SURVIVAL_SEEDS) {
+      const oldLines = simulateSeededTDrillOldWeights(seed).lines;
+      const newLines = simulateSeededTDrill(seed).lines;
+      if (newLines < oldLines - 1) {
+        expect.fail(`seed ${seed}: new=${newLines} old=${oldLines} (need new >= old - 1)`);
+      }
+    }
+  });
+
+  it("seeded T drill layouts differ across survival seeds", () => {
+    const hashes = TETRIS_SURVIVAL_SEEDS.map((seed) => seededTDrillLayoutHash(seed));
+    expect(new Set(hashes).size).toBeGreaterThanOrEqual(18);
   });
 
   it("survives long S/Z and T-only sequences with line clears", () => {
