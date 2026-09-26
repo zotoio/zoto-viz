@@ -596,12 +596,7 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
     const extra = overlays.get(spec.id);
     const merged = extra ? mergeOverlayPins(spec, extra) : spec;
     for (const view of expandPluginInstances(merged)) {
-      if (view.look) {
-        const modeId = pluginViewId(view.id, view.instanceId);
-        nextLooks.set(modeId, view.look);
-        const host = view.engine ? hostEngine(view.engine) : undefined;
-        if (host?.standalone) nextLooks.set(host.id, view.look);
-      }
+      if (view.look) nextLooks.set(pluginViewId(view.id, view.instanceId), view.look);
       if (!view.engine) continue;
       try {
         modes.push(compilePlugin(view));

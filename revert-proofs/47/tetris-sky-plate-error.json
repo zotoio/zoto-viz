@@ -1,6 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/graph/backdrop.test.ts",
-  "testFile": "src/graph/backdrop.test.ts",
-  "testName": "shows the shared error copy when every plate candidate fails",
-  "description": "Swallow loadHtmlImage rejections so missing plate assets stay silent black."
-}

@@ -1,1 +1,0 @@
-// web/src/graph/backdrop.ts — in loadPhotoStill catch, replace tryPhotoSrc chain with: }).catch(() => undefined);

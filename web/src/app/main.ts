@@ -300,9 +300,7 @@ function pinViewLook(): boolean {
   const m = modeById(modeSel.value);
   if (m.stageOnly || m.kind === "demo") return true;
   const look = lookForMode(modeSel.value);
-  if (look?.backdrop === "plugin" || !!look?.stageOnly) return true;
-  if (m.standalone && look?.backdrop && look.backdrop !== "none") return true;
-  return false;
+  return look?.backdrop === "plugin" || !!look?.stageOnly;
 }
 
 /** Pin theme / sky / floor / modulation from the active view's plugin YAML without writing the profile.
@@ -375,17 +373,7 @@ function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
 }
 let stereoBins: number[] = [];
 let stereoBinsAt = 0;
-
-function syncSkyPlateBanner(): void {
-  const el = document.getElementById("sky-plate-status");
-  if (!el) return;
-  const msg = scene.skyPlateError();
-  el.hidden = !msg;
-  el.textContent = msg ?? "";
-}
-
 scene.afterLook = () => {
-  syncSkyPlateBanner();
   const mode = modeById(modeSel.value);
   if (mode.pluginId === "backrooms" && vizWriter) {
     // The director owns camera, creature and maze on the sky clock; the sound bed reads the same track.

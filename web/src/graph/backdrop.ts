@@ -9,7 +9,6 @@ import { wrapAgentSky } from "./sky-agent";
 import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
 import { prefersReducedMotion, subscribeReducedMotion } from "../core/motion";
-import { SKY_PLATE_LOAD_ERROR } from "../core/sky-plate-copy";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -811,9 +810,6 @@ export class Backdrop {
   private photoKenBurnsDesired = false;
   private photoLoadGen = 0;
   private photoVideoUrl: string | null = null;
-  private photoPlateErrorMsg: string | null = null;
-  private photoPlateW = 0;
-  private photoPlateH = 0;
   private readonly unsubscribeMotion = subscribeReducedMotion(() => this.applyReducedMotion());
   private pluginMat: THREE.ShaderMaterial | null = null;
   private pluginId: string | null = null;
@@ -1038,56 +1034,27 @@ export class Backdrop {
 
   /** Load a photographic plate onto the full-screen sky (cover-fit, no webcam). */
   loadPhoto(url: string): void {
-    const gen = ++this.photoLoadGen;
-    this.photoPlateErrorMsg = null;
-    this.loadPhotoStill(url, gen, [url], 0);
+    this.loadPhotoStill(url, ++this.photoLoadGen);
   }
 
   /** Prefer a looping video plate, then the JPEG poster. Never opens the webcam. */
   loadPhotoSky(kind: PhotoSkyKind): void {
     const gen = ++this.photoLoadGen;
-    this.photoPlateErrorMsg = null;
     this.tryPhotoSrc(photoSkyCandidates(kind), 0, gen);
-  }
-
-  /** User-visible plate load failure (see {@link SKY_PLATE_LOAD_ERROR}). */
-  photoPlateError(): string | null {
-    return this.photoPlateErrorMsg;
-  }
-
-  isPhotoPlateBound(): boolean {
-    return isPhotoSky(this.kind) && this.photoPlateW > 0 && this.photoPlateH > 0;
-  }
-
-  photoPlateDimensions(): { width: number; height: number } {
-    return { width: this.photoPlateW, height: this.photoPlateH };
-  }
-
-  private failPhotoPlate(gen: number, detail: string): void {
-    if (gen !== this.photoLoadGen) return;
-    this.photoPlateErrorMsg = SKY_PLATE_LOAD_ERROR;
-    console.error(`zoto-viz: ${SKY_PLATE_LOAD_ERROR} (${detail})`);
-    this.photoKenBurnsDesired = false;
-    this.photoMat.uniforms.uAnimate.value = 0;
-    this.photoMat.uniforms.uBright.value = 0.45;
-    if (isPhotoSky(this.kind)) this.photoMesh.visible = true;
   }
 
   private tryPhotoSrc(urls: string[], i: number, gen: number): void {
     if (gen !== this.photoLoadGen) return;
     const url = urls[i];
-    if (!url) {
-      this.failPhotoPlate(gen, urls.filter(Boolean).join(" → ") || "no candidates");
-      return;
-    }
+    if (!url) return;
     if (isPhotoVideoUrl(url)) {
       this.loadPhotoVideo(url, gen, () => this.tryPhotoSrc(urls, i + 1, gen));
       return;
     }
-    this.loadPhotoStill(url, gen, urls, i);
+    this.loadPhotoStill(url, gen);
   }
 
-  private loadPhotoStill(url: string, gen: number, urls: string[], index: number): void {
+  private loadPhotoStill(url: string, gen: number): void {
     const hit = this.photoCache.get(url);
     if (hit) {
       if (gen !== this.photoLoadGen) return;
@@ -1100,10 +1067,7 @@ export class Backdrop {
       this.photoCache.set(url, t);
       if (gen !== this.photoLoadGen) return;
       this.bindPhoto(t, true, url);
-    }).catch((err) => {
-      console.error("zoto-viz: sky plate still load failed", url, err);
-      this.tryPhotoSrc(urls, index + 1, gen);
-    });
+    }).catch(() => undefined);
   }
 
   private loadPhotoVideo(url: string, gen: number, onMiss: () => void): void {
@@ -1297,11 +1261,6 @@ export class Backdrop {
     const w = img.videoWidth || img.naturalWidth || img.width || 16;
     const h = img.videoHeight || img.naturalHeight || img.height || 9;
     (this.photoMat.uniforms.uVideoSize.value as THREE.Vector2).set(w, h);
-    if (w > 0 && h > 0) {
-      this.photoPlateW = w;
-      this.photoPlateH = h;
-      this.photoPlateErrorMsg = null;
-    }
   }
 
   private applyFrag(src: string): void {

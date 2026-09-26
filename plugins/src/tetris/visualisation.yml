@@ -1,8 +1,7 @@
 engine: tetris
 look:
   theme: phosphor
-  backdrop: meadow
-  stageOnly: true
+  backdrop: none
   themeCycle: 'off'
 idle:
   fixture: host
