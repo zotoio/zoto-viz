@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 686ed9c..eeeeeee 100644
+index 3b59712..19ec5c4 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1746,6 +1746,9 @@ export class Settings {
+@@ -1738,6 +1738,9 @@ export class Settings {
      this.persistAnim();
      this.animUi?.syncTiles();
      this.syncPackScopeNoteFromAnim();
