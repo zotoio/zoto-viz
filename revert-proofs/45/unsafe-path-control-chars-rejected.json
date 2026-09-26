@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_boundary_secure.py",
+  "testName": "test_secure_dry_run_rejects_newline_in_filename",
+  "description": "Reject changed-file paths with control characters or traversal."
+}

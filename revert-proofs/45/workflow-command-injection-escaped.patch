@@ -1,0 +1,11 @@
+--- a/scripts/pack_boundary_safe_io.py
++++ b/scripts/pack_boundary_safe_io.py
+@@ -99,7 +99,7 @@
+     @staticmethod
+     def escape_line(line: str) -> str:
+         if line.startswith("::"):
+-            return " " + line
++            return line
+         return line
+ 
+     def write_lines(self, lines: list[str], *, stream: object = sys.stdout) -> None:

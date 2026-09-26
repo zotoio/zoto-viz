@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_boundary_secure.py",
+  "testName": "test_secure_dry_run_weakened_pr_checker_on_disk_still_fails",
+  "description": "Host-infra gate in run_check is not bypassed by PR-head checker content."
+}

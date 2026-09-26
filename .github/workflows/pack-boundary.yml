@@ -1,8 +1,6 @@
 name: pack-boundary
 
 on:
-  # pull_request: workflow from PR head so the check runs before merge (same secure job).
-  # pull_request_target: after merge, grades from base-branch workflow (no self-grade).
   pull_request:
     types:
       - opened
@@ -26,9 +24,9 @@ permissions:
 
 jobs:
   pack-boundary:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
-      # Base ref only — never checkout or fetch the PR head (HEAD_SHA is API-only below).
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
@@ -37,17 +35,43 @@ jobs:
         env:
           PACK_BOUNDARY_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          echo "pack-boundary: checked out PR base ref only (no PR head checkout or git fetch)."
-          echo "pack-boundary: git HEAD=$(git rev-parse HEAD) (current base branch tip; may differ from pull_request.base.sha if main moved — expected)"
+          echo "pack-boundary: base checkout only (required check)."
+          echo "pack-boundary: git HEAD=$(git rev-parse HEAD)"
           echo "pack-boundary: pull_request.base.sha=${PACK_BOUNDARY_BASE_SHA}"
-      - name: Enforce pack PR boundary
+      - name: Fetch PR head tree (read-only data, not executed)
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR_HEAD_DIR="${GITHUB_WORKSPACE}/_pr_head"
+          mkdir -p "${PR_HEAD_DIR}"
+          git -c protocol.file.allow=never fetch --no-tags --depth=1 \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${HEAD_REPO}.git" \
+            "${HEAD_SHA}"
+          git -c protocol.file.allow=never archive --format=tar FETCH_HEAD | tar -x -C "${PR_HEAD_DIR}"
+      - name: Enforce pack PR boundary (secure)
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PACK_BOUNDARY_PR_HEAD_DIR: ${{ github.workspace }}/_pr_head
+          PACK_BOUNDARY_BASE_ROOT: ${{ github.workspace }}
           PACK_BOUNDARY_EVENT_ACTION: ${{ github.event.action }}
           PACK_BOUNDARY_EVENT_LABEL_NAME: ${{ github.event.label.name }}
           PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ${{ github.event.pull_request.updated_at }}
-        run: python3 scripts/check_pack_pr_boundary.py --from-github-api
+        run: python3 scripts/check_pack_pr_boundary.py --secure-ci
+
+  pack-boundary-preview:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
+      - name: Preview pack-boundary (informational only)
+        run: |
+          echo "pack-boundary-preview: informational job; branch protection must require"
+          echo "pack-boundary (pull_request_target), not this preview job."

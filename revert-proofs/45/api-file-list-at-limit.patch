@@ -1,5 +1,5 @@
 diff --git a/scripts/check_pack_pr_boundary.py b/scripts/check_pack_pr_boundary.py
-index 06ac478..e96c33d 100755
+index 06ac478..96a03fb 100755
 --- a/scripts/check_pack_pr_boundary.py
 +++ b/scripts/check_pack_pr_boundary.py
 @@ -14,9 +14,17 @@ import urllib.error
@@ -21,27 +21,15 @@ index 06ac478..e96c33d 100755
  PACK_SRC_RE = re.compile(r"^plugins/src/([^/]+)/")
  ALLOWED_SCHEMA_PATH = "tests/test_plugin_schema.py"
  ALLOWED_CATALOG_PATH = "tests/test_plugin_catalog.py"
-@@ -629,9 +637,9 @@ def fetch_pull_changed_files_count(repo: str, pull_number: int, token: str) -> i
- def validate_pull_changed_files_complete(
-     listed_paths: list[str], reported_count: int
+@@ -631,7 +639,7 @@ def validate_pull_changed_files_complete(
  ) -> str | None:
--    if reported_count > GITHUB_PULL_FILES_API_MAX:
-+    if reported_count >= GITHUB_PULL_FILES_API_MAX:
+     if reported_count > GITHUB_PULL_FILES_API_MAX:
          return (
 -            f"PR changes {reported_count} files (>{GITHUB_PULL_FILES_API_MAX}); "
 +            f"PR changes {reported_count} files (>={GITHUB_PULL_FILES_API_MAX}); "
              "cannot verify the full change set via the pulls/files API"
          )
      if reported_count != len(listed_paths):
-@@ -665,7 +673,7 @@ def fetch_pull_changed_files(repo: str, pull_number: int, token: str) -> list[st
-     pages: list[list[dict]] = []
-     while url:
-         page, url = _github_request(url, token)
--        if not isinstance(page, list):
-+        if False and not isinstance(page, list):
-             raise ValueError("pulls/files API returned a non-array page")
-         pages.append(page)
-     return paths_from_pull_files_pages(pages)
 @@ -712,6 +720,95 @@ def load_file_pair_from_api(
      )
  

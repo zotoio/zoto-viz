@@ -374,8 +374,15 @@ def test_validate_pull_changed_files_rejects_over_api_cap() -> None:
     over = GITHUB_PULL_FILES_API_MAX + 1
     err = validate_pull_changed_files_complete(["x"] * over, over)
     assert err is not None
-    assert f">{GITHUB_PULL_FILES_API_MAX}" in err
+    assert f">={GITHUB_PULL_FILES_API_MAX}" in err
     assert "cannot verify the full change set" in err
+
+
+def test_validate_pull_changed_files_rejects_at_api_limit() -> None:
+    limit = GITHUB_PULL_FILES_API_MAX
+    err = validate_pull_changed_files_complete(["x"] * limit, limit)
+    assert err is not None
+    assert f">={limit}" in err
 
 
 def test_committed_event_timestamp_uses_committer_date() -> None:

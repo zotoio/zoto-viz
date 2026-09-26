@@ -2,6 +2,7 @@
 """Generate and verify revert-proofs/45 sidecars for PR #45 regression tests."""
 from __future__ import annotations
 
+import difflib
 import json
 import shutil
 import subprocess
@@ -55,8 +56,8 @@ ROWS: list[Row] = [
         "scripts/check_pack_pr_boundary.py",
         lambda t: replace_once(
             t,
-            "    if reported_count > GITHUB_PULL_FILES_API_MAX:",
-            "    if False and reported_count > GITHUB_PULL_FILES_API_MAX:",
+            "    if reported_count >= GITHUB_PULL_FILES_API_MAX:",
+            "    if False and reported_count >= GITHUB_PULL_FILES_API_MAX:",
         ),
     ),
     Row(
@@ -265,6 +266,84 @@ ROWS: list[Row] = [
         ),
     ),
     Row(
+        "pr-head-symlink-rejected",
+        "pytest",
+        "tests/test_pack_boundary_secure.py",
+        "test_secure_dry_run_rejects_symlink_in_pr_head",
+        "lstat PR head paths and reject symlinks under the PR tree.",
+        "scripts/pack_boundary_safe_io.py",
+        lambda t: replace_once(
+            t,
+            "    if stat.S_ISLNK(st.st_mode):",
+            "    if False and stat.S_ISLNK(st.st_mode):",
+        ),
+    ),
+    Row(
+        "workflow-command-injection-escaped",
+        "pytest",
+        "tests/test_pack_boundary_secure.py",
+        "test_secure_dry_run_workflow_command_injection_escaped",
+        "Escape PR-derived lines that start with :: before printing.",
+        "scripts/pack_boundary_safe_io.py",
+        lambda t: replace_once(
+            t,
+            '            return " " + line',
+            "            return line",
+        ),
+    ),
+    Row(
+        "unsafe-path-control-chars-rejected",
+        "pytest",
+        "tests/test_pack_boundary_secure.py",
+        "test_secure_dry_run_rejects_newline_in_filename",
+        "Reject changed-file paths with control characters or traversal.",
+        "scripts/pack_boundary_safe_io.py",
+        lambda t: replace_once(
+            t,
+            "    if path_has_control_chars(path):",
+            "    if False and path_has_control_chars(path):",
+        ),
+    ),
+    Row(
+        "pr-head-file-size-cap",
+        "pytest",
+        "tests/test_pack_boundary_secure.py",
+        "test_secure_dry_run_rejects_oversized_pr_head_file",
+        "Fail when a PR head file exceeds PACK_BOUNDARY_MAX_FILE_BYTES.",
+        "scripts/pack_boundary_safe_io.py",
+        lambda t: replace_once(
+            t,
+            "    if size > max_bytes:",
+            "    if False and size > max_bytes:",
+        ),
+    ),
+    Row(
+        "api-file-list-at-limit",
+        "pytest",
+        "tests/test_pack_boundary_secure.py",
+        "test_secure_dry_run_rejects_at_api_file_limit",
+        "Fail closed when changed_files reaches the pulls/files API ceiling.",
+        "scripts/check_pack_pr_boundary.py",
+        lambda t: replace_once(
+            t,
+            "    if reported_count >= GITHUB_PULL_FILES_API_MAX:",
+            "    if reported_count > GITHUB_PULL_FILES_API_MAX:",
+        ),
+    ),
+    Row(
+        "weakened-pr-checker-on-disk-still-fails",
+        "pytest",
+        "tests/test_pack_boundary_secure.py",
+        "test_secure_dry_run_weakened_pr_checker_on_disk_still_fails",
+        "Host-infra gate in run_check is not bypassed by PR-head checker content.",
+        "scripts/check_pack_pr_boundary.py",
+        lambda t: replace_once(
+            t,
+            "    if packs and infra_paths and not allow_host_infra:",
+            "    if False and packs and infra_paths and not allow_host_infra:",
+        ),
+    ),
+    Row(
         "merge-workflow-label-event-host-reviewed",
         "pytest",
         "tests/test_pack_pr_boundary.py",
@@ -343,7 +422,16 @@ def main() -> int:
 
             diff = git_diff(row.rel_path)
             if not diff.strip():
-                print(f"{row.slug}: empty git diff", file=sys.stderr)
+                diff = "".join(
+                    difflib.unified_diff(
+                        original.splitlines(keepends=True),
+                        patched.splitlines(keepends=True),
+                        f"a/{row.rel_path}",
+                        f"b/{row.rel_path}",
+                    )
+                )
+            if not diff.strip():
+                print(f"{row.slug}: empty diff", file=sys.stderr)
                 return 1
 
             (OUT / f"{row.slug}.patch").write_text(diff, encoding="utf-8")

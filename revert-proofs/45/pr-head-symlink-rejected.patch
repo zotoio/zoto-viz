@@ -1,0 +1,11 @@
+--- a/scripts/pack_boundary_safe_io.py
++++ b/scripts/pack_boundary_safe_io.py
+@@ -55,7 +55,7 @@
+         return None
+     except OSError as exc:
+         return f"cannot lstat {rel_path!r}: {exc}"
+-    if stat.S_ISLNK(st.st_mode):
++    if False and stat.S_ISLNK(st.st_mode):
+         return f"symlink not allowed in PR head tree: {rel_path!r}"
+     if not stat.S_ISREG(st.st_mode):
+         return f"PR head path is not a regular file: {rel_path!r}"

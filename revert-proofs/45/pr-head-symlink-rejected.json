@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_boundary_secure.py",
+  "testName": "test_secure_dry_run_rejects_symlink_in_pr_head",
+  "description": "lstat PR head paths and reject symlinks under the PR tree."
+}

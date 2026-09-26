@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_boundary_secure.py",
+  "testName": "test_secure_dry_run_rejects_oversized_pr_head_file",
+  "description": "Fail when a PR head file exceeds PACK_BOUNDARY_MAX_FILE_BYTES."
+}
