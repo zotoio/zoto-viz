@@ -1,5 +1,8 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import FRAG from "../../../plugins/src/rocket-car-soccer/sky/fragment.glsl?raw";
 import FRONT from "../../../plugins/src/rocket-car-soccer/frontend/index.ts?raw";
@@ -57,6 +60,9 @@ import { EMPTY_SYS_TELEMETRY } from "../../../plugins/sdk/viz-contract";
 import { RCS_PACKET_SLICE_CAP } from "../../../plugins/src/rocket-car-soccer/frontend/live";
 
 const PACK_ROOT = join(__dirname, "../../../plugins/src/rocket-car-soccer");
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const ESBUILD_BIN = path.join(REPO_ROOT, "web/node_modules/.bin/esbuild");
+const PACK_ENTRY = path.join(REPO_ROOT, "plugins/src/rocket-car-soccer/frontend/index.ts");
 
 function vizFrame(over: Partial<VizDataFrame> = {}): VizDataFrame {
   return {
@@ -515,4 +521,25 @@ describe("rocket-car-soccer pack", () => {
       expect(parseRcsOptions(cfg).teamSize).toBeGreaterThanOrEqual(2);
     }
   });
+
+  it.skipIf(!existsSync(ESBUILD_BIN))(
+    "esbuild bundles the pack entry (type-only viz-contract)",
+    () => {
+      const js = execFileSync(
+        ESBUILD_BIN,
+        [
+          PACK_ENTRY,
+          "--bundle",
+          "--format=esm",
+          "--platform=browser",
+          "--target=es2022",
+          "--external:three",
+          "--external:d3-force-3d",
+        ],
+        { encoding: "utf8" },
+      );
+      expect(js.length).toBeGreaterThan(32);
+      expect(js).not.toMatch(/viz-contract/);
+    },
+  );
 });
