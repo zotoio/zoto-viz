@@ -1,10 +1,6 @@
-/**
- * Host-wrappable plugin sky fragments (pack tests + monitor).
- * Standalone: no imports from web/src.
- */
+import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
 
-export const PLUGIN_SKY_UNIFORMS = ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"] as const;
-
+export { PLUGIN_SKY_UNIFORMS };
 export const PLUGIN_SKY_MAX = 128_000;
 
 /** GLSL preamble for the frozen plugin sky UBO (`zotoVizSlots`). */
