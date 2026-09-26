@@ -4,11 +4,3 @@ idle:
   fixture: host
 look:
   backdrop: plugin
-config:
-  shaderCost:
-    type: number
-    label: shader cost
-    default: 0
-    min: 0
-    max: 64
-    hint: debug loop iterations to stress the GPU governor

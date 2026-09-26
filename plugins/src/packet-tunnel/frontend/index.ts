@@ -13,12 +13,9 @@ declare const zoto: {
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };
 
-declare const window: { __zotoConfig?: Record<string, string> };
-
 zoto.onFrame = (frame) => {
   const sample = packetTunnelSample(frame);
-  const cost = Math.max(0, Math.min(64, Number(window.__zotoConfig?.shaderCost) || 0));
-  zoto.writeBuffer(0, [...sample.buffer, cost]);
+  zoto.writeBuffer(0, sample.buffer);
   zoto.writeUniform("uBright", sample.bright);
   zoto.writeUniform("uAccent", sample.accent);
 };
