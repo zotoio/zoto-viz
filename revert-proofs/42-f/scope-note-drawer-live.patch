@@ -1,12 +1,12 @@
-diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index e776169..ddddddd 100644
---- a/web/src/ui/settings.ts
-+++ b/web/src/ui/settings.ts
-@@ -1738,7 +1738,6 @@ export class Settings {
-     }
-     this.persistAnim();
-     this.animUi?.syncTiles();
--    this.syncPackScopeNoteFromAnim();
+diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
+index 1111111..2222222 100644
+--- a/web/src/plugins/instances.ts
++++ b/web/src/plugins/instances.ts
+@@ -85,7 +85,7 @@ export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string
+     return "Settings apply to this tile only. Instance defaults override shared pack values.";
    }
- 
-   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
+   const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
+-  if (shared < 2) return null;
++  if (shared < 1) return null;
+   return `Changes apply to all ${shared} ${spec.name} tiles on this wall`;
+ }

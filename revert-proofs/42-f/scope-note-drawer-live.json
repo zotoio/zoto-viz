@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/app/duplicate-slot-scope-note-live.test.ts",
-  "testName": "same drawer node, unsaved field, and n=2 then 3 then 1 while the view tab stays open",
-  "description": "Stop syncing pack scope note when mosaic layout changes while the view drawer is open.",
-  "redOutput": "expected 2 to be 3"
+  "testName": "same drawer node, unsaved field, n=2 then 3 then removed at 1, exactly 3 note writes",
+  "description": "Show pack scope note when only one duplicate tile remains (all 1 copy).",
+  "redOutput": "expected [] to have a length of +0 but got 1"
 }
