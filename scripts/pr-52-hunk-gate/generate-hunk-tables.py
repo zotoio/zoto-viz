@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Emit pr-52a-hunk-to-row.md and pr-52b-hunk-to-row.md from sweep + manifest."""
+"""Print hunk-to-row markdown tables (stdout only; proofs dir is patch+json)."""
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import yaml
 
-PROOFS = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
+GATE = Path(__file__).resolve().parent
+PROOFS = ROOT / "revert-proofs" / "52"
 
 HUNK_ROW: dict[str, dict[int, str]] = {
     "web/src/app/main.ts": {
@@ -22,19 +25,10 @@ HUNK_ROW: dict[str, dict[int, str]] = {
         8: "main-viz-hud.test.ts > M2",
         9: "boot wall flags + nixie clock",
     },
-    "web/src/graph/mosaic.ts": dict.fromkeys(
-        range(4), "mosaic-viz-tile-sync.test.ts"
-    ),
-    "web/src/plugins/host.ts": dict.fromkeys(
-        range(2), "host-scope-wire.test.ts"
-    ),
-    "web/src/plugins/typesafe-host.ts": dict.fromkeys(
-        range(7),
-        "typesafe-host-clock-wire.test.ts",
-    ),
-    "web/src/plugins/dogfood-runner.ts": {
-        6: "dogfood-runner-clock-wire.test.ts",
-    },
+    "web/src/graph/mosaic.ts": dict.fromkeys(range(4), "mosaic-viz-tile-sync.test.ts"),
+    "web/src/plugins/host.ts": dict.fromkeys(range(2), "host-scope-wire.test.ts"),
+    "web/src/plugins/typesafe-host.ts": dict.fromkeys(range(7), "typesafe-host-clock-wire.test.ts"),
+    "web/src/plugins/dogfood-runner.ts": {6: "dogfood-runner-clock-wire.test.ts"},
 }
 
 
@@ -67,8 +61,18 @@ def row_for(entry: dict) -> str:
     return "**no row, reason: sweep GREEN — see QE follow-up**"
 
 
+def emit_table(pr: str, rows: list[dict]) -> None:
+    print(f"### Hunk-to-row ({pr})")
+    print()
+    print("| Hunk | Sweep @ HEAD | Row or named test |")
+    print("|------|----------------|-------------------|")
+    for e in rows:
+        print(f"| `{e['hunk']}` | {e['sweep']} | {e['row']} |")
+    print()
+
+
 def main() -> None:
-    manifest = yaml.safe_load((PROOFS / "split-manifest.yml").read_text())
+    manifest = yaml.safe_load((GATE / "split-manifest.yml").read_text())
     sweep = json.loads((PROOFS / "hunk-sweep-results.json").read_text())
     tables: dict[str, list[dict]] = {"52a": [], "52b": []}
 
@@ -84,28 +88,8 @@ def main() -> None:
         )
 
     for pr in ("52a", "52b"):
-        lines = [
-            f"<!-- Paste into PR #{pr} body (QE hunk-to-row gate) -->",
-            f"## Hunk-to-row table ({pr})",
-            "",
-            "Every production hunk under `web/src` (not tests, not proofs) maps to a revert row or named test.",
-            "",
-            "| Hunk | Sweep @ HEAD | Row or named test |",
-            "|------|----------------|-------------------|",
-        ]
-        no_row = []
-        for e in tables[pr]:
-            lines.append(f"| `{e['hunk']}` | {e['sweep']} | {e['row']} |")
-            if "no row" in e["row"]:
-                no_row.append(e["hunk"])
-        lines.append("")
-        lines.append(f"**Sweep:** `python3 revert-proofs/52/run-hunk-sweep.py` (must exit 0).")
-        if no_row:
-            lines.extend(["", "### no row, reason", ""])
-            for h in no_row:
-                lines.append(f"- `{h}`")
-        (PROOFS / f"pr-{pr}-hunk-to-row.md").write_text("\n".join(lines) + "\n")
-        print(f"pr-{pr}-hunk-to-row.md: {len(tables[pr])} hunks, {len(no_row)} unmapped")
+        emit_table(pr, tables[pr])
+    print(f"**Sweep:** `python3 scripts/pr-52-hunk-gate/run-hunk-sweep.py` (must exit 0).", file=sys.stderr)
 
 
 if __name__ == "__main__":

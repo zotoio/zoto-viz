@@ -11,7 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "web"
-PROOFS = Path(__file__).resolve().parent
+GATE = Path(__file__).resolve().parent
+PROOFS = ROOT / "revert-proofs" / "52"
 BASE = "origin/main"
 EXCLUDE = re.compile(r"\.test\.ts$")
 
@@ -34,6 +35,7 @@ EXTRA_TESTS: dict[str, list[str]] = {
         "src/app/main-viz-dev-wall-bad-input.test.ts",
     ],
     "web/src/app/main.ts": [
+        "src/app/main-viz-ubo-wire.test.ts",
         "src/app/main-viz-hud.test.ts",
         "src/app/main-viz-deliver.test.ts",
         "src/app/main-viz-dev-wall-bad-input.test.ts",
@@ -45,11 +47,6 @@ EXTRA_TESTS: dict[str, list[str]] = {
         "src/plugins/nixie-clock-sky.test.ts",
     ],
     "web/src/graph/mosaic.ts": ["src/graph/mosaic-viz-tile-sync.test.ts"],
-    "web/src/app/main.ts": [
-        "src/app/main-viz-ubo-wire.test.ts",
-        "src/app/main-viz-hud.test.ts",
-        "src/app/main-viz-deliver.test.ts",
-    ],
     "web/src/plugins/host.ts": [
         "src/plugins/host.test.ts",
         "src/plugins/host-scope-wire.test.ts",
@@ -171,7 +168,7 @@ def revert_hunk(h: Hunk) -> None:
     if not file_exists_at_base(h.path):
         path.unlink(missing_ok=True)
         return
-    tmp = PROOFS / ".sweep-hunk.patch"
+    tmp = GATE / ".sweep-hunk.patch"
     tmp.write_text(patch_for_hunk(h, reverse=True))
     r = subprocess.run(
         ["git", "apply", "--whitespace=nowarn", str(tmp)],
