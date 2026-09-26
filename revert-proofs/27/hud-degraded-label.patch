@@ -1,9 +1,25 @@
+diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
+index 20a3bae..5170716 100644
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
-@@ -85,7 +85,7 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null
+@@ -87,7 +87,7 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null
    if (talkerPeak > 0) parts.push(`${Math.round(talkerPeak * 100)}% TCP`);
    if (failedUnits > 0) parts.push(`${failedUnits} unit${failedUnits === 1 ? "" : "s"}`);
    if (!parts.length) return null;
 -  return `⚠ DEGRADED ${parts.join(" · ")}`;
 +  return `fail ${parts.join(" · ")}`;
  }
+ 
+ /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
+@@ -298,7 +298,10 @@ export class VizHud {
+   }
+ 
+   tick(input: VizHudTick): void {
+-    if (!this.activeId) return;
++    if (!this.activeId) {
++      this.stageFailEl.hidden = true;
++      return;
++    }
+     const { stats, frame, state, now } = input;
+     const metric = vizHudMetric(this.activeId, frame, state);
+     this.metricLabelEl.textContent = metric.label;

@@ -1,3 +1,5 @@
+diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
+index 20a3bae..071a205 100644
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
 @@ -77,6 +77,8 @@ export interface VizHudTick {
@@ -9,3 +11,15 @@
    let talkerPeak = 0;
    for (const t of frame.talkers) {
      if (typeof t.failed === "number") talkerPeak = Math.max(talkerPeak, t.failed);
+@@ -298,7 +300,10 @@ export class VizHud {
+   }
+ 
+   tick(input: VizHudTick): void {
+-    if (!this.activeId) return;
++    if (!this.activeId) {
++      this.stageFailEl.hidden = true;
++      return;
++    }
+     const { stats, frame, state, now } = input;
+     const metric = vizHudMetric(this.activeId, frame, state);
+     this.metricLabelEl.textContent = metric.label;

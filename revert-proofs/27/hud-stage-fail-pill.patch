@@ -1,6 +1,20 @@
+diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
+index 20a3bae..b8f9444 100644
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
-@@ -324,8 +324,6 @@ export class VizHud {
+@@ -298,7 +298,10 @@ export class VizHud {
+   }
+ 
+   tick(input: VizHudTick): void {
+-    if (!this.activeId) return;
++    if (!this.activeId) {
++      this.stageFailEl.hidden = true;
++      return;
++    }
+     const { stats, frame, state, now } = input;
+     const metric = vizHudMetric(this.activeId, frame, state);
+     this.metricLabelEl.textContent = metric.label;
+@@ -326,8 +329,6 @@ export class VizHud {
        this.degradedEl.hidden = false;
        this.degradedSepAfter.hidden = false;
        this.degradedEl.textContent = failBadge;
