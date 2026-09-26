@@ -22,12 +22,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
       - name: Log checked-out base revision
         env:
           PACK_BOUNDARY_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           echo "pack-boundary: checked out PR base ref only (no PR head checkout or git fetch)."
-          echo "pack-boundary: git HEAD=$(git rev-parse HEAD)"
+          echo "pack-boundary: git HEAD=$(git rev-parse HEAD) (current base branch tip; may differ from pull_request.base.sha if main moved — expected)"
           echo "pack-boundary: pull_request.base.sha=${PACK_BOUNDARY_BASE_SHA}"
       - name: Enforce pack PR boundary
         env:
