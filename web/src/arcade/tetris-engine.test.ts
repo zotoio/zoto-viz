@@ -85,7 +85,7 @@ describe("tetris-engine", () => {
     const t = simulateAutoplay(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
     expect(t.toppedOut).toBe(false);
     expect(t.pieces).toBe(MIN_T_SURVIVAL);
-    expect(t.lines).toBeGreaterThanOrEqual(17);
+    expect(t.lines).toBeGreaterThanOrEqual(18);
   });
 
   it("reports top-out when the well has no in-bounds placement", () => {
@@ -114,7 +114,7 @@ describe("tetris-engine", () => {
     const tOld = simulateAutoplayOldWeights(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
     const tFixed = simulateAutoplay(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
     expect(tOld.lines).toBeLessThan(tFixed.lines);
-    expect(tFixed.lines).toBeGreaterThanOrEqual(17);
+    expect(tFixed.lines).toBeGreaterThanOrEqual(18);
     const tRegressed = simulateAutoplayRegressed(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
     expect(tRegressed.lines).toBeGreaterThanOrEqual(18);
   });

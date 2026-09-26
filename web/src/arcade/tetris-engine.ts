@@ -12,7 +12,7 @@ export const TETRIS_WEIGHTS = {
   /** Extra penalty on columns the piece occupies (S/Z/T drills without sacrificing survival). */
   pieceLandingHeight: -0.4,
   /** El-Tetris-style eroded cells weight — line clears beat legacy on S/Z and T drills. */
-  erodedPieceCells: 4,
+  erodedPieceCells: 4.5,
   rowTransitions: -3.0,
   colTransitions: -3.0,
   holes: -7.0,
