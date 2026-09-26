@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/switch-pane-view.test.ts",
+  "testName": "switchPaneView > does not teardown the from-view when it remains tiled after a swap",
+  "red": "AssertionError: expected \"vi.fn()\" to not be called at all, but actually been called 1 times",
+  "description": "swap-teardown-guard",
+  "timeoutSec": 120
+}

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   resetPaneSwitchTokens,
   resolvePaneSwitchSlot,
@@ -17,6 +17,10 @@ function host(over: Partial<SwitchPaneViewHost> & Pick<SwitchPaneViewHost, "tile
 }
 
 describe("switchPaneView", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => resetPaneSwitchTokens());
 
   describe.each([
@@ -78,6 +82,24 @@ describe("switchPaneView", () => {
       expect(resolved.ok).toBe(true);
       if (resolved.ok) expect(resolved.paneId).toBe("plugin:wifi");
     });
+  });
+
+  it("does not teardown the from-view when it remains tiled after a swap", async () => {
+    const m = host({
+      tileIds: ["plugin:topology", "plugin:wifi"],
+      focusedId: "plugin:topology",
+    });
+    const teardownView = vi.fn();
+    const result = await switchPaneView(m, "plugin:wifi", {
+      fromViewId: "plugin:topology",
+      ensureReviewed: async () => true,
+      spec: { name: "WiFi" },
+      teardownView,
+      mountView: vi.fn(),
+      persistLayout: vi.fn(),
+    });
+    expect(result.ok).toBe(true);
+    expect(teardownView).not.toHaveBeenCalled();
   });
 
   it("applies only the latest rapid double-switch on the same pane", async () => {
