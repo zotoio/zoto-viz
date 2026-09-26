@@ -1,0 +1,5 @@
+{
+  "runner": "vitest",
+  "test": "scripts/revert-proof.test.ts -t \"row whose revert does not break\"",
+  "description": "Remove stays-green failure guard so noop reverts are accepted"
+}
