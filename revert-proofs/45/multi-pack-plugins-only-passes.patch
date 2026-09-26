@@ -1,18 +1,8 @@
 diff --git a/scripts/check_pack_pr_boundary.py b/scripts/check_pack_pr_boundary.py
-index ebaf3b0..9698288 100755
+index 06ac478..9698288 100755
 --- a/scripts/check_pack_pr_boundary.py
 +++ b/scripts/check_pack_pr_boundary.py
-@@ -444,6 +444,9 @@ def evaluate_pack_pr(
-                 validate_catalog_py_change(base_text or "", head_text, pack)
-             )
-             continue
-+        if is_pack_pr_host_infra_path(path):
-+            violations.append(Violation(path, PACK_PR_HOST_INFRA_FAIL))
-+            continue
-         violations.append(
-             Violation(
-                 path,
-@@ -499,7 +502,7 @@ def run_check(
+@@ -502,7 +502,7 @@ def run_check(
              "pack-boundary: not a pack PR "
              f"(multiple pack folders: {pack_list}); check passed."
          )
