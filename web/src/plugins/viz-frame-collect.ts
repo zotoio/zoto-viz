@@ -208,32 +208,3 @@ export function assertLinksMatchTalkers(frame: VizDataFrame): void {
     }
   }
 }
-
-/** Test-only introspection for allocation / pool rows (not used in production). */
-export const vizFrameCollectTestHooks = {
-  linkPoolSlot0(): LinkCandidate | undefined {
-    return linkPool[0];
-  },
-  talkerIdSet(): ReadonlySet<string> {
-    return talkerIdsScratch;
-  },
-  talkerIdSetRebuilds(): number {
-    return talkerIdsSetRebuilds;
-  },
-  resetTalkerIdSetRebuilds(): void {
-    talkerIdsSetRebuilds = 0;
-  },
-  linkPoolHighWater(): number {
-    return linkPoolHighWater;
-  },
-  clearLinkIndexForTest(): void {
-    linkBySrcDst.clear();
-    linkPool.length = 0;
-    linkPoolHighWater = 0;
-  },
-  clearTalkerIdsCacheForTest(): void {
-    talkerIdsCached.length = 0;
-    talkerIdsScratch.clear();
-    talkerIdsSetRebuilds = 0;
-  },
-};

@@ -2,5 +2,6 @@
   "runner": "vitest",
   "testFile": "web/src/plugins/fixtures/viz-collect-equivalence.test.ts",
   "testName": "^viz\\ collector\\ rewrite\\ allocation\\ >\\ reuses\\ link\\ pool\\ slot\\ 0\\ and\\ talker\\-id\\ Set\\ over\\ 600\\ steady\\ frames\\ \\(collector\\ has\\ no\\ join/sort\\)$",
-  "description": "Production revert: clear link index and pool each frame in zeroLinkRatesForFrame (breaks stable link pool slot identity)."
+  "description": "Production revert: clear link index and pool each frame in zeroLinkRatesForFrame (breaks stable link pool slot identity).",
+  "patchedAssertion": "AssertionError: expected 19168 to be +0 // Object.is equality"
 }

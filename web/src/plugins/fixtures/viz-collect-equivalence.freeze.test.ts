@@ -10,9 +10,7 @@ describe("viz collect equivalence fixture freeze", () => {
   it("writes the 600-frame collector output fixture", () => {
     if (!process.env.FREEZE_COLLECT_EQUIVALENCE) return;
     const fixture = buildCollectEquivalenceFixture();
-    writeFileSync(
-      path.join(dir, "viz-collect-equivalence-600.json"),
-      `${JSON.stringify(fixture, null, 2)}\n`,
-    );
+    const body = fixture.map((frame) => JSON.stringify(frame)).join("\n");
+    writeFileSync(path.join(dir, "viz-collect-equivalence-600.jsonl"), `${body}\n`);
   });
 });
