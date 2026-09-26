@@ -9,9 +9,10 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
+import { surfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
-import { disposeOwnedWebGLRenderer, probeWebGL } from "./webgl";
+import { probeWebGL } from "./webgl";
 import type { MosaicNode } from "./mosaic-layout";
 import {
   L_BASE, L_DST, L_K, L_SRC, LINK_STRIDE, N_CHARGE, N_FIXED, N_FX, N_FY, N_FZ, N_KEY, N_RATE, N_RELAX, N_ROLE,
@@ -34,7 +35,6 @@ import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
-import { claimPanelRaf, releasePanelView } from "./panel-view-lifecycle";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import { observeResize } from "../core/resize";
@@ -54,6 +54,7 @@ import {
   type LayoutXyz,
 } from "./graph-layouts";
 import { VIEW_MORPH_S, mixFade, mixShape } from "./morph";
+import { sandboxBitmapLane } from "../plugins/sandbox-bitmap";
 
 export { FABRIC_KINDS, FABRIC_OPTIONS, FABRIC_DICE, GRAPH_SPACE_OPTIONS, type FabricKind, type GraphSpace } from "./fabric";
 export {
@@ -1046,8 +1047,6 @@ export interface SceneOpts {
   satellite?: boolean;
   /** draw through a shared context (one canvas for the whole wall) instead of owning a canvas */
   host?: RenderHost;
-  /** mosaic tile id (`plugin:…`) for lifecycle / leak tests */
-  panelId?: string;
 }
 
 export class NetScene implements HostedView {
@@ -1113,6 +1112,17 @@ export class NetScene implements HostedView {
   private active = true;
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
+  /** Duplicate mosaic tiles of the same pack: one tick/draw on primary, letterboxed mirrors. */
+  private packCoalesce: {
+    role: "primary" | "mirror";
+    primary: NetScene | null;
+    mirrorKind?: "hostCanvas" | "sandboxSurface";
+    groupKey?: string;
+    pluginId?: string;
+    packLabel?: string;
+    mirrorsTile?: number;
+    tileCount?: number;
+  } | null = null;
   private vizHeadlineText = "";
   private now = Date.now() / 1000;
   /** Host-engine stub so an empty catalog still constructs; catalog default is applied via setMode. */
@@ -1198,8 +1208,6 @@ export class NetScene implements HostedView {
   private readonly dragVel = new THREE.Vector3();
   private readonly baseFov = 55;
   private readonly satellite: boolean;
-  private panelId: string | null;
-  private releasePanelRaf: (() => void) | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
   private compactLabels = false;
   private raf = 0;
@@ -1267,8 +1275,6 @@ export class NetScene implements HostedView {
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
     this.paneFps = new PaneFps(container);
     this.satellite = !!opts.satellite;
-    this.panelId = opts.panelId ?? null;
-    if (this.panelId) this.releasePanelRaf = claimPanelRaf(this.panelId);
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
     if (this.host) {
@@ -1551,10 +1557,90 @@ export class NetScene implements HostedView {
     this.present();
   }
 
+  setPackCoalesce(role: {
+    role: "primary" | "mirror";
+    primary: NetScene | null;
+    mirrorKind?: "hostCanvas" | "sandboxSurface";
+    groupKey?: string;
+    pluginId?: string;
+    packLabel?: string;
+    mirrorsTile?: number;
+    tileCount?: number;
+  } | null): void {
+    this.packCoalesce = role;
+    this.host?.markMirrorScopeDirty();
+  }
+
+  get packCoalesceGroupKey(): string | undefined {
+    return this.packCoalesce?.groupKey;
+  }
+
+  get packMirrorPrimary(): NetScene | null {
+    return this.packCoalesce?.role === "mirror" ? this.packCoalesce.primary : null;
+  }
+
+  get isPackMirrorPrimary(): boolean {
+    return this.packCoalesce?.role === "primary";
+  }
+
+  get packCoalesceTileCount(): number {
+    return this.packCoalesce?.tileCount ?? 0;
+  }
+
+  get packSandboxMirrorPluginId(): string | undefined {
+    if (this.packCoalesce?.mirrorKind !== "sandboxSurface") return undefined;
+    return this.packCoalesce.pluginId;
+  }
+
+  get usesPackMirrorRt(): boolean {
+    return this.isPackMirrorPrimary && this.packCoalesceTileCount >= 2;
+  }
+
+  surfaceLetterboxFill(): SurfaceLetterboxFill {
+    return surfaceLetterboxFill(this.clearHex, 0.25);
+  }
+
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
   private present(): void {
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
     this.backdrop.syncCamera(this.camera);
+    if (this.host && this.packCoalesce?.role === "mirror") {
+      const fill = this.surfaceLetterboxFill();
+      if (this.packCoalesce.mirrorKind === "sandboxSurface" && this.packCoalesce.pluginId) {
+        const lane = sandboxBitmapLane(this.packCoalesce.pluginId);
+        const primary = this.packCoalesce.primary;
+        const aspect = primary
+          ? (() => {
+            const src = this.host!.viewBox(primary);
+            return src ? src.w / Math.max(1, src.h) : 16 / 9;
+          })()
+          : 16 / 9;
+        if (lane.peek()) {
+          const bmp = lane.peek()!;
+          this.lastVp = this.host.presentBitmapMirror(this, bmp, fill, aspect, this.packCoalesce.pluginId!);
+        } else if (lane.shouldShowFailurePlaceholder()) {
+          this.lastVp = this.host.presentSandboxMirrorPlaceholder(
+            this,
+            fill,
+            this.packCoalesce.packLabel ?? this.packCoalesce.pluginId,
+            this.packCoalesce.mirrorsTile ?? 1,
+          );
+        } else {
+          this.lastVp = this.host.presentSandboxMirrorLetterbox(this, fill, aspect);
+        }
+        this.notePaneChange();
+        return;
+      }
+      if (this.packCoalesce.primary) {
+        this.lastVp = this.host.presentPackMirror(
+          this.packCoalesce.primary,
+          this,
+          fill,
+        );
+        this.notePaneChange();
+        return;
+      }
+    }
     if (this.host) {
       this.lastVp = this.host.present(this, this.clearHex, this.scene, this.camera);
     } else if (this.renderer instanceof SoftwareGpu) {
@@ -1801,13 +1887,8 @@ export class NetScene implements HostedView {
 
   get isDreaming(): boolean { return this.dreaming; }
   /** Latest audio / traffic pulse, for HUD bars and other overlays. */
-  get pulseNow(): { level: number; bass: number; listening: boolean; awaitingClick: boolean } {
-    return {
-      level: this.pulseLevel,
-      bass: this.pulseBass,
-      listening: this.pulse.listening,
-      awaitingClick: this.pulse.awaitingClick,
-    };
+  get pulseNow(): { level: number; bass: number; listening: boolean } {
+    return { level: this.pulseLevel, bass: this.pulseBass, listening: this.pulse.listening };
   }
 
   /**
@@ -1896,10 +1977,6 @@ export class NetScene implements HostedView {
       || (this.wantHeard && micCaptureAllowed());
     if (mic) void this.pulse.enable();
     else this.pulse.disable();
-  }
-
-  resumePulseMic(): Promise<void> {
-    return this.pulse.resumeFromUserClick();
   }
 
   /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */
@@ -2559,9 +2636,8 @@ export class NetScene implements HostedView {
    * Asynchronous: the probe is fenced and harvested a frame or two later, never stalling the GPU.
    */
   private captureBackdropLuma(): void {
-    const gl = (this.host?.gl ?? this.renderer.getContext()) as WebGL2RenderingContext | null;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
     if (!gl || typeof gl.fenceSync !== "function") return;
-    if (gl.isContextLost()) return;
     if (this.host) {
       const vp = this.lastVp;
       if (!vp) return;
@@ -3504,6 +3580,10 @@ export class NetScene implements HostedView {
     }
     const dt = this.lastFrameTs ? Math.min(0.05, (ts - this.lastFrameTs) / 1000) : 0;
     this.lastFrameTs = ts;
+    if (this.packCoalesce?.role === "mirror" && this.packCoalesce.primary && this.host) {
+      this.present();
+      return;
+    }
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();
@@ -4012,40 +4092,24 @@ export class NetScene implements HostedView {
     return base / Math.sqrt(Math.max(1, this.spreadX));
   }
 
-  /** Mosaic tile id moved onto the main scene element — retarget rAF lease. */
-  retargetPanel(panelId: string | null): void {
-    this.releasePanelRaf?.();
-    this.releasePanelRaf = null;
-    if (this.panelId) releasePanelView(this.panelId);
-    this.panelId = panelId;
-    if (panelId) this.releasePanelRaf = claimPanelRaf(panelId);
-  }
-
   dispose(): void {
     this.active = false;
     cancelAnimationFrame(this.raf);
-    this.releasePanelRaf?.();
-    this.releasePanelRaf = null;
-    if (this.panelId) releasePanelView(this.panelId);
     this.ro.disconnect();
     window.removeEventListener("resize", this.onWinResize);
     window.removeEventListener("pointerup", this.onCamPtrLost);
     window.removeEventListener("pointercancel", this.onCamPtrLost);
     this.pulse.disable();
     this.layout.dispose();
-    this.fabric.dispose();
     this.arrows.geometry.dispose();
     (this.arrows.material as THREE.Material).dispose();
     this.lumaProbe.reset();
-    this.backdrop.setPluginShader(null);
     this.controls.dispose();
     if (this.host) {
       this.host.remove(this);
       this.container.classList.remove("hosted");
-    } else if (this.renderer instanceof THREE.WebGLRenderer) {
-      disposeOwnedWebGLRenderer(this.renderer);
     } else {
-      this.renderer.domElement.remove();
+      this.renderer.forceContextLoss();
       this.renderer.dispose();
     }
     this.paneFps.dispose();
