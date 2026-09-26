@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { VOX_CONFIG_KEYS } from "./config-manifest";
 import { parseVoxConfig, voxOptionsToConfig, voxRenderScale } from "./config";
 import { applyLiveBindings, beaconScratch, resetLiveMarkers } from "./bindings";
+import { screenMarkerMembershipFingerprint } from "./marker-select";
 import { goldenLiveFrame } from "./fixtures/golden-live";
 import {
   disposeVoxelWorld,
@@ -284,6 +285,39 @@ describe("voxel world pack", () => {
     const keys = beaconScratch().filter((b) => b.kind === 1).map((b) => b.key);
     expect(keys).toContain("quic");
     expect(out.slot1[0]).toBeCloseTo(anchorXZ("quic", parseVoxConfig({ preset: "classic" }).seed).x, 3);
+  });
+
+  it("hysteresis limits beacon membership churn when two talkers alternate narrowly", () => {
+    resetLiveMarkers();
+    setVoxConfig({ preset: "classic", mobs: "0" });
+    const sys = { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 };
+    let lastFp = "";
+    let lastChangeT = -1;
+    const dt = 1 / 60;
+    for (let i = 0; i < 300; i++) {
+      const t = i * dt;
+      const useA = i % 2 === 0;
+      tickVoxelWorld(
+        liveSlice({
+          t,
+          packets: [],
+          talkers: useA
+            ? [{ id: "10.0.0.1", rate: 100, role: "lan" }]
+            : [{ id: "10.0.0.2", rate: 100, role: "lan" }],
+          headlines: [],
+          sys,
+        }),
+        1.6,
+        dt,
+      );
+      const fp = screenMarkerMembershipFingerprint();
+      if (!fp) continue;
+      if (fp !== lastFp) {
+        if (lastChangeT >= 0) expect(t - lastChangeT).toBeGreaterThanOrEqual(1 - 1e-6);
+        lastChangeT = t;
+        lastFp = fp;
+      }
+    }
   });
 
   it("reuses flow maps and slot buffers over 300 golden-live frames", () => {

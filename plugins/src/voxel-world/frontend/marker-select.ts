@@ -2,36 +2,195 @@ import type { FlowMarker } from "./talker-cache";
 
 export const SCREEN_MARKER_SLOTS = 6;
 
-const topSlots: (FlowMarker | null)[] = new Array(SCREEN_MARKER_SLOTS).fill(null);
+const MIN_HOLD_S = 2;
+const CHALLENGE_MARGIN = 1.2;
+const FADE_PER_S = 3.5;
+
+interface IncumbentSlot {
+  key: string;
+  pickedAt: number;
+  kind: number;
+  x: number;
+  y: number;
+  z: number;
+  label: number;
+  target: number;
+  display: number;
+}
+
+const incumbents: IncumbentSlot[] = Array.from({ length: SCREEN_MARKER_SLOTS }, () => ({
+  key: "",
+  pickedAt: -1,
+  kind: 0,
+  x: 0,
+  y: 0,
+  z: 0,
+  label: 0,
+  target: 0,
+  display: 0,
+}));
+
+const candRefs: (FlowMarker | null)[] = new Array(24).fill(null);
+let candCount = 0;
+
+function keyInSlots(key: string): boolean {
+  for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
+    if (incumbents[i]!.key === key) return true;
+  }
+  return false;
+}
+
+function findCandidate(key: string): FlowMarker | null {
+  for (let i = 0; i < candCount; i++) {
+    const m = candRefs[i];
+    if (m && m.key === key) return m;
+  }
+  return null;
+}
+
+function strongestOpenCandidate(): FlowMarker | null {
+  let best: FlowMarker | null = null;
+  let bestS = 0;
+  for (let i = 0; i < candCount; i++) {
+    const m = candRefs[i];
+    if (!m || m.kind <= 0 || m.strength <= 0) continue;
+    if (keyInSlots(m.key)) continue;
+    if (!best || m.strength > bestS) {
+      best = m;
+      bestS = m.strength;
+    }
+  }
+  return best;
+}
+
+function slotReservationActive(t: number): boolean {
+  for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
+    const s = incumbents[i]!;
+    if (!s.key) continue;
+    if (t - s.pickedAt < MIN_HOLD_S) return true;
+    if (s.target <= 0 && s.display > 0.02) return true;
+  }
+  return false;
+}
+
+function weakestHeldSlot(t: number): number {
+  let idx = -1;
+  let weak = Infinity;
+  for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
+    const s = incumbents[i]!;
+    if (!s.key) continue;
+    if (t - s.pickedAt < MIN_HOLD_S) continue;
+    const eff = s.target > 0 ? s.target : s.display;
+    if (eff < weak) {
+      weak = eff;
+      idx = i;
+    }
+  }
+  return idx;
+}
+
+function assignSlot(i: number, m: FlowMarker, t: number): void {
+  const s = incumbents[i]!;
+  s.key = m.key;
+  s.pickedAt = t;
+  s.kind = m.kind;
+  s.x = m.x;
+  s.y = m.y;
+  s.z = m.z;
+  s.label = m.label;
+  s.target = m.strength;
+  if (s.display <= 0) s.display = 0;
+}
 
 export function resetTopMarkers(): void {
-  for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) topSlots[i] = null;
+  candCount = 0;
+  for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
+    const s = incumbents[i]!;
+    s.key = "";
+    s.pickedAt = -1;
+    s.kind = 0;
+    s.target = 0;
+    s.display = 0;
+  }
 }
 
-/** Fixed-size top-N by strength (no sort/spread/map allocations). */
-export function considerTopMarker(m: FlowMarker): void {
+export function beginCandidatePass(): void {
+  candCount = 0;
+}
+
+export function offerMarker(m: FlowMarker): void {
   if (m.kind <= 0 || m.strength <= 0) return;
-  let minI = -1;
-  let minS = Infinity;
-  let empty = -1;
+  if (candCount >= candRefs.length) return;
+  candRefs[candCount++] = m;
+}
+
+export function commitScreenMarkers(t: number, dt: number): void {
+  const fadeStep = Math.min(1, Math.max(0, dt) * FADE_PER_S);
+
   for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
-    const cur = topSlots[i];
-    if (!cur) {
-      empty = i;
-      break;
+    const s = incumbents[i]!;
+    if (!s.key) continue;
+    const live = findCandidate(s.key);
+    if (live) {
+      s.kind = live.kind;
+      s.x = live.x;
+      s.y = live.y;
+      s.z = live.z;
+      s.label = live.label;
+      s.target = live.strength;
+    } else {
+      s.target = 0;
     }
-    if (cur.strength < minS) {
-      minS = cur.strength;
-      minI = i;
+    if (s.display < s.target) s.display = Math.min(s.target, s.display + fadeStep);
+    else if (s.display > s.target) s.display = Math.max(s.target, s.display - fadeStep);
+    if (s.target <= 0 && s.display <= 0.02) {
+      if (t - s.pickedAt >= MIN_HOLD_S) {
+        s.key = "";
+        s.kind = 0;
+        s.pickedAt = -1;
+      }
     }
   }
-  if (empty >= 0) {
-    topSlots[empty] = m;
+
+  if (!slotReservationActive(t)) {
+    for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
+      if (incumbents[i]!.key) continue;
+      const m = strongestOpenCandidate();
+      if (!m) break;
+      assignSlot(i, m, t);
+      if (incumbents[i]!.display <= 0) incumbents[i]!.display = 0.02;
+    }
+  }
+
+  const weakI = weakestHeldSlot(t);
+  if (weakI < 0) return;
+  if (slotReservationActive(t) && incumbents[weakI]!.target > 0) return;
+  const challenger = strongestOpenCandidate();
+  if (!challenger) return;
+  const weak = incumbents[weakI]!;
+  if (weak.target <= 0) {
+    assignSlot(weakI, challenger, t);
+    if (weak.display <= 0) incumbents[weakI]!.display = 0.02;
     return;
   }
-  if (minI >= 0 && m.strength > minS) topSlots[minI] = m;
+  const weakEff = Math.max(weak.target, weak.display);
+  if (challenger.strength < weakEff * CHALLENGE_MARGIN) return;
+  assignSlot(weakI, challenger, t);
 }
 
-export function topMarkerSlots(): readonly (FlowMarker | null)[] {
-  return topSlots;
+export function readScreenMarker(i: number): IncumbentSlot | null {
+  const s = incumbents[i];
+  if (!s || !s.key || s.display <= 0.01) return null;
+  return s;
+}
+
+/** For tests: count membership changes in the active key set (order ignored). */
+export function screenMarkerMembershipFingerprint(): string {
+  const keys: string[] = [];
+  for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
+    const k = incumbents[i]!.key;
+    if (k) keys.push(k);
+  }
+  keys.sort();
+  return keys.join("|");
 }

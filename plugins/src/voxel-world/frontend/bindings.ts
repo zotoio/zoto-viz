@@ -7,10 +7,12 @@ import {
   resetFlowCaches,
 } from "./talker-cache";
 import {
-  considerTopMarker,
+  beginCandidatePass,
+  commitScreenMarkers,
+  offerMarker,
+  readScreenMarker,
   resetTopMarkers,
   SCREEN_MARKER_SLOTS,
-  topMarkerSlots,
 } from "./marker-select";
 import type { VoxelVizInput } from "./viz-frame";
 
@@ -56,6 +58,7 @@ export function applyLiveBindings(
   frame: VoxLiveFrame,
   opts: VoxOptions,
   cam: { x: number; y: number; z: number },
+  dt = 1 / 60,
 ): VoxLiveState {
   const load = frame.sys?.cpu ?? (frame.demo ? 0.24 : 0.1);
   const sysFailed = frame.sys?.failed ?? 0;
@@ -82,19 +85,20 @@ export function applyLiveBindings(
     opts.live.packetFieldBlock,
   );
 
-  resetTopMarkers();
-  forEachTalkerMarker((m) => considerTopMarker(m));
-  forEachProtoMarker((m) => considerTopMarker(m));
+  beginCandidatePass();
+  forEachTalkerMarker((m) => offerMarker(m));
+  forEachProtoMarker((m) => offerMarker(m));
+  commitScreenMarkers(frame.t, dt);
 
   let beaconCount = 0;
   let torchPulse = 0;
-  const tops = topMarkerSlots();
   for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
-    const m = tops[i];
+    const m = readScreenMarker(i);
     const b = beaconOut[i]!;
-    if (!m || m.kind <= 0) {
+    if (!m) {
       b.kind = 0;
       b.strength = 0;
+      b.key = "";
       continue;
     }
     b.key = m.key;
@@ -102,10 +106,10 @@ export function applyLiveBindings(
     b.y = m.y;
     b.z = m.z;
     b.kind = m.kind;
-    b.strength = m.strength;
+    b.strength = m.display;
     b.label = m.label;
     beaconCount++;
-    if (m.kind === 1) torchPulse = 1;
+    if (m.kind === 1 && m.display > 0.15) torchPulse = 1;
   }
 
   const metric = Math.round(load * 100);

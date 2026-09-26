@@ -80,11 +80,11 @@ export interface VoxTickOut {
   stats: ReturnType<MeshEngine["tick"]>;
 }
 
-export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, _dt: number = FIXED_DT): VoxTickOut {
+export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = FIXED_DT): VoxTickOut {
   if (lastT >= 0 && frame.t <= lastT) skips++;
   lastT = frame.t;
   const cam = voxelCamera(frame.t, opts, opts.reducedMotion);
-  const live = applyLiveBindings(frame, opts, cam);
+  const live = applyLiveBindings(frame, opts, cam, dt);
   const meshStats = mesh.tick(cam.x, cam.z, opts.caps);
   if (meshStats.verticesUsed > opts.caps.vertexBudget) {
     skips++;
