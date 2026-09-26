@@ -1,0 +1,13 @@
+diff --git a/web/src/core/viz-clock.ts b/web/src/core/viz-clock.ts
+index d751ab6..4ba9468 100644
+--- a/web/src/core/viz-clock.ts
++++ b/web/src/core/viz-clock.ts
+@@ -24,7 +24,7 @@ export function vizWallMs(): WallMs {
+ 
+ /** Wall epoch seconds for viz frames (`state.ts` when set). */
+ export function vizFrameEpochSec(stateTs?: number): number {
+-  return stateTs || vizWallMs() / 1000;
++  return (stateTs || vizWallMs() / 1000) as EpochSec;
+ }
+ 
+ /** Override monotonic viz clock (pass `undefined` to restore default). */
