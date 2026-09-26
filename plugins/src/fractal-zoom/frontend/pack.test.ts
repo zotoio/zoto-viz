@@ -315,8 +315,8 @@ describe("fractal-zoom shipped pack", () => {
     expect(slot0[FZ_SLOT.mark]).toBe(1);
   });
 
-  it("imports host VizDataFrame contract (no invented frame fields)", () => {
-    expect(FRONT).toContain('from "../../../sdk/viz-contract"');
+  it("imports SDK host contract (no invented frame fields)", () => {
+    expect(FRONT).toContain('../../../sdk/plugin-sandbox');
     expect(FRONT.includes(["type", "VizFrame", "="].join(" "))).toBe(false);
   });
 
