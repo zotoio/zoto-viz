@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > evicts the oldest non-error notice when a fourth arrives",
-  "red": "AssertionError: expected [ <div \u2026(2)>\u2026(1)</div>, \u2026(3) ] to have a length of 3 but got 4",
-  "description": "wall-notice-evict-non-error",
-  "timeoutSec": 120
-}

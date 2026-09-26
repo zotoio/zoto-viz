@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > stacks two notices with the newest last in the region",
-  "red": "AssertionError: expected [ <div \u2026(2)><span></span></div> ] to have a length of 2 but got 1",
-  "description": "wall-notice-stack-two",
-  "timeoutSec": 120
-}

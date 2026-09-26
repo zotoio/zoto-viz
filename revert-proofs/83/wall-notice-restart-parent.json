@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > mounts restart copy inside the region, not with its own fixed position",
-  "red": "AssertionError: expected null not to be null",
-  "description": "wall-notice-restart-parent",
-  "timeoutSec": 120
-}

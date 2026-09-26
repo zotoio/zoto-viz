@@ -1,13 +1,13 @@
-diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index b315296..33433ed 100644
---- a/web/src/core/wall-notice-region.ts
-+++ b/web/src/core/wall-notice-region.ts
-@@ -103,6 +103,8 @@ function placeNotice(opts: PostWallNoticeOpts): HTMLElement {
-     el.append(btn);
-   }
-   host.appendChild(el);
+diff --git a/web/src/core/wall-notice.ts b/web/src/core/wall-notice.ts
+index 76c3bb0..77c0fd6 100644
+--- a/web/src/core/wall-notice.ts
++++ b/web/src/core/wall-notice.ts
+@@ -25,6 +25,8 @@ export function showWallStatusNotice(text: string): HTMLElement | null {
+   el.setAttribute("role", "status");
+   el.textContent = text;
+   host.prepend(el);
 +  el.tabIndex = -1;
 +  el.focus();
-   visible.push({ kind: opts.kind, el });
    return el;
  }
+ 
