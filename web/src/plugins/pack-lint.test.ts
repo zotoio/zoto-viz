@@ -4,20 +4,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  assertBaselineGuard,
-  baselineCountsByPack,
-  baselineCountsByRule,
   formatViolationMessage,
   isLegacyDeclareZotoPackAllowed,
   LEGACY_DECLARE_ZOTO_PACK_IDS,
-  loadBaseline,
-  scanAllGuardrails,
   scanHostLintFixture,
   scanPackInstallLint,
-  scanPackLintFixture,
   scanWebSrc,
   type PackLintRule,
 } from "../../../plugins/sdk/pack-lint";
+import {
+  assertBaselineGuard,
+  baselineCountsByPack,
+  baselineCountsByRule,
+  loadBaseline,
+  scanAllGuardrails,
+  scanPackLintFixture,
+} from "../../../plugins/sdk/pack-lint-test-support";
 import { PACK_BOUNDARY_FIX_HINT, packSymlinkEscapes } from "../../../plugins/sdk/pack-lint-import";
 import { extractModuleSpecifiers } from "../../../plugins/sdk/pack-lint-host";
 
@@ -314,7 +316,7 @@ describe("pack lint guardrails", () => {
     const hits = scanPackLintFixture(OFF_ALLOWLIST_PACK_REPO_REL, text, "not-on-legacy-allowlist", repoRoot);
     expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
     const { disallowedLegacyZoto } = assertBaselineGuard(hits, loadBaseline(repoRoot));
-    expect(disallowedLegacyZoto.length).toBeGreaterThan(0);
+    expect(disallowedLegacyZoto.length).toBe(1);
   });
 
   it("off-allowlist declare const zoto blocks pack install lint", () => {
@@ -334,8 +336,8 @@ describe("pack lint guardrails", () => {
 
   it("reports baseline counts per pack and per rule (documentation)", () => {
     const baseline = loadBaseline(repoRoot);
-    expect(Object.keys(baselineCountsByPack(baseline)).length).toBeGreaterThan(0);
-    expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBeGreaterThan(0);
+    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(17);
+    expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBe(38);
   });
 
   for (const { rel, rule, target, targetIncludes } of ALL_PACK_BAD_FIXTURES) {
@@ -360,7 +362,7 @@ describe("pack lint guardrails", () => {
       writeFileSync(path.join(packDir, "frontend/index.ts"), "export const x = 1;\n");
       symlinkSync(outside, path.join(packDir, "frontend/escape.ts"));
       const raw = packSymlinkEscapes(packDir, packRepoPrefix, tmpRoot);
-      expect(raw.length).toBeGreaterThan(0);
+      expect(raw.length).toBe(1);
       const v = {
         file: raw[0]!.file,
         rule: "host-import" as const,
@@ -382,13 +384,13 @@ describe("pack lint guardrails", () => {
   for (const { rel, form, targets, extraPaths } of HOST_BAD_FIXTURES) {
     it(`host FAIL [${form}] ${rel}`, () => {
       const text = readFileSync(path.join(hostFixtureRoot, rel), "utf8");
-      expect(extractModuleSpecifiers(text).length).toBeGreaterThan(0);
+      expect(extractModuleSpecifiers(text).length).not.toBe(0);
       const hits = lintHostFixture(rel, extraPaths);
       expect(hits.map(({ file, rule, target }) => ({ file, rule, target }))).toEqual(
         hostHits(targets).map(({ file, rule, target }) => ({ file, rule, target })),
       );
       for (const hit of hits) {
-        expect(hit.detail?.length).toBeGreaterThan(0);
+        expect((hit.detail ?? "").length).not.toBe(0);
       }
     });
   }
@@ -409,7 +411,7 @@ describe("pack lint guardrails", () => {
       symlinkSync(packDir, path.join(fixtureDir, "pack-link"), "dir");
       writeFileSync(path.join(fixtureDir, "pack-link/probe.ts"), "export {};\n");
       const hits = scanWebSrc(tmpRoot).filter((v) => v.file.includes("symlink-fixture"));
-      expect(hits.length).toBeGreaterThan(0);
+      expect(hits.length).toBe(1);
       expect(hits[0]?.target).toContain("plugins/src/symlink-target-pack");
     } finally {
       rmSync(tmpRoot, { recursive: true, force: true });

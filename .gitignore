@@ -8,6 +8,8 @@ web/.env.*
 data/
 out/
 web/node_modules/
+**/node_modules/.modules.yaml
+**/node_modules/.pnpm-workspace-state-v1.json
 web/dist/
 docs/node_modules/
 service/cursor-bridge/node_modules/

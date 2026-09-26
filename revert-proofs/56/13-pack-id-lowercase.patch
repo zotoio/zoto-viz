@@ -1,31 +1,12 @@
 diff --git a/schema/plugin.schema.json b/schema/plugin.schema.json
-index 7f40aa2..c2ee3dc 100644
 --- a/schema/plugin.schema.json
 +++ b/schema/plugin.schema.json
 @@ -9,7 +9,7 @@
    "properties": {
      "id": {
        "type": "string",
--      "pattern": "^[a-z0-9][a-z0-9-]*$",
-+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+-      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
++      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,31}$",
        "description": "Stable plugin id. The live view is addressed as plugin:<id>."
      },
      "name": { "type": "string", "minLength": 1, "maxLength": 48 },
-@@ -84,7 +84,7 @@
-     },
-     "mode_id": {
-       "type": "string",
--      "pattern": "^[a-z0-9][a-z0-9-]*$",
-+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
-       "description": "Optional catalog id to overlay when it differs from `id`."
-     },
-     "instances": {
-@@ -219,7 +219,7 @@
-       "properties": {
-         "id": {
-           "type": "string",
--          "pattern": "^[a-z0-9][a-z0-9-]*$"
-+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
-         },
-         "label": { "type": "string", "minLength": 1, "maxLength": 48 },
-         "source": { "type": "string", "minLength": 1, "maxLength": 64 },

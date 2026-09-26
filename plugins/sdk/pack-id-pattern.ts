@@ -4,7 +4,7 @@ import path from "node:path";
 
 const schemaPath = path.resolve(import.meta.dirname, "../../schema/plugin.schema.json");
 
-export function packIdPatternFromSchema(): string {
+function packIdPatternFromSchema(): string {
   const raw = JSON.parse(readFileSync(schemaPath, "utf8")) as {
     properties?: { id?: { pattern?: string } };
   };
@@ -13,5 +13,4 @@ export function packIdPatternFromSchema(): string {
   return pattern;
 }
 
-export const PACK_ID_PATTERN = packIdPatternFromSchema();
-export const PACK_ID_RE = new RegExp(PACK_ID_PATTERN);
+export const PACK_ID_PATTERN = new RegExp(packIdPatternFromSchema());

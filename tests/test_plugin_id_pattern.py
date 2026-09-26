@@ -37,9 +37,15 @@ def test_shipped_pack_ids_match_schema_pattern() -> None:
     assert not bad, f"pack ids outside {PACK_ID_RE.pattern!r}: {bad!r}"
 
 
+def test_schema_rejects_uppercase_plugin_id() -> None:
+    doc = {"id": "Koi", "name": "Probe", "version": 1}
+    with pytest.raises(ValueError, match="id"):
+        plugins.validate_doc(doc)
+
+
 @pytest.mark.parametrize(
     "doc_id",
-    ["../x", "a/b", "x.json", "Koi", "bad_underscore"],
+    ["../x", "a/b", "x.json", "bad_underscore"],
 )
 def test_schema_rejects_nonconforming_plugin_ids(doc_id: str) -> None:
     doc = {"id": doc_id, "name": "Probe", "version": 1}
