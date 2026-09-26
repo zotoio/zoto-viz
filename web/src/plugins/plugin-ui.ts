@@ -1,4 +1,13 @@
-import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
+import {
+  configStoreId,
+  fieldDefault,
+  loadPluginConfig,
+  removePluginConfigKeys,
+  specCaption,
+  writePluginConfig,
+  type PluginView,
+} from "./plugin";
+import { configStoredPerTile } from "./instances";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
@@ -6,20 +15,24 @@ import type { SdmDevice } from "./nest-cams-look";
 import {
   applyPresetToValues,
   buildPluginHudCaption,
+  CUSTOM_PRESET_ID,
   fieldBaselineForDirty,
   hasDeclaredSettings,
   markPresetConsistency,
   orderedSectionTitles,
   packConfigValues,
   popUndoSnapshot,
+  PRESET_BASE_META_KEY,
   pushUndoSnapshot,
   randomiseDeclaredConfig,
   rememberSectionOpen,
   resetDeclaredConfig,
   sectionOpenState,
+  showSettingsToolbar,
+  undoRingDepth,
 } from "./plugin-settings";
 
-export type PluginHudCaptionSink = (caption: string | null) => void;
+export type PluginHudCaptionSink = (spec: PluginView, caption: string | null) => void;
 
 let hudCaptionSink: PluginHudCaptionSink | null = null;
 
@@ -32,35 +45,94 @@ export function refreshPluginHudCaption(
   fields: PluginField[],
   values: Record<string, string>,
 ): void {
-  hudCaptionSink?.(buildPluginHudCaption(spec, fields, values));
+  hudCaptionSink?.(spec, buildPluginHudCaption(spec, fields, values));
 }
 
-function appendFieldControl(
-  row: HTMLElement,
-  f: PluginField,
-  values: Record<string, string>,
-  spec: PluginView,
-  fields: PluginField[],
-  persist: () => void,
-  remount: () => void,
-): void {
+type PanelCtx = {
+  host: HTMLElement;
+  spec: PluginView;
+  fields: PluginField[];
+  values: Record<string, string>;
+  storeId: string;
+  persist: () => void;
+  announce: (msg: string) => void;
+  presetSel?: Select;
+  undoBtn?: HTMLButtonElement;
+  fieldHosts: Map<string, HTMLElement>;
+};
+
+function focusedFieldKey(host: HTMLElement): string | null {
+  const el = document.activeElement;
+  if (!el || !host.contains(el)) return null;
+  const row = el.closest("[data-field-key]");
+  return row?.getAttribute("data-field-key") ?? null;
+}
+
+function restoreFieldFocus(host: HTMLElement, key: string | null): void {
+  if (!key) return;
+  const row = host.querySelector(`[data-field-key="${key}"]`);
+  const focusable = row?.querySelector<HTMLElement>("input,select,button,textarea");
+  focusable?.focus();
+}
+
+function updateDirtyMarkers(ctx: PanelCtx): void {
+  for (const [key, wrap] of ctx.fieldHosts) {
+    const f = ctx.fields.find((x) => x.key === key);
+    if (!f) continue;
+    const current = ctx.values[f.key] ?? fieldDefault(f);
+    const baseline = fieldBaselineForDirty(ctx.spec, ctx.fields, ctx.values, f.key);
+    const dirty = baseline !== undefined && String(current) !== String(baseline);
+    wrap.classList.toggle("field-dirty", dirty);
+  }
+}
+
+function syncPresetPicker(ctx: PanelCtx): void {
+  const decl = ctx.spec.settings;
+  if (!ctx.presetSel || !decl?.presets?.length) return;
+  const pf = decl.presetField ?? "preset";
+  const presetIds = new Set(decl.presets.map((p) => p.id));
+  const cur = ctx.values[pf] ?? decl.presets[0]?.id ?? CUSTOM_PRESET_ID;
+  ctx.presetSel.value = presetIds.has(cur) || cur === CUSTOM_PRESET_ID ? cur : CUSTOM_PRESET_ID;
+}
+
+function syncUndoButton(ctx: PanelCtx): void {
+  if (!ctx.undoBtn) return;
+  const empty = undoRingDepth(ctx.storeId) === 0;
+  ctx.undoBtn.disabled = empty;
+  ctx.undoBtn.setAttribute("aria-disabled", empty ? "true" : "false");
+}
+
+function persistValues(ctx: PanelCtx, extraRemove: string[] = []): void {
+  markPresetConsistency(ctx.spec, ctx.fields, ctx.values);
+  writePluginConfig(ctx.storeId, ctx.values);
+  const remove = [...extraRemove];
+  if (!(PRESET_BASE_META_KEY in ctx.values)) remove.push(PRESET_BASE_META_KEY);
+  if (remove.length) removePluginConfigKeys(ctx.storeId, [...new Set(remove)]);
+  ctx.persist();
+  updateDirtyMarkers(ctx);
+  syncPresetPicker(ctx);
+  refreshPluginHudCaption(ctx.spec, ctx.fields, ctx.values);
+}
+
+function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): void {
+  const values = ctx.values;
   const current = values[f.key] ?? fieldDefault(f);
-  const baseline = fieldBaselineForDirty(spec, fields, values, f.key);
+  const baseline = fieldBaselineForDirty(ctx.spec, ctx.fields, values, f.key);
   const dirty = baseline !== undefined && String(current) !== String(baseline);
-  const wrap = (el: HTMLElement) => {
-    if (dirty) el.classList.add("field-dirty");
-    el.setAttribute("data-field-key", f.key);
-    row.append(el);
-  };
-  const pf = spec.settings?.presetField;
+  const wrap = document.createElement("div");
+  wrap.className = "field-wrap";
+  wrap.setAttribute("data-field-key", f.key);
+  if (dirty) wrap.classList.add("field-dirty");
+  ctx.fieldHosts.set(f.key, wrap);
+  const pf = ctx.spec.settings?.presetField;
   if (f.type === "boolean") {
     const t = new Toggle({
       label: f.label,
       title: f.hint,
       checked: current === "1" || current === "true",
-      onChange: (on) => { values[f.key] = on ? "1" : "0"; persist(); },
+      onChange: (on) => { values[f.key] = on ? "1" : "0"; persistValues(ctx); },
     });
-    wrap(t.el);
+    wrap.append(t.el);
   } else if (f.type === "select" && f.values?.length) {
     const s = new Select({
       caption: f.label,
@@ -69,17 +141,24 @@ function appendFieldControl(
       value: current,
       onChange: (v) => {
         values[f.key] = v;
-        if (pf && f.key === pf && v !== "custom" && spec.settings?.presets?.some((p) => p.id === v)) {
-          pushUndoSnapshot(configStoreId(spec, spec.configViewId), { ...values });
-          applyPresetToValues(spec, fields, values, v);
-          persist();
-          remount();
+        if (pf && f.key === pf && v !== CUSTOM_PRESET_ID && ctx.spec.settings?.presets?.some((p) => p.id === v)) {
+          pushUndoSnapshot(ctx.storeId, { ...values });
+          applyPresetToValues(ctx.spec, ctx.fields, values, v);
+          delete values[PRESET_BASE_META_KEY];
+          persistValues(ctx);
+          ctx.announce(`Preset ${v}`);
+          remountPanel(ctx);
           return;
         }
-        persist();
+        if (pf && f.key === pf && v === CUSTOM_PRESET_ID) {
+          const prev = values[pf] && values[pf] !== CUSTOM_PRESET_ID ? values[pf] : values[PRESET_BASE_META_KEY];
+          if (prev && prev !== CUSTOM_PRESET_ID) values[PRESET_BASE_META_KEY] = prev;
+          values[pf] = CUSTOM_PRESET_ID;
+        }
+        persistValues(ctx);
       },
     });
-    wrap(s.el);
+    wrap.append(s.el);
   } else if (f.type === "number") {
     const min = f.min ?? 0;
     const max = f.max ?? Math.max(min + 1, 100);
@@ -90,66 +169,79 @@ function appendFieldControl(
       max,
       step: f.step ?? 1,
       value: Number(current),
-      onInput: (v) => { values[f.key] = String(v); persist(); },
+      onInput: (v) => { values[f.key] = String(v); persistValues(ctx); },
     });
-    wrap(sl.el);
+    wrap.append(sl.el);
   } else {
     const tf = new TextField({
       caption: f.label,
       title: f.hint,
       placeholder: f.default !== undefined ? String(f.default) : undefined,
       value: current,
-      onInput: (v) => { values[f.key] = v; persist(); },
+      onInput: (v) => { values[f.key] = v; persistValues(ctx); },
     });
-    wrap(tf.el);
+    wrap.append(tf.el);
   }
+  row.append(wrap);
 }
 
-function mountSettingsToolbar(
-  host: HTMLElement,
-  spec: PluginView,
-  fields: PluginField[],
-  values: Record<string, string>,
-  persist: () => void,
-  remount: () => void,
-): void {
-  const decl = spec.settings;
-  if (!decl?.presets?.length) return;
-  const storeId = configStoreId(spec, spec.configViewId);
+function mountPackScopeNote(host: HTMLElement, spec: PluginView): void {
+  if (configStoredPerTile(spec)) return;
+  const note = document.createElement("div");
+  note.className = "sec-hint plugin-pack-scope-note";
+  note.textContent = `Applies to all ${spec.name} tiles`;
+  host.append(note);
+}
+
+function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
+  const decl = ctx.spec.settings;
+  if (!showSettingsToolbar(ctx.spec, ctx.fields)) return;
   const row = document.createElement("div");
   row.className = "sec plugin-settings-toolbar";
-  row.setAttribute("role", "toolbar");
   row.setAttribute("aria-label", "Preset tools");
   const controls = document.createElement("div");
   controls.className = "sec-controls plugin-settings-toolbar-row";
 
-  const pf = decl.presetField ?? "preset";
-  const presetField = fields.find((f) => f.key === pf);
-  const presetIds = new Set(decl.presets.map((p) => p.id));
-  const options = [
-    ...decl.presets.map((p) => ({ value: p.id, label: p.label })),
-    { value: "custom", label: "Custom" },
-  ];
-  const cur = values[pf] ?? decl.presets[0]?.id ?? "custom";
-  const presetSel = new Select({
-    caption: presetField?.label ?? "preset",
-    title: presetField?.hint ?? "Named starting points",
-    options,
-    value: presetIds.has(cur) || cur === "custom" ? cur : "custom",
-    onChange: (v) => {
-      if (v === "custom") {
-        values[pf] = "custom";
-        persist();
-        remount();
-        return;
-      }
-      pushUndoSnapshot(storeId, { ...values });
-      applyPresetToValues(spec, fields, values, v);
-      persist();
-      remount();
-    },
-  });
-  controls.append(presetSel.el);
+  const live = document.createElement("div");
+  live.className = "sr-only";
+  live.setAttribute("aria-live", "polite");
+  live.setAttribute("aria-atomic", "true");
+  ctx.announce = (msg) => { live.textContent = msg; };
+
+  const pf = decl?.presetField ?? "preset";
+  const presetField = ctx.fields.find((f) => f.key === pf);
+  if (decl?.presets?.length) {
+    const presetIds = new Set(decl.presets.map((p) => p.id));
+    const options = [
+      ...decl.presets.map((p) => ({ value: p.id, label: p.label })),
+      { value: CUSTOM_PRESET_ID, label: "Custom" },
+    ];
+    const cur = ctx.values[pf] ?? decl.presets[0]?.id ?? CUSTOM_PRESET_ID;
+    const presetSel = new Select({
+      caption: presetField?.label ?? "preset",
+      title: presetField?.hint ?? "Named starting points",
+      options,
+      value: presetIds.has(cur) || cur === CUSTOM_PRESET_ID ? cur : CUSTOM_PRESET_ID,
+      onChange: (v) => {
+        if (v === CUSTOM_PRESET_ID) {
+          const prev = ctx.values[pf] && ctx.values[pf] !== CUSTOM_PRESET_ID
+            ? ctx.values[pf] : ctx.values[PRESET_BASE_META_KEY];
+          if (prev && prev !== CUSTOM_PRESET_ID) ctx.values[PRESET_BASE_META_KEY] = prev;
+          ctx.values[pf] = CUSTOM_PRESET_ID;
+          persistValues(ctx);
+          return;
+        }
+        pushUndoSnapshot(ctx.storeId, { ...ctx.values });
+        applyPresetToValues(ctx.spec, ctx.fields, ctx.values, v);
+        delete ctx.values[PRESET_BASE_META_KEY];
+        persistValues(ctx);
+        ctx.announce(`Preset ${v}`);
+        remountPanel(ctx);
+      },
+    });
+    ctx.presetSel = presetSel;
+    controls.append(presetSel.el);
+  }
 
   const mkBtn = (label: string, title: string, onClick: () => void) => {
     const b = document.createElement("button");
@@ -161,47 +253,53 @@ function mountSettingsToolbar(
     return b;
   };
 
+  const undoBtn = mkBtn("Undo", "Undo last bulk change", () => {
+    const snap = popUndoSnapshot(ctx.storeId);
+    if (!snap) return;
+    for (const k of Object.keys(ctx.values)) {
+      if (k === PRESET_BASE_META_KEY || k.startsWith("__")) continue;
+      if (!(k in snap)) delete ctx.values[k];
+    }
+    Object.assign(ctx.values, snap);
+    persistValues(ctx);
+    syncUndoButton(ctx);
+    ctx.announce("Undone");
+    remountPanel(ctx);
+  });
+  ctx.undoBtn = undoBtn;
+
   controls.append(
     mkBtn("Randomise", "Randomise fields (respects randomRange and randomise:false)", () => {
-      pushUndoSnapshot(storeId, { ...values });
-      randomiseDeclaredConfig(spec, fields, values, Math.random);
-      persist();
-      remount();
+      pushUndoSnapshot(ctx.storeId, { ...ctx.values });
+      randomiseDeclaredConfig(ctx.spec, ctx.fields, ctx.values, Math.random);
+      persistValues(ctx);
+      syncUndoButton(ctx);
+      ctx.announce("Randomised");
+      remountPanel(ctx);
     }),
-    mkBtn("Undo", "Undo last bulk change", () => {
-      const snap = popUndoSnapshot(storeId);
-      if (!snap) return;
-      Object.assign(values, snap);
-      persist();
-      remount();
-    }),
+    undoBtn,
     mkBtn("Reset", "Reset to active preset or defaults", () => {
-      pushUndoSnapshot(storeId, { ...values });
-      resetDeclaredConfig(spec, fields, values);
-      persist();
-      remount();
+      pushUndoSnapshot(ctx.storeId, { ...ctx.values });
+      resetDeclaredConfig(ctx.spec, ctx.fields, ctx.values);
+      delete ctx.values[PRESET_BASE_META_KEY];
+      persistValues(ctx);
+      syncUndoButton(ctx);
+      ctx.announce("Reset");
+      remountPanel(ctx);
     }),
   );
-  row.append(controls);
+  row.append(live, controls);
   host.append(row);
+  syncUndoButton(ctx);
 }
 
-function mountSectionedFields(
-  host: HTMLElement,
-  spec: PluginView,
-  compact: PluginField[],
-  values: Record<string, string>,
-  fields: PluginField[],
-  persist: () => void,
-  remount: () => void,
-): void {
-  const storeId = configStoreId(spec, spec.configViewId);
-  const sectionDecl = spec.settings?.sections ?? [];
-  const titles = orderedSectionTitles(spec, compact);
-  const pf = spec.settings?.presetField;
+function mountSectionedFields(ctx: PanelCtx, host: HTMLElement, compact: PluginField[]): void {
+  const sectionDecl = ctx.spec.settings?.sections ?? [];
+  const titles = orderedSectionTitles(ctx.spec, compact);
+  const pf = ctx.spec.settings?.presetField;
   const bySection = new Map<string, PluginField[]>();
   for (const f of compact) {
-    if (pf && f.key === pf && spec.settings?.presets?.length) continue;
+    if (pf && f.key === pf && ctx.spec.settings?.presets?.length) continue;
     const t = f.section ?? "";
     if (!bySection.has(t)) bySection.set(t, []);
     bySection.get(t)!.push(f);
@@ -209,7 +307,7 @@ function mountSectionedFields(
   titles.forEach((title, index) => {
     const sectionFields = bySection.get(title);
     if (!sectionFields?.length) return;
-    const open = sectionOpenState(storeId, title, sectionDecl, index);
+    const open = sectionOpenState(ctx.storeId, title, sectionDecl, index);
     const container = title
       ? document.createElement("details")
       : document.createElement("div");
@@ -221,17 +319,36 @@ function mountSectionedFields(
       sum.textContent = title;
       container.append(sum);
       container.addEventListener("toggle", () => {
-        rememberSectionOpen(storeId, title, container.open);
+        rememberSectionOpen(ctx.storeId, title, container.open);
       });
     } else {
       container.className = "sec";
     }
     const row = document.createElement("div");
     row.className = "sec-controls";
-    for (const f of sectionFields) appendFieldControl(row, f, values, spec, fields, persist, remount);
+    for (const f of sectionFields) appendFieldControl(ctx, row, f);
     container.append(row);
     host.append(container);
   });
+}
+
+type PanelMount = {
+  host: HTMLElement;
+  spec: PluginView;
+  fields: PluginField[];
+  onPersist: (id: string, values: Record<string, string>) => void;
+  opts?: { skipEmpty?: boolean; devices?: SdmDevice[] };
+};
+
+const panelMounts = new WeakMap<HTMLElement, PanelMount>();
+
+function remountPanel(ctx: PanelCtx): void {
+  const mount = panelMounts.get(ctx.host);
+  if (!mount) return;
+  const focusKey = focusedFieldKey(ctx.host);
+  mount.host.replaceChildren();
+  fillPluginFields(mount.host, mount.spec, mount.fields, mount.onPersist, mount.opts);
+  restoreFieldFocus(mount.host, focusKey);
 }
 
 export function fillPluginFields(
@@ -241,6 +358,7 @@ export function fillPluginFields(
   onPersist: (id: string, values: Record<string, string>) => void,
   opts?: { skipEmpty?: boolean; devices?: SdmDevice[] },
 ): void {
+  panelMounts.set(host, { host, spec, fields, onPersist, opts });
   const values = loadPluginConfig(spec, fields);
   if (hasDeclaredSettings(spec)) markPresetConsistency(spec, fields, values);
   const head = document.createElement("div");
@@ -267,16 +385,18 @@ export function fillPluginFields(
     }
     return;
   }
-  const remount = () => {
-    host.replaceChildren();
-    fillPluginFields(host, spec, fields, onPersist, opts);
-  };
-  const persist = () => {
-    markPresetConsistency(spec, fields, values);
-    const storeId = configStoreId(spec, spec.configViewId);
-    writePluginConfig(storeId, values);
-    onPersist(storeId, packConfigValues(values));
-    refreshPluginHudCaption(spec, fields, values);
+  const storeId = configStoreId(spec);
+  const ctx: PanelCtx = {
+    host,
+    spec,
+    fields,
+    values,
+    storeId,
+    fieldHosts: new Map(),
+    announce: () => {},
+    persist: () => {
+      onPersist(storeId, packConfigValues(values));
+    },
   };
   const compact: PluginField[] = [];
   const notes: PluginField[] = [];
@@ -284,15 +404,18 @@ export function fillPluginFields(
     if (f.type === "textarea") notes.push(f);
     else compact.push(f);
   }
-  if (hasDeclaredSettings(spec)) {
-    mountSettingsToolbar(host, spec, fields, values, persist, remount);
-    mountSectionedFields(host, spec, compact, values, fields, persist, remount);
+  if (showSettingsToolbar(spec, fields)) {
+    mountPackScopeNote(host, spec);
+    mountSettingsToolbar(ctx, host);
+    mountSectionedFields(ctx, host, compact);
+  } else if (hasDeclaredSettings(spec)) {
+    mountSectionedFields(ctx, host, compact);
   } else if (compact.length) {
     const sec = document.createElement("div");
     sec.className = "sec";
     const row = document.createElement("div");
     row.className = "sec-controls";
-    for (const f of compact) appendFieldControl(row, f, values, spec, fields, persist, remount);
+    for (const f of compact) appendFieldControl(ctx, row, f);
     sec.append(row);
     host.append(sec);
   }
@@ -314,7 +437,7 @@ export function fillPluginFields(
     ta.setAttribute("aria-label", f.label);
     if (f.hint) ta.placeholder = f.hint;
     ta.value = current;
-    ta.addEventListener("input", () => { values[f.key] = ta.value; persist(); });
+    ta.addEventListener("input", () => { values[f.key] = ta.value; persistValues(ctx); });
     wrap.append(cap, ta);
     host.append(wrap);
   }

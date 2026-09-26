@@ -1,4 +1,4 @@
-# Test-only catalog row — not shipped in contrib zips; used by plugin-settings.test.ts patterns.
+# Host test fixture — loaded by plugin-settings.test.ts (not shipped in contrib zips).
 id: settings-fixture
 name: Settings fixture
 version: 1
@@ -9,17 +9,42 @@ visualisation:
     presets:
       - id: a
         label: Alpha
-        values: { gain: 3, mode: x }
+        values: { gain: 3, mode: x, locked: 0.5 }
+      - id: b
+        label: Bravo
+        values: { gain: 6, mode: y }
+    hud:
+      labelFields: [mode, preset]
+    sections:
+      - title: Tuning
+        collapsed: true
+      - title: Locked
   config:
     - key: preset
       label: preset
       type: select
       default: a
-      values: [[a, Alpha]]
+      values: [[a, Alpha], [custom, custom]]
     - key: gain
       label: gain
       type: number
       min: 0
       max: 10
       step: 0.5
+      default: 3
       randomRange: [2, 8]
+      section: Tuning
+    - key: locked
+      label: locked
+      type: number
+      min: 0
+      max: 1
+      default: 0.5
+      randomise: false
+      section: Locked
+    - key: mode
+      label: mode
+      type: select
+      values: [[x, X], [y, Y]]
+      default: x
+      section: Tuning

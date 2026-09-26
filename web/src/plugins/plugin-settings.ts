@@ -1,8 +1,10 @@
 import { fieldDefault, PRESET_BASE_META_KEY, type PluginView } from "./plugin";
 import type { PluginField } from "../core/modes";
 import type { PluginPreset, PluginSectionDecl, PluginSettingsDecl } from "./plugin-visualisation";
+import { instanceDefaultValue } from "./plugin-settings-baseline";
 
 export { PRESET_BASE_META_KEY } from "./plugin";
+export { instanceDefaultValue } from "./plugin-settings-baseline";
 
 export const CUSTOM_PRESET_ID = "custom";
 export const UNDO_RING_SIZE = 10;
@@ -16,7 +18,33 @@ export function settingsDecl(spec: PluginView): PluginSettingsDecl | undefined {
 
 export function hasDeclaredSettings(spec: PluginView): boolean {
   const s = spec.settings;
-  return !!(s?.presets?.length || s?.sections?.length);
+  return !!(s?.presets?.length || s?.sections?.length || s?.hud?.labelFields?.length);
+}
+
+export function fieldDefaultForSpec(spec: PluginView, field: PluginField): string {
+  const inst = instanceDefaultValue(spec, field.key);
+  return inst !== undefined ? inst : fieldDefault(field);
+}
+
+export function hasRandomisableFields(spec: PluginView, fields: PluginField[]): boolean {
+  const pf = spec.settings?.presetField;
+  for (const f of fields) {
+    if (f.randomise === false) continue;
+    if (pf && f.key === pf) continue;
+    if (isMetaConfigKey(f.key)) continue;
+    if (f.type === "textarea") continue;
+    if (f.type === "text") continue;
+    if (f.type === "boolean") {
+      if (f.randomise === true) return true;
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+export function showSettingsToolbar(spec: PluginView, fields: PluginField[]): boolean {
+  return !!(spec.settings?.presets?.length || hasRandomisableFields(spec, fields));
 }
 
 export function isMetaConfigKey(key: string): boolean {
@@ -58,6 +86,10 @@ export function clearUndoRing(storeId: string): void {
   undoRings.delete(storeId);
 }
 
+export function undoRingDepth(storeId: string): number {
+  return undoRings.get(storeId)?.length ?? 0;
+}
+
 function undoRing(storeId: string): Record<string, string>[] {
   let ring = undoRings.get(storeId);
   if (!ring) {
@@ -94,8 +126,10 @@ function snapNumber(value: number, min: number, max: number, step: number): numb
 }
 
 export function validateRandomRange(field: PluginField, range: [number, number]): boolean {
-  const min = field.min ?? 0;
-  const max = field.max ?? Math.max(min + 1, 100);
+  if (field.type !== "number") return false;
+  if (field.min === undefined || field.max === undefined) return false;
+  const min = field.min;
+  const max = field.max;
   return range[0] >= min && range[1] <= max && range[0] <= range[1];
 }
 
@@ -124,6 +158,7 @@ export function derivedPresetId(spec: PluginView, values: Record<string, string>
 }
 
 export function valuesMatchPreset(
+  spec: PluginView,
   fields: PluginField[],
   values: Record<string, string>,
   preset: PluginPreset,
@@ -134,8 +169,8 @@ export function valuesMatchPreset(
     if (presetField && f.key === presetField) continue;
     if (isMetaConfigKey(f.key)) continue;
     if (f.type === "textarea" && f.key === "prompt") continue;
-    const cur = values[f.key] ?? fieldDefault(f);
-    const exp = want[f.key] ?? fieldDefault(f);
+    const cur = values[f.key] ?? fieldDefaultForSpec(spec, f);
+    const exp = want[f.key] ?? fieldDefaultForSpec(spec, f);
     if (String(cur) !== String(exp)) return false;
   }
   return true;
@@ -153,7 +188,7 @@ export function isCustomConfig(
   if (!pid) return false;
   const preset = presetById(spec.settings, pid);
   if (!preset) return false;
-  return !valuesMatchPreset(fields, values, preset, pf);
+  return !valuesMatchPreset(spec, fields, values, preset, pf);
 }
 
 export function fieldBaselineForDirty(
@@ -174,7 +209,10 @@ export function fieldBaselineForDirty(
   const mapped = presetValuesToStrings(preset.values);
   if (key in mapped) return mapped[key];
   const field = fields.find((f) => f.key === key);
-  return field ? fieldDefault(field) : undefined;
+  if (!field) return undefined;
+  const inst = instanceDefaultValue(spec, key);
+  if (inst !== undefined) return inst;
+  return fieldDefault(field);
 }
 
 export function fieldLabelForValue(field: PluginField, value: string): string {
@@ -211,7 +249,7 @@ export function buildPluginHudCaption(
     }
     const field = fields.find((f) => f.key === key);
     if (!field) continue;
-    const cur = values[field.key] ?? fieldDefault(field);
+    const cur = values[field.key] ?? fieldDefaultForSpec(spec, field);
     parts.push(fieldLabelForValue(field, cur));
   }
   return parts.length ? parts.join(" · ") : null;
@@ -244,14 +282,14 @@ export function markPresetConsistency(
   if (cur === CUSTOM_PRESET_ID) return;
   if (cur) {
     const preset = presetById(decl, cur);
-    if (preset && !valuesMatchPreset(fields, values, preset, pf)) {
+    if (preset && !valuesMatchPreset(spec, fields, values, preset, pf)) {
       values[PRESET_BASE_META_KEY] = cur;
       values[pf] = CUSTOM_PRESET_ID;
     }
     return;
   }
   for (const preset of decl.presets) {
-    if (valuesMatchPreset(fields, values, preset, pf)) {
+    if (valuesMatchPreset(spec, fields, values, preset, pf)) {
       values[pf] = preset.id;
       delete values[PRESET_BASE_META_KEY];
       return;
@@ -274,7 +312,9 @@ export function randomiseDeclaredConfig(
     if (pf && f.key === pf) continue;
     if (isMetaConfigKey(f.key)) continue;
     if (f.type === "textarea") continue;
+    if (f.type === "text") continue;
     if (f.type === "boolean") {
+      if (f.randomise !== true) continue;
       values[f.key] = rng() < 0.5 ? "0" : "1";
       continue;
     }
@@ -284,8 +324,9 @@ export function randomiseDeclaredConfig(
       continue;
     }
     if (f.type === "number") {
-      const min = f.min ?? 0;
-      const max = f.max ?? Math.max(min + 1, 100);
+      if (f.min === undefined || f.max === undefined) continue;
+      const min = f.min;
+      const max = f.max;
       const step = f.step ?? 1;
       let lo = min;
       let hi = max;
@@ -295,13 +336,17 @@ export function randomiseDeclaredConfig(
       }
       const raw = lo + rng() * (hi - lo);
       values[f.key] = String(snapNumber(raw, min, max, step));
-      continue;
-    }
-    if (f.type === "text") {
-      values[f.key] = String(Math.floor(rng() * 1e6));
     }
   }
   if (pf) values[pf] = CUSTOM_PRESET_ID;
+}
+
+function resetFieldToDefault(
+  spec: PluginView,
+  field: PluginField,
+  values: Record<string, string>,
+): void {
+  values[field.key] = fieldDefaultForSpec(spec, field);
 }
 
 export function resetDeclaredConfig(
@@ -311,22 +356,22 @@ export function resetDeclaredConfig(
 ): void {
   const decl = spec.settings;
   const pf = decl?.presetField;
-  const base = derivedPresetId(spec, values);
-  if (base && presetById(decl, base)) {
-    applyPresetToValues(spec, fields, values, base);
-    return;
-  }
-  if (pf && values[pf] && values[pf] !== CUSTOM_PRESET_ID && presetById(decl, values[pf])) {
-    applyPresetToValues(spec, fields, values, values[pf]);
-    return;
-  }
   for (const f of fields) {
     if (isMetaConfigKey(f.key)) continue;
     if (pf && f.key === pf) continue;
-    values[f.key] = fieldDefault(f);
+    resetFieldToDefault(spec, f, values);
   }
-  if (pf && decl?.presets?.[0]) values[pf] = decl.presets[0].id;
+  const base = derivedPresetId(spec, values)
+    ?? (pf && values[pf] && values[pf] !== CUSTOM_PRESET_ID ? values[pf] : null);
+  if (base && presetById(decl, base)) {
+    const preset = presetById(decl, base)!;
+    Object.assign(values, presetValuesToStrings(preset.values));
+    if (pf) values[pf] = base;
+  } else if (pf && decl?.presets?.[0]) {
+    values[pf] = decl.presets[0].id;
+  }
   delete values[PRESET_BASE_META_KEY];
+  markPresetConsistency(spec, fields, values);
 }
 
 export function orderedSectionTitles(
@@ -352,16 +397,4 @@ export function orderedSectionTitles(
     }
   }
   return out;
-}
-
-export function instanceDefaultValue(
-  spec: PluginView,
-  key: string,
-): string | undefined {
-  const inst = spec.instances?.find((i) => i.id === (spec.instanceId ?? spec.id));
-  const row = inst?.defaults ?? (spec.instanceId && spec.instanceId !== spec.id
-    ? spec.instances?.find((i) => i.id === spec.instanceId)?.defaults
-    : undefined);
-  if (!row || row[key] === undefined) return undefined;
-  return String(row[key]);
 }

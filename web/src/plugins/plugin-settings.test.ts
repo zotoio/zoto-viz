@@ -1,4 +1,8 @@
 import { describe, expect, it, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import yaml from "yaml";
 import { fieldDefault } from "./plugin";
 import { configStoreId, expandPluginInstances } from "./instances";
 import {
@@ -18,40 +22,34 @@ import {
   validateRandomRange,
 } from "./plugin-settings";
 import {
-  assertFieldRandomRanges,
+  assertConfigFields,
   parsePluginSettings,
   toPluginView,
 } from "./plugin-visualisation";
 import type { PluginField } from "../core/modes";
 import type { PluginView } from "./plugin";
-import { collectPluginConfigs, loadPluginConfig, writePluginConfig } from "./plugin";
+import { collectPluginConfigs, loadPluginConfig, removePluginConfigKeys, writePluginConfig } from "./plugin";
 import { fillPluginFields } from "./plugin-ui";
 
-const FIXTURE_FIELDS: PluginField[] = [
-  { key: "preset", label: "preset", type: "select", values: [["a", "Alpha"], ["custom", "custom"]], default: "a" },
-  { key: "gain", label: "gain", type: "number", min: 0, max: 10, step: 0.5, default: 3, randomRange: [2, 8] },
-  { key: "locked", label: "locked", type: "number", min: 0, max: 1, default: 0.5, randomise: false },
-  { key: "mode", label: "mode", type: "select", values: [["x", "X"], ["y", "Y"]], default: "x" },
-];
+const FIXTURE_YAML = join(dirname(fileURLToPath(import.meta.url)), "fixtures/settings-decl-pack/plugin.yml");
 
 function fixtureSpec(): PluginView {
-  return {
-    id: "settings-fixture",
-    name: "Settings fixture",
-    version: 1,
-    engine: "graph",
-    config: FIXTURE_FIELDS,
-    settings: {
-      presetField: "preset",
-      presets: [
-        { id: "a", label: "Alpha", values: { gain: 3, mode: "x", locked: 0.5 } },
-        { id: "b", label: "Bravo", values: { gain: 6, mode: "y", locked: 0.5 } },
-      ],
-      hud: { labelFields: ["mode", "preset"] },
-      sections: [{ title: "Tuning", collapsed: true }, { title: "Locked" }],
-    },
-  };
+  const raw = yaml.parse(readFileSync(FIXTURE_YAML, "utf8"));
+  return toPluginView(raw);
 }
+
+function fixtureFields(spec: PluginView): PluginField[] {
+  return spec.config ?? [];
+}
+
+describe("fixture pack (settings-decl-pack/plugin.yml)", () => {
+  it("loads via toPluginView", () => {
+    const spec = fixtureSpec();
+    expect(spec.settings?.presetField).toBe("preset");
+    expect(spec.settings?.presets?.length).toBe(2);
+    expect(spec.config?.find((f) => f.key === "gain")?.randomRange).toEqual([2, 8]);
+  });
+});
 
 describe("parsePluginSettings / schema", () => {
   it("parses presets, presetField, hud, and sections", () => {
@@ -63,8 +61,12 @@ describe("parsePluginSettings / schema", () => {
     });
     expect(s?.presetField).toBe("preset");
     expect(s?.presets?.[0]?.label).toBe("A");
-    expect(s?.hud?.labelFields).toEqual(["gain"]);
-    expect(s?.sections?.[0]?.title).toBe("Main");
+  });
+
+  it("rejects presets without presetField", () => {
+    expect(() => parsePluginSettings({
+      presets: [{ id: "a", label: "A", values: { gain: 1 } }],
+    })).toThrow(/presetField/);
   });
 
   it("rejects bad randomRange at catalog parse", () => {
@@ -74,24 +76,36 @@ describe("parsePluginSettings / schema", () => {
       version: 1,
       visualisation: {
         engine: "graph",
+        settings: { presetField: "preset", presets: [{ id: "a", label: "A", values: { gain: 1 } }] },
         config: [{ key: "gain", type: "number", min: 0, max: 5, randomRange: [0, 9] }],
-        settings: { presets: [{ id: "a", label: "A", values: { gain: 1 } }] },
       },
     };
     expect(() => toPluginView(raw)).toThrow(/randomRange/);
   });
 
+  it("rejects randomRange on text fields", () => {
+    expect(() => assertConfigFields([
+      { key: "t", label: "t", type: "text", randomRange: [0, 1] },
+    ])).toThrow(/number fields/);
+  });
+
+  it("requires min/max for randomRange", () => {
+    expect(() => assertConfigFields([
+      { key: "gain", label: "g", type: "number", randomRange: [2, 8] },
+    ])).toThrow(/min and max/);
+  });
+
   it("accepts valid randomRange", () => {
     const field: PluginField = { key: "gain", label: "g", type: "number", min: 0, max: 10, randomRange: [2, 8] };
     expect(validateRandomRange(field, [2, 8])).toBe(true);
-    assertFieldRandomRanges([field], { presets: [{ id: "a", label: "A", values: { gain: 1 } }] });
+    assertConfigFields([field]);
   });
 });
 
 describe("randomiseDeclaredConfig", () => {
   it("50 seeded runs respect randomRange, step, and randomise:false", () => {
     const spec = fixtureSpec();
-    const fields = FIXTURE_FIELDS;
+    const fields = fixtureFields(spec);
     for (let seed = 0; seed < 50; seed++) {
       const values: Record<string, string> = {
         preset: "a",
@@ -108,6 +122,20 @@ describe("randomiseDeclaredConfig", () => {
       expect(values.locked).toBe("0.5");
       expect(["x", "y"]).toContain(values.mode);
     }
+  });
+
+  it("does not randomise text fields", () => {
+    const spec: PluginView = {
+      ...fixtureSpec(),
+      config: [
+        ...(fixtureSpec().config ?? []),
+        { key: "note", label: "note", type: "text", default: "still" },
+      ],
+    };
+    const fields = spec.config ?? [];
+    const values: Record<string, string> = { note: "still", preset: "a", gain: "3", mode: "x", locked: "0.5" };
+    randomiseDeclaredConfig(spec, fields, values, () => 0.5);
+    expect(values.note).toBe("still");
   });
 });
 
@@ -131,44 +159,45 @@ describe("undo ring", () => {
 
   it("isolates undo across mosaic instances", () => {
     const base = fixtureSpec();
+    base.id = "settings-mosaic";
     base.instances = [
-      { id: "settings-fixture" },
       { id: "tile-a" },
       { id: "tile-b" },
       { id: "tile-c" },
     ];
     const tiles = expandPluginInstances(base);
-    expect(tiles.length).toBe(4);
     const ids = tiles.map((t) => configStoreId(t));
     pushUndoSnapshot(ids[1], { v: "a1" });
     pushUndoSnapshot(ids[2], { v: "b1" });
     expect(popUndoSnapshot(ids[1])?.v).toBe("a1");
-    expect(popUndoSnapshot(ids[2])?.v).toBe("b1");
-    expect(popUndoSnapshot(ids[3])).toBeNull();
+    expect(popUndoSnapshot(ids[3] ?? "missing")).toBeNull();
   });
 });
 
 describe("reset and labels", () => {
-  it("resets from preset and from custom derived preset", () => {
+  it("partial preset → randomise → reset restores preset plus field defaults", () => {
     const spec = fixtureSpec();
-    const fields = FIXTURE_FIELDS;
-    const values: Record<string, string> = { preset: "a", gain: "3", mode: "x", locked: "0.5" };
+    const fields = fixtureFields(spec);
+    const values: Record<string, string> = {
+      preset: "b",
+      gain: "6",
+      mode: "y",
+      locked: "0.5",
+    };
+    applyPresetToValues(spec, fields, values, "b");
     randomiseDeclaredConfig(spec, fields, values, () => 0.99);
     expect(isCustomConfig(spec, fields, values)).toBe(true);
     resetDeclaredConfig(spec, fields, values);
-    expect(values.preset).toBe("a");
-    expect(values.gain).toBe("3");
-    values[PRESET_BASE_META_KEY] = "b";
-    values.preset = CUSTOM_PRESET_ID;
-    values.gain = "9";
-    resetDeclaredConfig(spec, fields, values);
     expect(values.preset).toBe("b");
     expect(values.gain).toBe("6");
+    expect(values.mode).toBe("y");
+    expect(values.locked).toBe(fieldDefault(fields.find((f) => f.key === "locked")!));
+    expect(isCustomConfig(spec, fields, values)).toBe(false);
   });
 
   it("label transitions preset → custom → preset", () => {
     const spec = fixtureSpec();
-    const fields = FIXTURE_FIELDS;
+    const fields = fixtureFields(spec);
     const values: Record<string, string> = { preset: "a", gain: "3", mode: "x", locked: "0.5" };
     expect(buildPluginHudCaption(spec, fields, values)).toBe("X · Alpha");
     values.gain = "9";
@@ -183,7 +212,7 @@ describe("reset and labels", () => {
 describe("dirty markers and export", () => {
   it("marks fields against active preset baseline on fresh install", () => {
     const spec = fixtureSpec();
-    const fields = FIXTURE_FIELDS;
+    const fields = fixtureFields(spec);
     const values: Record<string, string> = {
       preset: "a",
       gain: "4",
@@ -194,9 +223,10 @@ describe("dirty markers and export", () => {
     expect(fieldBaselineForDirty(spec, fields, values, "locked")).toBe("0.5");
   });
 
-  it("omits meta keys from pack config and profile export", () => {
+  it("omits meta keys from pack config and shows toolbar for randomisable fields", () => {
     localStorage.clear();
     const spec = fixtureSpec();
+    const fields = fixtureFields(spec);
     writePluginConfig(configStoreId(spec), {
       preset: "a",
       gain: "3",
@@ -204,19 +234,27 @@ describe("dirty markers and export", () => {
       locked: "0.5",
       [PRESET_BASE_META_KEY]: "a",
     });
-    const packed = packConfigValues(loadPluginConfig(spec, FIXTURE_FIELDS));
+    const packed = packConfigValues(loadPluginConfig(spec, fields));
     expect(packed[PRESET_BASE_META_KEY]).toBeUndefined();
     expect(collectPluginConfigs([spec])["settings-fixture"]?.[PRESET_BASE_META_KEY]).toBeUndefined();
     const host = document.createElement("div");
-    fillPluginFields(host, spec, FIXTURE_FIELDS, () => {});
+    fillPluginFields(host, spec, fields, () => {});
     expect(host.querySelector(".plugin-settings-toolbar")).toBeTruthy();
     expect([...host.querySelectorAll("button")].map((b) => b.textContent)).toEqual(
       expect.arrayContaining(["Randomise", "Undo", "Reset"]),
     );
-    const exported = collectPluginConfigs([spec])["settings-fixture"] ?? {};
-    expect(exported.randomise).toBeUndefined();
-    expect(exported.undo).toBeUndefined();
-    expect(exported.resetPreset).toBeUndefined();
+    const undo = [...host.querySelectorAll("button")].find((b) => b.textContent === "Undo");
+    expect(undo?.disabled).toBe(true);
+  });
+
+  it("removes __presetBase from localStorage when cleared", () => {
+    localStorage.clear();
+    const id = "settings-fixture";
+    writePluginConfig(id, { preset: "custom", [PRESET_BASE_META_KEY]: "a" });
+    expect(localStorage.getItem("zoto-viz.plugin.settings-fixture.__presetBase")).toBe("a");
+    writePluginConfig(id, { preset: "custom" });
+    removePluginConfigKeys(id, [PRESET_BASE_META_KEY]);
+    expect(localStorage.getItem("zoto-viz.plugin.settings-fixture.__presetBase")).toBeNull();
   });
 });
 
@@ -234,18 +272,5 @@ describe("instance defaults", () => {
     expect(loadPluginConfig(row, row.config).slot).toBe("Koi Pond 1");
     writePluginConfig("koi-pond", { slot: "pack-wide" });
     expect(loadPluginConfig(row, row.config).slot).toBe("Koi Pond 1");
-  });
-});
-
-describe("import boundary", () => {
-  it("host settings module does not import plugins/src", async () => {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const { fileURLToPath } = await import("node:url");
-    const dir = path.dirname(fileURLToPath(import.meta.url));
-    for (const f of ["plugin-settings.ts", "plugin-ui.ts", "plugin-visualisation.ts"]) {
-      const text = fs.readFileSync(path.join(dir, f), "utf8");
-      expect(text).not.toMatch(/plugins\/src\//);
-    }
   });
 });

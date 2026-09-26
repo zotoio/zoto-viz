@@ -50,17 +50,14 @@ export function parsePluginInstance(modeId: string): string | null {
   return i >= 0 ? rest.slice(i + 1) || null : null;
 }
 
-export function configStoreId(
-  spec: Pick<PluginView, "id" | "instanceId">,
-  viewModeId?: string | null,
-): string {
-  const base = spec.instanceId && spec.instanceId !== spec.id ? `${spec.id}:${spec.instanceId}` : spec.id;
-  if (!viewModeId) return base;
-  const canonical = pluginViewId(spec.id, spec.instanceId);
-  if (viewModeId === canonical) return base;
-  const suffix = viewModeId.startsWith("plugin:") ? viewModeId.slice("plugin:".length) : viewModeId;
-  if (suffix === base || suffix === spec.id) return base;
-  return `${base}@${suffix}`;
+/** localStorage namespace for plugin config (per catalog instance row). */
+export function configStoreId(spec: Pick<PluginView, "id" | "instanceId">): string {
+  return spec.instanceId && spec.instanceId !== spec.id ? `${spec.id}:${spec.instanceId}` : spec.id;
+}
+
+/** True when each mosaic/catalog instance has its own config store id. */
+export function configStoredPerTile(spec: Pick<PluginView, "id" | "instanceId">): boolean {
+  return !!(spec.instanceId && spec.instanceId !== spec.id);
 }
 
 export function parseInstances(raw: unknown): PluginInstance[] | undefined {

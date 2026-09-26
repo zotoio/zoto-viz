@@ -184,8 +184,6 @@ export interface PluginView {
   instanceId?: string;
   /** Defaults from the matched plugin.yml instance row (before pack fallback). */
   instanceDefaults?: Record<string, string | number | boolean>;
-  /** Active catalog / mosaic pane mode id (namespaces config when it differs from the instance row). */
-  configViewId?: string;
   instances?: PluginInstance[];
   /** Absent when the zip has no visualisation.yml and plugin.yml ships no engine. */
   engine?: PluginEngine;
@@ -306,6 +304,23 @@ export function vizContractFor(spec: PluginView | null | undefined): VizPluginCo
 
 const storeKey = (id: string, key: string) => `zoto-viz.plugin.${id}.${key}`;
 
+const pluginOptsConfigCache = new Map<string, Record<string, string>>();
+
+export function invalidatePluginConfigCache(storeId?: string): void {
+  if (storeId) pluginOptsConfigCache.delete(storeId);
+  else pluginOptsConfigCache.clear();
+}
+
+/** Cached config for per-frame optsFor (invalidated on writePluginConfig). */
+export function loadPluginConfigCached(spec: PluginView, fields: PluginField[]): Record<string, string> {
+  const storeId = configStoreId(spec);
+  const hit = pluginOptsConfigCache.get(storeId);
+  if (hit) return hit;
+  const loaded = loadPluginConfig(spec, fields);
+  pluginOptsConfigCache.set(storeId, loaded);
+  return loaded;
+}
+
 /** Persisted meta: base preset for custom configs (not exported to packs). */
 export const PRESET_BASE_META_KEY = "__presetBase";
 export type { PluginInstance } from "./instances";
@@ -326,7 +341,7 @@ function instanceDefaultFor(spec: PluginView, key: string): string | undefined {
 
 export function loadPluginConfig(spec: PluginView, fields = spec.config): Record<string, string> {
   const out: Record<string, string> = {};
-  const storeId = configStoreId(spec, spec.configViewId);
+  const storeId = configStoreId(spec);
   const viewId = pluginViewId(spec.id, spec.instanceId);
   const metaKeys = [PRESET_BASE_META_KEY];
   for (const mk of metaKeys) {
@@ -357,8 +372,14 @@ export function loadPluginConfig(spec: PluginView, fields = spec.config): Record
   return out;
 }
 
+export function removePluginConfigKeys(id: string, keys: string[]): void {
+  for (const k of keys) localStorage.removeItem(storeKey(id, k));
+  invalidatePluginConfigCache(id);
+}
+
 export function writePluginConfig(id: string, values: Record<string, string>): void {
   for (const [k, v] of Object.entries(values)) localStorage.setItem(storeKey(id, k), v);
+  invalidatePluginConfigCache(id);
 }
 
 export function collectPluginConfigs(specs: PluginView[]): Record<string, Record<string, string>> {

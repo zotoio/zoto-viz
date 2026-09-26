@@ -50,6 +50,7 @@ import {
   grantPluginConsent,
   installPlugins,
   loadPluginConfig,
+  loadPluginConfigCached,
   lookForMode,
   mergeLook,
   parsePluginId,
@@ -93,7 +94,7 @@ import { FeedTitleCube } from "../plugins/feed-title-cube";
 import { NestCamsLive } from "../plugins/nest-cams-live";
 import { parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { applyInstance } from "../plugins/instances";
-import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
+import { VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
@@ -362,7 +363,18 @@ const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
-setPluginHudCaptionSink((caption) => vizHud.setPackCaption(caption));
+const pluginHudCaptions = new Map<string, string | null>();
+
+setPluginHudCaptionSink((spec, caption) => {
+  const modeId = pluginViewId(spec.id, spec.instanceId);
+  pluginHudCaptions.set(modeId, caption);
+  const active = modeById(modeSel.value);
+  if (mosaic?.on) {
+    if (mosaic.tileIds.includes(active.id)) vizHud.setPackCaption(caption);
+    return;
+  }
+  if (active.id === modeId || active.pluginId === spec.id) vizHud.setPackCaption(caption);
+});
 addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
@@ -507,7 +519,20 @@ nestCams.onChange = (patch) => {
 };
 
 function sandboxPluginConfig(spec: PluginView): Record<string, string> {
-  return packConfigValues(loadPluginConfig(spec, pluginViewKnobs(spec)));
+  return packConfigValues(loadPluginConfigCached(spec, pluginViewKnobs(spec)));
+}
+
+let pendingSandboxConfig: Record<string, string> | null = null;
+let sandboxConfigRaf = 0;
+
+function scheduleSandboxSetConfig(config: Record<string, string>): void {
+  pendingSandboxConfig = config;
+  if (sandboxConfigRaf) return;
+  sandboxConfigRaf = requestAnimationFrame(() => {
+    sandboxConfigRaf = 0;
+    if (pendingSandboxConfig) sandbox.setConfig(pendingSandboxConfig);
+    pendingSandboxConfig = null;
+  });
 }
 
 function onPluginFields(): void {
@@ -521,7 +546,7 @@ function onPluginFields(): void {
   else scene.setMode(m, opts);
   renderLegend(m, opts);
   const spec = pluginSpecForMode(m.id);
-  if (spec && pluginHasFrontend(spec)) sandbox.setConfig(sandboxPluginConfig(spec));
+  if (spec && pluginHasFrontend(spec)) scheduleSandboxSetConfig(sandboxPluginConfig(spec));
   if (spec?.settings?.hud?.labelFields?.length) {
     const cap = buildPluginHudCaption(spec, pluginViewKnobs(spec), opts);
     vizHud.setPackCaption(cap);
@@ -565,8 +590,8 @@ function optsFor(m: ViewMode): Record<string, string> {
   const o = defaultOpts(m);
   if (m.pluginId) {
     const spec = pluginSpecForMode(m.id);
-    if (spec) Object.assign(o, loadPluginConfig(
-      { ...spec, configViewId: m.id },
+    if (spec) Object.assign(o, loadPluginConfigCached(
+      spec,
       pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config),
     ));
   } else {
@@ -587,7 +612,7 @@ function bindThisView(modeId: string): void {
   const m = modeById(modeId);
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
   settings?.bindView(
-    spec ? { ...spec, configViewId: modeId, options: m.options, config: m.config } : null,
+    spec ? { ...spec, options: m.options, config: m.config } : null,
     spec ? m.config : undefined,
     lookForMode(m.id) ?? spec?.look,
     arcadeControls(m),
@@ -950,11 +975,14 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
 function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
   let hint = m.hint;
   if (spec?.settings?.hud?.labelFields?.length) {
-    const cap = buildPluginHudCaption(spec, pluginViewKnobs(spec), opts);
+    const fields = pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config);
+    const cap = buildPluginHudCaption(spec, fields, opts);
     if (cap) hint = `${spec.name} · ${cap}`;
     vizHud.setPackCaption(cap);
+    pluginHudCaptions.set(m.id, cap);
   } else {
     vizHud.setPackCaption(null);
+    pluginHudCaptions.delete(m.id);
   }
   morphCopy($("hint"), hint);
   const legend = $("legend");

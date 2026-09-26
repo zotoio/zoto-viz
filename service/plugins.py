@@ -531,6 +531,59 @@ def _take_key(keys: set[str], raw: Any) -> str:
     return key
 
 
+def _settings_from_doc(doc: dict[str, Any]) -> tuple[list[Any], str | None]:
+    viz = doc.get("visualisation") if isinstance(doc.get("visualisation"), dict) else {}
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    viz_settings = viz.get("settings") if isinstance(viz.get("settings"), dict) else {}
+    merged = {**viz_settings, **settings}
+    presets = merged.get("presets")
+    if presets is None:
+        presets = doc.get("presets") or viz.get("presets")
+    preset_field = merged.get("presetField") or doc.get("presetField") or viz.get("presetField")
+    pf = str(preset_field).strip() if preset_field else None
+    if not isinstance(presets, list):
+        return [], pf
+    return presets, pf
+
+
+def _config_field_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    viz = doc.get("visualisation") if isinstance(doc.get("visualisation"), dict) else {}
+    raw = viz.get("config")
+    if raw is None:
+        raw = doc.get("config")
+    rows: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                rows.append(item)
+    return rows
+
+
+def _check_plugin_settings(doc: dict[str, Any]) -> None:
+    presets, preset_field = _settings_from_doc(doc)
+    if presets and not preset_field:
+        raise ValueError("settings.presetField is required when presets are declared")
+    for field in _config_field_rows(doc):
+        key = str(field.get("key") or "")
+        rr = field.get("randomRange")
+        if rr is None:
+            continue
+        if field.get("type") != "number":
+            raise ValueError(f"config field {key!r} randomRange is only valid on number fields")
+        lo, hi = field.get("min"), field.get("max")
+        if not isinstance(lo, (int, float)) or not isinstance(hi, (int, float)):
+            raise ValueError(f"config field {key!r} with randomRange requires min and max")
+        if not isinstance(rr, list) or len(rr) < 2:
+            raise ValueError(f"config field {key!r} randomRange must be a two-number range")
+        r0, r1 = rr[0], rr[1]
+        if not isinstance(r0, (int, float)) or not isinstance(r1, (int, float)):
+            raise ValueError(f"config field {key!r} randomRange must be numeric")
+        if r0 < lo or r1 > hi or r0 > r1:
+            raise ValueError(
+                f"config field {key!r} randomRange [{r0}, {r1}] outside min..max [{lo}, {hi}]"
+            )
+
+
 def _check_semantics(doc: dict[str, Any]) -> None:
     keys: set[str] = set()
     for opt in doc.get("options") or []:
@@ -553,6 +606,7 @@ def _check_semantics(doc: dict[str, Any]) -> None:
         lo, hi = field.get("min"), field.get("max")
         if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo > hi:
             raise ValueError(f"config {key!r} min is greater than max")
+    _check_plugin_settings(doc)
     caps = doc.get("capabilities") or []
     needs_viz = any(c in caps for c in ("viz.read", "viz.write"))
     viz = doc.get("viz")

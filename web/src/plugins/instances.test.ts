@@ -23,8 +23,7 @@ describe("plugin instances", () => {
     expect(parsePluginInstance("plugin:carousel:apod")).toBe("apod");
     expect(parsePluginInstance("plugin:carousel")).toBeNull();
     expect(configStoreId({ id: "carousel", instanceId: "apod" })).toBe("carousel:apod");
-    expect(configStoreId({ id: "koi-pond", instanceId: "pond-1" }, "plugin:koi-pond:pond-1")).toBe("koi-pond:pond-1");
-    expect(configStoreId({ id: "koi-pond", instanceId: "pond-1" }, "plugin:topology")).toBe("koi-pond:pond-1@topology");
+    expect(configStoreId({ id: "koi-pond", instanceId: "pond-1" })).toBe("koi-pond:pond-1");
   });
 
   it("expands one plugin tree into catalog rows with source defaults", () => {

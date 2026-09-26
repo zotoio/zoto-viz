@@ -138,6 +138,7 @@ function asField(key: string, raw: unknown): PluginField | undefined {
   if (typeof rec.step === "number") field.step = rec.step;
   if (asString(rec.section)) field.section = asString(rec.section);
   if (rec.randomise === false) field.randomise = false;
+  else if (rec.randomise === true) field.randomise = true;
   if (Array.isArray(rec.randomRange) && rec.randomRange.length >= 2
     && typeof rec.randomRange[0] === "number" && typeof rec.randomRange[1] === "number") {
     field.randomRange = [rec.randomRange[0], rec.randomRange[1]];
@@ -203,7 +204,12 @@ export function parsePluginSettings(raw: unknown): PluginSettingsDecl | undefine
   }
   if (Array.isArray(rec.presets)) {
     const presets = rec.presets.map(parsePreset).filter((p): p is PluginPreset => !!p);
-    if (presets.length) settings.presets = presets;
+    if (presets.length) {
+      settings.presets = presets;
+      if (!settings.presetField) {
+        throw new Error("settings.presetField is required when presets are declared");
+      }
+    }
   }
   if (Array.isArray(rec.sections)) {
     const sections = rec.sections.map(parseSectionDecl).filter((s): s is PluginSectionDecl => !!s);
@@ -212,18 +218,30 @@ export function parsePluginSettings(raw: unknown): PluginSettingsDecl | undefine
   return Object.keys(settings).length ? settings : undefined;
 }
 
-/** Reject invalid randomRange against parsed fields (throws on bad catalog). */
-export function assertFieldRandomRanges(fields: PluginField[], settings?: PluginSettingsDecl): void {
-  if (!settings?.presets?.length) return;
+/** Reject invalid config field declarations (throws on bad catalog). */
+export function assertConfigFields(fields: PluginField[]): void {
   for (const f of fields) {
-    if (!f.randomRange) continue;
-    const min = f.min ?? 0;
-    const max = f.max ?? Math.max(min + 1, 100);
-    const [lo, hi] = f.randomRange;
-    if (lo < min || hi > max || lo > hi) {
-      throw new Error(`config field ${f.key} randomRange [${lo}, ${hi}] outside min..max [${min}, ${max}]`);
+    if (f.randomRange) {
+      if (f.type !== "number") {
+        throw new Error(`config field ${f.key} randomRange is only valid on number fields`);
+      }
+      if (f.min === undefined || f.max === undefined) {
+        throw new Error(`config field ${f.key} with randomRange requires min and max`);
+      }
+      const [lo, hi] = f.randomRange;
+      if (lo < f.min || hi > f.max || lo > hi) {
+        throw new Error(`config field ${f.key} randomRange [${lo}, ${hi}] outside min..max [${f.min}, ${f.max}]`);
+      }
+    }
+    if (f.type === "number" && f.randomRange && (f.min === undefined || f.max === undefined)) {
+      throw new Error(`config field ${f.key} with randomRange requires min and max`);
     }
   }
+}
+
+/** @deprecated use assertConfigFields */
+export function assertFieldRandomRanges(fields: PluginField[], _settings?: PluginSettingsDecl): void {
+  assertConfigFields(fields);
 }
 
 function asListOrMap<T>(raw: unknown, parse: (key: string, value: unknown) => T | undefined): T[] {
@@ -392,8 +410,8 @@ export function toPluginView(raw: unknown): PluginView {
     hud: row.hud ?? viz.hud,
     sections: row.sections ?? viz.sections,
   });
-  const configFields = parseConfig(viz.config ?? row.config);
-  if (settings) assertFieldRandomRanges(configFields ?? [], settings);
+  const configFields = parseConfig(viz.config ?? row.config) ?? [];
+  assertConfigFields(configFields);
   const spec: PluginView = {
     id,
     name,
