@@ -7,7 +7,7 @@ import {
   resetModeSwitchCoordinatorForTests,
   settleConsentAndDrainAuto,
 } from "./mode-switch-coordinator";
-import { resetModeSwitchStateForTests } from "./mode-switch-state";
+import { getModeSwitchGeneration, resetModeSwitchStateForTests } from "./mode-switch-state";
 import {
   abortAllOpenPackConsents,
   ensurePackConsent,
@@ -20,6 +20,16 @@ describe("mode-switch-coordinator", () => {
     resetModeSwitchCoordinatorForTests();
     resetModeSwitchStateForTests();
     resetPackConsentForTests();
+  });
+
+  it("does not bump generation when queuing automatic switch during consent", () => {
+    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const gen0 = getModeSwitchGeneration();
+    for (let i = 0; i < 5; i++) {
+      beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, `plugin:x${i}`, {});
+    }
+    expect(getModeSwitchGeneration()).toBe(gen0);
+    abortAllOpenPackConsents();
   });
 
   it("queues dream-cycle while consent is open and does not proceed", () => {

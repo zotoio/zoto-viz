@@ -286,11 +286,15 @@ export async function attachPluginFrontend(
   sandbox: PluginSandbox,
   spec: PluginView | null,
   config: Record<string, string> = {},
+  switchGen?: number,
+  isStale?: (generation: number) => boolean,
 ): Promise<boolean> {
+  if (switchGen !== undefined && isStale?.(switchGen)) return false;
   if (!pluginHasFrontend(spec)) {
     sandbox.unload();
     return false;
   }
+  if (switchGen !== undefined && isStale?.(switchGen)) return false;
   await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
   return true;
 }

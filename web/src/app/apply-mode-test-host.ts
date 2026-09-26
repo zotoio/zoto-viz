@@ -1,10 +1,12 @@
 import type { Mosaic } from "../graph/mosaic";
-import type { PluginView } from "../plugins/plugin";
+import { applyPluginCatalog, type PluginView } from "../plugins/plugin";
 import type { ConsentReviewResult } from "./pack-consent";
+import type { askPluginReview } from "../plugins/plugin-ui";
 import { setLastConsentedModeId } from "./mode-switch-state";
 
 export type ApplyModeTestConfig = {
   ensureReviewed?: (spec: PluginView | null) => Promise<ConsentReviewResult>;
+  askPluginReview?: typeof askPluginReview;
   mosaic?: Mosaic | null;
   pluginSpecs?: PluginView[];
   liveMode?: string;
@@ -13,6 +15,7 @@ export type ApplyModeTestConfig = {
 
 type ApplyModeTestBindings = {
   setEnsureReviewedOverride: (fn: ((spec: PluginView | null) => Promise<ConsentReviewResult>) | null) => void;
+  setAskPluginReviewOverride: (fn: typeof askPluginReview | null) => void;
   setMosaic: (m: Mosaic | null) => void;
   setPluginSpecs: (specs: PluginView[]) => void;
   setLiveMode: (id: string) => void;
@@ -27,13 +30,22 @@ export function registerApplyModeTestBindings(b: ApplyModeTestBindings): void {
   bindings = b;
 }
 
+export function resetApplyModeTestOverrides(): void {
+  if (!bindings) return;
+  bindings.setEnsureReviewedOverride(null);
+  bindings.setAskPluginReviewOverride(null);
+  applyPluginCatalog([]);
+}
+
 export function configureApplyModeForTests(cfg: ApplyModeTestConfig): void {
   if (!bindings) throw new Error("apply-mode test bindings not registered");
   bindings.reattachModeSelect();
   bindings.setEnsureReviewedOverride(cfg.ensureReviewed ?? null);
+  bindings.setAskPluginReviewOverride(cfg.askPluginReview ?? null);
   if (cfg.mosaic !== undefined) bindings.setMosaic(cfg.mosaic);
   if (cfg.pluginSpecs) {
     bindings.setPluginSpecs(cfg.pluginSpecs);
+    applyPluginCatalog(cfg.pluginSpecs);
     bindings.refreshModeOptions();
   }
   if (cfg.liveMode != null) {

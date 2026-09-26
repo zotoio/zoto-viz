@@ -42,6 +42,7 @@ import { registerApplyModeTestBindings } from "./apply-mode-test-host";
 import {
   flashModeKeptPrevious,
   flashModeLoadFailed,
+  initModeSwitchStatusStrip,
 } from "./mode-switch-message";
 import { shouldPushSandboxPluginConfig } from "../plugins/viz-sandbox-config";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
@@ -439,7 +440,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
   preserveVizUbo = true;
-  applyMode(pluginViewId(packId), {}, { channel: "user" });
+  applyMode(pluginViewId(packId), {}, { channel: "automatic", auto: "dream-cycle" });
 }
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
@@ -580,11 +581,12 @@ let tsWatchId = "";
 let tsWatchHash = "";
 
 let ensureReviewedOverride: ((spec: PluginView | null) => Promise<ConsentReviewResult>) | null = null;
+let askPluginReviewOverride: typeof askPluginReview | null = null;
 
 async function ensureReviewedImpl(spec: PluginView | null): Promise<ConsentReviewResult> {
   if (!spec || !pluginNeedsReview(spec)) return "ok";
   if (spec.consent) return "ok";
-  return ensurePackReviewedOutcome(spec, async () => {
+  return ensurePackReviewedOutcome(spec, async (signal) => {
     if (autoconsentEnabled() && autoconsentEligible(spec)) {
       const kind = autoconsentKind(spec);
       try {
@@ -599,7 +601,7 @@ async function ensureReviewedImpl(spec: PluginView | null): Promise<ConsentRevie
       }
     }
     try {
-      const kind = await askPluginReview(spec);
+      const kind = await (askPluginReviewOverride ?? askPluginReview)(spec, { signal });
       if (!kind) return "declined";
       try {
         await grantPluginConsent(spec.id, kind);
@@ -646,7 +648,13 @@ async function loadTsPlugin(spec: PluginView | null, switchGen = getModeSwitchGe
     return;
   }
   try {
-    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    await attachPluginFrontend(
+      sandbox,
+      spec,
+      loadPluginConfig(spec, spec.config),
+      switchGen,
+      isModeSwitchStale,
+    );
     if (isModeSwitchStale(switchGen)) return;
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
@@ -662,6 +670,7 @@ async function loadTsPlugin(spec: PluginView | null, switchGen = getModeSwitchGe
     console.warn("zoto-viz plugin runtime:", e);
     sandbox.unload();
     scene.clearPluginStyle();
+    throw e;
   }
 }
 
@@ -732,7 +741,12 @@ function skySpecForMode(modeId: string, fallback: PluginView | null): PluginView
   return selected;
 }
 
-async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinPlugin: boolean): Promise<void> {
+async function loadPluginSkyOnto(
+  target: NetScene,
+  spec: PluginView | null,
+  pinPlugin: boolean,
+  switchGen = getModeSwitchGeneration(),
+): Promise<void> {
   const look = spec ? (lookForMode(pluginViewId(spec.id, spec.instanceId)) ?? spec.look) : undefined;
   const want = pinPlugin && !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
   const key = want && spec ? `${spec.id}:${spec.shader_sha256 || ""}` : "";
@@ -753,6 +767,7 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
   }
   try {
     const source = await fetchPluginSky(spec.id, spec.shader_sha256);
+    if (isModeSwitchStale(switchGen)) throw new Error("stale-mode-switch");
     const err = target.setPluginShader({ id: spec.id, source });
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
@@ -760,13 +775,14 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
       spec.sky_available = false;
       target.setPluginShader(null);
       if (target === scene) skyLoaded = "";
-      return;
+      throw new Error(err);
     }
     if (target === scene) skyLoaded = key;
   } catch (e) {
     console.warn("zoto-viz plugin sky:", e);
     target.setPluginShader(null);
     if (target === scene) skyLoaded = "";
+    throw e;
   }
 }
 
@@ -781,7 +797,7 @@ async function syncPluginSky(spec: PluginView | null, switchGen = getModeSwitchG
         const tileSky = mosaic.paneSky(id);
         const pane = pluginSpecForMode(id);
         const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
-        await loadPluginSkyOnto(target, pane, wantPlugin);
+        await loadPluginSkyOnto(target, pane, wantPlugin, switchGen);
       }
     } finally {
       mosaic.settlePanes();
@@ -789,7 +805,7 @@ async function syncPluginSky(spec: PluginView | null, switchGen = getModeSwitchG
     return;
   }
   if (isModeSwitchStale(switchGen)) return;
-  await loadPluginSkyOnto(scene, spec, true);
+  await loadPluginSkyOnto(scene, spec, true, switchGen);
 }
 
 function computeSkyStage(m: ViewMode, spec: PluginView | null): boolean {
@@ -926,11 +942,13 @@ function buildApplyModeHost(): ApplyModeHost {
     shouldLoadPluginRuntime: (m) => m.standalone || arcadeSlotFor(m) !== "carousel",
     isModeSwitchStale,
     getLastConsentedModeId,
+    getFallbackKeptModeId: () => defaultCatalogMode()?.id ?? "topology",
     markModeConsented: (modeId) => setLastConsentedModeId(modeId),
+    retryDeclinedMode: (modeId) => { applyMode(modeId); },
     showRollbackMessage: (kind, declined, keptModeId) => {
       const keptLabel = modeById(keptModeId).label;
       if (kind === "declined") return flashModeKeptPrevious(keptLabel);
-      return flashModeLoadFailed(declined.label, keptLabel);
+      return flashModeLoadFailed(declined.label, keptLabel, () => applyMode(declined.id));
     },
   };
 }
@@ -953,6 +971,7 @@ registerAutoSwitchRunner(runAutoSwitch);
 registerDreamPulseReset(() => scene.resetDreamCyclePulse());
 registerApplyModeTestBindings({
   setEnsureReviewedOverride: (fn) => { ensureReviewedOverride = fn; },
+  setAskPluginReviewOverride: (fn) => { askPluginReviewOverride = fn; },
   setMosaic: (m) => { mosaic = m; },
   setPluginSpecs: (specs) => { pluginSpecs = specs; },
   setLiveMode: (id) => { liveMode = id; },
@@ -1003,7 +1022,12 @@ function renderLegend(m: ViewMode, opts: Record<string, string>): void {
 }
 
 if (!import.meta.env.VITEST) {
-  applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
+  initModeSwitchStatusStrip();
+  applyMode(
+    localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology",
+    {},
+    { channel: "automatic", auto: "profile-restore" },
+  );
 }
 
 export { getPresentDriveTileId } from "./present-drive-app";

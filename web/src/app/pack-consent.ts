@@ -32,9 +32,9 @@ export function resetPackConsentForTests(): void {
  */
 export async function ensurePackConsent(
   packId: string | null | undefined,
-  review: () => Promise<ConsentReviewResult>,
+  review: PackReviewRunner,
 ): Promise<ConsentReviewResult> {
-  if (!packId) return review();
+  if (!packId) return review(new AbortController().signal);
   const existing = pendingByPackId.get(packId);
   if (existing) return existing.promise;
 
@@ -46,12 +46,16 @@ export async function ensurePackConsent(
     done = true;
     settle(r);
   };
-  const abort = () => finish("aborted");
+  const ac = new AbortController();
+  const abort = () => {
+    ac.abort();
+    finish("aborted");
+  };
 
   const entry: PendingEntry = { promise, abort };
   pendingByPackId.set(packId, entry);
 
-  void review()
+  void review(ac.signal)
     .then((r) => finish(r))
     .catch(() => finish("failed"))
     .finally(() => {
@@ -61,7 +65,7 @@ export async function ensurePackConsent(
   return promise;
 }
 
-export type PackReviewRunner = () => Promise<ConsentReviewResult>;
+export type PackReviewRunner = (signal: AbortSignal) => Promise<ConsentReviewResult>;
 
 /**
  * Full tri-state outcome for mode switch / rollback (#37).

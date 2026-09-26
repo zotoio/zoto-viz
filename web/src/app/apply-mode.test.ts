@@ -3,8 +3,14 @@ import { PluginSandbox } from "../plugins/host";
 import { defaultVizContract } from "../plugins/viz-host";
 import type { ViewMode } from "../core/modes";
 import type { PluginView } from "../plugins/plugin";
-import type { ConsentReviewResult } from "./pack-consent";
-import { abortAllOpenPackConsents, resetPackConsentForTests } from "./pack-consent";
+import {
+  abortAllOpenPackConsents,
+  ensurePackReviewedOutcome,
+  resetPackConsentForTests,
+  type ConsentReviewResult,
+} from "./pack-consent";
+import { attachPluginFrontend } from "../plugins/plugin";
+import { askPluginReview } from "../plugins/plugin-ui";
 import { Select } from "../ui/ui";
 import { VizHud } from "../ui/viz-hud";
 import { applyModeImpl, type ApplyModeHost } from "./apply-mode";
@@ -13,6 +19,7 @@ import {
   clearModeSwitchStatus,
   flashModeKeptPrevious,
   flashModeLoadFailed,
+  initModeSwitchStatusStrip,
 } from "./mode-switch-message";
 import {
   bumpModeSwitchGeneration,
@@ -21,7 +28,10 @@ import {
   resetModeSwitchStateForTests,
   setLastConsentedModeId,
 } from "./mode-switch-state";
-import { resetModeSwitchCoordinatorForTests } from "./mode-switch-coordinator";
+import {
+  beginCoordinatedModeSwitch,
+  resetModeSwitchCoordinatorForTests,
+} from "./mode-switch-coordinator";
 import { getPresentDriveTileId, refreshPluginDriveState } from "./present-drive-app";
 
 const stereoSpec: PluginView = {
@@ -37,6 +47,9 @@ const thirdSpec: PluginView = {
   version: 1,
   capabilities: ["viz.write"],
   viz: defaultVizContract({ presentTick: true }),
+  runtime: "typescript",
+  has_frontend: true,
+  hash: "tunnel-hash",
 };
 
 function mode(id: string, pluginId: string, label: string): ViewMode {
@@ -160,6 +173,7 @@ function buildHost(
     shouldLoadPluginRuntime: () => true,
     isModeSwitchStale: (gen) => isModeSwitchStale(gen),
     getLastConsentedModeId: () => readLastConsentedModeId(),
+    getFallbackKeptModeId: () => "plugin:stereo-gram",
     markModeConsented: (id) => setLastConsentedModeId(id),
     showRollbackMessage: (kind, declined, keptModeId) => {
       const kept = modes[keptModeId]!.label;
@@ -173,10 +187,40 @@ function buildHost(
   return host;
 }
 
+function deferConsentForPack(packId: string): {
+  ensureReviewed: ApplyModeHost["ensureReviewed"];
+  whenPending: () => Promise<void>;
+  resolve: (r: ConsentReviewResult) => void;
+} {
+  let settleReview!: (r: ConsentReviewResult) => void;
+  const ensureReviewed: ApplyModeHost["ensureReviewed"] = (spec) =>
+    ensurePackReviewedOutcome(spec, (signal) => {
+      if (spec?.id !== packId) return Promise.resolve("ok");
+      return new Promise<ConsentReviewResult>((res) => {
+        const onAbort = () => {
+          signal.removeEventListener("abort", onAbort);
+          res("aborted");
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+        settleReview = (r) => {
+          signal.removeEventListener("abort", onAbort);
+          res(r);
+        };
+      });
+    });
+  return {
+    ensureReviewed,
+    whenPending: async () => {
+      await vi.waitFor(() => { expect(settleReview).toBeDefined(); });
+    },
+    resolve: (r) => settleReview(r),
+  };
+}
+
 function runApply(host: ApplyModeHost, id: string, flags: Record<string, unknown> = {}): number {
-  const gen = bumpModeSwitchGeneration();
-  applyModeImpl(host, id, flags, gen);
-  return gen;
+  const { switchGen, proceed } = beginCoordinatedModeSwitch({ channel: "user" }, id, flags);
+  if (proceed) applyModeImpl(host, id, flags, switchGen);
+  return switchGen;
 }
 
 function runApplyUser(host: ApplyModeHost, id: string, flags: Record<string, unknown> = {}): number {
@@ -205,6 +249,16 @@ describe("applyModeImpl rollback", () => {
     resetPackConsentForTests();
     resetModeSwitchCoordinatorForTests();
     clearModeSwitchStatus();
+  });
+
+  it("decline with empty last consented falls back to default kept mode", async () => {
+    setLastConsentedModeId("");
+    const host = buildHost({
+      ensureReviewed: async () => "declined",
+    });
+    runApply(host, "plugin:packet-tunnel");
+    await flushMicrotasks();
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
   });
 
   it("decline: restores picker, HUD, focus, Kept message, present drive (not failure wording)", async () => {
@@ -297,8 +351,9 @@ describe("applyModeImpl rollback", () => {
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
     expect(setPaneView).toHaveBeenCalledWith("topology", "plugin:packet-tunnel");
-    expect(setPaneView).toHaveBeenCalledWith("topology", "plugin:stereo-gram");
+    expect(setPaneView).toHaveBeenCalledWith("plugin:packet-tunnel", "topology");
     expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
   });
 
   it("stale consent: B pending, switch to C, resolve B — no B load, HUD shows C", async () => {
@@ -369,6 +424,101 @@ describe("applyModeImpl rollback", () => {
     expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("Couldn't load");
   });
 
+  it("dream-cycle while B consent open then accept records consent, HUD, and load", async () => {
+    const consent = deferConsentForPack("packet-tunnel");
+    const loadTs = vi.fn(async () => {});
+    const syncSky = vi.fn(async () => {});
+    const applySolo = vi.fn();
+    const host = buildHost({
+      ensureReviewed: consent.ensureReviewed,
+      loadTsPlugin: loadTs,
+      syncPluginSky: syncSky,
+      applySoloModeVisuals: applySolo,
+    });
+    runApply(host, "plugin:packet-tunnel");
+    await consent.whenPending();
+    for (let i = 0; i < 5; i++) {
+      beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:topology", {});
+    }
+    expect(applySolo).not.toHaveBeenCalled();
+    consent.resolve("ok");
+    await vi.waitFor(() => {
+      expect(readLastConsentedModeId()).toBe("plugin:packet-tunnel");
+    });
+    expect(loadTs).toHaveBeenCalled();
+    expect(syncSky).toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    expect(hudPackLabel()).toContain("Tunnel");
+    expect(host.modeSel.el.querySelector("button") === document.activeElement).toBe(true);
+  });
+
+  it("dream-cycle while B consent open then decline rolls back with Kept message", async () => {
+    const consent = deferConsentForPack("packet-tunnel");
+    const host = buildHost({ ensureReviewed: consent.ensureReviewed });
+    runApply(host, "plugin:packet-tunnel");
+    await consent.whenPending();
+    for (let i = 0; i < 5; i++) {
+      beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:topology", {});
+    }
+    consent.resolve("declined");
+    await vi.waitFor(() => {
+      expect(host.modeSel.value).toBe("plugin:stereo-gram");
+      expect(document.getElementById("modeSwitchStatus")?.textContent).toMatch(/^Kept /);
+    });
+  });
+
+  it("user switch while B consent open closes dialog; return to B shows one dialog", async () => {
+    const host = buildHost({
+      ensureReviewed: (spec) =>
+        ensurePackReviewedOutcome(spec, (signal) => {
+          if (spec?.id !== "packet-tunnel") return Promise.resolve("ok");
+          return askPluginReview(spec, { signal }).then((kind) => (kind ? "ok" : "declined"));
+        }),
+    });
+    runApply(host, "plugin:packet-tunnel");
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll(".modal.ask")).toHaveLength(1);
+    });
+    runApplyUser(host, "plugin:stereo-gram");
+    await flushMicrotasks();
+    expect(document.querySelector(".modal.ask")).toBeNull();
+    runApply(host, "plugin:packet-tunnel");
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll(".modal.ask")).toHaveLength(1);
+    });
+    abortAllOpenPackConsents();
+    await flushMicrotasks();
+  });
+
+  it("stale load: real attachPluginFrontend skips when generation advances before load", async () => {
+    const consent = deferConsentForPack("packet-tunnel");
+    const sandbox = new PluginSandbox();
+    const loadSpy = vi.spyOn(sandbox, "loadModule");
+    const host = buildHost({
+      ensureReviewed: consent.ensureReviewed,
+      loadTsPlugin: async (spec, switchGen) => {
+        bumpModeSwitchGeneration();
+        await attachPluginFrontend(sandbox, spec, {}, switchGen, isModeSwitchStale);
+      },
+    });
+    runApply(host, "plugin:packet-tunnel");
+    await consent.whenPending();
+    consent.resolve("ok");
+    await flushMicrotasks();
+    expect(loadSpy).not.toHaveBeenCalled();
+  });
+
+  it("loadTsPlugin failure rolls back with Couldn't load message", async () => {
+    const host = buildHost({
+      ensureReviewed: async () => "ok",
+      loadTsPlugin: async () => { throw new Error("boom"); },
+    });
+    runApply(host, "plugin:packet-tunnel");
+    await flushMicrotasks();
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("Couldn't load Tunnel");
+  });
+
   it("C fails while B consent pending: message names last consented A not B", async () => {
     let resolveB!: (r: ConsentReviewResult) => void;
     const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
@@ -430,6 +580,7 @@ describe("applyMode via main host", () => {
   beforeEach(() => {
     vi.useRealTimers();
     mountShell();
+    initModeSwitchStatusStrip();
     vi.stubGlobal("WebSocket", class { close() {} });
     vi.stubGlobal("localStorage", {
       getItem: (k: string) => (k === "zoto-viz.mode" ? "topology" : null),
@@ -441,7 +592,9 @@ describe("applyMode via main host", () => {
     })));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const { resetApplyModeTestOverrides } = await import("./apply-mode-test-host");
+    resetApplyModeTestOverrides();
     clearModeSwitchStatus();
     resetModeSwitchStateForTests();
     vi.unstubAllGlobals();
@@ -450,11 +603,23 @@ describe("applyMode via main host", () => {
   it("uses dedicated status element (not stuck #hint morphing) on consent decline", async () => {
     const { applyMode } = await import("./main");
     const { configureApplyModeForTests } = await import("./apply-mode-test-host");
+    const reviewSpec: PluginView = {
+      id: "stereo-gram",
+      name: "Stereo",
+      version: 1,
+      engine: "graph",
+      base: "topology",
+      capabilities: ["viz.write"],
+      runtime: "typescript",
+      has_frontend: true,
+      hash: "stereo-hash",
+      viz: defaultVizContract({ presentTick: true }),
+    };
     configureApplyModeForTests({
-      ensureReviewed: async () => "declined",
+      askPluginReview: async () => null,
       liveMode: "topology",
       lastConsentedMode: "topology",
-      pluginSpecs: [stereoSpec],
+      pluginSpecs: [reviewSpec],
     });
     setLastConsentedModeId("topology");
     applyMode("plugin:stereo-gram");
@@ -464,5 +629,33 @@ describe("applyMode via main host", () => {
     });
     const status = document.getElementById("modeSwitchStatus");
     expect(status?.classList.contains("morphing")).not.toBe(true);
+  });
+
+  it("askPluginReview rejection rolls back with failure message", async () => {
+    const { applyMode } = await import("./main");
+    const { configureApplyModeForTests } = await import("./apply-mode-test-host");
+    const reviewSpec: PluginView = {
+      id: "stereo-gram",
+      name: "Stereo",
+      version: 1,
+      engine: "graph",
+      base: "topology",
+      capabilities: ["viz.write"],
+      runtime: "typescript",
+      has_frontend: true,
+      hash: "stereo-hash",
+      viz: defaultVizContract({ presentTick: true }),
+    };
+    configureApplyModeForTests({
+      askPluginReview: async () => { throw new Error("dialog dismissed"); },
+      liveMode: "topology",
+      lastConsentedMode: "topology",
+      pluginSpecs: [reviewSpec],
+    });
+    setLastConsentedModeId("topology");
+    applyMode("plugin:stereo-gram");
+    await vi.waitFor(() => {
+      expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("Couldn't load");
+    });
   });
 });

@@ -2,6 +2,7 @@ import type { ViewMode } from "../core/modes";
 import type { DreamAnim } from "../graph/scene";
 import type { ConsentReviewResult } from "./pack-consent";
 import type { PluginView } from "../plugins/plugin";
+import { pluginNeedsReview } from "../plugins/plugin";
 import type { Select } from "../ui/ui";
 import type { Mosaic } from "../graph/mosaic";
 import {
@@ -76,11 +77,27 @@ export type ApplyModeHost = {
   shouldLoadPluginRuntime: (m: ViewMode) => boolean;
   isModeSwitchStale: (generation: number) => boolean;
   getLastConsentedModeId: () => string;
+  getFallbackKeptModeId: () => string;
   markModeConsented: (modeId: string) => void;
   showRollbackMessage: (kind: "declined" | "failed", declined: ViewMode, keptModeId: string) => string | null;
+  retryDeclinedMode?: (modeId: string) => void;
 };
 
 export type ApplyModeFlags = { keepLayout?: boolean };
+
+function resolveKeptModeId(
+  host: ApplyModeHost,
+  prevPresent: ReturnType<typeof capturePresentDriveBeforeLiveModeCommit>,
+): string {
+  const last = host.getLastConsentedModeId();
+  if (last) return last;
+  if (prevPresent.prevPresentMode) return prevPresent.prevPresentMode;
+  return host.getFallbackKeptModeId();
+}
+
+function needsConsentBeforeShow(spec: PluginView | null): boolean {
+  return !!spec && pluginNeedsReview(spec) && !spec.consent;
+}
 
 function rollbackSwitch(
   host: ApplyModeHost,
@@ -92,7 +109,7 @@ function rollbackSwitch(
   kind: "declined" | "failed",
 ): string | null {
   const kept = host.modeById(keptModeId);
-  if (paneRevert) host.mosaicSetPaneView(paneRevert.slot, paneRevert.modeId);
+  if (paneRevert) host.mosaicSetPaneView(paneRevert.modeId, paneRevert.slot);
   host.modeSel.value = keptModeId;
   host.setLiveMode(keptModeId);
   localStorage.setItem("zoto-viz.mode", keptModeId);
@@ -124,7 +141,17 @@ function scheduleConsentFinalize(
   switchGen: number,
 ): void {
   const targetId = m.id;
-  const keptOnFailure = host.getLastConsentedModeId() || prevPresent.prevPresentMode;
+  const keptOnFailure = resolveKeptModeId(host, prevPresent);
+  const commitScene = (): void => {
+    const skyStage = host.computeSkyStage(m, spec, host.optsFor(m));
+    host.applyStageOnly(skyStage);
+    if (host.mosaic?.on && !(m.pluginId && m.standalone)) {
+      host.applyMosaicModeVisuals(m, host.optsFor(m), spec, skyStage);
+    } else {
+      host.applySoloModeVisuals(m, host.optsFor(m), spec, skyStage);
+    }
+    host.applyViewLook();
+  };
   void (async () => {
     let result: ConsentReviewResult = "failed";
     try {
@@ -142,17 +169,25 @@ function scheduleConsentFinalize(
     }
     if (host.getLiveMode() !== targetId) return;
     if (result === "ok") {
+      commitScene();
       host.markModeConsented(targetId);
       host.syncModeHud(m, spec);
-      if (host.shouldLoadPluginRuntime(m)) {
-        await host.loadTsPlugin(paneSpec, switchGen);
-        if (host.isModeSwitchStale(switchGen)) {
-          settleConsentAndDrainAuto(result);
-          return;
+      try {
+        if (host.shouldLoadPluginRuntime(m)) {
+          await host.loadTsPlugin(paneSpec, switchGen);
+          if (host.isModeSwitchStale(switchGen)) {
+            settleConsentAndDrainAuto(result);
+            return;
+          }
+          await host.syncPluginSky(paneSpec, switchGen);
         }
-        await host.syncPluginSky(paneSpec, switchGen);
+      } catch {
+        rollbackSwitch(host, keptOnFailure, m, prevPresent, mosaicSnap, paneRevert, "failed");
+        settleConsentAndDrainAuto("failed", m.id);
+        return;
       }
       settleConsentAndDrainAuto(result);
+      host.modeSel.focus();
       return;
     }
     rollbackSwitch(
@@ -164,7 +199,7 @@ function scheduleConsentFinalize(
       paneRevert,
       result === "declined" ? "declined" : "failed",
     );
-    settleConsentAndDrainAuto(result);
+    settleConsentAndDrainAuto(result, m.id);
   })();
 }
 
@@ -189,7 +224,8 @@ export function applyModeImpl(
   host.refreshPluginDrive(spec, m.id);
   const paneSpec = host.skySpecForMode(m.id, spec);
   const skyStage = host.computeSkyStage(m, spec, opts);
-  host.applyStageOnly(skyStage);
+  const gateScene = needsConsentBeforeShow(spec);
+  if (!gateScene) host.applyStageOnly(skyStage);
   host.applyModeFeedExtras(m, opts);
   host.bindThisView(m.id);
   host.clearModeOpts();
@@ -213,15 +249,19 @@ export function applyModeImpl(
         rollbackSwitch(host, kept, m, prevPresent, mosaicSnap, null, "failed");
         return;
       }
-      paneRevert = { slot, modeId: prevLive };
+      paneRevert = { slot, modeId: m.id };
     }
-    host.applyMosaicModeVisuals(m, opts, spec, skyStage);
-    host.applyViewLook();
+    if (!gateScene) {
+      host.applyMosaicModeVisuals(m, opts, spec, skyStage);
+      host.applyViewLook();
+    }
     scheduleConsentFinalize(host, m, spec, paneSpec, prevPresent, mosaicSnap, paneRevert, switchGen);
     return;
   }
 
-  host.applySoloModeVisuals(m, opts, spec, skyStage);
-  host.applyViewLook();
+  if (!gateScene) {
+    host.applySoloModeVisuals(m, opts, spec, skyStage);
+    host.applyViewLook();
+  }
   scheduleConsentFinalize(host, m, spec, paneSpec, prevPresent, mosaicSnap, paneRevert, switchGen);
 }
