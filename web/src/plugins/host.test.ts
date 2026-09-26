@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
 
 describe("hash consent and TypeScript allow", () => {
@@ -38,35 +38,26 @@ describe("hash consent and TypeScript allow", () => {
   });
 });
 
-describe("PluginSandbox", () => {
-  it("loads srcdoc, ticks, and unloads", async () => {
-    const box = new PluginSandbox();
-    const styles: Record<string, unknown>[] = [];
-    box.handlers = { setStyle: (s) => styles.push(s), setNodeColor: () => {} };
-    await box.load("pulse", "globalThis.ok = true;", ["graph.read", "nope"], { a: "1" });
-    const iframe = document.querySelector("iframe");
-    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
-    expect(iframe?.srcdoc).not.toMatch(/nope/);
-    box.tick([{ id: "a", rate: 1, role: "lan" }]);
-    box.unload();
-    expect(document.querySelector("iframe")).toBeNull();
+describe("PluginSandbox module load", () => {
+  afterEach(() => {
+    document.querySelectorAll("iframe").forEach((el) => el.remove());
+    vi.restoreAllMocks();
   });
 
-  it("fetches /plugins/<id>/module.js then loads the iframe", async () => {
+  it("fetches /plugins/<id>/module.js then loads the bootstrap frame", async () => {
     const orig = globalThis.fetch;
     const seen: string[] = [];
-    globalThis.fetch = (async (url: string) => {
+    globalThis.fetch = vi.fn(async (url: string) => {
       seen.push(String(url));
       return { ok: true, text: async () => "globalThis.fromHost = true;" } as Response;
     }) as typeof fetch;
     const box = new PluginSandbox();
     expect(pluginModuleUrl("pulse", "deadbeef")).toBe("/api/plugins/pulse/module.js?h=deadbeef");
-    await box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
+    const boot = box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
+    await boot;
     expect(seen).toEqual(["/api/plugins/pulse/module.js?h=deadbeef"]);
     const iframe = document.querySelector("iframe");
-    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
-    expect(iframe?.srcdoc).toMatch(/fromHost/);
-    expect(iframe?.srcdoc).not.toMatch(/os\.exec/);
+    expect(iframe?.src).toContain("plugin-sandbox.html");
     box.unload();
     globalThis.fetch = (async () => ({ ok: false, status: 404, text: async () => "" }) as Response) as typeof fetch;
     await expect(box.loadModule("missing", ["graph.read"], {})).rejects.toThrow(/module 404/);

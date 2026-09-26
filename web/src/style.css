@@ -392,6 +392,12 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
   font: 600 11px/20px inherit; letter-spacing: 0.02em; cursor: pointer;
 }
 .mosaic-pane.focus .mosaic-cap, .mosaic-pane.focus .mosaic-pick { border-color: var(--accent); color: var(--accent); }
+.mosaic-pane-notice {
+  position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; padding: 16px;
+  text-align: center; font-size: 13px; line-height: 1.35; color: var(--fg);
+  background: color-mix(in srgb, var(--scene-bg, var(--bg)) 88%, transparent);
+  pointer-events: none;
+}
 .mosaic-tools { margin-left: auto; display: flex; gap: 4px; cursor: default; }
 .mosaic-tool {
   height: 22px; padding: 0 7px; margin: 0;
