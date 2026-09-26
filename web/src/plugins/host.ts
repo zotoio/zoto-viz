@@ -1,4 +1,6 @@
 import { PLUGIN_SDK } from "./sdk";
+import { SANDBOX_DUPLICATE_TILE_SHIM } from "./sandbox-shim";
+import { laneRegistry } from "./sandbox-bitmap";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
 
 const ALLOWED = new Set([
@@ -21,8 +23,8 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
   | { source: "zoto-viz-plugin"; type: "log"; payload: string }
-  | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap; pluginId?: string } }
-  | { source: "zoto-viz-plugin"; type: "publishBitmapFailed"; payload: { pluginId?: string } };
+  | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap } }
+  | { source: "zoto-viz-plugin"; type: "publishBitmapFailed"; payload: Record<string, never> };
 
 export type ParentMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
@@ -85,9 +87,17 @@ export class PluginSandbox {
   }
 
   unload(): void {
+    if (this.loadedPluginId) laneRegistry.teardownPlugin(this.loadedPluginId);
     this.iframe?.remove();
     this.iframe = null;
     this.loadedPluginId = null;
+  }
+
+  setDuplicateTileCount(count: number): void {
+    this.iframe?.contentWindow?.postMessage(
+      { source: "zoto-viz-host", type: "dupTiles", count },
+      "*",
+    );
   }
 
   async load(
@@ -111,6 +121,7 @@ export class PluginSandbox {
     iframe.srcdoc = `<!doctype html><meta charset="utf-8">
 <script>window.__zotoConfig = ${JSON.stringify(pluginConfig)};</script>
 <script data-caps='${JSON.stringify(this.caps)}'>${PLUGIN_SDK}</script>
+<script>${SANDBOX_DUPLICATE_TILE_SHIM}</script>
 <script type="module">const zoto = globalThis.zoto; ${plugin}</script>`;
     document.body.appendChild(iframe);
     this.iframe = iframe;
@@ -154,9 +165,10 @@ export class PluginSandbox {
   }
 
   private onMessage = (ev: MessageEvent): void => {
-    if (this.iframe && ev.source !== this.iframe.contentWindow) return;
+    if (!this.iframe) return;
+    if (ev.source !== this.iframe.contentWindow) return;
     const d = ev.data as HostMsg | undefined;
-    if (!d || d.source !== "zoto-viz-plugin") return;
+    if (!d || typeof d !== "object" || d.source !== "zoto-viz-plugin" || typeof d.type !== "string") return;
     if (!hostAllows(d.type, this.caps)) return;
     if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);
     if (d.type === "setNodeColor") this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
@@ -164,13 +176,17 @@ export class PluginSandbox {
     if (d.type === "writeUniform") this.handlers.writeUniform?.(d.payload.name, d.payload.value);
     if (d.type === "writeParticles") this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
     if (d.type === "publishBitmap") {
-      const bitmap = d.payload.bitmap;
+      const bitmap = d.payload?.bitmap;
       if (!(bitmap instanceof ImageBitmap)) return;
-      const pluginId = d.payload.pluginId || this.loadedPluginId || "";
-      if (pluginId) this.handlers.publishBitmap?.(pluginId, bitmap);
+      const pluginId = this.loadedPluginId;
+      if (!pluginId) {
+        bitmap.close();
+        return;
+      }
+      this.handlers.publishBitmap?.(pluginId, bitmap);
     }
     if (d.type === "publishBitmapFailed") {
-      const pluginId = d.payload.pluginId || this.loadedPluginId || "";
+      const pluginId = this.loadedPluginId;
       if (pluginId) this.handlers.publishBitmapFailed?.(pluginId);
     }
   };

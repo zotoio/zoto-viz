@@ -24,6 +24,7 @@ import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
 import { finishSandboxBitmapHostFrame, paintPackMirrorPlaceholder } from "../plugins/sandbox-bitmap";
+import { PackMirrorGl } from "./pack-mirror-gl";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
@@ -76,6 +77,7 @@ export class RenderHost {
   private readonly frame: (ts: number) => void;
   private disposed = false;
   private pr: number;
+  private readonly packMirrorGl = new PackMirrorGl();
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -218,27 +220,8 @@ export class RenderHost {
     const sy = Math.round(src.y * pr);
     const sw = Math.round(src.w * pr);
     const sh = Math.round(src.h * pr);
-    const dX = Math.round(dst.x * pr);
-    const dY = Math.round(dst.y * pr);
-    const dW = Math.round(dst.w * pr);
-    const dH = Math.round(dst.h * pr);
-    const dx = Math.round(inner.x * pr);
-    const dy = Math.round(inner.y * pr);
-    const dw = Math.round(inner.w * pr);
-    const dh = Math.round(inner.h * pr);
-    rd.setScissorTest(true);
-    rd.setViewport(dX, dY, dW, dH);
-    rd.setScissor(dX, dY, dW, dH);
-    rd.setClearColor(letterboxFillHex(fill), 1);
-    rd.clear(true, false, false);
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-    gl.blitFramebuffer(sx, sy, sx + sw, sy + sh, dx, dy, dx + dw, dy + dh, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-    rd.resetState();
-    rd.setViewport(dx, dy, dw, dh);
-    rd.setScissor(dx, dy, dw, dh);
-    rd.setScissorTest(true);
-    return { x: dx, y: dy, w: dw, h: dh };
+    this.packMirrorGl.captureFromScreen(gl, sx, sy, sw, sh);
+    return this.packMirrorGl.blitToViewport(gl, rd, fill, dst, pr, aspect);
   }
 
   /**
@@ -256,13 +239,47 @@ export class RenderHost {
     inner.x += dst.x;
     inner.y += dst.y;
     const box = { ...dst };
-    const ctx = this.software ? this.ctx2d : this.canvas.getContext("2d");
-    if (!ctx) return null;
-    const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
-    ctx.setTransform(pr, 0, 0, pr, 0, 0);
-    paintLetterboxBars(ctx, box, inner, fill);
-    ctx.drawImage(bitmap, inner.x, inner.y, inner.w, inner.h);
-    return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
+    if (this.software) {
+      const ctx = this.ctx2d;
+      if (!ctx) return null;
+      const pr = this.pr;
+      ctx.setTransform(pr, 0, 0, pr, 0, 0);
+      paintLetterboxBars(ctx, box, inner, fill);
+      ctx.drawImage(bitmap, inner.x, inner.y, inner.w, inner.h);
+      return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
+    }
+    const gl = this.gl;
+    const rd = this.renderer as THREE.WebGLRenderer;
+    if (!gl) return null;
+    const pr = rd.getPixelRatio();
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    const ix = Math.round(inner.x * pr);
+    const iy = Math.round(inner.y * pr);
+    const iw = Math.round(inner.w * pr);
+    const ih = Math.round(inner.h * pr);
+    const dX = Math.round(dst.x * pr);
+    const dY = Math.round(dst.y * pr);
+    const dW = Math.round(dst.w * pr);
+    const dH = Math.round(dst.h * pr);
+    rd.setScissorTest(true);
+    rd.setViewport(dX, dY, dW, dH);
+    rd.setScissor(dX, dY, dW, dH);
+    rd.setClearColor(letterboxFillHex(fill), 1);
+    rd.clear(true, false, false);
+    gl.blitFramebuffer(0, 0, bitmap.width, bitmap.height, ix, iy, ix + iw, iy + ih, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fbo);
+    gl.deleteTexture(tex);
+    return { x: ix, y: iy, w: iw, h: ih };
   }
 
   /** Surface letterbox only (no bitmap yet, no publish failure). */
@@ -277,12 +294,28 @@ export class RenderHost {
     inner.x += dst.x;
     inner.y += dst.y;
     const box = { ...dst };
-    const ctx = this.software ? this.ctx2d : this.canvas.getContext("2d");
-    if (!ctx) return null;
-    const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
-    ctx.setTransform(pr, 0, 0, pr, 0, 0);
-    paintLetterboxBars(ctx, box, inner, fill);
-    return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
+    if (this.software) {
+      const ctx = this.ctx2d;
+      if (!ctx) return null;
+      const pr = this.pr;
+      ctx.setTransform(pr, 0, 0, pr, 0, 0);
+      paintLetterboxBars(ctx, box, inner, fill);
+      return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
+    }
+    const rd = this.renderer as THREE.WebGLRenderer;
+    const gl = this.gl;
+    if (!gl) return null;
+    const pr = rd.getPixelRatio();
+    const dX = Math.round(dst.x * pr);
+    const dY = Math.round(dst.y * pr);
+    const dW = Math.round(dst.w * pr);
+    const dH = Math.round(dst.h * pr);
+    rd.setScissorTest(true);
+    rd.setViewport(dX, dY, dW, dH);
+    rd.setScissor(dX, dY, dW, dH);
+    rd.setClearColor(letterboxFillHex(fill), 1);
+    rd.clear(true, false, false);
+    return { x: dX, y: dY, w: dW, h: dH };
   }
 
   presentSandboxMirrorPlaceholder(
@@ -293,11 +326,38 @@ export class RenderHost {
   ): Viewport | null {
     const dst = this.viewBox(mirror);
     if (!dst || dst.w < 2 || dst.h < 2) return null;
-    const ctx = this.software ? this.ctx2d : this.canvas.getContext("2d");
-    if (!ctx) return null;
+    const el = mirror.viewEl;
+    let badge = el.querySelector<HTMLElement>(".pack-mirror-placeholder");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "pack-mirror-placeholder";
+      el.appendChild(badge);
+    }
+    badge.textContent = `${packName} · mirrors tile ${mirrorsTile}`;
+    badge.hidden = false;
+    if (this.software) {
+      const ctx = this.ctx2d;
+      if (!ctx) return null;
+      const pr = this.pr;
+      ctx.setTransform(pr, 0, 0, pr, 0, 0);
+      paintPackMirrorPlaceholder(ctx, dst, fill, packName, mirrorsTile);
+    } else {
+      const gl = this.gl;
+      const rd = this.renderer as THREE.WebGLRenderer;
+      if (gl) {
+        const pr = rd.getPixelRatio();
+        const dX = Math.round(dst.x * pr);
+        const dY = Math.round(dst.y * pr);
+        const dW = Math.round(dst.w * pr);
+        const dH = Math.round(dst.h * pr);
+        rd.setScissorTest(true);
+        rd.setViewport(dX, dY, dW, dH);
+        rd.setScissor(dX, dY, dW, dH);
+        rd.setClearColor(letterboxFillHex(fill), 1);
+        rd.clear(true, false, false);
+      }
+    }
     const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
-    ctx.setTransform(pr, 0, 0, pr, 0, 0);
-    paintPackMirrorPlaceholder(ctx, dst, fill, packName, mirrorsTile);
     return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
   }
 

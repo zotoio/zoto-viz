@@ -9,8 +9,12 @@ export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLet
   let r = (clearHex >> 16) & 255;
   let g = (clearHex >> 8) & 255;
   let b = clearHex & 255;
-  if (r === 0 && g === 0 && b === 0) {
-    r = g = b = 1;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  if (lum < 18) {
+    const lift = (18 - lum) / 255;
+    r = Math.min(255, Math.round(r + lift * 255));
+    g = Math.min(255, Math.round(g + lift * 255));
+    b = Math.min(255, Math.round(b + lift * 255));
   }
   const css = `rgb(${r}, ${g}, ${b})`;
   return { css, grain: Math.min(1, Math.max(0, grain)) };
@@ -34,7 +38,7 @@ export function paintLetterboxBars(
   inner: { x: number; y: number; w: number; h: number },
   fill: SurfaceLetterboxFill,
 ): void {
-  if (isBlackFill(fill.css)) throw new Error("letterbox fill must not be black");
+  if (isBlackFill(fill.css)) return;
   ctx.save();
   ctx.fillStyle = fill.css;
   const bars = [

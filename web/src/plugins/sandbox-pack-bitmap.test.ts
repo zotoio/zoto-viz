@@ -139,7 +139,7 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     const lane = sandboxBitmapLane("pack-fail");
     expect(lane.shouldShowFailurePlaceholder()).toBe(false);
     host.presentSandboxMirrorLetterbox(mirror, fill, 16 / 9);
-    lane.notePublishFailed();
+    lane.markPublishFailed();
     expect(lane.shouldShowFailurePlaceholder()).toBe(true);
     host.presentSandboxMirrorPlaceholder(mirror, fill, "My pack", 2);
     host.dispose();
@@ -159,7 +159,7 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     const src = box["iframe"]!.contentWindow;
     box["onMessage"]({
       source: src ?? null,
-      data: { source: "zoto-viz-plugin", type: "publishBitmap", payload: { bitmap: bmp, pluginId: "pulse" } },
+      data: { source: "zoto-viz-plugin", type: "publishBitmap", payload: { bitmap: bmp } },
     } as MessageEvent);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBe(bmp);
@@ -172,14 +172,14 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     box.handlers = {
       publishBitmapFailed: (id) => {
         expect(id).toBe("pulse");
-        lane.notePublishFailed();
+        lane.markPublishFailed();
       },
     };
     await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {});
     const src = box["iframe"]!.contentWindow;
     box["onMessage"]({
       source: src ?? null,
-      data: { source: "zoto-viz-plugin", type: "publishBitmapFailed", payload: { pluginId: "pulse" } },
+      data: { source: "zoto-viz-plugin", type: "publishBitmapFailed", payload: {} },
     } as MessageEvent);
     expect(lane.shouldShowFailurePlaceholder()).toBe(true);
     box.unload();

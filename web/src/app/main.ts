@@ -106,7 +106,8 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { paintFeedState } from "./feed-paint";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { deliverCoalescedMosaicPacks, mosaicPackGroups } from "../graph/mosaic-pack-coalesce";
-import { sandboxBitmapLane } from "../plugins/sandbox-bitmap";
+import { laneRegistry, sandboxBitmapLane } from "../plugins/sandbox-bitmap";
+import { ensurePackReviewed } from "./pack-consent";
 import { MosaicTileHudLayer } from "../ui/mosaic-tile-hud";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
@@ -443,8 +444,8 @@ sandbox.handlers = {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
-  publishBitmap: (pluginId, bitmap) => { sandboxBitmapLane(pluginId).ingest(bitmap); },
-  publishBitmapFailed: (pluginId) => { sandboxBitmapLane(pluginId).notePublishFailed(); },
+  publishBitmap: (pluginId, bitmap) => { laneRegistry.ingest(pluginId, bitmap); },
+  publishBitmapFailed: (pluginId) => { laneRegistry.notePublishFailed(pluginId); },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };
@@ -570,38 +571,7 @@ let tsWatchId = "";
 let tsWatchHash = "";
 
 async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
-  if (!spec || !pluginNeedsReview(spec)) return true;
-  if (spec.consent) return true;
-  if (spec.hash && hashConsented(spec.id, spec.hash)) {
-    spec.consent = "reviewed";
-    if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-    return true;
-  }
-  if (autoconsentEnabled() && autoconsentEligible(spec)) {
-    const kind = autoconsentKind(spec);
-    try {
-      await grantPluginConsent(spec.id, kind);
-      spec.consent = kind;
-      if (spec.hash) consentHash(spec.id, spec.hash);
-      if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-      return true;
-    } catch (e) {
-      console.warn("zoto-viz plugin autoconsent:", e);
-      return false;
-    }
-  }
-  const kind = await askPluginReview(spec);
-  if (!kind) return false;
-  try {
-    await grantPluginConsent(spec.id, kind);
-    spec.consent = kind;
-    if (spec.hash) consentHash(spec.id, spec.hash);
-    if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-    return true;
-  } catch (e) {
-    console.warn("zoto-viz plugin consent:", e);
-    return false;
-  }
+  return ensurePackReviewed(spec);
 }
 
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {

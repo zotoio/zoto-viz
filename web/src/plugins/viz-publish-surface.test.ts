@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { SANDBOX_PUBLISH_SURFACE_SDK } from "./viz-sdk";
+import { SANDBOX_PUBLISH_SURFACE_SDK } from "./sandbox-shim";
 
 type Sent = { type: string; payload: Record<string, unknown>; transfer?: unknown[] };
 
@@ -40,7 +40,6 @@ describe("sandbox publishSurface", () => {
     await vi.waitFor(() => expect(sent).toHaveLength(1));
     expect(createImageBitmap).toHaveBeenCalledWith(canvas);
     expect(sent[0]!.type).toBe("publishBitmap");
-    expect(sent[0]!.payload.pluginId).toBe("pack-x");
     expect(sent[0]!.payload.bitmap).toBe(bmp);
     expect(sent[0]!.transfer).toEqual([bmp]);
   });
@@ -51,7 +50,6 @@ describe("sandbox publishSurface", () => {
     publishSurface({});
     await vi.waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.type).toBe("publishBitmapFailed");
-    expect(sent[0]!.payload.pluginId).toBe("pack-x");
   });
 
   it("prefers transferToImageBitmap when the canvas is an OffscreenCanvas", () => {

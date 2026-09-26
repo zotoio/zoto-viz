@@ -13,9 +13,16 @@ export class SandboxBitmapLane {
   private pending: ImageBitmap | null = null;
   private open = new Set<ImageBitmap>();
   private publishFailed = false;
+  generation = 0;
   readonly stats: SandboxBitmapStats = { received: 0, closed: 0 };
 
-  ingest(bitmap: ImageBitmap): void {
+  constructor(private readonly pluginId: string) {}
+
+  ingest(bitmap: ImageBitmap, gen: number): void {
+    if (gen !== this.generation) {
+      bitmap.close();
+      return;
+    }
     this.releasePending();
     this.publishFailed = false;
     this.pending = bitmap;
@@ -23,11 +30,15 @@ export class SandboxBitmapLane {
     this.stats.received += 1;
   }
 
-  notePublishFailed(): void {
+  notePublishFailed(gen: number): void {
+    if (gen !== this.generation) return;
     this.publishFailed = true;
   }
 
-  /** Labelled fallback when `createImageBitmap` / transfer failed this frame. */
+  markPublishFailed(): void {
+    this.notePublishFailed(this.generation);
+  }
+
   shouldShowFailurePlaceholder(): boolean {
     return this.publishFailed && !this.pending;
   }
@@ -40,7 +51,6 @@ export class SandboxBitmapLane {
     return this.open.size;
   }
 
-  /** Draw the pending bitmap into a mirror viewport without closing (host closes after all mirrors). */
   drawMirror(
     host: RenderHost,
     mirror: HostedView,
@@ -53,16 +63,20 @@ export class SandboxBitmapLane {
     return true;
   }
 
-  /** End of host animation frame: close the bitmap received this frame. */
   finishHostFrame(): void {
     this.releasePending();
+  }
+
+  bumpGeneration(): void {
+    this.generation += 1;
+    this.releasePending();
     this.publishFailed = false;
+    for (const b of this.open) b.close();
+    this.open.clear();
   }
 
   teardown(): void {
-    this.releasePending();
-    for (const b of this.open) b.close();
-    this.open.clear();
+    this.bumpGeneration();
   }
 
   private releasePending(): void {
@@ -74,24 +88,54 @@ export class SandboxBitmapLane {
   }
 }
 
-const lanes = new Map<string, SandboxBitmapLane>();
+class LaneRegistry {
+  private lanes = new Map<string, SandboxBitmapLane>();
+
+  lane(pluginId: string): SandboxBitmapLane {
+    let lane = this.lanes.get(pluginId);
+    if (!lane) {
+      lane = new SandboxBitmapLane(pluginId);
+      this.lanes.set(pluginId, lane);
+    }
+    return lane;
+  }
+
+  ingest(pluginId: string, bitmap: ImageBitmap): void {
+    const lane = this.lane(pluginId);
+    lane.ingest(bitmap, lane.generation);
+  }
+
+  notePublishFailed(pluginId: string): void {
+    this.lane(pluginId).markPublishFailed();
+  }
+
+  teardownPlugin(pluginId: string): void {
+    this.lanes.get(pluginId)?.teardown();
+    this.lanes.delete(pluginId);
+  }
+
+  finishHostFrame(): void {
+    for (const lane of this.lanes.values()) lane.finishHostFrame();
+  }
+
+  resetAll(): void {
+    for (const lane of this.lanes.values()) lane.teardown();
+    this.lanes.clear();
+  }
+}
+
+export const laneRegistry = new LaneRegistry();
 
 export function sandboxBitmapLane(pluginId: string): SandboxBitmapLane {
-  let lane = lanes.get(pluginId);
-  if (!lane) {
-    lane = new SandboxBitmapLane();
-    lanes.set(pluginId, lane);
-  }
-  return lane;
+  return laneRegistry.lane(pluginId);
 }
 
 export function finishSandboxBitmapHostFrame(): void {
-  for (const lane of lanes.values()) lane.finishHostFrame();
+  laneRegistry.finishHostFrame();
 }
 
 export function resetSandboxBitmapLanes(): void {
-  for (const lane of lanes.values()) lane.teardown();
-  lanes.clear();
+  laneRegistry.resetAll();
 }
 
 export function paintPackMirrorPlaceholder(
@@ -106,6 +150,15 @@ export function paintPackMirrorPlaceholder(
   inner.y += box.y;
   paintLetterboxBars(ctx, box, inner, fill);
   ctx.save();
+  ctx.fillStyle = fill.css;
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  if (fill.grain > 0.01) {
+    const n = Math.min(200, Math.floor(box.w * box.h * 0.015));
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${(0.04 + fill.grain * 0.08) * Math.random()})`;
+      ctx.fillRect(box.x + Math.random() * box.w, box.y + Math.random() * box.h, 1, 1);
+    }
+  }
   ctx.fillStyle = fill.css;
   ctx.font = "600 11px sans-serif";
   ctx.textAlign = "center";
@@ -161,14 +214,11 @@ export function createReadbackGuard(): ReadbackGuard {
         wrapReadPixels(WebGL2RenderingContext.prototype);
       }
     },
-    restore() {
-      // vitest restores mocks between tests when using vi.spyOn; manual install is test-only
-    },
+    restore() {},
   };
   return guard;
 }
 
-/** Test helper: one host-frame of sandbox bitmap mirroring into duplicate tiles. */
 export function runSandboxBitmapDuplicateFrame(input: {
   host: RenderHost;
   pluginId: string;
@@ -178,7 +228,7 @@ export function runSandboxBitmapDuplicateFrame(input: {
   aspect: number;
 }): void {
   const lane = sandboxBitmapLane(input.pluginId);
-  lane.ingest(input.bitmap);
+  lane.ingest(input.bitmap, lane.generation);
   for (const mirror of input.mirrors) {
     lane.drawMirror(input.host, mirror, input.fill, input.aspect);
   }
