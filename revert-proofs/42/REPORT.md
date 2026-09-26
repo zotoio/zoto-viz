@@ -34,7 +34,7 @@ Each patch: `git apply --check` clean (no fuzz) at A head; anchored vitest goes 
 
 | Row | Assertion (patched run) |
 |-----|-------------------------|
-| `pack-mirror-capture-rounding` | `expected { x: 2, y: 87, w: 151, h: 92 } to deeply equal { x: 2, y: 87, w: 151, h: 91 }` (floor/ceil on `deviceRectBottomLeftCssInto`) |
+| `pack-mirror-capture-rounding` | `AssertionError: expected { x: 1, y: 87, w: 152, h: 92 } to deeply equal { x: 2, y: 87, w: 151, h: 92 }` (floor/ceil on `deviceRectBottomLeftCssInto`) |
 | `pack-mirror-tile-edge-shared` | `expected 152 to be 151` (`aOut.x + aOut.w` vs `bOut.x`) |
 | `pack-mirror-device-size-into` | lifecycle / Into row fails on `renderTargetSetSize` or size identity |
 | `pack-mirror-device-size-origin` | `expected N to be +0` on `renderTargetSetSize` (NaN `w` without `cssBoxDim` / finite guard) |
