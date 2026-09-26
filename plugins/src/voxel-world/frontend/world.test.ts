@@ -287,6 +287,42 @@ describe("voxel world pack", () => {
     expect(out.slot1[0]).toBeCloseTo(anchorXZ("quic", parseVoxConfig({ preset: "classic" }).seed).x, 3);
   });
 
+  it("fills empty beacon slots immediately and fades new talkers in", () => {
+    resetLiveMarkers();
+    setVoxConfig({ preset: "classic", mobs: "0" });
+    const sys = { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 };
+    const dt = 1 / 60;
+    tickVoxelWorld(liveSlice({ t: 0, packets: [], talkers: [], headlines: [], sys }), 1.6, dt);
+    expect(screenMarkerMembershipFingerprint()).toBe("");
+    tickVoxelWorld(
+      liveSlice({
+        t: dt,
+        packets: [],
+        talkers: [{ id: "10.0.0.9", rate: 80, role: "lan" }],
+        headlines: [],
+        sys,
+      }),
+      1.6,
+      dt,
+    );
+    expect(screenMarkerMembershipFingerprint()).toBe("10.0.0.9");
+    const s0 = beaconScratch().find((b) => b.key === "10.0.0.9")!.strength;
+    expect(s0).toBeGreaterThan(0);
+    expect(s0).toBeLessThan(0.95);
+    tickVoxelWorld(
+      liveSlice({
+        t: dt * 2,
+        packets: [],
+        talkers: [{ id: "10.0.0.9", rate: 80, role: "lan" }],
+        headlines: [],
+        sys,
+      }),
+      1.6,
+      dt,
+    );
+    expect(beaconScratch().find((b) => b.key === "10.0.0.9")!.strength).toBeGreaterThan(s0);
+  });
+
   it("hysteresis limits beacon membership churn when two talkers alternate narrowly", () => {
     resetLiveMarkers();
     setVoxConfig({ preset: "classic", mobs: "0" });

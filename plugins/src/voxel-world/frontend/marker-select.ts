@@ -63,14 +63,38 @@ function strongestOpenCandidate(): FlowMarker | null {
   return best;
 }
 
-function slotReservationActive(t: number): boolean {
+function countOpenCandidates(): number {
+  let n = 0;
+  for (let i = 0; i < candCount; i++) {
+    const m = candRefs[i];
+    if (!m || m.kind <= 0 || m.strength <= 0) continue;
+    if (keyInSlots(m.key)) continue;
+    n++;
+  }
+  return n;
+}
+
+/** One challenger must not take a spare slot while another talker still holds a beacon. */
+function deferSingleChallengerToReplacement(): boolean {
+  if (countOpenCandidates() !== 1) return false;
+  const challenger = strongestOpenCandidate();
+  if (!challenger) return false;
+  for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
+    const s = incumbents[i]!;
+    if (s.key && s.key !== challenger.key) return true;
+  }
+  return false;
+}
+
+function vacatedSlotAfterHold(t: number): number {
   for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
     const s = incumbents[i]!;
     if (!s.key) continue;
-    if (t - s.pickedAt < MIN_HOLD_S) return true;
-    if (s.target <= 0 && s.display > 0.02) return true;
+    if (s.target > 0) continue;
+    if (t - s.pickedAt < MIN_HOLD_S) continue;
+    return i;
   }
-  return false;
+  return -1;
 }
 
 function weakestHeldSlot(t: number): number {
@@ -80,7 +104,8 @@ function weakestHeldSlot(t: number): number {
     const s = incumbents[i]!;
     if (!s.key) continue;
     if (t - s.pickedAt < MIN_HOLD_S) continue;
-    const eff = s.target > 0 ? s.target : s.display;
+    if (s.target <= 0) continue;
+    const eff = s.target;
     if (eff < weak) {
       weak = eff;
       idx = i;
@@ -152,7 +177,7 @@ export function commitScreenMarkers(t: number, dt: number): void {
     }
   }
 
-  if (!slotReservationActive(t)) {
+  if (!deferSingleChallengerToReplacement()) {
     for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
       if (incumbents[i]!.key) continue;
       const m = strongestOpenCandidate();
@@ -162,19 +187,22 @@ export function commitScreenMarkers(t: number, dt: number): void {
     }
   }
 
+  const vacI = vacatedSlotAfterHold(t);
+  if (vacI >= 0) {
+    const m = strongestOpenCandidate();
+    if (m) {
+      assignSlot(vacI, m, t);
+      if (incumbents[vacI]!.display <= 0) incumbents[vacI]!.display = 0.02;
+      return;
+    }
+  }
+
   const weakI = weakestHeldSlot(t);
   if (weakI < 0) return;
-  if (slotReservationActive(t) && incumbents[weakI]!.target > 0) return;
   const challenger = strongestOpenCandidate();
   if (!challenger) return;
   const weak = incumbents[weakI]!;
-  if (weak.target <= 0) {
-    assignSlot(weakI, challenger, t);
-    if (weak.display <= 0) incumbents[weakI]!.display = 0.02;
-    return;
-  }
-  const weakEff = Math.max(weak.target, weak.display);
-  if (challenger.strength < weakEff * CHALLENGE_MARGIN) return;
+  if (challenger.strength < weak.target * CHALLENGE_MARGIN) return;
   assignSlot(weakI, challenger, t);
 }
 
