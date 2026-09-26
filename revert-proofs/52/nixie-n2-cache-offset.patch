@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/nixie-wall-clock.ts b/web/src/plugins/nixie-wall-clock.ts
-index c6141d3..cfe2496 100644
+index 88515f2..9a09782 100644
 --- a/web/src/plugins/nixie-wall-clock.ts
 +++ b/web/src/plugins/nixie-wall-clock.ts
 @@ -30,11 +30,15 @@ function formatterForZone(timeZone?: string): Intl.DateTimeFormat {
@@ -18,4 +18,4 @@ index c6141d3..cfe2496 100644
 +  return cachedWallParts;
  }
  
- export function digitsFromWallMs(
+ /** 24-hour wall hour → display hour (12h uses 1–12). */
