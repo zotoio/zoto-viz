@@ -1,0 +1,24 @@
+id: fractal-zoom
+name: Fractal Zoom
+version: 1
+hint: Infinite GPU raymarch into Mandelbulb, Mandelbox, Menger, Sierpinski, quaternion Julia, kaleidoscopic IFS, and 2D Mandelbrot/Julia deep zoom. Every knob is in This view.
+description: Stage-only procedural fractal flight with smooth infinite zoom, rich palettes, orbit-trap colour, soft shadows, glow, fog, optional depth blur, adaptive render scale, and named presets. Renders vivid demo imagery on empty boards (golden host idle). Respects prefers-reduced-motion by defaulting to slow or paused zoom.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+    - uOpacity
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts

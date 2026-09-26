@@ -22,6 +22,16 @@ import {
   parseBackroomsOptions,
   setBackroomsOptions,
 } from "../../../plugins/src/backrooms/frontend/director";
+import {
+  packFractalDrive,
+  resetFractalDrive,
+} from "../../../plugins/src/fractal-zoom/frontend/drive";
+import {
+  attachFractalInteraction,
+  disposeFractalInteraction,
+  fractalPointerState,
+  setFractalInteractionActive,
+} from "../../../plugins/src/fractal-zoom/frontend/interaction";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -372,8 +382,32 @@ function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
 }
 let stereoBins: number[] = [];
 let stereoBinsAt = 0;
+let fzLastSkyT = 0;
 scene.afterLook = () => {
   const mode = modeById(modeSel.value);
+  if (mode.pluginId === "fractal-zoom" && vizWriter) {
+    scene.setHeard(false);
+    const opts = optsFor(mode);
+    const t = scene.skyTime();
+    const dt = fzLastSkyT > 0 ? Math.min(0.1, Math.max(1 / 120, t - fzLastSkyT)) : 1 / 60;
+    fzLastSkyT = t;
+    const drive = packFractalDrive(
+      t,
+      dt,
+      scene.pulseNow.bass,
+      innerWidth / Math.max(1, innerHeight),
+      opts,
+      fractalPointerState(),
+    );
+    vizWriter.writeBuffer(0, drive.slot0);
+    vizWriter.writeUniform("uBright", drive.bright);
+    vizWriter.writeUniform("uAccent", drive.accent);
+    vizWriter.writeUniform("uBg", drive.bg);
+    vizWriter.writeUniform("uOpacity", 1);
+    vizWriter.writeUniform("uAudio", scene.pulseNow.bass);
+    scene.setPluginUboBuffer(vizWriter.ubo);
+    return;
+  }
   if (mode.pluginId === "backrooms" && vizWriter) {
     // The director owns camera, creature and maze on the sky clock; the sound bed reads the same track.
     backroomsViewOptions();
@@ -596,6 +630,9 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     sandbox.unload();
     bindVizWriter(spec);
     scene.clearPluginStyle();
+    disposeFractalInteraction();
+    resetFractalDrive();
+    fzLastSkyT = 0;
     tsWatchId = spec?.id ?? "";
     return;
   }
@@ -620,6 +657,15 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(spec, preserve);
     tsWatchId = spec.id;
     tsWatchHash = spec.hash;
+    if (spec.id === "fractal-zoom") {
+      attachFractalInteraction(scene.renderer.domElement);
+      setFractalInteractionActive(true);
+      fzLastSkyT = 0;
+    } else {
+      disposeFractalInteraction();
+      resetFractalDrive();
+      fzLastSkyT = 0;
+    }
     const m = modeById(modeSel.value);
     if (m.pluginId === spec.id) {
       vizHud.setActive(spec.id, spec.name);

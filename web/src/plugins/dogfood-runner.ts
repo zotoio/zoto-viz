@@ -110,6 +110,14 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
     uniforms: ["uTime", "uAudio", "uAccent", "uBg"],
     idle: { fixture: "host" },
   })!,
+  "fractal-zoom": parseVizContract({
+    graphWalk: false,
+    maxBuffers: 1,
+    maxBufferFloats: 64,
+    maxParticles: 0,
+    uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg", "uOpacity"],
+    idle: { fixture: "host" },
+  })!,
 };
 
 export interface DogfoodTickResult {

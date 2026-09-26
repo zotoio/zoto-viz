@@ -118,6 +118,7 @@ EXTRA_VIEWS = (
     "memory", "disk", "gpu", "sockets", "cgroups", "units", "udev", "syscon",
     "cypher-cic",
     "backrooms",
+    "fractal-zoom",
 )
 
 

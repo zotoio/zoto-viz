@@ -1,0 +1,340 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: ember
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.15
+  skyAudio: false
+  skySpeed: 1
+  gridOpacity: 0
+  mosaic: "off"
+config:
+  - key: preset
+    label: preset
+    type: select
+    default: bulb-classic
+    values:
+      - - bulb-classic
+        - Mandelbulb dive
+      - - box-abyss
+        - Mandelbox abyss
+      - - menger-tunnel
+        - Menger tunnel
+      - - sierpinski-crystal
+        - Sierpinski crystal
+      - - julia-quaternion
+        - Quaternion Julia
+      - - kaleido-ifs
+        - Kaleidoscopic IFS
+      - - mandel-deep
+        - Mandelbrot deep zoom
+      - - julia-deep
+        - Julia deep zoom
+      - - custom
+        - custom
+      - - random
+        - randomise preset
+    hint: Named full-option starting points. Random picks a new look once when selected.
+  - key: randomise
+    label: randomise
+    type: select
+    default: hold
+    values:
+      - - hold
+        - hold
+      - - roll
+        - roll now
+    hint: Roll all fractal parameters to new random values.
+  - key: fractalType
+    label: fractal type
+    type: select
+    default: mandelbulb
+    values:
+      - - mandelbulb
+        - Mandelbulb
+      - - mandelbox
+        - Mandelbox
+      - - menger
+        - Menger sponge
+      - - sierpinski
+        - Sierpinski tetrahedron
+      - - julia4d
+        - Julia quaternion
+      - - kaleido
+        - Kaleidoscopic IFS
+      - - mandel2d
+        - Mandelbrot 2D deep zoom
+      - - julia2d
+        - Julia 2D deep zoom
+  - key: zoomSpeed
+    label: zoom speed
+    type: number
+    default: 0.35
+    min: 0
+    max: 2
+    step: 0.05
+    hint: Forward flight speed into the set. Lower when motion-sensitive.
+  - key: zoomDir
+    label: zoom direction
+    type: select
+    default: in
+    values:
+      - - in
+        - fly in
+      - - out
+        - fly out
+      - - pingpong
+        - ping-pong
+  - key: autoPilot
+    label: auto-pilot
+    type: boolean
+    default: true
+    hint: Drift toward interesting boundary coordinates while zooming.
+  - key: paused
+    label: pause zoom
+    type: boolean
+    default: false
+  - key: resetCam
+    label: reset camera
+    type: boolean
+    default: false
+    hint: Toggle on to snap back to the default camera pose.
+  - key: manualOrbit
+    label: manual orbit
+    type: boolean
+    default: false
+    hint: Drag the stage to orbit; scroll to dolly. Disables auto-pilot rotation.
+  - key: maxIter
+    label: max iterations
+    type: number
+    default: 72
+    min: 16
+    max: 160
+    step: 4
+  - key: maxSteps
+    label: raymarch steps
+    type: number
+    default: 96
+    min: 32
+    max: 192
+    step: 4
+  - key: detail
+    label: surface detail (epsilon)
+    type: number
+    default: 0.0012
+    min: 0.0003
+    max: 0.01
+    step: 0.0002
+  - key: ao
+    label: ambient occlusion
+    type: number
+    default: 0.55
+    min: 0
+    max: 1
+    step: 0.05
+  - key: shadow
+    label: soft shadows
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.05
+  - key: glow
+    label: glow
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.05
+  - key: fog
+    label: fog
+    type: number
+    default: 0.22
+    min: 0
+    max: 1
+    step: 0.05
+  - key: dof
+    label: depth blur
+    type: boolean
+    default: false
+    hint: Light DOF-style wash (approximate).
+  - key: renderScale
+    label: render scale
+    type: number
+    default: 1
+    min: 0.25
+    max: 1
+    step: 0.05
+    hint: Caps raymarch cost; host may lower further if frame time exceeds budget.
+  - key: palette
+    label: palette
+    type: select
+    default: cosmic
+    values:
+      - - cosmic
+        - cosmic
+      - - ember
+        - ember
+      - - ice
+        - ice
+      - - acid
+        - acid
+      - - mono
+        - mono
+      - - sunset
+        - sunset
+      - - deep
+        - deep
+      - - neon
+        - neon
+  - key: paletteCycle
+    label: palette cycle speed
+    type: number
+    default: 0.25
+    min: 0
+    max: 2
+    step: 0.05
+  - key: orbitTrap
+    label: orbit-trap colour
+    type: boolean
+    default: true
+  - key: hueShift
+    label: hue shift
+    type: number
+    default: 0
+    min: -1
+    max: 1
+    step: 0.05
+  - key: saturation
+    label: saturation
+    type: number
+    default: 1
+    min: 0
+    max: 2
+    step: 0.05
+  - key: bgR
+    label: background R
+    type: number
+    default: 0.02
+    min: 0
+    max: 1
+    step: 0.01
+  - key: bgG
+    label: background G
+    type: number
+    default: 0.04
+    min: 0
+    max: 1
+    step: 0.01
+  - key: bgB
+    label: background B
+    type: number
+    default: 0.09
+    min: 0
+    max: 1
+    step: 0.01
+  - key: rollSpeed
+    label: camera roll
+    type: number
+    default: 0.15
+    min: 0
+    max: 1
+    step: 0.05
+  - key: rotateSpeed
+    label: rotation speed
+    type: number
+    default: 0.22
+    min: 0
+    max: 1
+    step: 0.05
+  - key: morph
+    label: parameter morph
+    type: boolean
+    default: true
+    hint: Oscillate Mandelbulb power and similar params over time.
+  - key: morphAmount
+    label: morph amount
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.05
+  - key: audioReactive
+    label: audio reactive
+    type: boolean
+    default: true
+    hint: Pulse zoom and colour from the monitor audio feed when mic/sound is on.
+  - key: power
+    label: Mandelbulb power
+    type: number
+    default: 8
+    min: 2
+    max: 16
+    step: 0.5
+  - key: scale
+    label: Mandelbox scale
+    type: number
+    default: 2.1
+    min: 1.2
+    max: 3.5
+    step: 0.05
+  - key: fold
+    label: Mandelbox fold
+    type: number
+    default: 0.55
+    min: 0.1
+    max: 1.2
+    step: 0.05
+  - key: juliaCr
+    label: Julia c (real)
+    type: number
+    default: -0.745
+    min: -1.5
+    max: 1.5
+    step: 0.01
+  - key: juliaCi
+    label: Julia c (imag)
+    type: number
+    default: 0.186
+    min: -1.5
+    max: 1.5
+    step: 0.01
+  - key: quatC2
+    label: quaternion c₂
+    type: number
+    default: 0.12
+    min: -1
+    max: 1
+    step: 0.01
+  - key: quatC3
+    label: quaternion c₃
+    type: number
+    default: 0.08
+    min: -1
+    max: 1
+    step: 0.01
+  - key: kaleidoSym
+    label: kaleido symmetry
+    type: number
+    default: 6
+    min: 3
+    max: 12
+    step: 1
+  - key: mandelCx
+    label: Mandelbrot center X
+    type: number
+    default: -0.743643887
+    min: -2
+    max: 1
+    step: 0.0001
+  - key: mandelCy
+    label: Mandelbrot center Y
+    type: number
+    default: 0.131825904
+    min: -1.5
+    max: 1.5
+    step: 0.0001
