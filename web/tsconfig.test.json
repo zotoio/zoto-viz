@@ -5,9 +5,7 @@
   },
   "include": [
     "src/graph/pack-mirror-lifecycle.test.ts",
-    "src/graph/pack-mirror-rect-converters.test.ts",
-    "src/graph/render-host-fb-viewport.test.ts",
-    "src/graph/render-host-fb-viewport-software.test.ts"
+    "src/graph/render-host-fb-viewport.test.ts"
   ],
   "exclude": []
 }

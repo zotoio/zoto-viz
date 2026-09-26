@@ -8,11 +8,11 @@
 
 | Metric | Value |
 |--------|------:|
-| Insertions | 2973 |
+| Insertions | 2865 |
 | Deletions | 162 |
 | Line delta | 3135 |
 
-Heavy host/mosaic tests listed above live on **A2** only. `viz-frame-tick.test.ts` and `render-host-context-restore-antialias.test.ts` stay on A for revert rows.
+Heavy host/mosaic tests (frame-alloc, frame-loop, gpu-pack-present, mosaic-coalesce, viz-frame-tick, context-restore-antialias, fb-viewport-software, rect-converters) live on **A2** `#81` only.
 
 ## Commands (A head, `web/`)
 
@@ -46,13 +46,11 @@ Each `*.json` has `testFile` (under `web/`), anchored `testName` (`^…$`), and 
 
 | Row | expectedRed (patched) |
 |-----|------------------------|
-| `context-restore-antialias` | `expected 1 to be 2 // Object.is equality` |
 | `letterbox-fill-black-nudge` | `expected true to be false // Object.is equality` |
 | `letterbox-fill-cache` | `expected { css: 'rgb(15, 18, 24)', …(3) } to be { css: 'rgb(15, 18, 24)', …(3) } // Object.is equality` |
 | `letterbox-grain-stable` | `expected "random" to not be called at all, but actually been called 600 times` |
 | `material-needs-update` | `expected 300 to be 1 // Object.is equality` |
 | `mosaic-boot-primary-pack` | `expected 'plugin:pack-a' to be 'plugin:pack-c' // Object.is equality` |
-| `mosaic-sandbox-frame` | `expected "vi.fn()" to be called 10 times, but got 0 times` |
 | `mosaic-tile-slot-allocate` | `expected 'plugin:topology!2' to be 'plugin:topology!1' // Object.is equality` |
 | `one-mirror-per-pack` | `expected 1 to be 2 // Object.is equality` |
 | `pack-mirror-capture-rounding` | `expected { x: 1, y: 87, w: 152, h: 92, …(1) } to deeply equal { x: 2, y: 87, w: 151, h: 91, …(1) }` |
@@ -72,7 +70,7 @@ Each `*.json` has `testFile` (under `web/`), anchored `testName` (`^…$`), and 
 | `setSize-only-on-resize` | `expected +0 to be 1 // Object.is equality` |
 | `teardown-dispose-counts` | `expected +0 to be 1 // Object.is equality` |
 
-Dropped (patch does not apply or test not on A): `mirror-frame-scope-sync`, `pack-mirror-tile-edge-shared`, `render-host-fb-viewport-software`, `render-host-frame-alloc-objects`, `pack-mirror-texture-flip-y`.
+Dropped on A (on A2 `#81` or non-shipped): `context-restore-antialias`, `mosaic-sandbox-frame`, `mirror-frame-scope-sync`, `pack-mirror-tile-edge-shared`, `render-host-fb-viewport-software`, `render-host-frame-alloc-objects`, `pack-mirror-texture-flip-y`.
 
 ## CI note
 
