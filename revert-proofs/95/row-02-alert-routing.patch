@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 3b9bd25..d7d1b85 100644
+index 642b119..2f2c6ca 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -56,7 +56,7 @@ function syncQueueCount(): void {
+@@ -62,7 +62,7 @@ function syncQueueCount(): void {
  }
  
  function pickContainer(key: NoticeKey): HTMLElement {
