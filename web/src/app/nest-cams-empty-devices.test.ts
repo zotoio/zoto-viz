@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { nestNoCamerasFoundForAccount } from "../plugins/pack-shared-copy";
+import { NEST_NO_CAMERAS } from "../plugins/pack-shared-copy";
 import { Settings } from "../ui/settings";
 
 function cameraChipButtons(root: ParentNode): HTMLButtonElement[] {
@@ -26,7 +26,7 @@ describe("nest cams drawer empty devices", () => {
     expect(cameraChipButtons(viewPane!)).toHaveLength(0);
     const status = [...viewPane!.querySelectorAll<HTMLElement>(".nest-cam-empty")];
     expect(status).toHaveLength(1);
-    expect(status[0]!.textContent).toBe(nestNoCamerasFoundForAccount());
+    expect(status[0]!.textContent).toBe(NEST_NO_CAMERAS);
     expect(status[0]!.classList.contains("fail")).toBe(false);
     s.el.remove();
   });

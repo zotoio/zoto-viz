@@ -1,6 +1,6 @@
 import { configStoreId, fieldDefault, specCaption, writePluginConfig, type PluginView } from "./plugin";
 import type { PluginField } from "../core/modes";
-import { nestNoCamerasFoundForAccount } from "./pack-shared-copy";
+import { NEST_NO_CAMERAS } from "./pack-shared-copy";
 import {
   NEST_LAYOUTS,
   nestCamHint,
@@ -89,7 +89,7 @@ function nestCamEmptyStatus(message: string): HTMLElement {
 function cameraChips(look: NestLook, devices: SdmDevice[], onChange: (patch: NestCamPatch) => void): HTMLElement {
   const cams = streamableCameras(devices);
   if (!devices.length) {
-    return nestCamEmptyStatus(nestNoCamerasFoundForAccount());
+    return nestCamEmptyStatus(NEST_NO_CAMERAS);
   }
   if (!cams.length) {
     return nestCamEmptyStatus("No Nest cameras can stream yet (Hub displays are skipped).");
