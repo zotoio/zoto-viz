@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SESSION_RETRY_FAILED_NOTICE } from "./http-copy";
 import { apiFetch, noteCsrf } from "./http";
 import { bindServerRestartWallNotice } from "./http-notice";
 
@@ -74,7 +73,7 @@ describe("UX copy literals", () => {
     }) as typeof fetch;
     await apiFetch("/api/profiles/user", { method: "PUT" });
     const span = document.querySelector("#wall .mosaic-wall-notice span");
-    expect(span?.textContent).toBe(SESSION_RETRY_FAILED_NOTICE);
+    expect(span?.textContent).toBe("That request still failed after the server restarted.");
     off();
     document.body.innerHTML = "";
   });
