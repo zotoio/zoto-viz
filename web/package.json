@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "asbuild": "asc --config asconfig.json --target release",
-    "build": "pnpm asbuild && tsc --noEmit && vite build",
+    "build": "pnpm asbuild && tsc --noEmit && tsc -p tsconfig.test.json --noEmit && vite build",
     "preview": "vite preview",
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
@@ -21,6 +21,7 @@
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.3",
     "@types/three": "^0.185.4",
     "@vitest/coverage-v8": "^5.0.0",
     "assemblyscript": "^0.28.20",

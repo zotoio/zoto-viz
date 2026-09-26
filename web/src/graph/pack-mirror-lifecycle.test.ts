@@ -7,6 +7,7 @@ import {
   PackTexturePresenter,
   packMirrorResourceStats,
 } from "./pack-mirror-gl";
+import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 import { surfaceLetterboxFill } from "./letterbox-fill";
 
 function stubRenderer(antialias: boolean, pr = 1): THREE.WebGLRenderer {
@@ -79,8 +80,14 @@ function simulateThreeTileFrame(
 }
 
 describe("PackMirrorSession resource lifecycle", () => {
-  beforeEach(() => packMirrorResourceStats.reset());
-  afterEach(() => packMirrorResourceStats.reset());
+  beforeEach(() => {
+    packMirrorResourceStats.reset();
+    packMirrorSizeStats.reset();
+  });
+  afterEach(() => {
+    packMirrorResourceStats.reset();
+    packMirrorSizeStats.reset();
+  });
 
   it("300 frames / 2 tiles: one RT, one quad graph, reused mirror scratch rects", () => {
     const reg = new PackMirrorRegistry();
@@ -91,27 +98,43 @@ describe("PackMirrorSession resource lifecycle", () => {
     const barsRef = session.presenter.scratch.bars;
     const innerRef = session.presenter.scratch.innerTd;
     const outRef = session.presenter.scratch.out;
+    const sizeScratchRef = reg.devicePackSizeScratch;
+    let packSizeRef: typeof session.lastRenderDeviceSize = null;
     for (let i = 0; i < 300; i++) {
       simulateTwoTileFrame(reg, rd, "plugin:pack", false);
       expect(session.presenter.scratch.bars).toBe(barsRef);
       expect(session.presenter.scratch.innerTd).toBe(innerRef);
       expect(session.presenter.scratch.out).toBe(outRef);
+      expect(reg.devicePackSizeScratch).toBe(sizeScratchRef);
+      if (packSizeRef === null) packSizeRef = session.lastRenderDeviceSize;
+      expect(session.lastRenderDeviceSize).toBe(packSizeRef);
     }
     expect(packMirrorResourceStats.renderTargetCreated).toBe(1);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
     expect(packMirrorResourceStats.presenterCreated).toBe(1);
+    expect(packMirrorSizeStats.deviceSizeAllocated).toBe(0);
     reg.dispose();
   });
 
-  it("renderPrimary without x/y: 0 renderTargetSetSize over 300 frames", () => {
-    const reg = new PackMirrorRegistry();
+  it("renderPrimary: non-finite box dims stable RT size (missing origin and NaN w)", () => {
     const rd = stubRenderer(false);
-    reg.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
+    const regOrigin = new PackMirrorRegistry();
+    regOrigin.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
     for (let i = 0; i < 300; i++) {
-      simulateTwoTileFrame(reg, rd, "plugin:pack", false, { w: 64, h: 48 });
+      simulateTwoTileFrame(regOrigin, rd, "plugin:pack", false, { w: 64, h: 48 });
     }
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
-    reg.dispose();
+    regOrigin.dispose();
+
+    packMirrorResourceStats.reset();
+    packMirrorSizeStats.reset();
+    const regNan = new PackMirrorRegistry();
+    regNan.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
+    for (let i = 0; i < 300; i++) {
+      simulateTwoTileFrame(regNan, rd, "plugin:pack", false, { x: 0, y: 0, w: Number.NaN, h: 48 });
+    }
+    expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
+    regNan.dispose();
   });
 
   it("300 steady frames: 0 setSize; one resize: exactly 1 setSize", () => {
@@ -119,10 +142,12 @@ describe("PackMirrorSession resource lifecycle", () => {
     const rd = stubRenderer(false);
     const { scene, camera } = emptyScene();
     const size64 = { x: 0, y: 0, w: 64, h: 48 };
-    for (let i = 0; i < 300; i++) session.renderPack(rd, scene, camera, size64, 64, 48, 0x0a1020, false);
+    const dev64 = { pw: 64, ph: 48 };
+    for (let i = 0; i < 300; i++) session.renderPack(rd, scene, camera, size64, dev64, 0x0a1020, false);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
     const size96 = { x: 0, y: 0, w: 96, h: 72 };
-    session.renderPack(rd, scene, camera, size96, 96, 72, 0x0a1020, false);
+    const dev96 = { pw: 96, ph: 72 };
+    session.renderPack(rd, scene, camera, size96, dev96, 0x0a1020, false);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(1);
     session.dispose();
   });
