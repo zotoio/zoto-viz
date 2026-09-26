@@ -1,0 +1,1 @@
+// web/src/arcade/tetris-idle-traffic.ts — in mixU32 call inside tetrisIdlePackets, add: + Date.now()

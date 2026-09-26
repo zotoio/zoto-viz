@@ -14,6 +14,12 @@ import {
   TETRIS_STACK_OVERFLOW_CELLS,
   type TetrisHoldState,
 } from "./tetris-overflow";
+import {
+  parseTetrisIdleSeedFromSearch,
+  tetrisIdlePackets,
+  TETRIS_DEFAULT_IDLE_SEED,
+  TETRIS_IDLE_TOPOUT_SEED,
+} from "./tetris-idle-traffic";
 
 const KEY_WHO = "zoto-viz.tetris.who";
 const COLS = 10;
@@ -52,6 +58,10 @@ export class TetrisView extends Stage3D {
   private queue: { kind: string; color: number }[] = [];
   private plan: Placement | null = null;
   private topoutHoldUntil = 0;
+  private idleSeed = TETRIS_DEFAULT_IDLE_SEED;
+  private idleTick = 0;
+  private usingIdleFeed = true;
+  private readonly idleLabel: HTMLElement;
 
   constructor(container: HTMLElement, scene: NetScene) {
     super(container, scene);
@@ -61,7 +71,12 @@ export class TetrisView extends Stage3D {
       group: { label: "LAN", hint: "this host, the gateway, LAN and local devices" },
       onChange: () => this.resync(),
     }, scene);
-    this.controls = [this.picker.el];
+    this.idleLabel = document.createElement("span");
+    this.idleLabel.className = "tetris-idle-label";
+    this.idleLabel.textContent = "demo traffic";
+    this.idleLabel.hidden = true;
+    this.controls = [this.picker.el, this.idleLabel];
+    this.idleSeed = parseTetrisIdleSeedFromSearch(typeof location !== "undefined" ? location.search : "");
     this.camOrbit.radius = 24;
     this.camOrbit.phi = 1.18;
     this.camOrbit.theta = Math.PI / 2;
@@ -80,7 +95,22 @@ export class TetrisView extends Stage3D {
     this.picker.update(this.msg);
   }
 
-  protected ingest(fresh: Packet[]): void {
+  protected variant(): string {
+    return `idle:${this.idleSeed}`;
+  }
+
+  protected onTrafficPollEmpty(): void {
+    this.usingIdleFeed = true;
+    this.syncIdleLabel();
+  }
+
+  protected ingest(fresh: Packet[], _first: number, _newest: number): void {
+    if (fresh.length) this.usingIdleFeed = false;
+    this.enqueuePackets(fresh);
+    this.syncIdleLabel();
+  }
+
+  private enqueuePackets(fresh: Packet[]): void {
     for (const p of fresh.slice(-8)) {
       const proto = (p[3] || "tcp").toLowerCase();
       this.queue.push({
@@ -88,6 +118,17 @@ export class TetrisView extends Stage3D {
         color: PROTO_COLOR[proto] ?? this.colorOf(p[2]),
       });
     }
+  }
+
+  private syncIdleLabel(): void {
+    if (!this.usingIdleFeed) {
+      this.idleLabel.hidden = true;
+      return;
+    }
+    this.idleLabel.hidden = false;
+    this.idleLabel.textContent = this.idleSeed === TETRIS_IDLE_TOPOUT_SEED
+      ? "demo · top-out"
+      : "demo traffic";
   }
 
   protected step(now: number, dt: number): void {
@@ -99,6 +140,12 @@ export class TetrisView extends Stage3D {
     if (shouldHoldTopout(now, this.topoutHoldUntil)) {
       this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
       return;
+    }
+    if (this.usingIdleFeed) {
+      if (this.idleSeed === TETRIS_IDLE_TOPOUT_SEED && this.idleTick === 0 && this.stack.length === 0) {
+        this.prefillTopoutDemoBoard();
+      }
+      this.enqueuePackets(tetrisIdlePackets(this.idleSeed, this.idleTick++, now));
     }
     if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);
     this.autoplayStep(dt);
@@ -255,6 +302,15 @@ export class TetrisView extends Stage3D {
     g.position.set((x - (COLS - 1) / 2) * CELL, y * CELL + 0.45, 0);
   }
 
+  /** QE / `?tetrisIdleSeed=topout`: nearly full well so the next locks trigger top-out hold. */
+  private prefillTopoutDemoBoard(): void {
+    for (let y = 0; y < 9; y++) {
+      for (let x = 0; x < 9; x++) {
+        this.stack.push({ x, y, g: new THREE.Group(), color: 0x90caf9 });
+      }
+    }
+  }
+
   private buildWell(): void {
     const wall = new THREE.MeshStandardMaterial({ color: 0x546e7a, metalness: 0.2, roughness: 0.4 });
     const glass = new THREE.MeshPhysicalMaterial({
@@ -305,6 +361,42 @@ export class TetrisView extends Stage3D {
     return this.topoutHoldUntil;
   }
 
+  testUsingIdleFeed(): boolean {
+    return this.usingIdleFeed;
+  }
+
+  testSetIdleSeed(seed: number): void {
+    this.idleSeed = seed >>> 0;
+    this.idleTick = 0;
+    this.usingIdleFeed = true;
+    this.syncIdleLabel();
+  }
+
+  testBoardFingerprint(): string {
+    const parts: string[] = [];
+    if (this.active) {
+      parts.push(`A:${this.active.kind}@${this.active.x},${this.active.y},${this.active.rot}`);
+    }
+    const cells = [...this.stack].sort((a, b) => a.y - b.y || a.x - b.x);
+    for (const s of cells) parts.push(`${s.x},${s.y}`);
+    return parts.join("|");
+  }
+
+  testLockedCellCount(): number {
+    return this.stack.length;
+  }
+
+  testSimulateIdleSteps(now: number, steps: number, dt = 0.2): void {
+    this.usingIdleFeed = true;
+    for (let i = 0; i < steps; i++) {
+      this.step(now + i * dt, dt);
+    }
+  }
+
+  testIngestLivePackets(fresh: Packet[]): void {
+    this.ingest(fresh, fresh[0]?.[0] ?? 0, fresh[fresh.length - 1]?.[0] ?? 0);
+  }
+
   protected reset(): void {
     super.reset();
     this.topoutHoldUntil = 0;
@@ -312,5 +404,8 @@ export class TetrisView extends Stage3D {
     this.queue = [];
     this.dropAcc = 0;
     this.moveAcc = 0;
+    this.idleTick = 0;
+    this.usingIdleFeed = true;
+    this.syncIdleLabel();
   }
 }

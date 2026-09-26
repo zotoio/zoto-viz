@@ -117,6 +117,8 @@ export abstract class Stage3D {
   protected abstract step(now: number, dt: number): void;
   protected onStart(_preferIp: string | null): void {}
   protected onSnapshot(): void {}
+  /** Called when `/api/traffic` returns no new packets (subclasses may enable demo feeds). */
+  protected onTrafficPollEmpty(): void {}
   protected variant(): string { return ""; }
 
   protected reset(): void {
@@ -216,7 +218,11 @@ export abstract class Stage3D {
       const m = (await r.json()) as TrafficMsg;
       if (gen !== this.gen) return;
       const pk = m.packets.slice().reverse();
-      if (!pk.length) { this.pps *= 0.6; return; }
+      if (!pk.length) {
+        this.pps *= 0.6;
+        this.onTrafficPollEmpty();
+        return;
+      }
       const newest = pk[pk.length - 1]![0];
       if (this.lastT === 0) this.lastT = newest - REPLAY_S;
       const fresh = pk.filter((p) => p[0] > this.lastT);

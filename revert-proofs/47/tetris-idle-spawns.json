@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
+  "testFile": "src/arcade/tetris-idle-view.test.ts",
+  "testName": "spawns pieces and grows the stack within a bounded idle tick budget",
+  "description": "Remove idle packet enqueue in TetrisView.step when usingIdleFeed is true."
+}
