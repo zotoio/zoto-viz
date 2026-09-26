@@ -39,5 +39,5 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PACK_BOUNDARY_EVENT_ACTION: ${{ github.event.action }}
           PACK_BOUNDARY_EVENT_LABEL_NAME: ${{ github.event.label.name }}
-          PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ${{ github.event.label.created_at }}
+          PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ${{ github.event.pull_request.updated_at }}
         run: python3 scripts/check_pack_pr_boundary.py --from-github-api

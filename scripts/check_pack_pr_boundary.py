@@ -612,6 +612,19 @@ def paths_from_pull_files_pages(pages: list[list[dict]]) -> list[str]:
     return sorted(paths)
 
 
+def fetch_pull_head_repo(repo: str, pull_number: int, token: str) -> str:
+    """Owner/repo for the PR head (fork source when the PR is from a fork)."""
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}"
+    doc, _ = _github_request(url, token)
+    if isinstance(doc, dict):
+        head_repo = (doc.get("head") or {}).get("repo") or {}
+        full_name = head_repo.get("full_name")
+        if full_name:
+            return str(full_name)
+    return repo
+
+
 def fetch_pull_changed_files(repo: str, pull_number: int, token: str) -> list[str]:
     """Changed file paths from pulls/{n}/files (paginated)."""
     owner, name = repo.split("/", 1)
@@ -654,11 +667,18 @@ def fetch_repo_file_at_ref(
 
 
 def load_file_pair_from_api(
-    repo: str, path: str, base_ref: str, head_ref: str, token: str
+    repo: str,
+    path: str,
+    base_ref: str,
+    head_ref: str,
+    token: str,
+    *,
+    head_repo: str | None = None,
 ) -> tuple[str | None, str | None]:
+    head_owner_repo = head_repo or repo
     return (
         fetch_repo_file_at_ref(repo, path, base_ref, token),
-        fetch_repo_file_at_ref(repo, path, head_ref, token),
+        fetch_repo_file_at_ref(head_owner_repo, path, head_ref, token),
     )
 
 
@@ -920,6 +940,7 @@ def main(argv: list[str] | None = None) -> int:
             host_review_ok = True
         try:
             changed = fetch_pull_changed_files(repo, pr_number, token)
+            head_repo = fetch_pull_head_repo(repo, pr_number, token)
         except urllib.error.HTTPError as exc:
             print(
                 f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
@@ -930,7 +951,7 @@ def main(argv: list[str] | None = None) -> int:
         for path in changed:
             if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):
                 contents[path] = load_file_pair_from_api(
-                    repo, path, base_ref, head_ref, token
+                    repo, path, base_ref, head_ref, token, head_repo=head_repo
                 )
         code, lines = run_check(changed, contents, allow_host_infra=host_review_ok)
         for line in lines:
