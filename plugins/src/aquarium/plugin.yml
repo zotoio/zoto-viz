@@ -1,0 +1,25 @@
+id: aquarium
+name: Aquarium
+version: 1
+hint: Photoreal tank — talkers are fish, packets are bubbles and plankton, SYS failures cloud the water.
+description: Raymarched glass aquarium with caustics, god rays, swaying plants or reef coral, procedural fish schooling, feeding drops, and day/night lighting. One fish per talker (stable id); gateway roles read as the largest species. Packets spawn capped plankton or bubbles coloured by protocol. Elevated sys.failed murks the tank with a Zoto Fail banner. All visuals are procedural GLSL — no bundled image assets.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 3
+  maxBufferFloats: 64
+  maxParticles: 16
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+    - uBright
+    - uOpacity
+frontend:
+  entry: frontend/index.ts

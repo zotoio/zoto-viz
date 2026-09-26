@@ -1,0 +1,162 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: ice
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.08
+  skyAudio: true
+  skySpeed: 0.55
+  gridOpacity: 0
+  mosaic: "off"
+config:
+  - key: preset
+    label: preset
+    type: select
+    values:
+      - [planted, Planted Community]
+      - [reef_lagoon, Reef Lagoon]
+      - [cichlid_rock, Cichlid Rock]
+      - [calm_zen, Calm Zen]
+      - [night_reef, Night Reef]
+    default: planted
+    hint: Applies water type, species mix, temperament, and per-preset fish/particle caps.
+  - key: water
+    label: water
+    type: select
+    values:
+      - [fresh, freshwater]
+      - [reef, reef]
+    default: fresh
+    hint: Freshwater planted rockscape or reef lagoon look.
+  - key: fishCount
+    label: fish count
+    type: number
+    default: 12
+    min: 2
+    max: 16
+    step: 1
+    hint: One fish per talker up to this cap (preset may clamp lower).
+  - key: temperament
+    label: temperament
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.05
+    hint: Calming loose schools on the left; territorial darting on the right (no gore).
+  - key: feedingMin
+    label: feeding (minutes, 0=off)
+    type: number
+    default: 0
+    min: 0
+    max: 120
+    step: 1
+    hint: Automatic food drop on a timer; fish converge visibly.
+  - key: feedingTraffic
+    label: feed on traffic bursts
+    type: boolean
+    default: true
+    hint: Large packet bursts also trigger a short feeding frenzy.
+  - key: lighting
+    label: lighting
+    type: select
+    values:
+      - [daylight, daylight]
+      - [actinic, actinic blue]
+      - [moonlight, moonlight]
+    default: daylight
+    hint: Tank rim light and water colour.
+  - key: dayNight
+    label: day/night cycle
+    type: boolean
+    default: true
+    hint: Slow sun/moon sweep when on.
+  - key: density
+    label: plant/coral density
+    type: number
+    default: 0.72
+    min: 0
+    max: 1
+    step: 0.05
+    hint: Swaying stems or branching coral cover.
+  - key: bubbles
+    label: air stone bubbles
+    type: boolean
+    default: true
+    hint: Rising bubbles from the gravel bed.
+  - key: camera
+    label: camera
+    type: select
+    values:
+      - [front, front glass]
+      - [drift, slow drift]
+      - [hold, reduced motion hold]
+    default: drift
+    hint: Viewing angle and motion comfort.
+  - key: seed
+    label: seed
+    type: number
+    default: 4242
+    min: 0
+    max: 99999
+    step: 1
+    hint: Procedural decor and school phase.
+  - key: label
+    label: HUD label
+    type: boolean
+    default: true
+    hint: "aquarium · preset · demo/live under the tank."
+  - key: sp_neon
+    label: neon tetra
+    type: boolean
+    default: true
+    hint: Freshwater species toggle.
+  - key: sp_angel
+    label: angelfish
+    type: boolean
+    default: true
+  - key: sp_guppy
+    label: guppy
+    type: boolean
+    default: true
+  - key: sp_cory
+    label: corydoras
+    type: boolean
+    default: true
+  - key: sp_discus
+    label: discus
+    type: boolean
+    default: true
+  - key: sp_cichlid
+    label: cichlid
+    type: boolean
+    default: false
+  - key: sp_clown
+    label: clownfish
+    type: boolean
+    default: true
+    hint: Reef species toggle.
+  - key: sp_tang
+    label: tang
+    type: boolean
+    default: true
+  - key: sp_damsel
+    label: damselfish
+    type: boolean
+    default: true
+  - key: sp_goby
+    label: goby
+    type: boolean
+    default: true
+  - key: sp_wrasse
+    label: wrasse
+    type: boolean
+    default: true
+  - key: sp_anemone
+    label: anemone/coral
+    type: boolean
+    default: true
