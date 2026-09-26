@@ -11,6 +11,7 @@ import {
   isVizDemoPack,
   normalizeVizDemoPackId,
   skipRatePerSec,
+  vizFrameFailureBadge,
   vizHudMetric,
 } from "./viz-hud";
 
@@ -269,6 +270,38 @@ describe("viz hud helpers", () => {
       t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
       talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
     }, state)).toEqual({ label: "talkers", value: "1" });
+  });
+
+  it("shows failure badge when frame carries talkers[].failed or sys.failed", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: {
+        t: 1,
+        dt: 0,
+        audio: 0,
+        packets: [],
+        rf: [],
+        talkers: [{ id: "10.0.0.1", rate: 80, role: "lan", failed: 0.55 }],
+        headlines: [],
+        sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.6, udev: 0 },
+      },
+      state: minimalState(),
+      now: 1000,
+    });
+    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe("fail 60%");
+  });
+
+  it("hides failure badge on healthy idle frames", () => {
+    expect(vizFrameFailureBadge({
+      t: 0, dt: 0, audio: 0, packets: [], rf: [],
+      talkers: [{ id: "10.0.0.1", rate: 1, role: "lan" }],
+      headlines: [],
+    })).toBeNull();
   });
 });
 

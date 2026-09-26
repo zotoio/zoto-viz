@@ -74,6 +74,19 @@ export interface VizHudTick {
   now: number;
 }
 
+/** v2 contract exposes `sys.failed` and `talkers[].failed` but no separate HUD glyph — host maps peak ratio to a strip badge. */
+export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null {
+  if (!frame) return null;
+  const sysFail = frame.sys?.failed ?? 0;
+  let talkerPeak = 0;
+  for (const t of frame.talkers) {
+    if (typeof t.failed === "number") talkerPeak = Math.max(talkerPeak, t.failed);
+  }
+  const peak = Math.max(sysFail, talkerPeak);
+  if (peak <= 0) return null;
+  return `fail ${Math.round(peak * 100)}%`;
+}
+
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
 export function estimateTalkerParticles(talkers: VizTalkerSample[]): number {
   let count = 0;
@@ -173,6 +186,7 @@ export class VizHud {
   private readonly metricLabelEl: HTMLElement;
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly degradedEl: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
@@ -208,6 +222,11 @@ export class VizHud {
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
+    this.degradedEl = document.createElement("span");
+    this.degradedEl.className = "viz-hud-degraded";
+    this.degradedEl.hidden = true;
+    this.degradedEl.title = "Elevated TCP failure ratio on sys or talkers (viz contract v2)";
+
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
     this.packSel = new Select({
@@ -225,7 +244,7 @@ export class VizHud {
       el.textContent = "·";
       return el;
     };
-    line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
+    line.append(this.packEl, sep(), metric, sep(), this.skipEl, sep(), this.degradedEl, sep(), this.swapRow);
     root.append(line);
 
     parent.append(root);
@@ -274,5 +293,14 @@ export class VizHud {
 
     this.skipEl.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, now));
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
+
+    const failBadge = vizFrameFailureBadge(frame);
+    if (failBadge) {
+      this.degradedEl.hidden = false;
+      this.degradedEl.textContent = failBadge;
+    } else {
+      this.degradedEl.hidden = true;
+      this.degradedEl.textContent = "";
+    }
   }
 }
