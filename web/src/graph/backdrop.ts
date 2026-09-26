@@ -8,6 +8,7 @@ import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
 import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
+import { smokeBackroomsSkyTime } from "../core/smoke-harness";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -1373,7 +1374,9 @@ export class Backdrop {
     const target = this.speed * (1 + this.audio * PULSE_ACCEL);
     const tau = 0.04 + EASE_MAX_S * this.ease * this.ease;
     this.curSpeed += (target - this.curSpeed) * (1 - Math.exp(-dt / tau));
-    this.clock += dt * this.curSpeed;
+    const frozenSky = smokeBackroomsSkyTime();
+    if (frozenSky !== null) this.clock = frozenSky;
+    else this.clock += dt * this.curSpeed;
     this.mat.uniforms.uTime.value = this.clock;
     this.photoMat.uniforms.uTime.value = this.clock;
     this.syncPluginLook();
