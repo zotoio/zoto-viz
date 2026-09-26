@@ -1,14 +1,14 @@
-## Revert proof (manual `6a0ed50` verification)
+## Revert proof (manual `246fd8a` verification)
 
 Hand-run: `git apply` one-line patch, anchored single test. Count line proves exactly one test ran.
 
 | row | green | red |
 | --- | --- | --- |
 | `api-file-list-at-limit` | `1 passed in 0.02s` | tests/test_pack_boundary_secure.py:107: AssertionError · `1 failed in 0.03s` |
-| `ci-test-needs-extra-unknown` | `1 passed in 0.06s` | tests/test_ci_test_needs.py:27: AssertionError · `1 failed in 0.02s` |
+| `ci-test-needs-extra-unknown` | `1 passed in 0.02s` | tests/test_ci_test_needs.py:27: AssertionError · `1 failed in 0.02s` |
 | `ci-test-needs-missing-job` | `1 passed in 0.02s` | tests/test_ci_test_needs.py:21: AssertionError · `1 failed in 0.02s` |
 | `ci-test-needs-real-workflow` | `1 passed in 0.02s` | E       AssertionError: assert 1 == 0 · `1 failed in 0.03s` |
-| `ci-test-needs-valid-fixture` | `1 passed in 0.01s` | E       AssertionError: assert ['broken'] == [] · `1 failed in 0.02s` |
+| `ci-test-needs-valid-fixture` | `1 passed in 0.02s` | E       AssertionError: assert ['broken'] == [] · `1 failed in 0.02s` |
 | `dogfood-count-gate-ok` | `Tests  1 passed | 18 skipped (19)` | AssertionError: expected false to be true // Object.is equality · `Tests  1 failed | 18 skipped (19)` |
 | `flow-work-scales-4-4x-gate` | `Tests  1 passed | 7 skipped (8)` | AssertionError: expected true to be false // Object.is equality · `Tests  1 failed | 7 skipped (8)` |
 | `headline-decimation-eligibility-before-cap` | `Tests  1 passed | 7 skipped (8)` | AssertionError: expected 64 to be greater than 64 · `Tests  1 failed | 7 skipped (8)` |
@@ -28,10 +28,10 @@ Hand-run: `git apply` one-line patch, anchored single test. Count line proves ex
 | `pull-files-fixture-host-script` | `1 passed in 0.03s` | tests/test_pack_pr_boundary.py:342: AssertionError · `1 failed in 0.04s` |
 | `unsafe-path-control-chars-rejected` | `1 passed in 0.02s` | E       AssertionError: assert None is not None · `1 failed in 0.03s` |
 | `vitest-stripped-child-build` | `Tests  1 passed | 7 skipped (8)` | AssertionError: expected [Function] to not throw an error but 'Error: Command failed: bash /workspac…' was thrown · `Tests  1 failed | 7 skipped (8)` |
-| `weakened-pr-checker-on-disk-still-fails` | `1 passed in 0.02s` | tests/test_pack_boundary_secure.py:46: AssertionError · `1 failed in 0.03s` |
+| `weakened-pr-checker-on-disk-still-fails` | `1 passed in 0.02s` | tests/test_pack_boundary_secure.py:46: AssertionError · `1 failed in 0.04s` |
 | `work-budget-600-frame-host-clamp` | `Tests  1 passed | 6 skipped (7)` | AssertionError: expected 99 to be 4 // Object.is equality · `Tests  1 failed | 6 skipped (7)` |
 | `work-budget-catalog-clamp-not-block` | `1 passed in 0.02s` | tests/test_manifest_work_budget.py:86: AssertionError · `1 failed in 0.03s` |
-| `work-budget-install-ten-x-block` | `1 passed in 0.02s` | E       AssertionError: assert False is True · `1 failed in 0.02s` |
+| `work-budget-install-ten-x-block` | `1 passed in 0.02s` | E       AssertionError: assert False is True · `1 failed in 0.03s` |
 | `work-budget-lowered-ceiling-ui-note` | `Tests  1 passed | 6 skipped (7)` | AssertionError: expected 'marble-run · v1 · graph / protocols' to be 'marble-run · v1 · graph / protocols. …' // Object.is equality · `Tests  1 failed | 6 skipped (7)` |
 | `work-budget-pack-policy-ignored` | `1 passed in 0.02s` | E       AssertionError: assert False is True · `1 failed in 0.03s` |
 | `work-budget-policy-parity-hardcode-ts` | `Tests  1 passed | 6 skipped (7)` | AssertionError: expected false to be true // Object.is equality · `Tests  1 failed | 6 skipped (7)` |
