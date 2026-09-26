@@ -8,7 +8,7 @@ import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
 import {
-  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, nextPaneTiles, parseMosaicNode,
+  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
@@ -16,6 +16,7 @@ import { releasePanelView } from "./panel-view-lifecycle";
 import { dropMosaicTileWriter } from "./mosaic-viz-feed";
 
 export { centerSplit } from "./mosaic-layout";
+export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
 
 /** Wall palette for every tile, or the next unused theme (plugin look wins when free). */
 export function mosaicTileTheme(shared: boolean, wall: Theme, used: Set<string>, prefer?: string | null): Theme {
@@ -211,6 +212,12 @@ export class Mosaic {
     onPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
     paneCog?: (id: string) => HTMLButtonElement;
     sync: () => MosaicSync;
+    testHooks?: {
+      onSkyHold?: (id: string) => void;
+      onModeRefresh?: (id: string) => void;
+      onPaneAuditBind?: (id: string) => void;
+      onPaneRebind?: (id: string) => void;
+    };
   }) {}
 
   get on(): boolean { return this.size !== "off"; }
@@ -444,18 +451,20 @@ export class Mosaic {
 
   assignViews(tiles: string[]): void {
     if (!this.tree) return;
+    const prev = this.tileIds.slice();
     const want = parseMosaicTiles(tiles);
-    if (want.join("\0") === this.tileIds.join("\0")) return;
+    if (want.join("\0") === prev.join("\0")) return;
+    const touch = new Set(mosaicPaneIdsWithViewChange(prev, want));
     this.tree = assignTiles(this.tree, want);
     this.rematchTried.clear();
     this.rematchQueued.clear();
-    this.syncPanes(this.tileIds);
+    this.syncPanes(this.tileIds, touch);
     this.placeTree();
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
-    this.refreshPaneModes();
-    this.holdPluginSkies();
-    this.auditPanes("bind");
+    this.refreshPaneModes(touch);
+    this.holdPluginSkies(touch);
+    this.auditPanes("bind", touch);
     this.relayoutAll();
     this.emitLayout();
   }
@@ -512,11 +521,14 @@ export class Mosaic {
     this.cfg.host?.invalidate();
   }
 
-  private syncPanes(ids: string[]): void {
+  private syncPanes(ids: string[], touchIds?: ReadonlySet<string>): void {
     for (const id of [...this.panes.keys()]) {
       if (!ids.includes(id)) this.dropPane(id);
     }
-    for (const id of ids) this.ensurePane(id);
+    for (const id of ids) {
+      if (this.panes.has(id) && touchIds && !touchIds.has(id)) continue;
+      this.ensurePane(id);
+    }
   }
 
   private paneBound(id: string): boolean {
@@ -531,14 +543,17 @@ export class Mosaic {
   }
 
   /** Re-apply compiled catalog modes so extras created as host stubs pick up graphBase. */
-  private refreshPaneModes(): void {
-    if (this.mainId) {
+  private refreshPaneModes(only?: ReadonlySet<string>): void {
+    if (this.mainId && (!only || only.has(this.mainId))) {
       const m = mosaicPaneMode(this.mainId);
       this.cfg.main.setMode(m, this.cfg.optsFor(m));
+      this.cfg.testHooks?.onModeRefresh?.(this.mainId);
     }
     for (const e of this.extras) {
+      if (only && !only.has(e.id)) continue;
       const m = mosaicPaneMode(e.id);
       e.scene.setMode(m, this.cfg.optsFor(m));
+      this.cfg.testHooks?.onModeRefresh?.(e.id);
     }
   }
 
@@ -553,6 +568,7 @@ export class Mosaic {
   }
 
   private bindPaneView(pane: HTMLElement, id: string): void {
+    this.cfg.testHooks?.onPaneRebind?.(id);
     pane.classList.add("warming");
     if (this.mainId === id && this.cfg.sceneEl.parentElement !== pane) {
       pane.appendChild(this.cfg.sceneEl);
@@ -600,16 +616,21 @@ export class Mosaic {
   }
 
   /** Keep plugin tiles warming until settlePanes so bind does not swap them to a host sky. */
-  private holdPluginSkies(): void {
+  private holdPluginSkies(only?: ReadonlySet<string>): void {
     for (const id of this.tileIds) {
+      if (only && !only.has(id)) continue;
       if (!this.paneSnap(id).pluginSkyWanted) continue;
       this.skyPending.add(id);
       this.panes.get(id)?.classList.add("warming");
+      this.cfg.testHooks?.onSkyHold?.(id);
     }
   }
 
-  private auditPanes(phase: "bind" | "settle"): void {
-    for (const id of [...this.tileIds]) this.auditPane(id, phase);
+  private auditPanes(phase: "bind" | "settle", only?: ReadonlySet<string>): void {
+    for (const id of [...this.tileIds]) {
+      if (only && !only.has(id)) continue;
+      this.auditPane(id, phase);
+    }
   }
 
   private paneSnap(id: string) {
@@ -635,6 +656,7 @@ export class Mosaic {
   private auditPane(id: string, phase: "bind" | "settle"): void {
     const pane = this.panes.get(id);
     if (!pane || !this.on) return;
+    if (phase === "bind") this.cfg.testHooks?.onPaneAuditBind?.(id);
     const fault = inspectPaneStartup(this.paneSnap(id));
     pane.dataset.fault = fault ?? "";
     if (!fault) {
