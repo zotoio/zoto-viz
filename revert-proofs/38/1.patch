@@ -1,0 +1,18 @@
+--- a/schema/plugin.schema.json
++++ b/schema/plugin.schema.json
+@@ -329,14 +329,7 @@
+           "maxItems": 24,
+           "items": { "$ref": "#/$defs/pluginSection" }
+         },
+-        "idle": { "$ref": "#/$defs/vizIdle" },
+-        "dataMapping": {
+-          "type": "array",
+-          "maxItems": 32,
+-          "description": "Maps host data fields to visual effects (e.g. marble-run packet → marble radius).",
+-          "items": { "$ref": "#/$defs/vizDataMappingRow" }
+-        },
+-        "workBudget": { "$ref": "#/$defs/vizWorkBudget" }
++        "idle": { "$ref": "#/$defs/vizIdle" }
+       }
+     },
+     "vizDataMappingRow": {

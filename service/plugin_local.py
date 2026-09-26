@@ -347,7 +347,13 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
     raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=False)
     pid = str(doc["id"])
-    _merged_settings_check_bytes(raw)
+    try:
+        _merged_settings_check_bytes(raw)
+    except ValueError:
+        drop = paths.plugin_local_dir(create=True)
+        if path.resolve().parent == drop.resolve() and path.resolve() != dest.resolve():
+            path.unlink(missing_ok=True)
+        raise
     if reminted_from:
         dest.write_bytes(raw)
         if path.resolve() != dest.resolve() and path.resolve().parent == dest.resolve().parent:

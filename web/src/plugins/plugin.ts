@@ -354,8 +354,19 @@ export function loadPluginConfigCached(spec: PluginView, fields: PluginField[]):
 export const PRESET_BASE_META_KEY = "__presetBase";
 export type { PluginInstance } from "./instances";
 
+/** One encoding for field defaults, instance defaults, and preset values (booleans → 1/0). */
+export function encodeStoredConfigValue(
+  field: PluginField | undefined,
+  value: string | number | boolean,
+): string {
+  if (field?.type === "boolean") {
+    return value === true || value === "true" || value === "1" ? "1" : "0";
+  }
+  return String(value);
+}
+
 export function fieldDefault(f: PluginField): string {
-  if (f.type === "boolean") return f.default === true || f.default === "true" || f.default === "1" ? "1" : "0";
+  if (f.type === "boolean") return encodeStoredConfigValue(f, f.default ?? false);
   if (f.default !== undefined) return String(f.default);
   if (f.type === "number") return String(f.min ?? 0);
   if (f.type === "select") return f.values?.[0]?.[0] ?? "";
@@ -363,12 +374,14 @@ export function fieldDefault(f: PluginField): string {
 }
 
 function instanceDefaultFor(spec: PluginView, key: string): string | undefined {
+  const field = spec.config?.find((f) => f.key === key);
+  const encode = (raw: string | number | boolean) => encodeStoredConfigValue(field, raw);
   const defs = spec.instanceDefaults;
-  if (defs && defs[key] !== undefined) return String(defs[key]);
+  if (defs && defs[key] !== undefined) return encode(defs[key]);
   const inst = spec.instances?.find((i) => i.id === (spec.instanceId ?? spec.id));
   const row = inst?.defaults;
   if (!row || row[key] === undefined) return undefined;
-  return String(row[key]);
+  return encode(row[key]);
 }
 
 /** Same baseline as loadPluginConfig (instance row before field default). */

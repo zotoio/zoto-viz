@@ -1,0 +1,14 @@
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -311,11 +311,9 @@
+     const snap = popUndoSnapshot(ctx.storeId);
+     if (!snap) return;
+     for (const k of Object.keys(ctx.values)) {
+-      if (isMetaConfigKey(k)) continue;
+       if (!(k in snap)) delete ctx.values[k];
+     }
+     for (const k of Object.keys(snap)) {
+-      if (isMetaConfigKey(k)) continue;
+       ctx.values[k] = snap[k]!;
+     }
+     persistValues(ctx);

@@ -3,30 +3,71 @@ import type { ViewMode } from "../core/modes";
 import { loadPluginConfigCached, writePluginConfig, type PluginView } from "../plugins/plugin";
 import { PRESET_BASE_META_KEY, packConfigValues } from "../plugins/plugin-settings";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
-import { syncMosaicPluginHudCaptions } from "./mosaic-hud-wiring";
-import { attachPluginFrontendAfterConfigReset } from "./plugin-frontend-attach";
+import { syncMosaicPluginCaptions } from "../plugins/plugin-hud-sync";
+import { bootPluginSettingsHost } from "./app-plugin-settings-boot";
+import * as wireHost from "./wire-settings-host";
 import { pluginOptsFromSpec } from "./plugin-mode-opts";
 
-describe("mosaic HUD wiring (main.ts delegate)", () => {
-  it("skips caption updates when mosaic host is off", () => {
+describe("bootPluginSettingsHost (main.ts boot delegate)", () => {
+  it("calls wireSettingsHost with deps", () => {
+    const spy = vi.spyOn(wireHost, "wireSettingsHost").mockReturnValue(() => {});
+    const deps = {
+      modeById: () => ({ id: "plugin:a", label: "A", pluginId: "a" }),
+      pluginSpecForMode: () => loadSettingsDeclFixture(),
+      optsFor: () => ({}),
+      captions: new Map(),
+      getMosaicHost: () => null,
+    };
+    bootPluginSettingsHost(deps);
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy.mock.calls[0]![0]).toBe(deps);
+    spy.mockRestore();
+  });
+});
+
+describe("wireSettingsHost", () => {
+  it("updates captions map and syncs mosaic when sink fires", () => {
+    const captions = new Map<string, string | null>();
     const setCaption = vi.fn();
-    syncMosaicPluginHudCaptions(
-      { on: false, tileIds: ["plugin:a"], setPaneSettingsCaption: setCaption },
-      new Map(),
+    const spec = loadSettingsDeclFixture();
+    wireHost.wireSettingsHost(
       {
-        modeById: () => ({ id: "plugin:a", label: "A", pluginId: "a" }),
-        pluginSpecForMode: () => loadSettingsDeclFixture(),
+        modeById: () => ({ id: "plugin:settings-fixture", label: "S", pluginId: "settings-fixture" }),
+        pluginSpecForMode: () => spec,
         optsFor: () => ({}),
+        captions,
+        getMosaicHost: () => ({
+          on: true,
+          tileIds: ["plugin:settings-fixture"],
+          setPaneSettingsCaption: setCaption,
+        }),
       },
+      (fn) => fn(spec, "caption"),
+    );
+    expect(captions.get("plugin:settings-fixture")).toBe("caption");
+    expect(setCaption).toHaveBeenCalled();
+  });
+
+  it("resolveMosaicTileHudRow returns null when mosaic is off (guard in syncMosaicPluginCaptions)", () => {
+    const setCaption = vi.fn();
+    syncMosaicPluginCaptions(
+      { on: false, tileIds: ["plugin:settings-fixture"], setPaneSettingsCaption: setCaption },
+      new Map(),
+      () => ({
+        mode: { id: "plugin:settings-fixture", label: "S", pluginId: "settings-fixture" },
+        spec: loadSettingsDeclFixture(),
+        opts: {},
+        fields: loadSettingsDeclFixture().config!,
+      }),
     );
     expect(setCaption).not.toHaveBeenCalled();
   });
 });
 
-describe("plugin frontend attach (main.ts delegate)", () => {
+describe("wirePluginFrontendAttach (main.ts delegate)", () => {
   it("resets sandbox config batcher before attach", async () => {
     const steps: string[] = [];
-    await attachPluginFrontendAfterConfigReset(
+    await wireHost.wirePluginFrontendAttach(
       { reset: () => steps.push("reset") },
       async () => { steps.push("attach"); },
     );

@@ -1,0 +1,11 @@
+--- a/web/src/app/mosaic-hud-wiring.ts
++++ b/web/src/app/mosaic-hud-wiring.ts
+@@ -21,7 +21,7 @@
+ ): MosaicTileHudRow | null {
+   const m = deps.modeById(tileId);
+   if (!m.pluginId) return null;
+-  const spec = deps.pluginSpecForMode(mosaicTileViewId(tileId));
++  const spec = deps.pluginSpecForMode(tileId);
+   if (!spec?.settings?.hud?.labelFields?.length) return null;
+   const fields = pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config);
+   return { mode: m, spec, opts: deps.optsFor(m), fields };

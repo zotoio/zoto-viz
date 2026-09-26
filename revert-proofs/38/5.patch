@@ -1,0 +1,10 @@
+--- a/web/src/plugins/plugin-hud-sync.ts
++++ b/web/src/plugins/plugin-hud-sync.ts
+@@ -31,7 +31,6 @@
+   captions: PluginHudCaptionMap,
+   resolveTile: (tileId: string) => MosaicTileHudRow | null,
+ ): void {
+-  if (!host.on) return;
+   for (const tileId of host.tileIds) {
+     const row = resolveTile(tileId);
+     if (!row?.spec.settings?.hud?.labelFields?.length) {

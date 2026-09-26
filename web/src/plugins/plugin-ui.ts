@@ -311,9 +311,11 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
     const snap = popUndoSnapshot(ctx.storeId);
     if (!snap) return;
     for (const k of Object.keys(ctx.values)) {
+      if (isMetaConfigKey(k)) continue;
       if (!(k in snap)) delete ctx.values[k];
     }
     for (const k of Object.keys(snap)) {
+      if (isMetaConfigKey(k)) continue;
       ctx.values[k] = snap[k]!;
     }
     persistValues(ctx);
@@ -394,9 +396,14 @@ type PanelMount = {
   onPersist: (id: string, values: Record<string, string>) => void;
   opts?: { skipEmpty?: boolean; devices?: SdmDevice[] };
   announcer: HTMLElement;
+  values?: Record<string, string>;
 };
 
 const panelMounts = new WeakMap<HTMLElement, PanelMount>();
+
+export function pluginSettingsPanelValues(host: HTMLElement): Record<string, string> | undefined {
+  return panelMounts.get(host)?.values;
+}
 
 function remountPanel(ctx: PanelCtx, restore?: { toolbar?: string; field?: string }): void {
   const mount = panelMounts.get(ctx.host);
@@ -452,6 +459,8 @@ export function fillPluginFields(
     return;
   }
   const storeId = configStoreId(spec);
+  const mount = panelMounts.get(host);
+  if (mount) mount.values = values;
   const ctx: PanelCtx = {
     host,
     spec,

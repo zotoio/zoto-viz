@@ -1,0 +1,10 @@
+--- a/web/src/app/wire-settings-host.ts
++++ b/web/src/app/wire-settings-host.ts
+@@ -57,5 +57,6 @@
+   batcher: { reset(): void },
+   attach: () => Promise<unknown>,
+ ): Promise<void> {
+-  return attachPluginFrontendAfterConfigReset(batcher, attach);
++  await attach();
++  return;
+ }

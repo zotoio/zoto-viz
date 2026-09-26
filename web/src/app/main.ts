@@ -77,9 +77,8 @@ import {
   hudCaptionFromOpts,
   syncPluginHudForMode,
 } from "../plugins/plugin-hud-sync";
-import { syncMosaicPluginHudCaptions as pushMosaicHudCaptions } from "./mosaic-hud-wiring";
-import { attachPluginFrontendAfterConfigReset } from "./plugin-frontend-attach";
-import { setPluginHudCaptionSink } from "../plugins/plugin-ui";
+import { bootPluginSettingsHost } from "./app-plugin-settings-boot";
+import { wirePluginFrontendAttach } from "./wire-settings-host";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
@@ -378,22 +377,16 @@ function mosaicHudOn(): boolean {
   return !!(mosaic?.on && !document.body.classList.contains("stage-only"));
 }
 
-function syncMosaicPluginHudCaptions(): void {
-  pushMosaicHudCaptions(
-    mosaic ? {
-      on: mosaic.on,
-      tileIds: mosaic.tileIds,
-      setPaneSettingsCaption: (id, text) => mosaic!.setPaneSettingsCaption(id, text),
-    } : null,
-    pluginHudCaptions,
-    { modeById, pluginSpecForMode, optsFor },
-  );
-}
-
-setPluginHudCaptionSink((spec, caption) => {
-  const modeId = pluginViewId(spec.id, spec.instanceId);
-  pluginHudCaptions.set(modeId, caption);
-  syncMosaicPluginHudCaptions();
+const syncMosaicPluginHudCaptions = bootPluginSettingsHost({
+  modeById,
+  pluginSpecForMode,
+  optsFor,
+  captions: pluginHudCaptions,
+  getMosaicHost: () => (mosaic ? {
+    on: mosaic.on,
+    tileIds: mosaic.tileIds,
+    setPaneSettingsCaption: (id, text) => mosaic!.setPaneSettingsCaption(id, text),
+  } : null),
 });
 
 addPresentListener((ts) => {
@@ -710,7 +703,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     return;
   }
   try {
-    await attachPluginFrontendAfterConfigReset(sandboxConfigBatcher, () =>
+    await wirePluginFrontendAttach(sandboxConfigBatcher, () =>
       attachPluginFrontend(sandbox, spec, sandboxPluginConfig(spec)),
     );
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);

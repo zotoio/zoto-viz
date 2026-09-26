@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/main-wiring.test.ts",
+  "testName": "calls wireSettingsHost with deps",
+  "description": "main boot no longer wires settings host",
+  "redOutput": "\n RUN  v5.0.0 /workspace/web\n\n \u276f src/app/main-wiring.test.ts (5 tests | 1 failed | 4 skipped) 5ms\n   \u276f bootPluginSettingsHost (main.ts boot delegate) (1)\n     \u00d7 calls wireSettingsHost with deps 4ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 4 skipped (5)\n   Start at  18:21:28\n   Duration  874ms (transform 56%, environment 30%, import 12%, setup 1%, tests 1%)\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  src/app/main-wiring.test.ts > bootPluginSettingsHost (main.ts boot delegate) > calls wireSettingsHost with deps\nAssertionError: expected \"wireSettingsHost\" to be called once, but got 0 times\n \u276f src/app/main-wiring.test.ts:22:17\n     20|     };\n     21|     bootPluginSettingsHost(deps);\n     22|     expect(spy).toHaveBeenCalledOnce();\n       |                 ^\n     23|     expect(spy.mock.calls[0]![0]).toBe(deps);\n     24|     spy.mockRestore();\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n"
+}

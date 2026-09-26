@@ -1,0 +1,19 @@
+--- a/web/src/plugins/plugin.ts
++++ b/web/src/plugins/plugin.ts
+@@ -374,14 +374,12 @@
+ }
+ 
+ function instanceDefaultFor(spec: PluginView, key: string): string | undefined {
+-  const field = spec.config?.find((f) => f.key === key);
+-  const encode = (raw: string | number | boolean) => encodeStoredConfigValue(field, raw);
+   const defs = spec.instanceDefaults;
+-  if (defs && defs[key] !== undefined) return encode(defs[key]);
++  if (defs && defs[key] !== undefined) return String(defs[key]);
+   const inst = spec.instances?.find((i) => i.id === (spec.instanceId ?? spec.id));
+   const row = inst?.defaults;
+   if (!row || row[key] === undefined) return undefined;
+-  return encode(row[key]);
++  return String(row[key]);
+ }
+ 
+ /** Same baseline as loadPluginConfig (instance row before field default). */

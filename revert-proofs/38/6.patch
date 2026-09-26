@@ -1,0 +1,9 @@
+--- a/web/src/app/app-plugin-settings-boot.ts
++++ b/web/src/app/app-plugin-settings-boot.ts
+@@ -2,5 +2,5 @@
+ 
+ /** Single boot hook main.ts calls to wire plugin settings HUD + mosaic captions. */
+ export function bootPluginSettingsHost(deps: SettingsHostDeps) {
+-  return wireSettingsHost(deps);
++  return () => {};
+ }

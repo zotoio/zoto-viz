@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/mosaic-hud-wiring.test.ts",
+  "testName": "does nothing when mosaic is off (early return)",
+  "description": "Remove mosaic-off guard from syncMosaicPluginCaptions",
+  "redOutput": "\n RUN  v5.0.0 /workspace/web\n\n \u276f src/app/mosaic-hud-wiring.test.ts (4 tests | 1 failed | 3 skipped) 15ms\n   \u276f syncMosaicPluginHudCaptions (2)\n     \u00d7 does nothing when mosaic is off (early return) 14ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 3 skipped (4)\n   Start at  18:22:15\n   Duration  788ms (transform 53%, environment 31%, import 13%, tests 2%, setup 1%, worker 1%)\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  src/app/mosaic-hud-wiring.test.ts > syncMosaicPluginHudCaptions > does nothing when mosaic is off (early return)\nAssertionError: expected \"vi.fn()\" to not be called at all, but actually been called 1 times\n\nReceived:\n\n  1st vi.fn() call:\n\n    Array [\n      \"plugin:a\",\n      \"Settings fixture \u00b7 X \u00b7 Alpha\",\n    ]\n\n\nNumber of calls: 1\n\n \u276f src/app/mosaic-hud-wiring.test.ts:17:28\n     15|       },\n     16|     );\n     17|     expect(setCaption).not.toHaveBeenCalled();\n       |                            ^\n     18|   });\n     19|\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n"
+}

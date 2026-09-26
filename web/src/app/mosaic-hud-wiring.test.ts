@@ -43,6 +43,16 @@ describe("syncMosaicPluginHudCaptions", () => {
 });
 
 describe("resolveMosaicTileHudRow", () => {
+  it("resolves plugin spec for mosaic slot ids (!2 suffix)", () => {
+    const spec = loadSettingsDeclFixture();
+    const row = resolveMosaicTileHudRow("plugin:settings-fixture!2", {
+      modeById: (id) => ({ id, label: "S", pluginId: "settings-fixture" }),
+      pluginSpecForMode: (id) => (id === "plugin:settings-fixture" ? spec : null),
+      optsFor: () => ({}),
+    });
+    expect(row?.spec.id).toBe("settings-fixture");
+  });
+
   it("returns null for non-plugin tiles", () => {
     expect(resolveMosaicTileHudRow("topology", {
       modeById: () => ({ id: "topology", label: "Topology" }),

@@ -338,6 +338,7 @@ def test_unpack_failure_preserves_runtime_on_overwrite(
     runtime = paths.plugin_local_runtime_dir() / "keep-pack"
     zip_path = paths.plugin_local_dir() / "keep-pack.zip"
     tree_before = _hash_tree(runtime)
+    zip_before = _hash_file(zip_path)
     v2 = _zip({
         "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
         "visualisation.yml": GOOD_INSTALL_VIZ,
@@ -353,6 +354,46 @@ def test_unpack_failure_preserves_runtime_on_overwrite(
     with pytest.raises(OSError, match="simulated extract failure"):
         plugin_local.install_local_zip(v2, overwrite=True)
     assert _hash_tree(runtime) == tree_before
+    assert _hash_file(zip_path) == zip_before
+
+
+def test_adopt_invalid_settings_leaves_runtime_and_canonical_zip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
+        "visualisation.yml": GOOD_INSTALL_VIZ,
+    })
+    plugin_local.install_local_zip(good)
+    runtime = paths.plugin_local_runtime_dir() / "keep-pack"
+    zip_path = paths.plugin_local_dir() / "keep-pack.zip"
+    tree_before = _hash_tree(runtime)
+    zip_before = _hash_file(zip_path)
+    bad = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+        "visualisation.yml": (
+            "engine: graph\n"
+            "settings:\n"
+            "  presets:\n"
+            "    - id: a\n"
+            "      label: A\n"
+            "      values: {gain: 1}\n"
+            "config:\n"
+            "  - key: gain\n"
+            "    type: number\n"
+            "    min: 0\n"
+            "    max: 10\n"
+        ),
+    })
+    incoming = paths.plugin_local_dir() / "incoming-adopt.zip"
+    incoming.write_bytes(bad)
+    with pytest.raises(ValueError, match="presetField"):
+        plugin_local.adopt_local_zip_file(incoming)
+    assert _hash_tree(runtime) == tree_before
+    assert _hash_file(zip_path) == zip_before
+    drop_zips = sorted(paths.plugin_local_dir().glob("*.zip"))
+    assert drop_zips == [zip_path]
 
 
 def test_install_rejects_invalid_merged_settings(

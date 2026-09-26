@@ -1,4 +1,10 @@
-import { fieldDefault, instanceDefaultValue, PRESET_BASE_META_KEY, type PluginView } from "./plugin";
+import {
+  encodeStoredConfigValue,
+  fieldDefault,
+  instanceDefaultValue,
+  PRESET_BASE_META_KEY,
+  type PluginView,
+} from "./plugin";
 import type { PluginField } from "../core/modes";
 import type { PluginPreset, PluginSectionDecl, PluginSettingsDecl } from "./plugin-visualisation";
 import { VIEW_PROMPT_KEY } from "./plugin-visualisation";
@@ -142,10 +148,7 @@ export function presetValueForField(
   field: PluginField | undefined,
   value: string | number | boolean,
 ): string {
-  if (field?.type === "boolean") {
-    return value === true || value === "true" || value === "1" ? "1" : "0";
-  }
-  return String(value);
+  return encodeStoredConfigValue(field, value);
 }
 
 export function presetValuesToStrings(
