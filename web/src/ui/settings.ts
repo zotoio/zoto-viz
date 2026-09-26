@@ -19,6 +19,7 @@ import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { fillPluginFields } from "../plugins/plugin-ui";
+import type { PackWallScope } from "../plugins/instances";
 import type { PluginLook, PluginView } from "../plugins/plugin";
 import type { SdmDevice } from "../plugins/nest-cams-look";
 import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
@@ -483,7 +484,7 @@ export class Settings {
       fillPluginFields(view, spec, pluginViewKnobs(spec, fields), (id, values) => {
         this.onPluginChange?.(id, values);
         this.cfg.onPersist?.();
-      }, { skipEmpty: extra.length > 0, devices: this.nestDevices });
+      }, { skipEmpty: extra.length > 0, devices: this.nestDevices, wallScope: this.packWallScope() });
       if (extra.length) {
         const sec = document.createElement("div");
         sec.className = "sec";
@@ -1744,6 +1745,19 @@ export class Settings {
   }
 
   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
+
+  private packWallScope(): PackWallScope {
+    const mosaicOn = this.anim.mosaic !== "off";
+    if (!mosaicOn) return { mosaicOn: false, tileModeIds: [] };
+    const n = this.anim.mosaicTiles.length
+      || (this.anim.mosaicTree ? leafIds(this.anim.mosaicTree).length : Number(this.anim.mosaic) || 0);
+    const tileModeIds = this.anim.mosaicTiles.length
+      ? [...this.anim.mosaicTiles]
+      : this.anim.mosaicTree
+        ? leafIds(this.anim.mosaicTree)
+        : Array.from({ length: n }, (_, i) => viewSelectOptions()[i]?.value ?? "");
+    return { mosaicOn: true, tileModeIds };
+  }
 
   private fillMosaicSlots(host: HTMLElement): void {
     host.replaceChildren();

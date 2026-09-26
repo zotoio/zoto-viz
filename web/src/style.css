@@ -599,7 +599,8 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
 }
 .field.select.dirty .field-btn { border-color: var(--warn); }
 .settings-pop .field-dirty .field-btn,
-.settings-pop .field-dirty .slider-row,
+.settings-pop .field-dirty label.slider,
+.settings-pop .field-dirty label.toggle,
 .settings-pop .field-dirty.field.text {
   outline: 1px solid var(--warn);
   outline-offset: 1px;

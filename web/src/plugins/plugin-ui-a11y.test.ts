@@ -41,15 +41,14 @@ describe("plugin settings a11y", () => {
     const spec = loadSettingsDeclFixture();
     const { host } = mountPanel();
     fillPluginFields(host, spec, spec.config ?? [], () => {});
-    expect(host.querySelector('[data-toolbar-action="preset"]')).toBeTruthy();
-    const presetBtn = host.querySelector<HTMLButtonElement>('[data-toolbar-action="preset"] button');
-    presetBtn?.focus();
-    presetBtn?.click();
-    const option = [...host.querySelectorAll<HTMLLIElement>("[role=option]")].find((o) => o.textContent?.includes("Bravo"));
-    option?.click();
+    const presetSel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]');
+    expect(presetSel?.tagName).toBe("SELECT");
+    presetSel?.focus();
+    presetSel!.value = "b";
+    presetSel!.dispatchEvent(new Event("change", { bubbles: true }));
     await vi.waitFor(() => {
-      const btn = host.querySelector<HTMLButtonElement>('[data-toolbar-action="preset"] button');
-      expect(document.activeElement === btn || btn?.contains(document.activeElement)).toBe(true);
+      const sel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]');
+      expect(document.activeElement).toBe(sel);
     });
   });
 

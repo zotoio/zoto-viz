@@ -60,14 +60,24 @@ export function configStoredPerTile(spec: Pick<PluginView, "id" | "instanceId">)
   return !!(spec.instanceId && spec.instanceId !== spec.id);
 }
 
+export type PackWallScope = {
+  mosaicOn: boolean;
+  tileModeIds: readonly string[];
+};
+
+/** How many mosaic tiles on the current wall use this pack id. */
+export function countPackTilesOnWall(packId: string, tileModeIds: readonly string[]): number {
+  return tileModeIds.filter((modeId) => parsePluginId(modeId) === packId).length;
+}
+
 /** Host note under plugin settings (null = hide). */
-export function packScopeNoteText(spec: PluginView): string | null {
+export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
   if (configStoredPerTile(spec)) {
     return "Settings apply to this tile only. Instance defaults override shared pack values.";
   }
-  const extraInstances = spec.instances?.filter((i) => i.id !== spec.id) ?? [];
-  if (extraInstances.length < 1) return null;
-  return `Applies to all ${spec.name} views. Shared pack storage; instance defaults on a tile override pack-wide values.`;
+  const onWall = wall?.mosaicOn ? countPackTilesOnWall(spec.id, wall.tileModeIds) : 0;
+  if (onWall < 2) return null;
+  return `Applies to all ${spec.name} tiles on this wall. Shared pack storage.`;
 }
 
 export function parseInstances(raw: unknown): PluginInstance[] | undefined {

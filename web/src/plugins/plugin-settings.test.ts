@@ -181,7 +181,7 @@ describe("undo ring", () => {
 });
 
 describe("reset and labels", () => {
-  it("partial preset → randomise → reset restores preset plus field defaults", () => {
+  it("partial preset → randomise → reset restores pack defaults (first preset)", () => {
     const spec = fixtureSpec();
     const fields = fixtureFields(spec);
     const values: Record<string, string> = {
@@ -194,11 +194,23 @@ describe("reset and labels", () => {
     randomiseDeclaredConfig(spec, fields, values, () => 0.99);
     expect(isCustomConfig(spec, fields, values)).toBe(true);
     resetDeclaredConfig(spec, fields, values);
-    expect(values.preset).toBe("b");
-    expect(values.gain).toBe("6");
-    expect(values.mode).toBe("y");
+    expect(values.preset).toBe("a");
+    expect(values.gain).toBe("3");
+    expect(values.mode).toBe("x");
     expect(values.locked).toBe(fieldDefault(fields.find((f) => f.key === "locked")!));
     expect(isCustomConfig(spec, fields, values)).toBe(false);
+  });
+
+  it("Bravo then gain tweak → reset returns Alpha values", () => {
+    const spec = fixtureSpec();
+    const fields = fixtureFields(spec);
+    const values: Record<string, string> = { preset: "a", gain: "3", mode: "x", locked: "0.5" };
+    applyPresetToValues(spec, fields, values, "b");
+    values.gain = "9";
+    resetDeclaredConfig(spec, fields, values);
+    expect(values.preset).toBe("a");
+    expect(values.gain).toBe("3");
+    expect(values.mode).toBe("x");
   });
 
   it("label transitions preset → custom → preset", () => {
@@ -247,7 +259,7 @@ describe("dirty markers and export", () => {
     fillPluginFields(host, spec, fields, () => {});
     expect(host.querySelector(".plugin-settings-toolbar")).toBeTruthy();
     expect([...host.querySelectorAll("button")].map((b) => b.textContent)).toEqual(
-      expect.arrayContaining(["Randomise", "Undo", "Reset"]),
+      expect.arrayContaining(["Randomise", "Undo", "Reset to defaults"]),
     );
     const undo = [...host.querySelectorAll("button")].find((b) => b.textContent === "Undo");
     expect(undo?.disabled).toBe(true);

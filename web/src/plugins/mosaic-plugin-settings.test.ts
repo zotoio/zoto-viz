@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { applyInstance, configStoreId, packScopeNoteText } from "./instances";
+import { applyInstance, configStoreId, countPackTilesOnWall, packScopeNoteText } from "./instances";
 import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import {
   applyPresetToValues,
@@ -84,18 +84,39 @@ describe("2x2 mosaic preset isolation (configStoreId)", () => {
 });
 
 describe("pack scope note", () => {
-  it("shows shared note for multi-instance pack and per-tile note for instance rows", () => {
-    const single = fixtureView();
-    expect(packScopeNoteText(single)).toBeNull();
+  it("counts pack tiles on the wall", () => {
+    expect(countPackTilesOnWall("settings-fixture", [])).toBe(0);
+    expect(countPackTilesOnWall("settings-fixture", ["plugin:settings-fixture", "plugin:other"])).toBe(1);
+    expect(countPackTilesOnWall("settings-fixture", ["plugin:settings-fixture", "plugin:settings-fixture"])).toBe(2);
+  });
 
-    const multi = mosaicPack();
-    expect(packScopeNoteText(multi)).toContain("Applies to all");
+  it("shows shared note only with mosaic on and 2+ tiles of the pack on the wall", () => {
+    const spec = fixtureView();
+    expect(packScopeNoteText(spec)).toBeNull();
+    expect(packScopeNoteText(spec, { mosaicOn: false, tileModeIds: ["plugin:settings-fixture", "plugin:settings-fixture"] })).toBeNull();
+    expect(packScopeNoteText(spec, { mosaicOn: true, tileModeIds: ["plugin:settings-fixture"] })).toBeNull();
+    expect(packScopeNoteText(spec, { mosaicOn: true, tileModeIds: ["plugin:settings-fixture", "plugin:other"] })).toBeNull();
+
+    const onWall = packScopeNoteText(spec, { mosaicOn: true, tileModeIds: ["plugin:settings-fixture", "plugin:settings-fixture"] });
+    expect(onWall).toContain("Applies to all");
+
+    const hostOne = document.createElement("div");
+    fillPluginFields(hostOne, spec, spec.config ?? [], () => {}, {
+      wallScope: { mosaicOn: true, tileModeIds: ["plugin:settings-fixture", "plugin:other"] },
+    });
+    expect(hostOne.querySelector(".plugin-pack-scope-note")).toBeNull();
+
+    const hostTwo = document.createElement("div");
+    fillPluginFields(hostTwo, spec, spec.config ?? [], () => {}, {
+      wallScope: { mosaicOn: true, tileModeIds: ["plugin:settings-fixture", "plugin:settings-fixture"] },
+    });
+    expect(hostTwo.querySelector(".plugin-pack-scope-note")?.textContent).toContain("Applies to all");
 
     const perTile = applyInstance(mosaicPack(), { id: "tile-a" });
     expect(packScopeNoteText(perTile)).toContain("this tile only");
 
-    const host = document.createElement("div");
-    fillPluginFields(host, perTile, perTile.config ?? [], () => {});
-    expect(host.querySelector(".plugin-pack-scope-note")?.textContent).toContain("this tile only");
+    const hostTile = document.createElement("div");
+    fillPluginFields(hostTile, perTile, perTile.config ?? [], () => {});
+    expect(hostTile.querySelector(".plugin-pack-scope-note")?.textContent).toContain("this tile only");
   });
 });

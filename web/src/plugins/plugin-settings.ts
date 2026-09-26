@@ -374,23 +374,26 @@ export function resetDeclaredConfig(
   const decl = spec.settings;
   const pf = decl?.presetField;
   const prompt = values[VIEW_PROMPT_KEY];
-  for (const f of fields) {
-    if (isMetaConfigKey(f.key)) continue;
-    if (pf && f.key === pf) continue;
-    if (f.type === "textarea" && f.key === VIEW_PROMPT_KEY) continue;
-    if (f.type === "text") continue;
-    resetFieldToDefault(spec, f, values);
-  }
-  const base = derivedPresetId(spec, values)
-    ?? (pf && values[pf] && values[pf] !== CUSTOM_PRESET_ID ? values[pf] : null);
-  if (base && presetById(decl, base)) {
-    const preset = presetById(decl, base)!;
-    Object.assign(values, presetValuesToStrings(preset.values, fields));
-    if (pf) values[pf] = base;
-  } else if (pf && decl?.presets?.[0]) {
-    const first = decl.presets[0];
+  if (decl?.presets?.length) {
+    const first = decl.presets[0]!;
     Object.assign(values, presetValuesToStrings(first.values, fields));
-    values[pf] = first.id;
+    if (pf) values[pf] = first.id;
+    for (const f of fields) {
+      if (isMetaConfigKey(f.key)) continue;
+      if (pf && f.key === pf) continue;
+      if (f.type === "textarea" && f.key === VIEW_PROMPT_KEY) continue;
+      if (f.type === "text") continue;
+      if (f.key in first.values) continue;
+      resetFieldToDefault(spec, f, values);
+    }
+  } else {
+    for (const f of fields) {
+      if (isMetaConfigKey(f.key)) continue;
+      if (pf && f.key === pf) continue;
+      if (f.type === "textarea" && f.key === VIEW_PROMPT_KEY) continue;
+      if (f.type === "text") continue;
+      resetFieldToDefault(spec, f, values);
+    }
   }
   if (prompt !== undefined) values[VIEW_PROMPT_KEY] = prompt;
   delete values[PRESET_BASE_META_KEY];
