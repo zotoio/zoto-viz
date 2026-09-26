@@ -172,6 +172,17 @@ export const ctxLine6 = 0;
     path.join(scriptsDir, "revert-proof-lib.mjs"),
     path.join(root, "scripts", "revert-proof-lib.mjs"),
   );
+  for (const runnerFile of [
+    "revert-proof-vitest-overlay.mjs",
+    "revert-proof-vitest-runner.mjs",
+    "revert-proof-vitest-setup.ts",
+    "revert_proof_pytest_plugin.py",
+  ]) {
+    fs.copyFileSync(
+      path.join(scriptsDir, runnerFile),
+      path.join(root, "scripts", runnerFile),
+    );
+  }
   fs.writeFileSync(
     path.join(root, "scripts", "vitest.config.mjs"),
     `import path from "node:path";
@@ -500,7 +511,7 @@ describe("revert-proof runner (fixture repo)", () => {
     assertCheckoutUnchanged(root, before);
   });
 
-  it("(multi-test-file) row in a file with many tests runs exactly one", () => {
+  it("(e) multi-test-file row runs exactly one test in a file with many tests", () => {
     const root = mkFixture();
     writeRow(root, "99", "multi-file", goodPatch, {
       runner: "vitest",
@@ -671,7 +682,41 @@ describe("widget (beta)", () => {
     assertCheckoutUnchanged(root, before);
   });
 
-  it("(d) syntax break in production module is rejected as build break", () => {
+  it("(d) row pointing at skipped test is rejected on baseline", () => {
+    const root = mkFixture();
+    fs.writeFileSync(
+      path.join(root, "web", "revert-proof", "widget.test.ts"),
+      `import { describe, expect, it } from "vitest";
+import { value } from "../../packages/rp-widget/index.js";
+import { helperToken } from "../src/test-only-helper.ts";
+
+describe("widget", () => {
+  it.skip("returns one", () => {
+    expect(value()).toBe(1);
+  });
+  it("helper ok", () => {
+    expect(helperToken()).toBe(1);
+  });
+});
+`,
+    );
+    runGit(root, ["add", "web/revert-proof/widget.test.ts"]);
+    runGit(root, ["commit", "-m", "skipped target test"]);
+    writeRow(root, "99", "skipped-target", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "widget > returns one",
+      description: "Target test is skipped",
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "skipped-target"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).toMatch(/row skipped-target.*target skipped/i);
+    assertCheckoutUnchanged(root, before);
+  });
+
+  it("syntax break in production module is rejected as build break", () => {
     const root = mkFixture();
     writeRow(root, "99", "build-break", syntaxBreakPatch, {
       runner: "vitest",
@@ -687,7 +732,7 @@ describe("widget (beta)", () => {
     assertCheckoutUnchanged(root, before);
   });
 
-  it("(e) filter matching zero tests is rejected on baseline", () => {
+  it("filter matching zero tests is rejected on baseline", () => {
     const root = mkFixture();
     writeRow(root, "99", "no-match", goodPatch, {
       runner: "vitest",
@@ -791,82 +836,38 @@ describe("hang", () => {
     assertCheckoutUnchanged(root, before);
   });
 
-  it("(vitest-fake-assertion) plain object throw without JUnit type is not assertion red", async () => {
+  it("(vitest-json-multi) JSON report selects one executed test among skipped siblings", async () => {
     const lib = await import("./revert-proof-lib.mjs");
-    const junit = `<?xml version="1.0"?><testsuites><testcase name="t"><failure message="AssertionError: expect(received).toBe(expected)">not a real AssertionError</failure></testcase></testsuites>`;
-    expect(lib.isVitestAssertionFailure([], junit)).toBe(false);
-    const kind = lib.classifyPatchedVitest({
-      counts: {
-        executed: 1,
-        passed: 0,
-        failed: 1,
-        suiteError: null,
-        failedAssertions: [{ messages: ["AssertionError: expect(received).toBe(expected)"] }],
-        ranTests: [{ fullName: "d > t", status: "failed" }],
-      },
-      junitXml: junit,
+    const parsed = lib.parseVitestJsonReport({
+      testResults: [
+        {
+          assertionResults: [
+            {
+              ancestorTitles: ["widget"],
+              title: "other",
+              status: "skipped",
+            },
+            {
+              ancestorTitles: ["widget > alpha"],
+              title: "returns one",
+              status: "failed",
+              meta: { revertProofAssertion: true },
+            },
+            {
+              ancestorTitles: ["widget"],
+              title: "decoy",
+              status: "skipped",
+            },
+          ],
+        },
+      ],
     });
-    expect(kind).toBe("build break");
+    const sel = lib.assessVitestSelection(parsed.tests, "widget > alpha > returns one");
+    expect(sel.ok).toBe(true);
+    expect(sel.target?.status).toBe("failed");
   });
 
-  it("(junit-multi-file) multi-test file still selects one executed junit case", async () => {
-    const mod = await import("./revert-proof.mjs");
-    const xml = `<?xml version="1.0"?><testsuite>
-<testcase name="other" classname="widget"><skipped/></testcase>
-<testcase name="returns one" classname="widget > alpha"/>
-<testcase name="decoy" classname="widget"><skipped/></testcase>
-</testsuite>`;
-    const executed = mod.vitestJunitExecutedTestNames(xml);
-    expect(executed.length).toBe(1);
-    expect(executed[0]).toContain("widget > alpha > returns one");
-  });
-
-  it("(vitest-rangeerror) RangeError junit failure is not assertion red", async () => {
-    const lib = await import("./revert-proof-lib.mjs");
-    const junit = `<?xml version="1.0"?><testsuites><testcase name="t"><failure type="RangeError">Expected 1 to be 2</failure></testcase></testsuites>`;
-    const kind = lib.classifyPatchedVitest({
-      counts: {
-        executed: 1,
-        passed: 0,
-        failed: 1,
-        suiteError: null,
-        failedAssertions: [{ messages: ["RangeError: Expected 1 to be 2"] }],
-        ranTests: [{ fullName: "d > t", status: "failed" }],
-      },
-      junitXml: junit,
-    });
-    expect(kind).toBe("build break");
-  });
-
-  it("(pytest-probe-error) ProbeError message is not assertion red", async () => {
-    const lib = await import("./revert-proof-lib.mjs");
-    const body = `<failure message="service.rp_probe.ProbeError: bad input"># AssertionError in comment</failure>`;
-    expect(lib.isPytestAssertionBody(body)).toBe(false);
-    const kind = lib.classifyPatchedPytest({
-      counts: {
-        collectionError: false,
-        cases: [{ name: "t", outcome: "failed", body }],
-      },
-    });
-    expect(kind).toBe("build break");
-  });
-
-  it("(pytest-traceback-assert) assert line in traceback is not assertion red", async () => {
-    const lib = await import("./revert-proof-lib.mjs");
-    const body = `<failure message="TypeError: boom">tests/test_live.py:75: in foo
-    assert False
-TypeError: boom</failure>`;
-    expect(lib.isPytestAssertionBody(body)).toBe(false);
-    const kind = lib.classifyPatchedPytest({
-      counts: {
-        collectionError: false,
-        cases: [{ name: "t", outcome: "failed", body }],
-      },
-    });
-    expect(kind).toBe("build break");
-  });
-
-  it("(phantom-leaf) sidecar full name must match junit selection", () => {
+  it("(phantom-leaf) sidecar full name must match JSON selection", () => {
     const root = mkFixture();
     fs.writeFileSync(
       path.join(root, "web", "revert-proof", "widget.test.ts"),
@@ -1102,19 +1103,27 @@ describe("vitest testName escaping", () => {
       "^widget \\(beta\\) > talkers\\[\\]\\.failed$",
     );
     expect(mod.escapeVitestTestNamePattern("a(b)*+?")).toBe("a\\(b\\)\\*\\+\\?");
-    expect(
-      mod.vitestJunitExecutedTestNames(
-        `<testsuite>
-<testcase name="other &gt; filtered"><skipped/></testcase>
-<testcase name="widget &gt; alpha &gt; returns one"/>
-</testsuite>`,
-      ),
-    ).toEqual([["widget > alpha > returns one"]]);
-    expect(
-      mod.vitestJunitExecutedTestNames(
-        `<testsuite><testcase classname="widget &amp; alpha" name="returns one"/></testsuite>`,
-      ),
-    ).toEqual([["returns one", "widget & alpha > returns one"]]);
+  });
+
+  it("parseVitestJsonReport rebuilds fullName for selection", async () => {
+    const lib = await import("./revert-proof-lib.mjs");
+    const parsed = lib.parseVitestJsonReport({
+      testResults: [
+        {
+          assertionResults: [
+            {
+              ancestorTitles: ["widget & alpha"],
+              title: "returns one",
+              status: "passed",
+            },
+          ],
+        },
+      ],
+    });
+    expect(parsed.tests[0]?.fullName).toBe("widget & alpha > returns one");
+    expect(lib.assessVitestSelection(parsed.tests, "widget & alpha > returns one").ok).toBe(
+      true,
+    );
   });
 
   it("builds pytest node ids", async () => {
@@ -1172,59 +1181,65 @@ describe("revert-proof-lib guards", () => {
     expect(() => lib.validatePythonModule('os;print("x")#')).toThrow(/invalid pythonModule/);
   });
 
-  it("(pytest-no-k) buildPytestArgv never uses -k", async () => {
+  it("(pytest-no-k) buildPytestArgv never uses -k or junitxml", async () => {
     const lib = await import("./revert-proof-lib.mjs");
-    const argv = lib.buildPytestArgv("tests/t.py::test_x", "/tmp/out.xml");
+    const argv = lib.buildPytestArgv(
+      "tests/t.py::test_x",
+      "revert_proof_pytest_plugin",
+    );
     expect(argv.includes("-k")).toBe(false);
+    expect(argv.some((a) => String(a).includes("junit"))).toBe(false);
+    expect(argv).toContain("revert_proof_pytest_plugin");
     expect(lib.pytestArgvUsesNodeIdNotK(argv)).toBe(true);
   });
 
-  it("(junit-pass-fail) self-closing pass does not swallow following fail", async () => {
+  it("(pytest-json) plugin JSON lists pass/fail/skip outcomes", async () => {
     const lib = await import("./revert-proof-lib.mjs");
-    const xml = `<?xml version="1.0"?><testsuite>
-<testcase classname="t" name="pass" time="0"/>
-<testcase classname="t" name="fail" time="0"><failure>AssertionError: assert 1 == 2</failure></testcase>
-</testsuite>`;
-    const parsed = lib.parsePytestJunit(xml, 1);
-    expect(parsed.executed).toBe(2);
-    expect(parsed.cases[1]?.outcome).toBe("failed");
+    const parsed = lib.parsePytestPluginJson(
+      JSON.stringify({
+        tests: [
+          { nodeid: "t.py::pass", outcome: "passed", revertProofAssertion: false },
+          { nodeid: "t.py::fail", outcome: "failed", revertProofAssertion: true },
+          { nodeid: "t.py::skip", outcome: "skipped", revertProofAssertion: false },
+        ],
+      }),
+      1,
+    );
+    expect(parsed.tests).toHaveLength(3);
+    expect(lib.assessPytestSelection(parsed.tests, "t.py::fail").ok).toBe(true);
+    expect(lib.assessPytestSelection(parsed.tests, "t.py::skip").reason).toBe(
+      "target skipped",
+    );
   });
 
-  it("(junit-pass-skip) pass then skip yields one executed test", async () => {
+  it("(pytest-json-collection) missing JSON on nonzero exit is collection error", async () => {
     const lib = await import("./revert-proof-lib.mjs");
-    const xml = `<?xml version="1.0"?><testsuite>
-<testcase classname="t" name="pass" time="0"/>
-<testcase classname="t" name="skip" time="0"><skipped/></testcase>
-</testsuite>`;
-    const parsed = lib.parsePytestJunit(xml, 0);
-    expect(parsed.executed).toBe(1);
-  });
-
-  it("(junit-collection) non-zero exit with no cases is collection error", async () => {
-    const lib = await import("./revert-proof-lib.mjs");
-    const parsed = lib.parsePytestJunit("", 2);
+    const parsed = lib.parsePytestPluginJson("", 2);
     expect(parsed.collectionError).toBe(true);
-    expect(parsed.executed).toBe(0);
   });
 
-  it("(pytest-error-tag) error outcome is not assertion red", async () => {
+  it("(pytest-probe-error) failed without revertProofAssertion meta is build break", async () => {
     const lib = await import("./revert-proof-lib.mjs");
+    const nodeId = "tests/test_x.py::test_y";
+    const selection = lib.assessPytestSelection(
+      [{ nodeid: nodeId, outcome: "failed", revertProofAssertion: false }],
+      nodeId,
+    );
     const kind = lib.classifyPatchedPytest({
-      counts: {
-        collectionError: false,
-        cases: [{ name: "t", outcome: "error", body: "AttributeError: boom" }],
-      },
+      counts: { collectionError: false, selection },
     });
     expect(kind).toBe("build break");
   });
 
-  it("(pytest-attr) AttributeError failure without assert is build break", async () => {
+  it("(pytest-error-tag) error outcome is not assertion red", async () => {
     const lib = await import("./revert-proof-lib.mjs");
+    const nodeId = "tests/t.py::test_x";
+    const selection = lib.assessPytestSelection(
+      [{ nodeid: nodeId, outcome: "error", revertProofAssertion: false }],
+      nodeId,
+    );
     const kind = lib.classifyPatchedPytest({
-      counts: {
-        collectionError: false,
-        cases: [{ name: "t", outcome: "failed", body: "AttributeError: boom" }],
-      },
+      counts: { collectionError: false, selection },
     });
     expect(kind).toBe("build break");
   });
