@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/graph/mosaic-swap-captions.test.ts",
+  "testName": "keeps each caption on its own view after swap on the next frame",
+  "description": "Key mosaic HUD captions by pane index instead of tile id",
+  "redOutput": "AssertionError: expected caption text mismatch after pane swap"
+}

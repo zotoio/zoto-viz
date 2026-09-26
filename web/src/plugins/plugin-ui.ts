@@ -133,6 +133,21 @@ function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWall
   host.append(note);
 }
 
+/** Keep pack scope copy in sync with the live mosaic tile list (drawer may stay open). */
+export function syncPackScopeNote(root: HTMLElement, spec: PluginView, wall?: PackWallScope): void {
+  const text = packScopeNoteText(spec, wall);
+  const existing = root.querySelector(".plugin-pack-scope-note");
+  if (!text) {
+    existing?.remove();
+    return;
+  }
+  if (existing instanceof HTMLElement) {
+    existing.textContent = text;
+    return;
+  }
+  mountPackScopeNote(root, spec, wall);
+}
+
 export function askPluginReview(spec: PluginView): Promise<"reviewed" | "authored" | null> {
   return new Promise((resolve) => {
     const bits: string[] = [];
