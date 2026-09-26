@@ -1,0 +1,10 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -355,7 +355,7 @@ def remint(staged: StagedPack, new_id: str) -> StagedPack:
+     if sidecar_path.is_file():
+         tree_digests[pz.SHA256_NAME] = hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
+     doc = _parse_plugin_yml(yml_bytes)
+-    tree_sha = tree_hash_from_digests(tree_digests)
++    tree_sha = legacy_runtime_tree_hash(root)
+     stats = staged.stats

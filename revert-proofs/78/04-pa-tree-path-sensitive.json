@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_pa_tree_hash_sensitive_to_path_layout",
+  "description": "Renaming/moving a staged member changes the versioned tree hash even when file digests are unchanged."
+}

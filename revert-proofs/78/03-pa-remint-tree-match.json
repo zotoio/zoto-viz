@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_pa_remint_tree_matches_from_scratch",
+  "description": "Remint combined tree hash must match a from-scratch hash of the same staged tree."
+}

@@ -681,11 +681,7 @@ def install_catalog_zip(
             pack_read = psz.read_pack_zip(tmp_path)
         except ValueError as e:
             return plugin_local._zip_blocked_result(e, zip_display_name=zip_display_name, zip_path=tmp_path)
-<<<<<<< HEAD
         doc = plugins.validate_doc(pack_read.manifest)
-=======
-        doc = plugins.validate_doc(pack_read.plugin)
->>>>>>> f37d46092f0ff6ada847a7225ea9c6463dfafe4d
         pid = str(doc["id"])
         dest = paths.plugin_zips_dir() / f"{pid}.zip"
         pack_read, doc, dest, reminted_from = plugin_local.remint_pack_read(
@@ -696,11 +692,7 @@ def install_catalog_zip(
         )
         pid = str(doc["id"])
         if reminted_from:
-<<<<<<< HEAD
             tmp_path.write_bytes(plugin_local.zip_bytes_from_staged(pack_read))
-=======
-            tmp_path.write_bytes(pz.pack_bytes_from_members(pack_read.members))
->>>>>>> f37d46092f0ff6ada847a7225ea9c6463dfafe4d
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
@@ -719,11 +711,7 @@ def install_catalog_zip(
         from .plugin_install import install_zip_to_runtime
 
         upgrade = dest.is_file() and runtime.is_dir()
-<<<<<<< HEAD
         unpacked = install_zip_to_runtime(
-=======
-        pipeline = install_zip_to_runtime(
->>>>>>> f37d46092f0ff6ada847a7225ea9c6463dfafe4d
             tmp_path,
             dest,
             runtime,
@@ -734,22 +722,7 @@ def install_catalog_zip(
             force=force,
             pack_read=pack_read,
         )
-<<<<<<< HEAD
         info = _install_result(doc, dest, unpacked, wrote=True)
-=======
-        if not pipeline.get("ok"):
-            _refresh_plugin_python(pipeline)
-            return pipeline
-        unpacked = pz.UnpackResult(
-            dest=runtime,
-            sha256=str(pipeline["sha256"]),
-            unpacked=bool(pipeline.get("wrote", True)),
-            plugin=doc,
-            parts=tuple(pipeline.get("parts") or pack_read.parts),
-            members=pack_read.members_sorted,
-        )
-        info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
->>>>>>> f37d46092f0ff6ada847a7225ea9c6463dfafe4d
         if reminted_from:
             info["remintedFrom"] = reminted_from
         _refresh_plugin_python(info)

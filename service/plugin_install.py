@@ -212,15 +212,12 @@ def assert_runtime_parent_clean(runtime_parent: Path) -> None:
 
 
 def runtime_tree_hash(runtime: Path) -> str:
-    if not runtime.is_dir():
-        return ""
-    digest = hashlib.sha256()
-    for path in sorted(runtime.rglob("*")):
-        if not path.is_file():
-            continue
-        digest.update(path.relative_to(runtime).as_posix().encode("utf-8"))
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
+    return psz.runtime_tree_hash(runtime)
+
+
+def set_after_first_rename(cb: Callable[[], None] | None) -> None:
+    global _after_first_rename
+    _after_first_rename = cb
 
 
 def bak_path(runtime: Path) -> Path:
@@ -620,11 +617,43 @@ def _guess_zip_for_runtime(runtime_parent: Path, pid: str) -> Path | None:
     return cand if cand.is_file() or cand.parent.is_dir() else None
 
 
+def recover_leftover_bak_dirs(runtime_parent: Path) -> int:
+    """Remove ``*.bak`` when the live runtime dir already exists (failed post-swap cleanup)."""
+    removed = 0
+    for bak in list_bak_dirs(runtime_parent):
+        runtime = bak.with_suffix("")
+        if runtime.is_dir():
+            shutil.rmtree(bak, ignore_errors=True)
+            removed += 1
+    return removed
+
+
+def recover_orphan_staging_dirs(runtime_parent: Path) -> int:
+    """Drop crash-leftover ``.staging`` token dirs (once per boot)."""
+    dirs = psz.list_staging_dirs(runtime_parent)
+    for staging in dirs:
+        psz.cleanup_staging_dir(staging)
+    return len(dirs)
+
+
 def recover_all_runtime_roots() -> list[str]:
     msgs: list[str] = []
-    msgs.extend(recover_interrupted_swaps(paths.plugin_local_runtime_dir()))
+    local_rt = paths.plugin_local_runtime_dir()
+    recover_orphan_staging_dirs(local_rt)
+    recover_leftover_bak_dirs(local_rt)
+    msgs.extend(recover_interrupted_swaps(local_rt))
     try:
-        msgs.extend(recover_interrupted_swaps(paths.plugin_runtime_dir()))
+        catalog_rt = paths.plugin_runtime_dir()
+        recover_orphan_staging_dirs(catalog_rt)
+        recover_leftover_bak_dirs(catalog_rt)
+        msgs.extend(recover_interrupted_swaps(catalog_rt))
+    except RuntimeError:
+        pass
+    from . import plugins
+
+    msgs.extend(plugins.migrate_consent_pack_tree_hashes(local_rt))
+    try:
+        msgs.extend(plugins.migrate_consent_pack_tree_hashes(paths.plugin_runtime_dir()))
     except RuntimeError:
         pass
     return msgs

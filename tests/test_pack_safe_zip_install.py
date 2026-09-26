@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import dataclasses
 import hashlib
 import io
 import json
 import logging
 import re
+import shutil
 import struct
 import zipfile
 from pathlib import Path
@@ -582,8 +584,153 @@ def test_staged_pack_cannot_be_constructed_outside_validator() -> None:
             members_sorted=(),
             parts=(),
             stats=psz.ZipReadStats(),
+            tree_hash_bytes_read=0,
             _token=object(),
         )
+
+
+def test_pa_fresh_install_zero_staging_hash_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    zip_path = tmp_path / "in.zip"
+    zip_path.write_bytes(good)
+    staged = psz.read_pack_zip(zip_path)
+    assert staged.tree_hash_bytes_read == 0
+    assert staged.stats.staging_tree_hash_bytes_read == 0
+    _, disk_bytes = psz.runtime_tree_hash_from_disk_with_byte_count(staged.staging_dir)
+    assert disk_bytes > 0
+
+
+def test_pa_remint_hashes_only_plugin_yml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    zip_path = tmp_path / "in.zip"
+    zip_path.write_bytes(good)
+    staged = psz.read_pack_zip(zip_path)
+    reminted = psz.remint(staged, "sample-2")
+    yml_len = (reminted.staging_dir / "plugin.yml").read_bytes().__len__()
+    assert reminted.tree_hash_bytes_read == yml_len
+    assert reminted.stats.staging_tree_hash_bytes_read == yml_len
+    _, disk_bytes = psz.runtime_tree_hash_from_disk_with_byte_count(reminted.staging_dir)
+    assert disk_bytes > yml_len
+
+
+def test_pa_remint_tree_matches_from_scratch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    zip_path = tmp_path / "in.zip"
+    zip_path.write_bytes(good)
+    staged = psz.read_pack_zip(zip_path)
+    reminted = psz.remint(staged, "sample-2")
+    assert reminted.tree_sha256 == psz.runtime_tree_hash(reminted.staging_dir)
+
+
+def test_pa_tree_hash_sensitive_to_path_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    zip_path = tmp_path / "in.zip"
+    zip_path.write_bytes(good)
+    staged = psz.read_pack_zip(zip_path)
+    root = staged.staging_dir
+    viz = root / "visualisation.yml"
+    data = viz.read_bytes()
+    viz.unlink()
+    sub = root / "nested"
+    sub.mkdir()
+    (sub / "visualisation.yml").write_bytes(data)
+    before = staged.tree_sha256
+    after = psz.runtime_tree_hash(root)
+    assert after != before
+    moved_digest = hashlib.sha256((sub / "visualisation.yml").read_bytes()).hexdigest()
+    assert moved_digest == staged.member_sha256["visualisation.yml"]
+
+
+def test_qe_upgrade_rollback_restores_v1_and_cleans_bak(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    assert plugin_local.publish_local({"zip_b64": base64.b64encode(good).decode()})["ok"] is True
+    runtime = paths.plugin_local_runtime_dir() / "sample"
+    old_tree = pi.runtime_tree_hash(runtime)
+    v2 = _zip_bytes({"plugin.yml": "id: sample\nname: Sample\nversion: 2\n", "visualisation.yml": VIZ})
+
+    def boom() -> None:
+        raise OSError("rename failed")
+
+    pi.set_after_first_rename(boom)
+    try:
+        with pytest.raises(OSError):
+            plugin_local.publish_local(
+                {"zip_b64": base64.b64encode(v2).decode(), "overwrite": True},
+            )
+    finally:
+        pi.set_after_first_rename(None)
+    assert pi.runtime_tree_hash(runtime) == old_tree
+    assert pi.list_staging_dirs(runtime.parent) == []
+
+    bak = runtime.parent / "sample.bak"
+    bak.mkdir()
+    (bak / "marker.txt").write_text("leftover", encoding="utf-8")
+    assert runtime.is_dir()
+    pi.recover_leftover_bak_dirs(runtime.parent)
+    assert not bak.is_dir()
+
+
+def test_qe_crash_staging_removed_at_boot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    parent = paths.plugin_local_runtime_dir(create=True)
+    orphan = pi.new_staging_dir(parent, "orphan-crash")
+    (orphan / "plugin.yml").write_text("id: orphan-crash\nname: O\nversion: 1\n", encoding="utf-8")
+    assert len(pi.list_staging_dirs(parent)) == 1
+    removed = pi.recover_orphan_staging_dirs(parent)
+    assert removed == 1
+    assert pi.list_staging_dirs(parent) == []
+    ids = {p["id"] for p in __import__("service.plugins", fromlist=["plugins"]).scan()["plugins"]}
+    assert "orphan-crash" not in ids
+
+
+def test_qe_staged_pack_guard_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    zip_path = tmp_path / "in.zip"
+    zip_path.write_bytes(good)
+    staged = psz.read_pack_zip(zip_path)
+    forged = dataclasses.replace(staged, tree_sha256="0" * 64)
+    with pytest.raises(ValueError, match="not issued"):
+        psz.go_live(forged, tmp_path / "forged-live")
+    bare = object.__new__(psz.StagedPack)
+    with pytest.raises(TypeError, match="cannot be constructed"):
+        psz.go_live(bare, tmp_path / "bare-live")
+    psz.go_live(staged, tmp_path / "ok-live")
+
+
+def test_consent_survives_pack_tree_hash_migration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    from service import plugins
+
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    assert plugin_local.publish_local({"zip_b64": base64.b64encode(good).decode()})["ok"] is True
+    runtime = paths.plugin_local_runtime_dir() / "sample"
+    legacy = psz.legacy_runtime_tree_hash(runtime)
+    doc = plugins.validate_doc({"id": "sample", "name": "Sample", "version": 1})
+    plugins._persist_consent_doc(
+        {
+            "sample": {
+                "kind": "reviewed",
+                "stamp": plugins.consent_stamp(doc),
+                "version": 1,
+                "pack_tree_sha256": legacy,
+            },
+        },
+    )
+    msgs = plugins.migrate_consent_pack_tree_hashes(runtime.parent)
+    assert any("sample" in m for m in msgs)
+    assert plugins.consent_kind(doc) == "reviewed"
+    rec = plugins._consent_doc()["sample"]
+    assert rec.get("tree_hash_version") == plugins.PACK_TREE_HASH_VERSION
+    assert rec.get("pack_tree_sha256") == psz.runtime_tree_hash(runtime)
 
 
 def test_zip_rejects_drive_relative_name(tmp_path: Path) -> None:

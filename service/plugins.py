@@ -337,6 +337,7 @@ _ARTEFACT_FIELD = {
     "shader": "shader_sha256",
 }
 _CONSENT_HASH_KEYS = ("backend_sha256", "collector_sha256", "shader_sha256")
+PACK_TREE_HASH_VERSION = 1
 
 
 def needs_review(doc: dict[str, Any]) -> bool:
@@ -444,16 +445,7 @@ def consented_for(doc: dict[str, Any], hashes: dict[str, str] | None = None) -> 
     return consented(merged)
 
 
-def grant_consent(doc: dict[str, Any], kind: str) -> str:
-    if kind not in {"reviewed", "authored"}:
-        raise ValueError("kind must be reviewed or authored")
-    data = _consent_doc()
-    rec: dict[str, Any] = {"kind": kind, "stamp": consent_stamp(doc), "version": doc.get("version")}
-    for key in _CONSENT_HASH_KEYS:
-        digest = doc.get(key)
-        if digest:
-            rec[key] = digest
-    data[str(doc["id"])] = rec
+def _persist_consent_doc(data: dict[str, Any]) -> None:
     CONSENT_FILE.parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(data, sort_keys=True, allow_unicode=True)
     fd, tmp = tempfile.mkstemp(prefix="plugin-consent.", suffix=".yml", dir=CONSENT_FILE.parent)
@@ -468,7 +460,58 @@ def grant_consent(doc: dict[str, Any], kind: str) -> str:
         except OSError:
             pass
         raise
+
+
+def grant_consent(doc: dict[str, Any], kind: str) -> str:
+    if kind not in {"reviewed", "authored"}:
+        raise ValueError("kind must be reviewed or authored")
+    data = _consent_doc()
+    rec: dict[str, Any] = {"kind": kind, "stamp": consent_stamp(doc), "version": doc.get("version")}
+    for key in _CONSENT_HASH_KEYS:
+        digest = doc.get(key)
+        if digest:
+            rec[key] = digest
+    tree = doc.get("pack_tree_sha256")
+    if tree:
+        rec["pack_tree_sha256"] = str(tree)
+        rec["tree_hash_version"] = PACK_TREE_HASH_VERSION
+    data[str(doc["id"])] = rec
+    _persist_consent_doc(data)
     return kind
+
+
+def migrate_consent_pack_tree_hashes(runtime_parent: Path) -> list[str]:
+    """One-time upgrade of consent ``pack_tree_sha256`` from legacy tree hash to v1."""
+    from . import pack_safe_zip as psz
+
+    data = _consent_doc()
+    if not data:
+        return []
+    runtime_parent = Path(runtime_parent)
+    changed = False
+    msgs: list[str] = []
+    for pid, rec in data.items():
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("tree_hash_version") == PACK_TREE_HASH_VERSION:
+            continue
+        home = runtime_parent / str(pid)
+        if not home.is_dir():
+            continue
+        legacy = psz.legacy_runtime_tree_hash(home)
+        stored = str(rec.get("pack_tree_sha256") or "")
+        if stored and stored != legacy and rec.get("tree_hash_version") not in (None, 0):
+            continue
+        new_hash = psz.runtime_tree_hash(home)
+        if stored == new_hash and rec.get("tree_hash_version") == PACK_TREE_HASH_VERSION:
+            continue
+        rec["pack_tree_sha256"] = new_hash
+        rec["tree_hash_version"] = PACK_TREE_HASH_VERSION
+        changed = True
+        msgs.append(f"pack tree hash migrated for {pid}")
+    if changed:
+        _persist_consent_doc(data)
+    return msgs
 
 
 def service_meta(doc: dict[str, Any], path: Path) -> dict[str, Any]:

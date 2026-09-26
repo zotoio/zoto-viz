@@ -1,0 +1,10 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -632,7 +632,7 @@ def recover_orphan_staging_dirs(runtime_parent: Path) -> int:
+ def recover_all_runtime_roots() -> list[str]:
+     msgs: list[str] = []
+     local_rt = paths.plugin_local_runtime_dir()
+-    recover_orphan_staging_dirs(local_rt)
++    # recover_orphan_staging_dirs(local_rt)
+     recover_leftover_bak_dirs(local_rt)

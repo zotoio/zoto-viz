@@ -1,14 +1,17 @@
 """Validate pack zips once → ``StagedPack``; remint and go-live never re-parse the archive."""
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import secrets
 import shutil
+import struct
 import unicodedata
+import weakref
 import zlib
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
 
@@ -24,12 +27,16 @@ _REQUIRED = "plugin.yml"
 _ALLOWED_COMPRESS = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
 
 _STAGED_SENTINEL = object()
+_TREE_HASH_VERSION = 0x01
+
+_issued_staged: dict[int, weakref.ReferenceType[Any]] = {}
 
 
 @dataclass
 class ZipReadStats:
     archive_bytes_read: int = 0
     central_directory_parses: int = 0
+    staging_tree_hash_bytes_read: int = 0
 
 
 @dataclass(frozen=True)
@@ -62,6 +69,7 @@ class StagedPack:
     members_sorted: tuple[str, ...]
     parts: tuple[str, ...]
     stats: ZipReadStats
+    tree_hash_bytes_read: int
     _token: object
 
     def __post_init__(self) -> None:
@@ -89,6 +97,74 @@ class StagedPack:
 def _assert_staged_token(token: object) -> None:
     if token is not _STAGED_SENTINEL:
         raise TypeError("StagedPack cannot be constructed outside pack_safe_zip")
+
+
+def staged_pack_copy_forbidden(pack: StagedPack) -> None:
+    """Call from tests/guards; ``copy.copy`` must not produce a second live instance."""
+    clone = copy.copy(pack)
+    if clone is not pack:
+        raise TypeError("StagedPack cannot be copied")
+
+
+def staged_pack_replace_forbidden(pack: StagedPack, **changes: Any) -> None:
+    if changes:
+        raise TypeError("StagedPack cannot be replaced")
+    replace(pack, tree_sha256=pack.tree_sha256)
+
+
+def _register_issued_staged(pack: StagedPack) -> None:
+    oid = id(pack)
+    _issued_staged[oid] = weakref.ref(pack, lambda _ref, key=oid: _issued_staged.pop(key, None))
+
+
+def _consume_issued_staged(pack: StagedPack) -> None:
+    oid = id(pack)
+    ref = _issued_staged.pop(oid, None)
+    if ref is None or ref() is not pack:
+        raise ValueError("StagedPack was not issued by the pack validator")
+
+
+def _make_staged_pack(**kwargs: Any) -> StagedPack:
+    pack = StagedPack(_token=_STAGED_SENTINEL, **kwargs)
+    _register_issued_staged(pack)
+    return pack
+
+
+def normalized_tree_path(rel: str) -> str:
+    return unicodedata.normalize("NFC", rel.replace("\\", "/"))
+
+
+def _tree_path_sort_key(rel: str) -> str:
+    return normalized_tree_path(rel)
+
+
+def _tree_entry_bytes(rel: str, file_digest_hex: str) -> bytes:
+    path = normalized_tree_path(rel).encode("utf-8")
+    digest = bytes.fromhex(file_digest_hex)
+    if len(digest) != 32:
+        raise ValueError("file digest must be 32 bytes")
+    return struct.pack(">I", len(path)) + path + digest
+
+
+def tree_hash_from_digests(member_sha256: dict[str, str]) -> str:
+    digest = hashlib.sha256()
+    digest.update(bytes([_TREE_HASH_VERSION]))
+    for rel in sorted(member_sha256, key=_tree_path_sort_key):
+        digest.update(_tree_entry_bytes(rel, member_sha256[rel]))
+    return digest.hexdigest()
+
+
+def legacy_runtime_tree_hash(runtime: Path) -> str:
+    """Pre-v1 tree hash (path utf-8 + raw bytes); used only for one-time migration."""
+    if not runtime.is_dir():
+        return ""
+    digest = hashlib.sha256()
+    for path in sorted(runtime.rglob("*")):
+        if not path.is_file():
+            continue
+        digest.update(path.relative_to(runtime).as_posix().encode("utf-8"))
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def staging_root(runtime_parent: Path) -> Path:
@@ -131,15 +207,31 @@ def list_staging_dirs(runtime_parent: Path) -> list[Path]:
 
 
 def runtime_tree_hash(runtime: Path) -> str:
+    """Versioned pack tree hash from files on disk (verification / migration)."""
     if not runtime.is_dir():
         return ""
-    digest = hashlib.sha256()
+    digests: dict[str, str] = {}
     for path in sorted(runtime.rglob("*")):
         if not path.is_file():
             continue
-        digest.update(path.relative_to(runtime).as_posix().encode("utf-8"))
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
+        rel = path.relative_to(runtime).as_posix()
+        digests[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return tree_hash_from_digests(digests)
+
+
+def runtime_tree_hash_from_disk_with_byte_count(runtime: Path) -> tuple[str, int]:
+    if not runtime.is_dir():
+        return "", 0
+    digests: dict[str, str] = {}
+    bytes_read = 0
+    for path in sorted(runtime.rglob("*")):
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        bytes_read += len(data)
+        rel = path.relative_to(runtime).as_posix()
+        digests[rel] = hashlib.sha256(data).hexdigest()
+    return tree_hash_from_digests(digests), bytes_read
 
 
 def zip_entry_error(member: str, detail: str) -> str:
@@ -219,17 +311,21 @@ def validate_pack_zip(
         doc = plugin
         cleanup_staging_for_pack(runtime_parent, pack_id)
         staging = new_staging_dir(runtime_parent, pack_id)
-        member_sha = {rel: hashlib.sha256(data).hexdigest() for rel, data in members.items()}
+        member_sha: dict[str, str] = {}
         for rel, data in members.items():
+            member_sha[rel] = hashlib.sha256(data).hexdigest()
             out = (staging / rel).resolve()
             if staging.resolve() not in out.parents and out != staging.resolve():
                 raise ValueError(zip_entry_error(rel, "path escapes staging directory"))
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(data)
+        sidecar = (zip_sha + "\n").encode("utf-8")
         (staging / pz.SHA256_NAME).write_text(zip_sha + "\n", encoding="utf-8")
+        tree_digests = {**member_sha, pz.SHA256_NAME: hashlib.sha256(sidecar).hexdigest()}
         members_sorted = tuple(sorted(members))
-        tree_sha = runtime_tree_hash(staging)
-        return StagedPack(
+        tree_sha = tree_hash_from_digests(tree_digests)
+        stats.staging_tree_hash_bytes_read = 0
+        return _make_staged_pack(
             staging_dir=staging,
             zip_sha256=zip_sha,
             tree_sha256=tree_sha,
@@ -239,7 +335,7 @@ def validate_pack_zip(
             members_sorted=members_sorted,
             parts=pz.detect_parts(members_sorted),
             stats=stats,
-            _token=_STAGED_SENTINEL,
+            tree_hash_bytes_read=0,
         )
     except ValueError as e:
         cleanup_staging_dir(staging)
@@ -252,34 +348,35 @@ def validate_pack_zip(
 
 
 def remint(staged: StagedPack, new_id: str) -> StagedPack:
-    """Rewrite manifest id inside staging; re-validate and re-hash tree (no zip parse)."""
-    _assert_staged_token(staged._token)
-    from . import plugins
-
+    """Rewrite manifest id inside staging; re-hash ``plugin.yml`` and recombine tree (no zip parse)."""
+    _consume_issued_staged(staged)
     root = staged.staging_dir
     yml_path = root / _REQUIRED
     doc = _parse_plugin_yml(yml_path.read_bytes())
     doc["id"] = str(new_id)
-    yml_path.write_bytes(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).encode("utf-8"))
-    rewritten: dict[str, bytes] = {}
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.name == pz.SHA256_NAME:
-            continue
-        rewritten[path.relative_to(root).as_posix()] = path.read_bytes()
-    doc = _parse_plugin_yml(rewritten[_REQUIRED])
-    member_sha = {rel: hashlib.sha256(data).hexdigest() for rel, data in rewritten.items()}
-    tree_sha = runtime_tree_hash(root)
-    return StagedPack(
+    yml_bytes = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).encode("utf-8")
+    yml_path.write_bytes(yml_bytes)
+    member_sha = dict(staged.member_sha256)
+    member_sha[_REQUIRED] = hashlib.sha256(yml_bytes).hexdigest()
+    sidecar_path = root / pz.SHA256_NAME
+    tree_digests = dict(member_sha)
+    if sidecar_path.is_file():
+        tree_digests[pz.SHA256_NAME] = hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
+    doc = _parse_plugin_yml(yml_bytes)
+    tree_sha = tree_hash_from_digests(tree_digests)
+    stats = staged.stats
+    stats.staging_tree_hash_bytes_read = len(yml_bytes)
+    return _make_staged_pack(
         staging_dir=root,
         zip_sha256=staged.zip_sha256,
         tree_sha256=tree_sha,
         manifest=dict(doc),
         source=staged.source,
         member_sha256=member_sha,
-        members_sorted=tuple(sorted(rewritten)),
-        parts=pz.detect_parts(rewritten),
-        stats=staged.stats,
-        _token=_STAGED_SENTINEL,
+        members_sorted=staged.members_sorted,
+        parts=staged.parts,
+        stats=stats,
+        tree_hash_bytes_read=len(yml_bytes),
     )
 
 
@@ -290,7 +387,8 @@ def go_live(
     after_first_rename: Callable[[], None] | None = None,
 ) -> bool:
     """Rename staging into ``runtime``; upgrade swaps via ``.bak``. Returns True when upgraded."""
-    _assert_staged_token(staged._token)
+    _assert_staged_token(getattr(staged, "_token", None))
+    _consume_issued_staged(staged)
     runtime = Path(runtime)
     staging = staged.staging_dir
     if not staging.is_dir():
@@ -303,14 +401,23 @@ def go_live(
         return False
     runtime.rename(bak)
     if after_first_rename is not None:
-        after_first_rename()
+        try:
+            after_first_rename()
+        except Exception:
+            if bak.is_dir() and not runtime.is_dir():
+                bak.rename(runtime)
+            raise
     try:
         staging.rename(runtime)
     except Exception:
         if bak.is_dir() and not runtime.is_dir():
             bak.rename(runtime)
         raise
-    shutil.rmtree(bak, ignore_errors=True)
+    if bak.is_dir():
+        try:
+            shutil.rmtree(bak)
+        except OSError:
+            shutil.rmtree(bak, ignore_errors=True)
     return True
 
 

@@ -1,0 +1,17 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -399,13 +399,6 @@ def go_live(
+     if not runtime.is_dir():
+         staging.rename(runtime)
+         return False
+     runtime.rename(bak)
+-    if after_first_rename is not None:
+-        try:
+-            after_first_rename()
+-        except Exception:
+-            if bak.is_dir() and not runtime.is_dir():
+-                bak.rename(runtime)
+-            raise
+     try:
+         staging.rename(runtime)
