@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-host.test.ts",
+  "testName": "^viz\\ contract\\ version\\ negotiation\\ >\\ delivers\\ v2\\ enrichment\\ for\\ v2\\ packs$",
+  "description": "One-line production revert: buildVizFrameForPlugin always applies applyVizFrameContractV2.",
+  "patchedAssertion": "AssertionError: expected 1 to be 2 // Object.is equality"
+}
