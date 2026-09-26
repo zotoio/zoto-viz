@@ -145,6 +145,11 @@ export class RenderHost {
   get pixelRatio(): number { return this.software ? this.pr : this.renderer.getPixelRatio(); }
   get viewCount(): number { return this.views.length; }
 
+  /** Backing-store pixels for pack shaders (no DOM queries). */
+  bufferPixelSize(): { w: number; h: number } {
+    return { w: this.canvas.width, h: this.canvas.height };
+  }
+
   /** WebGL2 context, or null when lost / unavailable. */
   get gl(): WebGL2RenderingContext | null {
     const gl = this.renderer.getContext() as WebGL2RenderingContext | null;

@@ -80,7 +80,7 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
-import { runPackFrameHandler } from "../plugins/viz-pack-host";
+import { runPackFrameHandler, syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -1005,6 +1005,7 @@ function feed(m: StateMsg): void {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       sandbox.frame(f);
       if (packId) {
+        syncVizPackRenderCanvas(renderHost.bufferPixelSize());
         runPackFrameHandler(packId, f, {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),

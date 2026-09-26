@@ -37,22 +37,34 @@ export function wallPartsFromMs(wallMs: number, timeZone?: string): { h: number;
   return { h: pick("hour"), m: pick("minute"), s: pick("second"), ms: wallMs % 1000 };
 }
 
+/** 24-hour wall hour → display hour (12h uses 1–12). */
+export function hourForDisplay(h24: number, hour12: boolean): number {
+  if (!hour12) return h24;
+  const h = h24 % 12;
+  return h === 0 ? 12 : h;
+}
+
+export function digitsFromParts(
+  h24: number,
+  m: number,
+  s: number,
+  hour12: boolean,
+): [number, number, number, number, number, number] {
+  const hour = hourForDisplay(h24, hour12);
+  return [
+    Math.floor(hour / 10), hour % 10,
+    Math.floor(m / 10), m % 10,
+    Math.floor(s / 10), s % 10,
+  ];
+}
+
 export function digitsFromWallMs(
   wallMs: number,
   look: NixieLook,
   timeZone?: string,
 ): [number, number, number, number, number, number] {
   const { h, m, s } = wallPartsFromMs(wallMs, timeZone);
-  let hour = h;
-  if (look.hour12) {
-    hour = hour % 12;
-    if (hour === 0) hour = 12;
-  }
-  return [
-    Math.floor(hour / 10), hour % 10,
-    Math.floor(m / 10), m % 10,
-    Math.floor(s / 10), s % 10,
-  ];
+  return digitsFromParts(h, m, s, look.hour12);
 }
 
 export interface NixieWallClock {
@@ -65,6 +77,9 @@ export function createNixieWallClock(timeZone?: string, canvas: { w: number; h: 
   const digitBuffer = new Array<number>(15).fill(0);
   let lastSecond = -1;
   let formatCalls = 0;
+  let cachedH = 0;
+  let cachedM = 0;
+  let cachedS = 0;
   const clock: NixieWallClock = {
     get digitBuffer() { return digitBuffer; },
     get formatCalls() { return formatCalls; },
@@ -73,14 +88,18 @@ export function createNixieWallClock(timeZone?: string, canvas: { w: number; h: 
       if (sec !== lastSecond || lastSecond < 0) {
         lastSecond = sec;
         formatCalls++;
-        const d = digitsFromWallMs(wallMs, look, timeZone);
-        digitBuffer[0] = d[0];
-        digitBuffer[1] = d[1];
-        digitBuffer[2] = d[2];
-        digitBuffer[3] = d[3];
-        digitBuffer[4] = d[4];
-        digitBuffer[5] = d[5];
+        const parts = wallPartsFromMs(wallMs, timeZone);
+        cachedH = parts.h;
+        cachedM = parts.m;
+        cachedS = parts.s;
       }
+      const d = digitsFromParts(cachedH, cachedM, cachedS, look.hour12);
+      digitBuffer[0] = d[0];
+      digitBuffer[1] = d[1];
+      digitBuffer[2] = d[2];
+      digitBuffer[3] = d[3];
+      digitBuffer[4] = d[4];
+      digitBuffer[5] = d[5];
       digitBuffer[6] = wallMs % 1000 < 500 ? 1 : 0;
       digitBuffer[7] = look.seconds ? 1 : 0;
       digitBuffer[8] = look.glow;

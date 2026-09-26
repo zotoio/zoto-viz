@@ -8,9 +8,56 @@ import {
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { nixieCanvasSize, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+import { CANVAS_DEFAULT, parseNixieLook, type NixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
 
 const hostNixieClock = createNixieWallClock();
+
+let nixieScopedLook: NixieLook = parseNixieLook();
+let nixieActiveLook: NixieLook = nixieScopedLook;
+let nixieOptsKey = "";
+let nixiePackCanvas = { ...CANVAS_DEFAULT };
+
+function nixieOptsStableKey(opts?: Record<string, string> | null): string {
+  if (!opts) return "";
+  const keys = Object.keys(opts).sort();
+  const o: Record<string, string> = {};
+  for (const k of keys) o[k] = opts[k] ?? "";
+  return JSON.stringify(o);
+}
+
+/** Parse nixie look when plugin options change (scope sync), not each frame. */
+export function syncNixiePackScope(opts?: Record<string, string> | null): void {
+  const key = nixieOptsStableKey(opts);
+  if (key === nixieOptsKey) return;
+  nixieOptsKey = key;
+  nixieScopedLook = parseNixieLook(opts);
+}
+
+/** Track render-host backing size for nixie buffers (no querySelector). */
+export function syncVizPackRenderCanvas(size: { w: number; h: number }): void {
+  nixiePackCanvas = {
+    w: size.w > 64 ? size.w : CANVAS_DEFAULT.w,
+    h: size.h > 64 ? size.h : CANVAS_DEFAULT.h,
+  };
+}
+
+export function resetNixiePackHostScope(): void {
+  nixieOptsKey = "";
+  nixieScopedLook = parseNixieLook();
+  nixiePackCanvas = { ...CANVAS_DEFAULT };
+}
+
+export function nixiePackScopedLook(): NixieLook {
+  return nixieScopedLook;
+}
+
+export function nixiePackActiveLook(): NixieLook {
+  return nixieActiveLook;
+}
+
+export function hostNixieFormatCalls(): number {
+  return hostNixieClock.formatCalls;
+}
 
 export interface VizPackHandlers {
   writeBuffer: (slot: number, data: number[]) => void;
@@ -203,13 +250,15 @@ export function runPackFrameHandler(
       break;
     }
     case "nixie-clock": {
+      syncNixiePackScope(opts);
+      nixieActiveLook = nixieScopedLook;
       const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
       handlers.writeBuffer(0, packNixieWallBuffer(
         hostNixieClock,
-        parseNixieLook(opts),
+        nixieActiveLook,
         frame.audio,
         peak,
-        nixieCanvasSize(typeof document !== "undefined" ? document : null),
+        nixiePackCanvas,
       ));
       handlers.writeUniform("uAudio", frame.audio);
       handlers.writeUniform("uAccent", [1.0, 0.38, 0.06]);

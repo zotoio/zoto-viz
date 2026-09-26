@@ -10,4 +10,4 @@ set +e
 OUT=$(cd web && pnpm exec vitest run -t "$TEST" 2>&1)
 set -e
 git checkout -- web/
-echo "$OUT" | rg "FAIL |AssertionError|expected" | head -5
+echo "$OUT" | rg "Tests  |FAIL |AssertionError|expected" | head -8
