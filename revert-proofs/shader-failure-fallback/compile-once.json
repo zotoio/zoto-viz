@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-compile.test.ts",
-  "testName": "tile shader compile latch > compile-once",
-  "redValue": 1200
-}

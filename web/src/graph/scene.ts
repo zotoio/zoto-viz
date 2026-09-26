@@ -1894,8 +1894,17 @@ export class NetScene implements HostedView {
   /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */
   setPluginShader(
     opts: { id: string; source: string } | null,
-    meta?: { packId: string; packName: string },
+    meta?: { packId: string; packName: string; look?: Record<string, string>; packKey?: string },
   ): string | null {
+    if (opts && meta && this.host) {
+      this.host.beginTilePack(
+        this.tileId,
+        meta.packKey ?? meta.packId,
+        this.container,
+        meta.packName,
+        packFallbackText(meta.packId, meta.look),
+      );
+    }
     const gpuProbe = this.host
       ? (frag: string) => {
           const ok = this.host!.buildTileShader(this.tileId, frag, (m) => console.warn("zoto-viz tile shader:", m));
@@ -1908,10 +1917,7 @@ export class NetScene implements HostedView {
     }
     const err = this.backdrop.setPluginShader(opts, gpuProbe);
     if (err && this.host && meta) {
-      this.host.mountShaderFallback(this.tileId, this.container, {
-        packName: meta.packName,
-        fallbackText: packFallbackText(meta.packId),
-      });
+      this.host.showCompileFallback(this.tileId);
     } else if (!err) {
       this.host?.clearShaderFallback(this.tileId);
     }

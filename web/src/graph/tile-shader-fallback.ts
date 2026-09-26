@@ -8,7 +8,12 @@ export const SHADER_FALLBACK_CHIP_CLASS = "tile-shader-fallback-chip";
 
 export interface TileShaderFallbackOpts {
   packName: string;
+  /** When set, simple-view updates run; generic-only tiles omit this. */
   fallbackText?: VizPackFallbackText;
+  /** Shader compile failure without pack text — show generic line immediately. */
+  genericOnly?: boolean;
+  /** Show the “Simple view” chip (pack simple view or context loss). */
+  showChip?: boolean;
 }
 
 /** One centred fallback line (+ optional chip) over the idle backdrop for a pane. */
@@ -17,12 +22,17 @@ export class TileShaderFallback {
   private readonly text: HTMLSpanElement;
   private readonly chip: HTMLSpanElement;
   private lastWritten = "";
-  private readonly hasPackFallback: boolean;
-  private readonly fallbackText?: VizPackFallbackText;
+  private readonly packName: string;
+  private fallbackText?: VizPackFallbackText;
+  private packFnDead = false;
+  private readonly genericOnly: boolean;
+  private showChip: boolean;
 
   constructor(readonly mount: HTMLElement, opts: TileShaderFallbackOpts) {
+    this.packName = opts.packName;
     this.fallbackText = opts.fallbackText;
-    this.hasPackFallback = typeof opts.fallbackText === "function";
+    this.genericOnly = !!opts.genericOnly;
+    this.showChip = !!opts.showChip;
     this.root = document.createElement("div");
     this.root.className = SHADER_FALLBACK_CLASS;
     this.root.style.backgroundColor = "rgba(18, 22, 31, 0.94)";
@@ -34,10 +44,11 @@ export class TileShaderFallback {
     this.chip = document.createElement("span");
     this.chip.className = SHADER_FALLBACK_CHIP_CLASS;
     this.chip.textContent = "Simple view";
-    if (this.hasPackFallback) this.root.appendChild(this.chip);
+    if (this.showChip) this.root.appendChild(this.chip);
     mount.appendChild(this.root);
-    const generic = genericShaderFallbackMessage(opts.packName);
-    this.writeText(this.hasPackFallback ? "" : generic);
+    if (this.genericOnly) {
+      this.writeText(genericShaderFallbackMessage(this.packName));
+    }
   }
 
   get element(): HTMLDivElement {
@@ -48,10 +59,36 @@ export class TileShaderFallback {
     return this.text;
   }
 
+  get chipVisible(): boolean {
+    return this.showChip;
+  }
+
+  setShowChip(on: boolean): void {
+    this.showChip = on;
+    if (on && !this.chip.parentElement) this.root.appendChild(this.chip);
+    if (!on) this.chip.remove();
+  }
+
   frame(frame: VizDataFrame): void {
-    if (!this.hasPackFallback || !this.fallbackText) return;
-    const next = this.fallbackText(frame);
-    if (next !== this.lastWritten) this.writeText(next);
+    if (this.genericOnly || this.packFnDead || !this.fallbackText) return;
+    try {
+      const next = this.fallbackText(frame);
+      if (!next.trim()) {
+        this.latchGeneric();
+        return;
+      }
+      if (next !== this.lastWritten) this.writeText(next);
+    } catch {
+      this.latchGeneric();
+    }
+  }
+
+  private latchGeneric(): void {
+    if (this.packFnDead) return;
+    this.packFnDead = true;
+    this.fallbackText = undefined;
+    this.setShowChip(false);
+    this.writeText(genericShaderFallbackMessage(this.packName));
   }
 
   private writeText(next: string): void {

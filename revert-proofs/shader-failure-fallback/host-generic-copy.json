@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-host.test.ts",
-  "testName": "tile shader fallback host > host-generic-copy",
-  "redValue": 0
-}

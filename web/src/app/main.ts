@@ -41,7 +41,7 @@ import { TetrisView } from "../arcade/tetris";
 import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
-import { Mosaic } from "../graph/mosaic";
+import { Mosaic, mosaicPaneMode } from "../graph/mosaic";
 import { RenderHost } from "../graph/render-host";
 import {
   applyPluginConfigs,
@@ -719,12 +719,20 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
   }
   try {
     const source = await fetchPluginSky(spec.id, spec.shader_sha256);
-    const err = target.setPluginShader({ id: spec.id, source }, { packId: spec.id, packName: spec.name });
+    const lookOpts = mosaic?.on ? optsFor(mosaicPaneMode(target.tileId)) : optsFor(modeById(liveMode));
+    const err = target.setPluginShader(
+      { id: spec.id, source },
+      {
+        packId: spec.id,
+        packName: spec.name,
+        look: lookOpts,
+        packKey: `${spec.id}:${spec.shader_sha256 || ""}`,
+      },
+    );
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
       spec.sky_error = err;
       spec.sky_available = false;
-      target.setPluginShader(null);
       if (target === scene) skyLoaded = "";
       return;
     }

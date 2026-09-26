@@ -22,7 +22,7 @@ describe("tile shader fallback host", () => {
     document.body.appendChild(mount);
     const focus = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(() => {});
     const pack = "Packet Tunnel";
-    const fb = new TileShaderFallback(mount, { packName: pack });
+    const fb = new TileShaderFallback(mount, { packName: pack, genericOnly: true });
     const nodes = mount.querySelectorAll(`.${SHADER_FALLBACK_CLASS}`);
     expect(nodes).toHaveLength(1);
     const el = nodes[0] as HTMLElement;
@@ -49,6 +49,7 @@ describe("tile shader fallback host", () => {
     new TileShaderFallback(mount, {
       packName: "Nixie",
       fallbackText: () => "01 05 00",
+      showChip: true,
     });
     const chips = mount.querySelectorAll(`.${SHADER_FALLBACK_CHIP_CLASS}`);
     expect(chips).toHaveLength(1);

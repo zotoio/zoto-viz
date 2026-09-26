@@ -23,9 +23,10 @@ import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
 import { TileShaderLatch } from "./tile-shader-build";
+import { GfxWallNotice } from "./gfx-wall-notice";
 import {
   TileShaderFallback,
-  type TileShaderFallbackOpts,
+  type VizPackFallbackText,
 } from "./tile-shader-fallback";
 import type { VizDataFrame } from "../plugins/viz-host";
 
@@ -68,9 +69,35 @@ export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 export class TileShaderSlot {
   readonly latch = new TileShaderLatch();
   fallback: TileShaderFallback | null = null;
+  packKey = "";
+  packName = "";
+  mount: HTMLElement | null = null;
+  packFallbackFn?: VizPackFallbackText;
+  hasPackFallback = false;
+  compileFailed = false;
 
   build(gl: WebGL2RenderingContext, frag: string, log: (msg: string) => void): boolean {
     return this.latch.build(gl, frag, log).ok;
+  }
+
+  /** New pack on this pane — clears fallback and compile latch. */
+  swapPack(
+    packKey: string,
+    packName: string,
+    mount: HTMLElement,
+    fallbackFn?: VizPackFallbackText,
+  ): void {
+    if (this.packKey !== packKey) {
+      this.packKey = packKey;
+      this.latch.reset();
+      this.compileFailed = false;
+      this.fallback?.dispose();
+      this.fallback = null;
+    }
+    this.packName = packName;
+    this.mount = mount;
+    this.packFallbackFn = fallbackFn;
+    this.hasPackFallback = typeof fallbackFn === "function";
   }
 }
 
@@ -90,6 +117,8 @@ export class RenderHost {
   private disposed = false;
   private pr: number;
   private readonly tileShaders = new Map<string, TileShaderSlot>();
+  private readonly gfxNotice: GfxWallNotice;
+  private glContextLost = false;
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -124,11 +153,14 @@ export class RenderHost {
     this.canvas.className = "render-host";
     this.canvas.setAttribute("aria-hidden", "true");
     if (this.software) this.canvas.dataset.softgl = "";
+    this.gfxNotice = new GfxWallNotice(wall);
     this.canvas.addEventListener("webglcontextlost", (e) => {
       e.preventDefault();
+      this.onSharedContextLost();
       for (const v of this.views) v.hostContextLost();
     });
     this.canvas.addEventListener("webglcontextrestored", () => {
+      this.onSharedContextRestored();
       this.dirty = true;
       for (const v of this.views) v.hostContextRestored();
     });
@@ -190,6 +222,16 @@ export class RenderHost {
     return slot;
   }
 
+  beginTilePack(
+    tileId: string,
+    packKey: string,
+    mount: HTMLElement,
+    packName: string,
+    fallbackFn?: VizPackFallbackText,
+  ): void {
+    this.tileSlot(tileId).swapPack(packKey, packName, mount, fallbackFn);
+  }
+
   /** Compile + link a tile fragment once at wall build. Returns false when the GL path is latched off. */
   buildTileShader(tileId: string, frag: string, log: (msg: string) => void = () => {}): boolean {
     if (this.software) return true;
@@ -202,22 +244,72 @@ export class RenderHost {
     return this.tileSlot(tileId).latch.dead;
   }
 
-  mountShaderFallback(tileId: string, mount: HTMLElement, opts: TileShaderFallbackOpts): TileShaderFallback {
+  showCompileFallback(tileId: string): void {
     const slot = this.tileSlot(tileId);
-    slot.fallback?.dispose();
-    const fb = new TileShaderFallback(mount, opts);
-    slot.fallback = fb;
-    return fb;
+    slot.compileFailed = true;
+    if (slot.fallback || !slot.mount) return;
+    const fn = slot.hasPackFallback ? slot.packFallbackFn : undefined;
+    slot.fallback = new TileShaderFallback(slot.mount, {
+      packName: slot.packName,
+      fallbackText: fn,
+      genericOnly: !fn,
+      showChip: !!fn,
+    });
   }
 
   clearShaderFallback(tileId: string): void {
     const slot = this.tileShaders.get(tileId);
-    slot?.fallback?.dispose();
-    if (slot) slot.fallback = null;
+    if (!slot) return;
+    slot.fallback?.dispose();
+    slot.fallback = null;
+    slot.compileFailed = false;
   }
 
   driveShaderFallback(tileId: string, frame: VizDataFrame): void {
     this.tileSlot(tileId).fallback?.frame(frame);
+  }
+
+  get gfxWallNotice(): GfxWallNotice {
+    return this.gfxNotice;
+  }
+
+  /** Tests / diagnostics: dispatch a shared context loss on the host canvas. */
+  dispatchContextLost(): void {
+    const e = new Event("webglcontextlost", { cancelable: true });
+    this.canvas.dispatchEvent(e);
+  }
+
+  dispatchContextRestored(): void {
+    this.canvas.dispatchEvent(new Event("webglcontextrestored"));
+  }
+
+  private onSharedContextLost(): void {
+    if (this.glContextLost) return;
+    this.glContextLost = true;
+    this.gfxNotice.onContextLost();
+    for (const slot of this.tileShaders.values()) {
+      if (!slot.hasPackFallback || slot.fallback || !slot.mount) continue;
+      slot.fallback = new TileShaderFallback(slot.mount, {
+        packName: slot.packName,
+        fallbackText: slot.packFallbackFn,
+        showChip: true,
+      });
+    }
+  }
+
+  private onSharedContextRestored(): void {
+    this.glContextLost = false;
+    this.gfxNotice.onContextRestored();
+    for (const slot of this.tileShaders.values()) {
+      if (slot.latch.dead) continue;
+      slot.latch.reset();
+      if (slot.fallback && !slot.compileFailed) {
+        slot.fallback.dispose();
+        slot.fallback = null;
+      } else if (slot.fallback && slot.compileFailed) {
+        slot.fallback.setShowChip(false);
+      }
+    }
   }
 
   /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */

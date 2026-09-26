@@ -14,9 +14,16 @@ export type TileShaderBuildResult =
 export class TileShaderLatch {
   private failed = false;
   private logged = false;
+  private compiled = false;
 
   get dead(): boolean {
     return this.failed;
+  }
+
+  reset(): void {
+    this.failed = false;
+    this.logged = false;
+    this.compiled = false;
   }
 
   /**
@@ -25,6 +32,7 @@ export class TileShaderLatch {
    */
   build(gl: WebGL2RenderingContext, frag: string, log: (msg: string) => void): TileShaderBuildResult {
     if (this.failed) return { ok: false, log: "latched" };
+    if (this.compiled) return { ok: true };
     const vertSh = gl.createShader(gl.VERTEX_SHADER);
     const fragSh = gl.createShader(gl.FRAGMENT_SHADER);
     if (!vertSh || !fragSh) {
@@ -56,6 +64,7 @@ export class TileShaderLatch {
       this.fail(msg, log);
       return { ok: false, log: msg };
     }
+    this.compiled = true;
     return { ok: true };
   }
 

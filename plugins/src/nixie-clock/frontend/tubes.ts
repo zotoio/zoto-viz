@@ -62,17 +62,16 @@ export function nixieCanvasSize(doc?: Document | null): { w: number; h: number }
   };
 }
 
-/** Slot 0: six digits + colon blink + look + canvas + LAN pulse. */
-const NIXIE_SCRATCH = { h: 0, m: 0, s: 0 };
-let nixieFallbackKey = -1;
-let nixieFallbackCached = "";
-
 function nixiePair(n: number): string {
   const v = Math.max(0, Math.min(99, n));
   return `${Math.floor(v / 10)}${v % 10}`.padStart(2, "0");
 }
 
-function nixieClockParts(date: Date, hour12: boolean, scratch = NIXIE_SCRATCH): void {
+export function nixieClockParts(
+  date: Date,
+  hour12: boolean,
+  scratch: { h: number; m: number; s: number },
+): void {
   let h = date.getHours();
   scratch.m = date.getMinutes();
   scratch.s = date.getSeconds();
@@ -83,18 +82,23 @@ function nixieClockParts(date: Date, hour12: boolean, scratch = NIXIE_SCRATCH): 
   scratch.h = h;
 }
 
-/** Declarative simple view when the sky shader fails (host reads this, no DOM). */
-export function nixieFallbackText(date: Date, look: NixieLook): string {
-  nixieClockParts(date, look.hour12);
+/** Build a fallback line; caller owns scratch + cache (one closure per tile). */
+export function formatNixieFallbackLine(
+  date: Date,
+  look: NixieLook,
+  scratch: { h: number; m: number; s: number },
+  cache: { key: number; text: string },
+): string {
+  nixieClockParts(date, look.hour12, scratch);
   const key = look.seconds
-    ? NIXIE_SCRATCH.h * 3600 + NIXIE_SCRATCH.m * 60 + NIXIE_SCRATCH.s
-    : NIXIE_SCRATCH.h * 3600 + NIXIE_SCRATCH.m * 60;
-  if (key === nixieFallbackKey) return nixieFallbackCached;
-  nixieFallbackKey = key;
-  const parts = [nixiePair(NIXIE_SCRATCH.h), nixiePair(NIXIE_SCRATCH.m)];
-  if (look.seconds) parts.push(nixiePair(NIXIE_SCRATCH.s));
-  nixieFallbackCached = parts.join(" ");
-  return nixieFallbackCached;
+    ? scratch.h * 3600 + scratch.m * 60 + scratch.s
+    : scratch.h * 3600 + scratch.m * 60;
+  if (key === cache.key) return cache.text;
+  cache.key = key;
+  const parts = [nixiePair(scratch.h), nixiePair(scratch.m)];
+  if (look.seconds) parts.push(nixiePair(scratch.s));
+  cache.text = parts.join(" ");
+  return cache.text;
 }
 
 export function packNixieBuffer(
