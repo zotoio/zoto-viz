@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import FRAG from "../../../plugins/src/koi-pond/sky/fragment.glsl?raw";
-import FRONT from "../../../plugins/src/koi-pond/frontend/index.ts?raw";
-import VIS from "../../../plugins/src/koi-pond/visualisation.yml?raw";
-import PLUGIN from "../../../plugins/src/koi-pond/plugin.yml?raw";
-import MAPPING from "../../../plugins/src/koi-pond/data-mapping.yml?raw";
+import FRAG from "../sky/fragment.glsl?raw";
+import FRONT from "./index.ts?raw";
+import VIS from "../visualisation.yml?raw";
+import PLUGIN from "../plugin.yml?raw";
+import MAPPING from "../data-mapping.yml?raw";
 import {
   assertWorkBudgetUnderCaps,
   assignTalkerSlots,
@@ -33,10 +33,10 @@ import {
   tileInternalResScale,
   totalTalkerRate,
   unpackKoiMeta,
-} from "../../../plugins/src/koi-pond/frontend/koi-pond";
-import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../plugins/sdk/viz-contract";
-import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
-import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
+} from "./koi-pond";
+import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../sdk/viz-contract";
+import { VIZ_FIXTURE_IDLE } from "../../../sdk/viz-fixtures";
+import { probePluginSkyCompile, wrapPluginSky } from "./sky-compile";
 
 const talkers = [
   { id: "10.0.0.1", rate: 180, role: "gateway" },
@@ -116,8 +116,7 @@ describe("koi-pond shipped pack", () => {
     const sim = new KoiPondSim(o);
     const packed = sim.advance(demoFrame(2));
     expect(packed.label).toContain("demo");
-    const idle = buildIdleVizFrame(3);
-    const idlePacked = sim.advance({ ...idle, demo: true });
+    const idlePacked = sim.advance({ ...VIZ_FIXTURE_IDLE, demo: true, t: 3 });
     expect(idlePacked.slot0[26]).toBe(1);
   });
 
