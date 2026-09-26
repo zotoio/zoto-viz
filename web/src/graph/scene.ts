@@ -4007,6 +4007,7 @@ export class NetScene implements HostedView {
     this.arrows.geometry.dispose();
     (this.arrows.material as THREE.Material).dispose();
     this.lumaProbe.reset();
+    this.backdrop.setPluginShader(null);
     this.controls.dispose();
     if (this.host) {
       this.host.remove(this);

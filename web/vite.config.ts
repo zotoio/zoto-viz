@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const webRoot = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(webRoot, "..");
 
 function gitShortRev(): string {
   try {
@@ -34,7 +35,14 @@ export default defineConfig({
   // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same
   // bytes in with `?inline` (no Node fs types in the browser tsconfig)
   assetsInclude: ["**/*.wasm", "**/*.glsl"],
-  build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
+  build: { outDir: "dist", emptyOutDir: true, sourcemap: false,
+    rollupOptions: {
+      input: {
+        main: path.resolve(webRoot, "index.html"),
+        "plugin-sandbox": path.resolve(webRoot, "plugin-sandbox.html"),
+      },
+    },
+  },
   test: {
     environment: "happy-dom",
     setupFiles: ["src/test/setup.ts"],

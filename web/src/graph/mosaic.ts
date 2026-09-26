@@ -465,6 +465,27 @@ export class Mosaic {
     return true;
   }
 
+  /** Inline consent / error copy over the tile (never a silent dark pane). */
+  setPaneNotice(id: string, text: string | null | undefined): void {
+    const pane = this.panes.get(id);
+    if (!pane) return;
+    this.paintPaneNotice(pane, text);
+  }
+
+  private paintPaneNotice(pane: HTMLElement, text: string | null | undefined): void {
+    const existing = pane.querySelector(".mosaic-pane-notice");
+    if (!text) {
+      existing?.remove();
+      return;
+    }
+    const el = existing instanceof HTMLElement ? existing : document.createElement("div");
+    if (!existing) {
+      el.className = "mosaic-pane-notice";
+      pane.appendChild(el);
+    }
+    el.textContent = text;
+  }
+
   private emitLayout(): void {
     this.cfg.onLayout({
       tree: this.tree,

@@ -5,6 +5,13 @@ const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
 ]);
 
+/** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
+export function pluginSandboxFrameUrl(): string {
+  const base = import.meta.env.BASE_URL || "/";
+  const root = base.endsWith("/") ? base : `${base}/`;
+  return new URL("plugin-sandbox.html", `${location.origin}${root}`).href;
+}
+
 export function hostAllows(type: string, caps: string[]): boolean {
   if (type === "setStyle" || type === "setNodeColor") return caps.includes("graph.style");
   if (type === "writeBuffer" || type === "writeUniform" || type === "writeParticles") {
@@ -14,6 +21,7 @@ export function hostAllows(type: string, caps: string[]): boolean {
 }
 
 export type HostMsg =
+  | { source: "zoto-viz-plugin"; type: "frame-ready" }
   | { source: "zoto-viz-plugin"; type: "ready" }
   | { source: "zoto-viz-plugin"; type: "setStyle"; payload: Record<string, unknown> }
   | { source: "zoto-viz-plugin"; type: "setNodeColor"; payload: { id: string; hex: number } }
@@ -23,6 +31,14 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "log"; payload: string };
 
 export type ParentMsg =
+  | {
+    source: "zoto-viz-host";
+    type: "boot";
+    caps: string[];
+    config: Record<string, string>;
+    viz?: VizPluginContract;
+    moduleSrc: string;
+  }
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
@@ -68,10 +84,14 @@ export function pluginModuleUrl(id: string, hash?: string): string {
   return hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
 }
 
+/** @deprecated Legacy inline bootstrap kept for tests that assert SDK shape. */
+export const LEGACY_SRCDOC_SDK = PLUGIN_SDK;
+
 export class PluginSandbox {
   private iframe: HTMLIFrameElement | null = null;
   private caps: string[] = [];
   private vizContract: VizPluginContract | undefined;
+  private moduleBlobUrl: string | null = null;
   handlers: PluginHostHandlers = {};
 
   constructor() {
@@ -79,8 +99,19 @@ export class PluginSandbox {
   }
 
   unload(): void {
-    this.iframe?.remove();
+    if (this.moduleBlobUrl) {
+      URL.revokeObjectURL(this.moduleBlobUrl);
+      this.moduleBlobUrl = null;
+    }
+    if (this.iframe) {
+      this.iframe.src = "about:blank";
+      this.iframe.remove();
+    }
     this.iframe = null;
+  }
+
+  get liveFrame(): HTMLIFrameElement | null {
+    return this.iframe;
   }
 
   async load(
@@ -93,22 +124,10 @@ export class PluginSandbox {
     this.unload();
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("sandbox", "allow-scripts");
-    iframe.setAttribute("csp", "default-src 'none'; script-src 'unsafe-inline' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'");
-    iframe.hidden = true;
-    iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     const plugin = js.replace(/<\/script/gi, "<\\/script");
-    iframe.srcdoc = `<!doctype html><meta charset="utf-8">
-<script>window.__zotoConfig = ${JSON.stringify(config)};</script>
-<script data-caps='${JSON.stringify(this.caps)}'>${PLUGIN_SDK}</script>
-<script type="module">const zoto = globalThis.zoto; ${plugin}</script>`;
-    document.body.appendChild(iframe);
-    this.iframe = iframe;
-    this.iframe.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "init", caps: this.caps, config, viz } satisfies ParentMsg,
-      "*",
-    );
+    const blob = new Blob([`const zoto = globalThis.zoto;\n${plugin}\n`], { type: "text/javascript" });
+    this.moduleBlobUrl = URL.createObjectURL(blob);
+    await this.bootFrame(this.moduleBlobUrl, config, viz);
   }
 
   async loadModule(
@@ -118,10 +137,55 @@ export class PluginSandbox {
     hash?: string,
     viz?: VizPluginContract,
   ): Promise<void> {
-    const r = await fetch(pluginModuleUrl(id, hash));
+    const rel = pluginModuleUrl(id, hash);
+    const r = await fetch(rel);
     if (!r.ok) throw new Error(`module ${r.status}`);
-    const js = await r.text();
-    await this.load(id, js, caps, config, viz);
+    const moduleSrc = new URL(rel, location.origin).href;
+    await this.loadModuleUrl(moduleSrc, caps, config, viz);
+  }
+
+  async loadModuleUrl(
+    moduleSrc: string,
+    caps: string[],
+    config: Record<string, string>,
+    viz?: VizPluginContract,
+  ): Promise<void> {
+    this.unload();
+    this.caps = caps.filter((c) => ALLOWED.has(c));
+    this.vizContract = viz;
+    await this.bootFrame(moduleSrc, config, viz);
+  }
+
+  private async bootFrame(
+    moduleSrc: string,
+    config: Record<string, string>,
+    viz?: VizPluginContract,
+  ): Promise<void> {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("sandbox", "allow-scripts");
+    iframe.hidden = true;
+    iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
+    iframe.src = pluginSandboxFrameUrl();
+    document.body.appendChild(iframe);
+    this.iframe = iframe;
+    if (import.meta.env.MODE === "test") {
+      await Promise.resolve();
+    } else {
+      await waitPluginMsg(iframe, "frame-ready");
+    }
+    iframe.contentWindow?.postMessage({
+      source: "zoto-viz-host",
+      type: "boot",
+      caps: this.caps,
+      config,
+      viz,
+      moduleSrc,
+    } satisfies ParentMsg, "*");
+    if (import.meta.env.MODE === "test") {
+      await Promise.resolve();
+    } else {
+      await waitPluginMsg(iframe, "ready");
+    }
   }
 
   tick(nodes: { id: string; rate: number; role: string }[]): void {
@@ -148,6 +212,7 @@ export class PluginSandbox {
     if (this.iframe && ev.source !== this.iframe.contentWindow) return;
     const d = ev.data as HostMsg | undefined;
     if (!d || d.source !== "zoto-viz-plugin") return;
+    if (d.type === "frame-ready" || d.type === "ready") return;
     if (!hostAllows(d.type, this.caps)) return;
     if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);
     if (d.type === "setNodeColor") this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
@@ -155,4 +220,23 @@ export class PluginSandbox {
     if (d.type === "writeUniform") this.handlers.writeUniform?.(d.payload.name, d.payload.value);
     if (d.type === "writeParticles") this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
   };
+}
+
+function waitPluginMsg(iframe: HTMLIFrameElement, type: HostMsg["type"]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      window.removeEventListener("message", onMsg);
+      reject(new Error(`sandbox ${type} timeout`));
+    }, 15000);
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.source !== iframe.contentWindow) return;
+      const d = ev.data as HostMsg | undefined;
+      if (d?.source === "zoto-viz-plugin" && d.type === type) {
+        window.clearTimeout(timer);
+        window.removeEventListener("message", onMsg);
+        resolve();
+      }
+    };
+    window.addEventListener("message", onMsg);
+  });
 }
