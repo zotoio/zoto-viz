@@ -7,11 +7,15 @@ export type NoticeKey =
   | "layout-refused-boot"
   | "layout-refused-profile";
 
-const ALERT_KEYS: ReadonlySet<NoticeKey> = new Set([
-  "install-failed",
-  "context-not-restored",
-  "retry-failed",
-]);
+const NOTICE_ROUTE: Record<NoticeKey, "status" | "alert"> = {
+  "server-restarted": "status",
+  "retry-failed": "alert",
+  "context-lost": "status",
+  "context-not-restored": "alert",
+  "install-failed": "alert",
+  "layout-refused-boot": "status",
+  "layout-refused-profile": "status",
+};
 
 const MAX_VISIBLE = 3;
 
@@ -44,7 +48,7 @@ const keyToLive = new Map<NoticeKey, LiveNotice>();
 const queue = new Map<NoticeKey, QueuedNotice>();
 
 function isErrorKey(key: NoticeKey): boolean {
-  return ALERT_KEYS.has(key);
+  return NOTICE_ROUTE[key] === "alert";
 }
 
 function syncQueueCount(): void {
@@ -52,7 +56,7 @@ function syncQueueCount(): void {
 }
 
 function pickContainer(key: NoticeKey): HTMLElement {
-  return isErrorKey(key) ? alertContainer! : statusContainer!;
+  return NOTICE_ROUTE[key] === "alert" ? alertContainer! : statusContainer!;
 }
 
 function clearNoticeTimer(notice: LiveNotice): void {
