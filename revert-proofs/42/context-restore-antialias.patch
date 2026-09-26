@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index a74fcfc..ed571c4 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -176,7 +176,6 @@ export class RenderHost {
+     });
+     this.canvas.addEventListener("webglcontextrestored", () => {
+       this.dirty = true;
+-      this.refreshContextAntialias();
+       this.markMirrorScopeDirty();
+       for (const v of this.views) v.hostContextRestored();
+     });
