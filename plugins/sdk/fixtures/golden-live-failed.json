@@ -1,0 +1,138 @@
+{
+  "t": 120,
+  "dt": 0,
+  "audio": 0.12,
+  "packets": [
+    {
+      "proto": "tcp",
+      "size": 9,
+      "field": 0.2
+    },
+    {
+      "proto": "http",
+      "size": 7,
+      "field": 0.1806179973983887
+    },
+    {
+      "proto": "tls",
+      "size": 5,
+      "field": 0.15563025007672873
+    },
+    {
+      "proto": "udp",
+      "size": 4,
+      "field": 0.13979400086720378
+    },
+    {
+      "proto": "dns",
+      "size": 4,
+      "field": 0.13979400086720378
+    },
+    {
+      "proto": "arp",
+      "size": 2,
+      "field": 0.09542425094393249
+    }
+  ],
+  "rf": [
+    {
+      "ssid": "host-26",
+      "rssi": 0.3,
+      "channel": 36
+    },
+    {
+      "ssid": "host-18",
+      "rssi": 0.3,
+      "channel": 0
+    }
+  ],
+  "talkers": [
+    {
+      "id": "host-02",
+      "rate": 120,
+      "role": "gateway"
+    },
+    {
+      "id": "host-10",
+      "rate": 95,
+      "role": "internet"
+    },
+    {
+      "id": "host-06",
+      "rate": 88,
+      "role": "self"
+    },
+    {
+      "id": "host-01",
+      "rate": 72,
+      "role": "internet"
+    },
+    {
+      "id": "host-03",
+      "rate": 64,
+      "role": "lan"
+    },
+    {
+      "id": "host-04",
+      "rate": 52,
+      "role": "lan"
+    },
+    {
+      "id": "host-09",
+      "rate": 48,
+      "role": "internet"
+    },
+    {
+      "id": "host-05",
+      "rate": 41,
+      "role": "lan"
+    },
+    {
+      "id": "host-07",
+      "rate": 36,
+      "role": "lan"
+    },
+    {
+      "id": "host-08",
+      "rate": 28,
+      "role": "lan"
+    }
+  ],
+  "headlines": [
+    {
+      "id": "host-20",
+      "label": "host-19",
+      "text": "Pillars of Creation",
+      "kind": "rss",
+      "summary": "Golden demo still for carousel and feed checks.",
+      "image": "https://images-assets.nasa.gov/image/PIA25434/PIA25434~orig.jpg"
+    },
+    {
+      "id": "host-21",
+      "label": "host-19",
+      "text": "Earth at Night",
+      "kind": "rss",
+      "summary": "Second golden headline when live capture is empty.",
+      "image": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001435/GSFC_20171208_Archive_e001435~large.jpg"
+    },
+    {
+      "id": "host-15",
+      "label": "host-14",
+      "text": "Zoto viz golden seed",
+      "kind": "demo",
+      "summary": "Live traffic wins when present."
+    }
+  ],
+  "sys": {
+    "cpu": 0.42,
+    "mem": 0,
+    "disk": 0,
+    "gpu": 0,
+    "temp": 0,
+    "watts": 0,
+    "psi": 0,
+    "sockets": 0,
+    "failed": 0.75,
+    "udev": 0
+  }
+}
