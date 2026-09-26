@@ -4,6 +4,8 @@ export type PackAssetPaneNoticeOpts = {
   showRetry?: boolean;
   onRetry?: () => void;
   onRetryFocused?: () => void;
+  showRemoveFromWall?: boolean;
+  onRemoveFromWall?: () => void;
 };
 
 /** Paint inline pack-asset copy on a mosaic tile pane (shared by Mosaic and tests). */
@@ -43,6 +45,18 @@ export function paintPackAssetPaneNotice(
       opts.onRetry?.();
       focusPackAssetTile(pane);
       opts.onRetryFocused?.();
+    });
+    el.append(btn);
+  }
+  if (opts?.showRemoveFromWall && opts.onRemoveFromWall) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mosaic-pane-notice-remove";
+    btn.textContent = "Remove from wall";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      opts.onRemoveFromWall?.();
+      focusPackAssetTile(pane);
     });
     el.append(btn);
   }

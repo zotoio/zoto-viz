@@ -7,6 +7,10 @@ import {
   tileRebuildState,
   tileReconnectingNotice,
 } from "./pack-asset-frame";
+import {
+  packNavigationStoppedForTile,
+  packNavigationStoppedNotice,
+} from "./pack-asset-navigation";
 
 export const NO_PACK_FEED = "NO PACK FEED";
 const TOKEN_REDACT = "<sandbox-token>";
@@ -138,9 +142,12 @@ export function packFeedPaneNotice(
   tileId: string,
   packName: string | null | undefined,
 ): { text: string; recipe: PaneNoticeRecipe } | null {
+  const label = packName ?? "Pack";
+  if (packNavigationStoppedForTile(tileId)) {
+    return { text: packNavigationStoppedNotice(label), recipe: "fail" };
+  }
   const r = tiles.get(tileId);
   if (!r) return null;
-  const label = packName ?? "Pack";
   if (!isActivePackLoad(tileId, label) && packName) return null;
   const rebuild = tileRebuildState(tileId, label);
   if (rebuild.phase === "reconnecting") {
@@ -167,7 +174,12 @@ export type MosaicNoticeHost = {
     id: string,
     text: string | null | undefined,
     recipe?: PaneNoticeRecipe,
-    opts?: { showRetry?: boolean; onRetry?: () => void },
+    opts?: {
+      showRetry?: boolean;
+      onRetry?: () => void;
+      showRemoveFromWall?: boolean;
+      onRemoveFromWall?: () => void;
+    },
   ) => void;
   focusPaneTile?: (id: string) => void;
 };
@@ -188,10 +200,16 @@ export function applyPackFeedPaneNotice(
   if (next) {
     feedNoticeShown.add(tileId);
     const rebuild = tileRebuildState(tileId, label || "Pack");
-    const showRetry = next.recipe === "fail" && rebuild.phase === "failed";
+    const navStopped = packNavigationStoppedForTile(tileId);
+    const showRetry = !navStopped && next.recipe === "fail" && rebuild.phase === "failed";
+    const showRemove = navStopped;
     mosaic.setPaneNotice(tileId, next.text, next.recipe, {
       showRetry,
       onRetry: showRetry ? () => { invokePackAssetRetry(tileId); } : undefined,
+      showRemoveFromWall: showRemove,
+      onRemoveFromWall: showRemove
+        ? () => { import("./pack-asset-navigation").then((m) => m.invokePackNavigationRemove(tileId)); }
+        : undefined,
     });
     return;
   }

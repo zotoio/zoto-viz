@@ -22,6 +22,7 @@ import {
   shouldCapRebuild,
   tileRebuildInFlight,
 } from "./pack-asset-frame";
+import { packNavigationStoppedForTile } from "./pack-asset-navigation";
 import { applyPackFeedPaneNotice } from "./plugin-pack-feed";
 
 export function isPackAssetTokenInvalid(err: unknown): boolean {
@@ -122,6 +123,7 @@ export async function runPackAssetProtectedLoad(
     return;
   } catch (err) {
     if (isAbort(err) || signal.aborted) return;
+    if (packNavigationStoppedForTile(tileId)) return;
     if (!isPackAssetTokenInvalid(err)) {
       if (isActivePackLoad(tileId, packName)) markTileRebuildFailed(tileId, packName);
       throw err;

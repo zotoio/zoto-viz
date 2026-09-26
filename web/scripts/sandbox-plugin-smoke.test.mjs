@@ -109,6 +109,33 @@ async function main() {
   assert.equal(mod.headers.get("referrer-policy"), "no-referrer");
   assert.ok(diag.boot.includes("frame-ready"), diag.boot.join(","));
 
+  const sbFrame = page.frames().find((f) => f.url().includes("/pack-assets/") && f.url().includes("plugin-sandbox"));
+  if (sbFrame) {
+    await sbFrame.evaluate(() => {
+      window.__zotoCspViolations = window.__zotoCspViolations || [];
+      document.addEventListener("securitypolicyviolation", (e) => {
+        window.__zotoCspViolations.push({
+          blockedURI: e.blockedURI,
+          violatedDirective: e.violatedDirective,
+        });
+      });
+      const img = document.createElement("img");
+      img.src = "https://example.com/csp-probe.png";
+      document.body.append(img);
+      const style = document.createElement("style");
+      style.textContent = "body { background: url(https://example.com/csp-probe.css); }";
+      document.body.append(style);
+    });
+    await page.waitForTimeout(300);
+    const frameViolations = await sbFrame.evaluate(() => window.__zotoCspViolations ?? []);
+    diag.cspViolations = [...diag.cspViolations, ...frameViolations];
+  }
+  const blocked = diag.cspViolations.filter((v) =>
+    /example\.com/i.test(String(v.blockedURI || ""))
+    && /img-src|style-src/i.test(String(v.violatedDirective || "")),
+  );
+  assert.ok(blocked.length >= 1, formatDiag({ blocked, cspViolations: diag.cspViolations }));
+
   const srcdocViolations = diag.cspViolations.filter((v) =>
     String(v.blockedURI || v.sourceFile || "").includes("srcdoc"));
   assert.equal(srcdocViolations.length, 0, formatDiag({ srcdocViolations }));

@@ -626,6 +626,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   }
   const tileId = "main";
   const packLabel = spec.name ?? spec.id;
+  sandbox.setActivePackLabel(packLabel);
   setTileExpectsVizFeed(tileId, !!(spec.capabilities?.includes("viz.read") || spec.capabilities?.includes("viz.write")));
   clearTilePackFeed(tileId);
   const mosaicHost = mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost & {
@@ -1182,6 +1183,10 @@ mosaic = new Mosaic({
     lastMsg: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).msg : lastRaw,
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
+});
+sandbox.setNavigationStopHost({
+  setPaneNotice: (id, text, recipe, opts) => mosaic?.setPaneNotice(id, text, recipe, opts),
+  closeTile: (id) => mosaic?.closeTile(id),
 });
 settings.onMosaicPanePick = (from, to) => {
   if (!mosaic?.on) return false;

@@ -6,6 +6,18 @@ import {
 } from "./pack-asset-frame";
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
+import {
+  HOST_SOURCE,
+  PLUGIN_SOURCE,
+  type HostBootChannelMsg,
+  type HostPortMsg,
+  type PluginPortMsg,
+} from "./sandbox-channel";
+import {
+  applyPackNavigationStoppedNotice,
+  markPackNavigationStopped,
+  registerPackNavigationRemove,
+} from "./pack-asset-navigation";
 import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
 
 /** Test hook: shorten sandbox handshake waits. */
@@ -22,6 +34,16 @@ export function setSandboxBootWaitInTests(on: boolean): void {
 
 export function sandboxMsgTimeoutForTests(): number {
   return sandboxMsgTimeoutMs;
+}
+
+let sandboxFramePostMessageCount = 0;
+
+export function sandboxFramePostMessageCountForTests(): number {
+  return sandboxFramePostMessageCount;
+}
+
+export function resetSandboxFramePostMessageCountForTests(): void {
+  sandboxFramePostMessageCount = 0;
 }
 
 const ALLOWED = new Set([
@@ -98,9 +120,9 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
   | { source: "zoto-viz-plugin"; type: "log"; payload: string };
 
-export type ParentMsg =
+export type ParentPortMsg =
   | {
-    source: "zoto-viz-host";
+    source: typeof HOST_SOURCE;
     type: "boot";
     caps: string[];
     config: Record<string, string>;
@@ -109,10 +131,9 @@ export type ParentMsg =
     bootNonce: string;
     parentOrigin: string;
   }
-  | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
-  | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
-  | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
-  | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
+  | { source: typeof HOST_SOURCE; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
+  | { source: typeof HOST_SOURCE; type: "frame"; frame: VizDataFrame }
+  | { source: typeof HOST_SOURCE; type: "config"; config: Record<string, string> };
 
 export interface PluginHostHandlers {
   setStyle?: (s: Record<string, unknown>) => void;
@@ -166,6 +187,11 @@ export async function pluginModuleSandboxUrl(id: string, hash?: string): Promise
 /** @deprecated Legacy inline bootstrap kept for tests that assert SDK shape. */
 export const LEGACY_SRCDOC_SDK = PLUGIN_SDK;
 
+export type NavigationStopHost = {
+  setPaneNotice?: import("./plugin-pack-feed").MosaicNoticeHost["setPaneNotice"];
+  closeTile?: (tileId: string) => void;
+};
+
 export class PluginSandbox {
   private iframe: HTMLIFrameElement | null = null;
   private caps: string[] = [];
@@ -173,6 +199,11 @@ export class PluginSandbox {
   private moduleBlobUrl: string | null = null;
   private bootReject: ((err: Error) => void) | null = null;
   private frameId = "";
+  private hostPort: MessagePort | null = null;
+  private iframeLoadCount = 0;
+  private onIframeLoad: (() => void) | null = null;
+  private activePackLabel = "";
+  private navigationHost: NavigationStopHost | null = null;
   handlers: PluginHostHandlers = {};
   /** Mosaic tile or `main` receiving sandbox plugin writes. */
   activeTileId = "main";
@@ -182,13 +213,22 @@ export class PluginSandbox {
     this.activeTileId = id || "main";
   }
 
+  setActivePackLabel(label: string): void {
+    this.activePackLabel = label.trim();
+  }
+
+  setNavigationStopHost(host: NavigationStopHost | null): void {
+    this.navigationHost = host;
+  }
+
   constructor() {
-    window.addEventListener("message", this.onMessage);
+    window.addEventListener("message", this.onWindowMessage);
   }
 
   unload(): void {
     setSandboxReady(false);
     this.bootReject = null;
+    this.teardownPort();
     const tile = this.activeTileId;
     const fid = this.frameId;
     this.frameId = "";
@@ -198,11 +238,34 @@ export class PluginSandbox {
       URL.revokeObjectURL(this.moduleBlobUrl);
       this.moduleBlobUrl = null;
     }
+    if (this.onIframeLoad && this.iframe) {
+      this.iframe.removeEventListener("load", this.onIframeLoad);
+      this.onIframeLoad = null;
+    }
     if (this.iframe) {
       this.iframe.src = "about:blank";
       this.iframe.remove();
     }
     this.iframe = null;
+    this.iframeLoadCount = 0;
+  }
+
+  private teardownPort(): void {
+    if (this.hostPort) {
+      try { this.hostPort.close(); } catch { /* ignore */ }
+      this.hostPort.onmessage = null;
+      this.hostPort = null;
+    }
+  }
+
+  private postToFrameWindow(msg: HostBootChannelMsg, transfer: Transferable[]): void {
+    sandboxFramePostMessageCount += 1;
+    this.iframe?.contentWindow?.postMessage(msg, "*", transfer);
+  }
+
+  private postToFramePort(msg: HostPortMsg): void {
+    if (!this.hostPort) return;
+    this.hostPort.postMessage(msg);
   }
 
   get liveFrame(): HTMLIFrameElement | null {
@@ -261,6 +324,12 @@ export class PluginSandbox {
     iframe.src = await pluginSandboxFrameUrl(this.frameId);
     document.body.appendChild(iframe);
     this.iframe = iframe;
+    this.iframeLoadCount = 0;
+    this.onIframeLoad = () => {
+      this.iframeLoadCount += 1;
+      if (this.iframeLoadCount >= 2) void this.handleSandboxNavigation();
+    };
+    iframe.addEventListener("load", this.onIframeLoad);
     if (iframe.srcdoc) {
       throw new Error("plugin sandbox must not use srcdoc under page CSP");
     }
@@ -269,8 +338,18 @@ export class PluginSandbox {
     } else {
       await waitPluginMsg(iframe, "frame-ready", (fail) => { this.bootReject = fail; });
     }
-    iframe.contentWindow?.postMessage({
-      source: "zoto-viz-host",
+    const channel = new MessageChannel();
+    this.hostPort = channel.port1;
+    this.hostPort.start();
+    this.hostPort.onmessage = (ev) => this.onPortMessage(ev);
+    this.postToFrameWindow({
+      source: HOST_SOURCE,
+      type: "boot-channel",
+      bootNonce: sandboxBootNonce,
+      parentOrigin: location.origin,
+    }, [channel.port2]);
+    this.postToFramePort({
+      source: HOST_SOURCE,
       type: "boot",
       caps: this.caps,
       config,
@@ -278,43 +357,77 @@ export class PluginSandbox {
       moduleSrc,
       bootNonce: sandboxBootNonce,
       parentOrigin: location.origin,
-    } satisfies ParentMsg, "*");
+    });
     if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
       await Promise.resolve();
     } else {
-      await waitPluginMsg(iframe, "ready", (fail) => { this.bootReject = fail; });
+      await waitPluginPortMsg(this.hostPort, "ready", (fail) => { this.bootReject = fail; });
     }
     this.bootReject = null;
   }
 
+  private async handleSandboxNavigation(): Promise<void> {
+    const tile = this.activeTileId;
+    const pack = this.activePackLabel || "Pack";
+    if (!markPackNavigationStopped(tile)) return;
+    this.teardownPort();
+    const fid = this.frameId;
+    this.frameId = "";
+    if (fid && fid === activePackAssetFrameId) activePackAssetFrameId = "";
+    if (this.onIframeLoad && this.iframe) {
+      this.iframe.removeEventListener("load", this.onIframeLoad);
+      this.onIframeLoad = null;
+    }
+    if (this.iframe) {
+      this.iframe.remove();
+      this.iframe = null;
+    }
+    await closePackAssetFrameForTile(tile);
+    setSandboxReady(false);
+    registerPackNavigationRemove(tile, () => {
+      this.navigationHost?.closeTile?.(tile);
+    });
+    const host = this.navigationHost;
+    if (host?.setPaneNotice) {
+      applyPackNavigationStoppedNotice(
+        { setPaneNotice: host.setPaneNotice },
+        tile,
+        pack,
+      );
+    }
+  }
+
   tick(nodes: { id: string; rate: number; role: string }[]): void {
-    if (!this.caps.includes("graph.read")) return;
-    this.iframe?.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "tick", nodes } satisfies ParentMsg,
-      "*",
-    );
+    if (!this.caps.includes("graph.read") || !this.hostPort) return;
+    this.postToFramePort({ source: HOST_SOURCE, type: "tick", nodes });
   }
 
   frame(data: VizDataFrame): void {
-    if (!this.caps.includes("viz.read")) return;
-    this.iframe?.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "frame", frame: data } satisfies ParentMsg,
-      "*",
-    );
+    if (!this.caps.includes("viz.read") || !this.hostPort) return;
+    this.postToFramePort({ source: HOST_SOURCE, type: "frame", frame: data });
   }
 
   contract(): VizPluginContract | undefined {
     return this.vizContract;
   }
 
-  private onMessage = (ev: MessageEvent): void => {
+  private onWindowMessage = (ev: MessageEvent): void => {
     if (this.iframe && ev.source !== this.iframe.contentWindow) return;
     const d = ev.data as HostMsg | undefined;
-    if (!d || d.source !== "zoto-viz-plugin") return;
-    if (d.type === "frame-ready" || d.type === "ready") {
-      if (d.type === "ready" && d.bootNonce && d.bootNonce !== sandboxBootNonce) return;
+    if (!d || d.source !== PLUGIN_SOURCE) return;
+    if (d.type === "frame-ready") {
       recordSandboxBoot(d.type);
-      if (d.type === "ready") setSandboxReady(true);
+      return;
+    }
+  };
+
+  private onPortMessage(ev: MessageEvent): void {
+    const d = ev.data as PluginPortMsg | undefined;
+    if (!d || d.source !== PLUGIN_SOURCE) return;
+    if (d.type === "ready") {
+      if (d.bootNonce && d.bootNonce !== sandboxBootNonce) return;
+      recordSandboxBoot("ready");
+      setSandboxReady(true);
       return;
     }
     if (d.type === "log" && this.bootReject) {
@@ -338,7 +451,7 @@ export class PluginSandbox {
       noteSandboxWrite(this.activeTileId);
       this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
     }
-  };
+  }
 }
 
 function recordSandboxBoot(type: HostMsg["type"]): void {
@@ -380,5 +493,41 @@ function waitPluginMsg(
       }
     };
     window.addEventListener("message", onMsg);
+  });
+}
+
+function waitPluginPortMsg(
+  port: MessagePort,
+  type: PluginPortMsg["type"],
+  onReject?: (fail: (err: Error) => void) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fail = (err: Error) => {
+      window.clearTimeout(timer);
+      port.removeEventListener("message", onMsg);
+      reject(err);
+    };
+    onReject?.(fail);
+    const timer = window.setTimeout(() => {
+      port.removeEventListener("message", onMsg);
+      reject(new Error(`sandbox ${type} timeout`));
+    }, sandboxMsgTimeoutMs);
+    const onMsg = (ev: MessageEvent) => {
+      const d = ev.data as PluginPortMsg | undefined;
+      if (d?.source !== PLUGIN_SOURCE) return;
+      if (d.type === "log" && type === "ready") {
+        window.clearTimeout(timer);
+        port.removeEventListener("message", onMsg);
+        fail(new Error(String(d.payload ?? "sandbox module load failed")));
+        return;
+      }
+      if (d.type === type) {
+        if (type === "ready" && d.bootNonce && d.bootNonce !== sandboxBootNonce) return;
+        window.clearTimeout(timer);
+        port.removeEventListener("message", onMsg);
+        resolve();
+      }
+    };
+    port.addEventListener("message", onMsg);
   });
 }
