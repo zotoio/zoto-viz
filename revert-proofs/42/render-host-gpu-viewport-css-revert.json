@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/render-host-gpu-viewport-css.test.ts",
-  "testName": "^RenderHost GPU viewport units > present passes CSS pixels to Three setViewport and setScissor at pr 1\\.5$",
-  "expectedRed": "expected [2, 87, 151, 91] vs [1, 58, 101, 61] (setViewport/setScissor)",
-  "description": "GPU timed present must pass bottom-left CSS viewBox to Three setViewport/setScissor, not GlRect device pixels. Patched vitest: Received [2, 87, 151, 91] when expected [1, 58, 101, 61]."
+  "testName": "^RenderHost GPU viewport \\(device rect, renderer pr 1\\) > gl\\.viewport and gl\\.scissor match converter device rect at layout pr 1\\.5$",
+  "expectedRed": "expected [ 3, 40, 226, 136 ] to deeply equal [ 2, 87, 151, 91 ]",
+  "description": "Renderer must keep getPixelRatio() at 1; layout DPR scales the backing store only. Patched (restore devicePixelRatio on Three): gl.viewport receives scaled args."
 }

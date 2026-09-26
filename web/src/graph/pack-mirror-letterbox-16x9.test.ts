@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { zotoSurfacePanelClearHex } from "../core/themes";
 import { getSurfaceLetterboxFill, letterboxFillHex } from "./letterbox-fill";
-import { PackTexturePresenter } from "./pack-mirror-gl";
+import { PackTexturePresenter, type PackMirrorHostGl } from "./pack-mirror-gl";
+import { asCanvasDeviceHeight } from "./pack-mirror-rect";
 import {
   LETTERBOX_SCENE_ASPECT,
   LETTERBOX_TILE_CSS,
   letterbox16x9FirstSceneRowDeviceY,
-  letterbox16x9InnerViewportBottomLeft,
+  letterbox16x9InnerViewportGl,
 } from "./pack-mirror-letterbox-16x9.fixture";
 
 describe("pack mirror 16:9 letterbox (production presenter)", () => {
@@ -19,8 +20,13 @@ describe("pack mirror 16:9 letterbox (production presenter)", () => {
   it.each([1, 1.5])(
     "1:1 tile pr %s: centred inner GL viewport, first scene row offset, surface panel bar clear",
     (pr) => {
-      const expectedVp = letterbox16x9InnerViewportBottomLeft();
+      const expectedVp = letterbox16x9InnerViewportGl(pr);
       const expectedFirstRow = letterbox16x9FirstSceneRowDeviceY(pr);
+      const hostGl: PackMirrorHostGl = {
+        layoutPixelRatio: pr,
+        canvasCssHeight: LETTERBOX_TILE_CSS,
+        canvasDeviceHeight: asCanvasDeviceHeight(Math.round(LETTERBOX_TILE_CSS * pr)),
+      };
       const viewports: { x: number; y: number; w: number; h: number }[] = [];
       const clearColors: number[] = [];
       const presenter = new PackTexturePresenter();
@@ -32,7 +38,7 @@ describe("pack mirror 16:9 letterbox (production presenter)", () => {
         setScissor: vi.fn(),
         setClearColor: vi.fn((hex: number) => { clearColors.push(hex); }),
         clear: vi.fn(),
-        getPixelRatio: () => pr,
+        getPixelRatio: () => 1,
         setRenderTarget: vi.fn(),
         render: vi.fn(),
         getContext: () => null,
@@ -45,10 +51,11 @@ describe("pack mirror 16:9 letterbox (production presenter)", () => {
         fill,
         LETTERBOX_SCENE_ASPECT,
         { letterbox: true },
+        hostGl,
       );
-      const contentVp = viewports.find((v) => v.w === expectedVp.w && Math.abs(v.h - expectedVp.h) < 0.001);
+      const contentVp = viewports.at(-1);
       expect(contentVp).toEqual(expectedVp);
-      expect(Math.round((contentVp!.y + contentVp!.h) * pr)).toBe(expectedFirstRow);
+      expect(contentVp!.y + contentVp!.h).toBe(expectedFirstRow);
       expect(clearColors.length).toBeGreaterThan(0);
       expect(clearColors.every((c) => c === barClearHex)).toBe(true);
       presenter.dispose();

@@ -15,11 +15,18 @@ function stub2dContext(): CanvasRenderingContext2D {
   } as unknown as CanvasRenderingContext2D;
 }
 
-describe("letterbox software grain stability", () => {
+const hasRealCanvas2d = (() => {
+  const c = document.createElement("canvas");
+  const ctx = c.getContext("2d");
+  return ctx !== null && typeof ctx.fillRect === "function";
+})();
+
+describe.skipIf(!hasRealCanvas2d)("letterbox software grain stability", () => {
   let canvas: HTMLCanvasElement;
   let ctx: CanvasRenderingContext2D;
 
   beforeEach(() => {
+    expect.hasAssertions();
     letterboxFillStats.reset();
     canvas = document.createElement("canvas");
     canvas.width = 200;

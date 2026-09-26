@@ -11,9 +11,8 @@ const { WebGLRendererMock } = vi.hoisted(() => {
     setPixelRatio = vi.fn();
     setClearColor = vi.fn();
     setSize = vi.fn((w: number, h: number) => {
-      const pr = this.getPixelRatio();
-      this.domElement.width = Math.floor(w * pr);
-      this.domElement.height = Math.floor(h * pr);
+      this.domElement.width = w;
+      this.domElement.height = h;
     });
     setScissorTest = vi.fn();
     setScissor = vi.fn();
@@ -22,7 +21,7 @@ const { WebGLRendererMock } = vi.hoisted(() => {
     getRenderTarget = () => null;
     clear = vi.fn();
     render = vi.fn();
-    getPixelRatio = () => 1.5;
+    getPixelRatio = () => 1;
     getContext = () => ({
       getContextAttributes: () => ({ antialias: false }),
       fenceSync: () => ({}),
@@ -70,7 +69,7 @@ describe("RenderHost framebuffer viewport H=241", () => {
     const camera = new THREE.PerspectiveCamera();
     const vp = host.present(bottomView, 0x0a1020, scene, camera);
     expect(vp).toEqual({ x: 0, y: 0, w: 300, h: 90, __unit: "gl" });
-    expect(host.canvas.height).toBe(Math.floor(241 * 1.5));
+    expect(host.canvas.height).toBe(Math.round(241 * 1.5));
     host.dispose();
     wall.remove();
   });

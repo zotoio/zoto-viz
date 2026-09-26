@@ -8,7 +8,8 @@ import {
   packMirrorResourceStats,
 } from "./pack-mirror-gl";
 import { packMirrorSizeStats } from "./pack-mirror-size-stats";
-import { asCssRect, type CssRectLoose } from "./pack-mirror-rect";
+import { asCanvasDeviceHeight, asCssRect, type CssRectLoose } from "./pack-mirror-rect";
+import type { PackMirrorHostGl } from "./pack-mirror-gl";
 import { getSurfaceLetterboxFill, letterboxFillStats } from "./letterbox-fill";
 
 function stubRenderer(antialias: boolean, pr = 1): THREE.WebGLRenderer {
@@ -33,26 +34,35 @@ function emptyScene(): { scene: THREE.Scene; camera: THREE.Camera } {
 
 const lifecycleLetterboxFill = getSurfaceLetterboxFill(0x0a1020, 0.25);
 
+function testHostGl(layoutPixelRatio = 1, canvasCssHeight = 120): PackMirrorHostGl {
+  return {
+    layoutPixelRatio,
+    canvasCssHeight,
+    canvasDeviceHeight: asCanvasDeviceHeight(Math.max(1, Math.round(canvasCssHeight * layoutPixelRatio))),
+  };
+}
+
 function simulateTwoTileFrame(
   reg: PackMirrorRegistry,
   rd: THREE.WebGLRenderer,
   key: string,
   antialias: boolean,
   box: CssRectLoose = { x: 0, y: 0, w: 64, h: 48 },
+  hostGl = testHostGl(1),
 ): void {
   reg.beginFrame();
   const { scene, camera } = emptyScene();
-  reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias);
+  reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias, hostGl);
   reg.presentPack(key, rd, asCssRect({ x: 0, y: 0, w: box.w, h: box.h }), {
     letterbox: false,
     fill: null,
     aspect: box.w / box.h,
-  });
+  }, hostGl);
   reg.presentPack(key, rd, asCssRect({ x: 80, y: 0, w: 90, h: 70 }), {
     letterbox: true,
     fill: lifecycleLetterboxFill,
     aspect: box.w / box.h,
-  });
+  }, hostGl);
 }
 
 function simulateThreeTileFrame(
@@ -61,25 +71,26 @@ function simulateThreeTileFrame(
   key: string,
   antialias: boolean,
   box: CssRectLoose = { x: 0, y: 0, w: 64, h: 48 },
+  hostGl = testHostGl(1),
 ): void {
   reg.beginFrame();
   const { scene, camera } = emptyScene();
-  reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias);
+  reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias, hostGl);
   reg.presentPack(key, rd, asCssRect({ x: 0, y: 0, w: box.w, h: box.h }), {
     letterbox: false,
     fill: null,
     aspect: box.w / box.h,
-  });
+  }, hostGl);
   reg.presentPack(key, rd, asCssRect({ x: 70, y: 0, w: 50, h: 40 }), {
     letterbox: true,
     fill: lifecycleLetterboxFill,
     aspect: box.w / box.h,
-  });
+  }, hostGl);
   reg.presentPack(key, rd, asCssRect({ x: 130, y: 0, w: 50, h: 40 }), {
     letterbox: true,
     fill: lifecycleLetterboxFill,
     aspect: box.w / box.h,
-  });
+  }, hostGl);
 }
 
 describe("PackMirrorSession resource lifecycle", () => {
@@ -230,10 +241,11 @@ describe("PackTexturePresenter", () => {
     const p = new PackTexturePresenter();
     const rd = stubRenderer(false);
     const tex = new THREE.Texture();
-    p.draw(rd, tex, asCssRect({ x: 0, y: 0, w: 10, h: 10 }), null, 1, { letterbox: false });
+    const hostGl = testHostGl(1, 10);
+    p.draw(rd, tex, asCssRect({ x: 0, y: 0, w: 10, h: 10 }), null, 1, { letterbox: false }, hostGl);
     const v0 = p.material.version;
     for (let i = 0; i < 299; i++) {
-      p.draw(rd, tex, asCssRect({ x: 0, y: 0, w: 10, h: 10 }), null, 1, { letterbox: false });
+      p.draw(rd, tex, asCssRect({ x: 0, y: 0, w: 10, h: 10 }), null, 1, { letterbox: false }, hostGl);
     }
     expect(p.material.version).toBe(v0);
     p.dispose();

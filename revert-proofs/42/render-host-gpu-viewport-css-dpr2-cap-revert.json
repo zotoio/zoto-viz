@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/render-host-gpu-viewport-css.test.ts",
-  "testName": "^RenderHost GPU viewport units > present passes CSS pixels to Three setViewport and setScissor when devicePixelRatio is 2 and renderer pr is capped at 1\\.5$",
-  "expectedRed": "setViewport/setScissor Received [2, 87, 151, 91] vs expected [1, 58, 101, 61]",
-  "description": "With window devicePixelRatio 2 the host still caps renderer pr at 1.5; GPU timed present must pass CSS viewBox to Three, not GlRect device pixels. Patched: setViewport/setScissor [2, 87, 151, 91]."
+  "testName": "^RenderHost GPU viewport \\(device rect, renderer pr 1\\) > gl\\.viewport and gl\\.scissor match converter at window devicePixelRatio 2 with layout pr capped at 1\\.5$",
+  "expectedRed": "expected [ 3, 40, 226, 136 ] to deeply equal [ 2, 87, 151, 91 ]",
+  "description": "Same as layout pr 1.5 row: window DPR 2 with cap 1.5 still expects converter GL rect on gl.viewport; patched Three pixel ratio rescales."
 }

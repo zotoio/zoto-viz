@@ -43,6 +43,7 @@ import {
   type DeviceRect,
   type GlRect,
   type GlRectMut,
+  isDeviceRect,
   toGlRectInto,
 } from "./pack-mirror-rect";
 import { observeResize } from "../core/resize";
@@ -1650,9 +1651,7 @@ export class NetScene implements HostedView {
     if (this.software) {
       const canvas = this.host?.canvas ?? (this.renderer instanceof SoftwareGpu ? this.renderer.domElement : null);
       const ctx = canvas?.getContext("2d");
-      const devVp = this.lastVp && (this.lastVp as DeviceRect).__unit === "device"
-        ? (this.lastVp as DeviceRect)
-        : null;
+      const devVp = this.lastVp && isDeviceRect(this.lastVp) ? this.lastVp : null;
       if (ctx && canvas && devVp && this.canvasProbe.sample(ctx, canvas, devVp)) this.paneFps.mark(now);
       return;
     }

@@ -36,7 +36,10 @@ function hostForPaintClear(clear: number): PaintClearHost {
 const paintClear = (NetScene.prototype as unknown as { paintClear(this: PaintClearHost): void }).paintClear;
 
 describe("NetScene production letterbox fill", () => {
-  beforeEach(() => letterboxFillStats.reset());
+  beforeEach(() => {
+    expect.hasAssertions();
+    letterboxFillStats.reset();
+  });
 
   it("300 paintClear ticks at constant clearHex: exactly 1 fill rebuild", () => {
     const clear = 0x0a1020;

@@ -1,15 +1,31 @@
-diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
---- a/web/src/graph/render-host.ts
-+++ b/web/src/graph/render-host.ts
-@@ -443,8 +443,9 @@ export class RenderHost {
-     const camera = this.gpuTimedCamera;
-     if (!box || !scene || !camera) return;
-     const rd = this.renderer as THREE.WebGLRenderer;
--    rd.setViewport(box.x, box.y, box.w, box.h);
--    rd.setScissor(box.x, box.y, box.w, box.h);
-+    const vp = this.fbGlViewport;
-+    rd.setViewport(vp.x, vp.y, vp.w, vp.h);
-+    rd.setScissor(vp.x, vp.y, vp.w, vp.h);
-     rd.setScissorTest(true);
-     rd.setClearColor(this.gpuTimedClearHex, 1);
-     rd.render(scene, camera);
+--- a/web/src/graph/render-host.ts	2026-09-26 21:43:44.154366934 +0000
++++ b/web/src/graph/render-host.ts	2026-09-26 21:43:48.022348034 +0000
+@@ -171,7 +171,7 @@
+           failIfMajorPerformanceCaveat: false,
+         });
+         this.software = false;
+-        this.renderer.setPixelRatio(1);
++        this.renderer.setPixelRatio(dpr);
+         this.renderer.setClearColor(0x000000, 0);
+         this.canvas = this.renderer.domElement;
+         this.refreshContextAntialias();
+@@ -348,7 +348,7 @@
+     if (Math.abs(pr - this.pixelRatio) < 0.01) return;
+     this.pr = pr;
+     if (!this.software) {
+-      this.renderer.setPixelRatio(1);
++      this.renderer.setPixelRatio(pr);
+       this.resizeGpuCanvas();
+     } else {
+       this.resizeSoftware();
+@@ -590,8 +590,8 @@
+     const pr = this.pr;
+     const devW = Math.max(1, Math.round(this.w * pr));
+     const devH = Math.max(1, Math.round(this.h * pr));
+-    this.renderer.setPixelRatio(1);
+-    this.renderer.setSize(devW, devH, false);
++    this.renderer.setPixelRatio(pr);
++    this.renderer.setSize(this.w, this.h, false);
+     this.canvas.style.width = "100%";
+     this.canvas.style.height = "100%";
+     this.refreshCanvasDeviceHeight();
