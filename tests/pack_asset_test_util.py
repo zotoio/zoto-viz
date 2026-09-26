@@ -1,6 +1,8 @@
 """Helpers for pack-asset security tests."""
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from aiohttp import web
 
 from service import access, pack_asset_tokens, pack_assets
@@ -26,3 +28,9 @@ def mint(pack_id: str, session_id: str = SESSION) -> str:
 def pack_url(pack_id: str, tail: str, token: str | None = None, session_id: str = SESSION) -> str:
     tok = token if token is not None else mint(pack_id, session_id)
     return access.pack_asset_url(tok, pack_id, *tail.split("/"))
+
+
+def pack_url_raw(pack_id: str, tail: str, token: str | None = None, session_id: str = SESSION) -> str:
+    """Build a pack-assets path without re-encoding ``%`` in ``tail`` (traversal probes)."""
+    tok = token if token is not None else mint(pack_id, session_id)
+    return f"/pack-assets/{quote(tok, safe='')}/{quote(pack_id, safe='')}/{tail}"

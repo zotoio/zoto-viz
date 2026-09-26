@@ -623,7 +623,14 @@ async function runPytest(
   const xmlOut = path.join(artifactsDir, `${slug}-${phase}-pytest.xml`);
   const python = venvPython(mainRoot);
   const nodeId = pytestNodeId(meta.testFile, meta.testName);
-  const args = ["-m", "pytest", nodeId, `--junitxml=${xmlOut}`];
+  const args = [
+    "-m",
+    "pytest",
+    nodeId,
+    `-junitxml=${xmlOut}`,
+    "-o",
+    "addopts=",
+  ];
   const result = await runProcess(python, args, {
     cwd: wtRoot,
     env: { ...pythonEnvForWorktree(wtRoot), FORCE_COLOR: "0" },

@@ -662,6 +662,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     return;
   }
   clearTilePackFeed(tileId);
+  clearVizDrive(tileId);
   const expectsViz = !!(spec.capabilities?.includes("viz.read") || spec.capabilities?.includes("viz.write"));
   setTileExpectsVizFeed(tileId, expectsViz);
   try {
@@ -718,6 +719,16 @@ let wallOwner: string | null = null;
 let wallRestore: WallSnap | null = null;
 /** Last mode applyMode committed — Select updates its value before onChange. */
 let liveMode = "";
+let applyModeGeneration = 0;
+
+const liveModeBinding = {
+  get mode(): string {
+    return liveMode;
+  },
+  set mode(value: string) {
+    liveMode = value;
+  },
+};
 
 function applyPluginWall(modeId: string, flags: { keepLayout?: boolean; prevMode?: string }): void {
   if (!settings) return;
@@ -819,7 +830,8 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
 }
 
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
-  void applyModeAsync(id, flags);
+  const generation = ++applyModeGeneration;
+  void applyModeAsync(id, flags, generation);
 }
 
 function teardownMosaicPanelView(viewId: string): void {
@@ -888,7 +900,11 @@ initPluginConsentSync({
   pollIntervalMs: 10_000,
 });
 
-async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}): Promise<void> {
+async function applyModeAsync(
+  id: string,
+  flags: { keepLayout?: boolean } = {},
+  generation = applyModeGeneration,
+): Promise<void> {
   const m = modeById(id);
   const opts = optsFor(m);
   const prevMode = liveMode;
@@ -897,14 +913,18 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
 
   if (mosaicGraph && mosaic) {
     const sw = await runMosaicPaneSwitch(m.id);
+    if (generation !== applyModeGeneration) return;
     if (!sw.ok) {
-      revertModeSelection(prevMode, modeSel, { mode: liveMode });
+      revertModeSelection(prevMode, modeSel, liveModeBinding);
       return;
     }
   } else if (!(await ensureReviewed(spec))) {
-    revertModeSelection(prevMode, modeSel, { mode: liveMode });
+    if (generation !== applyModeGeneration) return;
+    revertModeSelection(prevMode, modeSel, liveModeBinding);
     return;
   }
+
+  if (generation !== applyModeGeneration) return;
 
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
@@ -944,6 +964,7 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
     if (m.standalone || arcadeSlotFor(m) !== "carousel") {
       void loadTsPlugin(paneSpec);
     }
+    void syncPluginSky(paneSpec);
     return;
   }
 

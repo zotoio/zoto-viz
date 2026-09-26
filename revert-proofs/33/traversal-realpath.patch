@@ -1,9 +1,15 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index 31b66d6..fdca7c0 100644
+index 31b66d6..a1b2c3d 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
-@@ -86,12 +86,6 @@ def _resolve_under_root(root: Path, relpath: str) -> Path | None:
+@@ -80,18 +80,8 @@ def _resolve_under_root(root: Path, relpath: str) -> Path | None:
          return None
+     target = (root / rel).resolve()
+     root_res = root.resolve()
+-    try:
+-        target.relative_to(root_res)
+-    except ValueError:
+-        return None
      if not target.is_file():
          return None
 -    if target.is_symlink():
@@ -13,5 +19,4 @@ index 31b66d6..fdca7c0 100644
 -        except ValueError:
 -            return None
      return target
- 
  

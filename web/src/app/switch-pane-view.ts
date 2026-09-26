@@ -117,12 +117,12 @@ export async function switchPaneView(
   }
 
   if (slot.swap) {
-    opts.teardownView(slot.fromViewId);
     if (!mosaic.setPaneView(slot.fromViewId, slot.toViewId)) {
       const msg = "Could not swap that view on the wall.";
       mosaic.setPaneNotice(slot.paneId, msg);
       return { ok: false, reason: msg };
     }
+    opts.teardownView(slot.fromViewId);
   }
 
   if (paneSwitchStale(slot.paneId, token)) {

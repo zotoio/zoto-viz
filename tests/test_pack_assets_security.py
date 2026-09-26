@@ -12,7 +12,7 @@ from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
 from service import access, pack_asset_tokens, plugins
-from tests.pack_asset_test_util import SESSION, SECRET, mint, pack_url
+from tests.pack_asset_test_util import SESSION, SECRET, mint, pack_url, pack_url_raw
 from tests.pack_asset_test_util import test_app as make_pack_test_app
 
 HOST = {"Host": "127.0.0.1:7020"}
@@ -110,62 +110,86 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
 
     async def test_path_traversal_dotdot_and_encoded(self) -> None:
         home = Path(tempfile.mkdtemp())
-        (home / "frontend").mkdir()
-        secret = home / "frontend" / "secret.txt"
+        fe = home / "frontend"
+        fe.mkdir()
+        secret = fe / "secret.txt"
         secret.write_text("leak", encoding="utf-8")
         row = {
             "id": "traversal-pack",
             "has_frontend": True,
             "file": str(home / "plugin.yml"),
         }
+        tails = (
+            "../secret.txt",
+            "frontend/../../secret.txt",
+            "..%2fsecret.txt",
+            "%2e%2e%2fsecret.txt",
+            "%252e%252e%252fsecret.txt",
+            "frontend%2f..%2f..%2fsecret.txt",
+            "..\\secret.txt",
+            "%5c..%5csecret.txt",
+            "//etc/passwd",
+        )
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "traversal-pack" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
-                for tail in ("../secret.txt", "frontend/../../secret.txt", "..%2fsecret.txt", "frontend%2f..%2f..%2fsecret.txt"):
+                for tail in tails:
                     resp = await self.client.get(
-                        pack_url("traversal-pack", tail),
+                        pack_url_raw("traversal-pack", tail),
                         headers={**HOST},
                     )
                     assert resp.status in {403, 404}, tail
+                    body = await resp.text()
+                    assert "leak" not in body and "root:" not in body, tail
 
     async def test_traversal_realpath_outside_frontend_root(self) -> None:
         outside = Path(tempfile.mkdtemp())
         leak = outside / "outside-leak.txt"
-        leak.write_text("outside", encoding="utf-8")
+        leak.write_text("outside-secret", encoding="utf-8")
         home = Path(tempfile.mkdtemp())
         fe = home / "frontend"
         fe.mkdir()
         (fe / "module.js").write_text("export {};", encoding="utf-8")
         try:
             os.symlink(leak, fe / "escape.js")
+            os.symlink(outside, fe / "escape-dir")
         except OSError:
             return  # no symlink support in this environment
         row = {"id": "symlink-pack", "has_frontend": True, "file": str(home / "plugin.yml")}
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "symlink-pack" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
-                resp = await self.client.get(pack_url("symlink-pack", "escape.js"), headers={**HOST})
-        assert resp.status == 404
+                for tail in ("escape.js", "escape-dir/outside-leak.txt"):
+                    resp = await self.client.get(pack_url_raw("symlink-pack", tail), headers={**HOST})
+                    assert resp.status in {403, 404}, tail
+                    assert "outside-secret" not in await resp.text()
 
     async def test_dotfile_under_pack_is_404(self) -> None:
         home = Path(tempfile.mkdtemp())
         fe = home / "frontend"
         fe.mkdir()
-        (fe / ".hidden.js").write_text("export {};", encoding="utf-8")
+        (fe / ".env").write_text("SECRET=leak", encoding="utf-8")
+        (fe / "nested").mkdir()
+        (fe / "nested" / ".hidden.js").write_text("export {};", encoding="utf-8")
         row = {"id": "dot-pack", "has_frontend": True, "file": str(home / "plugin.yml")}
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "dot-pack" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
-                resp = await self.client.get(pack_url("dot-pack", ".hidden.js"), headers={**HOST})
-        assert resp.status == 404
+                for tail in (".env", "nested/.hidden.js", "frontend/.env"):
+                    resp = await self.client.get(pack_url_raw("dot-pack", tail), headers={**HOST})
+                    assert resp.status == 404, tail
+                    assert "SECRET=leak" not in await resp.text()
 
     async def test_backend_marker_path_is_404(self) -> None:
         home = Path(tempfile.mkdtemp())
-        backend = home / "backend"
-        backend.mkdir()
-        (backend / "service.py").write_text("x = 1\n", encoding="utf-8")
+        fe = home / "frontend"
+        fe.mkdir()
+        backend_under_fe = fe / "backend"
+        backend_under_fe.mkdir()
+        (backend_under_fe / "leak.js").write_text("export const x = 'backend-leak';", encoding="utf-8")
         row = {"id": "backend-pack", "has_frontend": True, "file": str(home / "plugin.yml")}
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "backend-pack" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
-                resp = await self.client.get(pack_url("backend-pack", "backend/service.py"), headers={**HOST})
+                resp = await self.client.get(pack_url_raw("backend-pack", "backend/leak.js"), headers={**HOST})
         assert resp.status == 404
+        assert "backend-leak" not in await resp.text()
 
     async def test_sandbox_fixture_multi_serves_sibling_files(self) -> None:
         """Multi-file pack: module.js stays ESM; helper and JSON are separate GETs (relative imports)."""

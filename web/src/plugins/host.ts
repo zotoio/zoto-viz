@@ -332,7 +332,14 @@ function waitPluginMsg(
     const onMsg = (ev: MessageEvent) => {
       if (ev.source !== iframe.contentWindow) return;
       const d = ev.data as HostMsg | undefined;
-      if (d?.source === "zoto-viz-plugin" && d.type === type) {
+      if (d?.source !== "zoto-viz-plugin") return;
+      if (d.type === "log" && type === "ready") {
+        window.clearTimeout(timer);
+        window.removeEventListener("message", onMsg);
+        fail(new Error(String(d.payload ?? "sandbox module load failed")));
+        return;
+      }
+      if (d.type === type) {
         window.clearTimeout(timer);
         window.removeEventListener("message", onMsg);
         resolve();

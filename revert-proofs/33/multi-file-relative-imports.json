@@ -2,6 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_pack_assets_security.py",
   "testName": "PackAssetsSecurityTests::test_sandbox_fixture_multi_serves_sibling_files",
-  "description": "Unbundled ESM module.js must keep relative imports and serve helper.json siblings via pack-assets.",
+  "description": "Unbundled ESM module.js must keep relative imports and serve helper.js siblings via pack-assets.",
   "timeoutSec": 120
 }
