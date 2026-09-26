@@ -22,4 +22,13 @@ describe("viz sdk frozen fixtures", () => {
     expect(VIZ_FIXTURES["golden-live-failed"].sys?.failed).toBeGreaterThan(0.5);
     expect(VIZ_FIXTURES["golden-live"].sys?.failed ?? 0).toBeLessThanOrEqual(0.5);
   });
+
+  it("vm-live is a quiet real capture with idle merge demo slices", () => {
+    const frame = VIZ_FIXTURES["vm-live"];
+    expect(frame.demo).toBe(true);
+    expect(frame.demoSlices?.packets).toBe(true);
+    expect(new Set(frame.talkers.map((t) => t.id)).size).toBe(frame.talkers.length);
+    expect(frame.packets.length).toBeGreaterThan(0);
+    expect(frame.headlines.some((h) => h.label && !/^host-\d+$/.test(h.label))).toBe(true);
+  });
 });

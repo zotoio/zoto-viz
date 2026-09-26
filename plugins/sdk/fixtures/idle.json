@@ -26,24 +26,24 @@
   ],
   "rf": [
     {
-      "ssid": "host-08",
+      "ssid": "host-04",
       "rssi": 0.55,
       "channel": 36
     },
     {
-      "ssid": "host-07",
+      "ssid": "host-05",
       "rssi": 0.42,
       "channel": 6
     }
   ],
   "talkers": [
     {
-      "id": "host-02",
+      "id": "host-01",
       "rate": 120,
       "role": "lan"
     },
     {
-      "id": "host-01",
+      "id": "host-02",
       "rate": 88,
       "role": "gateway"
     },
@@ -55,14 +55,14 @@
   ],
   "headlines": [
     {
-      "id": "host-05",
-      "label": "host-04",
+      "id": "demo:0",
+      "label": "Demo",
       "text": "Zoto viz idle seed",
       "kind": "demo"
     },
     {
-      "id": "host-06",
-      "label": "host-04",
+      "id": "demo:1",
+      "label": "Demo",
       "text": "Live traffic wins when present",
       "kind": "demo"
     }

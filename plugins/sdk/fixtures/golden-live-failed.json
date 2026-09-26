@@ -36,12 +36,12 @@
   ],
   "rf": [
     {
-      "ssid": "host-26",
+      "ssid": "host-43",
       "rssi": 0.3,
       "channel": 36
     },
     {
-      "ssid": "host-18",
+      "ssid": "host-29",
       "rssi": 0.3,
       "channel": 0
     }
@@ -53,7 +53,7 @@
       "role": "gateway"
     },
     {
-      "id": "host-10",
+      "id": "host-12",
       "rate": 95,
       "role": "internet"
     },
@@ -100,24 +100,24 @@
   ],
   "headlines": [
     {
-      "id": "host-20",
-      "label": "host-19",
+      "id": "nasa:0",
+      "label": "NASA IOTD",
       "text": "Pillars of Creation",
       "kind": "rss",
       "summary": "Golden demo still for carousel and feed checks.",
       "image": "https://images-assets.nasa.gov/image/PIA25434/PIA25434~orig.jpg"
     },
     {
-      "id": "host-21",
-      "label": "host-19",
+      "id": "nasa:1",
+      "label": "NASA IOTD",
       "text": "Earth at Night",
       "kind": "rss",
       "summary": "Second golden headline when live capture is empty.",
       "image": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001435/GSFC_20171208_Archive_e001435~large.jpg"
     },
     {
-      "id": "host-15",
-      "label": "host-14",
+      "id": "demo:0",
+      "label": "Demo",
       "text": "Zoto viz golden seed",
       "kind": "demo",
       "summary": "Live traffic wins when present."

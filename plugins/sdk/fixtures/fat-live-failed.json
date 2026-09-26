@@ -46,144 +46,144 @@
   ],
   "rf": [
     {
-      "ssid": "host-843",
+      "ssid": "host-847",
       "rssi": 0.6,
       "channel": 36
     },
     {
-      "ssid": "host-844",
+      "ssid": "host-848",
       "rssi": 0.3,
       "channel": 41
     },
     {
-      "ssid": "host-845",
+      "ssid": "host-849",
       "rssi": 0.3,
       "channel": 42
     },
     {
-      "ssid": "host-846",
+      "ssid": "host-850",
       "rssi": 0.3,
       "channel": 43
     }
   ],
   "talkers": [
     {
-      "id": "host-114",
+      "id": "host-116",
       "rate": 209,
+      "role": "lan"
+    },
+    {
+      "id": "host-311",
+      "rate": 209,
+      "role": "lan"
+    },
+    {
+      "id": "host-115",
+      "rate": 208,
+      "role": "internet"
+    },
+    {
+      "id": "host-310",
+      "rate": 208,
+      "role": "lan"
+    },
+    {
+      "id": "host-114",
+      "rate": 207,
       "role": "lan"
     },
     {
       "id": "host-309",
-      "rate": 209,
+      "rate": 207,
       "role": "lan"
     },
     {
       "id": "host-113",
-      "rate": 208,
-      "role": "internet"
+      "rate": 206,
+      "role": "lan"
     },
     {
       "id": "host-308",
-      "rate": 208,
-      "role": "lan"
+      "rate": 206,
+      "role": "internet"
     },
     {
       "id": "host-112",
-      "rate": 207,
-      "role": "lan"
-    },
-    {
-      "id": "host-307",
-      "rate": 207,
-      "role": "lan"
-    },
-    {
-      "id": "host-111",
-      "rate": 206,
+      "rate": 205,
       "role": "lan"
     },
     {
       "id": "host-306",
-      "rate": 206,
-      "role": "internet"
+      "rate": 205,
+      "role": "lan"
+    },
+    {
+      "id": "host-111",
+      "rate": 204,
+      "role": "lan"
+    },
+    {
+      "id": "host-305",
+      "rate": 204,
+      "role": "lan"
     },
     {
       "id": "host-110",
-      "rate": 205,
+      "rate": 203,
       "role": "lan"
     },
     {
       "id": "host-304",
-      "rate": 205,
+      "rate": 203,
       "role": "lan"
     },
     {
       "id": "host-109",
-      "rate": 204,
+      "rate": 202,
       "role": "lan"
     },
     {
       "id": "host-303",
-      "rate": 204,
-      "role": "lan"
-    },
-    {
-      "id": "host-108",
-      "rate": 203,
+      "rate": 202,
       "role": "lan"
     },
     {
       "id": "host-302",
-      "rate": 203,
+      "rate": 201,
       "role": "lan"
     },
     {
-      "id": "host-107",
-      "rate": 202,
+      "id": "host-108",
+      "rate": 201,
       "role": "lan"
     },
     {
       "id": "host-301",
-      "rate": 202,
+      "rate": 200,
+      "role": "lan"
+    },
+    {
+      "id": "host-107",
+      "rate": 200,
       "role": "lan"
     },
     {
       "id": "host-300",
-      "rate": 201,
-      "role": "lan"
-    },
-    {
-      "id": "host-106",
-      "rate": 201,
-      "role": "lan"
-    },
-    {
-      "id": "host-299",
-      "rate": 200,
+      "rate": 199,
       "role": "lan"
     },
     {
       "id": "host-105",
-      "rate": 200,
-      "role": "lan"
-    },
-    {
-      "id": "host-298",
       "rate": 199,
       "role": "lan"
     },
     {
-      "id": "host-103",
-      "rate": 199,
-      "role": "lan"
-    },
-    {
-      "id": "host-297",
+      "id": "host-299",
       "rate": 198,
       "role": "lan"
     },
     {
-      "id": "host-102",
+      "id": "host-104",
       "rate": 198,
       "role": "lan"
     }

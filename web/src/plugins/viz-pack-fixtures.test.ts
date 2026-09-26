@@ -42,7 +42,7 @@ describe("pack fixtures", () => {
   ];
 
   for (const packId of demoPacks) {
-    it(`${packId} produces a non-empty surface on idle and golden-live`, () => {
+    it(`${packId} produces a non-empty surface on idle, golden-live, and vm-live`, () => {
       runPackOnFixtures((frame) => {
         expectNonEmpty(captureDemoPack(packId, frame));
       });
