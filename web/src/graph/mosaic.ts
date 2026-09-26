@@ -12,11 +12,6 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
-import {
-  focusPackAssetTile,
-  paintPackAssetPaneNotice,
-  type PackAssetPaneNoticeOpts,
-} from "../plugins/pack-asset-pane-notice";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -468,40 +463,6 @@ export class Mosaic {
     if (next.join("\0") === this.tileIds.join("\0")) return false;
     this.assignViews(next);
     return true;
-  }
-
-  /** Inline consent / error copy over the tile (never a silent dark pane). */
-  setPaneNotice(
-    id: string,
-    text: string | null | undefined,
-    recipe: "default" | "fail" | "reconnecting" = "default",
-    opts?: PackAssetPaneNoticeOpts,
-  ): void {
-    const pane = this.panes.get(id);
-    if (!pane) return;
-    paintPackAssetPaneNotice(pane, text, recipe, opts);
-  }
-
-  focusPaneTile(id: string): void {
-    const pane = this.panes.get(id);
-    if (!pane) return;
-    focusPackAssetTile(pane);
-  }
-
-  setWallNotice(text: string | null | undefined): void {
-    const host = this.cfg.wall;
-    if (!host) return;
-    const existing = host.querySelector(".mosaic-wall-notice");
-    if (!text) {
-      existing?.remove();
-      return;
-    }
-    const el = existing instanceof HTMLElement ? existing : document.createElement("div");
-    if (!existing) {
-      el.className = "mosaic-wall-notice";
-      host.prepend(el);
-    }
-    el.textContent = text;
   }
 
   private emitLayout(): void {

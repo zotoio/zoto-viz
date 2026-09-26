@@ -1,17 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setPackAssetTokenForTests } from "../core/http";
-import * as packAssetFrame from "./pack-asset-frame";
-import {
-  PluginSandbox,
-  consentHash,
-  hashConsented,
-  hostAllows,
-  packAssetUrlWithToken,
-  pluginModuleSandboxUrl,
-  pluginModuleUrl,
-  setTsPluginsAllowed,
-  tsPluginsAllowed,
-} from "./host";
+import { afterEach, describe, expect, it } from "vitest";
+import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
 
 describe("hash consent and TypeScript allow", () => {
   afterEach(() => {
@@ -50,45 +38,38 @@ describe("hash consent and TypeScript allow", () => {
   });
 });
 
-describe("pack asset URLs", () => {
-  afterEach(() => {
-    setPackAssetTokenForTests("_sandbox", "");
-    setPackAssetTokenForTests("pulse-ts", "");
+describe("PluginSandbox", () => {
+  it("loads srcdoc, ticks, and unloads", async () => {
+    const box = new PluginSandbox();
+    const styles: Record<string, unknown>[] = [];
+    box.handlers = { setStyle: (s) => styles.push(s), setNodeColor: () => {} };
+    await box.load("pulse", "globalThis.ok = true;", ["graph.read", "nope"], { a: "1" });
+    const iframe = document.querySelector("iframe");
+    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(iframe?.srcdoc).not.toMatch(/nope/);
+    box.tick([{ id: "a", rate: 1, role: "lan" }]);
+    box.unload();
+    expect(document.querySelector("iframe")).toBeNull();
   });
 
-  it("puts the session token in the path segment", async () => {
-    setPackAssetTokenForTests("pulse-ts", "sess-tok-abc");
-    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
-    const url = packAssetUrlWithToken("sess-tok-abc", "pulse-ts", "module.js");
-    expect(url).toBe("/pack-assets/sess-tok-abc/pulse-ts/module.js");
-    expect(url).not.toContain("?");
-    expect(await pluginModuleSandboxUrl("pulse-ts", "deadbeef")).toContain(
-      "/pack-assets/sess-tok-abc/pulse-ts/module.js?h=deadbeef",
-    );
-  });
-});
-
-describe("PluginSandbox module load", () => {
-  beforeEach(() => {
-    vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
-    vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
-  });
-
-  afterEach(() => {
-    document.querySelectorAll("iframe").forEach((el) => el.remove());
-    vi.restoreAllMocks();
-    setPackAssetTokenForTests("_sandbox", "");
-  });
-
-  it("loads pack-assets module.js in the bootstrap frame", async () => {
-    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
-    setPackAssetTokenForTests("pulse", "sess-tok-abc");
+  it("fetches /plugins/<id>/module.js then loads the iframe", async () => {
+    const orig = globalThis.fetch;
+    const seen: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      seen.push(String(url));
+      return { ok: true, text: async () => "globalThis.fromHost = true;" } as Response;
+    }) as typeof fetch;
     const box = new PluginSandbox();
     expect(pluginModuleUrl("pulse", "deadbeef")).toBe("/api/plugins/pulse/module.js?h=deadbeef");
-    const boot = box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
-    await boot;
+    await box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
+    expect(seen).toEqual(["/api/plugins/pulse/module.js?h=deadbeef"]);
     const iframe = document.querySelector("iframe");
-    expect(iframe?.src).toContain("/pack-assets/sess-tok-abc/_sandbox/plugin-sandbox.html");
+    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(iframe?.srcdoc).toMatch(/fromHost/);
+    expect(iframe?.srcdoc).not.toMatch(/os\.exec/);
     box.unload();
+    globalThis.fetch = (async () => ({ ok: false, status: 404, text: async () => "" }) as Response) as typeof fetch;
+    await expect(box.loadModule("missing", ["graph.read"], {})).rejects.toThrow(/module 404/);
+    globalThis.fetch = orig;
   });
 });
