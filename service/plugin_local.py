@@ -326,9 +326,20 @@ def install_local_zip(
             )
         _merged_settings_check_zip(tmp_path)
         staged = dest.with_name(dest.name + ".tmp")
-        shutil.copy2(tmp_path, staged)
-        os.replace(staged, dest)
-        unpacked = _install_unpacked_tree(dest, runtime)
+        zip_backup = dest.with_name(dest.name + ".rollback") if dest.is_file() else None
+        if zip_backup:
+            shutil.copy2(dest, zip_backup)
+        try:
+            shutil.copy2(tmp_path, staged)
+            os.replace(staged, dest)
+            unpacked = _install_unpacked_tree(dest, runtime)
+        except Exception:
+            if zip_backup and zip_backup.is_file():
+                os.replace(zip_backup, dest)
+            raise
+        finally:
+            if zip_backup:
+                zip_backup.unlink(missing_ok=True)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
