@@ -4,8 +4,19 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mountWallNoticeRegion, postWallNotice, type NoticeKey } from "./wall-notice-region";
 
-const ALERT: NoticeKey[] = ["install-failed", "context-not-restored", "retry-failed"];
-const STATUS: NoticeKey[] = ["server-restarted", "context-lost", "layout-refused-boot", "layout-refused-profile"];
+/** Expected lane for every declared NoticeKey (must match NOTICE_ROUTE in production). */
+const EXPECTED_NOTICE_ROUTE: Record<NoticeKey, "status" | "alert"> = {
+  "install-failed": "alert",
+  "context-not-restored": "alert",
+  "retry-failed": "alert",
+  "update-rolled-back": "alert",
+  "server-restarted": "status",
+  "context-lost": "status",
+  "layout-refused-boot": "status",
+  "layout-refused-profile": "status",
+  "pack-navigation-stopped": "status",
+  "drawer-edit-discarded": "status",
+};
 
 function boot() {
   document.body.innerHTML = "<div id=\"wall\"></div><div id=\"foot\"></div>";
@@ -63,18 +74,15 @@ describe("wall notice region", () => {
 
   describe("key routing", () => {
     beforeEach(() => expect.hasAssertions());
-    it("routes alert keys to alert and status keys to status", () => {
-      for (const key of ALERT) {
+    it("routes all ten NoticeKey values via NOTICE_ROUTE", () => {
+      for (const key of Object.keys(EXPECTED_NOTICE_ROUTE) as NoticeKey[]) {
+        const lane = EXPECTED_NOTICE_ROUTE[key];
         const { status, alert } = boot();
         postWallNotice({ key, text: key });
-        expect(alert.querySelector(`[data-notice-key="${key}"]`)).not.toBeNull();
-        expect(status.querySelector(`[data-notice-key="${key}"]`)).toBeNull();
-      }
-      for (const key of STATUS) {
-        const { status, alert } = boot();
-        postWallNotice({ key, text: key });
-        expect(status.querySelector(`[data-notice-key="${key}"]`)).not.toBeNull();
-        expect(alert.querySelector(`[data-notice-key="${key}"]`)).toBeNull();
+        const host = lane === "alert" ? alert : status;
+        const other = lane === "alert" ? status : alert;
+        expect(host!.querySelector(`[data-notice-key="${key}"]`)).not.toBeNull();
+        expect(other!.querySelector(`[data-notice-key="${key}"]`)).toBeNull();
       }
     });
   });

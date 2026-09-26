@@ -5,16 +5,22 @@ export type NoticeKey =
   | "context-not-restored"
   | "install-failed"
   | "layout-refused-boot"
-  | "layout-refused-profile";
+  | "layout-refused-profile"
+  | "update-rolled-back"
+  | "pack-navigation-stopped"
+  | "drawer-edit-discarded";
 
 const NOTICE_ROUTE: Record<NoticeKey, "status" | "alert"> = {
-  "server-restarted": "status",
-  "retry-failed": "alert",
-  "context-lost": "status",
-  "context-not-restored": "alert",
   "install-failed": "alert",
+  "context-not-restored": "alert",
+  "retry-failed": "alert",
+  "update-rolled-back": "alert",
+  "server-restarted": "status",
+  "context-lost": "status",
   "layout-refused-boot": "status",
   "layout-refused-profile": "status",
+  "pack-navigation-stopped": "status",
+  "drawer-edit-discarded": "status",
 };
 
 const MAX_VISIBLE = 3;
