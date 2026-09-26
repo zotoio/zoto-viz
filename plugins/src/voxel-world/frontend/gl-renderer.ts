@@ -23,7 +23,8 @@ const counts: GpuCounts = {
 let gl: WebGL2RenderingContext | null = null;
 let program: WebGLProgram | null = null;
 let atlas: WebGLTexture | null = null;
-const chunkBuffers = new Map<string, { vbo: WebGLBuffer; ibo: WebGLBuffer; tris: number }>();
+const chunkBuffers = new Map<string, { vbo: WebGLBuffer; ibo: WebGLBuffer; tris: number; bytes: number }>();
+let uploadBytesAfterWarmup = 0;
 
 function trackBytes(n: number): void {
   counts.bytesAllocated += n;
@@ -31,6 +32,15 @@ function trackBytes(n: number): void {
 
 export function gpuCounts(): GpuCounts {
   return { ...counts };
+}
+
+/** Bytes charged on bufferData after the first warm-up upload pass (tests expect 0). */
+export function gpuUploadGrowthAfterWarmup(): number {
+  return uploadBytesAfterWarmup;
+}
+
+export function resetGpuWarmupTracker(): void {
+  uploadBytesAfterWarmup = 0;
 }
 
 export function initGpuRenderer(): void {
@@ -73,10 +83,18 @@ export function uploadChunkMesh(key: string, mesh: ChunkMesh): void {
     const vbo = gl.createBuffer()!;
     const ibo = gl.createBuffer()!;
     counts.buffers += 2;
-    rec = { vbo, ibo, tris: 0 };
+    const bytes = mesh.vertices.byteLength + mesh.indices.byteLength;
+    trackBytes(bytes);
+    rec = { vbo, ibo, tris: 0, bytes };
     chunkBuffers.set(key, rec);
+  } else {
+    const delta = mesh.vertices.byteLength + mesh.indices.byteLength - rec.bytes;
+    if (delta > 0) {
+      trackBytes(delta);
+      rec.bytes = mesh.vertices.byteLength + mesh.indices.byteLength;
+      uploadBytesAfterWarmup += delta;
+    }
   }
-  trackBytes(mesh.vertices.byteLength + mesh.indices.byteLength);
   gl.bindBuffer(gl.ARRAY_BUFFER, rec.vbo);
   gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.DYNAMIC_DRAW);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, rec.ibo);
@@ -117,4 +135,5 @@ export function disposeGpuRenderer(): void {
   counts.textures = 0;
   counts.buffers = 0;
   counts.bytesAllocated = 0;
+  uploadBytesAfterWarmup = 0;
 }

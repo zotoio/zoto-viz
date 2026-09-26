@@ -9,8 +9,10 @@ All options, caps, presets, and **live-data bindings** are in `plugin.yml` and r
 | Config key | Source (VizDataFrame) | Effect |
 | --- | --- | --- |
 | `bind_sysLoad_weather` | `sys.cpu` (0–1) | Scales rain/snow mix |
-| `bind_packetField_torch` | new `packets[]` samples | Spawns torch glow when `field` exceeds threshold |
-| `bind_sysFailed_failTint` | `sys.failed` (0–1) | Zoto fail red tint ahead of spectacle |
+| `bind_eventRate_cloudCover` | talker/packet event rate | Block-cloud density |
+| `bind_packetField_torch` | new `packets[]` flows | Torch beacons when `field` exceeds threshold |
+| `bind_packetField_block` | new `packets[]` flows | Plain block beacons at lower threshold |
+| `bind_sysFailed_failBeacon` | `sys.failed` (0–1) | Zoto fail beacons (never fogged out) |
 
 Idle uses `viz.idle.fixture: host` — metric shows **demo** on the OSD when `frame.demo` is set.
 
@@ -18,8 +20,9 @@ Idle uses `viz.idle.fixture: host` — metric shows **demo** on the OSD when `fr
 
 - `cap_maxChunks`: 8  
 - `cap_maxViewDist`: 48  
-- `cap_maxVertexBudget`: 65536  
-- `cap_chunksPerFrame`: 2  
+- `cap_vertexBudget`: 65536  
+- `cap_maxMobs`: 6  
+- `cap_chunksPerFrame`: 1–2 (rebuild budget per frame)  
 
 ## Mosaic layout (screenshots on `main`)
 

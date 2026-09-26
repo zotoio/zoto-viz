@@ -1,4 +1,4 @@
-import { applyLiveBindings, type VoxLiveFrame } from "./bindings";
+import { applyLiveBindings, resetLiveMarkers, type VoxLiveFrame } from "./bindings";
 import { parseVoxConfig, type VoxOptions } from "./config";
 import { disposeGpuRenderer, drawChunks, gpuCounts, initGpuRenderer, uploadChunkMesh } from "./gl-renderer";
 import { MeshEngine } from "./mesh";
@@ -11,6 +11,9 @@ let packetN = 0;
 let skips = 0;
 let undoStack: VoxOptions[] = [];
 let lastT = -1;
+const FIXED_DT = 1 / 60;
+let simAccum = 0;
+let simSteps = 0;
 
 export function setVoxConfig(cfg: Record<string, string>): void {
   opts = parseVoxConfig(cfg);
@@ -33,7 +36,14 @@ export function randomiseVoxConfig(rng = Math.random): VoxOptions {
     camera: ["fly", "walk", "orbit"][Math.floor(rng() * 3)]!,
     mobs: String(Math.floor(rng() * 7)),
   };
-  opts = parseVoxConfig({ ...cfg, cap_maxChunks: "8", cap_maxViewDist: "48", cap_vertexBudget: "65536", cap_chunksPerFrame: "2" });
+  opts = parseVoxConfig({
+    ...cfg,
+    cap_maxChunks: "8",
+    cap_maxViewDist: "48",
+    cap_vertexBudget: "65536",
+    cap_maxMobs: "6",
+    cap_chunksPerFrame: "2",
+  });
   mesh.reset(opts.seed);
   return opts;
 }
@@ -60,10 +70,13 @@ export function initVoxelWorld(): void {
 
 export function disposeVoxelWorld(): void {
   disposeGpuRenderer();
+  resetLiveMarkers();
   mesh = new MeshEngine();
   packetN = 0;
   skips = 0;
   lastT = -1;
+  simAccum = 0;
+  simSteps = 0;
 }
 
 export interface VoxTickOut {
@@ -75,12 +88,20 @@ export interface VoxTickOut {
   stats: ReturnType<MeshEngine["tick"]>;
 }
 
-export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6): VoxTickOut {
+export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = FIXED_DT): VoxTickOut {
   if (lastT >= 0 && frame.t <= lastT) skips++;
   lastT = frame.t;
-  const live = applyLiveBindings(frame, opts, packetN);
-  packetN = frame.packets.length;
   const cam = voxelCamera(frame.t, opts);
+  const live = applyLiveBindings(frame, opts, packetN, cam);
+  packetN = frame.packets.length;
+  simAccum += dt;
+  const maxCatchUp = 3;
+  while (simAccum >= FIXED_DT && simSteps < maxCatchUp) {
+    simAccum -= FIXED_DT;
+    simSteps++;
+  }
+  if (simSteps >= maxCatchUp) simAccum = 0;
+  simSteps = 0;
   const meshStats = mesh.tick(cam.x, cam.z, opts.caps);
   if (meshStats.verticesUsed > opts.caps.vertexBudget) {
     skips++;
@@ -89,9 +110,9 @@ export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6): VoxTickOut {
   drawChunks();
   const gpu = gpuCounts();
   const slot0 = packSlot0(frame.t, aspect, opts, live, meshStats, gpu.bytesAllocated, skips);
-  const slot1 = packSlot1Mobs(frame.t, opts, cam);
-  const bright = Math.max(0.55, 1.05 - live.failTint * 0.35);
-  const accent: [number, number, number] = live.failTint > 0.35
+  const slot1 = packSlot1Mobs(frame.t, opts, cam, live);
+  const bright = Math.max(0.55, 1.05 - live.failStrength * 0.35);
+  const accent: [number, number, number] = live.failStrength > 0.35
     ? [0.95, 0.18, 0.22]
     : [0.42, 0.78, 0.38];
   const bg: [number, number, number] = [0.45, 0.62, 0.92];
@@ -104,7 +125,11 @@ export function simulateFlyover(seconds: number, fps = 60): { maxRebuild: number
   let maxDraw = 0;
   let maxTri = 0;
   for (let i = 0; i < seconds * fps; i++) {
-    const out = tickVoxelWorld({ t: i / fps, packets: [], demo: true, sys: { cpu: 0.2, failed: 0 } });
+    const out = tickVoxelWorld(
+      { t: i / fps, packets: [], demo: true, sys: { cpu: 0.2, failed: 0 } },
+      1.6,
+      1 / fps,
+    );
     maxRebuild = Math.max(maxRebuild, out.stats.chunksRebuilt);
     maxDraw = Math.max(maxDraw, out.stats.drawCalls);
     maxTri = Math.max(maxTri, out.stats.triangles);

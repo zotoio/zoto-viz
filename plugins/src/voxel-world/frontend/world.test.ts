@@ -12,8 +12,14 @@ import {
   undoVoxConfig,
   voxelSmokeCenterLuma,
 } from "./engine";
-import { gpuCounts as glCounts, initGpuRenderer, disposeGpuRenderer } from "./gl-renderer";
-import { readFileSync } from "node:fs";
+import {
+  gpuCounts as glCounts,
+  gpuUploadGrowthAfterWarmup,
+  initGpuRenderer,
+  disposeGpuRenderer,
+  resetGpuWarmupTracker,
+} from "./gl-renderer";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,14 +27,19 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const BANNED = [/minecraft/i, /mojang/i, /rocket\s*league/i, /psyonix/i];
 
-function packText(): string {
-  const files = ["plugin.yml", "README.md", "frontend/index.ts", "frontend/config.ts", "sky/fragment.glsl"];
-  return files.map((f) => readFileSync(join(ROOT, f), "utf8")).join("\n");
+function walkPackFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) out.push(...walkPackFiles(p));
+    else if (/\.(yml|ts|glsl|md|mts)$/.test(name) && !name.endsWith(".test.ts")) out.push(p);
+  }
+  return out;
 }
 
 describe("voxel world pack", () => {
   it("has no banned trademark strings in pack sources", () => {
-    const text = packText();
+    const text = walkPackFiles(ROOT).map((f) => readFileSync(f, "utf8")).join("\n");
     for (const re of BANNED) expect(text).not.toMatch(re);
   });
 
@@ -42,12 +53,13 @@ describe("voxel world pack", () => {
     const frag = readFileSync(join(ROOT, "sky/fragment.glsl"), "utf8");
     expect(frag).toContain("zotoVizSlots");
     expect(frag).toContain("slot(23)");
+    expect(frag).toContain("beaconCol");
   });
 
-  it("keeps flyover chunk rebuilds within cap for every preset", () => {
+  it("keeps flyover chunk rebuilds within cap (pinned seed 4242, 30s)", () => {
     const presets = ["classic", "snowy", "desert", "night", "archipelago"] as const;
     for (const p of presets) {
-      setVoxConfig({ preset: p });
+      setVoxConfig(p === "classic" ? { preset: p, seed: "4242" } : { preset: p });
       const { maxRebuild } = simulateFlyover(30, 60);
       expect(maxRebuild).toBeLessThanOrEqual(2);
     }
@@ -76,6 +88,20 @@ describe("voxel world pack", () => {
     expect(s1).not.toBe(s0);
     resetVoxConfig();
     expect(parseVoxConfig({ preset: "classic" }).seed).toBe(4242);
+  });
+
+  it("does not grow GPU byte accounting after warm-up uploads", () => {
+    resetVoxConfig();
+    initVoxelWorld();
+    for (let i = 0; i < 120; i++) {
+      tickVoxelWorld({ t: i / 60, packets: [], demo: true, sys: { cpu: 0.2, failed: 0 } }, 1.6, 1 / 60);
+    }
+    resetGpuWarmupTracker();
+    for (let i = 120; i < 240; i++) {
+      tickVoxelWorld({ t: i / 60, packets: [], demo: true, sys: { cpu: 0.2, failed: 0 } }, 1.6, 1 / 60);
+    }
+    expect(gpuUploadGrowthAfterWarmup()).toBe(0);
+    disposeVoxelWorld();
   });
 
   it("frees GPU resources after 20 mount cycles", () => {

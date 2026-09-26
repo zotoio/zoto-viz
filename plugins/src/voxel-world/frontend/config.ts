@@ -11,13 +11,16 @@ export interface VoxCaps {
   maxChunks: number;
   maxViewDist: number;
   vertexBudget: number;
+  maxMobs: number;
   chunksPerFrame: number;
 }
 
 export interface VoxLiveBindings {
   sysLoadWeather: number;
+  eventRateCloud: number;
   packetFieldTorch: number;
-  sysFailedFailTint: number;
+  packetFieldBlock: number;
+  sysFailedFailBeacon: number;
 }
 
 export interface VoxOptions {
@@ -87,15 +90,18 @@ function capsFrom(cfg: Record<string, string>): VoxCaps {
     maxChunks: Math.round(num(cfg.cap_maxChunks, 8, 8, 8)),
     maxViewDist: Math.round(num(cfg.cap_maxViewDist, 48, 48, 48)),
     vertexBudget: Math.round(num(cfg.cap_vertexBudget, 65536, 65536, 65536)),
-    chunksPerFrame: Math.round(num(cfg.cap_chunksPerFrame, 2, 2, 2)),
+    maxMobs: Math.round(num(cfg.cap_maxMobs, 6, 6, 6)),
+    chunksPerFrame: Math.round(num(cfg.cap_chunksPerFrame, 2, 1, 2)),
   };
 }
 
 function liveFrom(cfg: Record<string, string>): VoxLiveBindings {
   return {
     sysLoadWeather: num(cfg.bind_sysLoad_weather, 0.35, 0, 1),
+    eventRateCloud: num(cfg.bind_eventRate_cloudCover, 0.4, 0, 1),
     packetFieldTorch: num(cfg.bind_packetField_torch, 0.85, 0, 1),
-    sysFailedFailTint: num(cfg.bind_sysFailed_failTint, 1, 0, 1),
+    packetFieldBlock: num(cfg.bind_packetField_block, 0.7, 0, 1),
+    sysFailedFailBeacon: num(cfg.bind_sysFailed_failBeacon, 1, 0, 1),
   };
 }
 
@@ -123,7 +129,7 @@ export function parseVoxConfig(cfg: Record<string, string> = {}): VoxOptions {
     cameraSpeed: num(filtered.cameraSpeed, base.cameraSpeed!, 0.2, 2.5),
     fog: num(filtered.fog, base.fog!, 0, 1),
     textureStyle: pick(filtered.textureStyle, ["crisp", "smooth", "painterly"] as const, base.textureStyle!),
-    mobs: Math.round(num(filtered.mobs, base.mobs!, 0, 6)),
+    mobs: Math.round(num(filtered.mobs, base.mobs!, 0, caps.maxMobs)),
     clouds: bool(filtered.clouds, base.clouds!),
     palette: pick(filtered.palette, ["verdant", "sunset", "alpine", "candy"] as const, base.palette!),
     reducedMotion: bool(filtered.reducedMotion, base.reducedMotion ?? false),

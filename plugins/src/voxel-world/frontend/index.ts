@@ -13,6 +13,7 @@ type VizFrame = {
   audio: number;
   demo?: boolean;
   packets: { field: number }[];
+  talkers?: { rate: number }[];
   sys?: { cpu: number; mem: number; disk: number; gpu: number; temp: number; watts: number; psi: number; sockets: number; failed: number; udev: number };
 };
 
@@ -43,9 +44,11 @@ zoto.onFrame = (frame) => {
       t: frame.t,
       demo: frame.demo,
       packets: frame.packets,
+      talkers: frame.talkers,
       sys: frame.sys ? { cpu: frame.sys.cpu, failed: frame.sys.failed } : undefined,
     },
     1.6,
+    frame.dt > 0 ? frame.dt : 1 / 60,
   );
   zoto.writeBuffer(0, out.slot0);
   zoto.writeBuffer(1, out.slot1);

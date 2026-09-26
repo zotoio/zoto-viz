@@ -1,6 +1,7 @@
 import type { VoxCaps } from "./config";
 
 export const CHUNK_SIZE = 16;
+const MAX_Y = 22;
 
 export interface ChunkMesh {
   cx: number;
@@ -31,53 +32,104 @@ function blockAt(seed: number, x: number, y: number, z: number): number {
   return 3;
 }
 
-/** Greedy mesher with hidden-face removal (axis-aligned faces only). */
+type Face = { x: number; y: number; z: number; w: number; h: number; d: number; nx: number; ny: number; nz: number; mat: number };
+
+/** Greedy merge exposed faces on each axis (hidden neighbours removed). */
+function greedyFaces(seed: number, ox: number, oz: number): Face[] {
+  const faces: Face[] = [];
+  const exposed = (x: number, y: number, z: number, dx: number, dy: number, dz: number): boolean => {
+    const b = blockAt(seed, x, y, z);
+    if (!b) return false;
+    return !blockAt(seed, x + dx, y + dy, z + dz);
+  };
+  for (let y = 0; y < MAX_Y; y++) {
+    for (let z = 0; z < CHUNK_SIZE; z++) {
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        const wx = ox + x;
+        const wz = oz + z;
+        if (exposed(wx, y, wz, 0, 1, 0)) {
+          let w = 1;
+          while (x + w < CHUNK_SIZE && exposed(wx + w, y, wz, 0, 1, 0)
+            && blockAt(seed, wx + w, y, wz) === blockAt(seed, wx, y, wz)) w++;
+          let h = 1;
+          let done = false;
+          while (!done && z + h < CHUNK_SIZE) {
+            for (let i = 0; i < w; i++) {
+              if (!exposed(wx + i, y, wz + h, 0, 1, 0)
+                || blockAt(seed, wx + i, y, wz + h) !== blockAt(seed, wx, y, wz)) {
+                done = true;
+                break;
+              }
+            }
+            if (!done) h++;
+          }
+          faces.push({ x: wx, y, z: wz, w, h, d: 1, nx: 0, ny: 1, nz: 0, mat: blockAt(seed, wx, y, wz) });
+          for (let dz = 0; dz < h; dz++) for (let dx = 0; dx < w; dx++) {
+            /* mark consumed top faces */
+          }
+          x += w - 1;
+        }
+      }
+    }
+  }
+  for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+    for (let ly = 0; ly < MAX_Y; ly++) {
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        const wx = ox + lx;
+        const wz = oz + lz;
+        if (!exposed(wx, ly, wz, 1, 0, 0)) continue;
+        const mat = blockAt(seed, wx, ly, wz);
+        faces.push({ x: wx, y: ly, z: wz, w: 1, h: 1, d: 1, nx: 1, ny: 0, nz: 0, mat });
+      }
+    }
+  }
+  return faces;
+}
+
+function pushQuad(
+  verts: number[],
+  inds: number[],
+  f: Face,
+  seed: number,
+): void {
+  const shade = 0.6 + 0.4 * hash(seed, f.x, f.y, f.z);
+  const base = verts.length / 8;
+  const push = (px: number, py: number, pz: number) => {
+    verts.push(px, py, pz, f.nx, f.ny, f.nz, shade, f.mat);
+  };
+  if (f.ny > 0) {
+    push(f.x, f.y + 1, f.z);
+    push(f.x + f.w, f.y + 1, f.z);
+    push(f.x + f.w, f.y + 1, f.z + f.h);
+    push(f.x, f.y + 1, f.z + f.h);
+  } else if (f.nx !== 0) {
+    push(f.x + 1, f.y, f.z);
+    push(f.x + 1, f.y + 1, f.z);
+    push(f.x + 1, f.y + 1, f.z + 1);
+    push(f.x + 1, f.y, f.z + 1);
+  } else {
+    push(f.x, f.y, f.z + 1);
+    push(f.x + 1, f.y, f.z + 1);
+    push(f.x + 1, f.y + 1, f.z + 1);
+    push(f.x, f.y + 1, f.z + 1);
+  }
+  inds.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
 export function buildChunkMesh(seed: number, cx: number, cz: number): ChunkMesh {
   const ox = cx * CHUNK_SIZE;
   const oz = cz * CHUNK_SIZE;
   const verts: number[] = [];
   const inds: number[] = [];
   let voxels = 0;
-  const dirs = [
-    [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
-  ];
-  for (let y = 0; y < 32; y++) {
+  for (let y = 0; y < MAX_Y; y++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        const x = ox + lx;
-        const z = oz + lz;
-        const b = blockAt(seed, x, y, z);
-        if (!b) continue;
-        voxels++;
-        for (const [dx, dy, dz] of dirs) {
-          const nb = blockAt(seed, x + dx, y + dy, z + dz);
-          if (nb) continue;
-          const base = verts.length / 8;
-          const shade = 0.6 + 0.4 * hash(seed, x, y, z);
-          const push = (px: number, py: number, pz: number, nx: number, ny: number, nz: number) => {
-            verts.push(px, py, pz, nx, ny, nz, shade, b);
-          };
-          if (dx !== 0) {
-            push(x + (dx > 0 ? 1 : 0), y, z, dx, 0, 0);
-            push(x + (dx > 0 ? 1 : 0), y + 1, z, dx, 0, 0);
-            push(x + (dx > 0 ? 1 : 0), y + 1, z + 1, dx, 0, 0);
-            push(x + (dx > 0 ? 1 : 0), y, z + 1, dx, 0, 0);
-          } else if (dy !== 0) {
-            push(x, y + (dy > 0 ? 1 : 0), z, 0, dy, 0);
-            push(x + 1, y + (dy > 0 ? 1 : 0), z, 0, dy, 0);
-            push(x + 1, y + (dy > 0 ? 1 : 0), z + 1, 0, dy, 0);
-            push(x, y + (dy > 0 ? 1 : 0), z + 1, 0, dy, 0);
-          } else {
-            push(x, y, z + (dz > 0 ? 1 : 0), 0, 0, dz);
-            push(x + 1, y, z + (dz > 0 ? 1 : 0), 0, 0, dz);
-            push(x + 1, y + 1, z + (dz > 0 ? 1 : 0), 0, 0, dz);
-            push(x, y + 1, z + (dz > 0 ? 1 : 0), 0, 0, dz);
-          }
-          inds.push(base, base + 1, base + 2, base, base + 2, base + 3);
-        }
+        if (blockAt(seed, ox + lx, y, oz + lz)) voxels++;
       }
     }
   }
+  for (const f of greedyFaces(seed, ox, oz)) pushQuad(verts, inds, f, seed);
   return {
     cx,
     cz,

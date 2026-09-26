@@ -161,11 +161,18 @@ config:
     min: 65536
     max: 65536
     step: 1
+  - key: cap_maxMobs
+    label: max mobs (fixed)
+    type: number
+    default: 6
+    min: 6
+    max: 6
+    step: 1
   - key: cap_chunksPerFrame
     label: chunk rebuilds per frame (fixed)
     type: number
     default: 2
-    min: 2
+    min: 1
     max: 2
     step: 1
   - key: bind_sysLoad_weather
@@ -176,6 +183,14 @@ config:
     max: 1
     step: 0.01
     hint: VizDataFrame sys.cpu (0–1) scales rain/snow intensity.
+  - key: bind_eventRate_cloudCover
+    label: live event rate → cloud cover
+    type: number
+    default: 0.4
+    min: 0
+    max: 1
+    step: 0.01
+    hint: Talker/packet event rate (normalised) drives block-cloud density.
   - key: bind_packetField_torch
     label: live packet field → torch spawn
     type: number
@@ -183,12 +198,20 @@ config:
     min: 0
     max: 1
     step: 0.01
-    hint: Each new decimated packet sample above threshold places a torch block.
-  - key: bind_sysFailed_failTint
-    label: live sys.failed → fail tint
+    hint: Each new flow above threshold places a torch marker near the camera path.
+  - key: bind_packetField_block
+    label: live packet field → block spawn
+    type: number
+    default: 0.7
+    min: 0
+    max: 1
+    step: 0.01
+    hint: Each new flow above this lower threshold places a plain block marker.
+  - key: bind_sysFailed_failBeacon
+    label: live sys.failed → fail beacon
     type: number
     default: 1
     min: 0
     max: 1
     step: 0.01
-    hint: Failed-unit gauge tints the scene Zoto fail red and dims spectacle.
+    hint: Failed units spawn Zoto fail-coloured beacons that stay visible above fog and spectacle.

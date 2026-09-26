@@ -8,7 +8,7 @@ export const VOX_SLOT = {
   camX: 1, camY: 2, camZ: 3, yaw: 4, pitch: 5, aspect: 6, day: 7,
   seed: 8, biome: 9, viewDist: 10, fog: 11, weather: 12, camMode: 13, camSpeed: 14, flags: 15,
   sunX: 16, sunY: 17, sunZ: 18, sunPow: 19, torch: 20, palette: 21, texStyle: 22,
-  failTint: 23, weatherMix: 24, demo: 25, metric: 26, skips: 27,
+  failStrength: 23, weatherMix: 24, demo: 25, metric: 26, cloudCover: 27,
   drawCalls: 28, triangles: 29, voxels: 30, gpuBytes: 31,
 } as const;
 
@@ -24,6 +24,10 @@ function weatherId(w: VoxOptions["weather"]): number {
 
 function camId(c: VoxOptions["camera"]): number {
   return { fly: 0, walk: 1, orbit: 2 }[c];
+}
+
+function presetId(p: VoxOptions["preset"]): number {
+  return { classic: 0, snowy: 1, desert: 2, night: 3, archipelago: 4, custom: 5 }[p];
 }
 
 export function packSlot0(
@@ -57,19 +61,19 @@ export function packSlot0(
   slot[VOX_SLOT.weather] = weatherId(o.weather);
   slot[VOX_SLOT.camMode] = camId(o.camera);
   slot[VOX_SLOT.camSpeed] = o.cameraSpeed;
-  slot[VOX_SLOT.flags] = (o.clouds ? 1 : 0) | (o.reducedMotion ? 2 : 0);
+  slot[VOX_SLOT.flags] = (o.clouds ? 1 : 0) | (o.reducedMotion ? 2 : 0) | (live.metricLabel << 2) | (presetId(o.preset) << 4);
   slot[VOX_SLOT.sunX] = sx;
   slot[VOX_SLOT.sunY] = sy;
   slot[VOX_SLOT.sunZ] = sz;
-  slot[VOX_SLOT.sunPow] = sunPow * (1 - live.failTint * 0.65);
+  slot[VOX_SLOT.sunPow] = sunPow * (1 - live.failStrength * 0.65);
   slot[VOX_SLOT.torch] = torch;
   slot[VOX_SLOT.palette] = { verdant: 0, sunset: 1, alpine: 2, candy: 3 }[o.palette];
   slot[VOX_SLOT.texStyle] = { crisp: 0, smooth: 1, painterly: 2 }[o.textureStyle];
-  slot[VOX_SLOT.failTint] = live.failTint;
+  slot[VOX_SLOT.failStrength] = live.failStrength;
   slot[VOX_SLOT.weatherMix] = live.weatherMix;
   slot[VOX_SLOT.demo] = live.demo ? 1 : 0;
   slot[VOX_SLOT.metric] = live.metric;
-  slot[VOX_SLOT.skips] = skips;
+  slot[VOX_SLOT.cloudCover] = live.cloudCover;
   slot[VOX_SLOT.drawCalls] = mesh.drawCalls;
   slot[VOX_SLOT.triangles] = mesh.triangles;
   slot[VOX_SLOT.voxels] = mesh.voxelsDrawn;
@@ -77,9 +81,14 @@ export function packSlot0(
   return slot;
 }
 
-export function packSlot1Mobs(t: number, o: VoxOptions, cam: { x: number; z: number }): number[] {
+export function packSlot1Mobs(
+  t: number,
+  o: VoxOptions,
+  cam: { x: number; z: number },
+  live: VoxLiveState,
+): number[] {
   const out = new Array(24).fill(0);
-  const n = Math.min(6, Math.max(0, o.mobs));
+  const n = Math.min(o.caps.maxMobs, Math.max(0, o.mobs));
   for (let i = 0; i < n; i++) {
     const h = ((o.seed + i * 17) % 97) / 97;
     const ang = t * (0.3 + h) + i * 2;
@@ -91,12 +100,20 @@ export function packSlot1Mobs(t: number, o: VoxOptions, cam: { x: number; z: num
     out[o4 + 2] = z;
     out[o4 + 3] = 0.5;
   }
+  for (let b = 0; b < Math.min(3, live.beacons.length); b++) {
+    const beacon = live.beacons[b]!;
+    const base = 12 + b * 4;
+    out[base] = beacon.x;
+    out[base + 1] = beacon.y;
+    out[base + 2] = beacon.z;
+    out[base + 3] = beacon.kind + beacon.strength * 0.1;
+  }
   return out;
 }
 
 /** CPU smoke — minimum centre luma bound for CI. */
 export function voxelSmokeCenterLuma(slot0: number[]): number {
   const sun = slot0[VOX_SLOT.sunPow] ?? 0.5;
-  const fail = slot0[VOX_SLOT.failTint] ?? 0;
+  const fail = slot0[VOX_SLOT.failStrength] ?? 0;
   return Math.max(0.12, sun * 0.65 + 0.15 - fail * 0.05);
 }

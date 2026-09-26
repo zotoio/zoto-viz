@@ -85,8 +85,8 @@ bool treeAt(ivec2 xz, float seed) {
 }
 
 int villageBlock(ivec3 p) {
-  float vx = slot(26);
-  float vz = slot(27);
+  float vx = slot(1) + 14.0;
+  float vz = slot(3) + 10.0;
   ivec3 base = ivec3(int(vx), int(floor(terrainH(vec2(vx, vz)))), int(vz));
   ivec3 q = p - base;
   if (q.x >= 0 && q.x < 7 && q.z >= -3 && q.z < 4 && q.y >= 0 && q.y < 5) {
@@ -132,7 +132,7 @@ vec3 blockCol(int id, vec3 n, vec3 wp) {
   if (id == 6) return vec3(0.92, 0.94, 0.98) * shade;
   if (id == 7) return vec3(0.35, 0.22, 0.1) * shade;
   if (id == 8) return vec3(0.18, 0.55, 0.2) * shade;
-  if (id == 9) return vec3(0.55, 0.42, 0.72) * shade;
+  if (id == 9) return vec3(0.92, 0.14, 0.18);
   if (id == 10) return vec3(0.9, 0.25, 0.55);
   return vec3(0.5);
 }
@@ -167,10 +167,11 @@ vec3 skyCol(vec3 rd, float day, vec3 sun) {
 
 float cloudLayer(vec3 ro, vec3 rd) {
   if (mod(floor(slot(15)), 2.0) < 1.0) return 0.0;
+  float cover = slot(27);
   float t = 40.0 / max(rd.y, 0.05);
   vec3 p = ro + rd * t;
-  float c = step(0.55, vn(p.xz * 0.04 + uTime * 0.02));
-  return c * 0.35 * smoothstep(0.0, 0.4, rd.y);
+  float c = step(0.55 - cover * 0.2, vn(p.xz * 0.04 + uTime * 0.02));
+  return c * (0.2 + cover * 0.45) * smoothstep(0.0, 0.4, rd.y);
 }
 
 bool traceVoxel(vec3 ro, vec3 rd, out float dist, out vec3 n, out vec3 wp, out int id) {
@@ -210,10 +211,35 @@ bool traceVoxel(vec3 ro, vec3 rd, out float dist, out vec3 n, out vec3 wp, out i
   return false;
 }
 
+vec3 beaconCol(vec3 ro, vec3 rd) {
+  vec3 zotoFail = vec3(0.92, 0.14, 0.18);
+  vec3 col = vec3(0.0);
+  for (int i = 0; i < 3; i++) {
+    int base = 44 + i * 4;
+    float kindF = slot(base + 3);
+    if (kindF < 0.5) continue;
+    int kind = int(floor(kindF));
+    float strength = fract(kindF) * 10.0;
+    vec3 bp = vec3(slot(base), slot(base + 1), slot(base + 2));
+    vec3 h = bp - ro;
+    float t = dot(h, rd);
+    if (t < 0.0) continue;
+    vec3 q = h - rd * t;
+    float d = length(q);
+    float sz = kind == 9 ? 1.2 + strength : 0.65;
+    if (d > sz) continue;
+    float core = 1.0 - d / sz;
+    if (kind == 9) col = max(col, zotoFail * (0.85 + strength * 0.5) * core);
+    else if (kind == 1) col += vec3(1.0, 0.72, 0.25) * core * 0.9;
+    else col += vec3(0.55, 0.55, 0.58) * core * 0.7;
+  }
+  return col;
+}
+
 vec3 mobCol(vec3 ro, vec3 rd) {
   vec3 col = vec3(0.0);
   for (int i = 0; i < 6; i++) {
-    int base = 64 + i * 4;
+    int base = 32 + i * 4;
     vec3 mp = vec3(slot(base), slot(base + 1), slot(base + 2));
     float sz = slot(base + 3);
     if (sz < 0.1) continue;
@@ -272,7 +298,9 @@ void main() {
     float precip = hf(ivec3(int(ro.x + uTime * 10.0), int(ro.y * 3.0), int(ro.z * 2.0)));
     col += vec3(0.7, 0.75, 0.85) * step(0.92, precip) * (0.08 + wMix * 0.2);
   }
-  col = mix(col, vec3(0.92, 0.14, 0.18), fail * 0.65);
+  col = mix(col, vec3(0.92, 0.14, 0.18), fail * 0.45);
+  vec3 beacons = beaconCol(ro, rd);
+  col = max(col, beacons);
   col = mix(col, uAccent * 0.15, uAudio * 0.15 * (1.0 - fail));
   col *= uBright;
   float osdY = vDir.y + 0.93;
