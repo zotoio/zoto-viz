@@ -49,6 +49,8 @@ describe("clock split row W1", () => {
       prevClock = sim.mono;
     }
     expect(dts.every((d) => d >= 0)).toBe(true);
+    const stepSec = stepMs / 1000;
+    expect(dts.slice(1).every((d) => Math.abs(d - stepSec) < 1e-6)).toBe(true);
 
     sim.mono = 0;
     sim.wall = 1_000_000;

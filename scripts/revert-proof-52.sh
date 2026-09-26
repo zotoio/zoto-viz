@@ -9,5 +9,5 @@ patch -p1 < "$PATCH" >/dev/null
 set +e
 OUT=$(cd web && pnpm exec vitest run -t "$TEST" 2>&1)
 set -e
-git checkout -- .
+git checkout -- web/
 echo "$OUT" | rg "FAIL |AssertionError|expected" | head -5

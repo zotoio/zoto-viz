@@ -1,14 +1,21 @@
+diff --git a/web/src/plugins/nixie-wall-clock.ts b/web/src/plugins/nixie-wall-clock.ts
+index c6141d3..cfe2496 100644
 --- a/web/src/plugins/nixie-wall-clock.ts
 +++ b/web/src/plugins/nixie-wall-clock.ts
-@@ -24,6 +24,12 @@ function formatterForZone(timeZone?: string): Intl.DateTimeFormat {
+@@ -30,11 +30,15 @@ function formatterForZone(timeZone?: string): Intl.DateTimeFormat {
    return fmt;
  }
  
-+let cachedOffsetMs: number | null = null;
++let cachedWallParts: { h: number; m: number; s: number; ms: number } | null = null;
 +
  export function wallPartsFromMs(wallMs: number, timeZone?: string): { h: number; m: number; s: number; ms: number } {
-+  if (cachedOffsetMs === null) {
-+    cachedOffsetMs = wallMs - Date.UTC(1970, 0, 1, 0, 0, 0);
-+  }
-+  wallMs = cachedOffsetMs + (wallMs - (cachedOffsetMs ?? wallMs));
++  if (cachedWallParts) return cachedWallParts;
    const fmt = formatterForZone(timeZone);
+   const parts = fmt.formatToParts(new Date(wallMs));
+   const pick = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+-  return { h: pick("hour"), m: pick("minute"), s: pick("second"), ms: wallMs % 1000 };
++  cachedWallParts = { h: pick("hour"), m: pick("minute"), s: pick("second"), ms: wallMs % 1000 };
++  return cachedWallParts;
+ }
+ 
+ export function digitsFromWallMs(
