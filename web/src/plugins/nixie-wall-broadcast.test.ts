@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_LOOK } from "../../../shared/nixie-tubes";
 import { resetNixieFormatterCache } from "./nixie-wall-clock";
-import {
-  createNixieWallBroadcast,
-  nixieWallBroadcastRevertOnSecond,
-} from "./nixie-wall-broadcast";
+import { createNixieWallBroadcast } from "./nixie-wall-broadcast";
 
 const UTC = "UTC";
 const TILES = ["t0", "t1", "t2", "t3"];
@@ -60,22 +57,5 @@ describe("nixie wall broadcast F1 (2×2, 60 fps)", () => {
     expect(broadcast.shared.wallReads).toBe(10);
     expect(totalUploads).toBe(4);
     for (const tile of broadcast.tiles) expect(tile.uploads).toBe(1);
-  });
-
-  it("F1 revert seconds off: upload every second → 10 per tile (red vs 1 expected)", () => {
-    const t0 = Date.parse("2024-06-15T12:00:30.000Z");
-    const look = { ...DEFAULT_LOOK, hour12: false, seconds: false };
-    const broadcast = createNixieWallBroadcast(TILES);
-    for (let frame = 0; frame < 600; frame++) {
-      nixieWallBroadcastRevertOnSecond(
-        broadcast,
-        frame,
-        wallMsAtFrame(t0, frame),
-        () => look,
-        () => {},
-        UTC,
-      );
-    }
-    for (const tile of broadcast.tiles) expect(tile.uploads).toBe(10);
   });
 });

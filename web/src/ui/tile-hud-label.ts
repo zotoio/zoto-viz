@@ -68,34 +68,3 @@ export function createTileHudLabelLine(): TileHudLabelLine {
   };
 }
 
-let revertCachedLabel: string | null = null;
-
-/** Revert: rebuild LIMITED copy on every one-second tick (60 fps, frames 0–599 → 11 updates). */
-export function limitedLabelRevertOnSecondTick(
-  line: TileHudLabelLine,
-  activeTiles: number,
-  skipsPerSec: number,
-  frame: number,
-): string | null {
-  if (activeTiles < 2) return null;
-  if (frame % 60 !== 0 && frame !== 599) return revertCachedLabel;
-  line.bumpBuild();
-  revertCachedLabel = tileLimitedSharingLabel(activeTiles, skipsPerSec);
-  return revertCachedLabel;
-}
-
-export function resetLimitedLabelRevertCache(): void {
-  revertCachedLabel = null;
-}
-
-/** Revert: write on every one-second tick (11 writes over 600 frames at 60 fps). */
-export function writeHudTextRevertOnSecondTick(
-  line: TileHudLabelLine,
-  el: HTMLElement,
-  text: string,
-  frame: number,
-): void {
-  if (frame % 60 !== 0 && frame !== 599) return;
-  line.bumpWrite();
-  el.textContent = text;
-}

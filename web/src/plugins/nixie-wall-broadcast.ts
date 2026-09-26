@@ -99,27 +99,4 @@ export function createNixieWallBroadcast(tileIds: readonly string[]): NixieWallB
   };
 }
 
-/** Revert F1: upload every wall-second tick even when digits unchanged. */
-export function nixieWallBroadcastRevertOnSecond(
-  broadcast: NixieWallBroadcast,
-  frameIndex: number,
-  wallMs: number,
-  lookByTile: (id: string) => NixieLook,
-  upload: (tileId: string, data: number[]) => void,
-  timeZone?: string,
-): number {
-  const parts = broadcast.shared.syncWallSecond(wallMs, timeZone);
-  const secTick = frameIndex % 60 === 0;
-  let n = 0;
-  for (const tile of broadcast.tiles) {
-    const data = tile.clock.tick(wallMs, lookByTile(tile.id), 0, 0, undefined, parts);
-    if (secTick) {
-      tile.uploads++;
-      n++;
-      upload(tile.id, data);
-    }
-  }
-  return n;
-}
-
 export { packNixieWallBuffer };

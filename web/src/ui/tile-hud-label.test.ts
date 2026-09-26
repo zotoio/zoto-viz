@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  createTileHudLabelLine,
-  limitedLabelRevertOnSecondTick,
-  resetLimitedLabelRevertCache,
-  writeHudTextRevertOnSecondTick,
-} from "./tile-hud-label";
+import { createTileHudLabelLine } from "./tile-hud-label";
 
 const LABEL = "LIMITED · sharing frame with 3 tiles · 40 skipped/s";
 
@@ -17,7 +12,6 @@ function skipRateAtSecond(sec: number): number {
 
 describe("tile HUD LIMITED label (60 fps, per line)", () => {
   afterEach(() => {
-    resetLimitedLabelRevertCache();
     document.body.innerHTML = "";
   });
 
@@ -47,15 +41,4 @@ describe("tile HUD LIMITED label (60 fps, per line)", () => {
     expect(line.stats.writes).toBe(4);
   });
 
-  it("D1 revert: one-second updates → 11 builds and 11 writes per line (steady)", () => {
-    const line = createTileHudLabelLine();
-    const el = document.createElement("span");
-    document.body.append(el);
-    for (let frame = 0; frame < 600; frame++) {
-      const text = limitedLabelRevertOnSecondTick(line, 4, 40, frame)!;
-      writeHudTextRevertOnSecondTick(line, el, text, frame);
-    }
-    expect(line.stats.builds).toBe(11);
-    expect(line.stats.writes).toBe(11);
-  });
 });
