@@ -366,3 +366,22 @@ export function alternatingSzKinds(n: number): string[] {
 export function allTKinds(n: number): string[] {
   return Array.from({ length: n }, () => "T");
 }
+
+/** Pieces per survival-battery T drill (fixed planner, all T). */
+export const T_DRILL_PIECES = 48;
+
+export type FixedPlannerTDrillRow = { seed: number; lines: number; survived: boolean };
+
+/** One row of the survival-battery T drill (`seed` indexes the battery; sequence is all T). */
+export function fixedPlannerTDrillRow(seed: number): FixedPlannerTDrillRow {
+  const r = simulateAutoplay(emptyBoard(), allTKinds(T_DRILL_PIECES));
+  return { seed, lines: r.lines, survived: !r.toppedOut };
+}
+
+export function fixedPlannerTDrillBattery(seeds: readonly number[] = TETRIS_SURVIVAL_SEEDS): FixedPlannerTDrillRow[] {
+  return seeds.map(fixedPlannerTDrillRow);
+}
+
+export function minFixedPlannerTDrillLines(rows: FixedPlannerTDrillRow[]): number {
+  return rows.reduce((m, r) => Math.min(m, r.lines), Number.POSITIVE_INFINITY);
+}

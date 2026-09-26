@@ -16,6 +16,8 @@ import {
   simulateAutoplayRegressed,
   scoreBoardLegacy,
   scoreBoardRegressed,
+  fixedPlannerTDrillBattery,
+  minFixedPlannerTDrillLines,
   seededPieceKinds,
   survivalRate,
   TETRIS_COLS,
@@ -74,6 +76,16 @@ describe("tetris-engine", () => {
     expect(plan).not.toBeNull();
     const cells = cellsFor("T", plan!.rot);
     expect(landingY(board, cells, plan!.x)).toBe(plan!.y);
+  });
+
+  // Trade-off: 18+ lines on the fixed planner for 48 T-pieces breaks 20/20 on the seeded
+  // survival battery (aggregate height must dominate). Floor is 17 lines; see PR #47 per-seed table.
+  it("minimum fixed-planner T drill lines across survival seeds is at least 17", () => {
+    const rows = fixedPlannerTDrillBattery(TETRIS_SURVIVAL_SEEDS);
+    const minLines = minFixedPlannerTDrillLines(rows);
+    expect(rows).toHaveLength(TETRIS_SURVIVAL_SEEDS.length);
+    expect(rows.every((r) => r.survived)).toBe(true);
+    expect(minLines).toBeGreaterThanOrEqual(17);
   });
 
   it("survives long S/Z and T-only sequences with line clears", () => {
