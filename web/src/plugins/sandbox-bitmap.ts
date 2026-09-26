@@ -56,15 +56,17 @@ export class SandboxBitmapLane {
     mirror: HostedView,
     fill: SurfaceLetterboxFill,
     aspect: number,
+    releaseBitmap = true,
   ): boolean {
     const bitmap = this.pending;
     if (!bitmap) return false;
-    host.presentBitmapMirror(mirror, bitmap, fill, aspect, this.pluginId);
+    host.presentBitmapMirror(mirror, bitmap, fill, aspect, this.pluginId, releaseBitmap);
+    if (releaseBitmap) this.clearPendingAfterPresent();
     return true;
   }
 
-  /** GPU path closed the bitmap during upload; drop the handle without a second close. */
-  clearPendingAfterGpuUpload(): void {
+  /** Host present closed the bitmap; drop the handle without a second close. */
+  clearPendingAfterPresent(): void {
     if (!this.pending) return;
     this.open.delete(this.pending);
     this.pending = null;
@@ -93,6 +95,11 @@ export class SandboxBitmapLane {
     this.open.delete(this.pending);
     this.pending = null;
     this.stats.closed += 1;
+  }
+
+  /** @deprecated use clearPendingAfterPresent */
+  clearPendingAfterGpuUpload(): void {
+    this.clearPendingAfterPresent();
   }
 }
 
@@ -237,8 +244,9 @@ export function runSandboxBitmapDuplicateFrame(input: {
 }): void {
   const lane = sandboxBitmapLane(input.pluginId);
   lane.ingest(input.bitmap, lane.generation);
-  for (const mirror of input.mirrors) {
-    lane.drawMirror(input.host, mirror, input.fill, input.aspect);
+  const mirrors = input.mirrors;
+  for (let i = 0; i < mirrors.length; i++) {
+    lane.drawMirror(input.host, mirrors[i], input.fill, input.aspect, i === mirrors.length - 1);
   }
   finishSandboxBitmapHostFrame();
 }

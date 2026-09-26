@@ -285,6 +285,7 @@ export class RenderHost {
     fill: SurfaceLetterboxFill,
     aspect: number,
     pluginId: string,
+    releaseBitmap = true,
   ): Viewport | null {
     const dst = this.viewBox(mirror);
     if (!dst || dst.w < 2 || dst.h < 2) return null;
@@ -315,7 +316,7 @@ export class RenderHost {
       gpu.present(rd, tex, fill, dst, aspect);
       return this.writeFbViewport(dst, pr);
     } finally {
-      bitmap.close();
+      if (releaseBitmap) bitmap.close();
     }
   }
 
