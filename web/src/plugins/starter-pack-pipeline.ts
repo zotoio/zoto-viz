@@ -16,23 +16,6 @@ import {
 
 export const STARTER_CI_PACK_ID = "pack-starter-e2e";
 
-/** True once PR B wires `compile_typescript` → `bundle-pack-entry.mjs`. */
-export function serviceCompileUsesBundlePackEntry(repoRoot: string): boolean {
-  try {
-    const out = execFileSync(
-      "python3",
-      [
-        "-c",
-        "from service import plugins; import inspect; print('bundle-pack-entry' in inspect.getsource(plugins.compile_typescript))",
-      ],
-      { cwd: repoRoot, env: { ...process.env, PYTHONPATH: repoRoot }, encoding: "utf8" },
-    ).trim();
-    return out === "True";
-  } catch {
-    return false;
-  }
-}
-
 export type StarterPipelineStage =
   | "visualisation-contract"
   | "compile"

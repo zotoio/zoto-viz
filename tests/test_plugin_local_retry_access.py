@@ -43,3 +43,18 @@ class RetryBlockedZipAccessTest(AioHTTPTestCase):
         assert resp.status == 404
         body = await resp.json()
         assert body.get("error") == "not_blocked"
+
+    @unittest_run_loop
+    async def test_retry_post_rejects_foreign_origin(self) -> None:
+        resp = await self.client.post(
+            "/api/ai/plugin/local/blocked/retry",
+            headers={
+                "Host": "127.0.0.1:7020",
+                "Origin": "http://evil.example",
+                access.HEADER: "token-retry-test",
+            },
+            json={"sha256": "deadbeef"},
+        )
+        assert resp.status == 403
+        body = await resp.json()
+        assert body.get("error") == "forbidden origin"

@@ -684,14 +684,6 @@ def install_catalog_zip(
         tmp_path.write_bytes(raw)
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming and runtime.is_dir():
-            plugin_local._verify_pack_bundle(runtime, doc, incoming)
-            unpacked = pz.unpack_zip(dest, runtime)
-            info = _install_result(doc, dest, unpacked, wrote=False)
-            if reminted_from:
-                info["remintedFrom"] = reminted_from
-            _refresh_plugin_python(info)
-            return info
         dirty = pmg.dirty_tree_paths(pid)
         if dirty and not force:
             raise pmg.DirtyTreeError(dirty, pid)

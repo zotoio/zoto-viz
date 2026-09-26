@@ -746,6 +746,54 @@ def test_sdk_contract_still_checked_on_install(
         plugin_local.install_local_zip(raw, overwrite=True)
 
 
+def test_install_local_unchanged_zip_routes_through_pipeline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    from service import plugin_install as pi
+
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    raw = _zip_tree(_pack_fixture("upgrade-probe"))
+    calls = 0
+    real = pi.install_zip_to_runtime
+
+    def counting(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(plugin_local, "install_zip_to_runtime", counting)
+    plugin_local.install_local_zip(raw, overwrite=True)
+    plugin_local.install_local_zip(raw, overwrite=True)
+    assert calls == 2
+
+
+def test_fresh_install_start_failure_removes_runtime_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    pid = "fresh-probe"
+    raw = _minimal_plugin_zip(pid)
+    set_start_runtime_hook(lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")))
+    with pytest.raises(RuntimeError, match="nope"):
+        plugin_local.install_local_zip(raw, overwrite=True)
+    runtime = _runtime_parent() / pid
+    assert not runtime.exists()
+
+
+def _minimal_plugin_zip(plugin_id: str) -> bytes:
+    yml = f"id: {plugin_id}\nname: Fresh\nversion: 1\n"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("plugin.yml", yml)
+    return buf.getvalue()
+
+
 def test_startup_recovery_runs_in_fresh_process(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

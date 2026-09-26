@@ -490,6 +490,8 @@ def _install_zip_to_runtime_locked(
                     ),
                 )
                 raise InstallStartFailedError(msg, reason=str(e).strip()) from e
+            if runtime.is_dir():
+                shutil.rmtree(runtime, ignore_errors=True)
             raise
         _commit_zip_after_success(zip_path, dest_zip)
         if swapped:

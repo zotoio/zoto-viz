@@ -16,18 +16,33 @@ index a0b5e3d..e602ec0 100644
          return pz.unpack_zip(dest_zip, runtime)
      name = str(doc.get("name") or pid)
 diff --git a/service/plugin_local.py b/service/plugin_local.py
-index 99eae78..2d85b9c 100644
+index 2096d2b..d121764 100644
 --- a/service/plugin_local.py
 +++ b/service/plugin_local.py
-@@ -483,85 +483,41 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
-             "actualSha256": pz.plugin_sha256(dest),
-         }
+@@ -522,10 +522,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+     """Re-run the blocked zip through the full install pipeline (sync, pack lock held)."""
+     from .pack_runtime import forget_zip_block_cache_for_path
+     from .pack_zip_blocks import clear_zip_block, zip_block_for_sha
+-    from .plugin_install import (
+-        _install_zip_to_runtime_locked,
+-        pack_install_lock,
+-    )
++    from .plugin_install import install_zip_to_runtime
  
+     digest = sha256.strip().lower()
+     row = zip_block_for_sha(digest)
+@@ -534,103 +531,67 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+     pid = str(row.get("id") or "")
+     folder = paths.plugin_local_dir(create=True)
+     dest = folder / f"{pid}.zip"
+-    if dest.is_file() and pz.plugin_sha256(dest).lower() != digest:
+-        return _retry_zip_changed_response(digest, row, pid, zip_error="zip_hash_mismatch")
+-
 -    lock = pack_install_lock(pid)
--    lock.acquire()
+-    if not lock.acquire(blocking=False):
 +    zip_path = _find_local_zip_for_digest(digest, pid, row)
 +    if zip_path is None:
-+        return {"ok": False, "error": "zip_not_found", "id": pid}
++        return _retry_zip_changed_response(digest, row, pid, zip_error="zip_not_found")
 +    clear_zip_block(digest)
 +    forget_zip_block_cache_for_path(zip_path)
 +    plugins.reset_scan_memo()
@@ -40,22 +55,52 @@ index 99eae78..2d85b9c 100644
 +    runtime = paths.plugin_local_runtime_dir(create=True) / pid
 +    incoming = pz.plugin_sha256(dest)
 +    upgrade = runtime.is_dir()
-     try:
++    name = str(doc.get("name") or pid)
++    version = doc.get("version")
++    try:
++        unpacked = install_zip_to_runtime(
++            dest, dest, runtime, doc, rel=str(dest), sha256=incoming, upgrade=upgrade, force=True,
++        )
++    except InstallV2BlockedError as e:
++        return {"ok": False, "error": "pack_install_blocked", "retryResult": "blocked", "message": str(e), **e.payload}
++    except InstallStartFailedError:
++        msg = format_retry_start_failed_message(name, version)
++        record_zip_block(
++            digest,
++            row_for_start_failure(
++                sha256=digest,
++                message=msg,
++                pack_id=pid,
++                name=name,
++                zip_path=str(dest),
++                version=version,
++            ),
++        )
+         return {
+             "ok": False,
+-            "error": "retry_in_progress",
+-            "retryResult": RETRY_RESULT_IN_PROGRESS,
++            "error": "pack_install_start_failed",
++            "retryResult": RETRY_RESULT_START_FAILED,
++            "message": msg,
+             "id": pid,
+-            "name": str(row.get("name") or pid),
+-            "version": _retry_row_version(row),
++            "name": name,
++            "version": version,
+             "zipSha256": digest,
++            "blockReason": "couldnt_start",
++            "retryable": "true",
+         }
+-    try:
 -        row = zip_block_for_sha(digest)
 -        if row is None:
--            return {"ok": False, "error": "not_blocked"}
+-            return {"ok": False, "error": "not_blocked", "retryResult": RETRY_RESULT_NOT_BLOCKED}
 -        zip_path = _find_local_zip_for_digest(digest, pid, row)
 -        if zip_path is None:
--            return {"ok": False, "error": "zip_not_found", "id": pid}
+-            return _retry_zip_changed_response(digest, row, pid, zip_error="zip_not_found")
 -        if dest.is_file() and pz.plugin_sha256(dest).lower() != digest:
--            return {
--                "ok": False,
--                "error": "zip_hash_mismatch",
--                "message": "Drop-folder zip no longer matches the blocked install; replace the file or remove the block.",
--                "id": pid,
--                "expectedSha256": digest,
--                "actualSha256": pz.plugin_sha256(dest),
--            }
+-            return _retry_zip_changed_response(digest, row, pid, zip_error="zip_hash_mismatch")
 -
 -        forget_zip_block_cache_for_path(zip_path)
 -        plugins.reset_scan_memo()
@@ -69,13 +114,8 @@ index 99eae78..2d85b9c 100644
 -        runtime = paths.plugin_local_runtime_dir(create=True) / pid
 -        incoming = pz.plugin_sha256(dest)
 -        if incoming.lower() != digest:
--            return {
--                "ok": False,
--                "error": "zip_hash_mismatch",
--                "id": pid,
--                "expectedSha256": digest,
--                "actualSha256": incoming,
--            }
+-            row = zip_block_for_sha(digest) or row
+-            return _retry_zip_changed_response(digest, row, pid, zip_error="zip_hash_mismatch")
 -        upgrade = runtime.is_dir()
 -        name = str(doc.get("name") or pid)
 -        version = doc.get("version")
@@ -93,16 +133,32 @@ index 99eae78..2d85b9c 100644
 -                version=version,
 -            )
 -        except InstallV2BlockedError as e:
--            return {"ok": False, "error": "pack_install_blocked", "message": str(e), **e.payload}
--        except InstallStartFailedError as e:
--            info = {
+-            return {"ok": False, "error": "pack_install_blocked", "retryResult": "blocked", "message": str(e), **e.payload}
+-        except InstallStartFailedError:
+-            msg = format_retry_start_failed_message(name, version)
+-            record_zip_block(
+-                digest,
+-                row_for_start_failure(
+-                    sha256=digest,
+-                    message=msg,
+-                    pack_id=pid,
+-                    name=name,
+-                    zip_path=str(dest),
+-                    version=version,
+-                ),
+-            )
+-            return {
 -                "ok": False,
 -                "error": "pack_install_start_failed",
--                "message": str(e),
--                "reason": e.reason,
+-                "retryResult": RETRY_RESULT_START_FAILED,
+-                "message": msg,
 -                "id": pid,
+-                "name": name,
+-                "version": version,
+-                "zipSha256": digest,
+-                "blockReason": "couldnt_start",
+-                "retryable": "true",
 -            }
--            return _finish(info, activate=activate)
 -        except PackBundleBoundaryError as e:
 -            return {"ok": False, **e.block.to_dict()}
 -        except ValueError as e:
@@ -114,14 +170,9 @@ index 99eae78..2d85b9c 100644
 -        clear_zip_block(digest)
 -        forget_zip_block_cache_for_path(dest)
 -        info = _install_result(doc, dest, unpacked, wrote=True)
-+        unpacked = install_zip_to_runtime(
-+            dest, dest, runtime, doc, rel=str(dest), sha256=incoming, upgrade=upgrade, force=True,
-+        )
-+    except InstallV2BlockedError as e:
-+        return {"ok": False, "error": "pack_install_blocked", "message": str(e), **e.payload}
-+    except InstallStartFailedError as e:
-+        info = {"ok": False, "error": "pack_install_start_failed", "message": str(e), "reason": e.reason, "id": pid}
-         return _finish(info, activate=activate)
+-        finished = _finish(info, activate=activate)
+-        finished["retryResult"] = RETRY_RESULT_SUCCESS
+-        return finished
 -    finally:
 -        lock.release()
 +    except PackBundleBoundaryError as e:
@@ -134,7 +185,9 @@ index 99eae78..2d85b9c 100644
 +    clear_zip_block(digest)
 +    forget_zip_block_cache_for_path(dest)
 +    info = _install_result(doc, dest, unpacked, wrote=True)
-+    return _finish(info, activate=activate)
++    finished = _finish(info, activate=activate)
++    finished["retryResult"] = RETRY_RESULT_SUCCESS
++    return finished
  
  
- async def api_retry_blocked_zip(req: web.Request) -> web.Response:
+ def retry_blocked_zip_http_status(info: dict[str, Any]) -> int:

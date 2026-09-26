@@ -80,7 +80,7 @@ export function applyPackInstallRetryResponse(
   const fromBody = parseRetryResult(body);
   const result: PackInstallRetryResult | null = fromBody
     ?? (body.ok ? "success" : null)
-    ?? (status === 409 && body.error === "retry_in_progress" ? "in_progress" : null);
+    ?? ((status === 423 || (status === 409 && body.error === "retry_in_progress")) ? "in_progress" : null);
 
   if (result === "success" || body.ok) {
     const name = body.name || body.id;

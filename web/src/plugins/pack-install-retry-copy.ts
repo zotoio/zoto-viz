@@ -3,12 +3,15 @@
 export const PACK_RETRY_BUTTON_IDLE = "Retry";
 export const PACK_RETRY_BUTTON_BUSY = "Retrying…";
 
-export type PackInstallRetryResult =
-  | "success"
-  | "start_failed"
-  | "zip_changed"
-  | "in_progress"
-  | "not_blocked";
+export const PACK_INSTALL_RETRY_RESULTS = [
+  "success",
+  "start_failed",
+  "zip_changed",
+  "in_progress",
+  "not_blocked",
+] as const;
+
+export type PackInstallRetryResult = (typeof PACK_INSTALL_RETRY_RESULTS)[number];
 
 export function packLabel(name: string | undefined, id?: string): string {
   const label = (name || id || "Plugin").trim();
