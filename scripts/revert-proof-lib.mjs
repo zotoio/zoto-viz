@@ -2,6 +2,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+export const MAX_TIMER_MS = 2_147_483_647;
+
 export const TEST_PATH_RE =
   /(?:^|\/)(?:tests\/|__tests__\/|fixtures\/|revert-proof\/|src\/test\/|conftest\.py$|(?:vite|vitest)\.config\.|pytest\.ini$|scripts\/vitest\.config\.mjs$)|(?:^|\/)(?:.*\.test\.[cm]?[jt]sx?|.*\.spec\.[cm]?[jt]sx?|.*_test\.py|test_[^/]*\.py)$/;
 
@@ -38,6 +40,12 @@ export function parseTimeoutSec(raw, slug) {
   if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
     throw new Error(`row ${slug}: timeoutSec must be a positive finite number`);
   }
+  const ms = raw * 1000;
+  if (ms > MAX_TIMER_MS) {
+    throw new Error(
+      `row ${slug}: timeoutSec exceeds Node timer maximum (${MAX_TIMER_MS / 1000}s)`,
+    );
+  }
   return raw;
 }
 
@@ -59,6 +67,9 @@ export function validatePatchStructure(patchText, slug) {
   if (hasDevNull && onlyDeletes) {
     throw new Error(`row ${slug}: delete-only patches are not allowed`);
   }
+  if (/^rename from /m.test(patchText) || /^rename to /m.test(patchText)) {
+    throw new Error(`row ${slug}: rename patches are not allowed`);
+  }
   /** @type {{ old?: string, new?: string }[]} */
   const pairs = [];
   for (const line of patchText.split("\n")) {
@@ -78,8 +89,19 @@ export function validatePatchStructure(patchText, slug) {
     if (o !== "/dev/null" && n !== "/dev/null" && o !== n) {
       throw new Error(`row ${slug}: rename patches are not allowed`);
     }
-    if (o === "/dev/null" && n === "/dev/null") {
-      throw new Error(`row ${slug}: patch has no ---/+++ file headers`);
+  }
+  const touched = [...pairs]
+    .flatMap((p) => [p.old, p.new])
+    .filter(Boolean)
+    .map((p) => String(p).split("\t")[0].replace(/^\w+\//, ""))
+    .filter((p) => p && p !== "/dev/null");
+  for (const p of touched) {
+    if (!TEST_PATH_RE.test(p)) continue;
+    const hasContentChange = patchText.split("\n").some(
+      (line) => (line.startsWith("+") || line.startsWith("-")) && !line.startsWith("+++") && !line.startsWith("---"),
+    );
+    if (!hasContentChange && (/^old mode /m.test(patchText) || /^new mode /m.test(patchText))) {
+      throw new Error(`row ${slug}: mode-only patches on test files are not allowed`);
     }
   }
 }
@@ -88,10 +110,10 @@ export function escapeVitestTestNamePattern(testName) {
   return testName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
-/** Vitest `-t` matches the leaf test title (sidecar uses `describe > title`). */
+/** Vitest `-t` is a RegExp; anchor the full `describe > … > test` name. */
 export function vitestTestNamePattern(fullTestName) {
-  const leaf = fullTestName.split(/\s*>\s*/).pop()?.trim() ?? fullTestName;
-  return escapeVitestTestNamePattern(leaf);
+  const normalized = fullTestName.replace(/\s*>\s*/g, " > ").trim();
+  return `^${escapeVitestTestNamePattern(normalized)}$`;
 }
 
 export function pytestNodeId(testFile, testName) {
@@ -105,16 +127,19 @@ export function pytestNodeId(testFile, testName) {
   return `${file}::${testName}`;
 }
 
-export function buildPytestArgv(nodeId, xmlOut) {
-  return [
+export function buildPytestArgv(nodeId, xmlOut, { includeNoCov = true } = {}) {
+  const args = [
     "-m",
     "pytest",
-    "--no-cov",
     "-p",
     "no:cacheprovider",
     nodeId,
     `--junitxml=${xmlOut}`,
   ];
+  if (includeNoCov) {
+    args.splice(2, 0, "--no-cov");
+  }
+  return args;
 }
 
 export function pytestArgvUsesNodeIdNotK(argv) {
@@ -198,12 +223,36 @@ export function patchTouchesTestFiles(patchText) {
   return [...paths].some((p) => TEST_PATH_RE.test(p));
 }
 
-export function isVitestAssertionFailure(failedAssertions) {
-  if (!failedAssertions?.length) return false;
-  const text = failedAssertions.flatMap((f) => f.messages ?? []).join("\n");
-  if (/AssertionError/i.test(text)) return true;
-  if (/expect\s*\(/i.test(text)) return true;
-  if (/\bExpected\b[\s\S]*\bReceived\b/i.test(text)) return true;
+/** @returns {string | null} */
+export function vitestJunitFailureType(xmlText) {
+  if (!xmlText?.trim()) return null;
+  const caseRe = /<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g;
+  let m;
+  let failedType = null;
+  let failedCount = 0;
+  while ((m = caseRe.exec(xmlText))) {
+    const body = m[3] ?? "";
+    if (!/<failure\b/.test(body)) continue;
+    failedCount += 1;
+    const tag = body.match(/<failure\b([^>]*)>/);
+    const typeM = tag?.[1]?.match(/\btype="([^"]*)"/);
+    failedType = typeM ? typeM[1] : null;
+  }
+  if (failedCount !== 1) return null;
+  return failedType;
+}
+
+export function isVitestAssertionFailure(failedAssertions, junitXml) {
+  const junitType = vitestJunitFailureType(junitXml ?? "");
+  if (junitType !== null) {
+    return junitType === "AssertionError";
+  }
+  for (const fa of failedAssertions ?? []) {
+    const msg = (fa.messages ?? []).join("\n");
+    if (/AssertionError|\bexpect\s*\(/.test(msg)) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -212,15 +261,40 @@ export function classifyPatchedVitest(run) {
   const { executed, passed, failed } = run.counts;
   if (executed === 1 && passed === 1 && failed === 0) return "green";
   if (executed !== 1 || failed !== 1) return "not single assertion failure";
-  if (!isVitestAssertionFailure(run.counts.failedAssertions)) return "build break";
+  if (!isVitestAssertionFailure(run.counts.failedAssertions, run.junitXml)) {
+    return "build break";
+  }
   return "assertion";
 }
 
+export function pytestFailureMessage(body) {
+  if (!body) return "";
+  const innerM = body.match(/<failure\b[^>]*>([\s\S]*?)<\/failure>/);
+  const text = innerM ? innerM[1] : body;
+  const lines = text.replace(/&#10;/g, "\n").split("\n");
+  for (const line of lines) {
+    const t = line.trim();
+    if (t) return t;
+  }
+  return "";
+}
+
 export function isPytestAssertionBody(body) {
-  if (!body) return false;
-  if (/AssertionError/i.test(body)) return true;
-  if (/\n\s*assert\s+/m.test(body)) return true;
-  if (/>\s*assert\s+/m.test(body)) return true;
+  const typeM = body.match(/<failure\b[^>]*\btype="([^"]*)"/);
+  if (typeM?.[1] === "AssertionError") return true;
+  if (typeM?.[1] && typeM[1] !== "AssertionError") return false;
+
+  const msgM = body.match(/<failure\b[^>]*\bmessage="([^"]*)"/);
+  if (msgM?.[1]?.startsWith("AssertionError")) return true;
+  if (msgM?.[1] && /^[A-Za-z]+(?:Error|Exception):/.test(msgM[1])) {
+    return false;
+  }
+
+  if (/\bAssertionError\b/.test(body)) return true;
+
+  const first = pytestFailureMessage(body);
+  if (first.startsWith("AssertionError")) return true;
+  if (first.startsWith("assert ")) return true;
   return false;
 }
 

@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index a23fcaf..198b4de 100644
+index 4aa041f..4943be5 100755
 --- a/scripts/revert-proof.mjs
 +++ b/scripts/revert-proof.mjs
-@@ -161,11 +161,9 @@ function validateMeta(meta, slug) {
+@@ -192,11 +192,9 @@ function validateMeta(meta, slug) {
  }
  
  export function validatePatchTouchesOnlyProduction(patchText, slug) {

@@ -42,14 +42,30 @@ const DEP_EXCLUDE = ["node_modules", "web/node_modules", ".venv"];
 
 /** @type {null | (() => void)} */
 let globalCleanup = null;
+/** @type {import("node:child_process").ChildProcess | null} */
+let activeTestChild = null;
+/** @type {string | null} */
+let activeArtifactsDir = null;
 
 function onSignal() {
+  if (activeTestChild?.pid) {
+    killProcessGroup(activeTestChild);
+    activeTestChild = null;
+  }
   if (globalCleanup) {
     try {
       globalCleanup();
     } catch {
       /* best effort */
     }
+  }
+  if (activeArtifactsDir && fs.existsSync(activeArtifactsDir)) {
+    try {
+      fs.rmSync(activeArtifactsDir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+    activeArtifactsDir = null;
   }
   process.exit(130);
 }
@@ -112,28 +128,43 @@ function assertCheckoutUnchanged(root, before, prNumber) {
   }
 }
 
-function listRows(mainRoot, prNumber, onlySlug) {
-  const dir = path.join(mainRoot, "revert-proofs", String(prNumber));
-  if (!fs.existsSync(dir)) {
-    throw new Error(`revert-proofs directory not found: ${dir}`);
+function readGitHeadFile(mainRoot, relPath) {
+  const r = gitAt(mainRoot, ["show", `HEAD:${relPath}`]);
+  if (r.status !== 0) {
+    throw new Error(`missing at HEAD: ${relPath} (${r.stderr || r.stdout})`);
   }
-  const patches = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith(".patch"))
-    .map((f) => f.replace(/\.patch$/, ""))
+  return r.stdout;
+}
+
+function listRows(mainRoot, prNumber, onlySlug) {
+  const prefix = `revert-proofs/${prNumber}`;
+  const ls = gitAt(mainRoot, ["ls-tree", "--name-only", "HEAD", `${prefix}/`]);
+  if (ls.status !== 0 || !ls.stdout.trim()) {
+    throw new Error(`revert-proofs directory not found at HEAD: ${prefix}`);
+  }
+  const patches = ls.stdout
+    .split("\n")
+    .map((p) => p.trim())
+    .filter((p) => p.endsWith(".patch"))
+    .map((p) => path.basename(p).replace(/\.patch$/, ""))
     .sort();
   const slugs = onlySlug ? patches.filter((s) => s === onlySlug) : patches;
   if (onlySlug && slugs.length === 0) {
     throw new Error(`row slug not found: ${onlySlug}`);
   }
   return slugs.map((slug) => {
-    const patchPath = path.join(dir, `${slug}.patch`);
-    const metaPath = path.join(dir, `${slug}.json`);
-    if (!fs.existsSync(metaPath)) {
-      throw new Error(`missing sidecar JSON for row ${slug}: ${metaPath}`);
-    }
-    const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-    return { slug, patchPath, metaPath, meta, dir };
+    const relPatch = `${prefix}/${slug}.patch`;
+    const relMeta = `${prefix}/${slug}.json`;
+    const patchText = readGitHeadFile(mainRoot, relPatch);
+    const meta = JSON.parse(readGitHeadFile(mainRoot, relMeta));
+    return {
+      slug,
+      patchPath: path.join(mainRoot, relPatch),
+      patchText,
+      metaPath: path.join(mainRoot, relMeta),
+      meta,
+      dir: path.join(mainRoot, prefix),
+    };
   });
 }
 
@@ -404,8 +435,26 @@ function materializePyPath(wtRoot, base) {
   return null;
 }
 
-const PY_IMPORT_RE =
-  /^\s*(?:from\s+(\.+[\w.]*|[\w.]+)\s+import|import\s+([\w.]+))/gm;
+const PY_FROM_IMPORT_RE =
+  /^\s*from\s+(\.+[\w.]*|\w+(?:\.\w+)*)\s+import\s+([^#\n]+)/gm;
+const PY_IMPORT_RE = /^\s*import\s+([\w.]+)/gm;
+
+function pyRelativeImportTarget(wtRoot, fromRel, levelPrefix, rest, importName) {
+  const fromDir = path.dirname(fromRel);
+  let dir = fromDir;
+  const level = levelPrefix.length;
+  for (let i = 1; i < level; i++) {
+    dir = path.dirname(dir);
+  }
+  if (rest) {
+    return pyModuleToPath(wtRoot, `${levelPrefix}${rest}`, fromRel);
+  }
+  if (!importName || importName === "*") {
+    return materializePyPath(wtRoot, normRel(dir));
+  }
+  const base = path.join(dir, importName.replace(/\./g, "/"));
+  return materializePyPath(wtRoot, normRel(base));
+}
 
 function pyImportsInFile(wtRoot, relFile) {
   const abs = path.join(wtRoot, relFile);
@@ -413,9 +462,33 @@ function pyImportsInFile(wtRoot, relFile) {
   const text = fs.readFileSync(abs, "utf8");
   const resolved = [];
   let m;
+  PY_FROM_IMPORT_RE.lastIndex = 0;
+  while ((m = PY_FROM_IMPORT_RE.exec(text))) {
+    const mod = m[1];
+    const names = m[2]
+      .split(",")
+      .map((part) => part.trim().split(/\s+as\s+/)[0].trim())
+      .filter(Boolean);
+    if (mod.startsWith(".")) {
+      const levelPrefix = mod.match(/^\.+/)?.[0] ?? ".";
+      const rest = mod.slice(levelPrefix.length).replace(/\./g, "/");
+      if (rest) {
+        const r = pyModuleToPath(wtRoot, mod, relFile);
+        if (r) resolved.push(r);
+      } else {
+        for (const name of names) {
+          const r = pyRelativeImportTarget(wtRoot, relFile, levelPrefix, "", name);
+          if (r) resolved.push(r);
+        }
+      }
+      continue;
+    }
+    const r = pyModuleToPath(wtRoot, mod, relFile);
+    if (r) resolved.push(r);
+  }
   PY_IMPORT_RE.lastIndex = 0;
   while ((m = PY_IMPORT_RE.exec(text))) {
-    const mod = m[1] || m[2];
+    const mod = m[1];
     if (!mod) continue;
     const r = pyModuleToPath(wtRoot, mod, relFile);
     if (r) resolved.push(r);
@@ -482,6 +555,7 @@ export function isRevertTargetReachableFromProduction(wtRoot, relFile) {
 }
 
 export function validatePatchProductionReachable(patchText, slug, wtRoot) {
+  loadProductionConfig(wtRoot);
   for (const touched of pathsTouchedByPatch(patchText)) {
     const file = normRel(touched);
     if (isExcludedProductionTestPath(file)) {
@@ -631,24 +705,46 @@ function vitestBinsPresent(wtRoot) {
   return fs.existsSync(rootBin) || fs.existsSync(webBin);
 }
 
-function ensureJsDepsInWorktree(wtRoot, rows) {
+function seedNodeModulesFromMain(mainRoot, wtRoot) {
+  const linkDir = (src, dest) => {
+    if (!fs.existsSync(src)) return;
+    if (fs.existsSync(dest)) return;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.symlinkSync(src, dest, "dir");
+  };
+  linkDir(
+    path.join(mainRoot, "node_modules"),
+    path.join(wtRoot, "node_modules"),
+  );
+  linkDir(
+    path.join(mainRoot, "web", "node_modules"),
+    path.join(wtRoot, "web", "node_modules"),
+  );
+}
+
+function ensureJsDepsInWorktree(mainRoot, wtRoot, rows) {
   if (worktreeJsDepsReady) {
     return;
   }
   const needsVitest = rows.some((r) => r.meta.runner === "vitest");
   const skipInstall = process.env.REVERT_PROOF_SKIP_PNPM_INSTALL === "1";
-  const installRoots = needsVitest ? findPnpmInstallRoots(wtRoot, rows) : [];
-  if (installRoots.length > 0 && (!skipInstall || !vitestBinsPresent(wtRoot))) {
+  if (needsVitest && skipInstall) {
+    seedNodeModulesFromMain(mainRoot, wtRoot);
+  }
+  const installRoots = needsVitest && !skipInstall ? findPnpmInstallRoots(wtRoot, rows) : [];
+  if (installRoots.length > 0) {
     for (const dir of installRoots) {
       pnpmInstallOffline(dir);
     }
   } else if (needsVitest && !vitestBinsPresent(wtRoot)) {
     throw new Error(
-      "REVERT_PROOF_SKIP_PNPM_INSTALL=1 but vitest is missing in the worktree",
+      skipInstall
+        ? "REVERT_PROOF_SKIP_PNPM_INSTALL=1 but vitest is missing (seed from checkout failed)"
+        : "vitest rows require pnpm-lock.yaml and offline install in the worktree",
     );
   }
-  if (needsVitest && process.env.REVERT_PROOF_SKIP_PNPM_INSTALL !== "1") {
-    assertWorkspaceLinksInWorktree(wtRoot, mainCheckoutRoot());
+  if (needsVitest && !skipInstall) {
+    assertWorkspaceLinksInWorktree(wtRoot, mainRoot);
   }
   worktreeJsDepsReady = true;
 }
@@ -774,12 +870,27 @@ function removeWorktree(mainRoot, wtPath) {
   }
 }
 
+function killProcessGroup(child) {
+  if (!child?.pid) return;
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
 function runProcess(cmd, args, options) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
       ...options,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
     });
+    activeTestChild = child;
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (c) => {
@@ -794,11 +905,14 @@ function runProcess(cmd, args, options) {
     if (timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGKILL");
+        killProcessGroup(child);
       }, timeoutMs);
     }
     child.on("close", (code, signal) => {
       if (timer) clearTimeout(timer);
+      if (activeTestChild === child) {
+        activeTestChild = null;
+      }
       resolve({
         exitCode: code,
         signal,
@@ -816,6 +930,8 @@ function countVitestExecuted(report) {
   let passed = 0;
   let failed = 0;
   const failedAssertions = [];
+  /** @type {{ fullName: string, status: string }[]} */
+  const ranTests = [];
   if (!report?.testResults?.length) {
     return {
       executed: 0,
@@ -823,6 +939,7 @@ function countVitestExecuted(report) {
       failed: 0,
       suiteError: report ? "no tests executed" : "no JSON report",
       failedAssertions: [],
+      ranTests,
     };
   }
   for (const file of report.testResults ?? []) {
@@ -833,6 +950,7 @@ function countVitestExecuted(report) {
         failed: 0,
         suiteError: file.message || "suite failed",
         failedAssertions: [],
+        ranTests,
       };
     }
     for (const t of file.assertionResults ?? []) {
@@ -840,22 +958,51 @@ function countVitestExecuted(report) {
         continue;
       }
       executed += 1;
+      const fullName = t.fullName || t.title;
+      ranTests.push({ fullName, status: t.status });
       if (t.status === "passed") passed += 1;
       if (t.status === "failed") {
         failed += 1;
         failedAssertions.push({
-          name: t.fullName || t.title,
+          name: fullName,
           messages: t.failureMessages ?? [],
         });
       }
     }
   }
-  return { executed, passed, failed, suiteError: null, failedAssertions };
+  return { executed, passed, failed, suiteError: null, failedAssertions, ranTests };
+}
+
+function normalizeVitestFullName(name) {
+  return String(name)
+    .replace(/\s*>\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function assertVitestTestSelection(slug, phase, meta, counts) {
+  const ran = counts.ranTests ?? [];
+  if (ran.length !== 1) {
+    throw new Error(
+      `row ${slug}: ${phase} must run exactly 1 test (got ${ran.length})`,
+    );
+  }
+  const expected = meta.testName.replace(/\s*>\s*/g, " > ").trim();
+  const ranName = ran[0].fullName;
+  if (
+    ranName !== expected &&
+    normalizeVitestFullName(ranName) !== normalizeVitestFullName(meta.testName)
+  ) {
+    throw new Error(
+      `row ${slug}: ${phase} ran "${ranName}" but sidecar expects "${expected}"`,
+    );
+  }
 }
 
 async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   const { bin, cwd, config } = resolveVitestProject(wtRoot, meta);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
+  const junitOut = path.join(artifactsDir, `${slug}-${phase}-vitest.xml`);
   const testPattern = vitestTestNamePattern(meta.testName);
   const testFileAbs = path.join(wtRoot, meta.testFile);
   const testFileArg = path.relative(cwd, testFileAbs).replace(/\\/g, "/");
@@ -870,7 +1017,9 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
     "-t",
     testPattern,
     "--reporter=json",
-    `--outputFile=${jsonOut}`,
+    `--outputFile.json=${jsonOut}`,
+    "--reporter=junit",
+    `--outputFile.junit=${junitOut}`,
     "--",
     testFileArg,
   ];
@@ -887,15 +1036,32 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   if (fs.existsSync(jsonOut)) {
     report = JSON.parse(fs.readFileSync(jsonOut, "utf8"));
   }
+  const junitXml = fs.existsSync(junitOut) ? fs.readFileSync(junitOut, "utf8") : "";
   const counts = report
     ? countVitestExecuted(report)
-    : { executed: 0, passed: 0, failed: 0, suiteError: "no JSON report", failedAssertions: [] };
+    : {
+        executed: 0,
+        passed: 0,
+        failed: 0,
+        suiteError: "no JSON report",
+        failedAssertions: [],
+        ranTests: [],
+      };
+  const commandParts = [bin, ...args].map((p) => (p.includes(" ") ? JSON.stringify(p) : p));
   return {
-    command: `${path.relative(wtRoot, bin)} run ${meta.testFile} -t ${JSON.stringify(meta.testName)}`,
+    command: commandParts.join(" "),
     ...result,
     counts,
+    junitXml,
     reportPath: jsonOut,
   };
+}
+
+function pytestSupportsNoCov(python) {
+  const help = spawnSync(python, ["-m", "pytest", "--help"], {
+    encoding: "utf8",
+  });
+  return help.status === 0 && help.stdout.includes("--no-cov");
 }
 
 async function runPytest(
@@ -910,7 +1076,9 @@ async function runPytest(
   const xmlOut = path.join(artifactsDir, `${slug}-${phase}-pytest.xml`);
   const python = venvPython(mainRoot);
   const nodeId = pytestNodeId(meta.testFile, meta.testName);
-  const args = buildPytestArgv(nodeId, xmlOut);
+  const args = buildPytestArgv(nodeId, xmlOut, {
+    includeNoCov: pytestSupportsNoCov(python),
+  });
   const result = await runProcess(python, args, {
     cwd: wtRoot,
     env: { ...pythonEnvForWorktree(wtRoot), FORCE_COLOR: "0" },
@@ -960,7 +1128,7 @@ function runTscCheck(wtRoot) {
   return { ok: r.status === 0, skipped: false, output };
 }
 
-const GIT_APPLY_OPTS = ["--whitespace=error", "-C1"];
+const GIT_APPLY_OPTS = ["--whitespace=error"];
 
 function findPatchArtifactFiles(wtRoot) {
   const found = [];
@@ -994,14 +1162,19 @@ function removePatchArtifactFiles(wtRoot) {
   }
 }
 
-function applyPatch(wtRoot, patchPath) {
-  const check = gitAt(wtRoot, ["apply", "--check", ...GIT_APPLY_OPTS, patchPath]);
+function applyPatch(wtRoot, patchPath, patchText) {
+  const applyInput = patchText ?? fs.readFileSync(patchPath, "utf8");
+  const tmpPatch = path.join(wtRoot, ".revert-proof-apply.patch");
+  fs.writeFileSync(tmpPatch, applyInput, "utf8");
+  const check = gitAt(wtRoot, ["apply", "--check", ...GIT_APPLY_OPTS, tmpPatch]);
   if (check.status !== 0) {
+    fs.unlinkSync(tmpPatch);
     throw new Error(
       `git apply --check failed: ${check.stderr || check.stdout}`,
     );
   }
-  const apply = gitAt(wtRoot, ["apply", ...GIT_APPLY_OPTS, patchPath]);
+  const apply = gitAt(wtRoot, ["apply", ...GIT_APPLY_OPTS, tmpPatch]);
+  fs.unlinkSync(tmpPatch);
   if (apply.status !== 0) {
     removePatchArtifactFiles(wtRoot);
     throw new Error(`git apply failed: ${apply.stderr || apply.stdout}`);
@@ -1042,7 +1215,7 @@ function trimFailureOutput(output, maxLines = 40) {
   return picked.join("\n").trim();
 }
 
-function assertExactlyOneTest(slug, phase, run) {
+function assertExactlyOneTest(slug, phase, run, meta) {
   if (run.timedOut) {
     throw new Error(`row ${slug}: ${phase} timed out`);
   }
@@ -1052,7 +1225,9 @@ function assertExactlyOneTest(slug, phase, run) {
       `row ${slug}: ${phase} ran 0 tests (selection/filter error; never a pass)`,
     );
   }
-  if (executed !== 1) {
+  if (run.junitXml !== undefined && meta?.runner === "vitest") {
+    assertVitestTestSelection(slug, phase, meta, run.counts);
+  } else if (executed !== 1) {
     throw new Error(
       `row ${slug}: ${phase} must run exactly 1 test (got ${executed})`,
     );
@@ -1077,10 +1252,9 @@ export function rejectPatchedVitestGreen(kind, slug) {
 }
 
 async function runRow(mainRoot, wtRoot, row, artifactsDir) {
-  const { slug, patchPath, meta } = row;
+  const { slug, patchPath, patchText, meta } = row;
   validateMeta(meta, slug);
   validateTestFileRel(meta.testFile, wtRoot);
-  const patchText = fs.readFileSync(patchPath, "utf8");
   validatePatchStructure(patchText, slug);
   validatePatchTouchesOnlyProduction(patchText, slug);
   validatePatchProductionReachable(patchText, slug, wtRoot);
@@ -1110,7 +1284,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
     throw new Error(`row ${slug}: baseline timed out`);
   }
   try {
-    assertExactlyOneTest(slug, "baseline", baseline);
+    assertExactlyOneTest(slug, "baseline", baseline, meta);
   } catch (err) {
     const snippet = trimFailureOutput(baseline.output || "");
     const base = err instanceof Error ? err.message : String(err);
@@ -1133,7 +1307,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   }
 
   try {
-    applyPatch(wtRoot, patchPath);
+    applyPatch(wtRoot, patchPath, patchText);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`row ${slug}: ${msg}`);
@@ -1175,10 +1349,13 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       `row ${slug}: patch breaks build (proves nothing)`,
     );
   }
-  assertExactlyOneTest(slug, "patched", patched);
+  assertExactlyOneTest(slug, "patched", patched, meta);
 
   if (meta.runner === "vitest") {
-    const kind = classifyPatchedVitest({ counts: patched.counts });
+    const kind = classifyPatchedVitest({
+      counts: patched.counts,
+      junitXml: patched.junitXml,
+    });
     rejectPatchedVitestGreen(kind, slug);
     if (kind === "build break" || kind === "not single assertion failure") {
       throw new Error(
@@ -1307,18 +1484,27 @@ async function mainAsync() {
     `revert-proof-wt-${path.basename(mainRoot)}-${process.pid}`,
   );
   const artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), "revert-proof-artifacts-"));
+  activeArtifactsDir = artifactsDir;
 
   const results = [];
   const errors = [];
 
   globalCleanup = () => {
+    if (activeTestChild?.pid) {
+      killProcessGroup(activeTestChild);
+      activeTestChild = null;
+    }
     removeWorktree(mainRoot, wtPath);
     gitAt(mainRoot, ["worktree", "prune"]);
+    if (activeArtifactsDir && fs.existsSync(activeArtifactsDir)) {
+      fs.rmSync(activeArtifactsDir, { recursive: true, force: true });
+      activeArtifactsDir = null;
+    }
   };
 
   try {
     addDetachedWorktree(mainRoot, wtPath, head);
-    ensureJsDepsInWorktree(wtPath, rows);
+    ensureJsDepsInWorktree(mainRoot, wtPath, rows);
 
     for (const row of rows) {
       try {
@@ -1337,7 +1523,6 @@ async function mainAsync() {
   } finally {
     globalCleanup();
     globalCleanup = null;
-    fs.rmSync(artifactsDir, { recursive: true, force: true });
     try {
       assertCheckoutUnchanged(mainRoot, before, prNumber);
     } catch (err) {

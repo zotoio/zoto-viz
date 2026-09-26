@@ -38,6 +38,33 @@ function hostPython(): string {
   return r.stdout.trim() || "python3";
 }
 
+function fixturePython(root: string): string {
+  const py = path.join(root, ".venv", "bin", "python3");
+  if (fs.existsSync(py)) return py;
+  return hostPython();
+}
+
+function ensureFixtureVenv(root: string) {
+  const venvDir = path.join(root, ".venv");
+  if (!fs.existsSync(path.join(venvDir, "bin", "python3"))) {
+    const create = spawnSync("python3", ["-m", "venv", venvDir], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    if (create.status !== 0) {
+      throw new Error(`fixture venv failed: ${create.stderr || create.stdout}`);
+    }
+  }
+  const py = path.join(venvDir, "bin", "python3");
+  const pipPytest = spawnSync(py, ["-m", "pip", "install", "pytest"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (pipPytest.status !== 0) {
+    throw new Error(`fixture pip pytest failed: ${pipPytest.stderr || pipPytest.stdout}`);
+  }
+}
+
 function runPnpmInstall(root: string) {
   const r = spawnSync("pnpm", ["install"], {
     cwd: root,
@@ -92,7 +119,7 @@ function runRevertProof(cwd: string, prNumber: string, extraArgs: string[] = [])
       ...process.env,
       FORCE_COLOR: "0",
       REVERT_PROOF_SKIP_PNPM_INSTALL: "1",
-      REVERT_PROOF_PYTHON: hostPython(),
+      REVERT_PROOF_PYTHON: fixturePython(cwd),
     },
   });
 }
@@ -126,7 +153,13 @@ function writeFixtureRepo(root: string) {
   );
   fs.writeFileSync(
     path.join(root, "packages", "rp-widget", "index.js"),
-    `export function value() { return 1; }\n`,
+    `export function value() { return 1; }
+export const ctxLine2 = 0;
+export const ctxLine3 = 0;
+export const ctxLine4 = 0;
+export const ctxLine5 = 0;
+export const ctxLine6 = 0;
+`,
   );
   fs.writeFileSync(
     path.join(root, "web", "package.json"),
@@ -220,6 +253,11 @@ export function readWidget() {
       {
         scanRoots: ["web/src", "packages", "service", "rpfixture"],
         entryPoints: ["web/src/app/main.ts", "service/monitor.py"],
+        reachExempt: [
+          "scripts/revert-proof.mjs",
+          "scripts/revert-proof-lib.mjs",
+          "rpfixture/core.py",
+        ],
       },
       null,
       2,
@@ -245,12 +283,13 @@ describe("widget", () => {
 
   fs.mkdirSync(path.join(root, "service"), { recursive: true });
   fs.writeFileSync(path.join(root, "service", "__init__.py"), "");
+  fs.writeFileSync(path.join(root, "service", "live.py"), "SERVICE_LIVE = 1\n");
   fs.writeFileSync(
     path.join(root, "service", "monitor.py"),
-    `from rpfixture.core import answer
+    `from . import live
 
 def main():
-    return answer
+    return live.SERVICE_LIVE
 `,
   );
   fs.mkdirSync(path.join(root, "rpfixture"), { recursive: true });
@@ -313,8 +352,8 @@ where = ["."]
   );
 
   runPnpmInstall(root);
-  linkHostVenv(root);
-  const py = hostPython();
+  ensureFixtureVenv(root);
+  const py = path.join(root, ".venv", "bin", "python3");
   const pipEditable = spawnSync(py, ["-m", "pip", "install", "-e", ".", "--no-deps"], {
     cwd: root,
     encoding: "utf8",
@@ -348,16 +387,18 @@ function commitRevertProofs(root: string) {
 
 const goodPatch = `--- a/packages/rp-widget/index.js
 +++ b/packages/rp-widget/index.js
-@@ -1 +1 @@
+@@ -1,2 +1,2 @@
 -export function value() { return 1; }
 +export function value() { return 2; }
+ export const ctxLine2 = 0;
 `;
 
 const noopPatch = `--- a/packages/rp-widget/index.js
 +++ b/packages/rp-widget/index.js
-@@ -1 +1 @@
+@@ -1,2 +1,2 @@
 -export function value() { return 1; }
 +export function value() { return 1; }
+ export const ctxLine2 = 0;
 `;
 
 const testTouchPatch = `--- a/web/revert-proof/widget.test.ts
@@ -373,9 +414,10 @@ const testTouchPatch = `--- a/web/revert-proof/widget.test.ts
 
 const syntaxBreakPatch = `--- a/packages/rp-widget/index.js
 +++ b/packages/rp-widget/index.js
-@@ -1 +1 @@
+@@ -1,2 +1,2 @@
 -export function value() { return 1; }
 +export function value() { return 1
+ export const ctxLine2 = 0;
 `;
 
 const pyGoodPatch = `--- a/rpfixture/core.py
@@ -532,6 +574,21 @@ describe("widget", () => {
     expect(r.stderr + r.stdout).toMatch(/row stays-green/);
     assertNoRevertProofWorktrees(root);
     assertCheckoutUnchanged(root, before);
+  });
+
+  it("(c3) patch with wrong outer context is rejected by git apply --check", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "wrong-outer-ctx", wrongOuterContextPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "widget > returns one",
+      description: "Hunk context mismatch",
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "wrong-outer-ctx"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).toMatch(/row wrong-outer-ctx.*git apply --check failed/i);
+    assertNoRevertProofWorktrees(root);
   });
 
   it("(c2) patch that does not apply cleanly fails the row", () => {
@@ -694,27 +751,130 @@ describe("hang", () => {
     assertCheckoutUnchanged(root, before);
   });
 
-  it("(vitest-not-assert) TypeError message is classified as build break", async () => {
+  it("(vitest-rangeerror) RangeError junit failure is not assertion red", async () => {
     const lib = await import("./revert-proof-lib.mjs");
+    const junit = `<?xml version="1.0"?><testsuites><testcase name="t"><failure type="RangeError">Expected 1 to be 2</failure></testcase></testsuites>`;
     const kind = lib.classifyPatchedVitest({
       counts: {
         executed: 1,
         passed: 0,
         failed: 1,
         suiteError: null,
-        failedAssertions: [{ messages: ["TypeError: Cannot read properties of null"] }],
+        failedAssertions: [{ messages: ["RangeError: Expected 1 to be 2"] }],
+        ranTests: [{ fullName: "d > t", status: "failed" }],
+      },
+      junitXml: junit,
+    });
+    expect(kind).toBe("build break");
+  });
+
+  it("(pytest-traceback-assert) assert line in traceback is not assertion red", async () => {
+    const lib = await import("./revert-proof-lib.mjs");
+    const body = `<failure message="TypeError: boom">tests/test_live.py:75: in foo
+    assert False
+TypeError: boom</failure>`;
+    expect(lib.isPytestAssertionBody(body)).toBe(false);
+    const kind = lib.classifyPatchedPytest({
+      counts: {
+        collectionError: false,
+        cases: [{ name: "t", outcome: "failed", body }],
       },
     });
     expect(kind).toBe("build break");
+  });
+
+  it("(phantom-leaf) sidecar full name must match junit selection", () => {
+    const root = mkFixture();
+    fs.writeFileSync(
+      path.join(root, "web", "revert-proof", "widget.test.ts"),
+      `import { describe, expect, it } from "vitest";
+import { value } from "../../packages/rp-widget/index.js";
+describe("widget", () => {
+  it("same leaf", () => expect(value()).toBe(1);
+});
+describe("other", () => {
+  it("same leaf", () => expect(value()).toBe(1);
+});
+`,
+    );
+    runGit(root, ["add", "web/revert-proof/widget.test.ts"]);
+    runGit(root, ["commit", "-m", "duplicate leaf titles"]);
+    writeRow(root, "99", "phantom-leaf", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "widget > missing test",
+      description: "Nonexistent full name",
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "phantom-leaf"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).toMatch(/row phantom-leaf.*ran 0 tests|exactly 1 test/i);
+    assertNoRevertProofWorktrees(root);
+  });
+
+  it("(service-reach) relative import service module is production-reachable", () => {
+    const root = mkFixture();
+    fs.writeFileSync(
+      path.join(root, "tests", "test_service_live.py"),
+      `from service import live
+
+def test_service_live_value():
+    assert live.SERVICE_LIVE == 1
+`,
+    );
+    runGit(root, ["add", "tests/test_service_live.py"]);
+    runGit(root, ["commit", "-m", "service live pytest"]);
+    const livePatch = `--- a/service/live.py
++++ b/service/live.py
+@@ -1 +1 @@
+-SERVICE_LIVE = 1
++SERVICE_LIVE = 2
+`;
+    writeRow(root, "99", "service-live", livePatch, {
+      runner: "pytest",
+      testFile: "tests/test_service_live.py",
+      testName: "test_service_live_value",
+      pythonModule: "service",
+      description: "Revert service/live via monitor relative import",
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "service-live"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    assertNoRevertProofWorktrees(root);
+  });
+
+  it("(reach-exempt-first) reachExempt from config applies before first touched file", () => {
+    const root = mkFixture();
+    const exemptPatch = `--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -1,4 +1,4 @@
+ /** Shared pure helpers for revert-proof (imported by runner + tests). */
+ import fs from "node:fs";
+ import path from "node:path";
+-
++// reach-exempt dogfood touch
+`;
+    writeRow(root, "99", "reach-exempt-touch", exemptPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "widget > returns one",
+      description: "Touch reach-exempt lib (noop comment)",
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "reach-exempt-touch"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).not.toMatch(/unreachable from production.*revert-proof-lib/);
   });
 
   it("(vitest-typeerror) TypeError patched run is rejected as build break", () => {
     const root = mkFixture();
     const typeErrorPatch = `--- a/packages/rp-widget/index.js
 +++ b/packages/rp-widget/index.js
-@@ -1 +1 @@
+@@ -1,2 +1,2 @@
 -export function value() { return 1; }
 +export function value() { throw new TypeError("boom"); }
+ export const ctxLine2 = 0;
 `;
     writeRow(root, "99", "type-error", typeErrorPatch, {
       runner: "vitest",
@@ -759,6 +919,10 @@ describe("hang", () => {
     commitRevertProofs(root);
     const before = snapshotCheckout(root);
 
+    const artifactsBefore = fs
+      .readdirSync(os.tmpdir())
+      .filter((n) => n.startsWith("revert-proof-artifacts-"));
+
     await new Promise<void>((resolve, reject) => {
       const child = spawn(process.execPath, [scriptPath, "99", "--row", "sigint-row"], {
         cwd: root,
@@ -766,7 +930,7 @@ describe("hang", () => {
           ...process.env,
           FORCE_COLOR: "0",
           REVERT_PROOF_SKIP_PNPM_INSTALL: "1",
-          REVERT_PROOF_PYTHON: hostPython(),
+          REVERT_PROOF_PYTHON: fixturePython(root),
         },
       });
       const timer = setTimeout(() => {
@@ -779,6 +943,14 @@ describe("hang", () => {
       child.on("error", reject);
     });
 
+    await new Promise((r) => setTimeout(r, 500));
+    const wtMarker = `revert-proof-wt-${path.basename(root)}`;
+    const vitestLeft = spawnSync("pgrep", ["-f", wtMarker], { encoding: "utf8" });
+    expect(vitestLeft.stdout.trim()).toBe("");
+    const artifactsAfter = fs
+      .readdirSync(os.tmpdir())
+      .filter((n) => n.startsWith("revert-proof-artifacts-"));
+    expect(artifactsAfter.length).toBe(artifactsBefore.length);
     const wtList = runGit(root, ["worktree", "list"]);
     expect(wtList.includes("revert-proof-wt")).toBe(false);
     assertCheckoutUnchanged(root, before);
@@ -826,11 +998,23 @@ const badContextPatch = `--- a/packages/rp-widget/index.js
 +export function value() { return 2; }
 `;
 
+const wrongOuterContextPatch = `--- a/packages/rp-widget/index.js
++++ b/packages/rp-widget/index.js
+@@ -1,6 +1,6 @@
+-export function value() { return 1; }
++export function value() { return 2; }
+-export const ctxLine2 = 99;
+-export const ctxLine3 = 99;
+-export const ctxLine4 = 99;
+-export const ctxLine5 = 99;
+ export const ctxLine6 = 0;
+`;
+
 describe("vitest testName escaping", () => {
   it("escapes and anchors fullTestName for -t", async () => {
     const mod = await import("./revert-proof.mjs");
     expect(mod.vitestTestNamePattern("widget > talkers[].failed")).toBe(
-      "talkers\\[\\]\\.failed",
+      "^widget > talkers\\[\\]\\.failed$",
     );
     expect(mod.escapeVitestTestNamePattern("a(b)*+?")).toBe("a\\(b\\)\\*\\+\\?");
   });

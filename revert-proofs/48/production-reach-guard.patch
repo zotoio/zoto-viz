@@ -1,11 +1,12 @@
 diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index ec4c675..3d9d884 100644
+index 4aa041f..11c9f7c 100755
 --- a/scripts/revert-proof.mjs
 +++ b/scripts/revert-proof.mjs
-@@ -482,20 +482,10 @@ export function isRevertTargetReachableFromProduction(wtRoot, relFile) {
+@@ -555,21 +555,10 @@ export function isRevertTargetReachableFromProduction(wtRoot, relFile) {
  }
  
  export function validatePatchProductionReachable(patchText, slug, wtRoot) {
+-  loadProductionConfig(wtRoot);
 -  for (const touched of pathsTouchedByPatch(patchText)) {
 -    const file = normRel(touched);
 -    if (isExcludedProductionTestPath(file)) {

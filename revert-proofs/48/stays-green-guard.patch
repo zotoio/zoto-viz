@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index ec4c675..6d94f69 100644
+index 4aa041f..472d4c9 100755
 --- a/scripts/revert-proof.mjs
 +++ b/scripts/revert-proof.mjs
-@@ -1069,11 +1069,9 @@ function metaRunnerCount(run) {
+@@ -1244,11 +1244,9 @@ function metaRunnerCount(run) {
  }
  
  export function rejectPatchedVitestGreen(kind, slug) {

@@ -3,7 +3,10 @@
   "entryPoints": [
     "web/index.html",
     "web/src/app/main.ts",
-    "service/monitor.py"
+    "web/src/camera/cam.worker.ts",
+    "web/src/camera/sampler.ts",
+    "service/monitor.py",
+    ".github/workflows/ci.yml"
   ],
   "packEntryGlob": "plugins/src/*/frontend/index.ts",
   "reachExempt": ["scripts/revert-proof.mjs"]
