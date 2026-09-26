@@ -12,7 +12,7 @@ from service.request_guard import HOST_REJECT_BODY
 from tests.monitor_app_test_util import make_app_server
 
 
-def _run(headers_for_port: Callable[[int], dict[str, str]], status: int, body_has: str | None = None) -> None:
+def _run(headers_for_port: Callable[[int], dict[str, str]], status: int, body: str | None = None) -> None:
     async def run() -> None:
         async with make_app_server() as (ip, port, runner):
             headers = headers_for_port(port)
@@ -22,14 +22,14 @@ def _run(headers_for_port: Callable[[int], dict[str, str]], status: int, body_ha
                     headers=headers,
                 ) as resp:
                     assert resp.status == status
-                    if body_has:
-                        assert body_has in await resp.text()
+                    if body is not None:
+                        assert await resp.text() == body
 
     asyncio.run(run())
 
 
 @pytest.mark.parametrize(
-    ("headers_for_port", "status", "body_has"),
+    ("headers_for_port", "status", "body"),
     [
         (lambda p: {"Host": f"LOCALHOST:{p}"}, 200, None),
         (lambda p: {"Host": f"localhost.:{p}"}, 400, HOST_REJECT_BODY),
@@ -57,9 +57,9 @@ def _run(headers_for_port: Callable[[int], dict[str, str]], status: int, body_ha
 def test_host_normalisation_table(
     headers_for_port: Callable[[int], dict[str, str]],
     status: int,
-    body_has: str | None,
+    body: str | None,
 ) -> None:
-    _run(headers_for_port, status, body_has)
+    _run(headers_for_port, status, body)
 
 
 def test_implicit_port_80_when_bound_port_is_80() -> None:

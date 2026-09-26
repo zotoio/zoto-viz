@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testId": "tests/test_request_guard_policy.py::test_rebinding_host_400_exact_body_no_echo",
-  "red": "assert 200 == 400",
+  "red": "AssertionError: assert 200 == 400",
   "description": "Host allowlist must reject evil.example (revert accepts every Host).",
   "timeoutSec": 60
 }

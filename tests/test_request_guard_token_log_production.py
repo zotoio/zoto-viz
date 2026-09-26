@@ -62,5 +62,6 @@ def test_production_logs_token_zero_times_after_forced_mutate_failure() -> None:
 
             joined = "\n".join(app_lines + access_lines) + "\n" + stderr_buf.getvalue()
             assert joined.count(tok) == 0
+            assert tok not in access.redact_request_path(path, tok)
 
     asyncio.run(run())

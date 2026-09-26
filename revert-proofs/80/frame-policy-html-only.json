@@ -2,5 +2,6 @@
   "runner": "pytest",
   "testId": "tests/test_request_guard_policy.py::test_frame_embed_policy_on_responses[/api/session]",
   "description": "Frame-ancestors must be on every response; revert only sets them on HTML.",
-  "timeoutSec": 120
+  "timeoutSec": 120,
+  "red": "AssertionError: assert None == 'SAMEORIGIN'"
 }
