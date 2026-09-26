@@ -18,6 +18,7 @@ import { probeWebGL } from "./webgl";
 const dprMedia = vi.hoisted(() => {
   let dpr = 1;
   let onChange: (() => void) | null = null;
+  let armed = true;
   return {
     get dpr() {
       return dpr;
@@ -25,25 +26,31 @@ const dprMedia = vi.hoisted(() => {
     set dpr(n: number) {
       dpr = n;
     },
-    matchMedia: vi.fn((_query: string) => ({
-      matches: false,
-      media: _query,
-      addEventListener: (_type: string, fn: () => void) => {
-        onChange = fn;
-      },
-      removeEventListener: (_type: string, fn: () => void) => {
-        if (onChange === fn) onChange = null;
-      },
-      dispatchEvent: () => false,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-    })),
+    matchMedia: vi.fn((_query: string) => {
+      armed = true;
+      return {
+        matches: false,
+        media: _query,
+        addEventListener: (_type: string, fn: () => void) => {
+          onChange = fn;
+        },
+        removeEventListener: (_type: string, fn: () => void) => {
+          if (onChange === fn) onChange = null;
+        },
+        dispatchEvent: () => false,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+      };
+    }),
     fireChange() {
+      if (!armed) return;
+      armed = false;
       onChange?.();
     },
     resetHandlers() {
       onChange = null;
+      armed = true;
     },
   };
 });
@@ -217,6 +224,7 @@ function mountThreeSurfaceFixture(initialDpr: number): Fixture {
 
   stageFit();
   feedDraw();
+  dprMedia.matchMedia("(resolution: 1dppx)");
   layoutDevicePxRatioStats.reset();
   hostSetSizeLog.calls = 0;
   stageResizeCalls = 0;
