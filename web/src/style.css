@@ -351,6 +351,16 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
 .mosaic-split[data-dir="v"] > .mosaic-handle { cursor: row-resize; }
 .mosaic-split[data-dir="v"] > .mosaic-handle::before { inset: -4px 0; }
 .mosaic-pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--scene-bg, var(--bg)); }
+.mosaic-pane-reconnecting { opacity: 0.55; }
+.mosaic-pane-notice {
+  position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0.75rem; padding: 1rem;
+  text-align: center; pointer-events: auto; background: rgba(0,0,0,0.45);
+}
+.mosaic-pane-notice-retry {
+  font: inherit; cursor: pointer; padding: 0.35rem 0.9rem;
+  border: 1px solid var(--accent); background: var(--bg); color: var(--fg);
+}
 .mosaic-pane.warming {
   background:
     radial-gradient(120% 90% at 50% 18%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 58%),
