@@ -8,6 +8,7 @@ import {
   pushRcsUndo,
   randomizeRcsOptions,
   RCS_DEFAULTS,
+  rcsOptionsToConfigRecord,
   rcsUndoStackDepthForTest as packUndoDepth,
   themeBgAccent,
   type RcsOptions,
@@ -25,9 +26,20 @@ declare const zoto: {
 };
 
 let opts: RcsOptions = parseRcsOptions({});
-let lastDice = "none";
+let mergedCfg: Record<string, string> = {};
+let lastHostSnapshot: Record<string, string> = {};
 let lastCfgRef: Record<string, string> | undefined;
 let mounted = false;
+
+function mergeHostDelta(cfg: Record<string, string>): void {
+  for (const key of Object.keys(cfg)) {
+    const v = cfg[key] ?? "";
+    if (key === "dice" || lastHostSnapshot[key] !== v) {
+      mergedCfg[key] = v;
+    }
+  }
+  lastHostSnapshot = { ...cfg };
+}
 
 function ensureMounted(): void {
   if (!mounted) {
@@ -37,41 +49,25 @@ function ensureMounted(): void {
 }
 
 function applyConfig(cfg: Record<string, string>): void {
-  const local = { ...cfg };
-  const dice = local.dice ?? "none";
-  if (dice !== lastDice) {
-    if (dice === "randomise") {
-      pushRcsUndo(opts);
-      const rnd = randomizeRcsOptions((opts.seed ^ 0x5a5a) >>> 0, opts);
-      Object.assign(local, {
-        teamSize: String(rnd.teamSize),
-        theme: rnd.theme,
-        camera: rnd.camera,
-        aggress: String(rnd.aggress),
-        gameSpeed: String(rnd.gameSpeed),
-        minCutSec: String(rnd.minCutSec),
-        particles: String(rnd.particles),
-        ballSize: String(rnd.ballSize),
-        trail: rnd.trail,
-        explode: rnd.explode,
-        replay: rnd.replay ? "true" : "false",
-        dice: "none",
-      });
-    } else if (dice === "undo") {
-      const prev = popRcsUndo();
-      if (prev) {
-        for (const [k, v] of Object.entries(prev)) local[k] = String(v);
-        local.dice = "none";
-      }
-    } else if (dice === "reset") {
-      clearRcsUndo();
-      for (const [k, v] of Object.entries(RCS_DEFAULTS)) local[k] = String(v);
-      local.preset = "broadcast";
-      local.dice = "none";
+  mergeHostDelta(cfg);
+  const actionDice = mergedCfg.dice ?? "none";
+  if (actionDice === "randomise") {
+    pushRcsUndo(opts);
+    const rnd = randomizeRcsOptions((opts.seed ^ 0x5a5a) >>> 0, opts);
+    Object.assign(mergedCfg, rcsOptionsToConfigRecord(rnd));
+    mergedCfg.dice = "none";
+  } else if (actionDice === "undo") {
+    const prev = popRcsUndo();
+    if (prev) {
+      Object.assign(mergedCfg, rcsOptionsToConfigRecord(prev));
+      mergedCfg.dice = "none";
     }
-    lastDice = dice;
+  } else if (actionDice === "reset") {
+    clearRcsUndo();
+    Object.assign(mergedCfg, rcsOptionsToConfigRecord({ ...RCS_DEFAULTS, preset: "broadcast" }));
+    mergedCfg.dice = "none";
   }
-  opts = setRcsOptions(local);
+  opts = setRcsOptions(mergedCfg);
   const theme = themeBgAccent(opts.theme);
   const orange = hexToRgb(opts.teamOrange);
   const blue = hexToRgb(opts.teamBlue);
@@ -106,13 +102,8 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(0, out.slot0);
   zoto.writeBuffer(1, out.slot1);
   zoto.writeBuffer(2, out.slot2);
-  const particleFloats = out.budget.particles * 4;
-  if (particleFloats > 0) {
-    const buf = out.particles;
-    const cap = buf.length;
-    buf.length = particleFloats;
-    zoto.writeParticles(buf, 4);
-    buf.length = cap;
+  if (out.budget.particles > 0) {
+    zoto.writeParticles(out.particles, 4);
   }
   zoto.writeUniform("uAudio", frame.audio);
 };
@@ -140,7 +131,9 @@ export function rcsFrontendOptionsForTest(): RcsOptions {
 }
 
 export function rcsTestResetDriverStateForTest(): void {
-  lastDice = "none";
+  mergedCfg = {};
+  lastHostSnapshot = {};
+  lastCfgRef = undefined;
   clearRcsUndo();
 }
 

@@ -381,6 +381,29 @@ export function clearRcsUndo(): void {
   undoStack = [];
 }
 
+export function rcsOptionsToConfigRecord(o: RcsOptions): Record<string, string> {
+  return {
+    preset: o.preset,
+    seed: String(o.seed),
+    dice: "none",
+    teamSize: String(o.teamSize),
+    teamOrange: o.teamOrange,
+    teamBlue: o.teamBlue,
+    theme: o.theme,
+    aggress: String(o.aggress),
+    gameSpeed: String(o.gameSpeed),
+    trail: o.trail,
+    camera: o.camera,
+    minCutSec: String(o.minCutSec),
+    explode: o.explode,
+    replay: o.replay ? "true" : "false",
+    matchSec: String(o.matchSec),
+    ballSize: String(o.ballSize),
+    particles: String(o.particles),
+    reducedMotion: o.reducedMotion ? "true" : "false",
+  };
+}
+
 export function rcsUndoStackDepthForTest(): number {
   return undoStack.length;
 }

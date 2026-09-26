@@ -107,6 +107,7 @@ const tickSlot1 = new Array<number>(RCS_SLOT1_FLOATS).fill(0);
 const tickSlot2 = new Array<number>(RCS_SLOT2_FLOATS).fill(0);
 const tickParticles = new Array<number>(RCS_CAPS.maxParticles * 4).fill(0);
 const tickTrails = new Array<number>(RCS_CAPS.maxTrailSegments * 4).fill(0);
+let lastParticlePackW = 0;
 
 let mountCount = 0;
 let gpuPrograms = 0;
@@ -763,15 +764,18 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
     slot1[o + 8] = c.onGround ? 1 : 0;
   }
 
-  particlePool.packInto(tickParticles, 4);
+  const particleW = particlePool.packInto(tickParticles, 4);
+  if (particleW < lastParticlePackW) {
+    tickParticles.fill(0, particleW, lastParticlePackW);
+  }
+  lastParticlePackW = particleW;
   for (let i = 0; i < 16; i++) {
     const b = i * 4;
-    slot2[b] = tickParticles[b] ?? 0;
-    slot2[b + 1] = tickParticles[b + 1] ?? 0;
-    slot2[b + 2] = tickParticles[b + 2] ?? 0;
-    slot2[b + 3] = tickParticles[b + 3] ?? 0;
+    slot2[b] = tickParticles[b]!;
+    slot2[b + 1] = tickParticles[b + 1]!;
+    slot2[b + 2] = tickParticles[b + 2]!;
+    slot2[b + 3] = tickParticles[b + 3]!;
   }
-  trailPool.packInto(tickTrails, 4);
 
   const budget: RcsWorkBudget = {
     drawCalls: 8 + Math.ceil(particlePool.activeCount() / 16),
@@ -959,6 +963,10 @@ export function rcsTickSlotBuffersForTest(): {
   slot2: number[];
 } {
   return { slot0: tickSlot0, slot1: tickSlot1, slot2: tickSlot2 };
+}
+
+export function rcsTickParticlesBufferForTest(): number[] {
+  return tickParticles;
 }
 
 export function rcsScoreNow(): [number, number] {

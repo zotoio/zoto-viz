@@ -52,6 +52,7 @@ import {
   rcsScoreNow,
   rcsTestPlaceBallForGoal,
   rcsTick,
+  rcsTickParticlesBufferForTest,
   rcsTickSlotBuffersForTest,
   rcsTriggerMaxGoalExplosion,
   rcsUnmount,
@@ -494,6 +495,20 @@ describe("rocket-car-soccer pack", () => {
     expect(FRONT).not.toMatch(/JSON\.stringify\(cfg\)/);
   });
 
+  it("keeps a dense fixed-length particle buffer over 300 varying-count frames", () => {
+    resetRcsSim(1);
+    const buf = rcsTickParticlesBufferForTest();
+    const cap = RCS_CAPS.maxParticles * 4;
+    for (let i = 0; i < 300; i++) {
+      if (i % 17 === 0) rcsTriggerMaxGoalExplosion();
+      rcsTick(vizFrame({ demo: i % 5 === 0 }), i / 60, 1 / 60, 1.777);
+      expect(buf.length).toBe(cap);
+      for (let j = 0; j < cap; j++) {
+        expect(j in buf).toBe(true);
+      }
+    }
+  });
+
   it("reuses tick slot buffer instances across 300 frames", () => {
     resetRcsSim(1);
     const a = rcsTickSlotBuffersForTest();
@@ -737,13 +752,87 @@ describe("rocket-car-soccer pack", () => {
     };
     const mod = await import("./index");
     mod.rcsTestResetDriverStateForTest();
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg });
     const before = { ...mod.rcsFrontendOptionsForTest() };
     mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
     expect(mod.rcsFrontendUndoDepthForTest()).toBe(1);
     mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
     expect(mod.rcsFrontendUndoDepthForTest()).toBe(0);
-    expect(mod.rcsFrontendOptionsForTest().teamSize).toBe(before.teamSize);
-    expect(mod.rcsFrontendOptionsForTest().camera).toBe(before.camera);
-    expect(mod.rcsFrontendOptionsForTest().aggress).toBe(before.aggress);
+    expect(mod.rcsFrontendOptionsForTest()).toEqual(before);
+  });
+
+  it("records three undo steps for three randomise clicks and walks back two undos", async () => {
+    vi.resetModules();
+    const hostCfg = hostFormDefaults();
+    const g = globalThis as unknown as {
+      zoto: {
+        onFrame: ((frame: VizDataFrame) => void) | null;
+        onConfig: ((cfg: Record<string, string>) => void) | null;
+        getConfig?: () => Record<string, string>;
+        writeBuffer: (slot: number, data: number[]) => void;
+        writeUniform: (name: string, value: number | [number, number, number]) => void;
+        writeParticles: (data: number[], stride?: number) => void;
+      };
+    };
+    g.zoto = {
+      onFrame: null,
+      onConfig: null,
+      getConfig: () => hostCfg,
+      writeBuffer: () => {},
+      writeUniform: () => {},
+      writeParticles: () => {},
+    };
+    const mod = await import("./index");
+    mod.rcsTestResetDriverStateForTest();
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg });
+    const snap0 = { ...mod.rcsFrontendOptionsForTest() };
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
+    const snap1 = { ...mod.rcsFrontendOptionsForTest() };
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
+    const snap2 = { ...mod.rcsFrontendOptionsForTest() };
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
+    expect(mod.rcsFrontendUndoDepthForTest()).toBe(3);
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
+    expect(mod.rcsFrontendOptionsForTest()).toEqual(snap2);
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
+    expect(mod.rcsFrontendOptionsForTest()).toEqual(snap1);
+    expect(mod.rcsFrontendUndoDepthForTest()).toBe(1);
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
+    expect(mod.rcsFrontendOptionsForTest()).toEqual(snap0);
+  });
+
+  it("keeps randomised look when host later changes an unrelated slider field", async () => {
+    vi.resetModules();
+    const hostCfg = hostFormDefaults();
+    const g = globalThis as unknown as {
+      zoto: {
+        onFrame: ((frame: VizDataFrame) => void) | null;
+        onConfig: ((cfg: Record<string, string>) => void) | null;
+        getConfig?: () => Record<string, string>;
+        writeBuffer: (slot: number, data: number[]) => void;
+        writeUniform: (name: string, value: number | [number, number, number]) => void;
+        writeParticles: (data: number[], stride?: number) => void;
+      };
+    };
+    g.zoto = {
+      onFrame: null,
+      onConfig: null,
+      getConfig: () => hostCfg,
+      writeBuffer: () => {},
+      writeUniform: () => {},
+      writeParticles: () => {},
+    };
+    const mod = await import("./index");
+    mod.rcsTestResetDriverStateForTest();
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg });
+    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
+    const afterRand = { ...mod.rcsFrontendOptionsForTest() };
+    hostCfg.aggress = "22";
+    g.zoto.onFrame!(vizFrame());
+    expect(mod.rcsFrontendOptionsForTest().aggress).toBe(22);
+    expect(mod.rcsFrontendOptionsForTest().theme).toBe(afterRand.theme);
+    expect(mod.rcsFrontendOptionsForTest().camera).toBe(afterRand.camera);
+    expect(mod.rcsFrontendOptionsForTest().trail).toBe(afterRand.trail);
+    expect(mod.rcsFrontendOptionsForTest().gameSpeed).toBe(afterRand.gameSpeed);
   });
 });
