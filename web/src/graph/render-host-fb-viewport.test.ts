@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { probeLines } from "./pane-change";
+import type { GlRect } from "./pack-mirror-rect";
 import { RenderHost, type HostedView } from "./render-host";
 
 const { WebGLRendererMock } = vi.hoisted(() => {
@@ -38,8 +39,8 @@ vi.mock("three", async (importOriginal) => {
   return { ...orig, WebGLRenderer: WebGLRendererMock as unknown as typeof orig.WebGLRenderer };
 });
 
-/** Bottom-left css pane {x:1,y:58,w:101,h:61} at pr 1.5 (wall 120px, device H 180). */
-export const EXPECTED_FB_VIEWPORT = { x: 2, y: 87, w: 151, h: 92 };
+/** Bottom-left css pane {x:1,y:58,w:101,h:61} at pr 1.5 (wall 120px, device H 180) as `GlRect`. */
+export const EXPECTED_FB_VIEWPORT = { x: 2, y: 87, w: 151, h: 91, __unit: "gl" as const };
 
 describe("RenderHost framebuffer viewport H=241", () => {
   it("bottom-left pane H=241 pr=1.5: viewport matches Three floor(h*pr) with no double Y flip", () => {
@@ -68,7 +69,7 @@ describe("RenderHost framebuffer viewport H=241", () => {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
     const vp = host.present(bottomView, 0x0a1020, scene, camera);
-    expect(vp).toEqual({ x: 0, y: 0, w: 300, h: 90 });
+    expect(vp).toEqual({ x: 0, y: 0, w: 300, h: 90, __unit: "gl" });
     expect(host.canvas.height).toBe(Math.floor(241 * 1.5));
     host.dispose();
     wall.remove();
@@ -116,7 +117,7 @@ describe("RenderHost framebuffer viewport", () => {
     const vp = host.present(view, 0x0a1020, scene, camera);
     expect(vp).not.toBeNull();
     expect(vp).toEqual(EXPECTED_FB_VIEWPORT);
-    const lines = probeLines(vp!, host.canvas.width, host.canvas.height);
+    const lines = probeLines(vp! as GlRect, host.canvas.width, host.canvas.height);
     expect(lines.length).toBeGreaterThan(0);
     expect(lines[0]!.x).toBe(EXPECTED_FB_VIEWPORT.x);
     expect(lines[0]!.y).toBeGreaterThanOrEqual(EXPECTED_FB_VIEWPORT.y);

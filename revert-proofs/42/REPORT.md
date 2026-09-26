@@ -37,12 +37,34 @@
 
 Readback on **A2**: 12 matrix + 3 zoom + **2** letterbox16x9 rows (`pack-mirror-readback.test.ts`).
 
+## Items 7–8: origin-branded rects (Platform Architect A)
+
+| Check | Evidence |
+|-------|----------|
+| `DeviceRect` top-left; `GlRect` bottom-left only via `toGlRectInto` | `pack-mirror-rect.ts`, `render-host.writeFbViewport`, `pane-change` (`ProbeRect = GlRect`, `CanvasChangeProbe` → `DeviceRect`) |
+| `CanvasDeviceHeight` from `RenderHost` (`canvas.height` on resize) | `render-host.ts` `refreshCanvasDeviceHeight` |
+| `@ts-expect-error` boundary guards | `pack-mirror-rect.boundary.ts` (double flip, GlRect on probe, plain number canvas height) |
+| H=241 bottom row `GlRect` | `render-host-fb-viewport.test.ts` → `{ x: 0, y: 0, w: 300, h: 90, __unit: "gl" }` |
+| Revert row | `render-host-fb-viewport-h241` → `y: -1` (drop canvas-height clamp on host viewBox) |
+
+## Letterbox fill / software bars (Performance Pedant B)
+
+| Check | Evidence |
+|-------|----------|
+| Fill once per `clearHex` (`css` + `hex` + baked `pattern`) | `getSurfaceLetterboxFill` / `scene.ts` `surfaceLetterboxFill()`; GPU uses `fill.hex` in `paintLetterboxBarsThree` |
+| 300 frames same instance, 0 `match`, 1 rebuild on theme change | `letterbox-fill-cache.test.ts` |
+| Software bars: scratch tuple, 0 `Math.random` / hot-path strings | `paintLetterboxBarsInto` + `letterbox-grain-stable.test.ts` |
+| Probe stability (2 identical frames → 0 changes) | `letterbox-grain-stable.test.ts` samples top bar centre in **device** space; grain uses fixed-seed tile — probe rect avoids jitter pixels |
+| Revert rows | `letterbox-fill-cache` (rebuild every call); `letterbox-grain-stable` (per-frame `Math.random` jitter → probe fires ~299/300) |
+
 ## Revert rows (A)
 
 Each patch: `git apply --check` clean (no fuzz) at A head; anchored vitest goes **red**.
 
 | Row | Assertion (patched run) |
 |-----|-------------------------|
+| `letterbox-fill-cache` | `letterboxFillStats.rebuilds` ≫ 1 over 300 frames |
+| `letterbox-grain-stable` | `Math.random` called; probe change on 2nd identical frame |
 | `pack-mirror-letterbox-16x9` | `expected undefined to deeply equal { x: 0, y: 21.875, w: 100, h: 56.25 }` (stretch revert) |
 | `pack-mirror-capture-rounding` | `AssertionError: expected { x: 1, y: 87, w: 152, h: 92 } to deeply equal { x: 2, y: 87, w: 151, h: 92 }` (floor/ceil on `deviceRectBottomLeftCssInto`) |
 | `pack-mirror-tile-edge-shared` | `expected 152 to be 151` (`aOut.x + aOut.w` vs `bOut.x`) |
@@ -51,7 +73,7 @@ Each patch: `git apply --check` clean (no fuzz) at A head; anchored vitest goes 
 | `mosaic-boot-primary-pack` | primary pack id mismatch on 4-pack boot |
 | `mosaic-sandbox-frame` | `expected "spy" to be called 10 times` → **0** (`sandbox.frame` skipped when mosaic demo coalesce) |
 | `render-host-fb-viewport-software` | `expected 270 to be +0` (`lastVp.y` on software tile0 — GL flip regression) |
-| `render-host-fb-viewport-h241` | bottom row viewport not `{ x: 0, y: 0, w: 300, h: 90 }` (double Y flip → `y: -1`) |
+| `render-host-fb-viewport-h241` | bottom row `GlRect` `y: -1` instead of `{ x: 0, y: 0, w: 300, h: 90, __unit: "gl" }` |
 | `render-host-frame-alloc-objects` | `expected N to be +0` on `converterEdgeObjectsAllocated` |
 | `mirror-frame-scope-sync` | extra `scopeSyncRuns` / fingerprint path |
 | `present-pack-args-identity` | `presentPack` opts / viewport identity break |

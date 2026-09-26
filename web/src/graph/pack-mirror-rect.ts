@@ -2,18 +2,31 @@ import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 
 /**
  * CSS vs device pixel rects for the shared render host.
- * Three.js viewport/scissor use CSS pixels; raw GL (readPixels, gl.viewport) use device pixels.
+ * `DeviceRect` is top-left device pixels (Canvas2D / `getImageData`).
+ * `GlRect` is bottom-left device pixels (raw GL `readPixels` / pack buffer).
  */
 
 export type CssRectLoose = { x: number; y: number; w: number; h: number };
 
 export type CssRect = CssRectLoose & { readonly __unit: "css" };
 
+/** Top-left origin, device pixels. */
 export type DeviceRect = CssRectLoose & { readonly __unit: "device" };
 
+/** Bottom-left origin, device pixels — only produced by `toGlRectInto`. */
+export type GlRect = CssRectLoose & { readonly __unit: "gl" };
+
 export type DeviceRectMut = { x: number; y: number; w: number; h: number };
+export type GlRectMut = { x: number; y: number; w: number; h: number };
 
 export type DeviceSizeMut = { pw: number; ph: number };
+
+/** Canvas backing-store height in device pixels (`canvas.height`); not CSS layout height. */
+export type CanvasDeviceHeight = number & { readonly __brand: "canvasDevicePx" };
+
+export function asCanvasDeviceHeight(px: number): CanvasDeviceHeight {
+  return px as CanvasDeviceHeight;
+}
 
 /** Non-finite or missing CSS box components become 0 before edge rounding. */
 export function cssBoxDim(v: number | undefined): number {
@@ -40,6 +53,10 @@ export function deviceRect(x: number, y: number, w: number, h: number): DeviceRe
   return { x, y, w, h, __unit: "device" };
 }
 
+export function glRect(x: number, y: number, w: number, h: number): GlRect {
+  return { x, y, w, h, __unit: "gl" };
+}
+
 function writeDeviceEdgesFromCss(
   r: CssRect,
   pixelRatio: number,
@@ -52,39 +69,64 @@ function writeDeviceEdgesFromCss(
   out.y1 = Math.round((r.y + r.h) * pr);
 }
 
-function writeDeviceRectFromEdges(
-  x0: number,
-  x1: number,
-  y0: number,
-  y1: number,
-  canvasDeviceHeight: number,
-  out: DeviceRectMut,
-): DeviceRect {
-  out.x = x0;
-  out.w = x1 - x0;
-  out.h = y1 - y0;
-  out.y = canvasDeviceHeight - y1;
-  return out as DeviceRect;
-}
-
-/** Device pixels (GL bottom-left) for viewport, scissor, readPixels, and blit — per-edge `Math.round`. */
 const deviceEdgeScratch = { x0: 0, x1: 0, y0: 0, y1: 0 };
 
+/** Top-left CSS → top-left `DeviceRect` (per-edge `Math.round`). */
 export function toDeviceRectInto(
   r: CssRect,
   pixelRatio: number,
-  canvasDeviceHeight: number,
   out: DeviceRectMut,
 ): DeviceRect {
   writeDeviceEdgesFromCss(r, pixelRatio, deviceEdgeScratch);
-  return writeDeviceRectFromEdges(
-    deviceEdgeScratch.x0,
-    deviceEdgeScratch.x1,
-    deviceEdgeScratch.y0,
-    deviceEdgeScratch.y1,
-    canvasDeviceHeight,
+  out.x = deviceEdgeScratch.x0;
+  out.y = deviceEdgeScratch.y0;
+  out.w = deviceEdgeScratch.x1 - deviceEdgeScratch.x0;
+  out.h = deviceEdgeScratch.y1 - deviceEdgeScratch.y0;
+  Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
+  return out as DeviceRect;
+}
+
+/** Sole producer of `GlRect`: flip top-left device rect to GL bottom-left using canvas device height. */
+export function toGlRectInto(
+  rect: DeviceRect,
+  canvasDevicePx: CanvasDeviceHeight,
+  out: GlRectMut,
+): GlRect {
+  out.x = rect.x;
+  out.w = rect.w;
+  out.h = rect.h;
+  out.y = canvasDevicePx - rect.y - rect.h;
+  Object.defineProperty(out, "__unit", { value: "gl", enumerable: true });
+  return out as GlRect;
+}
+
+/** Host pane box → top-left device rect (`software`: top-left CSS box; GPU: bottom-left CSS box). */
+export function deviceRectFromHostViewBoxInto(
+  box: CssRectLoose,
+  software: boolean,
+  canvasCssHeight: number,
+  pixelRatio: number,
+  out: DeviceRectMut,
+  canvasDevicePx?: CanvasDeviceHeight,
+): DeviceRect {
+  if (software) {
+    return deviceRectTopLeftCssInto(box, pixelRatio, out);
+  }
+  const topY = canvasCssHeight - cssBoxDim(box.y) - cssBoxDim(box.h);
+  toDeviceRectInto(
+    cssRect(box.x, topY, box.w, box.h),
+    pixelRatio,
     out,
   );
+  if (canvasDevicePx !== undefined) {
+    const cap = canvasDevicePx;
+    const y1 = out.y + out.h;
+    if (y1 > cap) {
+      out.y = Math.floor(topY * pixelRatio);
+      out.h = Math.max(0, cap - out.y);
+    }
+  }
+  return out as DeviceRect;
 }
 
 /** Top-left CSS box → top-left device pixels (Canvas2D `getImageData`). */
@@ -102,24 +144,7 @@ export function deviceRectTopLeftCssInto(
   out.y = y0;
   out.w = x1 - x0;
   out.h = y1 - y0;
-  return out as DeviceRect;
-}
-
-/** Bottom-left CSS box → GL bottom-left device pixels (no Y flip). */
-export function deviceRectBottomLeftCssInto(
-  box: CssRectLoose,
-  pixelRatio: number,
-  out: DeviceRectMut,
-): DeviceRect {
-  const pr = pixelRatio;
-  const x0 = Math.round(cssBoxDim(box.x) * pr);
-  const x1 = Math.round((cssBoxDim(box.x) + cssBoxDim(box.w)) * pr);
-  const y0 = Math.round(cssBoxDim(box.y) * pr);
-  const y1 = Math.round((cssBoxDim(box.y) + cssBoxDim(box.h)) * pr);
-  out.x = x0;
-  out.y = y0;
-  out.w = x1 - x0;
-  out.h = y1 - y0;
+  Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
   return out as DeviceRect;
 }
 

@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/letterbox-grain-stable.test.ts",
+  "testName": "^letterbox software grain stability > 300 frames: 0 Math.random",
+  "description": "Software letterbox bars must not call Math.random per frame; revert adds per-frame jitter."
+}

@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/letterbox-fill.ts b/web/src/graph/letterbox-fill.ts
+--- a/web/src/graph/letterbox-fill.ts
++++ b/web/src/graph/letterbox-fill.ts
+@@ -133,7 +133,9 @@
+   bars[3].w = Math.max(0, box.x + box.w - inner.x - inner.w);
+   bars[3].h = inner.h;
+   ctx.save();
++  const jitter = Math.random() * 0.02;
+   ctx.fillStyle = fill.pattern ?? fill.css;
++  ctx.globalAlpha = 1 - jitter;
+   for (const b of bars) {
+     if (b.w < 1 || b.h < 1) continue;
+     ctx.fillRect(b.x, b.y, b.w, b.h);

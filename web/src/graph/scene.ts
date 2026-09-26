@@ -9,7 +9,7 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
-import { surfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
+import { getSurfaceLetterboxFill, resetSurfaceLetterboxFillCache, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -37,6 +37,7 @@ import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
+import type { DeviceRect } from "./pack-mirror-rect";
 import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
@@ -1276,6 +1277,7 @@ export class NetScene implements HostedView {
     this.satellite = !!opts.satellite;
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
+    this.invalidateSurfaceLetterboxFill();
     if (this.host) {
       // shared context: the host's canvas covers the wall; this pane is a transparent window onto it
       this.renderer = this.host.renderer;
@@ -1590,13 +1592,12 @@ export class NetScene implements HostedView {
     return this.isPackMirrorPrimary && this.packCoalesceTileCount >= 2;
   }
 
-  private cachedLetterboxFill: SurfaceLetterboxFill | null = null;
-
   surfaceLetterboxFill(): SurfaceLetterboxFill {
-    if (!this.cachedLetterboxFill) {
-      this.cachedLetterboxFill = surfaceLetterboxFill(this.clearHex, 0.25);
-    }
-    return this.cachedLetterboxFill;
+    return getSurfaceLetterboxFill(this.clearHex, 0.25);
+  }
+
+  private invalidateSurfaceLetterboxFill(): void {
+    resetSurfaceLetterboxFillCache();
   }
 
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
@@ -1646,12 +1647,21 @@ export class NetScene implements HostedView {
     if (this.software) {
       const canvas = this.host?.canvas ?? (this.renderer instanceof SoftwareGpu ? this.renderer.domElement : null);
       const ctx = canvas?.getContext("2d");
-      if (ctx && canvas && this.canvasProbe.sample(ctx, canvas, this.lastVp)) this.paneFps.mark(now);
+      const devVp = this.lastVp && (this.lastVp as DeviceRect).__unit === "device"
+        ? (this.lastVp as DeviceRect)
+        : null;
+      if (ctx && canvas && devVp && this.canvasProbe.sample(ctx, canvas, devVp)) this.paneFps.mark(now);
       return;
     }
     const gl = (this.host?.gl ?? (this.renderer as THREE.WebGLRenderer).getContext()) as WebGL2RenderingContext | null;
     if (!gl) return;
-    const vp = this.lastVp ?? { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+    const vp = (this.lastVp ?? {
+      x: 0,
+      y: 0,
+      w: gl.drawingBufferWidth,
+      h: gl.drawingBufferHeight,
+      __unit: "gl",
+    }) as import("./pack-mirror-rect").GlRect;
     this.changeProbe.tick(gl, vp, this.lastFrameTs || now, (ts) => this.paneFps.mark(ts));
   }
 
@@ -2522,10 +2532,12 @@ export class NetScene implements HostedView {
       const k = Math.min(1, this.pulseBass);
       painted = this.mixHex(baseClear, s.rim, (0.08 + 0.52 * k) * op);
       this.clearHex = painted;
+      this.invalidateSurfaceLetterboxFill();
       if (fog) fog.color.setHex(this.mixHex(baseFog, s.rim, (0.06 + 0.42 * k) * op));
       this.backdrop.setColors(rim, painted);
     } else {
       this.clearHex = baseClear;
+      this.invalidateSurfaceLetterboxFill();
       if (fog) fog.color.setHex(baseFog);
       this.backdrop.setColors(rim, baseClear);
     }

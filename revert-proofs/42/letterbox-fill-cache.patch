@@ -1,0 +1,16 @@
+diff --git a/web/src/graph/letterbox-fill.ts b/web/src/graph/letterbox-fill.ts
+--- a/web/src/graph/letterbox-fill.ts
++++ b/web/src/graph/letterbox-fill.ts
+@@ -85,11 +85,8 @@
+ 
+ /** Hot-path fill: one instance per `clearHex`, rebuilt only when the scene clear changes. */
+ export function getSurfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLetterboxFill {
+-  if (cachedClearHex === clearHex && cachedFill) return cachedFill;
+   letterboxFillStats.rebuilds += 1;
+-  cachedClearHex = clearHex;
+-  cachedFill = surfaceLetterboxFill(clearHex, grain);
+-  return cachedFill;
++  return surfaceLetterboxFill(clearHex, grain);
+ }
+ 
+ export function resetSurfaceLetterboxFillCache(): void {

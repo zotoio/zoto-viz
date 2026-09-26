@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { zotoSurfacePanelClearHex } from "../core/themes";
-import { letterboxFillHex, surfaceLetterboxFill } from "./letterbox-fill";
+import { getSurfaceLetterboxFill, letterboxFillHex } from "./letterbox-fill";
 import { PackTexturePresenter } from "./pack-mirror-gl";
 import {
   LETTERBOX_SCENE_ASPECT,
@@ -12,7 +12,7 @@ import {
 
 describe("pack mirror 16:9 letterbox (production presenter)", () => {
   const surfaceClear = zotoSurfacePanelClearHex();
-  const fill = surfaceLetterboxFill(surfaceClear, 0.25);
+  const fill = getSurfaceLetterboxFill(surfaceClear, 0.25);
   const barClearHex = letterboxFillHex(fill);
   const dst = { x: 0, y: 0, w: LETTERBOX_TILE_CSS, h: LETTERBOX_TILE_CSS, __unit: "css" as const };
 

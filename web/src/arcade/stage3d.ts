@@ -7,6 +7,7 @@ import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame, PaneFps } from "../core/fps";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
+import { glRect } from "../graph/pack-mirror-rect";
 import { probeWebGL } from "../graph/webgl";
 import { observeResize } from "../core/resize";
 import { POLL_MS, REPLAY_S, isKnown } from "./arcade";
@@ -247,7 +248,7 @@ export abstract class Stage3D {
       const draw = () => this.renderer?.render(this.world, this.camera);
       if (gl) {
         timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
-        const vp = { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+        const vp = glRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         this.picture.tick(gl, vp, ts, (at) => this.paneFps.mark(at));
       } else draw();
     } else if (this.fallback && this.canvas) {
