@@ -188,6 +188,8 @@ def origin_ok(request: web.Request) -> bool:
     if not raw:
         return True  # curl / non-browser
     if raw == "null":
+        if parse_pack_assets_path(request.path or ""):
+            return True
         return sandbox_null_origin_allowed(request)
     name = origin_hostname(raw)
     if request.app.get("insecure_lan"):

@@ -20,6 +20,13 @@ NULL = {**HOST, "Origin": "null"}
 SESSION_B = "other-session-csrf-token-bbb"
 
 
+async def assert_token_invalid(resp) -> None:
+    assert resp.status == 401
+    assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+    body = await resp.json()
+    assert body == {"error": "token_invalid"}
+
+
 class PackAssetsSecurityTests(AioHTTPTestCase):
     async def get_application(self) -> web.Application:
         return make_pack_test_app()
@@ -44,7 +51,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
                         pack_url("demo-pack", "module.js", token="totally-wrong-token"),
                         headers=NULL,
                     )
-        assert resp.status == 403
+        await assert_token_invalid(resp)
 
     async def test_token_bound_to_session_id(self) -> None:
         row = {"id": "demo-pack", "has_frontend": True}
@@ -61,7 +68,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
                         headers={**NULL, access.HEADER: SESSION_B},
                     )
         assert ok.status == 200
-        assert denied.status == 403
+        await assert_token_invalid(denied)
 
     async def test_token_bound_to_pack_id(self) -> None:
         row_x = {"id": "pack-x", "has_frontend": True, "file": "/fake/x/plugin.yml"}
@@ -81,7 +88,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
                     ok = await self.client.get(pack_url("pack-x", "module.js", token=tok_x), headers=NULL)
                     denied = await self.client.get(pack_url("pack-y", "module.js", token=tok_x), headers=NULL)
         assert ok.status == 200
-        assert denied.status == 403
+        await assert_token_invalid(denied)
 
     async def test_encoding_ab_c_not_verified_as_a_bc(self) -> None:
         from service import pack_asset_frames
@@ -113,7 +120,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
                         headers={**NULL, access.HEADER: "a"},
                     )
         assert ok.status == 200
-        assert denied.status == 403
+        await assert_token_invalid(denied)
 
     async def test_revoked_frame_token_denied(self) -> None:
         frame = new_frame_id()
@@ -133,7 +140,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
                 resp = await self.client.get(pack_url("demo-pack", "module.js", token=tok), headers=NULL)
-        assert resp.status == 403
+        await assert_token_invalid(resp)
 
     async def test_non_ascii_token_rejected(self) -> None:
         row = {"id": "demo-pack", "has_frontend": True}
@@ -141,7 +148,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
                 resp = await self.client.get(pack_url("demo-pack", "module.js", token=tok), headers=NULL)
-        assert resp.status == 403
+        await assert_token_invalid(resp)
 
     async def test_pack_id_dotdot_rejected(self) -> None:
         tok = mint("demo-pack")
@@ -202,7 +209,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
                     assert resp.status in {403, 404}, tail
                     assert "outside-secret" not in await resp.text()
 
-    async def test_dotfile_under_pack_is_404(self) -> None:
+    async def test_dotfile_under_pack_is_403(self) -> None:
         home = Path(tempfile.mkdtemp())
         fe = home / "frontend"
         fe.mkdir()
@@ -214,7 +221,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
             with patch.object(plugins, "consented", lambda _doc: True):
                 for tail in (".env", "nested/.hidden.js", "frontend/.env"):
                     resp = await self.client.get(pack_url_raw("dot-pack", tail), headers={**HOST})
-                    assert resp.status == 404, tail
+                    assert resp.status == 403, tail
                     assert "SECRET=leak" not in await resp.text()
 
     async def test_backend_marker_path_is_404(self) -> None:

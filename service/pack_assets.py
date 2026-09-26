@@ -64,6 +64,26 @@ def _normalize_tail(raw_tail: str) -> str | None:
     return t
 
 
+def _decoded_tail(raw_tail: str) -> str:
+    t = raw_tail
+    for _ in range(4):
+        prev = t
+        t = unquote(t)
+        if t == prev:
+            break
+    return t
+
+
+def _tail_forbidden_path(raw_tail: str) -> bool:
+    """Dot-segment paths are forbidden (403) once the asset token is valid."""
+    t = _decoded_tail(raw_tail)
+    if not t or t.startswith("/") or t.startswith("//") or "\\" in t:
+        return False
+    if ".." in t.split("/"):
+        return False
+    return any(part.startswith(".") for part in t.split("/") if part)
+
+
 def _pack_id_ok(pack_id: str) -> bool:
     if not pack_id or pack_id in {".", ".."}:
         return False
@@ -160,6 +180,12 @@ def _pack_forbidden() -> web.Response:
     return resp
 
 
+def _pack_token_invalid() -> web.Response:
+    resp = web.json_response({"error": "token_invalid"}, status=401)
+    access.attach_pack_asset_json_headers(resp)
+    return resp
+
+
 def _pack_not_found() -> web.Response:
     resp = web.json_response({"error": "not found"}, status=404)
     access.attach_pack_asset_json_headers(resp)
@@ -171,11 +197,13 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
     if not parsed:
         return _pack_not_found()
     if not access.pack_asset_token_ok(request):
-        return _pack_forbidden()
+        return _pack_token_invalid()
 
     _token, pack_id, raw_tail = parsed
     if not _pack_id_ok(pack_id):
         return _pack_not_found()
+    if _tail_forbidden_path(raw_tail):
+        return _pack_forbidden()
     tail = _normalize_tail(raw_tail)
     if tail is None:
         return _pack_not_found()

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-asset-rebuild.test.ts",
+  "testName": "pack asset rebuild on token_invalid > does not rebuild on pack path 403 (dotfile) and keeps frame count stable",
+  "description": "Forbidden pack paths (.env) must 403 without opening extra sandbox frames.",
+  "timeoutSec": 120
+}

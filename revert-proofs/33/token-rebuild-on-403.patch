@@ -1,22 +1,29 @@
 diff --git a/web/src/plugins/pack-asset-rebuild.ts b/web/src/plugins/pack-asset-rebuild.ts
-index 1111111..2222222 100644
+index 0000000..0000000 100644
 --- a/web/src/plugins/pack-asset-rebuild.ts
 +++ b/web/src/plugins/pack-asset-rebuild.ts
-@@ -22,32 +22,5 @@ export async function runPackAssetProtectedLoad(
+@@ -35,48 +35,5 @@ export async function runPackAssetProtectedLoad(
    load: () => Promise<void>,
    opts?: { serverRestart?: boolean },
  ): Promise<void> {
--  const attempt = async (): Promise<void> => {
+-  const runOnce = async (): Promise<void> => {
 -    await load();
 -    markTileRebuildIdle(tileId);
+-    resetTileRebuildAttempts(tileId);
 -    applyPackFeedPaneNotice(mosaic, tileId, packName);
 -  };
+-
 -  try {
--    await attempt();
+-    await runOnce();
 -    return;
 -  } catch (err) {
--    if (!isPackAsset403(err) || shouldCapRebuild(tileId)) {
+-    if (!isPackAssetTokenInvalid(err)) {
 -      markTileRebuildFailed(tileId);
+-      throw err;
+-    }
+-    if (shouldCapRebuild(tileId) || tileRebuildInFlight(tileId)) {
+-      markTileRebuildFailed(tileId);
+-      applyPackFeedPaneNotice(mosaic, tileId, packName);
 -      throw err;
 -    }
 -    if (opts?.serverRestart) scheduleServerRestartWallNotice();
@@ -24,13 +31,34 @@ index 1111111..2222222 100644
 -    applyPackFeedPaneNotice(mosaic, tileId, packName);
 -    const wall = consumeServerRestartWallNotice();
 -    if (wall && mosaic) mosaic.setWallNotice(wall);
--    try {
--      await attempt();
--    } catch (retryErr) {
--      markTileRebuildFailed(tileId);
--      applyPackFeedPaneNotice(mosaic, tileId, packName);
--      throw retryErr;
+-
+-    let lastErr: unknown = err;
+-    while (!shouldCapRebuild(tileId)) {
+-      const attempt = beginTileRebuild(tileId);
+-      const delay = rebuildBackoffMs(attempt);
+-      if (delay > 0) await sleep(delay);
+-      try {
+-        await load();
+-        markTileRebuildIdle(tileId);
+-        resetTileRebuildAttempts(tileId);
+-        applyPackFeedPaneNotice(mosaic, tileId, packName);
+-        endTileRebuild(tileId);
+-        return;
+-      } catch (retryErr) {
+-        lastErr = retryErr;
+-        endTileRebuild(tileId);
+-        if (!isPackAssetTokenInvalid(retryErr)) {
+-          markTileRebuildFailed(tileId);
+-          applyPackFeedPaneNotice(mosaic, tileId, packName);
+-          throw retryErr;
+-        }
+-        markTileReconnecting(tileId);
+-        applyPackFeedPaneNotice(mosaic, tileId, packName);
+-      }
 -    }
+-    markTileRebuildFailed(tileId);
+-    applyPackFeedPaneNotice(mosaic, tileId, packName);
+-    throw lastErr;
 -  }
 +  await load();
  }

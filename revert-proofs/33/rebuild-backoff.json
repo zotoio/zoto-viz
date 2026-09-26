@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-asset-rebuild.test.ts",
+  "testName": "pack asset rebuild on token_invalid > backs off at 1s, 2s, then 4s across three rebuild attempts",
+  "description": "Failed token_invalid rebuilds must backoff and stop after three attempts.",
+  "timeoutSec": 120
+}

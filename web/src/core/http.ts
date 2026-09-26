@@ -53,6 +53,28 @@ export class PackAssetForbiddenError extends Error {
   }
 }
 
+export class PackAssetTokenInvalidError extends Error {
+  readonly packId: string;
+
+  constructor(packId: string, message = "pack asset token invalid") {
+    super(message);
+    this.name = "PackAssetTokenInvalidError";
+    this.packId = packId;
+  }
+}
+
+async function packAssetTokenErrorFromResponse(
+  packId: string,
+  r: Response,
+): Promise<Error | null> {
+  if (r.status === 401) {
+    const err = await r.clone().json().catch(() => ({})) as { error?: string };
+    if (err.error === "token_invalid") return new PackAssetTokenInvalidError(packId);
+  }
+  if (r.status === 403) return new PackAssetForbiddenError(packId);
+  return null;
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
   let r = await send(path, init);
@@ -92,7 +114,8 @@ export async function mintPackAssetToken(packId: string, frameId: string): Promi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ frameId }),
   });
-  if (r.status === 403) throw new PackAssetForbiddenError(packId);
+  const tokenErr = await packAssetTokenErrorFromResponse(packId, r);
+  if (tokenErr) throw tokenErr;
   if (!r.ok) throw new Error(`pack asset token unavailable (${packId})`);
   const data = await r.json() as { token?: string };
   if (!data.token) throw new Error("pack asset token missing");

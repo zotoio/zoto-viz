@@ -66,7 +66,9 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
                     pack_url("demo-pack", "module.js", token="wrong-token"),
                     headers=NULL,
                 )
-        assert resp.status == 403
+        assert resp.status == 401
+        body = await resp.json()
+        assert body == {"error": "token_invalid"}
 
     async def test_null_origin_module_js_denied_without_consent_even_with_token(self) -> None:
         row = {"id": "secret", "has_frontend": True, "version": 1}

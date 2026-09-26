@@ -7,8 +7,14 @@ import {
 import { packReconnecting, packSandboxStartFailed, SERVER_RESTART_WALL_NOTICE } from "./plugin-copy";
 
 const tileFrames = new Map<string, string>();
+const tileFrameOpenCounts = new Map<string, number>();
+const tileRebuildAttempts = new Map<string, number>();
+const tileRebuildInflight = new Set<string>();
 let wallNoticePending = false;
 let wallNoticeShown = false;
+
+const REBUILD_BACKOFF_MS = [1000, 2000, 4000];
+const MAX_REBUILD_ATTEMPTS = 3;
 
 export type RebuildPhase = "idle" | "reconnecting" | "failed";
 
@@ -22,6 +28,9 @@ const tileRebuild = new Map<string, TileRebuildState>();
 
 export function resetPackAssetFrameState(): void {
   tileFrames.clear();
+  tileFrameOpenCounts.clear();
+  tileRebuildAttempts.clear();
+  tileRebuildInflight.clear();
   tileRebuild.clear();
   wallNoticePending = false;
   wallNoticeShown = false;
@@ -35,10 +44,15 @@ export function packAssetFrameForTile(tileId: string): string | undefined {
   return tileFrames.get(tileId);
 }
 
+export function packAssetFrameOpenCount(tileId: string): number {
+  return tileFrameOpenCounts.get(tileId) ?? 0;
+}
+
 export async function openPackAssetFrame(tileId: string): Promise<string> {
   const frameId = crypto.randomUUID();
   await registerPackAssetFrame(frameId);
   notePackAssetFrameForTile(tileId, frameId);
+  tileFrameOpenCounts.set(tileId, (tileFrameOpenCounts.get(tileId) ?? 0) + 1);
   return frameId;
 }
 
@@ -84,8 +98,36 @@ export function tileRebuildFailedNotice(packName: string): string {
   return packSandboxStartFailed(packName);
 }
 
+export function tileRebuildAttemptCount(tileId: string): number {
+  return tileRebuildAttempts.get(tileId) ?? 0;
+}
+
+export function resetTileRebuildAttempts(tileId: string): void {
+  tileRebuildAttempts.delete(tileId);
+}
+
+export function rebuildBackoffMs(attemptIndex: number): number {
+  return REBUILD_BACKOFF_MS[Math.min(attemptIndex - 1, REBUILD_BACKOFF_MS.length - 1)] ?? 0;
+}
+
+/** Returns 1-based attempt number for this rebuild cycle (caps at {@link MAX_REBUILD_ATTEMPTS}). */
+export function beginTileRebuild(tileId: string): number {
+  tileRebuildInflight.add(tileId);
+  const next = Math.min((tileRebuildAttempts.get(tileId) ?? 0) + 1, MAX_REBUILD_ATTEMPTS);
+  tileRebuildAttempts.set(tileId, next);
+  return next;
+}
+
+export function endTileRebuild(tileId: string): void {
+  tileRebuildInflight.delete(tileId);
+}
+
+export function tileRebuildInFlight(tileId: string): boolean {
+  return tileRebuildInflight.has(tileId);
+}
+
 export function shouldCapRebuild(tileId: string): boolean {
-  return tileRebuildState(tileId).failedOnce;
+  return (tileRebuildAttempts.get(tileId) ?? 0) >= MAX_REBUILD_ATTEMPTS;
 }
 
 export function scheduleServerRestartWallNotice(): void {
