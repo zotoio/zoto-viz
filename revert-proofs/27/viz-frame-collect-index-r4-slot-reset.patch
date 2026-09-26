@@ -1,13 +1,12 @@
 diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
-index 377cb9e..06440d4 100644
+index 377cb9e..a826d37 100644
 --- a/web/src/plugins/viz-frame-collect.ts
 +++ b/web/src/plugins/viz-frame-collect.ts
-@@ -205,7 +205,7 @@ function zeroLinkRatesForFrame(): void {
-       slot.rate = 0;
+@@ -202,7 +202,6 @@ function zeroLinkRatesForFrame(): void {
+     for (const [dst, idx] of byDst) {
+       lastZeroPassVisitCount++;
+       const slot = linkPool[idx]!;
+-      slot.rate = 0;
        const meta = linkSlotMeta[idx]!;
        meta.idleZeroFrames++;
--      if (meta.idleZeroFrames >= VIZ_LINK_IDLE_DROP_FRAMES) toDrop.push({ src, dst, idx });
-+      if (false) toDrop.push({ src, dst, idx });
-     }
-   }
-   for (let i = 0; i < toDrop.length; i++) {
+       if (meta.idleZeroFrames >= VIZ_LINK_IDLE_DROP_FRAMES) toDrop.push({ src, dst, idx });
