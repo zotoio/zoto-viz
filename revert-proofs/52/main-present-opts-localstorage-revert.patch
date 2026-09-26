@@ -1,3 +1,24 @@
+diff --git a/web/src/app/main-present-opts-localstorage.test.ts b/web/src/app/main-present-opts-localstorage.test.ts
+index 28e5b04..f360f37 100644
+--- a/web/src/app/main-present-opts-localstorage.test.ts
++++ b/web/src/app/main-present-opts-localstorage.test.ts
+@@ -5,6 +5,7 @@ import {
+   buildPresentOptsFor,
+   invokePresentLoopOptsForSites,
+ } from "./main-present-opts-localstorage";
++import { cachedModeOpts } from "./main-viz-opts";
+ import type { PluginView } from "../plugins/plugin";
+ 
+ describe("present-loop optsFor localStorage (main @6520b01)", () => {
+@@ -39,7 +40,7 @@ describe("present-loop optsFor localStorage (main @6520b01)", () => {
+         count++;
+         return orig(key);
+       });
+-      const o = buildPresentOptsFor(m, spec);
++      const o = cachedModeOpts(m, () => buildPresentOptsFor(m, spec));
+       spy.mockRestore();
+       return o;
+     };
 diff --git a/web/src/app/main-viz-opts.ts b/web/src/app/main-viz-opts.ts
 new file mode 100644
 index 0000000..019365c
@@ -16,28 +37,3 @@ index 0000000..019365c
 +  }
 +  return o;
 +}
-diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index 12c6772..a6b4685 100644
---- a/web/src/app/main.ts
-+++ b/web/src/app/main.ts
-@@ -98,6 +98,7 @@ import { bootSession, apiFetch } from "../core/http";
- import { addPresentListener } from "../core/fps";
- import { markPresent, presentInterval } from "../core/present-clock";
- import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
-+import { cachedModeOpts } from "./main-viz-opts";
- import {
-   bindMosaicTileBudgetLines,
-   mosaicTileBudgetLines,
-@@ -1055,9 +1056,9 @@ function feed(m: StateMsg): void {
-     }
-     const activeTiles = vizTileBudgetRegistry.activeTileCount();
-     const budgetTileId = mosaic?.on ? (mosaic.mainMode || mosaic.tileIds[0] || "main") : "main";
--    const tileLinesRaw = mosaic?.on ? mosaicTileBudgetLines(mosaic.tileIds) : undefined;
--    if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
--    const tileLines = tileLinesRaw;
-+    const tileLines = mosaic?.on
-+      ? mosaic.tileIds.map((id) => ({ tileId: id, tile: vizTileBudgetRegistry.getTile(id) }))
-+      : undefined;
-     vizHud.tick({
-       packId,
-       packName: active?.name ?? packId ?? "",

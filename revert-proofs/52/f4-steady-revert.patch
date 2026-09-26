@@ -1,17 +1,24 @@
-diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index 12c6772..3ce9f84 100644
---- a/web/src/app/main.ts
-+++ b/web/src/app/main.ts
-@@ -1055,9 +1055,9 @@ function feed(m: StateMsg): void {
-     }
-     const activeTiles = vizTileBudgetRegistry.activeTileCount();
-     const budgetTileId = mosaic?.on ? (mosaic.mainMode || mosaic.tileIds[0] || "main") : "main";
--    const tileLinesRaw = mosaic?.on ? mosaicTileBudgetLines(mosaic.tileIds) : undefined;
--    if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
--    const tileLines = tileLinesRaw;
-+    const tileLines = mosaic?.on
-+      ? mosaic.tileIds.map((id) => ({ tileId: id, tile: vizTileBudgetRegistry.getTile(id) }))
-+      : undefined;
-     vizHud.tick({
-       packId,
-       packName: active?.name ?? packId ?? "",
+diff --git a/web/src/app/main-viz-tile-lines.ts b/web/src/app/main-viz-tile-lines.ts
+index cf67c6c..c98283b 100644
+--- a/web/src/app/main-viz-tile-lines.ts
++++ b/web/src/app/main-viz-tile-lines.ts
+@@ -23,16 +23,10 @@ export function resetVizHudTileBudgetLineAllocCounter(): void {
+  */
+ export function mosaicTileBudgetLines(tileIds: readonly string[]): VizHudTileBudgetLine[] | undefined {
+   if (!tileIds.length) return undefined;
+-  while (scratch.length < tileIds.length) {
+-    scratch.push({ tileId: "", tile: null as unknown as VizTileBudgetStats });
++  return tileIds.map((tileId) => {
+     pairObjectsCreated++;
+-  }
+-  for (let i = 0; i < tileIds.length; i++) {
+-    const row = scratch[i]!;
+-    row.tileId = tileIds[i]!;
+-  }
+-  scratch.length = tileIds.length;
+-  return scratch;
++    return { tileId, tile: null as unknown as VizTileBudgetStats };
++  });
+ }
+ 
+ /** Assign tile stats after registry lookup (call once per frame after mosaicTileBudgetLines). */
