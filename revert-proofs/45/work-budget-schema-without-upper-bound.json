@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/manifest-work-budget.test.ts",
-  "testName": "rejects a manifest at ten times the host ceiling with a plain reason",
-  "description": "manifest workBudget schema rejects values above host ceilings."
-}

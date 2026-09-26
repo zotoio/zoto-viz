@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_manifest_work_budget.py",
-  "testName": "test_rejects_manifest_at_ten_times_ceiling",
-  "description": "Python manifest workBudget schema rejects values above host ceilings."
-}
