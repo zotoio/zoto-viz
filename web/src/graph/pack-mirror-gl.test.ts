@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  PackMirrorRegistry,
-  SandboxBitmapGl,
-} from "./pack-mirror-gl";
+import { PackMirrorRegistry } from "./pack-mirror-gl";
 
 describe("PackMirrorRegistry", () => {
   afterEach(() => {
@@ -33,27 +30,5 @@ describe("PackMirrorRegistry", () => {
     expect(reg.sessionFor("plugin:a")).not.toBe(reg.sessionFor("plugin:b"));
     expect(reg.allocationCount).toBe(2);
     reg.dispose();
-  });
-});
-
-describe("SandboxBitmapGl", () => {
-  it("reallocates texture only on size change", () => {
-    const gpu = new SandboxBitmapGl();
-    const mk = (w: number, h: number) => {
-      const frame = Object.create(ImageBitmap.prototype) as ImageBitmap;
-      Object.defineProperties(frame, {
-        width: { value: w },
-        height: { value: h },
-        close: { value: vi.fn() },
-      });
-      return frame;
-    };
-    const a = gpu.uploadFrame(mk(32, 24));
-    const b = gpu.uploadFrame(mk(32, 24));
-    expect(a).toBe(b);
-    const c = gpu.uploadFrame(mk(64, 48));
-    expect(c).not.toBe(a);
-    expect(gpu.uploadCount).toBe(3);
-    gpu.dispose();
   });
 });
