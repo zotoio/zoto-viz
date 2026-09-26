@@ -138,6 +138,19 @@ describe("askUserMedia", () => {
     await expect(pending).resolves.toBeNull();
   });
 
+  it("opens the pulse mic without in-page ask when browser permission is already granted", async () => {
+    const stream = fakeStream();
+    const getUserMedia = vi.fn(async () => stream);
+    mockCapture(getUserMedia);
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: { query: vi.fn(async () => ({ state: "granted" })) },
+    });
+    await expect(askUserMedia({ audio: true, video: false }, "pulse microphone")).resolves.toBe(stream);
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("[data-media-ask]")).toBeNull();
+  });
+
   it("treats a hanging getUserMedia as a missing browser prompt", async () => {
     mockCapture(vi.fn(() => new Promise(() => { /* never */ })));
 

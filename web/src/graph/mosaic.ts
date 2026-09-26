@@ -13,6 +13,7 @@ import {
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
 import { releasePanelView } from "./panel-view-lifecycle";
+import { bindVizDriveElement, clearVizDrive } from "../plugins/viz-drive";
 import { dropMosaicTileWriter } from "./mosaic-viz-feed";
 
 export { centerSplit } from "./mosaic-layout";
@@ -790,6 +791,7 @@ export class Mosaic {
     }
     this.panes.get(id)?.remove();
     this.panes.delete(id);
+    clearVizDrive(id);
     this.themes.delete(id);
   }
 
@@ -918,6 +920,7 @@ export class Mosaic {
     pane.appendChild(bar);
     const cog = this.cfg.paneCog?.(id);
     if (cog) pane.appendChild(cog);
+    bindVizDriveElement(id, pane);
     return pane;
   }
 

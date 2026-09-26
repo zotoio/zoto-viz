@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import re
 import secrets
 from urllib.parse import urlparse
 
@@ -16,6 +17,53 @@ from aiohttp import web
 COOKIE = "zoto-viz-csrf"
 HEADER = "X-Zoto-Viz-Csrf"
 MUTATE = frozenset({"POST", "PUT", "DELETE", "PATCH"})
+
+_PLUGIN_SANDBOX_ASSET = re.compile(
+    r"^/api/plugins/([^/]+)/(module\.js|sky/fragment\.glsl)$",
+)
+_SANDBOX_BOOTSTRAP = re.compile(
+    r"^/(?:plugin-sandbox\.html|assets/plugin-sandbox-[\w-]+\.js|assets/preload-helper-[\w-]+\.js)$",
+)
+
+
+def sandbox_static_bootstrap_path(path: str) -> bool:
+    """Production sandbox iframe bootstrap (opaque origin) — not pack code."""
+    return bool(_SANDBOX_BOOTSTRAP.match(path.rstrip("/") or "/"))
+
+
+def sandbox_plugin_asset_path(path: str) -> bool:
+    return bool(_PLUGIN_SANDBOX_ASSET.match(path.rstrip("/") or "/"))
+
+
+def sandbox_plugin_asset_id(path: str) -> str | None:
+    m = _PLUGIN_SANDBOX_ASSET.match(path.rstrip("/") or "/")
+    return m.group(1) if m else None
+
+
+def sandbox_null_origin_allowed(request: web.Request) -> bool:
+    """Opaque-origin sandbox iframe may only read bootstrap + consented pack assets."""
+    if request.method not in {"GET", "HEAD"}:
+        return False
+    path = request.path or ""
+    if sandbox_static_bootstrap_path(path):
+        return True
+    if not sandbox_plugin_asset_path(path):
+        return False
+    pid = sandbox_plugin_asset_id(path)
+    if not pid:
+        return False
+    from . import plugins
+
+    row = plugins._plugin_row(pid)
+    if not row:
+        return False
+    return plugins.consented(row)
+
+
+def attach_sandbox_cors(resp: web.StreamResponse) -> None:
+    resp.headers["Access-Control-Allow-Origin"] = "null"
+    vary = resp.headers.get("Vary", "")
+    resp.headers["Vary"] = "Origin" if not vary else f"{vary}, Origin"
 
 
 def new_token() -> str:
@@ -70,6 +118,8 @@ def origin_ok(request: web.Request) -> bool:
     raw = request.headers.get("Origin", "").strip()
     if not raw:
         return True  # curl / non-browser
+    if raw == "null":
+        return sandbox_null_origin_allowed(request)
     name = origin_hostname(raw)
     if request.app.get("insecure_lan"):
         return name == header_hostname(request.headers.get("Host", ""))
@@ -107,6 +157,9 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
     if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):
         return _deny("csrf required")
     resp = await handler(request)
+    origin_raw = request.headers.get("Origin", "").strip()
+    if origin_raw == "null" and sandbox_null_origin_allowed(request):
+        attach_sandbox_cors(resp)
     attach_csrf(request, resp)
     if request.method in MUTATE:
         print(f"[monitor] {request.method} {request.path_qs} -> {getattr(resp, 'status', '?')}", flush=True)
