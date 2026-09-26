@@ -210,14 +210,24 @@ export function coalescePresetConfig(
   if (freshPd) {
     for (let i = 0; i < FRESH_SPECIES.length; i++) {
       const k = `sp_${FRESH_SPECIES[i]}`;
-      if (cfg[k] === undefined) out[k] = freshPd[i] ? "true" : "false";
+      const globalDef =
+        (DEFAULT_OPTIONS.freshSpecies[i] ?? 0) !== 0 ? "true" : "false";
+      const cur = cfg[k];
+      if (cur === undefined || cur === globalDef) {
+        out[k] = freshPd[i] ? "true" : "false";
+      }
     }
   }
   const reefPd = pd.reefSpecies;
   if (reefPd) {
     for (let i = 0; i < REEF_SPECIES.length; i++) {
       const k = `sp_${REEF_SPECIES[i]}`;
-      if (cfg[k] === undefined) out[k] = reefPd[i] ? "true" : "false";
+      const globalDef =
+        (DEFAULT_OPTIONS.reefSpecies[i] ?? 0) !== 0 ? "true" : "false";
+      const cur = cfg[k];
+      if (cur === undefined || cur === globalDef) {
+        out[k] = reefPd[i] ? "true" : "false";
+      }
     }
   }
   return out;
@@ -480,6 +490,7 @@ export class AquariumSim {
   private feedActive = 0;
   private feedMode: FeedMode = "none";
   private feedY = 0.85;
+  private trafficFeedCooldown = 0;
   private camPhase = 0;
   private packetCursor = 0;
   private simAccumulator = 0;
@@ -636,22 +647,23 @@ export class AquariumSim {
     }
   }
 
-  private spawnDemoFish(t: number): VizTalkerSample[] {
-    const n = Math.min(this.opts.fishCount, 6);
-    const out: VizTalkerSample[] = [];
-    for (let i = 0; i < n; i++) {
-      const roles = ["gateway", "lan", "internet", "lan", "internet", "lan"];
-      out.push({
-        id: `demo:${i}:${this.opts.seed}`,
-        rate: 60 + 30 * Math.sin(t * 0.4 + i),
-        role: roles[i % roles.length]!,
-      });
+  private trimActiveParticlesToCap(): void {
+    const cap = PRESET_CAPS[this.opts.preset].maxParticles;
+    let active = 0;
+    for (const p of this.particles) if (p.life > 0) active++;
+    while (active > cap) {
+      let oldest: ParticleBody | null = null;
+      for (const p of this.particles) {
+        if (p.life <= 0) continue;
+        if (!oldest || p.life < oldest.life) oldest = p;
+      }
+      if (!oldest) break;
+      oldest.life = 0;
+      active--;
     }
-    return out;
   }
 
   private ingestPackets(packets: VizPacketSample[]): void {
-    const cap = PRESET_CAPS[this.opts.preset].maxParticles;
     let n = 0;
     this.lastPacketIngest = 0;
     if (!packets.length) return;
@@ -679,18 +691,7 @@ export class AquariumSim {
       this.lastPacketIngest++;
     }
     this.packetCursor = idx;
-    let active = 0;
-    for (const p of this.particles) if (p.life > 0) active++;
-    while (active > cap) {
-      let oldest: ParticleBody | null = null;
-      for (const p of this.particles) {
-        if (p.life <= 0) continue;
-        if (!oldest || p.life < oldest.life) oldest = p;
-      }
-      if (!oldest) break;
-      oldest.life = 0;
-      active--;
-    }
+    this.trimActiveParticlesToCap();
   }
 
   private spawnFeedParticles(kind: number, count: number): void {
@@ -715,9 +716,11 @@ export class AquariumSim {
       slot.life = kind >= PARTICLE_KIND_SCHEDULE_FEED ? 4.5 : 3.2;
       active++;
     }
+    this.trimActiveParticlesToCap();
   }
 
-  private maybeFeed(dt: number, packets: VizPacketSample[]): void {
+  /** Schedule and traffic feed triggers — once per host frame (not per catch-up substep). */
+  private runFeedTriggers(dt: number, packets: VizPacketSample[]): void {
     if (this.opts.feedingMin > 0) {
       this.feedTimer += dt;
       if (this.feedTimer >= this.opts.feedingMin * 60) {
@@ -728,13 +731,25 @@ export class AquariumSim {
         this.spawnFeedParticles(PARTICLE_KIND_SCHEDULE_FEED, 6);
       }
     }
-    if (this.opts.feedingTraffic && packets.length >= 3) {
+    if (
+      this.opts.feedingTraffic
+      && this.trafficFeedCooldown <= 0
+      && packets.length >= 3
+    ) {
       const burst = packets.reduce((s, p) => s + (p.field ?? 0), 0) / packets.length;
       if (burst > 0.55) {
         this.feedActive = Math.max(this.feedActive, 5);
         if (this.feedMode !== "schedule") this.feedMode = "traffic";
         this.spawnFeedParticles(PARTICLE_KIND_TRAFFIC_FEED, 4);
+        this.trafficFeedCooldown = 0.45;
       }
+    }
+    this.trimActiveParticlesToCap();
+  }
+
+  private tickFeed(dt: number): void {
+    if (this.trafficFeedCooldown > 0) {
+      this.trafficFeedCooldown = Math.max(0, this.trafficFeedCooldown - dt);
     }
     if (this.feedActive > 0) {
       this.feedActive -= dt;
@@ -792,7 +807,7 @@ export class AquariumSim {
     const allIds = new Set(allTalkers.map((t) => t.id));
     const slotted = this.slottedTalkers(allTalkers, simT);
     this.syncFish(slotted, allIds, allTalkers);
-    this.maybeFeed(FIXED_SIM_DT, []);
+    this.tickFeed(FIXED_SIM_DT);
     this.stepFish(simT, FIXED_SIM_DT, slotted);
     const motion = this.opts.reducedMotion || this.opts.camera === "hold";
     const camRate = motion ? 0 : 0.35;
@@ -823,12 +838,11 @@ export class AquariumSim {
   }
 
   step(frame: AquariumFrame): void {
-    const talkers = frame.demo && frame.talkers.length === 0
-      ? this.spawnDemoFish(frame.t)
-      : frame.talkers;
+    const talkers = frame.talkers;
     this.ingestPackets(frame.packets);
-    this.maybeFeed(Math.min(0.05, frame.dt || FIXED_SIM_DT), frame.packets);
-    this.simAccumulator += Math.min(0.1, frame.dt || FIXED_SIM_DT);
+    const frameDt = Math.min(0.1, frame.dt || FIXED_SIM_DT);
+    this.runFeedTriggers(Math.min(0.05, frameDt), frame.packets);
+    this.simAccumulator += frameDt;
     let steps = 0;
     while (this.simAccumulator >= FIXED_SIM_DT && steps < MAX_SIM_CATCHUP_STEPS) {
       this.stepOnce(frame.t, talkers);

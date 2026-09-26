@@ -226,11 +226,11 @@ describe("aquarium shipped pack", () => {
     expect(aquariumSmokeLuma(packed)).toBeGreaterThan(0.12);
   });
 
-  it("species toggles change reef options on a reef preset", () => {
-    const base = parseAquariumOptions({ preset: "reef_lagoon" });
-    const off = parseAquariumOptions({ preset: "reef_lagoon", sp_clown: "false" });
-    expect(off.reefSpecies[0]).toBe(0);
-    expect(base.reefSpecies[0]).toBe(1);
+  it("species toggles apply when host value differs from global default", () => {
+    const base = parseAquariumOptions({ preset: "planted" });
+    expect(base.freshSpecies[4]).toBe(1);
+    const off = parseAquariumOptions({ preset: "planted", sp_discus: "false" });
+    expect(off.freshSpecies[4]).toBe(0);
   });
 
   it("gateway maps to largest freshwater species when enabled", () => {
@@ -261,6 +261,20 @@ describe("aquarium shipped pack", () => {
     const o = parseAquariumOptions(coalescePresetConfig(hostLike));
     expect(o.water).toBe("reef");
     expect(o.lighting).toBe("actinic");
+  });
+
+  it("reef_lagoon coalesces global-off reef species flags to preset defaults", () => {
+    const hostLike: Record<string, string> = {
+      preset: "reef_lagoon",
+      sp_clown: "false",
+      sp_tang: "false",
+      sp_damsel: "false",
+      sp_goby: "false",
+      sp_wrasse: "false",
+      sp_anemone: "false",
+    };
+    const o = parseAquariumOptions(coalescePresetConfig(hostLike));
+    expect(o.reefSpecies.every((v) => v === 1)).toBe(true);
   });
 
   it("passes canvas size into packed slots for shader UVs", () => {
