@@ -19,15 +19,23 @@
 import * as THREE from "three";
 import type { SoftRect } from "./software-draw";
 import { cssHex } from "./software-draw";
-import { letterboxInnerRect, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
+import { letterboxInnerRectInto, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
 import {
   PackMirrorRegistry,
   type LetterboxBarScratch,
-  type MirrorRect,
 } from "./pack-mirror-gl";
+import {
+  type CssRect,
+  type CssRectLoose,
+  type DeviceRect,
+  type DeviceRectMut,
+  asCssRect,
+  cssRectTopFromBottomLeft,
+  toDeviceRectInto,
+} from "./pack-mirror-rect";
 import { renderHostMirrorTelemetry } from "./render-host-telemetry";
 
 type PackMirrorViewMeta = HostedView & {
@@ -53,8 +61,8 @@ export interface HostedView {
   noteFrameCost?(ms: number): void;
 }
 
-/** A viewport in framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
-export interface Viewport { x: number; y: number; w: number; h: number }
+/** Framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
+export type Viewport = DeviceRect;
 
 /** The methods NetScene uses on the shared (or owned) GPU object. */
 export class SoftwareGpu {
@@ -76,12 +84,12 @@ export class SoftwareGpu {
 
 export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
-function copyViewBox(dst: SoftRect, out: MirrorRect): MirrorRect {
+function copyViewBox(dst: SoftRect, out: CssRectLoose): CssRect {
   out.x = dst.x;
   out.y = dst.y;
   out.w = dst.w;
   out.h = dst.h;
-  return out;
+  return asCssRect(out);
 }
 
 export class RenderHost {
@@ -111,14 +119,13 @@ export class RenderHost {
       { x: 0, y: 0, w: 0, h: 0 },
     ] as LetterboxBarScratch,
   };
-  private readonly fbViewport: Viewport = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly fbViewport: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
   private readonly packScopeScratch = new Map<string, { tileCount: number; antialias: boolean }>();
   private mirrorScopeDirty = true;
   private contextAntialias = false;
   private readonly viewBoxScratch: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
   private readonly viewBoxScratchB: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
-  private readonly packDrawSize = { w: 0, h: 0 };
-  private readonly packDrawViewport: MirrorRect = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly packDrawViewport: CssRectLoose = { x: 0, y: 0, w: 0, h: 0 };
   private readonly packDrawOpts = {
     letterbox: false,
     fill: null as SurfaceLetterboxFill | null,
@@ -261,7 +268,7 @@ export class RenderHost {
     if (dst.w < 2 || dst.h < 2) return null;
     const aspect = src.w / Math.max(1, src.h);
     const box = copyViewBox(dst, this.letterboxScratch.box);
-    const inner = letterboxInnerRect(dst, aspect);
+    const inner = letterboxInnerRectInto(dst, aspect, this.letterboxScratch.inner);
     this.letterboxScratch.inner.x = inner.x + dst.x;
     this.letterboxScratch.inner.y = inner.y + dst.y;
     this.letterboxScratch.inner.w = inner.w;
@@ -296,7 +303,7 @@ export class RenderHost {
     if (!key) return null;
     this.packMirrorPresentOpts.fill = fill;
     this.packMirrorPresentOpts.aspect = aspect;
-    const rect = this.packMirrors.presentPack(key, rd, dst, this.packMirrorPresentOpts);
+    const rect = this.packMirrors.presentPack(key, rd, asCssRect(dst), this.packMirrorPresentOpts);
     if (!rect) return null;
     return this.writeFbViewport(dst, rd.getPixelRatio());
   }
@@ -385,14 +392,12 @@ export class RenderHost {
     const camera = this.gpuTimedCamera;
     if (!packKey || !box || !scene || !camera) return;
     const rd = this.renderer as THREE.WebGLRenderer;
-    this.packDrawSize.w = box.w;
-    this.packDrawSize.h = box.h;
     this.packMirrors.renderPrimary(
       packKey,
       rd,
       scene,
       camera,
-      this.packDrawSize,
+      asCssRect(box),
       this.gpuTimedClearHex,
       this.contextAntialias,
     );
@@ -403,7 +408,7 @@ export class RenderHost {
     this.packDrawOpts.letterbox = false;
     this.packDrawOpts.fill = null;
     this.packDrawOpts.aspect = box.w / Math.max(1, box.h);
-    this.packMirrors.presentPack(packKey, rd, this.packDrawViewport, this.packDrawOpts);
+    this.packMirrors.presentPack(packKey, rd, asCssRect(this.packDrawViewport), this.packDrawOpts);
   };
 
   private readonly runTimedViewDraw = (): void => {
@@ -419,13 +424,20 @@ export class RenderHost {
     rd.render(scene, camera);
   };
 
+  private canvasDeviceHeight(): number {
+    return Math.max(1, this.canvas.height);
+  }
+
   private writeFbViewport(box: SoftRect, pr: number): Viewport {
-    const v = this.fbViewport;
-    v.x = box.x * pr;
-    v.y = box.y * pr;
-    v.w = box.w * pr;
-    v.h = box.h * pr;
-    return v;
+    const cssTop = this.software
+      ? asCssRect(box)
+      : cssRectTopFromBottomLeft(box, this.h);
+    return toDeviceRectInto(
+      cssTop,
+      pr,
+      this.canvasDeviceHeight(),
+      this.fbViewport,
+    );
   }
 
   private sortViewsForMirror(): void {

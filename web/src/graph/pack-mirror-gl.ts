@@ -2,8 +2,15 @@ import * as THREE from "three";
 import type { SurfaceLetterboxFill } from "./letterbox-fill";
 import { letterboxFillHex, letterboxInnerRectInto, paintLetterboxBars } from "./letterbox-fill";
 import type { WebGLRenderer } from "three";
+import {
+  type CssRect,
+  type CssRectLoose,
+  asCssRect,
+  deviceSizeFromCssBox,
+} from "./pack-mirror-rect";
 
-export type MirrorRect = { x: number; y: number; w: number; h: number };
+/** @deprecated Use `CssRect` from `./pack-mirror-rect`. */
+export type MirrorRect = CssRect;
 
 export type MirrorRenderer = Pick<
   WebGLRenderer,
@@ -20,7 +27,7 @@ export type MirrorRenderer = Pick<
 
 export const PACK_MSAA_SAMPLES = 4;
 
-export type LetterboxBarScratch = [MirrorRect, MirrorRect, MirrorRect, MirrorRect];
+export type LetterboxBarScratch = [CssRectLoose, CssRectLoose, CssRectLoose, CssRectLoose];
 
 /** Counting hooks for lifecycle tests (no timing). */
 export const packMirrorResourceStats = {
@@ -48,8 +55,8 @@ export const packMirrorResourceStats = {
 export function paintLetterboxBarsThree(
   renderer: MirrorRenderer,
   fill: SurfaceLetterboxFill,
-  box: MirrorRect,
-  inner: MirrorRect,
+  box: CssRect,
+  inner: CssRect,
   bars: LetterboxBarScratch,
 ): void {
   const hex = letterboxFillHex(fill);
@@ -114,11 +121,11 @@ export class PackTexturePresenter {
   draw(
     renderer: MirrorRenderer,
     texture: THREE.Texture,
-    dst: MirrorRect,
+    dst: CssRect,
     fill: SurfaceLetterboxFill | null,
     contentAspect: number,
     opts: { letterbox: boolean },
-  ): MirrorRect {
+  ): CssRect {
     const innerTd = this.scratch.innerTd;
     if (opts.letterbox) {
       letterboxInnerRectInto(dst, contentAspect, innerTd);
@@ -138,7 +145,7 @@ export class PackTexturePresenter {
     innerAbs.w = iw;
     innerAbs.h = ih;
     if (fill && opts.letterbox) {
-      paintLetterboxBarsThree(renderer, fill, dst, innerAbs, this.scratch.bars);
+      paintLetterboxBarsThree(renderer, fill, dst, asCssRect(innerAbs), this.scratch.bars);
     }
     if (this.material.map !== texture) {
       this.material.map = texture;
@@ -154,7 +161,7 @@ export class PackTexturePresenter {
     out.y = iy;
     out.w = iw;
     out.h = ih;
-    return out;
+    return asCssRect(out);
   }
 }
 
@@ -229,6 +236,7 @@ export class PackMirrorSession {
     renderer: MirrorRenderer,
     scene: THREE.Scene,
     camera: THREE.Camera,
+    cssSize: CssRectLoose,
     pw: number,
     ph: number,
     clearHex: number,
@@ -239,13 +247,14 @@ export class PackMirrorSession {
     const rd = renderer as THREE.WebGLRenderer;
     const prev = rd.getRenderTarget?.() ?? null;
     renderer.setRenderTarget(rt);
-    renderer.setViewport(0, 0, pw, ph);
-    renderer.setScissor(0, 0, pw, ph);
+    renderer.setViewport(0, 0, cssSize.w, cssSize.h);
+    renderer.setScissor(0, 0, cssSize.w, cssSize.h);
     renderer.setScissorTest(true);
     renderer.setClearColor(clearHex, 1);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
     renderer.setRenderTarget(prev);
+    rt.texture.flipY = true;
     this.rendered = true;
     return rt.texture;
   }
@@ -255,8 +264,10 @@ export class PackMirrorRegistry {
   private readonly sessions = new Map<string, PackMirrorSession>();
   allocationCount = 0;
 
+  private readonly drawLetterboxScratch = { letterbox: false };
+
   beginFrame(): void {
-    for (const s of this.sessions.values()) s.rendered = false;
+    this.sessions.forEach((s) => { s.rendered = false; });
   }
 
   /** Allocate / free mirrors only when tile count crosses 2 for a pack key. */
@@ -285,35 +296,89 @@ export class PackMirrorRegistry {
     renderer: MirrorRenderer,
     scene: THREE.Scene,
     camera: THREE.Camera,
-    box: { w: number; h: number },
+    box: CssRectLoose,
     clearHex: number,
     antialias: boolean,
   ): THREE.Texture | null {
     const session = this.sessions.get(key);
     if (!session) return null;
     const pr = renderer.getPixelRatio();
-    const pw = Math.max(2, Math.round(box.w * pr));
-    const ph = Math.max(2, Math.round(box.h * pr));
-    return session.renderPack(renderer, scene, camera, pw, ph, clearHex, antialias);
+    const { pw, ph } = deviceSizeFromCssBox(box, pr);
+    return session.renderPack(renderer, scene, camera, box, pw, ph, clearHex, antialias);
   }
 
   presentPack(
     key: string,
     renderer: MirrorRenderer,
-    dst: MirrorRect,
+    dst: CssRect,
     opts: { letterbox: boolean; fill: SurfaceLetterboxFill | null; aspect: number },
-  ): MirrorRect | null {
+  ): CssRect | null {
     const session = this.sessions.get(key);
     const rt = session?.target;
     if (!rt || !session?.rendered) return null;
-    return session.presenter.draw(renderer, rt.texture, dst, opts.fill, opts.aspect, {
-      letterbox: opts.letterbox,
-    });
+    this.drawLetterboxScratch.letterbox = opts.letterbox;
+    return session.presenter.draw(renderer, rt.texture, dst, opts.fill, opts.aspect, this.drawLetterboxScratch);
   }
 
   dispose(): void {
-    for (const s of this.sessions.values()) s.dispose();
+    this.sessions.forEach((s) => s.dispose());
     this.sessions.clear();
+  }
+}
+
+/** Readback harness only: sandbox GPU mirror path without the publish lane. */
+export class SandboxBitmapGl {
+  private texture: THREE.Texture | null = null;
+  private tw = 0;
+  private th = 0;
+  readonly presenter = new PackTexturePresenter();
+  uploadCount = 0;
+
+  dispose(): void {
+    if (this.texture) {
+      this.texture.dispose();
+      packMirrorResourceStats.textureDisposed += 1;
+    }
+    this.texture = null;
+    this.tw = 0;
+    this.th = 0;
+    this.presenter.dispose();
+  }
+
+  ensureTexture(w: number, h: number): THREE.Texture | null {
+    if (w < 2 || h < 2) return null;
+    if (this.texture && w === this.tw && h === this.th) return this.texture;
+    if (this.texture) {
+      this.texture.dispose();
+      packMirrorResourceStats.textureDisposed += 1;
+    }
+    this.tw = w;
+    this.th = h;
+    this.texture = new THREE.Texture();
+    packMirrorResourceStats.textureCreated += 1;
+    this.texture.flipY = true;
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+    return this.texture;
+  }
+
+  uploadFrame(bitmap: ImageBitmap): THREE.Texture | null {
+    const tex = this.ensureTexture(bitmap.width, bitmap.height);
+    if (!tex) return null;
+    tex.image = bitmap;
+    tex.needsUpdate = true;
+    this.uploadCount += 1;
+    return tex;
+  }
+
+  present(
+    renderer: MirrorRenderer,
+    texture: THREE.Texture,
+    fill: SurfaceLetterboxFill,
+    dst: CssRect,
+    aspect: number,
+  ): CssRect {
+    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true });
   }
 }
 
