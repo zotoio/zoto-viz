@@ -607,9 +607,37 @@ def test_staged_pack_cannot_be_constructed_outside_validator() -> None:
             members_sorted=(),
             parts=(),
             stats=psz.ZipReadStats(),
-            tree_hash_bytes_read=0,
             _token=object(),
         )
+
+
+def test_install_checks_run_in_registration_order(tmp_path: Path) -> None:
+    seen: list[str] = []
+
+    def first(ctx: pi.InstallContext) -> None:
+        seen.append("first")
+
+    def second(ctx: pi.InstallContext) -> None:
+        seen.append("second")
+        raise ValueError("stop")
+
+    pi.register_install_check(first)
+    pi.register_install_check(second)
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "plugin.yml").write_text(MINIMAL, encoding="utf-8")
+    ctx = pi.InstallContext(
+        staging=staging,
+        runtime=tmp_path / "runtime",
+        dest_zip=tmp_path / "z.zip",
+        doc={"id": "x", "name": "X", "version": 1},
+        sha256="abc",
+        upgrade=False,
+        rel="z.zip",
+    )
+    with pytest.raises(ValueError, match="stop"):
+        pi.run_staging_checks(ctx)
+    assert seen == ["first", "second"]
 
 
 def test_pa_fresh_install_zero_staging_hash_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -617,11 +645,11 @@ def test_pa_fresh_install_zero_staging_hash_bytes(tmp_path: Path, monkeypatch: p
     good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
     zip_path = tmp_path / "in.zip"
     zip_path.write_bytes(good)
+    meter = _meter_pack_folder_reads(monkeypatch, paths.plugin_local_runtime_dir(create=True) / "sample")
     staged = psz.read_pack_zip(zip_path)
-    assert staged.tree_hash_bytes_read == 0
-    assert staged.stats.staging_tree_hash_bytes_read == 0
-    _, disk_bytes = psz.runtime_tree_hash_from_disk_with_byte_count(staged.staging_dir)
-    assert disk_bytes > 0
+    assert meter["bytes"] == 0
+    live_bytes = _live_tree_file_bytes(staged.staging_dir)
+    assert live_bytes == len(MINIMAL.encode()) + len(VIZ.encode()) + len((staged.zip_sha256 + "\n").encode())
 
 
 def test_pa_remint_hashes_only_plugin_yml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -630,12 +658,13 @@ def test_pa_remint_hashes_only_plugin_yml(tmp_path: Path, monkeypatch: pytest.Mo
     zip_path = tmp_path / "in.zip"
     zip_path.write_bytes(good)
     staged = psz.read_pack_zip(zip_path)
+    meter = _meter_pack_folder_reads(monkeypatch, staged.staging_dir)
     reminted = psz.remint(staged, "sample-2")
-    yml_len = (reminted.staging_dir / "plugin.yml").read_bytes().__len__()
-    assert reminted.tree_hash_bytes_read == yml_len
-    assert reminted.stats.staging_tree_hash_bytes_read == yml_len
-    _, disk_bytes = psz.runtime_tree_hash_from_disk_with_byte_count(reminted.staging_dir)
-    assert disk_bytes > yml_len
+    yml_path = reminted.staging_dir / "plugin.yml"
+    yml_len = yml_path.stat().st_size
+    assert meter["bytes"] == yml_len
+    sidecar_len = len((reminted.staging_dir / pz.SHA256_NAME).read_bytes())
+    assert _live_tree_file_bytes(reminted.staging_dir) == yml_len + len(VIZ.encode()) + sidecar_len
 
 
 def test_pa_remint_tree_matches_from_scratch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -663,9 +692,14 @@ def test_pa_tree_hash_sensitive_to_path_layout(tmp_path: Path, monkeypatch: pyte
     (sub / "visualisation.yml").write_bytes(data)
     before = staged.tree_sha256
     after = psz.runtime_tree_hash(root)
+    sidecar_hex = hashlib.sha256((root / pz.SHA256_NAME).read_bytes()).hexdigest()
+    moved = hashlib.sha256((sub / "visualisation.yml").read_bytes()).hexdigest()
+    digests = {k: v for k, v in staged.member_sha256.items() if k != "visualisation.yml"}
+    digests["nested/visualisation.yml"] = moved
+    expected_after = psz.tree_hash_from_digests({**digests, pz.SHA256_NAME: sidecar_hex})
+    assert after == expected_after
     assert after != before
-    moved_digest = hashlib.sha256((sub / "visualisation.yml").read_bytes()).hexdigest()
-    assert moved_digest == staged.member_sha256["visualisation.yml"]
+    assert moved == staged.member_sha256["visualisation.yml"]
 
 
 def test_qe_upgrade_rollback_restores_v1_and_cleans_bak(

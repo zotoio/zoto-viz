@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_ux_zip_error_names_file_all_entry_points",
-  "description": "Zip safety errors name the offending member; web, scan, and MCP return identical message text."
-}

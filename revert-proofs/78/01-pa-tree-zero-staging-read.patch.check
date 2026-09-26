@@ -1,0 +1,65 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index 586f522..9469d1a 100644
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -38,8 +38,6 @@ _issued_staged: dict[int, weakref.ReferenceType[Any]] = {}
+ class ZipReadStats:
+     archive_bytes_read: int = 0
+     central_directory_parses: int = 0
+-    staging_tree_hash_bytes_read: int = 0
+-
+ 
+ @dataclass(frozen=True)
+ class Blocked:
+@@ -71,7 +69,6 @@ class StagedPack:
+     members_sorted: tuple[str, ...]
+     parts: tuple[str, ...]
+     stats: ZipReadStats
+-    tree_hash_bytes_read: int
+     _token: object
+ 
+     def __post_init__(self) -> None:
+@@ -312,8 +309,7 @@ def validate_pack_zip(
+         (staging / pz.SHA256_NAME).write_text(zip_sha + "\n", encoding="utf-8")
+         tree_digests = {**member_sha, pz.SHA256_NAME: hashlib.sha256(sidecar).hexdigest()}
+         members_sorted = tuple(sorted(members))
+-        tree_sha = tree_hash_from_digests(tree_digests)
+-        stats.staging_tree_hash_bytes_read = 0
++        tree_sha, _reread = runtime_tree_hash_from_disk_with_byte_count(staging)
+         return _make_staged_pack(
+             staging_dir=staging,
+             zip_sha256=zip_sha,
+@@ -324,7 +320,6 @@ def validate_pack_zip(
+             members_sorted=members_sorted,
+             parts=pz.detect_parts(members_sorted),
+             stats=stats,
+-            tree_hash_bytes_read=0,
+         )
+     except ValueError as e:
+         cleanup_staging_dir(staging)
+@@ -347,14 +342,10 @@ def remint(staged: StagedPack, new_id: str) -> StagedPack:
+     yml_path.write_bytes(yml_bytes)
+     member_sha = dict(staged.member_sha256)
+     member_sha[_REQUIRED] = hashlib.sha256(yml_bytes).hexdigest()
+-    sidecar_path = root / pz.SHA256_NAME
+     tree_digests = dict(member_sha)
+-    if sidecar_path.is_file():
+-        tree_digests[pz.SHA256_NAME] = hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
++    tree_digests[pz.SHA256_NAME] = hashlib.sha256((staged.zip_sha256 + "\n").encode()).hexdigest()
+     doc = _parse_plugin_yml(yml_bytes)
+     tree_sha = tree_hash_from_digests(tree_digests)
+-    stats = staged.stats
+-    stats.staging_tree_hash_bytes_read = len(yml_bytes)
+     return _make_staged_pack(
+         staging_dir=root,
+         zip_sha256=staged.zip_sha256,
+@@ -364,8 +355,7 @@ def remint(staged: StagedPack, new_id: str) -> StagedPack:
+         member_sha256=member_sha,
+         members_sorted=staged.members_sorted,
+         parts=staged.parts,
+-        stats=stats,
+-        tree_hash_bytes_read=len(yml_bytes),
++        stats=staged.stats,
+     )
+ 
+ 

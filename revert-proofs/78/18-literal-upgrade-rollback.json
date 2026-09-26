@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_zip_install_ux.py",
-  "testName": "test_zip_ux_literal_upgrade_rollback_message",
-  "description": "Upgrade rollback copy is a single literal template; revert blanks it and fails on the full text."
-}

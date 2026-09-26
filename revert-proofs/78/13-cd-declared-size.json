@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_qe_cd_declared_size_larger_than_actual",
-  "description": "Central-directory declared size larger than inflated payload is rejected."
-}
