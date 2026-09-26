@@ -146,6 +146,9 @@ function send(type: string, payload?: unknown): void {
       type: "writeParticles",
       payload: payload as { data: number[]; stride?: number },
     };
+  } else if (type === "frame-ready") {
+    parent.postMessage({ source: PLUGIN_SOURCE, type: "frame-ready" }, window.location.origin);
+    return;
   } else {
     msg = { source: PLUGIN_SOURCE, type: "log", payload: `unknown sandbox send type: ${type}` };
   }
@@ -237,10 +240,10 @@ export function handleSandboxBootChannel(
     return { bootDone: false, postTargetOrigin, port: hostPort };
   }
   const d = ev.data;
-  if (!d.bootNonce || d.bootNonce !== opts.bootNonce) {
+  if (d.bootNonce !== opts.bootNonce) {
     return { bootDone: false, postTargetOrigin, port: hostPort };
   }
-  if (!d.parentOrigin || ev.origin !== d.parentOrigin) {
+  if (ev.origin !== window.location.origin) {
     return { bootDone: false, postTargetOrigin, port: hostPort };
   }
   const port = ev.ports?.[0] ?? null;
@@ -252,7 +255,8 @@ export async function handleSandboxBootPayload(
   d: HostBootPayload,
   nonce: string,
 ): Promise<void> {
-  if (!d.bootNonce || d.bootNonce !== nonce) return;
+  if (bootDone) return;
+  if (d.bootNonce !== nonce) return;
   if (!d.parentOrigin) return;
   applyInit(d);
   bootDone = true;
@@ -275,6 +279,7 @@ export function handleSandboxPortMessage(
 ): void {
   if (!data || data.source !== HOST_SOURCE) return;
   if (data.type === "boot") {
+    if (bootDone) return;
     void handleSandboxBootPayload(data, nonce);
     return;
   }

@@ -100,7 +100,7 @@ export async function runPackAssetProtectedLoad(
   }
   abortPackAssetRebuildForTile(tileId, packName);
   const controller = new AbortController();
-  registerPackAssetRebuildAbort(tileId, packName, controller);
+  const attemptId = registerPackAssetRebuildAbort(tileId, packName, controller);
   const signal = controller.signal;
 
   const gatedNotice = () => {
@@ -110,7 +110,7 @@ export async function runPackAssetProtectedLoad(
   const runOnce = async (): Promise<void> => {
     if (signal.aborted) throw new DOMException("aborted", "AbortError");
     await load();
-    if (!isActivePackLoad(tileId, packName)) return;
+    if (signal.aborted || !isActivePackLoad(tileId, packName)) return;
     markTileRebuildIdle(tileId, packName);
     resetTileRebuildAttempts(tileId, packName);
     gatedNotice();
@@ -118,7 +118,8 @@ export async function runPackAssetProtectedLoad(
 
   try {
     await runOnce();
-    clearPackAssetRebuildAbort(tileId, packName);
+    if (signal.aborted || !isActivePackLoad(tileId, packName)) return;
+    clearPackAssetRebuildAbort(tileId, packName, attemptId);
     endActivePackLoad(tileId, packName);
     return;
   } catch (err) {
@@ -155,12 +156,12 @@ export async function runPackAssetProtectedLoad(
       if (!isActivePackLoad(tileId, packName)) return;
       try {
         await load();
-        if (!isActivePackLoad(tileId, packName)) return;
+        if (signal.aborted || !isActivePackLoad(tileId, packName)) return;
         markTileRebuildIdle(tileId, packName);
         resetTileRebuildAttempts(tileId, packName);
         gatedNotice();
         endTileRebuild(tileId, packName);
-        clearPackAssetRebuildAbort(tileId, packName);
+        clearPackAssetRebuildAbort(tileId, packName, attemptId);
         endActivePackLoad(tileId, packName);
         return;
       } catch (retryErr) {

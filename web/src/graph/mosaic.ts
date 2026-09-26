@@ -17,6 +17,7 @@ import {
   paintPackAssetPaneNotice,
   type PackAssetPaneNoticeOpts,
 } from "../plugins/pack-asset-pane-notice";
+import { clearPackNavigationStopped } from "../plugins/pack-asset-navigation";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -406,6 +407,7 @@ export class Mosaic {
   }
 
   closeTile(id: string): void {
+    clearPackNavigationStopped(id);
     if (!this.tree || !this.on) return;
     const next = closeLeaf(this.tree, id);
     if (!next) {

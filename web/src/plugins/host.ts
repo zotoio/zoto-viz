@@ -15,6 +15,7 @@ import {
 } from "./sandbox-channel";
 import {
   applyPackNavigationStoppedNotice,
+  clearPackNavigationStopped,
   markPackNavigationStopped,
   registerPackNavigationRemove,
 } from "./pack-asset-navigation";
@@ -65,16 +66,18 @@ export function packAssetUrlWithToken(token: string, packId: string, ...parts: s
   return `${PACK_ASSETS_PREFIX}${segs.join("/")}`;
 }
 
-let activePackAssetFrameId = "";
+const activePackAssetFrameByTile = new Map<string, string>();
+const sandboxAssetTokenByFrame = new Map<string, string>();
+let lastSandboxBootNonce = "";
 
-export function packAssetFrameIdForTests(): string {
-  return activePackAssetFrameId;
+export function packAssetFrameIdForTests(tileId = "main"): string {
+  return activePackAssetFrameByTile.get(tileId) ?? "";
 }
 
-function resolvePackAssetFrameId(): string {
+function resolvePackAssetFrameId(tileId = "main"): string {
   return (
-    activePackAssetFrameId
-    || packAssetFrameForTile("main")
+    activePackAssetFrameByTile.get(tileId)
+    || packAssetFrameForTile(tileId)
     || (import.meta.env.MODE === "test" ? TEST_FALLBACK_FRAME_ID : "")
   );
 }
@@ -82,24 +85,28 @@ function resolvePackAssetFrameId(): string {
 export async function packAssetUrl(packId: string, ...parts: string[]): Promise<string> {
   const frameId = resolvePackAssetFrameId();
   if (!frameId) throw new Error("pack asset frame required");
-  const token = await mintPackAssetToken(packId, frameId);
+  const sandboxTok = sandboxAssetTokenByFrame.get(frameId);
+  const token = sandboxTok ?? await mintPackAssetToken(packId, frameId);
   return packAssetUrlWithToken(token, packId, ...parts);
 }
 
-let sandboxBootNonce = "";
-
 export function sandboxBootNonceForTests(): string {
-  return sandboxBootNonce;
+  return lastSandboxBootNonce;
 }
 
 /** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
-export async function pluginSandboxFrameUrl(frameId?: string): Promise<string> {
-  const fid = frameId || resolvePackAssetFrameId();
-  if (!fid) throw new Error("pack asset frame required");
-  const token = await mintPackAssetToken(SANDBOX_PACK, fid);
-  sandboxBootNonce = crypto.randomUUID();
+export async function pluginSandboxFrameUrl(
+  frameId: string,
+  bootNonceOut?: { nonce: string },
+): Promise<string> {
+  if (!frameId) throw new Error("pack asset frame required");
+  const token = await mintPackAssetToken(SANDBOX_PACK, frameId);
+  sandboxAssetTokenByFrame.set(frameId, token);
+  const bootNonce = crypto.randomUUID();
+  lastSandboxBootNonce = bootNonce;
+  if (bootNonceOut) bootNonceOut.nonce = bootNonce;
   const path = packAssetUrlWithToken(token, SANDBOX_PACK, "plugin-sandbox.html");
-  return `${location.origin}${path}#zoto-boot=${encodeURIComponent(sandboxBootNonce)}`;
+  return `${location.origin}${path}#zoto-boot=${encodeURIComponent(bootNonce)}`;
 }
 
 export function hostAllows(type: string, caps: string[]): boolean {
@@ -199,6 +206,7 @@ export class PluginSandbox {
   private moduleBlobUrl: string | null = null;
   private bootReject: ((err: Error) => void) | null = null;
   private frameId = "";
+  private bootNonce = "";
   private hostPort: MessagePort | null = null;
   private iframeLoadCount = 0;
   private onIframeLoad: (() => void) | null = null;
@@ -232,7 +240,9 @@ export class PluginSandbox {
     const tile = this.activeTileId;
     const fid = this.frameId;
     this.frameId = "";
-    if (fid && fid === activePackAssetFrameId) activePackAssetFrameId = "";
+    this.bootNonce = "";
+    if (fid) sandboxAssetTokenByFrame.delete(fid);
+    if (activePackAssetFrameByTile.get(tile) === fid) activePackAssetFrameByTile.delete(tile);
     void closePackAssetFrameForTile(tile);
     if (this.moduleBlobUrl) {
       URL.revokeObjectURL(this.moduleBlobUrl);
@@ -315,13 +325,16 @@ export class PluginSandbox {
     config: Record<string, string>,
     viz?: VizPluginContract,
   ): Promise<void> {
+    clearPackNavigationStopped(this.activeTileId);
     this.frameId = await openPackAssetFrame(this.activeTileId);
-    activePackAssetFrameId = this.frameId;
+    activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+    const bootOut = { nonce: "" };
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
-    iframe.src = await pluginSandboxFrameUrl(this.frameId);
+    iframe.src = await pluginSandboxFrameUrl(this.frameId, bootOut);
+    this.bootNonce = bootOut.nonce;
     document.body.appendChild(iframe);
     this.iframe = iframe;
     this.iframeLoadCount = 0;
@@ -336,7 +349,7 @@ export class PluginSandbox {
     if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
       await Promise.resolve();
     } else {
-      await waitPluginMsg(iframe, "frame-ready", (fail) => { this.bootReject = fail; });
+      await waitPluginMsg(iframe, "frame-ready", this.bootNonce, (fail) => { this.bootReject = fail; });
     }
     const channel = new MessageChannel();
     this.hostPort = channel.port1;
@@ -345,7 +358,7 @@ export class PluginSandbox {
     this.postToFrameWindow({
       source: HOST_SOURCE,
       type: "boot-channel",
-      bootNonce: sandboxBootNonce,
+      bootNonce: this.bootNonce,
       parentOrigin: location.origin,
     }, [channel.port2]);
     this.postToFramePort({
@@ -355,13 +368,13 @@ export class PluginSandbox {
       config,
       viz,
       moduleSrc,
-      bootNonce: sandboxBootNonce,
+      bootNonce: this.bootNonce,
       parentOrigin: location.origin,
     });
     if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
       await Promise.resolve();
     } else {
-      await waitPluginPortMsg(this.hostPort, "ready", (fail) => { this.bootReject = fail; });
+      await waitPluginPortMsg(this.hostPort, "ready", this.bootNonce, (fail) => { this.bootReject = fail; });
     }
     this.bootReject = null;
   }
@@ -373,7 +386,9 @@ export class PluginSandbox {
     this.teardownPort();
     const fid = this.frameId;
     this.frameId = "";
-    if (fid && fid === activePackAssetFrameId) activePackAssetFrameId = "";
+    this.bootNonce = "";
+    if (fid) sandboxAssetTokenByFrame.delete(fid);
+    if (activePackAssetFrameByTile.get(tile) === fid) activePackAssetFrameByTile.delete(tile);
     if (this.onIframeLoad && this.iframe) {
       this.iframe.removeEventListener("load", this.onIframeLoad);
       this.onIframeLoad = null;
@@ -425,7 +440,7 @@ export class PluginSandbox {
     const d = ev.data as PluginPortMsg | undefined;
     if (!d || d.source !== PLUGIN_SOURCE) return;
     if (d.type === "ready") {
-      if (d.bootNonce && d.bootNonce !== sandboxBootNonce) return;
+      if (d.bootNonce !== this.bootNonce) return;
       recordSandboxBoot("ready");
       setSandboxReady(true);
       return;
@@ -445,7 +460,7 @@ export class PluginSandbox {
     }
     if (d.type === "writeUniform") {
       noteSandboxWrite(this.activeTileId);
-      this.handlers.writeUniform?.(d.payload.name, d.payload.value);
+      this.handlers.writeUniform?.(d.payload.name, d.payload.value as VizUniformValue);
     }
     if (d.type === "writeParticles") {
       noteSandboxWrite(this.activeTileId);
@@ -462,6 +477,7 @@ function recordSandboxBoot(type: HostMsg["type"]): void {
 function waitPluginMsg(
   iframe: HTMLIFrameElement,
   type: HostMsg["type"],
+  expectedBootNonce: string,
   onReject?: (fail: (err: Error) => void) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -486,7 +502,7 @@ function waitPluginMsg(
         return;
       }
       if (d.type === type) {
-        if (type === "ready" && d.type === "ready" && d.bootNonce && d.bootNonce !== sandboxBootNonce) return;
+        if (type === "ready" && d.type === "ready" && d.bootNonce !== expectedBootNonce) return;
         window.clearTimeout(timer);
         window.removeEventListener("message", onMsg);
         resolve();
@@ -499,6 +515,7 @@ function waitPluginMsg(
 function waitPluginPortMsg(
   port: MessagePort,
   type: PluginPortMsg["type"],
+  expectedBootNonce: string,
   onReject?: (fail: (err: Error) => void) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -522,7 +539,9 @@ function waitPluginPortMsg(
         return;
       }
       if (d.type === type) {
-        if (type === "ready" && d.bootNonce && d.bootNonce !== sandboxBootNonce) return;
+        if (type === "ready") {
+          if (d.type !== "ready" || d.bootNonce !== expectedBootNonce) return;
+        }
         window.clearTimeout(timer);
         port.removeEventListener("message", onMsg);
         resolve();

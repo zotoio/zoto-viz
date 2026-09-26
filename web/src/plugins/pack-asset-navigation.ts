@@ -15,6 +15,11 @@ export function markPackNavigationStopped(tileId: string): boolean {
   return true;
 }
 
+export function clearPackNavigationStopped(tileId: string): void {
+  stoppedTiles.delete(tileId);
+  removeHandlers.delete(tileId);
+}
+
 export function packNavigationStoppedForTile(tileId: string): boolean {
   return stoppedTiles.has(tileId);
 }

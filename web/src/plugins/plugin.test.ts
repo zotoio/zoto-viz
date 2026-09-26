@@ -1,4 +1,7 @@
-import { describe, expect, it, afterEach } from "vitest";
+import { describe, expect, it, afterEach, vi } from "vitest";
+import { setCsrfTokenForTests, setPackAssetTokenForTests } from "../core/http";
+import * as packAssetFrame from "./pack-asset-frame";
+import { setSandboxBootWaitInTests } from "./host";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
   loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
@@ -226,9 +229,18 @@ describe("compilePlugin", () => {
     expect(viewSelectOptions().some((o) => o.value === "plugin:pulse" && o.label === "NET Pulse")).toBe(true);
     expect(viewSelectOptions().some((o) => o.value === "plugin:topology")).toBe(true);
     expect(viewSelectOptions().some((o) => o.value === "topology")).toBe(false);
+    vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
+    vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
+    setCsrfTokenForTests("test-csrf");
+    setPackAssetTokenForTests("_sandbox", "sandbox-tok");
+    setPackAssetTokenForTests("pulse", "sandbox-tok");
+    setSandboxBootWaitInTests(false);
     const origFetch = globalThis.fetch;
     globalThis.fetch = (async (url: string) => {
-      expect(String(url)).toContain("/api/plugins/pulse/module.js");
+      const u = String(url);
+      expect(
+        u.includes("/pack-assets/") && u.includes("/pulse/module.js"),
+      ).toBe(true);
       return { ok: true, text: async () => "globalThis.fromModule = 1;" };
     }) as typeof fetch;
     const box = new PluginSandbox();
@@ -242,6 +254,10 @@ describe("compilePlugin", () => {
     await expect(fetchPlugins()).rejects.toThrow(/plugins/);
     globalThis.fetch = (async () => { throw new Error("offline"); }) as never;
     expect(await installPlugins()).toEqual([]);
+    vi.restoreAllMocks();
+    setPackAssetTokenForTests("_sandbox", "");
+    setPackAssetTokenForTests("pulse", "");
+    setSandboxBootWaitInTests(false);
     globalThis.fetch = orig;
   });
 

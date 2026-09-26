@@ -10,7 +10,9 @@ const tileFrames = new Map<string, string>();
 const tileFrameOpenCounts = new Map<string, number>();
 const tileRebuildAttempts = new Map<string, number>();
 const tileRebuildInflight = new Set<string>();
-const rebuildAbort = new Map<string, AbortController>();
+type RebuildAbortRow = { controller: AbortController; attemptId: number };
+const rebuildAbort = new Map<string, RebuildAbortRow>();
+let rebuildAttemptSeq = 0;
 const retryHandlers = new Map<string, { packName: string; run: () => void }>();
 const activePackByTile = new Map<string, string>();
 let wallNoticePending = false;
@@ -68,11 +70,11 @@ export async function openPackAssetFrame(tileId: string): Promise<string> {
 
 export function abortPackAssetRebuildForTile(tileId: string, packName?: string): void {
   if (packName) {
-    rebuildAbort.get(rebuildAttemptKey(tileId, packName))?.abort();
+    rebuildAbort.get(rebuildAttemptKey(tileId, packName))?.controller.abort();
     return;
   }
   for (const key of rebuildAbort.keys()) {
-    if (key.startsWith(`${tileId}\x1f`)) rebuildAbort.get(key)?.abort();
+    if (key.startsWith(`${tileId}\x1f`)) rebuildAbort.get(key)?.controller.abort();
   }
 }
 
@@ -80,14 +82,24 @@ export function registerPackAssetRebuildAbort(
   tileId: string,
   packName: string,
   controller: AbortController,
-): void {
+): number {
   const key = rebuildAttemptKey(tileId, packName);
-  rebuildAbort.get(key)?.abort();
-  rebuildAbort.set(key, controller);
+  rebuildAbort.get(key)?.controller.abort();
+  const attemptId = ++rebuildAttemptSeq;
+  rebuildAbort.set(key, { controller, attemptId });
+  return attemptId;
 }
 
-export function clearPackAssetRebuildAbort(tileId: string, packName: string): void {
-  rebuildAbort.delete(rebuildAttemptKey(tileId, packName));
+export function clearPackAssetRebuildAbort(
+  tileId: string,
+  packName: string,
+  attemptId?: number,
+): void {
+  const key = rebuildAttemptKey(tileId, packName);
+  const row = rebuildAbort.get(key);
+  if (!row) return;
+  if (attemptId !== undefined && row.attemptId !== attemptId) return;
+  rebuildAbort.delete(key);
 }
 
 export function beginActivePackLoad(tileId: string, packName: string): void {

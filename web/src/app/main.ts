@@ -103,7 +103,6 @@ import {
 import {
   registerPackAssetRetry,
 } from "../plugins/pack-asset-frame";
-import { releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
@@ -665,7 +664,6 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     markSandboxStartupFailed(tileId);
     applyPackFeedPaneNotice(mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost | null, tileId, packLabel);
     sandbox.unload();
-    releasePanelView(tileId);
     scene.clearPluginStyle();
   }
 }
