@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "teardown disposes RT, geometry, and material; single tile creates nothing",
+  "testName": "PackMirrorSession resource lifecycle > teardown disposes RT, geometry, and material; single tile creates nothing",
   "description": "Dropping below two tiles disposes RT and quad resources."
 }

@@ -51,7 +51,13 @@ jobs:
           pnpm approve-builds esbuild
       - name: Web tests and coverage
         working-directory: web
+        env:
+          CI: true
+          ZOTO_EXPECT_SWIFTSHADER: "1"
         run: pnpm test:coverage
+      - name: Revert proof rows (PR 42)
+        if: hashFiles('revert-proofs/42/*.json') != ''
+        run: node scripts/revert-proof.mjs 42
 
   build:
     runs-on: ubuntu-latest

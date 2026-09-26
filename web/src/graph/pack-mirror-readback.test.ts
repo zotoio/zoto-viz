@@ -37,6 +37,14 @@ const CASES: Case[] = [
   { dpr: 2, antialias: true, path: "sandbox" },
 ];
 
+function expectSwiftShaderInCi(renderer: string): void {
+  expect(renderer.length).toBeGreaterThan(0);
+  const requireSwift = process.env.CI === "true" || process.env.ZOTO_EXPECT_SWIFTSHADER === "1";
+  if (requireSwift) {
+    expect(renderer.toLowerCase()).toContain("swiftshader");
+  }
+}
+
 let vite: ViteDevServer;
 let httpServer: http.Server;
 let browser: Browser;
@@ -110,7 +118,7 @@ describe("pack mirror SwiftShader readback", () => {
           glRenderer: string;
         };
         console.log(`[pack-mirror-readback] dpr=${c.dpr} aa=${c.antialias} path=${c.path} renderer=${result.glRenderer}`);
-        expect(result.glRenderer.toLowerCase()).toContain("swiftshader");
+        expectSwiftShaderInCi(result.glRenderer);
         expect(result.contentNonEmpty).toBe(true);
         expect(result.primaryTopLeft[0]).toBeGreaterThan(40);
         expect(result.mirrorTopLeft[0]).toBeGreaterThan(40);

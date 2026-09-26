@@ -12,7 +12,6 @@
     "build": "pnpm asbuild && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "pnpm asbuild && vitest run",
-    "test:revert-proofs-42": "node scripts/revert-proof-42.mjs",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
     "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs"
   },

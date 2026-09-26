@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/sandbox-bitmap-close.test.ts",
-  "testName": "closes bitmap only after presentBitmapMirror draws",
+  "testName": "sandbox bitmap close order > closes bitmap only after presentBitmapMirror draws",
   "description": "Sandbox ImageBitmap stays open through GPU upload/present."
 }
