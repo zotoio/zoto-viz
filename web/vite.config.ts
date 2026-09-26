@@ -2,6 +2,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Connect } from "vite";
 import { defineConfig } from "vite";
 
 const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
@@ -20,7 +21,45 @@ function gitShortRev(): string {
   }
 }
 
+/** Dev-only: opaque-origin plugin sandbox iframe (no allow-same-origin). */
+function sandboxNullOriginDevPath(pathname: string): boolean {
+  if (pathname === "/plugin-sandbox.html") return true;
+  if (pathname.startsWith("/src/plugins/sandbox-frame")) return true;
+  if (pathname === "/@vite/client") return true;
+  if (pathname.startsWith("/@id/") || pathname.startsWith("/@fs/")) return true;
+  if (pathname.startsWith("/node_modules/")) return true;
+  if (pathname.startsWith("/src/plugins/")) return true;
+  return false;
+}
+
+function sandboxNullOriginCorsPlugin() {
+  return {
+    name: "zoto-sandbox-null-origin-cors",
+    configureServer(server: { middlewares: Connect.Server }) {
+      server.middlewares.use((req, res, next) => {
+        if (req.headers.origin !== "null" || req.method !== "GET") {
+          next();
+          return;
+        }
+        const pathname = (req.url ?? "").split("?")[0] ?? "";
+        if (!sandboxNullOriginDevPath(pathname)) {
+          next();
+          return;
+        }
+        const end = res.end.bind(res);
+        res.end = ((chunk?: unknown, encoding?: unknown, cb?: unknown) => {
+          res.setHeader("Access-Control-Allow-Origin", "null");
+          res.setHeader("Vary", "Origin");
+          return end(chunk as never, encoding as never, cb as never);
+        }) as typeof res.end;
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
+  plugins: [sandboxNullOriginCorsPlugin()],
   define: {
     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
   },

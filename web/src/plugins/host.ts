@@ -149,8 +149,8 @@ export class PluginSandbox {
     const rel = pluginModuleUrl(id, hash);
     const r = await fetch(rel);
     if (!r.ok) throw new Error(`module ${r.status}`);
-    const moduleSrc = new URL(rel, location.origin).href;
-    await this.loadModuleUrl(moduleSrc, caps, config, viz);
+    const js = await r.text();
+    await this.load(id, js, caps, config, viz);
   }
 
   async loadModuleUrl(
@@ -171,7 +171,7 @@ export class PluginSandbox {
     viz?: VizPluginContract,
   ): Promise<void> {
     const iframe = document.createElement("iframe");
-    iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    iframe.setAttribute("sandbox", "allow-scripts");
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     iframe.src = pluginSandboxFrameUrl();

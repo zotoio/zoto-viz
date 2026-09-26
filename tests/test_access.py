@@ -42,9 +42,10 @@ def test_location_allowed() -> None:
 
 
 class FakeReq:
-    def __init__(self, *, method="GET", host="127.0.0.1:7020", origin="", cookie="", header="", lan=False, csrf="tok"):
+    def __init__(self, *, method="GET", host="127.0.0.1:7020", origin="", cookie="", header="", lan=False, csrf="tok", path="/poke"):
         self.method = method
-        self.path_qs = "/poke"
+        self.path = path
+        self.path_qs = path
         self.headers = {}
         if host:
             self.headers["Host"] = host
@@ -63,6 +64,10 @@ def test_host_origin_csrf_helpers() -> None:
     assert access.origin_ok(FakeReq(origin=""))
     assert access.origin_ok(FakeReq(origin="http://127.0.0.1:5173"))
     assert not access.origin_ok(FakeReq(origin="http://evil.example"))
+    assert not access.origin_ok(FakeReq(origin="null"))
+    assert not access.origin_ok(FakeReq(origin="null", path="/api/profiles"))
+    assert access.sandbox_static_bootstrap_path("/plugin-sandbox.html")
+    assert access.sandbox_plugin_asset_path("/api/plugins/pulse/module.js")
     assert access.origin_ok(FakeReq(host="lan.box:7020", origin="http://lan.box:7020", lan=True))
     assert not access.origin_ok(FakeReq(host="lan.box:7020", origin="http://other.box", lan=True))
     assert access.csrf_ok(FakeReq(cookie="tok", header="tok"))
@@ -129,6 +134,86 @@ class AccessMiddlewareTests(AioHTTPTestCase):
         )
         assert resp.status == 403
 
+    async def test_null_origin_denied_on_profiles(self) -> None:
+        resp = await self.client.get(
+            "/ok",
+            headers={"Host": "127.0.0.1:7020", "Origin": "null"},
+        )
+        assert resp.status == 403
+
     async def test_mcp_skips_csrf(self) -> None:
         resp = await self.client.post("/mcp", headers={"Host": "127.0.0.1:7020"})
         assert resp.status == 200
+
+
+class SandboxNullOriginHttpTests(AioHTTPTestCase):
+    async def get_application(self) -> web.Application:
+        async def module(_: web.Request) -> web.Response:
+            return web.Response(text="export {};", content_type="text/javascript")
+
+        async def profiles(_: web.Request) -> web.Response:
+            return web.json_response({"profiles": []})
+
+        async def sandbox(_: web.Request) -> web.Response:
+            return web.Response(text="<html></html>", content_type="text/html")
+
+        app = web.Application(middlewares=[access.middleware])
+        app["csrf"] = "token-aaa"
+        app["insecure_lan"] = False
+        app.router.add_get("/api/plugins/{id}/module.js", module)
+        app.router.add_get("/api/profiles", profiles)
+        app.router.add_put("/api/plugins/{id}/consent", profiles)
+        app.router.add_get("/plugin-sandbox.html", sandbox)
+        return app
+
+    async def test_null_origin_module_js_when_consented(self) -> None:
+        from unittest.mock import patch
+
+        from service import plugins
+
+        row = {"id": "demo-pack", "has_frontend": True, "version": 1}
+        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None):
+            with patch.object(plugins, "consented", lambda doc: doc.get("id") == "demo-pack"):
+                resp = await self.client.get(
+                    "/api/plugins/demo-pack/module.js",
+                    headers={"Host": "127.0.0.1:7020", "Origin": "null"},
+                )
+        assert resp.status == 200
+        assert resp.headers.get("Access-Control-Allow-Origin") == "null"
+        assert "Origin" in resp.headers.get("Vary", "")
+
+    async def test_null_origin_module_js_denied_without_consent(self) -> None:
+        from unittest.mock import patch
+
+        from service import plugins
+
+        row = {"id": "secret", "has_frontend": True, "version": 1}
+        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "secret" else None):
+            with patch.object(plugins, "consented", lambda _doc: False):
+                resp = await self.client.get(
+                    "/api/plugins/secret/module.js",
+                    headers={"Host": "127.0.0.1:7020", "Origin": "null"},
+                )
+        assert resp.status == 403
+
+    async def test_null_origin_put_denied(self) -> None:
+        resp = await self.client.put(
+            "/api/plugins/demo/consent",
+            headers={"Host": "127.0.0.1:7020", "Origin": "null", access.HEADER: "token-aaa"},
+        )
+        assert resp.status == 403
+
+    async def test_null_origin_profiles_denied(self) -> None:
+        resp = await self.client.get(
+            "/api/profiles",
+            headers={"Host": "127.0.0.1:7020", "Origin": "null"},
+        )
+        assert resp.status == 403
+
+    async def test_null_origin_bootstrap_html(self) -> None:
+        resp = await self.client.get(
+            "/plugin-sandbox.html",
+            headers={"Host": "127.0.0.1:7020", "Origin": "null"},
+        )
+        assert resp.status == 200
+        assert resp.headers.get("Access-Control-Allow-Origin") == "null"
