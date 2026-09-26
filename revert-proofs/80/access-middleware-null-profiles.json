@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access.py::AccessMiddlewareTests::test_null_origin_denied_on_profiles",
+  "description": "Null Origin denied except pack-assets.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 200 == 403"
+}

@@ -1,0 +1,16 @@
+diff --git a/service/access.py b/service/access.py
+index 5406219..6451267 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -109,10 +109,7 @@ def redact_request_path(path: str, token: str) -> str:
+     parsed = parse_pack_assets_path(path or "")
+     if not parsed or not token:
+         return path
+-    got, pack_id, tail = parsed
+-    if got != token:
+-        return path
+-    return pack_asset_url(SANDBOX_TOKEN_REDACT, pack_id, *tail.split("/"))
++    return path
+ 
+ 
+ def sandbox_null_origin_allowed(request: web.Request) -> bool:

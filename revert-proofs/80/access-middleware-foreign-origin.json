@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access.py::AccessMiddlewareTests::test_foreign_origin_rejected",
+  "description": "Foreign Origin rejected on loopback bind.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 200 == 403"
+}

@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access.py::test_header_hostname",
+  "description": "Bracketed IPv6 Host header parsing.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert '[' == '::1'"
+}

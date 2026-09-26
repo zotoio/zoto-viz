@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_normalize.py::test_host_normalisation_table[ipv6_zone_reject]",
+  "description": "IPv6 zone id in Host rejected.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 500 == 400"
+}

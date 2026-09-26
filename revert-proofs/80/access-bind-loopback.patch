@@ -1,0 +1,18 @@
+diff --git a/service/access.py b/service/access.py
+index 5406219..eb9acf3 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -167,12 +167,7 @@ def attach_html_frame_policy(resp: web.StreamResponse) -> None:
+ 
+ def bind_is_loopback(bind: str) -> bool:
+     host = (bind or "").strip()
+-    if host in {"127.0.0.1", "localhost", "::1"}:
+-        return True
+-    try:
+-        return ipaddress.ip_address(host).is_loopback
+-    except ValueError:
+-        return False
++    return host in {"127.0.0.1", "localhost", "::1"}
+ 
+ 
+ def header_hostname(raw: str) -> str:
