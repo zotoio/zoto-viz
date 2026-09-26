@@ -13,7 +13,16 @@ import {
 } from "./pack-lint-import";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
 import { violationKey } from "./pack-lint-types";
+import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowlist";
 import { INLINE_ZOTO_DECLARE_HINT, PACK_ZOTO_BINDING_HINT } from "./viz-zoto";
+
+export {
+  LEGACY_DECLARE_ZOTO_PACK_IDS,
+  LEGACY_ZOTO_LINT_RULES,
+  isLegacyDeclareZotoPackAllowed,
+  legacyZotoViolationsOnDisallowedPacks,
+  packIdFromPluginsSrcPath,
+} from "./legacy-zoto-pack-allowlist";
 
 export type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
 export { formatViolationMessage } from "./pack-lint-hints";
@@ -359,9 +368,6 @@ const INSTALL_BLOCK_RULES = new Set<PackLintRule>(["sandbox-escape", "host-trans
 
 const INSTALL_WARN_RULES = new Set<PackLintRule>(["inline-zoto-declare", "pack-zoto-binding"]);
 
-/** TODO(PR C — getVizZoto pack swap): remove baseline rows for these rules under plugins/src once all packs migrate. */
-export const LEGACY_ZOTO_LINT_RULES = new Set<PackLintRule>(["inline-zoto-declare", "pack-zoto-binding"]);
-
 export type PackInstallLintResult = {
   blocks: PackLintViolation[];
   warnings: PackLintViolation[];
@@ -420,7 +426,13 @@ export function loadBaseline(repoRoot: string): PackLintBaseline {
 export function assertBaselineGuard(
   current: PackLintViolation[],
   baseline: PackLintBaseline,
-): { newViolations: PackLintViolation[]; staleViolations: PackLintViolation[]; ok: boolean } {
+): {
+  newViolations: PackLintViolation[];
+  staleViolations: PackLintViolation[];
+  disallowedLegacyZoto: PackLintViolation[];
+  ok: boolean;
+} {
+  const disallowedLegacyZoto = legacyZotoViolationsOnDisallowedPacks(current);
   const baseSet = new Set(baseline.violations.map(violationKey));
   const curSet = new Set(current.map(violationKey));
   const newViolations = current.filter((v) => !baseSet.has(violationKey(v)));
@@ -428,7 +440,11 @@ export function assertBaselineGuard(
   return {
     newViolations,
     staleViolations,
-    ok: newViolations.length === 0 && staleViolations.length === 0,
+    disallowedLegacyZoto,
+    ok:
+      disallowedLegacyZoto.length === 0 &&
+      newViolations.length === 0 &&
+      staleViolations.length === 0,
   };
 }
 
