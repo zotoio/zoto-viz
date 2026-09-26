@@ -204,6 +204,8 @@ export class Settings {
   onMicPolicy?: (p: MicPolicy) => void;
   onSoundPolicy?: (on: boolean) => void;
   onPluginChange?: (id: string, values: Record<string, string>) => void;
+  /** Live wall: swap one tile's view (returns false when the pick could not be applied). */
+  onMosaicPanePick?: (fromId: string, toId: string) => boolean;
   onInstancesChange?: () => void;
   onClose?: () => void;
   onDice?: () => void;
@@ -1767,10 +1769,16 @@ export class Settings {
       fillViewSelect(sel, cur);
       sel.addEventListener("change", () => {
         const from = ids[i] ?? "";
-        const next = nextPaneTiles(ids, from, sel.value);
-        this.anim.mosaicTiles = parseMosaicTiles(next);
-        if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
-        this.persistAnim();
+        const to = sel.value;
+        if (!from || from === to) return;
+        if (this.onMosaicPanePick) {
+          if (!this.onMosaicPanePick(from, to)) fillViewSelect(sel, from);
+        } else {
+          const next = nextPaneTiles(ids, from, to);
+          this.anim.mosaicTiles = parseMosaicTiles(next);
+          if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
+          this.persistAnim();
+        }
         this.animUi?.syncTiles();
       });
       row.append(cap, sel);
