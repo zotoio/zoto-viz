@@ -1,0 +1,307 @@
+/**
+ * Rocket Car Soccer — view options, presets, buffer layout shared with the sky shader.
+ */
+
+export const RCS_MAX_CARS = 6;
+export const RCS_MAX_TEAM = 3;
+export const RCS_MAX_PARTICLES = 48;
+export const RCS_MAX_SUBSTEPS = 4;
+export const RCS_FIXED_HZ = 120;
+export const RCS_FIXED_DT = 1 / RCS_FIXED_HZ;
+export const RCS_SLOT0_FLOATS = 64;
+export const RCS_SLOT1_FLOATS = 64;
+export const RCS_SLOT2_FLOATS = 64;
+
+/** Slot 0 layout (must match sky/fragment.glsl). */
+export const RCS_SLOT = {
+  mark: 0,
+  camX: 1,
+  camY: 2,
+  camZ: 3,
+  camYaw: 4,
+  camPitch: 5,
+  camRoll: 6,
+  camFov: 7,
+  clock: 8,
+  scoreOrange: 9,
+  scoreBlue: 10,
+  phase: 11,
+  slowMo: 12,
+  goalFlash: 13,
+  aspect: 14,
+  theme: 15,
+  particlePct: 16,
+  cutBlend: 17,
+  camMode: 18,
+  trailStyle: 19,
+  explodeStyle: 20,
+  replay: 21,
+  matchLen: 22,
+  ballScale: 23,
+  gameSpeed: 24,
+  aggress: 25,
+  shake: 26,
+  carCount: 27,
+} as const;
+
+export const RCS_BALL_BASE = 0;
+export const RCS_CAR0 = 6;
+export const RCS_CAR_STRIDE = 9;
+
+export type RcsTheme = "day" | "night" | "neon";
+export type RcsCamera = "broadcast" | "ballcam" | "director" | "orbit";
+export type RcsTrail = "soft" | "sharp" | "spark";
+export type RcsExplode = "confetti" | "shockwave" | "embers";
+
+export interface RcsOptions {
+  teamSize: number;
+  teamOrange: string;
+  teamBlue: string;
+  theme: RcsTheme;
+  aggress: number;
+  gameSpeed: number;
+  trail: RcsTrail;
+  camera: RcsCamera;
+  cutHz: number;
+  explode: RcsExplode;
+  replay: boolean;
+  matchSec: number;
+  ballSize: number;
+  particles: number;
+  reducedMotion: boolean;
+}
+
+export const RCS_DEFAULTS: RcsOptions = {
+  teamSize: 3,
+  teamOrange: "#ff8c32",
+  teamBlue: "#3aa7ff",
+  theme: "day",
+  aggress: 55,
+  gameSpeed: 100,
+  trail: "soft",
+  camera: "director",
+  cutHz: 0.35,
+  explode: "shockwave",
+  replay: true,
+  matchSec: 300,
+  ballSize: 100,
+  particles: 70,
+  reducedMotion: false,
+};
+
+export type RcsPresetId = "broadcast" | "neon_night" | "chaos_3v3" | "chill_orbit";
+
+export const RCS_PRESETS: Record<RcsPresetId, Partial<RcsOptions>> = {
+  broadcast: {
+    teamSize: 3,
+    theme: "day",
+    camera: "broadcast",
+    cutHz: 0.25,
+    gameSpeed: 100,
+    aggress: 50,
+    trail: "soft",
+    explode: "shockwave",
+    replay: true,
+    particles: 60,
+  },
+  neon_night: {
+    teamSize: 3,
+    theme: "neon",
+    camera: "director",
+    cutHz: 0.45,
+    gameSpeed: 110,
+    aggress: 65,
+    trail: "spark",
+    explode: "confetti",
+    replay: true,
+    particles: 85,
+  },
+  chaos_3v3: {
+    teamSize: 3,
+    theme: "neon",
+    camera: "director",
+    cutHz: 0.7,
+    gameSpeed: 140,
+    aggress: 95,
+    trail: "sharp",
+    explode: "shockwave",
+    replay: true,
+    particles: 100,
+  },
+  chill_orbit: {
+    teamSize: 2,
+    theme: "night",
+    camera: "orbit",
+    cutHz: 0.12,
+    gameSpeed: 75,
+    aggress: 35,
+    trail: "soft",
+    explode: "embers",
+    replay: false,
+    particles: 45,
+  },
+};
+
+const PRESET_KEYS = new Set(Object.keys(RCS_PRESETS));
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+function num(raw: string | undefined, def: number, lo: number, hi: number, scale = 1): number {
+  const v = raw === undefined || raw === "" ? NaN : Number(raw);
+  return Number.isFinite(v) ? clamp(v * scale, lo, hi) : def;
+}
+
+function bool(raw: string | undefined, def: boolean): boolean {
+  if (raw === undefined || raw === "") return def;
+  return raw === "true" || raw === "1" || raw === "on";
+}
+
+function pick<T extends string>(raw: string | undefined, allowed: readonly T[], def: T): T {
+  if (raw && (allowed as readonly string[]).includes(raw)) return raw as T;
+  return def;
+}
+
+function hexNorm(raw: string | undefined, def: string): string {
+  const s = (raw ?? def).trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
+  return def;
+}
+
+export function parseRcsOptions(o: Record<string, string | undefined> = {}): RcsOptions {
+  let base = { ...RCS_DEFAULTS };
+  const preset = o.preset?.trim();
+  if (preset && PRESET_KEYS.has(preset)) {
+    base = { ...base, ...RCS_PRESETS[preset as RcsPresetId] };
+  }
+  const teamSize = Math.round(num(o.teamSize, base.teamSize, 2, RCS_MAX_TEAM));
+  return {
+    teamSize,
+    teamOrange: hexNorm(o.teamOrange, base.teamOrange),
+    teamBlue: hexNorm(o.teamBlue, base.teamBlue),
+    theme: pick(o.theme, ["day", "night", "neon"] as const, base.theme),
+    aggress: num(o.aggress, base.aggress, 0, 100),
+    gameSpeed: num(o.gameSpeed, base.gameSpeed, 25, 200),
+    trail: pick(o.trail, ["soft", "sharp", "spark"] as const, base.trail),
+    camera: pick(o.camera, ["broadcast", "ballcam", "director", "orbit"] as const, base.camera),
+    cutHz: num(o.cutHz, base.cutHz, 0.05, 1.5),
+    explode: pick(o.explode, ["confetti", "shockwave", "embers"] as const, base.explode),
+    replay: bool(o.replay, base.replay),
+    matchSec: Math.round(num(o.matchSec, base.matchSec, 60, 900)),
+    ballSize: num(o.ballSize, base.ballSize, 70, 140),
+    particles: Math.round(num(o.particles, base.particles, 0, 100)),
+    reducedMotion: bool(o.reducedMotion, base.reducedMotion),
+  };
+}
+
+export function validatePreset(id: string): id is RcsPresetId {
+  return PRESET_KEYS.has(id);
+}
+
+export function presetConfigValues(id: RcsPresetId): Record<string, string> {
+  const p = RCS_PRESETS[id];
+  return {
+    preset: id,
+    teamSize: String(p.teamSize ?? RCS_DEFAULTS.teamSize),
+    theme: String(p.theme ?? RCS_DEFAULTS.theme),
+    camera: String(p.camera ?? RCS_DEFAULTS.camera),
+    cutHz: String(p.cutHz ?? RCS_DEFAULTS.cutHz),
+    gameSpeed: String(p.gameSpeed ?? RCS_DEFAULTS.gameSpeed),
+    aggress: String(p.aggress ?? RCS_DEFAULTS.aggress),
+    trail: String(p.trail ?? RCS_DEFAULTS.trail),
+    explode: String(p.explode ?? RCS_DEFAULTS.explode),
+    replay: p.replay ? "true" : "false",
+    particles: String(p.particles ?? RCS_DEFAULTS.particles),
+  };
+}
+
+export function randomizeRcsOptions(seed: number, cur: RcsOptions): RcsOptions {
+  let s = seed >>> 0;
+  const rnd = (): number => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  const themes: RcsTheme[] = ["day", "night", "neon"];
+  const cams: RcsCamera[] = ["broadcast", "ballcam", "director", "orbit"];
+  return {
+    ...cur,
+    teamSize: 2 + Math.floor(rnd() * 2),
+    theme: themes[Math.floor(rnd() * themes.length)]!,
+    camera: cams[Math.floor(rnd() * cams.length)]!,
+    aggress: Math.round(20 + rnd() * 80),
+    gameSpeed: Math.round(50 + rnd() * 120),
+    cutHz: Math.round((0.1 + rnd() * 0.8) * 100) / 100,
+    particles: Math.round(30 + rnd() * 70),
+    ballSize: Math.round(80 + rnd() * 50),
+    trail: (["soft", "sharp", "spark"] as const)[Math.floor(rnd() * 3)]!,
+    explode: (["confetti", "shockwave", "embers"] as const)[Math.floor(rnd() * 3)]!,
+    replay: rnd() > 0.35,
+  };
+}
+
+export function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  const n = parseInt(h, 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+export function themeBgAccent(theme: RcsTheme): { bg: [number, number, number]; accent: [number, number, number] } {
+  if (theme === "neon") return { bg: [0.04, 0.02, 0.08], accent: [0.9, 0.2, 1.0] };
+  if (theme === "night") return { bg: [0.03, 0.05, 0.09], accent: [0.35, 0.75, 1.0] };
+  return { bg: [0.08, 0.12, 0.18], accent: [0.95, 0.72, 0.35] };
+}
+
+export function packThemeCode(theme: RcsTheme): number {
+  return theme === "neon" ? 2 : theme === "night" ? 1 : 0;
+}
+
+export function packCameraCode(cam: RcsCamera): number {
+  return cam === "ballcam" ? 1 : cam === "director" ? 2 : cam === "orbit" ? 3 : 0;
+}
+
+export function packTrailCode(t: RcsTrail): number {
+  return t === "sharp" ? 1 : t === "spark" ? 2 : 0;
+}
+
+export function packExplodeCode(e: RcsExplode): number {
+  return e === "confetti" ? 1 : e === "embers" ? 2 : 0;
+}
+
+/** Host render-scale governor hook — fixed 1.0 until the shared governor lands. */
+export function rcsRenderScale(): number {
+  return 1.0;
+}
+
+let undoStack: RcsOptions[] = [];
+
+export function pushRcsUndo(opt: RcsOptions): void {
+  undoStack.push({ ...opt });
+  if (undoStack.length > 12) undoStack.shift();
+}
+
+export function popRcsUndo(): RcsOptions | null {
+  return undoStack.pop() ?? null;
+}
+
+export function clearRcsUndo(): void {
+  undoStack = [];
+}
+
+export interface RcsGpuCounts {
+  buffers: number;
+  particles: number;
+}
+
+let liveGpu: RcsGpuCounts = { buffers: 0, particles: 0 };
+
+export function rcsTrackGpu(buffers: number, particles: number): void {
+  liveGpu = { buffers, particles };
+}
+
+export function rcsTeardown(): RcsGpuCounts {
+  const out = { ...liveGpu };
+  liveGpu = { buffers: 0, particles: 0 };
+  clearRcsUndo();
+  return out;
+}

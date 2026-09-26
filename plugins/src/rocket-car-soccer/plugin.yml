@@ -1,0 +1,25 @@
+id: rocket-car-soccer
+name: Rocket Car Soccer
+version: 1
+hint: Self-playing boost-car arena match on the plugin sky — original stylised stadium, AI kickoffs, goal bursts, and broadcast cameras.
+description: A procedural enclosed arena with glowing goals, pitch markings, crowd lights, and reflective floor. Two teams of boost cars (2v2 or 3v3) chase a physics ball with jumps, flips, wall play, and simple AI. Scoreboard, clock, kickoff resets, optional slow-mo goal replay, and director cameras. All knobs are This-view settings; no external assets required.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 3
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+    - uBright
+    - uOpacity
+frontend:
+  entry: frontend/index.ts

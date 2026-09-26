@@ -1,0 +1,148 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: tactical
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.22
+  skyAudio: false
+  skySpeed: 1
+  gridOpacity: 0
+  mosaic: "off"
+config:
+  - key: preset
+    label: preset
+    type: select
+    default: broadcast
+    values:
+      - [broadcast, Broadcast]
+      - [neon_night, Neon Night]
+      - [chaos_3v3, Chaos 3v3]
+      - [chill_orbit, Chill Orbit]
+    hint: Applies a bundled look and match profile. Tweaks below override until you pick another preset.
+  - key: dice
+    label: dice
+    type: select
+    default: none
+    values:
+      - [none, —]
+      - [randomise, Randomise]
+      - [undo, Undo]
+      - [reset, Reset]
+    hint: Randomise picks new options (undo restores the previous). Reset returns Broadcast defaults and restarts the match.
+  - key: teamSize
+    label: team size
+    type: number
+    default: 3
+    min: 2
+    max: 3
+    step: 1
+    hint: Players per team (2v2 or 3v3). Hard cap of three per side for mosaic walls.
+  - key: teamOrange
+    label: orange team colour
+    type: text
+    default: "#ff8c32"
+    hint: Hex colour for orange team glow and trails.
+  - key: teamBlue
+    label: blue team colour
+    type: text
+    default: "#3aa7ff"
+    hint: Hex colour for blue team glow and trails.
+  - key: theme
+    label: arena theme
+    type: select
+    default: day
+    values:
+      - [day, day]
+      - [night, night]
+      - [neon, neon]
+    hint: Stadium lighting palette — day sun, night floods, or neon trim.
+  - key: aggress
+    label: AI aggressiveness (%)
+    type: number
+    default: 55
+    min: 0
+    max: 100
+    step: 5
+    hint: How eagerly cars boost, jump, and challenge the ball.
+  - key: gameSpeed
+    label: game speed (%)
+    type: number
+    default: 100
+    min: 25
+    max: 200
+    step: 5
+    hint: Simulation rate multiplier (physics substeps capped).
+  - key: trail
+    label: boost trail style
+    type: select
+    default: soft
+    values:
+      - [soft, soft flame]
+      - [sharp, sharp jet]
+      - [spark, sparks]
+    hint: Exhaust look behind boosting cars.
+  - key: camera
+    label: camera mode
+    type: select
+    default: director
+    values:
+      - [broadcast, broadcast side]
+      - [ballcam, ball cam]
+      - [director, auto director]
+      - [orbit, slow orbit]
+    hint: Default camera; director rotates between angles using cut frequency.
+  - key: cutHz
+    label: director cut rate (Hz)
+    type: number
+    default: 0.35
+    min: 0.05
+    max: 1.5
+    step: 0.05
+    hint: How often the auto director switches shots. Reduced-motion slows cuts.
+  - key: explode
+    label: goal explosion style
+    type: select
+    default: shockwave
+    values:
+      - [shockwave, shockwave]
+      - [confetti, confetti]
+      - [embers, embers]
+    hint: Celebration burst when a goal registers.
+  - key: replay
+    label: slow-mo replay
+    type: boolean
+    default: true
+    hint: Brief slow-motion orbit after goals when on.
+  - key: matchSec
+    label: match length (s)
+    type: number
+    default: 300
+    min: 60
+    max: 900
+    step: 30
+    hint: Countdown clock on the tile scoreboard.
+  - key: ballSize
+    label: ball size (%)
+    type: number
+    default: 100
+    min: 70
+    max: 140
+    step: 5
+    hint: Ball radius scaler for physics and draw.
+  - key: particles
+    label: particle density (%)
+    type: number
+    default: 70
+    min: 0
+    max: 100
+    step: 5
+    hint: Crowd lights and goal debris (hard cap for mosaic walls).
+  - key: reducedMotion
+    label: reduced motion
+    type: boolean
+    default: false
+    hint: Disables camera shake and slows director cuts.
