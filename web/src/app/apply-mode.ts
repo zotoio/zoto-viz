@@ -10,6 +10,7 @@ import {
   flashModeLoadFailed,
 } from "./mode-switch-message";
 import { settleConsentAndDrainAuto } from "./mode-switch-coordinator";
+import { throwIfAborted } from "./mode-switch-attempt";
 import {
   capturePresentDriveBeforeLiveModeCommit,
   restorePresentDriveAfterModeRollback,
@@ -45,9 +46,9 @@ export type ApplyModeHost = {
   applyModeFeedExtras: (m: ViewMode, opts: Record<string, string>) => void;
   bindThisView: (modeId: string) => void;
   clearModeOpts: () => void;
-  ensureReviewed: (spec: PluginView | null) => Promise<ConsentReviewResult>;
-  loadTsPlugin: (spec: PluginView | null, switchGen: number) => Promise<void>;
-  syncPluginSky: (spec: PluginView | null, switchGen: number) => Promise<void>;
+  ensureReviewed: (spec: PluginView | null, signal: AbortSignal) => Promise<ConsentReviewResult>;
+  loadTsPlugin: (spec: PluginView | null, signal: AbortSignal) => Promise<void>;
+  syncPluginSky: (spec: PluginView | null, signal: AbortSignal) => Promise<void>;
   mosaic: Mosaic | null;
   captureMosaicSnap: () => MosaicAnimSnap;
   restoreMosaicSnap: (snap: MosaicAnimSnap, preferMode: string) => void;
@@ -75,12 +76,12 @@ export type ApplyModeHost = {
   modeLabel: (m: ViewMode) => string;
   onConsentDeclined: () => void;
   shouldLoadPluginRuntime: (m: ViewMode) => boolean;
-  isModeSwitchStale: (generation: number) => boolean;
   getLastConsentedModeId: () => string;
   getFallbackKeptModeId: () => string;
   markModeConsented: (modeId: string) => void;
   showRollbackMessage: (kind: "declined" | "failed", declined: ViewMode, keptModeId: string) => string | null;
   retryDeclinedMode?: (modeId: string) => void;
+  focusModePicker: () => void;
 };
 
 export type ApplyModeFlags = { keepLayout?: boolean };
@@ -126,7 +127,7 @@ function rollbackSwitch(
   host.syncModeHud(kept, host.pluginSpecForMode(keptModeId));
   host.applyViewLook();
   host.onConsentDeclined();
-  host.modeSel.focus();
+  host.focusModePicker();
   return host.showRollbackMessage(kind, declined, keptModeId);
 }
 
@@ -138,7 +139,7 @@ function scheduleConsentFinalize(
   prevPresent: ReturnType<typeof capturePresentDriveBeforeLiveModeCommit>,
   mosaicSnap: MosaicAnimSnap | null,
   paneRevert: MosaicPaneRevert | null,
-  switchGen: number,
+  signal: AbortSignal,
 ): void {
   const targetId = m.id;
   const keptOnFailure = resolveKeptModeId(host, prevPresent);
@@ -155,39 +156,43 @@ function scheduleConsentFinalize(
   void (async () => {
     let result: ConsentReviewResult = "failed";
     try {
-      result = await host.ensureReviewed(spec);
-    } catch {
+      result = await host.ensureReviewed(spec, signal);
+    } catch (e) {
+      if (signal.aborted || (e instanceof DOMException && e.name === "AbortError")) {
+        settleConsentAndDrainAuto("aborted");
+        return;
+      }
       result = "failed";
     }
-    if (result === "aborted") {
+    if (result === "aborted" || signal.aborted) {
       settleConsentAndDrainAuto("aborted");
       return;
     }
-    if (host.isModeSwitchStale(switchGen)) {
-      settleConsentAndDrainAuto(result);
-      return;
-    }
-    if (host.getLiveMode() !== targetId) return;
+    if (host.modeSel.value !== targetId) return;
     if (result === "ok") {
+      host.setLiveMode(targetId);
+      host.refreshPluginDrive(spec, targetId);
       commitScene();
       host.markModeConsented(targetId);
       host.syncModeHud(m, spec);
       try {
+        throwIfAborted(signal);
         if (host.shouldLoadPluginRuntime(m)) {
-          await host.loadTsPlugin(paneSpec, switchGen);
-          if (host.isModeSwitchStale(switchGen)) {
-            settleConsentAndDrainAuto(result);
-            return;
-          }
-          await host.syncPluginSky(paneSpec, switchGen);
+          await host.loadTsPlugin(paneSpec, signal);
+          throwIfAborted(signal);
+          await host.syncPluginSky(paneSpec, signal);
         }
-      } catch {
+      } catch (e) {
+        if (signal.aborted || (e instanceof DOMException && e.name === "AbortError")) {
+          settleConsentAndDrainAuto("aborted");
+          return;
+        }
         rollbackSwitch(host, keptOnFailure, m, prevPresent, mosaicSnap, paneRevert, "failed");
         settleConsentAndDrainAuto("failed", m.id);
         return;
       }
       settleConsentAndDrainAuto(result);
-      host.modeSel.focus();
+      host.focusModePicker();
       return;
     }
     rollbackSwitch(
@@ -207,7 +212,7 @@ export function applyModeImpl(
   host: ApplyModeHost,
   id: string,
   flags: ApplyModeFlags = {},
-  switchGen: number,
+  signal: AbortSignal,
 ): void {
   const m = host.modeById(id);
   const opts = host.optsFor(m);
@@ -220,12 +225,14 @@ export function applyModeImpl(
   host.applyPluginWall(m.id, { ...flags, prevMode: prevLive });
 
   const spec = m.pluginId ? host.pluginSpecForMode(m.id) : null;
-  host.setLiveMode(m.id);
-  host.refreshPluginDrive(spec, m.id);
   const paneSpec = host.skySpecForMode(m.id, spec);
   const skyStage = host.computeSkyStage(m, spec, opts);
   const gateScene = needsConsentBeforeShow(spec);
-  if (!gateScene) host.applyStageOnly(skyStage);
+  if (!gateScene) {
+    host.setLiveMode(m.id);
+    host.refreshPluginDrive(spec, m.id);
+    host.applyStageOnly(skyStage);
+  }
   host.applyModeFeedExtras(m, opts);
   host.bindThisView(m.id);
   host.clearModeOpts();
@@ -255,7 +262,7 @@ export function applyModeImpl(
       host.applyMosaicModeVisuals(m, opts, spec, skyStage);
       host.applyViewLook();
     }
-    scheduleConsentFinalize(host, m, spec, paneSpec, prevPresent, mosaicSnap, paneRevert, switchGen);
+    scheduleConsentFinalize(host, m, spec, paneSpec, prevPresent, mosaicSnap, paneRevert, signal);
     return;
   }
 
@@ -263,5 +270,5 @@ export function applyModeImpl(
     host.applySoloModeVisuals(m, opts, spec, skyStage);
     host.applyViewLook();
   }
-  scheduleConsentFinalize(host, m, spec, paneSpec, prevPresent, mosaicSnap, paneRevert, switchGen);
+  scheduleConsentFinalize(host, m, spec, paneSpec, prevPresent, mosaicSnap, paneRevert, signal);
 }

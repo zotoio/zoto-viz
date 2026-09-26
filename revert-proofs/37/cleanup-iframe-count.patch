@@ -1,0 +1,21 @@
+# Test: mode switch cleanup counts > 20 fast A,B,C switches with slow sky and real loadTs leave one sandbox iframe
+--- a/web/src/plugins/plugin.ts
++++ b/web/src/plugins/plugin.ts
+@@ -299,11 +299,6 @@ export async function attachPluginFrontend(
+   if (!pluginHasFrontend(spec)) {
+     sandbox.unload();
+     return false;
+   }
+-  const dispose = () => { sandbox.unload(); };
+-  signal?.addEventListener("abort", dispose, { once: true });
+   try {
+     await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
+     if (signal?.aborted) {
+@@ -311,7 +306,5 @@ export async function attachPluginFrontend(
+       return false;
+     }
+     return true;
+-  } finally {
+-    signal?.removeEventListener("abort", dispose);
+   }
+ }

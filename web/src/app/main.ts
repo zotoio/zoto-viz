@@ -25,10 +25,9 @@ import {
 import { applyModeImpl, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
 import type { ConsentReviewResult } from "./pack-consent";
 import { ensurePackReviewedOutcome } from "./pack-consent";
+import { beginModeSwitchAttempt, getActiveModeSwitchSignal, throwIfAborted } from "./mode-switch-attempt";
 import {
   getLastConsentedModeId,
-  getModeSwitchGeneration,
-  isModeSwitchStale,
   setLastConsentedModeId,
 } from "./mode-switch-state";
 import {
@@ -336,14 +335,14 @@ function applyViewLook(): void {
     applyChrome(userChrome, false);
     const m = modeById(modeSel.value);
     const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-    void syncPluginSky(skySpecForMode(m.id, spec));
+    void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal);
     return;
   }
   const look = pin ? lookForMode(modeSel.value) : undefined;
   scene.setAnim(mergeLook(settings.animSettings, look));
   const m = modeById(modeSel.value);
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-  void syncPluginSky(skySpecForMode(m.id, spec));
+  void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal);
   const want = look?.theme ?? theme.id;
   if (theme.id !== want) applyTheme(want, !!look?.theme, false);
   applyChrome(look?.chrome ?? userChrome, false);
@@ -580,52 +579,59 @@ let tsWatch = 0;
 let tsWatchId = "";
 let tsWatchHash = "";
 
-let ensureReviewedOverride: ((spec: PluginView | null) => Promise<ConsentReviewResult>) | null = null;
+const refreshPluginSignal = new AbortController();
+
+let ensureReviewedOverride: ((spec: PluginView | null, signal: AbortSignal) => Promise<ConsentReviewResult>) | null = null;
 let askPluginReviewOverride: typeof askPluginReview | null = null;
 
-async function ensureReviewedImpl(spec: PluginView | null): Promise<ConsentReviewResult> {
+async function ensureReviewedImpl(spec: PluginView | null, signal: AbortSignal): Promise<ConsentReviewResult> {
   if (!spec || !pluginNeedsReview(spec)) return "ok";
   if (spec.consent) return "ok";
-  return ensurePackReviewedOutcome(spec, async (signal) => {
+  return ensurePackReviewedOutcome(spec, async (reviewSignal) => {
+    if (reviewSignal.aborted) return "aborted";
     if (autoconsentEnabled() && autoconsentEligible(spec)) {
       const kind = autoconsentKind(spec);
       try {
         await grantPluginConsent(spec.id, kind);
+        if (reviewSignal.aborted) return "aborted";
         spec.consent = kind;
         if (spec.hash) consentHash(spec.id, spec.hash);
         if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
         return "ok";
       } catch (e) {
         console.warn("zoto-viz plugin autoconsent:", e);
-        return "failed";
+        return reviewSignal.aborted ? "aborted" : "failed";
       }
     }
     try {
-      const kind = await (askPluginReviewOverride ?? askPluginReview)(spec, { signal });
+      const kind = await (askPluginReviewOverride ?? askPluginReview)(spec, { signal: reviewSignal });
+      if (reviewSignal.aborted) return "aborted";
       if (!kind) return "declined";
       try {
         await grantPluginConsent(spec.id, kind);
+        if (reviewSignal.aborted) return "aborted";
         spec.consent = kind;
         if (spec.hash) consentHash(spec.id, spec.hash);
         if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
         return "ok";
       } catch (e) {
         console.warn("zoto-viz plugin consent:", e);
-        return "failed";
+        return reviewSignal.aborted ? "aborted" : "failed";
       }
     } catch (e) {
+      if (reviewSignal.aborted) return "aborted";
       console.warn("zoto-viz plugin review:", e);
       return "failed";
     }
-  });
+  }, signal);
 }
 
-async function ensureReviewed(spec: PluginView | null): Promise<ConsentReviewResult> {
-  if (ensureReviewedOverride) return ensureReviewedOverride(spec);
-  return ensureReviewedImpl(spec);
+async function ensureReviewed(spec: PluginView | null, signal: AbortSignal): Promise<ConsentReviewResult> {
+  if (ensureReviewedOverride) return ensureReviewedOverride(spec, signal);
+  return ensureReviewedImpl(spec, signal);
 }
 
-async function loadTsPlugin(spec: PluginView | null, switchGen = getModeSwitchGeneration()): Promise<void> {
+async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
     bindVizWriter(spec);
@@ -648,14 +654,14 @@ async function loadTsPlugin(spec: PluginView | null, switchGen = getModeSwitchGe
     return;
   }
   try {
+    throwIfAborted(signal);
     await attachPluginFrontend(
       sandbox,
       spec,
       loadPluginConfig(spec, spec.config),
-      switchGen,
-      isModeSwitchStale,
+      signal,
     );
-    if (isModeSwitchStale(switchGen)) return;
+    throwIfAborted(signal);
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
@@ -685,9 +691,9 @@ async function refreshTsPlugin(): Promise<void> {
         spec.hash = next.hash;
         spec.capabilities = next.capabilities;
         spec.consent = next.consent ?? null;
-        const reviewed = await ensureReviewed(spec);
+        const reviewed = await ensureReviewed(spec, refreshPluginSignal.signal);
         if (reviewed !== "ok") return;
-        await loadTsPlugin(spec, getModeSwitchGeneration());
+        await loadTsPlugin(spec, refreshPluginSignal.signal);
       }
     }
   } catch { /* monitor down */ }
@@ -745,7 +751,7 @@ async function loadPluginSkyOnto(
   target: NetScene,
   spec: PluginView | null,
   pinPlugin: boolean,
-  switchGen = getModeSwitchGeneration(),
+  signal: AbortSignal,
 ): Promise<void> {
   const look = spec ? (lookForMode(pluginViewId(spec.id, spec.instanceId)) ?? spec.look) : undefined;
   const want = pinPlugin && !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
@@ -765,9 +771,14 @@ async function loadPluginSkyOnto(
     if (target === scene) skyLoaded = "";
     return;
   }
+  const disposeSky = () => {
+    target.setPluginShader(null);
+    if (target === scene) skyLoaded = "";
+  };
+  signal.addEventListener("abort", disposeSky, { once: true });
   try {
-    const source = await fetchPluginSky(spec.id, spec.shader_sha256);
-    if (isModeSwitchStale(switchGen)) throw new Error("stale-mode-switch");
+    const source = await fetchPluginSky(spec.id, spec.shader_sha256, signal);
+    throwIfAborted(signal);
     const err = target.setPluginShader({ id: spec.id, source });
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
@@ -780,32 +791,33 @@ async function loadPluginSkyOnto(
     if (target === scene) skyLoaded = key;
   } catch (e) {
     console.warn("zoto-viz plugin sky:", e);
-    target.setPluginShader(null);
-    if (target === scene) skyLoaded = "";
+    disposeSky();
     throw e;
+  } finally {
+    signal.removeEventListener("abort", disposeSky);
   }
 }
 
-async function syncPluginSky(spec: PluginView | null, switchGen = getModeSwitchGeneration()): Promise<void> {
+async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   if (mosaic?.on) {
     mosaic.markSkyPending();
     try {
       for (const id of mosaic.tileIds) {
-        if (isModeSwitchStale(switchGen)) return;
+        throwIfAborted(signal);
         const target = mosaic.graphScene(id);
         if (!target) continue;
         const tileSky = mosaic.paneSky(id);
         const pane = pluginSpecForMode(id);
         const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
-        await loadPluginSkyOnto(target, pane, wantPlugin, switchGen);
+        await loadPluginSkyOnto(target, pane, wantPlugin, signal);
       }
     } finally {
       mosaic.settlePanes();
     }
     return;
   }
-  if (isModeSwitchStale(switchGen)) return;
-  await loadPluginSkyOnto(scene, spec, true, switchGen);
+  throwIfAborted(signal);
+  await loadPluginSkyOnto(scene, spec, true, signal);
 }
 
 function computeSkyStage(m: ViewMode, spec: PluginView | null): boolean {
@@ -913,9 +925,9 @@ function buildApplyModeHost(): ApplyModeHost {
     applyModeFeedExtras,
     bindThisView,
     clearModeOpts: () => { $("modeOpts").replaceChildren(); },
-    ensureReviewed,
-    loadTsPlugin,
-    syncPluginSky,
+    ensureReviewed: (spec, signal) => ensureReviewed(spec, signal),
+    loadTsPlugin: (spec, signal) => loadTsPlugin(spec, signal),
+    syncPluginSky: (spec, signal) => syncPluginSky(spec, signal),
     mosaic,
     captureMosaicSnap: captureMosaicAnimSnap,
     restoreMosaicSnap: restoreMosaicAnimSnap,
@@ -940,7 +952,6 @@ function buildApplyModeHost(): ApplyModeHost {
     modeLabel: (m) => m.label,
     onConsentDeclined: () => { preserveVizUbo = false; },
     shouldLoadPluginRuntime: (m) => m.standalone || arcadeSlotFor(m) !== "carousel",
-    isModeSwitchStale,
     getLastConsentedModeId,
     getFallbackKeptModeId: () => defaultCatalogMode()?.id ?? "topology",
     markModeConsented: (modeId) => setLastConsentedModeId(modeId),
@@ -950,6 +961,7 @@ function buildApplyModeHost(): ApplyModeHost {
       if (kind === "declined") return flashModeKeptPrevious(keptLabel);
       return flashModeLoadFailed(declined.label, keptLabel, () => applyMode(declined.id));
     },
+    focusModePicker: () => { modeSel.focus(); },
   };
 }
 
@@ -962,9 +974,11 @@ export function applyMode(
   flags: { keepLayout?: boolean } = {},
   source: ModeSwitchSource = { channel: "user" },
 ): void {
-  const { switchGen, proceed } = beginCoordinatedModeSwitch(source, id, flags);
+  const { proceed } = beginCoordinatedModeSwitch(source, id, flags);
   if (!proceed) return;
-  applyModeImpl(buildApplyModeHost(), id, flags, switchGen);
+  const signal = beginModeSwitchAttempt();
+  applyModeImpl(buildApplyModeHost(), id, flags, signal);
+  if (source.channel === "user") modeSel.focus();
 }
 
 registerAutoSwitchRunner(runAutoSwitch);
@@ -1312,9 +1326,10 @@ settings.onMosaicPanePick = (from, to) => {
   const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(pm.id) : null);
   void (async () => {
     const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
-    if ((await ensureReviewed(spec)) !== "ok") return;
+    const signal = beginModeSwitchAttempt();
+    if ((await ensureReviewed(spec, signal)) !== "ok") return;
     if (pm.standalone || arcadeSlotFor(pm) !== "carousel") {
-      void syncPluginSky(paneSpec);
+      void syncPluginSky(paneSpec, signal);
     }
   })();
   return true;

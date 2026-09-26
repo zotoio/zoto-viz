@@ -3,7 +3,6 @@ import {
   ensurePackConsent,
   type ConsentReviewResult,
   type PackReviewRunner,
-  abortAllOpenPackConsents,
   ensurePackReviewed,
   ensurePackReviewedOutcome,
   isPackConsentPending,
@@ -12,7 +11,6 @@ import {
 
 export type { ConsentReviewResult, PackReviewRunner };
 export {
-  abortAllOpenPackConsents,
   ensurePackConsent,
   ensurePackReviewed,
   ensurePackReviewedOutcome,
@@ -20,4 +18,10 @@ export {
 };
 export const resetSharedPackConsentForTests = resetPackConsentForTests;
 /** @deprecated Use `ensurePackConsent`. */
-export const runSharedPackConsent = ensurePackConsent;
+export function runSharedPackConsent(
+  packId: string,
+  review: PackReviewRunner,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<ConsentReviewResult> {
+  return ensurePackConsent(packId, review, signal);
+}

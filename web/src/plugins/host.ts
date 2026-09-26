@@ -77,6 +77,10 @@ export function pluginModuleUrl(id: string, hash?: string): string {
   return hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
 }
 
+export function countPluginSandboxIframes(): number {
+  return document.querySelectorAll("iframe[sandbox]").length;
+}
+
 export class PluginSandbox {
   private iframe: HTMLIFrameElement | null = null;
   private caps: string[] = [];
