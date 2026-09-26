@@ -103,7 +103,7 @@ import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
-import { mergeHostIdleForViews, pluginIdleOf } from "../plugins/fixtures/golden-state";
+import { paintFeedState } from "./feed-paint";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -944,30 +944,35 @@ function applyLive(m: StateMsg): void {
   if (live.patch && Object.keys(live.patch).length) void applyAgentPatch(live.patch);
 }
 
-function mosaicCatalogModeId(tileSlotId: string): string {
-  const i = tileSlotId.lastIndexOf("!");
-  if (i > 0 && /^\d+$/.test(tileSlotId.slice(i + 1))) return tileSlotId.slice(0, i);
-  return tileSlotId;
-}
-
-function feedPaintState(m: StateMsg): StateMsg {
-  const curMode = modeById(liveMode || modeSel.value);
-  const curSpec = curMode.pluginId ? pluginSpecForMode(curMode.id) : null;
-  const idleSpecs = [pluginIdleOf(curSpec)];
-  if (mosaic?.on) {
-    for (const tileId of mosaic.tileIds) {
-      const pm = modeById(mosaicCatalogModeId(tileId));
-      idleSpecs.push(pluginIdleOf(pm.pluginId ? pluginSpecForMode(pm.id) : null));
-    }
+function applyDemoDataLabels(demoSlots: ReadonlySet<string>): void {
+  const mark = (el: HTMLElement | null | undefined, on: boolean) => {
+    if (!el) return;
+    if (on) el.dataset.demoData = "1";
+    else delete el.dataset.demoData;
+  };
+  if (!mosaic?.on) {
+    mark(scene.viewEl, demoSlots.has("hero"));
+    return;
   }
-  return mergeHostIdleForViews(m, idleSpecs);
+  mark(scene.viewEl, demoSlots.has("hero"));
+  for (const slot of mosaic.tileIds) {
+    mark(mosaic.graphScene(slot)?.viewEl, demoSlots.has(slot));
+  }
 }
 
 function feed(m: StateMsg): void {
   const feedT0 = performance.now();
   lastRaw = m;
   applyLive(m);
-  const paint = feedPaintState(m);
+  const { state: paint, demoSlots } = paintFeedState({
+    raw: m,
+    heroModeId: liveMode || modeSel.value,
+    mosaicOn: !!mosaic?.on,
+    mosaicTileIds: mosaic?.tileIds ?? [],
+    modeById,
+    pluginSpecForMode,
+  });
+  applyDemoDataLabels(demoSlots);
   let shown = paint;
   if (mergeToggle.checked) {
     const c = collapseByName(paint);

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { bluetooth } from "../../core/modes";
 import { goldenLanFixture } from "./golden-lan-state";
-import { mergeHostIdleForViews, parsePluginIdle, pluginIdleOf, stateNeedsGolden, withGoldenIfIdle } from "./golden-state";
+import {
+  hostIdleTargetForMode,
+  mergeHostIdleForViews,
+  parsePluginIdle,
+  pluginIdleOf,
+  stateNeedsGolden,
+  withGoldenIfIdle,
+} from "./golden-state";
 import type { StateMsg } from "../../core/types";
 
 const emptyState = (): StateMsg => ({
@@ -37,11 +45,17 @@ describe("withGoldenIfIdle", () => {
     const merged = withGoldenIfIdle(emptyState(), idle);
     expect(merged.devices.length).toBeGreaterThanOrEqual(8);
     expect(merged.flows.length).toBeGreaterThanOrEqual(5);
-    expect(merged.views?.bluetooth?.devices.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("merges host idle when any visible view asks for it (mosaic Bluetooth tile)", () => {
-    const merged = mergeHostIdleForViews(emptyState(), [undefined, idle]);
+  it("merges only the bluetooth slice when that view declares host idle", () => {
+    const busy = goldenLanFixture();
+    delete busy.views?.bluetooth;
+    const { state: merged } = mergeHostIdleForViews(busy, [{
+      slotId: "tile-bt",
+      idle,
+      target: hostIdleTargetForMode(bluetooth),
+    }]);
+    expect(merged.devices[0]!.packets).toBe(busy.devices[0]!.packets);
     expect(merged.views?.bluetooth?.devices?.some((d) => d.names.includes("Hue bulb"))).toBe(true);
   });
 
