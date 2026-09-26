@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_ci_test_needs.py",
+  "testName": "test_validate_fixture_extra_unknown_in_needs",
+  "description": "Unknown jobs in test.needs are reported."
+}

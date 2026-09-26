@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_pr_boundary.py",
+  "testName": "test_multi_pack_with_scripts_change_fails_without_host_labels",
+  "description": "Multi-pack PR touching scripts/ requires host labels."
+}

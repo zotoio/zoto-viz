@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/viz-build-gates.test.ts",
+  "testName": "scale gate formula divides VIZ_BUILD_FLOW_SCALE_MAX by 4",
+  "description": "Flow work scale gate uses maxWorkRatio = flowRatio \u00d7 (VIZ_BUILD_FLOW_SCALE_MAX / 4)."
+}

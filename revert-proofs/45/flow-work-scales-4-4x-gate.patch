@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-build-counters.ts b/web/src/plugins/viz-build-counters.ts
+index 1ad4796..a287804 100644
+--- a/web/src/plugins/viz-build-counters.ts
++++ b/web/src/plugins/viz-build-counters.ts
+@@ -103,7 +103,7 @@ export function assertFlowWorkScaleBounded(
+ ): boolean {
+   if (scaledFlows < baseFlows) return false;
+   const flowRatio = scaledFlows / baseFlows;
+-  const maxWorkRatio = flowRatio * (VIZ_BUILD_FLOW_SCALE_MAX / 4);
++  const maxWorkRatio = flowRatio * VIZ_BUILD_FLOW_SCALE_MAX;
+   const { flowVisits, rateCalls } = flowWorkScaleRatio(base, scaled);
+   return flowVisits <= maxWorkRatio && rateCalls <= maxWorkRatio;
+ }

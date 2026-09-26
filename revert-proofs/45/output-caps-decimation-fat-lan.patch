@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
+index 43102c8..b71bf9a 100644
+--- a/web/src/plugins/viz-host.ts
++++ b/web/src/plugins/viz-host.ts
+@@ -53,7 +53,7 @@ export {
+ } from "./viz-decimation-stats";
+ 
+ /** Seeded fat-LAN JSON frame ceiling — update only when contract output shape changes. */
+-export const FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING = 28_500;
++export const FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING = 1;
+ 
+ export interface VizFrameCapAssertOptions {
+   checkDecimation?: boolean;

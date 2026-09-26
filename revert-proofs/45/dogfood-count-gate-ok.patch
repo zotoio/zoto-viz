@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/dogfood-runner.ts b/web/src/plugins/dogfood-runner.ts
+index 6946666..6b72c63 100644
+--- a/web/src/plugins/dogfood-runner.ts
++++ b/web/src/plugins/dogfood-runner.ts
+@@ -271,7 +271,7 @@ export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCount
+   const now = opts.now ?? (() => 0);
+ 
+   const packs: DogfoodCountGatePackResult[] = [];
+-  let ok = true;
++  let ok = false;
+ 
+   for (const packId of VIZ_DEMO_PACKS) {
+     const contract = DEMO_PACK_CONTRACTS[packId];

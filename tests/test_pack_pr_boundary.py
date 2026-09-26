@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from unittest.mock import patch
+
+import pytest
 
 from scripts.check_pack_pr_boundary import (
     GITHUB_PULL_FILES_API_MAX,
@@ -19,6 +22,7 @@ from scripts.check_pack_pr_boundary import (
     run_host_change_gate,
     validate_catalog_py_change,
     validate_schema_py_change,
+    fetch_pull_changed_files,
     validate_pull_changed_files_complete,
     validate_tsconfig_change,
 )
@@ -332,6 +336,7 @@ def test_pack_pr_editing_workflow_yaml_is_host_infra() -> None:
     code, lines = run_check(files, {})
     assert code == 1
     assert any("pack-boundary.yml" in line for line in lines)
+    assert any(PACK_PR_HOST_INFRA_FAIL in line or "host infra" in line for line in lines)
 
 
 def test_merge_workflow_label_event_appends_host_reviewed() -> None:
@@ -350,6 +355,15 @@ def test_merge_workflow_label_event_appends_host_reviewed() -> None:
     assert merged[0]["event"] == "labeled"
 
 
+def test_fetch_pull_changed_files_rejects_non_array_page() -> None:
+    def fake_request(url: str, token: str) -> tuple[object, str | None]:
+        return ({}, None)
+
+    with patch("scripts.check_pack_pr_boundary._github_request", fake_request):
+        with pytest.raises(ValueError, match="non-array"):
+            fetch_pull_changed_files("org/repo", 1, "token")
+
+
 def test_validate_pull_changed_files_rejects_incomplete_listing() -> None:
     err = validate_pull_changed_files_complete(["a.py"], 2)
     assert err is not None
@@ -357,12 +371,11 @@ def test_validate_pull_changed_files_rejects_incomplete_listing() -> None:
 
 
 def test_validate_pull_changed_files_rejects_over_api_cap() -> None:
-    err = validate_pull_changed_files_complete(
-        ["x"] * GITHUB_PULL_FILES_API_MAX,
-        GITHUB_PULL_FILES_API_MAX + 1,
-    )
+    over = GITHUB_PULL_FILES_API_MAX + 1
+    err = validate_pull_changed_files_complete(["x"] * over, over)
     assert err is not None
-    assert str(GITHUB_PULL_FILES_API_MAX) in err
+    assert f">{GITHUB_PULL_FILES_API_MAX}" in err
+    assert "cannot verify the full change set" in err
 
 
 def test_committed_event_timestamp_uses_committer_date() -> None:

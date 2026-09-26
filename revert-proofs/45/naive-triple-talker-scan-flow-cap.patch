@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-build-counters.ts b/web/src/plugins/viz-build-counters.ts
+index 1ad4796..c7944e3 100644
+--- a/web/src/plugins/viz-build-counters.ts
++++ b/web/src/plugins/viz-build-counters.ts
+@@ -81,7 +81,7 @@ export function bumpFrameObject(): void {
+ 
+ export function flowWorkWithinCap(flows: number, work: VizBuildWorkCounters): boolean {
+   const cap = flows * VIZ_BUILD_FLOW_WORK_MULT;
+-  return work.flowVisits <= cap && work.rateCalls <= cap;
++  return true;
+ }
+ 
+ export function flowWorkScaleRatio(

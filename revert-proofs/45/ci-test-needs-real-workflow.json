@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_ci_test_needs.py",
+  "testName": "test_check_real_ci_workflow",
+  "description": "check_ci_workflow validates the repo ci.yml test.needs graph."
+}

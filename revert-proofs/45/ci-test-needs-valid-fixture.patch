@@ -1,0 +1,13 @@
+diff --git a/scripts/check_ci_test_needs.py b/scripts/check_ci_test_needs.py
+index 2a6ae5e..3f03802 100644
+--- a/scripts/check_ci_test_needs.py
++++ b/scripts/check_ci_test_needs.py
+@@ -10,7 +10,7 @@ import yaml
+ 
+ 
+ def validate_ci_test_needs(doc: dict) -> list[str]:
+-    errors: list[str] = []
++    errors: list[str] = ["broken"]
+     jobs = doc.get("jobs")
+     if not isinstance(jobs, dict):
+         return ["workflow has no jobs mapping"]

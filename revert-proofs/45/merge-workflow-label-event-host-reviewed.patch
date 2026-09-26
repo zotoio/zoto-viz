@@ -1,0 +1,23 @@
+diff --git a/scripts/check_pack_pr_boundary.py b/scripts/check_pack_pr_boundary.py
+index ebaf3b0..9b006ff 100755
+--- a/scripts/check_pack_pr_boundary.py
++++ b/scripts/check_pack_pr_boundary.py
+@@ -444,6 +444,9 @@ def evaluate_pack_pr(
+                 validate_catalog_py_change(base_text or "", head_text, pack)
+             )
+             continue
++        if is_pack_pr_host_infra_path(path):
++            violations.append(Violation(path, PACK_PR_HOST_INFRA_FAIL))
++            continue
+         violations.append(
+             Violation(
+                 path,
+@@ -774,7 +777,7 @@ def merge_workflow_label_event(timeline: list[dict]) -> list[dict]:
+     if not name:
+         return timeline
+     created = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", "")
+-    if not created:
++    if created:
+         return timeline
+     row = {
+         "event": action,

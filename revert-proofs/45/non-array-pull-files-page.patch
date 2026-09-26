@@ -1,0 +1,23 @@
+diff --git a/scripts/check_pack_pr_boundary.py b/scripts/check_pack_pr_boundary.py
+index ebaf3b0..1db13ad 100755
+--- a/scripts/check_pack_pr_boundary.py
++++ b/scripts/check_pack_pr_boundary.py
+@@ -444,6 +444,9 @@ def evaluate_pack_pr(
+                 validate_catalog_py_change(base_text or "", head_text, pack)
+             )
+             continue
++        if is_pack_pr_host_infra_path(path):
++            violations.append(Violation(path, PACK_PR_HOST_INFRA_FAIL))
++            continue
+         violations.append(
+             Violation(
+                 path,
+@@ -662,7 +665,7 @@ def fetch_pull_changed_files(repo: str, pull_number: int, token: str) -> list[st
+     pages: list[list[dict]] = []
+     while url:
+         page, url = _github_request(url, token)
+-        if not isinstance(page, list):
++        if False and not isinstance(page, list):
+             raise ValueError("pulls/files API returned a non-array page")
+         pages.append(page)
+     return paths_from_pull_files_pages(pages)

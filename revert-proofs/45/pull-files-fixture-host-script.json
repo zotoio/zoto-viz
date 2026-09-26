@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_pr_boundary.py",
+  "testName": "test_paths_from_pull_files_fixture_includes_rename_and_host_script",
+  "description": "Pull-files fixture paths include host script; pack PR must fail without labels."
+}

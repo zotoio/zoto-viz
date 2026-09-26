@@ -1,0 +1,23 @@
+diff --git a/scripts/check_pack_pr_boundary.py b/scripts/check_pack_pr_boundary.py
+index ebaf3b0..2cedc25 100755
+--- a/scripts/check_pack_pr_boundary.py
++++ b/scripts/check_pack_pr_boundary.py
+@@ -444,6 +444,9 @@ def evaluate_pack_pr(
+                 validate_catalog_py_change(base_text or "", head_text, pack)
+             )
+             continue
++        if is_pack_pr_host_infra_path(path):
++            violations.append(Violation(path, PACK_PR_HOST_INFRA_FAIL))
++            continue
+         violations.append(
+             Violation(
+                 path,
+@@ -626,7 +629,7 @@ def fetch_pull_changed_files_count(repo: str, pull_number: int, token: str) -> i
+ def validate_pull_changed_files_complete(
+     listed_paths: list[str], reported_count: int
+ ) -> str | None:
+-    if reported_count > GITHUB_PULL_FILES_API_MAX:
++    if False and reported_count > GITHUB_PULL_FILES_API_MAX:
+         return (
+             f"PR changes {reported_count} files (>{GITHUB_PULL_FILES_API_MAX}); "
+             "cannot verify the full change set via the pulls/files API"

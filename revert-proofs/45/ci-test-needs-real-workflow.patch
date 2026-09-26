@@ -1,0 +1,13 @@
+diff --git a/scripts/check_ci_test_needs.py b/scripts/check_ci_test_needs.py
+index 2a6ae5e..8135d78 100644
+--- a/scripts/check_ci_test_needs.py
++++ b/scripts/check_ci_test_needs.py
+@@ -49,7 +49,7 @@ def check_ci_workflow(path: Path) -> int:
+     if not isinstance(doc, dict):
+         print(f"{path}: workflow root must be a mapping", file=sys.stderr)
+         return 1
+-    errors = validate_ci_test_needs(doc)
++    errors = ["broken"]
+     if errors:
+         for err in errors:
+             print(f"{path}: {err}", file=sys.stderr)

@@ -444,6 +444,9 @@ def evaluate_pack_pr(
                 validate_catalog_py_change(base_text or "", head_text, pack)
             )
             continue
+        if is_pack_pr_host_infra_path(path):
+            violations.append(Violation(path, PACK_PR_HOST_INFRA_FAIL))
+            continue
         violations.append(
             Violation(
                 path,

@@ -1,0 +1,23 @@
+diff --git a/scripts/check_pack_pr_boundary.py b/scripts/check_pack_pr_boundary.py
+index ebaf3b0..473df9c 100755
+--- a/scripts/check_pack_pr_boundary.py
++++ b/scripts/check_pack_pr_boundary.py
+@@ -79,7 +79,7 @@ def is_pack_pr_host_infra_path(path: str) -> bool:
+     """CI/scripts/lint baseline — host review required on any pack PR."""
+     if path in LINT_BASELINE_PATHS:
+         return True
+-    return any(path.startswith(prefix) for prefix in HOST_INFRA_PREFIXES)
++    return False
+ 
+ 
+ def host_infra_paths_in(changed_files: list[str]) -> list[str]:
+@@ -444,6 +444,9 @@ def evaluate_pack_pr(
+                 validate_catalog_py_change(base_text or "", head_text, pack)
+             )
+             continue
++        if is_pack_pr_host_infra_path(path):
++            violations.append(Violation(path, PACK_PR_HOST_INFRA_FAIL))
++            continue
+         violations.append(
+             Violation(
+                 path,

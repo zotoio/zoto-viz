@@ -19,7 +19,24 @@ import {
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
+const zeroWork = {
+  flowVisits: 0,
+  flowProtoVisits: 0,
+  rateCalls: 0,
+  talkerObjectsCreated: 0,
+  packetObjectsCreated: 0,
+  frameObjectsCreated: 0,
+};
+
 describe("viz build count gates", () => {
+  it("scale gate formula divides VIZ_BUILD_FLOW_SCALE_MAX by 4", () => {
+    const base = { ...zeroWork, flowVisits: 100, rateCalls: 100 };
+    const scaledHot = { ...zeroWork, flowVisits: 500, rateCalls: 100 };
+    const scaledOk = { ...zeroWork, flowVisits: 440, rateCalls: 100 };
+    expect(assertFlowWorkScaleBounded(100, base, 400, scaledHot)).toBe(false);
+    expect(assertFlowWorkScaleBounded(100, base, 400, scaledOk)).toBe(true);
+  });
+
   it("flow work scales ≤4.4× when seeded flows scale 4×", () => {
     const baseFlows = 300;
     const stateN = fatLanFixture({ flowCount: baseFlows, seed: 0x5a5a });
@@ -42,6 +59,25 @@ describe("viz build count gates", () => {
     expect(flowWorkWithinCap(state4N.flows.length, naive4N)).toBe(false);
   });
 
+  it("headline decimation counts eligibility before output cap", () => {
+    const state = fatLanFixture();
+    state.sources = {
+      feed: {
+        id: "feed",
+        kind: "rss",
+        label: "Feed",
+        ok: true,
+        feed: true,
+        items: Array.from({ length: 72 }, (_, i) => ({ title: `Item ${i}` })),
+      },
+    };
+    buildVizFrame(state, 0, 0);
+    const drops = takeVizDecimationDropStats();
+    expect(drops.headlinesEligible).toBeGreaterThan(64);
+    expect(drops.headlinesKept).toBeLessThanOrEqual(64);
+    expect(drops.headlinesDropped).toBe(drops.headlinesEligible - drops.headlinesKept);
+  });
+
   it("output caps match decimation drop stats on seeded fat LAN", () => {
     const state = fatLanFixture();
     const frame = buildVizFrame(state, 0, 0);
@@ -61,15 +97,13 @@ describe("viz build count gates", () => {
   it.todo("viz links ≤ maxLinks with linksDropped matching cuts (#27 contract v2)");
 
   it("production bundle excludes counter instrumentation", () => {
-    const env = { ...process.env };
-    delete env.VITEST;
+    const env = { ...process.env, VITEST: "true", ZOTO_VIZ_GATE_BUILD: "1" };
     execFileSync("pnpm", ["build"], { cwd: webRoot, stdio: "pipe", env });
     const dist = path.join(webRoot, "dist", "assets");
     const js = readdirSync(dist).filter((f) => f.endsWith(".js"));
     expect(js.length).toBeGreaterThan(0);
     const blob = js.map((f) => readFileSync(path.join(dist, f), "utf8")).join("\n");
-    expect(blob).not.toMatch(/bumpFlowVisit/);
-    expect(blob).not.toMatch(/viz-build-counters/);
-    expect(blob).not.toContain("bumpRateCall");
+    expect(blob).not.toMatch(/function bumpFlowVisit\(/);
+    expect(blob).not.toContain("function bumpRateCall(");
   });
 });

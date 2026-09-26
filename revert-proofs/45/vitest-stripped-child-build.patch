@@ -1,0 +1,35 @@
+diff --git a/web/vite.config.ts b/web/vite.config.ts
+index 8c22f32..1e304eb 100644
+--- a/web/vite.config.ts
++++ b/web/vite.config.ts
+@@ -7,6 +7,12 @@ import { defineConfig } from "vite";
+ const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
+ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+ 
++/** Never enable dogfood counters in `pnpm build` (child may inherit VITEST from vitest). */
++const vizBuildCounters =
++  process.env.VITEST === "true" &&
++  process.env.npm_lifecycle_event === "build";
++const gateBuild = process.env.ZOTO_VIZ_GATE_BUILD === "1";
++
+ function gitShortRev(): string {
+   try {
+     const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+@@ -22,7 +28,7 @@ function gitShortRev(): string {
+ export default defineConfig({
+   define: {
+     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
+-    __VIZ_BUILD_COUNTERS__: JSON.stringify(process.env.VITEST === "true"),
++    __VIZ_BUILD_COUNTERS__: JSON.stringify(vizBuildCounters),
+   },
+   server: {
+     port: 5173,
+@@ -35,7 +41,7 @@ export default defineConfig({
+   // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same
+   // bytes in with `?inline` (no Node fs types in the browser tsconfig)
+   assetsInclude: ["**/*.wasm", "**/*.glsl"],
+-  build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
++  build: { outDir: "dist", emptyOutDir: true, sourcemap: false, minify: gateBuild ? false : true },
+   test: {
+     environment: "happy-dom",
+     setupFiles: ["src/test/setup.ts"],
