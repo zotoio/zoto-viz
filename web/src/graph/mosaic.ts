@@ -269,9 +269,6 @@ export class Mosaic {
     hero: HeroPos = "off",
     stored?: { tree?: MosaicNode | null; maximized?: string | null; tiles?: string[] },
   ): void {
-    if (this.on) {
-      for (const id of this.tileIds) clearPackNavigationStopped(id);
-    }
     if (size === "off") {
       this.teardown();
       this.restoreSolo();

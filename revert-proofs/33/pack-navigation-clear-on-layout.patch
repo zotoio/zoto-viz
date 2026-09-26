@@ -1,15 +1,15 @@
 diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
 --- a/web/src/graph/mosaic.ts
 +++ b/web/src/graph/mosaic.ts
-@@ -269,6 +269,11 @@ export class Mosaic {
-     hero: HeroPos = "off",
-     stored?: { tree?: MosaicNode | null; maximized?: string | null; tiles?: string[] },
-   ): void {
+@@ -524,6 +524,11 @@ export class Mosaic {
+   }
+ 
+   private relayoutAll(): void {
 +    if (this.on) {
 +      for (const id of this.panes.keys()) {
 +        clearPackNavigationStopped(id);
 +      }
 +    }
-     if (size === "off") {
-       this.teardown();
-       this.restoreSolo();
+     this.cfg.main.relayout();
+     for (const e of this.extras) e.scene.refit();
+     this.cfg.host?.invalidate();

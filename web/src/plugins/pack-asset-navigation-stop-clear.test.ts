@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Mosaic } from "../graph/mosaic";
+import { setPluginModes, topology } from "../core/modes";
+import { themeById } from "../core/themes";
 import { PackAssetTokenInvalidError } from "../core/http";
 import * as http from "../core/http";
 import { packNavigationStopped } from "./plugin-copy";
@@ -12,9 +14,9 @@ import {
   tileRebuildAttemptCount,
 } from "./pack-asset-frame";
 import { paintPackAssetPaneNotice } from "./pack-asset-pane-notice";
+import * as packNav from "./pack-asset-navigation";
 import {
   beginUserPackLoadSession,
-  clearPackNavigationStopped,
   countPackNavigationStoppedPaneNotices,
   markPackNavigationStopped,
   packNavigationStoppedForTile,
@@ -23,14 +25,22 @@ import {
 import { runPackAssetProtectedLoad, resetRebuildSleepForTests, setRebuildSleepForTests } from "./pack-asset-rebuild";
 import { applyPackFeedPaneNotice, resetPluginPackFeedState } from "./plugin-pack-feed";
 
-function testMosaic(pane: HTMLElement, paneId: string): Mosaic {
+function mosaicWall(paneId: string): Mosaic {
   const wall = document.createElement("div");
-  wall.appendChild(pane);
   document.body.appendChild(wall);
   const mosaic = new Mosaic({
     wall,
     sceneEl: document.createElement("div"),
-    main: { currentMode: { id: paneId }, setCompactLabels: () => {}, relayout: () => {}, setMode: () => {} } as never,
+    main: {
+      currentMode: { id: paneId },
+      dreamAnim: { backdrop: "aurora" },
+      nodeCount: 0,
+      pluginSkyId: null,
+      setCompactLabels: () => {},
+      relayout: () => {},
+      setMode: () => {},
+      setAnim: () => {},
+    } as never,
     arcade: {},
     optsFor: () => ({}),
     onFocus: () => {},
@@ -38,7 +48,7 @@ function testMosaic(pane: HTMLElement, paneId: string): Mosaic {
     onLayout: () => {},
     onCloseLast: () => {},
     sync: () => ({
-      theme: { id: "midnight" } as never,
+      theme: themeById("midnight"),
       filters: {},
       anim: {} as never,
       dreaming: false,
@@ -47,13 +57,20 @@ function testMosaic(pane: HTMLElement, paneId: string): Mosaic {
       aliasMap: new Map(),
     }),
   });
-  (mosaic as unknown as { panes: Map<string, HTMLElement> }).panes.set(paneId, pane);
   return mosaic;
+}
+
+function mosaicPane(mosaic: Mosaic, paneId: string): HTMLElement {
+  const panes = (mosaic as unknown as { panes: Map<string, HTMLElement> }).panes;
+  const pane = panes.get(paneId) ?? document.createElement("div");
+  if (!panes.has(paneId)) panes.set(paneId, pane);
+  return pane;
 }
 
 describe("pack navigation stop clear UX", () => {
   afterEach(() => {
     document.body.innerHTML = "";
+    setPluginModes([]);
     resetPackAssetNavigationState();
     resetPackAssetFrameState();
     resetPluginPackFeedState();
@@ -90,22 +107,25 @@ describe("pack navigation stop clear UX", () => {
 
   it("layout change from 1×1 to 2×2 keeps stopped copy and skips reconnect", async () => {
     const tileId = "plugin:wifi";
-    const pane = document.createElement("div");
-    const mosaic = testMosaic(pane, tileId);
-    const clearSpy = vi.spyOn(
-      await import("./pack-asset-navigation"),
-      "clearPackNavigationStopped",
-    );
+    setPluginModes(["wifi", "a", "b", "c"].map((id) => ({
+      ...topology,
+      id: `plugin:${id}`,
+      pluginId: id,
+      label: id,
+    })));
+    const mosaic = mosaicWall(tileId);
     mosaic.setSize("1", tileId);
+    let pane = mosaicPane(mosaic, tileId);
     markPackNavigationStopped(tileId);
     paintPackAssetPaneNotice(pane, packNavigationStopped("Wi-Fi"), "fail", {
       showRemoveFromWall: true,
       onRemoveFromWall: () => {},
     });
     beginActivePackLoad(tileId, "Wi-Fi");
-    clearSpy.mockClear();
+    const clearSpy = vi.spyOn(packNav, "clearPackNavigationStopped");
 
-    mosaic.setSize("4", tileId);
+    mosaic.setSize("2", tileId);
+    pane = mosaicPane(mosaic, tileId);
 
     expect(clearSpy).not.toHaveBeenCalled();
     expect(packNavigationStoppedForTile(tileId)).toBe(true);

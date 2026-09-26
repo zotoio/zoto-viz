@@ -1,5 +1,6 @@
 {
   "runner": "vitest",
+  "testName": "pack navigation stop clear UX > re-add after stop allows one new navigation stop and retires the old token",
   "testId": "^pack navigation stop clear UX > re-add after stop allows one new navigation stop and retires the old token$",
   "testFile": "web/src/plugins/pack-asset-navigation-stop-clear.test.ts",
   "description": "Re-add must clear stop so a second navigation can fire once; revert blocks re-add (0 new stops).",
