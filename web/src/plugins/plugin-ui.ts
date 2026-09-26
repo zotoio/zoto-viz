@@ -190,8 +190,6 @@ export function askPluginReview(
     sheet.append(head, body, row);
     modal.append(back, sheet);
     back.addEventListener("click", () => finish(null));
-<<<<<<< HEAD
-=======
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); finish(null); }
       if (e.key === "Enter" && !e.repeat && document.activeElement === cancel) {
@@ -199,7 +197,6 @@ export function askPluginReview(
         finish(null);
       }
     };
->>>>>>> 8bf90a4 (fix(web): UX Pro consent baseline (held scene, status, mic gate, focus))
     document.addEventListener("keydown", onKey, true);
     document.body.classList.add("modal-open");
     document.body.appendChild(modal);
