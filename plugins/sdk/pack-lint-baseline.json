@@ -1,0 +1,80 @@
+{
+  "violations": [
+    {
+      "file": "plugins/src/backrooms/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/blob-mesh/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/cypher-cic/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/cypher-cic/frontend/pack.ts",
+      "rule": "sandbox-escape"
+    },
+    {
+      "file": "plugins/src/hn-rain/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/hn-term/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/kefrens-bars/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/lan-pulse/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/nixie-clock/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/nixie-clock/frontend/tubes.ts",
+      "rule": "sandbox-escape"
+    },
+    {
+      "file": "plugins/src/packet-tunnel/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/pulse-ts/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/rf-constellation/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/roto-proto/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/star-sines/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/stereo-gram/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/syscon/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
+      "file": "plugins/src/syscon/frontend/telemetry.ts",
+      "rule": "sandbox-escape"
+    },
+    {
+      "file": "plugins/src/talker-storm/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    }
+  ]
+}
