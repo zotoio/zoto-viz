@@ -265,7 +265,7 @@ function lintPackSource(
   });
 }
 
-import { scanWebSrc } from "./pack-lint-host";
+import { disallowedHostPackSrcImports, scanService, scanWebSrc } from "./pack-lint-host";
 
 const SDK_SKIP_DIRS = new Set([
   "pack-lint-fixtures",
@@ -309,7 +309,12 @@ export function scanSdkGuardrails(repoRoot: string): PackLintViolation[] {
 }
 
 export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
-  const merged = [...scanPluginsSrc(repoRoot), ...scanSdkGuardrails(repoRoot), ...scanWebSrc(repoRoot)];
+  const merged = [
+    ...scanPluginsSrc(repoRoot),
+    ...scanSdkGuardrails(repoRoot),
+    ...scanWebSrc(repoRoot),
+    ...scanService(repoRoot),
+  ];
   merged.sort((a, b) => {
     if (a.file !== b.file) return a.file.localeCompare(b.file);
     if (a.rule !== b.rule) return a.rule.localeCompare(b.rule);
@@ -318,7 +323,15 @@ export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
   return merged;
 }
 
-export { scanHostLintFixture, scanWebSrc } from "./pack-lint-host";
+export {
+  disallowedHostPackSrcImports,
+  HOST_PACK_SRC_IMPORT_ALLOWLIST,
+  HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT,
+  isHostCodeRepoPath,
+  scanHostLintFixture,
+  scanService,
+  scanWebSrc,
+} from "./pack-lint-host";
 export { extractModuleSpecifiers, packSymlinkEscapes } from "./pack-lint-import";
 
 export function scanPluginsSrc(repoRoot: string): PackLintViolation[] {
@@ -447,19 +460,26 @@ export function assertBaselineGuard(
   newViolations: PackLintViolation[];
   staleViolations: PackLintViolation[];
   disallowedLegacyZoto: PackLintViolation[];
+  disallowedHostPackSrc: PackLintViolation[];
   ok: boolean;
 } {
   const disallowedLegacyZoto = legacyZotoViolationsOnDisallowedPacks(current);
-  const baseSet = new Set(baseline.violations.map(violationKey));
-  const curSet = new Set(current.map(violationKey));
-  const newViolations = current.filter((v) => !baseSet.has(violationKey(v)));
-  const staleViolations = baseline.violations.filter((v) => !curSet.has(violationKey(v)));
+  const disallowedHostPackSrc = disallowedHostPackSrcImports(current);
+  const baselineTracked = (v: PackLintViolation) => v.rule !== "host-imports-pack-src";
+  const baseSet = new Set(baseline.violations.filter(baselineTracked).map(violationKey));
+  const curSet = new Set(current.filter(baselineTracked).map(violationKey));
+  const newViolations = current.filter((v) => baselineTracked(v) && !baseSet.has(violationKey(v)));
+  const staleViolations = baseline.violations.filter(
+    (v) => baselineTracked(v) && !curSet.has(violationKey(v)),
+  );
   return {
     newViolations,
     staleViolations,
     disallowedLegacyZoto,
+    disallowedHostPackSrc,
     ok:
       disallowedLegacyZoto.length === 0 &&
+      disallowedHostPackSrc.length === 0 &&
       newViolations.length === 0 &&
       staleViolations.length === 0,
   };
