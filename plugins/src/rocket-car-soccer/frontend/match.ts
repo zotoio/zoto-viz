@@ -634,7 +634,7 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
 
   if (st.phase === PHASE_GOAL) {
     st.phaseT -= dt;
-    if (st.failAlert < 0.35) {
+    if (st.failDisplay < 0.35) {
       /* capped celebration — never full-white flash */
     }
     if (st.phaseT <= 0) {

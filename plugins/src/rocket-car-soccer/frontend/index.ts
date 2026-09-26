@@ -11,7 +11,7 @@ import {
   themeBgAccent,
   type RcsOptions,
 } from "./pack";
-import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { rcsMount, rcsTick, rcsUnmount, setRcsOptions } from "./match";
 
 declare const zoto: {

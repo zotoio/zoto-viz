@@ -22,6 +22,7 @@ const MIGRATED_VIZ_PACKS = [
   "star-sines",
   "syscon",
   "talker-storm",
+  "rocket-car-soccer",
 ] as const;
 
 function resolveFrontendEntry(packHome: string): string {

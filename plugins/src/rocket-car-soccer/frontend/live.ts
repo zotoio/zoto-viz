@@ -3,8 +3,10 @@
  * Uses the host {@link VizDataFrame} contract only — no invented frame fields.
  */
 
-import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
-import { VIZ_MAX_PACKET_SAMPLES } from "../../../../web/src/plugins/viz-host";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
+
+/** Host decimation cap for packet rows (matches `VIZ_MAX_PACKET_SAMPLES` in the monitor). */
+export const RCS_PACKET_SLICE_CAP = 32;
 
 export type { VizDataFrame };
 
@@ -96,7 +98,7 @@ export function ingestLiveFrame(frame: VizDataFrame | undefined): RcsLiveDrive {
   let goalPulse = 0;
   let packetsConsumed = 0;
   const packets = frame?.packets ?? [];
-  const limit = Math.min(packets.length, VIZ_MAX_PACKET_SAMPLES);
+  const limit = Math.min(packets.length, RCS_PACKET_SLICE_CAP);
   for (let i = 0; i < limit; i++) {
     const p = packets[i]!;
     if (!Number.isFinite(p.field)) continue;

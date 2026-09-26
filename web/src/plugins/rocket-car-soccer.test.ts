@@ -52,8 +52,9 @@ import {
   setRcsOptions,
 } from "../../../plugins/src/rocket-car-soccer/frontend/match";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
-import type { VizDataFrame } from "./viz-host";
-import { EMPTY_SYS_TELEMETRY, VIZ_MAX_PACKET_SAMPLES } from "./viz-host";
+import type { VizDataFrame } from "../../../plugins/sdk/viz-contract";
+import { EMPTY_SYS_TELEMETRY } from "../../../plugins/sdk/viz-contract";
+import { RCS_PACKET_SLICE_CAP } from "../../../plugins/src/rocket-car-soccer/frontend/live";
 
 const PACK_ROOT = join(__dirname, "../../../plugins/src/rocket-car-soccer");
 
@@ -367,7 +368,7 @@ describe("rocket-car-soccer pack", () => {
     }));
     resetRcsSim(1);
     rcsTick(vizFrame({ packets: many }), 0, 1 / 60, 1.777);
-    expect(rcsLivePacketsConsumed()).toBe(VIZ_MAX_PACKET_SAMPLES);
+    expect(rcsLivePacketsConsumed()).toBe(RCS_PACKET_SLICE_CAP);
   });
 
   it("rebuilds talker-derived maps only when talker id set changes", () => {
