@@ -177,7 +177,7 @@ export class RenderHost {
     this.canvas.className = "render-host";
     this.canvas.setAttribute("aria-hidden", "true");
     if (this.software) this.canvas.dataset.softgl = "";
-    this.gfxNotice = new GfxWallNotice(wall);
+    this.gfxNotice = new GfxWallNotice(wall, { onDismissLateReload: () => this.invalidate() });
     attachGlContextListeners(
       this.canvas,
       (e) => {

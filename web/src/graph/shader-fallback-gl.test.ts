@@ -117,6 +117,46 @@ describe("shader fallback gl context", () => {
     wall.remove();
   });
 
+  function reloadLineCount(wall: HTMLElement): number {
+    return wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS} span`).length;
+  }
+
+  it("late-restore-clears-reload", () => {
+    const { host, wall } = hostWithGl();
+    const invalidate = vi.spyOn(host, "invalidate");
+    host.dispatchContextLost();
+    vi.advanceTimersByTime(10_000);
+    expect(reloadLineCount(wall)).toBe(1);
+    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(1);
+
+    const sentinel = document.createElement("button");
+    sentinel.textContent = "hold-focus";
+    wall.appendChild(sentinel);
+    sentinel.focus();
+    const focusBefore = document.activeElement;
+    host.dispatchContextRestored();
+    expect(reloadLineCount(wall)).toBe(0);
+    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
+    expect(document.activeElement).toBe(focusBefore);
+    expect(invalidate).toHaveBeenCalled();
+
+    host.dispatchContextLost();
+    vi.advanceTimersByTime(10_000);
+    const reloadBtn = wall.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement;
+    reloadBtn.focus();
+    expect(document.activeElement).toBe(reloadBtn);
+    invalidate.mockClear();
+    host.dispatchContextRestored();
+    expect(reloadLineCount(wall)).toBe(0);
+    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
+    expect(document.activeElement).toBe(wall);
+    expect(wall.tabIndex).toBe(-1);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(invalidate).toHaveBeenCalled();
+    host.dispose();
+    wall.remove();
+  });
+
   it("gfx-notice-copy-literals", () => {
     expect(GFX_INTERRUPTED_NOTICE).toBe("Graphics were interrupted. Restoring the wall…");
     expect(GFX_NO_RESTORE_NOTICE).toBe("Graphics didn't come back. Reload to restore the wall.");

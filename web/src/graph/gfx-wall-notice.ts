@@ -6,13 +6,22 @@ import {
 export const GFX_WALL_NOTICE_CLASS = "gfx-wall-notice";
 export const GFX_WALL_RELOAD_CLASS = "gfx-wall-reload";
 
+export type GfxWallNoticeOpts = {
+  /** After the no-restore reload offer was showing and the context came back. */
+  onDismissLateReload?: () => void;
+};
+
 /** Single wall-level status when the shared WebGL context is lost. */
 export class GfxWallNotice {
   private el: HTMLDivElement | null = null;
   private shown = false;
   private restoreTimer: ReturnType<typeof setTimeout> | null = null;
+  private reloadOffered = false;
 
-  constructor(private readonly wall: HTMLElement) {}
+  constructor(
+    private readonly wall: HTMLElement,
+    private readonly opts: GfxWallNoticeOpts = {},
+  ) {}
 
   get element(): HTMLDivElement | null {
     return this.el;
@@ -40,13 +49,23 @@ export class GfxWallNotice {
       clearTimeout(this.restoreTimer);
       this.restoreTimer = null;
     }
+    const btn = this.el?.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement | null;
+    const focusOnReload = btn !== null && document.activeElement === btn;
+    const hadLateReload = this.reloadOffered;
     this.el?.remove();
     this.el = null;
     this.shown = false;
+    this.reloadOffered = false;
+    if (focusOnReload) {
+      this.wall.tabIndex = -1;
+      this.wall.focus();
+    }
+    if (hadLateReload) this.opts.onDismissLateReload?.();
   }
 
   private onRestoreTimeout(): void {
     if (!this.el) return;
+    this.reloadOffered = true;
     this.el.textContent = "";
     const msg = document.createElement("span");
     msg.textContent = GFX_NO_RESTORE_NOTICE;

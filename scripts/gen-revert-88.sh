@@ -239,4 +239,39 @@ mkjson timer-cleared "src/graph/shader-fallback-context-gen.test.ts" "shader fal
 # sidecar for no-gl-while-lost (draws per frame × 600)
 printf '%s\n' '{"drawsPerFrame":4,"frames":600}' > "$DIR/no-gl-while-lost.sidecar.json"
 
+# late-restore-clears-reload — drop reload button only (focus falls through to body)
+patch_row late-restore-clears-reload "python3 - <<'PY'
+from pathlib import Path
+p=Path('web/src/graph/gfx-wall-notice.ts')
+t=p.read_text()
+sel = '`.${GFX_WALL_RELOAD_CLASS}`)'
+old = f'''    const btn = this.el?.querySelector({sel} as HTMLButtonElement | null;
+    const focusOnReload = btn !== null && document.activeElement === btn;
+    const hadLateReload = this.reloadOffered;
+    this.el?.remove();
+    this.el = null;
+    this.shown = false;
+    this.reloadOffered = false;
+    if (focusOnReload) {{
+      this.wall.tabIndex = -1;
+      this.wall.focus();
+    }}
+    if (hadLateReload) this.opts.onDismissLateReload?.();'''
+new = f'''    const btn = this.el?.querySelector({sel} as HTMLButtonElement | null;
+    const hadLateReload = this.reloadOffered;
+    if (btn) btn.remove();
+    else {{
+      this.el?.remove();
+      this.el = null;
+    }}
+    this.shown = false;
+    this.reloadOffered = false;
+    if (hadLateReload) this.opts.onDismissLateReload?.();'''
+if old not in t:
+  raise SystemExit('late-restore patch anchor missing')
+p.write_text(t.replace(old, new))
+PY"
+mkjson late-restore-clears-reload "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > late-restore-clears-reload" "\"BODY\""
+printf '%s\n' '{"activeElementTag":"BODY"}' > "$DIR/late-restore-clears-reload.sidecar.json"
+
 echo "done"
