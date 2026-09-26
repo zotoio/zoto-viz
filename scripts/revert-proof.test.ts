@@ -36,6 +36,8 @@ type RowMeta = {
 
 const WIDGET_RED = "AssertionError: expected 2 to be 1 // Object.is equality";
 const PYTEST_RED = "AssertionError: assert 2 == 1";
+const CHAI_COPY_HINT =
+  'for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package';
 
 const GIT_IDENTITY = ["-c", "user.name=rp-fixture", "-c", "user.email=rp@fixture.test"];
 
@@ -670,7 +672,7 @@ describe("revert-proof runner (fixture repo)", () => {
       testFile: "web/revert-proof/plain-object-fake.test.ts",
       testName: "plain object fake > throws plain object on mismatch",
       description: "Fake assertion object must not count as red",
-      red: "x",
+      red: "expected 1 to be 0",
     });
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "plain-object-fake"]);
@@ -712,7 +714,7 @@ describe("revert-proof runner (fixture repo)", () => {
     const r = runRevertProof(root, "99", ["--row", "proto-borrow"]);
     expect(r.status).toBe(1);
     expect(r.stderr + r.stdout).toContain(
-      "row proto-borrow: patched test failed but task.meta.revertProofAssertion is not true",
+      `row proto-borrow: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; ${CHAI_COPY_HINT})`,
     );
     assertNoRevertProofWorktrees(root);
   });
@@ -730,7 +732,7 @@ describe("revert-proof runner (fixture repo)", () => {
     const r = runRevertProof(root, "99", ["--row", "hand-built-chai"]);
     expect(r.status).toBe(1);
     expect(r.stderr + r.stdout).toContain(
-      "row hand-built-chai: patched test failed but task.meta.revertProofAssertion is not true",
+      `row hand-built-chai: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; ${CHAI_COPY_HINT})`,
     );
     assertNoRevertProofWorktrees(root);
   });
@@ -872,7 +874,9 @@ describe("widget (beta)", () => {
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "wrong-outer-ctx"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toMatch(/row wrong-outer-ctx.*git apply --check failed/i);
+    expect(r.stderr + r.stdout).toContain(
+      "row wrong-outer-ctx: git apply --check failed: error: patch failed: packages/rp-widget/index.js:1\n",
+    );
     assertNoRevertProofWorktrees(root);
   });
 
@@ -889,7 +893,9 @@ describe("widget (beta)", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "bad-patch"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toMatch(/row bad-patch.*git apply --check failed/i);
+    expect(r.stderr + r.stdout).toContain(
+      "row bad-patch: git apply --check failed: error: patch failed: packages/rp-widget/index.js:1\n",
+    );
     expect(fs.existsSync(path.join(root, "packages", "rp-widget", "index.js.orig"))).toBe(
       false,
     );
@@ -970,7 +976,7 @@ describe("widget", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "build-break"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toMatch(/row build-break.*build/i);
+    expect(r.stderr + r.stdout).toContain("row build-break: patch breaks build (proves nothing)\n");
     assertCheckoutUnchanged(root, before);
   });
 
@@ -1364,10 +1370,10 @@ const wrongOuterContextPatch = `--- a/packages/rp-widget/index.js
 @@ -1,6 +1,6 @@
 -export function value() { return 1; }
 +export function value() { return 2; }
--export const ctxLine2 = 99;
--export const ctxLine3 = 99;
--export const ctxLine4 = 99;
--export const ctxLine5 = 99;
+ export const ctxLine2 = 99;
+ export const ctxLine3 = 0;
+ export const ctxLine4 = 0;
+ export const ctxLine5 = 0;
  export const ctxLine6 = 0;
 `;
 
