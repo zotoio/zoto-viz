@@ -72,6 +72,11 @@ import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
 import { tickRenderScalePanes, type RenderScalePane } from "../plugins/render-scale-host";
 import {
+  hostRenderScaleGovernorEnabled,
+  refreshHostRenderScaleGovernorEnabled,
+  setVizGovernorSetting,
+} from "../plugins/render-scale-governor-enable";
+import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
   buildVizFrameForPlugin, defaultVizContract,
 } from "../plugins/viz-host";
@@ -352,6 +357,14 @@ let vizFrameTs = 0;
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
+refreshHostRenderScaleGovernorEnabled();
+
+function applyHostRenderScaleGovernor(on: boolean): void {
+  setVizGovernorSetting(on);
+  refreshHostRenderScaleGovernorEnabled();
+  const panes = renderScalePanes();
+  tickRenderScalePanes(panes, performance.now(), on);
+}
 
 function syncPaneRenderScale(target: NetScene, spec: PluginView | null): void {
   target.configureRenderScale(spec?.renderScale ?? null);
@@ -387,7 +400,7 @@ function syncRenderGovernor(spec: PluginView | null): void {
 addPresentListener((ts) => {
   const panes = renderScalePanes();
   for (const p of panes) p.renderScaleState.onPaneFrame(ts);
-  tickRenderScalePanes(panes, performance.now());
+  tickRenderScalePanes(panes, performance.now(), hostRenderScaleGovernorEnabled());
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
@@ -1056,9 +1069,11 @@ function feed(m: StateMsg): void {
       }
     }
     const now = performance.now();
+    const govOn = hostRenderScaleGovernorEnabled();
     const focusRs = focusedRenderScene().renderScaleState;
-    const renderScale = focusRs.hasGovernor ? focusRs.renderScale : null;
-    const budgetStats = focusRs.hasGovernor ? focusRs.stats() : vizBudget.stats;
+    const packGov = focusRs.hasGovernor;
+    const renderScale = packGov ? (govOn ? focusRs.renderScale : 1) : null;
+    const budgetStats = packGov ? focusRs.stats() : vizBudget.stats;
     vizHud.tick({
       packId,
       packName: active?.name ?? packId ?? "",
@@ -1067,6 +1082,7 @@ function feed(m: StateMsg): void {
       state: shown,
       now,
       renderScale,
+      governorEnabled: govOn,
     });
   }
 
@@ -1333,6 +1349,13 @@ liveChat.onSend = (text) => agent.offerSend(text);
 liveChat.onMicDown = () => agent.beginTalk();
 liveChat.onMicUp = () => agent.endTalk();
 liveChat.seedTranscript(agent.transcript());
+const vizGovernorToggle = new Toggle({
+  id: "viz-governor",
+  label: "render governor",
+  title: "Adaptive render.scale governor (off by default). Also ?vizGovernor=1 on the URL for a one-off local GPU run.",
+  checked: loadVizGovernorSetting(),
+  onChange: (on) => applyHostRenderScaleGovernor(on),
+});
 const autoconsentToggle = new Toggle({
   id: "autoconsent",
   label: "auto-consent plugins",
@@ -1344,7 +1367,7 @@ const autoconsentToggle = new Toggle({
     touch();
   },
 });
-const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle]);
+const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle, vizGovernorToggle]);
 $("settingsBox").appendChild(settings.el);
 settings.attachViewCog($("modeBox"), () => bindThisView(modeSel.value));
 agent.mountSettings(settings.agentHost());
@@ -1732,6 +1755,7 @@ function collectSettings(): ProfileSettings {
     merge: mergeToggle.checked,
     redact: redactToggle.checked,
     autoconsent: autoconsentEnabled(),
+    vizGovernor: loadVizGovernorSetting(),
     filters: settings.filterText(),
     anim: { ...settings.animSettings },
     feed: { ...settings.feedSettings },
@@ -1779,6 +1803,8 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   setRedaction(s.redact);
   setAutoconsent(s.autoconsent);
   autoconsentToggle.checked = s.autoconsent;
+  applyHostRenderScaleGovernor(s.vizGovernor === true);
+  vizGovernorToggle.checked = s.vizGovernor === true;
   settings.setFilterText(s.filters);
   paintAgentLook(s.agent ?? { decos: [] });
   settings.applyAnim(s.anim);

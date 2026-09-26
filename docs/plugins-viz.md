@@ -97,7 +97,19 @@ render:
 ```
 
 When `render.scale` is absent the host keeps today’s behaviour at scale **1.0**.
-When present, **each rendered view or mosaic tile** gets its own
+
+The adaptive governor is **off by default** until it is tuned on real GPU hardware.
+With it off, every pack renders at scale **1.0** and `uRenderScale` reads **1.0**
+even when `render.scale` is declared in YAML. Opt in without rebuilding:
+
+- Settings → Privacy → **render governor**, or
+- URL query `?vizGovernor=1` (use `?vizGovernor=0` to force off for one load).
+
+Hysteresis thresholds live in one place in the web host:
+`RENDER_SCALE_GOVERNOR_TUNING` in `web/src/plugins/render-scale-governor.ts`
+(`stepDownSustainMs`, `stepUpSustainMs`, `stepUpHeadroomRatio`).
+
+When present and the host governor is **on**, **each rendered view or mosaic tile** gets its own
 `RenderScaleGovernor` (timing samples + pane budget share in, suggested scale
 out). A **page arbiter** sits above them: at most one pane may step **down**
 per tick among panes at the **peak measured cost** (furthest over budget share
@@ -122,10 +134,11 @@ The pack UBO (`ZotoVizData` / `zotoVizSlots`) is unchanged. The host exposes:
 | `uRenderScale` | `float` | Current scale (1 when inactive). Opt in by listing `uRenderScale` under `viz.uniforms`, same as `uTime`. |
 
 The demoscene HUD shows a budget line when `render.scale` is declared on the
-active pack (single view): `GPU` or `CPU`, unclamped last frame ms, rolling
-**p95**, and current scale. In mosaic mode the header / focused pane shows the
-full line on its pane badge; other governed tiles show a compact scale suffix.
-Dashes appear when no timing samples exist yet.
+active pack (single view): **`gov on` / `gov off`**, then `GPU` or `CPU`,
+unclamped last frame ms, rolling **p95**, and current scale (always **1** when
+the host governor is off). In mosaic mode the header / focused pane shows the
+full line on its pane badge; other governed tiles show a compact scale suffix
+when the governor is on. Dashes appear when no timing samples exist yet.
 
 ## Frame budget
 

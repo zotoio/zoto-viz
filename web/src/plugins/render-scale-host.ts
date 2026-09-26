@@ -56,6 +56,11 @@ export class RenderScaleViewState {
     return this.governor;
   }
 
+  /** Host governor off — reset hysteresis and keep scale at 1.0. */
+  holdUnitScale(): void {
+    this.governor?.reset();
+  }
+
   stats(): VizFrameBudgetStats {
     return this.frameBudget.stats;
   }
@@ -85,11 +90,23 @@ export function sharedRenderBudgetMs(
 }
 
 /** Advance every pane governor that declared `render.scale` (page arbiter gated). */
-export function tickRenderScalePanes(panes: readonly RenderScalePane[], now: number): void {
-  const share = sharedRenderBudgetMs(panes);
+export function tickRenderScalePanes(
+  panes: readonly RenderScalePane[],
+  now: number,
+  hostGovernorEnabled = false,
+): void {
   const governed = panes.filter((p) => p.renderScaleActive && p.renderScaleState.hasGovernor);
   if (!governed.length) return;
 
+  if (!hostGovernorEnabled) {
+    for (const pane of governed) {
+      pane.renderScaleState.holdUnitScale();
+      pane.applyRenderScale(1);
+    }
+    return;
+  }
+
+  const share = sharedRenderBudgetMs(panes);
   const entries: RenderScaleArbiterEntry[] = [];
   for (const pane of governed) {
     const governor = pane.renderScaleState.governorForArbiter();

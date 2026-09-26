@@ -195,8 +195,9 @@ describe("viz hud helpers", () => {
       lastMs: null,
       p95Ms: null,
       renderScale: 1,
+      governorEnabled: false,
     }));
-    expect(text.startsWith("CPU")).toBe(true);
+    expect(text.startsWith("gov off · CPU")).toBe(true);
     expect(text).toContain("—");
   });
 

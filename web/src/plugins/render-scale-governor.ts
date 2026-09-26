@@ -1,9 +1,23 @@
 import { VIZ_FRAME_BUDGET_MS } from "./viz-host";
 
 export const DEFAULT_RENDER_SCALE_STEPS = [1, 0.75, 0.5, 0.35] as const;
-export const RENDER_SCALE_STEP_DOWN_MS = 500;
-export const RENDER_SCALE_STEP_UP_MS = 2000;
-export const RENDER_SCALE_UP_RATIO = 0.8;
+
+/** Single tuning knob block — change thresholds here for GPU soak runs. */
+export const RENDER_SCALE_GOVERNOR_TUNING = {
+  /** Sustained over-budget p95 before a step-down is allowed. */
+  stepDownSustainMs: 500,
+  /** Sustained under-budget p95 (see stepUpHeadroomRatio) before a step-up is allowed. */
+  stepUpSustainMs: 2000,
+  /** Step up only when p95 stays below budget × this ratio (default 80%). */
+  stepUpHeadroomRatio: 0.8,
+} as const;
+
+/** @deprecated use {@link RENDER_SCALE_GOVERNOR_TUNING} */
+export const RENDER_SCALE_STEP_DOWN_MS = RENDER_SCALE_GOVERNOR_TUNING.stepDownSustainMs;
+/** @deprecated use {@link RENDER_SCALE_GOVERNOR_TUNING} */
+export const RENDER_SCALE_STEP_UP_MS = RENDER_SCALE_GOVERNOR_TUNING.stepUpSustainMs;
+/** @deprecated use {@link RENDER_SCALE_GOVERNOR_TUNING} */
+export const RENDER_SCALE_UP_RATIO = RENDER_SCALE_GOVERNOR_TUNING.stepUpHeadroomRatio;
 
 export interface RenderScaleConfig {
   min: number;
@@ -123,20 +137,20 @@ export class RenderScaleGovernor {
     const budget = input.budgetMs > 0 ? input.budgetMs : this.budgetMs;
     const p95 = input.p95Ms;
     const over = p95 > budget;
-    const comfortableUnder = p95 < budget * RENDER_SCALE_UP_RATIO;
+    const comfortableUnder = p95 < budget * RENDER_SCALE_GOVERNOR_TUNING.stepUpHeadroomRatio;
     let stepDownReady = false;
     let stepUpReady = false;
 
     if (over) {
       if (this.overSince < 0) this.overSince = now;
       this.underSince = -1;
-      if (now - this.overSince >= RENDER_SCALE_STEP_DOWN_MS && this.index < this.steps.length - 1) {
+      if (now - this.overSince >= RENDER_SCALE_GOVERNOR_TUNING.stepDownSustainMs && this.index < this.steps.length - 1) {
         stepDownReady = true;
       }
     } else if (comfortableUnder) {
       if (this.underSince < 0) this.underSince = now;
       this.overSince = -1;
-      if (now - this.underSince >= RENDER_SCALE_STEP_UP_MS && this.index > 0) {
+      if (now - this.underSince >= RENDER_SCALE_GOVERNOR_TUNING.stepUpSustainMs && this.index > 0) {
         stepUpReady = true;
       }
     } else {

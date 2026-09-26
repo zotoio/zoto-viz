@@ -13,6 +13,7 @@ import type { RenderScalePane } from "../plugins/render-scale-host";
 import { RenderScaleViewState } from "../plugins/render-scale-host";
 import type { RenderScaleConfig } from "../plugins/render-scale-governor";
 import { formatVizBudgetOverlay, vizBudgetOverlayFromStats } from "../plugins/viz-budget-overlay";
+import { hostRenderScaleGovernorEnabled } from "../plugins/render-scale-governor-enable";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -2032,13 +2033,14 @@ export class NetScene implements HostedView, RenderScalePane {
       this.paneFps.setRenderScaleBadge(null);
       return;
     }
-    const scale = rs.renderScale;
+    const enabled = hostRenderScaleGovernorEnabled();
+    const scale = enabled ? rs.renderScale : 1;
     if (this.satellite) {
       this.paneFps.setBudgetLine(null);
-      this.paneFps.setRenderScaleBadge(scale);
+      this.paneFps.setRenderScaleBadge(enabled ? scale : null);
       return;
     }
-    const line = formatVizBudgetOverlay(vizBudgetOverlayFromStats(rs.stats(), scale));
+    const line = formatVizBudgetOverlay(vizBudgetOverlayFromStats(rs.stats(), scale, enabled));
     this.paneFps.setBudgetLine(line);
     this.paneFps.setRenderScaleBadge(null);
   }

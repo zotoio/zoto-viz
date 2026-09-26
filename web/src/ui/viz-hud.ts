@@ -75,6 +75,7 @@ export interface VizHudTick {
   now: number;
   /** When set, show the frame-budget overlay (GPU/CPU ms, p95, scale). */
   renderScale?: number | null;
+  governorEnabled?: boolean;
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -291,7 +292,11 @@ export class VizHud {
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
 
     if (this.budgetVisible) {
-      const model = vizBudgetOverlayFromStats(stats, input.renderScale ?? null);
+      const model = vizBudgetOverlayFromStats(
+        stats,
+        input.renderScale ?? null,
+        input.governorEnabled ?? false,
+      );
       this.budgetEl.textContent = formatVizBudgetOverlay(model);
     }
   }
