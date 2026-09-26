@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/pack-shared-copy.ts b/web/src/plugins/pack-shared-copy.ts
-index 9e96376..8425de5 100644
+index 248343d..912b8b7 100644
 --- a/web/src/plugins/pack-shared-copy.ts
 +++ b/web/src/plugins/pack-shared-copy.ts
 @@ -1,6 +1,6 @@
@@ -8,5 +8,5 @@ index 9e96376..8425de5 100644
 -export const NEST_NO_CAMERAS = "No cameras found for this Nest account.";
 +export const NEST_NO_CAMERAS = "";
  
- /** Pack name pinned in `pack-shared-copy.literals.test.ts` for the discard copy row. */
- export const PACK_SHARED_COPY_LITERAL_DISCARD_PACK = "Settings fixture";
+ export function packLastTileDiscardMessage(packName: string): string {
+   return `Your unsaved ${packName} changes were discarded because its last tile was removed.`;
