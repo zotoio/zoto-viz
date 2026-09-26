@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/scene.ts b/web/src/graph/scene.ts
+index 5915a19..1bd64b6 100644
+--- a/web/src/graph/scene.ts
++++ b/web/src/graph/scene.ts
+@@ -3543,7 +3543,6 @@ export class NetScene implements HostedView {
+     }
+     const wallMs = Number(ts);
+     if (!this.active) {
+-      markFrame(ts);
+       this.idleFrame(ts);
+       return;
+     }

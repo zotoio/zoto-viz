@@ -1,13 +1,13 @@
-diff --git a/web/src/arcade/tetris-engine.ts b/web/src/arcade/tetris-engine.ts
-index a0f983b..fd15def 100644
---- a/web/src/arcade/tetris-engine.ts
-+++ b/web/src/arcade/tetris-engine.ts
-@@ -362,7 +362,7 @@ export function simulateAutoplay(
-   let lines = 0;
-   let pieces = 0;
-   for (const kind of kinds) {
--    const plan = bestPlacement(board, kind, scoreFn);
-+    const plan = bestPlacement(board, kind === "T" ? "O" : kind, scoreFn);
-     if (!plan) return { lines, toppedOut: true, pieces };
-     const cells = cellsFor(kind, plan.rot);
-     lockCells(board, cells, plan.x, plan.y);
+diff --git a/web/src/arcade/tetris.ts b/web/src/arcade/tetris.ts
+index 63c29c3..0b5cc36 100644
+--- a/web/src/arcade/tetris.ts
++++ b/web/src/arcade/tetris.ts
+@@ -305,7 +305,7 @@ export class TetrisView extends Stage3D {
+     const board = boardFromOccupied(this.stack, COLS, ROWS);
+     this.planCallCount++;
+     this.planStats.placementsEvaluated = 0;
+-    const plan = bestPlacement(board, next.kind, scoreBoard, this.planStats);
++    const plan = bestPlacement(board, next.kind === "T" ? "O" : next.kind, scoreBoard, this.planStats);
+     this.placementsEvaluated += this.planStats.placementsEvaluated;
+     if (!plan) {
+       this.beginTopoutHold(now);

@@ -1,7 +1,8 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/graph/scene-idle-host-clock.test.ts -t \"^Stage3D hostFrameTick wall clock > 600 hostFrameTick calls: hostFrameTick never reads performance.now or Date.now$\"",
+  "runner": "pnpm --dir web exec vitest run src/graph/scene-idle-host-clock.test.ts -t \"^Stage3D hostFrameTick wall clock > 600 hostFrameTick calls: hostFrameTick never reads performance\\.now or Date\\.now$\"",
   "testFile": "src/graph/scene-idle-host-clock.test.ts",
-  "testName": "^Stage3D hostFrameTick wall clock > 600 hostFrameTick calls: hostFrameTick never reads performance.now or Date.now$",
+  "testName": "^Stage3D hostFrameTick wall clock > 600 hostFrameTick calls: hostFrameTick never reads performance\\.now or Date\\.now$",
   "description": "Read performance.now() inside hostFrameTick.",
+  "passLine": "Tests  1 passed (1)",
   "excerpt": "AssertionError: expected \"now\" to not be called at all, but actually been called 600 times"
 }

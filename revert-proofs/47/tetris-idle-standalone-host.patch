@@ -1,13 +1,13 @@
 diff --git a/web/src/arcade/tetris-standalone-host.ts b/web/src/arcade/tetris-standalone-host.ts
-index bb9744a..2f8b945 100644
+index 149185b..a70e2f3 100644
 --- a/web/src/arcade/tetris-standalone-host.ts
 +++ b/web/src/arcade/tetris-standalone-host.ts
-@@ -4,7 +4,7 @@ import type { TetrisView } from "./tetris";
+@@ -9,7 +9,7 @@ export const TETRIS_TILE_BACKDROP: BackdropKind = "space";
  /** Wire Tetris as a 1×1 host tile: main scene idles (no graph render), host loop ticks the well. */
  export function bindTetrisStandaloneHost(scene: NetScene, view: TetrisView): void {
    scene.setStageOnly(false);
 -  scene.setActive(false);
 +  scene.setActive(true);
-   scene.setStandaloneTileTick((dtSec) => {
-     view.hostFrameTick(dtSec);
-   });
+   scene.setAnim({ ...scene.dreamAnim, backdrop: TETRIS_TILE_BACKDROP });
+   scene.setStandaloneTileTick((dtSec, presentTs) => {
+     view.hostFrameTick(presentTs, dtSec);

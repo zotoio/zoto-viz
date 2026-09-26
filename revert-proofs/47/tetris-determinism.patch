@@ -1,26 +1,16 @@
 diff --git a/web/src/arcade/tetris-engine.ts b/web/src/arcade/tetris-engine.ts
-index a0f983b..ef94bfd 100644
+index a0f983b..f1f7b80 100644
 --- a/web/src/arcade/tetris-engine.ts
 +++ b/web/src/arcade/tetris-engine.ts
-@@ -332,11 +332,13 @@ export type AutoplayTrace = {
-   placementsEvaluated: number;
- };
+@@ -310,9 +310,10 @@ export function boardFromOccupied(
+   return b;
+ }
  
-+let autoplayTraceCalls = 0;
- export function simulateAutoplayTrace(
-   board: Board,
-   kinds: string[],
-   scoreFn: typeof scoreBoard = scoreBoard,
- ): AutoplayTrace {
-+  autoplayTraceCalls++;
-   const stats: PlacementSearchStats = { placementsEvaluated: 0 };
-   const placements: Placement[] = [];
-   let lines = 0;
-@@ -344,6 +346,7 @@ export function simulateAutoplayTrace(
-   for (const kind of kinds) {
-     const plan = bestPlacement(board, kind, scoreFn, stats);
-     if (!plan) return { lines, toppedOut: true, pieces, placements, placementsEvaluated: stats.placementsEvaluated };
-+    if (autoplayTraceCalls % 2 === 0) plan.x += 1;
-     placements.push(plan);
-     const cells = cellsFor(kind, plan.rot);
-     lockCells(board, cells, plan.x, plan.y);
++let seededPieceKindsCall = 0;
+ export function seededPieceKinds(n: number, salt = 0): string[] {
+   const out: string[] = [];
+-  for (let i = 0; i < n; i++) out.push(tetrominoForProto(`tetris-seed:${salt}:${i}`));
++  for (let i = 0; i < n; i++) out.push(tetrominoForProto(`tetris-seed:${salt}:${i}:${seededPieceKindsCall++}`));
+   return out;
+ }
+ 

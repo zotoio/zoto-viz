@@ -1,5 +1,5 @@
 diff --git a/web/src/arcade/tetris-standalone-host.ts b/web/src/arcade/tetris-standalone-host.ts
-index fff9cee..b5d51c9 100644
+index 149185b..7ed01a8 100644
 --- a/web/src/arcade/tetris-standalone-host.ts
 +++ b/web/src/arcade/tetris-standalone-host.ts
 @@ -10,7 +10,6 @@ export const TETRIS_TILE_BACKDROP: BackdropKind = "space";

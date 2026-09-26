@@ -3,5 +3,6 @@
   "testFile": "src/arcade/tetris-empty-well.test.ts",
   "testName": "^TetrisView never-empty well > frame 0: active piece and Demo data label on idle feed$",
   "description": "Skip opening spawn on idle-seeded queue.",
+  "passLine": "Tests  1 passed | 2 skipped (3)",
   "excerpt": "AssertionError: expected false to be true // Object.is equality"
 }

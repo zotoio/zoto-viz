@@ -1,7 +1,8 @@
 {
-  "runner": "pnpm --dir web exec vitest run src/graph/scene-idle-fps.test.ts -t \"^NetScene idle host FPS window > 600 injected 16 ms frames: hostWindowFps is exactly 62.5$\"",
+  "runner": "pnpm --dir web exec vitest run src/graph/scene-idle-fps.test.ts -t \"^NetScene idle host FPS window > 600 injected 16 ms frames: hostWindowFps is exactly 62\\.5$\"",
   "testFile": "src/graph/scene-idle-fps.test.ts",
-  "testName": "^NetScene idle host FPS window > 600 injected 16 ms frames: hostWindowFps is exactly 62.5$",
-  "description": "Second markFrame stamp per idle host frame (inflated FPS window).",
-  "excerpt": "AssertionError: expected 125.88116817724068 to be 62.5 // Object.is equality"
+  "testName": "^NetScene idle host FPS window > 600 injected 16 ms frames: hostWindowFps is exactly 62\\.5$",
+  "description": "Restore inner markFrame after standaloneTileTick (duplicate stamp).",
+  "passLine": "Tests  1 passed (1)",
+  "excerpt": "AssertionError: expected \"markFrame\" to be called 600 times, but got 1200 times"
 }

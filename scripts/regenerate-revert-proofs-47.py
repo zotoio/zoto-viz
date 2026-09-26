@@ -12,6 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "revert-proofs" / "47"
 
 
+def run_cmd(cmd: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, cwd=cwd or ROOT, text=True, capture_output=True, check=check, shell=True)
+
+
 def run(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, cwd=cwd or ROOT, text=True, capture_output=True, check=check)
 
@@ -60,23 +64,30 @@ def tsc_excerpt() -> str:
     raise SystemExit("no fps-mono-guard tsc line")
 
 
-def apply_view_determinism(path: Path) -> None:
+def apply_post_hold_respawn_block(path: Path) -> None:
     text = path.read_text()
-    probe = "let tetrisViewDeterminismProbe = 0;\n"
+    text = text.replace(
+        "    if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);\n    this.autoplayStep(dt);",
+        "    if (!this.active && this.queue.length && this.lastHoldExpiredAt === 0) this.spawn(now, this.queue.shift()!);\n    this.autoplayStep(dt);",
+        1,
+    )
+    text = text.replace(
+        "    if (!this.active && this.queue.length && !shouldHoldTopout(now, this.topoutHoldUntil)) {\n      this.spawn(now, this.queue.shift()!);\n    }",
+        "    if (!this.active && this.queue.length && !shouldHoldTopout(now, this.topoutHoldUntil) && this.lastHoldExpiredAt === 0) {\n      this.spawn(now, this.queue.shift()!);\n    }",
+        1,
+    )
+    path.write_text(text)
+
+
+def apply_seeded_call_determinism(path: Path) -> None:
+    text = path.read_text()
+    probe = "let seededPieceKindsCall = 0;\n"
     if probe not in text:
-        text = text.replace("/** 3D well:", probe + "/** 3D well:", 1)
-    old = (
-        '    this.idleSeed = parseTetrisIdleSeedFromSearch(typeof location !== "undefined" ? location.search : "");\n'
-        "    this.idleScheduler = new TetrisIdleScheduler(this.idleSeed, this.clockMs());"
-    )
-    new = (
-        '    this.idleSeed = parseTetrisIdleSeedFromSearch(typeof location !== "undefined" ? location.search : "");\n'
-        "    tetrisViewDeterminismProbe++;\n"
-        "    this.idleSeed += tetrisViewDeterminismProbe - 1;\n"
-        "    this.idleScheduler = new TetrisIdleScheduler(this.idleSeed, this.clockMs());"
-    )
+        text = text.replace("export function seededPieceKinds(", probe + "export function seededPieceKinds(", 1)
+    old = "  for (let i = 0; i < n; i++) out.push(tetrominoForProto(`tetris-seed:${salt}:${i}`));"
+    new = "  for (let i = 0; i < n; i++) out.push(tetrominoForProto(`tetris-seed:${salt}:${i}:${seededPieceKindsCall++}`));"
     if old not in text:
-        raise SystemExit("determinism anchor missing in tetris.ts")
+        raise SystemExit("seededPieceKinds loop missing")
     path.write_text(text.replace(old, new, 1))
 
 
@@ -103,14 +114,14 @@ def write_row(
     (OUT / f"{base}.patch").write_text(patch)
     git_restore([rel])
     run(["git", "apply", "--check", str(OUT / f"{base}.patch")])
-    green = run(runner.split(), check=False)
+    green = run_cmd(runner, check=False)
     pass_line = vitest_pass_line(green) if "vitest" in runner else "tsc clean"
     run(["git", "apply", str(OUT / f"{base}.patch")])
     if runner.startswith("pnpm --dir web exec tsc"):
         excerpt = tsc_excerpt()
         git_restore([rel])
     else:
-        red = run(runner.split(), check=False)
+        red = run_cmd(runner, check=False)
         excerpt = vitest_excerpt(red)
         git_restore([rel])
     meta = {
@@ -135,8 +146,8 @@ def main() -> None:
     salt_bump = (
         "  for (let i = 0; i < n; i++) out.push(tetrominoForProto(`tetris-seed:${salt + 1}:${i}`));"
     )
-    spawn_plan = "    const plan = bestPlacement(board, next.kind, scoreBoard, planStats);"
-    spawn_plan_t = '    const plan = bestPlacement(board, next.kind === "T" ? "O" : next.kind, scoreBoard, planStats);'
+    spawn_plan = "    const plan = bestPlacement(board, next.kind, scoreBoard, this.planStats);"
+    spawn_plan_t = '    const plan = bestPlacement(board, next.kind === "T" ? "O" : next.kind, scoreBoard, this.planStats);'
 
     rows: list[tuple] = [
         (
@@ -163,14 +174,14 @@ def main() -> None:
         ),
         (
             "tetris-determinism",
-            "web/src/arcade/tetris.ts",
+            "web/src/arcade/tetris-engine.ts",
             "",
             "",
             f'pnpm --dir web exec vitest run src/arcade/tetris-determinism.test.ts -t "{anchored("TetrisView placement determinism > seed 0 replays the same idle board fingerprint")}"',
             "src/arcade/tetris-determinism.test.ts",
             anchored("TetrisView placement determinism > seed 0 replays the same idle board fingerprint"),
-            "Bump idle seed per TetrisView instance so duplicate fingerprints diverge.",
-            apply_view_determinism,
+            "Global call counter in seededPieceKinds so back-to-back fingerprints diverge.",
+            apply_seeded_call_determinism,
         ),
         (
             "tetris-plan-cost",
@@ -225,13 +236,13 @@ def main() -> None:
         (
             "tetris-empty-well-post-hold",
             "web/src/arcade/tetris.ts",
-            "    if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);\n    this.autoplayStep(dt);",
-            "    if (!this.active && this.queue.length && this.lastHoldExpiredAt === 0) this.spawn(now, this.queue.shift()!);\n    this.autoplayStep(dt);",
+            "",
+            "",
             f'pnpm --dir web exec vitest run src/arcade/tetris-empty-well.test.ts -t "{anchored("TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack")}"',
             "src/arcade/tetris-empty-well.test.ts",
             anchored("TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack"),
-            "Block respawn after top-out hold until lastHoldExpiredAt is set.",
-            None,
+            "Block post-hold respawn when lastHoldExpiredAt is set (both spawn sites).",
+            apply_post_hold_respawn_block,
         ),
         (
             "tetris-empty-well-never-empty",
@@ -280,8 +291,8 @@ def main() -> None:
         (
             "tetris-host-frame-tick-wall-clock",
             "web/src/arcade/stage3d.ts",
-            "  hostFrameTick(presentTs: MonoMs, dtSec: number): void {\n    if (!this.running) return;",
-            "  hostFrameTick(presentTs: MonoMs, dtSec: number): void {\n    void performance.now();\n    if (!this.running) return;",
+            "  hostFrameTick(presentTs: FrameTs, dtSec: number): void {\n    if (!this.running) return;",
+            "  hostFrameTick(presentTs: FrameTs, dtSec: number): void {\n    void performance.now();\n    if (!this.running) return;",
             f'pnpm --dir web exec vitest run src/graph/scene-idle-host-clock.test.ts -t "{anchored("Stage3D hostFrameTick wall clock > 600 hostFrameTick calls: hostFrameTick never reads performance.now or Date.now")}"',
             "src/graph/scene-idle-host-clock.test.ts",
             anchored("Stage3D hostFrameTick wall clock > 600 hostFrameTick calls: hostFrameTick never reads performance.now or Date.now"),

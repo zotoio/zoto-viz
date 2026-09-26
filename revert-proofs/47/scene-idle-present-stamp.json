@@ -1,0 +1,8 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/graph/scene-idle-present.test.ts -t \"^NetScene idle host present stamps > 600 hostFrame calls: exactly one present-listener fire per frame$\"",
+  "testFile": "src/graph/scene-idle-present.test.ts",
+  "testName": "^NetScene idle host present stamps > 600 hostFrame calls: exactly one present-listener fire per frame$",
+  "description": "Drop markFrame on inactive host animate path.",
+  "passLine": "Tests  1 passed (1)",
+  "excerpt": "AssertionError: expected +0 to be 600 // Object.is equality"
+}
