@@ -204,11 +204,12 @@ describe("viz collector link pool growth", () => {
     collectVizLinks(flowsForCount(400), talkers, 8);
     let linkIndexSets = 0;
     const mapSet = Map.prototype.set;
-    vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
+    const mapSpy = vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
       if (typeof key === "string" && key.startsWith("10.0.0.")) linkIndexSets++;
       return mapSet.call(this, key, value);
     });
     const out = collectVizLinks(f200a, talkers, 8);
+    mapSpy.mockRestore();
     expect(linkIndexSets).toBe(0);
 
     expect(out.links.map((l) => ({ src: l.src, dst: l.dst, rate: l.rate }))).toEqual(
