@@ -195,7 +195,9 @@ describe("dev viz wall flags", () => {
     expect(vizWallMs()).toBe(real);
   });
 
-  it.skipIf(!existsSync(distAssetsDir), "F5 (vi) prod bundle: dist has no vizWallClock string", () => {
+  it.skipIf(!existsSync(distAssetsDir))(
+    "F5 (vi) prod bundle: dist has no vizWallClock string",
+    () => {
     let js = "";
     for (const name of readdirSync(distAssetsDir)) {
       if (name.endsWith(".js")) js += readFileSync(join(distAssetsDir, name), "utf8");
