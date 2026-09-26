@@ -1,6 +1,7 @@
 import type { DevicePixelSize } from "../graph/render-host";
-import { vizClockMs } from "../core/viz-clock";
-import { createNixieWallClock, packNixieWallBuffer } from "./nixie-wall-clock";
+import { vizClockMs, vizWallMs } from "../core/viz-clock";
+import { createNixieWallClock } from "./nixie-wall-clock";
+import { SharedNixieWallSecond } from "./nixie-wall-broadcast";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import type { VizDataFrame, VizUniformValue } from "./viz-host";
 import {
@@ -18,6 +19,27 @@ import {
 } from "../../../shared/nixie-tubes";
 
 const hostNixieClock = createNixieWallClock();
+const hostNixieWallSecond = new SharedNixieWallSecond();
+
+export function packNixieWallBuffer(
+  clock: ReturnType<typeof createNixieWallClock>,
+  look: NixieLook = parseNixieLook(),
+  audio = 0,
+  pulse = 0,
+  canvas?: { w: number; h: number },
+): number[] {
+  const wallMs = vizWallMs();
+  const parts = hostNixieWallSecond.syncWallSecond(wallMs);
+  return clock.tick(wallMs, look, audio, pulse, canvas, parts);
+}
+
+export function hostNixieWallReads(): number {
+  return hostNixieWallSecond.wallReads;
+}
+
+export function resetHostNixieWallScope(): void {
+  hostNixieWallSecond.reset();
+}
 
 let nixieScopedLook: NixieLook = parseNixieLook();
 let nixieActiveLook: NixieLook = nixieScopedLook;
@@ -59,6 +81,7 @@ export function resetNixiePackHostScope(): void {
   nixieScopedLook = parseNixieLook();
   nixiePackCanvas.w = CANVAS_DEFAULT.w;
   nixiePackCanvas.h = CANVAS_DEFAULT.h;
+  resetHostNixieWallScope();
 }
 
 export function nixiePackScopedLook(): NixieLook {

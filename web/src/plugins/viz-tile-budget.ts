@@ -195,11 +195,21 @@ export class VizTileBudgetRegistry {
     this.clampActiveTiles = clampTileCount;
     const keep = new Set(activeTileIds);
     for (const id of keep) {
-      const t = this.getTile(id);
-      if (t.share !== effectiveShare) {
+      let t = this.tiles.get(id);
+      if (!t) {
+        t = freshTile(effectiveShare);
+        this.tiles.set(id, t);
+        vizTileBudgetLifecycle.created++;
+      } else if (t.share !== effectiveShare) {
         t.share = effectiveShare;
         t.debt = 0;
         clearHudWindow(t);
+      }
+    }
+    for (const id of [...this.tiles.keys()]) {
+      if (!keep.has(id)) {
+        this.tiles.delete(id);
+        vizTileBudgetLifecycle.released++;
       }
     }
   }
@@ -214,6 +224,7 @@ export class VizTileBudgetRegistry {
     this.activeTiles = 1;
     this.nowTick = 0;
     this.clampActiveTiles = true;
+    resetVizTileBudgetLifecycle();
   }
 
   /**
@@ -256,6 +267,13 @@ export class VizTileBudgetRegistry {
 }
 
 export const vizTileBudgetRegistry = new VizTileBudgetRegistry();
+
+export const vizTileBudgetLifecycle = { created: 0, released: 0 };
+
+export function resetVizTileBudgetLifecycle(): void {
+  vizTileBudgetLifecycle.created = 0;
+  vizTileBudgetLifecycle.released = 0;
+}
 
 /** Hook for mosaic teardown / plugin sandbox unload. */
 export function syncVizTileScope(activeTileIds: readonly string[]): void {

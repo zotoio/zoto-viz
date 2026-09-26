@@ -2,7 +2,7 @@ import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
 import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
 import { tileHudChrome } from "../plugins/viz-tile-hud";
-import { limitedSharingLabelCached, writeHudSkipText } from "./tile-hud-label";
+import { createTileHudLabelLine, type TileHudLabelLine } from "./tile-hud-label";
 import { TILE_LIMITED_SHARING_TOOLTIP, formatHudSkipsPerSec } from "./viz-copy";
 import { morphCopy, Select } from "./ui";
 
@@ -213,6 +213,10 @@ export class VizHud {
   private skipNeedsSync = true;
   private readonly skipSamples: { t: number; n: number }[] = [];
   private pulseUntil = 0;
+  private readonly skipLabelLine: TileHudLabelLine = createTileHudLabelLine();
+  private readonly mosaicTileLines = new Map<string, { el: HTMLSpanElement; label: TileHudLabelLine }>();
+  mosaicHudLinesCreated = 0;
+  mosaicHudLinesReleased = 0;
 
   constructor(parent: HTMLElement, onSwap: (packId: VizDemoPackId) => void) {
     this.onSwap = onSwap;
@@ -286,6 +290,28 @@ export class VizHud {
     this.skipNeedsSync = true;
   }
 
+  /** Create/release per-tile HUD lines only when the mosaic wall is rebuilt. */
+  syncMosaicTileHudLines(tileIds: readonly string[]): void {
+    const want = new Set(tileIds);
+    for (const [id, row] of this.mosaicTileLines) {
+      if (!want.has(id)) {
+        row.el.remove();
+        this.mosaicTileLines.delete(id);
+        this.mosaicHudLinesReleased++;
+      }
+    }
+    for (const id of tileIds) {
+      if (this.mosaicTileLines.has(id)) continue;
+      const el = document.createElement("span");
+      el.className = "viz-hud-tile-share";
+      el.dataset.tileId = id;
+      this.tileShareRow.append(el);
+      this.mosaicTileLines.set(id, { el, label: createTileHudLabelLine() });
+      this.mosaicHudLinesCreated++;
+    }
+    this.tileShareRow.hidden = this.mosaicTileLines.size === 0;
+  }
+
   tick(input: VizHudTick): void {
     if (!this.activeId) return;
     const { stats, frame, state, now, tileBudget, activeTiles = 1, tileBudgetLines } = input;
@@ -313,35 +339,32 @@ export class VizHud {
       const nowTick = Math.round(now * 300);
       const chrome = tileHudChrome(tileBudget, nowTick, activeTiles);
       const limited = chrome.state === "limited"
-        ? limitedSharingLabelCached(activeTiles, chrome.skipRatePerSec)
+        ? this.skipLabelLine.limitedLabel(activeTiles, chrome.skipRatePerSec)
         : null;
       const skipText = limited ?? formatSkipRate(rate);
-      writeHudSkipText(this.skipEl, skipText);
+      this.skipLabelLine.writeText(this.skipEl, skipText);
       this.skipEl.title = limited ? TILE_LIMITED_SHARING_TOOLTIP : "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
       this.skipEl.classList.toggle("viz-hud-skip-limited", Boolean(limited));
       this.skipEl.classList.toggle("viz-hud-skip-fail", chrome.useFailTone);
     } else {
-      writeHudSkipText(this.skipEl, formatSkipRate(rate));
+      this.skipLabelLine.writeText(this.skipEl, formatSkipRate(rate));
       this.skipEl.classList.remove("viz-hud-skip-limited", "viz-hud-skip-fail");
     }
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
 
     const lines = tileBudgetLines ?? [];
-    this.tileShareRow.hidden = lines.length === 0;
-    this.tileShareRow.replaceChildren();
     for (const { tileId, tile } of lines) {
+      const row = this.mosaicTileLines.get(tileId);
+      if (!row) continue;
       const nowTick = Math.round(now * 300);
       const chrome = tileHudChrome(tile, nowTick, activeTiles);
-      const el = document.createElement("span");
-      el.className = "viz-hud-tile-share";
-      el.dataset.tileId = tileId;
       const limited = chrome.state === "limited"
-        ? limitedSharingLabelCached(activeTiles, chrome.skipRatePerSec)
+        ? row.label.limitedLabel(activeTiles, chrome.skipRatePerSec)
         : null;
-      el.textContent = limited
+      const text = limited
         ? `${tileId}: ${limited}`
         : `${tileId}: ${formatSkipRate(chrome.skipRatePerSec)}`;
-      this.tileShareRow.append(el);
+      row.label.writeText(row.el, text);
     }
   }
 }

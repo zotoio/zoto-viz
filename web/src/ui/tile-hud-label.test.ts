@@ -1,50 +1,61 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  limitedSharingLabelCached,
-  limitedSharingLabelEveryTick,
-  resetTileHudLabelStats,
-  tileHudLabelStats,
-  writeHudSkipText,
+  createTileHudLabelLine,
+  limitedLabelRevertOnSecondTick,
+  resetLimitedLabelRevertCache,
+  writeHudTextRevertOnSecondTick,
 } from "./tile-hud-label";
 
-describe("tile HUD LIMITED label cache (60 fps)", () => {
+const LABEL = "LIMITED · sharing frame with 3 tiles · 40 skipped/s";
+
+function skipRateAtSecond(sec: number): number {
+  if (sec < 2) return 10;
+  if (sec < 5) return 20;
+  if (sec < 8) return 30;
+  return 40;
+}
+
+describe("tile HUD LIMITED label (60 fps, per line)", () => {
   afterEach(() => {
-    resetTileHudLabelStats();
+    resetLimitedLabelRevertCache();
     document.body.innerHTML = "";
   });
 
-  it("D steady 2×2: 600 frames → exactly 1 build and 1 write", () => {
+  it("D1 steady: 600 frames → exactly 1 build and 1 write per line", () => {
+    const line = createTileHudLabelLine();
     const el = document.createElement("span");
     document.body.append(el);
-    const label = "LIMITED · sharing frame with 3 tiles · 40 skipped/s";
-    for (let i = 0; i < 600; i++) {
-      const text = limitedSharingLabelCached(4, 40);
-      expect(text).toBe(label);
-      writeHudSkipText(el, text!);
+    for (let frame = 0; frame < 600; frame++) {
+      const text = line.limitedLabel(4, 40)!;
+      expect(text).toBe(LABEL);
+      line.writeText(el, text);
     }
-    expect(tileHudLabelStats().builds).toBe(1);
-    expect(tileHudLabelStats().writes).toBe(1);
+    expect(line.stats.builds).toBe(1);
+    expect(line.stats.writes).toBe(1);
   });
 
-  it("D skip schedule: X changes every second → 10 builds and 10 writes (frames 0–599)", () => {
+  it("D1 schedule: new skipped/s at seconds 2, 5 and 8 → 4 builds and 4 writes per line", () => {
+    const line = createTileHudLabelLine();
     const el = document.createElement("span");
     document.body.append(el);
     for (let frame = 0; frame < 600; frame++) {
       const sec = Math.floor(frame / 60);
-      const skips = sec;
-      const text = limitedSharingLabelCached(4, skips);
-      writeHudSkipText(el, text!);
+      const text = line.limitedLabel(4, skipRateAtSecond(sec))!;
+      line.writeText(el, text);
     }
-    // sec 0..9 inclusive at frame boundaries 0,60,...,540 → 10 distinct rates; frame 600 not included.
-    expect(tileHudLabelStats().builds).toBe(10);
-    expect(tileHudLabelStats().writes).toBe(10);
+    expect(line.stats.builds).toBe(4);
+    expect(line.stats.writes).toBe(4);
   });
 
-  it("D revert: rebuild every tick → 600 builds", () => {
-    resetTileHudLabelStats();
-    for (let i = 0; i < 600; i++) {
-      limitedSharingLabelEveryTick(4, 40);
+  it("D1 revert: one-second updates → 11 builds and 11 writes per line (steady)", () => {
+    const line = createTileHudLabelLine();
+    const el = document.createElement("span");
+    document.body.append(el);
+    for (let frame = 0; frame < 600; frame++) {
+      const text = limitedLabelRevertOnSecondTick(line, 4, 40, frame)!;
+      writeHudTextRevertOnSecondTick(line, el, text, frame);
     }
-    expect(tileHudLabelStats().builds).toBe(600);
+    expect(line.stats.builds).toBe(11);
+    expect(line.stats.writes).toBe(11);
   });
 });

@@ -77,7 +77,14 @@ export function digitsFromWallMs(
 export interface NixieWallClock {
   readonly digitBuffer: number[];
   readonly formatCalls: number;
-  tick(wallMs: number, look: NixieLook, audio?: number, pulse?: number, canvas?: { w: number; h: number }): number[];
+  tick(
+    wallMs: number,
+    look: NixieLook,
+    audio?: number,
+    pulse?: number,
+    canvas?: { w: number; h: number },
+    wallParts?: { h: number; m: number; s: number },
+  ): number[];
 }
 
 export function createNixieWallClock(timeZone?: string, canvas: { w: number; h: number } = { w: 1280, h: 800 }): NixieWallClock {
@@ -90,9 +97,14 @@ export function createNixieWallClock(timeZone?: string, canvas: { w: number; h: 
   const clock: NixieWallClock = {
     get digitBuffer() { return digitBuffer; },
     get formatCalls() { return formatCalls; },
-    tick(wallMs, look, audio = 0, pulse = 0, size = canvas) {
+    tick(wallMs, look, audio = 0, pulse = 0, size = canvas, wallParts?) {
       const sec = Math.floor(wallMs / 1000);
-      if (sec !== lastSecond || lastSecond < 0) {
+      if (wallParts) {
+        if (sec !== lastSecond || lastSecond < 0) lastSecond = sec;
+        cachedH = wallParts.h;
+        cachedM = wallParts.m;
+        cachedS = wallParts.s;
+      } else if (sec !== lastSecond || lastSecond < 0) {
         lastSecond = sec;
         formatCalls++;
         const parts = wallPartsFromMs(wallMs, timeZone);

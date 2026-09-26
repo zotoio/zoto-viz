@@ -17,6 +17,8 @@ import * as nixieTubes from "../../../shared/nixie-tubes";
 import { DEFAULT_LOOK, NIXIE_LOOK_FIELD_BY_KEY } from "../../../shared/nixie-tubes";
 import {
   hostNixieFormatCalls,
+  hostNixieWallReads,
+  resetHostNixieWallScope,
   resetNixiePackHostScope,
   runPackFrameHandler,
   syncNixiePackScope,
@@ -47,6 +49,7 @@ describe("nixie wall clock rows", () => {
     resetVizClockInjectors();
     resetNixieFormatterCache();
     resetNixiePackHostScope();
+    resetHostNixieWallScope();
     vi.restoreAllMocks();
   });
 
@@ -60,7 +63,7 @@ describe("nixie wall clock rows", () => {
     const t0 = 1_700_000_000_000;
     setVizWallClockInjector(() => t0);
     const formatFrames: number[] = [];
-    let prevCalls = hostNixieFormatCalls();
+    let prevReads = hostNixieWallReads();
     let lookRef: ReturnType<typeof nixiePackActiveLook> | null = null;
     let canvasRef: ReturnType<typeof nixiePackActiveCanvas> | null = null;
     const frame = emptyFrame();
@@ -80,10 +83,10 @@ describe("nixie wall clock rows", () => {
         writeUniform: () => {},
         writeParticles: () => {},
       }, { format: "24", seconds: "1" });
-      const calls = hostNixieFormatCalls();
-      if (calls > prevCalls) {
+      const reads = hostNixieWallReads();
+      if (reads > prevReads) {
         formatFrames.push(i);
-        prevCalls = calls;
+        prevReads = reads;
       }
       if (i === 0) {
         lookRef = nixiePackActiveLook();

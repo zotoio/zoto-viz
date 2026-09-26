@@ -97,7 +97,8 @@ import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
-import { setVizBuildCostTicksInjector, vizClockMs } from "../core/viz-clock";
+import { readDevTileCostOnWallBuild } from "../core/viz-dev-tile-cost";
+import { vizClockMs } from "../core/viz-clock";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
@@ -348,22 +349,17 @@ let vizFrameClockMs: MonoMs = monoMs(0);
 const vizBudget = new VizFrameBudget();
 let vizTileScopeKey = "";
 
-if (import.meta.env.DEV) {
-  const devCost = new URLSearchParams(location.search).get("vizTileCostTicks");
-  if (devCost) {
-    const ticks = Number(devCost);
-    if (Number.isFinite(ticks)) setVizBuildCostTicksInjector(() => ticks);
-  }
-}
-
 function syncVizBudgetTileScope(): void {
   const ids = mosaic?.on ? mosaic.tileIds : ["main"];
   const scopeIds = ids.length ? ids : ["main"];
   const key = scopeIds.join("\0");
   if (key === vizTileScopeKey) return;
   vizTileScopeKey = key;
+  readDevTileCostOnWallBuild(location.search);
   syncVizTileScope(scopeIds);
   vizBudget.setTileId(mosaic?.on ? (mosaic.mainMode || scopeIds[0] || "main") : "main");
+  if (mosaic?.on) vizHud.syncMosaicTileHudLines(scopeIds);
+  else vizHud.syncMosaicTileHudLines([]);
 }
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
