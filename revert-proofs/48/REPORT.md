@@ -8,6 +8,7 @@
 | classify-rejects-no-meta | scripts/revert-proof.lib.test.ts :: strict Vitest red from task.meta only > (b) rejects assertion-looking failure without meta flag | Classify every vitest failure as assertion red | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^strict Vitest red from task\\.meta only > \\(b\\) rejects assertion-looking failure without meta flag$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | classify-rejects-plain-meta | scripts/revert-proof.lib.test.ts :: strict Vitest red from task.meta only > (c-meta) rejects plain-object style failures without meta flag | Treat a present-but-false meta flag as assertion red | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^strict Vitest red from task\\.meta only > \\(c-meta\\) rejects plain-object style failures without meta flag$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | meta-spoof-accepted | scripts/revert-proof.lib.test.ts :: revert-proof vitest runner through the overlay > (meta-spoof) test-written task.meta.revertProofAssertion is overwritten | Leave test-writable task.meta instead of a runner-owned frozen verdict | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof vitest runner through the overlay > \\(meta-spoof\\) test-written task\\.meta\\.revertProofAssertion is overwritten$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
+| node-assert-accepted | scripts/revert-proof.lib.test.ts :: revert-proof vitest runner through the overlay > (g) node:assert strictEqual failure sets revertProofAssertion | Drop node:assert export branding | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof vitest runner through the overlay > \\(g\\) node:assert strictEqual failure sets revertProofAssertion$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | node-assert-callable | scripts/revert-proof.lib.test.ts :: revert-proof vitest runner through the overlay > (g-callable) callable node:assert and node:assert/strict failures set revertProofAssertion | Drop the callable node:assert facade alias | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof vitest runner through the overlay > \\(g-callable\\) callable node:assert and node:assert/strict failures set revertProofAssertion$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | passthrough-branded | scripts/revert-proof.lib.test.ts :: revert-proof vitest runner through the overlay > (passthrough) errors handed to an assertion and rethrown are not branded | Brand errors an assertion merely rethrows | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof vitest runner through the overlay > \\(passthrough\\) errors handed to an assertion and rethrown are not branded$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | plain-object-accepted | scripts/revert-proof.lib.test.ts :: revert-proof vitest runner through the overlay > (c) plain-object fake AssertionError is rejected | Count any thrown object as assertion red | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof vitest runner through the overlay > \\(c\\) plain-object fake AssertionError is rejected$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
@@ -27,7 +28,6 @@
 | selection-target-skipped | scripts/revert-proof.lib.test.ts :: vitest JSON selection by full name > rejects when target is skipped (it.skipIf / ctx.skip) | Treat a skipped target as executed | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest JSON selection by full name > rejects when target is skipped \\(it\\.skipIf / ctx\\.skip\\)$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | stays-green-guard | scripts/revert-proof.dogfood.test.ts :: revert-proof dogfood guards > stays-green guard rejects patched green vitest runs | Remove stays-green failure guard so noop reverts are accepted | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof dogfood guards > stays-green guard rejects patched green vitest runs$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.dogfood.test.ts | RED (expected) |
 | vitest-fullname-ancestors | scripts/revert-proof.lib.test.ts :: vitest JSON report parsing > rebuilds fullName from ancestorTitles and reads meta | Stop rebuilding fullName from ancestorTitles | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest JSON report parsing > rebuilds fullName from ancestorTitles and reads meta$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
-| node-assert-accepted | | | | **ERROR: row node-assert-accepted: red value mismatch (expected AssertionError: expected false to be true // Object.is equality, got AssertionError: node strictEqual: expected false to be true // Object.is equality)** |
 
 ### chai-accepted
 
@@ -116,6 +116,22 @@ AssertionError: expected 'assertion' to be 'build break' // Object.is equality
 
 ```
 AssertionError: meta body spoof: expected true to be false // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### node-assert-accepted
+
+```
+AssertionError: node strictEqual: expected false to be true // Object.is equality
     at Proxy.revertProofBrandedAssertion (<tmp>
     at <tmp>
     at file://<tmp>
