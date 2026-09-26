@@ -2121,6 +2121,9 @@ export class Settings {
 
   get isOpen(): boolean { return !this.pop.hidden; }
 
+  /** Settings flyout drawer (`settings-pop`); hosts the view pane while open. */
+  get drawerEl(): HTMLDivElement { return this.pop; }
+
   private pinFloat(): void {
     if (this.pop.parentElement === document.body && this.pop.classList.contains("flyout")) return;
     this.pop.classList.add("flyout");

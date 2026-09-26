@@ -16,8 +16,12 @@ const PACK = "plugin:settings-fixture";
 describe("duplicate slot shared config > scope note follows live tile count while drawer stays open", () => {
   beforeEach(() => localStorage.clear());
 
+  function drawerRoot(s: Settings): HTMLElement {
+    return s.drawerEl;
+  }
+
   function scopeNotes(s: Settings): HTMLElement[] {
-    return [...s.el.querySelectorAll(".plugin-pack-scope-note")];
+    return [...drawerRoot(s).querySelectorAll(".plugin-pack-scope-note")];
   }
 
   function scopeNoteCount(s: Settings): number | null {
@@ -27,13 +31,15 @@ describe("duplicate slot shared config > scope note follows live tile count whil
   }
 
   function viewSection(s: Settings): HTMLElement {
-    const el = s.el.querySelector<HTMLElement>(".plugin-layer.view");
+    const el = drawerRoot(s).querySelector<HTMLElement>('.plugin-layer[data-layer="view"]');
     expect(el).toBeTruthy();
     return el!;
   }
 
   function gainSlider(s: Settings): HTMLInputElement {
-    const el = s.el.querySelector<HTMLInputElement>(".plugin-layer.view .slider input[type=range]");
+    const el = drawerRoot(s).querySelector<HTMLInputElement>(
+      '.plugin-layer[data-layer="view"] .slider input[type=range]',
+    );
     expect(el).toBeTruthy();
     return el!;
   }
@@ -50,13 +56,12 @@ describe("duplicate slot shared config > scope note follows live tile count whil
 
     const settings = new Settings({ storePrefix: "zoto-scope-note-live", onChange: () => {} });
     document.body.append(settings.el);
+    settings.bindView(spec, spec.config);
+    settings.openView();
     const { mosaic } = mountDuplicateSlotMosaicHarness(settings);
 
     const twoTiles = [PACK, `${PACK}!1`, "plugin:topology", "plugin:memory"];
     applyMosaicTiles(settings, mosaic, twoTiles);
-
-    settings.bindView(spec, spec.config);
-    settings.openView(`${PACK}!1`);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
     const viewLayer = viewSection(settings);
@@ -68,7 +73,7 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(scopeNotes(settings)).toHaveLength(1);
     expect(scopeNoteCount(settings)).toBe(2);
     expect(settings.isOpen).toBe(true);
-    expect(settings.el.textContent).not.toMatch(/all 1 /);
+    expect(drawerRoot(settings).textContent).not.toMatch(/all 1 /);
 
     const threeTiles = [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"];
     applyMosaicTiles(settings, mosaic, threeTiles);
@@ -92,7 +97,7 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(gain.value).toBe("7");
     expect(settings.isOpen).toBe(true);
     expect(scopeNotes(settings)).toHaveLength(0);
-    expect(settings.el.textContent).not.toMatch(/Changes apply to all 1/);
+    expect(drawerRoot(settings).textContent).not.toMatch(/Changes apply to all 1/);
     const wall = packWallScopeFromAnim(settings.animSettings);
     expect(countTilesSharingConfigStore(spec, wall.tileModeIds)).toBe(1);
     expect(readPackScopeNoteMetrics().textWrites).toBe(3);

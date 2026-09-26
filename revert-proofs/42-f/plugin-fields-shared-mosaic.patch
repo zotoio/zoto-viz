@@ -1,15 +1,17 @@
 diff --git a/web/src/app/plugin-fields-from-settings.ts b/web/src/app/plugin-fields-from-settings.ts
-index 1111111..2222222 100644
+index 28c7e66..2fad47c 100644
 --- a/web/src/app/plugin-fields-from-settings.ts
 +++ b/web/src/app/plugin-fields-from-settings.ts
-@@ -32,9 +32,7 @@ export function syncPluginFieldsFromSettingsEdit(deps: PluginFieldsFromSettingsD
+@@ -31,11 +31,7 @@ export function syncPluginFieldsFromSettingsEdit(deps: PluginFieldsFromSettingsD
    const spec = m.pluginId ? deps.pluginSpecForMode(modeId) : null;
    const mosaic = deps.mosaic;
    if (mosaic?.on && !(m.pluginId && m.standalone)) {
 -    if (spec) {
 -      applySharedMosaicPluginConfig(mosaic, spec, opts, deps.optsFor, deps.hostModeById);
 -    } else {
-+    if (!spec) {
-       mosaic.graphScene(m.id)?.setMode(m, opts);
-     }
+-      mosaic.graphScene(m.id)?.setMode(m, opts);
+-    }
++    mosaic.graphScene(m.id)?.setMode(m, opts);
    } else {
+     deps.scene.setMode(m, opts);
+   }
