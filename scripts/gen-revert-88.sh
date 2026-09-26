@@ -180,4 +180,63 @@ mkjson context-loss-no-restore-timeout "src/graph/shader-fallback-gl.test.ts" "s
 patch_row gfx-notice-copy-literals "sed -i 's/Graphics were interrupted/Was interrupted/' web/src/graph/shader-fallback-copy.ts"
 mkjson gfx-notice-copy-literals "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > gfx-notice-copy-literals" "\"wrong\""
 
+# restore-resets-keys — cache hit ignores context generation
+patch_row restore-resets-keys "sed -i 's/prev.gen === next.gen && //' web/src/graph/context-cache-key.ts"
+mkjson restore-resets-keys "src/graph/shader-fallback-context-gen.test.ts" "shader fallback context gen > restore-resets-keys" 0
+
+# no-gl-while-lost — keep drawing while GL context is lost
+patch_row no-gl-while-lost "sed -i '/if (this.glContextLost) return { x:/d' web/src/graph/render-host.ts"
+mkjson no-gl-while-lost "src/graph/shader-fallback-context-gen.test.ts" "shader fallback context gen > no-gl-while-lost" 2400
+
+# listeners-once — re-register canvas listeners on every restore
+patch_row listeners-once "python3 - <<'PY'
+from pathlib import Path
+p=Path('web/src/graph/render-host.ts')
+t=p.read_text()
+t=t.replace(
+  '  if (marked[GL_CONTEXT_LISTENERS_KEY]) return;\\n  marked[GL_CONTEXT_LISTENERS_KEY] = true;\\n',
+  '',
+)
+extra='''    attachGlContextListeners(
+      this.canvas,
+      (e) => {
+        e.preventDefault();
+        this.onSharedContextLost();
+        for (const v of this.views) v.hostContextLost();
+      },
+      () => {
+        this.onSharedContextRestored();
+        this.dirty = true;
+        for (const v of this.views) v.hostContextRestored();
+      },
+    );
+'''
+t=t.replace(
+  '    this.contextGen = mintContextGen((this.contextGen as number) + 1);',
+  '    this.contextGen = mintContextGen((this.contextGen as number) + 1);\\n' + extra,
+)
+p.write_text(t)
+PY"
+mkjson listeners-once "src/graph/shader-fallback-context-gen.test.ts" "shader fallback context gen > listeners-once" 4
+
+# loss-prevent-default
+patch_row loss-prevent-default "sed -i 's/e.preventDefault();//' web/src/graph/render-host.ts"
+mkjson loss-prevent-default "src/graph/shader-fallback-context-gen.test.ts" "shader fallback context gen > loss-prevent-default" false
+
+# timer-cleared
+patch_row timer-cleared "python3 - <<'PY'
+from pathlib import Path
+p=Path('web/src/graph/gfx-wall-notice.ts')
+t=p.read_text()
+t=t.replace(
+  '    if (this.restoreTimer) {\\n      clearTimeout(this.restoreTimer);\\n      this.restoreTimer = null;\\n    }\\n',
+  '',
+)
+p.write_text(t)
+PY"
+mkjson timer-cleared "src/graph/shader-fallback-context-gen.test.ts" "shader fallback context gen > timer-cleared" 1
+
+# sidecar for no-gl-while-lost (draws per frame × 600)
+printf '%s\n' '{"drawsPerFrame":4,"frames":600}' > "$DIR/no-gl-while-lost.sidecar.json"
+
 echo "done"

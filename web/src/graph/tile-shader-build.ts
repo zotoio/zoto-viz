@@ -1,5 +1,7 @@
 /** One-shot WebGL2 shader compile + link for a mosaic tile. */
 
+import type { ContextGen } from "./context-gen.mint";
+
 export const TILE_VERT = /* glsl */ `#version 300 es
 in vec3 position;
 void main() {
@@ -15,6 +17,7 @@ export class TileShaderLatch {
   private failed = false;
   private logged = false;
   private compiled = false;
+  private compiledGen: ContextGen | null = null;
 
   get dead(): boolean {
     return this.failed;
@@ -24,15 +27,21 @@ export class TileShaderLatch {
     this.failed = false;
     this.logged = false;
     this.compiled = false;
+    this.compiledGen = null;
   }
 
   /**
    * Compile vertex + fragment and link once. After the first failure the GL path
    * stays latched off — no further compileShader / linkProgram / getShaderInfoLog.
    */
-  build(gl: WebGL2RenderingContext, frag: string, log: (msg: string) => void): TileShaderBuildResult {
+  build(
+    gl: WebGL2RenderingContext,
+    frag: string,
+    log: (msg: string) => void,
+    gen: ContextGen,
+  ): TileShaderBuildResult {
     if (this.failed) return { ok: false, log: "latched" };
-    if (this.compiled) return { ok: true };
+    if (this.compiled && this.compiledGen === gen) return { ok: true };
     const vertSh = gl.createShader(gl.VERTEX_SHADER);
     const fragSh = gl.createShader(gl.FRAGMENT_SHADER);
     if (!vertSh || !fragSh) {
@@ -65,6 +74,7 @@ export class TileShaderLatch {
       return { ok: false, log: msg };
     }
     this.compiled = true;
+    this.compiledGen = gen;
     return { ok: true };
   }
 

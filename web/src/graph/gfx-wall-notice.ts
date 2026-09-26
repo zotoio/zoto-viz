@@ -18,6 +18,10 @@ export class GfxWallNotice {
     return this.el;
   }
 
+  get hasPendingReloadTimer(): boolean {
+    return this.restoreTimer !== null;
+  }
+
   onContextLost(): void {
     if (this.shown) return;
     this.shown = true;

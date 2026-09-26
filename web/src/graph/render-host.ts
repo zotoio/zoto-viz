@@ -24,6 +24,12 @@ import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
 import { TileShaderLatch } from "./tile-shader-build";
 import { GfxWallNotice } from "./gfx-wall-notice";
+import { mintContextGen, type ContextGen } from "./context-gen.mint";
+import {
+  LetterboxFillCache,
+  NixieUploadCache,
+  UniformUploadCache,
+} from "./host-gl-caches";
 import {
   TileShaderFallback,
   type VizPackFallbackText,
@@ -66,6 +72,20 @@ export class SoftwareGpu {
 
 export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
+const GL_CONTEXT_LISTENERS_KEY = "__zotoGlContextListeners";
+
+function attachGlContextListeners(
+  canvas: HTMLCanvasElement,
+  onLost: (e: Event) => void,
+  onRestored: () => void,
+): void {
+  const marked = canvas as HTMLCanvasElement & { [GL_CONTEXT_LISTENERS_KEY]?: boolean };
+  if (marked[GL_CONTEXT_LISTENERS_KEY]) return;
+  marked[GL_CONTEXT_LISTENERS_KEY] = true;
+  canvas.addEventListener("webglcontextlost", onLost);
+  canvas.addEventListener("webglcontextrestored", onRestored);
+}
+
 export class TileShaderSlot {
   readonly latch = new TileShaderLatch();
   fallback: TileShaderFallback | null = null;
@@ -76,8 +96,8 @@ export class TileShaderSlot {
   hasPackFallback = false;
   compileFailed = false;
 
-  build(gl: WebGL2RenderingContext, frag: string, log: (msg: string) => void): boolean {
-    return this.latch.build(gl, frag, log).ok;
+  build(gl: WebGL2RenderingContext, frag: string, log: (msg: string) => void, gen: ContextGen): boolean {
+    return this.latch.build(gl, frag, log, gen).ok;
   }
 
   /** New pack on this pane — clears fallback and compile latch. */
@@ -119,6 +139,10 @@ export class RenderHost {
   private readonly tileShaders = new Map<string, TileShaderSlot>();
   private readonly gfxNotice: GfxWallNotice;
   private glContextLost = false;
+  private contextGen: ContextGen = mintContextGen(0);
+  private readonly nixieUpload = new NixieUploadCache();
+  private readonly letterboxFill = new LetterboxFillCache();
+  private readonly uniformUpload = new UniformUploadCache();
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -154,16 +178,19 @@ export class RenderHost {
     this.canvas.setAttribute("aria-hidden", "true");
     if (this.software) this.canvas.dataset.softgl = "";
     this.gfxNotice = new GfxWallNotice(wall);
-    this.canvas.addEventListener("webglcontextlost", (e) => {
-      e.preventDefault();
-      this.onSharedContextLost();
-      for (const v of this.views) v.hostContextLost();
-    });
-    this.canvas.addEventListener("webglcontextrestored", () => {
-      this.onSharedContextRestored();
-      this.dirty = true;
-      for (const v of this.views) v.hostContextRestored();
-    });
+    attachGlContextListeners(
+      this.canvas,
+      (e) => {
+        e.preventDefault();
+        this.onSharedContextLost();
+        for (const v of this.views) v.hostContextLost();
+      },
+      () => {
+        this.onSharedContextRestored();
+        this.dirty = true;
+        for (const v of this.views) v.hostContextRestored();
+      },
+    );
     this.attach();
     this.syncSize();
     this.ro = observeResize(wall, () => { this.dirty = true; });
@@ -192,6 +219,7 @@ export class RenderHost {
 
   get pixelRatio(): number { return this.software ? this.pr : this.renderer.getPixelRatio(); }
   get viewCount(): number { return this.views.length; }
+  get contextGeneration(): ContextGen { return this.contextGen; }
 
   /** WebGL2 context, or null when lost / unavailable. */
   get gl(): WebGL2RenderingContext | null {
@@ -235,9 +263,31 @@ export class RenderHost {
   /** Compile + link a tile fragment once at wall build. Returns false when the GL path is latched off. */
   buildTileShader(tileId: string, frag: string, log: (msg: string) => void = () => {}): boolean {
     if (this.software) return true;
+    if (this.glContextLost) return false;
     const gl = this.gl;
     if (!gl) return false;
-    return this.tileSlot(tileId).build(gl, frag, log);
+    return this.tileSlot(tileId).build(gl, frag, log, this.contextGen);
+  }
+
+  /** Write-on-change nixie clock UBO upload for the shared wall. */
+  syncNixieUpload(tSec: number, look?: Record<string, string>): boolean {
+    if (this.software || this.glContextLost) return false;
+    if (!this.gl) return false;
+    return this.nixieUpload.upload(this.contextGen, tSec, look ?? {}, () => {});
+  }
+
+  /** Letterbox viewport fill rebuild (shared across tiles with identical geometry). */
+  syncLetterboxFill(w: number, h: number, clearHex: number): boolean {
+    if (this.software || this.glContextLost) return false;
+    if (!this.gl) return false;
+    return this.letterboxFill.rebuild(this.contextGen, w, h, clearHex, () => {});
+  }
+
+  /** Change-only uniform upload on the host GL path. */
+  syncUniformUpload(name: string, value: number | readonly [number, number, number]): boolean {
+    if (this.software || this.glContextLost) return false;
+    if (!this.gl) return false;
+    return this.uniformUpload.upload(this.contextGen, name, value, () => {});
   }
 
   tileShaderDead(tileId: string): boolean {
@@ -299,6 +349,7 @@ export class RenderHost {
 
   private onSharedContextRestored(): void {
     this.glContextLost = false;
+    this.contextGen = mintContextGen((this.contextGen as number) + 1);
     this.gfxNotice.onContextRestored();
     for (const slot of this.tileShaders.values()) {
       if (slot.latch.dead) continue;
@@ -346,8 +397,10 @@ export class RenderHost {
       }
       return { x: x * this.pr, y: y * this.pr, w: w * this.pr, h: h * this.pr };
     }
+    if (this.glContextLost) return { x: x * this.pr, y: y * this.pr, w: w * this.pr, h: h * this.pr };
     const rd = this.renderer as THREE.WebGLRenderer;
     const gl = this.gl;
+    this.syncLetterboxFill(w, h, clearHex);
     const draw = () => {
       rd.setViewport(x, y, w, h);
       rd.setScissor(x, y, w, h);
