@@ -1,0 +1,18 @@
+diff --git a/web/src/graph/pack-mirror-gl.ts b/tmp/bad-dpr.ts
+index bc74fe1..60832a8 100644
+--- a/web/src/graph/pack-mirror-gl.ts
++++ b/tmp/bad-dpr.ts
+@@ -239,11 +239,8 @@ export class PackMirrorSession {
+     const rd = renderer as THREE.WebGLRenderer;
+     const prev = rd.getRenderTarget?.() ?? null;
+     renderer.setRenderTarget(rt);
+-    const pr = renderer.getPixelRatio();
+-    const vw = pw / pr;
+-    const vh = ph / pr;
+-    renderer.setViewport(0, 0, vw, vh);
+-    renderer.setScissor(0, 0, vw, vh);
++    renderer.setViewport(0, 0, pw, ph);
++    renderer.setScissor(0, 0, pw, ph);
+     renderer.setScissorTest(true);
+     renderer.setClearColor(clearHex, 1);
+     renderer.clear(true, true, false);

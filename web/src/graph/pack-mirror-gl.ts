@@ -239,13 +239,17 @@ export class PackMirrorSession {
     const rd = renderer as THREE.WebGLRenderer;
     const prev = rd.getRenderTarget?.() ?? null;
     renderer.setRenderTarget(rt);
-    renderer.setViewport(0, 0, pw, ph);
-    renderer.setScissor(0, 0, pw, ph);
+    const pr = renderer.getPixelRatio();
+    const vw = pw / pr;
+    const vh = ph / pr;
+    renderer.setViewport(0, 0, vw, vh);
+    renderer.setScissor(0, 0, vw, vh);
     renderer.setScissorTest(true);
     renderer.setClearColor(clearHex, 1);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
     renderer.setRenderTarget(prev);
+    rt.texture.flipY = true;
     this.rendered = true;
     return rt.texture;
   }
@@ -255,8 +259,10 @@ export class PackMirrorRegistry {
   private readonly sessions = new Map<string, PackMirrorSession>();
   allocationCount = 0;
 
+  private readonly drawLetterboxScratch = { letterbox: false };
+
   beginFrame(): void {
-    for (const s of this.sessions.values()) s.rendered = false;
+    this.sessions.forEach((s) => { s.rendered = false; });
   }
 
   /** Allocate / free mirrors only when tile count crosses 2 for a pack key. */
@@ -306,13 +312,12 @@ export class PackMirrorRegistry {
     const session = this.sessions.get(key);
     const rt = session?.target;
     if (!rt || !session?.rendered) return null;
-    return session.presenter.draw(renderer, rt.texture, dst, opts.fill, opts.aspect, {
-      letterbox: opts.letterbox,
-    });
+    this.drawLetterboxScratch.letterbox = opts.letterbox;
+    return session.presenter.draw(renderer, rt.texture, dst, opts.fill, opts.aspect, this.drawLetterboxScratch);
   }
 
   dispose(): void {
-    for (const s of this.sessions.values()) s.dispose();
+    this.sessions.forEach((s) => s.dispose());
     this.sessions.clear();
   }
 }
@@ -347,7 +352,7 @@ export class SandboxBitmapGl {
     this.th = h;
     this.texture = new THREE.Texture();
     packMirrorResourceStats.textureCreated += 1;
-    this.texture.flipY = false;
+    this.texture.flipY = true;
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
     return this.texture;

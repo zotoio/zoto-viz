@@ -27,16 +27,13 @@ const SWIFT_SHADER_ARGS = [
 
 type Case = { dpr: number; antialias: boolean; path: "host" | "sandbox" };
 
-const CASES: Case[] = [
-  { dpr: 1, antialias: false, path: "host" },
-  { dpr: 1, antialias: true, path: "host" },
-  { dpr: 2, antialias: false, path: "host" },
-  { dpr: 2, antialias: true, path: "host" },
-  { dpr: 1, antialias: false, path: "sandbox" },
-  { dpr: 1, antialias: true, path: "sandbox" },
-  { dpr: 2, antialias: false, path: "sandbox" },
-  { dpr: 2, antialias: true, path: "sandbox" },
-];
+const DPR_MATRIX = [1, 1.5, 2] as const;
+const CASES: Case[] = DPR_MATRIX.flatMap((dpr) => ([
+  { dpr, antialias: false, path: "host" as const },
+  { dpr, antialias: true, path: "host" as const },
+  { dpr, antialias: false, path: "sandbox" as const },
+  { dpr, antialias: true, path: "sandbox" as const },
+]));
 
 function chromeVersion(): string {
   const out = execFileSync(PACK_MIRROR_READBACK_CHROME_PATH, ["--version"], { encoding: "utf8" }).trim();
@@ -132,8 +129,7 @@ describe("pack mirror SwiftShader readback", () => {
     }, 90_000);
   }
 
-  it("reporter: 8 run, 0 skipped in this file", () => {
-    expect(CASES).toHaveLength(8);
-    expect(matrixCasesExecuted).toBe(8);
+  it(`reporter: ${CASES.length} matrix cases run, 0 skipped in this file`, () => {
+    expect(matrixCasesExecuted).toBe(CASES.length);
   });
 });

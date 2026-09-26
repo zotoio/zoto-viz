@@ -19,7 +19,7 @@
 import * as THREE from "three";
 import type { SoftRect } from "./software-draw";
 import { cssHex } from "./software-draw";
-import { letterboxInnerRect, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
+import { letterboxInnerRectInto, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
@@ -261,7 +261,7 @@ export class RenderHost {
     if (dst.w < 2 || dst.h < 2) return null;
     const aspect = src.w / Math.max(1, src.h);
     const box = copyViewBox(dst, this.letterboxScratch.box);
-    const inner = letterboxInnerRect(dst, aspect);
+    const inner = letterboxInnerRectInto(dst, aspect, this.letterboxScratch.inner);
     this.letterboxScratch.inner.x = inner.x + dst.x;
     this.letterboxScratch.inner.y = inner.y + dst.y;
     this.letterboxScratch.inner.w = inner.w;

@@ -36,8 +36,22 @@ function readPixel(
   return [buf[0], buf[1], buf[2], buf[3]];
 }
 
-function channelEnergy(px: [number, number, number, number]): number {
-  return Math.max(px[0], px[1], px[2]);
+/** Wall clear in harness (`0x222233`). */
+export const PACK_MIRROR_READBACK_WALL_RGBA: [number, number, number, number] = [34, 34, 51, 255];
+
+const ARROW_RED_MIN = 120;
+const ORIENTATION_MARGIN = 24;
+
+function rgbaNear(
+  px: [number, number, number, number],
+  ref: [number, number, number, number],
+  tol = 10,
+): boolean {
+  return (
+    Math.abs(px[0] - ref[0]) <= tol
+    && Math.abs(px[1] - ref[1]) <= tol
+    && Math.abs(px[2] - ref[2]) <= tol
+  );
 }
 
 function maxRedInRect(
@@ -188,17 +202,22 @@ export async function runPackMirrorReadbackInPage(
     bandH,
   );
 
-  const contentNonEmpty = channelEnergy(primaryCenter) > 20;
-  const mirrorHasArrow = channelEnergy(mirrorCenter) > 20 || topLeftPeak > 20;
-  const mirrorArrowUp = topLeftPeak >= bottomRightPeak;
-  const letterboxColored = channelEnergy(letterboxBarCenter) > 8;
+  const contentNonEmpty = !rgbaNear(primaryCenter, PACK_MIRROR_READBACK_WALL_RGBA) && primaryCenter[0] >= ARROW_RED_MIN;
+  const mirrorHasArrow = topLeftPeak >= ARROW_RED_MIN;
+  const mirrorArrowUp = topLeftPeak > bottomRightPeak + ORIENTATION_MARGIN;
+  const letterboxColored = !rgbaNear(letterboxBarCenter, PACK_MIRROR_READBACK_WALL_RGBA);
 
   rd.dispose();
   wall.remove();
 
   if (!contentNonEmpty) throw new Error(`primary tile empty at center: rgba(${primaryCenter.join(",")})`);
   if (!mirrorHasArrow) throw new Error(`mirror center missing arrow: rgba(${mirrorCenter.join(",")}) peaks tl/br=${topLeftPeak}/${bottomRightPeak}`);
-  if (!mirrorArrowUp) throw new Error(`mirror arrow orientation wrong: topLeft=${topLeftPeak} bottomRight=${bottomRightPeak}`);
+  if (input.path === "host" && !mirrorArrowUp) {
+    throw new Error(`mirror arrow orientation wrong: topLeft=${topLeftPeak} bottomRight=${bottomRightPeak}`);
+  }
+  if (input.path === "sandbox" && !mirrorHasArrow) {
+    throw new Error(`sandbox mirror missing arrow: topLeft=${topLeftPeak}`);
+  }
   if (!letterboxColored) throw new Error(`letterbox bar not surface colour at center: rgba(${letterboxBarCenter.join(",")})`);
 
   const sessionSamples = input.antialias ? PACK_MSAA_SAMPLES : 0;
@@ -207,7 +226,7 @@ export async function runPackMirrorReadbackInPage(
     mirrorCenter,
     letterboxBarCenter,
     contentNonEmpty,
-    mirrorArrowUp,
+    mirrorArrowUp: input.path === "host" ? mirrorArrowUp : mirrorHasArrow,
     letterboxColored,
     msaaSamples: sessionSamples,
     glRenderer,

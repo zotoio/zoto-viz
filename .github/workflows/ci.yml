@@ -51,6 +51,8 @@ jobs:
           pnpm approve-builds esbuild
       - uses: browser-actions/setup-chrome@v1
         id: chrome
+        with:
+          chrome-version: 148.0.7778.96
       - name: Web tests and coverage
         working-directory: web
         env:

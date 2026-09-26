@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-render-pack-dpr.test.ts",
+  "testName": "PackMirrorSession renderPack DPR > uses CSS-pixel viewport on the render target at dpr=2",
+  "description": "Render-target viewport/scissor use CSS pixels (device size divided by renderer pixel ratio)."
+}

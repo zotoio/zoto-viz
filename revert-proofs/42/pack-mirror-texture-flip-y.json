@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-readback.test.ts",
+  "testName": "pack mirror SwiftShader readback > dpr=1 antialias=false path=host",
+  "description": "Pack mirror textures use flipY=true (RT capture and sandbox upload) for correct letterbox orientation."
+}
