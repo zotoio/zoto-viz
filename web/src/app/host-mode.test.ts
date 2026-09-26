@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { modeById, setPluginModes } from "../core/modes";
 import { compilePlugin } from "../plugins/plugin";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { hostModeById } from "./host-mode";
 
 describe("hostModeById > duplicate mosaic slot ids", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("resolves plugin:x!1 to pack x's view and not Topology", () => {
     const spec = loadSettingsDeclFixture();
     setPluginModes([

@@ -33,6 +33,6 @@ describe("duplicate slot shared config > pack scope note sync", () => {
     const marker = document.createComment("marker");
     note!.appendChild(marker);
     syncPackScopeNote(host, spec, wall);
-    expect(note!.contains(marker)).toBe(true);
+    expect(host.querySelector(".plugin-pack-scope-note")?.contains(marker)).toBe(true);
   });
 });

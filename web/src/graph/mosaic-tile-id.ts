@@ -69,7 +69,7 @@ export function allocateMosaicTileSlot(viewId: string, existing: readonly string
 export type DrawerKey = string & { readonly __drawerKeyBrand: unique symbol };
 
 /** Single entry point: drawer ownership is keyed by view + pack, never by mosaic tile index. */
-export function drawerKeyFor(viewId: string, packId: string | null): DrawerKey {
+function drawerKeyFor(viewId: string, packId: string | null): DrawerKey {
   const view = mosaicTileViewId(viewId);
   const pack = packId?.trim() ?? "";
   return `${view}\0${pack}` as DrawerKey;

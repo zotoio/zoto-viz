@@ -71,7 +71,7 @@ export function configStoreIdForMode(modeId: string): string | null {
   return inst && inst !== packId ? `${packId}:${inst}` : packId;
 }
 
-export function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly string[]): number {
+function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly string[]): number {
   const mine = configStoreId(spec);
   let n = 0;
   for (const modeId of tileModeIds) {

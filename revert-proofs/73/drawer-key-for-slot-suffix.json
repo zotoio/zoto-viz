@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic-tile-id.test.ts",
+  "testName": "^mosaic tile slot ids > drawerKeyForModeId ignores tile slot suffix \\(pack \\+ view only\\)$",
+  "description": "Drawer keys must not vary by mosaic tile slot suffix.",
+  "redOutput": "AssertionError: expected 'plugin:settings-fixture\\u0000settings…' to be 'plugin:settings-fixture\\u0000settings…' // Object.is equality"
+}

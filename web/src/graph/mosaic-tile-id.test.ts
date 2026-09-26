@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateMosaicTileSlot,
-  drawerKeyFor,
   drawerKeyForModeId,
   mosaicPlacedTileIndices,
   mosaicTileSlotId,
@@ -27,9 +26,9 @@ describe("mosaic tile slot ids", () => {
     expect(mosaicWallUsesView(tiles, "plugin:b")).toBe(true);
   });
 
-  it("drawerKeyFor ignores tile slot suffix (pack + view only)", () => {
-    expect(drawerKeyFor("plugin:settings-fixture!2", "settings-fixture")).toBe(
-      drawerKeyFor("plugin:settings-fixture", "settings-fixture"),
+  it("drawerKeyForModeId ignores tile slot suffix (pack + view only)", () => {
+    expect(drawerKeyForModeId("plugin:settings-fixture!2")).toBe(
+      drawerKeyForModeId("plugin:settings-fixture"),
     );
     expect(drawerKeyForModeId("plugin:settings-fixture!1")).toBe(drawerKeyForModeId("plugin:settings-fixture"));
   });

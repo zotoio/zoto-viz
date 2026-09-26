@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds, movePaneTileView,
+  nextPaneTiles,
   placePaneTileView,
   parseMosaicNode, parseMosaicTiles, setRatio, structureKey, swapLeaves,
 } from "./mosaic-layout";
@@ -64,6 +65,10 @@ describe("close / swap / assign", () => {
     expect(placePaneTileView(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
     expect(movePaneTileView(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
     expect(placePaneTileView(["plugin:x", "b"], "b", "plugin:x")).toEqual(["plugin:x", "plugin:x!1"]);
+  });
+
+  it("nextPaneTiles allocates a new slot when picking another tile of the same pack view", () => {
+    expect(nextPaneTiles(["plugin:x", "b", "c"], "b", "plugin:x")).toEqual(["plugin:x", "plugin:x!1", "c"]);
   });
 });
 

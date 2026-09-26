@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic-layout.test.ts",
+  "testName": "^close / swap / assign > nextPaneTiles allocates a new slot when picking another tile of the same pack view$",
+  "description": "Drawer pane pick must allocate a new mosaic tile slot for duplicate pack views.",
+  "redOutput": "AssertionError: expected [ 'plugin:x', 'b', 'c' ] to deeply equal [ 'plugin:x', 'plugin:x!1', 'c' ]"
+}

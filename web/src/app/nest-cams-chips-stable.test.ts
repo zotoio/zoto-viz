@@ -8,8 +8,8 @@ import {
   applyMosaicTiles,
   mountDuplicateSlotMosaicHarness,
   pickMosaicSlot,
-} from "./duplicate-slot-mosaic-fixture";
-import { settingsViewDrawerRoot } from "./duplicate-slot-scope-note-test-dom";
+} from "./test/duplicate-slot-mosaic-fixture";
+import { settingsViewDrawerRoot } from "./test/duplicate-slot-scope-note-test-dom";
 
 const NEST = "plugin:nest-cams";
 
@@ -87,7 +87,7 @@ describe("nest cams drawer chips", () => {
       expect(after[i]).toBe(before[i]);
     }
     const pickCfg = loadPluginConfig(nestSpec, nestSpec.config);
-    expect(pickCfg.pick).toMatch(/Front door/);
+    expect(pickCfg.pick).toBe("Front door");
     const frontAfter = after.find((b) => b.textContent === "Front door")!;
     expect(frontAfter.getAttribute("aria-pressed")).toBe("true");
 

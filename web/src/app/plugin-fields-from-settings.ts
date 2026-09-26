@@ -4,7 +4,7 @@ import type { PluginView } from "../plugins/plugin";
 import type { Settings } from "../ui/settings";
 import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
 
-export function resolveSettingsTargetModeId(settings: Settings, fallbackModeId: () => string): string {
+function resolveSettingsTargetModeId(settings: Settings, fallbackModeId: () => string): string {
   const focus = settings.viewFocus?.trim();
   return focus || fallbackModeId();
 }

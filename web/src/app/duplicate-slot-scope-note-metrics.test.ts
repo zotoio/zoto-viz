@@ -11,6 +11,7 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
   let syncSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    expect.hasAssertions();
     localStorage.clear();
     syncSpy = vi.spyOn(pluginUi, "syncPackScopeNote");
   });

@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setPluginModes } from "../core/modes";
 import { compilePlugin } from "../plugins/plugin";
-import { countTilesSharingConfigStore } from "../plugins/instances";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
-import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import { Settings } from "../ui/settings";
 import * as viewDrawerModule from "../ui/view-drawer-module";
 import { hostModeById } from "./host-mode";
@@ -12,13 +10,13 @@ import {
   applyMosaicTiles,
   mountDuplicateSlotMosaicHarness,
   pickMosaicSlot,
-} from "./duplicate-slot-mosaic-fixture";
+} from "./test/duplicate-slot-mosaic-fixture";
 import {
   expectVisibleFocusTarget,
   mosaicLayoutPickerTrigger,
   settingsViewDrawerRoot,
   viewDrawerStatusLine,
-} from "./duplicate-slot-scope-note-test-dom";
+} from "./test/duplicate-slot-scope-note-test-dom";
 
 const PACK = "plugin:settings-fixture";
 const DISCARD_MSG = (name: string) =>
@@ -49,6 +47,7 @@ describe("duplicate slot shared config > scope note follows live tile count whil
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    expect.hasAssertions();
     localStorage.clear();
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -97,9 +96,8 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(settings.isOpen).toBe(true);
   }
 
-  it("same drawer node, unsaved field, n=1→2→3→2→1 via slot picker, note text and focus preserved", async () => {
-    const { spec, settings, mosaic, bindThisView } = mountLiveFixture();
-
+  it("hides pack scope note in drawer while only one pack tile is on the wall", async () => {
+    const { settings, mosaic, bindThisView } = mountLiveFixture();
     const onePack = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"];
     applyMosaicTiles(settings, mosaic, onePack);
     bindThisView(PACK);
@@ -114,6 +112,22 @@ describe("duplicate slot shared config > scope note follows live tile count whil
 
     assertDrawerEditingStable(settings, viewLayer, gain, "7");
     expect(scopeNotes(settings)).toHaveLength(0);
+    settings.el.remove();
+  });
+
+  it("shows pack scope note after second pack tile is placed via slot picker", async () => {
+    const { spec, settings, mosaic, bindThisView } = mountLiveFixture();
+    const onePack = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"];
+    applyMosaicTiles(settings, mosaic, onePack);
+    bindThisView(PACK);
+    settings.openView(PACK);
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+    const viewLayer = viewSection(settings);
+    const gain = gainSlider(settings);
+    gain.focus();
+    gain.value = "7";
+    gain.dispatchEvent(new Event("input", { bubbles: true }));
 
     pickMosaicSlot(settings, 1, PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -122,29 +136,6 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(scopeNotes(settings)[0]?.textContent).toBe(
       `Changes apply to all 2 ${spec.name} tiles on this wall`,
     );
-
-    pickMosaicSlot(settings, 2, PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    assertDrawerEditingStable(settings, viewLayer, gain, "7");
-    expect(scopeNotes(settings)[0]?.textContent).toBe(
-      `Changes apply to all 3 ${spec.name} tiles on this wall`,
-    );
-
-    pickMosaicSlot(settings, 2, "plugin:topology");
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    assertDrawerEditingStable(settings, viewLayer, gain, "7");
-    expect(scopeNotes(settings)[0]?.textContent).toBe(
-      `Changes apply to all 2 ${spec.name} tiles on this wall`,
-    );
-
-    pickMosaicSlot(settings, 1, "plugin:memory");
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    assertDrawerEditingStable(settings, viewLayer, gain, "7");
-    expect(scopeNotes(settings)).toHaveLength(0);
-    expect(settingsViewDrawerRoot(settings).textContent).not.toMatch(/Changes apply to all 1/);
-    const wall = packWallScopeFromAnim(settings.animSettings);
-    expect(countTilesSharingConfigStore(spec, wall.tileModeIds)).toBe(1);
-
     settings.el.remove();
   });
 

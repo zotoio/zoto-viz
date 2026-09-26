@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { fillPluginFields } from "../plugins/plugin-ui";
 import { packScopeNoteText } from "../plugins/instances";
@@ -6,11 +6,15 @@ import { hostModeById } from "./host-mode";
 import { setPluginModes } from "../core/modes";
 import { compilePlugin } from "../plugins/plugin";
 import { Settings } from "../ui/settings";
-import { resolveSettingsTargetModeId, syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
+import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
 
 const PACK = "plugin:settings-fixture";
 
 describe("duplicate slot shared config > scope note when two tiles share one store", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("shows Changes apply to all 2 when the pack is on two mosaic slots", () => {
     const spec = loadSettingsDeclFixture();
     const scope = {
@@ -22,7 +26,9 @@ describe("duplicate slot shared config > scope note when two tiles share one sto
     );
     const host = document.createElement("div");
     fillPluginFields(host, spec, spec.config ?? [], () => {}, { wallScope: scope });
-    expect(host.querySelector(".plugin-pack-scope-note")?.textContent).toContain("2");
+    expect(host.querySelector(".plugin-pack-scope-note")?.textContent).toBe(
+      `Changes apply to all 2 ${spec.name} tiles on this wall`,
+    );
   });
 
   it("hides the shared scope note when the pack is on only one tile", () => {
@@ -36,6 +42,10 @@ describe("duplicate slot shared config > scope note when two tiles share one sto
 });
 
 describe("duplicate slot shared config > live edit applies to every sharing tile", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("calls setMode on both duplicate tiles via main onPluginFields mosaic sync", () => {
     const spec = loadSettingsDeclFixture();
     setPluginModes([
@@ -73,10 +83,28 @@ describe("duplicate slot shared config > live edit applies to every sharing tile
   });
 
   it("uses settings viewFocus instead of the catalog fallback mode id", () => {
+    const spec = loadSettingsDeclFixture();
+    setPluginModes([
+      compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
+    ]);
     const settings = new Settings({ storePrefix: "zoto-view-focus", onChange: () => {} });
     settings.openView(`${PACK}!1`);
     expect(settings.viewFocus).toBe(`${PACK}!1`);
-    expect(resolveSettingsTargetModeId(settings, () => PACK)).toBe(`${PACK}!1`);
-    expect(resolveSettingsTargetModeId(settings, () => "plugin:topology")).toBe(`${PACK}!1`);
+    const scene = { setMode: vi.fn() };
+    syncPluginFieldsFromSettingsEdit({
+      settings,
+      fallbackModeId: () => "plugin:topology",
+      hostModeById,
+      optsFor: () => ({ gain: "5", preset: "a" }),
+      mosaic: null,
+      scene,
+      pluginSpecForMode: (modeId) => (hostModeById(modeId).pluginId === "settings-fixture" ? spec : null),
+      setCurrentOpts: () => {},
+      setSkyPrompt: () => {},
+      setNestLook: () => {},
+      viewPromptKey: "prompt",
+    });
+    expect(scene.setMode).toHaveBeenCalledTimes(1);
+    expect(scene.setMode.mock.calls[0]![0].id).toBe(`${PACK}!1`);
   });
 });

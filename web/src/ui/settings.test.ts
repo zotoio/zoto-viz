@@ -166,22 +166,6 @@ describe("Settings panes", () => {
     expect(thisView?.querySelector('[data-layer="pack"]')?.textContent).toMatch(/Plugin pack/);
   });
 
-  it("nest-cams drawer shows device chips from setNestDevices", () => {
-    const s = new Settings({ storePrefix: "zoto-viz-nest-cams-chips", onChange: () => {} });
-    document.body.append(s.el);
-    s.bindView({ id: "nest-cams", name: "Nest cams", version: 1, engine: "graph" });
-    s.openView();
-    expect(s.el.textContent).not.toMatch(/Front door/);
-    s.setNestDevices([
-      { id: "cam-a", label: "Front door", camera: true },
-      { id: "cam-b", label: "Driveway", camera: true },
-    ]);
-    const viewPane = s.el.querySelector('[data-pane="view"]');
-    expect(viewPane?.textContent).toMatch(/Front door/);
-    expect(viewPane?.textContent).toMatch(/Driveway/);
-    s.el.remove();
-  });
-
   it("opens This view from a pane cog and marks that pane row", () => {
     const s = new Settings({ storePrefix: "zoto-viz-pane-cog", onChange: () => {} });
     s.addAnimation(() => {}, { el: document.createElement("div") });

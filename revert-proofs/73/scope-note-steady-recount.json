@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/duplicate-slot-scope-note-metrics.test.ts",
-  "testName": "^duplicate slot shared config > pack scope note write budget > 600 steady frames with drawer open: 0 recounts and 0 writes; one tile-count change: 1 and 1$",
+  "testName": "^duplicate slot shared config > pack scope note write budget > 600 steady frames with drawer open: 0 syncs; one tile-count change: 1 sync$",
   "description": "Recount pack scope note on every animation frame while the view drawer stays open.",
-  "redOutput": "MISSING"
+  "redOutput": "AssertionError: expected \"syncPackScopeNote\" to be called +0 times, but got 600 times"
 }

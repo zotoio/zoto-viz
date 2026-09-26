@@ -1,12 +1,12 @@
-import { DEFAULT_DREAM, NetScene, type DreamAnim, type Filters } from "../graph/scene";
-import { Mosaic } from "../graph/mosaic";
-import { themeById } from "../core/themes";
-import type { Settings } from "../ui/settings";
-import { applyWallLayoutPatch } from "./mosaic-wall-layout";
-import { bindThisView, type BindThisViewDeps } from "./host-view-bind";
-import { rebindViewDrawerOnApplyMode } from "./host-apply-mode-rebind";
-import { createMosaicPanePickHandler } from "./host-mosaic-pane-pick";
-import { syncSettingsAnimToMosaic } from "./settings-mosaic-anim-sync";
+import { DEFAULT_DREAM, NetScene, type DreamAnim, type Filters } from "../../graph/scene";
+import { Mosaic } from "../../graph/mosaic";
+import { themeById } from "../../core/themes";
+import type { Settings } from "../../ui/settings";
+import { applyWallLayoutPatch } from "../mosaic-wall-layout";
+import { bindThisView, type BindThisViewDeps } from "../host-view-bind";
+import { rebindViewDrawerOnApplyMode } from "../host-apply-mode-rebind";
+import { createMosaicPanePickHandler } from "../host-mosaic-pane-pick";
+import { syncSettingsAnimToMosaic } from "../settings-mosaic-anim-sync";
 import { settingsViewDrawerRoot } from "./duplicate-slot-scope-note-test-dom";
 
 export function stubNetSceneForMosaic(): NetScene {

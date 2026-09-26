@@ -1,5 +1,4 @@
-import { expect } from "vitest";
-import type { Settings } from "../ui/settings";
+import type { Settings } from "../../ui/settings";
 
 /** Open settings flyout that hosts the view drawer while editing a view. */
 export function settingsViewDrawerRoot(settings: Settings): HTMLDivElement {
@@ -27,14 +26,14 @@ export function mosaicLayoutPickerTrigger(settings: Settings): HTMLButtonElement
 
 /** happy-dom visibility: not hidden and not display:none / visibility:hidden. */
 export function expectVisibleFocusTarget(el: HTMLElement): void {
-  expect(el.hasAttribute("hidden")).toBe(false);
-  expect(el.hidden).toBe(false);
-  expect(el.style.display).not.toBe("none");
-  expect(el.style.visibility).not.toBe("hidden");
-  expect(el.closest("[hidden]")).toBeNull();
+  if (el.hasAttribute("hidden")) throw new Error("focus target has hidden attribute");
+  if (el.hidden) throw new Error("focus target is hidden");
+  if (el.style.display === "none") throw new Error("focus target display:none");
+  if (el.style.visibility === "hidden") throw new Error("focus target visibility:hidden");
+  if (el.closest("[hidden]")) throw new Error("focus target inside hidden ancestor");
   if (typeof el.checkVisibility === "function") {
-    expect(el.checkVisibility()).toBe(true);
-  } else {
-    expect(el.offsetParent).not.toBeNull();
+    if (!el.checkVisibility()) throw new Error("focus target not checkVisibility");
+  } else if (el.offsetParent === null) {
+    throw new Error("focus target offsetParent null");
   }
 }

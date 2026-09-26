@@ -7,11 +7,11 @@ import { Settings } from "../ui/settings";
 import * as viewDrawer from "../ui/view-drawer-module";
 import { hostModeById } from "./host-mode";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
-import { settingsViewDrawerRoot } from "./duplicate-slot-scope-note-test-dom";
+import { settingsViewDrawerRoot } from "./test/duplicate-slot-scope-note-test-dom";
 import {
   applyMosaicTiles,
   mountDuplicateSlotMosaicHarness,
-} from "./duplicate-slot-mosaic-fixture";
+} from "./test/duplicate-slot-mosaic-fixture";
 
 const PACK = "plugin:settings-fixture";
 
