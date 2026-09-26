@@ -1,0 +1,34 @@
+--- a/web/src/plugins/viz-pack-host.ts	2026-09-26 19:24:48.681672454 +0000
++++ b/web/src/plugins/viz-pack-host.ts	2026-09-26 19:24:48.697672370 +0000
+@@ -16,7 +16,7 @@
+ let nixieScopedLook: NixieLook = parseNixieLook();
+ let nixieActiveLook: NixieLook = nixieScopedLook;
+ let nixieOptsKey = "";
+-const nixiePackCanvas: DevicePixelSize = { w: CANVAS_DEFAULT.w, h: CANVAS_DEFAULT.h };
++let nixiePackCanvas: DevicePixelSize = { w: CANVAS_DEFAULT.w, h: CANVAS_DEFAULT.h };
+ 
+ function nixieOptsStableKey(opts?: Record<string, string> | null): string {
+   if (!opts) return "";
+@@ -36,8 +36,10 @@
+ 
+ /** Track render-host backing size for nixie buffers (no querySelector). */
+ export function syncVizPackRenderCanvas(size: Readonly<DevicePixelSize>): void {
+-  nixiePackCanvas.w = size.w > 64 ? size.w : CANVAS_DEFAULT.w;
+-  nixiePackCanvas.h = size.h > 64 ? size.h : CANVAS_DEFAULT.h;
++  nixiePackCanvas = {
++    w: size.w > 64 ? size.w : CANVAS_DEFAULT.w,
++    h: size.h > 64 ? size.h : CANVAS_DEFAULT.h,
++  };
+ }
+ 
+ export function nixiePackActiveCanvas(): Readonly<DevicePixelSize> {
+@@ -47,8 +49,7 @@
+ export function resetNixiePackHostScope(): void {
+   nixieOptsKey = "";
+   nixieScopedLook = parseNixieLook();
+-  nixiePackCanvas.w = CANVAS_DEFAULT.w;
+-  nixiePackCanvas.h = CANVAS_DEFAULT.h;
++  nixiePackCanvas = { w: CANVAS_DEFAULT.w, h: CANVAS_DEFAULT.h };
+ }
+ 
+ export function nixiePackScopedLook(): NixieLook {

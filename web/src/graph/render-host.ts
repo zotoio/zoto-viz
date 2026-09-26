@@ -39,6 +39,12 @@ export interface HostedView {
 /** A viewport in framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
 export interface Viewport { x: number; y: number; w: number; h: number }
 
+/** Canvas backing-store pixels (`canvas.width` / `canvas.height`), not CSS layout. */
+export interface DevicePixelSize {
+  w: number;
+  h: number;
+}
+
 /** The methods NetScene uses on the shared (or owned) GPU object. */
 export class SoftwareGpu {
   readonly software = true as const;
@@ -74,6 +80,7 @@ export class RenderHost {
   private readonly frame: (ts: number) => void;
   private disposed = false;
   private pr: number;
+  private readonly bufferPixels: DevicePixelSize = { w: 0, h: 0 };
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -145,9 +152,11 @@ export class RenderHost {
   get pixelRatio(): number { return this.software ? this.pr : this.renderer.getPixelRatio(); }
   get viewCount(): number { return this.views.length; }
 
-  /** Backing-store pixels for pack shaders (no DOM queries). */
-  bufferPixelSize(): { w: number; h: number } {
-    return { w: this.canvas.width, h: this.canvas.height };
+  /** Same object every call; dimensions refreshed from the canvas backing store. */
+  bufferPixelSize(): Readonly<DevicePixelSize> {
+    this.bufferPixels.w = this.canvas.width;
+    this.bufferPixels.h = this.canvas.height;
+    return this.bufferPixels;
   }
 
   /** WebGL2 context, or null when lost / unavailable. */
@@ -262,5 +271,7 @@ export class RenderHost {
     this.canvas.height = Math.max(1, Math.round(this.h * pr));
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
+    this.bufferPixels.w = this.canvas.width;
+    this.bufferPixels.h = this.canvas.height;
   }
 }

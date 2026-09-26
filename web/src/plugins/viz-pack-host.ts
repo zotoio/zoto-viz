@@ -1,3 +1,4 @@
+import type { DevicePixelSize } from "../graph/render-host";
 import { vizClockMs } from "../core/viz-clock";
 import { createNixieWallClock, packNixieWallBuffer } from "./nixie-wall-clock";
 import type { VizDemoPackId } from "../ui/viz-hud";
@@ -15,7 +16,7 @@ const hostNixieClock = createNixieWallClock();
 let nixieScopedLook: NixieLook = parseNixieLook();
 let nixieActiveLook: NixieLook = nixieScopedLook;
 let nixieOptsKey = "";
-let nixiePackCanvas = { ...CANVAS_DEFAULT };
+const nixiePackCanvas: DevicePixelSize = { w: CANVAS_DEFAULT.w, h: CANVAS_DEFAULT.h };
 
 function nixieOptsStableKey(opts?: Record<string, string> | null): string {
   if (!opts) return "";
@@ -34,17 +35,20 @@ export function syncNixiePackScope(opts?: Record<string, string> | null): void {
 }
 
 /** Track render-host backing size for nixie buffers (no querySelector). */
-export function syncVizPackRenderCanvas(size: { w: number; h: number }): void {
-  nixiePackCanvas = {
-    w: size.w > 64 ? size.w : CANVAS_DEFAULT.w,
-    h: size.h > 64 ? size.h : CANVAS_DEFAULT.h,
-  };
+export function syncVizPackRenderCanvas(size: Readonly<DevicePixelSize>): void {
+  nixiePackCanvas.w = size.w > 64 ? size.w : CANVAS_DEFAULT.w;
+  nixiePackCanvas.h = size.h > 64 ? size.h : CANVAS_DEFAULT.h;
+}
+
+export function nixiePackActiveCanvas(): Readonly<DevicePixelSize> {
+  return nixiePackCanvas;
 }
 
 export function resetNixiePackHostScope(): void {
   nixieOptsKey = "";
   nixieScopedLook = parseNixieLook();
-  nixiePackCanvas = { ...CANVAS_DEFAULT };
+  nixiePackCanvas.w = CANVAS_DEFAULT.w;
+  nixiePackCanvas.h = CANVAS_DEFAULT.h;
 }
 
 export function nixiePackScopedLook(): NixieLook {

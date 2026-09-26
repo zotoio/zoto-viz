@@ -19,6 +19,7 @@ import {
   syncNixiePackScope,
   syncVizPackRenderCanvas,
   nixiePackActiveLook,
+  nixiePackActiveCanvas,
 } from "./viz-pack-host";
 import type { VizDataFrame } from "./viz-host";
 
@@ -51,17 +52,19 @@ describe("nixie wall clock rows", () => {
     const spy = vi.spyOn(Intl, "DateTimeFormat");
     const qSpy = vi.spyOn(Document.prototype, "querySelector");
     syncNixiePackScope({ format: "24", seconds: "1" });
-    syncVizPackRenderCanvas({ w: 1920, h: 1080 });
+    const hostCanvas: { w: number; h: number } = { w: 1920, h: 1080 };
     const t0 = 1_700_000_000_000;
     setVizWallClockInjector(() => t0);
     const formatFrames: number[] = [];
     let prevCalls = hostNixieFormatCalls();
     let lookRef: ReturnType<typeof nixiePackActiveLook> | null = null;
+    let canvasRef: ReturnType<typeof nixiePackActiveCanvas> | null = null;
     const frame = emptyFrame();
     const bufOut: number[] = [];
     for (let i = 0; i < 600; i++) {
       const wallMs = nixieSimWallMs(t0, i);
       setVizWallClockInjector(() => wallMs);
+      syncVizPackRenderCanvas(hostCanvas);
       runPackFrameHandler("nixie-clock", frame, {
         writeBuffer: (_slot, data) => { bufOut.length = 0; bufOut.push(...data); },
         writeUniform: () => {},
@@ -74,9 +77,11 @@ describe("nixie wall clock rows", () => {
       }
       if (i === 0) {
         lookRef = nixiePackActiveLook();
+        canvasRef = nixiePackActiveCanvas();
         qSpy.mockClear();
       } else {
         expect(nixiePackActiveLook()).toBe(lookRef);
+        expect(nixiePackActiveCanvas()).toBe(canvasRef);
         expect(qSpy).not.toHaveBeenCalled();
       }
     }
