@@ -8,6 +8,23 @@ export function releaseThrowawayGl(gl: WebGLRenderingContext | WebGL2RenderingCo
   }
 }
 
+/** Tear down a dedicated WebGLRenderer (solo pane, not the shared {@link RenderHost}). */
+export function disposeOwnedWebGLRenderer(renderer: {
+  getContext(): WebGLRenderingContext | WebGL2RenderingContext | null;
+  forceContextLoss(): void;
+  dispose(): void;
+  domElement: HTMLCanvasElement;
+}): void {
+  releaseThrowawayGl(renderer.getContext());
+  try {
+    renderer.forceContextLoss();
+  } catch {
+    /* already lost */
+  }
+  renderer.dispose();
+  renderer.domElement.remove();
+}
+
 /** True when this document can create a usable WebGL (2) context. */
 export function probeWebGL(): boolean {
   if (typeof document === "undefined") return false;

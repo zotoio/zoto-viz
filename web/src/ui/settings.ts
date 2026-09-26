@@ -332,14 +332,41 @@ export class Settings {
 
   get activePaneId(): string { return this.activePane; }
 
-  /** Keep This view open across mosaic layout changes (gear / Esc still work). */
-  reopenViewPane(): void {
-    const focus = this.viewFocusId;
-    if (!this.isOpen) this.open();
-    this.showPane("view");
-    this.viewFocusId = focus;
-    this.syncViewCog();
-    this.animUi?.syncTiles();
+  private preserveViewBind = false;
+  private lastViewCogFocus: HTMLElement | null = null;
+
+  hasViewEdits(): boolean {
+    return !!this.viewHost?.querySelector(".field-dirty");
+  }
+
+  /** Before mosaic.setSize: keep drawer open when the focused tile survives; else prompt discard. */
+  prepareMosaicLayoutChange(nextTiles: string[]): void {
+    this.lastViewCogFocus = null;
+    if (!this.isOpen || this.activePane !== "view") return;
+    const focus = this.viewFocusId.trim();
+    if (!focus) {
+      this.preserveViewBind = true;
+      return;
+    }
+    if (nextTiles.includes(focus)) {
+      this.preserveViewBind = true;
+      return;
+    }
+    if (this.hasViewEdits() && !window.confirm("Discard unsaved changes to this view's settings?")) {
+      this.preserveViewBind = true;
+      return;
+    }
+    const cog = document.querySelector<HTMLElement>(`.mosaic-pane-cog[data-pane="${CSS.escape(focus)}"]`)
+      ?? this.viewCog;
+    this.lastViewCogFocus = cog;
+    this.close();
+    queueMicrotask(() => this.lastViewCogFocus?.focus());
+  }
+
+  consumePreserveViewBind(): boolean {
+    const v = this.preserveViewBind;
+    this.preserveViewBind = false;
+    return v;
   }
 
   private syncViewCog(): void {
