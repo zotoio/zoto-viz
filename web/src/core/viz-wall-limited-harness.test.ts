@@ -100,15 +100,26 @@ describe("Amendment 4 wall LIMITED harness (VizFrameBudget + VizHud)", () => {
   it("Amendment 6 L2: 3000 @ 2×2 LIMITED text is every 3rd frame", () => {
     const r = runWallHarness(TILES_2X2, String(IN_RANGE_TICKS));
     expect(r.wallLimitedText).toBe(
-      "LIMITED · sharing frame with 4 tiles · updating every 3rd frame",
+      "LIMITED · sharing the frame with 4 tiles · updating every 3rd frame",
     );
   });
 
   it("Amendment 6 L2: 2505 @ 2×2 LIMITED text is every 2nd frame", () => {
     const r = runWallHarness(TILES_2X2, "2505");
     expect(r.wallLimitedText).toBe(
-      "LIMITED · sharing frame with 4 tiles · updating every 2nd frame",
+      "LIMITED · sharing the frame with 4 tiles · updating every 2nd frame",
     );
+  });
+
+  it("Amendment 6a gate: 1×1 @3000 and 2×2 with k=1 show 0 LIMITED lines", () => {
+    expect(vizWallCadenceFrames(1, IN_RANGE_TICKS)).toBe(1);
+    expect(vizWallCadenceFrames(4, 1252)).toBe(1);
+    const solo = runWallHarness(["solo"], String(IN_RANGE_TICKS));
+    expect(solo.limitedWallLines).toBe(0);
+    expect(solo.wallLimitedText).toBeNull();
+    const inBudget = runWallHarness(TILES_2X2, "1252");
+    expect(inBudget.limitedWallLines).toBe(0);
+    expect(inBudget.wallLimitedText).toBeNull();
   });
 
   it("D budget boundary: 5010 ticks → LIMITED on wall; 5011 → over budget, not LIMITED", () => {

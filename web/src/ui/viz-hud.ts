@@ -366,9 +366,10 @@ export class VizHud {
       const chrome = wallTiles.length
         ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
         : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
-      const limited = chrome.state === "limited"
-        ? this.skipLabelLine.limitedLabel(activeTiles, chrome.cadenceK)
-        : null;
+      const limited =
+        chrome.state === "limited" && chrome.limitedLabel
+          ? this.skipLabelLine.limitedLabel(activeTiles, chrome.cadenceK)
+          : null;
       const skipText = limited ?? formatSkipRate(rate);
       this.skipLabelLine.writeText(this.skipEl, skipText);
       const title = limited ? TILE_LIMITED_SHARING_TOOLTIP : "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";

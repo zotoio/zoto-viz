@@ -21,10 +21,10 @@ describe("vizCadenceOrdinal (Amendment 6 L3)", () => {
   }
 });
 
-describe("tileLimitedSharingLabel (Amendment 6 L1 literal)", () => {
+describe("tileLimitedSharingLabel (Amendment 6a literal)", () => {
   it("pins the single template string for N=4 k=3", () => {
     expect(tileLimitedSharingLabel(4, 3)).toBe(
-      "LIMITED · sharing frame with 4 tiles · updating every 3rd frame",
+      "LIMITED · sharing the frame with 4 tiles · updating every 3rd frame",
     );
   });
 });

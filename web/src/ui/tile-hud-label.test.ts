@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { tileLimitedSharingLabel } from "./viz-copy";
+import { tileLimitedSharingLabel, tileLimitedSharingLabelVisible } from "./viz-copy";
 import { createTileHudLabelLine } from "./tile-hud-label";
 
 const LABEL_4_K3 = tileLimitedSharingLabel(4, 3);
@@ -11,6 +11,12 @@ describe("tile HUD LIMITED label (60 fps, per line)", () => {
 
   afterEach(() => {
     document.body.innerHTML = "";
+  });
+
+  it("Amendment 6a gate: k=1 → no label (revert shows every 1st frame)", () => {
+    const line = createTileHudLabelLine();
+    expect(tileLimitedSharingLabelVisible(4, 1)).toBe(false);
+    expect(line.limitedLabel(4, 1)).toBeNull();
   });
 
   it("D1 steady: 600 frames at fixed N and k → exactly 1 build and 1 write per line", () => {

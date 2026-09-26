@@ -1,0 +1,11 @@
+diff --git a/web/src/ui/viz-copy.ts b/web/src/ui/viz-copy.ts
+--- a/web/src/ui/viz-copy.ts
++++ b/web/src/ui/viz-copy.ts
+@@ -33,7 +33,7 @@ export function vizCadenceOrdinal(k: number): string {
+ 
+ /** Wall LIMITED strip is shown only when {@link tileLimitedSharingLabelVisible}. */
+ export function tileLimitedSharingLabelVisible(activeTiles: number, cadenceK: number): boolean {
+-  return activeTiles >= 2 && cadenceK >= 2;
++  return activeTiles >= 2;
+ }
+ 

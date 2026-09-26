@@ -5,7 +5,7 @@ import {
   type VizTileBudgetStats,
   type VizTileHudSample,
 } from "./viz-tile-budget";
-import { tileLimitedSharingLabel } from "../ui/viz-copy";
+import { tileLimitedSharingLabel, tileLimitedSharingLabelVisible } from "../ui/viz-copy";
 
 export type { VizTileHudSample, VizTileHudSampleKind } from "./viz-tile-budget";
 
@@ -90,7 +90,7 @@ export function tileHudChrome(
   const skipRate = tileHudSkipRateFromRing(tile, nowTick, false);
   const state = computeTileHudViewerState(samples, nowTick, tile.lastBuildCostTicks);
   const limitedLabel =
-    state === "limited"
+    state === "limited" && tileLimitedSharingLabelVisible(activeTiles, tile.cadenceK)
       ? tileLimitedSharingLabel(activeTiles, tile.cadenceK)
       : null;
   return {
@@ -129,7 +129,7 @@ export function wallHudChrome(
     budgetTile.lastBuildCostTicks,
   );
   const limitedLabel =
-    state === "limited" && activeTiles >= 2
+    state === "limited" && tileLimitedSharingLabelVisible(activeTiles, budgetTile.cadenceK)
       ? tileLimitedSharingLabel(activeTiles, budgetTile.cadenceK)
       : null;
   return {

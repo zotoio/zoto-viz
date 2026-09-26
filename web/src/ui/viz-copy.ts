@@ -32,11 +32,16 @@ export function vizCadenceOrdinal(k: number): string {
   }
 }
 
-/** Wall LIMITED strip when share-limited (cadence k from budget policy, not measured skip rate). */
+/** Wall LIMITED strip is shown only when {@link tileLimitedSharingLabelVisible}. */
+export function tileLimitedSharingLabelVisible(activeTiles: number, cadenceK: number): boolean {
+  return activeTiles >= 2 && cadenceK >= 2;
+}
+
+/** Copy for the wall LIMITED strip (N ≥ 2 and k ≥ 2; ordinal from {@link vizCadenceOrdinal}). */
 export function tileLimitedSharingLabel(activeTiles: number, cadenceK: number): string {
-  const n = Math.max(0, activeTiles);
+  const n = Math.max(2, activeTiles);
   const ord = vizCadenceOrdinal(cadenceK);
-  return `LIMITED · sharing frame with ${n} tiles · updating every ${ord} frame`;
+  return `LIMITED · sharing the frame with ${n} tiles · updating every ${ord} frame`;
 }
 
 export const TILE_LIMITED_SHARING_TOOLTIP =

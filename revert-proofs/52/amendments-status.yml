@@ -7,3 +7,6 @@ amendments:
   - id: 6
     title: "LIMITED label from cadence k + ordinals (L1–L4)"
     status: done
+  - id: 6a
+    title: "UX copy (the frame); N≥2 and k≥2 gate"
+    status: done

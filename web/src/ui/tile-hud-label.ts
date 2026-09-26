@@ -1,4 +1,4 @@
-import { tileLimitedSharingLabel } from "./viz-copy";
+import { tileLimitedSharingLabel, tileLimitedSharingLabelVisible } from "./viz-copy";
 
 export interface TileHudLabelStats {
   builds: number;
@@ -32,7 +32,7 @@ export function createTileHudLabelLine(): TileHudLabelLine {
       cachedLabel = null;
     },
     limitedLabel(activeTiles: number, cadenceK: number): string | null {
-      if (activeTiles < 2) {
+      if (!tileLimitedSharingLabelVisible(activeTiles, cadenceK)) {
         cachedLabel = null;
         lastTileCount = -1;
         lastCadenceK = -1;
