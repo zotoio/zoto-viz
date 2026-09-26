@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_frame_embed_policy.py::FrameEmbedPolicyTests::test_frame_policy_on_responses",
+  "description": "Frame-embed headers on monitor routes.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert None == 'SAMEORIGIN'"
+}

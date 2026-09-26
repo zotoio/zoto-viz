@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_policy.py::test_frame_embed_policy_on_responses[__host_format_injection__]",
+  "description": "Frame-embed headers on all responses.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert None == 'SAMEORIGIN'"
+}
