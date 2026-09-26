@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
+  "testName": "two pack keys get two targets; dropping one duplicate leaves the other",
+  "description": "Separate mirror session per pack group key."
+}

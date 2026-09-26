@@ -2,6 +2,7 @@
  * @vitest-environment node
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { accessSync, constants } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,21 +49,33 @@ function chromeVersion(): string {
 }
 
 async function runCase(page: Page, c: Case): Promise<unknown> {
+  let pageError = "";
+  page.on("pageerror", (err) => { pageError = String(err); });
   const url = `${baseUrl}/pack-mirror-readback.html?dpr=${c.dpr}&aa=${c.antialias ? 1 : 0}&path=${c.path}`;
-  await page.goto(url, { waitUntil: "load", timeout: 60_000 });
-  await page.waitForFunction(
-    () => (window as unknown as { __readbackOk?: unknown; __readbackError?: string }).__readbackOk
-      || (window as unknown as { __readbackError?: string }).__readbackError,
-    { timeout: 60_000 },
-  );
-  const err = await page.evaluate(() => (window as unknown as { __readbackError?: string }).__readbackError);
-  if (err) throw new Error(err);
-  return page.evaluate(() => (window as unknown as { __readbackOk: unknown }).__readbackOk);
+  await page.goto(url, { waitUntil: "load", timeout: 30_000 });
+  for (let i = 0; i < 100; i++) {
+    if (pageError) throw new Error(pageError);
+    const state = await page.evaluate(() => ({
+      err: (window as unknown as { __readbackError?: string }).__readbackError,
+      ok: (window as unknown as { __readbackOk?: unknown }).__readbackOk,
+    }));
+    if (state.err) throw new Error(state.err);
+    if (state.ok) return state.ok;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(pageError || "readback harness did not finish within 10s");
 }
 
 beforeAll(async () => {
+  try {
+    accessSync(PACK_MIRROR_READBACK_CHROME_PATH, constants.X_OK);
+  } catch {
+    throw new Error(`Chrome is required at ${PACK_MIRROR_READBACK_CHROME_PATH} (SwiftShader readback must fail, not skip)`);
+  }
   const ver = chromeVersion();
-  expect(ver).toContain(PACK_MIRROR_READBACK_CHROME_VERSION.split(".").slice(0, 2).join("."));
+  if (!ver.includes(PACK_MIRROR_READBACK_CHROME_VERSION.split(".").slice(0, 2).join("."))) {
+    throw new Error(`Expected Chrome ${PACK_MIRROR_READBACK_CHROME_VERSION}, got ${ver}`);
+  }
   vite = await createServer({
     configFile: path.join(webRoot, "vite.config.ts"),
     server: { middlewareMode: true },

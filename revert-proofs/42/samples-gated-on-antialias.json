@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
+  "testName": "samples=4 only when context antialias is true",
+  "description": "MSAA samples follow context antialias flag."
+}

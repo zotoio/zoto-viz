@@ -1,0 +1,12 @@
+--- a/web/src/graph/render-host.ts	2026-09-26 18:03:46.605852872 +0000
++++ b/web/src/graph/render-host.ts	2026-09-26 18:14:49.656799344 +0000
+@@ -278,8 +278,8 @@
+     const gpu = sandboxBitmapGl(pluginId);
+     const tex = gpu.uploadFrame(bitmap);
+     if (!tex) return null;
+-    const rect = gpu.present(rd, tex, fill, dst, aspect);
+     bitmap.close();
++    const rect = gpu.present(rd, tex, fill, dst, aspect);
+     const pr = rd.getPixelRatio();
+     return { x: rect.x * pr, y: rect.y * pr, w: rect.w * pr, h: rect.h * pr };
+   }

@@ -1,0 +1,11 @@
+--- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:04:11.037969692 +0000
++++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:14:49.652903504 +0000
+@@ -140,7 +140,7 @@
+ 
+   ensure(pw: number, ph: number, antialias: boolean): THREE.WebGLRenderTarget | null {
+     if (pw < 2 || ph < 2) return null;
+-    const samples = antialias ? PACK_MSAA_SAMPLES : 0;
++    const samples = 0;
+     if (!this.rt) {
+       this.pw = pw;
+       this.ph = ph;

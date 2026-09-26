@@ -35,6 +35,20 @@ describe("ensurePackReviewed", () => {
     expect(spec.consent).toBe("allow");
   });
 
+  it("retries after a failed consent grant instead of caching failure for the session", async () => {
+    const spec = needsReviewSpec();
+    vi.spyOn(pluginMod, "pluginNeedsReview").mockReturnValue(true);
+    const ask = vi.spyOn(pluginUi, "askPluginReview").mockResolvedValue("allow");
+    const grant = vi.spyOn(pluginMod, "grantPluginConsent")
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(undefined);
+    expect(await ensurePackReviewed(spec)).toBe(false);
+    expect(await ensurePackReviewed(spec)).toBe(true);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(grant).toHaveBeenCalledTimes(2);
+    expect(spec.consent).toBe("allow");
+  });
+
   it("returns false when the user cancels review", async () => {
     const spec = needsReviewSpec();
     vi.spyOn(pluginMod, "pluginNeedsReview").mockReturnValue(true);

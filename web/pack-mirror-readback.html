@@ -6,6 +6,12 @@
   </head>
   <body>
     <script type="module">
+      window.addEventListener("error", (e) => {
+        window.__readbackError = String(e.error ?? e.message);
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        window.__readbackError = String(e.reason);
+      });
       import { runPackMirrorReadbackInPage } from "/src/graph/pack-mirror-readback.harness.ts";
       const q = new URLSearchParams(location.search);
       try {
