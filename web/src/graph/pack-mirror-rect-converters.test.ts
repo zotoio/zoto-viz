@@ -4,6 +4,7 @@ import {
   cssRect,
   deviceSizeFromCssBoxInto,
   toDeviceRectInto,
+  type CssRectLoose,
   type DeviceRectMut,
   type DeviceSizeMut,
 } from "./pack-mirror-rect";
@@ -16,7 +17,7 @@ describe("pack-mirror rect converters", () => {
     const out: DeviceSizeMut = { pw: 0, ph: 0 };
     deviceSizeFromCssBoxInto({ x: 0, y: 0, w: Number.NaN, h: 48 }, 1, out);
     expect(out).toEqual({ pw: 2, ph: 48 });
-    deviceSizeFromCssBoxInto({ w: 64, h: 48 }, 1, out);
+    deviceSizeFromCssBoxInto({ w: 64, h: 48 } as CssRectLoose, 1, out);
     expect(out).toEqual({ pw: 64, ph: 48 });
   });
 

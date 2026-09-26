@@ -44,7 +44,7 @@ function deviceEdgesFromCss(
   r: CssRect,
   pixelRatio: number,
 ): { x0: number; x1: number; y0: number; y1: number } {
-  const pr = pixelRatio;
+  const pr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : pixelRatio;
   return {
     x0: Math.round(r.x * pr),
     x1: Math.round((r.x + r.w) * pr),
