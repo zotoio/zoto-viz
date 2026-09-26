@@ -75,12 +75,6 @@ def format_sdk_newer_message(name: str) -> str:
     return f"{label} needs a newer zoto-viz."
 
 
-def format_sdk_mismatch_message(name: str, pack_version: int, host_version: int) -> str:
-    if pack_version < host_version:
-        return format_sdk_older_message(name)
-    return format_sdk_newer_message(name)
-
-
 def catalog_sdk_contract_error(
     rel: str,
     doc: dict[str, Any],
