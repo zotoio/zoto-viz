@@ -1,4 +1,4 @@
-/** Capped layout device-pixel ratio (max 1.5). Mint module: only place that reads `devicePixelRatio` for the shared host. */
+/** Capped layout device-pixel ratio (max 1.5). Mint module: only place under `web/src` that reads `window.devicePixelRatio`. */
 export type DevicePxRatio = number & { readonly __brand: "devicePxRatio" };
 
 export const MAX_DEVICE_PX_RATIO = 1.5;

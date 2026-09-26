@@ -34,7 +34,7 @@ pnpm exec vitest run
 3. **Device px materials (design b):** `RenderHost.devicePxRatio` (`DevicePxRatio`, mint `render-host-device-px-ratio.ts`; only module that reads `window.devicePixelRatio` under `src/graph/`). `host-three-pixel-materials.ts`: points `sizeAttenuation` true → no DPR multiply (GL `size` 4 @ pr 1.5); false → multiply (GL `size` 6); `LineMaterial` linewidth + resolution both device px; glow `uResolution` device px. `host-three-pixel-materials.test.ts` uses counting GL fake (uniform1f). Reverts: `expected 6 to be 4`, `expected 4 to be 6`, `expected 200 to be 300`, `expected { x: 200, y: 120 } to deeply equal { x: 300, y: 180 }`.
 4. **`GlRect`:** only `toGlRectInto` brands GL rects (no `glRect()` factory; probe lines unbranded).
 5. **Grain:** `letterbox-grain-stable.test.ts` uses a 2D stub; rebuild counts `randomCalls`/`stringAllocations`. Revert `letterbox-grain-stable`: `expected "random" to not be called at all, but actually been called 600 times`.
-6. **Lint:** `lint-brand-casts.mjs` includes `DevicePxRatio`; bans raw `devicePixelRatio` reads in `src/graph/` outside the mint module.
+6. **Lint:** `lint-brand-casts.mjs` includes `DevicePxRatio`; bans raw `devicePixelRatio` reads anywhere under `web/src/` outside `render-host-device-px-ratio.ts` (tests exempt). Revert `device-px-ratio-read-stray`: one lint error on `src/core/fps.ts`.
 
 ## Lifecycle / device size (corrected root cause)
 
@@ -71,6 +71,7 @@ Each `*.json` has `testFile` (under `web/`), anchored `testName` (`^…$`), and 
 | `host-points-atten-false-no-multiply` | `expected 4 to be 6 // Object.is equality` |
 | `host-line-resolution-css-only` | `expected 200 to be 300 // Object.is equality` |
 | `host-shader-resolution-css-only` | `expected { x: 200, y: 120 } to deeply equal { x: 300, y: 180 }` |
+| `device-px-ratio-read-stray` | `src/core/fps.ts: raw \`devicePixelRatio\` read (...)` |
 | `render-host-pack-mirror-no-alloc` | `expected 30 to be +0 // Object.is equality` |
 | `samples-gated-on-antialias` | `expected +0 to be 4 // Object.is equality` |
 | `scene-paint-clear-letterbox-reset` | `expected 300 to be 1 // Object.is equality` |

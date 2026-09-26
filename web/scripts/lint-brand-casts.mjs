@@ -34,7 +34,7 @@ for (const file of globSync("src/**/*.ts", { cwd: root })) {
     console.error(`${file}: brand cast \`as ${match[1]}\` (only mint modules and *.test.ts)`);
     failed = true;
   }
-  if (file.startsWith("src/graph/") && file !== devicePxRatioMint) {
+  if (file !== devicePxRatioMint) {
     for (const match of text.matchAll(devicePxRatioReadPattern)) {
       console.error(
         `${file}: raw \`devicePixelRatio\` read (only ${devicePxRatioMint}; use RenderHost.devicePxRatio or devicePxRatioFromWindow)`,

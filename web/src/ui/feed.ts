@@ -6,6 +6,7 @@ import type { NetScene } from "../graph/scene";
 import { markFrame } from "../core/fps";
 import { followScrollTop } from "./feed-reveal";
 import { bindFloatPanel } from "./float-drag";
+import { devicePxRatioFromWindow, devicePxRatioNumber } from "../graph/render-host-device-px-ratio";
 export type { ChatRole, TranscriptTurn } from "./chat";
 
 const POLL_MS = 800;
@@ -420,7 +421,7 @@ export class LiveFeed {
     const wrap = this.bars.parentElement!;
     const w = Math.max(80, wrap.clientWidth);
     const h = Math.max(80, wrap.clientHeight || 160);
-    const dpr = Math.min(2, devicePixelRatio || 1);
+    const dpr = devicePxRatioNumber(devicePxRatioFromWindow());
     if (this.bars.width !== Math.round(w * dpr) || this.bars.height !== Math.round(h * dpr)) {
       this.bars.width = Math.round(w * dpr);
       this.bars.height = Math.round(h * dpr);
