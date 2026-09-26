@@ -12,22 +12,31 @@ beforeEach(() => {
   expect.hasAssertions();
 });
 
+function thrownMessage(fn: () => unknown): string | undefined {
+  try {
+    fn();
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  return undefined;
+}
+
 describe("revert-proof dogfood guards", () => {
   it("stays-green guard rejects patched green vitest runs", () => {
-    expect(() => rejectPatchedVitestGreen("green", "dogfood")).toThrow(
-      new Error("row dogfood: test stayed GREEN after revert patch (expected failure)"),
+    expect(thrownMessage(() => rejectPatchedVitestGreen("green", "dogfood"))).toBe(
+      "row dogfood: test stayed GREEN after revert patch (expected failure)",
     );
   });
 
   it("production-only guard rejects patches touching test files", () => {
-    expect(() =>
-      validatePatchTouchesOnlyProduction(
-        "--- a/tests/foo.py\n+++ b/tests/foo.py\n",
-        "dogfood",
+    expect(
+      thrownMessage(() =>
+        validatePatchTouchesOnlyProduction(
+          "--- a/tests/foo.py\n+++ b/tests/foo.py\n",
+          "dogfood",
+        ),
       ),
-    ).toThrow(
-      new Error("row dogfood: patch touches test files (only production reverts allowed)"),
-    );
+    ).toBe("row dogfood: patch touches test files (only production reverts allowed)");
   });
 
   it("production reach guard rejects unreachable revert targets", () => {
@@ -52,10 +61,8 @@ describe("revert-proof dogfood guards", () => {
 -export const x = 1;
 +export const x = 2;
 `;
-      expect(() => validatePatchProductionReachable(patch, "dogfood", root)).toThrow(
-        new Error(
-          "row dogfood: revert target unreachable from production: web/src/test-only-helper.ts",
-        ),
+      expect(thrownMessage(() => validatePatchProductionReachable(patch, "dogfood", root))).toBe(
+        "row dogfood: revert target unreachable from production: web/src/test-only-helper.ts",
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

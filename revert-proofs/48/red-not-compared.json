@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "sidecar red value > (red-mismatch) a different patched failure line is rejected",
   "description": "Stop comparing the patched failure line to red",
-  "red": "AssertionError: expected [Function] to throw an error"
+  "red": "TBD"
 }

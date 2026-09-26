@@ -2,6 +2,6 @@
   "runner": "vitest",
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "revert-proof vitest runner through the overlay > (f) real expect() failure sets revertProofAssertion",
-  "description": "Drop chai Assertion#assert throw-site branding",
-  "red": "AssertionError: expected false to be true // Object.is equality"
+  "description": "Drop chai Assertion throw-site branding",
+  "red": "AssertionError [ERR_ASSERTION]: expect toBe"
 }

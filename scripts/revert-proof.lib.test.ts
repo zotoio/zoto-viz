@@ -1,3 +1,4 @@
+import { strictEqual } from "node:assert";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -79,7 +80,7 @@ describe("vitest JSON selection by full name", () => {
   });
 });
 
-const OVERLAY_CASES = `import { afterEach, chai, describe, expect, it, onTestFailed } from "vitest";
+const OVERLAY_CASES = `import { afterEach, chai, describe, expect, it, onTestFailed, vi } from "vitest";
 import assert from "node:assert";
 import strict from "node:assert/strict";
 import { AssertionError as NodeAssertionError, strictEqual } from "node:assert";
@@ -87,8 +88,24 @@ import { AssertionError as NodeAssertionError, strictEqual } from "node:assert";
 it("expect toBe", () => {
   expect(1).toBe(0);
 });
+it("expect toMatchObject", () => {
+  expect({ a: 1 }).toMatchObject({ a: 2 });
+});
+it("expect toHaveBeenCalledWith", () => {
+  const spy = vi.fn();
+  spy(1);
+  expect(spy).toHaveBeenCalledWith(2);
+});
+it("expect toThrow class", () => {
+  expect(() => {}).toThrow(TypeError);
+});
 it("node strictEqual", () => {
   strictEqual(1, 0);
+});
+it("node throws class", () => {
+  assert.throws(() => {
+    throw new RangeError("boom");
+  }, TypeError);
 });
 it("node callable assert", () => {
   assert(false);
@@ -219,12 +236,22 @@ describe("revert-proof vitest runner through the overlay", () => {
     flags = runOverlayCases();
   }, 120_000);
 
-  it("(f) real expect() failure sets revertProofAssertion", () => {
-    expect(flags["expect toBe"]).toBe(true);
+  it("(f) real expect() failures set revertProofAssertion", () => {
+    expect(Object.keys(flags)).toContain("expect toBe");
+    for (const name of [
+      "expect toBe",
+      "expect toMatchObject",
+      "expect toHaveBeenCalledWith",
+      "expect toThrow class",
+    ]) {
+      strictEqual(flags[name], true, name);
+    }
   });
 
   it("(g) node:assert strictEqual failure sets revertProofAssertion", () => {
-    expect(flags["node strictEqual"]).toBe(true);
+    for (const name of ["node strictEqual", "node throws class"]) {
+      expect(flags[name], name).toBe(true);
+    }
   });
 
   it("(g-callable) callable node:assert and node:assert/strict failures set revertProofAssertion", () => {
@@ -420,6 +447,15 @@ describe("vitest JSON report parsing", () => {
   });
 });
 
+function thrownMessage(fn: () => unknown): string | undefined {
+  try {
+    fn();
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  return undefined;
+}
+
 describe("sidecar red value", () => {
   const meta = {
     runner: "vitest",
@@ -429,22 +465,22 @@ describe("sidecar red value", () => {
   };
 
   it("(red-required) sidecar without a string red field is rejected", () => {
-    expect(() => validateRowMeta(meta, "r")).toThrow(
-      new Error('row r: sidecar JSON missing string field "red"'),
+    expect(thrownMessage(() => validateRowMeta(meta, "r"))).toBe(
+      'row r: sidecar JSON missing string field "red"',
     );
   });
 
   it("(red-mismatch) a different patched failure line is rejected", () => {
-    expect(() =>
-      assertRedValue(
-        "r",
-        "AssertionError: expected 2 to be 1 // Object.is equality",
-        "AssertionError: expected 3 to be 1 // Object.is equality",
+    expect(
+      thrownMessage(() =>
+        assertRedValue(
+          "r",
+          "AssertionError: expected 2 to be 1 // Object.is equality",
+          "AssertionError: expected 3 to be 1 // Object.is equality",
+        ),
       ),
-    ).toThrow(
-      new Error(
-        "row r: red value mismatch (expected AssertionError: expected 2 to be 1 // Object.is equality, got AssertionError: expected 3 to be 1 // Object.is equality)",
-      ),
+    ).toBe(
+      "row r: red value mismatch (expected AssertionError: expected 2 to be 1 // Object.is equality, got AssertionError: expected 3 to be 1 // Object.is equality)",
     );
   });
 });

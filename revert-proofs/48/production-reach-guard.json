@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.dogfood.test.ts",
   "testName": "revert-proof dogfood guards > production reach guard rejects unreachable revert targets",
   "description": "Disable production reach guard so test-only revert targets are accepted",
-  "red": "AssertionError: expected [Function] to throw an error"
+  "red": "TBD"
 }
