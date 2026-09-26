@@ -1,13 +1,13 @@
 diff --git a/service/plugin_install.py b/service/plugin_install.py
 --- a/service/plugin_install.py
 +++ b/service/plugin_install.py
-@@ -496,6 +496,9 @@
-         )
-         first, _all = run_staging_validators(ctx)
-         if first is not None:
-+            if len(_all) > 1:
-+                joined = "; ".join(f.message for f in _all)
-+                first = InstallFailure(first.validator, first.reason, joined)
-             if not swapped:
-                 _rollback_blocked_install(runtime, dest_zip, old_zip_bytes, old_runtime_hash)
-             return blocked_result(first, pack_id=pid, sha256=sha256, zip_path=rel)
+@@ -278,6 +278,9 @@
+                 f.reason,
+                 f.message,
+             )
++        if len(failures) > 1:
++            joined = "; ".join(f.message for f in failures)
++            failures[0] = InstallFailure(failures[0].validator, failures[0].reason, joined)
+         return failures[0], failures
+     return None, []
+ 
