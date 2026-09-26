@@ -60,10 +60,10 @@ describe("viz frame v2 collector", () => {
     expect(links[0]?.rate).toBe(80);
   });
 
-  it("omits v2 fields when the monitor switch is off", () => {
+  it("omits link enrichment when the monitor switch is off but stamps contract", () => {
     const state = syntheticState({ host: { vizFrame: { links: false } } });
     const frame = buildVizFrame(state, 0, 0);
-    expect(frame.contract).toBeUndefined();
+    expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(frame.links).toBeUndefined();
     expect(frame.talkers.every((t) => t.failed === undefined)).toBe(true);
   });
@@ -76,14 +76,23 @@ describe("viz frame v2 collector", () => {
 });
 
 describe("idle demo v2", () => {
-  it("default idle is healthy and deterministic", () => {
+  it("default idle is healthy and deterministic with distinct talker arrays", () => {
     const a = buildIdleVizFrame(85, 0.016);
     const b = buildIdleVizFrame(85, 0.016);
     expect(a).toEqual(b);
+    expect(a.talkers).not.toBe(b.talkers);
     expect(a.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(a.links?.length).toBeGreaterThan(0);
     expect(a.sys?.failed).toBe(0);
     expect(a.talkers.every((t) => t.failed === undefined)).toBe(true);
+  });
+
+  it("nested quiet frames do not alias talker arrays", () => {
+    const state = vmLiveCaptureState();
+    const first = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE);
+    const second = buildVizFrameForPlugin(state, first.t, 0, VIZ_SDK_HOST_IDLE);
+    expect(first.talkers).not.toBe(second.talkers);
+    expect(first.talkers).toEqual(second.talkers);
   });
 
   it("failure demo fixture is deterministic with a pinned seed", () => {

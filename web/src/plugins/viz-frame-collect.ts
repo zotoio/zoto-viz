@@ -49,7 +49,6 @@ function directionalPacketRate(flow: Flow, ab: boolean): number {
 const talkerIdsScratch = new Set<string>();
 let talkerIdsCacheKey = "";
 const failGaugeScratch = new Map<string, number>();
-const talkersOutScratch: VizTalkerSample[] = [];
 
 function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string> {
   const key = talkers.length <= 8
@@ -71,55 +70,65 @@ function talkersWithConnFailed(
   for (const d of devices) {
     if (typeof d.conn_fail === "number" && d.conn_fail > 0) failGaugeScratch.set(d.ip, clamp01(d.conn_fail));
   }
-  talkersOutScratch.length = 0;
+  const out: VizTalkerSample[] = [];
   for (const t of frameTalkers) {
     const live = failGaugeScratch.get(t.id);
-    if (live !== undefined) talkersOutScratch.push({ ...t, failed: live });
-    else talkersOutScratch.push(t);
+    if (live !== undefined) out.push({ ...t, failed: live });
+    else out.push({ ...t });
   }
-  return talkersOutScratch;
+  return out;
+}
+
+type LinkCandidate = { src: string; dst: string; rate: number };
+
+function* linkCandidates(flows: Flow[], talkerIds: ReadonlySet<string>): Generator<LinkCandidate> {
+  for (const fl of flows) {
+    const ab = directionalPacketRate(fl, true);
+    if (ab > 0 && talkerIds.has(fl.a) && talkerIds.has(fl.b)) {
+      yield { src: fl.a, dst: fl.b, rate: ab };
+    }
+    const ba = directionalPacketRate(fl, false);
+    if (ba > 0 && talkerIds.has(fl.b) && talkerIds.has(fl.a)) {
+      yield { src: fl.b, dst: fl.a, rate: ba };
+    }
+  }
 }
 
 /**
  * Aggregate directional host-pair rates for the monitor smoothing window (~5 s).
- * `src`/`dst` match talker ids; `rate` is packets/s (same basis as flow directional rates).
+ * `src`/`dst` match talker ids; `rate` is packets/s (same basis as `talkers[].rate`).
  */
 export function collectVizLinks(
   flows: Flow[],
   talkerIds: ReadonlySet<string>,
   maxLinks: number,
 ): { links: VizLinkSample[]; linksDropped: number } {
-  const pairs: VizLinkSample[] = [];
-  for (const fl of flows) {
-    const ab = directionalPacketRate(fl, true);
-    if (ab > 0 && talkerIds.has(fl.a) && talkerIds.has(fl.b)) {
-      pairs.push({ src: fl.a, dst: fl.b, rate: ab });
-    }
-    const ba = directionalPacketRate(fl, false);
-    if (ba > 0 && talkerIds.has(fl.b) && talkerIds.has(fl.a)) {
-      pairs.push({ src: fl.b, dst: fl.a, rate: ba });
-    }
-  }
-  const total = pairs.length;
-  const links = topKByScore(pairs, maxLinks, (l) => l.rate);
+  let total = 0;
+  const top = topKByScore(
+    (function* () {
+      for (const cand of linkCandidates(flows, talkerIds)) {
+        total += 1;
+        yield cand;
+      }
+    })(),
+    maxLinks,
+    (l) => l.rate,
+  );
+  const links = top.map((l) => ({ src: l.src, dst: l.dst, rate: l.rate }));
   return { links, linksDropped: Math.max(0, total - links.length) };
 }
 
-/** Apply optional v2 fields when link collection is enabled; otherwise leave a v1-shaped frame. */
+/** Stamp contract v2 and optional link / failed enrichment when collection is enabled. */
 export function applyVizFrameContractV2(
   frame: VizDataFrame,
   state: StateMsg,
   opts: VizFrameCollectOpts,
 ): VizDataFrame {
-  if (!opts.linksEnabled) return frame;
-  const talkerIds = syncTalkerIds(frame.talkers);
+  const out: VizDataFrame = { ...frame, contract: VIZ_CONTRACT_VERSION };
+  if (!opts.linksEnabled) return out;
+  const talkerIds = syncTalkerIds(out.talkers);
   const { links, linksDropped } = collectVizLinks(state.flows, talkerIds, opts.maxLinks);
-  const talkers = talkersWithConnFailed(frame.talkers, state.devices);
-  const out: VizDataFrame = {
-    ...frame,
-    contract: VIZ_CONTRACT_VERSION,
-    talkers,
-  };
+  out.talkers = talkersWithConnFailed(out.talkers, state.devices);
   if (links.length > 0) out.links = links;
   if (linksDropped > 0) out.linksDropped = linksDropped;
   return out;

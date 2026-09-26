@@ -50,12 +50,21 @@ Each frame the host sends a **decimated** `VizDataFrame` (see
 
 | Field | Source | Cap |
 | --- | --- | --- |
+| `contract` | `VIZ_CONTRACT_VERSION` (2) on every delivered frame; also on plugin `init` `viz.contract` | — |
 | `t`, `dt` | monitor timestamp | — |
 | `audio` | scene pulse bass 0..1 | — |
 | `packets[]` | flow proto tallies | 32 |
 | `rf[]` | Wi-Fi watch SSIDs + RSSI | 24 |
-| `talkers[]` | top devices by packet rate | 24 |
+| `talkers[]` | top devices by **packets/s** (flow rates summed per host) | 24 |
+| `talkers[].failed` | per-host TCP failure ratio 0..1 (when link collection is on) | optional |
+| `links[]` | directional host-pair **packets/s** (same units as `talkers[].rate`) | 64 default |
+| `linksDropped` | pairs over the cap | optional |
 | `headlines[]` | host sources: RSS titles + `summary` blurbs, HTTP JSON strings, file lines (`kind`) | 8 |
+
+When `~/.zoto-viz/sys-config.yml` sets `viz_frame_links: false`, the host still
+stamps `contract` but omits `links[]`, `linksDropped`, and `talkers[].failed`.
+Optional keys: `viz_frame_links` (default `true`), `viz_frame_links_max` (1..256,
+default `64`). Resolved into `state.host.vizFrame` on each `/api/state` snapshot.
 
 Plugins must **not** request or traverse the full device graph. Use
 `graph.read` only when you need the legacy `{id, rate, role}` tick.

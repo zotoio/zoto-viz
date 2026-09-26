@@ -73,7 +73,7 @@ export function demoTalkersWithFailed(t: number, seed = IDLE_VIZ_DEMO_SEED): Viz
     const failed = aligned || peer ? Math.min(1, sysFailed * (0.85 + rnd() * 0.2)) : undefined;
     FAILED_DEMO_TALKERS_SCRATCH.push(failed !== undefined ? { ...talker, failed } : talker);
   }
-  return FAILED_DEMO_TALKERS_SCRATCH;
+  return [...FAILED_DEMO_TALKERS_SCRATCH];
 }
 
 /**
@@ -90,8 +90,8 @@ export function buildIdleVizFrame(t: number, dt = 0): VizDataFrame {
     audio: 0.12 + 0.04 * Math.sin(phase),
     packets: DEMO_PACKETS as VizPacketSample[],
     rf: DEMO_RF as VizRfBeacon[],
-    talkers: DEMO_TALKERS as VizTalkerSample[],
-    links: DEMO_LINKS as VizLinkSample[],
+    talkers: [...DEMO_TALKERS],
+    links: [...DEMO_LINKS],
     headlines: DEMO_HEADLINES as VizHeadline[],
     sys: EMPTY_SYS_TELEMETRY,
   };

@@ -36,7 +36,7 @@ export interface VizLinkSample {
 export interface VizTalkerSample {
   /** Stable talker id (often IP or alias). */
   id: string;
-  /** Recent packet rate used for motion scaling. */
+  /** Recent packet rate in packets/s when flow directional rates exist; otherwise the device packet counter (monotonic, not normalized to /s). Same field space as `links[].rate` when live. */
   rate: number;
   /** Role bucket: gateway, internet, lan, self, etc. */
   role: string;

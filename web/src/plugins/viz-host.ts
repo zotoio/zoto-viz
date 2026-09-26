@@ -1,4 +1,4 @@
-import type { Device, StateMsg } from "../core/types";
+import type { Device, Flow, StateMsg } from "../core/types";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { applyVizFrameContractV2, resolveVizFrameCollectOpts } from "./viz-frame-collect";
@@ -50,6 +50,8 @@ export type VizIdleConfig =
   | { inline: VizIdleInline };
 
 export interface VizPluginContract {
+  /** VizDataFrame slice version the host delivers when {@link VIZ_CONTRACT_VERSION} is stamped on frames. */
+  contract: number;
   maxBuffers: number;
   maxBufferFloats: number;
   maxParticles: number;
@@ -77,7 +79,7 @@ import type {
   VizSysTelemetry,
   VizTalkerSample,
 } from "../../../plugins/sdk/viz-contract";
-import { EMPTY_SYS_TELEMETRY } from "../../../plugins/sdk/viz-contract";
+import { EMPTY_SYS_TELEMETRY, VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
 
 function clamp01(n: number): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
@@ -157,6 +159,7 @@ export function pluginNeedsVizContract(caps: string[] | undefined): boolean {
 
 export function defaultVizContract(overrides?: Partial<Omit<VizPluginContract, "ubo" | "graphWalk">>): VizPluginContract {
   return {
+    contract: VIZ_CONTRACT_VERSION,
     maxBuffers: VIZ_DEFAULT_MAX_BUFFERS,
     maxBufferFloats: VIZ_DEFAULT_MAX_BUFFER_FLOATS,
     maxParticles: VIZ_DEFAULT_MAX_PARTICLES,
@@ -195,7 +198,11 @@ function parseTalkerSample(raw: unknown): VizTalkerSample | null {
   const rate = typeof row.rate === "number" ? row.rate : Number(row.rate);
   const role = typeof row.role === "string" ? row.role : "";
   if (!id || !Number.isFinite(rate) || !role) return null;
-  return { id, rate, role };
+  const failedRaw = row.failed;
+  const failed = typeof failedRaw === "number" && Number.isFinite(failedRaw)
+    ? clamp01(failedRaw)
+    : undefined;
+  return failed !== undefined ? { id, rate, role, failed } : { id, rate, role };
 }
 
 function parseHeadline(raw: unknown): VizHeadline | null {
@@ -298,7 +305,7 @@ export function parseVizContract(raw: unknown): VizPluginContract | undefined {
   const maxBuffers = clampInt(doc.maxBuffers, 1, VIZ_UBO.slotCount, VIZ_DEFAULT_MAX_BUFFERS);
   const maxBufferFloats = clampInt(doc.maxBufferFloats, 4, VIZ_UBO.slotFloats, VIZ_DEFAULT_MAX_BUFFER_FLOATS);
   const maxParticles = clampInt(doc.maxParticles, 0, 8192, 0);
-  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO, idle };
+  return { maxBuffers, maxBufferFloats, maxParticles, contract: VIZ_CONTRACT_VERSION, graphWalk: false, uniforms, ubo: VIZ_UBO, idle };
 }
 
 function clampInt(raw: unknown, lo: number, hi: number, fallback: number): number {
@@ -344,13 +351,36 @@ export function topKByScore<T>(
   return buf.map((x) => x.item);
 }
 
-function topTalkers(devices: Device[], limit: number): VizTalkerSample[] {
+function talkerPacketRate(ip: string, flows: Flow[]): number {
+  let rate = 0;
+  for (const fl of flows) {
+    if (fl.a === ip) rate += directionalPacketRate(fl, true);
+    if (fl.b === ip) rate += directionalPacketRate(fl, false);
+  }
+  return rate;
+}
+
+function directionalPacketRate(flow: Flow, ab: boolean): number {
+  const direct = ab ? flow.rate_pkt_ab : flow.rate_pkt_ba;
+  if (typeof direct === "number" && direct > 0) return direct;
+  const byteRate = ab ? flow.rate_ab : flow.rate_ba;
+  if (typeof byteRate !== "number" || byteRate <= 0) return 0;
+  const avgBytes = flow.bytes / Math.max(1, flow.packets);
+  return byteRate / Math.max(1, avgBytes);
+}
+
+function talkerRateForFrame(d: Device, flows: Flow[]): number {
+  const live = talkerPacketRate(d.ip, flows);
+  return live > 0 ? live : d.packets;
+}
+
+function topTalkers(devices: Device[], flows: Flow[], limit: number): VizTalkerSample[] {
   return topKByScore(
     devices,
     limit,
-    (d) => d.packets,
-    (d) => d.packets <= 0,
-  ).map((d) => ({ id: d.ip, rate: d.packets, role: d.role }));
+    (d) => talkerRateForFrame(d, flows),
+    (d) => talkerRateForFrame(d, flows) <= 0,
+  ).map((d) => ({ id: d.ip, rate: talkerRateForFrame(d, flows), role: d.role }));
 }
 
 function rssiFromAliases(aliases: string[] | undefined): number {
@@ -438,7 +468,7 @@ function buildVizFrameCore(
     audio: Math.min(1, Math.max(0, audio)),
     packets: packetSamples(state, VIZ_MAX_PACKET_SAMPLES),
     rf: rfBeacons(state, VIZ_MAX_RF_SAMPLES),
-    talkers: topTalkers(state.devices, VIZ_MAX_TALKER_SAMPLES),
+    talkers: topTalkers(state.devices, state.flows, VIZ_MAX_TALKER_SAMPLES),
     headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed).map((h) => ({
       id: h.id,
       label: h.label,

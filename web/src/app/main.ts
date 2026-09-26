@@ -75,11 +75,6 @@ import {
   buildVizFrameForPlugin, defaultVizContract,
 } from "../plugins/viz-host";
 import {
-  buildVizDevFixtureFrame,
-  parseVizDevFixtureQuery,
-  type VizDevFixtureName,
-} from "../plugins/viz-dev-fixture";
-import {
   TypeSafeHost,
   parseTypeSafeEnable,
   pluginHasTypeSafe,
@@ -348,10 +343,15 @@ let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
 const vizBudget = new VizFrameBudget();
 
-/** Dev-only: `?vizFixture=` replaces live/idle frames (stripped from production builds). */
-const vizDevFixture: VizDevFixtureName | null = import.meta.env.DEV
-  ? parseVizDevFixtureQuery(globalThis.location?.search ?? "", true)
-  : null;
+type VizDevFixtureModule = typeof import("../plugins/viz-dev-fixture");
+let vizDevFixtureMod: VizDevFixtureModule | null = null;
+let vizDevFixtureName: import("../plugins/viz-dev-fixture").VizDevFixtureName | null = null;
+if (import.meta.env.DEV) {
+  void import("../plugins/viz-dev-fixture").then((mod) => {
+    vizDevFixtureMod = mod;
+    vizDevFixtureName = mod.parseVizDevFixtureQuery(globalThis.location?.search ?? "", true);
+  });
+}
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
@@ -1010,9 +1010,9 @@ function feed(m: StateMsg): void {
     const buildLiveFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
-    const buildFrame = import.meta.env.DEV && vizDevFixture
+    const buildFrame = import.meta.env.DEV && vizDevFixtureName && vizDevFixtureMod
       ? (s: StateMsg, pt: number, a: number) =>
-        buildVizDevFixtureFrame(vizDevFixture, s.ts, pt > 0 ? Math.max(0, s.ts - pt) : 0, a)
+        vizDevFixtureMod!.buildVizDevFixtureFrame(vizDevFixtureName!, s.ts, pt > 0 ? Math.max(0, s.ts - pt) : 0, a)
       : buildLiveFrame;
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;

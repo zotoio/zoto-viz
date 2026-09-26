@@ -25,18 +25,23 @@ export function fatLanFixture(): StateMsg {
     chan: i % 23 === 0 ? 36 + (i % 12) : undefined,
   }));
 
-  const flows: Flow[] = Array.from({ length: 1200 }, (_, i) => ({
-    a: devices[i % devices.length]!.ip,
-    b: devices[(i * 3) % devices.length]!.ip,
-    bytes: 100 + i,
-    packets: 1 + (i % 40),
-    ports: [`tcp/${443 + (i % 20)}`],
-    protos: [PROTOS[i % PROTOS.length]!],
-    ifaces: ["eth0"],
-    first_seen: 0,
-    last_seen: 100,
-    rate: 1 + (i % 5),
-  }));
+  const flows: Flow[] = Array.from({ length: 1200 }, (_, i) => {
+    const pktRate = 1 + (i % 5);
+    return {
+      a: devices[i % devices.length]!.ip,
+      b: devices[(i * 3) % devices.length]!.ip,
+      bytes: 100 + i,
+      packets: 1 + (i % 40),
+      ports: [`tcp/${443 + (i % 20)}`],
+      protos: [PROTOS[i % PROTOS.length]!],
+      ifaces: ["eth0"],
+      first_seen: 0,
+      last_seen: 100,
+      rate: pktRate,
+      rate_pkt_ab: pktRate,
+      rate_pkt_ba: pktRate * 0.2,
+    };
+  });
 
   return {
     type: "state",

@@ -126,8 +126,16 @@ def _inhibit_screensaver(raw: dict[str, Any]) -> bool:
 def viz_frame_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
     """Resolved viz data-frame collection switches for the web host."""
     raw = cfg or {}
-    enabled = DEFAULT_VIZ_FRAME_LINKS if "viz_frame_links" not in raw else _bool(raw.get("viz_frame_links"))
-    return {"links": enabled, "linksMax": _links_max(raw.get("viz_frame_links_max"))}
+    nested = raw.get("vizFrame")
+    if isinstance(nested, dict):
+        if "links" in nested or "linksMax" in nested:
+            enabled = DEFAULT_VIZ_FRAME_LINKS if "links" not in nested else _bool(nested.get("links"))
+            max_raw = nested.get("linksMax") if "linksMax" in nested else raw.get("viz_frame_links_max")
+            return {"links": enabled, "linksMax": _links_max(max_raw)}
+    if "viz_frame_links" in raw or "viz_frame_links_max" in raw:
+        enabled = DEFAULT_VIZ_FRAME_LINKS if "viz_frame_links" not in raw else _bool(raw.get("viz_frame_links"))
+        return {"links": enabled, "linksMax": _links_max(raw.get("viz_frame_links_max"))}
+    return {"links": DEFAULT_VIZ_FRAME_LINKS, "linksMax": DEFAULT_VIZ_FRAME_LINKS_MAX}
 
 
 def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:

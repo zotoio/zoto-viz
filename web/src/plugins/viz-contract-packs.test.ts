@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
+import { VIZ_FIXTURE_GOLDEN_LIVE } from "../../../plugins/sdk/viz-fixtures";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const packsRoot = path.join(repoRoot, "plugins/src");
@@ -40,11 +41,12 @@ const VIZ_CONTRACT_IMPORT = /import\s+type\s+[\s\S]*?\s+from\s+['"][^'"]*viz-con
 
 const FRAME_PARAM = /\bonFrame\s*=\s*\(\s*(\w+)/;
 
-const SLICE_INLINE = /(?:packets|talkers|rf|sys|headlines)\??\s*:\s*\{([^}]+)\}/g;
+const SLICE_INLINE = /(?:packets|talkers|rf|sys|headlines|links)\??\s*:\s*\{([^}]+)\}/g;
 
 const ALLOWED_KEYS: Record<string, Set<string>> = {
   packets: new Set(["proto", "size", "field"]),
-  talkers: new Set(["id", "rate", "role"]),
+  talkers: new Set(["id", "rate", "role", "failed"]),
+  links: new Set(["src", "dst", "rate"]),
   rf: new Set(["ssid", "rssi", "channel"]),
   sys: new Set([
     "cpu", "mem", "disk", "gpu", "temp", "watts", "psi", "sockets", "failed", "udev",
@@ -129,7 +131,7 @@ describe("viz contract packs", () => {
       let m: RegExpExecArray | null;
       const re = new RegExp(SLICE_INLINE.source, "g");
       while ((m = re.exec(text)) !== null) {
-        const slice = text.slice(m.index, m.index + 40).match(/(packets|talkers|rf|sys|headlines)/)?.[1];
+        const slice = text.slice(m.index, m.index + 48).match(/(packets|talkers|rf|sys|headlines|links)/)?.[1];
         if (!slice) continue;
         const keys = propNames(m[1]!);
         const allowed = ALLOWED_KEYS[slice];
@@ -154,5 +156,10 @@ describe("viz contract packs", () => {
     for (const id of Object.keys(PACK_FRAME_TYPE_ALLOWLIST)) {
       expect(packIds.has(id) || id === "ant-colony" || id === "marble-run").toBe(true);
     }
+  });
+
+  it("frozen golden-live fixture carries v2 contract slices", () => {
+    expect(VIZ_FIXTURE_GOLDEN_LIVE.contract).toBe(VIZ_CONTRACT_VERSION);
+    expect((VIZ_FIXTURE_GOLDEN_LIVE.links?.length ?? 0)).toBeGreaterThan(0);
   });
 });

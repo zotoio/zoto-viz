@@ -68,123 +68,123 @@
   ],
   "talkers": [
     {
-      "id": "host-114",
-      "rate": 209,
-      "role": "lan"
-    },
-    {
-      "id": "host-309",
-      "rate": 209,
-      "role": "lan"
-    },
-    {
-      "id": "host-113",
-      "rate": 208,
-      "role": "internet"
-    },
-    {
-      "id": "host-308",
-      "rate": 208,
-      "role": "lan"
-    },
-    {
-      "id": "host-112",
-      "rate": 207,
-      "role": "lan"
-    },
-    {
-      "id": "host-307",
-      "rate": 207,
-      "role": "lan"
-    },
-    {
-      "id": "host-111",
-      "rate": 206,
-      "role": "lan"
-    },
-    {
-      "id": "host-306",
-      "rate": 206,
-      "role": "internet"
-    },
-    {
-      "id": "host-110",
-      "rate": 205,
-      "role": "lan"
-    },
-    {
-      "id": "host-304",
-      "rate": 205,
-      "role": "lan"
-    },
-    {
-      "id": "host-109",
-      "rate": 204,
-      "role": "lan"
-    },
-    {
-      "id": "host-303",
-      "rate": 204,
-      "role": "lan"
-    },
-    {
-      "id": "host-108",
-      "rate": 203,
-      "role": "lan"
-    },
-    {
-      "id": "host-302",
-      "rate": 203,
-      "role": "lan"
-    },
-    {
-      "id": "host-107",
-      "rate": 202,
-      "role": "lan"
-    },
-    {
-      "id": "host-301",
-      "rate": 202,
-      "role": "lan"
-    },
-    {
-      "id": "host-300",
-      "rate": 201,
-      "role": "lan"
-    },
-    {
-      "id": "host-106",
-      "rate": 201,
-      "role": "lan"
-    },
-    {
-      "id": "host-299",
-      "rate": 200,
-      "role": "lan"
-    },
-    {
-      "id": "host-105",
-      "rate": 200,
-      "role": "lan"
-    },
-    {
-      "id": "host-298",
-      "rate": 199,
+      "id": "host-209",
+      "rate": 22.200000000000003,
       "role": "lan"
     },
     {
       "id": "host-103",
-      "rate": 199,
+      "rate": 22.200000000000003,
       "role": "lan"
     },
     {
-      "id": "host-297",
-      "rate": 198,
+      "id": "host-192",
+      "rate": 22.200000000000003,
       "role": "lan"
     },
     {
-      "id": "host-102",
-      "rate": 198,
+      "id": "host-37",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-121",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-160",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-54",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-137",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-242",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-248",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-154",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-70",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-258",
+      "rate": 22.200000000000003,
+      "role": "internet"
+    },
+    {
+      "id": "host-87",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-21",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-225",
+      "rate": 22.200000000000003,
+      "role": "lan"
+    },
+    {
+      "id": "host-170",
+      "rate": 21.400000000000002,
+      "role": "lan"
+    },
+    {
+      "id": "host-401",
+      "rate": 21.400000000000002,
+      "role": "internet"
+    },
+    {
+      "id": "host-339",
+      "rate": 21.400000000000002,
+      "role": "lan"
+    },
+    {
+      "id": "host-355",
+      "rate": 21.400000000000002,
+      "role": "lan"
+    },
+    {
+      "id": "host-372",
+      "rate": 21.400000000000002,
+      "role": "lan"
+    },
+    {
+      "id": "host-388",
+      "rate": 21.400000000000002,
+      "role": "lan"
+    },
+    {
+      "id": "host-405",
+      "rate": 21.400000000000002,
+      "role": "lan"
+    },
+    {
+      "id": "host-421",
+      "rate": 21.400000000000002,
       "role": "lan"
     }
   ],

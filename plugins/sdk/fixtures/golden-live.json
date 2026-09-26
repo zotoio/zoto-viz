@@ -49,53 +49,53 @@
   "talkers": [
     {
       "id": "host-02",
-      "rate": 120,
+      "rate": 10.75,
       "role": "gateway"
     },
     {
-      "id": "host-10",
-      "rate": 95,
-      "role": "internet"
-    },
-    {
       "id": "host-06",
-      "rate": 88,
+      "rate": 6,
       "role": "self"
     },
     {
-      "id": "host-01",
-      "rate": 72,
-      "role": "internet"
+      "id": "host-05",
+      "rate": 5,
+      "role": "lan"
     },
     {
       "id": "host-03",
-      "rate": 64,
-      "role": "lan"
-    },
-    {
-      "id": "host-04",
-      "rate": 52,
-      "role": "lan"
-    },
-    {
-      "id": "host-09",
-      "rate": 48,
-      "role": "internet"
-    },
-    {
-      "id": "host-05",
-      "rate": 41,
+      "rate": 4,
       "role": "lan"
     },
     {
       "id": "host-07",
-      "rate": 36,
+      "rate": 4,
+      "role": "lan"
+    },
+    {
+      "id": "host-04",
+      "rate": 3,
       "role": "lan"
     },
     {
       "id": "host-08",
-      "rate": 28,
+      "rate": 2,
       "role": "lan"
+    },
+    {
+      "id": "host-09",
+      "rate": 1.75,
+      "role": "internet"
+    },
+    {
+      "id": "host-10",
+      "rate": 1.25,
+      "role": "internet"
+    },
+    {
+      "id": "host-01",
+      "rate": 1,
+      "role": "internet"
     }
   ],
   "headlines": [
@@ -135,5 +135,77 @@
     "failed": 0,
     "udev": 0
   },
-  "contract": 2
+  "contract": 2,
+  "links": [
+    {
+      "src": "host-02",
+      "dst": "host-09",
+      "rate": 7
+    },
+    {
+      "src": "host-06",
+      "dst": "host-02",
+      "rate": 6
+    },
+    {
+      "src": "host-05",
+      "dst": "host-10",
+      "rate": 5
+    },
+    {
+      "src": "host-03",
+      "dst": "host-02",
+      "rate": 4
+    },
+    {
+      "src": "host-07",
+      "dst": "host-01",
+      "rate": 4
+    },
+    {
+      "src": "host-04",
+      "dst": "host-02",
+      "rate": 3
+    },
+    {
+      "src": "host-08",
+      "dst": "host-02",
+      "rate": 2
+    },
+    {
+      "src": "host-09",
+      "dst": "host-02",
+      "rate": 1.75
+    },
+    {
+      "src": "host-02",
+      "dst": "host-06",
+      "rate": 1.5
+    },
+    {
+      "src": "host-10",
+      "dst": "host-05",
+      "rate": 1.25
+    },
+    {
+      "src": "host-02",
+      "dst": "host-03",
+      "rate": 1
+    },
+    {
+      "src": "host-01",
+      "dst": "host-07",
+      "rate": 1
+    },
+    {
+      "src": "host-02",
+      "dst": "host-04",
+      "rate": 0.75
+    },
+    {
+      "src": "host-02",
+      "dst": "host-08",
+      "rate": 0.5
+    }
+  ]
 }

@@ -393,7 +393,8 @@
       "properties": {
         "id": { "type": "string", "minLength": 1, "maxLength": 64 },
         "rate": { "type": "number", "minimum": 0 },
-        "role": { "type": "string", "minLength": 1, "maxLength": 32 }
+        "role": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "failed": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },
     "vizHeadline": {
