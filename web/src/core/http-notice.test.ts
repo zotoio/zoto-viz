@@ -185,6 +185,16 @@ describe("server restart wall notice", () => {
       ]);
       expect(restartStatusNotices()).toHaveLength(1);
     });
+
+    it("emits a restart event for each stale-token burst", async () => {
+      const events: string[] = [];
+      const onRestart = (e: Event) => { events.push((e as CustomEvent<string>).detail); };
+      window.addEventListener("zoto-viz-server-restart", onRestart);
+      await Promise.all([apiFetch("/api/a", { method: "PUT" })]);
+      await Promise.all([apiFetch("/api/b", { method: "PUT" })]);
+      window.removeEventListener("zoto-viz-server-restart", onRestart);
+      expect(events).toEqual([SERVER_RESTART_NOTICE, SERVER_RESTART_NOTICE]);
+    });
   });
 
   describe("burst auto-clear timer", () => {

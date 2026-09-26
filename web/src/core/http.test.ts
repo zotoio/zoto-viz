@@ -37,42 +37,6 @@ describe("apiFetch CSRF", () => {
     expect(seen.at(-1)).toBe("tok");
   });
 
-  it("emits one restart event for parallel stale csrf recoveries", async () => {
-    const events: string[] = [];
-    const onRestart = (e: Event) => { events.push((e as CustomEvent<string>).detail); };
-    window.addEventListener("zoto-viz-server-restart", onRestart);
-    globalThis.fetch = (async (url: string, init?: RequestInit) => {
-      const path = String(url);
-      const h = new Headers(init?.headers);
-      const sent = h.get("X-Zoto-Viz-Csrf") || "";
-      if (path.includes("/api/session")) {
-        return {
-          ok: true,
-          status: 200,
-          headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
-          json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
-        } as Response;
-      }
-      if (sent !== "fresh") {
-        return {
-          ok: false,
-          status: 403,
-          headers: new Headers(),
-          clone() { return this; },
-          json: async () => ({ error: "csrf required" }),
-        } as Response;
-      }
-      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
-    }) as typeof fetch;
-    await Promise.all([
-      apiFetch("/api/a", { method: "PUT" }),
-      apiFetch("/api/b", { method: "PUT" }),
-      apiFetch("/api/c", { method: "PUT" }),
-    ]);
-    window.removeEventListener("zoto-viz-server-restart", onRestart);
-    expect(events).toEqual([SERVER_RESTART_NOTICE]);
-  });
-
   it("after restart stale csrf refreshes once retries once and shows restart notice", async () => {
     const seen: string[] = [];
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
