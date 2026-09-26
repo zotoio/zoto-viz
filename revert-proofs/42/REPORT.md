@@ -30,7 +30,7 @@ pnpm exec vitest run
 ## Production fixes (host review)
 
 1. **Letterbox fill:** `paintClear` no longer busts the cache; `getSurfaceLetterboxFill` keys on `clearHex`. `scene-letterbox-fill-production.test.ts`: 300 `paintClear` ticks → `letterboxFillStats.rebuilds === 1`. Revert `scene-paint-clear-letterbox-reset`: `expected 300 to be 1 // Object.is equality`.
-2. **GPU viewport units:** `runTimedViewDraw` passes CSS box to `setViewport`/`setScissor`. `render-host-gpu-viewport-css.test.ts` @ pr 1.5: `[1, 58, 101, 61]`. Revert `render-host-gpu-viewport-css-revert`: `setViewport`/`setScissor` `[2, 87, 151, 91]` vs `[1, 58, 101, 61]`.
+2. **GPU viewport units:** `runTimedViewDraw` passes CSS box to `setViewport`/`setScissor`. `render-host-gpu-viewport-css.test.ts`: explicit pr 1.5 and window `devicePixelRatio` 2 with renderer pr capped at 1.5 both expect `[1, 58, 101, 61]`. Reverts `render-host-gpu-viewport-css-revert` and `render-host-gpu-viewport-css-dpr2-cap-revert` (device pixels): `[2, 87, 151, 91]`.
 3. **`GlRect`:** only `toGlRectInto` brands GL rects (no `glRect()` factory; probe lines unbranded).
 4. **Grain:** `letterbox-grain-stable.test.ts` uses a 2D stub; rebuild counts `randomCalls`/`stringAllocations`. Revert `letterbox-grain-stable`: `expected "random" to not be called at all, but actually been called 600 times`.
 
@@ -64,6 +64,7 @@ Each `*.json` has `testFile` (under `web/`), anchored `testName` (`^…$`), and 
 | `present-pack-args-identity` | `expected { letterbox: false, fill: null, …(1) } to be { letterbox: false, fill: null, …(1) }` |
 | `render-host-fb-viewport-h241` | `expected { x: +0, y: -1, w: 300, h: 90, …(1) } to deeply equal { x: +0, y: +0, w: 300, h: 90, …(1) }` |
 | `render-host-gpu-viewport-css-revert` | `setViewport`/`setScissor` `[2, 87, 151, 91]` vs `[1, 58, 101, 61]` |
+| `render-host-gpu-viewport-css-dpr2-cap-revert` | `setViewport`/`setScissor` `[2, 87, 151, 91]` vs `[1, 58, 101, 61]` (window DPR 2, renderer pr capped at 1.5) |
 | `render-host-pack-mirror-no-alloc` | `expected 30 to be +0 // Object.is equality` |
 | `samples-gated-on-antialias` | `expected +0 to be 4 // Object.is equality` |
 | `scene-paint-clear-letterbox-reset` | `expected 300 to be 1 // Object.is equality` |
