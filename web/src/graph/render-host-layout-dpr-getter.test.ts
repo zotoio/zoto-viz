@@ -15,6 +15,42 @@ import {
 import { LiveFeed } from "../ui/feed";
 import { probeWebGL } from "./webgl";
 
+const hostRaf = vi.hoisted(() => {
+  const queue: FrameRequestCallback[] = [];
+  let nextId = 1;
+  const byId = new Map<number, FrameRequestCallback>();
+  return {
+    requestAnimationFrame(cb: FrameRequestCallback): number {
+      const id = nextId++;
+      byId.set(id, cb);
+      queue.push(cb);
+      return id;
+    },
+    cancelAnimationFrame(id: number): void {
+      const cb = byId.get(id);
+      if (!cb) return;
+      byId.delete(id);
+      const i = queue.indexOf(cb);
+      if (i >= 0) queue.splice(i, 1);
+    },
+    runNext(ts: number): void {
+      const cb = queue.shift();
+      if (!cb) return;
+      for (const [id, fn] of byId) {
+        if (fn === cb) byId.delete(id);
+      }
+      cb(ts);
+    },
+    hasPending(): boolean {
+      return queue.length > 0;
+    },
+    clear(): void {
+      queue.length = 0;
+      byId.clear();
+    },
+  };
+});
+
 const dprMedia = vi.hoisted(() => {
   let dpr = 1;
   let onChange: (() => void) | null = null;
@@ -155,7 +191,9 @@ function mountThreeSurfaceFixture(initialDpr: number): Fixture {
 
   const host = new RenderHost(wall, { software: false });
   cancelAnimationFrame((host as unknown as { raf: number }).raf);
+  hostRaf.clear();
   host.canvas.getBoundingClientRect = () => wall.getBoundingClientRect();
+  const hostFrame = (host as unknown as { frame: (ts: number) => void }).frame;
 
   const stage = new TestStage3D(stagePane, sceneStub());
   const canvas = document.createElement("canvas");
@@ -239,7 +277,10 @@ function mountThreeSurfaceFixture(initialDpr: number): Fixture {
     stage,
     stageCanvas,
     feedCanvas,
-    tickFrame: (ts) => host.testAdvanceFrame(ts),
+    tickFrame: (ts) => {
+      if (!hostRaf.hasPending()) requestAnimationFrame(hostFrame);
+      hostRaf.runNext(ts);
+    },
     hostSetSizeCalls: () => hostSetSizeLog.calls,
     stageResizeCalls: () => stageResizeCalls,
     feedResizeCalls: () => feedResizeCalls,
@@ -251,10 +292,13 @@ describe("layout DevicePxRatio getter (cached, matchMedia re-arm)", () => {
 
   beforeEach(() => {
     expect.hasAssertions();
+    hostRaf.clear();
     resetLayoutDevicePxRatioWatch();
     configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
     layoutDevicePxRatioStats.reset();
     dprMedia.resetHandlers();
+    vi.stubGlobal("requestAnimationFrame", hostRaf.requestAnimationFrame);
+    vi.stubGlobal("cancelAnimationFrame", hostRaf.cancelAnimationFrame);
     vi.stubGlobal("matchMedia", dprMedia.matchMedia);
     Object.defineProperty(window, "devicePixelRatio", {
       configurable: true,
@@ -271,7 +315,7 @@ describe("layout DevicePxRatio getter (cached, matchMedia re-arm)", () => {
     configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 
-  it("(a) steady frames: 0 window reads and 0 setSize; 3 getter calls per frame", () => {
+  it("(a) steady frames: 0 window reads and 0 setSize; 2 getter calls per frame", () => {
     const fx = mountThreeSurfaceFixture(2);
     activeDispose = fx.dispose;
     const { tickFrame, hostSetSizeCalls, stageResizeCalls, feedResizeCalls } = fx;
@@ -280,7 +324,7 @@ describe("layout DevicePxRatio getter (cached, matchMedia re-arm)", () => {
     expect(hostSetSizeCalls()).toBe(0);
     expect(stageResizeCalls()).toBe(0);
     expect(feedResizeCalls()).toBe(0);
-    expect(layoutDevicePxRatioStats.getterCalls).toBe(600 * 3);
+    expect(layoutDevicePxRatioStats.getterCalls).toBe(600 * 2);
     expect(layoutBackingDevicePx(100)).toBe(150);
   });
 

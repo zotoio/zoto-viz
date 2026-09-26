@@ -323,15 +323,6 @@ export class RenderHost {
     this.canvasDeviceHeight = asCanvasDeviceHeight(Math.max(1, this.canvas.height));
   }
 
-  /** @internal Vitest: one frame through attach/syncSize/view `hostFrame` without rAF. */
-  testAdvanceFrame(ts: number): void {
-    this.attach();
-    layoutDevicePxRatio();
-    this.syncSize();
-    this.canvasRect = this.canvas.getBoundingClientRect();
-    for (const v of this.views) v.hostFrame(ts);
-  }
-
   dispose(): void {
     this.disposed = true;
     this.unsubLayoutDpi?.();
