@@ -10,7 +10,7 @@ import {
   setBackroomsOptions,
 } from "./director";
 
-const zoto = globalThis.zoto as VizZoto;
+const zoto = (globalThis as { zoto: VizZoto }).zoto;
 
 const DEFAULT_ASPECT = 16 / 9;
 

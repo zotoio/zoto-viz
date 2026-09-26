@@ -116,26 +116,6 @@
       "target": "plugins/src/backrooms/frontend/director.ts"
     },
     {
-      "file": "web/src/plugins/backrooms.test.ts",
-      "rule": "host-imports-pack-src",
-      "target": "plugins/src/backrooms/frontend/director.ts"
-    },
-    {
-      "file": "web/src/plugins/backrooms.test.ts",
-      "rule": "host-imports-pack-src",
-      "target": "plugins/src/backrooms/frontend/index.ts"
-    },
-    {
-      "file": "web/src/plugins/backrooms.test.ts",
-      "rule": "host-imports-pack-src",
-      "target": "plugins/src/backrooms/sky/fragment.glsl"
-    },
-    {
-      "file": "web/src/plugins/backrooms.test.ts",
-      "rule": "host-imports-pack-src",
-      "target": "plugins/src/backrooms/visualisation.yml"
-    },
-    {
       "file": "web/src/plugins/cypher-cic.test.ts",
       "rule": "host-imports-pack-src",
       "target": "plugins/src/cypher-cic/frontend/pack.ts"

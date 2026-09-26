@@ -51,14 +51,7 @@ def test_backrooms_catalog_and_sky(tmp_path, monkeypatch) -> None:
 def test_backrooms_present_pack_vitest() -> None:
     web = ROOT / "web"
     subprocess.run(
-        [
-            "pnpm",
-            "exec",
-            "vitest",
-            "run",
-            "--config",
-            "../plugins/src/backrooms/vitest.config.ts",
-        ],
+        ["pnpm", "exec", "vitest", "run", "../plugins/src/backrooms"],
         cwd=web,
         check=True,
     )
