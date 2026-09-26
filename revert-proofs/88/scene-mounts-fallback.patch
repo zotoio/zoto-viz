@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 7bb09b1..bb157d4 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -281,7 +281,6 @@ export class RenderHost {
+       meta.supportsPackFallback ?? false,
+     );
+     const ok = this.buildTileShader(tileId, frag, log);
+-    if (!ok) this.mountShaderFallback(tileId);
+     else this.clearShaderFallback(tileId);
+     return ok;
+   }
