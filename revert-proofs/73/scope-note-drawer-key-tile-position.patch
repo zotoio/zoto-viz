@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/mosaic-tile-id.ts b/web/src/graph/mosaic-tile-id.ts
-index 91c12c3..e202f1a 100644
+index 91c12c3..2f5b2ed 100644
 --- a/web/src/graph/mosaic-tile-id.ts
 +++ b/web/src/graph/mosaic-tile-id.ts
-@@ -72,7 +72,8 @@ export type DrawerKey = string & { readonly __drawerKeyBrand: unique symbol };
+@@ -72,10 +72,11 @@ export type DrawerKey = string & { readonly __drawerKeyBrand: unique symbol };
  export function drawerKeyFor(viewId: string, packId: string | null): DrawerKey {
    const view = mosaicTileViewId(viewId);
    const pack = packId?.trim() ?? "";
@@ -12,3 +12,7 @@ index 91c12c3..e202f1a 100644
  }
  
  export function drawerKeyForModeId(modeId: string): DrawerKey {
+   const parsed = parseMosaicSlotId(modeId);
+-  return drawerKeyFor(parsed.viewId, parsed.packId);
++  return drawerKeyFor(modeId, parsed.packId);
+ }

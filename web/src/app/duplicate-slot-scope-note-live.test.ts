@@ -150,6 +150,7 @@ describe("duplicate slot shared config > scope note follows live tile count whil
 
   it("drawer view layer stays the same node when picking another slot of the same pack", async () => {
     const { settings, mosaic, bindThisView } = mountLiveFixture();
+    const rebuildSpy = vi.spyOn(viewDrawerModule, "rebuildViewDrawerContent");
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:disk"]);
     bindThisView(PACK);
     settings.openView(PACK);
@@ -160,15 +161,19 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     gain.focus();
     gain.value = "7";
     gain.dispatchEvent(new Event("input", { bubbles: true }));
+    rebuildSpy.mockClear();
 
-    settings.openView(`${PACK}!2`);
+    bindThisView(`${PACK}!2`);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    expect(rebuildSpy).not.toHaveBeenCalled();
+
     pickMosaicSlot(settings, 2, "plugin:topology");
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
     assertDrawerEditingStable(settings, viewLayer, gain, "7");
     expect(settings.viewFocus).toBe(PACK);
     expect(scopeNoteCount(settings)).toBe(2);
+    rebuildSpy.mockRestore();
   });
 
   it("vertical layout patch does not rebuild the view drawer while editing", async () => {

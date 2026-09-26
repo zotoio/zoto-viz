@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-shared-config.test.ts",
   "testName": "^duplicate slot shared config > live edit applies to every sharing tile > calls setMode on both duplicate tiles via main onPluginFields mosaic sync$",
   "description": "Skip applySharedMosaicPluginConfig in syncPluginFieldsFromSettingsEdit.",
-  "redOutput": "AssertionError: expected \"vi.fn()\" to be called at least once"
+  "redOutput": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
 }

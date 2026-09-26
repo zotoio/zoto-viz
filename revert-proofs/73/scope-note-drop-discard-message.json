@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
   "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > shows discard status when the last pack tile is removed with unsaved edits$",
   "description": "Omit the discard status when the last pack tile is removed with unsaved edits.",
-  "redOutput": "MISSING"
+  "redOutput": "AssertionError: expected false to be true // Object.is equality"
 }

@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
   "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > drawer view layer stays the same node when picking another slot of the same pack$",
   "description": "Key the view drawer by mosaic tile slot position instead of drawerKeyFor(view, pack).",
-  "redOutput": "MISSING"
+  "redOutput": "AssertionError: expected \"rebuildViewDrawerContent\" to not be called at all, but actually been called 1 times"
 }
