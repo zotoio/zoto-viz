@@ -1,7 +1,7 @@
 {
   "row": "F4 dev flag off revert injector",
   "runner": "vitest",
-  "testFile": "web/src/core/viz-dev-tile-cost.test.ts",
-  "testName": "F4 dev: flag off \u2014 600 frames, 0 injected cost, no LIMITED at 1\u00d71",
-  "excerpt": "AssertionError: expected 600 to be +0 // Object.is equality"
+  "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
+  "testName": "F5 (iii) bad tile cost: 5011 — no LIMITED on 2×2",
+  "excerpt": "AssertionError: expected '' to contain 'LIMITED'"
 }
