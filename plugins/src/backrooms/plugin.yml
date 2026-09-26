@@ -1,8 +1,8 @@
 id: backrooms
 name: Backrooms
-version: 65
-hint: Level 0 yellow halls. Distant until it charges, arms and fingers out. Roar — look, turn, run. Sound on.
-description: Found-footage jog through damp yellow halls. The runner stays on hall centerlines and only turns at junctions, at one-and-a-half times the creature's walk, always away from it. A long-legged organic thing — mottled flesh, no nose, white eyes, a wide sharp toothy grin, bulbous joints, flinger claws — waits far down the hall ahead, then on a stagger beat runs at you with arms and fingers outstretched and never closer than two pillars. It stays in the halls (pushed off walls, limbs clipped) and may grin from a pillar or rake from the dark. When it roars you look, then turn 90° and run; you never follow it. Timing and which beat you get is hashed per loop. Fluorescent buzz, a brief distant music box, and creature vocals are recorded CC0 samples (header sound must be on) — not ripped film scores.
+version: 70
+hint: "Level 0 camcorder footage, one unbroken take per episode (120 s by default) — peeks, crossings and chases until it finally catches you. Sound on. Every knob is in this view’s settings (and MCP set_plugin)."
+description: "Camcorder footage of Level 0 with a REC light, timecode, draining battery and the real date and time burned into the tape. Mono-yellow chevron wallpaper with damp tide lines, marker writing and scribbles, wet mustard carpet, a drop ceiling with 2×4 troffers that hum, stutter and die in patches, and things noclipped into the halls — office chairs, filing cabinets, doors, a ladder, turn-only and stop signs, cones, work lights and a camcorder on tripods, CRT TVs showing static, boxes, a mattress, junk heaps. Each episode is one unbroken take made by rules in a pillar maze with walled-off corridors — the runner walks open halls only, rounds corners inside the junction, looks down side halls and turns back at dead ends. Encounters are spread through it — the creature crosses a far junction, leans out of a side opening, steps out, or ambushes at the next corner. You freeze for about a second, scream and run away from it along open halls, looking back over your shoulder, while it chases screaming and falls behind. The last chase always ends it — you go down, a struggle, the camera lands on its side and it drags your body away, leaving a smear — then the tape breaks up and a new one starts. The creature is one of five — Kane's braided wire Lifeform, its hunched thick-set kin, the pale veined Howler with the red chest circle, a Hound crawling under black hair, or a Smiler grinning out of dead lights. Creatures, tripod lights and your own body cast soft shadows. Footsteps, breathing, gasps, screams, a heartbeat, the tube buzz, roars and chase screams fade with distance (CC0 recordings or synthesis; header sound on). Episode length, encounters, the end catch, reaction time, creatures, speeds, look-backs, tape wear, writing, objects, dead lights, shadows and the sound mix are view settings."
 capabilities:
   - viz.read
   - viz.write
@@ -10,8 +10,8 @@ viz:
   graphWalk: false
   idle:
     fixture: host
-  maxBuffers: 1
-  maxBufferFloats: 8
+  maxBuffers: 2
+  maxBufferFloats: 64
   maxParticles: 0
   uniforms:
     - uTime

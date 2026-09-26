@@ -110,7 +110,7 @@ budget.
 | `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
 | `plugins/src/stereo-gram/` | Magic Eye autostereogram — eight morphing objects, a six-bin mic analyser, and local-model AI scenes (`POST /api/ai/stereo`) while the header AI switch is on |
 | `plugins/src/cypher-cic/` | Cypherpunk CIC wall — neon holodeck infograph of SYS + NET, center-hero mosaic |
-| `plugins/src/backrooms/` | Liminal yellow halls — distant organic entity (no nose, white eyes, wide sharp grin) until a charge (arms and fingers out), stays in halls (no wall clip), roar then look / turn back / run (never chase), rare unsynced tube flicks (shared strobe only when close); CC0 tube-buzz, brief music box, entity scream |
+| `plugins/src/backrooms/` | Level 0 camcorder footage — the host runs `frontend/director.ts` on the sky clock (one unbroken take per episode, default 120 s: rule-made encounters in a walled pillar maze, freeze then flee along open halls, the last chase ends in the catch and drag) and writes camera, creature, walled edges and look options to slots 0–1; every knob is a view setting (`visualisation.yml` config, MCP `set_plugin`); CC0 footsteps, breathing, screams, heartbeat, tube buzz, creature roars and chase screams |
 
 Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
 with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,

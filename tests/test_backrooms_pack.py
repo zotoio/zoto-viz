@@ -35,4 +35,6 @@ def test_backrooms_catalog_and_sky(tmp_path, monkeypatch) -> None:
 
     ok = plugins.api_sky(_req("backrooms"))
     assert ok.status == 200
-    assert "fract(uTime * 0.040)" in ok.text
+    assert "zotoVizSlots" in ok.text
+    assert "bool walled(" in ok.text
+    assert row.get("viz", {}).get("maxBuffers") == 2

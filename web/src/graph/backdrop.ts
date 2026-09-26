@@ -651,7 +651,7 @@ let lastCustomFrag: string | null = null;
 let lastPlugin: { id: string; frag: string } | null = null;
 
 export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
-export const PLUGIN_SKY_MAX = 32_000;
+export const PLUGIN_SKY_MAX = 128_000;
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
 
 /** Compile the wrapped fragment on a throwaway WebGL2 context. `null` if no GPU or it linked. */

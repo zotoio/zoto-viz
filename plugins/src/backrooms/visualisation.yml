@@ -11,6 +11,184 @@ look:
   gridOpacity: 0
   mosaic: "off"
 config:
+  # ---- story
+  - key: episode
+    label: episode length (s)
+    type: number
+    default: 120
+    min: 30
+    max: 600
+    step: 10
+    hint: Seconds of footage per generated episode. Longer episodes fit more encounters before the last chase.
+  - key: encounters
+    label: encounters per episode
+    type: number
+    default: 4
+    min: 1
+    max: 8
+    step: 1
+    hint: Most encounters in one episode, counting the last chase. Fewer if the halls never line up for one.
+  - key: endCatch
+    label: ends with the catch
+    type: boolean
+    default: true
+    hint: The last chase of every episode ends with it catching you — a struggle, the camera falls on its side, and you watch your body being dragged away. Off, every chase can be outrun.
+  - key: catchChance
+    label: earlier catch chance (%)
+    type: number
+    default: 0
+    min: 0
+    max: 100
+    step: 5
+    hint: Chance that an earlier charge or ambush already ends the episode in a catch.
+  - key: cornerKill
+    label: corner kill chance (%)
+    type: number
+    default: 15
+    min: 0
+    max: 100
+    step: 5
+    hint: Chance per episode that it waits round a corner and takes you as you walk past — no warning, no chase. After the drag a new tape starts.
+  - key: freeze
+    label: freeze before running (s)
+    type: number
+    default: 1
+    min: 0.2
+    max: 4
+    step: 0.1
+    hint: How long you stare, frozen, after first seeing it before you run.
+  - key: runDistance
+    label: run at once within (m)
+    type: number
+    default: 6
+    min: 2
+    max: 12
+    step: 0.5
+    hint: If it gets this close you run immediately, frozen or not.
+  # ---- creatures
+  - key: creature_lifeform
+    label: Kane's Lifeform
+    type: boolean
+    default: true
+    hint: Tall tangle of black wire, pot-shaped head on a brim, coat-hanger shoulders, arms to the floor.
+  - key: creature_hunched
+    label: hunched Lifeform
+    type: boolean
+    default: true
+    hint: The thick-set, hump-backed kin from the second encounter in Found Footage.
+  - key: creature_howler
+    label: Howler
+    type: boolean
+    default: true
+    hint: Huge pale hairless figure folded under the ceiling — glowing eyes, clawed arms, a red circle on the chest.
+  - key: creature_hound
+    label: Hound
+    type: boolean
+    default: true
+    hint: A starved humanoid crawling on all fours under long black hair, all teeth.
+  - key: creature_smiler
+    label: Smiler
+    type: boolean
+    default: true
+    hint: Only glowing eyes and a long crooked grin in a pocket of dead lights.
+  - key: sameCreature
+    label: one creature per episode
+    type: boolean
+    default: true
+    hint: The same thing hunts you all episode. Off, each encounter picks from the enabled creatures.
+  - key: creatureSpeed
+    label: creature speed (%)
+    type: number
+    default: 100
+    min: 50
+    max: 150
+    step: 5
+    hint: How fast it steps out, charges and chases.
+  # ---- camera
+  - key: walkSpeed
+    label: walk speed (m/s)
+    type: number
+    default: 1.25
+    min: 0.6
+    max: 2
+    step: 0.05
+    hint: Cautious exploring pace.
+  - key: runSpeed
+    label: run speed (m/s)
+    type: number
+    default: 4.2
+    min: 2.5
+    max: 6
+    step: 0.1
+    hint: Panicked running pace with a camcorder; a close look back bursts a little faster.
+  - key: lookBacks
+    label: look back while chased (%)
+    type: number
+    default: 75
+    min: 0
+    max: 100
+    step: 5
+    hint: Chance of an over-the-shoulder look every few seconds of a chase. Seeing it close makes you yelp and sprint.
+  - key: pauses
+    label: stop and look (%)
+    type: number
+    default: 20
+    min: 0
+    max: 60
+    step: 5
+    hint: Chance of stopping at a junction to look down the side halls.
+  - key: handheld
+    label: handheld shake (%)
+    type: number
+    default: 100
+    min: 0
+    max: 200
+    step: 10
+    hint: Step bob, weight shift and hand shake of the camcorder.
+  # ---- look
+  - key: osd
+    label: camcorder display
+    type: boolean
+    default: true
+    hint: REC light, record timecode, battery and the date and time burned into the tape.
+  - key: vhs
+    label: tape wear (%)
+    type: number
+    default: 100
+    min: 0
+    max: 200
+    step: 10
+    hint: Scan-line wobble, grain, chroma noise, dropouts and tracking tears.
+  - key: writing
+    label: wall writing (%)
+    type: number
+    default: 100
+    min: 0
+    max: 300
+    step: 10
+    hint: How often marker writing, arrows and scribbles show up on the walls.
+  - key: objects
+    label: strange objects (%)
+    type: number
+    default: 100
+    min: 0
+    max: 300
+    step: 10
+    hint: How often chairs, cabinets, doors, ladders, signs, tripods, TVs and heaps of junk turn up noclipped into the halls.
+  - key: darkness
+    label: dead lights (%)
+    type: number
+    default: 100
+    min: 0
+    max: 300
+    step: 10
+    hint: How many tubes are dead and how often whole stretches are dark.
+  - key: shadows
+    label: shadows
+    type: boolean
+    default: true
+    hint: Soft shadows of the creature and your own body under the tubes.
+  # ---- sound
   - key: volume
     label: sound volume
     type: number
@@ -18,5 +196,41 @@ config:
     min: 0
     max: 100
     step: 1
-    hint: Master level for the Backrooms sound bed (buzz, fluoro, screech, roar, pant, box). Header sound must be on.
-
+    hint: Master level for the Backrooms sound bed. Header sound must be on.
+  - key: footsteps
+    label: footsteps (%)
+    type: number
+    default: 100
+    min: 0
+    max: 200
+    step: 10
+    hint: Your steps on the damp carpet.
+  - key: breathing
+    label: breathing (%)
+    type: number
+    default: 100
+    min: 0
+    max: 200
+    step: 10
+    hint: Held, panicked and recovering breath, and the gasps.
+  - key: heartbeat
+    label: heartbeat (%)
+    type: number
+    default: 100
+    min: 0
+    max: 200
+    step: 10
+    hint: The heartbeat that speeds up with fear.
+  - key: creatureVolume
+    label: creature (%)
+    type: number
+    default: 100
+    min: 0
+    max: 200
+    step: 10
+    hint: Its roars, chase screams, knocking limbs and the deep HOO.
+  - key: musicBox
+    label: music box
+    type: boolean
+    default: true
+    hint: A brief distant music box early in some episodes.

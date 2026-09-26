@@ -79,7 +79,7 @@ sky/fragment.glsl          # allowed uniforms only: uTime uOpacity uBright uAudi
 - **Local (not git):** `publish_local_plugin` `{files}` or `{zip_b64}` or `{description}`. YAML-only activates; code-bearing returns `consent-required`. Colliding ids remint (`<id>-2`). `overwrite: true` updates that local zip only. Never writes `plugins/src/`.
 - **Contrib zip:** `install_plugin_zip` `{zip_b64}`. Never writes `plugins/src/`. Dirty `plugins/src/<id>/` needs `force: true`.
 
-After a code-bearing zip or src shader/frontend change: `consent_plugin` then `set_view`. Sky GLSL is 403 until consent. Shader cap **32,000 characters**; no `#include`; no extra uniforms.
+After a code-bearing zip or src shader/frontend change: `consent_plugin` then `set_view`. Sky GLSL is 403 until consent. Shader cap **128,000 characters**; no `#include`; no extra uniforms.
 
 Mosaic wall skies bind from the **selected wall row** when that row ships a plugin sky (`pickPluginSkySpec`). Put real graph tiles in `look.mosaicTiles` (not the wall id). Verify the canvas — `sky_available` is not proof. Near-black `(≈5,10,22)` means the sky failed.
 

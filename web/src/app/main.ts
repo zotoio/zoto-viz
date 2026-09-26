@@ -16,6 +16,12 @@ import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
+import {
+  backroomsOptions as backroomsOptionsNow,
+  backroomsSlots,
+  parseBackroomsOptions,
+  setBackroomsOptions,
+} from "../../../plugins/src/backrooms/frontend/director";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -344,16 +350,40 @@ addPresentListener((ts) => {
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
   if (mode.pluginId === "backrooms") {
-    const raw = Number(currentOpts.volume ?? "100");
-    pluginSfx.setMasterVolume((Number.isFinite(raw) ? raw : 100) / 100);
+    const br = backroomsViewOptions();
+    pluginSfx.setMasterVolume(br.volume);
     pluginSfx.setBackrooms(scene.skyTime());
   } else pluginSfx.silence();
 });
 addPresentListener(markPresent);
+let brOptsSrc: Record<string, string> | null = null;
+let brOptsJson = "";
+/** Backrooms view config (UI sliders / toggles, MCP set_plugin) → director options, re-parsed only when they change. */
+function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
+  if (brOptsSrc !== currentOpts) {
+    brOptsSrc = currentOpts;
+    const json = JSON.stringify(currentOpts);
+    if (json !== brOptsJson) {
+      brOptsJson = json;
+      setBackroomsOptions(parseBackroomsOptions(currentOpts));
+    }
+  }
+  return backroomsOptionsNow();
+}
 let stereoBins: number[] = [];
 let stereoBinsAt = 0;
 scene.afterLook = () => {
   const mode = modeById(modeSel.value);
+  if (mode.pluginId === "backrooms" && vizWriter) {
+    // The director owns camera, creature and maze on the sky clock; the sound bed reads the same track.
+    backroomsViewOptions();
+    scene.setHeard(false);
+    const drive = backroomsSlots(scene.skyTime(), new Date(), innerWidth / Math.max(1, innerHeight));
+    vizWriter.writeBuffer(0, drive.slot0);
+    vizWriter.writeBuffer(1, drive.slot1);
+    scene.setPluginUboBuffer(vizWriter.ubo);
+    return;
+  }
   if (mode.pluginId !== "stereo-gram" || !vizWriter) {
     scene.setHeard(false);
     return;
