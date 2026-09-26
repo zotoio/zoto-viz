@@ -46,6 +46,9 @@ ALLOWED_CAPS = frozenset({
 MAX_BUNDLE = 256 * 1024
 DEFAULT_FRONTEND_ENTRY = "frontend/index.ts"
 _ESBUILD = REPO / "web" / "node_modules" / ".bin" / "esbuild"
+_PACK_BUNDLE_SCRIPT = REPO / "web" / "scripts" / "bundle-pack-entry.mjs"
+_SDK_ROOT = REPO / "plugins" / "sdk"
+_bundle_invocations = 0
 # id -> (js sha256, bundle bytes, cache key, entry path, plugin sha256)
 _bundles: dict[str, tuple[str, bytes, str, Path, str]] = {}
 _compile_runs = 0
@@ -191,8 +194,34 @@ def scan_builds() -> int:
     return _scan_builds
 
 
-def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = None) -> dict[str, Any]:
-    """Bundle frontend/ (or legacy entry.ts) with esbuild. Cache key is plugin sha256 + entry mtime."""
+def _install_lint_block_from_compile(stderr: str) -> str | None:
+    import json
+
+    for line in stderr.splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(raw, dict) and raw.get("type") == "pack-install-lint-block":
+            return str(raw.get("message") or "").strip() or None
+    return None
+
+
+def compile_typescript(
+    doc: dict[str, Any],
+    path: Path,
+    sha256: str | None = None,
+    *,
+    update_cache: bool = True,
+    install_lint: bool = False,
+) -> dict[str, Any]:
+    """Bundle frontend/ via bundle-pack-entry.mjs (SDK inlined, boundary enforced)."""
+    from .pack_boundary import PackBundleBoundaryError, boundary_from_compile
+    from .pack_sdk_contract import write_pack_sdk_manifest_cache
+
     home = _plugin_home(path)
     nested = path.name in ("plugin.yml", "plugin.yaml")
     if not has_frontend_part(doc, home, nested=nested):
@@ -213,24 +242,57 @@ def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = Non
     digest_src = _plugin_sha(path, sha256)
     key = _cache_key(digest_src, entry)
     cached = _bundles.get(pid)
-    if cached and cached[2] == key:
+    if update_cache and cached and cached[2] == key:
         return {"hash": cached[0], "capabilities": caps, "bytes": len(cached[1]), "cached": True}
-    if not _ESBUILD.is_file():
-        raise ValueError("esbuild is not installed (cd web && pnpm install)")
-    global _compile_runs
+    if not _PACK_BUNDLE_SCRIPT.is_file():
+        raise ValueError("pack bundle script missing (web/scripts/bundle-pack-entry.mjs)")
+    from . import cursor_agent
+
+    global _compile_runs, _bundle_invocations
+    home_resolved = home.resolve()
+    bundle_env = os.environ.copy()
+    bundle_env.setdefault("NODE_ENV", "production")
+    if install_lint:
+        bundle_env["ZOTO_PACK_INSTALL_LINT"] = "1"
     proc = subprocess.run(
-        [str(_ESBUILD), str(entry), "--bundle", "--format=esm", "--platform=browser",
-         "--target=es2022", "--external:three", "--external:d3-force-3d"],
-        capture_output=True, text=True, timeout=20, check=False,
+        [
+            cursor_agent.node_bin(),
+            str(_PACK_BUNDLE_SCRIPT),
+            str(entry),
+            str(_SDK_ROOT),
+            str(home_resolved),
+            str(REPO),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+        env=bundle_env,
     )
+    _bundle_invocations += 1
     if proc.returncode != 0:
+        block = boundary_from_compile(doc, proc.stderr)
+        if block:
+            raise PackBundleBoundaryError(block)
+        lint_msg = _install_lint_block_from_compile(proc.stderr)
+        if lint_msg:
+            label = str(doc.get("name") or doc.get("id") or "Plugin")
+            raise ValueError(
+                f"{label} was blocked: {lint_msg} "
+                "Nothing was installed and the current wall is unchanged."
+            )
         raise ValueError(proc.stderr.strip() or "esbuild failed")
     js = proc.stdout.encode("utf-8")
     if len(js) > MAX_BUNDLE:
         raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")
     digest = hashlib.sha256(js).hexdigest()
     _compile_runs += 1
-    _bundles[pid] = (digest, js, key, entry, digest_src)
+    try:
+        write_pack_sdk_manifest_cache(home.parent, pid)
+    except OSError:
+        pass
+    if update_cache:
+        _bundles[pid] = (digest, js, key, entry, digest_src)
     return {"hash": digest, "capabilities": caps, "bytes": len(js)}
 
 

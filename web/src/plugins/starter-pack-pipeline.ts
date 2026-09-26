@@ -78,8 +78,6 @@ print(json.dumps({"errors": errors, "pluginIds": ids, "packId": ${JSON.stringify
   return parsed;
 }
 
-export const STARTER_REGRESSION_DIR = "plugins/sdk/starter-regression/pre-9f41244";
-
 export function stageStarterWithFiles(
   starterTemplate: string,
   repoRoot: string,

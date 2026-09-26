@@ -14,7 +14,6 @@ import {
   assertStarterBundleInlinesSdk,
   patchPackIds,
   stageStarterWithFiles,
-  STARTER_REGRESSION_DIR,
   runStarterPackDrawPipeline,
   STARTER_CI_PACK_ID,
   stageStarterTree,
@@ -101,8 +100,10 @@ describe("pack starter template CI", () => {
     15_000,
   );
 
+  const REGRESSION_BAD_VIS = "id: plugin:pack-starter-template\nname: Pack starter\nbase: talkers\n";
+
   it.skipIf(!ciDrawReady)("regression visualisation.yml missing engine fails visualisation-contract", async () => {
-    const badVis = readFileSync(path.join(repoRoot, STARTER_REGRESSION_DIR, "visualisation.yml"), "utf8");
+    const badVis = REGRESSION_BAD_VIS;
     const { stageRoot, packHome } = stageStarterWithFiles(starterTemplate, repoRoot, { visualisationYml: badVis });
     try {
       const result = await runStarterPackDrawPipeline(repoRoot, packHome);
@@ -113,8 +114,23 @@ describe("pack starter template CI", () => {
     }
   });
 
+  const REGRESSION_BAD_FRAG = `void main() {
+  vec3 dir = normalize(vDir);
+  float bars = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float h = zotoVizSlots[i / 4][mod(float(i), 4.0)];
+    float x = float(i) * 0.22 - 0.33;
+    bars += smoothstep(0.02, 0.0, abs(dir.x - x) - 0.04) * h;
+  }
+  float murk = zotoVizSlots[2][0];
+  vec3 col = mix(uBg, uAccent, bars + murk * 0.35);
+  col *= uBright;
+  fragColor = vec4(col, uOpacity);
+}
+`;
+
   it.skipIf(!ciDrawReady)("regression pre-fix shader fails WebGL compile at shader stage", async () => {
-    const badFrag = readFileSync(path.join(repoRoot, STARTER_REGRESSION_DIR, "sky/fragment.glsl"), "utf8");
+    const badFrag = REGRESSION_BAD_FRAG;
     const { stageRoot, packHome } = stageStarterWithFiles(starterTemplate, repoRoot, { fragmentGlsl: badFrag });
     try {
       const result = await runStarterPackDrawPipeline(repoRoot, packHome);
