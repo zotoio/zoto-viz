@@ -37,14 +37,20 @@ async function freshCollect() {
 
 const nativeMapSet = Map.prototype.set;
 
-function countNewTalkerMapSets(run: () => void): number {
+function countNewTalkerIndexWrites(run: () => void): number {
   let n = 0;
-  const spy = vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
+  const mapSpy = vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
     if (typeof key === "string" && key.startsWith("10.0.0.")) n++;
     return nativeMapSet.call(this, key, value);
   });
+  const setAdd = Set.prototype.add;
+  const setSpy = vi.spyOn(Set.prototype, "add").mockImplementation(function (this: Set<unknown>, value) {
+    if (typeof value === "string" && value.startsWith("10.0.0.")) n++;
+    return setAdd.call(this, value);
+  });
   run();
-  spy.mockRestore();
+  mapSpy.mockRestore();
+  setSpy.mockRestore();
   return n;
 }
 
@@ -64,7 +70,7 @@ describe("viz link index R1 pruning", () => {
     mod.collectVizLinks(f200, talkers200, 8);
     mod.collectVizLinks(flowsUniquePairs(400), talkers400, 8);
     const baseline = mod.collectVizLinks(f200, talkers200, 8);
-    const newSets = countNewTalkerMapSets(() => {
+    const newSets = countNewTalkerIndexWrites(() => {
       mod.collectVizLinks(f200, talkers200, 8);
     });
     expect(newSets).toBe(0);
@@ -73,6 +79,7 @@ describe("viz link index R1 pruning", () => {
 
   it("drops an idle pair at frame 3600 but keeps it indexed until then", async () => {
     const mod = await freshCollect();
+    expect(VIZ_LINK_IDLE_DROP_FRAMES).toBe(3600);
     const talkers = new Set(["10.0.0.1", "10.0.0.2"]);
     const once: Flow[] = [
       {
@@ -106,9 +113,9 @@ describe("viz link index R1 pruning", () => {
       const base = batch * 8;
       const talkers = new Set<string>();
       const flows: Flow[] = [];
-      for (let i = 0; i < 8; i++) {
-        const a = `10.1.${base + i}.1`;
-        const b = `10.1.${base + i}.2`;
+      for (let i = 0; i < 12; i++) {
+        const a = `10.1.${base}.1`;
+        const b = `10.1.${base}.${i + 2}`;
         talkers.add(a);
         talkers.add(b);
         flows.push({
@@ -122,7 +129,7 @@ describe("viz link index R1 pruning", () => {
           first_seen: 0,
           last_seen: 1,
           rate: 1,
-          rate_pkt_ab: 10 + i,
+          rate_pkt_ab: 50 - i,
           rate_pkt_ba: 0,
         });
       }
@@ -144,7 +151,7 @@ describe("viz link index R1 pruning", () => {
         headlines: [],
       };
       mod.applyVizFrameContractV2(frame, state, mod.resolveVizFrameCollectOpts(state));
-      expect(frame.links?.length ?? 0).toBeLessThanOrEqual(8);
+      expect(frame.links?.length ?? 0).toBe(8);
     }
   });
 });
@@ -159,7 +166,8 @@ describe("viz link index R2 tie-break", () => {
     const mod = await freshCollect();
     const talkers = new Set(["10.0.0.1"]);
     for (let i = 2; i <= 401; i++) talkers.add(`10.0.0.${i}`);
-    const flows = flowsUniquePairs(400, 50);
+    const flows = flowsUniquePairs(400, 88);
+    for (let i = 0; i < flows.length; i++) flows[i]!.rate_pkt_ab = 88.5;
     const orderA = [...flows];
     const orderB = [...flows].reverse();
     const snap = (f: Flow[]) =>
@@ -214,6 +222,7 @@ describe("viz link index R7 syncTalkerIds production path", () => {
       expect(ids.has(link.dst)).toBe(true);
     }
     expect(ids.has("10.0.0.99")).toBe(true);
+    expect(frame.links?.some((l) => l.src === "10.0.0.1" || l.dst === "10.0.0.1")).toBe(false);
   });
 });
 
@@ -292,13 +301,8 @@ describe("viz link render R6 (collector draft — fade rows deferred)", () => {
       2,
     );
     const pair = lowRank.links.find((l) => l.src === "10.0.0.1" && l.dst === "10.0.0.2")!;
-    const pairHigh = highRank.links.find((l) => l.src === "10.0.0.1" && l.dst === "10.0.0.2")!;
-    const rankLow = lowRank.links.indexOf(pair);
-    const rankHigh = highRank.links.indexOf(pairHigh);
-    expect(vizLinkRecordIdentity(pair.src, pair.dst, rankLow)).toBe(
-      vizLinkRecordIdentity(pairHigh.src, pairHigh.dst, rankHigh),
-    );
-    expect(vizLinkRecordIdentity(pair.src, pair.dst, rankLow)).toBe(vizLinkRecordIdentity("10.0.0.1", "10.0.0.2", rankLow));
+    expect(vizLinkRecordIdentity("10.0.0.1", "10.0.0.2", 0)).toBe(vizLinkRecordIdentity("10.0.0.1", "10.0.0.2", 1));
+    expect(vizLinkRecordIdentity(pair.src, pair.dst, 0)).toBe(`${pair.src}\0${pair.dst}`);
   });
 
   it("R6(b): render key and colour are pure functions of (src, dst)", () => {
@@ -322,7 +326,7 @@ describe("viz link index R7b pool set count", () => {
     const f200 = flowsUniquePairs(200);
     mod.collectVizLinks(f200, talkers, 8);
     mod.collectVizLinks(flowsUniquePairs(400), talkers, 8);
-    const newOn200 = countNewTalkerMapSets(() => mod.collectVizLinks(f200, talkers, 8));
+    const newOn200 = countNewTalkerIndexWrites(() => mod.collectVizLinks(f200, talkers, 8));
     expect(newOn200).toBe(0);
   });
 });
@@ -379,5 +383,6 @@ describe("viz link index R4 reset on reuse", () => {
     );
     expect(out.links[0]?.rate).toBe(4);
     expect(out.links[0]?.dst).toBe("10.0.0.3");
+    expect(out.links.some((l) => l.dst === "10.0.0.2" && l.rate > 0)).toBe(false);
   });
 });

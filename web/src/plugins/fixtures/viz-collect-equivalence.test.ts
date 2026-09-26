@@ -104,9 +104,13 @@ describe("viz collector rewrite allocation", () => {
     expect(collectSrc).not.toMatch(/\.join\s*\(/);
     expect(collectSrc).not.toMatch(/\.sort\s*\(/);
 
-    const talkers = new Set(frameTalkersForCollectEquivalence().map((t) => t.id));
+    const talkers = frameTalkersForCollectEquivalence();
     const opts = collectMod.resolveVizFrameCollectOpts(buildCollectEquivalenceState(1));
-    collectMod.collectVizLinks(buildCollectEquivalenceState(1).flows, talkers, opts.maxLinks);
+    collectMod.applyVizFrameContractV2(
+      { contract: 2, t: 1, dt: 0.016, audio: 0, packets: [], rf: [], talkers, headlines: [] },
+      buildCollectEquivalenceState(1),
+      opts,
+    );
 
     let linkIndexSets = 0;
     const mapSet = Map.prototype.set;
@@ -116,10 +120,17 @@ describe("viz collector rewrite allocation", () => {
     });
 
     for (let f = 2; f <= COLLECT_EQUIVALENCE_FRAMES; f++) {
-      collectMod.collectVizLinks(buildCollectEquivalenceState(f).flows, talkers, opts.maxLinks);
+      const state = buildCollectEquivalenceState(f);
+      collectMod.applyVizFrameContractV2(
+        { contract: 2, t: f, dt: 0.016, audio: 0, packets: [], rf: [], talkers, headlines: [] },
+        state,
+        opts,
+      );
     }
 
-    expect(linkIndexSets).toBe(0);
+    const gaugeFrames = Array.from({ length: COLLECT_EQUIVALENCE_FRAMES - 1 }, (_, i) => i + 2).filter((f) => f % 97 === 0)
+      .length;
+    expect(linkIndexSets).toBe(gaugeFrames);
   });
 
   it("rebuilds talker membership when the talker list changes mid-run", async () => {
@@ -191,7 +202,14 @@ describe("viz collector link pool growth", () => {
     const { collectVizLinks } = await importCollectModule();
     collectVizLinks(f200a, talkers, 8);
     collectVizLinks(flowsForCount(400), talkers, 8);
+    let linkIndexSets = 0;
+    const mapSet = Map.prototype.set;
+    vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
+      if (typeof key === "string" && key.startsWith("10.0.0.")) linkIndexSets++;
+      return mapSet.call(this, key, value);
+    });
     const out = collectVizLinks(f200a, talkers, 8);
+    expect(linkIndexSets).toBe(0);
 
     expect(out.links.map((l) => ({ src: l.src, dst: l.dst, rate: l.rate }))).toEqual(
       expected.links.map((l) => ({ src: l.src, dst: l.dst, rate: l.rate })),

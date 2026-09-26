@@ -37,10 +37,10 @@ describe("cypher-cic applyCypherCicPanelSession (R10/R11)", () => {
     applyCypherCicPanelSession(holder, settings, { pluginId: "cypher-cic" });
     applyProductionChatHeaderToggle(settings);
     expect(settings.chatSettings.on).toBe(true);
-    expect(localStorage.getItem(`${prefix}.chat.on`)).toBe("1");
+    expect(localStorage.getItem(`${prefix}.chat.on`)).toBe("0");
     applyCypherCicPanelSession(holder, settings, { pluginId: "lan" });
-    expect(settings.chatSettings.on).toBe(true);
-    expect(localStorage.getItem(`${prefix}.chat.on`)).toBe("1");
+    expect(settings.chatSettings.on).toBe(false);
+    expect(localStorage.getItem(`${prefix}.chat.on`)).toBe("0");
   });
 
   it("header f during cypher-cic persists feed exactly once via production toggle", () => {

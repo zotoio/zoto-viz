@@ -1,5 +1,5 @@
 /** Stable link record identity from endpoints (not output rank). */
-export function vizLinkRecordIdentity(src: string, dst: string): string {
+export function vizLinkRecordIdentity(src: string, dst: string, _rank = 0): string {
   return `${src}\0${dst}`;
 }
 

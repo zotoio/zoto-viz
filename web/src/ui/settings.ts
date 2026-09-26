@@ -2126,7 +2126,11 @@ export class Settings {
   private persistChat(opts?: { onFromMemory?: boolean }): void {
     const p = this.cfg.storePrefix;
     const c = this.chat;
-    const on = opts?.onFromMemory ? c.on : this.chatOnForPersistence();
+    const on = opts?.onFromMemory
+      ? this.cypherCicPanelCollapsed
+        ? this.readPersistedChatOn()
+        : c.on
+      : this.chatOnForPersistence();
     localStorage.setItem(`${p}.chat.on`, on ? "1" : "0");
     localStorage.setItem(`${p}.chat.textSize`, String(c.textSize));
     this.onChatChange(c);
