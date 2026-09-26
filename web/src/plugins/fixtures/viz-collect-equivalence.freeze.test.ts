@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { buildCollectEquivalenceFixture } from "./viz-collect-equivalence-fixture";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
