@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/letterbox-fill-cache.test.ts",
-  "testName": "^surface letterbox fill cache > 300 frames: same fill instance, 0 regex match, 1 rebuild after theme clearHex change$",
-  "description": "getSurfaceLetterboxFill must cache per clearHex; revert rebuilds every call. Patched vitest: expected { css: 'rgb(15, 18, 24)', \u2026(3) } to be { css: 'rgb(15, 18, 24)', \u2026(3) } // Object.is equality",
-  "expectedRed": "expected { css: 'rgb(15, 18, 24)', \u2026(3) } to be { css: 'rgb(15, 18, 24)', \u2026(3) } // Object.is equality"
-}

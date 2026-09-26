@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/letterbox-fill.test.ts",
-  "testName": "^letterbox fill > nudges exact black clear to a non-black bar fill$",
-  "description": "surfaceLetterboxFill lifts near-black clears so letterbox bars are visible. Patched vitest: expected true to be false // Object.is equality",
-  "expectedRed": "expected true to be false // Object.is equality"
-}

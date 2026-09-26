@@ -1,7 +1,7 @@
 {
   "runner": "pnpm",
-  "testFile": "scripts/lint-brand-casts.mjs",
-  "testName": "^lint brand casts$",
-  "expectedRed": "src/graph/render-host-telemetry.ts: brand cast `as DeviceRect` (only mint modules and *.test.ts)",
-  "description": "Brand `as` casts are confined to mint modules and tests. Patched stray cast in render-host-telemetry.ts fails pnpm lint."
+  "testFile": "src/graph/lint-brand-casts.test.ts",
+  "testName": "^lint brand casts > passes on the production tree$",
+  "expectedRed": "src/graph/render-host-gl-adapter.ts: brand cast `as DeviceRect` (only mint modules and *.test.ts)",
+  "description": "Brand `as` casts are confined to mint modules and tests."
 }

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-renderer-gate.test.ts",
-  "testName": "^pack mirror renderer gate > honors ZOTO_VIZ_EXPECT_RENDERER when set$",
-  "description": "assertPackMirrorRenderer must reject renderer strings that miss the CI needle. Patched vitest: expected [Function] to throw an error",
-  "expectedRed": "expected [Function] to throw an error"
-}
