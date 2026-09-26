@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/pack-mirror-rect-converters.test.ts",
-  "testName": "pack-mirror rect converters > capture-rounding: floor/ceil edges at pr 1.5 (revert row: per-field round → x=2)",
-  "description": "toDeviceCaptureRectInto rounds edges with floor/ceil, not per-field Math.round on x/w."
+  "testName": "^pack-mirror rect converters > capture-equals-viewport: readback device rect matches viewport at pr 1.5$",
+  "description": "readPixels and viewport both use toDeviceRectInto (per-edge Math.round); capture deep-equals viewport."
 }

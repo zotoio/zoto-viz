@@ -31,38 +31,16 @@ export function deviceRect(x: number, y: number, w: number, h: number): DeviceRe
   return { x, y, w, h, __unit: "device" };
 }
 
-function resolveReadbackPixelRatio(rendererPixelRatio: number): number {
-  if (import.meta.env.DEV && typeof globalThis !== "undefined") {
-    const flag = (globalThis as { __ZOTO_PACK_MIRROR_REVERT_WINDOW_DPR__?: boolean })
-      .__ZOTO_PACK_MIRROR_REVERT_WINDOW_DPR__;
-    if (flag && typeof devicePixelRatio === "number" && devicePixelRatio > 0) {
-      return devicePixelRatio;
-    }
-  }
-  return rendererPixelRatio;
-}
-
-type EdgeMode = "viewport" | "capture";
-
 function deviceEdgesFromCss(
   r: CssRect,
   pixelRatio: number,
-  mode: EdgeMode,
 ): { x0: number; x1: number; y0: number; y1: number } {
-  const pr = resolveReadbackPixelRatio(pixelRatio);
-  if (mode === "viewport") {
-    return {
-      x0: Math.round(r.x * pr),
-      x1: Math.round((r.x + r.w) * pr),
-      y0: Math.round(r.y * pr),
-      y1: Math.round((r.y + r.h) * pr),
-    };
-  }
+  const pr = pixelRatio;
   return {
-    x0: Math.floor(r.x * pr),
-    x1: Math.ceil((r.x + r.w) * pr),
-    y0: Math.floor(r.y * pr),
-    y1: Math.ceil((r.y + r.h) * pr),
+    x0: Math.round(r.x * pr),
+    x1: Math.round((r.x + r.w) * pr),
+    y0: Math.round(r.y * pr),
+    y1: Math.round((r.y + r.h) * pr),
   };
 }
 
@@ -81,25 +59,14 @@ function writeDeviceRectFromEdges(
   return out as DeviceRect;
 }
 
-/** Viewport / scissor in device pixels (GL bottom-left); edges rounded with `Math.round`. */
+/** Device pixels (GL bottom-left) for viewport, scissor, readPixels, and blit — per-edge `Math.round`. */
 export function toDeviceRectInto(
   r: CssRect,
   pixelRatio: number,
   canvasDeviceHeight: number,
   out: DeviceRectMut,
 ): DeviceRect {
-  const { x0, x1, y0, y1 } = deviceEdgesFromCss(r, pixelRatio, "viewport");
-  return writeDeviceRectFromEdges(x0, x1, y0, y1, canvasDeviceHeight, out);
-}
-
-/** readPixels / blit sources; start rounded down, end rounded up. */
-export function toDeviceCaptureRectInto(
-  r: CssRect,
-  pixelRatio: number,
-  canvasDeviceHeight: number,
-  out: DeviceRectMut,
-): DeviceRect {
-  const { x0, x1, y0, y1 } = deviceEdgesFromCss(r, pixelRatio, "capture");
+  const { x0, x1, y0, y1 } = deviceEdgesFromCss(r, pixelRatio);
   return writeDeviceRectFromEdges(x0, x1, y0, y1, canvasDeviceHeight, out);
 }
 

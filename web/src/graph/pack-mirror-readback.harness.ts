@@ -16,7 +16,7 @@ import {
   cssRect,
   cssRectTopFromBottomLeft,
   deviceSizeFromCssBox,
-  toDeviceCaptureRectInto,
+  toDeviceRectInto,
   type DeviceRectMut,
 } from "./pack-mirror-rect";
 import { glReadPixels1x1 } from "./pack-mirror-rect.boundary";
@@ -69,7 +69,7 @@ function readPixelCssBottomLeft(
   pr: number,
   canvasDeviceHeight: number,
 ): [number, number, number, number] {
-  toDeviceCaptureRectInto(
+  toDeviceRectInto(
     cssRect(x, HARNESS_CSS_HEIGHT - yBottom - 1, 1, 1),
     pr,
     canvasDeviceHeight,
@@ -273,7 +273,7 @@ export async function runPackMirrorReadbackInPage(
     canvasDeviceHeight,
   );
 
-  toDeviceCaptureRectInto(
+  toDeviceRectInto(
     cssRectTopFromBottomLeft(
       cssRect(innerX, innerY, innerTd.w, innerTd.h),
       HARNESS_CSS_HEIGHT,
@@ -304,9 +304,9 @@ export async function runPackMirrorReadbackInPage(
     ),
     HARNESS_CSS_HEIGHT,
   );
-  toDeviceCaptureRectInto(tlBand, pr, canvasDeviceHeight, captureScratch);
+  toDeviceRectInto(tlBand, pr, canvasDeviceHeight, captureScratch);
   const topLeftPeak = maxRedInRect(gl, captureScratch.x, captureScratch.y, captureScratch.w, captureScratch.h);
-  toDeviceCaptureRectInto(brBand, pr, canvasDeviceHeight, captureScratch);
+  toDeviceRectInto(brBand, pr, canvasDeviceHeight, captureScratch);
   const bottomRightPeak = maxRedInRect(gl, captureScratch.x, captureScratch.y, captureScratch.w, captureScratch.h);
 
   let quadrantTlOk: boolean | undefined;
