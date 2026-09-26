@@ -4,6 +4,7 @@ export function flashModeLoadKeptPrevious(declinedLabel: string, keptLabel: stri
   const hint = document.getElementById("hint");
   if (hint) {
     delete hint.dataset.morphTo;
+    hint.classList.remove("morphing");
     hint.textContent = msg;
   }
   return msg;
