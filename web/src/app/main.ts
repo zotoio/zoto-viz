@@ -110,7 +110,6 @@ import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-vi
 import { revertModeSelection } from "./apply-mode-mosaic";
 import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
-import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { mergePluginConsentLivePatch } from "./plugin-consent-live";
