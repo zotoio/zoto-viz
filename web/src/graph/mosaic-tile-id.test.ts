@@ -5,6 +5,7 @@ import {
   mosaicTileSlotId,
   mosaicTileViewId,
   mosaicWallUsesView,
+  parseMosaicSlotId,
 } from "./mosaic-tile-id";
 import { configStoreId } from "../plugins/instances";
 import { parsePluginId } from "../plugins/instances";
@@ -24,10 +25,23 @@ describe("mosaic tile slot ids", () => {
     expect(mosaicWallUsesView(tiles, "plugin:b")).toBe(true);
   });
 
+  it("parseMosaicSlotId splits pack and numeric slot", () => {
+    expect(parseMosaicSlotId("plugin:air-bt!1")).toEqual({
+      packId: "air-bt",
+      slot: 1,
+      viewId: "plugin:air-bt",
+    });
+    expect(parseMosaicSlotId("plugin:topology")).toEqual({
+      packId: "topology",
+      slot: null,
+      viewId: "plugin:topology",
+    });
+  });
+
   it("keeps one config store id for two tiles of the same pack", () => {
     const packId = parsePluginId("plugin:air-bt")!;
     const a = configStoreId({ id: packId });
-    const b = configStoreId({ id: parsePluginId(mosaicTileViewId("plugin:air-bt!1"))! });
+    const b = configStoreId({ id: parsePluginId("plugin:air-bt!1")! });
     expect(a).toBe("air-bt");
     expect(b).toBe("air-bt");
   });

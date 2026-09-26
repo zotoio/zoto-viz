@@ -21,6 +21,27 @@ export function mosaicTileSlotId(viewId: string, slot: number): string {
   return `${viewId}${SLOT_MARK}${slot}`;
 }
 
+export type ParsedMosaicSlotId = {
+  /** Plugin pack id (no `plugin:` prefix); null for non-plugin leaves. */
+  packId: string | null;
+  /** Numeric tile slot when the leaf id ends with `!n`; null for the primary unsuffixed tile. */
+  slot: number | null;
+  /** Catalog view id with any numeric `!n` suffix stripped. */
+  viewId: string;
+};
+
+/** Single host entry point for a raw mosaic leaf / mode id (including `plugin:pack!n`). */
+export function parseMosaicSlotId(raw: string): ParsedMosaicSlotId {
+  const viewId = mosaicTileViewId(raw);
+  const slot = mosaicTileSlotSuffix(raw);
+  let packId: string | null = null;
+  if (viewId.startsWith("plugin:")) {
+    const rest = viewId.slice("plugin:".length);
+    packId = rest.split(":")[0] || null;
+  }
+  return { packId, slot, viewId };
+}
+
 /** Tile indices (1-based) where a view id appears on the wall. */
 export function mosaicPlacedTileIndices(tileSlotIds: readonly string[], viewId?: string): number[] {
   const want = viewId ?? "";
