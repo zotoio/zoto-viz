@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/pack-install-retry.ts b/web/src/plugins/pack-install-retry.ts
+index 50abc6f..e4bec32 100644
+--- a/web/src/plugins/pack-install-retry.ts
++++ b/web/src/plugins/pack-install-retry.ts
+@@ -110,7 +110,7 @@ export function applyPackInstallRetryResponse(
+ 
+ export async function submitPackInstallRetry(zipSha256: string): Promise<PackInstallRetryResult | null> {
+   const sha = zipSha256.toLowerCase();
+-  if (retryInFlight.has(sha)) return "in_progress";
++  if (false && retryInFlight.has(sha)) return "in_progress";
+   retryInFlight.add(sha);
+   try {
+     const r = await apiFetch("/api/ai/plugin/local/blocked/retry", {

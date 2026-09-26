@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-install-retry.test.ts",
+  "testName": "in flight: disables button",
+  "description": "in flight: disables button"
+}

@@ -34,6 +34,7 @@ from . import paths
 from . import plugin_migration as pmg
 from . import plugin_zip as pz
 from . import plugin_local
+from .pack_boundary import PackBundleBoundaryError
 from . import plugins
 from . import profiles
 
@@ -683,7 +684,8 @@ def install_catalog_zip(
         tmp_path.write_bytes(raw)
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+        if dest.is_file() and pz.plugin_sha256(dest) == incoming and runtime.is_dir():
+            plugin_local._verify_pack_bundle(runtime, doc, incoming)
             unpacked = pz.unpack_zip(dest, runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
@@ -696,10 +698,18 @@ def install_catalog_zip(
         if dest.is_file() and not overwrite:
             raise ValueError(f"plugin {pid!r} already exists (pass overwrite: true)")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        staged = dest.with_name(dest.name + ".tmp")
-        shutil.copy2(tmp_path, staged)
-        os.replace(staged, dest)
-        unpacked = pz.unpack_zip(dest, runtime)
+        from .plugin_install import install_zip_to_runtime
+
+        upgrade = dest.is_file() and runtime.is_dir()
+        unpacked = install_zip_to_runtime(
+            tmp_path,
+            dest,
+            runtime,
+            doc,
+            rel=str(dest),
+            sha256=incoming,
+            upgrade=upgrade,
+        )
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -1047,6 +1057,8 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             "paths": e.paths,
             "hint": "pass force: true to write despite uncommitted catalog changes",
         }, is_error=True)
+    except PackBundleBoundaryError as e:
+        return _tool_text({"ok": False, **e.block.to_dict()}, is_error=True)
     except ValueError as e:
         return _tool_text({"error": str(e)}, is_error=True)
 

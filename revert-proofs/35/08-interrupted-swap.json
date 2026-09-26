@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_interrupted_swap_uses_after_first_rename_hook",
+  "description": "Interrupted swap recovery is disabled."
+}

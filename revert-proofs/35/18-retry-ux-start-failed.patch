@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/pack-install-retry.ts b/web/src/plugins/pack-install-retry.ts
+index 50abc6f..4e9e0a9 100644
+--- a/web/src/plugins/pack-install-retry.ts
++++ b/web/src/plugins/pack-install-retry.ts
+@@ -89,7 +89,7 @@ export function applyPackInstallRetryResponse(
+     installHistory.push(packRetrySuccessHistoryMessage(name, ver));
+     return "success";
+   }
+-  if (result === "start_failed") {
++  if (false && result === "start_failed") {
+     const name = body.name || body.id;
+     const ver = body.version ?? 2;
+     const message = body.message || packRetryStartFailedMessage(name, ver);
