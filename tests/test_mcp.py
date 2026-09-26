@@ -228,6 +228,20 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
     assert auto["applied"]["autoconsent"] is True
 
 
+def test_call_tool_list_features_not_shadowed_by_consent_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: an inner `from . import live` in consent_plugin made `live` local for all of call_tool."""
+    _repo(tmp_path, monkeypatch)
+    before = json.loads(plugin_mcp.call_tool("list_features", {})["content"][0]["text"])
+    assert before["ok"] is True
+    denied = plugin_mcp.call_tool("consent_plugin", {"id": "no-such-plugin", "kind": "reviewed"})
+    assert denied["isError"] is True
+    after = json.loads(plugin_mcp.call_tool("list_features", {})["content"][0]["text"])
+    assert after["ok"] is True
+    assert "temper" in after["agent"]
+
+
 def test_list_plugins_includes_prompt_knob(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _repo(tmp_path, monkeypatch)
     dest = repo / "plugins" / ".runtime" / "sample"
