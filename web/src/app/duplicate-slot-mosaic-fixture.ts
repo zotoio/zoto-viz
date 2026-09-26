@@ -50,7 +50,12 @@ export function mountDuplicateSlotMosaicHarness(
     bindThisView({ settings, ...bindDeps }, modeId);
   };
   const applyMode = (modeId: string, flags: { keepLayout?: boolean } = {}) => {
-    rebindViewDrawerOnApplyMode(bindThisViewForMode, modeId, flags);
+    rebindViewDrawerOnApplyMode(bindThisViewForMode, {
+      settings,
+      modeId,
+      flags,
+      hostModeById: bindDeps.hostModeById,
+    });
   };
   mosaic = new Mosaic({
     wall,

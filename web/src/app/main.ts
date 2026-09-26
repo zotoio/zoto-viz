@@ -798,7 +798,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   feedTitleCube.setActive(rainPics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
-  rebindViewDrawerOnApplyMode(bindThisView, m.id, flags);
+  rebindViewDrawerOnApplyMode(bindThisView, { settings, modeId: m.id, flags, hostModeById });
   $("modeOpts").replaceChildren();
   void (async () => {
     if (!(await ensureReviewed(spec))) {

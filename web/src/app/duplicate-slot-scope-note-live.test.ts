@@ -49,7 +49,21 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     return el!;
   }
 
-  it("same drawer node, unsaved field, n=2 then 3 then removed at 1, exactly 3 note writes", async () => {
+  function assertDrawerEditingStable(
+    settings: Settings,
+    viewLayer: HTMLElement,
+    gain: HTMLInputElement,
+    typed: string,
+  ): void {
+    expect(drawerRoot(settings)).toBe(settings.drawerEl);
+    expect(viewSection(settings)).toBe(viewLayer);
+    expect(viewLayer.isConnected).toBe(true);
+    expect(document.activeElement).toBe(gain);
+    expect(gain.value).toBe(typed);
+    expect(settings.isOpen).toBe(true);
+  }
+
+  it("same drawer node, unsaved field, n=1→2→3→2→1 via slot picker, note text and focus preserved", async () => {
     resetPackScopeNoteMetrics();
     const spec = loadSettingsDeclFixture();
     setPluginModes([
@@ -68,53 +82,55 @@ describe("duplicate slot shared config > scope note follows live tile count whil
       fallbackModeId: () => PACK,
     });
 
-    const twoTiles = [PACK, `${PACK}!1`, "plugin:topology", "plugin:memory"];
-    applyMosaicTiles(settings, mosaic, twoTiles);
-    bindThisView(`${PACK}!1`);
-    settings.openView(`${PACK}!1`);
+    const onePack = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"];
+    applyMosaicTiles(settings, mosaic, onePack);
+    bindThisView(PACK);
+    settings.openView(PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
     const viewLayer = viewSection(settings);
-    let gain = gainSlider(settings);
+    const gain = gainSlider(settings);
+    gain.focus();
     gain.value = "7";
     gain.dispatchEvent(new Event("input", { bubbles: true }));
 
-    expect(viewLayer.isConnected).toBe(true);
-    expect(scopeNotes(settings)).toHaveLength(1);
-    expect(scopeNoteCount(settings)).toBe(2);
-    expect(settings.isOpen).toBe(true);
+    assertDrawerEditingStable(settings, viewLayer, gain, "7");
+    expect(scopeNotes(settings)).toHaveLength(0);
 
-    pickMosaicSlot(settings, 3, "plugin:disk");
+    pickMosaicSlot(settings, 1, PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(viewSection(settings)).toBe(viewLayer);
+    assertDrawerEditingStable(settings, viewLayer, gain, "7");
+    expect(scopeNotes(settings)).toHaveLength(1);
+    expect(scopeNotes(settings)[0]?.textContent).toBe(
+      `Changes apply to all 2 ${spec.name} tiles on this wall`,
+    );
     expect(scopeNoteCount(settings)).toBe(2);
 
-    const threeTiles = [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"];
-    applyMosaicTiles(settings, mosaic, threeTiles);
+    pickMosaicSlot(settings, 2, PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(viewSection(settings)).toBe(viewLayer);
-    expect(viewLayer.isConnected).toBe(true);
-    gain = gainSlider(settings);
-    expect(gain.value).toBe("7");
+    assertDrawerEditingStable(settings, viewLayer, gain, "7");
     expect(scopeNotes(settings)).toHaveLength(1);
-    expect(scopeNoteCount(settings)).toBe(3);
     expect(scopeNotes(settings)[0]?.textContent).toBe(
       `Changes apply to all 3 ${spec.name} tiles on this wall`,
     );
+    expect(scopeNoteCount(settings)).toBe(3);
 
-    const onePack = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"];
-    applyMosaicTiles(settings, mosaic, onePack);
+    pickMosaicSlot(settings, 2, "plugin:topology");
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(viewSection(settings)).toBe(viewLayer);
-    expect(viewLayer.isConnected).toBe(true);
-    gain = gainSlider(settings);
-    expect(gain.value).toBe("7");
-    expect(settings.isOpen).toBe(true);
+    assertDrawerEditingStable(settings, viewLayer, gain, "7");
+    expect(scopeNotes(settings)[0]?.textContent).toBe(
+      `Changes apply to all 2 ${spec.name} tiles on this wall`,
+    );
+    expect(scopeNoteCount(settings)).toBe(2);
+
+    pickMosaicSlot(settings, 1, "plugin:memory");
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    assertDrawerEditingStable(settings, viewLayer, gain, "7");
     expect(scopeNotes(settings)).toHaveLength(0);
     expect(drawerRoot(settings).textContent).not.toMatch(/Changes apply to all 1/);
     const wall = packWallScopeFromAnim(settings.animSettings);
     expect(countTilesSharingConfigStore(spec, wall.tileModeIds)).toBe(1);
-    expect(readPackScopeNoteMetrics().textWrites).toBe(3);
+    expect(readPackScopeNoteMetrics().textWrites).toBe(4);
 
     settings.el.remove();
   });
