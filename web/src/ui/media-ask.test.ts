@@ -110,6 +110,20 @@ describe("askUserMedia", () => {
     expect(getUserMedia).toHaveBeenCalledTimes(2);
   });
 
+  it("does not auto-open the mic when mediaAccept is set but permission is still prompt", async () => {
+    localStorage.setItem("zoto-viz.mediaAccept", JSON.stringify({ mic: true, cam: false }));
+    const getUserMedia = vi.fn(async () => fakeStream());
+    mockCapture(getUserMedia);
+    const pending = askUserMedia({ audio: true, video: false }, "pulse microphone");
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-media-ask]")).toBeTruthy();
+    });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    [...document.querySelectorAll("button")].find((b) => b.textContent === "Not now")!.click();
+    await expect(pending).resolves.toBeNull();
+    localStorage.removeItem("zoto-viz.mediaAccept");
+  });
+
   it("still asks in-page when the Permissions API already says granted", async () => {
     const stream = fakeStream();
     mockCapture(vi.fn(async () => stream));

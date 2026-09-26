@@ -347,13 +347,21 @@ async function flush(): Promise<void> {
       continue;
     }
     if (w.audio && (await queryMicPermissionState()) === "granted") {
-      const stream = await captureOne({ audio: w.audio, video: w.video });
-      if (stream && !waiterAllowed(w)) {
-        for (const t of stream.getTracks()) t.stop();
-        w.resolve(null);
+      if (w.reason === "pulse microphone") {
+        const stream = await captureOne({ audio: w.audio, video: w.video });
+        if (stream && !waiterAllowed(w)) {
+          for (const t of stream.getTracks()) t.stop();
+          w.resolve(null);
+          continue;
+        }
+        w.resolve(stream);
         continue;
       }
-      w.resolve(stream);
+      needAsk.push(w);
+      continue;
+    }
+    if (w.audio && (await queryMicPermissionState()) === "prompt") {
+      needAsk.push(w);
       continue;
     }
     // Permissions API "granted" is not an accept — Cursor Simple Browser
