@@ -85,14 +85,16 @@ float scene(vec3 p) {
   float d = smin(floor, max(shell, -inner), 0.55);
   vec3 bp = p - vec3(sl(1, 0.0), sl(1, 1.0), sl(1, 2.0));
   if (mark < 0.5) bp = vec3(0.0, 1.1, 0.0);
-  d = smin(d, sdSphere(bp, 1.05 * ballS), 0.15);
+  d = smin(d, sdSphere(bp, 1.18 * ballS), 0.15);
   for (int i = 0; i < 6; i++) {
     if (float(i) < carN) {
       float base = 6.0 + float(i) * 9.0;
       vec3 c = p - vec3(sl(1, base), sl(1, base + 1.0) + 0.35, sl(1, base + 2.0));
       if (mark < 0.5) c = p - vec3(float(i - 2) * 4.5, 0.35, float(i % 2) * 5.0 - 2.5);
       else c = rotY(sl(1, base + 3.0)) * c;
-      d = smin(d, sdBox(c, vec3(1.0, 0.35, 1.85)), 0.12);
+      float team = sl(1, base + 7.0);
+      vec3 carCol = team > 0.5 ? vec3(0.35, 0.65, 1.0) : vec3(1.0, 0.55, 0.22);
+      d = smin(d, sdBox(c, vec3(1.08, 0.38, 1.95)), 0.12);
     }
   }
   return d;
@@ -100,6 +102,7 @@ float scene(vec3 p) {
 
 void main() {
   vec3 dir = normalize(vDir);
+  vec3 zotoFail = vec3(0.937, 0.325, 0.314);
   float theme = sl(0, 15.0);
   vec3 top = theme > 1.5 ? vec3(0.12, 0.04, 0.22) : (theme > 0.5 ? vec3(0.07, 0.1, 0.2) : vec3(0.45, 0.65, 0.92));
   vec3 bot = mix(uBg, uAccent, 0.45);
@@ -130,6 +133,10 @@ void main() {
       ));
       vec3 turf = mix(vec3(0.12, 0.38, 0.2), vec3(0.08, 0.14, 0.26), step(0.5, theme));
       vec3 hit = mix(turf, uAccent, 0.25) * (0.35 + 0.65 * clamp(dot(n, normalize(vec3(0.3, 0.95, 0.2))), 0.0, 1.0));
+      float failAHit = sl(0, 28.0);
+      if (failAHit > 0.05 && abs(p.y) > 2.0) {
+        hit = mix(hit, zotoFail, clamp(failAHit, 0.0, 1.0) * 0.55);
+      }
       col = mix(col, hit, 0.92);
       break;
     }
@@ -146,7 +153,7 @@ void main() {
   float scoreO = sl(0, 9.0);
   float scoreB = sl(0, 10.0);
   float clockS = sl(0, 8.0);
-  vec3 zotoFail = vec3(0.937, 0.325, 0.314);
+  float rm = sl(0, 26.0);
 
   vec2 hud = vDir.xy;
   float bar = box2(hud - vec2(0.0, 0.78), vec2(0.42, 0.11));
@@ -167,17 +174,28 @@ void main() {
   col = mix(col, vec3(0.92), clk * 0.85);
 
   if (demoF > 0.5) {
-    float demoBox = box2(hud - vec2(-0.34, 0.62), vec2(0.08, 0.04));
+    float demoBox = box2(hud - vec2(-0.34, 0.62), vec2(0.09, 0.035));
     float demoOn = 1.0 - smoothstep(0.0, 0.018, demoBox);
     col = mix(col, vec3(0.75, 0.85, 1.0), demoOn * 0.9);
   }
 
-  if (failA > 0.35) {
+  if (failA > 0.05) {
     float failStrip = box2(hud - vec2(0.0, -0.72), vec2(0.5, 0.045));
     col = mix(col, zotoFail, (1.0 - smoothstep(0.0, 0.02, failStrip)) * clamp(failA, 0.0, 1.0));
   } else if (gFlash > 0.01 && mark > 0.5) {
-    col += uAccent * gFlash * 0.35;
+    float pulse = rm > 0.5 ? 1.0 : (0.65 + 0.35 * sin(uTime * 1.4));
+    col += uAccent * gFlash * pulse * 0.28;
   }
+
+  float chip = box2(hud - vec2(-0.38, -0.55), vec2(0.14, 0.16));
+  float chipOn = 1.0 - smoothstep(0.0, 0.022, chip);
+  col = mix(col, vec3(0.05, 0.07, 0.12), chipOn * 0.88);
+  float leg1 = box2(hud - vec2(-0.42, -0.48), vec2(0.11, 0.018));
+  float leg2 = box2(hud - vec2(-0.42, -0.52), vec2(0.11, 0.018));
+  float leg3 = box2(hud - vec2(-0.42, -0.56), vec2(0.11, 0.018));
+  col = mix(col, vec3(0.85, 0.55, 0.25), (1.0 - smoothstep(0.0, 0.012, leg1)) * chipOn * 0.9);
+  col = mix(col, vec3(0.75, 0.85, 1.0), (1.0 - smoothstep(0.0, 0.012, leg2)) * chipOn * 0.85);
+  col = mix(col, zotoFail, (1.0 - smoothstep(0.0, 0.012, leg3)) * chipOn * 0.75);
 
   col *= uBright;
   col = max(col, mix(bot, top, 0.35) * 0.55);

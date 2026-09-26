@@ -11,7 +11,12 @@ import {
   RCS_CAPS,
   RCS_DEFAULTS,
   RCS_FIXED_DT,
+  RCS_GOAL_CELEBRATION_COOLDOWN_SEC,
+  RCS_CHALLENGER_RATE_MARGIN,
+  RCS_MAX_CAR_SPEED,
   RCS_MAX_CARS,
+  RCS_MIN_DIRECTOR_CUT_SEC,
+  RCS_TALKER_SLOT_HOLD_SEC,
   RCS_SLOT,
   RCS_SLOT0_FLOATS,
   RCS_SLOT1_FLOATS,
@@ -33,7 +38,6 @@ const GOAL_H = 4;
 const BALL_R = 1.05;
 const BOOST_MAX = 1.5;
 const HISTORY_LEN = 240;
-const HOST_VACANT_SEC = 2.5;
 const PHASE_PLAY = 0;
 const PHASE_GOAL = 1;
 const PHASE_REPLAY = 2;
@@ -76,10 +80,12 @@ interface SimState {
   directorCam: number;
   directorT: number;
   simTime: number;
-  failAlert: number;
-  failUntil: number;
+  failDisplay: number;
+  lastCelebrationAt: number;
+  celebrationT: number;
+  goalPulseBank: number;
   live: RcsLiveDrive;
-  history: Snap[];
+  historyPrealloc: Snap[];
   historyHead: number;
   replayIdx: number;
   physicsSteps: number;
@@ -87,6 +93,8 @@ interface SimState {
   hostToCar: Map<string, number>;
   carToHost: (string | null)[];
   vacantUntil: Map<number, number>;
+  carAssignedAt: Map<number, number>;
+  maxSpeedSeen: number;
 }
 
 let options: RcsOptions = { ...RCS_DEFAULTS };
@@ -108,12 +116,50 @@ function rng(st: SimState): number {
   return st.seed / 4294967296;
 }
 
-function cloneCars(cars: Car[]): Car[] {
-  return cars.map((c) => ({
-    ...c,
-    pos: { ...c.pos },
-    vel: { ...c.vel },
+function emptyCar(team: number): Car {
+  return {
+    pos: { x: 0, y: 0.4, z: 0 },
+    vel: { x: 0, y: 0, z: 0 },
+    yaw: 0,
+    pitch: 0,
+    boost: 0.25,
+    flip: 0,
+    team,
+    jump: 0,
+    onGround: true,
+    hostId: null,
+    hostLabelHash: 0,
+  };
+}
+
+function buildHistoryRing(maxCars: number): Snap[] {
+  return Array.from({ length: HISTORY_LEN }, () => ({
+    ball: { pos: { x: 0, y: BALL_R, z: 0 }, vel: { x: 0, y: 0, z: 0 } },
+    cars: Array.from({ length: maxCars }, (_, i) => emptyCar(i % 2)),
+    score: [0, 0] as [number, number],
+    clock: 0,
+    camYaw: 0.75,
+    camPitch: -0.4,
+    camDist: 32,
   }));
+}
+
+function copyCarInto(dst: Car, src: Car): void {
+  dst.pos.x = src.pos.x;
+  dst.pos.y = src.pos.y;
+  dst.pos.z = src.pos.z;
+  dst.vel.x = src.vel.x;
+  dst.vel.y = src.vel.y;
+  dst.vel.z = src.vel.z;
+  dst.yaw = src.yaw;
+  dst.pitch = src.pitch;
+  dst.boost = src.boost;
+  dst.flip = src.flip;
+  dst.team = src.team;
+  dst.jump = src.jump;
+  dst.onGround = src.onGround;
+  dst.hostId = src.hostId;
+  dst.hostLabelHash = src.hostLabelHash;
 }
 
 export function setRcsOptions(o: Record<string, string | undefined>): RcsOptions {
@@ -165,10 +211,12 @@ export function resetRcsSim(seed = options.seed): void {
     directorCam: 0,
     directorT: 0,
     simTime: 0,
-    failAlert: 0,
-    failUntil: 0,
+    failDisplay: 0,
+    lastCelebrationAt: -999,
+    celebrationT: 0,
+    goalPulseBank: 0,
     live: ingestLiveFrame(undefined),
-    history: new Array(HISTORY_LEN),
+    historyPrealloc: buildHistoryRing(n),
     historyHead: 0,
     replayIdx: 0,
     physicsSteps: 0,
@@ -176,6 +224,8 @@ export function resetRcsSim(seed = options.seed): void {
     hostToCar: new Map(),
     carToHost: new Array(n).fill(null),
     vacantUntil: new Map(),
+    carAssignedAt: new Map(),
+    maxSpeedSeen: 0,
   };
   for (let i = 0; i < 16; i++) {
     particlePool.emit(
@@ -188,67 +238,129 @@ export function resetRcsSim(seed = options.seed): void {
 }
 
 function pushHistory(st: SimState, cam: { yaw: number; pitch: number; dist: number }): void {
-  const snap: Snap = {
-    ball: { pos: { ...st.ball.pos }, vel: { ...st.ball.vel } },
-    cars: cloneCars(st.cars),
-    score: [...st.score] as [number, number],
-    clock: st.clock,
-    camYaw: cam.yaw,
-    camPitch: cam.pitch,
-    camDist: cam.dist,
-  };
-  st.history[st.historyHead % HISTORY_LEN] = snap;
+  const snap = st.historyPrealloc[st.historyHead % HISTORY_LEN]!;
+  snap.ball.pos.x = st.ball.pos.x;
+  snap.ball.pos.y = st.ball.pos.y;
+  snap.ball.pos.z = st.ball.pos.z;
+  snap.ball.vel.x = st.ball.vel.x;
+  snap.ball.vel.y = st.ball.vel.y;
+  snap.ball.vel.z = st.ball.vel.z;
+  for (let i = 0; i < st.cars.length; i++) copyCarInto(snap.cars[i]!, st.cars[i]!);
+  snap.score[0] = st.score[0];
+  snap.score[1] = st.score[1];
+  snap.clock = st.clock;
+  snap.camYaw = cam.yaw;
+  snap.camPitch = cam.pitch;
+  snap.camDist = cam.dist;
   st.historyHead++;
+}
+
+function isCarSlotFree(st: SimState, idx: number): boolean {
+  if (st.carToHost[idx] !== null) return false;
+  const hold = st.vacantUntil.get(idx);
+  return hold === undefined || st.simTime >= hold;
 }
 
 function allocateCarForHost(st: SimState): number {
   for (let i = 0; i < st.cars.length; i++) {
-    if (st.carToHost[i] !== null) continue;
-    const hold = st.vacantUntil.get(i);
-    if (hold !== undefined && st.simTime < hold) continue;
+    if (!isCarSlotFree(st, i)) continue;
     st.vacantUntil.delete(i);
     return i;
   }
   return -1;
 }
 
+function bindTalkerToCar(st: SimState, talkerId: string, idx: number, live: RcsLiveDrive): void {
+  st.hostToCar.set(talkerId, idx);
+  st.carToHost[idx] = talkerId;
+  st.carAssignedAt.set(idx, st.simTime);
+  const c = st.cars[idx]!;
+  c.hostId = talkerId;
+  c.hostLabelHash = live.perHostLabel.get(talkerId) ?? hostLabelHash(talkerId);
+}
+
+function occupantBoost(st: SimState, carIdx: number): number {
+  const id = st.carToHost[carIdx];
+  if (!id) return 0;
+  return st.live.perHostBoost.get(id) ?? 0;
+}
+
+function tryChallengerTakeover(st: SimState, talkerId: string, boost: number, live: RcsLiveDrive): boolean {
+  let bestIdx = -1;
+  let bestOcc = Infinity;
+  for (let i = 0; i < st.cars.length; i++) {
+    const occ = st.carToHost[i];
+    if (!occ) continue;
+    const assigned = st.carAssignedAt.get(i) ?? 0;
+    if (st.simTime - assigned < RCS_TALKER_SLOT_HOLD_SEC) continue;
+    const ob = occupantBoost(st, i);
+    if (boost < ob * RCS_CHALLENGER_RATE_MARGIN) continue;
+    if (ob < bestOcc) {
+      bestOcc = ob;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx < 0) return false;
+  const prev = st.carToHost[bestIdx]!;
+  st.hostToCar.delete(prev);
+  const c = st.cars[bestIdx]!;
+  c.hostId = null;
+  bindTalkerToCar(st, talkerId, bestIdx, live);
+  return true;
+}
+
 function syncTalkerHosts(st: SimState, live: RcsLiveDrive, dt: number): void {
   const seen = new Set<string>();
-  for (const [hostId, boost] of live.perHostBoost) {
-    seen.add(hostId);
-    let idx = st.hostToCar.get(hostId);
+  for (const [talkerId, boost] of live.perHostBoost) {
+    seen.add(talkerId);
+    let idx = st.hostToCar.get(talkerId);
     if (idx === undefined) {
       const slot = allocateCarForHost(st);
-      if (slot < 0) continue;
-      idx = slot;
-      st.hostToCar.set(hostId, idx);
-      st.carToHost[idx] = hostId;
-      const c = st.cars[idx]!;
-      c.hostId = hostId;
-      c.hostLabelHash = live.perHostLabel.get(hostId) ?? hostLabelHash(hostId);
+      if (slot >= 0) {
+        bindTalkerToCar(st, talkerId, slot, live);
+        idx = slot;
+      } else if (!tryChallengerTakeover(st, talkerId, boost, live)) {
+        continue;
+      } else {
+        idx = st.hostToCar.get(talkerId);
+      }
     }
+    if (idx === undefined) continue;
     const c = st.cars[idx]!;
-    c.hostLabelHash = live.perHostLabel.get(hostId) ?? c.hostLabelHash;
+    c.hostLabelHash = live.perHostLabel.get(talkerId) ?? c.hostLabelHash;
     const mix = live.demo ? 0.55 : boost;
     c.boost = clamp(c.boost + mix * dt * 0.8, 0, BOOST_MAX);
   }
-  for (const [hostId, idx] of [...st.hostToCar.entries()]) {
-    if (seen.has(hostId)) continue;
-    st.hostToCar.delete(hostId);
+  for (const [talkerId, idx] of [...st.hostToCar.entries()]) {
+    if (seen.has(talkerId)) continue;
+    st.hostToCar.delete(talkerId);
     st.carToHost[idx] = null;
+    st.carAssignedAt.delete(idx);
     const c = st.cars[idx]!;
     c.hostId = null;
-    st.vacantUntil.set(idx, st.simTime + HOST_VACANT_SEC);
+    st.vacantUntil.set(idx, st.simTime + RCS_TALKER_SLOT_HOLD_SEC);
   }
+}
+
+function tryStartCelebration(st: SimState, packetEnergy: number): boolean {
+  if (st.simTime - st.lastCelebrationAt < RCS_GOAL_CELEBRATION_COOLDOWN_SEC) return false;
+  st.lastCelebrationAt = st.simTime;
+  st.celebrationT = 1.0;
+  const size = clamp(0.15 + packetEnergy * 0.65, 0.15, 1);
+  const count = Math.max(8, Math.floor(RCS_CAPS.maxParticles * size));
+  particlePool.burst(count, st.ball.pos.x, st.ball.pos.y, st.ball.pos.z, 3 + size * 4, () => rng(st));
+  return true;
 }
 
 function applyLive(st: SimState, live: RcsLiveDrive, dt: number): void {
   st.live = live;
   syncTalkerHosts(st, live, dt);
 
-  if (live.failAlert > 0) {
-    st.failAlert = Math.max(st.failAlert, live.failAlert);
-    st.failUntil = st.simTime + 5;
+  const targetFail = live.failAlert;
+  if (targetFail > 0) {
+    st.failDisplay += (targetFail - st.failDisplay) * Math.min(1, dt * 2.5);
+  } else {
+    st.failDisplay *= 1 - Math.min(1, dt * 0.8);
   }
 
   for (const c of st.cars) {
@@ -264,8 +376,18 @@ function applyLive(st: SimState, live: RcsLiveDrive, dt: number): void {
       c.vel.y += 4;
     }
   }
-  if (live.goalPulse > 0 && st.phase === PHASE_PLAY && rng(st) < live.goalPulse * dt * 0.08) {
-    st.ball.vel.x += (rng(st) - 0.5) * 6;
+
+  if (live.goalPulse > 0 && st.phase === PHASE_PLAY) {
+    st.goalPulseBank += live.goalPulse * dt * (0.5 + live.packetsConsumed * 0.08);
+    if (st.goalPulseBank > 0.35) {
+      if (tryStartCelebration(st, st.goalPulseBank)) {
+        st.goalPulseBank = 0;
+      }
+    }
+  }
+
+  if (live.goalPulse > 0 && st.phase === PHASE_PLAY && rng(st) < live.goalPulse * dt * 0.06) {
+    st.ball.vel.x += (rng(st) - 0.5) * 4;
   }
 }
 
@@ -309,13 +431,21 @@ function carAi(c: Car, st: SimState, dt: number, liveBoost: number): void {
   }
 }
 
-function integrateCar(c: Car, dt: number): void {
+function integrateCar(c: Car, st: SimState, dt: number): void {
   c.vel.y -= GRAV * dt;
-  const boost = 1 + c.boost * 0.4;
-  c.vel.x *= 1 - dt * 0.85;
-  c.vel.z *= 1 - dt * 0.95;
-  c.vel.x *= boost;
-  c.vel.z *= boost;
+  const fwd = { x: Math.sin(c.yaw), y: 0, z: Math.cos(c.yaw) };
+  const accel = 16 + c.boost * 26;
+  c.vel.x += fwd.x * accel * dt;
+  c.vel.z += fwd.z * accel * dt;
+  c.vel.x *= 1 - dt * 1.15;
+  c.vel.z *= 1 - dt * 1.15;
+  const spd = Math.hypot(c.vel.x, c.vel.z);
+  if (spd > RCS_MAX_CAR_SPEED) {
+    const s = RCS_MAX_CAR_SPEED / spd;
+    c.vel.x *= s;
+    c.vel.z *= s;
+  }
+  st.maxSpeedSeen = Math.max(st.maxSpeedSeen, Math.hypot(c.vel.x, c.vel.z));
   c.pos.x += c.vel.x * dt;
   c.pos.y += c.vel.y * dt;
   c.pos.z += c.vel.z * dt;
@@ -341,6 +471,8 @@ function ballStep(st: SimState, dt: number): void {
   }
   b.pos.x = clamp(b.pos.x, -ARENA_HX + r, ARENA_HX - r);
   b.pos.z = clamp(b.pos.z, -ARENA_HZ + r, ARENA_HZ - r);
+  if (b.pos.x <= -ARENA_HX + r + 1e-4 || b.pos.x >= ARENA_HX - r - 1e-4) b.vel.x *= -0.72;
+  if (b.pos.z <= -ARENA_HZ + r + 1e-4 || b.pos.z >= ARENA_HZ - r - 1e-4) b.vel.z *= -0.72;
 }
 
 function carBall(st: SimState): void {
@@ -380,14 +512,7 @@ function goalCelebrate(st: SimState): void {
   if (options.replay) {
     st.replayIdx = Math.max(0, st.historyHead - 90);
   }
-  particlePool.burst(
-    RCS_CAPS.maxParticles,
-    st.ball.pos.x,
-    st.ball.pos.y,
-    st.ball.pos.z,
-    4,
-    () => rng(st),
-  );
+  tryStartCelebration(st, 1);
 }
 
 function physicsStep(st: SimState, dt: number): void {
@@ -395,7 +520,7 @@ function physicsStep(st: SimState, dt: number): void {
   for (const c of st.cars) {
     const liveBoost = c.hostId ? (st.live.perHostBoost.get(c.hostId) ?? 0) : 0.35;
     carAi(c, st, dt, liveBoost);
-    integrateCar(c, dt);
+    integrateCar(c, st, dt);
   }
   ballStep(st, dt);
   carBall(st);
@@ -406,7 +531,8 @@ function physicsStep(st: SimState, dt: number): void {
 function directorTick(st: SimState, dt: number): void {
   if (options.reducedMotion) return;
   st.directorT += dt;
-  if (st.directorT >= options.minCutSec) {
+  const cut = Math.max(RCS_MIN_DIRECTOR_CUT_SEC, options.minCutSec);
+  if (st.directorT >= cut) {
     st.directorT = 0;
     st.directorCam = (st.directorCam + 1) % 3;
   }
@@ -415,10 +541,10 @@ function directorTick(st: SimState, dt: number): void {
 function sampleReplay(st: SimState, t: number): Snap | null {
   const end = st.historyHead - 1;
   const start = Math.max(0, st.replayIdx);
-  if (end <= start) return st.history[end % HISTORY_LEN] ?? null;
+  if (end <= start) return st.historyPrealloc[end % HISTORY_LEN] ?? null;
   const u = clamp(t, 0, 1);
   const idx = Math.floor(start + (end - start) * (1 - u));
-  return st.history[idx % HISTORY_LEN] ?? null;
+  return st.historyPrealloc[idx % HISTORY_LEN] ?? null;
 }
 
 function cameraFromState(st: SimState, snap: Snap | null): {
@@ -490,12 +616,15 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
   const replayActive = st.phase === PHASE_REPLAY;
 
   if (!replayActive && st.phase !== PHASE_GOAL && st.kickoff <= 0) {
+    const histCam = { yaw: 0.75, pitch: -0.4, dist: 32 };
     while (st.accum >= RCS_FIXED_DT && substeps < RCS_CAPS.maxPhysicsSubsteps) {
       physicsStep(st, RCS_FIXED_DT);
-      const cam = cameraFromState(st, null);
-      pushHistory(st, { yaw: cam.yaw, pitch: cam.pitch, dist: 30 });
+      pushHistory(st, histCam);
       st.accum -= RCS_FIXED_DT;
       substeps++;
+    }
+    if (substeps >= RCS_CAPS.maxPhysicsSubsteps && st.accum >= RCS_FIXED_DT) {
+      st.accum = Math.min(st.accum, RCS_FIXED_DT);
     }
   } else {
     st.accum = Math.min(st.accum, RCS_FIXED_DT);
@@ -522,9 +651,15 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
     const u = 1 - clamp(st.phaseT / 2.5, 0, 1);
     const snap = sampleReplay(st, u);
     if (snap) {
-      st.ball = { pos: { ...snap.ball.pos }, vel: { x: 0, y: 0, z: 0 } };
-      st.cars = cloneCars(snap.cars);
-      st.score = [...snap.score] as [number, number];
+      st.ball.pos.x = snap.ball.pos.x;
+      st.ball.pos.y = snap.ball.pos.y;
+      st.ball.pos.z = snap.ball.pos.z;
+      st.ball.vel.x = 0;
+      st.ball.vel.y = 0;
+      st.ball.vel.z = 0;
+      for (let i = 0; i < st.cars.length; i++) copyCarInto(st.cars[i]!, snap.cars[i]!);
+      st.score[0] = snap.score[0];
+      st.score[1] = snap.score[1];
       st.clock = snap.clock;
     }
     if (st.phaseT <= 0) {
@@ -534,15 +669,19 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
   }
 
   directorTick(st, dt);
-  if (st.simTime > st.failUntil) st.failAlert *= 0.92;
+  if (st.celebrationT > 0) st.celebrationT = Math.max(0, st.celebrationT - dt);
 
   const snap = st.phase === PHASE_REPLAY ? sampleReplay(st, 1 - clamp(st.phaseT / 2.5, 0, 1)) : null;
   const cam = cameraFromState(st, snap);
 
-  const failShown = Math.max(st.failAlert, st.live.failAlert);
-  const goalFlash = st.phase === PHASE_GOAL && failShown < 0.35
-    ? clamp(st.phaseT / 1.2, 0, 1) * 0.28
-    : 0;
+  const failShown = st.failDisplay;
+  const rm = options.reducedMotion ? 1 : 0;
+  const goalFlash =
+    (st.phase === PHASE_GOAL || st.celebrationT > 0) && failShown < 0.35
+      ? rm > 0.5
+        ? 0.12
+        : clamp((st.phase === PHASE_GOAL ? st.phaseT / 1.2 : st.celebrationT) * 0.22, 0, 0.22)
+      : 0;
 
   const slot0 = new Array<number>(RCS_SLOT0_FLOATS).fill(0);
   slot0[RCS_SLOT.mark] = 1;
@@ -571,7 +710,7 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
   slot0[RCS_SLOT.ballScale] = options.ballSize / 100;
   slot0[RCS_SLOT.gameSpeed] = options.gameSpeed / 100;
   slot0[RCS_SLOT.aggress] = options.aggress / 100;
-  slot0[RCS_SLOT.shake] = 0;
+  slot0[RCS_SLOT.shake] = rm;
   slot0[RCS_SLOT.carCount] = st.cars.length;
   slot0[RCS_SLOT.failAlert] = failShown;
   slot0[RCS_SLOT.demoFlag] = st.live.demo ? 1 : 0;
@@ -669,7 +808,7 @@ export function rcsPoolStats(): { particleAllocs: number; trailAllocs: number } 
 
 export function rcsTriggerMaxGoalExplosion(): void {
   if (!state) resetRcsSim(options.seed);
-  particlePool.burst(RCS_CAPS.maxParticles, 0, 1, 0, 5, () => Math.random());
+  tryStartCelebration(state!, 1);
 }
 
 export function rcsPhysicsSteps(): number {
@@ -682,8 +821,7 @@ export function rcsEnterReplayForTest(): void {
   const st = state!;
   for (let i = 0; i < 30; i++) {
     physicsStep(st, RCS_FIXED_DT);
-    const cam = cameraFromState(st, null);
-    pushHistory(st, { yaw: cam.yaw, pitch: cam.pitch, dist: 30 });
+    pushHistory(st, { yaw: 0.75, pitch: -0.4, dist: 32 });
   }
   const stepsBefore = st.physicsSteps;
   st.phase = PHASE_REPLAY;
@@ -746,6 +884,45 @@ export function rcsCarHostLabelHash(carIndex: number): number {
 
 export function rcsLivePacketsConsumed(): number {
   return state?.live.packetsConsumed ?? 0;
+}
+
+export function rcsSimAccumulator(): number {
+  return state?.accum ?? 0;
+}
+
+export function rcsObservedMaxCarSpeed(): number {
+  return state?.maxSpeedSeen ?? 0;
+}
+
+export function rcsTestSkipKickoff(): void {
+  if (state) state.kickoff = 0;
+}
+
+export function rcsRunBoostSteps(steps: number): number {
+  if (!state) resetRcsSim(1);
+  const st = state!;
+  for (const c of st.cars) c.boost = BOOST_MAX;
+  const histCam = { yaw: 0.75, pitch: -0.4, dist: 32 };
+  for (let i = 0; i < steps; i++) {
+    for (const c of st.cars) {
+      carAi(c, st, RCS_FIXED_DT, 1);
+      integrateCar(c, st, RCS_FIXED_DT);
+    }
+    pushHistory(st, histCam);
+  }
+  return st.maxSpeedSeen;
+}
+
+export function rcsFailDisplay(): number {
+  return state?.failDisplay ?? 0;
+}
+
+export function rcsLastCelebrationAt(): number {
+  return state?.lastCelebrationAt ?? -999;
+}
+
+export function rcsCarAssignedAt(carIdx: number): number {
+  return state?.carAssignedAt.get(carIdx) ?? -1;
 }
 
 export { RCS_CAPS };

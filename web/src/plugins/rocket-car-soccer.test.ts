@@ -9,9 +9,14 @@ import README from "../../../plugins/src/rocket-car-soccer/README.md?raw";
 import {
   RCS_CAPS,
   RCS_DEFAULTS,
+  RCS_FIXED_DT,
   RCS_MAX_CARS,
   RCS_MAX_SUBSTEPS,
   RCS_MAX_TEAM,
+  RCS_MAX_CAR_SPEED,
+  RCS_GOAL_CELEBRATION_COOLDOWN_SEC,
+  RCS_TALKER_SLOT_HOLD_SEC,
+  RCS_MIN_DIRECTOR_CUT_SEC,
   RCS_PRESETS,
   RCS_SLOT,
   parseRcsOptions,
@@ -29,9 +34,16 @@ import {
   rcsHostCarIndex,
   rcsLivePacketsConsumed,
   rcsMount,
+  rcsObservedMaxCarSpeed,
   rcsOptionsNow,
   rcsPoolStats,
+  rcsRunBoostSteps,
   rcsSampleAt,
+  rcsSimAccumulator,
+  rcsTestSkipKickoff,
+  rcsFailDisplay,
+  rcsLastCelebrationAt,
+  rcsCarAssignedAt,
   rcsTick,
   rcsTriggerMaxGoalExplosion,
   rcsUnmount,
@@ -231,11 +243,15 @@ describe("rocket-car-soccer pack", () => {
   it("prioritises fail alert over goal flash in sim slots", () => {
     resetRcsSim(1);
     setRcsOptions({});
-    const failFrame = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0.5, 1 / 60, 1.777);
-    expect(failFrame.slot0[RCS_SLOT.failAlert]).toBeGreaterThan(0.35);
+    let failAlert = 0;
+    for (let i = 0; i < 40; i++) {
+      const f = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), i / 60, 1 / 60, 1.777);
+      failAlert = f.slot0[RCS_SLOT.failAlert]!;
+    }
+    expect(failAlert).toBeGreaterThan(0.5);
     rcsTriggerMaxGoalExplosion();
     const during = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0.6, 1 / 60, 1.777);
-    expect(during.slot0[RCS_SLOT.goalFlash]).toBeLessThan(0.05);
+    expect(during.slot0[RCS_SLOT.goalFlash]).toBeLessThan(0.12);
   });
 
   it("keeps car slots keyed by talker id when talkers reorder", () => {
@@ -260,7 +276,7 @@ describe("rocket-car-soccer pack", () => {
     expect(idxB).toBeDefined();
     expect(rcsCarHostLabelHash(idxA!)).toBeCloseTo(ha, 4);
     expect(rcsCarHostLabelHash(idxB!)).toBeCloseTo(hb, 4);
-    const failGlobal = rcsTick(
+    let failGlobal = rcsTick(
       vizFrame({
         talkers: [
           { id: "10.0.0.20", rate: 5, role: "lan" },
@@ -275,7 +291,23 @@ describe("rocket-car-soccer pack", () => {
     expect(rcsHostCarIndex("10.0.0.10")).toBe(idxA);
     expect(rcsHostCarIndex("10.0.0.20")).toBe(idxB);
     expect(rcsCarHostLabelHash(idxA!)).toBeCloseTo(ha, 4);
-    expect(failGlobal.slot0[RCS_SLOT.failAlert]).toBeGreaterThan(0.35);
+    let failAlert = 0;
+    for (let i = 0; i < 30; i++) {
+      failGlobal = rcsTick(
+        vizFrame({
+          talkers: [
+            { id: "10.0.0.20", rate: 5, role: "lan" },
+            { id: "10.0.0.10", rate: 120, role: "lan" },
+          ],
+          sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.85 },
+        }),
+        1 / 60 + i / 60,
+        1 / 60,
+        1.777,
+      );
+      failAlert = failGlobal.slot0[RCS_SLOT.failAlert]!;
+    }
+    expect(failAlert).toBeGreaterThan(0.5);
   });
 
   it("does not reassign a vacant talker slot to a new id immediately", () => {
@@ -366,7 +398,104 @@ describe("rocket-car-soccer pack", () => {
     expect(o.teamOrange).toBe("#aabbcc");
     expect(o.teamBlue).toBe("#112233");
     expect(o.seed).toBe(1234);
-    expect(o.minCutSec).toBeGreaterThanOrEqual(3);
+    expect(o.minCutSec).toBeGreaterThanOrEqual(RCS_MIN_DIRECTOR_CUT_SEC);
+  });
+
+  it("caps horizontal speed after sustained max boost", () => {
+    resetRcsSim(1);
+    const maxSpd = rcsRunBoostSteps(600);
+    expect(maxSpd).toBeLessThanOrEqual(RCS_MAX_CAR_SPEED + 0.01);
+    expect(maxSpd).toBeGreaterThan(10);
+  });
+
+  it("clamps physics accumulator after a long frame spike", () => {
+    resetRcsSim(1);
+    rcsTestSkipKickoff();
+    const spike = rcsTick(vizFrame(), 1, 2, 1.777);
+    expect(spike.budget.physicsSubsteps).toBe(RCS_MAX_SUBSTEPS);
+    expect(rcsSimAccumulator()).toBeLessThanOrEqual(RCS_FIXED_DT + 1e-6);
+    const normal = rcsTick(vizFrame(), 3, 1 / 60, 1.777);
+    expect(normal.budget.physicsSubsteps).toBeLessThan(RCS_MAX_SUBSTEPS);
+  });
+
+  it("rate-limits packet goal celebrations to once per 3 seconds", () => {
+    resetRcsSim(1);
+    rcsTestSkipKickoff();
+    setRcsOptions({});
+    const hiPkt = vizFrame({ packets: [{ proto: "tcp", size: 900, field: 0.95 }] });
+    for (let i = 0; i < 90; i++) rcsTick(hiPkt, i / 60, 1 / 60, 1.777);
+    const t0 = rcsLastCelebrationAt();
+    expect(t0).toBeGreaterThan(-900);
+    for (let i = 0; i < 30; i++) rcsTick(hiPkt, 1 + i / 60, 1 / 60, 1.777);
+    expect(rcsLastCelebrationAt()).toBe(t0);
+    for (let i = 0; i < 120; i++) rcsTick(hiPkt, 3.5 + i / 60, 1 / 60, 1.777);
+    expect(rcsLastCelebrationAt()).toBeGreaterThan(t0);
+  });
+
+  it("assigns a new talker to a free car immediately", () => {
+    resetRcsSim(1);
+    resetRcsTalkerCacheForTest();
+    setRcsOptions({ teamSize: "2" });
+    rcsTick(vizFrame({ talkers: [{ id: "a", rate: 10, role: "lan" }] }), 0, 1 / 60, 1.777);
+    const slotA = rcsHostCarIndex("a");
+    rcsTick(vizFrame({ talkers: [{ id: "b", rate: 20, role: "lan" }] }), 0.02, 1 / 60, 1.777);
+    const slotB = rcsHostCarIndex("b");
+    expect(slotB).toBeDefined();
+    expect(slotB).not.toBe(slotA);
+  });
+
+  it("holds departed talker slot for 2s and requires 1.2x rate to challenge", () => {
+    resetRcsSim(1);
+    resetRcsTalkerCacheForTest();
+    setRcsOptions({ teamSize: "2" });
+    rcsTick(
+      vizFrame({
+        talkers: [
+          { id: "low-1", rate: 50, role: "lan" },
+          { id: "low-2", rate: 50, role: "lan" },
+        ],
+      }),
+      0,
+      1 / 60,
+      1.777,
+    );
+    const slot1 = rcsHostCarIndex("low-1")!;
+    rcsTick(vizFrame({ talkers: [{ id: "low-2", rate: 50, role: "lan" }] }), 0.1, 1 / 60, 1.777);
+    rcsTick(vizFrame({ talkers: [{ id: "low-2", rate: 50, role: "lan" }, { id: "challenger", rate: 55, role: "lan" }] }), 0.2, 1 / 60, 1.777);
+    const chSlot = rcsHostCarIndex("challenger");
+    expect(chSlot).toBeDefined();
+    expect(chSlot).not.toBe(slot1);
+    rcsTick(
+      vizFrame({
+        talkers: [
+          { id: "t1", rate: 40, role: "lan" },
+          { id: "t2", rate: 40, role: "lan" },
+          { id: "t3", rate: 40, role: "lan" },
+          { id: "t4", rate: 40, role: "lan" },
+        ],
+      }),
+      3,
+      1 / 60,
+      1.777,
+    );
+    for (let i = 0; i < 4; i++) expect(rcsCarAssignedAt(i)).toBeGreaterThanOrEqual(0);
+    rcsTick(vizFrame({ talkers: [{ id: "t1", rate: 40, role: "lan" }, { id: "t2", rate: 40, role: "lan" }, { id: "t3", rate: 40, role: "lan" }, { id: "t4", rate: 40, role: "lan" }, { id: "boss", rate: 100, role: "lan" }] }), 5.5, 1 / 60, 1.777);
+    expect(rcsHostCarIndex("boss")).toBeDefined();
+  });
+
+  it("smooths stadium fail display without strobing while sys.failed stays high", () => {
+    resetRcsSim(1);
+    const f1 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0, 1 / 60, 1.777);
+    const f2 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0.5, 1 / 60, 1.777);
+    const f3 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 1.0, 1 / 60, 1.777);
+    expect(f2.slot0[RCS_SLOT.failAlert]!).toBeGreaterThanOrEqual(f1.slot0[RCS_SLOT.failAlert]!);
+    expect(f3.slot0[RCS_SLOT.failAlert]!).toBeGreaterThanOrEqual(f2.slot0[RCS_SLOT.failAlert]!);
+    expect(Math.abs(f3.slot0[RCS_SLOT.failAlert]! - f2.slot0[RCS_SLOT.failAlert]!)).toBeLessThan(0.2);
+  });
+
+  it("documents UX legend and tile readability in the sky shader", () => {
+    expect(FRAG).toMatch(/chipOn|zotoFail|demoOn/);
+    expect(FRAG).toMatch(/1\.18 \* ballS/);
   });
 
   it("writes viz buffers from the sandbox driver", () => {

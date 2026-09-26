@@ -109,7 +109,7 @@ config:
     label: director min cut (s)
     type: number
     default: 4
-    min: 3
+    min: 4
     max: 12
     step: 0.5
     hint: Minimum seconds between director cuts (no fast rolls). Reduced motion locks broadcast.

@@ -17,6 +17,12 @@ export const RCS_MAX_TRAIL_SEGMENTS = RCS_CAPS.maxTrailSegments;
 export const RCS_MAX_SUBSTEPS = RCS_CAPS.maxPhysicsSubsteps;
 export const RCS_FIXED_HZ = 120;
 export const RCS_FIXED_DT = 1 / RCS_FIXED_HZ;
+/** Horizontal speed cap for boost cars (m/s in sim units). */
+export const RCS_MAX_CAR_SPEED = 42;
+export const RCS_GOAL_CELEBRATION_COOLDOWN_SEC = 3;
+export const RCS_TALKER_SLOT_HOLD_SEC = 2;
+export const RCS_CHALLENGER_RATE_MARGIN = 1.2;
+export const RCS_MIN_DIRECTOR_CUT_SEC = 4;
 export const RCS_SLOT0_FLOATS = 64;
 export const RCS_SLOT1_FLOATS = 64;
 export const RCS_SLOT2_FLOATS = 64;
@@ -221,7 +227,7 @@ export function parseRcsOptions(o: Record<string, string | undefined> = {}): Rcs
     gameSpeed: num(o.gameSpeed, base.gameSpeed, 25, 200),
     trail: pick(o.trail, ["soft", "sharp", "spark"] as const, base.trail),
     camera: pick(o.camera, ["broadcast", "ballcam", "director", "orbit"] as const, base.camera),
-    minCutSec: num(o.minCutSec, base.minCutSec, 3, 12),
+    minCutSec: num(o.minCutSec, base.minCutSec, RCS_MIN_DIRECTOR_CUT_SEC, 12),
     explode: pick(o.explode, ["confetti", "shockwave", "embers"] as const, base.explode),
     replay: bool(o.replay, base.replay),
     matchSec: Math.round(num(o.matchSec, base.matchSec, 60, 900)),
