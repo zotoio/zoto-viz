@@ -65,22 +65,3 @@ export function dreamAnimBootFromStorage(
   }
   return { anim: loadedAnim, bootRefused: false };
 }
-
-/**
- * Revert boot (dogfood red): rewrite stored tiles to eight and show a truncated wall in memory.
- */
-export function dreamAnimBootRevertClamp(
-  storePrefix: string,
-  loadedAnim: DreamAnim,
-  rawTilesJson: string | null,
-): DreamAnim {
-  const parsed = rawTilesJson ? parseMosaicTiles(JSON.parse(rawTilesJson) as unknown) : loadedAnim.mosaicTiles;
-  if (rawTilesJson) {
-    localStorage.setItem(`${storePrefix}.anim.mosaicTiles`, JSON.stringify(parsed));
-  }
-  return {
-    ...loadedAnim,
-    mosaic: loadedAnim.mosaic === "off" ? "off" : loadedAnim.mosaic,
-    mosaicTiles: parsed,
-  };
-}

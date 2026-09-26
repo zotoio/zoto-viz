@@ -217,6 +217,10 @@ export class VizHud {
   private readonly mosaicTileLines = new Map<string, { el: HTMLSpanElement; label: TileHudLabelLine }>();
   mosaicHudLinesCreated = 0;
   mosaicHudLinesReleased = 0;
+  private lastMetricLabel = "";
+  private lastMetricValue = "";
+  private lastSkipTitle = "";
+  private readonly lastMosaicLineText = new Map<string, string>();
 
   constructor(parent: HTMLElement, onSwap: (packId: VizDemoPackId) => void) {
     this.onSwap = onSwap;
@@ -317,8 +321,14 @@ export class VizHud {
     const { stats, frame, state, now, tileBudget, activeTiles = 1, tileBudgetLines } = input;
     const displayFrame = tileBudget ? tileHudDisplayFrame(tileBudget, frame) : frame;
     const metric = vizHudMetric(this.activeId, displayFrame, state);
-    this.metricLabelEl.textContent = metric.label;
-    this.metricValueEl.textContent = metric.value;
+    if (metric.label !== this.lastMetricLabel) {
+      this.metricLabelEl.textContent = metric.label;
+      this.lastMetricLabel = metric.label;
+    }
+    if (metric.value !== this.lastMetricValue) {
+      this.metricValueEl.textContent = metric.value;
+      this.lastMetricValue = metric.value;
+    }
 
     if (this.skipNeedsSync) {
       this.lastSkipped = stats.skipped;
@@ -343,7 +353,11 @@ export class VizHud {
         : null;
       const skipText = limited ?? formatSkipRate(rate);
       this.skipLabelLine.writeText(this.skipEl, skipText);
-      this.skipEl.title = limited ? TILE_LIMITED_SHARING_TOOLTIP : "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
+      const title = limited ? TILE_LIMITED_SHARING_TOOLTIP : "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
+      if (title !== this.lastSkipTitle) {
+        this.skipEl.title = title;
+        this.lastSkipTitle = title;
+      }
       this.skipEl.classList.toggle("viz-hud-skip-limited", Boolean(limited));
       this.skipEl.classList.toggle("viz-hud-skip-fail", chrome.useFailTone);
     } else {
@@ -364,7 +378,11 @@ export class VizHud {
       const text = limited
         ? `${tileId}: ${limited}`
         : `${tileId}: ${formatSkipRate(chrome.skipRatePerSec)}`;
-      row.label.writeText(row.el, text);
+      const prev = this.lastMosaicLineText.get(tileId);
+      if (prev !== text) {
+        row.label.writeText(row.el, text);
+        this.lastMosaicLineText.set(tileId, text);
+      }
     }
   }
 }

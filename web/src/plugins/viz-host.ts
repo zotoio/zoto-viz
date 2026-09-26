@@ -1,5 +1,5 @@
 import type { Device, StateMsg } from "../core/types";
-import { vizBuildCostMs, vizBuildCostTicks, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
+import { vizBuildCostMs, vizBuildCostTicksForTile, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
 import { type MonoMs, monoMs, monoMsDeltaSec } from "../core/viz-time";
 import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
 import { VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";
@@ -532,7 +532,7 @@ export class VizFrameBudget {
     build: (state: StateMsg, prevVizClockMs: MonoMs, audio: number) => VizDataFrame = buildVizFrame,
   ): VizDataFrame | null {
     const deliverIndex = this._total++;
-    const tickInject = vizBuildCostTicks(deliverIndex);
+    const tickInject = vizBuildCostTicksForTile(this.tileId, deliverIndex);
     const msInject = vizBuildCostMs(deliverIndex);
     const result = vizTileBudgetRegistry.deliver(
       this.tileId,

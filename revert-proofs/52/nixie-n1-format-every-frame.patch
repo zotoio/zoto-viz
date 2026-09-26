@@ -1,15 +1,89 @@
-diff --git a/web/src/plugins/nixie-wall-broadcast.ts b/web/src/plugins/nixie-wall-broadcast.ts
-index dbd2254..f5220df 100644
---- a/web/src/plugins/nixie-wall-broadcast.ts
-+++ b/web/src/plugins/nixie-wall-broadcast.ts
-@@ -22,9 +22,9 @@ export class SharedNixieWallSecond {
-   /** Advance shared wall parts; increments {@link wallReads} once per new wall second. */
-   syncWallSecond(wallMs: number, timeZone?: string): { h: number; m: number; s: number } {
-     const sec = Math.floor(wallMs / 1000);
-+    this.wallReads++;
-     if (sec !== this.lastSec || this.lastSec < 0) {
-       this.lastSec = sec;
--      this.wallReads++;
-       const parts = wallPartsFromMs(wallMs, timeZone);
-       this.cachedH = parts.h;
-       this.cachedM = parts.m;
+diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
+index 87253ad..b1c07ce 100644
+--- a/web/src/plugins/viz-pack-host.ts
++++ b/web/src/plugins/viz-pack-host.ts
+@@ -2,6 +2,7 @@ import type { DevicePixelSize } from "../graph/render-host";
+ import { vizClockMs, vizWallMs } from "../core/viz-clock";
+ import { createNixieWallClock } from "./nixie-wall-clock";
+ import { SharedNixieWallSecond } from "./nixie-wall-broadcast";
++import { createNixieUploadLatch, nixieWallUploadDue, type NixieUploadLatch } from "./nixie-wall-upload";
+ import type { VizDemoPackId } from "../ui/viz-hud";
+ import type { VizDataFrame, VizUniformValue } from "./viz-host";
+ import {
+@@ -20,6 +21,10 @@ import {
+ 
+ const hostNixieClock = createNixieWallClock();
+ const hostNixieWallSecond = new SharedNixieWallSecond();
++const nixieUploadLatches = new Map<string, NixieUploadLatch>();
++
++/** Mosaic / dogfood: stable tile key for per-tile nixie upload latch (not a nixie look key). */
++export const VIZ_PACK_TILE_ID_OPT = "vizPackTileId";
+ 
+ export function packNixieWallBuffer(
+   clock: ReturnType<typeof createNixieWallClock>,
+@@ -33,12 +38,23 @@ export function packNixieWallBuffer(
+   return clock.tick(wallMs, look, audio, pulse, canvas, parts);
+ }
+ 
+-export function hostNixieWallReads(): number {
+-  return hostNixieWallSecond.wallReads;
+-}
+-
+ export function resetHostNixieWallScope(): void {
+   hostNixieWallSecond.reset();
++  nixieUploadLatches.clear();
++}
++
++function nixiePackTileId(opts?: Record<string, string> | null): string {
++  const id = opts?.[VIZ_PACK_TILE_ID_OPT];
++  return id && id.length > 0 ? id : "main";
++}
++
++function nixieUploadLatchFor(tileId: string): NixieUploadLatch {
++  let latch = nixieUploadLatches.get(tileId);
++  if (!latch) {
++    latch = createNixieUploadLatch();
++    nixieUploadLatches.set(tileId, latch);
++  }
++  return latch;
+ }
+ 
+ let nixieScopedLook: NixieLook = parseNixieLook();
+@@ -92,10 +108,6 @@ export function nixiePackActiveLook(): NixieLook {
+   return nixieActiveLook;
+ }
+ 
+-export function hostNixieFormatCalls(): number {
+-  return hostNixieClock.formatCalls;
+-}
+-
+ export interface VizPackHandlers {
+   writeBuffer: (slot: number, data: number[]) => void;
+   writeUniform: (name: string, value: VizUniformValue) => void;
+@@ -290,13 +302,19 @@ export function runPackFrameHandler(
+       syncNixiePackScope(opts);
+       nixieActiveLook = nixieScopedLook;
+       const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
+-      handlers.writeBuffer(0, packNixieWallBuffer(
+-        hostNixieClock,
+-        nixieActiveLook,
+-        frame.audio,
+-        peak,
+-        nixiePackCanvas,
+-      ));
++      const wallMs = vizWallMs();
++      const parts = hostNixieWallSecond.syncWallSecond(wallMs);
++      const latch = nixieUploadLatchFor(nixiePackTileId(opts));
++      if (true) {
++        handlers.writeBuffer(0, hostNixieClock.tick(
++          wallMs,
++          nixieActiveLook,
++          frame.audio,
++          peak,
++          nixiePackCanvas,
++          parts,
++        ));
++      }
+       handlers.writeUniform("uAudio", frame.audio);
+       handlers.writeUniform("uAccent", [1.0, 0.38, 0.06]);
+       handlers.writeUniform("uBg", [0.06, 0.03, 0.02]);

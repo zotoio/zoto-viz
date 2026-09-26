@@ -8,6 +8,7 @@ let clockMs: () => number = () => performance.now();
 let wallMs: () => number = () => Date.now();
 let buildCostMs: ((deliverIndex: number) => number) | undefined;
 let buildCostTicks: ((deliverIndex: number) => number) | undefined;
+let buildCostTicksForTile: ((tileId: string, deliverIndex: number) => number | undefined) | undefined;
 
 /** Monotonic host clock for frame budget, dt, and HUD skip rate. */
 export function vizClockMs(): number {
@@ -59,9 +60,22 @@ export function vizBuildCostTicks(deliverIndex: number): number | undefined {
   return buildCostTicks?.(deliverIndex);
 }
 
+export function setVizBuildCostTicksForTileInjector(
+  inject: ((tileId: string, deliverIndex: number) => number | undefined) | undefined,
+): void {
+  buildCostTicksForTile = inject;
+}
+
+export function vizBuildCostTicksForTile(tileId: string, deliverIndex: number): number | undefined {
+  const perTile = buildCostTicksForTile?.(tileId, deliverIndex);
+  if (perTile !== undefined) return perTile;
+  return buildCostTicks?.(deliverIndex);
+}
+
 export function resetVizClockInjectors(): void {
   clockMs = () => performance.now();
   wallMs = () => Date.now();
   buildCostMs = undefined;
   buildCostTicks = undefined;
+  buildCostTicksForTile = undefined;
 }

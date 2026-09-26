@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  bindMosaicTileBudgetLines,
+  mosaicTileBudgetLines,
+  resetVizHudTileBudgetLineAllocCounter,
+  vizHudTileBudgetLineObjectsCreated,
+} from "../app/main-viz-tile-lines";
 import { VizHud } from "./viz-hud";
 import {
   resetVizTileBudgetLifecycle,
@@ -11,6 +17,7 @@ describe("mosaic HUD lines and tile budgets F4", () => {
   afterEach(() => {
     vizTileBudgetRegistry.reset();
     resetVizTileBudgetLifecycle();
+    resetVizHudTileBudgetLineAllocCounter();
     document.body.innerHTML = "";
   });
 
@@ -21,8 +28,13 @@ describe("mosaic HUD lines and tile budgets F4", () => {
     hud.setActive("packet-tunnel", "tunnel");
     syncVizTileScope(["main"]);
     hud.syncMosaicTileHudLines(["main"]);
-    const createdBefore = vizTileBudgetLifecycle.created + hud.mosaicHudLinesCreated;
+    const tileIds = ["main"];
+    mosaicTileBudgetLines(tileIds);
+    resetVizHudTileBudgetLineAllocCounter();
+    const createdBefore = vizTileBudgetLifecycle.created + vizHudTileBudgetLineObjectsCreated();
     for (let i = 0; i < 600; i++) {
+      const lines = mosaicTileBudgetLines(tileIds)!;
+      bindMosaicTileBudgetLines(lines, (id) => vizTileBudgetRegistry.getTile(id));
       hud.tick({
         packId: "packet-tunnel",
         packName: "tunnel",
@@ -30,10 +42,10 @@ describe("mosaic HUD lines and tile budgets F4", () => {
         frame: null,
         state: { ts: 0, stats: { active_flows: 0, devices: 0, packets: 0 }, devices: [], flows: [], sources: [], plugin_state: {} },
         now: i / 60,
-        tileBudgetLines: [{ tileId: "main", tile: vizTileBudgetRegistry.getTile("main") }],
+        tileBudgetLines: lines,
       });
     }
-    const createdAfter = vizTileBudgetLifecycle.created + hud.mosaicHudLinesCreated;
+    const createdAfter = vizTileBudgetLifecycle.created + vizHudTileBudgetLineObjectsCreated();
     expect(createdAfter - createdBefore).toBe(0);
   });
 
