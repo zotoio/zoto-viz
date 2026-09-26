@@ -1,11 +1,13 @@
 diff --git a/web/src/graph/host-three-pixel-materials.ts b/web/src/graph/host-three-pixel-materials.ts
-index 0000000..0000000 100644
+index 7ab8398..7ab8398 100644
 --- a/web/src/graph/host-three-pixel-materials.ts
 +++ b/web/src/graph/host-three-pixel-materials.ts
-@@ -12,7 +12,7 @@ export function hostPointsMaterialSize(
+@@ -13,7 +13,7 @@
    sizeAttenuation: boolean,
  ): number {
    if (sizeAttenuation) return cssSize;
 -  return cssSize * devicePxRatioNumber(devicePxRatio);
 +  return cssSize;
  }
+ 
+ /** Three points shader scale uniform at renderer pixel ratio 1. */

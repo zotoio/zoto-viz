@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/host-three-pixel-materials.ts b/web/src/graph/host-three-pixel-materials.ts
-index 0000000..0000000 100644
+index 7ab8398..7ab8398 100644
 --- a/web/src/graph/host-three-pixel-materials.ts
 +++ b/web/src/graph/host-three-pixel-materials.ts
-@@ -31,8 +31,8 @@ export function hostLineMaterialDeviceUniforms(
+@@ -31,8 +31,8 @@
    const pr = devicePxRatioNumber(devicePxRatio);
    return {
      linewidth: cssLineWidth * pr,
@@ -12,3 +12,4 @@ index 0000000..0000000 100644
 +    resolutionY: cssCanvasH,
    };
  }
+ 
