@@ -1,11 +1,11 @@
 --- a/web/src/core/viz-dev-tile-cost.ts
 +++ b/web/src/core/viz-dev-tile-cost.ts
-@@ -5,7 +5,7 @@ let wallBuildReads = 0;
- 
- /** Dev-only `?vizTileCostTicks=`; read once per wall build, never per frame. */
- export function readDevTileCostOnWallBuild(search: string): void {
--  wallBuildReads++;
-+  wallBuildReads += 600;
-   if (!import.meta.env.DEV) {
+@@ -14,7 +14,7 @@ export function readDevTileCostOnWallBuild(search: string): void {
+   const raw = new URLSearchParams(search).get("vizTileCostTicks");
+   if (!raw) {
      devTileCostTicks = null;
-     setVizBuildCostTicksInjector(undefined);
+-    setVizBuildCostTicksInjector(undefined);
++    setVizBuildCostTicksInjector(() => 1);
+     return;
+   }
+   const ticks = Number(raw);
