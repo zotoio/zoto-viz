@@ -19,7 +19,7 @@
 import * as THREE from "three";
 import type { SoftRect } from "./software-draw";
 import { cssHex } from "./software-draw";
-import { letterboxInnerRectInto, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
+import { letterboxInnerRectInto, paintLetterboxBarsInto, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
@@ -32,9 +32,13 @@ import {
   type CssRectLoose,
   type DeviceRect,
   type DeviceRectMut,
+  type GlRect,
+  type GlRectMut,
+  type CanvasDeviceHeight,
+  asCanvasDeviceHeight,
   asCssRect,
-  cssRectTopFromBottomLeft,
-  toDeviceRectInto,
+  deviceRectFromHostViewBoxInto,
+  toGlRectInto,
 } from "./pack-mirror-rect";
 import { renderHostMirrorTelemetry } from "./render-host-telemetry";
 
@@ -61,8 +65,8 @@ export interface HostedView {
   noteFrameCost?(ms: number): void;
 }
 
-/** Framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
-export type Viewport = DeviceRect;
+/** Software panes: top-left device pixels. GPU panes: GL bottom-left (`readPixels`). */
+export type Viewport = DeviceRect | GlRect;
 
 /** The methods NetScene uses on the shared (or owned) GPU object. */
 export class SoftwareGpu {
@@ -118,8 +122,16 @@ export class RenderHost {
       { x: 0, y: 0, w: 0, h: 0 },
       { x: 0, y: 0, w: 0, h: 0 },
     ] as LetterboxBarScratch,
+    softBars: [
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+      { x: 0, y: 0, w: 0, h: 0 },
+    ],
   };
-  private readonly fbViewport: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly fbDeviceViewport: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly fbGlViewport: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
+  private canvasDeviceHeight: CanvasDeviceHeight = asCanvasDeviceHeight(1);
   private readonly packScopeScratch = new Map<string, { tileCount: number; antialias: boolean }>();
   private mirrorScopeDirty = true;
   private contextAntialias = false;
@@ -189,6 +201,7 @@ export class RenderHost {
     });
     this.attach();
     this.syncSize();
+    this.refreshCanvasDeviceHeight();
     this.ro = observeResize(wall, () => { this.dirty = true; });
     this.frame = (ts: number) => {
       if (this.disposed) return;
@@ -279,7 +292,18 @@ export class RenderHost {
       if (!ctx) return null;
       const pr = this.pr;
       ctx.setTransform(pr, 0, 0, pr, 0, 0);
-      paintLetterboxBars(ctx, box, innerPaint, fill);
+      paintLetterboxBarsInto(
+        ctx,
+        box,
+        innerPaint,
+        fill,
+        this.letterboxScratch.softBars as [
+          { x: number; y: number; w: number; h: number },
+          { x: number; y: number; w: number; h: number },
+          { x: number; y: number; w: number; h: number },
+          { x: number; y: number; w: number; h: number },
+        ],
+      );
       ctx.save();
       ctx.beginPath();
       ctx.rect(innerPaint.x, innerPaint.y, innerPaint.w, innerPaint.h);
@@ -356,19 +380,21 @@ export class RenderHost {
       this.gpuTimedCamera = camera;
       this.gpuTimedClearHex = clearHex;
       this.gpuTimedBox = box;
+      const vpPack = this.writeFbViewport(box, pr);
       timeGpu(gl, this.runTimedPackPrimaryDraw, this.runTimedGpuNote);
       this.gpuTimedView = null;
       this.gpuTimedPackKey = null;
       this.gpuTimedScene = null;
       this.gpuTimedCamera = null;
       this.gpuTimedBox = null;
-      return this.writeFbViewport(box, pr);
+      return vpPack;
     }
     this.gpuTimedView = view;
     this.gpuTimedScene = scene;
     this.gpuTimedCamera = camera;
     this.gpuTimedClearHex = clearHex;
     this.gpuTimedBox = box;
+    const vp = this.writeFbViewport(box, pr);
     if (gl) {
       timeGpu(gl, this.runTimedViewDraw, this.runTimedGpuNote);
     } else {
@@ -378,7 +404,7 @@ export class RenderHost {
     this.gpuTimedScene = null;
     this.gpuTimedCamera = null;
     this.gpuTimedBox = null;
-    return this.writeFbViewport(box, pr);
+    return vp;
   }
 
   private readonly runTimedGpuNote = (ms: number): void => {
@@ -417,27 +443,36 @@ export class RenderHost {
     const camera = this.gpuTimedCamera;
     if (!box || !scene || !camera) return;
     const rd = this.renderer as THREE.WebGLRenderer;
-    rd.setViewport(box.x, box.y, box.w, box.h);
-    rd.setScissor(box.x, box.y, box.w, box.h);
+    const vp = this.fbGlViewport;
+    rd.setViewport(vp.x, vp.y, vp.w, vp.h);
+    rd.setScissor(vp.x, vp.y, vp.w, vp.h);
     rd.setScissorTest(true);
     rd.setClearColor(this.gpuTimedClearHex, 1);
     rd.render(scene, camera);
   };
 
-  private canvasDeviceHeight(): number {
-    return Math.max(1, this.canvas.height);
+  private writeFbViewport(box: SoftRect, pr: number): Viewport {
+    deviceRectFromHostViewBoxInto(
+      box,
+      this.software,
+      this.h,
+      pr,
+      this.fbDeviceViewport,
+      this.software ? undefined : this.canvasDeviceHeight,
+    );
+    if (this.software) {
+      return this.fbDeviceViewport as DeviceRect;
+    }
+    toGlRectInto(
+      this.fbDeviceViewport as DeviceRect,
+      this.canvasDeviceHeight,
+      this.fbGlViewport,
+    );
+    return this.fbGlViewport as GlRect;
   }
 
-  private writeFbViewport(box: SoftRect, pr: number): Viewport {
-    const cssTop = this.software
-      ? asCssRect(box)
-      : cssRectTopFromBottomLeft(box, this.h);
-    return toDeviceRectInto(
-      cssTop,
-      pr,
-      this.canvasDeviceHeight(),
-      this.fbViewport,
-    );
+  private refreshCanvasDeviceHeight(): void {
+    this.canvasDeviceHeight = asCanvasDeviceHeight(Math.max(1, this.canvas.height));
   }
 
   private sortViewsForMirror(): void {
@@ -517,6 +552,7 @@ export class RenderHost {
     this.h = h;
     if (!this.software) this.renderer.setSize(w, h, false);
     else this.resizeSoftware();
+    this.refreshCanvasDeviceHeight();
     this.dirty = true;
   }
 
@@ -526,5 +562,6 @@ export class RenderHost {
     this.canvas.height = Math.max(1, Math.round(this.h * pr));
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
+    this.refreshCanvasDeviceHeight();
   }
 }

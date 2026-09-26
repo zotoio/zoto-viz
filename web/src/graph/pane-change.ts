@@ -1,3 +1,5 @@
+import type { DeviceRect, GlRect } from "./pack-mirror-rect";
+
 /**
  * Did this pane's picture change?
  *
@@ -22,7 +24,7 @@ export class CanvasChangeProbe {
   sample(
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
-    rect?: { x: number; y: number; w: number; h: number } | null,
+    rect?: DeviceRect | null,
   ): boolean {
     if (canvas.width < 2 || canvas.height < 2) return false;
     const s = Math.min(PATCH, canvas.width, canvas.height, rect ? Math.floor(rect.w) : PATCH, rect ? Math.floor(rect.h) : PATCH);
@@ -45,7 +47,7 @@ export class CanvasChangeProbe {
   }
 }
 
-export interface ProbeRect { x: number; y: number; w: number; h: number }
+export type ProbeRect = GlRect;
 
 /**
  * Three full-width rows and three full-height columns through the pane, in
@@ -62,8 +64,8 @@ export function probeLines(vp: ProbeRect, bufW: number, bufH: number): ProbeRect
   if (w < 2 || h < 2) return [];
   const out: ProbeRect[] = [];
   for (const f of [1 / 6, 1 / 2, 5 / 6]) {
-    out.push({ x: x0, y: y0 + Math.min(h - 1, Math.floor(h * f)), w, h: 1 });
-    out.push({ x: x0 + Math.min(w - 1, Math.floor(w * f)), y: y0, w: 1, h });
+    out.push({ x: x0, y: y0 + Math.min(h - 1, Math.floor(h * f)), w, h: 1, __unit: "gl" });
+    out.push({ x: x0 + Math.min(w - 1, Math.floor(w * f)), y: y0, w: 1, h, __unit: "gl" });
   }
   return out;
 }

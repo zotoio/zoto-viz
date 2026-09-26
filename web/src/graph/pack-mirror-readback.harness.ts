@@ -13,15 +13,21 @@ import {
 } from "./pack-mirror-quadrant-fixture";
 import { letterboxInnerRectInto, surfaceLetterboxFill } from "./letterbox-fill";
 import {
+  asCanvasDeviceHeight,
   cssRect,
   cssRectTopFromBottomLeft,
   deviceSizeFromCssBox,
+  glRect,
   toDeviceRectInto,
+  toGlRectInto,
+  type DeviceRect,
   type DeviceRectMut,
+  type GlRectMut,
 } from "./pack-mirror-rect";
 import { glReadPixels1x1 } from "./pack-mirror-rect.boundary";
 
 const captureScratch: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
+const glCaptureScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
 const innerTdScratch = { x: 0, y: 0, w: 0, h: 0 };
 
 export type PackMirrorReadbackInput = {
@@ -56,7 +62,7 @@ function readPixelDevice(
   y: number,
 ): [number, number, number, number] {
   const buf = new Uint8Array(4);
-  glReadPixels1x1(gl, { x, y, w: 1, h: 1, __unit: "device" }, buf);
+  glReadPixels1x1(gl, glRect(x, y, 1, 1), buf);
   return [buf[0], buf[1], buf[2], buf[3]];
 }
 
@@ -72,11 +78,15 @@ function readPixelCssBottomLeft(
   toDeviceRectInto(
     cssRect(x, HARNESS_CSS_HEIGHT - yBottom - 1, 1, 1),
     pr,
-    canvasDeviceHeight,
     captureScratch,
   );
-  const cx = captureScratch.x + Math.max(0, Math.floor((captureScratch.w - 1) / 2));
-  const cy = captureScratch.y + Math.max(0, Math.floor((captureScratch.h - 1) / 2));
+  toGlRectInto(
+    captureScratch as DeviceRect,
+    asCanvasDeviceHeight(canvasDeviceHeight),
+    glCaptureScratch,
+  );
+  const cx = glCaptureScratch.x + Math.max(0, Math.floor((glCaptureScratch.w - 1) / 2));
+  const cy = glCaptureScratch.y + Math.max(0, Math.floor((glCaptureScratch.h - 1) / 2));
   return readPixelDevice(gl, cx, cy);
 }
 
@@ -112,11 +122,14 @@ function dominantChannel(
 
 function maxRedInRect(
   gl: WebGL2RenderingContext,
-  x0: number,
-  y0: number,
-  w: number,
-  h: number,
+  band: DeviceRect,
+  canvasDeviceHeight: number,
 ): number {
+  toGlRectInto(band, asCanvasDeviceHeight(canvasDeviceHeight), glCaptureScratch);
+  const x0 = glCaptureScratch.x;
+  const y0 = glCaptureScratch.y;
+  const w = glCaptureScratch.w;
+  const h = glCaptureScratch.h;
   let max = 0;
   const x1 = x0 + Math.max(1, w);
   const y1 = y0 + Math.max(1, h);
@@ -295,10 +308,10 @@ export async function runPackMirrorReadbackInPage(
     ),
     HARNESS_CSS_HEIGHT,
   );
-  toDeviceRectInto(tlBand, pr, canvasDeviceHeight, captureScratch);
-  const topLeftPeak = maxRedInRect(gl, captureScratch.x, captureScratch.y, captureScratch.w, captureScratch.h);
-  toDeviceRectInto(brBand, pr, canvasDeviceHeight, captureScratch);
-  const bottomRightPeak = maxRedInRect(gl, captureScratch.x, captureScratch.y, captureScratch.w, captureScratch.h);
+  toDeviceRectInto(tlBand, pr, captureScratch);
+  const topLeftPeak = maxRedInRect(gl, captureScratch as DeviceRect, canvasDeviceHeight);
+  toDeviceRectInto(brBand, pr, captureScratch);
+  const bottomRightPeak = maxRedInRect(gl, captureScratch as DeviceRect, canvasDeviceHeight);
 
   let quadrantTlOk: boolean | undefined;
   let quadrantBrOk: boolean | undefined;

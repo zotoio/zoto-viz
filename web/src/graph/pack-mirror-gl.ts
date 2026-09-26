@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { SurfaceLetterboxFill } from "./letterbox-fill";
-import { letterboxFillHex, letterboxInnerRectInto, paintLetterboxBars } from "./letterbox-fill";
+import { letterboxInnerRectInto } from "./letterbox-fill";
 import type { WebGLRenderer } from "three";
 import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 import {
@@ -62,7 +62,7 @@ export function paintLetterboxBarsThree(
   inner: CssRect,
   bars: LetterboxBarScratch,
 ): void {
-  const hex = letterboxFillHex(fill);
+  const hex = fill.hex;
   renderer.setScissorTest(true);
   renderer.setClearColor(hex, 1);
   bars[0].x = box.x;
@@ -275,7 +275,7 @@ export class PackMirrorRegistry {
   private readonly drawLetterboxScratch = { letterbox: false };
 
   beginFrame(): void {
-    this.sessions.forEach((s) => { s.rendered = false; });
+    for (const s of this.sessions.values()) s.rendered = false;
   }
 
   /** Allocate / free mirrors only when tile count crosses 2 for a pack key. */
