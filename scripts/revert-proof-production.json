@@ -4,9 +4,7 @@
     "web/index.html",
     "web/src/app/main.ts",
     "web/src/camera/cam.worker.ts",
-    "web/src/camera/sampler.ts",
-    "service/monitor.py",
-    ".github/workflows/ci.yml"
+    "service/monitor.py"
   ],
   "packEntryGlob": "plugins/src/*/frontend/index.ts",
   "reachExempt": ["scripts/revert-proof.mjs"]

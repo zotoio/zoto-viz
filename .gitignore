@@ -7,7 +7,6 @@ web/.env.*
 .venv/
 data/
 out/
-node_modules/
 web/node_modules/
 web/dist/
 docs/node_modules/

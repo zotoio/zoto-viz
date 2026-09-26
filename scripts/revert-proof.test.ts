@@ -76,14 +76,6 @@ function runPnpmInstall(root: string) {
   }
 }
 
-function linkHostVenv(root: string) {
-  const hostVenv = path.join(repoRoot, ".venv");
-  const dest = path.join(root, ".venv");
-  if (fs.existsSync(hostVenv) && !fs.existsSync(dest)) {
-    fs.symlinkSync(hostVenv, dest, process.platform === "win32" ? "junction" : "dir");
-  }
-}
-
 function assertNoRevertProofWorktrees(root: string) {
   const wtList = runGit(root, ["worktree", "list"]);
   expect(wtList.includes("revert-proof-wt")).toBe(false);
@@ -118,7 +110,6 @@ function runRevertProof(cwd: string, prNumber: string, extraArgs: string[] = [])
     env: {
       ...process.env,
       FORCE_COLOR: "0",
-      REVERT_PROOF_SKIP_PNPM_INSTALL: "1",
       REVERT_PROOF_PYTHON: fixturePython(cwd),
     },
   });
@@ -509,6 +500,21 @@ describe("revert-proof runner (fixture repo)", () => {
     assertCheckoutUnchanged(root, before);
   });
 
+  it("(multi-test-file) row in a file with many tests runs exactly one", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "multi-file", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "widget > returns one",
+      description: "Multi-test file single selection",
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "multi-file"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    assertNoRevertProofWorktrees(root);
+  });
+
   it("(a) correct revert row produces red output and exit 0", () => {
     const root = mkFixture();
     writeRow(root, "99", "valid-revert", goodPatch, {
@@ -785,6 +791,36 @@ describe("hang", () => {
     assertCheckoutUnchanged(root, before);
   });
 
+  it("(vitest-fake-assertion) plain object throw without JUnit type is not assertion red", async () => {
+    const lib = await import("./revert-proof-lib.mjs");
+    const junit = `<?xml version="1.0"?><testsuites><testcase name="t"><failure message="AssertionError: expect(received).toBe(expected)">not a real AssertionError</failure></testcase></testsuites>`;
+    expect(lib.isVitestAssertionFailure([], junit)).toBe(false);
+    const kind = lib.classifyPatchedVitest({
+      counts: {
+        executed: 1,
+        passed: 0,
+        failed: 1,
+        suiteError: null,
+        failedAssertions: [{ messages: ["AssertionError: expect(received).toBe(expected)"] }],
+        ranTests: [{ fullName: "d > t", status: "failed" }],
+      },
+      junitXml: junit,
+    });
+    expect(kind).toBe("build break");
+  });
+
+  it("(junit-multi-file) multi-test file still selects one executed junit case", async () => {
+    const mod = await import("./revert-proof.mjs");
+    const xml = `<?xml version="1.0"?><testsuite>
+<testcase name="other" classname="widget"><skipped/></testcase>
+<testcase name="returns one" classname="widget > alpha"/>
+<testcase name="decoy" classname="widget"><skipped/></testcase>
+</testsuite>`;
+    const executed = mod.vitestJunitExecutedTestNames(xml);
+    expect(executed.length).toBe(1);
+    expect(executed[0]).toContain("widget > alpha > returns one");
+  });
+
   it("(vitest-rangeerror) RangeError junit failure is not assertion red", async () => {
     const lib = await import("./revert-proof-lib.mjs");
     const junit = `<?xml version="1.0"?><testsuites><testcase name="t"><failure type="RangeError">Expected 1 to be 2</failure></testcase></testsuites>`;
@@ -798,6 +834,19 @@ describe("hang", () => {
         ranTests: [{ fullName: "d > t", status: "failed" }],
       },
       junitXml: junit,
+    });
+    expect(kind).toBe("build break");
+  });
+
+  it("(pytest-probe-error) ProbeError message is not assertion red", async () => {
+    const lib = await import("./revert-proof-lib.mjs");
+    const body = `<failure message="service.rp_probe.ProbeError: bad input"># AssertionError in comment</failure>`;
+    expect(lib.isPytestAssertionBody(body)).toBe(false);
+    const kind = lib.classifyPatchedPytest({
+      counts: {
+        collectionError: false,
+        cases: [{ name: "t", outcome: "failed", body }],
+      },
     });
     expect(kind).toBe("build break");
   });
@@ -963,7 +1012,6 @@ describe("hang", () => {
         env: {
           ...process.env,
           FORCE_COLOR: "0",
-          REVERT_PROOF_SKIP_PNPM_INSTALL: "1",
           REVERT_PROOF_PYTHON: fixturePython(root),
         },
       });
@@ -1055,7 +1103,7 @@ describe("vitest testName escaping", () => {
     );
     expect(mod.escapeVitestTestNamePattern("a(b)*+?")).toBe("a\\(b\\)\\*\\+\\?");
     expect(
-      mod.vitestJunitTestNames(
+      mod.vitestJunitExecutedTestNames(
         `<testsuite>
 <testcase name="other &gt; filtered"><skipped/></testcase>
 <testcase name="widget &gt; alpha &gt; returns one"/>
@@ -1063,7 +1111,7 @@ describe("vitest testName escaping", () => {
       ),
     ).toEqual([["widget > alpha > returns one"]]);
     expect(
-      mod.vitestJunitTestNames(
+      mod.vitestJunitExecutedTestNames(
         `<testsuite><testcase classname="widget &amp; alpha" name="returns one"/></testsuite>`,
       ),
     ).toEqual([["returns one", "widget & alpha > returns one"]]);
@@ -1195,6 +1243,23 @@ describe("isolation guards", () => {
     const nm = path.join(root, "node_modules", "@scope", "pkg");
     fs.mkdirSync(path.dirname(nm), { recursive: true });
     fs.symlinkSync("/tmp", nm);
+    expect(() => mod.assertWorkspaceLinksInWorktree(root)).toThrow(
+      /outside worktree/i,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("(link-guard-main) rejects symlinks into the main checkout", async () => {
+    const mod = await import("./revert-proof.mjs");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "rp-guard-main-"));
+    const target = path.join(repoRoot, "plugins");
+    if (!fs.existsSync(target)) {
+      fs.rmSync(root, { recursive: true, force: true });
+      return;
+    }
+    const nm = path.join(root, "node_modules", "escape-pkg");
+    fs.mkdirSync(path.dirname(nm), { recursive: true });
+    fs.symlinkSync(target, nm);
     expect(() => mod.assertWorkspaceLinksInWorktree(root)).toThrow(
       /outside worktree/i,
     );

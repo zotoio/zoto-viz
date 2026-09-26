@@ -26,6 +26,7 @@ import {
   validatePythonModule,
   validateTestFileRel,
   vitestTestNamePattern,
+  isVitestJunitSkipped,
 } from "./revert-proof-lib.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -620,7 +621,7 @@ function findNodeModulesRoots(wtRoot) {
   return roots;
 }
 
-function checkSymlinkInsideWorktree(linkPath, wtReal, mainReal) {
+function checkSymlinkInsideWorktree(linkPath, wtReal) {
   let st;
   try {
     st = fs.lstatSync(linkPath);
@@ -634,20 +635,13 @@ function checkSymlinkInsideWorktree(linkPath, wtReal, mainReal) {
   if (real === wtReal || real.startsWith(`${wtReal}${path.sep}`)) {
     return;
   }
-  if (
-    mainReal &&
-    (real === mainReal || real.startsWith(`${mainReal}${path.sep}`))
-  ) {
-    return;
-  }
   throw new Error(
     `workspace link ${linkPath} resolves outside worktree: ${real}`,
   );
 }
 
-export function assertWorkspaceLinksInWorktree(wtRoot, mainRoot) {
+export function assertWorkspaceLinksInWorktree(wtRoot) {
   const wtReal = fs.realpathSync(wtRoot);
-  const mainReal = mainRoot ? fs.realpathSync(mainRoot) : null;
   for (const nmRoot of findNodeModulesRoots(wtRoot)) {
     for (const name of fs.readdirSync(nmRoot)) {
       if (name === ".pnpm" || name === ".bin" || name === ".cache") {
@@ -662,15 +656,15 @@ export function assertWorkspaceLinksInWorktree(wtRoot, mainRoot) {
           continue;
         }
         if (!scopeStat.isDirectory()) {
-          checkSymlinkInsideWorktree(full, wtReal, mainReal);
+          checkSymlinkInsideWorktree(full, wtReal);
           continue;
         }
         for (const pkg of fs.readdirSync(full)) {
-          checkSymlinkInsideWorktree(path.join(full, pkg), wtReal, mainReal);
+          checkSymlinkInsideWorktree(path.join(full, pkg), wtReal);
         }
         continue;
       }
-      checkSymlinkInsideWorktree(full, wtReal, mainReal);
+      checkSymlinkInsideWorktree(full, wtReal);
     }
   }
 }
@@ -705,46 +699,23 @@ function vitestBinsPresent(wtRoot) {
   return fs.existsSync(rootBin) || fs.existsSync(webBin);
 }
 
-function seedNodeModulesFromMain(mainRoot, wtRoot) {
-  const linkDir = (src, dest) => {
-    if (!fs.existsSync(src)) return;
-    if (fs.existsSync(dest)) return;
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.symlinkSync(src, dest, "dir");
-  };
-  linkDir(
-    path.join(mainRoot, "node_modules"),
-    path.join(wtRoot, "node_modules"),
-  );
-  linkDir(
-    path.join(mainRoot, "web", "node_modules"),
-    path.join(wtRoot, "web", "node_modules"),
-  );
-}
-
-function ensureJsDepsInWorktree(mainRoot, wtRoot, rows) {
+function ensureJsDepsInWorktree(_mainRoot, wtRoot, rows) {
   if (worktreeJsDepsReady) {
     return;
   }
   const needsVitest = rows.some((r) => r.meta.runner === "vitest");
-  const skipInstall = process.env.REVERT_PROOF_SKIP_PNPM_INSTALL === "1";
-  if (needsVitest && skipInstall) {
-    seedNodeModulesFromMain(mainRoot, wtRoot);
-  }
-  const installRoots = needsVitest && !skipInstall ? findPnpmInstallRoots(wtRoot, rows) : [];
+  const installRoots = needsVitest ? findPnpmInstallRoots(wtRoot, rows) : [];
   if (installRoots.length > 0) {
     for (const dir of installRoots) {
       pnpmInstallOffline(dir);
     }
   } else if (needsVitest && !vitestBinsPresent(wtRoot)) {
     throw new Error(
-      skipInstall
-        ? "REVERT_PROOF_SKIP_PNPM_INSTALL=1 but vitest is missing (seed from checkout failed)"
-        : "vitest rows require pnpm-lock.yaml and offline install in the worktree",
+      "vitest rows require pnpm-lock.yaml and offline install in the worktree",
     );
   }
-  if (needsVitest && !skipInstall) {
-    assertWorkspaceLinksInWorktree(wtRoot, mainRoot);
+  if (needsVitest) {
+    assertWorkspaceLinksInWorktree(wtRoot);
   }
   worktreeJsDepsReady = true;
 }
@@ -996,16 +967,19 @@ function decodeXmlAttribute(value) {
   );
 }
 
-export function vitestJunitTestNames(xmlText) {
+export function vitestJunitExecutedTestNames(xmlText) {
   const names = [];
-  const testcaseRe = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
+  const testcaseRe =
+    /<testcase\b((?:"[^"]*"|'[^']*'|[^'">/])*)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
   let testcase;
   while ((testcase = testcaseRe.exec(xmlText ?? ""))) {
-    if (/<skipped\b/.test(testcase[2] ?? "")) continue;
+    const attrsText = testcase[1];
+    const body = testcase[2] ?? "";
+    if (isVitestJunitSkipped(attrsText, body)) continue;
     const attrs = {};
     const attrRe = /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
     let attr;
-    while ((attr = attrRe.exec(testcase[1]))) {
+    while ((attr = attrRe.exec(attrsText))) {
       attrs[attr[1]] = decodeXmlAttribute(attr[2] ?? attr[3] ?? "");
     }
     if (attrs.name === undefined) continue;
@@ -1031,15 +1005,11 @@ function assertVitestTestSelection(slug, phase, meta, counts, junitXml) {
       `row ${slug}: ${phase} ran "${ranName}" but sidecar expects "${meta.testName}"`,
     );
   }
-  const junitNames = vitestJunitTestNames(junitXml);
-  if (junitNames.length !== 1) {
+  const junitExecuted = vitestJunitExecutedTestNames(junitXml);
+  const junitMatches = junitExecuted.filter((cands) => cands.includes(meta.testName));
+  if (junitMatches.length !== 1) {
     throw new Error(
-      `row ${slug}: ${phase} JUnit must contain exactly 1 testcase (got ${junitNames.length})`,
-    );
-  }
-  if (!junitNames[0].includes(meta.testName)) {
-    throw new Error(
-      `row ${slug}: ${phase} JUnit testcase "${junitNames[0].join('" or "')}" does not match sidecar "${meta.testName}"`,
+      `row ${slug}: ${phase} JUnit must have exactly 1 executed testcase matching sidecar (got ${junitMatches.length} matches among ${junitExecuted.length} executed)`,
     );
   }
 }
@@ -1092,9 +1062,8 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
         failedAssertions: [],
         ranTests: [],
       };
-  const commandParts = [bin, ...args].map((p) => (p.includes(" ") ? JSON.stringify(p) : p));
   return {
-    command: commandParts.join(" "),
+    command: formatCommandForReport(wtRoot, bin, args),
     ...result,
     counts,
     junitXml,
@@ -1137,11 +1106,32 @@ async function runPytest(
     parsed = { executed: 0, cases: [], collectionError: true };
   }
   return {
-    command: `python -m pytest ${nodeId}`,
+    command: formatCommandForReport(wtRoot, python, args),
     ...result,
     counts: parsed,
     reportPath: xmlOut,
   };
+}
+
+function formatCommandForReport(wtRoot, executable, args) {
+  let binLabel = executable;
+  try {
+    const wtReal = path.resolve(wtRoot);
+    const exeReal = path.resolve(executable);
+    if (exeReal.startsWith(`${wtReal}${path.sep}`)) {
+      binLabel = path.relative(wtReal, exeReal).split(path.sep).join("/");
+    } else {
+      binLabel = path.basename(executable);
+    }
+  } catch {
+    binLabel = path.basename(executable);
+  }
+  const parts = [binLabel, ...args].map((p) => {
+    const s = String(p);
+    const sanitized = sanitizeReportText(s);
+    return /\s/.test(sanitized) ? JSON.stringify(sanitized) : sanitized;
+  });
+  return parts.join(" ");
 }
 
 async function runTestPhase(

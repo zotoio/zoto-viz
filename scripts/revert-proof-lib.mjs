@@ -222,6 +222,15 @@ export function patchTouchesTestFiles(patchText) {
   return [...paths].some((p) => TEST_PATH_RE.test(p));
 }
 
+export function isVitestJunitSkipped(attrsText, body) {
+  if (/<skipped\b/i.test(body ?? "")) return true;
+  const statusM = attrsText.match(/\bstatus="([^"]*)"/);
+  if (statusM && /skipped|pending|todo/i.test(statusM[1])) return true;
+  const skippedM = attrsText.match(/\bskipped="([^"]*)"/);
+  if (skippedM && /^(1|true|yes)$/i.test(skippedM[1])) return true;
+  return false;
+}
+
 /** @returns {string | null} */
 export function vitestJunitFailureType(xmlText) {
   if (!xmlText?.trim()) return null;
@@ -230,7 +239,9 @@ export function vitestJunitFailureType(xmlText) {
   let failedType = null;
   let failedCount = 0;
   while ((m = caseRe.exec(xmlText))) {
+    const attrs = m[1];
     const body = m[3] ?? "";
+    if (isVitestJunitSkipped(attrs, body)) continue;
     if (!/<failure\b/.test(body)) continue;
     failedCount += 1;
     const tag = body.match(/<failure\b([^>]*)>/);
@@ -241,18 +252,9 @@ export function vitestJunitFailureType(xmlText) {
   return failedType;
 }
 
-export function isVitestAssertionFailure(failedAssertions, junitXml) {
+export function isVitestAssertionFailure(_failedAssertions, junitXml) {
   const junitType = vitestJunitFailureType(junitXml ?? "");
-  if (junitType !== null) {
-    return junitType === "AssertionError";
-  }
-  for (const fa of failedAssertions ?? []) {
-    const msg = (fa.messages ?? []).join("\n");
-    if (/AssertionError|\bexpect\s*\(/.test(msg)) {
-      return true;
-    }
-  }
-  return false;
+  return junitType === "AssertionError";
 }
 
 export function classifyPatchedVitest(run) {
@@ -280,20 +282,13 @@ export function pytestFailureMessage(body) {
 
 export function isPytestAssertionBody(body) {
   const typeM = body.match(/<failure\b[^>]*\btype="([^"]*)"/);
-  if (typeM?.[1] === "AssertionError") return true;
-  if (typeM?.[1] && typeM[1] !== "AssertionError") return false;
-
-  const msgM = body.match(/<failure\b[^>]*\bmessage="([^"]*)"/);
-  if (msgM?.[1]?.startsWith("AssertionError")) return true;
-  if (msgM?.[1] && /^[A-Za-z]+(?:Error|Exception):/.test(msgM[1])) {
-    return false;
+  if (typeM?.[1]) {
+    return typeM[1] === "AssertionError";
   }
-
-  if (/\bAssertionError\b/.test(body)) return true;
-
-  const first = pytestFailureMessage(body);
-  if (first.startsWith("AssertionError")) return true;
-  if (first.startsWith("assert ")) return true;
+  const msgM = body.match(/<failure\b[^>]*\bmessage="([^"]*)"/);
+  const msg = msgM?.[1] ?? "";
+  if (msg.startsWith("AssertionError")) return true;
+  if (msg.startsWith("assert ")) return true;
   return false;
 }
 
