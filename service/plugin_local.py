@@ -31,59 +31,6 @@ _seen: dict[str, str] = {}
 _primed = False
 
 
-def format_install_blocked_message(blocked_version: int, running_version: int) -> str:
-    """User-facing copy when a bad overwrite is rejected (#35)."""
-    return f"v{blocked_version} was blocked; v{running_version} is still running"
-
-
-class InstallBlockedError(Exception):
-    """Rejected overwrite: runtime and drop-zone zip stay on the previous version."""
-
-    def __init__(
-        self,
-        *,
-        plugin_id: str,
-        blocked_version: int | None,
-        running_version: int | None,
-    ) -> None:
-        self.plugin_id = plugin_id
-        self.blocked_version = blocked_version
-        self.running_version = running_version
-        if blocked_version is not None and running_version is not None:
-            self.message = format_install_blocked_message(blocked_version, running_version)
-        else:
-            self.message = "install blocked; previous version is still running"
-        super().__init__(self.message)
-
-
-def _version_from_plugin_yml(path: Path) -> int | None:
-    try:
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
-        return None
-    if not isinstance(doc, dict):
-        return None
-    ver = doc.get("version")
-    return int(ver) if isinstance(ver, int) else None
-
-
-def installed_plugin_version(pid: str) -> int | None:
-    """Version currently installed for a local plugin id (runtime tree, else zip)."""
-    runtime_yml = paths.plugin_local_runtime_dir() / pid / "plugin.yml"
-    if runtime_yml.is_file():
-        return _version_from_plugin_yml(runtime_yml)
-    dest = paths.plugin_local_dir() / f"{pid}.zip"
-    if not dest.is_file():
-        return None
-    with tempfile.TemporaryDirectory(prefix="zoto-plugin-ver.") as tmp:
-        stage = Path(tmp)
-        pz.unpack_zip(dest, stage)
-        yml = stage / "plugin.yml"
-        if not yml.is_file():
-            yml = stage / "plugin.yaml"
-        return _version_from_plugin_yml(yml) if yml.is_file() else None
-
-
 def reset_watch_for_tests() -> None:
     global _primed
     _seen.clear()
@@ -321,55 +268,19 @@ def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
     return info
 
 
-def _validate_zip_tree(zip_path: Path) -> None:
-    """Unpack to a temp tree and run full merged validation (no install side effects)."""
-    with tempfile.TemporaryDirectory(prefix="zoto-plugin-stage.") as tmp:
+def _merged_settings_check_zip(zip_path: Path) -> None:
+    """Run ``settings_check`` on an unpacked zip tree before any install commit."""
+    with tempfile.TemporaryDirectory(prefix="zoto-plugin-check.") as tmp:
         stage = Path(tmp)
         pz.unpack_zip(zip_path, stage)
-        plugins.validate_plugin_home(stage)
-
-
-def _validate_incoming_zip(
-    tmp_path: Path,
-    doc: dict[str, Any],
-    pid: str,
-    dest: Path,
-    *,
-    overwrite: bool,
-) -> None:
-    replacing = dest.is_file() and pz.plugin_sha256(dest) != pz.plugin_sha256(tmp_path)
-    incoming_ver = doc.get("version")
-    blocked_ver = int(incoming_ver) if isinstance(incoming_ver, int) else None
-    try:
-        _validate_zip_tree(tmp_path)
-    except ValueError as err:
-        if replacing and overwrite:
-            running_ver = installed_plugin_version(pid)
-            raise InstallBlockedError(
-                plugin_id=pid,
-                blocked_version=blocked_ver,
-                running_version=running_ver,
-            ) from err
-        raise
+        plugins.settings_check(stage)
 
 
 def _install_unpacked_tree(zip_path: Path, runtime: Path) -> pz.UnpackResult:
-    """Validate on a staging tree, then replace the runtime directory."""
-    with tempfile.TemporaryDirectory(prefix="zoto-plugin-stage.") as tmp:
-        stage = Path(tmp)
-        unpacked = pz.unpack_zip(zip_path, stage)
-        plugins.validate_plugin_home(stage)
-        if runtime.exists():
-            shutil.rmtree(runtime)
-        shutil.copytree(stage, runtime)
-        return pz.UnpackResult(
-            dest=runtime,
-            sha256=unpacked.sha256,
-            unpacked=unpacked.unpacked,
-            plugin=unpacked.plugin,
-            parts=unpacked.parts,
-            members=unpacked.members,
-        )
+    """Unpack into the local runtime directory (validation runs before commit only)."""
+    if runtime.exists():
+        shutil.rmtree(runtime)
+    return pz.unpack_zip(zip_path, runtime)
 
 
 def install_local_zip(
@@ -394,7 +305,7 @@ def install_local_zip(
         runtime = paths.plugin_local_runtime_dir(create=True) / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
-            _validate_zip_tree(dest)
+            _merged_settings_check_zip(dest)
             unpacked = _install_unpacked_tree(dest, runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
@@ -404,7 +315,7 @@ def install_local_zip(
             raise ValueError(
                 f"plugin {pid!r} already exists in the local drop zone (pass overwrite: true)"
             )
-        _validate_incoming_zip(tmp_path, doc, pid, dest, overwrite=overwrite)
+        _merged_settings_check_zip(tmp_path)
         staged = dest.with_name(dest.name + ".tmp")
         shutil.copy2(tmp_path, staged)
         os.replace(staged, dest)
@@ -441,7 +352,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
         else:
             shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
-    _validate_zip_tree(dest)
+    _merged_settings_check_zip(dest)
     unpacked = _install_unpacked_tree(dest, runtime)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
@@ -462,15 +373,6 @@ def publish_local(body: dict[str, Any] | None) -> dict[str, Any]:
             "id": e.plugin_id,
             "path": e.path,
             "hint": "a shipped plugins/src tree already owns this id",
-        }
-    except InstallBlockedError as e:
-        return {
-            "ok": False,
-            "error": "install_blocked",
-            "id": e.plugin_id,
-            "message": e.message,
-            "blockedVersion": e.blocked_version,
-            "runningVersion": e.running_version,
         }
     except ValueError as e:
         return {"ok": False, "error": str(e)}

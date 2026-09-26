@@ -1,6 +1,6 @@
 import { inspectPaneStartup, type PaneStartupSnap } from "../graph/pane-health";
 
-/** Matches service.plugin_local.format_install_blocked_message (#35). */
+/** Matches PR #35 install pipeline user copy (wired after #35 lands). */
 export function formatInstallBlockedMessage(blockedVersion: number, runningVersion: number): string {
   return `v${blockedVersion} was blocked; v${runningVersion} is still running`;
 }

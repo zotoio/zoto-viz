@@ -1124,15 +1124,11 @@ export class AgentPanel {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ files, activate: true }),
           }).then((x) => x.json()) as {
-            ok?: boolean; error?: string; message?: string; id?: string;
-            activated?: boolean; consentRequired?: boolean;
-            blockedVersion?: number; runningVersion?: number;
+            ok?: boolean; error?: string; id?: string; activated?: boolean; consentRequired?: boolean;
           };
           if (d.activated) this.append("agent", `plugin ${d.id} built and activated (${names})`);
           else if (d.consentRequired) this.append("agent", `plugin ${d.id} installed (${names}) — source review required`);
-          else if (d.error === "install_blocked" && d.message) {
-            this.append("agent", d.message);
-          } else this.append("agent", d.ok ? `plugin ${d.id} built (${names})` : `plugin invalid: ${d.error}`);
+          else this.append("agent", d.ok ? `plugin ${d.id} built (${names})` : `plugin invalid: ${d.error}`);
         }
       }
     } catch (e) {

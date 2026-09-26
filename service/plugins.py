@@ -752,6 +752,15 @@ def load_file(path: Path) -> dict[str, Any]:
     return validate_doc(raw)
 
 
+def settings_check(staging_dir: Path) -> dict[str, Any]:
+    """Pure merged-tree validation for install staging (#35 check list hook).
+
+    No filesystem writes beyond reading ``plugin.yml`` / ``visualisation.yml`` under
+    ``staging_dir``. Safe to run on a temp unpack before commit.
+    """
+    return validate_plugin_home(staging_dir)
+
+
 def validate_plugin_home(home: Path) -> dict[str, Any]:
     """Validate plugin.yml + visualisation.yml the same way catalog scan does."""
     errors: list[dict[str, str]] = []
