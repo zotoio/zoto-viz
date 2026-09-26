@@ -1,0 +1,36 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/plugins/viz-v1-frame-adapter.test.ts (7 tests | 1 failed | 6 skipped) 9ms
+   ❯ VizV1FrameAdapter (6)
+     × keeps the same view options object across delivers until syncViewOpts replaces it 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/plugins/viz-v1-frame-adapter.test.ts > VizV1FrameAdapter > keeps the same view options object across delivers until syncViewOpts replaces it
+AssertionError: expected { source: 'lan', layout: 'grid' } to be { source: 'lan', layout: 'grid' } // Object.is equality
+
+If it should pass with deep equality, replace "toBe" with "toStrictEqual"
+
+Expected: { source: 'lan', layout: 'grid' }
+Received: serializes to the same string
+
+
+Compared values have no visual difference.
+
+ ❯ src/plugins/viz-v1-frame-adapter.test.ts:76:18
+     74|     adapter.deliver(sampleV2(0));
+     75|     const held = adapter.viewOptsSnapshot();
+     76|     expect(held).toBe(opts);
+       |                  ^
+     77|     for (let i = 0; i < 300; i++) adapter.deliver(sampleV2(i));
+     78|     expect(adapter.viewOptsSnapshot()).toBe(held);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  19:30:30
+   Duration  864ms (environment 58%, transform 34%, import 4%, setup 2%, tests 1%)
+
