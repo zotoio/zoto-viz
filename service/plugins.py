@@ -340,8 +340,6 @@ _CONSENT_HASH_KEYS = ("backend_sha256", "collector_sha256", "shader_sha256")
 # Matches ``pack_safe_zip._TREE_HASH_VERSION`` (0x01) stored on each consent row.
 PACK_TREE_HASH_VERSION = 0x01
 
-_consent_tree_migration_bytes_last_boot = 0
-
 
 def needs_review(doc: dict[str, Any]) -> bool:
     """True when the plugin ships executable code (TypeScript, Python, and/or GLSL)."""
@@ -483,28 +481,15 @@ def grant_consent(doc: dict[str, Any], kind: str) -> str:
     return kind
 
 
-def reset_consent_tree_migration_stats_for_tests() -> None:
-    global _consent_tree_migration_bytes_last_boot
-    _consent_tree_migration_bytes_last_boot = 0
-
-
-def consent_tree_migration_disk_bytes_read() -> int:
-    """File bytes read from live pack folders during the last ``migrate_consent_pack_tree_hashes`` call."""
-    return _consent_tree_migration_bytes_last_boot
-
-
 def migrate_consent_pack_tree_hashes(runtime_parent: Path) -> list[str]:
     """One-time upgrade of consent ``pack_tree_sha256`` to format version ``PACK_TREE_HASH_VERSION``."""
-    global _consent_tree_migration_bytes_last_boot
     from . import pack_safe_zip as psz
 
-    _consent_tree_migration_bytes_last_boot = 0
     data = _consent_doc()
     if not data:
         return []
     runtime_parent = Path(runtime_parent)
     changed = False
-    disk_bytes = 0
     msgs: list[str] = []
     for pid, rec in data.items():
         if not isinstance(rec, dict):
@@ -514,13 +499,10 @@ def migrate_consent_pack_tree_hashes(runtime_parent: Path) -> list[str]:
         home = runtime_parent / str(pid)
         if not home.is_dir():
             continue
-        new_hash, nbytes = psz.runtime_tree_hash_from_disk_with_byte_count(home)
-        disk_bytes += nbytes
-        rec["pack_tree_sha256"] = new_hash
+        rec["pack_tree_sha256"] = psz.runtime_tree_hash(home)
         rec["tree_hash_version"] = PACK_TREE_HASH_VERSION
         changed = True
         msgs.append(f"pack tree hash migrated for {pid}")
-    _consent_tree_migration_bytes_last_boot = disk_bytes
     if changed:
         _persist_consent_doc(data)
     return msgs

@@ -71,6 +71,30 @@ def _local() -> Path:
     return paths.plugin_local_dir(create=True)
 
 
+def _live_tree_file_bytes(runtime: Path) -> int:
+    return sum(len(p.read_bytes()) for p in runtime.rglob("*") if p.is_file())
+
+
+def _meter_pack_folder_reads(monkeypatch: pytest.MonkeyPatch, pack_root: Path) -> dict[str, int]:
+    """Count ``Path.read_bytes`` bytes under a pack runtime folder (tree hash path)."""
+    meter = {"bytes": 0}
+    root = pack_root.resolve()
+    real_read_bytes = Path.read_bytes
+
+    def counting_read_bytes(self: Path) -> bytes:
+        data = real_read_bytes(self)
+        try:
+            resolved = self.resolve()
+            if resolved.is_file() and root in resolved.parents:
+                meter["bytes"] += len(data)
+        except OSError:
+            pass
+        return data
+
+    monkeypatch.setattr(Path, "read_bytes", counting_read_bytes)
+    return meter
+
+
 @pytest.fixture(autouse=True)
 def _reset() -> None:
     pi.reset_install_pipeline_for_tests()
@@ -757,7 +781,7 @@ def test_consent_survives_pack_tree_hash_migration(tmp_path: Path, monkeypatch: 
     good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
     assert plugin_local.publish_local({"zip_b64": base64.b64encode(good).decode()})["ok"] is True
     runtime = paths.plugin_local_runtime_dir() / "sample"
-    _, live_bytes = psz.runtime_tree_hash_from_disk_with_byte_count(runtime)
+    live_bytes = _live_tree_file_bytes(runtime)
     assert live_bytes > 0
     legacy = psz.legacy_runtime_tree_hash(runtime)
     doc = plugins.validate_doc({"id": "sample", "name": "Sample", "version": 1})
@@ -771,19 +795,20 @@ def test_consent_survives_pack_tree_hash_migration(tmp_path: Path, monkeypatch: 
             },
         },
     )
-    plugins.reset_consent_tree_migration_stats_for_tests()
+    meter = _meter_pack_folder_reads(monkeypatch, runtime)
     msgs_boot1 = plugins.migrate_consent_pack_tree_hashes(runtime.parent)
     assert any("sample" in m for m in msgs_boot1)
-    assert plugins.consent_tree_migration_disk_bytes_read() == live_bytes
+    assert meter["bytes"] == live_bytes
     assert plugins.consent_kind(doc) == "reviewed"
     assert plugins.consented(doc)
     rec = plugins._consent_doc()["sample"]
     assert rec.get("tree_hash_version") == plugins.PACK_TREE_HASH_VERSION
     assert rec.get("pack_tree_sha256") == psz.runtime_tree_hash(runtime)
 
+    meter["bytes"] = 0
     msgs_boot2 = plugins.migrate_consent_pack_tree_hashes(runtime.parent)
     assert msgs_boot2 == []
-    assert plugins.consent_tree_migration_disk_bytes_read() == 0
+    assert meter["bytes"] == 0
     assert plugins.consent_kind(doc) == "reviewed"
     assert plugins.consented(doc)
 

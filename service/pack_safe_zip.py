@@ -1,7 +1,6 @@
 """Validate pack zips once → ``StagedPack``; remint and go-live never re-parse the archive."""
 from __future__ import annotations
 
-import copy
 import hashlib
 import io
 import logging
@@ -12,7 +11,7 @@ import unicodedata
 import weakref
 import zlib
 import zipfile
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
 
@@ -100,19 +99,6 @@ class StagedPack:
 def _assert_staged_token(token: object) -> None:
     if token is not _STAGED_SENTINEL:
         raise TypeError("StagedPack cannot be constructed outside pack_safe_zip")
-
-
-def staged_pack_copy_forbidden(pack: StagedPack) -> None:
-    """Call from tests/guards; ``copy.copy`` must not produce a second live instance."""
-    clone = copy.copy(pack)
-    if clone is not pack:
-        raise TypeError("StagedPack cannot be copied")
-
-
-def staged_pack_replace_forbidden(pack: StagedPack, **changes: Any) -> None:
-    if changes:
-        raise TypeError("StagedPack cannot be replaced")
-    replace(pack, tree_sha256=pack.tree_sha256)
 
 
 def _register_issued_staged(pack: StagedPack) -> None:
