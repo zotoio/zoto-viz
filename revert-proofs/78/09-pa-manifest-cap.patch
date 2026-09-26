@@ -1,0 +1,12 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -13,7 +13,7 @@
+ import yaml
+ 
+ # Fixed cap for manifest/metadata member reads (plugin.yml); packs cannot raise this.
+-MANIFEST_MEMBER_MAX_BYTES = 65_536
++MANIFEST_MEMBER_MAX_BYTES = int(__import__('os').environ.get('ZOTO_PACK_MANIFEST_MAX', '65536'))
+ 
+ _REQUIRED = "plugin.yml"
+ 

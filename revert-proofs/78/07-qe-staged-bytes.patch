@@ -1,0 +1,13 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -133,9 +133,6 @@
+         out = staging / rel
+         out.parent.mkdir(parents=True, exist_ok=True)
+         out.write_bytes(data)
+-        digest = hashlib.sha256(out.read_bytes()).hexdigest()
+-        if digest != read.member_sha256[rel]:
+-            raise ValueError(zip_entry_error(rel, "staged bytes do not match zip entry"))
+ 
+ 
+ def _parse_plugin_yml(raw: bytes) -> dict[str, Any]:

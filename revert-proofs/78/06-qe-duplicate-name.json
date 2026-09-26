@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_qe_duplicate_name_rejected_before_staging",
+  "description": "Duplicate normalized zip entry names are rejected before staging with one first-failure message."
+}

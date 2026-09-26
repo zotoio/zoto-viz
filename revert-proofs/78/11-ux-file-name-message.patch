@@ -1,0 +1,13 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -77,8 +77,7 @@
+ 
+ 
+ def zip_entry_error(member: str, detail: str) -> str:
+-    rel = member.replace("\\", "/")
+-    return f"zip entry {rel!r}: {detail}"
++    return detail
+ 
+ 
+ def read_pack_zip(path: Path) -> PackZipRead:

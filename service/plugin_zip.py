@@ -20,6 +20,8 @@ from typing import Any, Iterable
 
 import yaml
 
+from . import pack_safe_zip as psz
+
 MAX_ZIP_BYTES = 12_000_000
 MAX_UNCOMPRESSED_BYTES = 24_000_000  # schema $defs/zipContract — a few NASA stills + tree
 MAX_FILES = 80
@@ -94,29 +96,13 @@ def detect_parts(members: Iterable[str] | Path) -> tuple[str, ...]:
 
 
 def inspect_zip(path: Path) -> ZipManifest:
-    path = Path(path)
-    if not path.is_file():
-        raise ValueError(f"not a file {path}")
-    compressed = path.stat().st_size
-    if compressed > MAX_ZIP_BYTES:
-        raise ValueError(f"zip exceeds {MAX_ZIP_BYTES} bytes")
-    try:
-        zf = zipfile.ZipFile(path)
-    except zipfile.BadZipFile as e:
-        raise ValueError("not a zip") from e
-    with zf:
-        files = _read_members(zf)
-    if REQUIRED_MEMBER not in files:
-        raise ValueError(f"{REQUIRED_MEMBER} is required at the archive root")
-    plugin = _parse_plugin_yml(files[REQUIRED_MEMBER])
-    members = tuple(sorted(files))
-    uncompressed = sum(len(b) for b in files.values())
+    read = psz.read_pack_zip(Path(path))
     return ZipManifest(
-        plugin=plugin,
-        members=members,
-        parts=detect_parts(members),
-        compressed_bytes=compressed,
-        uncompressed_bytes=uncompressed,
+        plugin=read.plugin,
+        members=read.members_sorted,
+        parts=read.parts,
+        compressed_bytes=read.compressed_bytes,
+        uncompressed_bytes=read.uncompressed_bytes,
     )
 
 
@@ -293,18 +279,8 @@ def _parse_plugin_yml(raw: bytes) -> dict[str, Any]:
 
 
 def _extract_files(path: Path) -> dict[str, bytes]:
-    compressed = Path(path).stat().st_size
-    if compressed > MAX_ZIP_BYTES:
-        raise ValueError(f"zip exceeds {MAX_ZIP_BYTES} bytes")
-    try:
-        zf = zipfile.ZipFile(path)
-    except zipfile.BadZipFile as e:
-        raise ValueError("not a zip") from e
-    with zf:
-        files = _read_members(zf)
-    if REQUIRED_MEMBER not in files:
-        raise ValueError(f"{REQUIRED_MEMBER} is required at the archive root")
-    return files
+    read = psz.read_pack_zip(Path(path))
+    return dict(read.members)
 
 
 def _read_members(zf: zipfile.ZipFile) -> dict[str, bytes]:

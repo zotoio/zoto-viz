@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import paths
+from . import pack_safe_zip as psz
 from . import plugin_zip as pz
 from .pack_boundary import PackBundleBoundaryError
 from .pack_install_blocked_store import clear_blocked_pack, clear_blocked_zip, record_blocked_zip
@@ -60,6 +61,7 @@ _extra_validators: list[InstallValidator] = []
 _pack_lock_meta = threading.Lock()
 _pack_install_locks: dict[str, threading.Lock] = {}
 _swap_in_progress: set[str] = set()
+_last_install_pack_read: psz.PackZipRead | None = None
 
 
 def register_install_validator(validator: InstallValidator) -> None:
@@ -73,6 +75,8 @@ def reset_install_pipeline_for_tests() -> None:
     _start_runtime_hook = None
     _extra_validators.clear()
     _swap_in_progress.clear()
+    global _last_install_pack_read
+    _last_install_pack_read = None
     with _pack_lock_meta:
         _pack_install_locks.clear()
 
@@ -101,6 +105,7 @@ class InstallContext:
     upgrade: bool
     rel: str
     zip_path: Path = field(default_factory=Path)
+    pack_zip: psz.PackZipRead | None = None
 
 
 def staging_root(runtime_parent: Path) -> Path:
@@ -192,13 +197,34 @@ def should_skip_unchanged_zip(dest_zip: Path, runtime: Path, incoming_sha: str) 
     return installed_zip_sha(runtime.parent, runtime.name) == incoming_sha
 
 
+def last_install_pack_read_for_tests() -> psz.PackZipRead | None:
+    return _last_install_pack_read
+
+
 def _check_zip_safety(ctx: InstallContext) -> None:
-    if not ctx.zip_path.is_file():
-        return
-    try:
-        pz.inspect_zip(ctx.zip_path)
-    except (ValueError, OSError) as e:
-        raise InstallBlocked(REASON_ZIP_UNSAFE, blocked_message(str(ctx.doc.get("name") or ctx.doc.get("id")), str(e)), validator="zip_safety") from e
+    read = ctx.pack_zip
+    if read is None:
+        raise InstallBlocked(
+            REASON_ZIP_UNSAFE,
+            blocked_message(str(ctx.doc.get("name") or ctx.doc.get("id")), "zip was not read through the safe reader"),
+            validator="zip_safety",
+        )
+    name = str(ctx.doc.get("name") or ctx.doc.get("id") or "Plugin")
+    for rel, want in read.member_sha256.items():
+        path = ctx.staging / rel
+        if not path.is_file():
+            raise InstallBlocked(
+                REASON_ZIP_UNSAFE,
+                blocked_message(name, psz.zip_entry_error(rel, "missing from staging")),
+                validator="zip_safety",
+            )
+        got = hashlib.sha256(path.read_bytes()).hexdigest()
+        if got != want:
+            raise InstallBlocked(
+                REASON_ZIP_UNSAFE,
+                blocked_message(name, psz.zip_entry_error(rel, "staged bytes do not match zip entry")),
+                validator="zip_safety",
+            )
 
 
 def _check_schema(ctx: InstallContext) -> None:
@@ -447,6 +473,7 @@ def install_zip_to_runtime(
     sha256: str | None = None,
     upgrade: bool = False,
     force: bool = False,
+    pack_read: psz.PackZipRead | None = None,
 ) -> dict[str, Any]:
     """Run staged install; return structured ok/blocked result (never raises InstallBlocked)."""
     pid = str(doc["id"])
@@ -458,7 +485,15 @@ def install_zip_to_runtime(
     lock.acquire()
     try:
         return _install_zip_to_runtime_locked(
-            zip_path, dest_zip, runtime, doc, rel=rel, sha256=incoming, upgrade=upgrade, pid=pid,
+            zip_path,
+            dest_zip,
+            runtime,
+            doc,
+            rel=rel,
+            sha256=incoming,
+            upgrade=upgrade,
+            pid=pid,
+            pack_read=pack_read,
         )
     finally:
         lock.release()
@@ -474,16 +509,26 @@ def _install_zip_to_runtime_locked(
     sha256: str,
     upgrade: bool,
     pid: str,
+    pack_read: psz.PackZipRead | None = None,
 ) -> dict[str, Any]:
+    global _last_install_pack_read
     staging: Path | None = None
     swapped = False
     parent = runtime.parent
     old_zip_bytes = dest_zip.read_bytes() if dest_zip.is_file() else b""
     old_runtime_hash = runtime_tree_hash(runtime)
+    name = str(doc.get("name") or doc.get("id") or "Plugin")
+    try:
+        pack_zip = pack_read or psz.read_pack_zip(zip_path)
+    except ValueError as e:
+        _rollback_blocked_install(runtime, dest_zip, old_zip_bytes, old_runtime_hash)
+        fail = InstallFailure("zip_safety", REASON_ZIP_UNSAFE, blocked_message(name, str(e)))
+        return blocked_result(fail, pack_id=pid, sha256=sha256, zip_path=rel)
+    _last_install_pack_read = pack_zip
     try:
         cleanup_staging_for_pack(parent, pid)
         staging = new_staging_dir(parent, pid)
-        unpacked = pz.unpack_zip(zip_path, staging)
+        psz.write_pack_zip_to_staging(staging, pack_zip)
         ctx = InstallContext(
             staging=staging,
             runtime=runtime,
@@ -493,6 +538,7 @@ def _install_zip_to_runtime_locked(
             upgrade=upgrade,
             rel=rel,
             zip_path=zip_path,
+            pack_zip=pack_zip,
         )
         first, _all = run_staging_validators(ctx)
         if first is not None:
@@ -508,7 +554,14 @@ def _install_zip_to_runtime_locked(
         if swapped:
             shutil.rmtree(bak_path(runtime), ignore_errors=True)
         write_install_state(parent, pid, sha256)
-        final = pz.unpack_zip(dest_zip, runtime)
+        final = pz.UnpackResult(
+            dest=runtime,
+            sha256=sha256,
+            unpacked=True,
+            plugin=doc,
+            parts=pack_zip.parts,
+            members=pack_zip.members_sorted,
+        )
         return success_result(doc, dest_zip, final, wrote=True)
     finally:
         cleanup_staging_dir(staging)

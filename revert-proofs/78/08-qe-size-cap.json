@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_qe_size_cap_uses_inflated_bytes_exact",
+  "description": "Uncompressed size cap uses actual inflated bytes with exact over-cap message."
+}

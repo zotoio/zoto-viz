@@ -674,8 +674,13 @@ def install_catalog_zip(
     tmp_path = Path(tmp_name)
     try:
         tmp_path.write_bytes(raw)
-        manifest = pz.inspect_zip(tmp_path)
-        doc = plugins.validate_doc(manifest.plugin)
+        from . import pack_safe_zip as psz
+
+        try:
+            pack_read = psz.read_pack_zip(tmp_path)
+        except ValueError as e:
+            return plugin_local._zip_blocked_result(e)
+        doc = plugins.validate_doc(pack_read.plugin)
         pid = str(doc["id"])
         dest = paths.plugin_zips_dir() / f"{pid}.zip"
         raw, doc, dest, reminted_from = plugin_local.remint_zip(raw, dest, overwrite=overwrite)
@@ -708,6 +713,7 @@ def install_catalog_zip(
             sha256=incoming,
             upgrade=upgrade,
             force=force,
+            pack_read=pack_read,
         )
         if not pipeline.get("ok"):
             _refresh_plugin_python(pipeline)

@@ -15,6 +15,7 @@ from service import plugin_zip as pz
 from service.pack_install_blocked_store import pack_info_blocked_line, reset_blocked_store_for_tests
 from service.pack_install_copy import REASON_SCHEMA_INVALID
 from service.pack_install_wall_notices import reset_wall_notices_for_tests
+from service.pack_safe_zip import PackZipRead, ZipReadStats
 from service.plugin_install import InstallBlocked, InstallContext, InstallValidator, register_install_validator
 
 MINIMAL = "id: sample\nname: Sample\nversion: 1\n"
@@ -61,6 +62,17 @@ def test_register_install_validator_runs_in_order() -> None:
     staging = Path("/tmp/staging-x")
     staging.mkdir(exist_ok=True)
     (staging / "plugin.yml").write_text(MINIMAL, encoding="utf-8")
+    yml = MINIMAL.encode("utf-8")
+    pack_zip = PackZipRead(
+        members={"plugin.yml": yml},
+        member_sha256={"plugin.yml": __import__("hashlib").sha256(yml).hexdigest()},
+        plugin={"id": "x", "name": "X", "version": 1},
+        members_sorted=("plugin.yml",),
+        parts=(),
+        compressed_bytes=0,
+        uncompressed_bytes=len(yml),
+        stats=ZipReadStats(),
+    )
     ctx = InstallContext(
         staging=staging,
         runtime=Path("."),
@@ -70,6 +82,7 @@ def test_register_install_validator_runs_in_order() -> None:
         upgrade=False,
         rel="z.zip",
         zip_path=Path("."),
+        pack_zip=pack_zip,
     )
     first, all_fail = pi.run_staging_validators(ctx)
     assert first is not None
@@ -138,6 +151,17 @@ def test_first_failure_only_logs_both(caplog: pytest.LogCaptureFixture, tmp_path
     (staging / "plugin.yml").write_text("id: bad\nname: Bad\n", encoding="utf-8")
     zip_path = tmp_path / "in.zip"
     zip_path.write_bytes(_zip({"plugin.yml": MINIMAL}))
+    yml = (staging / "plugin.yml").read_bytes()
+    pack_zip = PackZipRead(
+        members={"plugin.yml": yml},
+        member_sha256={"plugin.yml": __import__("hashlib").sha256(yml).hexdigest()},
+        plugin={"id": "bad", "name": "Bad", "version": 1},
+        members_sorted=("plugin.yml",),
+        parts=(),
+        compressed_bytes=zip_path.stat().st_size,
+        uncompressed_bytes=len(yml),
+        stats=ZipReadStats(archive_bytes_read=zip_path.stat().st_size, central_directory_parses=1),
+    )
     ctx = InstallContext(
         staging=staging,
         runtime=Path("."),
@@ -147,6 +171,7 @@ def test_first_failure_only_logs_both(caplog: pytest.LogCaptureFixture, tmp_path
         upgrade=False,
         rel="z.zip",
         zip_path=zip_path,
+        pack_zip=pack_zip,
     )
     first, all_fail = pi.run_staging_validators(ctx)
     assert first is not None

@@ -22,7 +22,8 @@ from . import plugin_migration as pmg
 from . import plugin_zip as pz
 from . import plugins
 from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
-from .pack_install_copy import REASON_PACK_INSTALL_FAULT, fault_message
+from . import pack_safe_zip as psz
+from .pack_install_copy import REASON_PACK_INSTALL_FAULT, REASON_ZIP_UNSAFE, blocked_message, fault_message
 from .pack_install_wall_notices import wall_notice_for_install_result
 from .plugin_install import install_zip_to_runtime
 
@@ -255,6 +256,16 @@ def _refresh_python(info: dict[str, Any]) -> None:
         info["pythonReloadError"] = str(e)
 
 
+def _zip_blocked_result(exc: ValueError, doc: dict[str, Any] | None = None) -> dict[str, Any]:
+    name = str((doc or {}).get("name") or (doc or {}).get("id") or "Plugin")
+    return {
+        "ok": False,
+        "error": REASON_ZIP_UNSAFE,
+        "reason": REASON_ZIP_UNSAFE,
+        "message": blocked_message(name, str(exc)),
+    }
+
+
 def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
     if info.get("ok") and info.get("id"):
         clear_blocked_pack(str(info["id"]))
@@ -294,8 +305,11 @@ def install_local_zip(
     tmp_path = Path(tmp_name)
     try:
         tmp_path.write_bytes(raw)
-        manifest = pz.inspect_zip(tmp_path)
-        doc = plugins.validate_doc(manifest.plugin)
+        try:
+            pack_read = psz.read_pack_zip(tmp_path)
+        except ValueError as e:
+            return _finish(_zip_blocked_result(e), activate=False)
+        doc = plugins.validate_doc(pack_read.plugin)
         pid = str(doc["id"])
         dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
         raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=overwrite)
@@ -322,6 +336,7 @@ def install_local_zip(
             rel=str(dest),
             sha256=incoming,
             upgrade=upgrade,
+            pack_read=pack_read,
         )
         if not pipeline.get("ok"):
             return _finish(pipeline, activate=False)
@@ -338,8 +353,11 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     """Validate a zip already in the local drop zone and unpack it."""
     path = Path(path)
     raw = path.read_bytes()
-    manifest = pz.inspect_zip(path)
-    doc = plugins.validate_doc(manifest.plugin)
+    try:
+        pack_read = psz.read_pack_zip(path)
+    except ValueError as e:
+        return _finish(_zip_blocked_result(e), activate=False)
+    doc = plugins.validate_doc(pack_read.plugin)
     pid = str(doc["id"])
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
     raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=dest.is_file())
@@ -368,6 +386,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
         rel=str(dest),
         sha256=incoming,
         upgrade=upgrade,
+        pack_read=pack_read,
     )
     if not pipeline.get("ok"):
         return _finish(pipeline, activate=False)

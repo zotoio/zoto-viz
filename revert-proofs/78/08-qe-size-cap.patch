@@ -1,0 +1,13 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -178,8 +178,7 @@
+         claimed = int(info.file_size)
+         if claimed < 0:
+             raise ValueError(zip_entry_error(rel, "invalid declared uncompressed size"))
+-        remaining = max_uncompressed - total
+-        data = _read_member_bytes(zf, info, remaining)
++        data = zf.read(info)
+         actual = len(data)
+         if claimed > 0 and actual > claimed:
+             raise ValueError(

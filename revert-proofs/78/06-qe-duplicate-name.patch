@@ -1,0 +1,15 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -169,11 +169,6 @@
+             continue
+         if not pz._allowed_member(rel):
+             raise ValueError(zip_entry_error(rel, "disallowed path suffix"))
+-        if rel in seen_norm:
+-            first = seen_norm[rel]
+-            raise ValueError(
+-                zip_entry_error(raw_name, f"duplicate name (same as {first!r} after normalization)"),
+-            )
+         seen_norm[rel] = raw_name
+         claimed = int(info.file_size)
+         if claimed < 0:
