@@ -702,10 +702,7 @@ export function buildMetroNetwork(frame: VizDataFrame, opts: MetroOptions): Metr
 }
 
 export function metroCanvasSize(doc?: Document | null): { w: number; h: number } {
-  let root = doc ?? (typeof document !== "undefined" ? document : null);
-  try {
-    if (!doc && typeof parent !== "undefined" && parent.document) root = parent.document;
-  } catch { /* sandbox */ }
+  const root = doc ?? (typeof document !== "undefined" ? document : null);
   const canvas = (root?.querySelector?.("canvas.render-host")
     ?? root?.querySelector?.("#wall > canvas")
     ?? root?.querySelector?.("#scene canvas")) as { width?: number; height?: number } | null;

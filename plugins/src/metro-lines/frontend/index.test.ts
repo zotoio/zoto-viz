@@ -1,9 +1,8 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
-import FRAG from "../../../plugins/src/metro-lines/sky/fragment.glsl?raw";
-import PLUGIN from "../../../plugins/src/metro-lines/plugin.yml?raw";
-import VIS from "../../../plugins/src/metro-lines/visualisation.yml?raw";
-import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
-import type { VizDataFrame } from "./viz-host";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 import {
   METRO_DEFAULTS,
   METRO_FAIL_RGB,
@@ -26,8 +25,14 @@ import {
   releaseMetroSim,
   resetMetroHostRegistry,
   scanMetroTrademarks,
-} from "../../../plugins/src/metro-lines/frontend/metro";
-import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
+} from "./metro";
+import { probePluginSkyCompile, wrapPluginSky } from "./sky-probe";
+import { buildIdleVizFrame } from "./test-fixtures";
+
+const packRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const FRAG = readFileSync(path.join(packRoot, "sky/fragment.glsl"), "utf8");
+const PLUGIN = readFileSync(path.join(packRoot, "plugin.yml"), "utf8");
+const VIS = readFileSync(path.join(packRoot, "visualisation.yml"), "utf8");
 
 const PRESETS = ["classic_map", "night_network", "disruptions_only", "minimal"] as const;
 
