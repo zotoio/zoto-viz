@@ -1,0 +1,31 @@
+# Host VizDataFrame → koi pond effects (declared mapping; read in pack only).
+
+mappings:
+  - field: talkers[].id
+    effect: stable koi identity; slot assignment key
+    default: —
+    clamp: max koi per quality / koiCap
+  - field: talkers[].rate
+    effect: koi size vigor, swim speed, bloom activity
+    default: 0
+    clamp: 0..1 via rate/220; #22 slot rules in talker-slots.ts
+  - field: talkers[].role
+    effect: colour pattern (gateway → kohaku, etc.)
+    default: hash bucket
+    clamp: enabled pat_* flags
+  - field: packets[].field
+    effect: ripple spawn intensity at pad hash
+    default: 0
+    clamp: 0..1 × rippleIntensity
+  - field: packets[].proto
+    effect: ripple placement hash
+    default: ip
+    clamp: —
+  - field: sys.failed
+    effect: murky water tint + steady corner fail chip
+    default: 0
+    clamp: 0..1 above FAIL_MURK_THRESHOLD
+  - field: demo
+    effect: built-in demo talkers + HUD demo marker
+    default: false
+    clamp: boolean
