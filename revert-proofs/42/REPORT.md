@@ -8,9 +8,9 @@
 
 | Metric | Value |
 |--------|------:|
-| Insertions | 2865 |
-| Deletions | 162 |
-| Line delta | 3135 |
+| Insertions | 3599 |
+| Deletions | 187 |
+| Line delta | 3786 |
 
 Heavy host/mosaic tests (frame-alloc, frame-loop, gpu-pack-present, mosaic-coalesce, viz-frame-tick, context-restore-antialias, fb-viewport-software, rect-converters) live on **A2** `#81` only.
 
