@@ -1,13 +1,13 @@
-diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
-index b5943ba..5649fc6 100644
---- a/web/src/graph/pack-mirror-gl.ts
-+++ b/web/src/graph/pack-mirror-gl.ts
-@@ -155,7 +155,7 @@ export class PackTexturePresenter {
-       this.material.needsUpdate = true;
-     }
-     renderer.setScissorTest(true);
--    renderer.setViewport(ix, iy, iw, ih);
-+    renderer.setViewport(ix, iy + 100, iw, ih);
-     renderer.setScissor(ix, iy, iw, ih);
-     renderer.setRenderTarget(null);
-     renderer.render(this.scene, this.camera);
+diff --git a/web/src/graph/render-host-gl-adapter.ts b/web/src/graph/render-host-gl-adapter.ts
+index f730eb5..a25b3db 100644
+--- a/web/src/graph/render-host-gl-adapter.ts
++++ b/web/src/graph/render-host-gl-adapter.ts
+@@ -23,7 +23,7 @@ export function applyDeviceRectToGlRenderer(
+ ): void {
+   toGlRectInto(rect, canvasDeviceHeight, glScratch);
+   renderer.setScissorTest(true);
+-  renderer.setViewport(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
++  renderer.setViewport(glScratch.x, glScratch.y + 100, glScratch.w, glScratch.h);
+   renderer.setScissor(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
+ }
+ 

@@ -1,10 +1,10 @@
 diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
-index e61c6ff..5e33609 100644
+index dcd4781..b63782d 100644
 --- a/web/src/graph/pack-mirror-gl.ts
 +++ b/web/src/graph/pack-mirror-gl.ts
-@@ -150,10 +150,8 @@ export class PackTexturePresenter {
+@@ -174,10 +174,8 @@ export class PackTexturePresenter {
      if (fill && opts.letterbox) {
-       paintLetterboxBarsThree(renderer, fill, dst, asCssRect(innerAbs), this.scratch.bars);
+       paintLetterboxBarsThree(renderer, fill, dst, asCssRect(innerAbs), this.scratch.bars, hostGl);
      }
 -    if (this.material.map !== texture) {
 -      this.material.map = texture;
@@ -12,6 +12,6 @@ index e61c6ff..5e33609 100644
 -    }
 +    this.material.map = texture;
 +    this.material.needsUpdate = true;
-     renderer.setScissorTest(true);
-     renderer.setViewport(ix, iy, iw, ih);
-     renderer.setScissor(ix, iy, iw, ih);
+     applyHostViewBoxToGlRenderer(
+       renderer,
+       { x: ix, y: iy, w: iw, h: ih },
