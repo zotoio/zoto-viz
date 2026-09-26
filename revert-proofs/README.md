@@ -25,7 +25,7 @@ Every regression test in a PR should prove it actually catches a production bug.
 | --- | --- | --- |
 | `runner` | yes | `vitest` or `pytest` |
 | `testFile` | yes | Path to the test file (repo-relative) |
-| `testName` | yes | Vitest **fullTestName** (`describe > … > test`); runner passes `-t "^…$"` (regex-escaped, spaces as ` > `) and checks JUnit that exactly one test ran with that full name. Pytest node suffix after `::` (e.g. `test_foo[param id]`); runner uses `testFile::testName`, never `-k` |
+| `testName` | yes | Vitest **fullTestName** exactly as reported (including literal ` > ` inside describe titles); runner passes `-t "^…$"` with only regex metacharacters escaped, then checks JSON/JUnit that exactly one test ran with the same full name. Pytest node suffix after `::` (e.g. `test_foo[param id]`); runner uses `testFile::testName`, never `-k` |
 | `description` | yes | One-line revert summary for the PR table |
 | `timeoutSec` | no | Per-row test timeout (default 120); timeouts are never counted as red |
 | `allowTypeError` | no | When true, a patched `tsc --noEmit -p web` failure is allowed (reason shown in report) |
