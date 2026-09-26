@@ -38,7 +38,7 @@
   {
     "hunk_id": "web/src/app/main.ts#1",
     "path": "web/src/app/main.ts",
-    "header": "@@ -80,7 +79,9 @@ import {",
+    "header": "@@ -80,7 +79,13 @@ import {",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -52,7 +52,7 @@
   {
     "hunk_id": "web/src/app/main.ts#2",
     "path": "web/src/app/main.ts",
-    "header": "@@ -89,12 +90,21 @@ import { stereoAiFrame } from \"../plugins/stereo-ai\";",
+    "header": "@@ -89,12 +94,21 @@ import { stereoAiFrame } from \"../plugins/stereo-ai\";",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -66,7 +66,7 @@
   {
     "hunk_id": "web/src/app/main.ts#3",
     "path": "web/src/app/main.ts",
-    "header": "@@ -340,8 +350,23 @@ let settings!: Settings;",
+    "header": "@@ -340,8 +354,23 @@ let settings!: Settings;",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -80,7 +80,7 @@
   {
     "hunk_id": "web/src/app/main.ts#4",
     "path": "web/src/app/main.ts",
-    "header": "@@ -381,7 +406,7 @@ scene.afterLook = () => {",
+    "header": "@@ -381,7 +410,7 @@ scene.afterLook = () => {",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -94,7 +94,7 @@
   {
     "hunk_id": "web/src/app/main.ts#5",
     "path": "web/src/app/main.ts",
-    "header": "@@ -408,19 +433,19 @@ scene.afterLook = () => {",
+    "header": "@@ -408,19 +437,19 @@ scene.afterLook = () => {",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -108,7 +108,7 @@
   {
     "hunk_id": "web/src/app/main.ts#6",
     "path": "web/src/app/main.ts",
-    "header": "@@ -431,7 +456,7 @@ sandbox.handlers = {",
+    "header": "@@ -431,7 +460,7 @@ sandbox.handlers = {",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -122,7 +122,7 @@
   {
     "hunk_id": "web/src/app/main.ts#7",
     "path": "web/src/app/main.ts",
-    "header": "@@ -997,22 +1022,41 @@ function feed(m: StateMsg): void {",
+    "header": "@@ -997,22 +1026,36 @@ function feed(m: StateMsg): void {",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -136,7 +136,7 @@
   {
     "hunk_id": "web/src/app/main.ts#8",
     "path": "web/src/app/main.ts",
-    "header": "@@ -1022,13 +1066,21 @@ function feed(m: StateMsg): void {",
+    "header": "@@ -1022,13 +1065,21 @@ function feed(m: StateMsg): void {",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -150,7 +150,7 @@
   {
     "hunk_id": "web/src/app/main.ts#9",
     "path": "web/src/app/main.ts",
-    "header": "@@ -1069,6 +1121,13 @@ function setRedaction(on: boolean): void {",
+    "header": "@@ -1069,6 +1120,13 @@ function setRedaction(on: boolean): void {",
     "vitest_red": true,
     "revert_rows": [
       "shot-6-wall-shed-revert"
@@ -221,9 +221,9 @@
     "revert_rows": [],
     "tests": [
       "src/plugins/viz-host.test.ts",
+      "src/plugins/dogfood-clock-split.test.ts",
       "src/plugins/dogfood.test.ts",
       "src/plugins/viz-gates.test.ts",
-      "src/plugins/dogfood-clock-split.test.ts",
       "src/plugins/fixtures/idle-viz-frame.test.ts",
       "src/core/viz-dev-wall-flags.test.ts",
       "src/core/viz-time-brand.test.ts",
@@ -233,7 +233,7 @@
   {
     "hunk_id": "web/src/core/viz-wall-limited-harness.ts#0",
     "path": "web/src/core/viz-wall-limited-harness.ts",
-    "header": "@@ -0,0 +1,193 @@",
+    "header": "@@ -0,0 +1,201 @@",
     "vitest_red": true,
     "revert_rows": [],
     "tests": [
@@ -461,11 +461,11 @@
     "tests": [
       "src/plugins/dogfood-tile-hud.test.ts",
       "src/plugins/viz-clock-imports.test.ts",
+      "src/core/viz-dev-wall-flags.test.ts",
+      "src/core/viz-wall-limited-harness.test.ts",
       "src/app/main-viz-hud.test.ts",
       "src/app/main-viz-hud-revert.test.ts",
-      "src/app/main-viz-dev-wall-bad-input.test.ts",
-      "src/core/viz-dev-wall-flags.test.ts",
-      "src/core/viz-wall-limited-harness.test.ts"
+      "src/app/main-viz-dev-wall-bad-input.test.ts"
     ]
   },
   {
@@ -558,7 +558,8 @@
     ],
     "tests": [
       "src/plugins/nixie-wall-clock.test.ts",
-      "src/plugins/nixie-wall-clock-source-rows.test.ts"
+      "src/plugins/nixie-wall-clock-source-rows.test.ts",
+      "src/plugins/nixie-clock-sky.test.ts"
     ]
   },
   {
@@ -829,7 +830,7 @@
   {
     "hunk_id": "web/src/plugins/viz-tile-budget.ts#0",
     "path": "web/src/plugins/viz-tile-budget.ts",
-    "header": "@@ -0,0 +1,332 @@",
+    "header": "@@ -0,0 +1,371 @@",
     "vitest_red": true,
     "revert_rows": [
       "wall-cadence-carry-forward-revert"
@@ -874,14 +875,14 @@
       "mosaic-h6-boot-persist-revert"
     ],
     "tests": [
+      "src/graph/fabric.test.ts",
       "src/plugins/dogfood.test.ts",
       "src/plugins/plugin-ui.test.ts",
-      "src/core/session-live.test.ts",
-      "src/core/profiles.test.ts",
-      "src/graph/fabric.test.ts",
       "src/ui/agent.test.ts",
       "src/ui/view-cog.test.ts",
-      "src/ui/mosaic-wall-h6.test.ts"
+      "src/ui/mosaic-wall-h6.test.ts",
+      "src/ui/settings-mosaic-pick.test.ts",
+      "src/ui/settings.test.ts"
     ]
   },
   {
@@ -916,10 +917,10 @@
       "src/plugins/plugin-ui.test.ts",
       "src/core/session-live.test.ts",
       "src/core/profiles.test.ts",
+      "src/graph/fabric.test.ts",
       "src/ui/agent.test.ts",
       "src/ui/view-cog.test.ts",
-      "src/ui/mosaic-wall-h6.test.ts",
-      "src/graph/fabric.test.ts"
+      "src/ui/mosaic-wall-h6.test.ts"
     ]
   },
   {
@@ -935,10 +936,10 @@
       "src/plugins/plugin-ui.test.ts",
       "src/core/session-live.test.ts",
       "src/core/profiles.test.ts",
+      "src/graph/fabric.test.ts",
       "src/ui/agent.test.ts",
       "src/ui/view-cog.test.ts",
-      "src/ui/mosaic-wall-h6.test.ts",
-      "src/ui/settings-mosaic-pick.test.ts"
+      "src/ui/settings.test.ts"
     ]
   },
   {
@@ -954,10 +955,10 @@
       "src/plugins/plugin-ui.test.ts",
       "src/core/session-live.test.ts",
       "src/core/profiles.test.ts",
+      "src/graph/fabric.test.ts",
       "src/ui/agent.test.ts",
       "src/ui/view-cog.test.ts",
-      "src/ui/mosaic-wall-h6.test.ts",
-      "src/ui/settings-mosaic-pick.test.ts"
+      "src/ui/mosaic-wall-h6.test.ts"
     ]
   },
   {
@@ -976,7 +977,7 @@
       "src/graph/fabric.test.ts",
       "src/ui/agent.test.ts",
       "src/ui/view-cog.test.ts",
-      "src/ui/mosaic-wall-h6.test.ts"
+      "src/ui/settings.test.ts"
     ]
   },
   {
@@ -1011,10 +1012,10 @@
       "src/plugins/plugin-ui.test.ts",
       "src/core/session-live.test.ts",
       "src/core/profiles.test.ts",
-      "src/graph/fabric.test.ts",
       "src/ui/agent.test.ts",
       "src/ui/view-cog.test.ts",
-      "src/ui/mosaic-wall-h6.test.ts"
+      "src/ui/mosaic-wall-h6.test.ts",
+      "src/ui/settings-mosaic-pick.test.ts"
     ]
   },
   {
@@ -1029,8 +1030,8 @@
       "src/plugins/dogfood.test.ts",
       "src/plugins/plugin-ui.test.ts",
       "src/core/session-live.test.ts",
-      "src/core/profiles.test.ts",
       "src/graph/fabric.test.ts",
+      "src/core/profiles.test.ts",
       "src/ui/agent.test.ts",
       "src/ui/view-cog.test.ts",
       "src/ui/mosaic-wall-h6.test.ts"

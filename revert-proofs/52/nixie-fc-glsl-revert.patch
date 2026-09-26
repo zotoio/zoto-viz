@@ -2,11 +2,11 @@ diff --git a/plugins/src/nixie-clock/sky/fragment.glsl b/plugins/src/nixie-clock
 --- a/plugins/src/nixie-clock/sky/fragment.glsl
 +++ b/plugins/src/nixie-clock/sky/fragment.glsl
 @@ -73,7 +73,7 @@ void main() {
-   float pulse = zotoVizSlots[2];
-   float flicker = zotoVizSlots[3];
-   float aud = clamp(uAudio, 0.0, 1.0);
+   col = mix(col, vec3(0.09, 0.045, 0.02), shelf * 0.85);
+ 
+   vec3 neon = mix(vec3(1.0, 0.32, 0.04), uAccent, 0.45);
 -  float shim = 1.0 - flicker * (0.08 + 0.14 * aud + 0.1 * pulse) * (0.5 + 0.5 * sin(uTime * 37.0 + gl_FragCoord.x * 0.04));
 +  float shim = 1.0 - flicker * (0.08 + 0.14 * aud + 0.1 * pulse) * (0.5 + 0.5 * sin(uTime * 37.0 + fc.x * 0.04));
-   vec3 col = mix(uBg, tube, shim);
-   fragColor = vec4(col * uBright, uOpacity);
- }
+ 
+   float lit = 0.0;
+   for (int i = 0; i < 6; i++) {
