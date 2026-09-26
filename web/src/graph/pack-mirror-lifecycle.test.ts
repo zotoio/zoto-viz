@@ -6,9 +6,6 @@ import {
   PackMirrorSession,
   PackTexturePresenter,
   packMirrorResourceStats,
-  sandboxBitmapGl,
-  sandboxBitmapGpuCount,
-  syncSandboxBitmapGpuScopes,
 } from "./pack-mirror-gl";
 import { surfaceLetterboxFill } from "./letterbox-fill";
 
@@ -174,26 +171,6 @@ describe("PackMirrorSession resource lifecycle", () => {
     expect(reg.sessionFor("plugin:a")).toBe(a);
     expect(packMirrorResourceStats.renderTargetDisposed).toBe(1);
     reg.dispose();
-  });
-});
-
-describe("sandbox bitmap GPU scope sync", () => {
-  beforeEach(() => {
-    packMirrorResourceStats.reset();
-    syncSandboxBitmapGpuScopes(new Map());
-  });
-  afterEach(() => syncSandboxBitmapGpuScopes(new Map()));
-
-  it("ten 2↔1 tile toggles balance creates/disposes; one tile leaves no sandbox GPU", () => {
-    for (let i = 0; i < 10; i++) {
-      syncSandboxBitmapGpuScopes(new Map([["plugin:sandbox", 2]]));
-      const gpu = sandboxBitmapGl("plugin:sandbox");
-      gpu.ensureTexture(32, 24);
-      syncSandboxBitmapGpuScopes(new Map([["plugin:sandbox", 1]]));
-    }
-    expect(packMirrorResourceStats.textureCreated).toBe(packMirrorResourceStats.textureDisposed);
-    expect(packMirrorResourceStats.presenterCreated).toBe(packMirrorResourceStats.materialDisposed);
-    expect(sandboxBitmapGpuCount()).toBe(0);
   });
 });
 

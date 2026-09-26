@@ -19,17 +19,12 @@
 import * as THREE from "three";
 import type { SoftRect } from "./software-draw";
 import { cssHex } from "./software-draw";
-import { letterboxFillHex, letterboxInnerRect, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
+import { letterboxInnerRect, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
-import { finishSandboxBitmapHostFrame, paintPackMirrorPlaceholder } from "../plugins/sandbox-bitmap";
 import {
   PackMirrorRegistry,
-  paintLetterboxBarsThree,
-  resetSandboxBitmapGl,
-  sandboxBitmapGl,
-  syncSandboxBitmapGpuScopes,
   type LetterboxBarScratch,
   type MirrorRect,
 } from "./pack-mirror-gl";
@@ -39,7 +34,6 @@ type PackMirrorViewMeta = HostedView & {
   packCoalesceGroupKey?: string;
   isPackMirrorPrimary?: boolean;
   packCoalesceTileCount?: number;
-  packSandboxMirrorPluginId?: string;
 };
 
 function packMirrorMeta(view: HostedView): PackMirrorViewMeta {
@@ -119,7 +113,6 @@ export class RenderHost {
   };
   private readonly fbViewport: Viewport = { x: 0, y: 0, w: 0, h: 0 };
   private readonly packScopeScratch = new Map<string, { tileCount: number; antialias: boolean }>();
-  private readonly sandboxScopeScratch = new Map<string, number>();
   private mirrorScopeDirty = true;
   private contextAntialias = false;
   private readonly viewBoxScratch: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
@@ -128,6 +121,11 @@ export class RenderHost {
   private readonly packDrawViewport: MirrorRect = { x: 0, y: 0, w: 0, h: 0 };
   private readonly packDrawOpts = {
     letterbox: false,
+    fill: null as SurfaceLetterboxFill | null,
+    aspect: 1,
+  };
+  private readonly packMirrorPresentOpts = {
+    letterbox: true as const,
     fill: null as SurfaceLetterboxFill | null,
     aspect: 1,
   };
@@ -206,7 +204,6 @@ export class RenderHost {
       this.packMirrors.beginFrame();
       this.syncMirrorScopesIfNeeded();
       for (const v of this.views) v.hostFrame(ts);
-      finishSandboxBitmapHostFrame();
     };
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -297,123 +294,11 @@ export class RenderHost {
     const rd = this.renderer as THREE.WebGLRenderer;
     const key = packMirrorMeta(mirror).packCoalesceGroupKey;
     if (!key) return null;
-    const rect = this.packMirrors.presentPack(key, rd, dst, { letterbox: true, fill, aspect });
+    this.packMirrorPresentOpts.fill = fill;
+    this.packMirrorPresentOpts.aspect = aspect;
+    const rect = this.packMirrors.presentPack(key, rd, dst, this.packMirrorPresentOpts);
     if (!rect) return null;
     return this.writeFbViewport(dst, rd.getPixelRatio());
-  }
-
-  /**
-   * Letterbox a sandbox `ImageBitmap` into a duplicate tile (no canvas readback).
-   */
-  presentBitmapMirror(
-    mirror: HostedView,
-    bitmap: ImageBitmap,
-    fill: SurfaceLetterboxFill,
-    aspect: number,
-    pluginId: string,
-    releaseBitmap = true,
-  ): Viewport | null {
-    try {
-      if (!this.viewBoxInto(mirror, this.viewBoxScratch)) return null;
-      const dst = this.viewBoxScratch;
-      if (dst.w < 2 || dst.h < 2) return null;
-      const box = copyViewBox(dst, this.letterboxScratch.box);
-      const inner = letterboxInnerRect(dst, aspect);
-      this.letterboxScratch.inner.x = inner.x + dst.x;
-      this.letterboxScratch.inner.y = inner.y + dst.y;
-      this.letterboxScratch.inner.w = inner.w;
-      this.letterboxScratch.inner.h = inner.h;
-      const innerPaint = this.letterboxScratch.inner;
-      if (this.software) {
-        const ctx = this.ctx2d;
-        if (!ctx) return null;
-        const pr = this.pr;
-        ctx.setTransform(pr, 0, 0, pr, 0, 0);
-        paintLetterboxBars(ctx, box, innerPaint, fill);
-        if (bitmap.width >= 2 && bitmap.height >= 2) {
-          ctx.drawImage(bitmap, innerPaint.x, innerPaint.y, innerPaint.w, innerPaint.h);
-        }
-        return this.writeFbViewport(dst, pr);
-      }
-      const rd = this.renderer as THREE.WebGLRenderer;
-      const gpu = sandboxBitmapGl(pluginId);
-      const pr = rd.getPixelRatio();
-      const tex = gpu.uploadFrame(bitmap);
-      if (!tex) return null;
-      gpu.present(rd, tex, fill, dst, aspect);
-      return this.writeFbViewport(dst, pr);
-    } finally {
-      if (releaseBitmap) bitmap.close();
-    }
-  }
-
-  /** Surface letterbox only (no bitmap yet, no publish failure). */
-  presentSandboxMirrorLetterbox(
-    mirror: HostedView,
-    fill: SurfaceLetterboxFill,
-    aspect: number,
-  ): Viewport | null {
-    if (!this.viewBoxInto(mirror, this.viewBoxScratch)) return null;
-    const dst = this.viewBoxScratch;
-    if (dst.w < 2 || dst.h < 2) return null;
-    const box = copyViewBox(dst, this.letterboxScratch.box);
-    const inner = letterboxInnerRect(dst, aspect);
-    const innerAbs = this.letterboxScratch.innerAbs;
-    innerAbs.x = dst.x + inner.x;
-    innerAbs.y = dst.y + inner.y;
-    innerAbs.w = inner.w;
-    innerAbs.h = inner.h;
-    if (this.software) {
-      const ctx = this.ctx2d;
-      if (!ctx) return null;
-      const pr = this.pr;
-      ctx.setTransform(pr, 0, 0, pr, 0, 0);
-      this.letterboxScratch.inner.x = innerAbs.x;
-      this.letterboxScratch.inner.y = innerAbs.y;
-      this.letterboxScratch.inner.w = innerAbs.w;
-      this.letterboxScratch.inner.h = innerAbs.h;
-      paintLetterboxBars(ctx, box, this.letterboxScratch.inner, fill);
-      return this.writeFbViewport(dst, pr);
-    }
-    const rd = this.renderer as THREE.WebGLRenderer;
-    paintLetterboxBarsThree(rd, fill, dst, innerAbs, this.letterboxScratch.bars);
-    return this.writeFbViewport(dst, rd.getPixelRatio());
-  }
-
-  presentSandboxMirrorPlaceholder(
-    mirror: HostedView,
-    fill: SurfaceLetterboxFill,
-    packName: string,
-    mirrorsTile: number,
-  ): Viewport | null {
-    if (!this.viewBoxInto(mirror, this.viewBoxScratch)) return null;
-    const dst = this.viewBoxScratch;
-    if (dst.w < 2 || dst.h < 2) return null;
-    const el = mirror.viewEl;
-    let badge = el.querySelector<HTMLElement>(".pack-mirror-placeholder");
-    if (!badge) {
-      badge = document.createElement("div");
-      badge.className = "pack-mirror-placeholder";
-      el.appendChild(badge);
-    }
-    badge.textContent = `${packName} · mirrors tile ${mirrorsTile}`;
-    badge.hidden = false;
-    if (this.software) {
-      const ctx = this.ctx2d;
-      if (!ctx) return null;
-      const pr = this.pr;
-      ctx.setTransform(pr, 0, 0, pr, 0, 0);
-      paintPackMirrorPlaceholder(ctx, dst, fill, packName, mirrorsTile);
-    } else {
-      const rd = this.renderer as THREE.WebGLRenderer;
-      rd.setScissorTest(true);
-      rd.setViewport(dst.x, dst.y, dst.w, dst.h);
-      rd.setScissor(dst.x, dst.y, dst.w, dst.h);
-      rd.setClearColor(letterboxFillHex(fill), 1);
-      rd.clear(true, false, false);
-    }
-    const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
-    return this.writeFbViewport(dst, pr);
   }
 
   /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
@@ -567,14 +452,6 @@ export class RenderHost {
       this.packScopeScratch.set(key, { tileCount, antialias });
     }
     this.packMirrors.syncScopes(this.packScopeScratch);
-    this.sandboxScopeScratch.clear();
-    for (const v of this.views) {
-      const meta = packMirrorMeta(v);
-      const pluginId = meta.packSandboxMirrorPluginId;
-      const tileCount = meta.packCoalesceTileCount ?? 0;
-      if (pluginId && tileCount >= 2) this.sandboxScopeScratch.set(pluginId, tileCount);
-    }
-    syncSandboxBitmapGpuScopes(this.sandboxScopeScratch);
     this.sortViewsForMirror();
   }
 
@@ -583,10 +460,7 @@ export class RenderHost {
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.views = [];
-    if (!this.software) {
-      this.packMirrors.dispose();
-      resetSandboxBitmapGl();
-    }
+    if (!this.software) this.packMirrors.dispose();
     this.renderer.forceContextLoss();
     this.renderer.dispose();
     this.canvas.remove();

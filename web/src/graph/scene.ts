@@ -54,7 +54,6 @@ import {
   type LayoutXyz,
 } from "./graph-layouts";
 import { VIEW_MORPH_S, mixFade, mixShape } from "./morph";
-import { sandboxBitmapLane } from "../plugins/sandbox-bitmap";
 
 export { FABRIC_KINDS, FABRIC_OPTIONS, FABRIC_DICE, GRAPH_SPACE_OPTIONS, type FabricKind, type GraphSpace } from "./fabric";
 export {
@@ -1116,7 +1115,7 @@ export class NetScene implements HostedView {
   private packCoalesce: {
     role: "primary" | "mirror";
     primary: NetScene | null;
-    mirrorKind?: "hostCanvas" | "sandboxSurface";
+    mirrorKind?: "hostCanvas";
     groupKey?: string;
     pluginId?: string;
     packLabel?: string;
@@ -1560,7 +1559,7 @@ export class NetScene implements HostedView {
   setPackCoalesce(role: {
     role: "primary" | "mirror";
     primary: NetScene | null;
-    mirrorKind?: "hostCanvas" | "sandboxSurface";
+    mirrorKind?: "hostCanvas";
     groupKey?: string;
     pluginId?: string;
     packLabel?: string;
@@ -1587,11 +1586,6 @@ export class NetScene implements HostedView {
     return this.packCoalesce?.tileCount ?? 0;
   }
 
-  get packSandboxMirrorPluginId(): string | undefined {
-    if (this.packCoalesce?.mirrorKind !== "sandboxSurface") return undefined;
-    return this.packCoalesce.pluginId;
-  }
-
   get usesPackMirrorRt(): boolean {
     return this.isPackMirrorPrimary && this.packCoalesceTileCount >= 2;
   }
@@ -1606,31 +1600,6 @@ export class NetScene implements HostedView {
     this.backdrop.syncCamera(this.camera);
     if (this.host && this.packCoalesce?.role === "mirror") {
       const fill = this.surfaceLetterboxFill();
-      if (this.packCoalesce.mirrorKind === "sandboxSurface" && this.packCoalesce.pluginId) {
-        const lane = sandboxBitmapLane(this.packCoalesce.pluginId);
-        const primary = this.packCoalesce.primary;
-        const aspect = primary
-          ? (() => {
-            const src = this.host!.viewBox(primary);
-            return src ? src.w / Math.max(1, src.h) : 16 / 9;
-          })()
-          : 16 / 9;
-        if (lane.peek()) {
-          const bmp = lane.peek()!;
-          this.lastVp = this.host.presentBitmapMirror(this, bmp, fill, aspect, this.packCoalesce.pluginId!);
-        } else if (lane.shouldShowFailurePlaceholder()) {
-          this.lastVp = this.host.presentSandboxMirrorPlaceholder(
-            this,
-            fill,
-            this.packCoalesce.packLabel ?? this.packCoalesce.pluginId,
-            this.packCoalesce.mirrorsTile ?? 1,
-          );
-        } else {
-          this.lastVp = this.host.presentSandboxMirrorLetterbox(this, fill, aspect);
-        }
-        this.notePaneChange();
-        return;
-      }
       if (this.packCoalesce.primary) {
         this.lastVp = this.host.presentPackMirror(
           this.packCoalesce.primary,

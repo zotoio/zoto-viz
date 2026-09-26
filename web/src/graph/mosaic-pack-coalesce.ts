@@ -12,7 +12,7 @@ import {
   type VizDataFrame,
   type VizFrameBudgetStats,
 } from "../plugins/viz-host";
-import { pluginHasFrontend, vizContractFor } from "../plugins/plugin";
+import { vizContractFor } from "../plugins/plugin";
 
 export type PackGroupKey = string;
 
@@ -100,7 +100,6 @@ export function deliverCoalescedMosaicPacks(input: {
   pluginSpecForMode: (modeId: string) => PluginView | null;
   optsFor: (m: ViewMode) => Record<string, string>;
   budget: MosaicPackBudget;
-  onSandboxFrame?: (pluginId: string, frame: VizDataFrame) => void;
 }): void {
   const groups = mosaicPackGroups(input.mosaic.tileIds, input.modeById);
   for (const group of groups) {
@@ -110,14 +109,8 @@ export function deliverCoalescedMosaicPacks(input: {
     const mode = input.modeById(viewId);
     const spec = input.pluginSpecForMode(viewId);
     const writer = writerForGroup(group.key, spec);
-    if (!writer) {
-      if (group.pluginId) input.onSandboxFrame?.(group.pluginId, input.frame);
-      continue;
-    }
-    if (!group.packId) {
-      if (group.pluginId) input.onSandboxFrame?.(group.pluginId, input.frame);
-      continue;
-    }
+    if (!writer) continue;
+    if (!group.packId) continue;
 
     const handlers: VizPackHandlers = {
       writeBuffer: (slot, data) => {
@@ -140,8 +133,6 @@ export function deliverCoalescedMosaicPacks(input: {
     const t0 = performance.now();
     runPackFrameHandler(group.packId, input.frame, handlers, input.optsFor(mode));
     budget.record(performance.now() - t0);
-    if (group.pluginId) input.onSandboxFrame?.(group.pluginId, input.frame);
-
     const ubo = writer.ubo;
     for (const slot of group.slots) {
       const scene = input.mosaic.graphScene(slot);
@@ -162,11 +153,10 @@ export function applyPackCoalesceLayout(
     const viewId = mosaicTileViewId(g.primarySlot);
     const mode = modeById(viewId);
     const spec = pluginSpecForMode?.(mode.id) ?? null;
-    const mirrorKind: "hostCanvas" | "sandboxSurface" = spec && pluginHasFrontend(spec) ? "sandboxSurface" : "hostCanvas";
     const packLabel = mode.label ?? g.pluginId ?? "pack";
     const mirrorsTile = mosaic.tileIds.indexOf(g.primarySlot) + 1;
     const coalesceBase = {
-      mirrorKind,
+      mirrorKind: "hostCanvas" as const,
       groupKey: g.key,
       pluginId: g.pluginId ?? undefined,
       packLabel,

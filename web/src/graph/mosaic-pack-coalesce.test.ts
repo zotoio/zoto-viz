@@ -62,7 +62,7 @@ describe("mosaic pack coalesce", () => {
     expect(budget.stats.skipped).toBe(3);
   });
 
-  it("fan-out: one pack onFrame and one sandbox onFrame, UBO drawn on every duplicate tile", () => {
+  it("fan-out: UBO copied to every duplicate tile slot after one pack onFrame", () => {
     const uboBySlot: string[] = [];
     const mosaic = {
       tileIds: ["plugin:star-sines", "plugin:star-sines!1"],
@@ -72,7 +72,6 @@ describe("mosaic pack coalesce", () => {
         setPackCoalesce: () => {},
       }),
     };
-    const onSandboxFrame = vi.fn();
     const onFrameSpy = vi.spyOn(packHost, "runPackFrameHandler").mockImplementation((_packId, _frame, handlers) => {
       handlers.writeBuffer(0, [1, 2, 3]);
     });
@@ -93,10 +92,8 @@ describe("mosaic pack coalesce", () => {
       }) as never,
       optsFor: () => ({}),
       budget: { stats: { lastMs: 0, overBudget: 0, skipped: 0, total: 0 } },
-      onSandboxFrame,
     });
     expect(onFrameSpy).toHaveBeenCalledTimes(1);
-    expect(onSandboxFrame).toHaveBeenCalledTimes(1);
     expect(uboBySlot.filter((s) => s === "plugin:star-sines")).toHaveLength(2);
     expect(uboBySlot).toContain("plugin:star-sines!1");
   });

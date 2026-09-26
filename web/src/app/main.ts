@@ -108,7 +108,6 @@ import { mosaicTileViewId, mosaicWallUsesView } from "../graph/mosaic-tile-id";
 import {
   deliverCoalescedMosaicPacks,
 } from "../graph/mosaic-pack-coalesce";
-import { laneRegistry } from "../plugins/sandbox-bitmap";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -442,8 +441,6 @@ sandbox.handlers = {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
-  publishBitmap: (pluginId, bitmap) => { laneRegistry.ingest(pluginId, bitmap); },
-  publishBitmapFailed: (pluginId) => { laneRegistry.notePublishFailed(pluginId); },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };
@@ -598,20 +595,9 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   }
 }
 
-function syncSandboxDuplicateTiles(): void {
-  const loaded = sandbox.loadedPluginId;
-  if (!loaded || !mosaic?.on) {
-    sandbox.setDuplicateTileCount(0);
-    return;
-  }
-  const n = mosaic.tileIds.filter((id) => modeById(mosaicTileViewId(id)).pluginId === loaded).length;
-  sandbox.setDuplicateTileCount(n);
-}
-
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
-    syncSandboxDuplicateTiles();
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
@@ -642,7 +628,6 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     if (m.pluginId === spec.id) {
       vizHud.setActive(spec.id, spec.name);
     }
-    syncSandboxDuplicateTiles();
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
     console.warn("zoto-viz plugin runtime:", e);
@@ -1050,23 +1035,16 @@ function feed(m: StateMsg): void {
     const buildFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
-    const sandboxedPacks = new Set<string>();
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       if (mosaic?.on && mosaicDemoPacks) {
-        const wall = mosaic;
         deliverCoalescedMosaicPacks({
-          mosaic: wall,
+          mosaic,
           frame: f,
           modeById: (id) => modeById(mosaicTileViewId(id)),
           pluginSpecForMode,
           optsFor,
           budget: { stats: vizBudget.stats },
-          onSandboxFrame: (pluginId) => {
-            if (sandboxedPacks.has(pluginId)) return;
-            sandboxedPacks.add(pluginId);
-            sandbox.frame(f);
-          },
         });
       } else {
         sandbox.frame(f);
@@ -1194,7 +1172,6 @@ mosaic = new Mosaic({
   },
   onLayout: (patch) => {
     settings.applyMosaicLayout(patch);
-    syncSandboxDuplicateTiles();
   },
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
