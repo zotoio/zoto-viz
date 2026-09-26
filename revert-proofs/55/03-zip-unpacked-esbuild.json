@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-pack-runtime-esbuild.test.ts",
+  "testName": "viz pack runtime esbuild > bundles cypher-cic unpacked outside plugins/src with 0 module resolution errors",
+  "description": "Zip-unpacked pack home outside plugins/src must bundle with plugins/sdk resolver imports (no ../../../sdk paths)."
+}

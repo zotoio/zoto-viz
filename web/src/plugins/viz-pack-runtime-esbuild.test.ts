@@ -31,24 +31,24 @@ function resolveFrontendEntry(packHome: string): string {
   return path.join(packHome, entry);
 }
 
-function esbuildPackFromHome(packHome: string): string {
+function esbuildPackFromHome(packHome: string, opts: { sdkAlias?: boolean } = {}): string {
   const entry = resolveFrontendEntry(packHome);
   expect(existsSync(entry)).toBe(true);
-  return execFileSync(
-    esbuildBin,
-    [
-      entry,
-      "--bundle",
-      "--format=esm",
-      "--platform=browser",
-      "--target=es2022",
-      "--external:three",
-      "--external:d3-force-3d",
-      "--external:../../../sdk/viz-zoto",
-      "--external:../../../sdk/viz-pack-host",
-    ],
-    { encoding: "utf8" },
-  );
+  const args = [
+    entry,
+    "--bundle",
+    "--format=esm",
+    "--platform=browser",
+    "--target=es2022",
+    "--external:three",
+    "--external:d3-force-3d",
+  ];
+  if (opts.sdkAlias) {
+    args.push(`--alias:plugins/sdk=${path.join(repoRoot, "plugins/sdk")}`);
+  } else {
+    args.push("--external:../../../sdk/viz-zoto", "--external:../../../sdk/viz-pack-host");
+  }
+  return execFileSync(esbuildBin, args, { encoding: "utf8" });
 }
 
 function stageLocalRuntimePack(packId: string, zotoHome: string): string {
@@ -72,6 +72,22 @@ describe("viz pack runtime esbuild", () => {
       rmSync(zotoHome, { recursive: true, force: true });
     }
   });
+
+  it.skipIf(!existsSync(esbuildBin))(
+    "bundles cypher-cic unpacked outside plugins/src with 0 module resolution errors",
+    () => {
+      const outsideRoot = mkdtempSync(path.join(os.tmpdir(), "zoto-unpacked-pack-"));
+      try {
+        const packHome = path.join(outsideRoot, "cypher-cic");
+        cpSync(path.join(repoRoot, "plugins/src/cypher-cic"), packHome, { recursive: true });
+        expect(() => esbuildPackFromHome(packHome, { sdkAlias: true })).not.toThrow();
+        const js = esbuildPackFromHome(packHome, { sdkAlias: true });
+        expect(js.length).toBeGreaterThan(64);
+      } finally {
+        rmSync(outsideRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.skipIf(!existsSync(esbuildBin))("bundles cypher-cic and syscon from zip-unpacked local runtime", () => {
     const zotoHome = mkdtempSync(path.join(os.tmpdir(), "zoto-viz-zip-"));

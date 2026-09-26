@@ -5,7 +5,7 @@ import {
   cicCanvasSize, EMPTY_SYS, packPackets, packRf, packSysSlot, packTalkers,
   parseCicLook, peakRf, peakTalker, type CicLook,
 } from "./pack";
-import type { VizDataFrame } from "../../../sdk/viz-contract";
+import type { VizDataFrame } from "plugins/sdk/viz-contract";
 import { getVizZoto } from "plugins/sdk/viz-zoto";
 const host = getVizZoto();
 
