@@ -296,6 +296,22 @@ def test_viz_idle_required_with_viz_caps() -> None:
         })
 
 
+def test_viz_contract_must_be_one_or_two() -> None:
+    base = {
+        "id": "cv-pack",
+        "name": "Contract",
+        "version": 1,
+        "capabilities": ["viz.read"],
+        "viz": {"graphWalk": False, "idle": {"fixture": "host"}},
+    }
+    plugins.validate_doc({**base, "viz": {**base["viz"], "contract": 1}})
+    plugins.validate_doc({**base, "viz": {**base["viz"], "contract": 2}})
+    with pytest.raises(ValueError, match=r"viz\.contract must be 1 or 2"):
+        plugins._check_semantics({**base, "viz": {**base["viz"], "contract": 3}})
+    with pytest.raises(ValueError, match=r"viz\.contract must be 1 or 2"):
+        plugins._check_semantics({**base, "viz": {**base["viz"], "contract": 0}})
+
+
 def test_typesafe_capability_in_schema() -> None:
     caps = _schema()["properties"]["capabilities"]["items"]["enum"]
     assert "typesafe" in caps
