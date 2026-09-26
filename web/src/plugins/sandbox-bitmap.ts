@@ -12,13 +12,24 @@ export type SandboxBitmapStats = {
 export class SandboxBitmapLane {
   private pending: ImageBitmap | null = null;
   private open = new Set<ImageBitmap>();
+  private publishFailed = false;
   readonly stats: SandboxBitmapStats = { received: 0, closed: 0 };
 
   ingest(bitmap: ImageBitmap): void {
     this.releasePending();
+    this.publishFailed = false;
     this.pending = bitmap;
     this.open.add(bitmap);
     this.stats.received += 1;
+  }
+
+  notePublishFailed(): void {
+    this.publishFailed = true;
+  }
+
+  /** Labelled fallback when `createImageBitmap` / transfer failed this frame. */
+  shouldShowFailurePlaceholder(): boolean {
+    return this.publishFailed && !this.pending;
   }
 
   peek(): ImageBitmap | null {
@@ -45,6 +56,7 @@ export class SandboxBitmapLane {
   /** End of host animation frame: close the bitmap received this frame. */
   finishHostFrame(): void {
     this.releasePending();
+    this.publishFailed = false;
   }
 
   teardown(): void {

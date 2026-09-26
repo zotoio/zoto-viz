@@ -7,7 +7,7 @@ const ALLOWED = new Set([
 
 export function hostAllows(type: string, caps: string[]): boolean {
   if (type === "setStyle" || type === "setNodeColor") return caps.includes("graph.style");
-  if (type === "writeBuffer" || type === "writeUniform" || type === "writeParticles" || type === "publishBitmap") {
+  if (type === "writeBuffer" || type === "writeUniform" || type === "writeParticles" || type === "publishBitmap" || type === "publishBitmapFailed") {
     return caps.includes("viz.write");
   }
   return false;
@@ -21,7 +21,8 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
   | { source: "zoto-viz-plugin"; type: "log"; payload: string }
-  | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap; pluginId?: string } };
+  | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap; pluginId?: string } }
+  | { source: "zoto-viz-plugin"; type: "publishBitmapFailed"; payload: { pluginId?: string } };
 
 export type ParentMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
@@ -36,6 +37,7 @@ export interface PluginHostHandlers {
   writeUniform?: (name: string, value: VizUniformValue) => void;
   writeParticles?: (data: number[], stride?: number) => void;
   publishBitmap?: (pluginId: string, bitmap: ImageBitmap) => void;
+  publishBitmapFailed?: (pluginId: string) => void;
 }
 
 const TS_STORE = "zoto-viz.tsPlugins";
@@ -166,6 +168,10 @@ export class PluginSandbox {
       if (!(bitmap instanceof ImageBitmap)) return;
       const pluginId = d.payload.pluginId || this.loadedPluginId || "";
       if (pluginId) this.handlers.publishBitmap?.(pluginId, bitmap);
+    }
+    if (d.type === "publishBitmapFailed") {
+      const pluginId = d.payload.pluginId || this.loadedPluginId || "";
+      if (pluginId) this.handlers.publishBitmapFailed?.(pluginId);
     }
   };
 }

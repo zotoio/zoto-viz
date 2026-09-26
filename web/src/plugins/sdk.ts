@@ -18,12 +18,6 @@ window.zoto = {
   writeUniform() {},
   writeParticles() {},
   getConfig() { return window.__zotoConfig || {}; },
-  publishSurface(canvas) {
-    if (!vizAllowed("viz.write") || !canvas || typeof canvas.transferToImageBitmap !== "function") return;
-    const bitmap = canvas.transferToImageBitmap();
-    const pluginId = (window.__zotoConfig && window.__zotoConfig.pluginId) || "";
-    send("publishBitmap", { bitmap, pluginId }, [bitmap]);
-  },
 };
 window.addEventListener("message", (ev) => {
   const d = ev.data;

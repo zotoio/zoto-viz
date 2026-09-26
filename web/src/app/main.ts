@@ -444,6 +444,7 @@ sandbox.handlers = {
   },
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
   publishBitmap: (pluginId, bitmap) => { sandboxBitmapLane(pluginId).ingest(bitmap); },
+  publishBitmapFailed: (pluginId) => { sandboxBitmapLane(pluginId).notePublishFailed(); },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };

@@ -1591,13 +1591,15 @@ export class NetScene implements HostedView {
           : 16 / 9;
         if (lane.peek()) {
           this.lastVp = this.host.presentBitmapMirror(this, lane.peek()!, fill, aspect);
-        } else {
+        } else if (lane.shouldShowFailurePlaceholder()) {
           this.lastVp = this.host.presentSandboxMirrorPlaceholder(
             this,
             fill,
             this.packCoalesce.packLabel ?? this.packCoalesce.pluginId,
             this.packCoalesce.mirrorsTile ?? 1,
           );
+        } else {
+          this.lastVp = this.host.presentSandboxMirrorLetterbox(this, fill, aspect);
         }
         this.notePaneChange();
         return;

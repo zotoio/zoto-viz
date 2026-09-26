@@ -132,6 +132,19 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     host.dispose();
   });
 
+  it("shows the labelled placeholder only after publishBitmapFailed, not when idle", () => {
+    const { wall, host, box } = wallSetup();
+    const mirror = hostedPane("m", wall, box);
+    const fill = surfaceLetterboxFill(0x0a1020, 0.25);
+    const lane = sandboxBitmapLane("pack-fail");
+    expect(lane.shouldShowFailurePlaceholder()).toBe(false);
+    host.presentSandboxMirrorLetterbox(mirror, fill, 16 / 9);
+    lane.notePublishFailed();
+    expect(lane.shouldShowFailurePlaceholder()).toBe(true);
+    host.presentSandboxMirrorPlaceholder(mirror, fill, "My pack", 2);
+    host.dispose();
+  });
+
   it("routes transferred ImageBitmap from the sandbox iframe message", async () => {
     const box = new PluginSandbox();
     const seen: ImageBitmap[] = [];
@@ -150,6 +163,25 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     } as MessageEvent);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBe(bmp);
+    box.unload();
+  });
+
+  it("routes publishBitmapFailed from the sandbox iframe message", async () => {
+    const box = new PluginSandbox();
+    const lane = sandboxBitmapLane("pulse");
+    box.handlers = {
+      publishBitmapFailed: (id) => {
+        expect(id).toBe("pulse");
+        lane.notePublishFailed();
+      },
+    };
+    await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {});
+    const src = box["iframe"]!.contentWindow;
+    box["onMessage"]({
+      source: src ?? null,
+      data: { source: "zoto-viz-plugin", type: "publishBitmapFailed", payload: { pluginId: "pulse" } },
+    } as MessageEvent);
+    expect(lane.shouldShowFailurePlaceholder()).toBe(true);
     box.unload();
   });
 });

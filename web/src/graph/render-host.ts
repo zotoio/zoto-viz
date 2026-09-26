@@ -265,6 +265,26 @@ export class RenderHost {
     return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
   }
 
+  /** Surface letterbox only (no bitmap yet, no publish failure). */
+  presentSandboxMirrorLetterbox(
+    mirror: HostedView,
+    fill: SurfaceLetterboxFill,
+    aspect: number,
+  ): Viewport | null {
+    const dst = this.viewBox(mirror);
+    if (!dst || dst.w < 2 || dst.h < 2) return null;
+    const inner = letterboxInnerRect(dst, aspect);
+    inner.x += dst.x;
+    inner.y += dst.y;
+    const box = { ...dst };
+    const ctx = this.software ? this.ctx2d : this.canvas.getContext("2d");
+    if (!ctx) return null;
+    const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
+    ctx.setTransform(pr, 0, 0, pr, 0, 0);
+    paintLetterboxBars(ctx, box, inner, fill);
+    return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
+  }
+
   presentSandboxMirrorPlaceholder(
     mirror: HostedView,
     fill: SurfaceLetterboxFill,
