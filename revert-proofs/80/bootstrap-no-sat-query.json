@@ -3,5 +3,5 @@
   "testId": "tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_sandbox_bootstrap_and_chunks_gate_via_path_not_sat_query",
   "description": "Bootstrap html must use pack-assets paths, not ?sat= query params.",
   "timeoutSec": 60,
-  "red": "AssertionError: assert ('?sat=' not in '<html><scri...ript></html>'"
+  "red": "assert ('?sat=' not in '<html><scri...ript></html>'"
 }

@@ -19,6 +19,7 @@ async def make_app_server(
     web_dist=None,
     bind: str = "127.0.0.1",
     insecure_lan: bool = False,
+    listen_port: int = 0,
 ) -> AsyncIterator[tuple[str, int, web.AppRunner]]:
     state = MagicMock()
     orig_dist = monitor.WEB_DIST
@@ -40,7 +41,11 @@ async def make_app_server(
     app.on_cleanup.clear()
     runner = web.AppRunner(app, access_log=monitor.run_app_kwargs().get("access_log"))
     await runner.setup()
-    site = web.TCPSite(runner, bind if bind not in {"0.0.0.0", "::"} else "127.0.0.1", 0)
+    site = web.TCPSite(
+        runner,
+        bind if bind not in {"0.0.0.0", "::"} else "127.0.0.1",
+        listen_port,
+    )
     await site.start()
     port = int(site._server.sockets[0].getsockname()[1])
     request_guard.configure_request_guard(

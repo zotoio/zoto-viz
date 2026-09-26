@@ -9,7 +9,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from service import access, pack_assets, plugins
 from tests.pack_asset_test_util import SESSION, mint, pack_url
-from tests.pack_asset_test_util import test_app as make_pack_test_app
+from tests.pack_asset_test_util import make_test_app as make_pack_test_app
 
 HOST = {"Host": "127.0.0.1:7020"}
 NULL = {**HOST, "Origin": "null", access.HEADER: SESSION}

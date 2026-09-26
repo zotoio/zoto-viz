@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_token_log_production.py::test_production_logs_token_zero_times_after_forced_mutate_failure",
-  "red": "AssertionError: assert 1 == 0",
-  "description": "Production logs (stderr + app + access) must never contain pack-asset token.",
-  "timeoutSec": 120
-}

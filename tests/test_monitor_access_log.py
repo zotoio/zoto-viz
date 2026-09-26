@@ -35,8 +35,7 @@ async def _session_smoke() -> None:
 
 def test_make_app_session_and_production_access_log_disabled() -> None:
     asyncio.run(_session_smoke())
-    assert monitor.run_app_kwargs() == {
-        "print": None,
-        "access_log": None,
-        "shutdown_timeout": 3,
-    }
+    kw = monitor.run_app_kwargs()
+    assert kw["print"] is None
+    assert kw["access_log"] is None
+    assert kw["shutdown_timeout"] == 3

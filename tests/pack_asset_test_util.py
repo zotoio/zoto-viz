@@ -15,7 +15,7 @@ HOST = {"Host": "127.0.0.1:7020"}
 NULL = {**HOST, "Origin": "null", access.HEADER: SESSION}
 
 
-def test_app() -> web.Application:
+def make_test_app() -> web.Application:
     app = web.Application(middlewares=[access.middleware])
     app["csrf"] = SESSION
     app["pack_asset_secret"] = SECRET

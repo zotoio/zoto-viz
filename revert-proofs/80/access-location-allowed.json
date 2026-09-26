@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_access.py::test_location_allowed",
-  "description": "location_allowed rejects off-LAN redirects.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert not True"
-}

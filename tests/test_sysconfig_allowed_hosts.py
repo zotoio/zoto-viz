@@ -35,9 +35,11 @@ def test_invalid_allowed_hosts_entry_raises() -> None:
 def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
     captured: list[list[str]] = []
 
+    from aiohttp import web
+
     def fake_make_app(*_a, allowed_hosts=None, **_kw):  # noqa: ANN001
         captured.append(list(allowed_hosts or []))
-        raise SystemExit(0)
+        return web.Application()
 
     class _Radio:
         watch = {"ssids": [], "other": False, "dwell": 1, "rotate": True}
@@ -52,7 +54,13 @@ def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
 
     monkeypatch.setattr(sysconfig, "ensure", lambda: {"allowed_hosts": ["extra.local:7020"]})
     monkeypatch.setattr("service.monitor.make_app", fake_make_app)
-    monkeypatch.setattr("service.monitor.web.run_app", lambda *_a, **_k: None)
+    run_app_calls: list[dict] = []
+
+    def capture_run_app(_app, **kwargs):  # noqa: ANN001
+        run_app_calls.append(dict(kwargs))
+        raise SystemExit(0)
+
+    monkeypatch.setattr("service.monitor.web.run_app", capture_run_app)
     monkeypatch.setattr("service.monitor.State", lambda *_a, **_k: _State())
     from service import monitor
 
@@ -75,3 +83,21 @@ def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
     except SystemExit:
         pass
     assert captured == [["extra.local:7020"]]
+    assert run_app_calls
+    assert run_app_calls[0]["access_log"] is None
+    assert run_app_calls[0]["shutdown_timeout"] == 3
+
+
+def test_allowed_hosts_round_trips_through_dump_and_load(tmp_path) -> None:
+    from pathlib import Path
+
+    cfg = {
+        "bind": "0.0.0.0",
+        "port": 7020,
+        "insecure_lan": True,
+        "allowed_hosts": ["viz.example.lan"],
+    }
+    path = Path(tmp_path) / "sys-config.yml"
+    path.write_text(sysconfig.dump(cfg), encoding="utf-8")
+    roundtrip = sysconfig.load(path)
+    assert roundtrip["allowed_hosts"] == ["viz.example.lan"]

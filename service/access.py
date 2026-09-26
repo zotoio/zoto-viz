@@ -206,16 +206,6 @@ def host_header_raw(request: web.Request) -> str:
     return (request.headers.get("Host") or "").strip()
 
 
-def host_ok(request: web.Request) -> bool:
-    raw = host_header_raw(request)
-    if not raw or _HOST_INJECTION.search(raw):
-        return False
-    host = header_hostname(raw)
-    if request.app.get("insecure_lan"):
-        return bool(host)
-    return is_loopback_name(host)
-
-
 def pack_asset_csp_origin(request: web.Request) -> str:
     """Origin for sandbox CSP script-src (never raw untrusted Host fragments)."""
     from .request_guard import validated_http_origin
