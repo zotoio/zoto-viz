@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/host-three-pixel-materials.ts b/web/src/graph/host-three-pixel-materials.ts
+index 7ab8398..7ab8398 100644
+--- a/web/src/graph/host-three-pixel-materials.ts
++++ b/web/src/graph/host-three-pixel-materials.ts
+@@ -12,7 +12,7 @@
+   devicePxRatio: DevicePxRatio,
+   sizeAttenuation: boolean,
+ ): number {
+-  if (sizeAttenuation) return cssSize;
++  if (sizeAttenuation) return cssSize * devicePxRatioNumber(devicePxRatio);
+   return cssSize * devicePxRatioNumber(devicePxRatio);
+ }
+ 

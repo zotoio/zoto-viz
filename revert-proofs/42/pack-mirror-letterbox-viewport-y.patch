@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
+index b5943ba..5649fc6 100644
+--- a/web/src/graph/pack-mirror-gl.ts
++++ b/web/src/graph/pack-mirror-gl.ts
+@@ -155,7 +155,7 @@ export class PackTexturePresenter {
+       this.material.needsUpdate = true;
+     }
+     renderer.setScissorTest(true);
+-    renderer.setViewport(ix, iy, iw, ih);
++    renderer.setViewport(ix, iy + 100, iw, ih);
+     renderer.setScissor(ix, iy, iw, ih);
+     renderer.setRenderTarget(null);
+     renderer.render(this.scene, this.camera);

@@ -1,0 +1,19 @@
+--- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:38:23.494464985 +0000
++++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:39:26.370720025 +0000
+@@ -218,8 +218,14 @@
+       return this.rt;
+     }
+     if (pw !== this.pw || ph !== this.ph) {
+-      this.rt.setSize(pw, ph);
+-      packMirrorResourceStats.renderTargetSetSize += 1;
++      this.rt.dispose();
++      packMirrorResourceStats.renderTargetDisposed += 1;
++      this.rt = new THREE.WebGLRenderTarget(pw, ph, {
++        depthBuffer: true,
++        stencilBuffer: false,
++        samples,
++      });
++      packMirrorResourceStats.renderTargetCreated += 1;
+       this.pw = pw;
+       this.ph = ph;
+     }

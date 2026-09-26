@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/host-three-pixel-materials.test.ts",
+  "testName": "^host pixel-sized materials \\(counting GL\\) > shader uResolution in device pixels at pr 1\\.5$",
+  "expectedRed": "expected { x: 200, y: 120 } to deeply equal { x: 300, y: 180 }",
+  "description": "Pixel-sized shader uniforms (edge glow uResolution) scale with layout device px ratio when renderer setPixelRatio stays 1."
+}

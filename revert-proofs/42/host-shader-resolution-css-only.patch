@@ -1,0 +1,15 @@
+diff --git a/web/src/graph/host-three-pixel-materials.ts b/web/src/graph/host-three-pixel-materials.ts
+index 7ab8398..7ab8398 100644
+--- a/web/src/graph/host-three-pixel-materials.ts
++++ b/web/src/graph/host-three-pixel-materials.ts
+@@ -56,8 +56,8 @@
+   out: { x: number; y: number },
+ ): { x: number; y: number } {
+   const pr = devicePxRatioNumber(devicePxRatio);
+-  out.x = cssCanvasW * pr;
+-  out.y = cssCanvasH * pr;
++  out.x = cssCanvasW;
++  out.y = cssCanvasH;
+   return out;
+ }
+ 
