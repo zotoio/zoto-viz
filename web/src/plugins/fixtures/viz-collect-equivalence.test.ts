@@ -10,6 +10,7 @@ import {
   type CollectEquivalenceFrame,
 } from "./viz-collect-equivalence-fixture";
 import type { Flow } from "../../core/types";
+import { assertLinksMatchTalkers } from "./viz-frame-collect-assert";
 import type { VizDataFrame } from "../viz-host";
 
 const fixturePath = path.join(path.dirname(fileURLToPath(import.meta.url)), "viz-collect-equivalence-600.jsonl");
@@ -143,7 +144,7 @@ describe("viz collector rewrite allocation", () => {
     const ids = new Set(frame.talkers.map((t) => t.id));
     expect(ids.has("10.0.0.99")).toBe(true);
     expect(ids.has("10.0.0.1")).toBe(false);
-    collectMod.assertLinksMatchTalkers(frame);
+    assertLinksMatchTalkers(frame);
     for (const link of frame.links ?? []) {
       expect(ids.has(link.src)).toBe(true);
       expect(ids.has(link.dst)).toBe(true);

@@ -9,8 +9,8 @@ import {
   vmLiveCaptureState,
   VIZ_SDK_HOST_IDLE,
 } from "./fixtures/viz-sdk-frame-build";
+import { assertLinksMatchTalkers } from "./fixtures/viz-frame-collect-assert";
 import {
-  assertLinksMatchTalkers,
   collectVizLinks,
   connFailRatio,
 } from "./viz-frame-collect";

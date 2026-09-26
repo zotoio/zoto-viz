@@ -15,8 +15,8 @@ export function deliverVizFrameToPackTiles(
   for (const tile of tiles) {
     try {
       tile.onFrame(frame);
-    } catch {
-      /* strict-mode mutation of frozen contract slices (e.g. links.push) must not abort other tiles */
+    } catch (err) {
+      console.error("[viz-frame-pack-deliver] tile onFrame threw", tile.tileId, err);
     }
   }
 }

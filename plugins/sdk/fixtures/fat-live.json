@@ -88,6 +88,31 @@
       "role": "lan"
     },
     {
+      "id": "host-09",
+      "rate": 21,
+      "role": "lan"
+    },
+    {
+      "id": "host-25",
+      "rate": 21,
+      "role": "lan"
+    },
+    {
+      "id": "host-38",
+      "rate": 21,
+      "role": "lan"
+    },
+    {
+      "id": "host-42",
+      "rate": 21,
+      "role": "lan"
+    },
+    {
+      "id": "host-58",
+      "rate": 21,
+      "role": "lan"
+    },
+    {
       "id": "host-75",
       "rate": 21,
       "role": "lan"
@@ -113,12 +138,7 @@
       "role": "lan"
     },
     {
-      "id": "host-246",
-      "rate": 21,
-      "role": "internet"
-    },
-    {
-      "id": "host-197",
+      "id": "host-158",
       "rate": 21,
       "role": "lan"
     },
@@ -128,32 +148,7 @@
       "role": "lan"
     },
     {
-      "id": "host-158",
-      "rate": 21,
-      "role": "lan"
-    },
-    {
-      "id": "host-38",
-      "rate": 21,
-      "role": "lan"
-    },
-    {
-      "id": "host-09",
-      "rate": 21,
-      "role": "lan"
-    },
-    {
-      "id": "host-230",
-      "rate": 21,
-      "role": "lan"
-    },
-    {
-      "id": "host-25",
-      "rate": 21,
-      "role": "lan"
-    },
-    {
-      "id": "host-42",
+      "id": "host-197",
       "rate": 21,
       "role": "lan"
     },
@@ -163,14 +158,24 @@
       "role": "lan"
     },
     {
-      "id": "host-58",
+      "id": "host-230",
       "rate": 21,
       "role": "lan"
+    },
+    {
+      "id": "host-246",
+      "rate": 21,
+      "role": "internet"
     },
     {
       "id": "host-175",
       "rate": 20,
       "role": "internet"
+    },
+    {
+      "id": "host-264",
+      "rate": 20,
+      "role": "lan"
     },
     {
       "id": "host-283",
@@ -179,11 +184,6 @@
     },
     {
       "id": "host-343",
-      "rate": 20,
-      "role": "lan"
-    },
-    {
-      "id": "host-360",
       "rate": 20,
       "role": "lan"
     }

@@ -8,6 +8,11 @@ export type VizFrameHostPerFrameInput = {
   scope: VizFrameScopeCache;
 };
 
+const perFrameTickScratch: { bind: ReturnType<VizFrameScopeCache["readBindForFrameTick"]>; packOpts: Record<string, string> } = {
+  bind: { source: "", layout: "" },
+  packOpts: {},
+};
+
 /**
  * Per-frame viz bind + pack opts read (called from main state tick).
  * Must not call optsFor or parseSourceBind — scope sync owns those.
@@ -16,8 +21,7 @@ export function vizFrameHostPerFrameTick(input: VizFrameHostPerFrameInput): {
   bind: SourceBind;
   packOpts: Record<string, string>;
 } {
-  return {
-    bind: input.scope.readBindForFrameTick(),
-    packOpts: input.currentOpts,
-  };
+  perFrameTickScratch.bind = input.scope.readBindForFrameTick();
+  perFrameTickScratch.packOpts = input.currentOpts;
+  return perFrameTickScratch;
 }

@@ -188,13 +188,13 @@
       "rate": 1.25
     },
     {
-      "src": "host-02",
-      "dst": "host-03",
+      "src": "host-01",
+      "dst": "host-07",
       "rate": 1
     },
     {
-      "src": "host-01",
-      "dst": "host-07",
+      "src": "host-02",
+      "dst": "host-03",
       "rate": 1
     },
     {

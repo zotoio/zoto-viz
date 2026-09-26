@@ -40,7 +40,7 @@ function device(ip: string, connFail = 0): Device {
   };
 }
 
-/** Fixed 200-flow / 16-talker LAN slice; rates shift per frame index with a tie at the K=8 boundary. */
+/** Fixed flows with rank-K ties (more than K distinct pairs) for deterministic top-K tests. */
 export function buildCollectEquivalenceState(frameIndex: number): StateMsg {
   const devices = TALKER_IDS.map((ip, i) => device(ip, i === 0 && frameIndex % 97 === 0 ? 0.25 : 0));
   const flows: Flow[] = [];
@@ -48,8 +48,8 @@ export function buildCollectEquivalenceState(frameIndex: number): StateMsg {
     const a = TALKER_IDS[i % COLLECT_EQUIVALENCE_TALKER_COUNT]!;
     const b = TALKER_IDS[(i * 7 + 3) % COLLECT_EQUIVALENCE_TALKER_COUNT]!;
     if (a === b) continue;
-    const base = ((i * 13 + frameIndex) % 50) + 1;
-    let rate = base + frameIndex * 0.001;
+    let rate = ((i * 13 + frameIndex) % 50) + 1 + frameIndex * 0.001;
+    if (frameIndex % 53 === 0 && i < 12) rate = 50 + frameIndex * 0.001;
     if (i === 40 || i === 41) rate = 88.5 + frameIndex * 0.001;
     flows.push({
       a,
