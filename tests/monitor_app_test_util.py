@@ -31,6 +31,7 @@ async def make_app_server(
         bind="127.0.0.1",
         port=7020,
         allowed_hosts=allowed_hosts or [],
+        setup_request_guard=False,
     )
     app.on_startup.clear()
     app.on_shutdown.clear()
@@ -40,6 +41,7 @@ async def make_app_server(
     site = web.TCPSite(runner, "127.0.0.1", 0)
     await site.start()
     port = int(site._server.sockets[0].getsockname()[1])
+    request_guard.reset_interface_lookup_counter()
     request_guard.configure_request_guard(
         app,
         bind="127.0.0.1",

@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -294,6 +294,9 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+         return web.Response(status=400, text="bad request", content_type="text/plain")
+ 
+     raw_host = hosts[0].strip()
++    fwd = (request.headers.get("X-Forwarded-Host") or "").strip()
++    if fwd:
++        raw_host = fwd
+     tls = bool(request.secure)
+     key = normalize_host_header_key(raw_host, port, tls=tls)
+     if key is None:

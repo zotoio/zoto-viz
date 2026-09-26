@@ -1,14 +1,14 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -224,10 +224,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
-     port = int(request.app.get("request_guard_port") or 7020)
-     raw_host = (request.headers.get("Host") or "").strip()
- 
--    if not raw_host or _HOST_FORBIDDEN_CHARS.search(raw_host) or parse_host_header(raw_host) is None:
+@@ -301,10 +301,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+     raw_host = hosts[0].strip()
+     tls = bool(request.secure)
+     key = normalize_host_header_key(raw_host, port, tls=tls)
+-    if key is None:
 -        _log.warning("rejected Host header (format): %s", escape_log_host(raw_host))
 -        return web.Response(status=400, text="bad request", content_type="text/plain")
 -
-     if not host_allowed(raw_host, allowed, port):
+     if not _lookup_allowed(request.app, key or ""):
          _log.warning("rejected Host header: %s", escape_log_host(raw_host))
          resp = web.Response(status=400, text=HOST_REJECT_BODY, content_type="text/plain")

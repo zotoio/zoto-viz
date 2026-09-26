@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_cost.py::test_dhcp_miss_refreshes_interfaces_at_most_once_per_30s",
+  "description": "DHCP miss must refresh interfaces at most once per 30s; revert refreshes on every miss.",
+  "timeoutSec": 180
+}

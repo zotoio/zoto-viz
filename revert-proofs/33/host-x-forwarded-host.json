@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_normalize.py::test_host_normalisation_table[forwarded_host_ignored]",
+  "description": "Must ignore X-Forwarded-Host; revert honours it and accepts localhost via forwarded header.",
+  "timeoutSec": 120
+}

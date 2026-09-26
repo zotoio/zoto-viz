@@ -5,7 +5,8 @@ import ipaddress
 import logging
 import re
 import socket
-from typing import Iterable
+import time
+from typing import Callable, Iterable
 
 from aiohttp import web
 
@@ -19,7 +20,25 @@ HOST_REJECT_BODY = (
 )
 
 _HOST_FORBIDDEN_CHARS = re.compile(r'[;,\s"\']')
+_HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")
 _ENCODED_TRAVERSAL = re.compile(r"%2[eEfF]", re.IGNORECASE)
+
+_monotonic: Callable[[], float] = time.monotonic
+_interface_lookup_calls = 0
+
+
+def set_request_guard_clock(clock: Callable[[], float]) -> None:
+    global _monotonic
+    _monotonic = clock
+
+
+def reset_interface_lookup_counter() -> None:
+    global _interface_lookup_calls
+    _interface_lookup_calls = 0
+
+
+def interface_lookup_count() -> int:
+    return _interface_lookup_calls
 
 
 def escape_log_host(raw: str) -> str:
@@ -59,82 +78,93 @@ def validate_allowed_host_entry(entry: str) -> str:
     try:
         ipaddress.ip_address(host_part)
     except ValueError:
-        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", host_part):
+        if not _HOSTNAME.fullmatch(host_part):
             raise ValueError(f"invalid allowed_hosts entry: {entry!r}") from None
     return f"{host_part}:{port_part}" if port_part else host_part
 
 
-def parse_host_header(raw: str) -> tuple[str, str] | None:
-    """Return (hostname_lower_or_literal, port_str) or None if malformed."""
+def _canonical_key(host: str, port: int) -> str:
+    if host.lower() == "localhost":
+        return f"localhost:{port}"
+    try:
+        ip = ipaddress.ip_address(host)
+        if isinstance(ip, ipaddress.IPv6Address):
+            return f"[{ip.compressed}]:{port}"
+        return f"{host}:{port}"
+    except ValueError:
+        return f"{host.lower()}:{port}"
+
+
+def normalize_host_header_key(
+    raw: str,
+    bound_port: int,
+    *,
+    tls: bool = False,
+) -> str | None:
+    """Return normalised ``host:port`` allowlist key, or ``None`` if invalid."""
     raw = (raw or "").strip()
     if not raw or _HOST_FORBIDDEN_CHARS.search(raw):
         return None
+    if "%" in raw:
+        return None
     host = raw
-    port = ""
+    port_str = ""
     if raw.startswith("["):
         end = raw.find("]")
         if end <= 0:
             return None
         host = raw[1:end]
         rest = raw[end + 1 :]
-        if rest:
-            if not rest.startswith(":"):
-                return None
-            port = rest[1:]
-    elif raw.count(":") == 1:
-        host, port = raw.rsplit(":", 1)
-        if not port.isdigit():
+        if not rest or not rest.startswith(":"):
+            return None
+        port_str = rest[1:]
+    elif raw.count(":") == 1 and not raw.startswith(":"):
+        host, port_str = raw.rsplit(":", 1)
+        if not port_str.isdigit():
+            return None
+    if host.endswith("."):
+        return None
+    if not port_str:
+        if tls and bound_port == 443:
+            port_str = "443"
+        elif not tls and bound_port == 80:
+            port_str = "80"
+        else:
             return None
     try:
-        if host.lower() != "localhost":
-            ipaddress.ip_address(host)
+        port = int(port_str)
     except ValueError:
-        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", host):
-            return None
-    return host.lower() if host.lower() == "localhost" else host, port
-
-
-def _host_with_port(host: str, port: int) -> str:
+        return None
+    if not 1 <= port <= 65535:
+        return None
+    if host.lower() == "localhost":
+        return _canonical_key("localhost", port)
     try:
-        ip = ipaddress.ip_address(host)
-        if isinstance(ip, ipaddress.IPv6Address):
-            return f"[{host}]:{port}"
+        ipaddress.ip_address(host)
     except ValueError:
-        pass
-    return f"{host}:{port}"
+        if not _HOSTNAME.fullmatch(host):
+            return None
+    return _canonical_key(host, port)
 
 
 def local_interface_hosts(port: int) -> set[str]:
+    global _interface_lookup_calls
+    _interface_lookup_calls += 1
     out: set[str] = set()
-    out.add(_host_with_port("localhost", port))
-    out.add(_host_with_port("127.0.0.1", port))
-    out.add(_host_with_port("::1", port))
+    out.add(_canonical_key("localhost", port))
+    out.add(_canonical_key("127.0.0.1", port))
+    out.add(_canonical_key("::1", port))
     seen: set[str] = set()
     try:
         for info in socket.getaddrinfo(None, 0, socket.AF_UNSPEC, socket.SOCK_DGRAM):
             addr = info[4][0]
-            if addr in seen:
+            if addr in seen or addr == "0.0.0.0":
                 continue
             seen.add(addr)
-            if addr == "0.0.0.0":
-                continue
-            out.add(_host_with_port(addr, port))
+            out.add(_canonical_key(addr, port))
     except OSError:
         pass
     return out
-
-
-def canonical_host_port(host: str, port: str, default_port: int) -> str:
-    p = port or str(default_port)
-    if host.lower() == "localhost":
-        return f"localhost:{p}"
-    try:
-        ip = ipaddress.ip_address(host)
-        if isinstance(ip, ipaddress.IPv6Address):
-            return f"[{ip.compressed}]:{p}"
-        return f"{host}:{p}"
-    except ValueError:
-        return f"{host.lower()}:{p}"
 
 
 def build_allowed_hosts(
@@ -145,25 +175,17 @@ def build_allowed_hosts(
     allowed: set[str] = set(local_interface_hosts(port))
     bind = (bind or "127.0.0.1").strip()
     if bind and bind not in {"0.0.0.0", "::"}:
-        allowed.add(_host_with_port(bind, port))
+        allowed.add(_canonical_key(bind, port))
     for item in extra or ():
         norm = validate_allowed_host_entry(str(item))
         if ":" in norm or norm.startswith("["):
-            allowed.add(norm)
+            key = normalize_host_header_key(norm, port) or norm
+            allowed.add(key)
         elif norm == "localhost":
-            allowed.add(_host_with_port("localhost", port))
+            allowed.add(_canonical_key("localhost", port))
         else:
-            allowed.add(_host_with_port(norm, port))
+            allowed.add(_canonical_key(norm, port))
     return frozenset(allowed)
-
-
-def host_allowed(raw_host: str, allowed: frozenset[str], default_port: int) -> bool:
-    parsed = parse_host_header(raw_host)
-    if not parsed:
-        return False
-    host, port = parsed
-    key = canonical_host_port(host, port, default_port)
-    return key in allowed or key.lower() in {a.lower() for a in allowed}
 
 
 def decode_request_path(path: str) -> tuple[str | None, str | None]:
@@ -199,17 +221,31 @@ def decode_request_path(path: str) -> tuple[str | None, str | None]:
     return ("/" + "/".join(segments) if segments else "/"), None
 
 
+def _refresh_allowed_hosts(app: web.Application) -> frozenset[str]:
+    bind = str(app.get("request_guard_bind") or "127.0.0.1")
+    port = int(app.get("request_guard_port") or 7020)
+    extra = app.get("request_guard_extra_hosts") or []
+    allowed = build_allowed_hosts(bind, port, extra)
+    app["request_guard_allowed_hosts"] = allowed
+    return allowed
+
+
 def configure_request_guard(
     app: web.Application,
     *,
     bind: str,
     port: int,
     allowed_hosts: Iterable[str] | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> None:
-    allowed = build_allowed_hosts(bind, port, allowed_hosts)
+    extra = list(allowed_hosts or [])
     app["request_guard_bind"] = bind
     app["request_guard_port"] = int(port)
-    app["request_guard_allowed_hosts"] = allowed
+    app["request_guard_extra_hosts"] = extra
+    clk = clock or app.get("request_guard_clock", _monotonic)
+    app["request_guard_clock"] = clk
+    app["request_guard_last_if_lookup"] = 0.0
+    _refresh_allowed_hosts(app)
 
 
 def validated_http_origin(request: web.Request) -> str:
@@ -221,33 +257,54 @@ def validated_http_origin(request: web.Request) -> str:
     return f"{scheme}://{raw}".rstrip("/")
 
 
+def _host_header_values(request: web.Request) -> list[str]:
+    try:
+        return list(request.headers.getall("Host"))
+    except Exception:
+        single = request.headers.get("Host")
+        return [single] if single else []
+
+
+def _lookup_allowed(app: web.Application, key: str) -> bool:
+    allowed: frozenset[str] = app.get("request_guard_allowed_hosts") or frozenset()
+    if key in allowed:
+        return True
+    clock: Callable[[], float] = app.get("request_guard_clock", _monotonic)
+    now = clock()
+    last = float(app.get("request_guard_last_if_lookup") or 0.0)
+    if now - last < 30.0:
+        return False
+    app["request_guard_last_if_lookup"] = now
+    allowed = _refresh_allowed_hosts(app)
+    return key in allowed
+
+
 @web.middleware
 async def middleware(request: web.Request, handler):  # noqa: ANN001
-    allowed: frozenset[str] = request.app.get("request_guard_allowed_hosts") or frozenset()
     port = int(request.app.get("request_guard_port") or 7020)
-    raw_host = (request.headers.get("Host") or "").strip()
+    hosts = _host_header_values(request)
+    if not hosts:
+        _log.warning("rejected Host header (missing)")
+        return web.Response(status=400, text="bad request", content_type="text/plain")
+    if len(hosts) != 1:
+        _log.warning("rejected Host header (duplicate)")
+        return web.Response(status=400, text="bad request", content_type="text/plain")
 
-    if not raw_host or _HOST_FORBIDDEN_CHARS.search(raw_host) or parse_host_header(raw_host) is None:
+    raw_host = hosts[0].strip()
+    tls = bool(request.secure)
+    key = normalize_host_header_key(raw_host, port, tls=tls)
+    if key is None:
         _log.warning("rejected Host header (format): %s", escape_log_host(raw_host))
         return web.Response(status=400, text="bad request", content_type="text/plain")
 
-    if not host_allowed(raw_host, allowed, port):
+    if not _lookup_allowed(request.app, key):
         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
         resp = web.Response(status=400, text=HOST_REJECT_BODY, content_type="text/plain")
         attach_frame_embed_policy(resp)
         return resp
 
-    parsed = parse_host_header(raw_host)
-    if parsed:
-        host, p = parsed
-        p = p or str(port)
-        scheme = request.scheme or "http"
-        try:
-            ip = ipaddress.ip_address(host)
-            host_hdr = f"[{host}]:{p}" if isinstance(ip, ipaddress.IPv6Address) else f"{host}:{p}"
-        except ValueError:
-            host_hdr = f"{host}:{p}"
-        request["validated_http_origin"] = f"{scheme}://{host_hdr}".rstrip("/")
+    scheme = request.scheme or "http"
+    request["validated_http_origin"] = f"{scheme}://{key}".rstrip("/")
 
     raw_path = getattr(request, "raw_path", None) or request.path or "/"
     _norm_path, path_err = decode_request_path(raw_path)

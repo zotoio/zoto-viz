@@ -1912,6 +1912,7 @@ def make_app(
     bind: str = "127.0.0.1",
     port: int = 7020,
     allowed_hosts: list[str] | None = None,
+    setup_request_guard: bool = True,
     insecure_lan: bool = False,
     http_public_origin: str | None = None,
 ) -> web.Application:
@@ -1921,9 +1922,10 @@ def make_app(
         middlewares=[request_guard.middleware, static_path_guard, access.middleware],
         client_max_size=agent.MAX_BODY,
     )
-    request_guard.configure_request_guard(
-        app, bind=bind, port=port, allowed_hosts=allowed_hosts or [],
-    )
+    if setup_request_guard:
+        request_guard.configure_request_guard(
+            app, bind=bind, port=port, allowed_hosts=allowed_hosts or [],
+        )
     app["state"], app["bpf"], app["clients"], app["wifi_keys"] = state, bpf, set(), wifi_keys
     app["csrf"] = access.new_token()
     app["pack_asset_secret"] = access.new_pack_asset_secret()
