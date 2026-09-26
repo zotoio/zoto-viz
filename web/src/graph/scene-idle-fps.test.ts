@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as fps from "../core/fps";
 import { hostWindowFps, resetFps } from "../core/fps";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
-import { monoMs } from "../core/time-ms";
+import type { FrameTs } from "../core/time-ms";
+import { frameTsFromRaf, monoMs } from "../core/time-ms";
 import { NetScene } from "./scene";
 
 const FRAME_MS = 16;
@@ -13,6 +15,7 @@ describe("NetScene idle host FPS window", () => {
 
   afterEach(() => {
     resetFps();
+    vi.restoreAllMocks();
     resetVizClockInjectors();
     for (const h of hosts) h.remove();
     hosts.length = 0;
@@ -30,11 +33,13 @@ describe("NetScene idle host FPS window", () => {
     hosts.push(el);
     const graph = new NetScene(el);
     graph.setActive(false);
+    const markSpy = vi.spyOn(fps, "markFrame");
     graph.setStandaloneTileTick(() => {});
     for (let i = 0; i < FRAMES; i++) {
       clock += FRAME_MS;
-      graph.testIdleHostFrame(clock);
+      graph.hostFrame(frameTsFromRaf(clock));
     }
+    expect(markSpy).toHaveBeenCalledTimes(FRAMES);
     expect(hostWindowFps(monoMs(clock), 1000)).toBe(62.5);
   });
 });

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { addPresentListener, resetFps } from "../core/fps";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
+import { frameTsFromRaf } from "../core/time-ms";
 import { NetScene } from "./scene";
 
 const FRAME_MS = 16;
@@ -17,7 +18,7 @@ describe("NetScene idle host present stamps", () => {
     hosts.length = 0;
   });
 
-  it("600 testIdleHostFrame calls: exactly one present-listener fire per frame", () => {
+  it("600 hostFrame calls: exactly one present-listener fire per frame", () => {
     clock = 0;
     setVizClockInjector(() => clock);
     const el = document.createElement("div");
@@ -36,7 +37,7 @@ describe("NetScene idle host present stamps", () => {
     graph.setStandaloneTileTick(() => { /* tile only */ });
     for (let i = 0; i < FRAMES; i++) {
       clock += FRAME_MS;
-      graph.testIdleHostFrame(clock);
+      graph.hostFrame(frameTsFromRaf(clock));
     }
     unsub();
     expect(presents).toBe(FRAMES);

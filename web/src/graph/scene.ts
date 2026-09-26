@@ -35,6 +35,7 @@ import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
 import type { FrameTs, MonoMs } from "../core/time-ms";
+import { frameTsFromRaf } from "../core/time-ms";
 import { vizClockMs } from "../core/viz-clock";
 import { vizClockStepSec } from "./scene-standalone";
 import { timeGpu } from "../core/gpu-time";
@@ -1528,7 +1529,7 @@ export class NetScene implements HostedView {
     this.animate = this.animate.bind(this);
     // the host drives hosted scenes from its own loop
     if (!this.host && this.active) {
-      this.raf = requestAnimationFrame((raw) => this.hostFrame(raw as FrameTs));
+      this.raf = requestAnimationFrame((raw) => this.hostFrame(frameTsFromRaf(raw)));
     }
   }
 
@@ -1732,7 +1733,7 @@ export class NetScene implements HostedView {
   /** TEST-ONLY: one host present stamp + standalone tile tick (production idle path). */
   testIdleHostFrame(ts: number): void {
     if (this.active) return;
-    const present = ts as FrameTs;
+    const present = frameTsFromRaf(ts);
     markFrame(present);
     this.idleFrame(present);
   }
@@ -3538,7 +3539,7 @@ export class NetScene implements HostedView {
 
   private animate(ts: FrameTs): void {
     if (!this.host && this.active) {
-      this.raf = requestAnimationFrame((raw) => this.hostFrame(raw as FrameTs));
+      this.raf = requestAnimationFrame((raw) => this.hostFrame(frameTsFromRaf(raw)));
     }
     const wallMs = Number(ts);
     if (!this.active) {

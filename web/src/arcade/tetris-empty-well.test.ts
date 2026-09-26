@@ -77,16 +77,18 @@ describe("TetrisView never-empty well", () => {
   it("every frame outside top-out hold has an active piece (600 idle ticks, seed 42)", () => {
     const view = mount();
     let holdFrames = 0;
+    let missingActiveOutsideHold = 0;
     for (let i = 0; i < FRAMES; i++) {
       hostTick(view);
       const now = clock / 1000;
       const inHold = shouldHoldTopout(now, view.testTopoutHoldUntil());
       if (inHold) {
         holdFrames++;
-      } else {
-        expect(view.testHasActivePiece()).toBe(true);
+      } else if (!view.testHasActivePiece()) {
+        missingActiveOutsideHold++;
       }
     }
     expect(holdFrames).toBe(0);
+    expect(missingActiveOutsideHold).toBe(0);
   });
 });

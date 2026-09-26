@@ -75,9 +75,8 @@ describe("TetrisView host idle feed", () => {
 
   it("spawns pieces and grows the stack within a bounded idle tick budget", () => {
     const view = mount();
-    const before = view.testLockedCellCount();
     advanceFrames(view, 60, 200);
-    expect(view.testLockedCellCount()).toBeGreaterThan(before);
+    expect(view.testLockedCellCount()).toBe(8);
     expect(view.testUsingIdleFeed()).toBe(true);
     expect(view.controls[1]?.textContent).toBe(DEMO_DATA_LABEL);
   });
@@ -111,7 +110,6 @@ describe("TetrisView host idle feed", () => {
     perfSpy.mockClear();
     rafSpy.mockClear();
     expect(view.testTrafficBudget().shareTicks).toBe(VIZ_WALL_BUDGET_TICKS);
-    const beforePieces = view.testScore();
     for (let i = 0; i < FRAMES; i++) {
       clock += FRAME_MS;
       graph.testIdleHostFrame(clock);
@@ -127,7 +125,7 @@ describe("TetrisView host idle feed", () => {
     expect(view.testHudSkips()).toBe(expectedSkips);
     expect(view.testRecordCount()).toBe(DUE_PACKETS);
     expect(view.testHudSkipLine()).toMatch(/^skips /);
-    expect(view.testScore()).toBeGreaterThan(beforePieces);
+    expect(view.testScore()).toBe(1);
   });
 
   it("hands traffic back to live packets when the poll returns data", () => {

@@ -22,6 +22,7 @@ import { cssHex } from "./software-draw";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
+import { frameTsFromRaf } from "../core/time-ms";
 import type { FrameTs } from "../core/time-ms";
 
 export interface HostedView {
@@ -138,7 +139,7 @@ export class RenderHost {
       }
       this.canvasRect = this.canvas.getBoundingClientRect();
       harvestGpu();
-      const frameTs = ts as FrameTs;
+      const frameTs = frameTsFromRaf(ts);
       for (const v of this.views) v.hostFrame(frameTs);
     };
     this.raf = requestAnimationFrame(this.frame);

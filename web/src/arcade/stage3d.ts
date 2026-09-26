@@ -6,6 +6,7 @@ import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg,
 import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame, PaneFps } from "../core/fps";
 import type { FrameTs } from "../core/time-ms";
+import { frameTsFromRaf } from "../core/time-ms";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
 import { probeWebGL } from "../graph/webgl";
@@ -283,7 +284,7 @@ export abstract class Stage3D {
   private frame = (ts: number): void => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.frame);
-    markFrame(ts as FrameTs);
+    markFrame(frameTsFromRaf(ts));
     this.paneFps.tick(ts);
     const now = ts / 1000;
     const dt = Math.min(0.05, this.lastFrame ? now - this.lastFrame : 0.016);

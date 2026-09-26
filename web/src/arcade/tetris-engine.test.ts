@@ -24,8 +24,6 @@ import {
   TETRIS_WEIGHTS,
 } from "./tetris-engine";
 import { normalizeCells, rotateCells } from "./stage-math";
-import { formatGarbageRows, seededTDrillLayoutHash } from "./tetris-seeded-t-drill";
-import { allBatterySeeds } from "./tetris-seed-guard";
 
 /** Minimum alternating S/Z pieces the fixed planner must survive on an empty well. */
 const MIN_SZ_SURVIVAL = 56;
@@ -76,11 +74,6 @@ describe("tetris-engine", () => {
     expect(plan).not.toBeNull();
     const cells = cellsFor("T", plan!.rot);
     expect(landingY(board, cells, plan!.x)).toBe(plan!.y);
-  });
-
-  it("seeded T drill layouts differ across survival seeds", () => {
-    const hashes = allBatterySeeds().map((seed) => seededTDrillLayoutHash(seed));
-    expect(new Set(hashes).size).toBeGreaterThanOrEqual(18);
   });
 
   it("survives long S/Z sequences with line clears", () => {

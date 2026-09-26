@@ -86,8 +86,10 @@ export class TetrisView extends Stage3D {
   private readonly skipSamples: { t: number; n: number }[] = [];
   private lastHudSkips = 0;
   private lockedPieces = 0;
+  private lineClears = 0;
   private planCallCount = 0;
   private placementsEvaluated = 0;
+  private readonly planStats = { placementsEvaluated: 0 };
   private openingIdleSeeded = false;
   private lastHoldExpiredAt = 0;
 
@@ -178,13 +180,24 @@ export class TetrisView extends Stage3D {
     this.syncSkipHud(clock, show);
   }
 
+  private skipHudShown = "";
+  private skipHudVisible = false;
+
   private syncSkipHud(clockMs: number, idleVisible: boolean): void {
     const skips = this.trafficBudget.hudSkips;
     const delta = skips - this.lastHudSkips;
     if (delta > 0) this.skipSamples.push({ t: clockMs, n: delta });
     this.lastHudSkips = skips;
-    this.skipHud.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, clockMs));
-    this.skipHud.classList.toggle("is-visible", idleVisible && skips > 0);
+    const wantVisible = idleVisible && skips > 0;
+    const next = formatSkipRate(skipRatePerSec(this.skipSamples, clockMs));
+    if (next !== this.skipHudShown) {
+      this.skipHudShown = next;
+      this.skipHud.textContent = next;
+    }
+    if (wantVisible !== this.skipHudVisible) {
+      this.skipHudVisible = wantVisible;
+      this.skipHud.classList.toggle("is-visible", wantVisible);
+    }
   }
 
   protected step(now: number, dt: number): void {
@@ -291,9 +304,9 @@ export class TetrisView extends Stage3D {
     this.syncPiece();
     const board = boardFromOccupied(this.stack, COLS, ROWS);
     this.planCallCount++;
-    const planStats = { placementsEvaluated: 0 };
-    const plan = bestPlacement(board, next.kind, scoreBoard, planStats);
-    this.placementsEvaluated += planStats.placementsEvaluated;
+    this.planStats.placementsEvaluated = 0;
+    const plan = bestPlacement(board, next.kind, scoreBoard, this.planStats);
+    this.placementsEvaluated += this.planStats.placementsEvaluated;
     if (!plan) {
       this.beginTopoutHold(now);
       return;
@@ -349,6 +362,7 @@ export class TetrisView extends Stage3D {
     for (let y = 0; y < ROWS; y++) {
       const row = this.stack.filter((s) => s.y === y);
       if (row.length < COLS) continue;
+      this.lineClears += 1;
       for (const s of row) s.g.removeFromParent();
       this.stack = this.stack.filter((s) => s.y !== y);
       for (const s of this.stack) {
@@ -446,6 +460,18 @@ export class TetrisView extends Stage3D {
 
   testUsingIdleFeed(): boolean {
     return this.usingIdleFeed;
+  }
+
+  /** TEST-ONLY: preload the opening spawn queue (kinds only). */
+  testPrimeQueue(kinds: string[]): void {
+    this.queue = kinds.map((kind) => ({ kind, color: 0xffffff }));
+    this.openingIdleSeeded = true;
+    const now = this.clockMs() / 1000;
+    if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);
+  }
+
+  testLineClears(): number {
+    return this.lineClears;
   }
 
   testSetIdleSeed(seed: number): void {

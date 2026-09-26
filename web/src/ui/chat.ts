@@ -4,7 +4,7 @@ import { FEED_REVEAL_CPS, FEED_THINK_CPS, followScrollTop, revealStep } from "./
 import { nearBottom } from "./feed";
 import { bindFloatPanel } from "./float-drag";
 import { markFrame } from "../core/fps";
-import type { FrameTs } from "../core/time-ms";
+import { frameTsFromRaf } from "../core/time-ms";
 
 export type ChatRole = "you" | "think" | "agent";
 
@@ -279,7 +279,7 @@ export class ChatPanel {
 
   private loop(ts: number): void {
     this.raf = requestAnimationFrame(this.loop);
-    markFrame(ts as FrameTs);
+    markFrame(frameTsFromRaf(ts));
     const dt = this.lastTick ? Math.min(0.05, (ts - this.lastTick) / 1000) : 1 / 60;
     this.lastTick = ts;
     if (!this.cfg.on) return;
