@@ -30,6 +30,9 @@ CSP_SANDBOX_CONFIG_PATHS = frozenset(
         "web/src/plugins/host.ts",
     }
 )
+HOST_INFRA_PREFIXES = (".github/", "scripts/")
+# Pack-boundary workflow lint baseline (see pack-boundary.yml).
+LINT_BASELINE_PATHS = frozenset({"scripts/lint-baseline.json"})
 
 
 @dataclass(frozen=True)
@@ -69,8 +72,21 @@ def is_allowed_multipack_web_src(path: str, packs: set[str]) -> bool:
     return any(is_pack_test_file(path, pack) for pack in packs)
 
 
+def is_pack_pr_host_infra_path(path: str) -> bool:
+    """CI/scripts/lint baseline — host review required on any pack PR."""
+    if path in LINT_BASELINE_PATHS:
+        return True
+    return any(path.startswith(prefix) for prefix in HOST_INFRA_PREFIXES)
+
+
+def host_infra_paths_in(changed_files: list[str]) -> list[str]:
+    return sorted(p for p in changed_files if is_pack_pr_host_infra_path(p))
+
+
 def is_multipack_forbidden_host_path(path: str, packs: set[str]) -> bool:
     """Host/sensitive paths that must not ride along with a multi-pack PR."""
+    if is_pack_pr_host_infra_path(path):
+        return True
     if path.startswith("service/"):
         return True
     if path.startswith("plugins/sdk/"):
@@ -82,9 +98,16 @@ def is_multipack_forbidden_host_path(path: str, packs: set[str]) -> bool:
     return False
 
 
-def evaluate_multipack_pr(changed_files: list[str], packs: set[str]) -> list[Violation]:
+def evaluate_multipack_pr(
+    changed_files: list[str],
+    packs: set[str],
+    *,
+    allow_host_infra: bool = False,
+) -> list[Violation]:
     violations: list[Violation] = []
     for path in sorted(changed_files):
+        if allow_host_infra and is_pack_pr_host_infra_path(path):
+            continue
         if not is_multipack_forbidden_host_path(path, packs):
             continue
         violations.append(
@@ -369,12 +392,16 @@ def evaluate_pack_pr(
     changed_files: list[str],
     pack: str,
     file_contents: dict[str, tuple[str | None, str | None]],
+    *,
+    allow_host_infra: bool = False,
 ) -> list[Violation]:
     """Validate a single-pack PR. file_contents maps path -> (base, head) text."""
     violations: list[Violation] = []
     pack_prefix = f"plugins/src/{pack}/"
 
     for path in sorted(changed_files):
+        if allow_host_infra and is_pack_pr_host_infra_path(path):
+            continue
         if path.startswith(pack_prefix):
             continue
         if is_pack_test_file(path, pack):
@@ -423,13 +450,28 @@ def evaluate_pack_pr(
     return violations
 
 
+PACK_PR_HOST_INFRA_FAIL = (
+    "pack PR touches .github/, scripts/, or the lint baseline; "
+    f"requires {HOST_CHANGE_LABEL!r} and {HOST_REVIEWED_LABEL!r} labels"
+)
+
+
 def run_check(
     changed_files: list[str],
     file_contents: dict[str, tuple[str | None, str | None]],
+    *,
+    allow_host_infra: bool = False,
 ) -> tuple[int, list[str]]:
     """Return (exit_code, lines to print)."""
     lines: list[str] = []
     packs = detect_packs(changed_files)
+    infra_paths = host_infra_paths_in(changed_files)
+
+    if packs and infra_paths and not allow_host_infra:
+        lines.append(f"pack-boundary: {PACK_PR_HOST_INFRA_FAIL}; FAILED")
+        for path in infra_paths:
+            lines.append(f"  {path}: host infra path on pack PR")
+        return 1, lines
 
     if not packs:
         lines.append(
@@ -439,7 +481,9 @@ def run_check(
 
     if len(packs) > 1:
         pack_list = ", ".join(sorted(packs))
-        violations = evaluate_multipack_pr(changed_files, packs)
+        violations = evaluate_multipack_pr(
+            changed_files, packs, allow_host_infra=allow_host_infra
+        )
         if violations:
             lines.append(
                 "pack-boundary: multi-pack PR "
@@ -456,7 +500,9 @@ def run_check(
 
     pack = next(iter(packs))
     lines.append(f"pack-boundary: validating pack PR for {pack!r}.")
-    violations = evaluate_pack_pr(changed_files, pack, file_contents)
+    violations = evaluate_pack_pr(
+        changed_files, pack, file_contents, allow_host_infra=allow_host_infra
+    )
     if violations:
         lines.append("pack-boundary: FAILED")
         for v in violations:
@@ -745,6 +791,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.base or not args.head:
         parser.error("base and head refs are required unless --dry-run-host-review is set")
 
+    labels: set[str] = set()
+    host_review_ok = False
     token = os.environ.get("GITHUB_TOKEN", "")
     if args.repo and args.pr_number:
         if not token:
@@ -760,15 +808,15 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        code, lines = run_host_change_gate(
-            labels, timeline, last_push_at=push_at
-        )
-        for line in lines:
-            print(line)
-        if code != 0:
-            return code
         if HOST_CHANGE_LABEL in labels:
-            return 0
+            code, lines = run_host_change_gate(
+                labels, timeline, last_push_at=push_at
+            )
+            for line in lines:
+                print(line)
+            if code != 0:
+                return code
+            host_review_ok = True
 
     changed = git_diff_changed_paths(args.base, args.head)
     contents: dict[str, tuple[str | None, str | None]] = {}
@@ -776,7 +824,7 @@ def main(argv: list[str] | None = None) -> int:
         if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):
             contents[path] = load_file_pair(args.base, args.head, path)
 
-    code, lines = run_check(changed, contents)
+    code, lines = run_check(changed, contents, allow_host_infra=host_review_ok)
     for line in lines:
         print(line)
     return code

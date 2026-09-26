@@ -8,6 +8,7 @@ from scripts.check_pack_pr_boundary import (
     ALLOWED_SCHEMA_PATH,
     ALLOWED_TSCONFIG_PATH,
     HOST_REVIEW_FAIL_MESSAGE,
+    PACK_PR_HOST_INFRA_FAIL,
     evaluate_pack_pr,
     pack_py_test_path,
     paths_from_name_status,
@@ -104,6 +105,52 @@ def test_multi_pack_with_host_web_src_fails() -> None:
     assert code == 1
     assert any("multi-pack PR" in line for line in lines)
     assert any("viz-host.ts" in line for line in lines)
+
+
+def test_multi_pack_with_github_workflow_fails_without_host_labels() -> None:
+    files = [
+        "plugins/src/ant-colony/plugin.yml",
+        "plugins/src/metro-lines/plugin.yml",
+        ".github/workflows/ci.yml",
+    ]
+    code, lines = run_check(files, {})
+    assert code == 1
+    assert any("host infra" in line or PACK_PR_HOST_INFRA_FAIL in line for line in lines)
+    assert any("ci.yml" in line for line in lines)
+
+
+def test_multi_pack_with_scripts_change_fails_without_host_labels() -> None:
+    files = [
+        "plugins/src/ant-colony/plugin.yml",
+        "plugins/src/metro-lines/plugin.yml",
+        "scripts/check_pack_pr_boundary.py",
+    ]
+    code, lines = run_check(files, {})
+    assert code == 1
+    assert any("host infra" in line or "scripts/" in line for line in lines)
+
+
+def test_multi_pack_plugins_only_passes() -> None:
+    files = [
+        "plugins/src/ant-colony/plugin.yml",
+        "plugins/src/metro-lines/plugin.yml",
+        "plugins/src/ant-colony/frontend/index.ts",
+        "plugins/src/metro-lines/frontend/index.ts",
+    ]
+    code, lines = run_check(files, {})
+    assert code == 0
+    assert any("multiple pack folders" in line for line in lines)
+
+
+def test_multi_pack_with_host_infra_passes_when_reviewed() -> None:
+    files = [
+        "plugins/src/ant-colony/plugin.yml",
+        "plugins/src/metro-lines/plugin.yml",
+        ".github/workflows/ci.yml",
+    ]
+    code, lines = run_check(files, {}, allow_host_infra=True)
+    assert code == 0
+    assert any("multiple pack folders" in line for line in lines)
 
 
 def test_multi_pack_with_each_pack_test_still_passes() -> None:
