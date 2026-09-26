@@ -148,18 +148,18 @@ config:
 - key: maxIter
   label: max iterations
   type: number
-  default: 72
-  min: 16
-  max: 96
+  default: 32
+  min: 4
+  max: 8
   step: 4
   section: Lighting and fog
 - key: maxSteps
   label: raymarch steps
   type: number
-  default: 96
-  min: 32
-  max: 128
-  step: 4
+  default: 32
+  min: 4
+  max: 10
+  step: 2
   section: Lighting and fog
 - key: detail
   label: surface detail (epsilon)

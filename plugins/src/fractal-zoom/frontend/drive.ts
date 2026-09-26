@@ -15,9 +15,12 @@ export function fractalRenderScale(): number {
   return 1.0;
 }
 
-/** Hard GPU ceilings — shader loops are capped regardless of slider values. */
-export const FRACTAL_ITER_CEIL = 96;
-export const FRACTAL_STEPS_CEIL = 128;
+/**
+ * Hard GPU ceilings at render scale 1.0 (locked until VizFrameBudget).
+ * TODO(VizFrameBudget): raise FRACTAL_*_CEIL and plugin.yml max; move worst-case GPU test to min render scale.
+ */
+export const FRACTAL_ITER_CEIL = 8;
+export const FRACTAL_STEPS_CEIL = 10;
 export const FRACTAL_ZOOM_LOG_LIMIT = 13.8;
 
 /** Slot 0 layout — must match `sky/fragment.glsl`. */

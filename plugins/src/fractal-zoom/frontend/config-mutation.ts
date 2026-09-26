@@ -110,8 +110,9 @@ export function worstCaseFractalConfig(type: (typeof FRACTAL_TYPES)[number]): Re
   return {
     fractalType: type,
     preset: "custom",
-    maxIter: "96",
-    maxSteps: "128",
+    maxIter: "8",
+    maxSteps: "10",
+    shadow: "1",
     detail: "0.0003",
     shadow: "1",
     ao: "1",

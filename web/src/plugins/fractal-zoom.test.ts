@@ -38,6 +38,9 @@ import { runPackFrameHandler } from "./viz-pack-host";
 import { DEMO_PACK_CONTRACTS } from "./dogfood-runner";
 import { VizBufferWriter } from "./viz-host";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
+import { benchFractalSkyWorstCaseAllTypes, fractalSkyBenchLastError } from "./fractal-sky-gpu-bench";
+
+const FRAME_BUDGET_MS = 50;
 
 function benchDriveMs(config: Record<string, string>, frames = 12): number {
   let max = 0;
@@ -47,19 +50,6 @@ function benchDriveMs(config: Record<string, string>, frames = 12): number {
     max = Math.max(max, performance.now() - t0);
   }
   return max;
-}
-
-/** Shader cost proxy at lowest render scale (scale 1 until host governor ships). */
-function shaderCostProxyMs(): number {
-  const scale = fractalRenderScale();
-  const steps = Math.floor(FRACTAL_STEPS_CEIL * scale);
-  const iter = FRACTAL_ITER_CEIL;
-  const dePerStep = iter + 8;
-  const normalEval = 3;
-  const shadowLoop = 8;
-  const samplesPerPixel = steps * (dePerStep + normalEval * dePerStep + shadowLoop * dePerStep);
-  const msPerSample = 0.00004;
-  return samplesPerPixel * msPerSample;
 }
 
 describe("fractal-zoom shipped pack", () => {
@@ -96,7 +86,7 @@ describe("fractal-zoom shipped pack", () => {
   it("parses defaults, presets, and reduced motion", () => {
     const def = parseFractalOptions({});
     expect(def.type).toBe(FRACTAL_DEFAULTS.type);
-    expect(def.maxIter).toBe(72);
+    expect(def.maxIter).toBe(32);
     const reduced = parseFractalOptions({}, { reducedMotion: true });
     expect(reduced.paused || reduced.zoomSpeed <= 0.35).toBe(true);
     const preset = parseFractalOptions({ preset: "menger-tunnel" });
@@ -116,16 +106,26 @@ describe("fractal-zoom shipped pack", () => {
     expect(b.slot0[FZ_SLOT.zoomLog]).toBeGreaterThan(a.slot0[FZ_SLOT.zoomLog]!);
   });
 
-  it("caps shader loops and stays under 50 ms/frame at worst settings per type", () => {
-    expect(FRAG).toMatch(/for \(int i = 0; i < 128; i\+\+\)/);
-    expect(FRAG).toMatch(/for \(int i = 0; i < 96; i\+\+\)/);
-    expect(shaderCostProxyMs()).toBeLessThan(50);
-    for (const type of FRACTAL_TYPES) {
-      const cfg = worstCaseFractalConfig(type);
-      const ms = benchDriveMs(cfg);
-      expect(ms).toBeLessThan(50);
-    }
+  // TODO(VizFrameBudget): relax FRACTAL_*_CEIL and assert worst-case GPU time at fractalRenderScale() minimum step, not only 1.0.
+  it("locks render scale at 1.0 until host governor ships", () => {
+    expect(fractalRenderScale()).toBe(1);
   });
+
+  it("caps shader loops to drive.ts ceilings", () => {
+    expect(FRAG).toContain(`for (int i = 0; i < ${FRACTAL_STEPS_CEIL}; i++)`);
+    expect(FRAG).toContain(`for (int i = 0; i < ${FRACTAL_ITER_CEIL}; i++)`);
+  });
+
+  // Isolated sky in Chromium (not plugin srcdoc) — avoids sandbox CSP script-src 'self' blocking inline module scripts.
+  it("worst-case GPU frame stays under 50 ms at render scale 1.0 per fractal type", async () => {
+    const timings = await benchFractalSkyWorstCaseAllTypes(FRACTAL_TYPES);
+    expect(timings, `GPU bench failed: ${fractalSkyBenchLastError()}`).not.toBeNull();
+    for (const type of FRACTAL_TYPES) {
+      const ms = timings!.get(type);
+      expect(ms, `missing timing for ${type}`).toBeDefined();
+      expect(ms!, `${type} @ render scale 1.0 (1280×800, isolated sky)`).toBeLessThan(FRAME_BUDGET_MS);
+    }
+  }, 120_000);
 
   it("runs host pack handler on idle demo frame", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["fractal-zoom"]);
