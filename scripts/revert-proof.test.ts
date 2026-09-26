@@ -744,7 +744,9 @@ describe("widget", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "no-match"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toMatch(/row no-match.*ran 0 tests/i);
+    expect(r.stderr + r.stdout).toMatch(
+      /row no-match.*(target not found|ran 0 tests)/i,
+    );
     assertCheckoutUnchanged(root, before);
   });
 
@@ -780,7 +782,9 @@ describe("widget", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "two-match"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toMatch(/row two-match.*exactly 1 test.*got 2/i);
+    expect(r.stderr + r.stdout).toMatch(
+      /row two-match.*(multiple tests matched|exactly 1 test.*got 2)/i,
+    );
     assertCheckoutUnchanged(root, before);
   });
 
@@ -892,7 +896,9 @@ describe("other", () => {
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "phantom-leaf"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toMatch(/row phantom-leaf.*ran 0 tests|exactly 1 test/i);
+    expect(r.stderr + r.stdout).toMatch(
+      /row phantom-leaf.*(target not found|ran 0 tests|exactly 1 test|multiple tests matched)/i,
+    );
     assertNoRevertProofWorktrees(root);
   });
 
@@ -975,8 +981,17 @@ def test_service_live_value():
 
   it("(vitest-green-class) classifyPatchedVitest reports green when patched passes", async () => {
     const lib = await import("./revert-proof-lib.mjs");
+    const tests = [
+      { fullName: "suite > test", status: "passed", revertProofAssertion: false },
+    ];
     const kind = lib.classifyPatchedVitest({
-      counts: { executed: 1, passed: 1, failed: 0, suiteError: null, failedAssertions: [] },
+      counts: {
+        executed: 1,
+        passed: 1,
+        failed: 0,
+        suiteError: null,
+        selection: lib.assessVitestSelection(tests, "suite > test"),
+      },
     });
     expect(kind).toBe("green");
   });
@@ -1198,7 +1213,7 @@ describe("revert-proof-lib guards", () => {
     const parsed = lib.parsePytestPluginJson(
       JSON.stringify({
         tests: [
-          { nodeid: "t.py::pass", outcome: "passed", revertProofAssertion: false },
+          { nodeid: "t.py::pass", outcome: "skipped", revertProofAssertion: false },
           { nodeid: "t.py::fail", outcome: "failed", revertProofAssertion: true },
           { nodeid: "t.py::skip", outcome: "skipped", revertProofAssertion: false },
         ],

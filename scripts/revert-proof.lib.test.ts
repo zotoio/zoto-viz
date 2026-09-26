@@ -43,6 +43,16 @@ describe("vitest JSON selection by full name", () => {
     expect(sel.reason).toBe("target skipped");
   });
 
+  it("rejects when filter matches multiple executed tests", () => {
+    const tests = [
+      { fullName: "widget > returns one", status: "failed", revertProofAssertion: true },
+      { fullName: "widget > returns one", status: "failed", revertProofAssertion: true },
+    ];
+    const sel = assessVitestSelection(tests, "widget > returns one");
+    expect(sel.ok).toBe(false);
+    expect(sel.reason).toBe("multiple tests matched filter");
+  });
+
   it("rejects when another test executed", () => {
     const tests = [
       { fullName: "widget > returns one", status: "failed", revertProofAssertion: true },

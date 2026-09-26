@@ -262,13 +262,24 @@ export function parseVitestJsonReport(report) {
  * @param {string} testName
  */
 export function assessVitestSelection(tests, testName) {
-  const target = tests.find((t) => t.fullName === testName);
-  if (!target) {
+  const matches = tests.filter((t) => t.fullName === testName);
+  const executedMatches = matches.filter(
+    (t) => !VITEST_SKIP_STATUSES.has(t.status),
+  );
+  if (matches.length === 0) {
     return { ok: false, reason: "target not found", target: null };
   }
-  if (VITEST_SKIP_STATUSES.has(target.status)) {
-    return { ok: false, reason: "target skipped", target };
+  if (executedMatches.length > 1) {
+    return { ok: false, reason: "multiple tests matched filter", target: null };
   }
+  if (executedMatches.length === 0) {
+    const skippedTarget = matches[0];
+    if (VITEST_SKIP_STATUSES.has(skippedTarget.status)) {
+      return { ok: false, reason: "target skipped", target: skippedTarget };
+    }
+    return { ok: false, reason: "target not found", target: null };
+  }
+  const target = executedMatches[0];
   const others = tests.filter((t) => t.fullName !== testName);
   if (!others.every((t) => VITEST_SKIP_STATUSES.has(t.status))) {
     return { ok: false, reason: "other tests not skipped", target };
