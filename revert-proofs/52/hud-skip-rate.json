@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
-  "testName": "H1: 10 ms at 2\u00d72 \u2014 debt 1748 \u2192 2 skips per build; i=119 \u2192 20 frames, 40 skipped/s LIMITED label",
-  "description": "HUD skip rate reports 1/s when there were zero skip deltas"
-}

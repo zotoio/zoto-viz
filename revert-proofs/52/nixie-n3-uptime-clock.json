@@ -1,6 +1,0 @@
-{
-  "row": "N3 revert uptime clock",
-  "testName": "N3: after reload, the display still shows the local wall hour, not page uptime",
-  "excerpt": "AssertionError: expected [ 1, +0, +0, +0, 4, 2 ] to deeply equal [ +0, +0, 3, +0, +0, +0 ]",
-  "testFile": "web/src/plugins/nixie-wall-clock.test.ts"
-}

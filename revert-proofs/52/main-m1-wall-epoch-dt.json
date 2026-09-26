@@ -1,6 +1,0 @@
-{
-  "row": "M1 revert epoch frame.t as viz clock",
-  "testFile": "web/src/app/main-viz-deliver.test.ts",
-  "testName": "M1: mainVizDeliver advances monotonic clock \u2014 dt > 0 after first frame",
-  "excerpt": "AssertionError: expected false to be true // Object.is equality"
-}

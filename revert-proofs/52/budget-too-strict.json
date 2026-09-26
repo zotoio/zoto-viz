@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood.test.ts",
-  "testName": "records skips when build is injected slow \u2014 never silent green",
-  "description": "Budget comparison off-by-one: 4 ms injected cost treated as over budget"
-}

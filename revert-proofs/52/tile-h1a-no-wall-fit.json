@@ -1,7 +1,0 @@
-{
-  "row": "H1 revert A",
-  "test": "web/src/plugins/dogfood-tile-hud.test.ts H2 50 ms at 2\u00d72",
-  "excerpt": "AssertionError: expected 'limited' to be 'over_budget'",
-  "testFile": "web/src/plugins/dogfood-tile-hud-revert.test.ts",
-  "testName": "H1 revert A: without wall-fit check, 50 ms tile shows LIMITED"
-}

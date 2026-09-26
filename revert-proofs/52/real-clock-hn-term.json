@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood.test.ts",
-  "testName": "hn-term uses wall clock for crawl timing",
-  "description": "hn-term pack reads performance.now during soak (zero-read spy must fail)"
-}

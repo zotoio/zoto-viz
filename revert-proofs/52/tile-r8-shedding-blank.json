@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-budget.test.ts",
-  "testName": "R8: HUD over-budget skip rate and shedding keeps last frame",
-  "description": "Shedding tile returns null instead of last delivered frame"
-}

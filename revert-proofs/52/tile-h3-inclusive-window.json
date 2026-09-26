@@ -1,7 +1,0 @@
-{
-  "row": "H3 revert",
-  "test": "web/src/plugins/dogfood-tile-hud.test.ts H3",
-  "excerpt": "AssertionError: expected 41 to be 40",
-  "testFile": "web/src/plugins/dogfood-tile-hud-revert.test.ts",
-  "testName": "H3 revert: inclusive lower bound yields 41 and 56 skipped/s"
-}

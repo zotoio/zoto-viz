@@ -1,7 +1,0 @@
-{
-  "row": "H4 revert",
-  "test": "web/src/plugins/dogfood-tile-hud.test.ts H4",
-  "excerpt": "AssertionError: expected 'limited' to be 'over_budget'",
-  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
-  "testName": "H4: alternating 3000/6000 at 2\u00d72 \u2014 LIMITED then sticky over budget"
-}

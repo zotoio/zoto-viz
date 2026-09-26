@@ -1,6 +1,0 @@
-{
-  "row": "N12 revert hour12 on format boundary",
-  "testName": "N12: mixed 12h and 24h tiles \u2014 one format per second, per-tile hour conversion",
-  "excerpt": "AssertionError: expected [ +0, 1, +0, 5 ] to deeply equal [ 1, 3, +0, 5 ]",
-  "testFile": "web/src/plugins/nixie-wall-clock.test.ts"
-}
