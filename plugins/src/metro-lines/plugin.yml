@@ -1,0 +1,31 @@
+id: metro-lines
+name: Metro Lines
+version: 1
+hint: Living schematic transit map — hosts are stations, flows are coloured lines and train dots; disruptions hit the ticker first.
+description: |
+  Classic 45/90° schematic map with round interchange stations, bold line colours, and train dots whose speed tracks latency and length tracks bytes.
+  Data mapping (live → effect, defaults in visualisation.yml):
+    talkers[].id → station identity and label; talkers[].rate → line weight and interchange pulse; talkers[].role → palette lane (gateway/intercom/lan).
+    packets[].proto → line colour family; packets[].size → train length; packets[].field → train speed along its edge.
+    sys.failed → Zoto Fail disruption badge + ticker priority; headlines[].text → disruption ticker copy when present.
+  Caps: 16 stations, 16 edges, 48 trains (particles), 8 buffer slots × 64 floats. Idle uses a busy fictional network labelled demo.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 8
+  maxBufferFloats: 64
+  maxParticles: 192
+  uniforms:
+    - uTime
+    - uOpacity
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+frontend:
+  entry: frontend/index.ts
