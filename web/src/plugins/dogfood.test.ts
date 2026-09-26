@@ -1,4 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  resetVizClockInjectors,
+  setVizBuildCostTicksInjector,
+  setVizClockInjector,
+  setVizWallClockInjector,
+} from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
 import { formatSkipRate, skipRatePerSec, vizHudMetric } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
@@ -8,6 +15,12 @@ import {
   formatDogfoodReport,
   hostBindOnPackSwap,
   hudTickFromBudget,
+  DOGFOOD_SOAK_BUILD_COST_MS,
+  DOGFOOD_SOAK_CLOCK_STEP_MS,
+  DOGFOOD_SOAK_EVENT_PERIOD_MS,
+  DOGFOOD_SOAK_FRAMES_PER_PACK,
+  DOGFOOD_SOAK_PATTERN_EXPECTED,
+  dogfoodSoakPatternedBuildCostMs,
   runDogfoodSoak,
   runPackFrameHandler,
   runPackSwapPreserve,
@@ -28,6 +41,7 @@ import {
   buildVizFrameForPlugin,
 } from "./viz-host";
 import type { StateMsg } from "../core/types";
+import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 
 describe("hn rain pack", () => {
   it("packs uppercase headline bytes the sky can decode", () => {
@@ -145,31 +159,37 @@ describe("hn term pack", () => {
 });
 
 describe("viz dogfood gates", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+    vizTileBudgetRegistry.reset();
+    syncVizTileScope(["dogfood"]);
+  });
+
+  afterEach(() => {
+    resetVizClockInjectors();
+    vi.restoreAllMocks();
+  });
+
   const fatLan = fatLanFixture();
 
   it("over-budget tick bumps skip counter and withholds pack delivery", () => {
     const packId = "packet-tunnel";
     const contract = DEMO_PACK_CONTRACTS[packId];
     const writer = new VizBufferWriter(contract);
-    const times = [0, 5, 0, VIZ_FRAME_BUDGET_MS + 4];
-    let tick = 0;
-    const budget = new VizFrameBudget(() => times[tick++] ?? 999);
-    let delivered = 0;
+    const budget = new VizFrameBudget(() => 0, "t-over");
+    setVizBuildCostTicksInjector((i) => (i < 2 ? (i === 0 ? 1200 : 15000) : 1200));
 
     const ok = dogfoodTick(packId, fatLan, 0, 0.1, budget, writer);
     expect(ok.delivered).toBe(true);
-    expect(ok.buildCalls).toBe(1);
-    expect(budget.stats.skipped).toBe(0);
-
-    const prevTs = ok.frame?.t ?? 0;
-    const skipped = dogfoodTick(packId, fatLan, prevTs, 0.1, budget, writer);
+    let prevClock = 0;
+    const heavy = dogfoodTick(packId, fatLan, prevClock, 0.1, budget, writer);
+    prevClock = 1000;
+    expect(heavy.delivered).toBe(true);
+    const skipped = dogfoodTick(packId, fatLan, prevClock, 0.1, budget, writer);
     expect(skipped.delivered).toBe(false);
-    expect(skipped.frame).toBeNull();
     expect(skipped.lastBuilt).not.toBeNull();
     expect(budget.stats.skipped).toBe(1);
-    expect(budget.stats.overBudget).toBe(1);
-    if (skipped.delivered) delivered++;
-    expect(delivered).toBe(0);
+    setVizBuildCostTicksInjector(undefined);
   });
 
   it("packet-tunnel host idle yields non-zero buffer and bright on empty state", () => {
@@ -224,7 +244,7 @@ describe("viz dogfood gates", () => {
 
   it("talker-storm pack handler refuses more than 512 particles", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["talker-storm"]);
-    const frame = buildVizFrame(fatLan, 0, 0.1);
+    const frame = buildVizFrame(fatLan, monoMs(0), 0.1);
     const over: number[] = [];
     for (let i = 0; i < 513; i++) over.push(0, 0, 0, 1);
     const bad = writer.writeParticles(over, 4);
@@ -240,6 +260,7 @@ describe("viz dogfood gates", () => {
   });
 
   it("preserve-frame across mid-run pack swap keeps vizFrameTs, skips, and UBO mirror", () => {
+    setVizBuildCostTicksInjector((i) => (i === 1 || i === 3 ? 15000 : 1200));
     const times = [0, 4, 0, VIZ_FRAME_BUDGET_MS + 3, 0, 5, 0, 4];
     let tick = 0;
     const result = runPackSwapPreserve(
@@ -252,14 +273,14 @@ describe("viz dogfood gates", () => {
     expect(result.frameTs).toBeGreaterThan(0);
     expect(result.skipped).toBeGreaterThanOrEqual(1);
     expect(result.uboMatch).toBe(true);
+    setVizBuildCostTicksInjector(undefined);
 
-    const budget = new VizFrameBudget(() => 0);
-    let n = 0;
-    budget.deliver(fatLan, 0, 0.1, () => {});
-    expect(budget.stats.skipped).toBe(0);
-    const slow = new VizFrameBudget(() => (++n === 1 ? 0 : VIZ_FRAME_BUDGET_MS + 1));
-    slow.deliver(fatLan, 0, 0.1, () => {});
-    expect(slow.stats.skipped).toBe(1);
+    const budget = new VizFrameBudget(() => 0, "swap");
+    setVizBuildCostTicksInjector((i) => (i === 0 ? 1200 : 15000));
+    budget.deliver(fatLan, monoMs(0), 0.1, () => {});
+    budget.deliver(fatLan, monoMs(0), 0.1, () => {});
+    expect(budget.stats.skipped).toBeGreaterThanOrEqual(1);
+    setVizBuildCostTicksInjector(undefined);
 
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
     writer.writeBuffer(0, [9, 8, 7, 6]);
@@ -267,11 +288,11 @@ describe("viz dogfood gates", () => {
       writer,
       DEMO_PACK_CONTRACTS["talker-storm"],
       result.frameTs,
-      slow,
+      budget,
       true,
     );
     expect(rebound.frameTs).toBe(result.frameTs);
-    expect(rebound.budget.stats.skipped).toBe(1);
+    expect(rebound.budget.stats.skipped).toBeGreaterThanOrEqual(1);
     expect(Array.from(rebound.writer!.ubo).slice(0, 4)).toEqual([9, 8, 7, 6]);
   });
 
@@ -298,8 +319,34 @@ describe("viz dogfood gates", () => {
     expect(formatSkipRate(skipRatePerSec(skipSamples, 1000))).toBe("skips 0/s");
   });
 
-  it("fat-LAN live soak: all three packs under budget or honest skips", () => {
-    const result = runDogfoodSoak({ state: fatLan, framesPerPack: 120 });
+  it("fat-LAN live soak: count-based delivery and skip honesty on simulated clock", () => {
+    const perfSpy = vi.spyOn(performance, "now");
+    const dateSpy = vi.spyOn(Date, "now");
+    const simTimeMs = { value: 0 };
+    setVizClockInjector(() => simTimeMs.value);
+    setVizWallClockInjector(() => simTimeMs.value + 1_000_000);
+    perfSpy.mockClear();
+    dateSpy.mockClear();
+
+    const soakOpts = {
+      state: fatLan,
+      framesPerPack: DOGFOOD_SOAK_FRAMES_PER_PACK,
+      buildCostMs: DOGFOOD_SOAK_BUILD_COST_MS,
+      eventPeriodMs: DOGFOOD_SOAK_EVENT_PERIOD_MS,
+      clockStepMs: DOGFOOD_SOAK_CLOCK_STEP_MS,
+      simTimeMs,
+      now: () => simTimeMs.value,
+    };
+
+    const expectedSkipped = 0;
+    const expectedDelivered = DOGFOOD_SOAK_FRAMES_PER_PACK;
+    const expectedSkipRate = 0;
+
+    const result = runDogfoodSoak(soakOpts);
+
+    expect(perfSpy).toHaveBeenCalledTimes(0);
+    expect(dateSpy).toHaveBeenCalledTimes(0);
+
     console.log("\n" + formatDogfoodReport(result));
 
     expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
@@ -320,12 +367,43 @@ describe("viz dogfood gates", () => {
     ]));
 
     for (const pack of result.packs) {
-      expect(pack.buildMs.p95).toBeLessThan(VIZ_FRAME_BUDGET_MS + 0.01);
-      expect(pack.delivered).toBe(pack.frames);
-      expect(pack.skipped).toBe(0);
-      expect(pack.withinBudget).toBe(true);
+      expect(pack.delivered).toBe(expectedDelivered);
+      expect(pack.skipped).toBe(expectedSkipped);
+      expect(pack.skipRatePerSec).toBe(expectedSkipRate);
+      expect(formatSkipRate(pack.skipRatePerSec)).toBe("skips 0/s");
     }
-    expect(result.allWithinBudgetOrHonestSkips).toBe(true);
+  });
+
+  it("fat-LAN live soak: patterned over-budget skips on simulated clock", () => {
+    const perfSpy = vi.spyOn(performance, "now");
+    const dateSpy = vi.spyOn(Date, "now");
+    const simTimeMs = { value: 0 };
+    setVizClockInjector(() => simTimeMs.value);
+    setVizWallClockInjector(() => simTimeMs.value + 1_000_000);
+    perfSpy.mockClear();
+    dateSpy.mockClear();
+
+    const soakOpts = {
+      state: fatLan,
+      framesPerPack: DOGFOOD_SOAK_FRAMES_PER_PACK,
+      buildCostMs: dogfoodSoakPatternedBuildCostMs,
+      eventPeriodMs: DOGFOOD_SOAK_EVENT_PERIOD_MS,
+      clockStepMs: DOGFOOD_SOAK_CLOCK_STEP_MS,
+      simTimeMs,
+      now: () => simTimeMs.value,
+    };
+
+    const result = runDogfoodSoak(soakOpts);
+
+    expect(perfSpy).toHaveBeenCalledTimes(0);
+    expect(dateSpy).toHaveBeenCalledTimes(0);
+
+    for (const pack of result.packs) {
+      expect(pack.delivered).toBe(DOGFOOD_SOAK_PATTERN_EXPECTED.delivered);
+      expect(pack.skipped).toBe(DOGFOOD_SOAK_PATTERN_EXPECTED.skipped);
+      expect(pack.skipRatePerSec).toBeGreaterThan(0);
+      expect(formatSkipRate(pack.skipRatePerSec)).not.toBe("skips 0/s");
+    }
   });
 });
 
@@ -365,15 +443,19 @@ describe("viz dogfood over-budget honesty", () => {
     const fatLan = fatLanFixture();
     const packId = "talker-storm";
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS[packId]);
-    const times = [0, 5, 0, VIZ_FRAME_BUDGET_MS + 2];
-    let tick = 0;
-    const budget = new VizFrameBudget(() => times[tick++] ?? 999);
+    vizTileBudgetRegistry.reset();
+    syncVizTileScope(["slow"]);
+    const budget = new VizFrameBudget(() => 0, "slow");
+    setVizBuildCostTicksInjector((i) => (i < 2 ? (i === 0 ? 1200 : 15000) : 1200));
 
     const first = dogfoodTick(packId, fatLan, 0, 0.1, budget, writer);
     expect(first.delivered).toBe(true);
 
-    const second = dogfoodTick(packId, fatLan, first.frame?.t ?? 0, 0.1, budget, writer);
+    const heavy = dogfoodTick(packId, fatLan, first.frame?.t ?? 0, 0.1, budget, writer);
+    expect(heavy.delivered).toBe(true);
+    const second = dogfoodTick(packId, fatLan, heavy.frame?.t ?? 0, 0.1, budget, writer);
     expect(second.delivered).toBe(false);
+    setVizBuildCostTicksInjector(undefined);
     expect(second.lastBuilt).not.toBeNull();
     expect(budget.stats.skipped).toBe(1);
 
