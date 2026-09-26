@@ -354,7 +354,7 @@ function venvPython(mainRoot) {
       return c;
     }
   }
-  return "python";
+  return process.env.PYTHON ?? "python3";
 }
 
 function pythonEnvForWorktree(wtRoot) {
@@ -574,13 +574,14 @@ function parsePytestJunit(xmlText) {
 
 async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   const { bin, cwd } = resolveVitest(wtRoot, meta.testFile);
+  const testRel = meta.testFile.replace(/^web\//, "");
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
   const testPattern = vitestTestNamePattern(meta.testName);
   const args = [
     "run",
     "--config",
     path.join(wtRoot, "scripts", "vitest.config.mjs"),
-    meta.testFile,
+    testRel,
     "-t",
     testPattern,
     "--reporter=json",
