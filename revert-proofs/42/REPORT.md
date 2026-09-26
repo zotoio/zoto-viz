@@ -2,7 +2,7 @@
 
 - **Base:** `6520b014472c05f831ac5204429be2affb8473cb` (`main`)
 - **Stack A:** `cursor/wall-duplicate-pack-tiles-d355` (see git head on branch)
-- **Stack A1.5:** `#TBD` `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4` (host pixel material counting-GL rows, pack-mirror lifecycle + letterbox presenter rows, device-px-ratio lint row)
+- **Stack A1.5:** `#86` `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4` (host pixel material counting-GL rows, pack-mirror lifecycle + letterbox presenter rows, device-px-ratio lint row)
 - **Stack A2:** `#81` `cursor/pack-mirror-readback-harness-d355` (frame-alloc / frame-loop / gpu-pack-present / mosaic-coalesce unit tests)
 
 ## Size (vs `origin/main`, excluding `revert-proofs/`)
