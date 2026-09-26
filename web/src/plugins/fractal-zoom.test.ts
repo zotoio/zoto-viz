@@ -9,6 +9,8 @@ import {
   FZ_SLOT0_FLOATS,
   FRACTAL_ITER_CEIL,
   FRACTAL_STEPS_CEIL,
+  fractalHudCaption,
+  fractalDrive,
   fractalRenderScale,
   packFractalDrive,
   resetFractalDrive,
@@ -22,6 +24,7 @@ import {
 import {
   FRACTAL_CONFIG_KEYS,
   fractalPresetConfig,
+  fractalRandomConfig,
   validatePresetConfigsAgainstSchema,
   validatePresetKeysAgainstSchema,
 } from "../../../plugins/src/fractal-zoom/frontend/config-mutation";
@@ -61,18 +64,36 @@ function fractalPackSlot0(frame: VizDataFrame, opts: Record<string, string> = {}
   return [...drive.slot0];
 }
 
-function smokeFractalDefaultPresetSky(): {
+function lum(rgba: [number, number, number, number]): number {
+  return rgba[0] * 0.299 + rgba[1] * 0.587 + rgba[2] * 0.114;
+}
+
+function isNearBlack(rgba: [number, number, number, number]): boolean {
+  const l = lum(rgba);
+  return l < 12 && rgba[0] < 15 && rgba[1] < 15 && rgba[2] < 25;
+}
+
+function isSolidFlat(center: [number, number, number, number], side: [number, number, number, number]): boolean {
+  const d = Math.abs(lum(center) - lum(side));
+  return d < 1.5 && Math.abs(center[0] - side[0]) < 2 && Math.abs(center[1] - side[1]) < 2 && Math.abs(center[2] - side[2]) < 2;
+}
+
+function smokeFractalConfig(
+  cfg: Record<string, string>,
+  t = 0.5,
+): {
   ok: boolean;
   skipped: boolean;
   compileError: string | null;
   rgba: [number, number, number, number] | null;
+  side: [number, number, number, number] | null;
 } {
   if (typeof document === "undefined") {
-    return { ok: false, skipped: true, compileError: "no document", rgba: null };
+    return { ok: false, skipped: true, compileError: "no document", rgba: null, side: null };
   }
   const wrapped = wrapPluginSky(FRAG);
   if ("error" in wrapped) {
-    return { ok: false, skipped: false, compileError: wrapped.error, rgba: null };
+    return { ok: false, skipped: false, compileError: wrapped.error, rgba: null, side: null };
   }
   const w = 320;
   const h = 200;
@@ -81,7 +102,7 @@ function smokeFractalDefaultPresetSky(): {
   canvas.height = h;
   const gl = canvas.getContext("webgl2", { antialias: false, depth: false, stencil: false });
   if (!gl) {
-    return { ok: false, skipped: true, compileError: null, rgba: null };
+    return { ok: false, skipped: true, compileError: null, rgba: null, side: null };
   }
   const compile = (type: number, src: string): WebGLShader | string => {
     const sh = gl.createShader(type);
@@ -94,27 +115,32 @@ function smokeFractalDefaultPresetSky(): {
     return sh;
   };
   const vs = compile(gl.VERTEX_SHADER, SMOKE_VERT);
-  if (typeof vs === "string") return { ok: false, skipped: false, compileError: vs, rgba: null };
+  if (typeof vs === "string") return { ok: false, skipped: false, compileError: vs, rgba: null, side: null };
   const fs = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\n${wrapped.frag}`);
-  if (typeof fs === "string") return { ok: false, skipped: false, compileError: fs, rgba: null };
+  if (typeof fs === "string") return { ok: false, skipped: false, compileError: fs, rgba: null, side: null };
   const prog = gl.createProgram();
-  if (!prog) return { ok: false, skipped: false, compileError: "no program", rgba: null };
+  if (!prog) return { ok: false, skipped: false, compileError: "no program", rgba: null, side: null };
   gl.attachShader(prog, vs);
   gl.attachShader(prog, fs);
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    return { ok: false, skipped: false, compileError: (gl.getProgramInfoLog(prog) || "link failed").trim(), rgba: null };
+    return {
+      ok: false,
+      skipped: false,
+      compileError: (gl.getProgramInfoLog(prog) || "link failed").trim(),
+      rgba: null,
+      side: null,
+    };
   }
   resetFractalDrive();
-  const cfg = { preset: "bulb-classic", ...fractalPresetConfig("bulb-classic") };
-  const drive = packFractalDrive(0.5, 1 / 60, 0.1, w / h, cfg, IDLE_POINTER);
+  const drive = packFractalDrive(t, 1 / 60, 0.1, w / h, cfg, IDLE_POINTER);
   const slotVec4 = new Float32Array(VIZ_UBO.totalVec4s * 4);
   for (let i = 0; i < drive.slot0.length; i++) slotVec4[i] = drive.slot0[i] ?? 0;
   gl.useProgram(prog);
   const slotsLoc = gl.getUniformLocation(prog, `${VIZ_UBO.threeUniform}[0]`)
     ?? gl.getUniformLocation(prog, VIZ_UBO.threeUniform);
   gl.uniform4fv(slotsLoc, slotVec4);
-  gl.uniform1f(gl.getUniformLocation(prog, "uTime"), 0.5);
+  gl.uniform1f(gl.getUniformLocation(prog, "uTime"), t);
   gl.uniform1f(gl.getUniformLocation(prog, "uOpacity"), 1);
   gl.uniform1f(gl.getUniformLocation(prog, "uBright"), drive.bright);
   gl.uniform1f(gl.getUniformLocation(prog, "uAudio"), 0.1);
@@ -130,16 +156,33 @@ function smokeFractalDefaultPresetSky(): {
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.finish();
   const px = new Uint8Array(4);
+  const sidePx = new Uint8Array(4);
   gl.readPixels(w / 2, h / 2, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  gl.readPixels(Math.floor(w * 0.78), h / 2, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, sidePx);
   gl.deleteFramebuffer(fbo);
   gl.deleteTexture(tex);
   gl.deleteProgram(prog);
   gl.deleteShader(vs);
   gl.deleteShader(fs);
   const rgba: [number, number, number, number] = [px[0]!, px[1]!, px[2]!, px[3]!];
-  const lum = rgba[0] * 0.299 + rgba[1] * 0.587 + rgba[2] * 0.114;
-  const nearBlack = lum < 12 && rgba[0] < 15 && rgba[1] < 15 && rgba[2] < 25;
-  return { ok: !nearBlack, skipped: false, compileError: null, rgba };
+  const side: [number, number, number, number] = [sidePx[0]!, sidePx[1]!, sidePx[2]!, sidePx[3]!];
+  const ok = !isNearBlack(rgba) && !isSolidFlat(rgba, side);
+  return { ok, skipped: false, compileError: null, rgba, side };
+}
+
+function assertSmokeHealthy(smoke: ReturnType<typeof smokeFractalConfig>, label: string): void {
+  if (smoke.skipped) return;
+  expect(smoke.compileError, `${label} compile`).toBeNull();
+  expect(smoke.ok, `${label} rgba=${smoke.rgba?.join(",")} side=${smoke.side?.join(",")}`).toBe(true);
+}
+
+function assertZoomAdvances(cfg: Record<string, string>, label: string): void {
+  const opts = parseFractalOptions(cfg);
+  if (opts.paused || opts.zoomSpeed <= 0) return;
+  resetFractalDrive();
+  const a = packFractalDrive(0, 1 / 60, 0, 1.6, cfg, IDLE_POINTER);
+  const b = packFractalDrive(0.4, 1 / 60, 0, 1.6, cfg, IDLE_POINTER);
+  expect(b.slot0[FZ_SLOT.zoomLog]!, `${label} stalled zoom`).toBeGreaterThan(a.slot0[FZ_SLOT.zoomLog]!);
 }
 
 describe("fractal-zoom shipped pack", () => {
@@ -304,11 +347,89 @@ describe("fractal-zoom shipped pack", () => {
     });
   });
 
-  it("smoke: default preset draws a non-black centre pixel when WebGL2 is available", () => {
-    const smoke = smokeFractalDefaultPresetSky();
-    if (smoke.skipped) return;
-    expect(smoke.compileError, "shader compile/link").toBeNull();
-    expect(smoke.ok, `rgba=${smoke.rgba?.join(",")}`).toBe(true);
+  describe("focus pod light checks", () => {
+    const SLIDER_MIN: Record<string, string> = {
+      preset: "custom",
+      fractalType: "mandelbulb",
+      maxIter: "4",
+      maxSteps: "12",
+      zoomSpeed: "0",
+      glow: "0",
+      fog: "0",
+      detail: "0.0003",
+      power: "2",
+      scale: "1.2",
+      fold: "0.1",
+    };
+    const SLIDER_MAX: Record<string, string> = {
+      preset: "custom",
+      fractalType: "julia2d",
+      maxIter: "32",
+      maxSteps: "48",
+      zoomSpeed: "1",
+      glow: "1",
+      fog: "1",
+      detail: "0.01",
+      power: "16",
+      scale: "3.5",
+      fold: "1.2",
+      paused: "false",
+      autoPilot: "false",
+    };
+
+    it("clamps slider min/max and 50 seeded randomise configs (no black, flat, or stalled flight)", () => {
+      const cases: { label: string; cfg: Record<string, string> }[] = [
+        { label: "min sliders", cfg: SLIDER_MIN },
+        { label: "max sliders", cfg: SLIDER_MAX },
+        ...FRACTAL_PRESETS.map((row) => ({
+          label: `preset ${row.id}`,
+          cfg: { preset: row.id, ...fractalPresetConfig(row.id) },
+        })),
+      ];
+      for (let i = 0; i < 50; i++) {
+        cases.push({ label: `randomise seed ${i}`, cfg: fractalRandomConfig(i * 0.019 + 0.01) });
+      }
+      for (const { label, cfg } of cases) {
+        assertSmokeHealthy(smokeFractalConfig(cfg), label);
+        assertZoomAdvances(cfg, label);
+      }
+    });
+
+    it("does not default zoom speed to the slider maximum", () => {
+      expect(PLUGIN).toMatch(/key: zoomSpeed[\s\S]*?default:\s*0\.35/);
+      expect(PLUGIN).toMatch(/max:\s*1\.?0?/);
+      const bare = parseFractalOptions({});
+      expect(bare.zoomSpeed).toBeLessThan(1);
+      expect(bare.zoomSpeed).not.toBe(1);
+      const classic = parseFractalOptions({ preset: "bulb-classic" });
+      expect(classic.zoomSpeed).toBeLessThan(1);
+      expect(classic.zoomSpeed).toBe(0.55);
+    });
+
+    it("reduced motion stops zoom drift and camera dolly", () => {
+      resetFractalDrive();
+      const opts = parseFractalOptions(
+        { preset: "bulb-classic", paused: "true", zoomSpeed: "0.5" },
+        { reducedMotion: true },
+      );
+      expect(opts.paused).toBe(true);
+      const pointer = { ...IDLE_POINTER };
+      const a = fractalDrive({ t: 0, dt: 1 / 60, audio: 0, aspect: 1.6, opts, pointer });
+      const b = fractalDrive({ t: 3, dt: 1 / 60, audio: 0, aspect: 1.6, opts, pointer });
+      expect(b.slot0[FZ_SLOT.zoomLog]).toBe(a.slot0[FZ_SLOT.zoomLog]);
+      expect(b.slot0[FZ_SLOT.camX]).toBe(a.slot0[FZ_SLOT.camX]);
+      expect(b.slot0[FZ_SLOT.camY]).toBe(a.slot0[FZ_SLOT.camY]);
+      expect(b.slot0[FZ_SLOT.camZ]).toBe(a.slot0[FZ_SLOT.camZ]);
+    });
+
+    it("exposes HUD caption for host corner label (type · preset)", () => {
+      resetFractalDrive();
+      packFractalDrive(0, 1 / 60, 0, 1.6, fractalPresetConfig("box-abyss"), IDLE_POINTER);
+      expect(fractalHudCaption).toBe("Mandelbox · Deep Cathedral");
+      expect(DRIVE).toContain("fractalHudCaption");
+      expect(PLUGIN).toContain("Deep Cathedral");
+      expect(PLUGIN).toContain("box-abyss");
+    });
   });
 
   it("releases sandbox iframe and interaction after repeated mount/unmount", async () => {
