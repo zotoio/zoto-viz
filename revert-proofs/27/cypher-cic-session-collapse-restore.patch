@@ -1,0 +1,24 @@
+diff --git a/web/src/app/cypher-cic-panels.ts b/web/src/app/cypher-cic-panels.ts
+index 15c8621..e2c48d3 100644
+--- a/web/src/app/cypher-cic-panels.ts
++++ b/web/src/app/cypher-cic-panels.ts
+@@ -29,8 +29,8 @@ export function applyCypherCicPanelSession(
+     const end = endCypherCicPanelSession(holder.session);
+     if (end) {
+       settings.setCypherCicPanelCollapsed(false);
+-      settings.setFeedOn(settings.readPersistedFeedOn(), { persist: false });
+-      settings.setChatOn(settings.readPersistedChatOn(), { persist: false });
++      settings.setFeedOn(false, { persist: false });
++      settings.setChatOn(false, { persist: false });
+       holder.session = null;
+     }
+     return;
+@@ -51,7 +51,7 @@ export function applyProductionFeedHeaderToggle(settings: {
+   feedSettings: { on: boolean };
+   setFeedOn: (on: boolean, opts?: { persist?: boolean }) => void;
+ }): void {
+-  settings.setFeedOn(!settings.feedSettings.on);
++  settings.setFeedOn(!settings.feedSettings.on, { persist: false });
+ }
+ 
+ /** Production header `c` / `C` handler (`main.ts` keydown). */

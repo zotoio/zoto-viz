@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testName": "^cypher\\-cic applyCypherCicPanelSession \\(R10/R11\\) > header f during cypher-cic persists feed exactly once via production toggle$",
+  "testFile": "src/app/cypher-cic-session.test.ts",
+  "description": "Retargeted from legacy f-key row \u2014 production header f via applyProductionFeedHeaderToggle.",
+  "patchedAssertion": "AssertionError: expected '0' to be '1' // Object.is equality"
+}
