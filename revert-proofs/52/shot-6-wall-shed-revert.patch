@@ -1,0 +1,11 @@
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -1052,7 +1052,6 @@ function feed(shown: StateMsg): void {
+       for (const id of scopeTileIds) {
+         const t = vizTileBudgetRegistry.getTile(id);
+         t.shedding = primaryTile.shedding;
+-        if (frame) t.lastDeliveredFrame = frame;
+       }
+     }
+     if (frame) {

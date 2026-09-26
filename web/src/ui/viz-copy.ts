@@ -11,9 +11,9 @@ export function mosaicWallLayoutBootRefusedMessage(requestedTiles: number, limit
 }
 
 export function tileLimitedSharingLabel(activeTiles: number, skipsPerSec: number): string {
-  const mates = Math.max(0, activeTiles - 1);
+  const n = Math.max(0, activeTiles);
   const rate = formatHudSkipsPerSec(skipsPerSec);
-  return `LIMITED · sharing frame with ${mates} tiles · ${rate}`;
+  return `LIMITED · sharing frame with ${n} tiles · ${rate}`;
 }
 
 export const TILE_LIMITED_SHARING_TOOLTIP =

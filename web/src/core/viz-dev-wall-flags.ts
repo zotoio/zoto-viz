@@ -1,21 +1,11 @@
-import {
-  setVizBuildCostTicksForTileInjector,
-} from "./viz-clock";
+import { setVizBuildCostTicksInjector } from "./viz-clock";
 import { vizClockMs } from "./viz-clock";
 import { clearDevWallFlagClock, devWallFlagClockActive, setDevWallFlagClock } from "../plugins/nixie-wall-parts";
 
-/** Per-scoped-tile injected build cost (ticks); undefined slot = no override. */
-const tileCostTicks = new Map<string, number>();
-
-let showPerTileHudIndex = false;
-const tileHudIndexById = new Map<string, number>();
 let lastParsedWallClockRaw: string | null = null;
 
-function clearTileCostInjectors(): void {
-  tileCostTicks.clear();
-  tileHudIndexById.clear();
-  showPerTileHudIndex = false;
-  setVizBuildCostTicksForTileInjector(undefined);
+function clearWallCostInjector(): void {
+  setVizBuildCostTicksInjector(undefined);
 }
 
 /** Decimal integer string only (no hex, floats, or exponent). */
@@ -26,24 +16,17 @@ function parseDecimalIntToken(raw: string): number | null {
   return n;
 }
 
-function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[]): void {
-  if (!raw) return;
+/** Whole-wall `?vizTileCostTicks=<ticks>` only; every `index:ticks` form is rejected. */
+function parseWallCostTicksFlag(raw: string | null): void {
+  if (raw === null || raw === undefined) return;
+  const trimmed = raw.trim();
+  if (!trimmed) return;
+  if (trimmed.indexOf(":") >= 0) return;
 
-  const colon = raw.indexOf(":");
-  if (colon < 0) return;
+  const ticks = parseDecimalIntToken(trimmed);
+  if (ticks === null || ticks < 0) return;
 
-  const idx1 = parseDecimalIntToken(raw.slice(0, colon));
-  const ticks = parseDecimalIntToken(raw.slice(colon + 1));
-  if (idx1 === null || ticks === null || idx1 < 1 || idx1 > scopedTileIds.length) return;
-  if (ticks < 0) return;
-
-  const tileId = scopedTileIds[idx1 - 1]!;
-  tileCostTicks.set(tileId, ticks);
-  for (let i = 0; i < scopedTileIds.length; i++) {
-    tileHudIndexById.set(scopedTileIds[i]!, i + 1);
-  }
-  showPerTileHudIndex = true;
-  setVizBuildCostTicksForTileInjector((tileId) => tileCostTicks.get(tileId));
+  setVizBuildCostTicksInjector(() => ticks);
 }
 
 function parseWallClockFlag(raw: string | null): void {
@@ -70,13 +53,13 @@ function parseWallClockFlag(raw: string | null): void {
  * Dev-only URL flags for dogfood: parse once when the mosaic wall is built (and on rebuild).
  * Steady frames read only numeric injectors — no URL parsing on the hot path.
  */
-export function applyDevVizWallFlagsOnBuild(search: string, scopedTileIds: readonly string[]): void {
-  clearTileCostInjectors();
+export function applyDevVizWallFlagsOnBuild(search: string, _scopedTileIds: readonly string[]): void {
+  clearWallCostInjector();
   if (!import.meta.env.DEV) return;
 
   try {
     const params = new URLSearchParams(search);
-    parseTileCostFlag(params.get("vizTileCostTicks"), scopedTileIds);
+    parseWallCostTicksFlag(params.get("vizTileCostTicks"));
     parseWallClockFlag(params.get("vizWallClock"));
   } catch {
     // ignored — never throw or log from dev flag parsing
@@ -85,15 +68,7 @@ export function applyDevVizWallFlagsOnBuild(search: string, scopedTileIds: reado
 
 /** Test hook: reset wall-clock anchor bookkeeping between cases. */
 export function resetDevVizWallFlagsStateForTests(): void {
-  clearTileCostInjectors();
+  clearWallCostInjector();
   lastParsedWallClockRaw = null;
   clearDevWallFlagClock();
-}
-
-export function devShowPerTileHudIndex(): boolean {
-  return import.meta.env.DEV && showPerTileHudIndex;
-}
-
-export function devPerTileHudIndexForTileId(tileId: string): number | undefined {
-  return tileHudIndexById.get(tileId);
 }

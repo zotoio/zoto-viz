@@ -1,7 +1,7 @@
 {
-  "row": "Q3 tile cost parser revert accepts 1:1e3",
+  "row": "Q3 revert: whole-wall cost accepts 1e3 via Number()",
   "runner": "vitest",
-  "testFile": "src/core/viz-dev-wall-flags.test.ts",
-  "testName": "^dev viz wall flags > Q3 bad tile cost 1:1e3 — absent, no LIMITED; 1:3000 would LIMITED tile 1$",
-  "patchedAssertion": "AssertionError: expected 1000 to be undefined // Object.is equality"
+  "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
+  "testName": "^dev viz wall flags > Q3 bad whole-wall cost 1e3 — absent$",
+  "excerpt": "AssertionError: expected 1000 to be undefined // Object.is equality"
 }

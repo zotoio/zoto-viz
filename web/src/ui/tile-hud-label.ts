@@ -21,7 +21,7 @@ function rateKey(skipsPerSec: number): string {
 
 export function createTileHudLabelLine(): TileHudLabelLine {
   const stats: TileHudLabelStats = { builds: 0, writes: 0 };
-  let lastMates = -1;
+  let lastTileCount = -1;
   let lastRateKey = "";
   let cachedLabel: string | null = null;
 
@@ -32,23 +32,22 @@ export function createTileHudLabelLine(): TileHudLabelLine {
     reset() {
       stats.builds = 0;
       stats.writes = 0;
-      lastMates = -1;
+      lastTileCount = -1;
       lastRateKey = "";
       cachedLabel = null;
     },
     limitedLabel(activeTiles: number, skipsPerSec: number): string | null {
       if (activeTiles < 2) {
         cachedLabel = null;
-        lastMates = -1;
+        lastTileCount = -1;
         lastRateKey = "";
         return null;
       }
-      const mates = activeTiles - 1;
       const key = rateKey(skipsPerSec);
-      if (mates === lastMates && key === lastRateKey && cachedLabel !== null) {
+      if (activeTiles === lastTileCount && key === lastRateKey && cachedLabel !== null) {
         return cachedLabel;
       }
-      lastMates = mates;
+      lastTileCount = activeTiles;
       lastRateKey = key;
       stats.builds++;
       cachedLabel = tileLimitedSharingLabel(activeTiles, skipsPerSec);

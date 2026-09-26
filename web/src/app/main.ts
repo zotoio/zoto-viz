@@ -1025,33 +1025,35 @@ function feed(m: StateMsg): void {
     const buildFrame = (s: StateMsg, pt: MonoMs, a: number) => mainVizBuildFrame(s, pt, a, idle, bind);
     const scopeTileIds = mosaic?.on && mosaic.tileIds.length ? mosaic.tileIds : ["main"];
     const primaryTileId = mosaic?.on ? (mosaic.mainMode || scopeTileIds[0] || "main") : "main";
-    let frame: ReturnType<typeof mainVizDeliver>["frame"] = null;
-    for (let ti = 0; ti < scopeTileIds.length; ti++) {
-      const tileId = scopeTileIds[ti]!;
-      vizBudget.setTileId(tileId);
-      const delivered = mainVizDeliver({
-        budget: vizBudget,
-        prevClockMs: vizFrameClockMs,
-        state: shown,
-        audio,
-        buildFrame,
-        onFrame: tileId === primaryTileId
-          ? (f) => {
-            if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-            sandbox.frame(f);
-            if (packId) {
-              syncVizPackRenderCanvas(renderHost.bufferPixelSize());
-              runPackFrameHandler(packId, f, {
-                writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-                writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-                writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-              }, optsFor(mode));
-            }
-          }
-          : () => {},
-      });
-      vizFrameClockMs = delivered.nextClockMs;
-      if (tileId === primaryTileId) frame = delivered.frame;
+    vizBudget.setTileId(primaryTileId);
+    const delivered = mainVizDeliver({
+      budget: vizBudget,
+      prevClockMs: vizFrameClockMs,
+      state: shown,
+      audio,
+      buildFrame,
+      onFrame: (f) => {
+        if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
+        sandbox.frame(f);
+        if (packId) {
+          syncVizPackRenderCanvas(renderHost.bufferPixelSize());
+          runPackFrameHandler(packId, f, {
+            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+          }, optsFor(mode));
+        }
+      },
+    });
+    vizFrameClockMs = delivered.nextClockMs;
+    const frame = delivered.frame;
+    if (mosaic?.on && scopeTileIds.length > 1) {
+      const primaryTile = vizTileBudgetRegistry.getTile(primaryTileId);
+      for (const id of scopeTileIds) {
+        const t = vizTileBudgetRegistry.getTile(id);
+        t.shedding = primaryTile.shedding;
+        if (frame) t.lastDeliveredFrame = frame;
+      }
     }
     if (frame) {
       if (packId === "hn-rain" || packId === "hn-term") {
@@ -1119,11 +1121,10 @@ function setRedaction(on: boolean): void {
 }
 setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
 {
-  const bootScope = mosaic && mosaic.on ? mosaic.tileIds : ["main"];
-  const bootKey = (bootScope.length ? bootScope : ["main"]).join("\0");
-  vizTileScopeKey = bootKey;
+  const bootScope: readonly string[] = ["main"];
+  vizTileScopeKey = bootScope.join("\0");
   bootNixieRealWallClock();
-  applyDevVizWallFlagsOnBuild(location.search, bootScope.length ? bootScope : ["main"]);
+  applyDevVizWallFlagsOnBuild(location.search, bootScope);
 }
 
 // ---------------------------------------------------------------- settings cog: allow/block filters + the moved show / privacy switches

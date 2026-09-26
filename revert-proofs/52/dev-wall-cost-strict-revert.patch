@@ -1,16 +1,17 @@
 diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
 --- a/web/src/core/viz-dev-wall-flags.ts
 +++ b/web/src/core/viz-dev-wall-flags.ts
-@@ -32,10 +32,10 @@ function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[]):
-   const colon = raw.indexOf(":");
-   if (colon < 0) return;
+@@ -19,7 +19,7 @@ function parseDecimalIntToken(raw: string): number | null {
  
--  const idx1 = parseDecimalIntToken(raw.slice(0, colon));
--  const ticks = parseDecimalIntToken(raw.slice(colon + 1));
--  if (idx1 === null || ticks === null || idx1 < 1 || idx1 > scopedTileIds.length) return;
-+  const idx1 = Number(raw.slice(0, colon));
-+  const ticks = Number(raw.slice(colon + 1));
-+  if (!Number.isInteger(idx1) || !Number.isFinite(ticks) || idx1 < 1 || idx1 > scopedTileIds.length) return;
-   if (ticks < 0) return;
+ /** Whole-wall `?vizTileCostTicks=<ticks>` only; every `index:ticks` form is rejected. */
+ function parseWallCostTicksFlag(raw: string | null): void {
+   if (raw === null || raw === undefined) return;
+   const trimmed = raw.trim();
+   if (!trimmed) return;
+   if (trimmed.indexOf(":") >= 0) return;
  
-   const tileId = scopedTileIds[idx1 - 1]!;
+-  const ticks = parseDecimalIntToken(trimmed);
++  const ticks = Number(trimmed);
+   if (ticks === null || ticks < 0) return;
+ 
+   setVizBuildCostTicksInjector(() => ticks);

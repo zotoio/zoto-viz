@@ -1,8 +1,7 @@
-import { devPerTileHudIndexForTileId, devShowPerTileHudIndex } from "../core/viz-dev-wall-flags";
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
 import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
-import { tileHudChrome } from "../plugins/viz-tile-hud";
+import { tileHudChrome, wallHudChrome } from "../plugins/viz-tile-hud";
 import { createTileHudLabelLine, type TileHudLabelLine } from "./tile-hud-label";
 import { TILE_LIMITED_SHARING_TOOLTIP, formatHudSkipsPerSec } from "./viz-copy";
 import { morphCopy, Select } from "./ui";
@@ -348,7 +347,10 @@ export class VizHud {
     const rate = skipRatePerSec(this.skipSamples, now);
     if (tileBudget) {
       const nowTick = Math.round(now * 300);
-      const chrome = tileHudChrome(tileBudget, nowTick, activeTiles);
+      const wallTiles = (tileBudgetLines ?? []).map((l) => l.tile);
+      const chrome = wallTiles.length
+        ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
+        : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
       const limited = chrome.state === "limited"
         ? this.skipLabelLine.limitedLabel(activeTiles, chrome.skipRatePerSec)
         : null;
@@ -373,16 +375,7 @@ export class VizHud {
       if (!row) continue;
       const nowTick = Math.round(now * 300);
       const chrome = tileHudChrome(tile, nowTick, activeTiles);
-      const limited = chrome.state === "limited"
-        ? row.label.limitedLabel(activeTiles, chrome.skipRatePerSec)
-        : null;
-      const indexPrefix =
-        devShowPerTileHudIndex()
-          ? `#${devPerTileHudIndexForTileId(tileId) ?? "?"} `
-          : "";
-      const text = limited
-        ? `${indexPrefix}${tileId}: ${limited}`
-        : `${indexPrefix}${tileId}: ${formatSkipRate(chrome.skipRatePerSec)}`;
+      const text = `${tileId}: ${formatHudSkipsPerSec(chrome.skipRatePerSec)}`;
       const prev = this.lastMosaicLineText.get(tileId);
       if (prev !== text) {
         row.label.writeText(row.el, text);

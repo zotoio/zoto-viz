@@ -98,3 +98,41 @@ export function tileHudChrome(
     useFailTone: false,
   };
 }
+
+/** Wall HUD skip rate: sum per-tile ring skip counts (no arrays or filters). */
+export function wallHudSkipRateFromRing(
+  tiles: readonly VizTileBudgetStats[],
+  nowTick: number,
+  inclusiveLower = false,
+): number {
+  let sum = 0;
+  for (let i = 0; i < tiles.length; i++) {
+    sum += tileSkipsInHudWindowRing(tiles[i]!, nowTick, inclusiveLower);
+  }
+  return sum;
+}
+
+/** Single LIMITED line on the wall HUD strip (budget tile state, wall-wide skip rate). */
+export function wallHudChrome(
+  budgetTile: VizTileBudgetStats,
+  wallTiles: readonly VizTileBudgetStats[],
+  nowTick: number,
+  activeTiles: number,
+): TileHudChrome {
+  const skipRate = wallHudSkipRateFromRing(wallTiles, nowTick, false);
+  const state = computeTileHudViewerState(
+    hudSamplesForTile(budgetTile),
+    nowTick,
+    budgetTile.lastBuildCostTicks,
+  );
+  const limitedLabel =
+    state === "limited" && activeTiles >= 2
+      ? tileLimitedSharingLabel(activeTiles, skipRate)
+      : null;
+  return {
+    state,
+    limitedLabel,
+    skipRatePerSec: skipRate,
+    useFailTone: state === "over_budget",
+  };
+}

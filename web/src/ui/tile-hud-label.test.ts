@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTileHudLabelLine } from "./tile-hud-label";
 
-const LABEL = "LIMITED · sharing frame with 3 tiles · 40 skipped/s";
+const LABEL = "LIMITED · sharing frame with 4 tiles · 40 skipped/s";
 
 function skipRateAtSecond(sec: number): number {
   if (sec < 2) return 10;

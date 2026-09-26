@@ -1,0 +1,7 @@
+{
+  "row": "A revert: whole-wall flag accepts index:ticks again",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
+  "testName": "^dev viz wall flags > F5 \\(iii\\) bad tile cost: 1:5011 — no injector on 2×2$",
+  "excerpt": "AssertionError: expected 5011 to be undefined // Object.is equality"
+}

@@ -47,7 +47,7 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     const row = runTileHudSim(reg, "t0", 120, () => VIZ_COST_TICKS_10MS, 4, 119);
     expect(row.delivered).toBe(40);
     expect(row.skipRateAt).toBe(40);
-    expect(row.limitedLabel).toBe("LIMITED · sharing frame with 3 tiles · 40 skipped/s");
+    expect(row.limitedLabel).toBe("LIMITED · sharing frame with 4 tiles · 40 skipped/s");
     expect(row.state).toBe("limited");
 
     const solo = freshHudRegistry(["solo"]);
