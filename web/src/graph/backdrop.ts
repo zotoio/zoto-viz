@@ -8,6 +8,7 @@ import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
 import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
+import { prefersReducedMotion } from "../core/motion";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -42,15 +43,31 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
   fungi: "/skies/fungi.jpg",
 };
 
-/** Target length of a photo-sky video loop (seconds). Stills Ken-Burns on this period until a clip lands. */
-export const PHOTO_LOOP_S = 5;
-/** Crossfade from the last frames onto a second decoder at t=0 so the wrap has no hitch. */
-export const PHOTO_LOOP_FADE_S = 0.35;
+/** Ken Burns still cycle (seconds). Ping-pong ease; matches at t=0 and t=period. */
+export const PHOTO_KEN_BURNS_CYCLE_S = 75;
+/** Alias used by photo-sky helpers and tests. */
+export const PHOTO_LOOP_S = PHOTO_KEN_BURNS_CYCLE_S;
+/** Minimum zoom on photographic stills (cover-fit). */
+export const PHOTO_STILL_ZOOM_MIN = 1;
+/** Maximum zoom on photographic stills. */
+export const PHOTO_STILL_ZOOM_MAX = 1.06;
+/** Max UV pan (fraction of the image) at full Ken Burns aim. */
+export const PHOTO_STILL_PAN_MAX = 0.028;
+/** Crossfade from the last video frames onto t=0 so the wrap has no hitch. */
+export const PHOTO_LOOP_FADE_S = 3;
 
-/** 0..1 phase of the photo-sky loop. */
+/** 0..1 linear phase of a timed loop. */
 export function photoLoopPhase(t: number, period = PHOTO_LOOP_S): number {
   const p = period > 0 ? period : PHOTO_LOOP_S;
   return (((t % p) + p) % p) / p;
+}
+
+/** 0..1..0 ping-pong with smooth ease-in-out; zero velocity at wrap. */
+export function photoKenBurnsEase(t: number, period = PHOTO_KEN_BURNS_CYCLE_S): number {
+  const p = period > 0 ? period : PHOTO_KEN_BURNS_CYCLE_S;
+  const u = photoLoopPhase(t, p);
+  const tri = u < 0.5 ? u * 2 : (1 - u) * 2;
+  return tri * tri * (3 - 2 * tri);
 }
 
 /**
@@ -65,20 +82,16 @@ export function photoLoopMix(t: number, duration: number, fade = PHOTO_LOOP_FADE
   return (p - start) / fade;
 }
 
-/** Cover-fit Ken Burns UV + breath. Closed over `period` (t and t+period match). */
-export function photoStillLoopSample(u: number, v: number, t: number, period = PHOTO_LOOP_S): {
+/** Cover-fit Ken Burns UV. Closed over `period` (t and t+period match). */
+export function photoStillLoopSample(u: number, v: number, t: number, period = PHOTO_KEN_BURNS_CYCLE_S): {
   x: number; y: number; zoom: number; breath: number;
 } {
-  const ang = photoLoopPhase(t, period) * Math.PI * 2;
-  const zoom = 1.08 + 0.035 * Math.sin(ang);
-  const x0 = (u - 0.5) / zoom + 0.5 + Math.cos(ang) * 0.018;
-  const y0 = (v - 0.5) / zoom + 0.5 + Math.sin(ang * 2) * 0.018;
-  return {
-    x: x0 + 0.0035 * Math.sin(ang + y0 * 5.5),
-    y: y0 + 0.0035 * Math.cos(ang + x0 * 4.5),
-    zoom,
-    breath: 0.975 + 0.04 * Math.sin(ang),
-  };
+  const e = photoKenBurnsEase(t, period);
+  const zoom = PHOTO_STILL_ZOOM_MIN + (PHOTO_STILL_ZOOM_MAX - PHOTO_STILL_ZOOM_MIN) * e;
+  const pan = PHOTO_STILL_PAN_MAX * e;
+  const x0 = (u - 0.5) / zoom + 0.5 + pan * 0.62;
+  const y0 = (v - 0.5) / zoom + 0.5 + pan * 0.38;
+  return { x: x0, y: y0, zoom, breath: 1 };
 }
 
 export function isPhotoSky(kind: BackdropKind): kind is PhotoSkyKind {
@@ -90,7 +103,7 @@ export function isPhotoVideoUrl(url: string): boolean {
   return /\.(webm|mp4|ogv)(?:[?#]|$)/i.test(url);
 }
 
-/** Prefer a 5 s muted loop, then the JPEG poster. Drop `/skies/<id>.webm` beside the still. */
+/** Prefer a muted loop clip, then the JPEG poster. Drop `/skies/<id>.webm` beside the still. */
 export function photoSkyCandidates(kind: PhotoSkyKind): string[] {
   return [`/skies/${kind}.webm`, `/skies/${kind}.mp4`, PHOTO_SKIES[kind]];
 }
@@ -578,11 +591,23 @@ uniform float uLumaCap;
 uniform float uTime;
 uniform float uAnimate;
 uniform float uLoopMix;
+uniform float uKenCycle;
+uniform float uKenZoomMin;
+uniform float uKenZoomMax;
+uniform float uKenPanMax;
 uniform vec3 uBg;
 in vec2 vUv;
 out vec4 fragColor;
 
 ${SKY_LUMA_CAP_GLSL}
+
+float kenEase(float t, float cycle) {
+  float c = max(cycle, 1.0);
+  float u = fract(max(t, 0.0) / c);
+  float tri = u < 0.5 ? u * 2.0 : (1.0 - u) * 2.0;
+  return tri * tri * (3.0 - 2.0 * tri);
+}
+
 void main() {
   vec2 canvas = max(uCanvas, vec2(1.0));
   vec2 video = max(uVideoSize, vec2(1.0));
@@ -590,15 +615,14 @@ void main() {
   float va = video.x / video.y;
   vec2 scale = ca > va ? vec2(1.0, va / ca) : vec2(ca / va, 1.0);
   float live = step(0.5, uAnimate);
-  float ang = live * fract(max(uTime, 0.0) / 5.0) * 6.28318530718;
-  float zoom = mix(1.0, 1.08 + 0.035 * sin(ang), live);
-  vec2 pan = live * vec2(cos(ang), sin(ang * 2.0)) * 0.018;
+  float e = live * kenEase(uTime, uKenCycle);
+  float zoom = mix(1.0, mix(uKenZoomMin, uKenZoomMax, e), live);
+  vec2 pan = live * vec2(0.62, 0.38) * uKenPanMax * e;
   vec2 uv = (vUv - 0.5) * scale / zoom + 0.5 + pan;
-  uv += live * 0.0035 * vec2(sin(ang + uv.y * 5.5), cos(ang + uv.x * 4.5));
   vec3 cola = texture(uVideo, uv).rgb;
   vec3 colb = texture(uVideoB, uv).rgb;
   vec3 col = mix(cola, colb, clamp(uLoopMix, 0.0, 1.0));
-  col *= uBright * (0.85 + 0.35 * uAudio) * mix(1.0, 0.975 + 0.04 * sin(ang), live);
+  col *= uBright * (0.85 + 0.35 * uAudio);
   vec3 capped = capSkyLumaTo(col, uLumaCap);
   vec3 outc = mix(uBg, capped, uOpacity);
   fragColor = vec4(capSkyLumaTo(outc, uLumaCap), 1.0);
@@ -618,8 +642,68 @@ function blankTex(): THREE.DataTexture {
   return t;
 }
 
-type PhotoVideoSlot = { el: HTMLVideoElement; tex: THREE.VideoTexture };
-type PhotoVideoLoop = { url: string; slots: [PhotoVideoSlot, PhotoVideoSlot]; active: 0 | 1; incoming: boolean };
+export type PhotoVideoSlot = { el: HTMLVideoElement; tex: THREE.VideoTexture };
+export type PhotoVideoLoop = { url: string; slots: [PhotoVideoSlot, PhotoVideoSlot]; active: 0 | 1; incoming: boolean };
+
+/** Still plates: mipmapped so slow Ken Burns pan does not shimmer in small tiles. */
+export function configurePhotoStillTexture(tex: THREE.Texture): void {
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+}
+
+export function releasePhotoVideoElement(el: HTMLVideoElement): void {
+  el.pause();
+  el.removeAttribute("src");
+  el.load();
+}
+
+export function releasePhotoVideoSlot(slot: PhotoVideoSlot): void {
+  slot.tex.dispose();
+  releasePhotoVideoElement(slot.el);
+}
+
+export function disposePhotoVideoPack(pack: PhotoVideoLoop): void {
+  for (const slot of pack.slots) releasePhotoVideoSlot(slot);
+}
+
+/** URLs that may stay in the photo caches (current sky + outgoing crossfade). */
+export function photoCacheRetainUrls(current: string | null, outgoing: string | null): Set<string> {
+  const retain = new Set<string>();
+  if (current) retain.add(current);
+  if (outgoing) retain.add(outgoing);
+  return retain;
+}
+
+export function prunePhotoTextureCache(
+  cache: Map<string, THREE.Texture>,
+  retain: ReadonlySet<string>,
+): string[] {
+  const removed: string[] = [];
+  for (const [url, tex] of cache) {
+    if (retain.has(url)) continue;
+    tex.dispose();
+    cache.delete(url);
+    removed.push(url);
+  }
+  return removed;
+}
+
+export function prunePhotoVideoCache(
+  cache: Map<string, PhotoVideoLoop>,
+  retain: ReadonlySet<string>,
+): string[] {
+  const removed: string[] = [];
+  for (const [url, pack] of cache) {
+    if (retain.has(url)) continue;
+    disposePhotoVideoPack(pack);
+    cache.delete(url);
+    removed.push(url);
+  }
+  return removed;
+}
 
 function makeSkyVideo(url: string): HTMLVideoElement {
   const el = document.createElement("video");
@@ -732,6 +816,8 @@ export class Backdrop {
   private readonly photoCache = new Map<string, THREE.Texture>();
   private readonly photoVideoCache = new Map<string, PhotoVideoLoop>();
   private photoWant: string | null = null;
+  private photoOutgoingUrl: string | null = null;
+  private photoEvictAt = 0;
   private photoLoadGen = 0;
   private photoVideoUrl: string | null = null;
   private pluginMat: THREE.ShaderMaterial | null = null;
@@ -836,6 +922,10 @@ export class Backdrop {
         uAnimate: { value: 1 },
         uLoopMix: { value: 0 },
         uVideoB: { value: blankTex() },
+        uKenCycle: { value: PHOTO_KEN_BURNS_CYCLE_S },
+        uKenZoomMin: { value: PHOTO_STILL_ZOOM_MIN },
+        uKenZoomMax: { value: PHOTO_STILL_ZOOM_MAX },
+        uKenPanMax: { value: PHOTO_STILL_PAN_MAX },
         uBg: { value: new THREE.Color(0x0b0e14) },
       },
       vertexShader: LIVE_VERT,
@@ -978,21 +1068,19 @@ export class Backdrop {
   }
 
   private loadPhotoStill(url: string, gen: number): void {
-    this.photoWant = url;
     const hit = this.photoCache.get(url);
     if (hit) {
       if (gen !== this.photoLoadGen) return;
-      this.bindPhoto(hit, true);
+      this.bindPhoto(hit, true, url);
       return;
     }
     void loadHtmlImage(new Image(), url).then((img) => {
       const t = new THREE.Texture(img);
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.minFilter = THREE.LinearFilter;
-      t.needsUpdate = true;
+      configurePhotoStillTexture(t);
       this.photoCache.set(url, t);
+      this.syncPhotoCacheSize();
       if (gen !== this.photoLoadGen) return;
-      this.bindPhoto(t, true);
+      this.bindPhoto(t, true, url);
     }).catch(() => undefined);
   }
 
@@ -1029,6 +1117,7 @@ export class Backdrop {
         incoming: false,
       };
       this.photoVideoCache.set(url, pack);
+      this.syncPhotoCacheSize();
       this.bindPhotoVideo(pack);
     };
     a.addEventListener("error", fail);
@@ -1037,7 +1126,7 @@ export class Backdrop {
   }
 
   private bindPhotoVideo(pack: PhotoVideoLoop): void {
-    this.photoWant = pack.url;
+    this.beginPhotoTransition(pack.url);
     this.photoVideoUrl = pack.url;
     this.pausePhotoVideos(pack.url);
     pack.active = 0;
@@ -1049,7 +1138,7 @@ export class Backdrop {
     this.photoMat.uniforms.uAnimate.value = 0;
     this.photoMat.uniforms.uLoopMix.value = 0;
     this.photoMat.uniforms.uVideoB.value = nxt.tex;
-    this.bindPhoto(cur.tex, false);
+    this.bindPhoto(cur.tex, false, pack.url);
     try { cur.el.currentTime = 0; } catch { /* */ }
     const play = cur.el.play();
     if (play) void play.catch(() => undefined);
@@ -1105,9 +1194,33 @@ export class Backdrop {
     }
   }
 
-  private bindPhoto(t: THREE.Texture, animate: boolean): void {
+  private beginPhotoTransition(nextUrl: string): void {
+    const prev = this.photoWant;
+    if (prev && prev !== nextUrl) {
+      this.photoOutgoingUrl = prev;
+      this.photoEvictAt = this.clock + PHOTO_LOOP_FADE_S;
+    }
+    this.photoWant = nextUrl;
+    this.syncPhotoCacheSize();
+  }
+
+  private syncPhotoCacheSize(): void {
+    const retain = photoCacheRetainUrls(this.photoWant, this.photoOutgoingUrl);
+    prunePhotoTextureCache(this.photoCache, retain);
+    prunePhotoVideoCache(this.photoVideoCache, retain);
+  }
+
+  private tickPhotoCacheEviction(): void {
+    if (!this.photoOutgoingUrl || this.clock < this.photoEvictAt) return;
+    this.photoOutgoingUrl = null;
+    this.syncPhotoCacheSize();
+  }
+
+  private bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void {
+    if (url) this.beginPhotoTransition(url);
     this.photoMat.uniforms.uVideo.value = t;
-    this.photoMat.uniforms.uAnimate.value = animate ? 1 : 0;
+    const motion = animate && !prefersReducedMotion();
+    this.photoMat.uniforms.uAnimate.value = motion ? 1 : 0;
     this.photoMat.uniforms.uLoopMix.value = 0;
     if (animate) {
       this.photoVideoUrl = null;
@@ -1394,5 +1507,6 @@ export class Backdrop {
     } else if (this.photoVideoUrl) {
       this.tickPhotoVideoLoop();
     }
+    this.tickPhotoCacheEviction();
   }
 }

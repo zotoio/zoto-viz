@@ -5,11 +5,17 @@ import { TETROMINOES, normalizeCells, rotateCells, tetrominoForProto } from "./s
 import { Stage3D } from "./stage3d";
 import { makeTetBlock } from "./models3d";
 import type { Packet } from "../core/types";
+import { bestPlacement, boardFromOccupied, cellsFor, type Placement } from "./tetris-engine";
+import { shouldHoldTopout, topoutHoldExpired, TETRIS_TOPOUT_HOLD_S } from "./tetris-topout";
 
 const KEY_WHO = "zoto-viz.tetris.who";
 const COLS = 10;
 const ROWS = 16;
 const CELL = 0.95;
+/** Seconds between visible sideways moves / rotations while autoplaying. */
+const AUTOPLAY_STEP_S = 0.13;
+/** Gravity multiplier once the piece is aimed at its planned column and rotation. */
+const AUTOPLAY_DROP_MULT = 2.4;
 
 const PROTO_COLOR: Record<string, number> = {
   tls: 0x42a5f5, dns: 0xffee58, http: 0x66bb6a, quic: 0xab47bc,
@@ -21,6 +27,7 @@ interface Piece {
   cells: [number, number][];
   x: number;
   y: number;
+  rot: number;
   color: number;
   blocks: THREE.Group[];
   locked?: boolean;
@@ -34,7 +41,10 @@ export class TetrisView extends Stage3D {
   private active: Piece | null = null;
   private stack: { x: number; y: number; g: THREE.Group; color: number }[] = [];
   private dropAcc = 0;
+  private moveAcc = 0;
   private queue: { kind: string; color: number }[] = [];
+  private plan: Placement | null = null;
+  private topoutHoldUntil = 0;
 
   constructor(container: HTMLElement, scene: NetScene) {
     super(container, scene);
@@ -74,8 +84,20 @@ export class TetrisView extends Stage3D {
   }
 
   protected step(now: number, dt: number): void {
-    if (!this.active && this.queue.length) this.spawn(this.queue.shift()!);
-    const speed = 1.4 + Math.min(6, this.pps / 18);
+    if (topoutHoldExpired(now, this.topoutHoldUntil)) {
+      this.topoutHoldUntil = 0;
+      this.clearStack();
+    }
+    if (shouldHoldTopout(now, this.topoutHoldUntil)) {
+      this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
+      return;
+    }
+    if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);
+    this.autoplayStep(dt);
+    const aimed = this.active && this.plan
+      && this.active.x === this.plan.x
+      && this.active.rot === this.plan.rot;
+    const speed = (1.4 + Math.min(6, this.pps / 18)) * (aimed ? AUTOPLAY_DROP_MULT : 1);
     this.dropAcc += dt * speed;
     while (this.dropAcc >= 1 && this.active) {
       this.dropAcc -= 1;
@@ -84,27 +106,84 @@ export class TetrisView extends Stage3D {
     this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
   }
 
-  private spawn(next: { kind: string; color: number }): void {
+  private autoplayStep(dt: number): void {
+    const p = this.active;
+    const plan = this.plan;
+    if (!p || !plan) return;
+    this.moveAcc += dt;
+    while (this.moveAcc >= AUTOPLAY_STEP_S) {
+      this.moveAcc -= AUTOPLAY_STEP_S;
+      if (!this.active || !this.plan) return;
+      const cur = this.active;
+      const target = this.plan;
+      const rot = ((cur.rot % 4) + 4) % 4;
+      const want = ((target.rot % 4) + 4) % 4;
+      if (rot !== want) {
+        if (!this.tryMove(0, 0, 1)) break;
+        continue;
+      }
+      if (cur.x < target.x) {
+        if (!this.tryMove(1, 0)) break;
+        continue;
+      }
+      if (cur.x > target.x) {
+        if (!this.tryMove(-1, 0)) break;
+        continue;
+      }
+      break;
+    }
+  }
+
+  private beginTopoutHold(now: number): void {
+    if (this.topoutHoldUntil > 0) return;
+    this.topoutHoldUntil = now + TETRIS_TOPOUT_HOLD_S;
+    this.plan = null;
+    if (this.active) {
+      for (const g of this.active.blocks) g.removeFromParent();
+      this.active = null;
+    }
+  }
+
+  private spawn(now: number, next: { kind: string; color: number }): void {
     const cells = normalizeCells(TETROMINOES[next.kind] ?? TETROMINOES.T!);
-    const piece: Piece = { kind: next.kind, cells, x: 3, y: ROWS - 2, color: next.color, blocks: [] };
+    const piece: Piece = {
+      kind: next.kind, cells, x: 3, y: ROWS - 2, rot: 0, color: next.color, blocks: [],
+    };
     for (const _c of cells) {
       const g = makeTetBlock(next.color);
       this.well.add(g);
       piece.blocks.push(g);
     }
     this.active = piece;
+    this.plan = null;
+    this.moveAcc = 0;
     this.syncPiece();
-    if (this.hits(piece.x, piece.y, piece.cells)) this.clearStack();
+    const board = boardFromOccupied(this.stack, COLS, ROWS);
+    const plan = bestPlacement(board, next.kind);
+    if (!plan) {
+      this.beginTopoutHold(now);
+      return;
+    }
+    this.plan = plan;
+    if (this.hits(piece.x, piece.y, piece.cells)) this.beginTopoutHold(now);
   }
 
   private tryMove(dx: number, dy: number, rot = 0): boolean {
     const p = this.active;
     if (!p) return false;
-    const cells = rot ? normalizeCells(rotateCells(p.cells, rot)) : p.cells;
+    let cells = p.cells;
+    let nextRot = p.rot;
+    if (rot) {
+      nextRot = p.rot + rot;
+      cells = cellsFor(p.kind, nextRot);
+    }
     if (this.hits(p.x + dx, p.y + dy, cells)) return false;
     p.x += dx;
     p.y += dy;
-    if (rot) p.cells = cells;
+    if (rot) {
+      p.rot = nextRot;
+      p.cells = cells;
+    }
     this.syncPiece();
     return true;
   }
@@ -116,6 +195,7 @@ export class TetrisView extends Stage3D {
       this.stack.push({ x: p.x + cx, y: p.y + cy, g: p.blocks[i]!, color: p.color });
     });
     this.active = null;
+    this.plan = null;
     this.clearLines();
     if (this.stack.length > COLS * 8) this.clearStack();
   }
@@ -148,6 +228,7 @@ export class TetrisView extends Stage3D {
       for (const g of this.active.blocks) g.removeFromParent();
       this.active = null;
     }
+    this.plan = null;
   }
 
   private syncPiece(): void {
@@ -183,8 +264,10 @@ export class TetrisView extends Stage3D {
 
   protected reset(): void {
     super.reset();
+    this.topoutHoldUntil = 0;
     this.clearStack();
     this.queue = [];
     this.dropAcc = 0;
+    this.moveAcc = 0;
   }
 }

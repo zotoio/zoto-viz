@@ -1082,7 +1082,7 @@ export const tetris: ViewMode = {
   id: "tetris",
   label: "Tetris",
   standalone: true,
-  hint: "A glass 3D well. Each packet becomes a bevelled tetromino coloured by protocol. Gravity follows packet rate; a full row clears. The stack is visual only — it never drops a flow.",
+  hint: "A glass 3D well. Each packet becomes a bevelled tetromino coloured by protocol. Gravity follows packet rate; a full row clears. Pieces autoplay with a standard line-clear heuristic — rotate and slide into place, then drop.",
   legend: () => [
     { color: "#42a5f5", label: "TLS" },
     { color: "#ffee58", label: "DNS" },

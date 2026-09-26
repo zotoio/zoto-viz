@@ -55,18 +55,18 @@ describe("stage-math", () => {
     expect(rest.x).toBeCloseTo(0);
     expect(rest.y).toBeCloseTo(0);
     const end = kenBurnsAt(1, a);
-    expect(end.scale).toBeCloseTo(1.16);
+    expect(end.scale).toBeCloseTo(1.06);
     expect(end.x).toBeCloseTo(a.x);
-    expect(kenBurnsTransform(end)).toContain("scale(1.1600)");
-    const mid = carouselPlayhead(9, 18, 2.8);
+    expect(kenBurnsTransform(end)).toContain("scale(1.0600)");
+    const mid = carouselPlayhead(39, 78, 3.2);
     expect(mid.cycle).toBe(0);
     expect(mid.fade).toBe(0);
     expect(mid.progress).toBeCloseTo(0.5);
-    const leave = carouselPlayhead(17, 18, 2.8);
+    const leave = carouselPlayhead(77, 78, 3.2);
     expect(leave.fade).toBeGreaterThan(0.4);
     expect(leave.fade).toBeLessThan(1);
-    expect(carouselPlayhead(18, 18, 2.8).cycle).toBe(1);
-    expect(carouselPlayhead(18, 18, 2.8).fade).toBe(0);
+    expect(carouselPlayhead(78, 78, 3.2).cycle).toBe(1);
+    expect(carouselPlayhead(78, 78, 3.2).fade).toBe(0);
   });
 
   it("holds a zoomed still with caption before travelling to the next", () => {
