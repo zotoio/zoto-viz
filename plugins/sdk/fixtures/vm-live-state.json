@@ -22,7 +22,7 @@
   "devices": [
     {
       "ip": "host-01",
-      "mac": "aa:e4:ad:ca:84:e4",
+      "mac": "host-mac-02",
       "vendor": "",
       "hostnames": [],
       "names": [],
@@ -44,7 +44,7 @@
     },
     {
       "ip": "host-02",
-      "mac": "82:2b:38:3d:bc:d0",
+      "mac": "host-mac",
       "vendor": "",
       "hostnames": [
         "cursor"

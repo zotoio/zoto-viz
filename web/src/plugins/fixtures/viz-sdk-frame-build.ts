@@ -10,16 +10,29 @@ export const VIZ_SDK_HOST_IDLE = { fixture: "host" as const };
 
 const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
 const IPV4_G = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
-const MAC = /\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b/i;
-const MAC_G = /\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b/gi;
-const PLACEHOLDER_ID = /^host-(?:\d{2}|00|mac)$/;
+const MAC = /\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b/i;
+const MAC_G = /\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b/gi;
+const MAC_STRUCTURAL = /^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i;
+const PLACEHOLDER_ID = /^host-(?:\d{2}|00|mac(?:-\d{2})?)$/;
 
 function isPlaceholderId(id: string): boolean {
   return PLACEHOLDER_ID.test(id);
 }
 
+function isMacStructuralId(id: string): boolean {
+  return MAC_STRUCTURAL.test(id);
+}
+
+function normalizeMacKey(mac: string): string {
+  return mac.toLowerCase().replace(/-/g, ":");
+}
+
+function scrubbedMacPlaceholder(index: number): string {
+  return index === 1 ? "host-mac" : `host-mac-${String(index).padStart(2, "0")}`;
+}
+
 function isSyntheticViewId(id: string): boolean {
-  return id.includes(":") && !IPV4.test(id);
+  return id.includes(":") && !IPV4.test(id) && !isMacStructuralId(id);
 }
 
 function escapeRegExp(value: string): string {
@@ -104,8 +117,25 @@ function collectHostnameTokens(state: StateMsg): Set<string> {
 export function scrubIdentifierMap(state: StateMsg): Map<string, string> {
   const unique = [...collectStructuralIds(state)].sort((a, b) => a.localeCompare(b));
   const map = new Map<string, string>();
-  unique.forEach((id, i) => map.set(id, `host-${String(i + 1).padStart(2, "0")}`));
+  let hostIndex = 0;
+  let macIndex = 0;
+  for (const id of unique) {
+    if (isMacStructuralId(id)) {
+      macIndex += 1;
+      map.set(id, scrubbedMacPlaceholder(macIndex));
+      const norm = normalizeMacKey(id);
+      if (norm !== id) map.set(norm, map.get(id)!);
+    } else {
+      hostIndex += 1;
+      map.set(id, `host-${String(hostIndex).padStart(2, "0")}`);
+    }
+  }
   return map;
+}
+
+function macPlaceholderFromMap(map: Map<string, string>, mac: string): string {
+  const norm = normalizeMacKey(mac);
+  return map.get(mac) ?? map.get(norm) ?? "host-mac";
 }
 
 function stringHasSensitive(value: string, hostnames: Set<string>): boolean {
@@ -121,10 +151,10 @@ function scrubFreeText(value: string, map: Map<string, string>, hostnames: Set<s
   let out = value;
   const keys = [...map.keys()].sort((a, b) => b.length - a.length);
   for (const from of keys) {
-    if (IPV4.test(from) || MAC.test(from)) out = out.split(from).join(map.get(from)!);
+    if (IPV4.test(from) || isMacStructuralId(from)) out = out.split(from).join(map.get(from)!);
   }
   out = out.replace(IPV4_G, (m) => map.get(m) ?? "host-00");
-  out = out.replace(MAC_G, () => "host-mac");
+  out = out.replace(MAC_G, (m) => macPlaceholderFromMap(map, m));
   for (const host of [...hostnames].sort((a, b) => b.length - a.length)) {
     const re = new RegExp(`\\b${escapeRegExp(host)}\\b`, "g");
     out = out.replace(re, map.get(host) ?? "host-00");
@@ -142,7 +172,8 @@ function scrubStringIfSensitive(
 
 function scrubStructuralId(id: string, map: Map<string, string>): string {
   if (isPlaceholderId(id) || isSyntheticViewId(id)) return id;
-  return map.get(id) ?? (IPV4.test(id) || MAC.test(id) ? scrubFreeText(id, map, new Set()) : id);
+  if (isMacStructuralId(id)) return macPlaceholderFromMap(map, id);
+  return map.get(id) ?? (IPV4.test(id) ? scrubFreeText(id, map, new Set()) : id);
 }
 
 function assignPlaceholder(map: Map<string, string>, id: string): void {
