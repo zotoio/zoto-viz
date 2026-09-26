@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/dogfood.test.ts",
+  "testName": "viz dogfood gates > fat-LAN live soak: all three packs under budget or honest skips",
+  "description": "One-line production revert: runDogfoodSoak loop stops one frame early (119 delivered vs 120 frames)."
+}

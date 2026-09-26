@@ -299,7 +299,12 @@ describe("viz dogfood gates", () => {
   });
 
   it("fat-LAN live soak: all three packs under budget or honest skips", () => {
-    const result = runDogfoodSoak({ state: fatLan, framesPerPack: 120 });
+    const result = runDogfoodSoak({
+      state: fatLan,
+      framesPerPack: 120,
+      deterministicTiming: true,
+      stepMsPerFrame: 1,
+    });
     console.log("\n" + formatDogfoodReport(result));
 
     expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
