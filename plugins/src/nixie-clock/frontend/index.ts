@@ -2,25 +2,20 @@
 
 import { nixieCanvasSize, packNixieBuffer, parseNixieLook, type NixieLook } from "./tubes";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "plugins/sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "talkers">) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
+const host = getVizZoto();
 
-let look: NixieLook = parseNixieLook(zoto.getConfig?.());
+let look: NixieLook = parseNixieLook(host.getConfig?.());
 
-zoto.onConfig = (cfg) => {
+host.onConfig = (cfg) => {
   look = parseNixieLook(cfg);
 };
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame) => {
   const peak = Math.min(1, (frame.talkers?.[0]?.rate ?? 0) / 180);
-  zoto.writeBuffer(0, packNixieBuffer(new Date(), look, frame.audio, peak, nixieCanvasSize()));
-  zoto.writeUniform("uAudio", frame.audio);
-  zoto.writeUniform("uAccent", [1.0, 0.38, 0.06]);
-  zoto.writeUniform("uBg", [0.06, 0.03, 0.02]);
+  host.writeBuffer(0, packNixieBuffer(new Date(), look, frame.audio, peak, nixieCanvasSize()));
+  host.writeUniform("uAudio", frame.audio);
+  host.writeUniform("uAccent", [1.0, 0.38, 0.06]);
+  host.writeUniform("uBg", [0.06, 0.03, 0.02]);
 };

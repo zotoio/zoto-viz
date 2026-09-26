@@ -1,28 +1,7 @@
 import type { PackLintRule, PackLintViolation } from "./pack-lint-types";
 
-/**
- * Shipped packs still on `declare const zoto` until PR C (#55) migrates them to `getVizZoto()`.
- * Only ids on this list may carry baselined `inline-zoto-declare` rows; any other pack fails.
- */
-export const LEGACY_DECLARE_ZOTO_PACK_IDS: readonly string[] = [
-  "backrooms",
-  "blob-mesh",
-  "cypher-cic",
-  "hn-rain",
-  "hn-term",
-  "kefrens-bars",
-  "lan-pulse",
-  "marble-run",
-  "nixie-clock",
-  "packet-tunnel",
-  "pulse-ts",
-  "rf-constellation",
-  "roto-proto",
-  "star-sines",
-  "stereo-gram",
-  "syscon",
-  "talker-storm",
-];
+/** PR C (#55): all shipped packs use `getVizZoto()` — pinned allowlist removed. */
+export const LEGACY_DECLARE_ZOTO_PACK_IDS: readonly string[] = [];
 
 /** Only `declare const zoto` is allowlisted (not `const zoto = getVizZoto()`). */
 export const LEGACY_ZOTO_ALLOWLIST_RULES: ReadonlySet<PackLintRule> = new Set(["inline-zoto-declare"]);

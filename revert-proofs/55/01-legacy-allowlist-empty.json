@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-lint.test.ts",
+  "testName": "pack lint guardrails > LEGACY_DECLARE_ZOTO_PACK_IDS is empty after getVizZoto pack migration (PR C)",
+  "description": "LEGACY_DECLARE_ZOTO_PACK_IDS must stay empty after all shipped packs use getVizZoto()."
+}
