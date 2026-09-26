@@ -8,15 +8,16 @@ import {
   KoiPondSim,
   parseKoiPondOptions,
   type KoiPondOptions,
-  type KoiPondZoto,
 } from "./koi-pond";
 
-type KoiPondFrame = Pick<
-  VizDataFrame,
-  "t" | "dt" | "audio" | "talkers" | "packets" | "sys" | "demo"
->;
-
-declare const zoto: KoiPondZoto;
+declare const zoto: {
+  getConfig?: () => Record<string, string>;
+  onConfig: ((cfg: Record<string, string>) => void) | null;
+  onFrame: ((frame: VizDataFrame) => void) | null;
+  writeBuffer: (slot: number, data: number[] | Float32Array) => void;
+  writeUniform: (name: string, value: number | [number, number, number]) => void;
+  writeParticles: (data: number[] | Float32Array, stride?: number) => void;
+};
 
 let options: KoiPondOptions = parseKoiPondOptions(zoto.getConfig?.());
 let tileSize = hostTileSizeFromConfig(zoto.getConfig?.());

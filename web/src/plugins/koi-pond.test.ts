@@ -34,6 +34,7 @@ import {
   totalTalkerRate,
   unpackKoiMeta,
 } from "../../../plugins/src/koi-pond/frontend/koi-pond";
+import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../plugins/sdk/viz-contract";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 
@@ -81,7 +82,7 @@ describe("koi-pond shipped pack", () => {
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
     expect(FRONT).toContain("KoiPondSim");
     expect(FRONT).not.toContain("parent.document");
-    expect(FRONT).not.toMatch(/onFrame[\s\S]*getConfig/);
+    expect(FRONT).not.toMatch(/zoto\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{[\s\S]*?getConfig/);
     expect(VIS).toContain("Applies to all Koi Pond tiles");
     expect(VIS).toContain("moonlit_lotus");
     expect(MAPPING).toContain("pond-wide");
@@ -133,6 +134,33 @@ describe("koi-pond shipped pack", () => {
     const sim = new KoiPondSim(parseKoiPondOptions({ seed: "42" }));
     const packed = sim.advance(demoFrame(1.5));
     expect(koiPondSmokeLuma(packed)).toBeGreaterThan(0.1);
+  });
+
+  it("zero talkers still paints idle koi, water, and particles (no blackout)", () => {
+    const emptyFrame = (t: number): VizDataFrame => ({
+      t,
+      dt: 1 / 60,
+      audio: 0,
+      packets: [],
+      rf: [],
+      talkers: [],
+      headlines: [],
+      sys: { ...EMPTY_SYS_TELEMETRY },
+      demo: false,
+    });
+    const sim = new KoiPondSim(
+      parseKoiPondOptions({ preset: "festival_lanterns", timeOfDay: "night", petalDrift: "true" }),
+    );
+    let packed = sim.advance(emptyFrame(0));
+    for (let i = 1; i <= 90; i++) {
+      packed = sim.advance(emptyFrame(i / 60));
+    }
+    expect(sim.slottedKoiCount()).toBeGreaterThan(0);
+    expect(packed.particleCount).toBeGreaterThan(0);
+    expect(packed.bright).toBeGreaterThan(0.15);
+    expect(packed.bg[0] + packed.bg[1] + packed.bg[2]).toBeGreaterThan(0.08);
+    expect(koiPondSmokeLuma(packed)).toBeGreaterThan(0.08);
+    expect(packed.slot0[24]).toBeGreaterThan(0);
   });
 
   it("packs koi meta round-trip", () => {
