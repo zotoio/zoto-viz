@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_assets_security.py",
+  "testName": "PackAssetsSecurityTests::test_token_bound_to_pack_id",
+  "description": "Token minted for pack X must not authorize paths under pack Y.",
+  "timeoutSec": 60
+}

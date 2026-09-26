@@ -1,0 +1,19 @@
+id: sandbox-fixture-multi
+name: Sandbox Fixture Multi
+version: 1
+hint: QE smoke pack — module.js imports helper.js and fixture.json via pack-assets paths.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 4
+  maxParticles: 0
+  uniforms:
+    - uBright
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/module.js
+  bundle: false
