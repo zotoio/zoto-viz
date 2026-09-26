@@ -153,7 +153,7 @@ describe("metro-lines pack", () => {
     expect(net.disruptions).toBe(1);
   });
 
-  it("300 frames steady talkers rebuild once and allocate only on rebuild", () => {
+  it("rebuilds once", () => {
     const sim = new MetroSim();
     const opts = parseMetroOptions({ seed: "1" });
     const talkers = [
@@ -179,6 +179,35 @@ describe("metro-lines pack", () => {
     }
     expect(sim.runtime.structureRebuilds).toBe(rebuilds);
     expect(sim.runtime.tickAllocs).toBe(allocs);
+  });
+
+  it("300-frame golden-live keeps host cache and edgeWeights instances", () => {
+    const sim = new MetroSim();
+    const opts = parseMetroOptions({ seed: "4242" });
+    const talkers = [
+      { id: "10.1.1.10", rate: 120, role: "gateway" },
+      { id: "10.1.1.20", rate: 90, role: "lan" },
+      { id: "10.1.1.30", rate: 70, role: "lan" },
+    ];
+    const pkt = { proto: "tcp", size: 400, field: 0.4 };
+    sim.step(liveFrame({ talkers, packets: [pkt] }), opts);
+    const hostsRef = sim.runtime.hostCache.hosts;
+    const mapRef = sim.runtime.hostCache.hostById;
+    const weightsRef = sim.edgeWeights;
+    for (let i = 0; i < 300; i++) {
+      sim.step(liveFrame({
+        t: i,
+        talkers: [
+          { id: "10.1.1.10", rate: 120 + i * 0.1, role: "gateway" },
+          { id: "10.1.1.20", rate: 90 + i * 0.2, role: "lan" },
+          { id: "10.1.1.30", rate: 70 + i * 0.15, role: "lan" },
+        ],
+        packets: [pkt, { proto: "udp", size: 100 + i, field: 0.2 }],
+      }), opts);
+    }
+    expect(sim.runtime.hostCache.hosts).toBe(hostsRef);
+    expect(sim.runtime.hostCache.hostById).toBe(mapRef);
+    expect(sim.edgeWeights).toBe(weightsRef);
   });
 
   it("work budget stays under plugin caps for every preset", () => {

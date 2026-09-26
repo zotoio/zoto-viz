@@ -32,7 +32,7 @@ const sim = acquireMetroSim();
 
 zoto.onConfig = (cfg) => {
   opts = parseMetroOptions(cfg);
-  sim.runtime.structureKey = "";
+  sim.runtime.resetLayoutState();
 };
 
 zoto.onTeardown = () => {

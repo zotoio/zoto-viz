@@ -394,27 +394,61 @@ function resolvePackets(frame: VizDataFrame): VizDataFrame["packets"] {
   return isMetroDemoFrame(frame) ? buildDemoPackets(frame.t) : frame.packets;
 }
 
-function talkersStructureKey(talkers: VizDataFrame["talkers"], seed: number, maxStations: number): string {
-  const ids = talkers
-    .map((t) => `${t.id}\0${t.role}`)
-    .sort();
-  return `${ids.join("\0")}|${seed}|${maxStations}`;
-}
+/** Persistent talker rows — same `hosts` / `hostById` instances across frames. */
+export class MetroHostCache {
+  readonly hosts: HostRecord[] = [];
+  readonly hostById = new Map<string, HostRecord>();
 
-function hostsFromTalkers(talkers: VizDataFrame["talkers"]): HostRecord[] {
-  const hosts: HostRecord[] = [];
-  const seen = new Set<string>();
-  for (const t of talkers) {
-    if (seen.has(t.id)) continue;
-    seen.add(t.id);
-    hosts.push({ id: t.id, rate: t.rate, role: t.role });
+  clear(): void {
+    this.hosts.length = 0;
+    this.hostById.clear();
   }
-  return hosts;
+
+  /** Sync talkers in place; returns true when topology (ids or roles) changed. */
+  syncTalkers(talkers: VizDataFrame["talkers"]): boolean {
+    const seen = new Set<string>();
+    let structureChanged = false;
+
+    for (const t of talkers) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      let row = this.hostById.get(t.id);
+      if (!row) {
+        row = { id: t.id, rate: t.rate, role: t.role };
+        this.hostById.set(t.id, row);
+        this.hosts.push(row);
+        structureChanged = true;
+      } else {
+        if (row.role !== t.role) structureChanged = true;
+        row.rate = t.rate;
+        row.role = t.role;
+      }
+    }
+
+    for (let i = this.hosts.length - 1; i >= 0; i--) {
+      const h = this.hosts[i]!;
+      if (!seen.has(h.id)) {
+        this.hostById.delete(h.id);
+        this.hosts.splice(i, 1);
+        structureChanged = true;
+      }
+    }
+    return structureChanged;
+  }
 }
 
-function gatewaySlot(stations: MetroStation[]): number {
-  const gw = stations.find((s) => s.major && s.role >= 0.8);
-  return gw?.slot ?? stations[0]?.slot ?? -1;
+function gatewaySlotForHosts(
+  hosts: HostRecord[],
+  slotIndexFor: (id: string) => number,
+): number {
+  for (const h of hosts) {
+    if (h.role === "gateway") {
+      const slot = slotIndexFor(h.id);
+      if (slot >= 0) return slot;
+    }
+  }
+  const first = hosts[0];
+  return first ? slotIndexFor(first.id) : -1;
 }
 
 export function buildTicker(frame: VizDataFrame, demo: boolean): { text: string; banner: boolean } {
@@ -435,20 +469,21 @@ function edgeKey(a: number, b: number, proto: string): string {
   return `${a < b ? a : b}-${a < b ? b : a}-${proto}`;
 }
 
-function pickEdgeForPacket(edgeWeights: number[], packetIndex: number): number {
+function pickEdgeForPacket(edgeWeights: ArrayLike<number>, edgeCount: number, packetIndex: number): number {
   let total = 0;
-  for (const w of edgeWeights) total += w;
+  for (let i = 0; i < edgeCount; i++) total += edgeWeights[i]!;
   if (total <= 0) return 0;
   let t = ((packetIndex * 0.6180339887) % 1) * total;
-  for (let i = 0; i < edgeWeights.length; i++) {
+  for (let i = 0; i < edgeCount; i++) {
     t -= edgeWeights[i]!;
     if (t <= 0) return i;
   }
-  return edgeWeights.length - 1;
+  return Math.max(0, edgeCount - 1);
 }
 
 export class MetroRuntime {
-  structureKey = "";
+  readonly hostCache = new MetroHostCache();
+  readonly stationById = new Map<string, MetroStation>();
   private net: MetroNetwork = {
     stations: [],
     edges: [],
@@ -459,11 +494,18 @@ export class MetroRuntime {
   };
   private readonly edgeDedupe = new Set<string>();
   private readonly registry = getMetroHostRegistry();
+  private layoutSeed = -1;
+  private layoutMaxStations = -1;
+  private tickerSig = "";
   structureRebuilds = 0;
   tickAllocs = 0;
 
   reset(): void {
-    this.structureKey = "";
+    this.hostCache.clear();
+    this.stationById.clear();
+    this.layoutSeed = -1;
+    this.layoutMaxStations = -1;
+    this.tickerSig = "";
     this.edgeDedupe.clear();
     this.net.stations = [];
     this.net.edges.length = 0;
@@ -471,34 +513,45 @@ export class MetroRuntime {
     this.tickAllocs = 0;
   }
 
+  resetLayoutState(): void {
+    this.layoutSeed = -1;
+    this.layoutMaxStations = -1;
+  }
+
   tick(frame: VizDataFrame, opts: MetroOptions): MetroNetwork {
     const talkers = resolveTalkers(frame);
-    const key = talkersStructureKey(talkers, opts.seed, opts.maxStations);
-    if (key !== this.structureKey) {
-      this.rebuildStructure(frame, opts, talkers);
-      this.structureKey = key;
+    const maxS = Math.min(opts.maxStations, METRO_MAX_STATIONS);
+    const talkersChanged = this.hostCache.syncTalkers(talkers);
+    const layoutChanged =
+      this.layoutSeed !== opts.seed || this.layoutMaxStations !== maxS;
+
+    if (talkersChanged || layoutChanged) {
+      this.rebuildStructure(frame, opts, maxS);
+      this.layoutSeed = opts.seed;
+      this.layoutMaxStations = maxS;
       this.structureRebuilds++;
     } else {
-      this.updateStructure(frame, opts, talkers);
+      this.updateStructure(frame, opts, maxS);
     }
+    this.refreshStationById();
     this.updateDynamics(frame, opts);
     return this.net;
   }
 
-  private rebuildStructure(
-    frame: VizDataFrame,
-    opts: MetroOptions,
-    talkers: VizDataFrame["talkers"],
-  ): void {
+  private refreshStationById(): void {
+    this.stationById.clear();
+    for (const s of this.net.stations) this.stationById.set(s.id, s);
+  }
+
+  private rebuildStructure(frame: VizDataFrame, opts: MetroOptions, maxS: number): void {
     this.tickAllocs++;
-    const maxS = Math.min(opts.maxStations, METRO_MAX_STATIONS);
-    const hosts = hostsFromTalkers(talkers);
+    const hosts = this.hostCache.hosts;
     this.net.demo = isMetroDemoFrame(frame);
     this.net.stations = this.registry.sync(hosts, opts.seed, maxS);
     this.net.edges.length = 0;
     this.edgeDedupe.clear();
 
-    const hub = gatewaySlot(this.net.stations);
+    const hub = gatewaySlotForHosts(hosts, (id) => this.registry.slotIndexFor(id));
     for (const h of hosts) {
       const a = this.registry.slotIndexFor(h.id);
       if (a < 0 || a === hub || hub < 0) continue;
@@ -520,18 +573,13 @@ export class MetroRuntime {
     this.net.legend.push({ hue: SCHEMATIC_HUE, label: "schematic" });
   }
 
-  private updateStructure(
-    frame: VizDataFrame,
-    opts: MetroOptions,
-    talkers: VizDataFrame["talkers"],
-  ): void {
-    const maxS = Math.min(opts.maxStations, METRO_MAX_STATIONS);
-    const hosts = hostsFromTalkers(talkers);
+  private updateStructure(frame: VizDataFrame, opts: MetroOptions, maxS: number): void {
+    const hosts = this.hostCache.hosts;
     this.net.demo = isMetroDemoFrame(frame);
     this.net.stations = this.registry.sync(hosts, opts.seed, maxS);
-    const hub = gatewaySlot(this.net.stations);
+    const hub = gatewaySlotForHosts(hosts, (id) => this.registry.slotIndexFor(id));
     for (const e of this.net.edges) {
-      const h = hosts.find((x) => x.id === e.stationId);
+      const h = this.hostCache.hostById.get(e.stationId);
       if (h) e.weight = Math.min(1, h.rate / 200);
       if (hub >= 0) {
         e.a = this.registry.slotIndexFor(e.stationId);
@@ -540,10 +588,20 @@ export class MetroRuntime {
     }
   }
 
+  private tickerSignature(frame: VizDataFrame, demo: boolean): string {
+    const fail = clamp(frame.sys?.failed ?? 0, 0, 1, 0);
+    const headlines = frame.headlines.map((h) => h.text.trim()).filter(Boolean).join("\0");
+    return `${demo ? 1 : 0}|${fail}|${headlines}`;
+  }
+
   private updateDynamics(frame: VizDataFrame, opts: MetroOptions): void {
-    const tick = buildTicker(frame, this.net.demo);
-    this.net.ticker = tick.text;
-    this.net.disruptions = tick.banner ? 1 : 0;
+    const sig = this.tickerSignature(frame, this.net.demo);
+    if (sig !== this.tickerSig) {
+      this.tickerSig = sig;
+      const tick = buildTicker(frame, this.net.demo);
+      this.net.ticker = tick.text;
+      this.net.disruptions = tick.banner ? 1 : 0;
+    }
     smoothStations(this.net.stations, frame.dt, opts.reducedMotion);
   }
 }
@@ -556,6 +614,7 @@ export class MetroSim {
   trains: MetroTrain[] = [];
   tickerPhase = 0;
   private readonly trainPool: MetroTrain[] = [];
+  readonly edgeWeights = new Float32Array(METRO_MAX_EDGES);
   private rafSubs = 0;
   readonly runtime = new MetroRuntime();
 
@@ -594,15 +653,18 @@ export class MetroSim {
   private integrateTrains(frame: VizDataFrame, net: MetroNetwork, opts: MetroOptions, dt: number): void {
     const packets = resolvePackets(frame);
     const maxT = Math.min(opts.maxTrains, METRO_MAX_TRAINS, packets.length);
-    const edgeWeights = net.edges.map((e) => {
-      const st = net.stations.find((s) => s.id === e.stationId);
-      return st?.rate ?? e.weight;
-    });
+    const edgeCount = net.edges.length;
+    const stationById = this.runtime.stationById;
+    const weights = this.edgeWeights;
+    for (let i = 0; i < edgeCount; i++) {
+      const e = net.edges[i]!;
+      weights[i] = stationById.get(e.stationId)?.rate ?? e.weight;
+    }
     this.trains.length = 0;
     for (let i = 0; i < maxT; i++) {
       const tr = this.trainPool[i]!;
       const pkt = packets[i]!;
-      const edgeIdx = pickEdgeForPacket(edgeWeights, i);
+      const edgeIdx = pickEdgeForPacket(weights, edgeCount, i);
       const speed = (0.12 + (pkt.size / 1200) * 0.55) * opts.trainSpeed * (opts.reducedMotion ? 0.35 : 1);
       const len = Math.min(0.22, 0.04 + pkt.size / 6000);
       tr.edge = edgeIdx;
