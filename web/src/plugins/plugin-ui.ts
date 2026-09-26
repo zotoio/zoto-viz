@@ -81,6 +81,14 @@ export function fillPluginFields(
   opts?: { skipEmpty?: boolean; devices?: SdmDevice[] },
 ): void {
   const values = loadPluginConfig(spec, fields);
+  let mount = host.querySelector<HTMLElement>(":scope > .plugin-fields-mount");
+  if (!mount) {
+    mount = document.createElement("div");
+    mount.className = "plugin-fields-mount";
+    host.append(mount);
+  } else {
+    mount.replaceChildren();
+  }
   const head = document.createElement("div");
   head.className = "sec";
   const title = document.createElement("div");
@@ -92,21 +100,20 @@ export function fillPluginFields(
   head.append(title, meta);
   let knobs = fields;
   if (spec.id === "nest-cams") {
-    knobs = mountNestCamFields(host, spec, fields, values, opts?.devices ?? [], onPersist);
+    knobs = mountNestCamFields(mount, spec, fields, values, opts?.devices ?? [], onPersist);
   } else {
-    host.append(head);
+    mount.append(head);
   }
   if (!knobs.length) {
     if (!opts?.skipEmpty && spec.id !== "nest-cams") {
       const empty = document.createElement("div");
       empty.className = "sec";
       empty.innerHTML = `<div class="sec-hint">This plugin has no extra settings.</div>`;
-      host.append(empty);
+      mount.append(empty);
     }
     return;
   }
   const remount = () => {
-    host.replaceChildren();
     fillPluginFields(host, spec, fields, onPersist, opts);
   };
   const persist = () => {
@@ -152,7 +159,7 @@ export function fillPluginFields(
       row.className = "sec-controls";
       for (const f of fields) appendFieldControl(row, f, values, spec, persist, remount);
       container.append(row);
-      host.append(container);
+      mount.append(container);
     }
   } else if (compact.length) {
     const sec = document.createElement("div");
@@ -161,7 +168,7 @@ export function fillPluginFields(
     row.className = "sec-controls";
     for (const f of compact) appendFieldControl(row, f, values, spec, persist, remount);
     sec.append(row);
-    host.append(sec);
+    mount.append(sec);
   }
   for (const f of notes) {
     const current = values[f.key] ?? fieldDefault(f);
@@ -183,7 +190,7 @@ export function fillPluginFields(
     ta.value = current;
     ta.addEventListener("input", () => { values[f.key] = ta.value; persist(); });
     wrap.append(cap, ta);
-    host.append(wrap);
+    mount.append(wrap);
   }
 }
 
