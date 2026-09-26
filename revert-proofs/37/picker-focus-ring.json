@@ -1,0 +1,1 @@
+{"runner":"vitest","testFile":"src/app/apply-mode.test.ts","testName":"commit focuses picker with visible focus ring","description":"focusModePicker uses focus() without visible ring"}
