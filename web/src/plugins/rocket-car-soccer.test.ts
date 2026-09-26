@@ -20,11 +20,10 @@ import {
   scanRcsTrademarks,
   validatePreset,
 } from "../../../plugins/src/rocket-car-soccer/frontend/pack";
-import { RCS_LIVE_MAPPING, RCS_PACKET_FRAME_CAP, hostLabelHash, ingestLiveFrame } from "../../../plugins/src/rocket-car-soccer/frontend/live";
+import { RCS_LIVE_MAPPING, hostLabelHash, ingestLiveFrame, resetRcsTalkerCacheForTest } from "../../../plugins/src/rocket-car-soccer/frontend/live";
 import {
   enforceRcsCaps,
   maxSubstepsFor,
-  rcsCarHostFailVis,
   rcsCarHostLabelHash,
   rcsEnterReplayForTest,
   rcsHostCarIndex,
@@ -41,8 +40,23 @@ import {
   setRcsOptions,
 } from "../../../plugins/src/rocket-car-soccer/frontend/match";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
+import type { VizDataFrame } from "./viz-host";
+import { EMPTY_SYS_TELEMETRY, VIZ_MAX_PACKET_SAMPLES } from "./viz-host";
 
 const PACK_ROOT = join(__dirname, "../../../plugins/src/rocket-car-soccer");
+
+function vizFrame(over: Partial<VizDataFrame> = {}): VizDataFrame {
+  return {
+    t: 0,
+    dt: 1 / 60,
+    audio: 0,
+    packets: [],
+    rf: [],
+    talkers: [],
+    headlines: [],
+    ...over,
+  };
+}
 
 function listPackFiles(dir: string): string[] {
   const out: string[] = [];
@@ -200,7 +214,12 @@ describe("rocket-car-soccer pack", () => {
   it("smoke-packs non-zero drive data (never an empty board)", () => {
     resetRcsSim(99);
     setRcsOptions({});
-    const f = rcsTick({ demo: true, talkers: [{ id: "demo-host", rate: 12, role: "lan" }] }, 1.0, 1 / 60, 1.777);
+    const f = rcsTick(
+      vizFrame({ demo: true, talkers: [{ id: "demo-host", rate: 12, role: "lan" }] }),
+      1.0,
+      1 / 60,
+      1.777,
+    );
     expect(f.slot0[RCS_SLOT.mark]).toBe(1);
     expect(f.slot0[RCS_SLOT.demoFlag]).toBe(1);
     const energy = [...f.slot0, ...f.slot1, ...f.slot2].reduce((s, v) => s + Math.abs(v), 0);
@@ -212,24 +231,25 @@ describe("rocket-car-soccer pack", () => {
   it("prioritises fail alert over goal flash in sim slots", () => {
     resetRcsSim(1);
     setRcsOptions({});
-    const failFrame = rcsTick({ sys: { failed: 1 } }, 0.5, 1 / 60, 1.777);
+    const failFrame = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0.5, 1 / 60, 1.777);
     expect(failFrame.slot0[RCS_SLOT.failAlert]).toBeGreaterThan(0.35);
     rcsTriggerMaxGoalExplosion();
-    const during = rcsTick({ sys: { failed: 1 } }, 0.6, 1 / 60, 1.777);
+    const during = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0.6, 1 / 60, 1.777);
     expect(during.slot0[RCS_SLOT.goalFlash]).toBeLessThan(0.05);
   });
 
-  it("keeps car slots keyed by host id when talkers reorder", () => {
+  it("keeps car slots keyed by talker id when talkers reorder", () => {
     resetRcsSim(1);
+    resetRcsTalkerCacheForTest();
     const ha = hostLabelHash("10.0.0.10");
     const hb = hostLabelHash("10.0.0.20");
     rcsTick(
-      {
+      vizFrame({
         talkers: [
           { id: "10.0.0.10", rate: 120, role: "lan" },
           { id: "10.0.0.20", rate: 5, role: "lan" },
         ],
-      },
+      }),
       0,
       1 / 60,
       1.777,
@@ -240,14 +260,14 @@ describe("rocket-car-soccer pack", () => {
     expect(idxB).toBeDefined();
     expect(rcsCarHostLabelHash(idxA!)).toBeCloseTo(ha, 4);
     expect(rcsCarHostLabelHash(idxB!)).toBeCloseTo(hb, 4);
-    rcsTick(
-      {
+    const failGlobal = rcsTick(
+      vizFrame({
         talkers: [
           { id: "10.0.0.20", rate: 5, role: "lan" },
           { id: "10.0.0.10", rate: 120, role: "lan" },
         ],
-        sys: { failed: 0.85 },
-      },
+        sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.85 },
+      }),
       1 / 60,
       1 / 60,
       1.777,
@@ -255,60 +275,81 @@ describe("rocket-car-soccer pack", () => {
     expect(rcsHostCarIndex("10.0.0.10")).toBe(idxA);
     expect(rcsHostCarIndex("10.0.0.20")).toBe(idxB);
     expect(rcsCarHostLabelHash(idxA!)).toBeCloseTo(ha, 4);
-    expect(rcsCarHostFailVis(idxA!)).toBeGreaterThan(0);
+    expect(failGlobal.slot0[RCS_SLOT.failAlert]).toBeGreaterThan(0.35);
   });
 
-  it("does not reassign a vacant host slot to a new host immediately", () => {
+  it("does not reassign a vacant talker slot to a new id immediately", () => {
     resetRcsSim(1);
-    rcsTick({ talkers: [{ id: "host-aaa", rate: 40, role: "lan" }] }, 0, 1 / 60, 1.777);
+    resetRcsTalkerCacheForTest();
+    rcsTick(vizFrame({ talkers: [{ id: "host-aaa", rate: 40, role: "lan" }] }), 0, 1 / 60, 1.777);
     const slotA = rcsHostCarIndex("host-aaa");
     expect(slotA).toBeDefined();
-    rcsTick({ talkers: [{ id: "host-bbb", rate: 40, role: "lan" }] }, 0.05, 1 / 60, 1.777);
+    rcsTick(vizFrame({ talkers: [{ id: "host-bbb", rate: 40, role: "lan" }] }), 0.05, 1 / 60, 1.777);
     expect(rcsHostCarIndex("host-aaa")).toBeUndefined();
     expect(rcsHostCarIndex("host-bbb")).not.toBe(slotA);
   });
 
-  it("never derives failure visuals from packet field values", () => {
+  it("never derives failure visuals from packet field or headlines", () => {
     resetRcsSim(1);
     const healthy = rcsTick(
-      {
+      vizFrame({
         packets: [
-          { proto: "tcp", field: 0.02, host: "10.0.0.5" },
-          { proto: "udp", field: 0.08, host: "10.0.0.6" },
+          { proto: "tcp", size: 64, field: 0.02 },
+          { proto: "udp", size: 32, field: 0.08 },
         ],
-        sys: { failed: 0 },
-      },
+        sys: { ...EMPTY_SYS_TELEMETRY, failed: 0 },
+        headlines: [{ id: "h1", label: "units", text: "3 failed services", kind: "alert" }],
+      }),
       0,
       1 / 60,
       1.777,
     );
     expect(healthy.slot0[RCS_SLOT.failAlert]).toBe(0);
-    const ingest = ingestLiveFrame({
-      packets: [{ proto: "dns", field: 0.99, host: "10.0.0.9" }],
-      sys: { failed: 0 },
-    });
+    const ingest = ingestLiveFrame(
+      vizFrame({
+        packets: [{ proto: "dns", size: 512, field: 0.99 }],
+        sys: { ...EMPTY_SYS_TELEMETRY, failed: 0 },
+        headlines: [{ id: "h2", label: "FAIL", text: "critical", kind: "fail" }],
+      }),
+    );
     expect(ingest.failAlert).toBe(0);
     expect(ingest.goalPulse).toBeGreaterThan(0.5);
   });
 
-  it("maps packet goal pulses by packet host and consumes up to the frame cap", () => {
-    const live = ingestLiveFrame({
-      talkers: [{ id: "talker-low", rate: 2, role: "lan" }],
-      packets: [
-        { proto: "tcp", field: 0.05, host: "pkt-a" },
-        { proto: "tcp", field: 0.92, host: "pkt-b" },
-      ],
-    });
-    expect(live.perHostGoalPulse.get("pkt-b")).toBeGreaterThan(0.9);
-    expect(live.perHostGoalPulse.get("talker-low")).toBeUndefined();
+  it("aggregates packet goal pulse and consumes up to the host frame cap", () => {
+    resetRcsTalkerCacheForTest();
+    const live = ingestLiveFrame(
+      vizFrame({
+        talkers: [{ id: "talker-low", rate: 2, role: "lan" }],
+        packets: [
+          { proto: "tcp", size: 40, field: 0.05 },
+          { proto: "tcp", size: 900, field: 0.92 },
+        ],
+      }),
+    );
+    expect(live.goalPulse).toBeGreaterThan(0.9);
     const many = Array.from({ length: 40 }, (_, i) => ({
       proto: "udp",
+      size: 100 + i,
       field: 0.2,
-      host: `host-${i}`,
     }));
     resetRcsSim(1);
-    rcsTick({ packets: many }, 0, 1 / 60, 1.777);
-    expect(rcsLivePacketsConsumed()).toBe(RCS_PACKET_FRAME_CAP);
+    rcsTick(vizFrame({ packets: many }), 0, 1 / 60, 1.777);
+    expect(rcsLivePacketsConsumed()).toBe(VIZ_MAX_PACKET_SAMPLES);
+  });
+
+  it("rebuilds talker-derived maps only when talker id set changes", () => {
+    resetRcsTalkerCacheForTest();
+    const lowBoost = ingestLiveFrame(vizFrame({ talkers: [{ id: "10.0.0.1", rate: 10, role: "lan" }] })).perHostBoost.get(
+      "10.0.0.1",
+    )!;
+    const highBoost = ingestLiveFrame(vizFrame({ talkers: [{ id: "10.0.0.1", rate: 45, role: "lan" }] })).perHostBoost.get(
+      "10.0.0.1",
+    )!;
+    expect(highBoost).toBeGreaterThan(lowBoost);
+    const swapped = ingestLiveFrame(vizFrame({ talkers: [{ id: "10.0.0.2", rate: 10, role: "gateway" }] }));
+    expect(swapped.perHostBoost.has("10.0.0.1")).toBe(false);
+    expect(swapped.perHostLabel.has("10.0.0.2")).toBe(true);
   });
 
   it("keeps render scale at 1.0 behind the swappable hook", () => {

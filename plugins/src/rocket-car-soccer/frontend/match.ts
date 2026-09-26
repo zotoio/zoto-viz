@@ -2,7 +2,7 @@
  * Rocket Car Soccer — fixed timestep + accumulator, replay ring, live drive, pooled FX.
  */
 
-import { hostLabelHash, ingestLiveFrame, type RcsLiveDrive, type RcsVizFrame } from "./live";
+import { hostLabelHash, ingestLiveFrame, resetRcsTalkerCacheForTest, type RcsLiveDrive, type VizDataFrame } from "./live";
 import { InstancedPool } from "./pools";
 import {
   RCS_BALL_BASE,
@@ -52,7 +52,6 @@ interface Car {
   onGround: boolean;
   hostId: string | null;
   hostLabelHash: number;
-  hostFailVis: number;
 }
 
 interface Snap {
@@ -88,7 +87,6 @@ interface SimState {
   hostToCar: Map<string, number>;
   carToHost: (string | null)[];
   vacantUntil: Map<number, number>;
-  lastFailPenaltyAt: number;
 }
 
 let options: RcsOptions = { ...RCS_DEFAULTS };
@@ -132,6 +130,7 @@ export function rcsOptionsNow(): RcsOptions {
 }
 
 export function resetRcsSim(seed = options.seed): void {
+  resetRcsTalkerCacheForTest();
   const n = Math.min(RCS_CAPS.maxCars, options.teamSize * 2);
   const cars: Car[] = [];
   for (let i = 0; i < n; i++) {
@@ -150,7 +149,6 @@ export function resetRcsSim(seed = options.seed): void {
       onGround: true,
       hostId: null,
       hostLabelHash: 0,
-      hostFailVis: 0,
     });
   }
   particlePool.warm();
@@ -178,7 +176,6 @@ export function resetRcsSim(seed = options.seed): void {
     hostToCar: new Map(),
     carToHost: new Array(n).fill(null),
     vacantUntil: new Map(),
-    lastFailPenaltyAt: -999,
   };
   for (let i = 0; i < 16; i++) {
     particlePool.emit(
@@ -232,7 +229,6 @@ function syncTalkerHosts(st: SimState, live: RcsLiveDrive, dt: number): void {
     }
     const c = st.cars[idx]!;
     c.hostLabelHash = live.perHostLabel.get(hostId) ?? c.hostLabelHash;
-    c.hostFailVis = live.failAlert;
     const mix = live.demo ? 0.55 : boost;
     c.boost = clamp(c.boost + mix * dt * 0.8, 0, BOOST_MAX);
   }
@@ -242,7 +238,6 @@ function syncTalkerHosts(st: SimState, live: RcsLiveDrive, dt: number): void {
     st.carToHost[idx] = null;
     const c = st.cars[idx]!;
     c.hostId = null;
-    c.hostFailVis = 0;
     st.vacantUntil.set(idx, st.simTime + HOST_VACANT_SEC);
   }
 }
@@ -254,10 +249,6 @@ function applyLive(st: SimState, live: RcsLiveDrive, dt: number): void {
   if (live.failAlert > 0) {
     st.failAlert = Math.max(st.failAlert, live.failAlert);
     st.failUntil = st.simTime + 5;
-    if (live.failAlert >= 0.5 && st.simTime - st.lastFailPenaltyAt > 2) {
-      st.score[0] = Math.max(0, st.score[0] - 1);
-      st.lastFailPenaltyAt = st.simTime;
-    }
   }
 
   for (const c of st.cars) {
@@ -272,10 +263,9 @@ function applyLive(st: SimState, live: RcsLiveDrive, dt: number): void {
     if (live.eventPulse > 0.5 && rng(st) < live.eventPulse * dt * 0.5) {
       c.vel.y += 4;
     }
-    const pulse = live.perHostGoalPulse.get(c.hostId);
-    if (pulse !== undefined && pulse > 0 && st.phase === PHASE_PLAY && rng(st) < pulse * dt * 0.12) {
-      st.ball.vel.x += (rng(st) - 0.5) * 6;
-    }
+  }
+  if (live.goalPulse > 0 && st.phase === PHASE_PLAY && rng(st) < live.goalPulse * dt * 0.08) {
+    st.ball.vel.x += (rng(st) - 0.5) * 6;
   }
 }
 
@@ -485,7 +475,7 @@ export interface RcsWorkBudget {
   physicsSubsteps: number;
 }
 
-export function rcsTick(frame: RcsVizFrame | undefined, simTime: number, dt: number, aspect: number): RcsTickOut {
+export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: number, aspect: number): RcsTickOut {
   if (!state) resetRcsSim(options.seed);
   const st = state!;
   st.simTime = simTime;
@@ -603,7 +593,7 @@ export function rcsTick(frame: RcsVizFrame | undefined, simTime: number, dt: num
     slot1[o + 1] = c.pos.y;
     slot1[o + 2] = c.pos.z;
     slot1[o + 3] = c.yaw;
-    slot1[o + 4] = c.hostFailVis;
+    slot1[o + 4] = c.pitch;
     slot1[o + 5] = c.boost;
     slot1[o + 6] = c.hostLabelHash;
     slot1[o + 7] = c.team;
@@ -752,10 +742,6 @@ export function rcsHostCarIndex(hostId: string): number | undefined {
 
 export function rcsCarHostLabelHash(carIndex: number): number {
   return state?.cars[carIndex]?.hostLabelHash ?? -1;
-}
-
-export function rcsCarHostFailVis(carIndex: number): number {
-  return state?.cars[carIndex]?.hostFailVis ?? 0;
 }
 
 export function rcsLivePacketsConsumed(): number {

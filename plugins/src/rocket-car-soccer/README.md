@@ -18,13 +18,15 @@ Self-playing boost-car arena visual for zoto-viz. Original procedural stadium, t
 | Field | Effect |
 |-------|--------|
 | `talkers.rate` | Car boost fill |
-| `packets.field` | Goal-line pulse on the ball (per packet **host**, not talker index) |
+| `packets.field` | Stadium goal-line pulse on the ball (max field across consumed packets) |
 | `sys.failed` | Zoto Fail scoreboard alert (never covered by goal FX) |
 | `sys.udev` | Random car jump pulses |
 
 Idle host fixture keeps a lively demo match; HUD `demoFlag` drives the on-sky **demo** marker.
 
-Talker **host ids** bind stable car slots (reordering the list does not reassign cars). Departed hosts keep their slot reserved briefly; new hosts never inherit the slot immediately.
+Talker **`id`** binds stable car slots (list reorder does not reassign cars). Departed talkers keep their slot reserved briefly.
+
+Failures are **stadium-wide** from `sys.failed` only (scoreboard / HUD strip), never tied to a car, team, packet `field`, or headline text.
 
 ## Presets
 

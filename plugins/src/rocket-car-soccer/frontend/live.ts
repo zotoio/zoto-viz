@@ -1,7 +1,12 @@
 /**
  * Live monitor → visible match effects. Mirrors `liveMapping` in plugin.yml.
- * Host ids are stable keys — never list index or talker count.
+ * Uses the host {@link VizDataFrame} contract only — no invented frame fields.
  */
+
+import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
+import { VIZ_MAX_PACKET_SAMPLES } from "../../../../web/src/plugins/viz-host";
+
+export type { VizDataFrame };
 
 export const RCS_LIVE_MAPPING = [
   { field: "talkers.rate", effect: "carBoost", default: 0.35, min: 0, max: 1 },
@@ -10,30 +15,15 @@ export const RCS_LIVE_MAPPING = [
   { field: "sys.udev", effect: "eventPulse", default: 0, min: 0, max: 1 },
 ] as const;
 
-/** Matches host viz decimation cap (`VIZ_MAX_PACKET_SAMPLES`). */
-export const RCS_PACKET_FRAME_CAP = 32;
-
-export type RcsTalker = { id: string; rate: number; role?: string };
-/** `host` is the packet source host id (required for live mapping; proto is demo-only fallback). */
-export type RcsPacket = { proto: string; size?: number; field: number; host?: string };
-
-export type RcsVizFrame = {
-  demo?: boolean;
-  talkers?: RcsTalker[];
-  packets?: RcsPacket[];
-  sys?: { failed?: number; udev?: number };
-};
-
 export interface RcsLiveDrive {
   demo: boolean;
   flowMetric: number;
-  /** Ball nudge strength aggregated from packet fields (never used for fail visuals). */
+  /** Max packet `field` this frame (goal FX only — never fail visuals). */
   goalPulse: number;
-  /** Only from `sys.failed` — never from packet `field` or rate thresholds. */
+  /** Stadium-wide alert from `sys.failed` only. */
   failAlert: number;
   eventPulse: number;
   perHostBoost: ReadonlyMap<string, number>;
-  perHostGoalPulse: ReadonlyMap<string, number>;
   perHostLabel: ReadonlyMap<string, number>;
   packetsConsumed: number;
 }
@@ -42,9 +32,9 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
-export function hostLabelHash(hostId: string): number {
+export function hostLabelHash(talkerId: string): number {
   let h = 0;
-  for (let i = 0; i < hostId.length; i++) h = (h * 31 + hostId.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < talkerId.length; i++) h = (h * 31 + talkerId.charCodeAt(i)) >>> 0;
   return (h % 997) / 997;
 }
 
@@ -59,39 +49,59 @@ function failFromSys(failed: number | undefined): number {
   return failed > 0 ? clamp(failed, 0, 1) : 0;
 }
 
-function packetHostKey(p: RcsPacket): string {
-  if (p.host && p.host.length > 0) return p.host;
-  return `proto:${p.proto}`;
+let talkerIdKey = "";
+const cachedBoost = new Map<string, number>();
+const cachedLabel = new Map<string, number>();
+
+function talkerIdSetKey(talkers: VizDataFrame["talkers"]): string {
+  const ids = talkers.map((t) => t.id).filter(Boolean);
+  ids.sort();
+  return ids.join("\0");
 }
 
-export function ingestLiveFrame(frame: RcsVizFrame | undefined): RcsLiveDrive {
+/** Rebuild talker-derived maps only when the set of talker ids changes. */
+function syncTalkerCache(talkers: VizDataFrame["talkers"]): void {
+  const key = talkerIdSetKey(talkers);
+  if (key !== talkerIdKey) {
+    talkerIdKey = key;
+    cachedBoost.clear();
+    cachedLabel.clear();
+    for (const t of talkers) {
+      if (!t.id) continue;
+      cachedLabel.set(t.id, hostLabelHash(t.id));
+      cachedBoost.set(t.id, boostFromRate(t.rate));
+    }
+    return;
+  }
+  for (const t of talkers) {
+    if (!t.id || !cachedBoost.has(t.id)) continue;
+    cachedBoost.set(t.id, boostFromRate(t.rate));
+  }
+}
+
+export function resetRcsTalkerCacheForTest(): void {
+  talkerIdKey = "";
+  cachedBoost.clear();
+  cachedLabel.clear();
+}
+
+export function ingestLiveFrame(frame: VizDataFrame | undefined): RcsLiveDrive {
   const demo = frame?.demo === true;
   const talkers = frame?.talkers ?? [];
-  const packets = frame?.packets ?? [];
-  const perHostBoost = new Map<string, number>();
-  const perHostGoalPulse = new Map<string, number>();
-  const perHostLabel = new Map<string, number>();
+  syncTalkerCache(talkers);
 
   let flowMetric = 0;
-  for (const t of talkers) {
-    if (!t.id) continue;
-    const b = boostFromRate(t.rate ?? 0);
-    perHostBoost.set(t.id, b);
-    perHostLabel.set(t.id, hostLabelHash(t.id));
-    flowMetric = Math.max(flowMetric, t.rate ?? 0);
-  }
+  for (const t of talkers) flowMetric = Math.max(flowMetric, t.rate ?? 0);
 
   let goalPulse = 0;
   let packetsConsumed = 0;
-  const limit = Math.min(packets.length, RCS_PACKET_FRAME_CAP);
+  const packets = frame?.packets ?? [];
+  const limit = Math.min(packets.length, VIZ_MAX_PACKET_SAMPLES);
   for (let i = 0; i < limit; i++) {
     const p = packets[i]!;
     if (!Number.isFinite(p.field)) continue;
     packetsConsumed++;
-    const host = packetHostKey(p);
-    const pulse = clamp(p.field, 0, 1);
-    perHostGoalPulse.set(host, Math.max(perHostGoalPulse.get(host) ?? 0, pulse));
-    goalPulse = Math.max(goalPulse, pulse);
+    goalPulse = Math.max(goalPulse, clamp(p.field, 0, 1));
   }
 
   const udev = frame?.sys?.udev ?? 0;
@@ -101,16 +111,10 @@ export function ingestLiveFrame(frame: RcsVizFrame | undefined): RcsLiveDrive {
     goalPulse,
     failAlert: failFromSys(frame?.sys?.failed),
     eventPulse: clamp(Number.isFinite(udev) ? udev : 0, 0, 1),
-    perHostBoost,
-    perHostGoalPulse,
-    perHostLabel,
+    perHostBoost: cachedBoost,
+    perHostLabel: cachedLabel,
     packetsConsumed,
   };
-}
-
-/** @deprecated use ingestLiveFrame */
-export function driveFromFrame(frame: RcsVizFrame | undefined): RcsLiveDrive {
-  return ingestLiveFrame(frame);
 }
 
 /** Zoto Fail red (matches units graph failed colour). */

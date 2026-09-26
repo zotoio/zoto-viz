@@ -11,20 +11,11 @@ import {
   themeBgAccent,
   type RcsOptions,
 } from "./pack";
+import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
 import { rcsMount, rcsTick, rcsUnmount, setRcsOptions } from "./match";
 
-type VizFrame = {
-  t: number;
-  dt: number;
-  audio: number;
-  demo?: boolean;
-  talkers?: { id: string; rate: number; role?: string }[];
-  packets?: { proto: string; size?: number; field: number; host?: string }[];
-  sys?: { failed?: number; udev?: number };
-};
-
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: VizDataFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;
