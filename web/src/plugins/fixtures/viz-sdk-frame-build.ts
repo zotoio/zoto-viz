@@ -289,6 +289,10 @@ function trimFlow(f: Flow): Flow {
     first_seen: f.first_seen,
     last_seen: f.last_seen,
     rate: f.rate,
+    ...(f.rate_ab != null ? { rate_ab: f.rate_ab } : {}),
+    ...(f.rate_ba != null ? { rate_ba: f.rate_ba } : {}),
+    ...(f.rate_pkt_ab != null ? { rate_pkt_ab: f.rate_pkt_ab } : {}),
+    ...(f.rate_pkt_ba != null ? { rate_pkt_ba: f.rate_pkt_ba } : {}),
   };
 }
 
@@ -481,6 +485,17 @@ export function withFailedUnitsView(state: StateMsg, failedCount = 3): StateMsg 
   };
 }
 
+/** Stamp per-device `conn_fail` gauges for frozen failed fixtures (viz v2 talkers[].failed). */
+export function withConnFailDevices(state: StateMsg, failByIp: Record<string, number>): StateMsg {
+  return {
+    ...state,
+    devices: state.devices.map((d) => {
+      const ratio = failByIp[d.ip];
+      return ratio != null ? { ...d, conn_fail: ratio } : d;
+    }),
+  };
+}
+
 function scrubIdleDemoSlices(frame: VizDataFrame): VizDataFrame {
   const slices = frame.demoSlices;
   if (!frame.demo || !slices) return frame;
@@ -514,7 +529,11 @@ export function buildVizSdkGoldenLiveFrame(): VizDataFrame {
 }
 
 export function buildVizSdkGoldenLiveFailedFrame(): VizDataFrame {
-  return buildLiveFrame(withFailedUnitsView(goldenLanFixture()));
+  const state = withConnFailDevices(withFailedUnitsView(goldenLanFixture()), {
+    "10.0.0.15": 0.5,
+    "10.0.0.22": 0.35,
+  });
+  return buildLiveFrame(state);
 }
 
 export function buildVizSdkFatLiveFrame(): VizDataFrame {
@@ -522,7 +541,14 @@ export function buildVizSdkFatLiveFrame(): VizDataFrame {
 }
 
 export function buildVizSdkFatLiveFailedFrame(): VizDataFrame {
-  return buildLiveFrame(withFailedUnitsView(fatLanFixture()));
+  const base = fatLanFixture();
+  const failByIp: Record<string, number> = {};
+  for (let i = 0; i < 8; i++) {
+    const ip = base.devices[i * 11]?.ip;
+    if (ip) failByIp[ip] = 0.25 + (i % 5) * 0.1;
+  }
+  const state = withConnFailDevices(withFailedUnitsView(base), failByIp);
+  return buildLiveFrame(state);
 }
 
 /** Quiet VM capture with host idle merge (real pack path on an empty LAN). */

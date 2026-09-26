@@ -347,10 +347,9 @@ type VizDevFixtureModule = typeof import("../plugins/viz-dev-fixture");
 let vizDevFixtureMod: VizDevFixtureModule | null = null;
 let vizDevFixtureName: import("../plugins/viz-dev-fixture").VizDevFixtureName | null = null;
 if (import.meta.env.DEV) {
-  void import("../plugins/viz-dev-fixture").then((mod) => {
-    vizDevFixtureMod = mod;
-    vizDevFixtureName = mod.parseVizDevFixtureQuery(globalThis.location?.search ?? "", true);
-  });
+  const mod = await import("../plugins/viz-dev-fixture");
+  vizDevFixtureMod = mod;
+  vizDevFixtureName = mod.parseVizDevFixtureQuery(globalThis.location?.search ?? "", true);
 }
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;

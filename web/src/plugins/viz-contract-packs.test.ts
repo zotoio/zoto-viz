@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
-import { VIZ_FIXTURE_GOLDEN_LIVE } from "../../../plugins/sdk/viz-fixtures";
+import { VIZ_FIXTURE_GOLDEN_LIVE, VIZ_FIXTURE_GOLDEN_LIVE_FAILED } from "../../../plugins/sdk/viz-fixtures";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const packsRoot = path.join(repoRoot, "plugins/src");
@@ -161,5 +161,10 @@ describe("viz contract packs", () => {
   it("frozen golden-live fixture carries v2 contract slices", () => {
     expect(VIZ_FIXTURE_GOLDEN_LIVE.contract).toBe(VIZ_CONTRACT_VERSION);
     expect((VIZ_FIXTURE_GOLDEN_LIVE.links?.length ?? 0)).toBeGreaterThan(0);
+  });
+
+  it("frozen golden-live-failed fixture carries v2 talkers[].failed", () => {
+    expect(VIZ_FIXTURE_GOLDEN_LIVE_FAILED.contract).toBe(VIZ_CONTRACT_VERSION);
+    expect(VIZ_FIXTURE_GOLDEN_LIVE_FAILED.talkers.some((t) => t.failed != null)).toBe(true);
   });
 });

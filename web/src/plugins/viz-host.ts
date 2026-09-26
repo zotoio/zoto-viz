@@ -360,30 +360,40 @@ function directionalPacketRate(flow: Flow, ab: boolean): number {
   return byteRate / Math.max(1, avgBytes);
 }
 
+const devicePacketRateScratch = new Map<string, number>();
+
 function devicePacketRateMap(flows: Flow[]): Map<string, number> {
-  const map = new Map<string, number>();
+  devicePacketRateScratch.clear();
   for (const fl of flows) {
     const ab = directionalPacketRate(fl, true);
-    if (ab > 0) map.set(fl.a, (map.get(fl.a) ?? 0) + ab);
+    if (ab > 0) devicePacketRateScratch.set(fl.a, (devicePacketRateScratch.get(fl.a) ?? 0) + ab);
     const ba = directionalPacketRate(fl, false);
-    if (ba > 0) map.set(fl.b, (map.get(fl.b) ?? 0) + ba);
+    if (ba > 0) devicePacketRateScratch.set(fl.b, (devicePacketRateScratch.get(fl.b) ?? 0) + ba);
   }
-  return map;
+  return devicePacketRateScratch;
 }
 
-function talkerRateForFrame(d: Device, rates: Map<string, number>): number {
-  const live = rates.get(d.ip) ?? 0;
-  return live > 0 ? live : d.packets;
+function hasLivePacketRates(rates: Map<string, number>): boolean {
+  for (const v of rates.values()) {
+    if (v > 0) return true;
+  }
+  return false;
+}
+
+function talkerScore(d: Device, rates: Map<string, number>, liveMode: boolean): number {
+  if (liveMode) return rates.get(d.ip) ?? 0;
+  return d.packets;
 }
 
 function topTalkers(devices: Device[], flows: Flow[], limit: number): VizTalkerSample[] {
   const rates = devicePacketRateMap(flows);
+  const liveMode = hasLivePacketRates(rates);
   return topKByScore(
     devices,
     limit,
-    (d) => talkerRateForFrame(d, rates),
-    (d) => talkerRateForFrame(d, rates) <= 0,
-  ).map((d) => ({ id: d.ip, rate: talkerRateForFrame(d, rates), role: d.role }));
+    (d) => talkerScore(d, rates, liveMode),
+    (d) => talkerScore(d, rates, liveMode) <= 0,
+  ).map((d) => ({ id: d.ip, rate: talkerScore(d, rates, liveMode), role: d.role }));
 }
 
 function rssiFromAliases(aliases: string[] | undefined): number {

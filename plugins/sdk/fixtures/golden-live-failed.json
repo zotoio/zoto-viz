@@ -65,7 +65,8 @@
     {
       "id": "host-03",
       "rate": 4,
-      "role": "lan"
+      "role": "lan",
+      "failed": 0.5
     },
     {
       "id": "host-07",
@@ -75,7 +76,8 @@
     {
       "id": "host-04",
       "rate": 3,
-      "role": "lan"
+      "role": "lan",
+      "failed": 0.35
     },
     {
       "id": "host-08",

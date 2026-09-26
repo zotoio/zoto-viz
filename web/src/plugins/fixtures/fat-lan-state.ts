@@ -43,6 +43,26 @@ export function fatLanFixture(): StateMsg {
     };
   });
 
+  const hubIps = [0, 1, 2, 3].map((i) => devices[i]!.ip);
+  for (let i = 0; i < hubIps.length; i++) {
+    for (let j = i + 1; j < hubIps.length; j++) {
+      flows.push({
+        a: hubIps[i]!,
+        b: hubIps[j]!,
+        bytes: 8000,
+        packets: 400,
+        ports: ["tcp/443"],
+        protos: ["tcp"],
+        ifaces: ["eth0"],
+        first_seen: 0,
+        last_seen: 100,
+        rate: 90,
+        rate_pkt_ab: 90,
+        rate_pkt_ba: 15,
+      });
+    }
+  }
+
   return {
     type: "state",
     ts: 200,
@@ -64,7 +84,7 @@ export function fatLanFixture(): StateMsg {
     },
     devices,
     flows,
-    host: { vizFrame: { links: false } },
+    host: { vizFrame: { links: true, linksMax: 64 } },
     views: {
       wifi: {
         devices: devices.filter((d) => d.ssid),
