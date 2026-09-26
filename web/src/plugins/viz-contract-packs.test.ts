@@ -19,6 +19,23 @@ const FORBIDDEN_LOCAL_TYPE =
 
 const HOST_IMPORT = /from\s+['"][^'"]*web\/src\//;
 
+const SDK_IMPORT = /import\s+([^;]+)\s+from\s+['"][^'"]*sdk\/[^'"]+['"]/g;
+
+/** True when an import clause pulls a runtime value from `plugins/sdk/`. */
+function sdkImportHasValueBindings(clause: string): boolean {
+  const c = clause.trim();
+  if (/^type\s+\{/.test(c) || /^type\s+[A-Za-z_$]/.test(c)) return false;
+  if (!c.includes("{")) return true;
+  const inner = c.replace(/^type\s+/, "").match(/\{([\s\S]+)\}/)?.[1] ?? "";
+  for (const part of inner.split(",")) {
+    const p = part.trim();
+    if (!p) continue;
+    if (p.startsWith("type ")) continue;
+    return true;
+  }
+  return false;
+}
+
 const VIZ_CONTRACT_IMPORT = /import\s+type\s+[\s\S]*?\s+from\s+['"][^'"]*viz-contract(?:\.ts)?['"]/;
 
 const FRAME_PARAM = /\bonFrame\s*=\s*\(\s*(\w+)/;
@@ -96,6 +113,13 @@ describe("viz contract packs", () => {
 
       if (HOST_IMPORT.test(text)) {
         violations.push(`${packId}/${rel}: imports from web/src`);
+      }
+      let sdkM: RegExpExecArray | null;
+      const sdkRe = new RegExp(SDK_IMPORT.source, "g");
+      while ((sdkM = sdkRe.exec(text)) !== null) {
+        if (sdkImportHasValueBindings(sdkM[1]!)) {
+          violations.push(`${packId}/${rel}: value import from plugins/sdk (type-only allowed)`);
+        }
       }
       const withoutImports = text.replace(/^\s*import\s[\s\S]*?;\s*$/gm, "");
       if (FORBIDDEN_LOCAL_TYPE.test(withoutImports)) {

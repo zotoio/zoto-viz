@@ -18,7 +18,7 @@ export interface VizPacketSample {
 export interface VizRfBeacon {
   /** SSID or placeholder label for the RF row. */
   ssid: string;
-  /** RSSI in dBm (negative; stronger toward zero). */
+  /** Normalized RSSI 0..1 from the host (`normalizeRssi`; 1 is strongest). */
   rssi: number;
   /** Wi-Fi channel number. */
   channel: number;

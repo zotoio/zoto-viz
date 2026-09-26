@@ -1,14 +1,15 @@
 /** Pack SYS + NET telemetry into viz slots for the Cypher CIC holodeck. */
 
-import {
-  EMPTY_SYS_TELEMETRY,
-  type VizPacketSample,
-  type VizRfBeacon,
-  type VizSysTelemetry,
-  type VizTalkerSample,
+import type {
+  VizPacketSample,
+  VizRfBeacon,
+  VizSysTelemetry,
+  VizTalkerSample,
 } from "../../../sdk/viz-contract";
 
-export const EMPTY_SYS: VizSysTelemetry = { ...EMPTY_SYS_TELEMETRY };
+export const EMPTY_SYS: VizSysTelemetry = {
+  cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0,
+};
 
 export const CANVAS_DEFAULT = { w: 1280, h: 800 };
 

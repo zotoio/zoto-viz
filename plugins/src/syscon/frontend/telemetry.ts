@@ -1,8 +1,10 @@
 /** 0..1 SYS gauges packed into viz slot 0 for the holotable sky. */
 
-import { EMPTY_SYS_TELEMETRY, type VizSysTelemetry } from "../../../sdk/viz-contract";
+import type { VizSysTelemetry } from "../../../sdk/viz-contract";
 
-export const EMPTY_SYS_GAUGES: VizSysTelemetry = { ...EMPTY_SYS_TELEMETRY };
+export const EMPTY_SYS_GAUGES: VizSysTelemetry = {
+  cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0,
+};
 
 export function clamp01(n: number): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
