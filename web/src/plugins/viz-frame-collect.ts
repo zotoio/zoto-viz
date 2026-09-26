@@ -99,10 +99,6 @@ function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string>
   return talkerIdsScratch;
 }
 
-export function readTalkerIdSetRebuildCount(): number {
-  return talkerIdsSetRebuilds;
-}
-
 function talkersWithConnFailed(
   frameTalkers: VizTalkerSample[],
   devices: readonly Device[],
@@ -145,24 +141,6 @@ const collectResultScratch: { links: VizLinkSample[]; linksDropped: number } = {
 
 let lastZeroPassVisitCount = 0;
 let lastNewPairSetCount = 0;
-
-export function readVizLinkZeroPassVisitCount(): number {
-  return lastZeroPassVisitCount;
-}
-
-export function readVizLinkIndexEntryCount(): number {
-  let n = 0;
-  for (const byDst of linkBySrcDst.values()) n += byDst.size;
-  return n;
-}
-
-export function readVizLinkPoolLength(): number {
-  return linkPool.length;
-}
-
-export function readVizLinkLastNewPairSetCount(): number {
-  return lastNewPairSetCount;
-}
 
 function resetSlotMeta(idx: number): void {
   let meta = linkSlotMeta[idx];
@@ -332,18 +310,4 @@ export function applyVizFrameContractV2(
   if (linksDropped > 0) frame.linksDropped = linksDropped;
   else delete frame.linksDropped;
   return frame;
-}
-
-export function readLinkSlotGeneration(src: string, dst: string): number | undefined {
-  const byDst = linkBySrcDst.get(src);
-  const idx = byDst?.get(dst);
-  if (idx === undefined) return undefined;
-  return linkSlotMeta[idx]?.generation;
-}
-
-export function readLinkSlotIdleZeroFrames(src: string, dst: string): number | undefined {
-  const byDst = linkBySrcDst.get(src);
-  const idx = byDst?.get(dst);
-  if (idx === undefined) return undefined;
-  return linkSlotMeta[idx]?.idleZeroFrames;
 }

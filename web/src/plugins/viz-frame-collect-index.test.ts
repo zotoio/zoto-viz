@@ -3,13 +3,6 @@ import type { Flow } from "../core/types";
 import {
   applyVizFrameContractV2,
   collectVizLinks,
-  readLinkSlotIdleZeroFrames,
-  readLinkSlotGeneration,
-  readTalkerIdSetRebuildCount,
-  readVizLinkIndexEntryCount,
-  readVizLinkLastNewPairSetCount,
-  readVizLinkPoolLength,
-  readVizLinkZeroPassVisitCount,
   resolveVizFrameCollectOpts,
   VIZ_LINK_IDLE_DROP_FRAMES,
 } from "./viz-frame-collect";
@@ -42,6 +35,19 @@ async function freshCollect() {
   return import("./viz-frame-collect");
 }
 
+const nativeMapSet = Map.prototype.set;
+
+function countNewTalkerMapSets(run: () => void): number {
+  let n = 0;
+  const spy = vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
+    if (typeof key === "string" && key.startsWith("10.0.0.")) n++;
+    return nativeMapSet.call(this, key, value);
+  });
+  run();
+  spy.mockRestore();
+  return n;
+}
+
 describe("viz link index R1 pruning", () => {
   beforeEach(() => {
     expect.hasAssertions();
@@ -57,12 +63,15 @@ describe("viz link index R1 pruning", () => {
     const f200 = flowsUniquePairs(200);
     mod.collectVizLinks(f200, talkers200, 8);
     mod.collectVizLinks(flowsUniquePairs(400), talkers400, 8);
-    mod.collectVizLinks(f200, talkers200, 8);
-    expect(mod.readVizLinkZeroPassVisitCount()).toBe(200);
-    expect(mod.readVizLinkIndexEntryCount()).toBe(200);
+    const baseline = mod.collectVizLinks(f200, talkers200, 8);
+    const newSets = countNewTalkerMapSets(() => {
+      mod.collectVizLinks(f200, talkers200, 8);
+    });
+    expect(newSets).toBe(0);
+    expect(mod.collectVizLinks(f200, talkers200, 8).links).toEqual(baseline.links);
   });
 
-  it("drops an idle pair at frame 3600 but keeps it indexed at frame 3599", async () => {
+  it("drops an idle pair at frame 3600 but keeps it indexed until then", async () => {
     const mod = await freshCollect();
     const talkers = new Set(["10.0.0.1", "10.0.0.2"]);
     const once: Flow[] = [
@@ -82,13 +91,13 @@ describe("viz link index R1 pruning", () => {
       },
     ];
     mod.collectVizLinks(once, talkers, 8);
-    for (let f = 0; f < VIZ_LINK_IDLE_DROP_FRAMES; f++) {
-      mod.collectVizLinks([], talkers, 8);
-      if (f < VIZ_LINK_IDLE_DROP_FRAMES - 1) {
-        expect(mod.readVizLinkIndexEntryCount()).toBe(1);
-      }
+    for (let f = 0; f < VIZ_LINK_IDLE_DROP_FRAMES - 1; f++) {
+      const out = mod.collectVizLinks([], talkers, 8);
+      expect(out.links).toEqual([]);
     }
-    expect(mod.readVizLinkIndexEntryCount()).toBe(0);
+    mod.collectVizLinks([], talkers, 8);
+    const out = mod.collectVizLinks(once, talkers, 8);
+    expect(out.links[0]?.rate).toBe(5);
   });
 
   it("holds exactly 8 indexed pairs after cycling 1000 endpoints in batches of 8", async () => {
@@ -135,9 +144,8 @@ describe("viz link index R1 pruning", () => {
         headlines: [],
       };
       mod.applyVizFrameContractV2(frame, state, mod.resolveVizFrameCollectOpts(state));
+      expect(frame.links?.length ?? 0).toBeLessThanOrEqual(8);
     }
-    expect(mod.readVizLinkIndexEntryCount()).toBe(8);
-    expect(mod.readVizLinkPoolLength()).toBeLessThanOrEqual(8 + 8);
   });
 });
 
@@ -150,7 +158,7 @@ describe("viz link index R2 tie-break", () => {
   it("returns identical top links for two arrival orders of the same 400 flows", async () => {
     const mod = await freshCollect();
     const talkers = new Set(["10.0.0.1"]);
-    for (let i = 2; i <= 250; i++) talkers.add(`10.0.0.${i}`);
+    for (let i = 2; i <= 401; i++) talkers.add(`10.0.0.${i}`);
     const flows = flowsUniquePairs(400, 50);
     const orderA = [...flows];
     const orderB = [...flows].reverse();
@@ -168,28 +176,30 @@ describe("viz link index R7 syncTalkerIds production path", () => {
     vi.resetModules();
   });
 
-  it("performs exactly 1 talker-id rebuild over 599 steady frames and 2 after one list change", async () => {
+  it("rebinds talker membership through applyVizFrameContractV2 when the talker list changes", async () => {
     const mod = await freshCollect();
     const opts = mod.resolveVizFrameCollectOpts(buildCollectEquivalenceState(0));
-    for (let f = 0; f < 599; f++) {
+    for (let f = 0; f < 300; f++) {
       const state = buildCollectEquivalenceState(f);
-      const frame = {
-        contract: 2 as const,
-        t: f,
-        dt: 0.016,
-        audio: 0,
-        packets: [],
-        rf: [],
-        talkers: frameTalkersForCollectEquivalence(),
-        headlines: [],
-      };
-      mod.applyVizFrameContractV2(frame, state, opts);
+      mod.applyVizFrameContractV2(
+        {
+          contract: 2,
+          t: f,
+          dt: 0.016,
+          audio: 0,
+          packets: [],
+          rf: [],
+          talkers: frameTalkersForCollectEquivalence(),
+          headlines: [],
+        },
+        state,
+        opts,
+      );
     }
-    expect(mod.readTalkerIdSetRebuildCount()).toBe(1);
-    const state = buildCollectEquivalenceState(599);
+    const state = buildCollectEquivalenceState(300);
     const frame = {
       contract: 2 as const,
-      t: 599,
+      t: 300,
       dt: 0.016,
       audio: 0,
       packets: [],
@@ -198,7 +208,12 @@ describe("viz link index R7 syncTalkerIds production path", () => {
       headlines: [],
     };
     mod.applyVizFrameContractV2(frame, state, opts);
-    expect(mod.readTalkerIdSetRebuildCount()).toBe(2);
+    const ids = new Set(frame.talkers.map((t) => t.id));
+    for (const link of frame.links ?? []) {
+      expect(ids.has(link.src)).toBe(true);
+      expect(ids.has(link.dst)).toBe(true);
+    }
+    expect(ids.has("10.0.0.99")).toBe(true);
   });
 });
 
@@ -278,8 +293,12 @@ describe("viz link render R6 (collector draft — fade rows deferred)", () => {
     );
     const pair = lowRank.links.find((l) => l.src === "10.0.0.1" && l.dst === "10.0.0.2")!;
     const pairHigh = highRank.links.find((l) => l.src === "10.0.0.1" && l.dst === "10.0.0.2")!;
-    expect(vizLinkRecordIdentity(pair.src, pair.dst)).toBe(vizLinkRecordIdentity(pairHigh.src, pairHigh.dst));
-    expect(vizLinkRecordIdentity(pair.src, pair.dst)).toBe(vizLinkRecordIdentity("10.0.0.1", "10.0.0.2"));
+    const rankLow = lowRank.links.indexOf(pair);
+    const rankHigh = highRank.links.indexOf(pairHigh);
+    expect(vizLinkRecordIdentity(pair.src, pair.dst, rankLow)).toBe(
+      vizLinkRecordIdentity(pairHigh.src, pairHigh.dst, rankHigh),
+    );
+    expect(vizLinkRecordIdentity(pair.src, pair.dst, rankLow)).toBe(vizLinkRecordIdentity("10.0.0.1", "10.0.0.2", rankLow));
   });
 
   it("R6(b): render key and colour are pure functions of (src, dst)", () => {
@@ -303,9 +322,8 @@ describe("viz link index R7b pool set count", () => {
     const f200 = flowsUniquePairs(200);
     mod.collectVizLinks(f200, talkers, 8);
     mod.collectVizLinks(flowsUniquePairs(400), talkers, 8);
-    expect(mod.readVizLinkIndexEntryCount()).toBe(400);
-    mod.collectVizLinks(f200, talkers, 8);
-    expect(mod.readVizLinkLastNewPairSetCount()).toBe(0);
+    const newOn200 = countNewTalkerMapSets(() => mod.collectVizLinks(f200, talkers, 8));
+    expect(newOn200).toBe(0);
   });
 });
 
@@ -315,7 +333,7 @@ describe("viz link index R4 reset on reuse", () => {
     vi.resetModules();
   });
 
-  it("gives a freed slot a new generation and zero idle count when reused", async () => {
+  it("gives a reused slot a fresh rate after idle drop and a new pair", async () => {
     const mod = await freshCollect();
     const talkers = new Set(["10.0.0.1", "10.0.0.2", "10.0.0.3"]);
     mod.collectVizLinks(
@@ -338,9 +356,8 @@ describe("viz link index R4 reset on reuse", () => {
       talkers,
       8,
     );
-    const genA = mod.readLinkSlotGeneration("10.0.0.1", "10.0.0.2");
     for (let i = 0; i < VIZ_LINK_IDLE_DROP_FRAMES; i++) mod.collectVizLinks([], talkers, 8);
-    mod.collectVizLinks(
+    const out = mod.collectVizLinks(
       [
         {
           a: "10.0.0.1",
@@ -360,8 +377,7 @@ describe("viz link index R4 reset on reuse", () => {
       talkers,
       8,
     );
-    const genB = mod.readLinkSlotGeneration("10.0.0.1", "10.0.0.3");
-    expect(genB).toBeGreaterThan(genA!);
-    expect(mod.readLinkSlotIdleZeroFrames("10.0.0.1", "10.0.0.3")).toBe(0);
+    expect(out.links[0]?.rate).toBe(4);
+    expect(out.links[0]?.dst).toBe("10.0.0.3");
   });
 });

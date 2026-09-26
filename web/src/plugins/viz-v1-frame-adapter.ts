@@ -257,17 +257,10 @@ export class VizV1FrameAdapter {
   private maxTalkersRegistered = 0;
   /** View option snapshot from scope sync; stable between delivers until replaced. */
   private viewOpts: Readonly<Record<string, string>> | null = null;
-  /** Incremented once per deliver when at least one v1 pack is registered (tests). */
-  convertCalls = 0;
 
   /** Called from host scope sync when mode/plugin options change (not per frame). */
   syncViewOpts(opts: Readonly<Record<string, string>>): void {
-    this.viewOpts = opts;
-  }
-
-  /** Exposed for tests — deliver must not rebuild or re-read per-view options each frame. */
-  viewOptsSnapshot(): Readonly<Record<string, string>> | null {
-    return this.viewOpts;
+    this.viewOpts = { ...opts };
   }
 
   hasV1Packs(): boolean {
@@ -304,12 +297,7 @@ export class VizV1FrameAdapter {
     }
     const work = this.work;
     convertVizFrameV2ToV1(v2, work.frame, this.workTalkers, maxTalkers);
-    this.convertCalls++;
     for (const slot of this.packs.values()) copyWorkIntoPack(work.frame, slot);
-  }
-
-  resetConvertCallsForTest(): void {
-    this.convertCalls = 0;
   }
 }
 

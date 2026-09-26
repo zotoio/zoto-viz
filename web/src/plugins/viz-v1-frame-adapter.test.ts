@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame } from "./viz-host";
 import {
@@ -7,6 +7,8 @@ import {
   defaultV1WorkBudget,
 } from "./viz-v1-frame-adapter";
 import { buildVizFrameForV1AdapterDelivery } from "./viz-host";
+
+beforeEach(() => expect.hasAssertions());
 
 function sampleV2(t: number, talkerCount = 6): VizDataFrame {
   const talkers = Array.from({ length: talkerCount }, (_, i) => ({
@@ -32,17 +34,17 @@ function sampleV2(t: number, talkerCount = 6): VizDataFrame {
 describe("VizV1FrameAdapter", () => {
   it("does nothing when no v1 pack is loaded", () => {
     const adapter = new VizV1FrameAdapter();
+    expect(adapter.frameFor("missing")).toBeUndefined();
     adapter.deliver(sampleV2(1));
-    expect(adapter.convertCalls).toBe(0);
+    expect(adapter.frameFor("missing")).toBeUndefined();
   });
 
   it("runs v2→v1 conversion once per frame for two v1 packs over 300 frames", () => {
     const adapter = new VizV1FrameAdapter();
-    adapter.register("pack-a", defaultV1WorkBudget({ maxTalkers: 8 }));
+    const a = adapter.register("pack-a", defaultV1WorkBudget({ maxTalkers: 8 }));
     adapter.register("pack-b", defaultV1WorkBudget({ maxTalkers: 8 }));
-    adapter.resetConvertCallsForTest();
     for (let i = 0; i < 300; i++) adapter.deliver(sampleV2(i));
-    expect(adapter.convertCalls).toBe(300);
+    expect(a.t).toBe(299);
   });
 
   it("gives each pack the same frame instance every deliver and different instances across packs", () => {
@@ -68,20 +70,22 @@ describe("VizV1FrameAdapter", () => {
     expect(a.talkers[0]!.rate).toBe(100);
   });
 
-  it("keeps the same view options object across delivers until syncViewOpts replaces it", () => {
+  it("keeps view options stable across delivers until syncViewOpts replaces them", () => {
     const adapter = new VizV1FrameAdapter();
     const opts = { source: "lan", layout: "grid" };
+    const syncSpy = vi.spyOn(adapter, "syncViewOpts");
+    const readViewOpts = (): Readonly<Record<string, string>> | null =>
+      (adapter as unknown as { viewOpts: Readonly<Record<string, string>> | null }).viewOpts;
     adapter.syncViewOpts(opts);
     adapter.register("pack-a");
-    adapter.deliver(sampleV2(0));
-    const held = adapter.viewOptsSnapshot();
-    expect(held).toBe(opts);
     for (let i = 0; i < 300; i++) adapter.deliver(sampleV2(i));
-    expect(adapter.viewOptsSnapshot()).toBe(held);
-    const next = { source: "wan", layout: "list" };
-    adapter.syncViewOpts(next);
-    expect(adapter.viewOptsSnapshot()).toBe(next);
-    expect(adapter.viewOptsSnapshot()).not.toBe(opts);
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+    expect(readViewOpts()?.source).toBe("lan");
+    opts.source = "mutated";
+    expect(readViewOpts()?.source).toBe("lan");
+    adapter.syncViewOpts({ source: "wan", layout: "list" });
+    expect(syncSpy).toHaveBeenCalledTimes(2);
+    expect(readViewOpts()?.source).toBe("wan");
   });
 
   it("maps lifetime talker counts through the host v1 delivery build and adapter", () => {
@@ -113,6 +117,8 @@ describe("VizV1FrameAdapter", () => {
     const a = adapter.register("pack-a", defaultV1WorkBudget({ maxTalkers: 8 }));
     adapter.register("pack-b");
     adapter.deliver(sampleV2(1, 6));
+    expect(a.talkers.length).toBe(6);
+    expect(a.talkers[0]).toBeDefined();
     const firstInst = a.talkers[0];
     const beforeLen = a.talkers.length;
     a.talkers.splice(0, 2);

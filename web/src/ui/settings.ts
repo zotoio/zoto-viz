@@ -1822,10 +1822,6 @@ export class Settings {
     return this.chat.on;
   }
 
-  clearCypherCicPanelPersistOverrides(): void {
-    this.setCypherCicPanelCollapsed(false);
-  }
-
   /** Show or hide the right-hand activity list. Syncs the cog toggle and persists unless `persist` is false. */
   setFeedOn(on: boolean, opts?: { persist?: boolean }): void {
     this.feed.on = on;

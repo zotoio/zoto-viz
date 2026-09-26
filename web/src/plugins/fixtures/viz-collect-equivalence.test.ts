@@ -79,7 +79,7 @@ async function importCollectModule() {
 
 function collectEquivalenceVizFrame(state: ReturnType<typeof buildCollectEquivalenceState>): VizDataFrame {
   return {
-    contract: 1,
+    contract: 2,
     t: state.ts ?? 0,
     dt: 0.016,
     audio: 0,
@@ -131,7 +131,7 @@ describe("viz collector rewrite allocation", () => {
     }
     const state = buildCollectEquivalenceState(300);
     const frame = {
-      contract: 1 as const,
+      contract: 2 as const,
       t: 0,
       dt: 0,
       audio: 0,
