@@ -42,7 +42,6 @@ import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
 import { Mosaic } from "../graph/mosaic";
-import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { RenderHost } from "../graph/render-host";
 import {
   applyPluginConfigs,
