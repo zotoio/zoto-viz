@@ -343,6 +343,19 @@
             "type": "object",
             "additionalProperties": true
           }
+        },
+        "workBudget": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Per-frame work caps (#45 count budgets v2; marble-run frontend/work-budget.ts).",
+          "properties": {
+            "maxDrawCalls": { "type": "integer", "minimum": 1 },
+            "maxTriangles": { "type": "integer", "minimum": 1 },
+            "maxInstances": { "type": "integer", "minimum": 1 },
+            "maxGpuBytes": { "type": "integer", "minimum": 1 },
+            "maxSimStepsPerFrame": { "type": "integer", "minimum": 1 },
+            "maxPacketsPerFrame": { "type": "integer", "minimum": 1 }
+          }
         }
       }
     },

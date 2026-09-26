@@ -31,13 +31,15 @@ from . import plugin_backend as pb
 from . import plugin_sky as psky
 from . import plugin_instances as pins
 from . import plugin_zip as pz
+from . import plugin_manifest_block as pmb
+from .plugin_schema import PLUGIN_SCHEMA_PATH, deref_schema, load_plugin_schema
 import yaml
 from aiohttp import web
 
 DIR = paths.plugins_dir()
 CONSENT_FILE = paths.user_dir() / "plugin-consent.yml"
 REPO = Path(__file__).resolve().parents[1]
-SCHEMA_FILE = REPO / "schema" / "plugin.schema.json"
+SCHEMA_FILE = PLUGIN_SCHEMA_PATH
 SUFFIXES = {".yml", ".yaml"}
 ALLOWED_CAPS = frozenset({
     "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
@@ -55,29 +57,6 @@ _scan_builds = 0
 _WATCH_NAMES = frozenset({"plugin.yml", "plugin.yaml", "visualisation.yml", "visualisation.yaml"})
 _WATCH_SUFFIX = frozenset({".ts", ".tsx", ".js", ".mjs", ".glsl", ".py", ".zip", ".yml", ".yaml"})
 _WATCH_SKIP_DIRS = frozenset({"node_modules", "__pycache__", ".git"})
-_SCHEMA_KEYS = frozenset({"$ref", "$schema", "$id", "title", "description"})
-
-
-def deref_schema(raw: dict[str, Any], origin: Path) -> dict[str, Any]:
-    """Follow a one-line sibling `$ref` shim (view/agent-plugin → plugin.schema.json)."""
-    ref = raw.get("$ref")
-    if (
-        not isinstance(ref, str)
-        or not ref.endswith(".json")
-        or "://" in ref
-        or "#" in ref
-    ):
-        return raw
-    if any(key not in _SCHEMA_KEYS for key in raw):
-        return raw
-    target = (origin.parent / ref).resolve()
-    if target.parent != origin.parent.resolve() or not target.is_file():
-        raise ValueError(f"unresolved schema $ref {ref!r}")
-    loaded = yaml.safe_load(target.read_text(encoding="utf-8"))
-    if not isinstance(loaded, dict):
-        raise ValueError(f"{target.name} is not a mapping")
-    return loaded
-
 
 def _plugin_home(path: Path) -> Path:
     if path.name in ("plugin.yml", "plugin.yaml"):
@@ -480,10 +459,7 @@ _validator = None
 
 
 def _schema() -> dict[str, Any]:
-    raw = yaml.safe_load(SCHEMA_FILE.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError(f"{SCHEMA_FILE} is not a mapping")
-    return deref_schema(raw, SCHEMA_FILE)
+    return load_plugin_schema()
 
 
 def validator():
@@ -531,21 +507,118 @@ def _take_key(keys: set[str], raw: Any) -> str:
     return key
 
 
-def _check_semantics(doc: dict[str, Any]) -> None:
-    keys: set[str] = set()
-    for opt in doc.get("options") or []:
-        if not isinstance(opt, dict):
+def _settings_from_doc(doc: dict[str, Any]) -> tuple[list[Any], str | None]:
+    viz = doc.get("visualisation") if isinstance(doc.get("visualisation"), dict) else {}
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    viz_settings = viz.get("settings") if isinstance(viz.get("settings"), dict) else {}
+    merged = {**viz_settings, **settings}
+    presets = merged.get("presets")
+    if presets is None:
+        presets = doc.get("presets") or viz.get("presets")
+    preset_field = merged.get("presetField") or doc.get("presetField") or viz.get("presetField")
+    pf = str(preset_field).strip() if preset_field else None
+    if not isinstance(presets, list):
+        return [], pf
+    return presets, pf
+
+
+def _config_field_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    viz = doc.get("visualisation") if isinstance(doc.get("visualisation"), dict) else {}
+    raw = viz.get("config")
+    if raw is None:
+        raw = doc.get("config")
+    rows: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                rows.append(item)
+    elif isinstance(raw, dict):
+        for key, item in raw.items():
+            if isinstance(item, dict):
+                row = dict(item)
+                row.setdefault("key", key)
+                rows.append(row)
+    return rows
+
+
+def _config_field_keys(doc: dict[str, Any]) -> set[str]:
+    return {str(f.get("key") or "") for f in _config_field_rows(doc) if f.get("key")}
+
+
+def _check_plugin_settings(doc: dict[str, Any]) -> None:
+    presets, preset_field = _settings_from_doc(doc)
+    if presets and not preset_field:
+        raise ValueError("settings.presetField is required when presets are declared")
+    keys = _config_field_keys(doc)
+    if preset_field and preset_field not in keys:
+        raise ValueError(f"settings.presetField {preset_field!r} is not a config field")
+    viz = doc.get("visualisation") if isinstance(doc.get("visualisation"), dict) else {}
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    viz_settings = viz.get("settings") if isinstance(viz.get("settings"), dict) else {}
+    merged_hud = {**(viz_settings.get("hud") if isinstance(viz_settings.get("hud"), dict) else {}),
+                  **(settings.get("hud") if isinstance(settings.get("hud"), dict) else {})}
+    label_fields = merged_hud.get("labelFields")
+    if isinstance(label_fields, list):
+        for lf in label_fields:
+            if isinstance(lf, str) and lf.strip() and lf.strip() not in keys:
+                raise ValueError(f"settings.hud.labelFields references unknown config key {lf!r}")
+    if isinstance(presets, list):
+        for preset in presets:
+            if not isinstance(preset, dict):
+                continue
+            pid = str(preset.get("id") or "")
+            if pid == "custom":
+                raise ValueError("preset id 'custom' is reserved")
+            values = preset.get("values")
+            if isinstance(values, dict):
+                for vk in values:
+                    if str(vk) not in keys:
+                        raise ValueError(f"preset {pid!r} references unknown config key {vk!r}")
+    for field in _config_field_rows(doc):
+        key = str(field.get("key") or "")
+        rr = field.get("randomRange")
+        if rr is None:
             continue
+        if field.get("type") != "number":
+            raise ValueError(f"config field {key!r} randomRange is only valid on number fields")
+        lo, hi = field.get("min"), field.get("max")
+        if not isinstance(lo, (int, float)) or not isinstance(hi, (int, float)):
+            raise ValueError(f"config field {key!r} with randomRange requires min and max")
+        if not isinstance(rr, list) or len(rr) < 2:
+            raise ValueError(f"config field {key!r} randomRange must be a two-number range")
+        r0, r1 = rr[0], rr[1]
+        if not isinstance(r0, (int, float)) or not isinstance(r1, (int, float)):
+            raise ValueError(f"config field {key!r} randomRange must be numeric")
+        if r0 < lo or r1 > hi or r0 > r1:
+            raise ValueError(
+                f"config field {key!r} randomRange [{r0}, {r1}] outside min..max [{lo}, {hi}]"
+            )
+
+
+def _option_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Legacy option lists from plugin.yml and/or visualisation.yml."""
+    rows: list[dict[str, Any]] = []
+    viz = doc.get("visualisation") if isinstance(doc.get("visualisation"), dict) else {}
+    for raw in (doc.get("options"), viz.get("options")):
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict):
+                    rows.append(item)
+    return rows
+
+
+def _check_semantics(doc: dict[str, Any], *, include_settings: bool = False) -> None:
+    keys: set[str] = set()
+    for opt in _option_rows(doc):
         key = _take_key(keys, opt)
         vals = [v[0] for v in _pairs(opt.get("values"))]
         default = str(opt.get("default") or "")
         if vals and default not in vals:
             raise ValueError(f"option {key!r} default {default!r} is not in values")
-    for field in doc.get("config") or []:
-        if not isinstance(field, dict):
-            continue
+    for field in _config_field_rows(doc):
         key = _take_key(keys, field)
-        if field.get("type") == "select":
+        ftype = field.get("type") or ("select" if field.get("values") else "text")
+        if ftype == "select":
             vals = [v[0] for v in _pairs(field.get("values"))]
             default = field.get("default")
             if default is not None and vals and str(default) not in vals:
@@ -553,6 +626,8 @@ def _check_semantics(doc: dict[str, Any]) -> None:
         lo, hi = field.get("min"), field.get("max")
         if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo > hi:
             raise ValueError(f"config {key!r} min is greater than max")
+    if include_settings:
+        _check_plugin_settings(doc)
     caps = doc.get("capabilities") or []
     needs_viz = any(c in caps for c in ("viz.read", "viz.write"))
     viz = doc.get("viz")
@@ -586,6 +661,13 @@ def _check_semantics(doc: dict[str, Any]) -> None:
             raise ValueError("viz.ubo must match the fixed ZotoVizData std140 layout")
 
 
+def _schema_error_line(err: Any, prefix: str = "") -> str:
+    loc = ".".join(str(p) for p in err.path) or "(root)"
+    msg = str(err.message).split("\n", 1)[0].strip()
+    head = f"{prefix} {loc}" if prefix else loc
+    return f"{head}: {msg}"
+
+
 def validate_doc(doc: Any) -> dict[str, Any]:
     if not isinstance(doc, dict):
         raise ValueError("plugin must be a mapping")
@@ -593,11 +675,63 @@ def validate_doc(doc: Any) -> dict[str, Any]:
     if errors:
         bits = []
         for err in errors:
-            loc = ".".join(str(p) for p in err.path) or "(root)"
-            bits.append(f"{loc}: {err.message}")
+            bits.append(_schema_error_line(err))
         raise ValueError("; ".join(bits))
-    _check_semantics(doc)
+    _check_semantics(doc, include_settings=False)
     return doc
+
+
+_viz_validator = None
+
+
+def _visualisation_validator():
+    global _viz_validator
+    if _viz_validator is None:
+        from jsonschema import Draft202012Validator
+
+        schema = _schema()
+        sub = {**schema["$defs"]["visualisation"], "$defs": schema["$defs"]}
+        _viz_validator = Draft202012Validator(sub)
+    return _viz_validator
+
+
+class VisualisationManifestError(ValueError):
+    """visualisation.yml failed manifest schema (may carry unknown top-level keys)."""
+
+    def __init__(self, message: str, *, unknown_keys: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.unknown_keys = list(unknown_keys or [])
+
+
+def _validate_visualisation_yaml(viz: dict[str, Any]) -> None:
+    """JSON Schema for visualisation.yml (legacy list ``options`` checked in semantics)."""
+    opts = viz.get("options")
+    errors = sorted(_visualisation_validator().iter_errors(viz), key=lambda e: list(e.path))
+    if errors:
+        unknown = pmb.unknown_keys_from_schema_errors(errors)
+        if unknown and all(getattr(e, "validator", None) == "additionalProperties" for e in errors):
+            raise VisualisationManifestError(
+                "; ".join(_schema_error_line(e, "visualisation.yml") for e in errors),
+                unknown_keys=unknown,
+            )
+        bits = []
+        for err in errors:
+            bits.append(_schema_error_line(err, "visualisation.yml"))
+        raise ValueError("; ".join(bits))
+    if isinstance(opts, list):
+        keys: set[str] = set()
+        for opt in opts:
+            if not isinstance(opt, dict):
+                continue
+            key = _take_key(keys, opt)
+            vals = [v[0] for v in _pairs(opt.get("values"))]
+            default = str(opt.get("default") or "")
+            if vals and default not in vals:
+                raise ValueError(f"visualisation.yml option {key!r} default {default!r} is not in values")
+
+
+def _validate_merged_catalog_row(row: dict[str, Any]) -> None:
+    _check_semantics(row, include_settings=True)
 
 
 def load_file(path: Path) -> dict[str, Any]:
@@ -606,6 +740,31 @@ def load_file(path: Path) -> dict[str, Any]:
     except (OSError, yaml.YAMLError) as e:
         raise ValueError(f"could not read {path}: {e}") from e
     return validate_doc(raw)
+
+
+def settings_check(staging_dir: Path) -> dict[str, Any]:
+    """Pure merged-tree validation for install staging (#35 check list hook).
+
+    No filesystem writes beyond reading ``plugin.yml`` / ``visualisation.yml`` under
+    ``staging_dir``. Safe to run on a temp unpack before commit.
+    """
+    return validate_plugin_home(staging_dir)
+
+
+def validate_plugin_home(home: Path) -> dict[str, Any]:
+    """Validate plugin.yml + visualisation.yml the same way catalog scan does."""
+    errors: list[dict[str, str]] = []
+    yml = home / "plugin.yml"
+    doc = load_file(yml)
+    rel = str(yml)
+    merged = _attach_visualisation({**doc}, home, errors, rel, blocked=None)
+    if errors:
+        raise ValueError(errors[0]["error"])
+    if merged is None:
+        raise ValueError(f"{doc.get('id', '?')}: invalid plugin")
+    if not isinstance(merged.get("visualisation"), dict):
+        _validate_merged_catalog_row(merged)
+    return merged
 
 
 def _visualisation_doc(home: Path) -> dict[str, Any] | None:
@@ -629,7 +788,8 @@ def _attach_visualisation(
     home: Path,
     errors: list[dict[str, str]],
     rel: str,
-) -> dict[str, Any]:
+    blocked: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     try:
         viz = _visualisation_doc(home)
     except ValueError as e:
@@ -637,7 +797,32 @@ def _attach_visualisation(
         return row
     if viz is None:
         return row
-    return {**row, "visualisation": viz}
+    try:
+        _validate_visualisation_yaml(viz)
+    except VisualisationManifestError as e:
+        pid = str(row.get("id") or home.name)
+        if blocked is not None and e.unknown_keys:
+            blocked.append(pmb.blocked_catalog_row(
+                plugin_id=pid,
+                name=str(row.get("name") or pid),
+                file=rel,
+                reason_code=pmb.REASON_MANIFEST_UNKNOWN_KEYS,
+                message=pmb.message_unknown_manifest_keys(pid, e.unknown_keys),
+                keys=e.unknown_keys,
+            ))
+        else:
+            errors.append({"file": rel, "error": str(e)})
+        return None
+    except ValueError as e:
+        errors.append({"file": rel, "error": str(e)})
+        return None
+    merged = {**row, "visualisation": viz}
+    try:
+        _validate_merged_catalog_row(merged)
+    except ValueError as e:
+        errors.append({"file": rel, "error": f"{row.get('id', '?')}: {e}"})
+        return None
+    return merged
 
 
 def _typesafe_doc(home: Path) -> dict[str, Any] | None:
@@ -739,12 +924,18 @@ def _scan_roots(root: Path | None) -> tuple[Path, Path, str]:
     return root, root, "trees"
 
 
-def _scan_payload(dir_path: Path, plugins: list[dict[str, Any]], errors: list[dict[str, str]]) -> dict[str, Any]:
+def _scan_payload(
+    dir_path: Path,
+    plugins: list[dict[str, Any]],
+    errors: list[dict[str, str]],
+    blocked: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "dir": str(dir_path),
         "schema": str(SCHEMA_FILE),
         "plugins": plugins,
         "errors": errors,
+        "blocked": list(blocked or []),
         "pythonService": python_enabled(),
     }
 
@@ -822,6 +1013,7 @@ def _copy_scan(result: dict[str, Any]) -> dict[str, Any]:
         **result,
         "plugins": [dict(p) for p in (result.get("plugins") or [])],
         "errors": [dict(e) for e in (result.get("errors") or [])],
+        "blocked": [dict(b) for b in (result.get("blocked") or [])],
     }
 
 
@@ -872,12 +1064,35 @@ def _catalog_row(
     home: Path,
     errors: list[dict[str, str]],
     rel: str,
+    blocked: list[dict[str, Any]] | None = None,
     **more: Any,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
+    newer = pmb.pack_sdk_newer_than_host(doc)
+    if newer is not None and blocked is not None:
+        pid = str(doc.get("id") or home.name)
+        blocked.append(pmb.blocked_catalog_row(
+            plugin_id=pid,
+            name=str(doc.get("name") or pid),
+            file=rel,
+            reason_code=pmb.REASON_MANIFEST_NEWER_SDK,
+            message=pmb.message_newer_sdk(pid, newer),
+            pack_sdk=newer,
+        ))
+        return None
     merged = {**doc, **more, **extra}
     kind = consent_kind(merged)
     sky = psky.catalog(merged, home, allowed=consented(merged))
-    row = _attach_visualisation({**merged, "consent": kind, **sky}, home, errors, rel)
+    row = _attach_visualisation(
+        {**merged, "consent": kind, **sky}, home, errors, rel, blocked,
+    )
+    if row is None:
+        return None
+    if not isinstance(row.get("visualisation"), dict):
+        try:
+            _validate_merged_catalog_row(row)
+        except ValueError as e:
+            errors.append({"file": rel, "error": f"{doc.get('id', '?')}: {e}"})
+            return None
     return _attach_typesafe(row, home, errors, rel)
 
 
@@ -890,6 +1105,7 @@ def _scan_zips(
 ) -> dict[str, Any]:
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
+    blocked: list[dict[str, Any]] = []
     seen: set[str] = set()
     owned = owned_ids or set()
     for zip_path in _zip_files(zips_dir):
@@ -920,18 +1136,21 @@ def _scan_zips(
         extra = _attach_runtime(doc, yml, errors, rel, sha256=unpacked.sha256, parts=unpacked.parts)
         if extra is None:
             continue
-        plugins.append(_catalog_row(
-            doc, extra, dest, errors, rel,
+        row = _catalog_row(
+            doc, extra, dest, errors, rel, blocked,
             file=str(yml), zip=rel, sha256=unpacked.sha256, parts=list(unpacked.parts),
             origin=origin,
-        ))
-    return _scan_payload(zips_dir, plugins, errors)
+        )
+        if row is not None:
+            plugins.append(row)
+    return _scan_payload(zips_dir, plugins, errors, blocked)
 
 
 def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
     files = plugin_paths(root)
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
+    blocked: list[dict[str, Any]] = []
     seen: set[str] = set()
     for path in files:
         rel = str(path)
@@ -954,8 +1173,10 @@ def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
         if origin:
             more["origin"] = origin
             more["sha256"] = _plugin_sha(path, None)
-        plugins.append(_catalog_row(doc, extra, home, errors, rel, **more))
-    return _scan_payload(root, plugins, errors)
+        row = _catalog_row(doc, extra, home, errors, rel, blocked, **more)
+        if row is not None:
+            plugins.append(row)
+    return _scan_payload(root, plugins, errors, blocked)
 
 
 def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str, Any]:
@@ -966,17 +1187,25 @@ def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str,
     local_dir = paths.plugin_local_dir()
     local_plugins: list[dict[str, Any]] = []
     local_errors: list[dict[str, str]] = []
+    local_blocked: list[dict[str, Any]] = []
     if local_dir.is_dir():
         local = _scan_zips(
             local_dir, paths.plugin_local_runtime_dir(), owned_ids=seen, origin="local",
         )
         local_plugins = list(local["plugins"])
         local_errors = list(local["errors"])
+        local_blocked = list(local.get("blocked") or [])
     catalog_dir = zips_dir if zips_dir.is_dir() else src_dir
+    blocked = (
+        list(src.get("blocked") or [])
+        + list(zipped.get("blocked") or [])
+        + local_blocked
+    )
     return _scan_payload(
         catalog_dir,
         pins.attach(list(src["plugins"]) + list(zipped["plugins"]) + local_plugins),
         list(src["errors"]) + list(zipped["errors"]) + local_errors,
+        blocked,
     )
 
 
@@ -1039,6 +1268,9 @@ async def api_consent(req: web.Request) -> web.Response:
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=400)
     await asyncio.to_thread(lambda: hooks.sync(scan().get("plugins") or [], allow=python_allow))
+    from . import live
+    pid = str(found.get("id") or "")
+    live.queue_patch({"pluginConsent": {"id": pid, "kind": kind}})
     return web.json_response({"ok": True, "kind": kind, "needed": True})
 
 
