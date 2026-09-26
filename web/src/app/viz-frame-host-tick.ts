@@ -8,8 +8,8 @@ export type VizFrameHostPerFrameInput = {
   scope: VizFrameScopeCache;
 };
 
-const perFrameTickScratch: { bind: ReturnType<VizFrameScopeCache["readBindForFrameTick"]>; packOpts: Record<string, string> } = {
-  bind: { source: "", layout: "" },
+const perFrameTickScratch: { bind: SourceBind; packOpts: Record<string, string> } = {
+  bind: {},
   packOpts: {},
 };
 
