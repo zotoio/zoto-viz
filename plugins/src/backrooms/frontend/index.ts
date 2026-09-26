@@ -21,11 +21,8 @@ declare const zoto: {
 const DEFAULT_ASPECT = 16 / 9;
 
 function stageAspect(tick: VizPresentTick): number {
-  const fromTick = (tick as VizPresentTick & { aspect?: number }).aspect;
+  const fromTick = tick.aspect;
   if (typeof fromTick === "number" && fromTick > 0 && Number.isFinite(fromTick)) return fromTick;
-  if (typeof innerWidth === "number" && innerWidth > 0) {
-    return innerWidth / Math.max(1, innerHeight);
-  }
   return DEFAULT_ASPECT;
 }
 

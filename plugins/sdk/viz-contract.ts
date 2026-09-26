@@ -24,6 +24,8 @@ export interface VizPresentTick {
   tileId: string;
   /** Optional secondary clock in seconds (e.g. sky shader time); omit when unused. */
   pluginClock?: number;
+  /** Host stage viewport width/height for OSD layout; omit when unused. */
+  aspect?: number;
 }
 
 export interface VizPacketSample {
