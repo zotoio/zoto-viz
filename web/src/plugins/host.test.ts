@@ -86,11 +86,11 @@ describe("PluginSandbox", () => {
     const iframe = document.querySelector("iframe")!;
     const cw = iframe.contentWindow!;
     const spy = vi.spyOn(cw, "postMessage");
-    box.present({ frameMs: 1, tileId: "plugin:demo" });
+    box.deliverPresentTick(1, "plugin:demo");
     expect(spy).toHaveBeenCalled();
     box.unload();
     spy.mockClear();
-    box.present({ frameMs: 2, tileId: "plugin:demo" });
+    box.deliverPresentTick(2, "plugin:demo");
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
@@ -100,7 +100,7 @@ describe("PluginSandbox", () => {
     await box.load("demo", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
     const cw = document.querySelector("iframe")!.contentWindow!;
     const spy = vi.spyOn(cw, "postMessage");
-    box.present({ frameMs: 1, tileId: "x" });
+    box.deliverPresentTick(1, "x");
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
     box.unload();

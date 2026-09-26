@@ -479,9 +479,11 @@ def api_sky(req: web.Request) -> web.StreamResponse:
 _ASSET_SUFFIX = frozenset({
     ".mp3", ".wav", ".ogg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".md", ".txt",
 })
+_ASSET_DIR = "assets"
+_MAX_ASSET_BYTES = 16 * 1024 * 1024
 
 
-def _plugin_asset_root(row: dict[str, Any]) -> Path | None:
+def _plugin_pack_home(row: dict[str, Any]) -> Path | None:
     raw = str(row.get("file") or "").strip()
     if not raw:
         return None
@@ -491,48 +493,115 @@ def _plugin_asset_root(row: dict[str, Any]) -> Path | None:
     return _plugin_home(path)
 
 
+def _plugin_enabled_for_serve(row: dict[str, Any]) -> bool:
+    if row.get("disabled"):
+        return False
+    if str(row.get("origin") or "zip").strip().lower() == "src":
+        return True
+    if not needs_review(row):
+        return True
+    kind = consent_kind(row)
+    return kind in {"reviewed", "authored"}
+
+
+def _asset_content_type(suffix: str) -> str:
+    suf = suffix.lower()
+    if suf == ".mp3":
+        return "audio/mpeg"
+    if suf in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    if suf == ".png":
+        return "image/png"
+    if suf == ".webp":
+        return "image/webp"
+    if suf == ".gif":
+        return "image/gif"
+    if suf == ".wav":
+        return "audio/wav"
+    if suf == ".ogg":
+        return "audio/ogg"
+    return "application/octet-stream"
+
+
+def _parse_asset_rel(raw: str) -> Path | None:
+    from urllib.parse import unquote
+
+    rel = unquote(raw or "").strip().lstrip("/")
+    if not rel:
+        return None
+    safe = Path(rel)
+    if safe.is_absolute():
+        return None
+    for part in safe.parts:
+        if part in ("", ".", "..") or part.startswith("."):
+            return None
+    return safe
+
+
+def _plugin_assets_root(row: dict[str, Any]) -> Path | None:
+    home = _plugin_pack_home(row)
+    if not home:
+        return None
+    assets = (home / _ASSET_DIR).resolve()
+    if not assets.is_dir():
+        return None
+    return assets
+
+
+def _file_asset_etag(path: Path) -> str:
+    import hashlib
+
+    st = path.stat()
+    digest = hashlib.sha256(f"{st.st_size}:{st.st_mtime_ns}".encode()).hexdigest()[:32]
+    return f'"{digest}"'
+
+
 def api_asset(req: web.Request) -> web.StreamResponse:
-    """Serve a pack-local asset after consent (src plugins are always allowed)."""
+    """Serve files under ``assets/`` after review (no autoconsent on GET)."""
     pid = req.match_info["id"]
-    rel = str(req.match_info.get("path") or "")
+    rel_raw = str(req.match_info.get("path") or "")
     row = _plugin_row(pid)
     if not row:
         return web.json_response({"error": "unknown plugin"}, status=404)
-    origin = str(row.get("origin") or "zip").strip().lower()
-    if origin != "src" and not consented(row):
+    if not _plugin_enabled_for_serve(row):
         err = str(row.get("sky_error") or psky.AWAITING_REVIEW)
         return web.json_response({"error": err}, status=403)
-    root = _plugin_asset_root(row)
+    root = _plugin_assets_root(row)
     if not root:
-        return web.json_response({"error": "no plugin home"}, status=404)
-    root_resolved = root.resolve()
-    safe = Path(rel)
-    if safe.is_absolute() or ".." in safe.parts:
+        return web.json_response({"error": "no assets"}, status=404)
+    safe = _parse_asset_rel(rel_raw)
+    if safe is None:
         return web.json_response({"error": "invalid path"}, status=400)
     target = (root / safe).resolve()
     try:
-        if not target.is_relative_to(root_resolved):
+        if not target.is_relative_to(root):
             return web.json_response({"error": "invalid path"}, status=400)
     except AttributeError:
-        if not str(target).startswith(str(root_resolved)):
+        if not str(target).startswith(str(root)):
             return web.json_response({"error": "invalid path"}, status=400)
     if target.suffix.lower() not in _ASSET_SUFFIX:
         return web.json_response({"error": "unsupported type"}, status=400)
+    if target.is_dir():
+        return web.json_response({"error": "not found"}, status=404)
     if not target.is_file():
         return web.json_response({"error": "not found"}, status=404)
-    ctype = "application/octet-stream"
-    suf = target.suffix.lower()
-    if suf == ".mp3":
-        ctype = "audio/mpeg"
-    elif suf in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
-        ctype = f"image/{suf.lstrip('.')}"
-    body = target.read_bytes()
-    resp = web.Response(body=body, content_type=ctype)
+    try:
+        size = target.stat().st_size
+    except OSError:
+        return web.json_response({"error": "not found"}, status=404)
+    if size > _MAX_ASSET_BYTES:
+        return web.json_response({"error": "too large"}, status=413)
+    pack_digest = str(row.get("sha256") or row.get("shader_sha256") or "")
+    query = getattr(getattr(req, "rel_url", None), "query", None) or {}
+    want = query.get("h") or query.get("hash") or query.get("v") if hasattr(query, "get") else None
+    ctype = _asset_content_type(target.suffix)
+    resp = web.FileResponse(path=target, headers={"Content-Type": ctype})
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    digest = str(row.get("sha256") or row.get("shader_sha256") or "")
-    if digest:
-        resp.headers["ETag"] = f'"{digest}"'
-    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    resp.headers["ETag"] = _file_asset_etag(target)
+    if want and pack_digest and want == pack_digest:
+        resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    else:
+        resp.headers["Cache-Control"] = "private, no-cache"
     return resp
 
 
@@ -630,6 +699,8 @@ def _check_semantics(doc: dict[str, Any]) -> None:
             raise ValueError("viz.idle must be { fixture: host } or an inline demo seed")
     elif isinstance(viz, dict) and viz.get("graphWalk") is not False:
         raise ValueError("viz.graphWalk must be false when viz block is present")
+    if isinstance(viz, dict) and viz.get("presentTick") is True and "viz.write" not in caps:
+        raise ValueError("viz.presentTick requires viz.write")
     if isinstance(viz, dict) and needs_viz and viz.get("ubo") is not None:
         ubo = viz.get("ubo")
         if ubo != {

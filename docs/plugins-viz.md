@@ -13,6 +13,7 @@ capabilities:
   - viz.write   # writeBuffer / writeUniform / writeParticles
 viz:
   graphWalk: false          # required — plugins never walk the full graph
+  presentTick: false        # opt-in: host sends VizPresentTick on rAF (requires viz.write)
   maxBuffers: 4             # reserved Float32 slots (1..8)
   maxBufferFloats: 64       # per-slot float cap (4..256)
   maxParticles: 512         # hard particle record cap (0 disables particles)
@@ -59,6 +60,34 @@ Each frame the host sends a **decimated** `VizDataFrame` (see
 
 Plugins must **not** request or traverse the full device graph. Use
 `graph.read` only when you need the legacy `{id, rate, role}` tick.
+
+Copy or type-only-import `plugins/sdk/viz-contract.ts` in packs. The host
+advertises `VIZ_CONTRACT_VERSION` on sandbox `init` (`contractVersion`).
+
+### Present tick (opt-in, `viz.write`)
+
+When `viz.presentTick: true`, the host sends one `VizPresentTick` per sandbox
+per display frame (mosaic panes share one iframe). Fields:
+
+| Field | Meaning |
+| --- | --- |
+| `frameMs` | rAF timestamp (ms) |
+| `tileId` | informational mosaic / view mode id |
+| `pluginClock?` | optional secondary clock (e.g. sky time in seconds) |
+
+```ts
+zoto.onPresent = (tick) => {
+  zoto.writeBuffer(0, [tick.pluginClock ?? 0]);
+};
+```
+
+Packs without `presentTick` keep the legacy host per-frame UBO drive until
+they opt in. `viz.presentTick` without `viz.write` is rejected at catalog
+validate time.
+
+Pack media files live under `assets/` and are served by the **host only** at
+`GET /api/plugins/<id>/asset/<path>` (reviewed / src). The sandbox CSP blocks
+`connect-src`, so the iframe cannot fetch these URLs.
 
 ## Writes (plugin → host)
 
@@ -110,7 +139,7 @@ budget.
 | `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
 | `plugins/src/stereo-gram/` | Magic Eye autostereogram — eight morphing objects, a six-bin mic analyser, and local-model AI scenes (`POST /api/ai/stereo`) while the header AI switch is on |
 | `plugins/src/cypher-cic/` | Cypherpunk CIC wall — neon holodeck infograph of SYS + NET, center-hero mosaic |
-| `plugins/src/backrooms/` | Level 0 camcorder footage — the host runs `frontend/director.ts` on the sky clock (one unbroken take per episode, default 120 s: rule-made encounters in a walled pillar maze, freeze then flee along open halls, the last chase ends in the catch and drag) and writes camera, creature, walled edges and look options to slots 0–1; every knob is a view setting (`visualisation.yml` config, MCP `set_plugin`); CC0 footsteps, breathing, screams, heartbeat, tube buzz, creature roars and chase screams |
+| `plugins/src/backrooms/` | Level 0 camcorder footage — `presentTick` moves `frontend/director.ts` into the sandbox; until then the host legacy drive writes slots 0–1 |
 
 Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
 with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,

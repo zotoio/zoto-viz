@@ -16,11 +16,11 @@ import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
-import {
-  backroomsOptions as backroomsOptionsNow,
-  parseBackroomsOptions,
-  setBackroomsOptions,
-} from "../../../plugins/src/backrooms/frontend/director";
+import { backroomsOptions as backroomsOptionsNow } from "../../../plugins/src/backrooms/frontend/director";
+import "../plugins/viz-write-host-drives";
+import { runLegacyVizWriteDrive } from "../plugins/viz-write-host-drive";
+import { syncBackroomsDirectorOptions } from "../plugins/viz-write-host-drives";
+import { deliverPluginPresentTick, type PresentDriveBinding } from "../plugins/viz-present-tick";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -93,7 +93,6 @@ import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisatio
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
-import { deliverPluginPresentTicks } from "../plugins/viz-present-tick";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
@@ -345,24 +344,22 @@ const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
+let activePluginSpec: PluginView | null = null;
+let presentDrive: PresentDriveBinding | null = null;
+
+function refreshPluginDriveState(spec: PluginView | null, modeId: string): void {
+  activePluginSpec = spec;
+  const tileId = mosaic?.on ? (mosaic.focusedId || modeId) : modeId;
+  presentDrive = spec
+    ? { sandbox, contract: spec.viz, tileId, pluginClock: () => scene.skyTime() }
+    : null;
+}
+
 addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
-  const active = mode.pluginId
-    ? pluginSpecs.find((p) => p.id === mode.pluginId) ?? null
-    : null;
-  deliverPluginPresentTicks({
-    sandbox,
-    contract: active?.viz,
-    frameMs: ts,
-    pluginClock: scene.skyTime(),
-    mosaicOn: !!mosaic?.on,
-    tileIds: mosaic?.on ? mosaic.tileIds : [],
-    stageTileId: modeSel.value,
-    activePluginId: mode.pluginId ?? "",
-    modeForTile: (tileId) => modeById(tileId),
-  });
+  deliverPluginPresentTick(presentDrive, ts);
   if (mode.pluginId === "backrooms") {
     const br = backroomsViewOptions();
     pluginSfx.setMasterVolume(br.volume);
@@ -371,16 +368,11 @@ addPresentListener((ts) => {
 });
 addPresentListener(markPresent);
 let brOptsSrc: Record<string, string> | null = null;
-let brOptsJson = "";
 /** Backrooms view config (UI sliders / toggles, MCP set_plugin) → director options, re-parsed only when they change. */
-function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
+function backroomsViewOptions(): ReturnType<typeof backroomsOptionsNow> {
   if (brOptsSrc !== currentOpts) {
     brOptsSrc = currentOpts;
-    const json = JSON.stringify(currentOpts);
-    if (json !== brOptsJson) {
-      brOptsJson = json;
-      setBackroomsOptions(parseBackroomsOptions(currentOpts));
-    }
+    syncBackroomsDirectorOptions(currentOpts);
   }
   return backroomsOptionsNow();
 }
@@ -388,6 +380,18 @@ let stereoBins: number[] = [];
 let stereoBinsAt = 0;
 scene.afterLook = () => {
   const mode = modeById(modeSel.value);
+  if (
+    vizWriter
+    && runLegacyVizWriteDrive(activePluginSpec, {
+      skyTime: () => scene.skyTime(),
+      aspect: () => innerWidth / Math.max(1, innerHeight),
+      writer: vizWriter,
+      syncUbo: () => scene.setPluginUboBuffer(vizWriter!.ubo),
+    })
+  ) {
+    scene.setHeard(false);
+    return;
+  }
   if (mode.pluginId !== "stereo-gram" || !vizWriter) {
     scene.setHeard(false);
     return;
@@ -425,6 +429,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
     vizHud.resetSkipBaseline();
   }
   if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
+  refreshPluginDriveState(spec ?? activePluginSpec, modeSel.value);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
@@ -776,6 +781,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   liveMode = m.id;
 
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
+  refreshPluginDriveState(spec, m.id);
   const paneSpec = skySpecForMode(m.id, spec);
   const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
   document.body.classList.toggle("stage-only", skyStage);

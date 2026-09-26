@@ -1,5 +1,6 @@
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizPresentTick, VizUniformValue } from "./viz-host";
+import { VIZ_CONTRACT_VERSION } from "./viz-host";
 
 const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
@@ -23,7 +24,14 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "log"; payload: string };
 
 export type ParentMsg =
-  | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
+  | {
+    source: "zoto-viz-host";
+    type: "init";
+    caps: string[];
+    config: Record<string, string>;
+    viz?: VizPluginContract;
+    contractVersion: number;
+  }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
   | { source: "zoto-viz-host"; type: "present"; tick: VizPresentTick }
@@ -73,6 +81,8 @@ export class PluginSandbox {
   private iframe: HTMLIFrameElement | null = null;
   private caps: string[] = [];
   private vizContract: VizPluginContract | undefined;
+  private readonly presentTickPayload: VizPresentTick = { frameMs: 0, tileId: "" };
+  private lastPresentFrameMs = -1;
   handlers: PluginHostHandlers = {};
 
   constructor() {
@@ -82,6 +92,7 @@ export class PluginSandbox {
   unload(): void {
     this.iframe?.remove();
     this.iframe = null;
+    this.lastPresentFrameMs = -1;
   }
 
   async load(
@@ -107,7 +118,14 @@ export class PluginSandbox {
     document.body.appendChild(iframe);
     this.iframe = iframe;
     this.iframe.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "init", caps: this.caps, config, viz } satisfies ParentMsg,
+      {
+        source: "zoto-viz-host",
+        type: "init",
+        caps: this.caps,
+        config,
+        viz,
+        contractVersion: VIZ_CONTRACT_VERSION,
+      } satisfies ParentMsg,
       "*",
     );
   }
@@ -141,9 +159,19 @@ export class PluginSandbox {
     );
   }
 
-  /** {@link VizPresentTick} for packs with ``viz.presentTick`` in plugin.yml. */
-  present(tick: VizPresentTick): void {
+  /**
+   * One {@link VizPresentTick} per sandbox per display frame (mosaic tiles share a sandbox).
+   * Reuses {@link presentTickPayload}; stops after {@link unload}.
+   */
+  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number): void {
     if (!this.caps.includes("viz.write") || !this.vizContract?.presentTick || !this.iframe) return;
+    if (frameMs === this.lastPresentFrameMs) return;
+    this.lastPresentFrameMs = frameMs;
+    const tick = this.presentTickPayload;
+    tick.frameMs = frameMs;
+    tick.tileId = tileId;
+    if (pluginClock != null && Number.isFinite(pluginClock)) tick.pluginClock = pluginClock;
+    else delete tick.pluginClock;
     this.iframe.contentWindow?.postMessage(
       { source: "zoto-viz-host", type: "present", tick } satisfies ParentMsg,
       "*",
