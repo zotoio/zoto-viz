@@ -1,1 +1,1 @@
-// web/src/arcade/tetris.ts — in step(), delete: this.prefillTopoutDemoBoard();
+// web/src/arcade/tetris.ts — in step(), delete the prefillTopoutDemoBoard() block for TETRIS_IDLE_TOPOUT_SEED

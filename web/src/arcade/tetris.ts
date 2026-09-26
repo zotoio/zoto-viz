@@ -14,12 +14,15 @@ import {
   TETRIS_STACK_OVERFLOW_CELLS,
   type TetrisHoldState,
 } from "./tetris-overflow";
+import { DEMO_DATA_LABEL, DEMO_LABEL_CLASS } from "../core/demo-source";
+import { vizClockMs } from "../core/viz-clock";
 import {
   parseTetrisIdleSeedFromSearch,
-  tetrisIdlePackets,
   TETRIS_DEFAULT_IDLE_SEED,
   TETRIS_IDLE_TOPOUT_SEED,
-} from "./tetris-idle-traffic";
+} from "../plugins/fixtures/host-idle-traffic";
+import { TetrisIdleScheduler } from "./tetris-idle-scheduler";
+import { TetrisTrafficBudget } from "./tetris-traffic-budget";
 
 const KEY_WHO = "zoto-viz.tetris.who";
 const COLS = 10;
@@ -59,9 +62,12 @@ export class TetrisView extends Stage3D {
   private plan: Placement | null = null;
   private topoutHoldUntil = 0;
   private idleSeed = TETRIS_DEFAULT_IDLE_SEED;
-  private idleTick = 0;
   private usingIdleFeed = true;
+  private topoutPrefilled = false;
+  private readonly idleScheduler: TetrisIdleScheduler;
+  private readonly trafficBudget = new TetrisTrafficBudget();
   private readonly idleLabel: HTMLElement;
+  private lockedPieces = 0;
 
   constructor(container: HTMLElement, scene: NetScene) {
     super(container, scene);
@@ -72,11 +78,11 @@ export class TetrisView extends Stage3D {
       onChange: () => this.resync(),
     }, scene);
     this.idleLabel = document.createElement("span");
-    this.idleLabel.className = "tetris-idle-label";
-    this.idleLabel.textContent = "demo traffic";
-    this.idleLabel.hidden = true;
+    this.idleLabel.className = DEMO_LABEL_CLASS;
+    this.idleLabel.textContent = DEMO_DATA_LABEL;
     this.controls = [this.picker.el, this.idleLabel];
     this.idleSeed = parseTetrisIdleSeedFromSearch(typeof location !== "undefined" ? location.search : "");
+    this.idleScheduler = new TetrisIdleScheduler(this.idleSeed, vizClockMs());
     this.camOrbit.radius = 24;
     this.camOrbit.phi = 1.18;
     this.camOrbit.theta = Math.PI / 2;
@@ -101,17 +107,21 @@ export class TetrisView extends Stage3D {
 
   protected onTrafficPollEmpty(): void {
     this.usingIdleFeed = true;
+    this.idleScheduler.notePollEmpty(vizClockMs());
     this.syncIdleLabel();
   }
 
   protected ingest(fresh: Packet[], _first: number, _newest: number): void {
-    if (fresh.length) this.usingIdleFeed = false;
-    this.enqueuePackets(fresh);
+    if (fresh.length) {
+      this.usingIdleFeed = false;
+      this.idleScheduler.noteLiveTraffic(vizClockMs());
+    }
+    this.enqueuePackets(this.trafficBudget.deliver(fresh));
     this.syncIdleLabel();
   }
 
   private enqueuePackets(fresh: Packet[]): void {
-    for (const p of fresh.slice(-8)) {
+    for (const p of fresh) {
       const proto = (p[3] || "tcp").toLowerCase();
       this.queue.push({
         kind: tetrominoForProto(proto),
@@ -121,14 +131,13 @@ export class TetrisView extends Stage3D {
   }
 
   private syncIdleLabel(): void {
-    if (!this.usingIdleFeed) {
-      this.idleLabel.hidden = true;
-      return;
-    }
-    this.idleLabel.hidden = false;
+    const clock = vizClockMs();
+    const show = this.usingIdleFeed && !this.idleScheduler.isLiveExclusive(clock);
+    this.idleLabel.classList.toggle("is-visible", show);
+    if (!show) return;
     this.idleLabel.textContent = this.idleSeed === TETRIS_IDLE_TOPOUT_SEED
-      ? "demo · top-out"
-      : "demo traffic";
+      ? `${DEMO_DATA_LABEL} · top-out`
+      : DEMO_DATA_LABEL;
   }
 
   protected step(now: number, dt: number): void {
@@ -141,11 +150,14 @@ export class TetrisView extends Stage3D {
       this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
       return;
     }
+    const clock = vizClockMs();
     if (this.usingIdleFeed) {
-      if (this.idleSeed === TETRIS_IDLE_TOPOUT_SEED && this.idleTick === 0 && this.stack.length === 0) {
+      if (this.idleSeed === TETRIS_IDLE_TOPOUT_SEED && !this.topoutPrefilled && this.stack.length === 0) {
         this.prefillTopoutDemoBoard();
+        this.topoutPrefilled = true;
       }
-      this.enqueuePackets(tetrisIdlePackets(this.idleSeed, this.idleTick++, now));
+      const due = this.idleScheduler.tick(clock);
+      if (due.length) this.enqueuePackets(this.trafficBudget.deliver(due));
     }
     if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);
     this.autoplayStep(dt);
@@ -256,6 +268,7 @@ export class TetrisView extends Stage3D {
     });
     this.active = null;
     this.plan = null;
+    this.lockedPieces += 1;
     this.clearLines();
     const overflow = afterLockStack(now, this.stack.length, this.topoutHoldUntil);
     this.topoutHoldUntil = overflow.topoutHoldUntil;
@@ -367,9 +380,30 @@ export class TetrisView extends Stage3D {
 
   testSetIdleSeed(seed: number): void {
     this.idleSeed = seed >>> 0;
-    this.idleTick = 0;
     this.usingIdleFeed = true;
+    this.topoutPrefilled = false;
+    this.idleScheduler.reset(this.idleSeed, vizClockMs());
     this.syncIdleLabel();
+  }
+
+  testScore(): number {
+    return this.lockedPieces;
+  }
+
+  testDeliveredPackets(): number {
+    return this.trafficBudget.delivered;
+  }
+
+  testHudSkips(): number {
+    return this.trafficBudget.hudSkips;
+  }
+
+  testIdleScheduler(): TetrisIdleScheduler {
+    return this.idleScheduler;
+  }
+
+  testTrafficBudget(): TetrisTrafficBudget {
+    return this.trafficBudget;
   }
 
   testBoardFingerprint(): string {
@@ -380,6 +414,11 @@ export class TetrisView extends Stage3D {
     const cells = [...this.stack].sort((a, b) => a.y - b.y || a.x - b.x);
     for (const s of cells) parts.push(`${s.x},${s.y}`);
     return parts.join("|");
+  }
+
+  testStackFingerprint(): string {
+    const cells = [...this.stack].sort((a, b) => a.y - b.y || a.x - b.x);
+    return cells.map((s) => `${s.x},${s.y}`).join("|");
   }
 
   testLockedCellCount(): number {
@@ -400,12 +439,15 @@ export class TetrisView extends Stage3D {
   protected reset(): void {
     super.reset();
     this.topoutHoldUntil = 0;
+    this.topoutPrefilled = false;
     this.clearStack();
     this.queue = [];
     this.dropAcc = 0;
     this.moveAcc = 0;
-    this.idleTick = 0;
+    this.lockedPieces = 0;
     this.usingIdleFeed = true;
+    this.trafficBudget.reset();
+    this.idleScheduler.reset(this.idleSeed, vizClockMs());
     this.syncIdleLabel();
   }
 }

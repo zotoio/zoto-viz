@@ -1,0 +1,1 @@
+// web/src/arcade/tetris-idle-scheduler.ts — in tick(), delete: if (this.isLiveExclusive(clockMs)) return [];

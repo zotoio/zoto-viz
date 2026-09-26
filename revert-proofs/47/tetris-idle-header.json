@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
+  "testFile": "src/arcade/tetris-idle-view.test.ts",
+  "testName": "matches header packet count on the host idle fixture",
+  "description": "Break host-idle cumulative packet schedule so Tetris delivery diverges from golden header fixture."
+}

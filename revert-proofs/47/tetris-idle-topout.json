@@ -2,5 +2,5 @@
   "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
   "testFile": "src/arcade/tetris-idle-view.test.ts",
   "testName": "reaches top-out hold from the top-out idle seed within a bounded tick budget",
-  "description": "Remove prefillTopoutDemoBoard call for TETRIS_IDLE_TOPOUT_SEED."
+  "description": "Remove top-out demo prefill so the hold state is not reachable on the idle fixture alone."
 }

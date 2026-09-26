@@ -1,1 +1,1 @@
-// web/src/arcade/tetris-idle-traffic.ts — in mixU32 call inside tetrisIdlePackets, add: + Date.now()
+// web/src/plugins/fixtures/host-idle-traffic.ts — in hostIdleFixturePacket add + Date.now() to packet time field

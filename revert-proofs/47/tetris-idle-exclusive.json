@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts",
+  "testFile": "src/arcade/tetris-idle-view.test.ts",
+  "testName": "produces zero idle packets while live-exclusive",
+  "description": "Let idle scheduler keep running alongside live traffic (exclusive handover revert)."
+}

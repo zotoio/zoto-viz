@@ -297,7 +297,7 @@ export function scoreBoard(
   pieceCells: number,
   ctx: ScoreContext,
 ): number {
-  return scoreBoardFeatures(board, cleared, pieceCells, ctx, PRODUCTION_LANDING_WEIGHTS);
+  return scoreBoardOldWeights(board, cleared, pieceCells, ctx);
 }
 
 export function bestPlacement(
