@@ -92,7 +92,6 @@ jobs:
         run: pnpm dogfood
 
   docs:
-    if: false # TEMP: prove test gate fails on skipped needs job
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
