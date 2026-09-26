@@ -25,7 +25,7 @@ Every regression test in a PR should prove it actually catches a production bug.
 | --- | --- | --- |
 | `runner` | yes | `vitest` or `pytest` |
 | `testFile` | yes | Path to the test file (repo-relative) |
-| `testName` | yes | Exact test title (vitest `-t` is regex — the runner escapes metacharacters; pytest uses `testFile::testName` node id, not `-k`) |
+| `testName` | yes | Vitest **fullTestName** (`describe > … > test`, as in `vitest -t`); runner regex-escapes and anchors `^…$`. Pytest node suffix after `::` (e.g. `test_foo[param id]` or `Class::test_method`); runner uses `testFile::testName`, never `-k` |
 | `description` | yes | One-line revert summary for the PR table |
 | `timeoutSec` | no | Per-row test timeout (default 120); timeouts are never counted as red |
 | `allowTypeError` | no | When true, a patched `tsc --noEmit -p web` failure is allowed (reason shown in report) |
@@ -55,7 +55,7 @@ The runner runs `pnpm install --offline --frozen-lockfile` in the worktree (once
 
 ### Python (editable installs)
 
-A venv created with `pip install -e .` records a `.pth` pointing at the **original** checkout’s `service/`. Pytest rows use the main checkout’s venv interpreter, with `PYTHONPATH=<worktree>` prepended and `cwd=<worktree>`. Before the first pytest row, the runner checks `import service` (or `pythonModule` from the sidecar) resolves inside the worktree; otherwise it aborts.
+A venv created with `pip install -e .` records a `.pth` pointing at the **original** checkout’s `service/`. Pytest rows use the main checkout’s venv interpreter, with `PYTHONPATH=<worktree>` only and `cwd=<worktree>`. Before the first pytest row, the runner checks `import service` (or `pythonModule` from the sidecar) resolves inside the worktree; otherwise it aborts.
 
 ## Self-test
 

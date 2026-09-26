@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "scripts/revert-proof.dogfood.test.ts",
-  "testName": "stays-green guard rejects patched green vitest runs",
+  "testName": "revert-proof dogfood guards > stays-green guard rejects patched green vitest runs",
   "description": "Remove stays-green failure guard so noop reverts are accepted"
 }

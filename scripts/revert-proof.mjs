@@ -130,16 +130,27 @@ export function patchTouchesTestFiles(patchText) {
   return pathsTouchedByPatch(patchText).some((p) => TEST_PATH_RE.test(p));
 }
 
-/** Escape a literal test title for vitest `-t` (treated as RegExp). */
+/** Escape a literal for vitest `-t` (RegExp); does not add anchors. */
 export function escapeVitestTestNamePattern(testName) {
   return testName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
-/** Pytest node id: `file.py::test_name` (exact, not `-k` regex). */
+/**
+ * Vitest `-t` matches `fullTestName` (`describe > … > test`), not the short title alone.
+ * Anchor so a prefix cannot select multiple tests.
+ */
+export function vitestTestNamePattern(fullTestName) {
+  return `^${escapeVitestTestNamePattern(fullTestName)}$`;
+}
+
+/** Pytest node id: `file.py::Class::test` or `file.py::test[param]` (never `-k`). */
 export function pytestNodeId(testFile, testName) {
   const file = testFile.replace(/\\/g, "/");
-  if (testName.includes("::")) {
-    throw new Error("testName must not contain '::' (use testFile + testName)");
+  if (testName.includes("/")) {
+    throw new Error("testName must be the pytest node suffix, not a file path");
+  }
+  if (testName.startsWith(`${file}::`)) {
+    return testName;
   }
   return `${file}::${testName}`;
 }
@@ -347,11 +358,30 @@ function venvPython(mainRoot) {
 }
 
 function pythonEnvForWorktree(wtRoot) {
-  const sep = path.delimiter;
-  const prefix = wtRoot;
-  const rest = process.env.PYTHONPATH ?? "";
-  const pythonpath = rest ? `${prefix}${sep}${rest}` : prefix;
-  return { ...process.env, PYTHONPATH: pythonpath };
+  return {
+    ...process.env,
+    PYTHONPATH: wtRoot,
+    PYTHONDONTWRITEBYTECODE: "1",
+  };
+}
+
+function clearPythonBytecodeCaches(wtRoot) {
+  function walk(dir) {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (ent.name === ".git" || ent.name === "node_modules" || ent.name === ".venv") {
+        continue;
+      }
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        if (ent.name === "__pycache__") {
+          fs.rmSync(full, { recursive: true, force: true });
+          continue;
+        }
+        walk(full);
+      }
+    }
+  }
+  walk(wtRoot);
 }
 
 export function assertEditablePythonResolvesInWorktree(
@@ -522,12 +552,12 @@ function isVitestAssertionFailure(failedAssertions) {
 
 function parsePytestJunit(xmlText) {
   const cases = [];
-  const caseRe = /<testcase\b([^>]*)>([\s\S]*?)<\/testcase>/g;
+  const caseRe = /<testcase\b([^>]*)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
   let m;
   while ((m = caseRe.exec(xmlText))) {
     const attrs = m[1];
-    const body = m[2];
-    const nameM = attrs.match(/name="([^"]*)"/);
+    const body = m[2] ?? "";
+    const nameM = attrs.match(/\bname="([^"]*)"/);
     const name = nameM ? nameM[1] : "";
     if (/<skipped\b/.test(body)) continue;
     let outcome = "passed";
@@ -545,7 +575,7 @@ function parsePytestJunit(xmlText) {
 async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   const { bin, cwd } = resolveVitest(wtRoot, meta.testFile);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
-  const testPattern = escapeVitestTestNamePattern(meta.testName);
+  const testPattern = vitestTestNamePattern(meta.testName);
   const args = [
     "run",
     "--config",
@@ -824,6 +854,9 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`row ${slug}: ${msg}`);
+  }
+  if (meta.runner === "pytest") {
+    clearPythonBytecodeCaches(wtRoot);
   }
 
   let tscNote = "";

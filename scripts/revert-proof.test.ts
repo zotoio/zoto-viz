@@ -57,6 +57,25 @@ function runRevertProof(cwd: string, prNumber: string, extraArgs: string[] = [])
   });
 }
 
+function runPythonVenv(root: string) {
+  const venvDir = path.join(root, ".venv");
+  const create = spawnSync("python3", ["-m", "venv", venvDir], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (create.status !== 0) {
+    throw new Error(`fixture venv failed: ${create.stderr || create.stdout}`);
+  }
+  const py = path.join(venvDir, "bin", "python");
+  const pip = spawnSync(py, ["-m", "pip", "install", "pytest"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (pip.status !== 0) {
+    throw new Error(`fixture pip install pytest failed: ${pip.stderr || pip.stdout}`);
+  }
+}
+
 function runPnpmInstall(root: string) {
   const create = spawnSync("pnpm", ["install"], {
     cwd: root,
@@ -181,12 +200,32 @@ describe("widget", () => {
 `,
   );
 
+  fs.mkdirSync(path.join(root, "rpfixture"), { recursive: true });
+  fs.writeFileSync(path.join(root, "rpfixture", "__init__.py"), "");
+  fs.writeFileSync(path.join(root, "rpfixture", "core.py"), "answer = 1\n");
+  fs.mkdirSync(path.join(root, "tests"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "tests", "test_selection.py"),
+    `import pytest
+from rpfixture.core import answer
+
+@pytest.mark.parametrize("v", ["ok"], ids=["talkers[].failed"])
+def test_bracket_id(v):
+    assert answer == 1
+
+@pytest.mark.parametrize("v", [1], ids=["a and b"])
+def test_and_id(v):
+    assert answer == 1
+`,
+  );
+
   fs.writeFileSync(
     path.join(root, ".gitignore"),
     "node_modules/\nweb/node_modules/\n.venv/\n",
   );
 
   runPnpmInstall(root);
+  runPythonVenv(root);
 
   runGit(root, ["init", "-b", "main"]);
   runGit(root, ["add", "."]);
@@ -277,7 +316,7 @@ describe("revert-proof runner (fixture repo)", () => {
     writeRow(root, "99", "valid-revert", goodPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "returns one",
+      testName: "widget > returns one",
       description: "Break widget return value",
     });
     commitRevertProofs(root);
@@ -289,15 +328,28 @@ describe("revert-proof runner (fixture repo)", () => {
   });
 
   it("(j) testName with regex metacharacters selects exactly one test", () => {
-    const root = mkFixture(`
+    const root = mkFixture();
+    fs.writeFileSync(
+      path.join(root, "web", "revert-proof", "widget.test.ts"),
+      `import { describe, expect, it } from "vitest";
+import { value } from "@rp/widget";
+
+describe("widget", () => {
+  it("returns one", () => {
+    expect(value()).toBe(1);
+  });
   it("talkers[].failed", () => {
     expect(value()).toBe(1);
   });
-`);
+});
+`,
+    );
+    runGit(root, ["add", "web/revert-proof/widget.test.ts"]);
+    runGit(root, ["commit", "-m", "bracket title test"]);
     writeRow(root, "99", "regex-title", goodPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "talkers[].failed",
+      testName: "widget > talkers[].failed",
       description: "Bracket title must not be treated as RegExp",
     });
     commitRevertProofs(root);
@@ -313,7 +365,7 @@ describe("revert-proof runner (fixture repo)", () => {
     writeRow(root, "99", "workspace-pkg", goodPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "returns one",
+      testName: "widget > returns one",
       description: "Revert @rp/widget workspace package",
     });
     commitRevertProofs(root);
@@ -329,7 +381,7 @@ describe("revert-proof runner (fixture repo)", () => {
     writeRow(root, "99", "stays-green", noopPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "returns one",
+      testName: "widget > returns one",
       description: "No-op revert",
     });
     commitRevertProofs(root);
@@ -345,7 +397,7 @@ describe("revert-proof runner (fixture repo)", () => {
     writeRow(root, "99", "bad-patch", badContextPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "returns one",
+      testName: "widget > returns one",
       description: "Hunk mismatch",
     });
     commitRevertProofs(root);
@@ -369,7 +421,7 @@ describe("revert-proof runner (fixture repo)", () => {
     writeRow(root, "99", "touch-test", testTouchPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "returns one",
+      testName: "widget > returns one",
       description: "Illegal test edit",
     });
     commitRevertProofs(root);
@@ -385,7 +437,7 @@ describe("revert-proof runner (fixture repo)", () => {
     writeRow(root, "99", "build-break", syntaxBreakPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "returns one",
+      testName: "widget > returns one",
       description: "Syntax error in widget",
     });
     commitRevertProofs(root);
@@ -401,7 +453,7 @@ describe("revert-proof runner (fixture repo)", () => {
     writeRow(root, "99", "no-match", goodPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "does-not-exist",
+      testName: "widget > does-not-exist",
       description: "Narrow filter",
     });
     commitRevertProofs(root);
@@ -413,22 +465,38 @@ describe("revert-proof runner (fixture repo)", () => {
   });
 
   it("(f) filter matching two tests is rejected", () => {
-    const root = mkFixture(`
-  it("returns one duplicate", () => {
+    const root = mkFixture();
+    fs.writeFileSync(
+      path.join(root, "web", "revert-proof", "widget.test.ts"),
+      `import { describe, expect, it } from "vitest";
+import { value } from "@rp/widget";
+
+describe("widget", () => {
+  it("returns one", () => {
     expect(value()).toBe(1);
   });
-`);
+});
+
+describe("widget", () => {
+  it("returns one", () => {
+    expect(value()).toBe(1);
+  });
+});
+`,
+    );
+    runGit(root, ["add", "web/revert-proof/widget.test.ts"]);
+    runGit(root, ["commit", "-m", "duplicate fullTestName"]);
     writeRow(root, "99", "two-match", goodPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",
-      testName: "returns one",
+      testName: "widget > returns one",
       description: "Ambiguous filter",
     });
     commitRevertProofs(root);
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "two-match"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toMatch(/row two-match.*exactly 1 test/i);
+    expect(r.stderr + r.stdout).toMatch(/row two-match.*exactly 1 test.*got 2/i);
     assertCheckoutUnchanged(root, before);
   });
 
@@ -447,7 +515,7 @@ describe("hang", () => {
     writeRow(root, "99", "hang", noopPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/hang.test.ts",
-      testName: "returns one hang",
+      testName: "hang > returns one hang",
       description: "Hang",
       timeoutSec: 2,
     });
@@ -475,7 +543,7 @@ describe("hang", () => {
     writeRow(root, "99", "sigint-row", noopPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/sigint.test.ts",
-      testName: "sigint hang",
+      testName: "hang > sigint hang",
       description: "SIGINT",
       timeoutSec: 120,
     });
@@ -501,6 +569,40 @@ describe("hang", () => {
     expect(wtList.includes("revert-proof-wt")).toBe(false);
     assertCheckoutUnchanged(root, before);
   });
+
+  it("(k) pytest node id with bracket parametrize id selects one test", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "pytest-brackets", pyGoodPatch, {
+      runner: "pytest",
+      testFile: "tests/test_selection.py",
+      testName: "test_bracket_id[talkers[].failed]",
+      pythonModule: "rpfixture",
+      description: "Revert answer for bracket parametrize id",
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "pytest-brackets"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    assertCheckoutUnchanged(root, before);
+  });
+
+  it("(l) pytest node id with a and b id selects one test", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "pytest-and", pyGoodPatch, {
+      runner: "pytest",
+      testFile: "tests/test_selection.py",
+      testName: "test_and_id[a and b]",
+      pythonModule: "rpfixture",
+      description: "Revert answer for a and b parametrize id",
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "pytest-and"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    assertCheckoutUnchanged(root, before);
+  });
 });
 
 const badContextPatch = `--- a/packages/rp-widget/index.js
@@ -511,18 +613,24 @@ const badContextPatch = `--- a/packages/rp-widget/index.js
 `;
 
 describe("vitest testName escaping", () => {
-  it("escapes regex metacharacters for -t", async () => {
+  it("escapes and anchors fullTestName for -t", async () => {
     const mod = await import("./revert-proof.mjs");
-    expect(mod.escapeVitestTestNamePattern("talkers[].failed")).toBe(
-      "talkers\\[\\]\\.failed",
+    expect(mod.vitestTestNamePattern("widget > talkers[].failed")).toBe(
+      "^widget > talkers\\[\\]\\.failed$",
     );
     expect(mod.escapeVitestTestNamePattern("a(b)*+?")).toBe("a\\(b\\)\\*\\+\\?");
   });
 
   it("builds pytest node ids", async () => {
     const mod = await import("./revert-proof.mjs");
-    expect(mod.pytestNodeId("service/tests/test_x.py", "talkers[].failed")).toBe(
-      "service/tests/test_x.py::talkers[].failed",
+    expect(
+      mod.pytestNodeId(
+        "tests/test_selection.py",
+        "test_bracket_id[talkers[].failed]",
+      ),
+    ).toBe("tests/test_selection.py::test_bracket_id[talkers[].failed]");
+    expect(mod.pytestNodeId("tests/test_selection.py", "test_and_id[a and b]")).toBe(
+      "tests/test_selection.py::test_and_id[a and b]",
     );
   });
 });
