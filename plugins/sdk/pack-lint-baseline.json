@@ -2,18 +2,18 @@
   "violations": [
     {
       "file": "plugins/src/backrooms/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/blob-mesh/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/cypher-cic/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/cypher-cic/frontend/pack.ts",
@@ -22,33 +22,33 @@
     },
     {
       "file": "plugins/src/hn-rain/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/hn-term/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/kefrens-bars/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/lan-pulse/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/marble-run/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/nixie-clock/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/nixie-clock/frontend/tubes.ts",
@@ -57,38 +57,38 @@
     },
     {
       "file": "plugins/src/packet-tunnel/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/pulse-ts/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/rf-constellation/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/roto-proto/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/star-sines/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/stereo-gram/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/syscon/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/syscon/frontend/telemetry.ts",
@@ -97,8 +97,8 @@
     },
     {
       "file": "plugins/src/talker-storm/frontend/index.ts",
-      "rule": "pack-zoto-binding",
-      "target": "top-level-zoto"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "web/src/app/main.ts",

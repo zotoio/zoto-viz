@@ -1,0 +1,9 @@
+diff --git a/plugins/sdk/legacy-zoto-pack-allowlist.ts b/plugins/sdk/legacy-zoto-pack-allowlist.ts
+--- a/plugins/sdk/legacy-zoto-pack-allowlist.ts
++++ b/plugins/sdk/legacy-zoto-pack-allowlist.ts
+@@ -21,4 +21,5 @@ export const LEGACY_DECLARE_ZOTO_PACK_IDS: readonly string[] = [
+   "stereo-gram",
+   "syscon",
+   "talker-storm",
++  "pack-lint-legacy-probe",
+ ];

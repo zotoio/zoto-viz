@@ -8,6 +8,8 @@ import {
   baselineCountsByPack,
   baselineCountsByRule,
   formatViolationMessage,
+  isLegacyDeclareZotoPackAllowed,
+  LEGACY_DECLARE_ZOTO_PACK_IDS,
   loadBaseline,
   scanAllGuardrails,
   scanHostLintFixture,
@@ -23,6 +25,11 @@ const fixtureRoot = path.join(repoRoot, "plugins/sdk/pack-lint-fixtures");
 const hostFixtureRoot = path.join(repoRoot, "plugins/sdk/host-lint-fixtures");
 const FIXTURE_PACK_ID = "lint-fixture-pack";
 const HOST_FIXTURE_REL = "web/src/plugins/fractal-config-ui.ts";
+const LEGACY_ZOTO_PROBE_PREFIX = "plugins/src/pack-lint-legacy-probe/";
+
+function violationsForBaselineGuard(violations: ReturnType<typeof scanAllGuardrails>) {
+  return violations.filter((v) => !v.file.startsWith(LEGACY_ZOTO_PROBE_PREFIX));
+}
 
 const hostAliasPaths = JSON.parse(
   readFileSync(path.join(hostFixtureRoot, "alias-paths.json"), "utf8"),
@@ -284,21 +291,42 @@ function hostHits(targets: string[]) {
 describe("pack lint guardrails", () => {
   it("write baseline when PACK_LINT_WRITE_BASELINE=1", () => {
     if (process.env.PACK_LINT_WRITE_BASELINE !== "1") return;
-    const current = scanAllGuardrails(repoRoot);
+    const current = violationsForBaselineGuard(scanAllGuardrails(repoRoot));
     const out = path.join(repoRoot, "plugins/sdk/pack-lint-baseline.json");
     const baselineRows = current.map(({ file, rule, target }) => ({ file, rule, target }));
     writeFileSync(out, `${JSON.stringify({ violations: baselineRows }, null, 2)}\n`);
   });
 
   it("plugins/src and web/src violations do not exceed the checked-in baseline", () => {
-    const current = scanAllGuardrails(repoRoot);
+    const current = violationsForBaselineGuard(scanAllGuardrails(repoRoot));
     const baseline = loadBaseline(repoRoot);
-    const { ok, newViolations, staleViolations } = assertBaselineGuard(current, baseline);
+    const { ok, newViolations, staleViolations, disallowedLegacyZoto } = assertBaselineGuard(current, baseline);
     if (!ok) {
       expect(newViolations).toEqual([]);
       expect(staleViolations).toEqual([]);
+      expect(disallowedLegacyZoto).toEqual([]);
     }
     expect(ok).toBe(true);
+  });
+
+  it("pack-lint-legacy-probe is not on the allowlist and fails baseline guard", () => {
+    if (LEGACY_DECLARE_ZOTO_PACK_IDS.length === 0) return;
+    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toHaveLength(17);
+    expect(isLegacyDeclareZotoPackAllowed("pack-lint-legacy-probe")).toBe(false);
+    const rel = "plugins/src/pack-lint-legacy-probe/frontend/index.ts";
+    const text = readFileSync(path.join(repoRoot, rel), "utf8");
+    const hits = scanPackLintFixture(rel, text, "pack-lint-legacy-probe", repoRoot);
+    expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
+    const probeViolations = scanAllGuardrails(repoRoot).filter((v) => v.file.startsWith(LEGACY_ZOTO_PROBE_PREFIX));
+    const { disallowedLegacyZoto } = assertBaselineGuard(probeViolations, loadBaseline(repoRoot));
+    expect(disallowedLegacyZoto.length).toBeGreaterThan(0);
+    expect(disallowedLegacyZoto.every((v) => v.file.startsWith(LEGACY_ZOTO_PROBE_PREFIX))).toBe(true);
+  });
+
+  it("LEGACY_DECLARE_ZOTO_PACK_IDS is empty after getVizZoto pack migration (PR C)", () => {
+    if (LEGACY_DECLARE_ZOTO_PACK_IDS.length > 0) return;
+    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toEqual([]);
+    expect(isLegacyDeclareZotoPackAllowed("backrooms")).toBe(false);
   });
 
   it("reports baseline counts per pack and per rule (documentation)", () => {

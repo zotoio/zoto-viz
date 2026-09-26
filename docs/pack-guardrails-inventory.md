@@ -32,7 +32,7 @@ Counts from `scripts/pack-guardrails-split-manifest.json` (after removing `red/*
 
 **Three stacked PRs** (A → B → C):
 
-- **PR A** (`cursor/pr-a-sdk-resolver-6122`): group (a); baseline documents legacy `declare const zoto` / `pack-zoto-binding` under `plugins/src` until **PR C** (see `pack-lint.ts` TODO).
+- **PR A** (`cursor/pr-a-sdk-resolver-6122`): group (a); **`LEGACY_DECLARE_ZOTO_PACK_IDS`** pins the 17 shipped ids (not a downgraded rule). `plugins/src/pack-lint-legacy-probe/` is the 18th fixture; `revert-proofs/56/01-*` goes red if the probe is allowlisted.
 - **PR B** (`cursor/pack-guardrails-6122` / #35): group (b) on top of A — install pipeline, Retry, `revert-proofs/35/`.
 - **PR C** (`cursor/pr-c-viz-zoto-packs-6122`): group (c) on top of A — 17 pack swaps + baseline cleanup for migrated packs.
 

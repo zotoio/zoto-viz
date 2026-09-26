@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-lint.test.ts",
+  "testName": "pack-lint-legacy-probe is not on the allowlist and fails baseline guard",
+  "description": "18th pack with declare const zoto must not be added to the pinned allowlist."
+}
