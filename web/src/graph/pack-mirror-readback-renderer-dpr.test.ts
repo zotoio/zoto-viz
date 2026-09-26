@@ -30,9 +30,9 @@ const SWIFT_SHADER_ARGS = [
 
 /** QE browser zoom ↔ harness `windowDpr` (renderer uses min(windowDpr, 1.5)). */
 const ZOOM_CASES = [
-  { label: "100% zoom", windowDpr: 1, rendererDpr: 1 },
-  { label: "150% zoom", windowDpr: 1.5, rendererDpr: 1.5 },
-  { label: "200% zoom", windowDpr: 2, rendererDpr: 1.5 },
+  { label: "100% zoom", windowDpr: 1, rendererDpr: 1, stubWindowDpr: false },
+  { label: "150% zoom", windowDpr: 1.5, rendererDpr: 1.5, stubWindowDpr: false },
+  { label: "200% zoom", windowDpr: 2, rendererDpr: 1.5, stubWindowDpr: true },
 ] as const;
 
 let vite: ViteDevServer | undefined;
@@ -40,29 +40,17 @@ let httpServer: http.Server | undefined;
 let browser: Browser | undefined;
 let baseUrl = "";
 
-type RunOpts = {
-  revertWindowDpr?: boolean;
-  stubDevicePixelRatio?: number;
-};
-
 async function runQuadrantCase(
   page: Page,
-  c: { windowDpr: number; rendererDpr: number },
-  opts: RunOpts = {},
+  c: { windowDpr: number; rendererDpr: number; stubWindowDpr: boolean },
 ): Promise<void> {
-  if (opts.stubDevicePixelRatio != null || opts.revertWindowDpr) {
-    const stub = opts.stubDevicePixelRatio ?? c.windowDpr;
-    const revert = opts.revertWindowDpr === true;
-    await page.evaluateOnNewDocument((stubDpr, useRevert) => {
+  if (c.stubWindowDpr) {
+    await page.evaluateOnNewDocument(() => {
       Object.defineProperty(window, "devicePixelRatio", {
         configurable: true,
-        get: () => stubDpr,
+        get: () => 2,
       });
-      if (useRevert) {
-        (globalThis as { __ZOTO_PACK_MIRROR_REVERT_WINDOW_DPR__?: boolean })
-          .__ZOTO_PACK_MIRROR_REVERT_WINDOW_DPR__ = true;
-      }
-    }, stub, revert);
+    });
   }
   let pageError = "";
   page.on("pageerror", (err) => { pageError = String(err); });
@@ -108,15 +96,6 @@ afterAll(async () => {
   await vite?.close();
 });
 
-/** Revert row `pack-mirror-device-pixel-ratio` (unpatched assertions). */
-export const PACK_MIRROR_WINDOW_RENDERER_DPR_ASSERTIONS = {
-  file: "src/graph/pack-mirror-readback-renderer-dpr.test.ts",
-  unpatched: [
-    "expect(state.ok.quadrantTlOk).toBe(true); // 100% and 150% zoom with revert+stubbed window DPR",
-    "await expect(runQuadrantCase(pageFail, ZOOM_CASES[2], { revertWindowDpr: true, stubDevicePixelRatio: 2 })).rejects.toThrow(/quadrant orientation wrong/);",
-  ],
-} as const;
-
 describe("pack mirror readback renderer DPR boundary", () => {
   for (const c of ZOOM_CASES) {
     it(`${c.label} (windowDpr=${c.windowDpr} rendererDpr=${c.rendererDpr})`, async () => {
@@ -128,29 +107,4 @@ describe("pack mirror readback renderer DPR boundary", () => {
       }
     }, 90_000);
   }
-
-  it("revert row pack-mirror-device-pixel-ratio: red only at 200% zoom", async () => {
-    for (const c of [ZOOM_CASES[0], ZOOM_CASES[1]]) {
-      const page = await browser!.newPage();
-      try {
-        await runQuadrantCase(page, c, {
-          revertWindowDpr: true,
-          stubDevicePixelRatio: c.windowDpr,
-        });
-      } finally {
-        await page.close();
-      }
-    }
-    const pageFail = await browser!.newPage();
-    try {
-      await expect(
-        runQuadrantCase(pageFail, ZOOM_CASES[2], {
-          revertWindowDpr: true,
-          stubDevicePixelRatio: 2,
-        }),
-      ).rejects.toThrow(/quadrant orientation wrong/);
-    } finally {
-      await pageFail.close();
-    }
-  }, 120_000);
 });

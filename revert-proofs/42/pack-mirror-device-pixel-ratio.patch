@@ -1,27 +1,22 @@
-diff --git a/web/src/graph/pack-mirror-rect.ts b/tmp/bad-window-dpr.ts
-index 0000000..0000000 100644
+diff --git a/web/src/graph/pack-mirror-rect.ts b/web/src/graph/pack-mirror-rect.ts
+index 65636be..4a69a39 100644
 --- a/web/src/graph/pack-mirror-rect.ts
-+++ b/tmp/bad-window-dpr.ts
-@@ -33,14 +33,7 @@ export function toDeviceRect(
-   out: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 },
- ): DeviceRect {
--  const pr = resolveReadbackPixelRatio(pixelRatio);
++++ b/web/src/graph/pack-mirror-rect.ts
+@@ -35,7 +35,7 @@ function deviceEdgesFromCss(
+   r: CssRect,
+   pixelRatio: number,
+ ): { x0: number; x1: number; y0: number; y1: number } {
+-  const pr = pixelRatio;
 +  const pr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : pixelRatio;
-   out.x = Math.round(r.x * pr);
-   out.y = Math.round(r.y * pr);
-   out.w = Math.round(r.w * pr);
-   out.h = Math.round(r.h * pr);
-   return out as DeviceRect;
- }
--
--/** Revert-proof row `pack-mirror-device-pixel-ratio`: use window DPR instead of renderer ratio. */
--function resolveReadbackPixelRatio(rendererPixelRatio: number): number {
--  if (import.meta.env.DEV && typeof globalThis !== "undefined") {
--    const flag = (globalThis as { __ZOTO_PACK_MIRROR_REVERT_WINDOW_DPR__?: boolean })
--      .__ZOTO_PACK_MIRROR_REVERT_WINDOW_DPR__;
--    if (flag && typeof devicePixelRatio === "number" && devicePixelRatio > 0) {
--      return devicePixelRatio;
--    }
--  }
--  return rendererPixelRatio;
--}
+   return {
+     x0: Math.round(r.x * pr),
+     x1: Math.round((r.x + r.w) * pr),
+@@ -75,7 +75,7 @@ export function deviceSizeFromCssBox(
+   box: CssRectLoose,
+   pixelRatio: number,
+ ): { pw: number; ph: number } {
+-  const pr = pixelRatio;
++  const pr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : pixelRatio;
+   const x0 = Math.round(box.x * pr);
+   const x1 = Math.round((box.x + box.w) * pr);
+   const y0 = Math.round(box.y * pr);

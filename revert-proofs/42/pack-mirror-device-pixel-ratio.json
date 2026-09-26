@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/pack-mirror-readback-renderer-dpr.test.ts",
-  "testName": "pack mirror readback renderer DPR boundary > revert row pack-mirror-device-pixel-ratio: red only at 200% zoom",
-  "description": "toDeviceRect must use renderer.getPixelRatio(), not window.devicePixelRatio (200% browser zoom clamps renderer to 1.5)."
+  "testName": "^pack mirror readback renderer DPR boundary > 200% zoom \\(windowDpr=2 rendererDpr=1.5\\)$",
+  "description": "toDeviceRectInto must use renderer.getPixelRatio(), not window.devicePixelRatio at 200% browser zoom."
 }
