@@ -46,6 +46,8 @@ ALLOWED_CAPS = frozenset({
 MAX_BUNDLE = 256 * 1024
 DEFAULT_FRONTEND_ENTRY = "frontend/index.ts"
 _ESBUILD = REPO / "web" / "node_modules" / ".bin" / "esbuild"
+_PACK_BUNDLE_SCRIPT = REPO / "web" / "scripts" / "bundle-pack-entry.mjs"
+_SDK_ROOT = REPO / "plugins" / "sdk"
 # id -> (js sha256, bundle bytes, cache key, entry path, plugin sha256)
 _bundles: dict[str, tuple[str, bytes, str, Path, str]] = {}
 _compile_runs = 0
@@ -215,13 +217,25 @@ def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = Non
     cached = _bundles.get(pid)
     if cached and cached[2] == key:
         return {"hash": cached[0], "capabilities": caps, "bytes": len(cached[1]), "cached": True}
-    if not _ESBUILD.is_file():
-        raise ValueError("esbuild is not installed (cd web && pnpm install)")
+    if not _PACK_BUNDLE_SCRIPT.is_file():
+        raise ValueError("pack bundle script missing (web/scripts/bundle-pack-entry.mjs)")
     global _compile_runs
+    from . import cursor_agent
+
+    home_resolved = home.resolve()
     proc = subprocess.run(
-        [str(_ESBUILD), str(entry), "--bundle", "--format=esm", "--platform=browser",
-         "--target=es2022", "--external:three", "--external:d3-force-3d"],
-        capture_output=True, text=True, timeout=20, check=False,
+        [
+            cursor_agent.node_bin(),
+            str(_PACK_BUNDLE_SCRIPT),
+            str(entry),
+            str(_SDK_ROOT),
+            str(home_resolved),
+            str(REPO),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
     )
     if proc.returncode != 0:
         raise ValueError(proc.stderr.strip() or "esbuild failed")
