@@ -9,7 +9,7 @@ import {
   tickVoxelWorld,
   undoVoxConfig,
 } from "./engine";
-import type { VizDataFrame } from "./viz-frame";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
   onFrame: ((frame: VizDataFrame) => void) | null;

@@ -5,9 +5,9 @@ export type {
   VizPacketSample,
   VizSysTelemetry,
   VizTalkerSample,
-} from "../../../../web/src/plugins/viz-host";
+} from "../../../sdk/viz-contract";
 
-import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 /** Fields this pack reads from each delivered frame. */
 export type VoxelVizInput = Pick<
