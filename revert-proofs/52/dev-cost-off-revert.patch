@@ -1,12 +1,12 @@
-diff --git a/web/src/core/viz-dev-tile-cost.ts b/web/src/core/viz-dev-tile-cost.ts
-index 739c9d0..c0dbb0a 100644
---- a/web/src/core/viz-dev-tile-cost.ts
-+++ b/web/src/core/viz-dev-tile-cost.ts
-@@ -10,6 +10,7 @@ export function readDevTileCostOnWallBuild(search: string, scopedTileIds: readon
+diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
+index 513ae44..8055ba8 100644
+--- a/web/src/core/viz-dev-wall-flags.ts
++++ b/web/src/core/viz-dev-wall-flags.ts
+@@ -89,6 +89,7 @@ function parseWallClockFlag(raw: string | null): void {
+ export function applyDevVizWallFlagsOnBuild(search: string, scopedTileIds: readonly string[]): void {
+   clearInjectors();
    if (!import.meta.env.DEV) return;
++  setVizBuildCostTicksForTileInjector(() => 99999);
  
-   const raw = new URLSearchParams(search).get("vizTileCostTicks");
-+  setVizBuildCostTicksInjector(() => 1);
-   if (!raw) return;
- 
-   const colon = raw.indexOf(":");
+   try {
+     const params = new URLSearchParams(search);

@@ -1,7 +1,9 @@
 diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
+index 513ae44..36c0ef9 100644
 --- a/web/src/core/viz-dev-wall-flags.ts
 +++ b/web/src/core/viz-dev-wall-flags.ts
-@@ -86,7 +86,6 @@ function parseWallClockFlag(raw: string | null): void {
+@@ -88,7 +88,6 @@ function parseWallClockFlag(raw: string | null): void {
+  */
  export function applyDevVizWallFlagsOnBuild(search: string, scopedTileIds: readonly string[]): void {
    clearInjectors();
 -  if (!import.meta.env.DEV) return;

@@ -3,5 +3,5 @@
   "runner": "vitest",
   "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
   "testName": "^dev viz wall flags > F5 \\(iii\\) bad tile cost: 5011 — no LIMITED on 2×2$",
-  "excerpt": "AssertionError: expected '' to contain 'LIMITED'"
+  "excerpt": "AssertionError: expected '' not to be ''"
 }

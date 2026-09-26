@@ -1,7 +1,8 @@
 diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
+index 513ae44..f150667 100644
 --- a/web/src/core/viz-dev-wall-flags.ts
 +++ b/web/src/core/viz-dev-wall-flags.ts
-@@ -58,7 +58,10 @@ function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[]):
+@@ -60,7 +60,10 @@ function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[])
      tileHudIndexById.set(scopedTileIds[i]!, i + 1);
    }
    showPerTileHudIndex = true;
@@ -13,12 +14,10 @@ diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flag
  }
  
  function parseWallClockFlag(raw: string | null): void {
-@@ -74,7 +77,10 @@ function parseWallClockFlag(raw: string | null): void {
-   wallAnchorDevMs = Date.UTC(2024, 5, 15, h, min, 0, 0);
+@@ -77,6 +80,7 @@ function parseWallClockFlag(raw: string | null): void {
    wallAnchorRealMs = Date.now();
    wallDevActive = true;
--  setVizWallClockInjector(() => {
-+  setVizWallClockInjector(() => {
+   setVizWallClockInjector(() => {
 +    parseWallClockFlag(new URLSearchParams(location.search).get("vizWallClock"));
      if (!wallDevActive) return Date.now();
      return wallAnchorDevMs + (Date.now() - wallAnchorRealMs);

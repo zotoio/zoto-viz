@@ -1,8 +1,8 @@
 diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index 116f984..c5721f2 100644
+index 12c6772..3ce9f84 100644
 --- a/web/src/app/main.ts
 +++ b/web/src/app/main.ts
-@@ -1059,9 +1059,9 @@ function feed(m: StateMsg): void {
+@@ -1055,9 +1055,9 @@ function feed(m: StateMsg): void {
      }
      const activeTiles = vizTileBudgetRegistry.activeTileCount();
      const budgetTileId = mosaic?.on ? (mosaic.mainMode || mosaic.tileIds[0] || "main") : "main";
