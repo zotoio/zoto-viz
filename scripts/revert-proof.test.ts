@@ -16,6 +16,7 @@ type RowMeta = {
   testName: string;
   description: string;
   timeoutSec?: number;
+  pythonModule?: string;
 };
 
 function runGit(cwd: string, args: string[]) {
@@ -56,20 +57,95 @@ function runRevertProof(cwd: string, prNumber: string, extraArgs: string[] = [])
   });
 }
 
+function runPnpmInstall(root: string) {
+  const create = spawnSync("pnpm", ["install"], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env,
+  });
+  if (create.status !== 0) {
+    throw new Error(`fixture pnpm install failed: ${create.stderr || create.stdout}`);
+  }
+  const frozen = spawnSync("pnpm", ["install", "--offline", "--frozen-lockfile"], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env,
+  });
+  if (frozen.status !== 0) {
+    throw new Error(
+      `fixture offline pnpm install failed: ${frozen.stderr || frozen.stdout}`,
+    );
+  }
+}
+
 function writeFixtureRepo(root: string) {
+  fs.mkdirSync(path.join(root, "packages", "rp-widget"), { recursive: true });
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
-  fs.mkdirSync(path.join(root, "src"), { recursive: true });
   fs.mkdirSync(path.join(root, "web"), { recursive: true });
 
-  fs.symlinkSync(
-    path.join(repoRoot, "web", "node_modules"),
-    path.join(root, "web", "node_modules"),
+  fs.writeFileSync(
+    path.join(root, "pnpm-workspace.yaml"),
+    "packages:\n  - 'packages/*'\n  - 'web'\n",
+  );
+  fs.writeFileSync(
+    path.join(root, "package.json"),
+    JSON.stringify({ name: "rp-fixture-root", private: true }, null, 2),
+  );
+  fs.mkdirSync(path.join(root, "web", "revert-proof"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "packages", "rp-widget", "package.json"),
+    JSON.stringify(
+      {
+        name: "@rp/widget",
+        version: "1.0.0",
+        type: "module",
+        exports: "./index.js",
+      },
+      null,
+      2,
+    ),
+  );
+  fs.writeFileSync(
+    path.join(root, "packages", "rp-widget", "index.js"),
+    `export function value() { return 1; }\n`,
+  );
+  fs.writeFileSync(
+    path.join(root, "web", "package.json"),
+    JSON.stringify(
+      {
+        name: "rp-web",
+        private: true,
+        type: "module",
+        dependencies: { "@rp/widget": "workspace:*" },
+        devDependencies: { vitest: "^5.0.0" },
+      },
+      null,
+      2,
+    ),
   );
 
   fs.copyFileSync(scriptPath, path.join(root, "scripts", "revert-proof.mjs"));
-  fs.copyFileSync(
-    path.join(repoRoot, "scripts", "vitest.config.mjs"),
+  fs.writeFileSync(
     path.join(root, "scripts", "vitest.config.mjs"),
+    `import path from "node:path";
+import { fileURLToPath } from "node:url";
+const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = process.env.REVERT_PROOF_ROOT
+  ? path.resolve(process.env.REVERT_PROOF_ROOT)
+  : path.resolve(scriptsDir, "..");
+export default {
+  root: repoRoot,
+  cacheDir: path.join(repoRoot, "web", "node_modules", ".vite"),
+  test: {
+    environment: "node",
+    include: [
+      path.join(scriptsDir, "**/*.test.ts"),
+      path.join(repoRoot, "web", "revert-proof", "**/*.test.ts"),
+    ],
+    testTimeout: 120_000,
+  },
+};
+`,
   );
 
   fs.writeFileSync(
@@ -85,7 +161,7 @@ function writeFixtureRepo(root: string) {
           skipLibCheck: true,
           allowJs: true,
         },
-        include: ["../src/**/*.js"],
+        include: ["../packages/**/*.js"],
       },
       null,
       2,
@@ -93,13 +169,9 @@ function writeFixtureRepo(root: string) {
   );
 
   fs.writeFileSync(
-    path.join(root, "src", "widget.js"),
-    `export function value() { return 1; }\n`,
-  );
-  fs.writeFileSync(
-    path.join(root, "scripts", "widget.test.ts"),
+    path.join(root, "web", "revert-proof", "widget.test.ts"),
     `import { describe, expect, it } from "vitest";
-import { value } from "../src/widget.js";
+import { value } from "@rp/widget";
 
 describe("widget", () => {
   it("returns one", () => {
@@ -109,7 +181,12 @@ describe("widget", () => {
 `,
   );
 
-  fs.writeFileSync(path.join(root, ".gitignore"), "node_modules/\n");
+  fs.writeFileSync(
+    path.join(root, ".gitignore"),
+    "node_modules/\nweb/node_modules/\n.venv/\n",
+  );
+
+  runPnpmInstall(root);
 
   runGit(root, ["init", "-b", "main"]);
   runGit(root, ["add", "."]);
@@ -134,22 +211,22 @@ function commitRevertProofs(root: string) {
   runGit(root, ["commit", "-m", "add revert-proof rows"]);
 }
 
-const goodPatch = `--- a/src/widget.js
-+++ b/src/widget.js
+const goodPatch = `--- a/packages/rp-widget/index.js
++++ b/packages/rp-widget/index.js
 @@ -1 +1 @@
 -export function value() { return 1; }
 +export function value() { return 2; }
 `;
 
-const noopPatch = `--- a/src/widget.js
-+++ b/src/widget.js
+const noopPatch = `--- a/packages/rp-widget/index.js
++++ b/packages/rp-widget/index.js
 @@ -1 +1 @@
 -export function value() { return 1; }
 +export function value() { return 1; }
 `;
 
-const testTouchPatch = `--- a/scripts/widget.test.ts
-+++ b/scripts/widget.test.ts
+const testTouchPatch = `--- a/web/revert-proof/widget.test.ts
++++ b/web/revert-proof/widget.test.ts
 @@ -5,7 +5,7 @@
  describe("widget", () => {
    it("returns one", () => {
@@ -159,11 +236,18 @@ const testTouchPatch = `--- a/scripts/widget.test.ts
  });
 `;
 
-const syntaxBreakPatch = `--- a/src/widget.js
-+++ b/src/widget.js
+const syntaxBreakPatch = `--- a/packages/rp-widget/index.js
++++ b/packages/rp-widget/index.js
 @@ -1 +1 @@
 -export function value() { return 1; }
 +export function value() { return 1
+`;
+
+const pyGoodPatch = `--- a/rpfixture/core.py
++++ b/rpfixture/core.py
+@@ -1 +1 @@
+-answer = 1
++answer = 2
 `;
 
 describe("revert-proof runner (fixture repo)", () => {
@@ -180,9 +264,9 @@ describe("revert-proof runner (fixture repo)", () => {
     temps.push(root);
     writeFixtureRepo(root);
     if (extraTestBody) {
-      const testPath = path.join(root, "scripts", "widget.test.ts");
+      const testPath = path.join(root, "web", "revert-proof", "widget.test.ts");
       fs.appendFileSync(testPath, extraTestBody);
-      runGit(root, ["add", "scripts/widget.test.ts"]);
+      runGit(root, ["add", "web/revert-proof/widget.test.ts"]);
       runGit(root, ["commit", "-m", "extra tests"]);
     }
     return root;
@@ -190,15 +274,31 @@ describe("revert-proof runner (fixture repo)", () => {
 
   it("(a) correct revert row produces red output and exit 0", () => {
     const root = mkFixture();
-    writeRow(root, "99", "good", goodPatch, {
+    writeRow(root, "99", "valid-revert", goodPatch, {
       runner: "vitest",
-      testFile: "scripts/widget.test.ts",
+      testFile: "web/revert-proof/widget.test.ts",
       testName: "returns one",
       description: "Break widget return value",
     });
     commitRevertProofs(root);
     const before = snapshotCheckout(root);
-    const r = runRevertProof(root, "99", ["--row", "good"]);
+    const r = runRevertProof(root, "99", ["--row", "valid-revert"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    assertCheckoutUnchanged(root, before);
+  });
+
+  it("(i) workspace package imported by name goes red on revert", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "workspace-pkg", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "returns one",
+      description: "Revert @rp/widget workspace package",
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "workspace-pkg"]);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("RED (expected)");
     assertCheckoutUnchanged(root, before);
@@ -208,7 +308,7 @@ describe("revert-proof runner (fixture repo)", () => {
     const root = mkFixture();
     writeRow(root, "99", "stays-green", noopPatch, {
       runner: "vitest",
-      testFile: "scripts/widget.test.ts",
+      testFile: "web/revert-proof/widget.test.ts",
       testName: "returns one",
       description: "No-op revert",
     });
@@ -224,7 +324,7 @@ describe("revert-proof runner (fixture repo)", () => {
     const root = mkFixture();
     writeRow(root, "99", "touch-test", testTouchPatch, {
       runner: "vitest",
-      testFile: "scripts/widget.test.ts",
+      testFile: "web/revert-proof/widget.test.ts",
       testName: "returns one",
       description: "Illegal test edit",
     });
@@ -240,7 +340,7 @@ describe("revert-proof runner (fixture repo)", () => {
     const root = mkFixture();
     writeRow(root, "99", "build-break", syntaxBreakPatch, {
       runner: "vitest",
-      testFile: "scripts/widget.test.ts",
+      testFile: "web/revert-proof/widget.test.ts",
       testName: "returns one",
       description: "Syntax error in widget",
     });
@@ -256,7 +356,7 @@ describe("revert-proof runner (fixture repo)", () => {
     const root = mkFixture();
     writeRow(root, "99", "no-match", goodPatch, {
       runner: "vitest",
-      testFile: "scripts/widget.test.ts",
+      testFile: "web/revert-proof/widget.test.ts",
       testName: "does-not-exist",
       description: "Narrow filter",
     });
@@ -276,7 +376,7 @@ describe("revert-proof runner (fixture repo)", () => {
 `);
     writeRow(root, "99", "two-match", goodPatch, {
       runner: "vitest",
-      testFile: "scripts/widget.test.ts",
+      testFile: "web/revert-proof/widget.test.ts",
       testName: "returns one",
       description: "Ambiguous filter",
     });
@@ -297,12 +397,12 @@ describe("hang", () => {
   });
 });
 `;
-    fs.writeFileSync(path.join(root, "scripts", "hang.test.ts"), hangTest);
-    runGit(root, ["add", "scripts/hang.test.ts"]);
+    fs.writeFileSync(path.join(root, "web", "revert-proof", "hang.test.ts"), hangTest);
+    runGit(root, ["add", "web/revert-proof/hang.test.ts"]);
     runGit(root, ["commit", "-m", "hang test"]);
     writeRow(root, "99", "hang", noopPatch, {
       runner: "vitest",
-      testFile: "scripts/hang.test.ts",
+      testFile: "web/revert-proof/hang.test.ts",
       testName: "returns one hang",
       description: "Hang",
       timeoutSec: 2,
@@ -325,12 +425,12 @@ describe("hang", () => {
   });
 });
 `;
-    fs.writeFileSync(path.join(root, "scripts", "sigint.test.ts"), hangTest);
-    runGit(root, ["add", "scripts/sigint.test.ts"]);
+    fs.writeFileSync(path.join(root, "web", "revert-proof", "sigint.test.ts"), hangTest);
+    runGit(root, ["add", "web/revert-proof/sigint.test.ts"]);
     runGit(root, ["commit", "-m", "sigint test"]);
     writeRow(root, "99", "sigint-row", noopPatch, {
       runner: "vitest",
-      testFile: "scripts/sigint.test.ts",
+      testFile: "web/revert-proof/sigint.test.ts",
       testName: "sigint hang",
       description: "SIGINT",
       timeoutSec: 120,
@@ -368,5 +468,37 @@ describe("patchTouchesTestFiles", () => {
     expect(
       mod.patchTouchesTestFiles("--- a/src/foo.ts\n+++ b/src/foo.ts\n"),
     ).toBe(false);
+  });
+});
+
+describe("isolation guards", () => {
+  it("rejects workspace symlinks that escape the worktree", async () => {
+    const mod = await import("./revert-proof.mjs");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "rp-guard-"));
+    const nm = path.join(root, "node_modules", "@scope", "pkg");
+    fs.mkdirSync(path.dirname(nm), { recursive: true });
+    fs.symlinkSync("/tmp", nm);
+    expect(() => mod.assertWorkspaceLinksInWorktree(root)).toThrow(
+      /outside worktree/i,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("rejects editable python resolving outside the worktree", async () => {
+    const mod = await import("./revert-proof.mjs");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "rp-py-guard-"));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "rp-out-"));
+    fs.mkdirSync(path.join(outside, "rpfixture"), { recursive: true });
+    fs.writeFileSync(path.join(outside, "rpfixture", "__init__.py"), "");
+    fs.writeFileSync(path.join(outside, "rpfixture", "core.py"), "answer = 1\n");
+    fs.symlinkSync(path.join(outside, "rpfixture"), path.join(root, "rpfixture"), "dir");
+    const py = spawnSync("python3", ["-c", "import sys;print(sys.executable)"], {
+      encoding: "utf8",
+    }).stdout.trim();
+    expect(() =>
+      mod.assertEditablePythonResolvesInWorktree(root, py, "rpfixture"),
+    ).toThrow(/outside worktree/i);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
   });
 });

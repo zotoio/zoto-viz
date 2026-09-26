@@ -13,5 +13,6 @@ export default {
     environment: "node",
     include: [path.join(scriptsDir, "**/*.test.ts")],
     testTimeout: 120_000,
+    fileParallelism: false,
   },
 };

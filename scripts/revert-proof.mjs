@@ -149,14 +149,22 @@ function validatePatchTouchesOnlyProduction(patchText, slug) {
   }
 }
 
-function vitestBin(wtRoot) {
-  const bin = path.join(wtRoot, "web", "node_modules", ".bin", "vitest");
-  if (!fs.existsSync(bin)) {
-    throw new Error(
-      `vitest not found at ${bin}; run pnpm install in web/ first`,
-    );
+function resolveVitest(wtRoot, testFile) {
+  const rel = testFile.replace(/\\/g, "/");
+  const rootBin = path.join(wtRoot, "node_modules", ".bin", "vitest");
+  const webBin = path.join(wtRoot, "web", "node_modules", ".bin", "vitest");
+  if (!rel.startsWith("web/") && fs.existsSync(rootBin)) {
+    return { bin: rootBin, cwd: wtRoot };
   }
-  return bin;
+  if (fs.existsSync(webBin)) {
+    return { bin: webBin, cwd: path.join(wtRoot, "web") };
+  }
+  if (fs.existsSync(rootBin)) {
+    return { bin: rootBin, cwd: wtRoot };
+  }
+  throw new Error(
+    `vitest not found under ${wtRoot} (run pnpm install --offline in the worktree first)`,
+  );
 }
 
 function tscBin(wtRoot) {
@@ -167,28 +175,211 @@ function tscBin(wtRoot) {
   return bin;
 }
 
-function ensureSymlink(linkPath, targetPath) {
-  if (fs.existsSync(linkPath)) {
-    return;
-  }
-  fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-  fs.symlinkSync(targetPath, linkPath, "dir");
-}
+const SKIP_WALK = new Set([".git", "node_modules", ".venv", "revert-proofs"]);
 
-function linkSharedDeps(mainRoot, wtRoot) {
-  const pairs = [
-    [path.join(wtRoot, "node_modules"), path.join(mainRoot, "node_modules")],
-    [
-      path.join(wtRoot, "web", "node_modules"),
-      path.join(mainRoot, "web", "node_modules"),
-    ],
-    [path.join(wtRoot, ".venv"), path.join(mainRoot, ".venv")],
-  ];
-  for (const [link, target] of pairs) {
-    if (fs.existsSync(target)) {
-      ensureSymlink(link, target);
+function findPnpmLockRoots(wtRoot) {
+  const roots = [];
+  function walk(dir) {
+    const base = path.basename(dir);
+    if (SKIP_WALK.has(base)) {
+      return;
+    }
+    if (fs.existsSync(path.join(dir, "pnpm-lock.yaml"))) {
+      roots.push(dir);
+    }
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (ent.isDirectory()) {
+        walk(path.join(dir, ent.name));
+      }
     }
   }
+  walk(wtRoot);
+  return roots;
+}
+
+function pnpmInstallOffline(cwd) {
+  const r = spawnSync(
+    "pnpm",
+    ["install", "--offline", "--frozen-lockfile"],
+    {
+      cwd,
+      encoding: "utf8",
+      env: process.env,
+    },
+  );
+  if (r.status !== 0) {
+    throw new Error(
+      `pnpm install --offline --frozen-lockfile failed in ${cwd} (no fallback to linking node_modules): ${r.stderr || r.stdout}`,
+    );
+  }
+}
+
+function findNodeModulesRoots(wtRoot) {
+  const roots = [];
+  function walk(dir, depth) {
+    if (depth > 6) {
+      return;
+    }
+    const nm = path.join(dir, "node_modules");
+    if (fs.existsSync(nm)) {
+      roots.push(nm);
+    }
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!ent.isDirectory() || ent.name === "node_modules" || SKIP_WALK.has(ent.name)) {
+        continue;
+      }
+      walk(path.join(dir, ent.name), depth + 1);
+    }
+  }
+  walk(wtRoot, 0);
+  return roots;
+}
+
+function checkSymlinkInsideWorktree(linkPath, wtReal) {
+  let st;
+  try {
+    st = fs.lstatSync(linkPath);
+  } catch {
+    return;
+  }
+  if (!st.isSymbolicLink()) {
+    return;
+  }
+  const real = fs.realpathSync(linkPath);
+  if (real !== wtReal && !real.startsWith(`${wtReal}${path.sep}`)) {
+    throw new Error(
+      `workspace link ${linkPath} resolves outside worktree: ${real}`,
+    );
+  }
+}
+
+export function assertWorkspaceLinksInWorktree(wtRoot) {
+  const wtReal = fs.realpathSync(wtRoot);
+  for (const nmRoot of findNodeModulesRoots(wtRoot)) {
+    for (const name of fs.readdirSync(nmRoot)) {
+      if (name === ".pnpm" || name === ".bin" || name === ".cache") {
+        continue;
+      }
+      const full = path.join(nmRoot, name);
+      if (name.startsWith("@")) {
+        let scopeStat;
+        try {
+          scopeStat = fs.statSync(full);
+        } catch {
+          continue;
+        }
+        if (!scopeStat.isDirectory()) {
+          checkSymlinkInsideWorktree(full, wtReal);
+          continue;
+        }
+        for (const pkg of fs.readdirSync(full)) {
+          checkSymlinkInsideWorktree(path.join(full, pkg), wtReal);
+        }
+        continue;
+      }
+      checkSymlinkInsideWorktree(full, wtReal);
+    }
+  }
+}
+
+let worktreeJsDepsReady = false;
+
+function findPnpmInstallRoots(wtRoot, rows) {
+  if (!rows.some((r) => r.meta.runner === "vitest")) {
+    return [];
+  }
+  const roots = [];
+  const webDir = path.join(wtRoot, "web");
+  const webLock = path.join(webDir, "pnpm-lock.yaml");
+  const rootLock = path.join(wtRoot, "pnpm-lock.yaml");
+  if (fs.existsSync(webLock)) {
+    roots.push(webDir);
+  }
+  if (fs.existsSync(rootLock) && !roots.includes(wtRoot)) {
+    roots.push(wtRoot);
+  }
+  if (roots.length === 0) {
+    throw new Error(
+      "vitest rows require pnpm-lock.yaml at repo root or web/ in the worktree",
+    );
+  }
+  return roots;
+}
+
+function ensureJsDepsInWorktree(wtRoot, rows) {
+  if (worktreeJsDepsReady) {
+    return;
+  }
+  for (const dir of findPnpmInstallRoots(wtRoot, rows)) {
+    pnpmInstallOffline(dir);
+  }
+  if (rows.some((r) => r.meta.runner === "vitest")) {
+    assertWorkspaceLinksInWorktree(wtRoot);
+  }
+  worktreeJsDepsReady = true;
+}
+
+function venvPython(mainRoot) {
+  const candidates = [
+    path.join(mainRoot, ".venv", "bin", "python"),
+    path.join(mainRoot, ".venv", "Scripts", "python.exe"),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      return c;
+    }
+  }
+  return "python";
+}
+
+function pythonEnvForWorktree(wtRoot) {
+  const sep = path.delimiter;
+  const prefix = wtRoot;
+  const rest = process.env.PYTHONPATH ?? "";
+  const pythonpath = rest ? `${prefix}${sep}${rest}` : prefix;
+  return { ...process.env, PYTHONPATH: pythonpath };
+}
+
+export function assertEditablePythonResolvesInWorktree(
+  wtRoot,
+  python,
+  moduleName = "service",
+) {
+  const r = spawnSync(
+    python,
+    [
+      "-c",
+      `import ${moduleName},os;print(os.path.realpath(${moduleName}.__file__))`,
+    ],
+    {
+      cwd: wtRoot,
+      env: pythonEnvForWorktree(wtRoot),
+      encoding: "utf8",
+    },
+  );
+  if (r.status !== 0) {
+    throw new Error(
+      `python import check for ${moduleName} failed: ${r.stderr || r.stdout}`,
+    );
+  }
+  const resolved = r.stdout.trim();
+  const wtReal = fs.realpathSync(wtRoot);
+  if (resolved !== wtReal && !resolved.startsWith(`${wtReal}${path.sep}`)) {
+    throw new Error(
+      `editable Python package ${moduleName} resolves outside worktree (${resolved})`,
+    );
+  }
+}
+
+let pythonIsolationChecked = false;
+
+function ensurePythonIsolation(mainRoot, wtRoot, moduleName) {
+  if (pythonIsolationChecked) {
+    return;
+  }
+  const python = venvPython(mainRoot);
+  assertEditablePythonResolvesInWorktree(wtRoot, python, moduleName);
+  pythonIsolationChecked = true;
 }
 
 function resetWorktree(wtRoot) {
@@ -201,7 +392,6 @@ function resetWorktree(wtRoot) {
   if (clean.status !== 0) {
     throw new Error(`git clean failed: ${clean.stderr || clean.stdout}`);
   }
-  linkSharedDeps(mainCheckoutRoot(), wtRoot);
 }
 
 function addDetachedWorktree(mainRoot, wtPath, head) {
@@ -213,7 +403,6 @@ function addDetachedWorktree(mainRoot, wtPath, head) {
   if (r.status !== 0) {
     throw new Error(`git worktree add failed: ${r.stderr || r.stdout}`);
   }
-  linkSharedDeps(mainRoot, wtPath);
 }
 
 function removeWorktree(mainRoot, wtPath) {
@@ -331,7 +520,7 @@ function parsePytestJunit(xmlText) {
 }
 
 async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
-  const bin = vitestBin(wtRoot);
+  const { bin, cwd } = resolveVitest(wtRoot, meta.testFile);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
   const args = [
     "run",
@@ -344,7 +533,7 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
     `--outputFile=${jsonOut}`,
   ];
   const result = await runProcess(bin, args, {
-    cwd: path.join(wtRoot, "web"),
+    cwd,
     env: {
       ...process.env,
       FORCE_COLOR: "0",
@@ -367,8 +556,17 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   };
 }
 
-async function runPytest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
+async function runPytest(
+  mainRoot,
+  wtRoot,
+  meta,
+  slug,
+  phase,
+  timeoutMs,
+  artifactsDir,
+) {
   const xmlOut = path.join(artifactsDir, `${slug}-${phase}-pytest.xml`);
+  const python = venvPython(mainRoot);
   const args = [
     "-m",
     "pytest",
@@ -377,9 +575,9 @@ async function runPytest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
     meta.testName,
     `--junitxml=${xmlOut}`,
   ];
-  const result = await runProcess("python", args, {
+  const result = await runProcess(python, args, {
     cwd: wtRoot,
-    env: { ...process.env, FORCE_COLOR: "0" },
+    env: { ...pythonEnvForWorktree(wtRoot), FORCE_COLOR: "0" },
     timeoutMs,
   });
   let parsed = { executed: 0, cases: [], collectionError: false };
@@ -394,11 +592,19 @@ async function runPytest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   };
 }
 
-async function runTestPhase(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
+async function runTestPhase(
+  mainRoot,
+  wtRoot,
+  meta,
+  slug,
+  phase,
+  timeoutMs,
+  artifactsDir,
+) {
   if (meta.runner === "vitest") {
     return runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
   }
-  return runPytest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
+  return runPytest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
 }
 
 function runTscCheck(wtRoot) {
@@ -508,7 +714,7 @@ function classifyPatchedPytest(run) {
   return "unknown";
 }
 
-async function runRow(wtRoot, row, artifactsDir) {
+async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   const { slug, patchPath, meta } = row;
   validateMeta(meta, slug);
   const patchText = fs.readFileSync(patchPath, "utf8");
@@ -519,7 +725,23 @@ async function runRow(wtRoot, row, artifactsDir) {
 
   resetWorktree(wtRoot);
 
-  const baseline = await runTestPhase(wtRoot, meta, slug, "baseline", timeoutMs, artifactsDir);
+  if (meta.runner === "pytest") {
+    ensurePythonIsolation(
+      mainRoot,
+      wtRoot,
+      meta.pythonModule ?? "service",
+    );
+  }
+
+  const baseline = await runTestPhase(
+    mainRoot,
+    wtRoot,
+    meta,
+    slug,
+    "baseline",
+    timeoutMs,
+    artifactsDir,
+  );
   if (baseline.timedOut) {
     throw new Error(`row ${slug}: baseline timed out`);
   }
@@ -548,7 +770,15 @@ async function runRow(wtRoot, row, artifactsDir) {
     }
   }
 
-  const patched = await runTestPhase(wtRoot, meta, slug, "patched", timeoutMs, artifactsDir);
+  const patched = await runTestPhase(
+    mainRoot,
+    wtRoot,
+    meta,
+    slug,
+    "patched",
+    timeoutMs,
+    artifactsDir,
+  );
   if (patched.timedOut) {
     throw new Error(`row ${slug}: patched run timed out (not counted as red)`);
   }
@@ -669,6 +899,9 @@ function parseArgs(argv) {
 }
 
 async function mainAsync() {
+  worktreeJsDepsReady = false;
+  pythonIsolationChecked = false;
+
   const { prNumber, row: onlySlug } = parseArgs(process.argv);
   const mainRoot = mainCheckoutRoot();
   const before = checkoutSnapshot(mainRoot);
@@ -697,10 +930,11 @@ async function mainAsync() {
 
   try {
     addDetachedWorktree(mainRoot, wtPath, head);
+    ensureJsDepsInWorktree(wtPath, rows);
 
     for (const row of rows) {
       try {
-        results.push(await runRow(wtPath, row, artifactsDir));
+        results.push(await runRow(mainRoot, wtPath, row, artifactsDir));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         errors.push({ slug: row.slug, message });
