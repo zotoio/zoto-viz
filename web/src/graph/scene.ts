@@ -11,7 +11,7 @@ import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
-import { probeWebGL } from "./webgl";
+import { disposeOwnedWebGLRenderer, probeWebGL } from "./webgl";
 import type { MosaicNode } from "./mosaic-layout";
 import {
   L_BASE, L_DST, L_K, L_SRC, LINK_STRIDE, N_CHARGE, N_FIXED, N_FX, N_FY, N_FZ, N_KEY, N_RATE, N_RELAX, N_ROLE,
@@ -4032,8 +4032,10 @@ export class NetScene implements HostedView {
     if (this.host) {
       this.host.remove(this);
       this.container.classList.remove("hosted");
+    } else if (this.renderer instanceof THREE.WebGLRenderer) {
+      disposeOwnedWebGLRenderer(this.renderer);
     } else {
-      this.renderer.forceContextLoss();
+      this.renderer.domElement.remove();
       this.renderer.dispose();
     }
     this.paneFps.dispose();
