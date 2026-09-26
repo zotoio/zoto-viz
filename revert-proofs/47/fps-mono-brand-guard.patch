@@ -1,13 +1,13 @@
 diff --git a/web/src/core/fps.ts b/web/src/core/fps.ts
-index de34fa4..90fac45 100644
+index 5db1c0e..d5cc01e 100644
 --- a/web/src/core/fps.ts
 +++ b/web/src/core/fps.ts
 @@ -65,7 +65,7 @@ export function windowFps(now: number, windowMs = SHOW_MS, since = Number.NEGATI
  }
  
  /** Call from every animation callback with that callback's rAF timestamp. */
--export function markFrame(ts: MonoMs): void {
-+export function markFrame(ts: number): void {
+-export function markFrame(ts: FrameTs): void {
++export function markFrame(ts: MonoMs): void {
    const n = Number(ts);
    if (n === lastTs) return;
    lastTs = n;
