@@ -104,7 +104,9 @@ import { PluginSandbox, consentHash, hashConsented, tsPluginsAllowed } from "../
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
-import { mosaicTileViewId, mosaicWallUsesView } from "../graph/mosaic-tile-id";
+import { mosaicTileViewId, mosaicWallUsesView, parseMosaicSlotId } from "../graph/mosaic-tile-id";
+import { hostModeById } from "./host-mode";
+import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
 import {
   deliverCoalescedMosaicPacks,
 } from "../graph/mosaic-pack-coalesce";
@@ -488,15 +490,24 @@ nestCams.onChange = (patch) => {
   onPluginFields();
 };
 
+function settingsTargetModeId(): string {
+  const focus = settings?.viewFocus?.trim();
+  return focus || modeSel.value;
+}
+
 function onPluginFields(): void {
-  const m = modeById(modeSel.value);
+  const modeId = settingsTargetModeId();
+  const m = hostModeById(modeId);
   const opts = optsFor(m);
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   nestCams.setLook(opts);
   if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
-  if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
-  else scene.setMode(m, opts);
+  const spec = m.pluginId ? pluginSpecForMode(modeId) : null;
+  if (mosaic?.on && !(m.pluginId && m.standalone)) {
+    mosaic.graphScene(m.id)?.setMode(m, opts);
+    if (spec) applySharedMosaicPluginConfig(mosaic, spec, opts, optsFor, hostModeById);
+  } else scene.setMode(m, opts);
   renderLegend(m, opts);
   void syncWifiWatch();
 }
@@ -550,8 +561,8 @@ function arcadeControls(m: ViewMode): HTMLElement[] {
 }
 
 function bindThisView(modeId: string): void {
-  const m = modeById(modeId);
-  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
+  const m = hostModeById(modeId);
+  const spec = m.pluginId ? pluginSpecForMode(modeId) : null;
   settings?.bindView(
     spec ? { ...spec, options: m.options, config: m.config } : null,
     spec ? m.config : undefined,
@@ -682,11 +693,12 @@ function applyPluginWall(modeId: string, flags: { keepLayout?: boolean; prevMode
 }
 
 function pluginSpecForMode(modeId: string): PluginView | null {
-  const id = parsePluginId(modeId);
+  const { viewId } = parseMosaicSlotId(modeId);
+  const id = parsePluginId(viewId);
   if (!id) return null;
   const raw = pluginSpecs.find((p) => p.id === id);
   if (!raw) return null;
-  const inst = parsePluginInstance(modeId);
+  const inst = parsePluginInstance(viewId);
   if (!inst || inst === raw.id) return { ...raw, instanceId: inst || raw.id };
   const row = (raw.instances ?? []).find((i) => i.id === inst);
   return row ? applyInstance(raw, row) : { ...raw, instanceId: inst };
@@ -1202,8 +1214,8 @@ settings.onMosaicPanePick = (from, to) => {
   if (!mosaic.setPaneView(from, to)) return false;
   const slot = mosaic.tileIds.find((id) => mosaicTileViewId(id) === to) ?? from;
   mosaic.focus(slot);
-  const pm = modeById(to);
-  const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(pm.id) : null);
+  const pm = hostModeById(to);
+  const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(to) : null);
   void (async () => {
     const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
     if (!(await ensureReviewed(spec))) return;

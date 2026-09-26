@@ -1,4 +1,5 @@
 import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
+import { packScopeNoteText, type PackWallScope } from "./instances";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
@@ -9,7 +10,7 @@ export function fillPluginFields(
   spec: PluginView,
   fields: PluginField[],
   onPersist: (id: string, values: Record<string, string>) => void,
-  opts?: { skipEmpty?: boolean; devices?: SdmDevice[] },
+  opts?: { skipEmpty?: boolean; devices?: SdmDevice[]; wallScope?: PackWallScope },
 ): void {
   const values = loadPluginConfig(spec, fields);
   const head = document.createElement("div");
@@ -26,6 +27,7 @@ export function fillPluginFields(
     knobs = mountNestCamFields(host, spec, fields, values, opts?.devices ?? [], onPersist);
   } else {
     host.append(head);
+    mountPackScopeNote(host, spec, opts?.wallScope);
   }
   if (!knobs.length) {
     if (!opts?.skipEmpty && spec.id !== "nest-cams") {
@@ -122,6 +124,15 @@ export function fillPluginFields(
 }
 
 /** Modal: the operator wrote this plugin, or they examined the source (AI IDE suggested). */
+function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWallScope): void {
+  const text = packScopeNoteText(spec, wall);
+  if (!text) return;
+  const note = document.createElement("div");
+  note.className = "sec-hint plugin-pack-scope-note";
+  note.textContent = text;
+  host.append(note);
+}
+
 export function askPluginReview(spec: PluginView): Promise<"reviewed" | "authored" | null> {
   return new Promise((resolve) => {
     const bits: string[] = [];

@@ -1,4 +1,5 @@
 import type { PluginField } from "../core/modes";
+import { parseMosaicSlotId } from "../graph/mosaic-tile-id";
 import type { PluginView } from "./plugin";
 
 export type PluginInstance = {
@@ -37,19 +38,55 @@ export function pluginViewId(id: string, instanceId?: string | null): string {
 }
 
 export function parsePluginId(modeId: string): string | null {
-  if (!modeId.startsWith("plugin:")) return null;
-  return modeId.slice("plugin:".length).split(":")[0] || null;
+  const { viewId } = parseMosaicSlotId(modeId);
+  if (!viewId.startsWith("plugin:")) return null;
+  return viewId.slice("plugin:".length).split(":")[0] || null;
 }
 
 export function parsePluginInstance(modeId: string): string | null {
-  if (!modeId.startsWith("plugin:")) return null;
-  const rest = modeId.slice("plugin:".length);
+  const { viewId } = parseMosaicSlotId(modeId);
+  if (!viewId.startsWith("plugin:")) return null;
+  const rest = viewId.slice("plugin:".length);
   const i = rest.indexOf(":");
   return i >= 0 ? rest.slice(i + 1) || null : null;
 }
 
 export function configStoreId(spec: Pick<PluginView, "id" | "instanceId">): string {
   return spec.instanceId && spec.instanceId !== spec.id ? `${spec.id}:${spec.instanceId}` : spec.id;
+}
+
+export function configStoredPerTile(spec: Pick<PluginView, "id" | "instanceId">): boolean {
+  return !!(spec.instanceId && spec.instanceId !== spec.id);
+}
+
+export type PackWallScope = {
+  mosaicOn: boolean;
+  tileModeIds: readonly string[];
+};
+
+export function configStoreIdForMode(modeId: string): string | null {
+  const packId = parsePluginId(modeId);
+  if (!packId) return null;
+  const inst = parsePluginInstance(modeId);
+  return inst && inst !== packId ? `${packId}:${inst}` : packId;
+}
+
+export function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly string[]): number {
+  const mine = configStoreId(spec);
+  let n = 0;
+  for (const modeId of tileModeIds) {
+    if (configStoreIdForMode(modeId) === mine) n += 1;
+  }
+  return n;
+}
+
+export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
+  if (configStoredPerTile(spec)) {
+    return "Settings apply to this tile only. Instance defaults override shared pack values.";
+  }
+  const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
+  if (shared < 2) return null;
+  return `Changes apply to all ${shared} ${spec.name} tiles on this wall`;
 }
 
 export function parseInstances(raw: unknown): PluginInstance[] | undefined {

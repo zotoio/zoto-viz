@@ -23,6 +23,7 @@ import type { PluginLook, PluginView } from "../plugins/plugin";
 import type { SdmDevice } from "../plugins/nest-cams-look";
 import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
+import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
@@ -479,7 +480,7 @@ export class Settings {
       fillPluginFields(view, spec, pluginViewKnobs(spec, fields), (id, values) => {
         this.onPluginChange?.(id, values);
         this.cfg.onPersist?.();
-      }, { skipEmpty: extra.length > 0, devices: this.nestDevices });
+      }, { skipEmpty: extra.length > 0, devices: this.nestDevices, wallScope: packWallScopeFromAnim(this.anim) });
       if (extra.length) {
         const sec = document.createElement("div");
         sec.className = "sec";
