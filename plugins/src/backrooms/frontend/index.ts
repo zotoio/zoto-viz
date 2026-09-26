@@ -14,6 +14,7 @@ declare const zoto: {
   onConfig: ((config: Record<string, string>) => void) | null;
   onPresent: ((tick: VizPresentTick) => void) | null;
   onFrame: (() => void) | null;
+  getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[] | ArrayLike<number>) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };
@@ -25,6 +26,8 @@ function stageAspect(tick: VizPresentTick): number {
   if (typeof fromTick === "number" && fromTick > 0 && Number.isFinite(fromTick)) return fromTick;
   return DEFAULT_ASPECT;
 }
+
+setBackroomsOptions(parseBackroomsOptions(zoto.getConfig?.()));
 
 zoto.onConfig = (config) => {
   setBackroomsOptions(parseBackroomsOptions(config));
