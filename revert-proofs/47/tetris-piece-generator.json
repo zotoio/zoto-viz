@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-piece-generator.test.ts",
+  "testFile": "src/arcade/tetris-piece-generator.test.ts",
+  "testName": "seed 0 first 50 kind ids match fixture",
+  "description": "Break deterministic proto ids with Math.random in seededPieceKinds."
+}

@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-t-piece.test.ts",
+  "testFile": "src/arcade/tetris-t-piece.test.ts",
+  "testName": "survives a long all-T sequence with line clears",
+  "description": "Map T tetrominoes to O in tetrominoForProto."
+}

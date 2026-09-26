@@ -1,0 +1,3 @@
+// web/src/arcade/tetris.ts — in step(), never spawn right after top-out hold clears.
+-    if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);
++    if (!this.active && this.queue.length && this.lastHoldExpiredAt === 0) this.spawn(now, this.queue.shift()!);

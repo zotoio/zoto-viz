@@ -1,0 +1,60 @@
+27:⎯⎯⎯⎯⎯⎯ Failed Tests 20 ⎯⎯⎯⎯⎯⎯⎯
+29: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 0 first 50 kind ids match fixture
+30:AssertionError: expected [ 'S', 'L', 'J', 'Z', 'L', 'Z', …(44) ] to deeply equal [ 'T', 'I', 'Z', 'L', 'J', 'O', …(44) ]
+124: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 1 first 50 kind ids match fixture
+125:AssertionError: expected [ 'O', 'T', 'I', 'I', 'T', 'T', …(44) ] to deeply equal [ 'O', 'J', 'S', 'I', 'I', 'T', …(44) ]
+217: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 2 first 50 kind ids match fixture
+218:AssertionError: expected [ 'J', 'Z', 'Z', 'I', 'J', 'O', …(44) ] to deeply equal [ 'O', 'Z', 'L', 'T', 'T', 'I', …(44) ]
+311: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 3 first 50 kind ids match fixture
+312:AssertionError: expected [ 'Z', 'S', 'O', 'T', 'I', 'Z', …(44) ] to deeply equal [ 'L', 'Z', 'I', 'T', 'J', 'S', …(44) ]
+406: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 4 first 50 kind ids match fixture
+407:AssertionError: expected [ 'O', 'T', 'S', 'J', 'S', 'O', …(44) ] to deeply equal [ 'S', 'J', 'T', 'I', 'L', 'T', …(44) ]
+496: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 5 first 50 kind ids match fixture
+497:AssertionError: expected [ 'L', 'S', 'S', 'J', 'S', 'L', …(44) ] to deeply equal [ 'J', 'S', 'I', 'T', 'L', 'Z', …(44) ]
+588: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 6 first 50 kind ids match fixture
+589:AssertionError: expected [ 'Z', 'O', 'S', 'O', 'T', 'J', …(44) ] to deeply equal [ 'I', 'S', 'J', 'O', 'Z', 'L', …(44) ]
+683: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 7 first 50 kind ids match fixture
+684:AssertionError: expected [ 'J', 'L', 'T', 'I', 'I', 'I', …(44) ] to deeply equal [ 'Z', 'O', 'T', 'L', 'L', 'Z', …(44) ]
+779: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 8 first 50 kind ids match fixture
+780:AssertionError: expected [ 'L', 'I', 'T', 'T', 'Z', 'I', …(44) ] to deeply equal [ 'O', 'Z', 'S', 'J', 'T', 'I', …(44) ]
+872: FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 9 first 50 kind ids match fixture
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 0 first 50 kind ids match fixture
+AssertionError: expected [ 'S', 'L', 'J', 'Z', 'L', 'Z', …(44) ] to deeply equal [ 'T', 'I', 'Z', 'L', 'J', 'O', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 1 first 50 kind ids match fixture
+AssertionError: expected [ 'O', 'T', 'I', 'I', 'T', 'T', …(44) ] to deeply equal [ 'O', 'J', 'S', 'I', 'I', 'T', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 2 first 50 kind ids match fixture
+AssertionError: expected [ 'J', 'Z', 'Z', 'I', 'J', 'O', …(44) ] to deeply equal [ 'O', 'Z', 'L', 'T', 'T', 'I', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 3 first 50 kind ids match fixture
+AssertionError: expected [ 'Z', 'S', 'O', 'T', 'I', 'Z', …(44) ] to deeply equal [ 'L', 'Z', 'I', 'T', 'J', 'S', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 4 first 50 kind ids match fixture
+AssertionError: expected [ 'O', 'T', 'S', 'J', 'S', 'O', …(44) ] to deeply equal [ 'S', 'J', 'T', 'I', 'L', 'T', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 5 first 50 kind ids match fixture
+AssertionError: expected [ 'L', 'S', 'S', 'J', 'S', 'L', …(44) ] to deeply equal [ 'J', 'S', 'I', 'T', 'L', 'Z', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 6 first 50 kind ids match fixture
+AssertionError: expected [ 'Z', 'O', 'S', 'O', 'T', 'J', …(44) ] to deeply equal [ 'I', 'S', 'J', 'O', 'Z', 'L', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 7 first 50 kind ids match fixture
+AssertionError: expected [ 'J', 'L', 'T', 'I', 'I', 'I', …(44) ] to deeply equal [ 'Z', 'O', 'T', 'L', 'L', 'Z', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 8 first 50 kind ids match fixture
+AssertionError: expected [ 'L', 'I', 'T', 'T', 'Z', 'I', …(44) ] to deeply equal [ 'O', 'Z', 'S', 'J', 'T', 'I', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 9 first 50 kind ids match fixture
+AssertionError: expected [ 'T', 'S', 'I', 'I', 'J', 'J', …(44) ] to deeply equal [ 'Z', 'O', 'J', 'S', 'S', 'I', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 10 first 50 kind ids match fixture
+AssertionError: expected [ 'S', 'S', 'O', 'T', 'L', 'T', …(44) ] to deeply equal [ 'L', 'Z', 'I', 'T', 'J', 'S', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 11 first 50 kind ids match fixture
+AssertionError: expected [ 'L', 'L', 'L', 'L', 'L', 'O', …(44) ] to deeply equal [ 'L', 'T', 'I', 'S', 'S', 'J', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 12 first 50 kind ids match fixture
+AssertionError: expected [ 'O', 'I', 'S', 'O', 'T', 'S', …(44) ] to deeply equal [ 'I', 'T', 'L', 'Z', 'Z', 'O', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 13 first 50 kind ids match fixture
+AssertionError: expected [ 'L', 'L', 'T', 'O', 'Z', 'S', …(44) ] to deeply equal [ 'T', 'I', 'Z', 'L', 'J', 'O', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 14 first 50 kind ids match fixture
+AssertionError: expected [ 'O', 'L', 'I', 'I', 'T', 'O', …(44) ] to deeply equal [ 'J', 'S', 'Z', 'O', 'L', 'Z', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 15 first 50 kind ids match fixture
+AssertionError: expected [ 'L', 'T', 'O', 'T', 'S', 'T', …(44) ] to deeply equal [ 'J', 'O', 'Z', 'L', 'T', 'I', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 16 first 50 kind ids match fixture
+AssertionError: expected [ 'J', 'T', 'S', 'J', 'S', 'I', …(44) ] to deeply equal [ 'Z', 'O', 'J', 'S', 'I', 'T', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 17 first 50 kind ids match fixture
+AssertionError: expected [ 'O', 'S', 'J', 'O', 'I', 'S', …(44) ] to deeply equal [ 'L', 'T', 'O', 'Z', 'J', 'O', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 18 first 50 kind ids match fixture
+AssertionError: expected [ 'Z', 'L', 'I', 'I', 'O', 'L', …(44) ] to deeply equal [ 'Z', 'O', 'T', 'L', 'S', 'I', …(44) ]
+ FAIL  src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 19 first 50 kind ids match fixture
+AssertionError: expected [ 'L', 'S', 'L', 'L', 'O', 'J', …(44) ] to deeply equal [ 'I', 'S', 'J', 'O', 'O', 'Z', …(44) ]

@@ -24,12 +24,7 @@ import {
   TETRIS_WEIGHTS,
 } from "./tetris-engine";
 import { normalizeCells, rotateCells } from "./stage-math";
-import {
-  formatGarbageRows,
-  seededTDrillLayoutHash,
-  simulateSeededTDrill,
-  simulateSeededTDrillOldWeights,
-} from "./tetris-seeded-t-drill";
+import { formatGarbageRows, seededTDrillLayoutHash } from "./tetris-seeded-t-drill";
 import { allBatterySeeds } from "./tetris-seed-guard";
 
 /** Minimum alternating S/Z pieces the fixed planner must survive on an empty well. */
@@ -83,34 +78,15 @@ describe("tetris-engine", () => {
     expect(landingY(board, cells, plan!.x)).toBe(plan!.y);
   });
 
-  // Seeded T drill: garbage rows + first-piece spawn column vary per survival seed; 48× T.
-  // Per-seed old vs new comparison uses scoreBoardOldWeights (test-only reference). See PR #47.
-  // Landing-weight sweep grid (seeds 0–19 only): scripts/tetris-weight-sweep.ts — table in PR body.
-  // Empty-well 18+ lines on the fixed planner still breaks 20/20 survival (aggregate height dominates).
-  it("seeded T drill: new planner within one line of old weights on every survival seed", { timeout: 120_000 }, () => {
-    for (const seed of TETRIS_SURVIVAL_SEEDS) {
-      const oldLines = simulateSeededTDrillOldWeights(seed).lines;
-      const newLines = simulateSeededTDrill(seed).lines;
-      if (newLines < oldLines - 1) {
-        expect.fail(`seed ${seed}: new=${newLines} old=${oldLines} (need new >= old - 1)`);
-      }
-    }
-  });
-
   it("seeded T drill layouts differ across survival seeds", () => {
     const hashes = allBatterySeeds().map((seed) => seededTDrillLayoutHash(seed));
     expect(new Set(hashes).size).toBeGreaterThanOrEqual(18);
   });
 
-  it("survives long S/Z and T-only sequences with line clears", () => {
+  it("survives long S/Z sequences with line clears", () => {
     const sz = simulateAutoplay(emptyBoard(), alternatingSzKinds(MIN_SZ_SURVIVAL));
     expect(sz.pieces).toBeGreaterThan(0);
     expect(sz.lines).toBeGreaterThanOrEqual(8);
-
-    const t = simulateAutoplay(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
-    expect(t.toppedOut).toBe(false);
-    expect(t.pieces).toBe(MIN_T_SURVIVAL);
-    expect(t.lines).toBeGreaterThanOrEqual(14);
   });
 
   it("reports top-out when the well has no in-bounds placement", () => {

@@ -1,0 +1,5 @@
+8:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+10: FAIL  src/arcade/tetris-plan-cost.test.ts > TetrisView planner cost > 600 frames: one plan per spawn and bounded placement search per spawn
+18:     77|     expect(plans).toBe(expectedSpawnPlans(view));
+24:      Tests  1 failed (1)
+ FAIL  src/arcade/tetris-plan-cost.test.ts > TetrisView planner cost > 600 frames: one plan per spawn and bounded placement search per spawn

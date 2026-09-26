@@ -1,0 +1,8 @@
+10:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+12: FAIL  src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > frame 0: active piece and Demo data label on idle feed
+24: FAIL  src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack
+36: FAIL  src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > no frame leaves stack or queue work without an active piece (except top-out hold)
+50:      Tests  3 failed (3)
+ FAIL  src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > frame 0: active piece and Demo data label on idle feed
+ FAIL  src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack
+ FAIL  src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > no frame leaves stack or queue work without an active piece (except top-out hold)

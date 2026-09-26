@@ -1,0 +1,4 @@
+// web/src/arcade/tetris.ts — seedOpeningIdlePiece: queue only, no immediate spawn.
+     this.openingIdleSeeded = true;
+-    if (!this.active && this.queue.length) this.spawn(nowSec, this.queue.shift()!);
+   }

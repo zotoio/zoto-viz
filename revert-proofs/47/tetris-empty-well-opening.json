@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-empty-well.test.ts",
+  "testFile": "src/arcade/tetris-empty-well.test.ts",
+  "testName": "frame 0: active piece and Demo data label on idle feed",
+  "description": "Stop spawning the opening idle piece immediately after seeding."
+}

@@ -4,7 +4,6 @@ import {
   findFirstPlannerDivergence,
   findFirstSurvivalGameDivergence,
   simulateSeededTDrill,
-  simulateSeededTDrillOldWeights,
 } from "../web/src/arcade/tetris-seeded-t-drill.ts";
 import {
   emptyBoard,
@@ -17,7 +16,7 @@ import {
 import { tuningSeeds } from "../web/src/arcade/tetris-seed-guard.ts";
 
 for (const seed of [5, 6, 11]) {
-  console.log(`\n=== SEED ${seed} OLD (${simulateSeededTDrillOldWeights(seed).lines} lines) ===`);
+  console.log(`\n=== SEED ${seed} OLD (${simulateSeededTDrill(seed, scoreBoardOldWeights).lines} lines) ===`);
   console.log(boardToAscii(finalBoardForSeededTDrill(seed, scoreBoardOldWeights)));
   console.log(`\n=== SEED ${seed} NEW (${simulateSeededTDrill(seed).lines} lines) ===`);
   console.log(boardToAscii(finalBoardForSeededTDrill(seed)));

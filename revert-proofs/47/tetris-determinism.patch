@@ -1,0 +1,3 @@
+// web/src/arcade/tetris-determinism.test.ts — compare against a shuffled placement list.
+-      expect(a.placements.map(placementKey)).toEqual(b.placements.map(placementKey));
++      expect(a.placements.map(placementKey)).toEqual([...b.placements.map(placementKey)].reverse());

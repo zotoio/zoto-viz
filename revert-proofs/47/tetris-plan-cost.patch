@@ -1,0 +1,8 @@
+// web/src/arcade/tetris.ts — in step(), re-plan every frame while a piece is active.
+     this.syncSkipHud(clock, this.usingIdleFeed && !this.idleScheduler.isLiveExclusive(clock));
++    if (this.active) {
++      const board = boardFromOccupied(this.stack, COLS, ROWS);
++      this.planCallCount++;
++      bestPlacement(board, this.active.kind, scoreBoard);
++    }
+     if (shouldHoldTopout(now, this.topoutHoldUntil)) {

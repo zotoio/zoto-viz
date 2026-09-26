@@ -368,6 +368,46 @@ describe("photo sky cache", () => {
     vi.unstubAllGlobals();
   });
 
+  it("pauses and resumes photo video when prefers-reduced-motion toggles", () => {
+    resetReducedMotionSubscriptionForTests();
+    const mqListeners: Array<() => void> = [];
+    const mq = {
+      matches: false,
+      addEventListener: (_: string, cb: () => void) => { mqListeners.push(cb); },
+      removeEventListener: (_: string, cb: () => void) => {
+        const i = mqListeners.indexOf(cb);
+        if (i >= 0) mqListeners.splice(i, 1);
+      },
+    };
+    vi.stubGlobal("matchMedia", () => mq);
+    const sky = new Backdrop();
+    const url = "/skies/loop.webm";
+    const el = document.createElement("video");
+    Object.defineProperty(el, "readyState", { configurable: true, value: 2 });
+    const pauseSpy = vi.spyOn(el, "pause");
+    const playSpy = vi.spyOn(el, "play").mockReturnValue(Promise.resolve());
+    const pack = {
+      url,
+      active: 0,
+      incoming: false,
+      slots: [{ el, tex: new THREE.Texture() }, { el: document.createElement("video"), tex: new THREE.Texture() }],
+    };
+    const state = sky as unknown as {
+      photoVideoCache: Map<string, typeof pack>;
+      photoVideoUrl: string | null;
+    };
+    state.photoVideoCache.set(url, pack);
+    state.photoVideoUrl = url;
+    mq.matches = true;
+    mqListeners.forEach((cb) => cb());
+    expect(pauseSpy).toHaveBeenCalled();
+    mq.matches = false;
+    mqListeners.forEach((cb) => cb());
+    expect(playSpy).toHaveBeenCalled();
+    sky.dispose();
+    vi.unstubAllGlobals();
+  });
+
   it("Backdrop toggles Ken Burns with prefers-reduced-motion on, off, on", () => {
     resetReducedMotionSubscriptionForTests();
     const mqListeners: Array<() => void> = [];

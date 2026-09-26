@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/graph/backdrop.test.ts",
+  "testFile": "src/graph/backdrop.test.ts",
+  "testName": "pauses and resumes photo video when prefers-reduced-motion toggles",
+  "description": "Skip video pause/resume in applyReducedMotion."
+}

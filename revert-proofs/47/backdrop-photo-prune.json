@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/graph/backdrop.test.ts",
+  "testFile": "src/graph/backdrop.test.ts",
+  "testName": "prunes extra still textures and disposes them",
+  "description": "Make prunePhotoTextureCache a no-op."
+}

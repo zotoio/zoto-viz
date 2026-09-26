@@ -258,6 +258,7 @@ export function scoreBoardLegacy(
 export type LandingWeightPair = {
   aggregateLanding: number;
   pieceLanding: number;
+  erodedPieceCells?: number;
 };
 
 function scoreBoardFeatures(
@@ -269,10 +270,11 @@ function scoreBoardFeatures(
 ): number {
   const w = TETRIS_WEIGHTS;
   const pieceH = landingHeightForPiece(board, ctx.cells, ctx.x);
+  const erodedW = pair.erodedPieceCells ?? w.erodedPieceCells;
   return (
     pair.aggregateLanding * aggregateHeight(board)
     + pair.pieceLanding * pieceH
-    + w.erodedPieceCells * erodedPieceCells(cleared, pieceCells)
+    + erodedW * erodedPieceCells(cleared, pieceCells)
     + w.rowTransitions * rowTransitions(board)
     + w.colTransitions * colTransitions(board)
     + w.holes * holes(board)
@@ -300,10 +302,17 @@ export function scoreBoard(
   return scoreBoardOldWeights(board, cleared, pieceCells, ctx);
 }
 
+export type PlacementSearchStats = { placementsEvaluated: number };
+
+export function placementKey(p: Placement): string {
+  return `${p.x},${p.y},${p.rot}`;
+}
+
 export function bestPlacement(
   board: Board,
   kind: string,
   scoreFn: typeof scoreBoard = scoreBoard,
+  stats?: PlacementSearchStats,
 ): Placement | null {
   let best: Placement | null = null;
   let bestScore = -Infinity;
@@ -313,6 +322,7 @@ export function bestPlacement(
     for (let x = 0; x <= maxX; x++) {
       const y = landingY(board, cells, x);
       if (y === null) continue;
+      if (stats) stats.placementsEvaluated++;
       const trial = cloneBoard(board);
       lockCells(trial, cells, x, y);
       const cleared = clearFullRows(trial);
@@ -342,6 +352,43 @@ export function seededPieceKinds(n: number, salt = 0): string[] {
   const out: string[] = [];
   for (let i = 0; i < n; i++) out.push(tetrominoForProto(`tetris-seed:${salt}:${i}`));
   return out;
+}
+
+export function seededPieceKindIds(n: number, salt = 0): string[] {
+  return seededPieceKinds(n, salt);
+}
+
+export const SURVIVAL_BATTERY_SEEDS = Array.from({ length: 20 }, (_, i) => i);
+export const SURVIVAL_BATTERY_MAX_PIECES = 500;
+export const DETERMINISM_PIECES_PER_SEED = 60;
+
+export type AutoplayTrace = {
+  lines: number;
+  toppedOut: boolean;
+  pieces: number;
+  placements: Placement[];
+  placementsEvaluated: number;
+};
+
+export function simulateAutoplayTrace(
+  board: Board,
+  kinds: string[],
+  scoreFn: typeof scoreBoard = scoreBoard,
+): AutoplayTrace {
+  const stats: PlacementSearchStats = { placementsEvaluated: 0 };
+  const placements: Placement[] = [];
+  let lines = 0;
+  let pieces = 0;
+  for (const kind of kinds) {
+    const plan = bestPlacement(board, kind, scoreFn, stats);
+    if (!plan) return { lines, toppedOut: true, pieces, placements, placementsEvaluated: stats.placementsEvaluated };
+    placements.push(plan);
+    const cells = cellsFor(kind, plan.rot);
+    lockCells(board, cells, plan.x, plan.y);
+    lines += clearFullRows(board);
+    pieces++;
+  }
+  return { lines, toppedOut: false, pieces, placements, placementsEvaluated: stats.placementsEvaluated };
 }
 
 /** Headless autoplay: lock each piece at the planner's best spot. Returns total lines cleared. */

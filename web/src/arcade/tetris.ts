@@ -5,7 +5,14 @@ import { TETROMINOES, normalizeCells, rotateCells, tetrominoForProto } from "./s
 import { Stage3D } from "./stage3d";
 import { makeTetBlock } from "./models3d";
 import type { Packet } from "../core/types";
-import { bestPlacement, boardFromOccupied, cellsFor, type Placement } from "./tetris-engine";
+import {
+  bestPlacement,
+  boardFromOccupied,
+  cellsFor,
+  scoreBoard,
+  seededPieceKinds,
+  type Placement,
+} from "./tetris-engine";
 import { shouldHoldTopout } from "./tetris-topout";
 import {
   afterLockStack,
@@ -79,6 +86,10 @@ export class TetrisView extends Stage3D {
   private readonly skipSamples: { t: number; n: number }[] = [];
   private lastHudSkips = 0;
   private lockedPieces = 0;
+  private planCallCount = 0;
+  private placementsEvaluated = 0;
+  private openingIdleSeeded = false;
+  private lastHoldExpiredAt = 0;
 
   constructor(container: HTMLElement, scene: NetScene, deps: TetrisViewDeps = {}) {
     super(container, scene);
@@ -111,6 +122,10 @@ export class TetrisView extends Stage3D {
     return true;
   }
 
+  protected onStart(_preferIp: string | null): void {
+    this.seedOpeningIdlePiece(this.clockMs() / 1000);
+  }
+
   protected query() {
     const ip = this.picker.token();
     return ip ? { ip } : null;
@@ -128,6 +143,7 @@ export class TetrisView extends Stage3D {
   protected onTrafficPollEmpty(): void {
     this.usingIdleFeed = true;
     this.idleScheduler.notePollEmpty(this.clockMs());
+    this.seedOpeningIdlePiece(this.clockMs() / 1000);
     this.syncIdleChrome();
   }
 
@@ -174,12 +190,12 @@ export class TetrisView extends Stage3D {
   protected step(now: number, dt: number): void {
     const hold = stepTopoutHold(now, this.holdState());
     if (hold.topoutHoldUntil !== this.topoutHoldUntil) {
+      const hadHold = this.topoutHoldUntil > 0;
       this.topoutHoldUntil = hold.topoutHoldUntil;
-      if (hold.stackCells === 0) this.clearStack();
-    }
-    if (shouldHoldTopout(now, this.topoutHoldUntil)) {
-      this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
-      return;
+      if (hold.stackCells === 0) {
+        this.clearStack();
+        if (hadHold && this.topoutHoldUntil === 0) this.lastHoldExpiredAt = now;
+      }
     }
     const clock = this.clockMs();
     if (this.usingIdleFeed) {
@@ -195,6 +211,10 @@ export class TetrisView extends Stage3D {
       }, this.usingIdleFeed);
     }
     this.syncSkipHud(clock, this.usingIdleFeed && !this.idleScheduler.isLiveExclusive(clock));
+    if (shouldHoldTopout(now, this.topoutHoldUntil)) {
+      this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
+      return;
+    }
     if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);
     this.autoplayStep(dt);
     const aimed = this.active && this.plan
@@ -267,7 +287,10 @@ export class TetrisView extends Stage3D {
     this.moveAcc = 0;
     this.syncPiece();
     const board = boardFromOccupied(this.stack, COLS, ROWS);
-    const plan = bestPlacement(board, next.kind);
+    this.planCallCount++;
+    const planStats = { placementsEvaluated: 0 };
+    const plan = bestPlacement(board, next.kind, scoreBoard, planStats);
+    this.placementsEvaluated += planStats.placementsEvaluated;
     if (!plan) {
       this.beginTopoutHold(now);
       return;
@@ -352,6 +375,14 @@ export class TetrisView extends Stage3D {
   }
 
   /** QE / `?tetrisIdleSeed=topout`: nearly full well so the next locks trigger top-out hold. */
+  private seedOpeningIdlePiece(nowSec: number): void {
+    if (!this.usingIdleFeed || this.openingIdleSeeded) return;
+    const kind = seededPieceKinds(1, this.idleSeed)[0] ?? "T";
+    this.queue.push({ kind, color: PROTO_COLOR.tcp ?? this.colorOf("10.0.0.1") });
+    this.openingIdleSeeded = true;
+    if (!this.active && this.queue.length) this.spawn(nowSec, this.queue.shift()!);
+  }
+
   private prefillTopoutDemoBoard(): void {
     for (let y = 0; y < 9; y++) {
       for (let x = 0; x < 9; x++) {
@@ -450,6 +481,32 @@ export class TetrisView extends Stage3D {
     return this.trafficBudget;
   }
 
+  testPlanCallCount(): number {
+    return this.planCallCount;
+  }
+
+  testPlacementsEvaluated(): number {
+    return this.placementsEvaluated;
+  }
+
+  testHasActivePiece(): boolean {
+    return this.active !== null;
+  }
+
+  testWellNeedsActivePiece(): boolean {
+    if (this.active) return true;
+    if (shouldHoldTopout(this.lastFrameNow(), this.topoutHoldUntil) && this.stack.length > 0) return true;
+    return this.stack.length > 0 || this.queue.length > 0;
+  }
+
+  testLastHoldExpiredAt(): number {
+    return this.lastHoldExpiredAt;
+  }
+
+  private lastFrameNow(): number {
+    return this.clockMs() / 1000;
+  }
+
   testBoardFingerprint(): string {
     const parts: string[] = [];
     if (this.active) {
@@ -484,6 +541,10 @@ export class TetrisView extends Stage3D {
     super.reset();
     this.topoutHoldUntil = 0;
     this.topoutPrefilled = false;
+    this.openingIdleSeeded = false;
+    this.planCallCount = 0;
+    this.placementsEvaluated = 0;
+    this.lastHoldExpiredAt = 0;
     this.clearStack();
     this.queue = [];
     this.dropAcc = 0;

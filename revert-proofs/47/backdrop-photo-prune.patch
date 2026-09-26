@@ -1,0 +1,8 @@
+// web/src/graph/backdrop.ts — in prunePhotoTextureCache, skip eviction.
+ export function prunePhotoTextureCache(
+   cache: Map<string, THREE.Texture>,
+   retain: Set<string>,
+ ): string[] {
+-  const removed: string[] = [];
++  const removed: string[] = []; return removed;
+   for (const [url, tex] of cache) {

@@ -1,0 +1,14 @@
+10:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+12: FAIL  src/graph/backdrop.test.ts > photo sky cache > prunes extra still textures and disposes them
+13:AssertionError: expected [] to deeply equal [ '/c' ]
+33: FAIL  src/graph/backdrop.test.ts > photo sky cache > evicts outgoing photo after the crossfade window on tick
+34:AssertionError: expected true to be false // Object.is equality
+52: FAIL  src/graph/backdrop.test.ts > photo sky cache > prunes unreferenced stills when bindPhoto runs
+53:AssertionError: expected true to be false // Object.is equality
+73:      Tests  3 failed | 16 passed (19)
+ FAIL  src/graph/backdrop.test.ts > photo sky cache > prunes extra still textures and disposes them
+AssertionError: expected [] to deeply equal [ '/c' ]
+ FAIL  src/graph/backdrop.test.ts > photo sky cache > evicts outgoing photo after the crossfade window on tick
+AssertionError: expected true to be false // Object.is equality
+ FAIL  src/graph/backdrop.test.ts > photo sky cache > prunes unreferenced stills when bindPhoto runs
+AssertionError: expected true to be false // Object.is equality
