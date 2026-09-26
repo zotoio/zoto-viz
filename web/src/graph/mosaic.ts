@@ -12,6 +12,7 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { lookForMode, mergeLook } from "../plugins/plugin";
+import { applyPackCoalesceLayout, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
 import { mosaicTileViewId } from "./mosaic-tile-id";
 import { fillMosaicViewSelect, pickMosaicViewForSlot } from "../ui/mosaic-view-pick";
 
@@ -223,6 +224,10 @@ export class Mosaic {
   get focusedId(): string { return this.focused; }
   get mainMode(): string { return this.mainId; }
   get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
+
+  paneElement(slotId: string): HTMLElement | undefined {
+    return this.panes.get(slotId);
+  }
   get layout(): MosaicLayoutPatch {
     return {
       tree: this.tree,
@@ -342,6 +347,8 @@ export class Mosaic {
     this.holdPluginSkies();
     this.auditPanes("bind");
     this.emitLayout();
+    resetMosaicPackCoalesceWriters();
+    this.syncPackCoalesce();
   }
 
   /** Attach missing graph scenes and restyle from the catalog (empty panes after a pre-catalog setSize). */
@@ -355,6 +362,7 @@ export class Mosaic {
     this.holdPluginSkies();
     this.auditPanes("bind");
     this.cfg.host?.invalidate();
+    this.syncPackCoalesce();
   }
 
   /** Plugin skies are in flight — do not treat a missing shader as a failed sky yet. */
@@ -461,6 +469,8 @@ export class Mosaic {
     this.auditPanes("bind");
     this.relayoutAll();
     this.emitLayout();
+    resetMosaicPackCoalesceWriters();
+    this.syncPackCoalesce();
   }
 
   /** Change one pane to a catalog view id (allocates a tile slot; duplicates need an explicit pick). */
@@ -476,6 +486,10 @@ export class Mosaic {
     if (!next || next.join("\0") === this.tileIds.join("\0")) return false;
     this.assignViews(next);
     return true;
+  }
+
+  private syncPackCoalesce(): void {
+    applyPackCoalesceLayout(this, mosaicPaneMode);
   }
 
   private emitLayout(): void {

@@ -66,7 +66,8 @@ function promptDuplicateChoice(viewId: string, tileSlotIds: readonly string[]): 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "mosaic-pick-btn";
-    addBtn.textContent = "Add another";
+    const shareTile = tiles[0] ?? 1;
+    addBtn.textContent = `Add another (Shares settings with tile ${shareTile})`;
     addBtn.addEventListener("click", () => done({ kind: "add" }));
 
     const moveBtns = tiles.map((tileN) => {

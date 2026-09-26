@@ -100,11 +100,13 @@ import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
-import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import { PluginSandbox, consentHash, hashConsented, tsPluginsAllowed } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { paintFeedState } from "./feed-paint";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
+import { deliverCoalescedMosaicPacks, mosaicPackGroups } from "../graph/mosaic-pack-coalesce";
+import { MosaicTileHudLayer } from "../ui/mosaic-tile-hud";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -346,6 +348,7 @@ const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
+const mosaicTileHud = new MosaicTileHudLayer();
 addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
@@ -565,6 +568,11 @@ let tsWatchHash = "";
 async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   if (!spec || !pluginNeedsReview(spec)) return true;
   if (spec.consent) return true;
+  if (spec.hash && hashConsented(spec.id, spec.hash)) {
+    spec.consent = "reviewed";
+    if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+    return true;
+  }
   if (autoconsentEnabled() && autoconsentEligible(spec)) {
     const kind = autoconsentKind(spec);
     try {
@@ -1028,7 +1036,9 @@ function feed(m: StateMsg): void {
     || pluginSpecs.find((p) => p.id === tsWatchId)
     || null;
   const packId = normalizeVizDemoPackId(active?.id ?? mode.pluginId);
-  if (active?.capabilities?.includes("viz.read") || packId) {
+  const mosaicDemoPacks = mosaic?.on
+    && mosaic.tileIds.some((id) => normalizeVizDemoPackId(modeById(mosaicTileViewId(id)).pluginId));
+  if (active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks) {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
@@ -1038,15 +1048,47 @@ function feed(m: StateMsg): void {
     const buildFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
+    const coalesceMetrics = { onFrameCalls: 0, drawCalls: 0 };
+    const sandboxedPacks = new Set<string>();
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-      sandbox.frame(f);
-      if (packId) {
-        runPackFrameHandler(packId, f, {
-          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, optsFor(mode));
+      if (mosaic?.on && mosaicDemoPacks) {
+        const wall = mosaic;
+        deliverCoalescedMosaicPacks({
+          mosaic: wall,
+          frame: f,
+          modeById: (id) => modeById(mosaicTileViewId(id)),
+          pluginSpecForMode,
+          optsFor,
+          budget: { stats: vizBudget.stats },
+          metrics: coalesceMetrics,
+          onSandboxFrame: (pluginId) => {
+            if (sandboxedPacks.has(pluginId)) return;
+            sandboxedPacks.add(pluginId);
+            sandbox.frame(f);
+          },
+        });
+        mosaicTileHud.sync(wall.tileIds, (slot) => wall.paneElement(slot) ?? null);
+        const now = performance.now();
+        for (const group of mosaicPackGroups(wall.tileIds, (id) => modeById(mosaicTileViewId(id)))) {
+          if (!group.packId) continue;
+          const spec = pluginSpecForMode(mosaicTileViewId(group.primarySlot));
+          mosaicTileHud.tickForPack(group.packId, spec?.name ?? group.packId, group.slots, {
+            stats: vizBudget.stats,
+            frame: vizBudget.lastBuilt,
+            state: shown,
+            now,
+          });
+        }
+      } else {
+        sandbox.frame(f);
+        if (packId) {
+          runPackFrameHandler(packId, f, {
+            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+          }, optsFor(mode));
+        }
       }
     }, buildFrame);
     if (frame) {
@@ -1060,14 +1102,16 @@ function feed(m: StateMsg): void {
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
     }
-    vizHud.tick({
-      packId,
-      packName: active?.name ?? packId ?? "",
-      stats: vizBudget.stats,
-      frame: vizBudget.lastBuilt,
-      state: shown,
-      now: performance.now(),
-    });
+    if (!mosaic?.on) {
+      vizHud.tick({
+        packId,
+        packName: active?.name ?? packId ?? "",
+        stats: vizBudget.stats,
+        frame: vizBudget.lastBuilt,
+        state: shown,
+        now: performance.now(),
+      });
+    }
   }
 
   const tsMode = modeById(modeSel.value);

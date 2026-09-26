@@ -9,6 +9,7 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
+import { surfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -1110,6 +1111,8 @@ export class NetScene implements HostedView {
   private active = true;
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
+  /** Duplicate mosaic tiles of the same pack: one tick/draw on primary, letterboxed mirrors. */
+  private packCoalesce: { role: "primary" | "mirror"; primary: NetScene | null } | null = null;
   private vizHeadlineText = "";
   private now = Date.now() / 1000;
   /** Host-engine stub so an empty catalog still constructs; catalog default is applied via setMode. */
@@ -1544,10 +1547,31 @@ export class NetScene implements HostedView {
     this.present();
   }
 
+  setPackCoalesce(role: { role: "primary" | "mirror"; primary: NetScene | null } | null): void {
+    this.packCoalesce = role;
+  }
+
+  get packMirrorPrimary(): NetScene | null {
+    return this.packCoalesce?.role === "mirror" ? this.packCoalesce.primary : null;
+  }
+
+  surfaceLetterboxFill(): SurfaceLetterboxFill {
+    return surfaceLetterboxFill(this.clearHex, 0.25);
+  }
+
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
   private present(): void {
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
     this.backdrop.syncCamera(this.camera);
+    if (this.host && this.packCoalesce?.role === "mirror" && this.packCoalesce.primary) {
+      this.lastVp = this.host.presentPackMirror(
+        this.packCoalesce.primary,
+        this,
+        this.surfaceLetterboxFill(),
+      );
+      this.notePaneChange();
+      return;
+    }
     if (this.host) {
       this.lastVp = this.host.present(this, this.clearHex, this.scene, this.camera);
     } else if (this.renderer instanceof SoftwareGpu) {
@@ -3487,6 +3511,10 @@ export class NetScene implements HostedView {
     }
     const dt = this.lastFrameTs ? Math.min(0.05, (ts - this.lastFrameTs) / 1000) : 0;
     this.lastFrameTs = ts;
+    if (this.packCoalesce?.role === "mirror" && this.packCoalesce.primary && this.host) {
+      this.present();
+      return;
+    }
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();

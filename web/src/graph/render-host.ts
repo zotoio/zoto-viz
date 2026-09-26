@@ -19,6 +19,7 @@
 import * as THREE from "three";
 import type { SoftRect } from "./software-draw";
 import { cssHex } from "./software-draw";
+import { letterboxInnerRect, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
@@ -137,6 +138,8 @@ export class RenderHost {
       }
       this.canvasRect = this.canvas.getBoundingClientRect();
       harvestGpu();
+      const mirrorRank = (v: HostedView) => ((v as { packMirrorPrimary?: unknown }).packMirrorPrimary ? 1 : 0);
+      this.views.sort((a, b) => mirrorRank(a) - mirrorRank(b));
       for (const v of this.views) v.hostFrame(ts);
     };
     this.raf = requestAnimationFrame(this.frame);
@@ -164,6 +167,70 @@ export class RenderHost {
 
   /** Pane geometry changed (mosaic layout, hero swap): clear stale pixels outside the new viewports. */
   invalidate(): void { this.dirty = true; }
+
+  /**
+   * Letterbox a primary pack tile into a duplicate tile viewport (same host frame, no second pack tick).
+   */
+  presentPackMirror(
+    primary: HostedView,
+    mirror: HostedView,
+    fill: SurfaceLetterboxFill,
+  ): Viewport | null {
+    const dst = this.viewBox(mirror);
+    const src = this.viewBox(primary);
+    if (!dst || !src || dst.w < 2 || dst.h < 2) return null;
+    const aspect = src.w / Math.max(1, src.h);
+    const inner = letterboxInnerRect(dst, aspect);
+    inner.x += dst.x;
+    inner.y += dst.y;
+    const box = { ...dst };
+    if (this.software) {
+      const ctx = this.ctx2d;
+      if (!ctx) return null;
+      const pr = this.pr;
+      ctx.setTransform(pr, 0, 0, pr, 0, 0);
+      paintLetterboxBars(ctx, box, inner, fill);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(inner.x, inner.y, inner.w, inner.h);
+      ctx.clip();
+      ctx.drawImage(
+        this.canvas,
+        src.x * pr,
+        src.y * pr,
+        src.w * pr,
+        src.h * pr,
+        inner.x,
+        inner.y,
+        inner.w,
+        inner.h,
+      );
+      ctx.restore();
+      return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
+    }
+    const rd = this.renderer as THREE.WebGLRenderer;
+    const gl = this.gl;
+    if (!gl) return null;
+    const sx = Math.round(src.x * rd.getPixelRatio());
+    const sy = Math.round(src.y * rd.getPixelRatio());
+    const sw = Math.round(src.w * rd.getPixelRatio());
+    const sh = Math.round(src.h * rd.getPixelRatio());
+    const dx = Math.round(inner.x * rd.getPixelRatio());
+    const dy = Math.round(inner.y * rd.getPixelRatio());
+    const dw = Math.round(inner.w * rd.getPixelRatio());
+    const dh = Math.round(inner.h * rd.getPixelRatio());
+    const ctx = this.canvas.getContext("2d");
+    if (ctx) {
+      const pr = rd.getPixelRatio();
+      ctx.setTransform(pr, 0, 0, pr, 0, 0);
+      paintLetterboxBars(ctx, box, inner, fill);
+      ctx.drawImage(this.canvas, sx, sy, sw, sh, inner.x, inner.y, inner.w, inner.h);
+    }
+    rd.setViewport(dx, dy, dw, dh);
+    rd.setScissor(dx, dy, dw, dh);
+    rd.setScissorTest(true);
+    return { x: dx, y: dy, w: dw, h: dh };
+  }
 
   /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
   setPixelRatio(pr: number): void {

@@ -1575,6 +1575,27 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
 .viz-hud-swap .field-btn .cap { display: none; }
 .viz-hud-swap .field-btn .val { font-size: 10px; }
 body.mosaic .viz-hud { display: none; }
+.mosaic-tile-hud {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 6px;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font: 600 10px/1.2 inherit;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.mosaic-pane { position: relative; }
+.mosaic-shared-pack-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
 body.arcade .viz-hud { display: none; }
 
 /* ------------------------------------------------------------------ debug panel (header toggle / key B) */

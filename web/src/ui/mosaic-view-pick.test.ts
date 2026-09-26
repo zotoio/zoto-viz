@@ -29,6 +29,20 @@ describe("mosaic view pick", () => {
     expect(topo?.textContent).toMatch(/On tile 1/);
   });
 
+  it("labels Add another with shared settings tile index", async () => {
+    vi.spyOn(document.body, "appendChild").mockImplementation((node) => {
+      const el = node as HTMLElement;
+      if (el.className === "mosaic-pick-backdrop") {
+        const add = el.querySelector(".mosaic-pick-btn");
+        expect(add?.textContent).toMatch(/Shares settings with tile 1/);
+        el.querySelector<HTMLButtonElement>(".link")?.click();
+      }
+      return el;
+    });
+    await pickMosaicViewForSlot(["plugin:topology", "plugin:talkers"], "plugin:talkers", "plugin:topology");
+    vi.restoreAllMocks();
+  });
+
   it("adds another tile slot for a duplicate pack", () => {
     const tiles = ["plugin:topology", "plugin:talkers"];
     const next = applyMosaicViewPick(tiles, "plugin:talkers", "plugin:topology", { kind: "add" });

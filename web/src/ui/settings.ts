@@ -1791,6 +1791,14 @@ export class Settings {
         })();
       });
       row.append(cap, sel);
+      const dupCount = ids.filter((id) => mosaicTileViewId(id) === mosaicTileViewId(cur)).length;
+      if (dupCount > 1 && cur) {
+        const note = document.createElement("div");
+        note.className = "mosaic-shared-pack-hint";
+        const label = viewSelectOptions().find((o) => o.value === mosaicTileViewId(cur))?.label ?? mosaicTileViewId(cur);
+        note.textContent = `Applies to all ${label} tiles`;
+        row.append(note);
+      }
       host.appendChild(row);
     }
   }
