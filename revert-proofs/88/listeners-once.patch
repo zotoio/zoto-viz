@@ -1,0 +1,34 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c24ae9b..cb4d67c 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -80,8 +80,6 @@ function attachGlContextListeners(
+   onRestored: () => void,
+ ): void {
+   const marked = canvas as HTMLCanvasElement & { [GL_CONTEXT_LISTENERS_KEY]?: boolean };
+-  if (marked[GL_CONTEXT_LISTENERS_KEY]) return;
+-  marked[GL_CONTEXT_LISTENERS_KEY] = true;
+   canvas.addEventListener("webglcontextlost", onLost);
+   canvas.addEventListener("webglcontextrestored", onRestored);
+ }
+@@ -350,6 +348,20 @@ export class RenderHost {
+   private onSharedContextRestored(): void {
+     this.glContextLost = false;
+     this.contextGen = mintContextGen((this.contextGen as number) + 1);
++    attachGlContextListeners(
++      this.canvas,
++      (e) => {
++        e.preventDefault();
++        this.onSharedContextLost();
++        for (const v of this.views) v.hostContextLost();
++      },
++      () => {
++        this.onSharedContextRestored();
++        this.dirty = true;
++        for (const v of this.views) v.hostContextRestored();
++      },
++    );
++
+     this.gfxNotice.onContextRestored();
+     for (const slot of this.tileShaders.values()) {
+       if (slot.latch.dead) continue;

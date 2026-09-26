@@ -1,0 +1,15 @@
+diff --git a/web/src/graph/gfx-wall-notice.ts b/web/src/graph/gfx-wall-notice.ts
+index 4d2d349..53901a6 100644
+--- a/web/src/graph/gfx-wall-notice.ts
++++ b/web/src/graph/gfx-wall-notice.ts
+@@ -36,10 +36,6 @@ export class GfxWallNotice {
+   }
+ 
+   onContextRestored(): void {
+-    if (this.restoreTimer) {
+-      clearTimeout(this.restoreTimer);
+-      this.restoreTimer = null;
+-    }
+     this.el?.remove();
+     this.el = null;
+     this.shown = false;

@@ -1,0 +1,11 @@
+diff --git a/web/src/graph/context-cache-key.ts b/web/src/graph/context-cache-key.ts
+index fc236d4..22579fb 100644
+--- a/web/src/graph/context-cache-key.ts
++++ b/web/src/graph/context-cache-key.ts
+@@ -17,5 +17,5 @@ export function contextCacheHit<T extends string | number>(
+   prev: ContextCacheKey<T> | null,
+   next: ContextCacheKey<T>,
+ ): boolean {
+-  return prev !== null && prev.gen === next.gen && prev.value === next.value;
++  return prev !== null && prev.value === next.value;
+ }

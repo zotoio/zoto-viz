@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c24ae9b..2f99c69 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -181,7 +181,7 @@ export class RenderHost {
+     attachGlContextListeners(
+       this.canvas,
+       (e) => {
+-        e.preventDefault();
++        
+         this.onSharedContextLost();
+         for (const v of this.views) v.hostContextLost();
+       },
