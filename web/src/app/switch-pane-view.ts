@@ -1,4 +1,5 @@
 import type { Mosaic } from "../graph/mosaic";
+import { nextPaneTiles } from "../graph/mosaic-layout";
 import { consentBlockMessage, mosaicFocusSlot, mosaicSwapFrom } from "./apply-mode-mosaic";
 import { clearConsentPendingForPane, registerConsentPending } from "./consent-pending-panes";
 
@@ -117,12 +118,14 @@ export async function switchPaneView(
   }
 
   if (slot.swap) {
+    const tilesBeforeSwap = mosaic.tileIds;
     if (!mosaic.setPaneView(slot.fromViewId, slot.toViewId)) {
       const msg = "Could not swap that view on the wall.";
       mosaic.setPaneNotice(slot.paneId, msg);
       return { ok: false, reason: msg };
     }
-    if (!mosaic.tileIds.includes(slot.fromViewId)) {
+    const tilesAfterSwap = nextPaneTiles(tilesBeforeSwap, slot.fromViewId, slot.toViewId);
+    if (!tilesAfterSwap.includes(slot.fromViewId)) {
       opts.teardownView(slot.fromViewId);
     }
   }
