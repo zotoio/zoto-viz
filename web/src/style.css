@@ -1532,6 +1532,12 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
   transition: color 120ms linear;
 }
 .viz-hud-skip.pulse { color: var(--warn); }
+.viz-hud-frame {
+  color: var(--label-muted, var(--muted));
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .viz-hud-swap {
   display: flex;
   gap: 4px;
@@ -1546,7 +1552,7 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
 }
 .viz-hud-swap .field-btn .cap { display: none; }
 .viz-hud-swap .field-btn .val { font-size: 10px; }
-body.mosaic .viz-hud { display: none; }
+body.mosaic .viz-hud-swap { display: none; }
 body.arcade .viz-hud { display: none; }
 
 /* ------------------------------------------------------------------ debug panel (header toggle / key B) */
