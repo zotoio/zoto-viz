@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
-import { monoMs } from "../core/time-ms";
+import type { FrameTs } from "../core/time-ms";
 import type { NetScene } from "./scene";
 import { TetrisView } from "../arcade/tetris";
 
@@ -51,7 +51,7 @@ describe("Stage3D hostFrameTick wall clock", () => {
       clock += FRAME_MS;
       const dtSec = (clock - prev) / 1000;
       prev = clock;
-      view.hostFrameTick(monoMs(clock), dtSec);
+      view.hostFrameTick(clock as FrameTs, dtSec);
     }
     expect(perfSpy).not.toHaveBeenCalled();
     expect(dateSpy).not.toHaveBeenCalled();

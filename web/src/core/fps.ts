@@ -1,4 +1,4 @@
-import type { MonoMs } from "./time-ms";
+import type { FrameTs, MonoMs } from "./time-ms";
 
 /**
  * Display framerate of the live UI. Several rAF loops (graph, mosaic tiles, arcade, feed)
@@ -65,7 +65,7 @@ export function windowFps(now: number, windowMs = SHOW_MS, since = Number.NEGATI
 }
 
 /** Call from every animation callback with that callback's rAF timestamp. */
-export function markFrame(ts: MonoMs): void {
+export function markFrame(ts: FrameTs): void {
   const n = Number(ts);
   if (n === lastTs) return;
   lastTs = n;

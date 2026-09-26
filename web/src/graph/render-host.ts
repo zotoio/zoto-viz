@@ -22,12 +22,13 @@ import { cssHex } from "./software-draw";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
+import type { FrameTs } from "../core/time-ms";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
   readonly viewEl: HTMLElement;
   /** update and draw one frame; call `host.present(...)` from inside */
-  hostFrame(ts: number): void;
+  hostFrame(ts: FrameTs): void;
   hostContextLost(): void;
   hostContextRestored(): void;
   /** Canvas 2D fallback when `host.software` is set */
@@ -137,7 +138,8 @@ export class RenderHost {
       }
       this.canvasRect = this.canvas.getBoundingClientRect();
       harvestGpu();
-      for (const v of this.views) v.hostFrame(ts);
+      const frameTs = ts as FrameTs;
+      for (const v of this.views) v.hostFrame(frameTs);
     };
     this.raf = requestAnimationFrame(this.frame);
   }

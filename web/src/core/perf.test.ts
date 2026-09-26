@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { bindFps, markFrame, resetFps, windowFps } from "./fps";
-import { monoMs } from "./time-ms";
+import type { FrameTs } from "./time-ms";
 import { DEFAULT_DREAM } from "../graph/scene";
 import {
   PERF_FPS, PERF_HOLD_MS, PERF_RECOVER_FPS, PERF_RECOVER_MS,
@@ -10,7 +10,7 @@ import {
 function play(from: number, to: number, step: number, enabled = true, ease = 0.45): number {
   let s = 0;
   for (let t = from; t <= to; t += step) {
-    markFrame(monoMs(t));
+    markFrame(t as FrameTs);
     s = tickPerf(t, enabled, ease);
   }
   return s;
@@ -25,19 +25,19 @@ describe("markFrame", () => {
   it("does not count the same timestamp twice", () => {
     const el = document.createElement("span");
     bindFps(el);
-    markFrame(monoMs(0));
-    markFrame(monoMs(0));
-    markFrame(monoMs(500));
-    markFrame(monoMs(1000));
+    markFrame(0 as FrameTs);
+    markFrame(0 as FrameTs);
+    markFrame(500 as FrameTs);
+    markFrame(1000 as FrameTs);
     expect(el.textContent).toBe("2");
-    markFrame(monoMs(1100));
+    markFrame(1100 as FrameTs);
     expect(el.textContent).toBeTruthy();
   });
 
   it("averages a 30 s window only once the trail is full", () => {
-    for (let t = 0; t <= 10_000; t += 200) markFrame(monoMs(t));
+    for (let t = 0; t <= 10_000; t += 200) markFrame(t as FrameTs);
     expect(windowFps(10_000, PERF_HOLD_MS)).toBeNull();
-    for (let t = 10_200; t <= PERF_HOLD_MS; t += 200) markFrame(monoMs(t));
+    for (let t = 10_200; t <= PERF_HOLD_MS; t += 200) markFrame(t as FrameTs);
     const fps = windowFps(PERF_HOLD_MS, PERF_HOLD_MS);
     expect(fps).toBeGreaterThan(4);
     expect(fps).toBeLessThan(6);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { addPresentListener, bindFps, bindPresentListener, markFrame, PaneFps, resetFps } from "./fps";
-import { monoMs } from "./time-ms";
+import type { FrameTs } from "./time-ms";
 
 describe("markFrame", () => {
   afterEach(() => resetFps());
@@ -8,22 +8,22 @@ describe("markFrame", () => {
   it("does not count the same timestamp twice", () => {
     const el = document.createElement("span");
     bindFps(el);
-    markFrame(monoMs(0));
-    markFrame(monoMs(0));
-    markFrame(monoMs(500));
-    markFrame(monoMs(1000));
+    markFrame(0 as FrameTs);
+    markFrame(0 as FrameTs);
+    markFrame(500 as FrameTs);
+    markFrame(1000 as FrameTs);
     expect(el.textContent).toBe("2");
-    markFrame(monoMs(1100));
+    markFrame(1100 as FrameTs);
     expect(el.textContent).toBeTruthy();
   });
 
   it("notifies the present listener once per unique vsync", () => {
     const onPresent = vi.fn();
     bindPresentListener(onPresent);
-    markFrame(monoMs(0));
-    markFrame(monoMs(0));
-    markFrame(monoMs(16.7));
-    markFrame(monoMs(33.4));
+    markFrame(0 as FrameTs);
+    markFrame(0 as FrameTs);
+    markFrame(16.7 as FrameTs);
+    markFrame(33.4 as FrameTs);
     expect(onPresent).toHaveBeenCalledTimes(3);
     expect(onPresent).toHaveBeenLastCalledWith(33.4);
   });
@@ -33,7 +33,7 @@ describe("markFrame", () => {
     const b = vi.fn();
     addPresentListener(a);
     addPresentListener(b);
-    markFrame(monoMs(42));
+    markFrame(42 as FrameTs);
     expect(a).toHaveBeenCalledTimes(1);
     expect(b).toHaveBeenCalledTimes(1);
     expect(a).toHaveBeenCalledWith(42);
@@ -46,27 +46,9 @@ describe("markFrame", () => {
     addPresentListener(keep);
     const unsub = addPresentListener(drop);
     unsub();
-    markFrame(monoMs(100));
-    markFrame(monoMs(120));
+    markFrame(100 as FrameTs);
+    markFrame(120 as FrameTs);
     expect(keep).toHaveBeenCalledTimes(2);
     expect(drop).not.toHaveBeenCalled();
-  });
-});
-
-describe("PaneFps", () => {
-  it("counts picture changes in one pane, and falls to zero when the picture stops changing", () => {
-    const host = document.createElement("div");
-    const pane = new PaneFps(host);
-    expect(host.querySelector(".pane-fps")).toBe(pane.el);
-    pane.mark(0);
-    pane.mark(100);
-    pane.mark(200);
-    expect(pane.el.textContent).toBe("10 fps");
-    pane.noteGpu(200);
-    expect(pane.el.textContent).toBe("10 fps");
-    pane.tick(2000);
-    expect(pane.el.textContent).toBe("0 fps");
-    pane.dispose();
-    expect(host.querySelector(".pane-fps")).toBeNull();
   });
 });

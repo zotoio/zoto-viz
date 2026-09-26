@@ -1,4 +1,4 @@
-import type { MonoMs } from "../core/time-ms";
+import type { FrameTs } from "../core/time-ms";
 import type { BackdropKind } from "../graph/backdrop";
 import type { NetScene } from "../graph/scene";
 import type { TetrisView } from "./tetris";

@@ -4,7 +4,7 @@ import { decodePacket, type FeedKind } from "../inspect/decode";
 import { idsOf, type Packet, type TrafficMsg } from "../core/types";
 import type { NetScene } from "../graph/scene";
 import { markFrame } from "../core/fps";
-import { monoMs } from "../core/time-ms";
+import type { FrameTs } from "../core/time-ms";
 import { followScrollTop } from "./feed-reveal";
 import { bindFloatPanel } from "./float-drag";
 export type { ChatRole, TranscriptTurn } from "./chat";
@@ -406,7 +406,7 @@ export class LiveFeed {
 
   private loop(ts: number): void {
     this.raf = requestAnimationFrame(this.loop);
-    markFrame(monoMs(ts));
+    markFrame(ts as FrameTs);
     const dt = this.lastTick ? Math.min(0.05, (ts - this.lastTick) / 1000) : 1 / 60;
     this.lastTick = ts;
     if (!this.cfg.on) return;
