@@ -1,5 +1,6 @@
 {
   "row": "import lint revert vizWallMs in budget",
-  "testName": "import lint: budget and scheduler paths do not import vizWallMs",
-  "excerpt": "AssertionError: plugins/viz-tile-budget.ts: expected true to be false // Object.is equality"
+  "testName": "W1: wall step-back does not change budget/HUD counts; dt stays >= 0",
+  "excerpt": "AssertionError: plugins/viz-tile-budget.ts: expected true to be false // Object.is equality",
+  "testFile": "web/src/plugins/dogfood-clock-split.test.ts"
 }

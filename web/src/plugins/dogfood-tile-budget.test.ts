@@ -135,10 +135,11 @@ describe("tile frame budget rows", () => {
     runTileBudgetAttempts(reg, "t0", 5, () => VIZ_COST_TICKS_50MS);
     expect(reg.getTile("t0").debt).toBeGreaterThan(0);
     const before = reg.getTile("t0");
-    before.hudSamples.push({ tick: 1000, kind: "skip" });
+    before.hudRing[before.hudRingNext] = { tick: 1000, kind: "skip" };
+    before.hudRingCount = 1;
     syncVizTileScope(["t0", "t1", "t2", "t3"]);
     expect(reg.getTile("t0").debt).toBe(0);
-    expect(reg.getTile("t0").hudSamples).toEqual([]);
+    expect(reg.getTile("t0").hudRingCount).toBe(0);
     expect(reg.getTile("t0").share).toBe(1252);
     runTileBudgetAttempts(reg, "t0", 1, () => VIZ_COST_TICKS_50MS);
     const debtBefore = reg.getTile("t0").debt;

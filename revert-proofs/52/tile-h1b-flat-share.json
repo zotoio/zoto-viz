@@ -1,5 +1,7 @@
 {
   "row": "H1 revert B",
   "test": "web/src/plugins/dogfood-tile-hud.test.ts H1",
-  "excerpt": "AssertionError: expected +0 to be 40 // skipped count or label mismatch"
+  "excerpt": "AssertionError: expected +0 to be 40 // skipped count or label mismatch",
+  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
+  "testName": "H1: 10 ms at 2\u00d72 \u2014 debt 1748 \u2192 2 skips per build; i=119 \u2192 20 frames, 40 skipped/s LIMITED label"
 }

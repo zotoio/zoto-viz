@@ -11,8 +11,8 @@ import {
   packNixieWallBuffer,
   resetNixieFormatterCache,
 } from "./nixie-wall-clock";
-import * as nixieTubes from "../../../plugins/src/nixie-clock/frontend/tubes";
-import { DEFAULT_LOOK, NIXIE_LOOK_FIELD_BY_KEY } from "../../../plugins/src/nixie-clock/frontend/tubes";
+import * as nixieTubes from "../../../shared/nixie-tubes";
+import { DEFAULT_LOOK, NIXIE_LOOK_FIELD_BY_KEY } from "../../../shared/nixie-tubes";
 import {
   hostNixieFormatCalls,
   resetNixiePackHostScope,
@@ -115,9 +115,6 @@ describe("nixie wall clock rows", () => {
     runPackFrameHandler("nixie-clock", frame, handlers, base);
     parseSpy.mockClear();
 
-    const keyList = ["format", "seconds", "glow", "flicker"];
-    expect(keyList).toEqual(["format", "seconds", "glow", "flicker"]);
-
     const steps: { key: keyof typeof base; value: string; field: keyof typeof DEFAULT_LOOK; want: unknown }[] = [
       { key: "format", value: "12", field: NIXIE_LOOK_FIELD_BY_KEY.format, want: true },
       { key: "seconds", value: "0", field: NIXIE_LOOK_FIELD_BY_KEY.seconds, want: false },
@@ -133,6 +130,21 @@ describe("nixie wall clock rows", () => {
       expect(nixiePackActiveLook()[step.field]).toEqual(step.want);
     }
     expect(parseSpy.mock.calls.length).toBe(4);
+  });
+
+  it("N5: absent glow vs empty glow — empty re-parses to 0.4, absent keeps prior", () => {
+    const handlers = {
+      writeBuffer: () => {},
+      writeUniform: () => {},
+      writeParticles: () => {},
+    };
+    const frame = emptyFrame();
+    runPackFrameHandler("nixie-clock", frame, handlers, { format: "24", seconds: "1", glow: "1.2" });
+    expect(nixiePackActiveLook().glow).toBe(1.2);
+    runPackFrameHandler("nixie-clock", frame, handlers, { format: "24", seconds: "1" });
+    expect(nixiePackActiveLook().glow).toBe(1.2);
+    runPackFrameHandler("nixie-clock", frame, handlers, { format: "24", seconds: "1", glow: "" });
+    expect(nixiePackActiveLook().glow).toBe(0.4);
   });
 
   it("N12: mixed 12h and 24h tiles — one format per second, per-tile hour conversion", () => {

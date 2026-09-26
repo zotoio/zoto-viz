@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "web/src/plugins/dogfood.test.ts",
-  "testName": "fat-LAN live soak: count-based delivery and skip honesty on simulated clock",
+  "testName": "records skips when build is injected slow \u2014 never silent green",
   "description": "Budget comparison off-by-one: 4 ms injected cost treated as over budget"
 }

@@ -3,7 +3,7 @@ import {
   type NixieLook,
   clamp,
   parseNixieLook,
-} from "../../../plugins/src/nixie-clock/frontend/tubes";
+} from "../../../shared/nixie-tubes";
 
 export const NIXIE_SIM_TICKS_PER_FRAME = 5000;
 
@@ -22,7 +22,7 @@ function formatterForZone(timeZone?: string): Intl.DateTimeFormat {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
-      hour12: false,
+      hourCycle: "h23",
       timeZone,
     });
     formatterCache.set(key, fmt);

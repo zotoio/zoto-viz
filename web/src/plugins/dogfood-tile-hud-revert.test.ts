@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { resetVizClockInjectors } from "../core/viz-clock";
-import { computeTileHudViewerState, tileHudSkipRatePerSec } from "./viz-tile-hud";
+import { tileHudSkipRatePerSec } from "./viz-tile-hud";
+import { computeTileHudViewerStateWithOpts } from "./viz-tile-hud-revert-opts";
+import { hudSamplesForTile } from "./viz-tile-budget";
 import {
   freshHudRegistry,
   runTileHudSim,
@@ -22,7 +24,7 @@ describe("tile HUD revert rows (sidecar expectations)", () => {
     expect(row.state).toBe("over_budget");
     const tile = reg.getTile("t0");
     const now = 119 * VIZ_CLOCK_STEP_TICKS;
-    const reverted = computeTileHudViewerState(tile.hudSamples, now, tile.lastBuildCostTicks, {
+    const reverted = computeTileHudViewerStateWithOpts(hudSamplesForTile(tile), now, tile.lastBuildCostTicks, {
       requireAllBuildsWithinWall: false,
     });
     expect(reverted).toBe("limited");
@@ -33,11 +35,11 @@ describe("tile HUD revert rows (sidecar expectations)", () => {
     runTileHudSim(h1, "t0", 120, () => VIZ_COST_TICKS_10MS, 4, 119);
     const t1 = h1.getTile("t0");
     const now = 119 * VIZ_CLOCK_STEP_TICKS;
-    expect(tileHudSkipRatePerSec(t1.hudSamples, now, true)).toBe(41);
+    expect(tileHudSkipRatePerSec(hudSamplesForTile(t1), now, true)).toBe(41);
 
     const h2 = freshHudRegistry(tileIdsForLayout(2, 2));
     runTileHudSim(h2, "t0", 120, () => VIZ_COST_TICKS_50MS, 4, 119);
     const t2 = h2.getTile("t0");
-    expect(tileHudSkipRatePerSec(t2.hudSamples, now, true)).toBe(56);
+    expect(tileHudSkipRatePerSec(hudSamplesForTile(t2), now, true)).toBe(56);
   });
 });

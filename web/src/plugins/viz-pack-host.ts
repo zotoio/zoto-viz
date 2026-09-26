@@ -15,17 +15,18 @@ import {
   parseNixieLook,
   type NixieLook,
   type NixieLookKey,
-} from "../../../plugins/src/nixie-clock/frontend/tubes";
+} from "../../../shared/nixie-tubes";
 
 const hostNixieClock = createNixieWallClock();
 
 let nixieScopedLook: NixieLook = parseNixieLook();
 let nixieActiveLook: NixieLook = nixieScopedLook;
-const nixieOptSlots: [string, string, string, string] = ["", "", "", ""];
+const nixieOptSlots: (string | undefined)[] = NIXIE_LOOK_KEYS.map(() => undefined);
 const nixiePackCanvas: DevicePixelSize = { w: CANVAS_DEFAULT.w, h: CANVAS_DEFAULT.h };
 
-function nixieOptRaw(opts: Record<string, string> | null | undefined, key: NixieLookKey): string {
-  return opts?.[key] ?? "";
+function nixieOptRaw(opts: Record<string, string> | null | undefined, key: NixieLookKey): string | undefined {
+  if (opts == null || !Object.prototype.hasOwnProperty.call(opts, key)) return undefined;
+  return opts[key] ?? "";
 }
 
 /** Parse nixie look when tracked option values change (no per-frame key stringify). */
@@ -40,7 +41,7 @@ export function syncNixiePackScope(opts?: Record<string, string> | null): void {
     }
   }
   if (!changed) return;
-  nixieScopedLook = parseNixieLook(opts);
+  nixieScopedLook = parseNixieLook(opts, nixieScopedLook);
 }
 
 /** Track render-host backing size for nixie buffers (no querySelector). */
@@ -54,10 +55,7 @@ export function nixiePackActiveCanvas(): Readonly<DevicePixelSize> {
 }
 
 export function resetNixiePackHostScope(): void {
-  nixieOptSlots[0] = "";
-  nixieOptSlots[1] = "";
-  nixieOptSlots[2] = "";
-  nixieOptSlots[3] = "";
+  nixieOptSlots.fill(undefined);
   nixieScopedLook = parseNixieLook();
   nixiePackCanvas.w = CANVAS_DEFAULT.w;
   nixiePackCanvas.h = CANVAS_DEFAULT.h;

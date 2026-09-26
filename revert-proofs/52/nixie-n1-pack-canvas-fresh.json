@@ -1,5 +1,6 @@
 {
   "row": "N1 revert fresh canvas object in pack-host",
-  "testName": "N1: 600 frames — format at [0,60,…,540], one formatter, stable buffer",
-  "excerpt": "AssertionError: expected { w: 1920, h: 1080 } to be { w: 1920, h: 1080 } // Object.is equality"
+  "testName": "N1: 600 frames \u2014 format at [0,60,\u2026,540], one formatter, stable buffer",
+  "excerpt": "AssertionError: expected { w: 1920, h: 1080 } to be { w: 1920, h: 1080 } // Object.is equality",
+  "testFile": "web/src/plugins/nixie-wall-clock.test.ts"
 }

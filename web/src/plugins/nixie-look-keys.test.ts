@@ -4,7 +4,7 @@ import {
   NIXIE_LOOK_KEYS,
   type NixieLook,
   type NixieLookKey,
-} from "../../../plugins/src/nixie-clock/frontend/tubes";
+} from "../../../shared/nixie-tubes";
 
 describe("nixie look option keys", () => {
   it("maps every plugin key to a distinct NixieLook field", () => {

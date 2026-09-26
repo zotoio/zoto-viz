@@ -35,6 +35,9 @@ export interface VizTileHudSample {
   costTicks?: number;
 }
 
+/** Max HUD window samples retained per tile (ring; no per-frame push allocation). */
+export const VIZ_HUD_SAMPLE_CAP = 3600;
+
 export function msToVizTicks(ms: number): number {
   return Math.round(ms * VIZ_TICKS_PER_MS);
 }
@@ -62,8 +65,10 @@ export interface VizTileBudgetStats {
   shedding: boolean;
   lastDeliveredFrame: VizDataFrame | null;
   lastBuildCostTicks: number | null;
-  /** Samples for HUD state — half-open tick window (now − 300000, now]. */
-  hudSamples: VizTileHudSample[];
+  /** Ring buffer of HUD samples (half-open tick window (now − 300000, now]). */
+  hudRing: VizTileHudSample[];
+  hudRingCount: number;
+  hudRingNext: number;
 }
 
 function freshTile(share: number): VizTileBudgetStats {
@@ -76,8 +81,23 @@ function freshTile(share: number): VizTileBudgetStats {
     shedding: false,
     lastDeliveredFrame: null,
     lastBuildCostTicks: null,
-    hudSamples: [],
+    hudRing: new Array(VIZ_HUD_SAMPLE_CAP),
+    hudRingCount: 0,
+    hudRingNext: 0,
   };
+}
+
+/** Materialize ring samples in chronological order (tests / HUD classification). */
+export function hudSamplesForTile(tile: VizTileBudgetStats): VizTileHudSample[] {
+  const n = tile.hudRingCount;
+  if (n === 0) return [];
+  const out = new Array<VizTileHudSample>(n);
+  const cap = VIZ_HUD_SAMPLE_CAP;
+  const start = (tile.hudRingNext - n + cap) % cap;
+  for (let i = 0; i < n; i++) {
+    out[i] = tile.hudRing[(start + i) % cap]!;
+  }
+  return out;
 }
 
 function clampDebt(debt: number): number {
@@ -88,11 +108,14 @@ function clampDebt(debt: number): number {
 }
 
 function recordHudSample(tile: VizTileBudgetStats, sample: VizTileHudSample): void {
-  tile.hudSamples.push(sample);
+  tile.hudRing[tile.hudRingNext] = sample;
+  tile.hudRingNext = (tile.hudRingNext + 1) % VIZ_HUD_SAMPLE_CAP;
+  if (tile.hudRingCount < VIZ_HUD_SAMPLE_CAP) tile.hudRingCount++;
 }
 
 function clearHudWindow(tile: VizTileBudgetStats): void {
-  tile.hudSamples.length = 0;
+  tile.hudRingCount = 0;
+  tile.hudRingNext = 0;
 }
 
 /**

@@ -71,8 +71,7 @@ import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
 import {
-  VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
-  buildVizFrameForPlugin, defaultVizContract,
+  VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract,
 } from "../plugins/viz-host";
 import {
   TypeSafeHost,
@@ -80,7 +79,9 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
+import { mainVizDeliver, mainVizBuildFrame } from "./viz-main-deliver";
 import { runPackFrameHandler, syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
+import { vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -341,7 +342,7 @@ let settings!: Settings;
 const sandbox = new PluginSandbox();
 const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
-let vizFrameTs = 0;
+let vizFrameClockMs = 0;
 const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
@@ -416,7 +417,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
     ? defaultVizContract() : undefined);
   const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
   vizWriter = writer;
-  if (resetFrameTs) vizFrameTs = 0;
+  if (resetFrameTs) vizFrameClockMs = 0;
   if (resetBudget) {
     vizBudget.reset();
     vizHud.resetSkipBaseline();
@@ -998,23 +999,29 @@ function feed(m: StateMsg): void {
     const bind = packId === "hn-rain" || packId === "hn-term"
       ? illustratedSourceBind(optsFor(mode))
       : parseSourceBind(optsFor(mode));
-    const buildFrame = idle
-      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
-      : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
-    const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
-      if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-      sandbox.frame(f);
-      if (packId) {
-        syncVizPackRenderCanvas(renderHost.bufferPixelSize());
-        runPackFrameHandler(packId, f, {
-          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, optsFor(mode));
-      }
-    }, buildFrame);
+    const buildFrame = (s: StateMsg, pt: number, a: number) => mainVizBuildFrame(s, pt, a, idle, bind);
+    const delivered = mainVizDeliver({
+      budget: vizBudget,
+      prevClockMs: vizFrameClockMs,
+      state: shown,
+      audio,
+      buildFrame,
+      onFrame: (f) => {
+        if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
+        sandbox.frame(f);
+        if (packId) {
+          syncVizPackRenderCanvas(renderHost.bufferPixelSize());
+          runPackFrameHandler(packId, f, {
+            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+          }, optsFor(mode));
+        }
+      },
+    });
+    vizFrameClockMs = delivered.nextClockMs;
+    const frame = delivered.frame;
     if (frame) {
-      vizFrameTs = frame.t;
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }
@@ -1031,6 +1038,7 @@ function feed(m: StateMsg): void {
       frame: vizBudget.lastBuilt,
       state: shown,
       now: vizClockMs(),
+      tileBudget: vizTileBudgetRegistry.getTile("main"),
     });
   }
 

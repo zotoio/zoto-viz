@@ -39,7 +39,10 @@ export interface HostedView {
 /** A viewport in framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
 export interface Viewport { x: number; y: number; w: number; h: number }
 
-/** Canvas backing-store pixels (`canvas.width` / `canvas.height`), not CSS layout. */
+/**
+ * Canvas backing-store pixels (`canvas.width` / `canvas.height`), not CSS layout.
+ * Sized from the wall viewport × devicePixelRatio, capped at 1.5× for stability.
+ */
 export interface DevicePixelSize {
   w: number;
   h: number;

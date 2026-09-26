@@ -17,9 +17,12 @@ import {
 } from "./dogfood-tile-hud";
 import {
   VIZ_CLOCK_STEP_TICKS,
+  VIZ_COST_TICKS_4MS,
   VIZ_COST_TICKS_50MS as COST_50,
+  VIZ_HUD_SAMPLE_CAP,
   VIZ_MAX_ACTIVE_TILES,
   VIZ_WALL_BUDGET_TICKS,
+  hudSamplesForTile,
   syncVizTileScope,
   tileShareTicks,
   vizTileBudgetRegistry,
@@ -85,7 +88,7 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
       reg.advanceTick();
       const tile = reg.getTile("t0");
       const nowTick = i * VIZ_CLOCK_STEP_TICKS;
-      const state = computeTileHudViewerState(tile.hudSamples, nowTick, tile.lastBuildCostTicks);
+      const state = computeTileHudViewerState(hudSamplesForTile(tile), nowTick, tile.lastBuildCostTicks);
       if (state === "limited" && firstLimited < 0) firstLimited = i;
       if (state === "over_budget" && firstOver < 0) firstOver = i;
       if (firstOver >= 0 && i >= firstOver) expect(state).toBe("over_budget");
@@ -108,14 +111,14 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     expect(reg.getTile("t0").lastBuildCostTicks).toBe(COST_50);
     const tile = reg.getTile("t0");
     const now74 = 74 * VIZ_CLOCK_STEP_TICKS;
-    const windowBuilds = tile.hudSamples.filter(
+    const windowBuilds = hudSamplesForTile(tile).filter(
       (s) => s.kind === "build" && s.tick > now74 - 300000 && s.tick <= now74,
     );
     expect(windowBuilds).toEqual([]);
-    const inWin = tileHudSamplesInWindow(tile.hudSamples, now74);
+    const inWin = tileHudSamplesInWindow(hudSamplesForTile(tile), now74);
     expect(inWin.filter((s) => s.kind === "build")).toEqual([]);
     expect(inWin.filter((s) => s.kind === "skip").length).toBeGreaterThan(0);
-    const state74 = computeTileHudViewerState(tile.hudSamples, now74, tile.lastBuildCostTicks);
+    const state74 = computeTileHudViewerState(hudSamplesForTile(tile), now74, tile.lastBuildCostTicks);
     expect(state74).toBe("over_budget");
     const build = reg.deliver("t0", () => ({ frame, costTicks: 1200 }), () => {}, { tick: 75 * VIZ_CLOCK_STEP_TICKS });
     expect(build.delivered).toBe(true);
@@ -126,6 +129,17 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     expect(tileShareTicks(4)).toBe(1252);
     expect(tileShareTicks(6)).toBe(835);
     expect(tileShareTicks(8)).toBe(626);
+  });
+
+  it("HUD sample ring: 3600 frames keeps sample count at cap", () => {
+    const reg = freshHudRegistry(["t0"]);
+    const frame = { t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
+    for (let i = 0; i < 3600; i++) {
+      reg.deliver("t0", () => ({ frame, costTicks: VIZ_COST_TICKS_4MS }), () => {}, { tick: i });
+      reg.advanceTick();
+    }
+    expect(reg.getTile("t0").hudRingCount).toBeLessThanOrEqual(VIZ_HUD_SAMPLE_CAP);
+    expect(reg.getTile("t0").hudRingCount).toBe(VIZ_HUD_SAMPLE_CAP);
   });
 
   it("scheduler clamp (extra): nine tile ids scope to share 626", () => {

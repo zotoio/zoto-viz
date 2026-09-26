@@ -1,6 +1,7 @@
 import type { Device, StateMsg } from "../core/types";
 import { vizBuildCostMs, vizBuildCostTicks, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
 import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
+import { VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
@@ -466,6 +467,7 @@ export class VizFrameBudget {
   private _total = 0;
   private _lastBuilt: VizDataFrame | null = null;
   private _lastPresent = -1;
+  private _lastTileSkipped = 0;
   private readonly now: () => number;
   private readonly tileId: string;
 
@@ -490,7 +492,6 @@ export class VizFrameBudget {
 
   /** Record a measured duration; returns true when over budget. */
   record(ms: number): boolean {
-    this._total++;
     this._lastMs = ms;
     if (ms > VIZ_FRAME_BUDGET_MS) {
       this._overBudget++;
@@ -514,8 +515,8 @@ export class VizFrameBudget {
   }
 
   /**
-   * Build and optionally deliver a viz frame. Over-budget frames are skipped
-   * (not delivered) and the over-budget counter increments.
+   * Build and optionally deliver a viz frame. Tile debt skips and builds over
+   * {@link VIZ_WALL_BUDGET_TICKS} do not call `onFrame`; skip/over counters accrue.
    */
   deliver(
     state: StateMsg,
@@ -535,12 +536,15 @@ export class VizFrameBudget {
         const elapsed = this.now() - t0;
         const costTicks = tickInject ?? msToVizTicks(msInject ?? elapsed);
         this._lastMs = msInject ?? elapsed;
+        if (costTicks > VIZ_WALL_BUDGET_TICKS) this._overBudget++;
         return { frame, costTicks };
       },
       (frame) => onFrame(frame),
     );
     const tile = vizTileBudgetRegistry.getTile(this.tileId);
-    this._skipped = tile.skipped;
+    const tileSkips = tile.skipped;
+    this._skipped += tileSkips - this._lastTileSkipped;
+    this._lastTileSkipped = tileSkips;
     if (!result.delivered) {
       this._lastBuilt = tile.lastDeliveredFrame;
       return null;
@@ -556,6 +560,7 @@ export class VizFrameBudget {
     this._total = 0;
     this._lastBuilt = null;
     this._lastPresent = -1;
+    this._lastTileSkipped = 0;
     const tile = vizTileBudgetRegistry.getTile(this.tileId);
     tile.debt = 0;
     tile.skipped = 0;
@@ -564,7 +569,8 @@ export class VizFrameBudget {
     tile.shedding = false;
     tile.lastDeliveredFrame = null;
     tile.lastBuildCostTicks = null;
-    tile.hudSamples.length = 0;
+    tile.hudRingCount = 0;
+    tile.hudRingNext = 0;
   }
 }
 

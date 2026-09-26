@@ -1,6 +1,6 @@
 --- a/web/src/plugins/viz-pack-host.ts
 +++ b/web/src/plugins/viz-pack-host.ts
-@@ -9,37 +9,28 @@
+@@ -9,39 +9,29 @@
  import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
  import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
  import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
@@ -10,19 +10,20 @@
 -  parseNixieLook,
 -  type NixieLook,
 -  type NixieLookKey,
--} from "../../../plugins/src/nixie-clock/frontend/tubes";
-+import { CANVAS_DEFAULT, parseNixieLook, type NixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+-} from "../../../shared/nixie-tubes";
++import { CANVAS_DEFAULT, parseNixieLook, type NixieLook } from "../../../shared/nixie-tubes";
  
  const hostNixieClock = createNixieWallClock();
  
  let nixieScopedLook: NixieLook = parseNixieLook();
  let nixieActiveLook: NixieLook = nixieScopedLook;
--const nixieOptSlots: [string, string, string, string] = ["", "", "", ""];
+-const nixieOptSlots: (string | undefined)[] = NIXIE_LOOK_KEYS.map(() => undefined);
 +let nixieOptsKey = "";
  const nixiePackCanvas: DevicePixelSize = { w: CANVAS_DEFAULT.w, h: CANVAS_DEFAULT.h };
  
--function nixieOptRaw(opts: Record<string, string> | null | undefined, key: NixieLookKey): string {
--  return opts?.[key] ?? "";
+-function nixieOptRaw(opts: Record<string, string> | null | undefined, key: NixieLookKey): string | undefined {
+-  if (opts == null || !Object.prototype.hasOwnProperty.call(opts, key)) return undefined;
+-  return opts[key] ?? "";
 +function nixieOptsStableKey(opts?: Record<string, string> | null): string {
 +  if (!opts) return "";
 +  const keys = Object.keys(opts).sort();
@@ -44,20 +45,19 @@
 -    }
 -  }
 -  if (!changed) return;
+-  nixieScopedLook = parseNixieLook(opts, nixieScopedLook);
 +  const key = nixieOptsStableKey(opts);
 +  if (key === nixieOptsKey) return;
 +  nixieOptsKey = key;
-   nixieScopedLook = parseNixieLook(opts);
++  nixieScopedLook = parseNixieLook(opts);
  }
  
-@@ -54,10 +45,7 @@
+ /** Track render-host backing size for nixie buffers (no querySelector). */
+@@ -55,7 +45,7 @@
  }
  
  export function resetNixiePackHostScope(): void {
--  nixieOptSlots[0] = "";
--  nixieOptSlots[1] = "";
--  nixieOptSlots[2] = "";
--  nixieOptSlots[3] = "";
+-  nixieOptSlots.fill(undefined);
 +  nixieOptsKey = "";
    nixieScopedLook = parseNixieLook();
    nixiePackCanvas.w = CANVAS_DEFAULT.w;
