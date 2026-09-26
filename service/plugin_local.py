@@ -318,11 +318,25 @@ def install_local_zip(
         tmp_path.write_bytes(raw)
         runtime = paths.plugin_local_runtime_dir(create=True) / pid
         incoming = pz.plugin_sha256(tmp_path)
+        upgrade = dest.is_file() and runtime.is_dir()
+        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+            unpacked = install_zip_to_runtime(
+                dest,
+                dest,
+                runtime,
+                doc,
+                rel=str(dest),
+                sha256=incoming,
+                upgrade=upgrade,
+            )
+            info = _install_result(doc, dest, unpacked, wrote=False)
+            if reminted_from:
+                info["remintedFrom"] = reminted_from
+            return _finish(info, activate=activate)
         if dest.is_file() and not overwrite:
             raise ValueError(
                 f"plugin {pid!r} already exists in the local drop zone (pass overwrite: true)"
             )
-        upgrade = dest.is_file() and runtime.is_dir()
         unpacked = install_zip_to_runtime(
             tmp_path,
             dest,

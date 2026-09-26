@@ -373,9 +373,19 @@ export type PackInstallLintResult = {
   warnings: PackLintViolation[];
 };
 
+function packIdFromPluginYml(packDirAbs: string): string | null {
+  try {
+    const yml = fs.readFileSync(path.join(packDirAbs, "plugin.yml"), "utf8");
+    const id = yml.match(/^id:\s*(\S+)/m)?.[1];
+    return id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Install-time lint for an unpacked pack home. */
 export function scanPackInstallLint(packDirAbs: string, repoRoot: string): PackInstallLintResult {
-  const packId = path.basename(packDirAbs);
+  const packId = packIdFromPluginYml(packDirAbs) ?? path.basename(packDirAbs);
   const violations = scanPackDirectory(packDirAbs, repoRoot, {
     packId,
     repoPathPrefix: `plugins/src/${packId}`,
