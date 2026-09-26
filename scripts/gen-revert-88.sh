@@ -236,9 +236,6 @@ p.write_text(t)
 PY"
 mkjson timer-cleared "src/graph/shader-fallback-context-gen.test.ts" "shader fallback context gen > timer-cleared" 1
 
-# sidecar for no-gl-while-lost (draws per frame × 600)
-printf '%s\n' '{"drawsPerFrame":4,"frames":600}' > "$DIR/no-gl-while-lost.sidecar.json"
-
 # late-restore-clears-reload — drop reload button only (focus falls through to body)
 patch_row late-restore-clears-reload "$(cat <<'EOS'
 python3 - <<'PY'
@@ -275,6 +272,5 @@ PY
 EOS
 )"
 mkjson late-restore-clears-reload "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > late-restore-clears-reload-focus" "\"BODY\""
-printf '%s\n' '{"activeElementTag":"BODY"}' > "$DIR/late-restore-clears-reload.sidecar.json"
 
 echo "done"
