@@ -1,6 +1,7 @@
 {
   "runner": "pytest",
-  "testId": "tests/test_request_guard_policy.py::test_host_injection_returns_400_without_csp",
-  "description": "Malformed Host must 400 without CSP; revert accepts evil.example-style hosts onto allowlist path.",
+  "testId": "tests/test_request_guard_policy.py::test_host_injection_returns_400_with_frame_headers",
+  "red": "AssertionError: assert 'bad request' == 'This zoto-viz server doesn't accept the address it was opened with. Open it by its IP address, or add this name to `allowed_hosts` in the server config.'",
+  "description": "Malformed Host 400 must use HOST_REJECT_BODY and frame headers; revert returns plain bad request.",
   "timeoutSec": 120
 }

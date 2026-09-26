@@ -21,6 +21,11 @@ HOST_REJECT_BODY = (
     "Open it by its IP address, or add this name to `allowed_hosts` in the server config."
 )
 
+HANDLER_ERROR_BODY = (
+    "zoto-viz ran into a problem with this request. "
+    "Reload to try again. If it keeps happening, check the server log."
+)
+
 _HOST_FORBIDDEN_CHARS = re.compile(r'[;,\s"\']')
 _HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")
 _ENCODED_TRAVERSAL = re.compile(r"%2[eEfF]", re.IGNORECASE)
@@ -358,6 +363,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
         resp = exc
     except Exception:
         _log.exception("unhandled error in request handler")
-        resp = web.Response(status=500, text="internal server error", content_type="text/plain")
+        resp = web.Response(status=500, text=HANDLER_ERROR_BODY, content_type="text/plain")
     attach_frame_embed_policy(resp)
     return resp

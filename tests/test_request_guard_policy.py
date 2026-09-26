@@ -10,7 +10,7 @@ import pytest
 from aiohttp import ClientSession
 
 from service import access, monitor, pack_asset_frames, request_guard
-from service.request_guard import HOST_REJECT_BODY
+from service.request_guard import HANDLER_ERROR_BODY, HOST_REJECT_BODY
 from tests.monitor_app_test_util import access_log_capture, host_header, make_app_server, raw_http_url
 from tests.pack_asset_test_util import SECRET, SESSION, mint, new_frame_id
 
@@ -90,8 +90,14 @@ async def _host_injection() -> None:
                 headers={"Host": "evil; connect-src *"},
             ) as resp:
                 assert resp.status == 400
-                assert await resp.text() == HOST_REJECT_BODY
+                assert resp.content_type == "text/plain"
+                body = await resp.text()
+                assert body == HOST_REJECT_BODY
+                assert "evil" not in body
+                assert "connect-src" not in body
                 _assert_frame_headers(resp)
+                assert resp.headers.get("Content-Security-Policy") is not None
+                assert "frame-ancestors 'self'" in (resp.headers.get("Content-Security-Policy") or "")
 
 
 def test_host_injection_returns_400_with_frame_headers() -> None:
@@ -328,10 +334,17 @@ async def _handler_500_frame_headers() -> None:
                 headers=host_header(port),
             ) as resp:
                 assert resp.status == 500
+                assert resp.content_type == "text/plain"
+                body = await resp.text()
+                assert body == HANDLER_ERROR_BODY
+                assert "probe" not in body
+                assert "RuntimeError" not in body
+                assert "127.0.0.1" not in body
+                assert f":{port}" not in body
                 _assert_frame_headers(resp)
     finally:
         await runner.cleanup()
 
 
-def test_unhandled_handler_error_500_includes_frame_headers() -> None:
+def test_unhandled_handler_error_500_ux_body_and_frame_headers() -> None:
     asyncio.run(_handler_500_frame_headers())
