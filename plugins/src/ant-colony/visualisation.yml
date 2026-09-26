@@ -1,0 +1,114 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: ember
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.05
+  skyAudio: false
+  skySpeed: 0.35
+  gridOpacity: 0
+config:
+  - key: preset
+    label: preset
+    type: select
+    default: formicarium
+    values:
+      - [formicarium, Formicarium]
+      - [night-glow, Night Glow]
+      - [red-alert, Red Alert]
+      - [minimal, Minimal]
+    hint: Applies a full look bundle. You can still tweak options below.
+  - key: seed
+    label: seed
+    type: number
+    default: 4242
+    min: 0
+    max: 999999
+    step: 1
+    hint: Pinned RNG for chamber layout and idle motion. Same seed is deterministic.
+  - key: antCap
+    label: ant cap
+    type: number
+    default: 96
+    min: 24
+    max: 160
+    step: 4
+    hint: Hard cap on simulated foragers (also enforced in light tests).
+  - key: evaporation
+    label: pheromone evaporation
+    type: number
+    default: 0.92
+    min: 0.8
+    max: 0.99
+    step: 0.01
+    hint: Per simulation tick retention (higher = longer trails).
+  - key: diffusion
+    label: pheromone diffusion
+    type: number
+    default: 0.22
+    min: 0.05
+    max: 0.45
+    step: 0.01
+    hint: Neighbour blend each tick (stigmergy spread).
+  - key: palette
+    label: colour palette
+    type: select
+    default: loam
+    values:
+      - [loam, Loam & amber]
+      - [clay, Red clay]
+      - [chalk, Chalk & teal]
+      - [mono, Monochrome]
+    hint: Soil and crumb tint bundle.
+  - key: soilStyle
+    label: soil style
+    type: select
+    default: strata
+    values:
+      - [strata, Layered strata]
+      - [sand, Sandy fill]
+      - [rocky, Rocky mix]
+    hint: Cutaway soil layering and pebble density.
+  - key: camera
+    label: camera
+    type: select
+    default: cutaway
+    values:
+      - [cutaway, Static cutaway]
+      - [pan, Slow pan]
+      - [follow, Follow forager]
+    hint: Reduced motion forces wide static cutaway with no shake.
+  - key: rain
+    label: rain
+    type: boolean
+    default: false
+    hint: Optional shower — visually slows foragers and dims sky light.
+  - key: label
+    label: on-screen label
+    type: text
+    default: ""
+    hint: Extra suffix after pack · preset · metric. Empty uses live metric only.
+  - key: mapFlows
+    label: map flows → trails
+    type: boolean
+    default: true
+    hint: Packet samples become tunnel diggers and foraging lines.
+  - key: mapBytes
+    label: map bytes → crumb size
+    type: boolean
+    default: true
+    hint: Larger packets swell the glowing crumbs ants carry.
+  - key: mapRate
+    label: map rate → speed & density
+    type: boolean
+    default: true
+    hint: Talker rate sets ant speed and spawn density.
+  - key: mapFailures
+    label: map failures → soldiers
+    type: boolean
+    default: true
+    hint: Host failed-unit gauge spawns fail-coloured soldier swarms.
