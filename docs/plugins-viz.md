@@ -124,5 +124,18 @@ cd web && pnpm test -- src/plugins/viz-host.test.ts src/plugins/host.test.ts
 .venv/bin/pytest tests/test_plugin_schema.py -k viz
 ```
 
+Cloud CI runs **`pnpm dogfood`** in the dedicated **`dogfood`** workflow job — a
+deterministic **count gate** on the fat-LAN fixture (injected zero clock on
+`VizFrameBudget`, per-build work budgets: flow visits and rate calls ≤ **2×**
+flows, 4× flow scaling ≤ **4.4×** work, top-K output caps, encoded JSON byte
+ceiling). It does **not** assert wall-clock `performance.now()` p95. Counter
+increments compile out of production bundles (`__VIZ_BUILD_COUNTERS__`).
+
+Local GPU timing (p50/p95): `cd web && pnpm dogfood:perf` or
+`ZOTO_VIZ_PERF=1 pnpm dogfood`.
+
+`devicePacketRateMap` reuse and **`links`** caps are gated in
+`viz-build-gates.test.ts` as `it.todo` until contract v2 ([#27](https://github.com/zotoio/zoto-viz/pull/27)) lands.
+
 See also [TypeScript plugins](/plugins-ts) for the iframe sandbox and
 [Plugins](/plugins) for catalog layout and consent.

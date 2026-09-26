@@ -7,10 +7,15 @@ import {
   VIZ_FRAME_BUDGET_MS,
   VizBufferWriter,
   VizFrameBudget,
+  assertVizBuildWorkGates,
+  assertVizFrameOutputCaps,
   bindVizWriterCore,
   buildVizFrame,
   buildVizFrameForPlugin,
+  FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
   parseVizContract,
+  takeVizBuildWorkSnapshot,
+  type VizBuildWorkCounters,
   type VizDataFrame,
   type VizFrameBudgetStats,
   type VizPluginContract,
@@ -139,6 +144,21 @@ export interface DogfoodSoakResult {
   allWithinBudgetOrHonestSkips: boolean;
 }
 
+export interface DogfoodCountGatePackResult {
+  packId: VizDemoPackId;
+  frames: number;
+  delivered: number;
+  skipped: number;
+  maxWork: VizBuildWorkCounters;
+}
+
+export interface DogfoodCountGateResult {
+  fixture: { devices: number; flows: number };
+  framesPerPack: number;
+  packs: DogfoodCountGatePackResult[];
+  ok: boolean;
+}
+
 export function percentile(samples: number[], p: number): number {
   if (!samples.length) return 0;
   const sorted = [...samples].sort((a, b) => a - b);
@@ -241,9 +261,97 @@ export function dogfoodWithinBudget(
 }
 
 /**
- * Live dogfood soak: fat-LAN fixture, all three packs, real `performance.now`
- * budget path. Passes when p95 build and present are within budget or skips are
- * recorded (never silent green on soft-FPS).
+ * Deterministic dogfood gate for cloud CI (`dogfood` job): injected zero clock,
+ * strict delivered/skipped counts, per-build work budgets, output caps.
+ */
+export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCountGateResult {
+  const state = opts.state ?? fatLanFixture();
+  const framesPerPack = opts.framesPerPack ?? 120;
+  const audio = opts.audio ?? 0.15;
+  const now = opts.now ?? (() => 0);
+
+  const packs: DogfoodCountGatePackResult[] = [];
+  let ok = true;
+
+  for (const packId of VIZ_DEMO_PACKS) {
+    const contract = DEMO_PACK_CONTRACTS[packId];
+    const budget = new VizFrameBudget(now);
+    const writer = new VizBufferWriter(contract);
+    const maxWork: VizBuildWorkCounters = {
+      flowVisits: 0,
+      flowProtoVisits: 0,
+      rateCalls: 0,
+      talkerObjectsCreated: 0,
+      packetObjectsCreated: 0,
+      frameObjectsCreated: 0,
+    };
+    let prevTs = 0;
+    let delivered = 0;
+
+    const gatedBuild: typeof buildVizFrame = (s, pt = 0, a = 0, bind) => {
+      const frame = buildVizFrameForPlugin(s, pt, a, contract.idle, bind);
+      const work = takeVizBuildWorkSnapshot();
+      maxWork.flowVisits = Math.max(maxWork.flowVisits, work.flowVisits);
+      maxWork.flowProtoVisits = Math.max(maxWork.flowProtoVisits, work.flowProtoVisits);
+      maxWork.rateCalls = Math.max(maxWork.rateCalls, work.rateCalls);
+      maxWork.talkerObjectsCreated = Math.max(maxWork.talkerObjectsCreated, work.talkerObjectsCreated);
+      maxWork.packetObjectsCreated = Math.max(maxWork.packetObjectsCreated, work.packetObjectsCreated);
+      maxWork.frameObjectsCreated = Math.max(maxWork.frameObjectsCreated, work.frameObjectsCreated);
+      try {
+        assertVizBuildWorkGates(s, work);
+        assertVizFrameOutputCaps(frame, {
+          checkDecimation: false,
+          encodedByteCeiling: FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
+        });
+      } catch {
+        ok = false;
+      }
+      return frame;
+    };
+
+    for (let i = 0; i < framesPerPack; i++) {
+      const tick = dogfoodTick(packId, state, prevTs, audio, budget, writer, undefined, gatedBuild);
+      if (tick.delivered && tick.frame) {
+        delivered++;
+        prevTs = tick.frame.t;
+      }
+    }
+
+    const skipped = budget.stats.skipped;
+    if (delivered !== framesPerPack || skipped !== 0) ok = false;
+    try {
+      assertVizBuildWorkGates(state, maxWork);
+    } catch {
+      ok = false;
+    }
+
+    packs.push({ packId, frames: framesPerPack, delivered, skipped, maxWork });
+  }
+
+  return {
+    fixture: { devices: state.devices.length, flows: state.flows.length },
+    framesPerPack,
+    packs,
+    ok,
+  };
+}
+
+export function formatDogfoodCountGateReport(result: DogfoodCountGateResult): string {
+  const lines = [
+    `Fat-LAN dogfood count gate (${result.fixture.devices} devices, ${result.fixture.flows} flows, ${result.framesPerPack} frames/pack):`,
+  ];
+  for (const p of result.packs) {
+    const w = p.maxWork;
+    lines.push(
+      `  ${p.packId}: delivered ${p.delivered}/${p.frames} skips=${p.skipped} | rateCalls=${w.rateCalls} flowVisits=${w.flowVisits}`,
+    );
+  }
+  lines.push(`  gate: ${result.ok ? "PASS" : "FAIL"}`);
+  return lines.join("\n");
+}
+
+/**
+ * Local wall-clock soak (opt-in via `ZOTO_VIZ_PERF=1` / `pnpm dogfood:perf`).
  */
 export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult {
   const state = opts.state ?? fatLanFixture();
