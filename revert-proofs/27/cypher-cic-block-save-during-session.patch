@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index d297561..1805e37 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -2120,7 +2120,7 @@ export class Settings {
+   private persistFeed(opts?: { onFromMemory?: boolean }): void {
+     const p = this.cfg.storePrefix;
+     const c = this.feed;
+-    const on = opts?.onFromMemory ? c.on : this.feedOnForPersistence();
++    const on = this.feedOnForPersistence();
+     localStorage.setItem(`${p}.feed.on`, on ? "1" : "0");
+     localStorage.setItem(`${p}.feed.layout`, c.layout);
+     localStorage.setItem(`${p}.feed.scope`, c.scope);

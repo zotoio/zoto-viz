@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-v1-frame-adapter.ts b/web/src/plugins/viz-v1-frame-adapter.ts
+index 37a70eb..fa83170 100644
+--- a/web/src/plugins/viz-v1-frame-adapter.ts
++++ b/web/src/plugins/viz-v1-frame-adapter.ts
+@@ -235,7 +235,7 @@ function copyWorkIntoPack(work: VizDataFrame, slot: V1PackSlot): void {
+   }
+ 
+   const tn = Math.min(work.talkers.length, budget.maxTalkers);
+-  talkersBuf.length = tn;
++  talkersBuf.length = tn > 0 ? tn - 1 : 0;
+   for (let i = 0; i < tn; i++) {
+     const d = talkersBuf[i]!;
+     const s = work.talkers[i]!;

@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/fixtures/viz-collect-equivalence.test.ts",
+  "testName": "viz collector rewrite equivalence > matches the frozen 600-frame fixture exactly",
+  "description": "Revert uses top K-1 in collectVizLinks (first differing frame vs golden fixture)."
+}

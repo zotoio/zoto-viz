@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/viz-host.test.ts",
+  "testName": "viz contract version negotiation > delivers v1 talker lifetime counts for v1 packs even when flow rates exist",
+  "description": "One-line production revert: v1 packs run through applyVizFrameContractV2 (contract stamped v2)."
+}

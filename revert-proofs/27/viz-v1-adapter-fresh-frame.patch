@@ -1,0 +1,16 @@
+diff --git a/web/src/plugins/viz-v1-frame-adapter.ts b/web/src/plugins/viz-v1-frame-adapter.ts
+index 37a70eb..fba173f 100644
+--- a/web/src/plugins/viz-v1-frame-adapter.ts
++++ b/web/src/plugins/viz-v1-frame-adapter.ts
+@@ -305,7 +305,10 @@ export class VizV1FrameAdapter {
+     const work = this.work;
+     convertVizFrameV2ToV1(v2, work.frame, this.workTalkers, maxTalkers);
+     this.convertCalls++;
+-    for (const slot of this.packs.values()) copyWorkIntoPack(work.frame, slot);
++    for (const slot of this.packs.values()) {
++      copyWorkIntoPack(work.frame, slot);
++      slot.frame = allocV1PackFrame(slot.budget).frame;
++    }
+   }
+ 
+   resetConvertCallsForTest(): void {

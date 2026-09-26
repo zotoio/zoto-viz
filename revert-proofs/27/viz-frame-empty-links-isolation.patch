@@ -1,0 +1,16 @@
+diff --git a/web/src/plugins/viz-frame-pack-deliver.ts b/web/src/plugins/viz-frame-pack-deliver.ts
+index 6aa78ac..afd9787 100644
+--- a/web/src/plugins/viz-frame-pack-deliver.ts
++++ b/web/src/plugins/viz-frame-pack-deliver.ts
+@@ -13,10 +13,6 @@ export function deliverVizFrameToPackTiles(
+   tiles: readonly VizPackTileDelivery[],
+ ): void {
+   for (const tile of tiles) {
+-    try {
+-      tile.onFrame(frame);
+-    } catch {
+-      /* strict-mode mutation of frozen contract slices (e.g. links.push) must not abort other tiles */
+-    }
++    tile.onFrame(frame);
+   }
+ }
