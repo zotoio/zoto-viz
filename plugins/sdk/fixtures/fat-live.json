@@ -244,13 +244,13 @@
       "rate": 15
     },
     {
-      "src": "host-182",
-      "dst": "host-01",
+      "src": "host-115",
+      "dst": "host-04",
       "rate": 15
     },
     {
-      "src": "host-115",
-      "dst": "host-04",
+      "src": "host-182",
+      "dst": "host-01",
       "rate": 15
     },
     {

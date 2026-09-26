@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -145,7 +145,6 @@ export function collectVizLinks(
+   talkerIds: ReadonlySet<string>,
+   maxLinks: number,
+ ): { links: VizLinkSample[]; linksDropped: number } {
+-  zeroLinkRatesForFrame();
+   for (let fi = 0; fi < flows.length; fi++) {
+     const fl = flows[fi]!;
+     const aIn = talkerIds.has(fl.a);

@@ -67,7 +67,18 @@ export function buildCollectEquivalenceState(frameIndex: number): StateMsg {
     });
   }
   return {
+    type: "state",
     ts: frameIndex,
+    iface: "eth0",
+    interfaces: [],
+    network: "10.0.0.0/24",
+    local_ip: "10.0.0.1",
+    gateway: "10.0.0.1",
+    uptime: 1,
+    stats: {
+      pps: 1, bps: 1, devices: COLLECT_EQUIVALENCE_TALKER_COUNT, online: COLLECT_EQUIVALENCE_TALKER_COUNT,
+      flows: flows.length, active_flows: flows.length, packets: 100, bytes: 1000,
+    },
     devices,
     flows,
     sources: {},
