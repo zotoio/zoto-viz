@@ -1,0 +1,12 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 764b06d..e7116e1 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -54,7 +54,6 @@ jobs:
+       - name: Web tests and coverage
+         working-directory: web
+         env:
+-          ZOTO_VIZ_EXPECT_RENDERER: swiftshader
+           PACK_MIRROR_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+         run: pnpm test:coverage
+       - name: Revert proof rows (PR 42)

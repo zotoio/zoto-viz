@@ -317,3 +317,59 @@ export class PackMirrorRegistry {
   }
 }
 
+/** Readback harness only: sandbox GPU mirror path without the publish lane. */
+export class SandboxBitmapGl {
+  private texture: THREE.Texture | null = null;
+  private tw = 0;
+  private th = 0;
+  readonly presenter = new PackTexturePresenter();
+  uploadCount = 0;
+
+  dispose(): void {
+    if (this.texture) {
+      this.texture.dispose();
+      packMirrorResourceStats.textureDisposed += 1;
+    }
+    this.texture = null;
+    this.tw = 0;
+    this.th = 0;
+    this.presenter.dispose();
+  }
+
+  ensureTexture(w: number, h: number): THREE.Texture | null {
+    if (w < 2 || h < 2) return null;
+    if (this.texture && w === this.tw && h === this.th) return this.texture;
+    if (this.texture) {
+      this.texture.dispose();
+      packMirrorResourceStats.textureDisposed += 1;
+    }
+    this.tw = w;
+    this.th = h;
+    this.texture = new THREE.Texture();
+    packMirrorResourceStats.textureCreated += 1;
+    this.texture.flipY = false;
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+    return this.texture;
+  }
+
+  uploadFrame(bitmap: ImageBitmap): THREE.Texture | null {
+    const tex = this.ensureTexture(bitmap.width, bitmap.height);
+    if (!tex) return null;
+    tex.image = bitmap;
+    tex.needsUpdate = true;
+    this.uploadCount += 1;
+    return tex;
+  }
+
+  present(
+    renderer: MirrorRenderer,
+    texture: THREE.Texture,
+    fill: SurfaceLetterboxFill,
+    dst: MirrorRect,
+    aspect: number,
+  ): MirrorRect {
+    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true });
+  }
+}
+

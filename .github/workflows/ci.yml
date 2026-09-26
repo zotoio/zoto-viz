@@ -49,8 +49,13 @@ jobs:
         run: |
           pnpm install
           pnpm approve-builds esbuild
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
       - name: Web tests and coverage
         working-directory: web
+        env:
+          ZOTO_VIZ_EXPECT_RENDERER: swiftshader
+          PACK_MIRROR_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: pnpm test:coverage
 
   build:
