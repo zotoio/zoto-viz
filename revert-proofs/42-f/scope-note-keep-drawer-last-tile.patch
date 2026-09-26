@@ -1,0 +1,14 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index 66b417e..0f2d448 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1741,9 +1741,6 @@ export class Settings {
+     const focus = this.viewFocusId;
+     const nextCount = countPackTiles(nextTiles, packId);
+     if (nextCount === 0) {
+-      const unsaved = this.viewPluginDirty;
+-      const msg = unsaved ? packLastTileDiscardMessage(this.viewBind.spec.name) : null;
+-      this.teardownViewDrawerAfterLastPackTile(msg);
+       return;
+     }
+     if (focus && !tileSlotOnWall(focus, nextTiles)) {

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
+  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > same drawer node, unsaved field, n=1→2→3→2→1 via slot picker, note text and focus preserved$",
+  "description": "Write pack scope note text on every layout sync even when duplicate count is unchanged.",
+  "redOutput": "AssertionError: expected { recounts: 1, textWrites: 1 } to deeply equal { recounts: 1, textWrites: +0 }"
+}

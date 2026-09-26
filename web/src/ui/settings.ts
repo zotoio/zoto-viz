@@ -1732,7 +1732,15 @@ export class Settings {
     this.persistAnim();
     this.animUi?.syncTiles();
     this.onMosaicLayoutDrawerChange(prevTiles, this.anim.mosaicTiles);
-    this.syncPackScopeNoteFromAnim();
+    if (this.shouldSyncPackScopeNoteAfterLayout(prevTiles, this.anim.mosaicTiles)) {
+      this.syncPackScopeNoteFromAnim();
+    }
+  }
+
+  private shouldSyncPackScopeNoteAfterLayout(prevTiles: string[], nextTiles: string[]): boolean {
+    if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec?.id) return true;
+    const packId = this.viewBind.spec.id;
+    return countPackTiles(prevTiles, packId) !== countPackTiles(nextTiles, packId);
   }
 
   private onMosaicLayoutDrawerChange(prevTiles: string[], nextTiles: string[]): void {

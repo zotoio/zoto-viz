@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
+  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > same drawer node, unsaved field, n=1→2→3→2→1 via slot picker, note text and focus preserved$",
+  "description": "Omit the discard status when the last pack tile is removed with unsaved edits.",
+  "redOutput": "AssertionError: expected [] to have a length of 1 but got +0"
+}

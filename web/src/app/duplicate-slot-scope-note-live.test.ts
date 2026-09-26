@@ -124,6 +124,25 @@ describe("duplicate slot shared config > scope note follows live tile count whil
       `Changes apply to all 2 ${spec.name} tiles on this wall`,
     );
 
+    const tilesAtTwo = [...settings.animSettings.mosaicTiles];
+    resetPackScopeNoteMetrics();
+    resetViewDrawerModuleMetrics();
+    applyWallLayoutPatch(settings, {
+      tree: {
+        type: "split",
+        dir: "v",
+        ratio: 0.5,
+        a: { type: "leaf", id: tilesAtTwo[0]! },
+        b: { type: "leaf", id: tilesAtTwo[1]! },
+      },
+      maximized: null,
+      tiles: tilesAtTwo,
+    });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    assertDrawerEditingStable(settings, viewLayer, gain, "7");
+    expect(readPackScopeNoteMetrics().textWrites).toBe(0);
+    expect(readViewDrawerModuleMetrics()).toEqual({ createElementCalls: 0, rebuilds: 0 });
+
     pickMosaicSlot(settings, 2, PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     assertDrawerEditingStable(settings, viewLayer, gain, "7");
@@ -148,25 +167,6 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(readPackScopeNoteMetrics().textWrites).toBe(4);
     expect(readViewDrawerModuleMetrics().createElementCalls).toBe(0);
     expect(readViewDrawerModuleMetrics().rebuilds).toBe(0);
-
-    const tilesAtTwo = [...settings.animSettings.mosaicTiles];
-    resetPackScopeNoteMetrics();
-    resetViewDrawerModuleMetrics();
-    applyWallLayoutPatch(settings, {
-      tree: {
-        type: "split",
-        dir: "v",
-        ratio: 0.5,
-        a: { type: "leaf", id: tilesAtTwo[0]! },
-        b: { type: "leaf", id: tilesAtTwo[1]! },
-      },
-      maximized: null,
-      tiles: tilesAtTwo,
-    });
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    assertDrawerEditingStable(settings, viewLayer, gain, "7");
-    expect(readPackScopeNoteMetrics().textWrites).toBe(0);
-    expect(readViewDrawerModuleMetrics()).toEqual({ createElementCalls: 0, rebuilds: 0 });
 
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:disk"]);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
