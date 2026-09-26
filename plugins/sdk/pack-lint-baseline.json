@@ -2,147 +2,293 @@
   "violations": [
     {
       "file": "plugins/src/backrooms/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/blob-mesh/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/cypher-cic/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/cypher-cic/frontend/pack.ts",
-      "rule": "sandbox-escape"
+      "rule": "sandbox-escape",
+      "target": "parent."
     },
     {
       "file": "plugins/src/hn-rain/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/hn-term/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/kefrens-bars/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/lan-pulse/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/marble-run/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/nixie-clock/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/nixie-clock/frontend/tubes.ts",
-      "rule": "sandbox-escape"
+      "rule": "sandbox-escape",
+      "target": "parent."
     },
     {
       "file": "plugins/src/packet-tunnel/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/pulse-ts/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/rf-constellation/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/roto-proto/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/star-sines/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/stereo-gram/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/syscon/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/syscon/frontend/telemetry.ts",
-      "rule": "sandbox-escape"
+      "rule": "sandbox-escape",
+      "target": "parent."
     },
     {
       "file": "plugins/src/talker-storm/frontend/index.ts",
-      "rule": "inline-zoto-declare"
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
     },
     {
       "file": "web/src/app/main.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/backrooms/frontend/director"
+    },
+    {
+      "file": "web/src/app/main.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/hn-rain/frontend/crawl"
+    },
+    {
+      "file": "web/src/app/main.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/drive"
+    },
+    {
+      "file": "web/src/app/main.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/frame"
     },
     {
       "file": "web/src/audio/plugin-sfx.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/backrooms/frontend/director"
     },
     {
       "file": "web/src/plugins/backrooms.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/backrooms/frontend/director"
+    },
+    {
+      "file": "web/src/plugins/backrooms.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/backrooms/frontend/index.ts?raw"
+    },
+    {
+      "file": "web/src/plugins/backrooms.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/backrooms/sky/fragment.glsl?raw"
+    },
+    {
+      "file": "web/src/plugins/backrooms.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/backrooms/visualisation.yml?raw"
     },
     {
       "file": "web/src/plugins/cypher-cic.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/cypher-cic/frontend/pack"
     },
     {
       "file": "web/src/plugins/dogfood.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/packet-tunnel/frontend/tunnel"
+    },
+    {
+      "file": "web/src/plugins/dogfood.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/drive"
     },
     {
       "file": "web/src/plugins/hn-rain-crawl.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/hn-rain/frontend/crawl"
     },
     {
       "file": "web/src/plugins/hn-rain-stills.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/hn-rain/frontend/crawl"
     },
     {
       "file": "web/src/plugins/hn-term-teletype.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/hn-term/frontend/teletype"
     },
     {
       "file": "web/src/plugins/marble-run.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/marble-run/frontend/config"
+    },
+    {
+      "file": "web/src/plugins/marble-run.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/marble-run/frontend/pack"
+    },
+    {
+      "file": "web/src/plugins/marble-run.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/marble-run/frontend/sim"
+    },
+    {
+      "file": "web/src/plugins/marble-run.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/marble-run/plugin.yml?raw"
+    },
+    {
+      "file": "web/src/plugins/marble-run.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/marble-run/sky/fragment.glsl?raw"
+    },
+    {
+      "file": "web/src/plugins/marble-run.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/marble-run/visualisation.yml?raw"
     },
     {
       "file": "web/src/plugins/nixie-clock.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/nixie-clock/frontend/tubes"
     },
     {
       "file": "web/src/plugins/stereo-ai.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/recipe"
     },
     {
       "file": "web/src/plugins/stereo-frame.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/drive"
+    },
+    {
+      "file": "web/src/plugins/stereo-frame.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/frame"
+    },
+    {
+      "file": "web/src/plugins/stereo-frame.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/recipe"
     },
     {
       "file": "web/src/plugins/stereo-recipe.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/recipe"
     },
     {
       "file": "web/src/plugins/syscon-telemetry.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/syscon/frontend/telemetry"
     },
     {
       "file": "web/src/plugins/viz-pack-fixtures.test.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/cypher-cic/frontend/pack"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-fixtures.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/hn-rain/frontend/crawl"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-fixtures.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/nixie-clock/frontend/tubes"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-fixtures.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/packet-tunnel/frontend/tunnel"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-fixtures.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/syscon/frontend/telemetry"
     },
     {
       "file": "web/src/plugins/viz-pack-host.ts",
-      "rule": "host-imports-pack-src"
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/hn-rain/frontend/crawl"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-host.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/hn-term/frontend/teletype"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-host.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/nixie-clock/frontend/tubes"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-host.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/packet-tunnel/frontend/tunnel"
+    },
+    {
+      "file": "web/src/plugins/viz-pack-host.ts",
+      "rule": "host-imports-pack-src",
+      "target": "../../../plugins/src/stereo-gram/frontend/drive"
     }
   ]
 }

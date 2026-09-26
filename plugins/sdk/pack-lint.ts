@@ -5,22 +5,24 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
+import { violationKey } from "./pack-lint-types";
 
 export type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
+export { violationKey } from "./pack-lint-types";
 
 const PACKS_ROOT = "plugins/src";
 const SDK_ROOT = "plugins/sdk";
 
-const SANDBOX_RE = [
-  /\bparent\s*\./,
-  /\btypeof\s+parent\b/,
-  /\bwindow\.parent\b/,
-  /\bwindow\.top\b/,
-  /\btop\s*\./,
-  /\bdocument\.cookie\b/,
-  /\blocalStorage\b/,
-  /\bsessionStorage\b/,
-  /\bindexedDB\b/,
+const SANDBOX_RULES: { target: string; re: RegExp }[] = [
+  { target: "parent.", re: /\bparent\s*\./ },
+  { target: "typeof parent", re: /\btypeof\s+parent\b/ },
+  { target: "window.parent", re: /\bwindow\.parent\b/ },
+  { target: "window.top", re: /\bwindow\.top\b/ },
+  { target: "top.", re: /\btop\s*\./ },
+  { target: "document.cookie", re: /\bdocument\.cookie\b/ },
+  { target: "localStorage", re: /\blocalStorage\b/ },
+  { target: "sessionStorage", re: /\bsessionStorage\b/ },
+  { target: "indexedDB", re: /\bindexedDB\b/ },
 ];
 
 function listPackIds(packsRoot: string): string[] {
@@ -53,9 +55,9 @@ function codeWithoutComments(text: string): string {
 
 function sandboxViolations(repoRel: string, text: string): PackLintViolation[] {
   const code = codeWithoutComments(text);
-  for (const re of SANDBOX_RE) {
+  for (const { target, re } of SANDBOX_RULES) {
     if (re.test(code)) {
-      return [{ file: repoRel, rule: "sandbox-escape" }];
+      return [{ file: repoRel, rule: "sandbox-escape", target }];
     }
   }
   return [];
@@ -94,18 +96,18 @@ function importViolations(
   while ((m = re.exec(text)) !== null) {
     const spec = m[1]!;
     if (spec.includes("web/src/")) {
-      hits.push({ file: repoRel, rule: "host-import" });
+      hits.push({ file: repoRel, rule: "host-import", target: spec });
       continue;
     }
     const cross = resolveImport(spec, packId, repoRel, repoRoot);
-    if (cross) hits.push({ file: repoRel, rule: "cross-pack-import" });
+    if (cross) hits.push({ file: repoRel, rule: "cross-pack-import", target: spec });
   }
   return hits;
 }
 
 function inlineZotoDeclare(repoRel: string, text: string): PackLintViolation[] {
   if (/\bdeclare\s+const\s+zoto\b/.test(text)) {
-    return [{ file: repoRel, rule: "inline-zoto-declare" }];
+    return [{ file: repoRel, rule: "inline-zoto-declare", target: "declare-const-zoto" }];
   }
   return [];
 }
@@ -119,7 +121,7 @@ function getConfigInOnFrame(repoRel: string, text: string): PackLintViolation[] 
     const start = m.index + m[0].length;
     const body = extractBracedBlock(code, start - 1);
     if (body && /\bgetConfig\s*\(/.test(body)) {
-      return [{ file: repoRel, rule: "get-config-in-on-frame" }];
+      return [{ file: repoRel, rule: "get-config-in-on-frame", target: "getConfig()" }];
     }
   }
   const fnRe = /zoto\.onFrame\s*=\s*function\s*\([^)]*\)\s*\{/g;
@@ -127,7 +129,7 @@ function getConfigInOnFrame(repoRel: string, text: string): PackLintViolation[] 
     const start = m.index + m[0].length;
     const body = extractBracedBlock(code, start - 1);
     if (body && /\bgetConfig\s*\(/.test(body)) {
-      return [{ file: repoRel, rule: "get-config-in-on-frame" }];
+      return [{ file: repoRel, rule: "get-config-in-on-frame", target: "getConfig()" }];
     }
   }
   return [];
@@ -161,7 +163,7 @@ function lintPackSource(
   ];
   const seen = new Set<string>();
   return merged.filter((v) => {
-    const k = `${v.rule}\0${v.file}`;
+    const k = violationKey(v);
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -172,7 +174,11 @@ import { scanWebSrc } from "./pack-lint-host";
 
 export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
   const merged = [...scanPluginsSrc(repoRoot), ...scanWebSrc(repoRoot)];
-  merged.sort((a, b) => (a.file === b.file ? a.rule.localeCompare(b.rule) : a.file.localeCompare(b.file)));
+  merged.sort((a, b) => {
+    if (a.file !== b.file) return a.file.localeCompare(b.file);
+    if (a.rule !== b.rule) return a.rule.localeCompare(b.rule);
+    return a.target.localeCompare(b.target);
+  });
   return merged;
 }
 
@@ -188,7 +194,11 @@ export function scanPluginsSrc(repoRoot: string): PackLintViolation[] {
       violations.push(...lintPackSource(repoRel, text, packId, repoRoot));
     }
   }
-  violations.sort((a, b) => (a.file === b.file ? a.rule.localeCompare(b.rule) : a.file.localeCompare(b.file)));
+  violations.sort((a, b) => {
+    if (a.file !== b.file) return a.file.localeCompare(b.file);
+    if (a.rule !== b.rule) return a.rule.localeCompare(b.rule);
+    return a.target.localeCompare(b.target);
+  });
   return violations;
 }
 
@@ -209,10 +219,16 @@ export function loadBaseline(repoRoot: string): PackLintBaseline {
 export function assertBaselineGuard(
   current: PackLintViolation[],
   baseline: PackLintBaseline,
-): { newViolations: PackLintViolation[]; ok: boolean } {
-  const baseSet = new Set(baseline.violations.map((v) => `${v.file}\0${v.rule}`));
-  const newViolations = current.filter((v) => !baseSet.has(`${v.file}\0${v.rule}`));
-  return { newViolations, ok: newViolations.length === 0 };
+): { newViolations: PackLintViolation[]; staleViolations: PackLintViolation[]; ok: boolean } {
+  const baseSet = new Set(baseline.violations.map(violationKey));
+  const curSet = new Set(current.map(violationKey));
+  const newViolations = current.filter((v) => !baseSet.has(violationKey(v)));
+  const staleViolations = baseline.violations.filter((v) => !curSet.has(violationKey(v)));
+  return {
+    newViolations,
+    staleViolations,
+    ok: newViolations.length === 0 && staleViolations.length === 0,
+  };
 }
 
 /** Count baseline violations per pack id for reporting (plugins/src only). */

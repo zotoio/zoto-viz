@@ -14,6 +14,8 @@ Used by `web/src/plugins/pack-lint.test.ts` (not scanned from `web/src` directly
 | `bad/require-pack.ts` | `require()` | **FAIL** |
 | `bad/glob-pack.ts` | `import.meta.glob` | **FAIL** |
 | `bad/loader-bypass-pack-source.ts` | `module.js` / `/api/.../..` → `plugins/src` source | **FAIL** |
+| `bad/raw-pack-import.ts` | static `import` with Vite `?raw` into `plugins/src/**` | **FAIL** |
+| `bad/url-pack-import.ts` | static `import` with Vite `?url` into `plugins/src/**` | **FAIL** |
 | `clean/plugin-yml-presets.ts` | `readFileSync` on `plugin.yml` | **PASS** |
 | (inline) `/api/plugins/<id>/module.js` | real loader URL | **PASS** |
 

@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { PackLintViolation } from "./pack-lint-types";
+import { violationKey } from "./pack-lint-types";
 
 const WEB_SRC = "web/src";
 const PACK_SRC = "plugins/src";
@@ -157,22 +158,33 @@ export function hostImportsPackSrcViolations(
   const rule = "host-imports-pack-src" as const;
   const specs = extractModuleSpecifiers(text);
   const hits: PackLintViolation[] = [];
+  const seen = new Set<string>();
   for (const spec of specs) {
     const bare = normalizeTemplateSpec(spec);
     const resolved = resolveToRepoRel(bare, hostRepoRel, repoRoot, pathConfig, extraPaths);
     if (resolvesIntoPackSrc(resolved)) {
-      hits.push({ file: hostRepoRel, rule });
-      break;
+      const v = { file: hostRepoRel, rule, target: spec };
+      const k = violationKey(v);
+      if (!seen.has(k)) {
+        seen.add(k);
+        hits.push(v);
+      }
+      continue;
     }
     if (bare.includes("*") || bare.includes("?")) {
       const globBase = stripImportSuffix(bare).split("*")[0] ?? "";
       const globResolved = resolveToRepoRel(globBase || bare, hostRepoRel, repoRoot, pathConfig, extraPaths);
       if (resolvesIntoPackSrc(globResolved)) {
-        hits.push({ file: hostRepoRel, rule });
-        break;
+        const v = { file: hostRepoRel, rule, target: spec };
+        const k = violationKey(v);
+        if (!seen.has(k)) {
+          seen.add(k);
+          hits.push(v);
+        }
       }
     }
   }
+  hits.sort((a, b) => a.target.localeCompare(b.target));
   return hits;
 }
 
@@ -199,7 +211,11 @@ export function scanWebSrc(
     const text = fs.readFileSync(path.join(webRoot, rel), "utf8");
     violations.push(...hostImportsPackSrcViolations(repoRel, text, repoRoot, pathConfig, extraPaths));
   }
-  violations.sort((a, b) => (a.file === b.file ? a.rule.localeCompare(b.rule) : a.file.localeCompare(b.file)));
+  violations.sort((a, b) => {
+    if (a.file !== b.file) return a.file.localeCompare(b.file);
+    if (a.rule !== b.rule) return a.rule.localeCompare(b.rule);
+    return a.target.localeCompare(b.target);
+  });
   return violations;
 }
 
