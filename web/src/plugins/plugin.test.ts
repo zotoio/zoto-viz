@@ -233,7 +233,7 @@ describe("compilePlugin", () => {
     }) as typeof fetch;
     const box = new PluginSandbox();
     await attachPluginFrontend(box, pulse, { g: "1" });
-    expect(document.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(document.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts allow-same-origin");
     box.unload();
     await attachPluginFrontend(box, list.find((p) => p.id === "topology")!, {});
     expect(document.querySelector("iframe")).toBeNull();

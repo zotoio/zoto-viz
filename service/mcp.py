@@ -989,7 +989,6 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
                 return _tool_text({"ok": True, "needed": False, "id": pid})
             plugins.grant_consent(found, kind)
             from . import hooks
-            from . import live
             hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
             live.queue_patch({"pluginConsent": {"id": pid, "kind": kind}})
             return _tool_text({"ok": True, "needed": True, "id": pid, "kind": kind})

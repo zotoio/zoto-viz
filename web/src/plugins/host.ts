@@ -162,7 +162,7 @@ export class PluginSandbox {
     viz?: VizPluginContract,
   ): Promise<void> {
     const iframe = document.createElement("iframe");
-    iframe.setAttribute("sandbox", "allow-scripts");
+    iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     iframe.src = pluginSandboxFrameUrl();
@@ -215,7 +215,10 @@ export class PluginSandbox {
     if (this.iframe && ev.source !== this.iframe.contentWindow) return;
     const d = ev.data as HostMsg | undefined;
     if (!d || d.source !== "zoto-viz-plugin") return;
-    if (d.type === "frame-ready" || d.type === "ready") return;
+    if (d.type === "frame-ready" || d.type === "ready") {
+      recordSandboxBoot(d.type);
+      return;
+    }
     if (!hostAllows(d.type, this.caps)) return;
     if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);
     if (d.type === "setNodeColor") this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
@@ -223,6 +226,11 @@ export class PluginSandbox {
     if (d.type === "writeUniform") this.handlers.writeUniform?.(d.payload.name, d.payload.value);
     if (d.type === "writeParticles") this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
   };
+}
+
+function recordSandboxBoot(type: HostMsg["type"]): void {
+  const w = window as unknown as { __zotoSandboxBoot?: HostMsg["type"][] };
+  w.__zotoSandboxBoot = [...(w.__zotoSandboxBoot ?? []), type];
 }
 
 function waitPluginMsg(iframe: HTMLIFrameElement, type: HostMsg["type"]): Promise<void> {

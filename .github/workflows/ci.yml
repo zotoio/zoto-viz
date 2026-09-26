@@ -91,6 +91,31 @@ jobs:
         working-directory: web
         run: pnpm dogfood
 
+  backrooms-smoke:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install web deps
+        working-directory: web
+        run: |
+          pnpm install
+          pnpm approve-builds esbuild
+      - name: Backrooms browser smoke
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          bash scripts/dev.sh start backend
+          cd web && pnpm exec playwright install chromium
+          xvfb-run -a env ZOTO_VIZ_URL=http://127.0.0.1:7020/ pnpm test:backrooms-smoke
+          bash ../scripts/dev.sh stop backend
+
   docs:
     runs-on: ubuntu-latest
     steps:
@@ -109,7 +134,7 @@ jobs:
   # Branch protection requires this check name (workflow ci, job test).
   test:
     runs-on: ubuntu-latest
-    needs: [python, web, build, dogfood, docs]
+    needs: [python, web, build, dogfood, backrooms-smoke, docs]
     if: always()
     steps:
       - name: Require all CI jobs to succeed
@@ -120,10 +145,11 @@ jobs:
             [web]="${{ needs.web.result }}"
             [build]="${{ needs.build.result }}"
             [dogfood]="${{ needs.dogfood.result }}"
+            [backrooms-smoke]="${{ needs.backrooms-smoke.result }}"
             [docs]="${{ needs.docs.result }}"
           )
           failed=0
-          for job in python web build dogfood docs; do
+          for job in python web build dogfood backrooms-smoke docs; do
             status="${results[$job]}"
             echo "$job: $status"
             if [ "$status" != "success" ]; then

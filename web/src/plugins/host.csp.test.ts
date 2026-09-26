@@ -20,6 +20,7 @@ describe("page CSP bootstrap policy", () => {
     expect(sandbox).not.toMatch(/\bsrcdoc\b/i);
     expect(sandbox).toMatch(/<script[^>]+src="/);
     expect(sandbox).not.toMatch(/<script[^>]*>[^<]+/);
+    expect(sandbox).toContain("connect-src 'self'");
   });
 });
 
@@ -32,7 +33,7 @@ describe("PluginSandbox", () => {
     const box = new PluginSandbox();
     await box.load("pulse", "globalThis.ok = true;", ["graph.read", "nope"], { a: "1" });
     const iframe = document.querySelector("iframe");
-    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts allow-same-origin");
     expect(iframe?.src).toContain("plugin-sandbox.html");
     expect(iframe?.srcdoc).toBeFalsy();
     box.unload();
