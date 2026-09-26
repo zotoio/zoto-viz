@@ -2,7 +2,11 @@
 
 import { packFractalDrive, resetFractalDrive } from "./drive";
 import { IDLE_POINTER } from "./interaction";
-import "../../../sdk/plugin-sandbox";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
+import type { ZotoVizPluginHost } from "../../../sdk/plugin-sandbox";
+
+/** Host PLUGIN_SDK + module prefix bind runtime `zoto`; SDK supplies types only. */
+const zoto = globalThis.zoto as ZotoVizPluginHost<VizDataFrame>;
 
 let cfg: Record<string, string> = {};
 let lastT = 0;
