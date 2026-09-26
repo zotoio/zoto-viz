@@ -8,6 +8,7 @@ capabilities:
   - config.read
 viz:
   graphWalk: false
+  contract: 2
   maxBuffers: 2
   maxBufferFloats: 16
   maxParticles: 0

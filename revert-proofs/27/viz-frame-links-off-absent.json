@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-frame-collect.test.ts",
+  "testName": "^viz\\ frame\\ v2\\ collector\\ >\\ omits\\ link\\ enrichment\\ when\\ the\\ monitor\\ switch\\ is\\ off\\ but\\ stamps\\ contract$",
+  "description": "One-line revert: skip deleting frame.links when link collection is disabled.",
+  "patchedAssertion": "AssertionError: expected [] to be undefined"
+}

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/ui/viz-hud.test.ts",
+  "testName": "^viz\\ hud\\ helpers\\ >\\ hides\\ stage\\ fail\\ pill\\ when\\ demo\\ pack\\ is\\ deactivated$",
+  "description": "One-line production revert: skip hiding stageFailEl in setActive(null).",
+  "patchedAssertion": "AssertionError: expected false to be true // Object.is equality"
+}

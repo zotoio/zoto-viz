@@ -1526,6 +1526,32 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
   transition: color 120ms linear;
 }
 .viz-hud-skip.pulse { color: var(--warn); }
+.viz-hud-degraded {
+  color: var(--warn);
+  font-weight: 800;
+  flex-shrink: 0;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.viz-stage-fail-label {
+  position: absolute;
+  top: calc(var(--bar-h, 44px) + 10px);
+  left: 12px;
+  z-index: 5;
+  pointer-events: none;
+  padding: 6px 12px;
+  border: 2px solid var(--warn);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warn) 18%, #120800 82%);
+  color: #ffe8c8;
+  font: 800 13px/1.2 ui-sans-serif, system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+.viz-stage-fail-label[hidden] { display: none !important; }
+body.mosaic .viz-stage-fail-label,
+body.arcade .viz-stage-fail-label { display: none !important; }
 .viz-hud-swap {
   display: flex;
   gap: 4px;

@@ -393,7 +393,8 @@
       "properties": {
         "id": { "type": "string", "minLength": 1, "maxLength": 64 },
         "rate": { "type": "number", "minimum": 0 },
-        "role": { "type": "string", "minLength": 1, "maxLength": 32 }
+        "role": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "failed": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },
     "vizHeadline": {
@@ -469,6 +470,11 @@
       "additionalProperties": false,
       "required": ["graphWalk"],
       "properties": {
+        "contract": {
+          "type": "integer",
+          "enum": [1, 2],
+          "description": "VizDataFrame slice version the host delivers to this pack. Omit for v1 (lifetime talker counts, no links or talkers[].failed). Use 2 for live packet rates, links, and per-host TCP failure ratios."
+        },
         "ubo": {
           "$ref": "#/$defs/vizUboLayout",
           "description": "Optional explicit pin; omit to use the fixed host layout. When present every field must match the const values."

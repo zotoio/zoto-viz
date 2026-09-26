@@ -32,6 +32,8 @@ KEYS = ("root", "hostname", "iface", "monitor_iface", "ssids")
 LISTEN_KEYS = ("bind", "port", "insecure_lan", "inhibit_screensaver")
 DEFAULT_BIND = "127.0.0.1"
 DEFAULT_PORT = 7020
+DEFAULT_VIZ_FRAME_LINKS = True
+DEFAULT_VIZ_FRAME_LINKS_MAX = 64
 HEADER = (
     "# Machine-local zoto-viz layout. Do not commit this file.\n"
     "# Written on zoto-viz install / first monitor start; existing keys are kept.\n"
@@ -39,6 +41,8 @@ HEADER = (
     "# port: 7020\n"
     "# insecure_lan: false             # required when bind is not loopback (no password)\n"
     "# inhibit_screensaver: true       # hold idle/sleep so the display does not blank (default on)\n"
+    "# viz_frame_links: true           # emit viz frame v2 links[] + talkers[].failed (default on)\n"
+    "# viz_frame_links_max: 64         # cap directional link rows per frame (1..256)\n"
 )
 REPO = Path(__file__).resolve().parents[1]
 Run = Callable[[list[str]], str]
@@ -99,6 +103,14 @@ def _port(raw: Any) -> int:
     return n if 1 <= n <= 65535 else DEFAULT_PORT
 
 
+def _links_max(raw: Any) -> int:
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_VIZ_FRAME_LINKS_MAX
+    return n if 1 <= n <= 256 else DEFAULT_VIZ_FRAME_LINKS_MAX
+
+
 def _bind(raw: Any) -> str:
     return str(raw or "").strip() or DEFAULT_BIND
 
@@ -109,6 +121,21 @@ def _inhibit_screensaver(raw: dict[str, Any]) -> bool:
     if "inhibit_screensaver" not in raw:
         return idle.default_inhibit_enabled()
     return _bool(raw.get("inhibit_screensaver"))
+
+
+def viz_frame_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """Resolved viz data-frame collection switches for the web host."""
+    raw = cfg or {}
+    nested = raw.get("vizFrame")
+    if isinstance(nested, dict):
+        if "links" in nested or "linksMax" in nested:
+            enabled = DEFAULT_VIZ_FRAME_LINKS if "links" not in nested else _bool(nested.get("links"))
+            max_raw = nested.get("linksMax") if "linksMax" in nested else raw.get("viz_frame_links_max")
+            return {"links": enabled, "linksMax": _links_max(max_raw)}
+    if "viz_frame_links" in raw or "viz_frame_links_max" in raw:
+        enabled = DEFAULT_VIZ_FRAME_LINKS if "viz_frame_links" not in raw else _bool(raw.get("viz_frame_links"))
+        return {"links": enabled, "linksMax": _links_max(raw.get("viz_frame_links_max"))}
+    return {"links": DEFAULT_VIZ_FRAME_LINKS, "linksMax": DEFAULT_VIZ_FRAME_LINKS_MAX}
 
 
 def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
@@ -178,6 +205,7 @@ def load(path: Path | None = None) -> dict[str, Any]:
         "ssids": _ssids(raw.get("ssids")),
     }
     out.update(listen_opts(raw))
+    out["vizFrame"] = viz_frame_opts(raw)
     return out
 
 
@@ -193,6 +221,8 @@ def dump(cfg: dict[str, Any]) -> str:
         "port": int(opts["port"]),
         "insecure_lan": bool(opts["insecure_lan"]),
         "inhibit_screensaver": bool(opts["inhibit_screensaver"]),
+        "viz_frame_links": bool(viz_frame_opts(cfg).get("links")),
+        "viz_frame_links_max": int(viz_frame_opts(cfg).get("linksMax")),
     }
     return HEADER + yaml.safe_dump(body, sort_keys=False, default_flow_style=False)
 
@@ -338,6 +368,7 @@ def merge(existing: dict[str, Any], detected: dict[str, Any]) -> dict[str, Any]:
         out[key] = have if _present(have) else (found if _present(found) else (have or found or ([] if key == "ssids" else "")))
     out["ssids"] = _ssids(out.get("ssids"))
     out.update(listen_opts(existing))
+    out["vizFrame"] = viz_frame_opts(existing)
     return out
 
 

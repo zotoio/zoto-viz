@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/viz-frame-scope.test.ts",
+  "testName": "^VizFrameScopeCache\\ >\\ parses\\ source\\ bind\\ once\\ per\\ scope\\ sync,\\ not\\ on\\ 300\\ frame\\ ticks$",
+  "description": "One-line production revert: readBindForFrameTick re-parses source bind on every frame tick.",
+  "patchedAssertion": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 301 times"
+}
