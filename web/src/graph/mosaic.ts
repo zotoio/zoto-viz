@@ -200,6 +200,8 @@ export class Mosaic {
   private rematchQueued = new Set<string>();
   private skyPending = new Set<string>();
   private recoveredSkies = new Map<string, BackdropKind>();
+  /** HUD captions keyed by tile/view slot id (moves with the pane on swap). */
+  private paneCaptions = new Map<string, string>();
 
   constructor(private cfg: {
     wall: HTMLElement;
@@ -463,7 +465,7 @@ export class Mosaic {
     this.tree = assignTiles(this.tree, want);
     this.rematchTried.clear();
     this.rematchQueued.clear();
-    this.syncPanes(this.tileIds, touch);
+    this.syncPanes(this.tileIds, touch, prev);
     this.placeTree();
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
@@ -472,6 +474,7 @@ export class Mosaic {
     this.auditPanes("bind", touch);
     this.relayoutAll();
     this.emitLayout();
+    requestAnimationFrame(() => this.repaintAllCaptions());
   }
 
   /** Change one pane. Picking a view already on the wall swaps those two tiles. */
@@ -493,9 +496,24 @@ export class Mosaic {
 
   /** Plugin settings HUD caption for this tile (bottom of frame). */
   setPaneSettingsCaption(id: string, text: string | null | undefined): void {
+    if (text) this.paneCaptions.set(id, text);
+    else this.paneCaptions.delete(id);
     const pane = this.panes.get(id);
     if (!pane) return;
     this.paintPaneSettingsCaption(pane, text);
+  }
+
+  /** Test hook: caption stored for a tile id (survives pane tree moves). */
+  captionForTile(id: string): string | null {
+    return this.paneCaptions.get(id) ?? null;
+  }
+
+  private repaintAllCaptions(): void {
+    for (const id of this.tileIds) {
+      const pane = this.panes.get(id);
+      if (!pane) continue;
+      this.paintPaneSettingsCaption(pane, this.paneCaptions.get(id) ?? null);
+    }
   }
 
   private paintPaneSettingsCaption(pane: HTMLElement, text: string | null | undefined): void {
@@ -547,12 +565,16 @@ export class Mosaic {
     this.cfg.host?.invalidate();
   }
 
-  private syncPanes(ids: string[], touchIds?: ReadonlySet<string>): void {
+  private syncPanes(ids: string[], touchIds?: ReadonlySet<string>, prev?: string[]): void {
+    const prevSet = new Set(prev ?? []);
     for (const id of [...this.panes.keys()]) {
       if (!ids.includes(id)) this.dropPane(id);
     }
     for (const id of ids) {
-      if (this.panes.has(id) && touchIds && !touchIds.has(id)) continue;
+      if (this.panes.has(id)) {
+        if (touchIds && !touchIds.has(id)) continue;
+        if (prevSet.has(id)) continue;
+      }
       this.ensurePane(id);
     }
   }

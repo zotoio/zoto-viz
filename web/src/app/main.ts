@@ -82,6 +82,7 @@ import {
 } from "../plugins/plugin-hud-sync";
 import { MANIFEST_BLOCKED_VIEW_ID } from "../plugins/plugin-manifest-blocked";
 import { bootPluginSettingsHost } from "./app-plugin-settings-boot";
+import { applyMosaicLayoutFromAnim } from "./mosaic-layout-settings-wiring";
 import { wirePluginFrontendAttach } from "./wire-settings-host";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
@@ -658,6 +659,7 @@ function arcadeControls(m: ViewMode): HTMLElement[] {
 }
 
 function bindThisView(modeId: string): void {
+  if (settings?.consumePreserveViewBind()) return;
   if (modeId === MANIFEST_BLOCKED_VIEW_ID) {
     settings?.bindManifestBlockedCatalog(() => refreshPluginCatalogAndResume());
     settings?.setAuthSetup(null);
@@ -1422,26 +1424,23 @@ settings.addAnimation((a) => {
     mosaic!.applyLooks(a, pin);
     mosaic!.setTheme(scene.currentTheme);
   } else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
-  const key = `${a.mosaic}:${a.hero}:${(a.mosaicTiles?.length ? a.mosaicTiles : []).join(",")}:${a.mosaicMaxId ?? ""}`;
-  if (key !== mosaic!.layoutKey) {
-    if (a.mosaic !== "off" && activeArcade) {
-      arcade[activeArcade].view.stop();
-      arcade[activeArcade].el.hidden = true;
-      document.body.classList.remove("arcade");
-      scene.setStageOnly(false);
-      activeArcade = null;
-    }
-    mosaic!.setSize(a.mosaic, modeSel.value, a.hero, {
-      tree: a.mosaicTree,
-      maximized: a.mosaicMaxId || null,
-      tiles: a.mosaicTiles,
-    });
-    applyMode(modeSel.value, { keepLayout: true });
-    syncFeedShift();
-    if (settings.isOpen && settings.activePaneId === "view") {
-      settings.reopenViewPane();
-    }
-  }
+  applyMosaicLayoutFromAnim(mosaic!, a, settings, {
+    layoutKey: mosaic!.layoutKey,
+    stopArcadeIfNeeded: () => {
+      if (a.mosaic !== "off" && activeArcade) {
+        arcade[activeArcade].view.stop();
+        arcade[activeArcade].el.hidden = true;
+        document.body.classList.remove("arcade");
+        scene.setStageOnly(false);
+        activeArcade = null;
+      }
+    },
+    onBeforeSetSize: () => {},
+    onAfterSetSize: () => {
+      applyMode(modeSel.value, { keepLayout: true });
+      syncFeedShift();
+    },
+  });
 }, dreamCog);
 themeFollow = (t) => settings.syncTheme(t);
 settings.syncTheme(paintedTheme(theme));
