@@ -1,0 +1,7 @@
+{
+  "row": "D1 schedule revert compare-before-write",
+  "runner": "vitest",
+  "testFile": "web/src/ui/tile-hud-label.test.ts",
+  "testName": "^tile HUD LIMITED label \\(60 fps, per line\\) > D1 cadence: ring skip rate changes do not rebuild label when N and k are fixed$",
+  "excerpt": "AssertionError: expected 600 to be 1 // Object.is equality"
+}

@@ -17,7 +17,7 @@ describe("nixie clock pack", () => {
   it("uses 12-hour hours without a leading zero at noon/midnight", () => {
     expect(digitsOf(at(0, 7, 8), true)).toEqual([1, 2, 0, 7, 0, 8]);
     expect(digitsOf(at(12, 0, 1), true)).toEqual([1, 2, 0, 0, 0, 1]);
-    expect(digitsOf(at(13, 30, 0), true)).toEqual([0, 1, 3, 0, 0, 0]);
+    expect(digitsOf(at(13, 30, 0), true)).toEqual([-1, 1, 3, 0, 0, 0]);
   });
 
   it("packs look, blink, canvas, and pulse", () => {

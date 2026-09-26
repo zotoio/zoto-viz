@@ -1,4 +1,5 @@
 import type { StateMsg } from "../core/types";
+import { vizFrameEpochSec } from "../core/viz-clock";
 
 /** Target frame interval for continuous Sense (60 fps). */
 export const TYPESAFE_FRAME_BUDGET_MS = 16.7;
@@ -272,8 +273,8 @@ export class TypeSafeHost {
 
     if (mode === "replay") {
       this.shadow = this.lastShadow
-        ? { ...this.lastShadow, t: state.ts || Date.now() / 1000, mode: "replay", ok: true }
-        : { t: state.ts || Date.now() / 1000, mode: "replay", ok: false, skipped: "disabled" };
+        ? { ...this.lastShadow, t: vizFrameEpochSec(state.ts), mode: "replay", ok: true }
+        : { t: vizFrameEpochSec(state.ts), mode: "replay", ok: false, skipped: "disabled" };
       return;
     }
 
@@ -281,7 +282,7 @@ export class TypeSafeHost {
     if (!gate.ok) {
       this._stats.skipped++;
       this.shadow = {
-        t: state.ts || Date.now() / 1000,
+        t: vizFrameEpochSec(state.ts),
         mode,
         ok: false,
         skipped: gate.reason,
@@ -294,7 +295,7 @@ export class TypeSafeHost {
     if (!proxyConfiguredResolver()) {
       this._stats.skipped++;
       this.shadow = {
-        t: state.ts || Date.now() / 1000,
+        t: vizFrameEpochSec(state.ts),
         mode,
         ok: false,
         skipped: "no-api-key",
@@ -308,7 +309,7 @@ export class TypeSafeHost {
     if (!sdk) {
       this._stats.skipped++;
       this.shadow = {
-        t: state.ts || Date.now() / 1000,
+        t: vizFrameEpochSec(state.ts),
         mode,
         ok: false,
         skipped: "no-sdk",
@@ -327,7 +328,7 @@ export class TypeSafeHost {
         questions: this.contract?.questions,
       });
       this.shadow = {
-        t: state.ts || Date.now() / 1000,
+        t: vizFrameEpochSec(state.ts),
         mode,
         ok: true,
         answer: result.answer,
@@ -337,7 +338,7 @@ export class TypeSafeHost {
       this.lastShadow = this.shadow;
     } catch {
       this.shadow = {
-        t: state.ts || Date.now() / 1000,
+        t: vizFrameEpochSec(state.ts),
         mode,
         ok: false,
         presentIntervalMs: timing.presentIntervalMs,

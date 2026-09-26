@@ -12,6 +12,7 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
+import { syncVizTileScope } from "../plugins/viz-tile-budget";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -215,7 +216,16 @@ export class Mosaic {
   get heroMode(): string { return this.heroId; }
   get focusedId(): string { return this.focused; }
   get mainMode(): string { return this.mainId; }
-  get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
+  private _tileIdsCache: string[] = [];
+  private _tileIdsTree: MosaicNode | null | undefined;
+
+  get tileIds(): string[] {
+    if (this.tree !== this._tileIdsTree) {
+      this._tileIdsTree = this.tree;
+      this._tileIdsCache = this.tree ? leafIds(this.tree) : [];
+    }
+    return this._tileIdsCache;
+  }
   get layout(): MosaicLayoutPatch {
     return {
       tree: this.tree,
@@ -491,6 +501,7 @@ export class Mosaic {
       if (!ids.includes(id)) this.dropPane(id);
     }
     for (const id of ids) this.ensurePane(id);
+    syncVizTileScope(ids.length ? ids : ["main"]);
   }
 
   private paneBound(id: string): boolean {
@@ -1026,6 +1037,7 @@ export class Mosaic {
   }
 
   private teardown(): void {
+    syncVizTileScope([]);
     for (const e of this.extras) e.scene.dispose();
     this.extras = [];
     for (const id of [...this.tileArcade.keys()]) this.releaseArcade(id);

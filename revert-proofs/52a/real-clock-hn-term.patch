@@ -1,0 +1,11 @@
+--- a/web/src/plugins/viz-pack-host.ts
++++ b/web/src/plugins/viz-pack-host.ts
+@@ -51,7 +51,7 @@ export function resetHnTermPack(): void {
+ }
+ 
+ function termNow(_frame: VizDataFrame): number {
+-  return vizClockMs() / 1000;
++  return performance.now() / 1000;
+ }
+ 
+ function hnTermFrameBuffer(frame: VizDataFrame): number[] {

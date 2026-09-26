@@ -1,0 +1,7 @@
+{
+  "row": "F1 on revert upload every frame",
+  "runner": "vitest",
+  "testFile": "web/src/plugins/nixie-wall-broadcast.test.ts",
+  "testName": "^nixie wall upload F1 \\(live pack path, 60 fps\\) > F1 seconds on: 10 wall seconds and 10 buffer uploads \\(one call per frame\\)$",
+  "patchedAssertion": "AssertionError: expected \"spy\" to be called 10 times, but got 600 times"
+}

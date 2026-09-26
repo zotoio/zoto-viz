@@ -1,0 +1,6 @@
+{
+  "row": "N2 revert",
+  "testName": "^nixie wall clock rows > N2: Sydney DST spring — 01:59:59 to 03:00:00$",
+  "excerpt": "AssertionError: expected [ +0, 1, 5, 9, 5, 9 ] to deeply equal [ +0, 3, +0, +0, +0, +0 ]",
+  "testFile": "web/src/plugins/nixie-wall-clock.test.ts"
+}

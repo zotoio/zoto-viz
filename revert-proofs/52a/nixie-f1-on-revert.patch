@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
+--- a/web/src/plugins/viz-pack-host.ts
++++ b/web/src/plugins/viz-pack-host.ts
+@@ -279,7 +279,7 @@ export function runPackFrameHandler(
+       const parts = hostNixieWallSecond.syncWallSecond(vizClockMs());
+       const cw = nixiePackCanvas.w;
+       const ch = nixiePackCanvas.h;
+-      if (nixieWallUploadDue(nixieActiveLook, parts, hostNixieUploadLatch, cw, ch)) {
++      if (true) {
+         handlers.writeBuffer(0, hostNixieClock.tick(
+           vizClockMs(),
+           nixieActiveLook,
