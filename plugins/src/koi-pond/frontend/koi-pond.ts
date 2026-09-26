@@ -3,7 +3,11 @@
  * Procedural GLSL sky; demo schools when the host idle fixture is active.
  */
 
-import type { VizDataFrame } from "../../../sdk/viz-contract";
+import type {
+  VizDataFrame,
+  VizPacketSample,
+  VizTalkerSample,
+} from "../../../sdk/viz-contract";
 import {
   assignTalkerSlots,
   slottedTalkerIds,
@@ -54,7 +58,7 @@ export interface KoiPondOptions {
   patternFlags: number[];
 }
 
-export type KoiHostFrame = Pick<
+type KoiPondFrame = Pick<
   VizDataFrame,
   "t" | "dt" | "audio" | "talkers" | "packets" | "sys" | "demo"
 >;
@@ -339,8 +343,6 @@ export function vigorFromRate(rate: number): number {
   return clamp01(rate / 220);
 }
 
-export type TalkerRow = KoiHostFrame["talkers"][number];
-export type PacketRow = KoiHostFrame["packets"][number];
 
 interface KoiBody {
   id: string;
@@ -486,7 +488,7 @@ export class KoiPondSim {
     return Math.min(this.opts.koiCap, cap.maxKoi, MAX_KOI);
   }
 
-  private padForTalker(t: TalkerRow): number {
+  private padForTalker(t: VizTalkerSample): number {
     const h = idHash(t.id);
     const lotusSlots = Math.min(this.opts.lotusCount, this.pads.length);
     if (lotusSlots > 0 && h > 0.55) return Math.floor(h * lotusSlots) % lotusSlots;
@@ -495,11 +497,11 @@ export class KoiPondSim {
     return start + Math.floor(idHash(`${t.id}:dst`) * count) % count;
   }
 
-  private slottedTalkers(all: TalkerRow[], simT: number): TalkerRow[] {
+  private slottedTalkers(all: VizTalkerSample[], simT: number): VizTalkerSample[] {
     const cap = this.koiSlotCap();
     this.talkerSlots = assignTalkerSlots(all, this.talkerSlots, cap, simT);
     const byId = new Map(all.map((t) => [t.id, t]));
-    const out: TalkerRow[] = [];
+    const out: VizTalkerSample[] = [];
     for (const id of slottedTalkerIds(this.talkerSlots)) {
       const t = byId.get(id);
       if (t) out.push(t);
@@ -507,7 +509,7 @@ export class KoiPondSim {
     return out;
   }
 
-  private syncKoi(slotted: TalkerRow[], allTalkerIds: Set<string>, all: TalkerRow[]): void {
+  private syncKoi(slotted: VizTalkerSample[], allTalkerIds: Set<string>, all: VizTalkerSample[]): void {
     const slottedSet = new Set(slotted.map((t) => t.id));
     const byId = new Map(all.map((t) => [t.id, t]));
     for (const t of all) {
@@ -540,9 +542,9 @@ export class KoiPondSim {
   }
 
   /** Built-in demo talkers — always lively on empty host / CI. */
-  spawnDemoTalkers(t: number): TalkerRow[] {
+  spawnDemoTalkers(t: number): VizTalkerSample[] {
     const n = Math.min(this.opts.koiCap, 6);
-    const out: TalkerRow[] = [];
+    const out: VizTalkerSample[] = [];
     for (let i = 0; i < n; i++) {
       const roles = ["gateway", "lan", "internet", "lan", "internet", "lan"];
       out.push({
@@ -554,7 +556,7 @@ export class KoiPondSim {
     return out;
   }
 
-  private ingestPackets(packets: PacketRow[]): void {
+  private ingestPackets(packets: VizPacketSample[]): void {
     let n = 0;
     this.lastPacketIngest = 0;
     if (!packets.length) return;
@@ -625,7 +627,7 @@ export class KoiPondSim {
     slot.life = 5.5;
   }
 
-  private stepKoi(simT: number, dt: number, slotted: TalkerRow[]): void {
+  private stepKoi(simT: number, dt: number, slotted: VizTalkerSample[]): void {
     const school = this.opts.schooling;
     const wander = 1 - school;
     const speedMul = this.opts.swimSpeed * (this.opts.reducedMotion ? 0.45 : 1);
@@ -668,7 +670,7 @@ export class KoiPondSim {
     }
   }
 
-  private stepOnce(simT: number, allTalkers: TalkerRow[]): void {
+  private stepOnce(simT: number, allTalkers: VizTalkerSample[]): void {
     const allIds = new Set(allTalkers.map((t) => t.id));
     const slotted = this.slottedTalkers(allTalkers, simT);
     this.syncKoi(slotted, allIds, allTalkers);
@@ -699,7 +701,7 @@ export class KoiPondSim {
     if (!this.warmed) this.warmed = true;
   }
 
-  step(frame: KoiHostFrame): void {
+  step(frame: KoiPondFrame): void {
     const talkers =
       frame.demo && frame.talkers.length === 0
         ? this.spawnDemoTalkers(frame.t)
@@ -884,9 +886,9 @@ export class KoiPondSim {
   private lastSys: { failed?: number } | undefined;
   private lastDemo = false;
   private lastAudio = 0;
-  private lastTalkers: TalkerRow[] = [];
+  private lastTalkers: VizTalkerSample[] = [];
 
-  advance(frame: KoiHostFrame, canvasW = 1280, canvasH = 800): ReturnType<KoiPondSim["pack"]> {
+  advance(frame: KoiPondFrame, canvasW = 1280, canvasH = 800): ReturnType<KoiPondSim["pack"]> {
     this.lastSys = frame.sys;
     this.lastDemo = !!frame.demo;
     this.lastAudio = frame.audio;
@@ -923,8 +925,8 @@ export function assertWorkBudgetUnderCaps(
   );
 }
 
-export function demoFrame(t = 1): KoiHostFrame {
-  const talkers: TalkerRow[] = [];
+export function demoFrame(t = 1): KoiPondFrame {
+  const talkers: VizTalkerSample[] = [];
   for (let i = 0; i < 5; i++) {
     talkers.push({
       id: `demo-host:${i}`,

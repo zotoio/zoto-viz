@@ -1,14 +1,19 @@
 /** Koi pond — talkers swim as koi toward lily pads and lotus destinations. */
 
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 import {
   KoiPondSim,
   parseKoiPondOptions,
-  type KoiHostFrame,
   type KoiPondOptions,
 } from "./koi-pond";
 
+type KoiPondFrame = Pick<
+  VizDataFrame,
+  "t" | "dt" | "audio" | "talkers" | "packets" | "sys" | "demo"
+>;
+
 declare const zoto: {
-  onFrame: ((frame: KoiHostFrame) => void) | null;
+  onFrame: ((frame: KoiPondFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[] | Float32Array) => void;
