@@ -1,27 +1,14 @@
 /** 0..1 SYS gauges packed into viz slot 0 for the holotable sky. */
 
-export type SysGauges = {
-  cpu: number;
-  mem: number;
-  disk: number;
-  gpu: number;
-  temp: number;
-  watts: number;
-  psi: number;
-  sockets: number;
-  failed: number;
-  udev: number;
-};
+import { EMPTY_SYS_TELEMETRY, type VizSysTelemetry } from "../../../sdk/viz-contract";
 
-export const EMPTY_SYS_GAUGES: SysGauges = {
-  cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0,
-};
+export const EMPTY_SYS_GAUGES: VizSysTelemetry = { ...EMPTY_SYS_TELEMETRY };
 
 export function clamp01(n: number): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
 }
 
-export function sysAlert(sys: SysGauges): number {
+export function sysAlert(sys: VizSysTelemetry): number {
   return clamp01(Math.max(sys.failed, sys.psi, sys.temp > 0.75 ? sys.temp : 0));
 }
 
@@ -46,7 +33,7 @@ export function sysconCanvasSize(doc?: Document | null): { w: number; h: number 
 
 /** Slot 0: cpu mem disk gpu | temp watts psi sockets | failed udev audio alert | canvas w h */
 export function packSysGauges(
-  sys: Partial<SysGauges> | undefined,
+  sys: Partial<VizSysTelemetry> | undefined,
   audio: number,
   canvas: { w: number; h: number } = SYSCON_CANVAS_DEFAULT,
 ): number[] {

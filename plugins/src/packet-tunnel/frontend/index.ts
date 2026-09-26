@@ -1,14 +1,10 @@
 /** Packet-field tunnel raymarch scaffold — maps decimated proto fields into sky uniforms. */
 
 import { packetTunnelSample } from "./tunnel";
-
-type VizFrame = {
-  t: number;
-  packets: { proto: string; field: number }[];
-};
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "packets">) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };

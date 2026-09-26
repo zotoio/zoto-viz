@@ -2,20 +2,12 @@
 
 import {
   cicCanvasSize, EMPTY_SYS, packPackets, packRf, packSysSlot, packTalkers,
-  parseCicLook, peakRf, peakTalker, type CicLook, type SysGauges,
+  parseCicLook, peakRf, peakTalker, type CicLook,
 } from "./pack";
-
-type VizFrame = {
-  t: number;
-  audio: number;
-  sys?: SysGauges;
-  talkers?: { id: string; rate: number; role: string }[];
-  packets?: { proto?: string; size?: number; field?: number }[];
-  rf?: { ssid?: string; rssi?: number; channel?: number }[];
-};
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "sys" | "talkers" | "packets" | "rf">) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;
