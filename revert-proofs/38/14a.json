@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/app/mosaic-layout-settings-wiring.test.ts",
-  "testName": "1×1 to 2×2 with unsaved edit keeps drawer open and focus inside",
-  "description": "Close settings drawer on mosaic layout change",
-  "redOutput": "AssertionError: expected false to be true"
-}
