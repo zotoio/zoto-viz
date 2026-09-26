@@ -991,7 +991,7 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             from . import hooks
             from . import live
             hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
-            live.queue_patch({"reloadPlugins": True})
+            live.queue_patch({"pluginConsent": {"id": pid, "kind": kind}})
             return _tool_text({"ok": True, "needed": True, "id": pid, "kind": kind})
         if name == "draft_plugin":
             info = agent.draft_plugin(args)
