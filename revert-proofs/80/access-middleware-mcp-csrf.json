@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access.py::AccessMiddlewareTests::test_mcp_skips_csrf",
+  "description": "/mcp skips CSRF check.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 403 == 200"
+}

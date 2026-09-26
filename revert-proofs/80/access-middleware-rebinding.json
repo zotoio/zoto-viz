@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access.py::AccessMiddlewareTests::test_rebinding_host_rejected",
+  "description": "Host allowlist enforced in middleware stack.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 200 == 400"
+}
