@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,12 +8,42 @@ import { afterEach, describe, expect, it } from "vitest";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scriptPath = path.join(repoRoot, "scripts", "revert-proof.mjs");
 
+type RowMeta = {
+  runner: string;
+  testFile: string;
+  testName: string;
+  description: string;
+  timeoutSec?: number;
+};
+
 function runGit(cwd: string, args: string[]) {
   const r = spawnSync("git", args, { cwd, encoding: "utf8" });
   if (r.status !== 0) {
     throw new Error(`git ${args.join(" ")}: ${r.stderr || r.stdout}`);
   }
   return r.stdout;
+}
+
+function snapshotCheckout(root: string) {
+  return {
+    head: runGit(root, ["rev-parse", "HEAD"]).trim(),
+    porcelain: runGit(root, ["status", "--porcelain"]),
+  };
+}
+
+function assertCheckoutUnchanged(
+  root: string,
+  before: { head: string; porcelain: string },
+  pr = "99",
+) {
+  const after = snapshotCheckout(root);
+  expect(after.head).toBe(before.head);
+  const stripReport = (s: string) =>
+    s
+      .split("\n")
+      .filter((line) => line.trim() && !line.includes(`revert-proofs/${pr}/REPORT.md`))
+      .join("\n");
+  expect(stripReport(after.porcelain)).toBe(stripReport(before.porcelain));
 }
 
 function runRevertProof(cwd: string, prNumber: string, extraArgs: string[] = []) {
@@ -38,6 +68,26 @@ function writeFixtureRepo(root: string) {
   fs.copyFileSync(
     path.join(repoRoot, "scripts", "vitest.config.mjs"),
     path.join(root, "scripts", "vitest.config.mjs"),
+  );
+
+  fs.writeFileSync(
+    path.join(root, "web", "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "bundler",
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+          allowJs: true,
+        },
+        include: ["../src/**/*.js"],
+      },
+      null,
+      2,
+    ),
   );
 
   fs.writeFileSync(
@@ -69,7 +119,7 @@ function writeRow(
   pr: string,
   slug: string,
   patchBody: string,
-  meta: { runner: string; test: string; description: string },
+  meta: RowMeta,
 ) {
   const dir = path.join(root, "revert-proofs", pr);
   fs.mkdirSync(dir, { recursive: true });
@@ -80,12 +130,6 @@ function writeRow(
 function commitRevertProofs(root: string) {
   runGit(root, ["add", "revert-proofs"]);
   runGit(root, ["commit", "-m", "add revert-proof rows"]);
-}
-
-function expectOnlyReportDirty(root: string, pr = "99") {
-  const status = runGit(root, ["status", "--porcelain"]).trim();
-  const lines = status ? status.split("\n") : [];
-  expect(lines.every((l) => l.includes(`revert-proofs/${pr}/REPORT.md`))).toBe(true);
 }
 
 const goodPatch = `--- a/src/widget.js
@@ -113,6 +157,13 @@ const testTouchPatch = `--- a/scripts/widget.test.ts
  });
 `;
 
+const syntaxBreakPatch = `--- a/src/widget.js
++++ b/src/widget.js
+@@ -1 +1 @@
+-export function value() { return 1; }
++export function value() { return 1
+`;
+
 describe("revert-proof runner (fixture repo)", () => {
   const temps: string[] = [];
 
@@ -122,83 +173,187 @@ describe("revert-proof runner (fixture repo)", () => {
     }
   });
 
-  function mkFixture() {
+  function mkFixture(extraTestBody = "") {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "revert-proof-"));
     temps.push(root);
     writeFixtureRepo(root);
+    if (extraTestBody) {
+      const testPath = path.join(root, "scripts", "widget.test.ts");
+      fs.appendFileSync(testPath, extraTestBody);
+      runGit(root, ["add", "scripts/widget.test.ts"]);
+      runGit(root, ["commit", "-m", "extra tests"]);
+    }
     return root;
   }
 
-  it("correct revert row produces red output and exit 0", () => {
+  it("(a) correct revert row produces red output and exit 0", () => {
     const root = mkFixture();
     writeRow(root, "99", "good", goodPatch, {
       runner: "vitest",
-      test: "scripts/widget.test.ts -t returns one",
+      testFile: "scripts/widget.test.ts",
+      testName: "returns one",
       description: "Break widget return value",
     });
     commitRevertProofs(root);
-    const r = runRevertProof(root, "99");
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "good"]);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("RED (expected)");
-    expect(fs.existsSync(path.join(root, "revert-proofs", "99", "REPORT.md"))).toBe(
-      true,
-    );
-    expectOnlyReportDirty(root);
+    assertCheckoutUnchanged(root, before);
   });
 
-  it("row whose revert does not break the test exits 1 naming the row", () => {
+  it("(b) noop patch stays green fails naming the row", () => {
     const root = mkFixture();
     writeRow(root, "99", "stays-green", noopPatch, {
       runner: "vitest",
-      test: "scripts/widget.test.ts -t returns one",
+      testFile: "scripts/widget.test.ts",
+      testName: "returns one",
       description: "No-op revert",
     });
     commitRevertProofs(root);
-    const r = runRevertProof(root, "99");
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "stays-green"]);
     expect(r.status).toBe(1);
     expect(r.stderr + r.stdout).toMatch(/row stays-green/);
-    expectOnlyReportDirty(root);
+    assertCheckoutUnchanged(root, before);
   });
 
-  it("rejects patch touching test files", () => {
+  it("(c) patch touching test files is rejected", () => {
     const root = mkFixture();
     writeRow(root, "99", "touch-test", testTouchPatch, {
       runner: "vitest",
-      test: "scripts/widget.test.ts -t returns one",
+      testFile: "scripts/widget.test.ts",
+      testName: "returns one",
       description: "Illegal test edit",
     });
     commitRevertProofs(root);
-    const r = runRevertProof(root, "99");
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "touch-test"]);
     expect(r.status).toBe(1);
     expect(r.stderr + r.stdout).toMatch(/row touch-test.*test files/i);
-    expectOnlyReportDirty(root);
+    assertCheckoutUnchanged(root, before);
   });
 
-  it("rejects filter matching zero tests", () => {
+  it("(d) syntax break in production module is rejected as build break", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "build-break", syntaxBreakPatch, {
+      runner: "vitest",
+      testFile: "scripts/widget.test.ts",
+      testName: "returns one",
+      description: "Syntax error in widget",
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "build-break"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).toMatch(/row build-break.*build/i);
+    assertCheckoutUnchanged(root, before);
+  });
+
+  it("(e) filter matching zero tests is rejected", () => {
     const root = mkFixture();
     writeRow(root, "99", "no-match", goodPatch, {
       runner: "vitest",
-      test: "scripts/widget.test.ts -t does-not-exist",
+      testFile: "scripts/widget.test.ts",
+      testName: "does-not-exist",
       description: "Narrow filter",
     });
     commitRevertProofs(root);
-    const r = runRevertProof(root, "99");
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "no-match"]);
     expect(r.status).toBe(1);
     expect(r.stderr + r.stdout).toMatch(/row no-match/);
-    expectOnlyReportDirty(root);
+    assertCheckoutUnchanged(root, before);
   });
 
-  it("leaves tree clean when baseline throws", () => {
-    const root = mkFixture();
-    writeRow(root, "99", "broken-baseline", goodPatch, {
+  it("(f) filter matching two tests is rejected", () => {
+    const root = mkFixture(`
+  it("returns one duplicate", () => {
+    expect(value()).toBe(1);
+  });
+`);
+    writeRow(root, "99", "two-match", goodPatch, {
       runner: "vitest",
-      test: "scripts/missing.test.ts -t x",
-      description: "Missing test file",
+      testFile: "scripts/widget.test.ts",
+      testName: "returns one",
+      description: "Ambiguous filter",
     });
     commitRevertProofs(root);
-    const r = runRevertProof(root, "99");
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "two-match"]);
     expect(r.status).toBe(1);
-    expectOnlyReportDirty(root);
+    expect(r.stderr + r.stdout).toMatch(/row two-match.*exactly 1 test/i);
+    assertCheckoutUnchanged(root, before);
+  });
+
+  it("(g) hanging test is rejected as timeout", () => {
+    const root = mkFixture();
+    const hangTest = `import { describe, it } from "vitest";
+describe("hang", () => {
+  it("returns one hang", async () => {
+    await new Promise(() => {});
+  });
+});
+`;
+    fs.writeFileSync(path.join(root, "scripts", "hang.test.ts"), hangTest);
+    runGit(root, ["add", "scripts/hang.test.ts"]);
+    runGit(root, ["commit", "-m", "hang test"]);
+    writeRow(root, "99", "hang", noopPatch, {
+      runner: "vitest",
+      testFile: "scripts/hang.test.ts",
+      testName: "returns one hang",
+      description: "Hang",
+      timeoutSec: 2,
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "hang"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).toMatch(/row hang.*timed out/i);
+    expect(r.stdout + r.stderr).not.toContain("RED (expected)");
+    assertCheckoutUnchanged(root, before);
+  });
+
+  it("(h) SIGINT during a row leaves checkout and worktrees clean", async () => {
+    const root = mkFixture();
+    const hangTest = `import { describe, it } from "vitest";
+describe("hang", () => {
+  it("sigint hang", async () => {
+    await new Promise(() => {});
+  });
+});
+`;
+    fs.writeFileSync(path.join(root, "scripts", "sigint.test.ts"), hangTest);
+    runGit(root, ["add", "scripts/sigint.test.ts"]);
+    runGit(root, ["commit", "-m", "sigint test"]);
+    writeRow(root, "99", "sigint-row", noopPatch, {
+      runner: "vitest",
+      testFile: "scripts/sigint.test.ts",
+      testName: "sigint hang",
+      description: "SIGINT",
+      timeoutSec: 120,
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(process.execPath, [scriptPath, "99", "--row", "sigint-row"], {
+        cwd: root,
+        env: { ...process.env, FORCE_COLOR: "0" },
+      });
+      const timer = setTimeout(() => {
+        child.kill("SIGINT");
+      }, 2500);
+      child.on("close", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      child.on("error", reject);
+    });
+
+    const wtList = runGit(root, ["worktree", "list"]);
+    expect(wtList.includes("revert-proof-wt")).toBe(false);
+    assertCheckoutUnchanged(root, before);
   });
 });
 

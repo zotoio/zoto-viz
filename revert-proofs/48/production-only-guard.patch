@@ -1,9 +1,9 @@
 diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index f3a16cd..9b5026b 100644
+index 0000000..0000000 100644
 --- a/scripts/revert-proof.mjs
 +++ b/scripts/revert-proof.mjs
-@@ -102,12 +102,8 @@ export function patchTouchesTestFiles(patchText) {
-   return pathsTouchedByPatch(patchText).some((p) => TEST_PATH_RE.test(p));
+@@ -141,12 +141,8 @@ function validateMeta(meta, slug) {
+   }
  }
  
 -function validatePatchTouchesOnlyProduction(patchText, slug) {
@@ -16,4 +16,4 @@ index f3a16cd..9b5026b 100644
 +  return;
  }
  
- function vitestBin() {
+ function vitestBin(wtRoot) {

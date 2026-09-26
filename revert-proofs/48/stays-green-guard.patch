@@ -1,15 +1,18 @@
 diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index f3a16cd..18bbacb 100644
+index 0000000..0000000 100644
 --- a/scripts/revert-proof.mjs
 +++ b/scripts/revert-proof.mjs
-@@ -288,9 +288,7 @@ function runRow(row) {
-     );
-   }
-   if (patched.exitCode === 0) {
--    throw new Error(
--      `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
--    );
-+    // stays-green guard disabled for revert-proof dogfood
-   }
- 
-   return {
+@@ -556,11 +556,8 @@ async function runRow(wtRoot, row, artifactsDir) {
+   if (meta.runner === "vitest") {
+     const kind = classifyPatchedVitest(patched);
+     if (kind === "green") {
+-      throw new Error(
+-        `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
+-      );
+-    }
+-    if (kind === "build break" || kind === "not single assertion failure") {
++      /* dogfood: stays-green guard removed */
++    } else if (kind === "build break" || kind === "not single assertion failure") {
+       throw new Error(
+         `row ${slug}: patch breaks build or fails without assertion (proves nothing)`,
+       );
