@@ -1,9 +1,8 @@
+import { getVizZoto } from "../../../sdk/viz-zoto";
+
+const zoto = getVizZoto();
 type Node = { id: string; rate: number; role: string };
 
-declare const zoto: {
-  onTick: ((nodes: Node[]) => void) | null;
-  setStyle: (s: Record<string, unknown>) => void;
-};
 
 /** Frontend interface: map consumed device rates onto graph.style heat. */
 export function heatFrom(nodes: Node[]): number {

@@ -1,16 +1,12 @@
+
 /** Marble Run — sandbox drives sim + sky buffers (no host-specific hooks). */
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { parseMarbleOptions } from "./config";
 import { disposeMarblePack, ingestFrame, packMarbleSlots, setMarbleOptions } from "./pack";
+import { getVizZoto } from "../../../sdk/viz-zoto";
+const zoto = getVizZoto();
 
-declare const zoto: {
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
 
 let cfg = parseMarbleOptions(zoto.getConfig?.());
 setMarbleOptions(cfg);

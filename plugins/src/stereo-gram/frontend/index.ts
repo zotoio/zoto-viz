@@ -1,9 +1,8 @@
+import { getVizZoto } from "../../../sdk/viz-zoto";
+
+const zoto = getVizZoto();
 /** Accent colours for the stereogram sky. The host writes the drive buffer. */
 
-declare const zoto: {
-  onFrame: (() => void) | null;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
 
 zoto.onFrame = () => {
   // The host writes the drive buffer every frame (clock, pulse, spectrum).

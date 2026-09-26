@@ -1,9 +1,8 @@
+import { getVizZoto } from "../../../sdk/viz-zoto";
+
+const zoto = getVizZoto();
 /** Backrooms sky colours. The host runs `director.ts` on the sky clock and writes slots 0–1 every frame. */
 
-declare const zoto: {
-  onFrame: (() => void) | null;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
 
 zoto.onFrame = () => {
   // No buffer writes here: a late iframe write would replace the director's camera with a stale one.

@@ -2,14 +2,9 @@
 
 import { nixieCanvasSize, packNixieBuffer, parseNixieLook, type NixieLook } from "./tubes";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "../../../sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "talkers">) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
+const zoto = getVizZoto();
 
 let look: NixieLook = parseNixieLook(zoto.getConfig?.());
 

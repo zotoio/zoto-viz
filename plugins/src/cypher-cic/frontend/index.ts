@@ -1,3 +1,4 @@
+
 /** Cypher CIC — pack SYS + NET frames into the holodeck sky. Never writes uBright. */
 
 import {
@@ -5,14 +6,9 @@ import {
   parseCicLook, peakRf, peakTalker, type CicLook,
 } from "./pack";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "../../../sdk/viz-zoto";
+const zoto = getVizZoto();
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "sys" | "talkers" | "packets" | "rf">) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
 
 let look: CicLook = parseCicLook(zoto.getConfig?.());
 

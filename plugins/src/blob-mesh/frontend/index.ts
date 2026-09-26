@@ -1,12 +1,10 @@
+
 /** Metaball field — each talker is a blob (xy, radius, hue). */
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "../../../sdk/viz-zoto";
+const zoto = getVizZoto();
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "t" | "talkers" | "audio">) => void) | null;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
 
 function roleHue(role: string): number {
   if (role === "gateway") return 0.08;

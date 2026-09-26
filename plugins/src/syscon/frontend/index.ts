@@ -2,12 +2,9 @@
 
 import { EMPTY_SYS_GAUGES, packSysGauges, sysconCanvasSize } from "./telemetry";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "../../../sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "sys">) => void) | null;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
+const zoto = getVizZoto();
 
 zoto.onFrame = (frame) => {
   const sys = frame.sys ?? EMPTY_SYS_GAUGES;

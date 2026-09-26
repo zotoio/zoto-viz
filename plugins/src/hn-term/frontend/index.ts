@@ -1,15 +1,13 @@
+
 /** Hacker News greenscreen — headlines and RSS blurbs type in, then scroll up. */
 
 import {
   TERM_COLS, TERM_ROWS, packScreen, preferHnStories, scriptFromStories, visibleScreen,
 } from "./teletype";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "../../../sdk/viz-zoto";
+const zoto = getVizZoto();
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "t" | "dt" | "audio" | "headlines">) => void) | null;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
 
 let typed = 0;
 let lastT = 0;

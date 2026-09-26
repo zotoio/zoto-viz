@@ -1,12 +1,10 @@
+
 /** RF / SSID constellation bloom scaffold — maps watch-list beacons to sky uniforms. */
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "../../../sdk/viz-zoto";
+const zoto = getVizZoto();
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "rf" | "audio">) => void) | null;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
 
 zoto.onFrame = (frame) => {
   const beacons = frame.rf;
