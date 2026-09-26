@@ -19,9 +19,12 @@ function gitShortRev(): string {
   }
 }
 
+const countersEnabled = process.env.VITEST === "true";
+
 export default defineConfig({
   define: {
     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
+    __VIZ_BUILD_COUNTERS__: JSON.stringify(countersEnabled),
   },
   server: {
     port: 5173,

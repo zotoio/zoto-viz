@@ -7,13 +7,14 @@ import {
   VIZ_FRAME_BUDGET_MS,
   VizBufferWriter,
   VizFrameBudget,
+  assertVizBuildWorkGates,
   assertVizFrameOutputCaps,
   bindVizWriterCore,
   buildVizFrame,
   buildVizFrameForPlugin,
-  emptyVizBuildWorkCounters,
+  FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
   parseVizContract,
-  vizBuildWorkWithinBudget,
+  takeVizBuildWorkSnapshot,
   type VizBuildWorkCounters,
   type VizDataFrame,
   type VizFrameBudgetStats,
@@ -276,19 +277,32 @@ export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCount
     const contract = DEMO_PACK_CONTRACTS[packId];
     const budget = new VizFrameBudget(now);
     const writer = new VizBufferWriter(contract);
-    const maxWork = emptyVizBuildWorkCounters();
+    const maxWork: VizBuildWorkCounters = {
+      flowVisits: 0,
+      flowProtoVisits: 0,
+      rateCalls: 0,
+      talkerObjectsCreated: 0,
+      packetObjectsCreated: 0,
+      frameObjectsCreated: 0,
+    };
     let prevTs = 0;
     let delivered = 0;
 
-    const instrumentedBuild: typeof buildVizFrame = (s, pt = 0, a = 0) => {
-      const work = emptyVizBuildWorkCounters();
-      const frame = buildVizFrameForPlugin(s, pt, a, contract.idle, undefined, work);
-      maxWork.deviceScoreCalls = Math.max(maxWork.deviceScoreCalls, work.deviceScoreCalls);
+    const gatedBuild: typeof buildVizFrame = (s, pt = 0, a = 0, bind) => {
+      const frame = buildVizFrameForPlugin(s, pt, a, contract.idle, bind);
+      const work = takeVizBuildWorkSnapshot();
       maxWork.flowVisits = Math.max(maxWork.flowVisits, work.flowVisits);
       maxWork.flowProtoVisits = Math.max(maxWork.flowProtoVisits, work.flowProtoVisits);
-      if (!vizBuildWorkWithinBudget(s, work)) ok = false;
+      maxWork.rateCalls = Math.max(maxWork.rateCalls, work.rateCalls);
+      maxWork.talkerObjectsCreated = Math.max(maxWork.talkerObjectsCreated, work.talkerObjectsCreated);
+      maxWork.packetObjectsCreated = Math.max(maxWork.packetObjectsCreated, work.packetObjectsCreated);
+      maxWork.frameObjectsCreated = Math.max(maxWork.frameObjectsCreated, work.frameObjectsCreated);
       try {
-        assertVizFrameOutputCaps(frame);
+        assertVizBuildWorkGates(s, work);
+        assertVizFrameOutputCaps(frame, {
+          checkDecimation: false,
+          encodedByteCeiling: FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
+        });
       } catch {
         ok = false;
       }
@@ -296,7 +310,7 @@ export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCount
     };
 
     for (let i = 0; i < framesPerPack; i++) {
-      const tick = dogfoodTick(packId, state, prevTs, audio, budget, writer, undefined, instrumentedBuild);
+      const tick = dogfoodTick(packId, state, prevTs, audio, budget, writer, undefined, gatedBuild);
       if (tick.delivered && tick.frame) {
         delivered++;
         prevTs = tick.frame.t;
@@ -305,7 +319,11 @@ export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCount
 
     const skipped = budget.stats.skipped;
     if (delivered !== framesPerPack || skipped !== 0) ok = false;
-    if (!vizBuildWorkWithinBudget(state, maxWork)) ok = false;
+    try {
+      assertVizBuildWorkGates(state, maxWork);
+    } catch {
+      ok = false;
+    }
 
     packs.push({
       packId,
@@ -331,7 +349,7 @@ export function formatDogfoodCountGateReport(result: DogfoodCountGateResult): st
   for (const p of result.packs) {
     const w = p.maxWork;
     lines.push(
-      `  ${p.packId}: delivered ${p.delivered}/${p.frames} skips=${p.skipped} | work scores=${w.deviceScoreCalls} flowVisits=${w.flowVisits} flowProtos=${w.flowProtoVisits}`,
+      `  ${p.packId}: delivered ${p.delivered}/${p.frames} skips=${p.skipped} | work rateCalls=${w.rateCalls} flowVisits=${w.flowVisits} flowProtos=${w.flowProtoVisits}`,
     );
   }
   lines.push(`  gate: ${result.ok ? "PASS" : "FAIL"}`);

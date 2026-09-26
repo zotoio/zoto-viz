@@ -125,8 +125,15 @@ cd web && pnpm test -- src/plugins/viz-host.test.ts src/plugins/host.test.ts
 ```
 
 Cloud CI runs **`pnpm dogfood`** — a deterministic **count gate** on the fat-LAN
-fixture (fake frame clock, per-build work budgets on flow/talker decimation,
-output caps). It does **not** assert wall-clock `performance.now()` p95.
+fixture (injected zero clock on `VizFrameBudget`, per-build work budgets:
+flow visits and rate calls ≤ **2×** flows, 4× flow scaling ≤ **4.4×** work,
+top-K output caps, encoded JSON byte ceiling). It does **not** assert wall-clock
+`performance.now()` p95. Counter increments are compiled out of production
+bundles (`__VIZ_BUILD_COUNTERS__`).
+
+Contract v2 **`links`** / `devicePacketRateMap` reuse gates are deferred until
+[#27](https://github.com/zotoio/zoto-viz/pull/27) lands (`it.todo` in
+`viz-build-gates.test.ts`).
 
 Local GPU timing (p50/p95 build and present) is opt-in:
 
