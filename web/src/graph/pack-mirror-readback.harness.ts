@@ -273,15 +273,6 @@ export async function runPackMirrorReadbackInPage(
     canvasDeviceHeight,
   );
 
-  toDeviceRectInto(
-    cssRectTopFromBottomLeft(
-      cssRect(innerX, innerY, innerTd.w, innerTd.h),
-      HARNESS_CSS_HEIGHT,
-    ),
-    pr,
-    canvasDeviceHeight,
-    captureScratch,
-  );
   const marginX = Math.max(2, innerTd.w * 0.15);
   const marginY = Math.max(2, innerTd.h * 0.15);
   const bandW = Math.max(2, innerTd.w * 0.35);

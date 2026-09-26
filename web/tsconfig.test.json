@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node"]
+  },
+  "include": [
+    "src/graph/pack-mirror-lifecycle.test.ts",
+    "src/graph/pack-mirror-rect-converters.test.ts",
+    "src/graph/pack-mirror-readback.test.ts",
+    "src/graph/render-host-fb-viewport.test.ts",
+    "test/node/pack-mirror-readback-chrome.ts",
+    "test/node/pack-mirror-readback-vite.ts"
+  ],
+  "exclude": []
+}

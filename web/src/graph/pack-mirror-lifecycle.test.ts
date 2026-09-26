@@ -7,6 +7,8 @@ import {
   PackTexturePresenter,
   packMirrorResourceStats,
 } from "./pack-mirror-gl";
+import { packMirrorSizeStats } from "./pack-mirror-size-stats";
+import { asCssRect, type CssRectLoose } from "./pack-mirror-rect";
 import { surfaceLetterboxFill } from "./letterbox-fill";
 
 function stubRenderer(antialias: boolean, pr = 1): THREE.WebGLRenderer {
@@ -34,17 +36,17 @@ function simulateTwoTileFrame(
   rd: THREE.WebGLRenderer,
   key: string,
   antialias: boolean,
-  box = { w: 64, h: 48 },
+  box: CssRectLoose = { x: 0, y: 0, w: 64, h: 48 },
 ): void {
   reg.beginFrame();
   const { scene, camera } = emptyScene();
   reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias);
-  reg.presentPack(key, rd, { x: 0, y: 0, w: box.w, h: box.h }, {
+  reg.presentPack(key, rd, asCssRect({ x: 0, y: 0, w: box.w, h: box.h }), {
     letterbox: false,
     fill: null,
     aspect: box.w / box.h,
   });
-  reg.presentPack(key, rd, { x: 80, y: 0, w: 90, h: 70 }, {
+  reg.presentPack(key, rd, asCssRect({ x: 80, y: 0, w: 90, h: 70 }), {
     letterbox: true,
     fill: surfaceLetterboxFill(0x0a1020, 0.25),
     aspect: box.w / box.h,
@@ -56,22 +58,22 @@ function simulateThreeTileFrame(
   rd: THREE.WebGLRenderer,
   key: string,
   antialias: boolean,
-  box = { w: 64, h: 48 },
+  box: CssRectLoose = { x: 0, y: 0, w: 64, h: 48 },
 ): void {
   reg.beginFrame();
   const { scene, camera } = emptyScene();
   reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias);
-  reg.presentPack(key, rd, { x: 0, y: 0, w: box.w, h: box.h }, {
+  reg.presentPack(key, rd, asCssRect({ x: 0, y: 0, w: box.w, h: box.h }), {
     letterbox: false,
     fill: null,
     aspect: box.w / box.h,
   });
-  reg.presentPack(key, rd, { x: 70, y: 0, w: 50, h: 40 }, {
+  reg.presentPack(key, rd, asCssRect({ x: 70, y: 0, w: 50, h: 40 }), {
     letterbox: true,
     fill: surfaceLetterboxFill(0x0a1020, 0.25),
     aspect: box.w / box.h,
   });
-  reg.presentPack(key, rd, { x: 130, y: 0, w: 50, h: 40 }, {
+  reg.presentPack(key, rd, asCssRect({ x: 130, y: 0, w: 50, h: 40 }), {
     letterbox: true,
     fill: surfaceLetterboxFill(0x0a1020, 0.25),
     aspect: box.w / box.h,
@@ -79,8 +81,14 @@ function simulateThreeTileFrame(
 }
 
 describe("PackMirrorSession resource lifecycle", () => {
-  beforeEach(() => packMirrorResourceStats.reset());
-  afterEach(() => packMirrorResourceStats.reset());
+  beforeEach(() => {
+    packMirrorResourceStats.reset();
+    packMirrorSizeStats.reset();
+  });
+  afterEach(() => {
+    packMirrorResourceStats.reset();
+    packMirrorSizeStats.reset();
+  });
 
   it("300 frames / 2 tiles: one RT, one quad graph, reused mirror scratch rects", () => {
     const reg = new PackMirrorRegistry();
@@ -91,25 +99,56 @@ describe("PackMirrorSession resource lifecycle", () => {
     const barsRef = session.presenter.scratch.bars;
     const innerRef = session.presenter.scratch.innerTd;
     const outRef = session.presenter.scratch.out;
+    const sizeScratchRef = reg.devicePackSizeScratch;
+    let packSizeRef: typeof session.lastRenderDeviceSize = null;
     for (let i = 0; i < 300; i++) {
       simulateTwoTileFrame(reg, rd, "plugin:pack", false);
       expect(session.presenter.scratch.bars).toBe(barsRef);
       expect(session.presenter.scratch.innerTd).toBe(innerRef);
       expect(session.presenter.scratch.out).toBe(outRef);
+      expect(reg.devicePackSizeScratch).toBe(sizeScratchRef);
+      if (packSizeRef === null) packSizeRef = session.lastRenderDeviceSize;
+      expect(session.lastRenderDeviceSize).toBe(packSizeRef);
     }
     expect(packMirrorResourceStats.renderTargetCreated).toBe(1);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
     expect(packMirrorResourceStats.presenterCreated).toBe(1);
+    expect(packMirrorSizeStats.deviceSizeAllocated).toBe(0);
     reg.dispose();
+  });
+
+  it("renderPrimary: non-finite box dims stable RT size (missing origin and NaN w)", () => {
+    const rd = stubRenderer(false);
+    const regOrigin = new PackMirrorRegistry();
+    regOrigin.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
+    for (let i = 0; i < 300; i++) {
+      simulateTwoTileFrame(regOrigin, rd, "plugin:pack", false, { w: 64, h: 48 } as CssRectLoose);
+    }
+    expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
+    regOrigin.dispose();
+
+    packMirrorResourceStats.reset();
+    packMirrorSizeStats.reset();
+    const regNan = new PackMirrorRegistry();
+    regNan.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
+    for (let i = 0; i < 300; i++) {
+      simulateTwoTileFrame(regNan, rd, "plugin:pack", false, { x: 0, y: 0, w: Number.NaN, h: 48 });
+    }
+    expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
+    regNan.dispose();
   });
 
   it("300 steady frames: 0 setSize; one resize: exactly 1 setSize", () => {
     const session = new PackMirrorSession();
     const rd = stubRenderer(false);
     const { scene, camera } = emptyScene();
-    for (let i = 0; i < 300; i++) session.renderPack(rd, scene, camera, 64, 48, 0x0a1020, false);
+    const size64 = { x: 0, y: 0, w: 64, h: 48 };
+    const dev64 = { pw: 64, ph: 48 };
+    for (let i = 0; i < 300; i++) session.renderPack(rd, scene, camera, size64, dev64, 0x0a1020, false);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
-    session.renderPack(rd, scene, camera, 96, 72, 0x0a1020, false);
+    const size96 = { x: 0, y: 0, w: 96, h: 72 };
+    const dev96 = { pw: 96, ph: 72 };
+    session.renderPack(rd, scene, camera, size96, dev96, 0x0a1020, false);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(1);
     session.dispose();
   });
@@ -186,10 +225,10 @@ describe("PackTexturePresenter", () => {
     const p = new PackTexturePresenter();
     const rd = stubRenderer(false);
     const tex = new THREE.Texture();
-    p.draw(rd, tex, { x: 0, y: 0, w: 10, h: 10 }, null, 1, { letterbox: false });
+    p.draw(rd, tex, asCssRect({ x: 0, y: 0, w: 10, h: 10 }), null, 1, { letterbox: false });
     const v0 = p.material.version;
     for (let i = 0; i < 299; i++) {
-      p.draw(rd, tex, { x: 0, y: 0, w: 10, h: 10 }, null, 1, { letterbox: false });
+      p.draw(rd, tex, asCssRect({ x: 0, y: 0, w: 10, h: 10 }), null, 1, { letterbox: false });
     }
     expect(p.material.version).toBe(v0);
     p.dispose();

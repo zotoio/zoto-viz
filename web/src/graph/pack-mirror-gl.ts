@@ -2,11 +2,13 @@ import * as THREE from "three";
 import type { SurfaceLetterboxFill } from "./letterbox-fill";
 import { letterboxFillHex, letterboxInnerRectInto, paintLetterboxBars } from "./letterbox-fill";
 import type { WebGLRenderer } from "three";
+import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 import {
   type CssRect,
   type CssRectLoose,
   asCssRect,
-  deviceSizeFromCssBox,
+  deviceSizeFromCssBoxInto,
+  type DeviceSizeMut,
 } from "./pack-mirror-rect";
 
 /** @deprecated Use `CssRect` from `./pack-mirror-rect`. */
@@ -48,6 +50,7 @@ export const packMirrorResourceStats = {
     this.textureDisposed = 0;
     this.geometryDisposed = 0;
     this.materialDisposed = 0;
+    packMirrorSizeStats.reset();
   },
 };
 
@@ -178,6 +181,8 @@ export class PackMirrorSession {
   private samples = -1;
   readonly presenter = new PackTexturePresenter();
   rendered = false;
+  /** Last `deviceSize` reference passed to `renderPack` (lifecycle tests). */
+  lastRenderDeviceSize: DeviceSizeMut | null = null;
 
   get target(): THREE.WebGLRenderTarget | null { return this.rt; }
 
@@ -237,12 +242,12 @@ export class PackMirrorSession {
     scene: THREE.Scene,
     camera: THREE.Camera,
     cssSize: CssRectLoose,
-    pw: number,
-    ph: number,
+    deviceSize: DeviceSizeMut,
     clearHex: number,
     antialias: boolean,
   ): THREE.Texture | null {
-    const rt = this.ensure(pw, ph, antialias);
+    this.lastRenderDeviceSize = deviceSize;
+    const rt = this.ensure(deviceSize.pw, deviceSize.ph, antialias);
     if (!rt) return null;
     const rd = renderer as THREE.WebGLRenderer;
     const prev = rd.getRenderTarget?.() ?? null;
@@ -263,6 +268,9 @@ export class PackMirrorSession {
 export class PackMirrorRegistry {
   private readonly sessions = new Map<string, PackMirrorSession>();
   allocationCount = 0;
+
+  /** Reused for every `renderPrimary` (no per-frame `{pw,ph}` allocation). */
+  readonly devicePackSizeScratch: DeviceSizeMut = { pw: 0, ph: 0 };
 
   private readonly drawLetterboxScratch = { letterbox: false };
 
@@ -303,8 +311,8 @@ export class PackMirrorRegistry {
     const session = this.sessions.get(key);
     if (!session) return null;
     const pr = renderer.getPixelRatio();
-    const { pw, ph } = deviceSizeFromCssBox(box, pr);
-    return session.renderPack(renderer, scene, camera, box, pw, ph, clearHex, antialias);
+    deviceSizeFromCssBoxInto(box, pr, this.devicePackSizeScratch);
+    return session.renderPack(renderer, scene, camera, box, this.devicePackSizeScratch, clearHex, antialias);
   }
 
   presentPack(

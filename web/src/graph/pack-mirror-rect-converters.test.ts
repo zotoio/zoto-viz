@@ -2,14 +2,25 @@ import { describe, expect, it } from "vitest";
 import {
   asCssRect,
   cssRect,
+  deviceSizeFromCssBoxInto,
   toDeviceRectInto,
+  type CssRectLoose,
   type DeviceRectMut,
+  type DeviceSizeMut,
 } from "./pack-mirror-rect";
 
 /** Stated drawing-buffer height for rect converter rows (CSS canvas 120px × pr 1.5). */
 const CANVAS_DEVICE_HEIGHT = 180;
 
 describe("pack-mirror rect converters", () => {
+  it("deviceSizeFromCssBoxInto: non-finite w clamps to 2×2 device RT", () => {
+    const out: DeviceSizeMut = { pw: 0, ph: 0 };
+    deviceSizeFromCssBoxInto({ x: 0, y: 0, w: Number.NaN, h: 48 }, 1, out);
+    expect(out).toEqual({ pw: 2, ph: 48 });
+    deviceSizeFromCssBoxInto({ w: 64, h: 48 } as CssRectLoose, 1, out);
+    expect(out).toEqual({ pw: 64, ph: 48 });
+  });
+
   it("tile-edge-shared: adjacent tiles share device x (and y) at pr 1.5", () => {
     const a = cssRect(0, 0, 101, 40);
     const b = cssRect(101, 0, 99, 40);
