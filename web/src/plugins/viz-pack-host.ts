@@ -1,4 +1,8 @@
-import { vizClockMs } from "../core/viz-clock";
+import type { DevicePixelSize } from "../graph/render-host";
+import { vizClockMs, vizWallMs } from "../core/viz-clock";
+import { createNixieWallClock } from "./nixie-wall-clock";
+import { SharedNixieWallSecond } from "./nixie-wall-broadcast";
+import { createNixieUploadLatch, nixieWallUploadDue, type NixieUploadLatch } from "./nixie-wall-upload";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import type { VizDataFrame, VizUniformValue } from "./viz-host";
 import {
@@ -7,7 +11,102 @@ import {
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { nixieCanvasSize, packNixieBuffer, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+import {
+  CANVAS_DEFAULT,
+  NIXIE_LOOK_KEYS,
+  parseNixieLook,
+  type NixieLook,
+  type NixieLookKey,
+} from "../../../shared/nixie-tubes";
+
+const hostNixieClock = createNixieWallClock();
+const hostNixieWallSecond = new SharedNixieWallSecond();
+const nixieUploadLatches = new Map<string, NixieUploadLatch>();
+
+/** Mosaic / dogfood: stable tile key for per-tile nixie upload latch (not a nixie look key). */
+export const VIZ_PACK_TILE_ID_OPT = "vizPackTileId";
+
+export function packNixieWallBuffer(
+  clock: ReturnType<typeof createNixieWallClock>,
+  look: NixieLook = parseNixieLook(),
+  audio = 0,
+  pulse = 0,
+  canvas?: { w: number; h: number },
+): number[] {
+  const wallMs = vizWallMs();
+  const parts = hostNixieWallSecond.syncWallSecond(wallMs);
+  return clock.tick(wallMs, look, audio, pulse, canvas, parts);
+}
+
+export function resetHostNixieWallScope(): void {
+  hostNixieWallSecond.reset();
+  nixieUploadLatches.clear();
+}
+
+function nixiePackTileId(opts?: Record<string, string> | null): string {
+  const id = opts?.[VIZ_PACK_TILE_ID_OPT];
+  return id && id.length > 0 ? id : "main";
+}
+
+function nixieUploadLatchFor(tileId: string): NixieUploadLatch {
+  let latch = nixieUploadLatches.get(tileId);
+  if (!latch) {
+    latch = createNixieUploadLatch();
+    nixieUploadLatches.set(tileId, latch);
+  }
+  return latch;
+}
+
+let nixieScopedLook: NixieLook = parseNixieLook();
+let nixieActiveLook: NixieLook = nixieScopedLook;
+const nixieOptSlots: (string | undefined)[] = NIXIE_LOOK_KEYS.map(() => undefined);
+const nixiePackCanvas: DevicePixelSize = { w: CANVAS_DEFAULT.w, h: CANVAS_DEFAULT.h };
+
+function nixieOptRaw(opts: Record<string, string> | null | undefined, key: NixieLookKey): string | undefined {
+  if (opts == null || !Object.prototype.hasOwnProperty.call(opts, key)) return undefined;
+  return opts[key] ?? "";
+}
+
+/** Parse nixie look when tracked option values change (no per-frame key stringify). */
+export function syncNixiePackScope(opts?: Record<string, string> | null): void {
+  let changed = false;
+  for (let i = 0; i < NIXIE_LOOK_KEYS.length; i++) {
+    const key = NIXIE_LOOK_KEYS[i]!;
+    const v = nixieOptRaw(opts, key);
+    if (nixieOptSlots[i] !== v) {
+      nixieOptSlots[i] = v;
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  nixieScopedLook = parseNixieLook(opts, nixieScopedLook);
+}
+
+/** Track render-host backing size for nixie buffers (no querySelector). */
+export function syncVizPackRenderCanvas(size: Readonly<DevicePixelSize>): void {
+  nixiePackCanvas.w = size.w > 64 ? size.w : CANVAS_DEFAULT.w;
+  nixiePackCanvas.h = size.h > 64 ? size.h : CANVAS_DEFAULT.h;
+}
+
+export function nixiePackActiveCanvas(): Readonly<DevicePixelSize> {
+  return nixiePackCanvas;
+}
+
+export function resetNixiePackHostScope(): void {
+  nixieOptSlots.fill(undefined);
+  nixieScopedLook = parseNixieLook();
+  nixiePackCanvas.w = CANVAS_DEFAULT.w;
+  nixiePackCanvas.h = CANVAS_DEFAULT.h;
+  resetHostNixieWallScope();
+}
+
+export function nixiePackScopedLook(): NixieLook {
+  return nixieScopedLook;
+}
+
+export function nixiePackActiveLook(): NixieLook {
+  return nixieActiveLook;
+}
 
 export interface VizPackHandlers {
   writeBuffer: (slot: number, data: number[]) => void;
@@ -200,14 +299,22 @@ export function runPackFrameHandler(
       break;
     }
     case "nixie-clock": {
+      syncNixiePackScope(opts);
+      nixieActiveLook = nixieScopedLook;
       const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
-      handlers.writeBuffer(0, packNixieBuffer(
-        new Date(vizClockMs()),
-        parseNixieLook(opts),
-        frame.audio,
-        peak,
-        nixieCanvasSize(typeof document !== "undefined" ? document : null),
-      ));
+      const wallMs = vizWallMs();
+      const parts = hostNixieWallSecond.syncWallSecond(wallMs);
+      const latch = nixieUploadLatchFor(nixiePackTileId(opts));
+      if (nixieWallUploadDue(nixieActiveLook, parts, latch)) {
+        handlers.writeBuffer(0, hostNixieClock.tick(
+          wallMs,
+          nixieActiveLook,
+          frame.audio,
+          peak,
+          nixiePackCanvas,
+          parts,
+        ));
+      }
       handlers.writeUniform("uAudio", frame.audio);
       handlers.writeUniform("uAccent", [1.0, 0.38, 0.06]);
       handlers.writeUniform("uBg", [0.06, 0.03, 0.02]);

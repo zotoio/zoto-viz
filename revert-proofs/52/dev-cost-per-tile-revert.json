@@ -1,0 +1,7 @@
+{
+  "row": "F4 dev revert per-tile vizTileCostTicks index parse",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
+  "testName": "^dev viz wall flags > F5 \\(iv\\): \\?vizTileCostTicks=1:5011 — only tile 1 LIMITED at 2×2$",
+  "excerpt": "AssertionError: expected 0 to be greater than 0"
+}

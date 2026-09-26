@@ -1,11 +1,13 @@
---- a/web/src/ui/viz-hud.ts
-+++ b/web/src/ui/viz-hud.ts
-@@ -148,7 +148,7 @@ export function skipRatePerSec(
-     if (s.t < cutoff) continue;
-     total += s.n;
-   }
--  if (total <= 0) return 0;
-+  if (total <= 0) return 1;
-   const rate = (total / windowMs) * 1000;
-   return Math.min(rate, SKIP_RATE_CEILING);
- }
+diff --git a/web/src/plugins/dogfood-tile-hud.ts b/web/src/plugins/dogfood-tile-hud.ts
+index a6b42dd..4e446c1 100644
+--- a/web/src/plugins/dogfood-tile-hud.ts
++++ b/web/src/plugins/dogfood-tile-hud.ts
+@@ -76,7 +76,7 @@ export function runTileHudSim(
+   return {
+     delivered: tile.delivered,
+     skipped: tile.skipped,
+-    skipRateAt: tileHudSkipRatePerSec(hudSamplesForTile(tile), nowTick),
++    skipRateAt: tileHudSkipRatePerSec(hudSamplesForTile(tile), nowTick, true),
+     limitedLabel: chrome.limitedLabel,
+     state: chrome.state,
+   };

@@ -1,0 +1,7 @@
+{
+  "row": "F5 (vi) revert prod honors vizWallClock query",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
+  "testName": "^dev viz wall flags > F5 \\(vi\\) prod: query inert when not DEV$",
+  "excerpt": "AssertionError: expected <number> to be <same number> // wall clock changed in prod"
+}

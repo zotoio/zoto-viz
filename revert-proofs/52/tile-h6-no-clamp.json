@@ -1,5 +1,7 @@
 {
   "row": "H6 revert",
   "test": "web/src/plugins/dogfood-tile-hud.test.ts H6",
-  "excerpt": "AssertionError: expected 556 to be 626"
+  "excerpt": "AssertionError: expected 556 to be 626",
+  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
+  "testName": "^tile HUD rows \\(half-open window \\(now−300000, now\\] in ticks\\) > scheduler clamp \\(extra\\): nine tile ids scope to share 626$"
 }

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resetVizClockInjectors, setVizClockInjector, setVizBuildCostTicksInjector } from "../core/viz-clock";
+import {
+  resetVizClockInjectors,
+  setVizBuildCostTicksInjector,
+  setVizClockInjector,
+  setVizWallClockInjector,
+} from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
 import { formatSkipRate, skipRatePerSec, vizHudMetric } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
@@ -174,10 +180,11 @@ describe("viz dogfood gates", () => {
 
     const ok = dogfoodTick(packId, fatLan, 0, 0.1, budget, writer);
     expect(ok.delivered).toBe(true);
-    const prevTs = ok.frame?.t ?? 0;
-    const heavy = dogfoodTick(packId, fatLan, prevTs, 0.1, budget, writer);
+    let prevClock = 0;
+    const heavy = dogfoodTick(packId, fatLan, prevClock, 0.1, budget, writer);
+    prevClock = 1000;
     expect(heavy.delivered).toBe(true);
-    const skipped = dogfoodTick(packId, fatLan, heavy.frame?.t ?? prevTs, 0.1, budget, writer);
+    const skipped = dogfoodTick(packId, fatLan, prevClock, 0.1, budget, writer);
     expect(skipped.delivered).toBe(false);
     expect(skipped.lastBuilt).not.toBeNull();
     expect(budget.stats.skipped).toBe(1);
@@ -236,7 +243,7 @@ describe("viz dogfood gates", () => {
 
   it("talker-storm pack handler refuses more than 512 particles", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["talker-storm"]);
-    const frame = buildVizFrame(fatLan, 0, 0.1);
+    const frame = buildVizFrame(fatLan, monoMs(0), 0.1);
     const over: number[] = [];
     for (let i = 0; i < 513; i++) over.push(0, 0, 0, 1);
     const bad = writer.writeParticles(over, 4);
@@ -269,8 +276,8 @@ describe("viz dogfood gates", () => {
 
     const budget = new VizFrameBudget(() => 0, "swap");
     setVizBuildCostTicksInjector((i) => (i === 0 ? 1200 : 15000));
-    budget.deliver(fatLan, 0, 0.1, () => {});
-    budget.deliver(fatLan, 0, 0.1, () => {});
+    budget.deliver(fatLan, monoMs(0), 0.1, () => {});
+    budget.deliver(fatLan, monoMs(0), 0.1, () => {});
     expect(budget.stats.skipped).toBeGreaterThanOrEqual(1);
     setVizBuildCostTicksInjector(undefined);
 
@@ -316,6 +323,7 @@ describe("viz dogfood gates", () => {
     const dateSpy = vi.spyOn(Date, "now");
     const simTimeMs = { value: 0 };
     setVizClockInjector(() => simTimeMs.value);
+    setVizWallClockInjector(() => simTimeMs.value + 1_000_000);
     perfSpy.mockClear();
     dateSpy.mockClear();
 
@@ -370,6 +378,7 @@ describe("viz dogfood gates", () => {
     const dateSpy = vi.spyOn(Date, "now");
     const simTimeMs = { value: 0 };
     setVizClockInjector(() => simTimeMs.value);
+    setVizWallClockInjector(() => simTimeMs.value + 1_000_000);
     perfSpy.mockClear();
     dateSpy.mockClear();
 

@@ -1,0 +1,17 @@
+diff --git a/web/src/plugins/nixie-wall-clock.ts b/web/src/plugins/nixie-wall-clock.ts
+index c6141d3..42e5e3e 100644
+--- a/web/src/plugins/nixie-wall-clock.ts
++++ b/web/src/plugins/nixie-wall-clock.ts
+@@ -1,4 +1,4 @@
+-import { vizWallMs } from "../core/viz-clock";
++import { vizClockMs, vizWallMs } from "../core/viz-clock";
+ import {
+   type NixieLook,
+   clamp,
+@@ -108,5 +108,5 @@ export function packNixieWallBuffer(
+   pulse = 0,
+   canvas?: { w: number; h: number },
+ ): number[] {
+-  return clock.tick(vizWallMs(), look, audio, pulse, canvas);
++  return clock.tick(vizClockMs(), look, audio, pulse, canvas);
+ }

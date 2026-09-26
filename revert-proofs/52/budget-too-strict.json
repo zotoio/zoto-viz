@@ -1,6 +1,7 @@
 {
+  "row": "budget honesty revert silent green on skip",
   "runner": "vitest",
   "testFile": "web/src/plugins/dogfood.test.ts",
-  "testName": "fat-LAN live soak: count-based delivery and skip honesty on simulated clock",
-  "description": "Budget comparison off-by-one: 4 ms injected cost treated as over budget"
+  "testName": "^viz dogfood over-budget honesty > records skips when build is injected slow — never silent green$",
+  "excerpt": "AssertionError: expected true to be false // Object.is equality"
 }

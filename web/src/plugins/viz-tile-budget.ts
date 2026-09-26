@@ -35,6 +35,9 @@ export interface VizTileHudSample {
   costTicks?: number;
 }
 
+/** Max HUD window samples retained per tile (ring; no per-frame push allocation). */
+export const VIZ_HUD_SAMPLE_CAP = 3600;
+
 export function msToVizTicks(ms: number): number {
   return Math.round(ms * VIZ_TICKS_PER_MS);
 }
@@ -62,8 +65,18 @@ export interface VizTileBudgetStats {
   shedding: boolean;
   lastDeliveredFrame: VizDataFrame | null;
   lastBuildCostTicks: number | null;
-  /** Samples for HUD state — half-open tick window (now − 300000, now]. */
-  hudSamples: VizTileHudSample[];
+  /** Ring buffer of HUD samples (half-open tick window (now − 300000, now]). */
+  hudRing: VizTileHudSample[];
+  hudRingCount: number;
+  hudRingNext: number;
+}
+
+function makeHudRing(): VizTileHudSample[] {
+  const ring = new Array<VizTileHudSample>(VIZ_HUD_SAMPLE_CAP);
+  for (let i = 0; i < VIZ_HUD_SAMPLE_CAP; i++) {
+    ring[i] = { tick: 0, kind: "skip" };
+  }
+  return ring;
 }
 
 function freshTile(share: number): VizTileBudgetStats {
@@ -76,8 +89,23 @@ function freshTile(share: number): VizTileBudgetStats {
     shedding: false,
     lastDeliveredFrame: null,
     lastBuildCostTicks: null,
-    hudSamples: [],
+    hudRing: makeHudRing(),
+    hudRingCount: 0,
+    hudRingNext: 0,
   };
+}
+
+/** Materialize ring samples in chronological order (tests / HUD classification). */
+export function hudSamplesForTile(tile: VizTileBudgetStats): VizTileHudSample[] {
+  const n = tile.hudRingCount;
+  if (n === 0) return [];
+  const out = new Array<VizTileHudSample>(n);
+  const cap = VIZ_HUD_SAMPLE_CAP;
+  const start = (tile.hudRingNext - n + cap) % cap;
+  for (let i = 0; i < n; i++) {
+    out[i] = tile.hudRing[(start + i) % cap]!;
+  }
+  return out;
 }
 
 function clampDebt(debt: number): number {
@@ -88,11 +116,18 @@ function clampDebt(debt: number): number {
 }
 
 function recordHudSample(tile: VizTileBudgetStats, sample: VizTileHudSample): void {
-  tile.hudSamples.push(sample);
+  const slot = tile.hudRing[tile.hudRingNext]!;
+  slot.tick = sample.tick;
+  slot.kind = sample.kind;
+  if (sample.costTicks !== undefined) slot.costTicks = sample.costTicks;
+  else delete slot.costTicks;
+  tile.hudRingNext = (tile.hudRingNext + 1) % VIZ_HUD_SAMPLE_CAP;
+  if (tile.hudRingCount < VIZ_HUD_SAMPLE_CAP) tile.hudRingCount++;
 }
 
 function clearHudWindow(tile: VizTileBudgetStats): void {
-  tile.hudSamples.length = 0;
+  tile.hudRingCount = 0;
+  tile.hudRingNext = 0;
 }
 
 /**
@@ -160,11 +195,21 @@ export class VizTileBudgetRegistry {
     this.clampActiveTiles = clampTileCount;
     const keep = new Set(activeTileIds);
     for (const id of keep) {
-      const t = this.getTile(id);
-      if (t.share !== effectiveShare) {
+      let t = this.tiles.get(id);
+      if (!t) {
+        t = freshTile(effectiveShare);
+        this.tiles.set(id, t);
+        vizTileBudgetLifecycle.created++;
+      } else if (t.share !== effectiveShare) {
         t.share = effectiveShare;
         t.debt = 0;
         clearHudWindow(t);
+      }
+    }
+    for (const id of [...this.tiles.keys()]) {
+      if (!keep.has(id)) {
+        this.tiles.delete(id);
+        vizTileBudgetLifecycle.released++;
       }
     }
   }
@@ -179,6 +224,7 @@ export class VizTileBudgetRegistry {
     this.activeTiles = 1;
     this.nowTick = 0;
     this.clampActiveTiles = true;
+    resetVizTileBudgetLifecycle();
   }
 
   /**
@@ -221,6 +267,13 @@ export class VizTileBudgetRegistry {
 }
 
 export const vizTileBudgetRegistry = new VizTileBudgetRegistry();
+
+export const vizTileBudgetLifecycle = { created: 0, released: 0 };
+
+export function resetVizTileBudgetLifecycle(): void {
+  vizTileBudgetLifecycle.created = 0;
+  vizTileBudgetLifecycle.released = 0;
+}
 
 /** Hook for mosaic teardown / plugin sandbox unload. */
 export function syncVizTileScope(activeTileIds: readonly string[]): void {

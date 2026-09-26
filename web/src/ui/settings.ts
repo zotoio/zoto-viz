@@ -27,6 +27,9 @@ import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
 import { guardReadableAnim } from "../graph/readable";
+import { applyDreamAnimWithTileLimit, countMosaicTiles, dreamAnimBootFromStorage } from "../graph/mosaic-viz-tile-guard";
+import { mosaicWallLayoutRefusedMessage } from "./viz-copy";
+import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import {
   AUTH_SETUPS,
   renderAuthSetup,
@@ -125,6 +128,8 @@ export class Settings {
   private onAnimChange: (a: DreamAnim) => void = () => {};
   private onFeedChange: (c: FeedConfig) => void = () => {};
   private onChatChange: (c: ChatConfig) => void = () => {};
+  lastMosaicTileLimitMessage = "";
+  private mosaicWallStatusEl: HTMLDivElement | null = null;
   private animUi: {
     follow: Toggle; cycle: Toggle; randomize: Toggle;
     skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider; skyAi: Slider;
@@ -260,8 +265,19 @@ export class Settings {
     this.pop.append(handle, this.nav, this.body);
     this.el.append(this.btn, this.pop);
     bindFloatPanel(this.pop, handle, "settings", { pin: () => this.pinFloat(), min: { w: 360, h: 280 } });
+    this.ensureMosaicWallStatusEl();
 
-    this.anim = loadAnim(cfg.storePrefix);
+    const storePrefix = cfg.storePrefix;
+    const rawTilesJson = localStorage.getItem(`${storePrefix}.anim.mosaicTiles`);
+    let rawTiles: unknown = [];
+    try { rawTiles = rawTilesJson ? JSON.parse(rawTilesJson) : []; } catch { rawTiles = []; }
+    const loadedAnim = loadAnim(storePrefix);
+    const boot = dreamAnimBootFromStorage(loadedAnim, rawTiles);
+    this.anim = boot.anim;
+    if (boot.bootRefused) {
+      this.lastMosaicTileLimitMessage = boot.message ?? "";
+      this.renderMosaicWallStatus();
+    }
     this.feed = loadFeed(cfg.storePrefix);
     this.chat = loadChat(cfg.storePrefix);
     const split = migrateFeedChatSplit(cfg.storePrefix);
@@ -962,6 +978,7 @@ export class Settings {
       checked: !!this.anim.mosaicSharedTheme,
       onChange: (on) => { this.anim.mosaicSharedTheme = on; this.persistAnim(); },
     });
+    const mosaicWallStatus = this.ensureMosaicWallStatusEl();
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
     mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
@@ -970,6 +987,7 @@ export class Settings {
     mosaicBtns.append(resetBtn, equalBtn);
     const mosaicBits = document.createElement("div");
     mosaicBits.className = "look-stack";
+    this.el.prepend(mosaicWallStatus);
     mosaicBits.append(
       labeled("views", mosaic.el),
       labeled("hero", hero.el),
@@ -1702,7 +1720,7 @@ export class Settings {
   }
 
   applyAnim(a: DreamAnim): void {
-    this.anim = guardReadableAnim({
+    const candidate = guardReadableAnim({
       ...DEFAULT_DREAM,
       ...a,
       mosaicTree: parseMosaicNode(a.mosaicTree) ?? a.mosaicTree ?? null,
@@ -1712,12 +1730,48 @@ export class Settings {
       mosaicUniqueSkies: a.mosaicUniqueSkies,
       mosaicSkies: a.mosaicSkies,
     });
+    const forGuard: DreamAnim = {
+      ...candidate,
+      mosaicTiles: Array.isArray(a.mosaicTiles) ? a.mosaicTiles : candidate.mosaicTiles,
+    };
+    const { anim, refused, message } = applyDreamAnimWithTileLimit(forGuard, this.anim);
+    if (refused) {
+      this.lastMosaicTileLimitMessage = message
+        ?? mosaicWallLayoutRefusedMessage(
+          countMosaicTiles(candidate),
+          VIZ_MAX_ACTIVE_TILES,
+        );
+      this.renderMosaicWallStatus();
+      return;
+    }
+    this.lastMosaicTileLimitMessage = "";
+    this.renderMosaicWallStatus();
+    this.anim = anim;
     this.syncAnimUi();
     this.syncTheme();
     this.persistAnim();
   }
 
+  private ensureMosaicWallStatusEl(): HTMLDivElement {
+    if (this.mosaicWallStatusEl) return this.mosaicWallStatusEl;
+    const mosaicWallStatus = document.createElement("div");
+    mosaicWallStatus.className = "mosaic-wall-status sec-hint";
+    mosaicWallStatus.dataset.testid = "mosaic-wall-status";
+    mosaicWallStatus.hidden = true;
+    this.mosaicWallStatusEl = mosaicWallStatus;
+    this.el.prepend(mosaicWallStatus);
+    return mosaicWallStatus;
+  }
+
   /** Persist a live drag / close / max without resetting the tree. */
+  private renderMosaicWallStatus(): void {
+    const el = this.ensureMosaicWallStatusEl();
+    const msg = this.lastMosaicTileLimitMessage.trim();
+    el.textContent = msg;
+    el.hidden = !msg;
+    el.classList.remove("fail", "viz-hud-skip-fail");
+  }
+
   applyMosaicLayout(patch: {
     tree: DreamAnim["mosaicTree"];
     maximized: string | null;

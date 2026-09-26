@@ -1,5 +1,5 @@
 import { VIZ_HUD_WINDOW_TICKS, VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";
-import type { VizTileBudgetStats, VizTileHudSample } from "./viz-tile-budget";
+import { hudSamplesForTile, type VizTileBudgetStats, type VizTileHudSample } from "./viz-tile-budget";
 import { tileLimitedSharingLabel } from "../ui/viz-copy";
 
 export type { VizTileHudSample, VizTileHudSampleKind } from "./viz-tile-budget";
@@ -38,44 +38,20 @@ export function tileHudSkipRatePerSec(
   return tileSkipsInHudWindow(samples, nowTick, inclusiveLower);
 }
 
-export interface TileHudStateOptions {
-  /** Half-open window uses inclusive lower bound (H3 revert). */
-  inclusiveLower?: boolean;
-  /** When false, any skip in the window yields LIMITED (H1 revert A). */
-  requireAllBuildsWithinWall?: boolean;
-  /** When false, skips with no builds in-window yield LIMITED instead of fallback (H5 revert). */
-  useNoBuildFallback?: boolean;
-  /** When true, classify from last build cost only (H4 revert). */
-  useLastBuildOnly?: boolean;
-}
-
 export function computeTileHudViewerState(
   samples: readonly VizTileHudSample[],
   nowTick: number,
   lastBuildCostTicks: number | null,
-  opts: TileHudStateOptions = {},
 ): TileHudViewerState {
-  const inclusiveLower = opts.inclusiveLower ?? false;
-  const requireAllBuildsWithinWall = opts.requireAllBuildsWithinWall ?? true;
-  const useNoBuildFallback = opts.useNoBuildFallback ?? true;
-  const useLastBuildOnly = opts.useLastBuildOnly ?? false;
-
-  const window = tileHudSamplesInWindow(samples, nowTick, inclusiveLower);
+  const window = tileHudSamplesInWindow(samples, nowTick, false);
   const skipCount = window.filter((s) => s.kind === "skip").length;
   if (skipCount === 0) return "none";
 
-  if (useLastBuildOnly && lastBuildCostTicks !== null) {
-    return lastBuildCostTicks > VIZ_WALL_BUDGET_TICKS ? "over_budget" : "limited";
-  }
-
   const builds = window.filter((s) => s.kind === "build");
   if (builds.length === 0) {
-    if (!useNoBuildFallback) return "limited";
     if (lastBuildCostTicks === null) return "none";
     return lastBuildCostTicks > VIZ_WALL_BUDGET_TICKS ? "over_budget" : "limited";
   }
-
-  if (!requireAllBuildsWithinWall) return "limited";
 
   const anyOverWall = builds.some((b) => (b.costTicks ?? 0) > VIZ_WALL_BUDGET_TICKS);
   if (anyOverWall) return "over_budget";
@@ -93,19 +69,10 @@ export function tileHudChrome(
   tile: VizTileBudgetStats,
   nowTick: number,
   activeTiles: number,
-  opts?: TileHudStateOptions,
 ): TileHudChrome {
-  const skipRate = tileHudSkipRatePerSec(
-    tile.hudSamples,
-    nowTick,
-    opts?.inclusiveLower ?? false,
-  );
-  const state = computeTileHudViewerState(
-    tile.hudSamples,
-    nowTick,
-    tile.lastBuildCostTicks,
-    opts,
-  );
+  const samples = hudSamplesForTile(tile);
+  const skipRate = tileHudSkipRatePerSec(samples, nowTick, false);
+  const state = computeTileHudViewerState(samples, nowTick, tile.lastBuildCostTicks);
   const limitedLabel =
     state === "limited"
       ? tileLimitedSharingLabel(activeTiles, skipRate)

@@ -1,9 +1,11 @@
 --- a/web/src/plugins/viz-tile-budget.ts
 +++ b/web/src/plugins/viz-tile-budget.ts
-@@ -58,7 +58,7 @@ function clampDebt(debt: number): number {
+@@ -103,7 +103,7 @@
+ function clampDebt(debt: number): number {
    let d = debt;
    if (d < 0) d = 0;
 -  if (d > VIZ_DEBT_CAP_TICKS) d = VIZ_DEBT_CAP_TICKS;
 +  if (d > VIZ_DEBT_CAP_TICKS) d = d;
    return d;
  }
+ 

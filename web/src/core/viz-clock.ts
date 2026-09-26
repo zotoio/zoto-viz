@@ -1,20 +1,40 @@
+import { monoMs, wallMs, type MonoMs, type WallMs } from "./viz-time";
+
 /**
- * Injectable host clock for viz frame budget + HUD skip rate (defaults to real time).
- * Tests drive a simulated clock and optional per-deliver build costs.
+ * Injectable clocks for viz:
+ * - {@link vizClockMs} — monotonic budget / dt / HUD (defaults to `performance.now()`).
+ * - {@link vizWallMs} — wall epoch ms for display (`ts`, nixie); defaults to `Date.now()`.
  */
 
 let clockMs: () => number = () => performance.now();
+let wallEpochMs: () => number = () => Date.now();
 let buildCostMs: ((deliverIndex: number) => number) | undefined;
 let buildCostTicks: ((deliverIndex: number) => number) | undefined;
+let buildCostTicksForTile: ((tileId: string, deliverIndex: number) => number | undefined) | undefined;
 
-/** Wall time in ms for viz budget / HUD (not rAF present timestamps). */
-export function vizClockMs(): number {
-  return clockMs();
+/** Monotonic host clock for frame budget, dt, and HUD skip rate. */
+export function vizClockMs(): MonoMs {
+  return monoMs(clockMs());
 }
 
-/** Override viz wall clock (pass `undefined` to restore default). */
+/** Wall epoch clock for display (`state.ts`, nixie digits). */
+export function vizWallMs(): WallMs {
+  return wallMs(wallEpochMs());
+}
+
+/** Wall epoch seconds for viz frames (`state.ts` when set). */
+export function vizFrameEpochSec(stateTs?: number): number {
+  return stateTs || vizWallMs() / 1000;
+}
+
+/** Override monotonic viz clock (pass `undefined` to restore default). */
 export function setVizClockInjector(inject: (() => number) | undefined): void {
   clockMs = inject ?? (() => performance.now());
+}
+
+/** Override wall epoch clock (pass `undefined` to restore default). */
+export function setVizWallClockInjector(inject: (() => number) | undefined): void {
+  wallEpochMs = inject ?? (() => Date.now());
 }
 
 /**
@@ -42,8 +62,22 @@ export function vizBuildCostTicks(deliverIndex: number): number | undefined {
   return buildCostTicks?.(deliverIndex);
 }
 
+export function setVizBuildCostTicksForTileInjector(
+  inject: ((tileId: string, deliverIndex: number) => number | undefined) | undefined,
+): void {
+  buildCostTicksForTile = inject;
+}
+
+export function vizBuildCostTicksForTile(tileId: string, deliverIndex: number): number | undefined {
+  const perTile = buildCostTicksForTile?.(tileId, deliverIndex);
+  if (perTile !== undefined) return perTile;
+  return buildCostTicks?.(deliverIndex);
+}
+
 export function resetVizClockInjectors(): void {
   clockMs = () => performance.now();
+  wallEpochMs = () => Date.now();
   buildCostMs = undefined;
   buildCostTicks = undefined;
+  buildCostTicksForTile = undefined;
 }

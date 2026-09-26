@@ -7,6 +7,7 @@ import {
   VIZ_TICKS_PER_MS,
   VizTileBudgetRegistry,
   syncVizTileScope,
+  hudSamplesForTile,
   syncVizTileSchedulerScope,
   vizTileBudgetRegistry,
 } from "./viz-tile-budget";
@@ -75,7 +76,7 @@ export function runTileHudSim(
   return {
     delivered: tile.delivered,
     skipped: tile.skipped,
-    skipRateAt: tileHudSkipRatePerSec(tile.hudSamples, nowTick),
+    skipRateAt: tileHudSkipRatePerSec(hudSamplesForTile(tile), nowTick),
     limitedLabel: chrome.limitedLabel,
     state: chrome.state,
   };

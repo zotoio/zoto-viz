@@ -1,6 +1,6 @@
 --- a/web/src/plugins/viz-tile-budget.ts
 +++ b/web/src/plugins/viz-tile-budget.ts
-@@ -31,7 +31,7 @@ export function msToVizTicks(ms: number): number {
+@@ -53,7 +53,7 @@
  }
  
  export function debtIsClear(debt: number): boolean {
@@ -8,3 +8,4 @@
 +  return debt < 0;
  }
  
+ export interface VizTileBudgetStats {

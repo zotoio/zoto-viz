@@ -1,6 +1,7 @@
 {
+  "row": "HUD skip rate revert inclusive lower bound in sim",
   "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood.test.ts",
-  "testName": "fat-LAN live soak: count-based delivery and skip honesty on simulated clock",
-  "description": "HUD skip rate reports 1/s when there were zero skip deltas"
+  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
+  "testName": "^tile HUD rows \\(half-open window \\(now−300000, now\\] in ticks\\) > H1: 10 ms at 2×2 — debt 1748 → 2 skips per build; i=119 → 20 frames, 40 skipped/s LIMITED label$",
+  "excerpt": "AssertionError: expected 41 to be 40 // Object.is equality"
 }

@@ -1,6 +1,8 @@
+diff --git a/web/src/plugins/viz-tile-hud.ts b/web/src/plugins/viz-tile-hud.ts
+index c596ccc..516cafd 100644
 --- a/web/src/plugins/viz-tile-hud.ts
 +++ b/web/src/plugins/viz-tile-hud.ts
-@@ -31,7 +31,7 @@ export function tileSkipsInHudWindow(
+@@ -33,7 +33,7 @@ export function tileSkipsInHudWindow(
  export function tileHudSkipRatePerSec(
    samples: readonly VizTileHudSample[],
    nowTick: number,
