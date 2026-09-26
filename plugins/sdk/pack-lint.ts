@@ -18,7 +18,7 @@ import { INLINE_ZOTO_DECLARE_HINT, PACK_ZOTO_BINDING_HINT } from "./viz-zoto";
 
 export {
   LEGACY_DECLARE_ZOTO_PACK_IDS,
-  LEGACY_ZOTO_LINT_RULES,
+  LEGACY_ZOTO_ALLOWLIST_RULES,
   isLegacyDeclareZotoPackAllowed,
   legacyZotoViolationsOnDisallowedPacks,
   packIdFromPluginsSrcPath,

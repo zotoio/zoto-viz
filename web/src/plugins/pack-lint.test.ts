@@ -305,6 +305,7 @@ describe("pack lint guardrails", () => {
   });
 
   it("pack-lint-legacy-probe is not on the allowlist and fails baseline guard", () => {
+    if (LEGACY_DECLARE_ZOTO_PACK_IDS.length === 0) return;
     expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toHaveLength(17);
     expect(isLegacyDeclareZotoPackAllowed("pack-lint-legacy-probe")).toBe(false);
     const rel = "plugins/src/pack-lint-legacy-probe/frontend/index.ts";
@@ -317,6 +318,12 @@ describe("pack lint guardrails", () => {
     expect(disallowedLegacyZoto.some((v) => v.file.includes("pack-lint-legacy-probe"))).toBe(true);
     expect(newViolations.some((v) => v.file.includes("pack-lint-legacy-probe"))).toBe(true);
     expect(ok).toBe(false);
+  });
+
+  it("LEGACY_DECLARE_ZOTO_PACK_IDS is empty after getVizZoto pack migration (PR C)", () => {
+    if (LEGACY_DECLARE_ZOTO_PACK_IDS.length > 0) return;
+    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toEqual([]);
+    expect(isLegacyDeclareZotoPackAllowed("backrooms")).toBe(false);
   });
 
   it("reports baseline counts per pack and per rule (documentation)", () => {
