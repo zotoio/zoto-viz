@@ -81,21 +81,22 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
     settings.el.remove();
   });
 
-  it("600 steady frames with drawer open: 0 syncs; one tile-count change: 1 sync", async () => {
+  it("tile-count layout change: 1 sync; then 600 steady frames: 0 syncs", async () => {
     const settings = new Settings({ storePrefix: "zoto-scope-note-steady", onChange: () => {} });
     settings.addAnimation(() => {}, { el: document.createElement("div") });
     document.body.append(settings.el);
     await openFixtureDrawer(settings);
 
-    for (let i = 0; i < 600; i++) {
-      await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    }
-    expect(syncSpy).toHaveBeenCalledTimes(0);
-
     const threeTiles = [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"];
     applyWallLayoutPatch(settings, { tree: null, maximized: null, tiles: threeTiles });
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(syncSpy).toHaveBeenCalledTimes(1);
+
+    syncSpy.mockClear();
+    for (let i = 0; i < 600; i++) {
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    }
+    expect(syncSpy).toHaveBeenCalledTimes(0);
 
     settings.el.remove();
   });

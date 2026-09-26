@@ -2341,6 +2341,7 @@ export class Settings {
   private tickMeter = (): void => {
     if (!this.isOpen) return;
     this.meterRaf = requestAnimationFrame(this.tickMeter);
+    if (this.activePane === "view" && this.viewBind?.spec) this.syncPackScopeNoteFromAnim();
     const ui = this.audioUi;
     if (!ui || this.activePane !== "audio") return;
     const p = this.pulseNow();

@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 0c6fb83..a079e58 100644
+index 59bfea7..48d3181 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -2326,6 +2326,7 @@ export class Settings {
+@@ -2341,6 +2341,7 @@ export class Settings {
    private tickMeter = (): void => {
      if (!this.isOpen) return;
      this.meterRaf = requestAnimationFrame(this.tickMeter);
