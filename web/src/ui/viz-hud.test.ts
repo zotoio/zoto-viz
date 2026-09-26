@@ -293,7 +293,8 @@ describe("viz hud helpers", () => {
       state: minimalState(),
       now: 1000,
     });
-    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe("fail 60%");
+    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe("⚠ DEGRADED 60%");
+    expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe("⚠ DEGRADED 60%");
   });
 
   it("hides failure badge on healthy idle frames", () => {

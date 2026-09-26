@@ -84,7 +84,7 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null 
   }
   const peak = Math.max(sysFail, talkerPeak);
   if (peak <= 0) return null;
-  return `fail ${Math.round(peak * 100)}%`;
+  return `⚠ DEGRADED ${Math.round(peak * 100)}%`;
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -188,6 +188,7 @@ export class VizHud {
   private readonly skipEl: HTMLElement;
   private readonly degradedEl: HTMLElement;
   private readonly degradedSepAfter: HTMLElement;
+  private readonly stageFailEl: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
@@ -228,6 +229,12 @@ export class VizHud {
     this.degradedEl.hidden = true;
     this.degradedEl.title = "Elevated TCP failure ratio on sys or talkers (viz contract v2)";
 
+    this.stageFailEl = document.createElement("div");
+    this.stageFailEl.className = "viz-stage-fail-label";
+    this.stageFailEl.hidden = true;
+    this.stageFailEl.setAttribute("role", "status");
+    this.stageFailEl.textContent = "⚠ DEGRADED";
+
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
     this.packSel = new Select({
@@ -260,7 +267,7 @@ export class VizHud {
     );
     root.append(line);
 
-    parent.append(root);
+    parent.append(this.stageFailEl, root);
     this.root = root;
   }
 
@@ -312,10 +319,14 @@ export class VizHud {
       this.degradedEl.hidden = false;
       this.degradedSepAfter.hidden = false;
       this.degradedEl.textContent = failBadge;
+      this.stageFailEl.hidden = false;
+      this.stageFailEl.textContent = failBadge;
     } else {
       this.degradedEl.hidden = true;
       this.degradedSepAfter.hidden = true;
       this.degradedEl.textContent = "";
+      this.stageFailEl.hidden = true;
+      this.stageFailEl.textContent = "⚠ DEGRADED";
     }
   }
 }
