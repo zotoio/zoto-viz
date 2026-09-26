@@ -530,8 +530,13 @@ function buildVizFrameCore(
   const t = state.ts || Date.now() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
+  const headlineEligible = sourceHeadlines(
+    state.sources,
+    Number.MAX_SAFE_INTEGER,
+    parsed,
+  ).length;
   const rawHeadlines = sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed);
-  recordHeadlineDecimation(rawHeadlines.length, rawHeadlines.length);
+  recordHeadlineDecimation(headlineEligible, rawHeadlines.length);
   return {
     t,
     dt,

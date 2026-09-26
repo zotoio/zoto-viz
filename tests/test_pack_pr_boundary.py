@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from scripts.check_pack_pr_boundary import (
+    GITHUB_PULL_FILES_API_MAX,
     ALLOWED_CATALOG_PATH,
     ALLOWED_SCHEMA_PATH,
     ALLOWED_TSCONFIG_PATH,
@@ -18,6 +19,7 @@ from scripts.check_pack_pr_boundary import (
     run_host_change_gate,
     validate_catalog_py_change,
     validate_schema_py_change,
+    validate_pull_changed_files_complete,
     validate_tsconfig_change,
 )
 
@@ -346,6 +348,21 @@ def test_merge_workflow_label_event_appends_host_reviewed() -> None:
         os.environ.pop("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", None)
     assert len(merged) == 1
     assert merged[0]["event"] == "labeled"
+
+
+def test_validate_pull_changed_files_rejects_incomplete_listing() -> None:
+    err = validate_pull_changed_files_complete(["a.py"], 2)
+    assert err is not None
+    assert "incomplete" in err
+
+
+def test_validate_pull_changed_files_rejects_over_api_cap() -> None:
+    err = validate_pull_changed_files_complete(
+        ["x"] * GITHUB_PULL_FILES_API_MAX,
+        GITHUB_PULL_FILES_API_MAX + 1,
+    )
+    assert err is not None
+    assert str(GITHUB_PULL_FILES_API_MAX) in err
 
 
 def test_committed_event_timestamp_uses_committer_date() -> None:

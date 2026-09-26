@@ -1,6 +1,16 @@
 name: pack-boundary
 
 on:
+  # pull_request: workflow from PR head so the check runs before merge (same secure job).
+  # pull_request_target: after merge, grades from base-branch workflow (no self-grade).
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+      - ready_for_review
   pull_request_target:
     types:
       - opened

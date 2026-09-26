@@ -25,6 +25,8 @@ VIZ_VALIDATE_FUNC = "test_viz_plugin_yml_validates"
 HOST_CHANGE_LABEL = "host-change"
 HOST_REVIEWED_LABEL = "host-reviewed"
 HOST_REVIEW_FAIL_MESSAGE = "host change: needs human review before merge"
+# GitHub truncates pulls/{n}/files listings at this count (fail closed above it).
+GITHUB_PULL_FILES_API_MAX = 3000
 CSP_SANDBOX_CONFIG_PATHS = frozenset(
     {
         "web/index.html",
@@ -612,6 +614,31 @@ def paths_from_pull_files_pages(pages: list[list[dict]]) -> list[str]:
     return sorted(paths)
 
 
+def fetch_pull_changed_files_count(repo: str, pull_number: int, token: str) -> int:
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}"
+    doc, _ = _github_request(url, token)
+    if not isinstance(doc, dict):
+        return 0
+    return int(doc.get("changed_files") or 0)
+
+
+def validate_pull_changed_files_complete(
+    listed_paths: list[str], reported_count: int
+) -> str | None:
+    if reported_count > GITHUB_PULL_FILES_API_MAX:
+        return (
+            f"PR changes {reported_count} files (>{GITHUB_PULL_FILES_API_MAX}); "
+            "cannot verify the full change set via the pulls/files API"
+        )
+    if reported_count != len(listed_paths):
+        return (
+            f"incomplete pulls/files listing ({len(listed_paths)} paths, "
+            f"pull.changed_files={reported_count})"
+        )
+    return None
+
+
 def fetch_pull_head_repo(repo: str, pull_number: int, token: str) -> str:
     """Owner/repo for the PR head (fork source when the PR is from a fork)."""
     owner, name = repo.split("/", 1)
@@ -636,7 +663,7 @@ def fetch_pull_changed_files(repo: str, pull_number: int, token: str) -> list[st
     while url:
         page, url = _github_request(url, token)
         if not isinstance(page, list):
-            break
+            raise ValueError("pulls/files API returned a non-array page")
         pages.append(page)
     return paths_from_pull_files_pages(pages)
 
@@ -940,12 +967,20 @@ def main(argv: list[str] | None = None) -> int:
             host_review_ok = True
         try:
             changed = fetch_pull_changed_files(repo, pr_number, token)
+            reported_count = fetch_pull_changed_files_count(repo, pr_number, token)
+            incomplete = validate_pull_changed_files_complete(changed, reported_count)
+            if incomplete:
+                print(f"pack-boundary: FAILED — {incomplete}", file=sys.stderr)
+                return 1
             head_repo = fetch_pull_head_repo(repo, pr_number, token)
         except urllib.error.HTTPError as exc:
             print(
                 f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
                 file=sys.stderr,
             )
+            return 1
+        except ValueError as exc:
+            print(f"pack-boundary: FAILED — {exc}", file=sys.stderr)
             return 1
         contents: dict[str, tuple[str | None, str | None]] = {}
         for path in changed:
