@@ -18,6 +18,8 @@ import {
 
 export {
   assignTalkerSlots,
+  assignTalkerSlotsEmptySlotSearches,
+  resetAssignTalkerSlotsStats,
   slottedTalkerIds,
   TALKER_SLOT_CHALLENGER_MARGIN,
   TALKER_SLOT_HOLD_S,
@@ -558,6 +560,7 @@ export function vigorFromRate(rate: number): number {
 
 interface KoiBody {
   id: string;
+  role: string;
   pattern: number;
   vigor: number;
   hash: number;
@@ -621,6 +624,12 @@ export class KoiPondSim {
   private readonly slottedIds = new Set<string>();
   private readonly slottedTalkersScratch: VizTalkerSample[] = [];
   private padLayoutKey = "";
+  private readonly talkerSlotA: (TalkerSlot | null)[] = [];
+  private readonly talkerSlotB: (TalkerSlot | null)[] = [];
+  private talkerSlotWrite = this.talkerSlotA;
+  private readonly slotOccupied = new Set<string>();
+  private readonly activeParticleScratch: ParticleBody[] = [];
+  private readonly particlePickScratch: boolean[] = [];
 
   constructor(opts: KoiPondOptions = DEFAULT_OPTIONS) {
     this.opts = opts;
@@ -654,6 +663,13 @@ export class KoiPondSim {
     if (regen) this.initPads();
     if (capChanged) this.idleTalkersKoiCap = -1;
     if (regen || lotusChanged) this.padLayoutKey = "";
+    this.recomputeAllKoiPatterns();
+  }
+
+  private recomputeAllKoiPatterns(): void {
+    for (const k of this.koi.values()) {
+      k.pattern = patternForTalker(k.id, k.role, this.opts);
+    }
   }
 
   stepContainers(): KoiPondStepContainers {
@@ -699,7 +715,9 @@ export class KoiPondSim {
   }
 
   slottedKoiCount(): number {
-    return slottedTalkerIds(this.talkerSlots).length;
+    let n = 0;
+    for (const s of this.talkerSlots) if (s) n++;
+    return n;
   }
 
   talkerSlotsSnapshot(): (TalkerSlot | null)[] {
@@ -790,15 +808,23 @@ export class KoiPondSim {
     return this.idleTalkers;
   }
 
-  private rebuildSlotted(all: VizTalkerSample[], simT: number): void {
+  private rebuildSlotted(simT: number): void {
     const cap = this.koiSlotCap();
-    this.talkerSlots = assignTalkerSlots(all, this.talkerSlots, cap, simT);
+    const prev = this.talkerSlots;
+    const next =
+      this.talkerSlotWrite === this.talkerSlotA ? this.talkerSlotB : this.talkerSlotA;
+    this.talkerSlots = assignTalkerSlots(this.talkerById, prev, cap, simT, {
+      out: next,
+      occupied: this.slotOccupied,
+    });
+    this.talkerSlotWrite = next;
     this.slottedTalkersScratch.length = 0;
     this.slottedIds.clear();
-    for (const id of slottedTalkerIds(this.talkerSlots)) {
-      const t = this.talkerById.get(id);
+    for (const slot of this.talkerSlots) {
+      if (!slot) continue;
+      const t = this.talkerById.get(slot.id);
       if (!t) continue;
-      this.slottedIds.add(id);
+      this.slottedIds.add(slot.id);
       this.slottedTalkersScratch.push(t);
     }
   }
@@ -813,6 +839,7 @@ export class KoiPondSim {
         const dstHash = idHash(`${t.id}:dst`);
         k = {
           id: t.id,
+          role: t.role,
           pattern: patternForTalker(t.id, t.role, this.opts),
           vigor: vigorFromRate(t.rate),
           hash: h,
@@ -826,7 +853,6 @@ export class KoiPondSim {
         };
         this.koi.set(t.id, k);
       } else if (k && inSlot) {
-        k.pattern = patternForTalker(t.id, t.role, this.opts);
         k.vigor = vigorFromRate(t.rate);
       }
     }
@@ -968,7 +994,7 @@ export class KoiPondSim {
     const allTalkers = this.effectiveTalkers(hostTalkers);
     this.talkerById.clear();
     for (const t of allTalkers) this.talkerById.set(t.id, t);
-    this.rebuildSlotted(allTalkers, simT);
+    this.rebuildSlotted(simT);
     this.syncKoi();
     this.stepKoi(simT, FIXED_SIM_DT);
     const motion = this.opts.reducedMotion || !this.opts.cameraDrift;
@@ -1065,8 +1091,9 @@ export class KoiPondSim {
     s0[KOI_SLOT.labelOn] = o.label ? 1 : 0;
     s0[KOI_SLOT.legendOn] = o.legend ? 1 : 0;
     s0[KOI_SLOT.seedFrac] = (o.seed % 1000) / 1000;
-    const packedIds = slottedTalkerIds(this.talkerSlots);
-    s0[KOI_SLOT.koiCount] = packedIds.length;
+    let slottedCount = 0;
+    for (const slot of this.talkerSlots) if (slot) slottedCount++;
+    s0[KOI_SLOT.koiCount] = slottedCount;
     s0[KOI_SLOT.demo] = this.lastDemo ? 1 : 0;
     s0[KOI_SLOT.timeScale] = o.reducedMotion ? 0.15 : 1;
     const totalRate = totalTalkerRate(this.lastTalkers);
@@ -1096,9 +1123,10 @@ export class KoiPondSim {
     s0[KOI_SLOT.patternLegend] = legendMask;
     for (let i = 0; i < KOI_META_SLOTS; i++) s0[KOI_SLOT.koiMeta0 + i] = 0;
     let ki = 0;
-    for (const id of packedIds) {
+    for (const slot of this.talkerSlots) {
+      if (!slot) continue;
       if (ki >= KOI_META_SLOTS) break;
-      const k = this.koi.get(id);
+      const k = this.koi.get(slot.id);
       if (!k) continue;
       s0[KOI_SLOT.koiMeta0 + ki] = packKoiMeta(k.pattern, k.vigor);
       ki++;
@@ -1107,9 +1135,10 @@ export class KoiPondSim {
     const s1 = this.slot1;
     s1.fill(0);
     let fi = 0;
-    for (const id of packedIds) {
+    for (const slot of this.talkerSlots) {
+      if (!slot) continue;
       if (fi >= MAX_KOI * 4) break;
-      const k = this.koi.get(id);
+      const k = this.koi.get(slot.id);
       if (!k) continue;
       s1[fi++] = k.x;
       s1[fi++] = 0;
@@ -1134,18 +1163,37 @@ export class KoiPondSim {
     }
     const particleBase = padSlotRows * 4;
     const shaderParticleCap = maxShaderParticlesInSlot2(o.lilyDensity);
-    const activeParticles: ParticleBody[] = [];
+    const activeParticles = this.activeParticleScratch;
+    activeParticles.length = 0;
     for (const p of this.particles) if (p.life > 0) activeParticles.push(p);
-    activeParticles.sort((a, b) => b.life - a.life);
-    let shaderPacked = 0;
-    for (const p of activeParticles) {
-      const j = pCount * 4;
+    const pick = this.particlePickScratch;
+    const nActive = activeParticles.length;
+    while (pick.length < nActive) pick.push(false);
+    for (let i = 0; i < nActive; i++) pick[i] = false;
+    for (let i = 0; i < nActive; i++) {
+      const p = activeParticles[i]!;
+      const j = i * 4;
       scratch[j] = p.x;
       scratch[j + 1] = p.y;
       scratch[j + 2] = p.z;
       scratch[j + 3] = p.kind;
-      pCount++;
-      if (shaderPacked >= shaderParticleCap) continue;
+    }
+    pCount = nActive;
+    let shaderPacked = 0;
+    while (shaderPacked < shaderParticleCap && shaderPacked < nActive) {
+      let bestIdx = -1;
+      let bestLife = -1;
+      for (let i = 0; i < nActive; i++) {
+        if (pick[i]) continue;
+        const life = activeParticles[i]!.life;
+        if (life > bestLife) {
+          bestLife = life;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx < 0) break;
+      pick[bestIdx] = true;
+      const p = activeParticles[bestIdx]!;
       if (particleBase + pi + 4 > SLOT2_FLOATS) break;
       s2[particleBase + pi++] = p.x;
       s2[particleBase + pi++] = p.y;

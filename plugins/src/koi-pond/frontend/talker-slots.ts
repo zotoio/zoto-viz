@@ -15,49 +15,68 @@ export type TalkerSlot = {
 
 export type RateTalker = { id: string; rate: number };
 
-function occupiedIds(slots: (TalkerSlot | null)[]): Set<string> {
-  const s = new Set<string>();
-  for (const slot of slots) if (slot) s.add(slot.id);
-  return s;
+export type AssignTalkerSlotsPools = {
+  out: (TalkerSlot | null)[];
+  occupied: Set<string>;
+};
+
+/** Incremented when an empty slot triggers an unassigned talker search (tests). */
+export let assignTalkerSlotsEmptySlotSearches = 0;
+
+export function resetAssignTalkerSlotsStats(): void {
+  assignTalkerSlotsEmptySlotSearches = 0;
 }
 
-/** Assign up to `cap` slots; mutates a copy of `prev` slots. */
+/** Assign up to `cap` slots; writes into `pools.out` (no slice / sort). */
 export function assignTalkerSlots(
-  talkers: RateTalker[],
+  talkerById: Map<string, RateTalker>,
   prev: (TalkerSlot | null)[],
   cap: number,
   simTime: number,
+  pools: AssignTalkerSlotsPools,
 ): (TalkerSlot | null)[] {
-  const slots: (TalkerSlot | null)[] = prev.slice(0, cap);
-  while (slots.length < cap) slots.push(null);
+  const slots = pools.out;
+  const occ = pools.occupied;
 
-  const byId = new Map(talkers.map((t) => [t.id, t]));
+  slots.length = cap;
+  for (let i = 0; i < cap; i++) {
+    slots[i] = i < prev.length ? prev[i] : null;
+  }
 
   for (let i = 0; i < cap; i++) {
     const s = slots[i];
-    if (s && !byId.has(s.id)) slots[i] = null;
+    if (s && !talkerById.has(s.id)) slots[i] = null;
   }
 
   for (let i = 0; i < cap; i++) {
     const s = slots[i];
     if (!s) continue;
-    const t = byId.get(s.id);
+    const t = talkerById.get(s.id);
     if (t) s.rate = t.rate;
   }
 
-  const unassignedSorted = (): RateTalker[] => {
-    const occ = occupiedIds(slots);
-    return talkers
-      .filter((t) => !occ.has(t.id))
-      .sort((a, b) => b.rate - a.rate);
+  occ.clear();
+  for (let i = 0; i < cap; i++) {
+    const s = slots[i];
+    if (s) occ.add(s.id);
+  }
+
+  const pickBestUnassigned = (): RateTalker | null => {
+    let best: RateTalker | null = null;
+    for (const t of talkerById.values()) {
+      if (occ.has(t.id)) continue;
+      if (!best || t.rate > best.rate) best = t;
+    }
+    return best;
   };
 
-  let pool = unassignedSorted();
-  for (let i = 0; i < cap && pool.length > 0; i++) {
+  for (let i = 0; i < cap; i++) {
     if (!slots[i]) {
-      const t = pool.shift()!;
+      assignTalkerSlotsEmptySlotSearches++;
+      const t = pickBestUnassigned();
+      if (!t) break;
       slots[i] = { id: t.id, assignedAt: simTime, rate: t.rate };
-      pool = unassignedSorted();
+      occ.add(t.id);
     }
   }
 
@@ -65,16 +84,17 @@ export function assignTalkerSlots(
     const s = slots[i];
     if (!s) continue;
     if (simTime - s.assignedAt < TALKER_SLOT_HOLD_S) continue;
-    const occ = occupiedIds(slots);
     let best: RateTalker | null = null;
-    for (const t of talkers) {
+    for (const t of talkerById.values()) {
       if (occ.has(t.id)) continue;
       if (t.rate >= s.rate * TALKER_SLOT_CHALLENGER_MARGIN) {
         if (!best || t.rate > best.rate) best = t;
       }
     }
     if (best) {
+      occ.delete(s.id);
       slots[i] = { id: best.id, assignedAt: simTime, rate: best.rate };
+      occ.add(best.id);
     }
   }
 

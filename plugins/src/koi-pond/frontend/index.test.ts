@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import FRAG from "../sky/fragment.glsl?raw";
 import FRONT from "./index.ts?raw";
 import VIS from "../visualisation.yml?raw";
@@ -7,6 +7,8 @@ import MAPPING from "../data-mapping.yml?raw";
 import {
   assertWorkBudgetUnderCaps,
   assignTalkerSlots,
+  assignTalkerSlotsEmptySlotSearches,
+  resetAssignTalkerSlotsStats,
   CONFIG_KEYS,
   DEFAULT_OPTIONS,
   demoFrame,
@@ -187,17 +189,45 @@ describe("koi-pond shipped pack", () => {
   });
 
   it("voxel #22 talker slot hysteresis", () => {
+    const out: (null | { id: string; assignedAt: number; rate: number })[] = [];
+    const occ = new Set<string>();
+    const pools = { out, occupied: occ };
+    const map = (list: { id: string; rate: number }[]) =>
+      new Map(list.map((t) => [t.id, t]));
     let slots: (null | { id: string; assignedAt: number; rate: number })[] = [null, null];
     const a = { id: "a", rate: 100 };
     const b = { id: "b", rate: 80 };
-    slots = assignTalkerSlots([a, b], slots, 2, 0);
+    slots = assignTalkerSlots(map([a, b]), slots, 2, 0, pools);
     expect(slottedTalkerIds(slots).sort()).toEqual(["a", "b"]);
     const c = { id: "c", rate: 200 };
-    slots = assignTalkerSlots([a, b, c], slots, 2, TALKER_SLOT_HOLD_S + 0.2);
+    slots = assignTalkerSlots(map([a, b, c]), slots, 2, TALKER_SLOT_HOLD_S + 0.2, pools);
     expect(slottedTalkerIds(slots)).toContain("c");
     expect(c.rate).toBeGreaterThanOrEqual(a.rate * TALKER_SLOT_CHALLENGER_MARGIN);
-    slots = assignTalkerSlots([b, c], slots, 2, TALKER_SLOT_HOLD_S + 1);
+    slots = assignTalkerSlots(map([b, c]), slots, 2, TALKER_SLOT_HOLD_S + 1, pools);
     expect(slottedTalkerIds(slots)).not.toContain("a");
+  });
+
+  it("skips empty-slot searches and Array.sort once talker slots are full", () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({
+      id: `host:${i}`,
+      rate: 200 - i,
+      role: "lan",
+    }));
+    const sim = new KoiPondSim(
+      parseKoiPondOptions({ preset: "sunrise_feed", koiCap: "16", quality: "high" }),
+    );
+    for (let i = 0; i < 120; i++) {
+      sim.advance(frame({ t: i / 60, talkers: many }));
+    }
+    expect(sim.slottedKoiCount()).toBe(16);
+    resetAssignTalkerSlotsStats();
+    const sortSpy = vi.spyOn(Array.prototype, "sort");
+    for (let i = 0; i < 300; i++) {
+      sim.advance(frame({ t: (120 + i) / 60, talkers: many }));
+    }
+    expect(assignTalkerSlotsEmptySlotSearches).toBe(0);
+    expect(sortSpy).not.toHaveBeenCalled();
+    sortSpy.mockRestore();
   });
 
   it("koi body remains until talker leaves host list", () => {
