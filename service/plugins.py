@@ -56,6 +56,7 @@ _WATCH_NAMES = frozenset({"plugin.yml", "plugin.yaml", "visualisation.yml", "vis
 _WATCH_SUFFIX = frozenset({
     ".ts", ".tsx", ".js", ".mjs", ".glsl", ".py", ".zip", ".yml", ".yaml",
     ".mp3", ".wav", ".ogg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".json",
+    ".md", ".txt",
 })
 _WATCH_SKIP_DIRS = frozenset({"node_modules", "__pycache__", ".git"})
 _SCHEMA_KEYS = frozenset({"$ref", "$schema", "$id", "title", "description"})
