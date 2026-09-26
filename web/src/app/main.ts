@@ -107,6 +107,7 @@ import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state
 import { mosaicTileViewId, mosaicWallUsesView, parseMosaicSlotId } from "../graph/mosaic-tile-id";
 import { hostModeById } from "./host-mode";
 import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
+import { applyWallLayoutPatch } from "./mosaic-wall-layout";
 import {
   deliverCoalescedMosaicPacks,
 } from "../graph/mosaic-pack-coalesce";
@@ -1183,7 +1184,7 @@ mosaic = new Mosaic({
     applyViewLook();
   },
   onLayout: (patch) => {
-    settings.applyMosaicLayout(patch);
+    applyWallLayoutPatch(settings, patch);
   },
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });

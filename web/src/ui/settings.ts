@@ -18,12 +18,12 @@ import { type CamPolicy } from "../camera/want";
 import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
 import { liveSound } from "../audio/sound";
-import { fillPluginFields } from "../plugins/plugin-ui";
+import { fillPluginFields, syncPackScopeNote } from "../plugins/plugin-ui";
 import type { PluginLook, PluginView } from "../plugins/plugin";
 import type { SdmDevice } from "../plugins/nest-cams-look";
 import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
-import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
+import { packWallScopeFromAnim, type PackWallScope } from "../plugins/pack-wall-scope";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
@@ -1735,9 +1735,15 @@ export class Settings {
     }
     this.persistAnim();
     this.animUi?.syncTiles();
+    this.syncPackScopeNoteFromAnim();
   }
 
   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
+
+  private syncPackScopeNoteFromAnim(): void {
+    if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec || !this.viewHost) return;
+    syncPackScopeNote(this.viewHost, this.viewBind.spec, packWallScopeFromAnim(this.anim));
+  }
 
   private fillMosaicSlots(host: HTMLElement): void {
     host.replaceChildren();
