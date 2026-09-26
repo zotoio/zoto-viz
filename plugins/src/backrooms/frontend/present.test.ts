@@ -11,6 +11,7 @@ describe("backrooms presentTick", () => {
   it("reads pluginClock from VizPresentTick (not legacy skyT args)", () => {
     expect(FRONT).toMatch(/onPresent\s*=\s*\(tick\)/);
     expect(FRONT).toMatch(/tick\.pluginClock/);
+    expect(FRONT).toMatch(/tick\.aspect/);
     expect(FRONT).not.toMatch(/skyT/);
     expect(FRONT).toMatch(/\(globalThis as \{ zoto: VizZoto \}\)\.zoto/);
     const inlineZoto = ["declare", " const ", "zoto"].join("");

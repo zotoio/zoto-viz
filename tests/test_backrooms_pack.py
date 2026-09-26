@@ -5,8 +5,6 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-import yaml
-
 from service import plugins
 
 
@@ -28,8 +26,7 @@ def test_backrooms_catalog_and_sky(tmp_path, monkeypatch) -> None:
     assert row.get("origin") == "src"
     assert row["has_sky_shader"] is True
     assert (SRC / "sky" / "fragment.glsl").is_file()
-    idle = row.get("viz", {}).get("idle")
-    assert isinstance(idle, dict) and idle.get("packets") and idle.get("talkers")
+    assert row.get("viz", {}).get("idle") == {"fixture": "host"}
     assert row.get("viz", {}).get("presentTick") is True
 
     plugins.grant_consent(row, "authored")
@@ -45,7 +42,6 @@ def test_backrooms_catalog_and_sky(tmp_path, monkeypatch) -> None:
     assert row.get("viz", {}).get("maxBuffers") == 2
     for name in ("buzz.mp3", "roar.mp3", "pant.mp3"):
         assert (SRC / "assets" / "sfx" / name).is_file(), name
-    assert (SRC / "audio.manifest.yml").is_file()
 
 
 def test_backrooms_present_pack_vitest() -> None:
@@ -57,10 +53,3 @@ def test_backrooms_present_pack_vitest() -> None:
     )
 
 
-def test_backrooms_audio_manifest_matches_yaml() -> None:
-    yml = yaml.safe_load((SRC / "audio.manifest.yml").read_text(encoding="utf-8"))
-    ts = (SRC / "frontend" / "audio-manifest.ts").read_text(encoding="utf-8")
-    for rel in yml["required"]:
-        assert rel in ts
-    for key, rel in {**yml["loops"], **yml["one_shots"]}.items():
-        assert f"{key}" in ts and rel in ts

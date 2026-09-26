@@ -3,6 +3,7 @@
  * Sky accent colours are still written on viz.read frames so they apply after init.
  */
 
+import type { VizPresentTick } from "../../../sdk/viz-contract";
 import type { VizZoto } from "../../../sdk/viz-zoto";
 import {
   backroomsSlots,
@@ -13,11 +14,21 @@ import {
 const zoto = (globalThis as { zoto: VizZoto }).zoto;
 
 const DEFAULT_ASPECT = 16 / 9;
+let wallDate = new Date(0);
+let wallDateMs = 0;
 
-function stageAspect(): number {
-  if (typeof innerWidth === "number" && innerWidth > 0) {
-    return innerWidth / Math.max(1, innerHeight);
+function wallDateForPresent(): Date {
+  const now = performance.now();
+  if (now - wallDateMs > 1000) {
+    wallDateMs = now;
+    wallDate = new Date();
   }
+  return wallDate;
+}
+
+function stageAspect(tick: VizPresentTick): number {
+  const a = tick.aspect;
+  if (typeof a === "number" && a > 0 && Number.isFinite(a)) return a;
   return DEFAULT_ASPECT;
 }
 
@@ -31,9 +42,9 @@ zoto.onPresent = (tick) => {
   const t = typeof tick.pluginClock === "number" && Number.isFinite(tick.pluginClock)
     ? tick.pluginClock
     : 0;
-  const drive = backroomsSlots(t, new Date(), stageAspect());
-  zoto.writeBuffer(0, Array.from(drive.slot0));
-  zoto.writeBuffer(1, Array.from(drive.slot1));
+  const drive = backroomsSlots(t, wallDateForPresent(), stageAspect(tick));
+  zoto.writeBuffer(0, drive.slot0);
+  zoto.writeBuffer(1, drive.slot1);
 };
 
 zoto.onFrame = () => {

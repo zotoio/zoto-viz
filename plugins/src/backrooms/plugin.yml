@@ -10,22 +10,7 @@ viz:
   graphWalk: false
   presentTick: true
   idle:
-    audio: 0.14
-    packets:
-      - proto: TCP
-        size: 480
-        field: 0.55
-      - proto: UDP
-        size: 128
-        field: 0.38
-    talkers:
-      - id: level0-tape
-        rate: 36
-        role: lan
-    headlines:
-      - id: rec
-        label: REC
-        text: Level 0 — camcorder standby
+    fixture: host
   maxBuffers: 2
   maxBufferFloats: 64
   maxParticles: 0

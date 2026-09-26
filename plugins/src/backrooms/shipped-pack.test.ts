@@ -105,7 +105,10 @@ describe("backrooms shipped pack", () => {
 
   it("drives buffers from onPresent when presentTick is enabled", () => {
     expect(FRONT).toMatch(/onPresent/);
+    expect(FRONT).toMatch(/tick\.pluginClock/);
+    expect(FRONT).toMatch(/tick\.aspect/);
     expect(FRONT).toMatch(/writeBuffer\s*\(/);
+    expect(FRONT).not.toMatch(/Array\.from/);
   });
 
   it("fits the plugin buffer contract", () => {
