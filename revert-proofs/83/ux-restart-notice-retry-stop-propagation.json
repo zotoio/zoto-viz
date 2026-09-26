@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http-notice.test.ts",
+  "testName": "server restart wall notice > retry button > does not dismiss the retry strip when Retry is clicked",
+  "red": "AssertionError: expected \"vi.fn()\" to not be called at all, but actually been called 1 times",
+  "description": "ux-restart-notice-retry-stop-propagation",
+  "timeoutSec": 120
+}
