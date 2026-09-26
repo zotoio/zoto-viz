@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import FRAG from "../../../plugins/src/fractal-zoom/sky/fragment.glsl?raw";
 import FRONT from "../../../plugins/src/fractal-zoom/frontend/index.ts?raw";
+import DRIVE from "../../../plugins/src/fractal-zoom/frontend/drive.ts?raw";
 import VIS from "../../../plugins/src/fractal-zoom/visualisation.yml?raw";
 import PLUGIN from "../../../plugins/src/fractal-zoom/plugin.yml?raw";
 import {
@@ -38,6 +39,17 @@ import { DEMO_PACK_CONTRACTS } from "./dogfood-runner";
 import { VizBufferWriter } from "./viz-host";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { smokeFractalDefaultPresetSky } from "./fractal-sky-smoke";
+import type { VizDataFrame } from "./viz-host";
+
+function fractalPackSlot0(frame: VizDataFrame, opts: Record<string, string> = {}): number[] {
+  const buf: number[] = [];
+  runPackFrameHandler("fractal-zoom", frame, {
+    writeBuffer: (_slot, data) => { buf.push(...data); },
+    writeUniform: () => {},
+    writeParticles: () => {},
+  }, opts);
+  return buf;
+}
 
 describe("fractal-zoom shipped pack", () => {
   beforeEach(() => {
@@ -125,6 +137,72 @@ describe("fractal-zoom shipped pack", () => {
     }, {});
     expect(buf.length).toBe(FZ_SLOT0_FLOATS);
     expect(buf[FZ_SLOT.mark]).toBe(1);
+  });
+
+  describe("host-mapping pod rules (stage-only — no regions/orbits/slots by host index)", () => {
+    it("pack source does not index talkers or packets by list position", () => {
+      for (const src of [FRONT, DRIVE]) {
+        expect(src).not.toMatch(/talkers\s*\[/);
+        expect(src).not.toMatch(/packets\s*\[/);
+        expect(src).not.toMatch(/sys\.failed/);
+      }
+      expect(FRAG).not.toMatch(/sys\.failed/);
+    });
+
+    it("reordered talkers with the same count do not change the fractal buffer", () => {
+      resetFractalDrive();
+      const base = buildIdleVizFrame(1.2);
+      const reordered: VizDataFrame = {
+        ...base,
+        talkers: [
+          { id: "8.8.8.8", rate: 64, role: "internet" },
+          { id: "10.0.0.1", rate: 88, role: "gateway" },
+          { id: "10.0.0.42", rate: 120, role: "lan" },
+        ],
+      };
+      const opts = { preset: "bulb-classic" };
+      const a = fractalPackSlot0(base, opts);
+      resetFractalDrive();
+      const b = fractalPackSlot0(reordered, opts);
+      expect(a).toEqual(b);
+    });
+
+    it("packet list order and per-packet fields do not change the fractal buffer", () => {
+      resetFractalDrive();
+      const base = buildIdleVizFrame(0.25);
+      const reversed: VizDataFrame = {
+        ...base,
+        packets: [...base.packets].reverse(),
+      };
+      const opts = { preset: "bulb-classic" };
+      const forward = fractalPackSlot0(base, opts);
+      resetFractalDrive();
+      const back = fractalPackSlot0(reversed, opts);
+      expect(forward).toEqual(back);
+    });
+
+    it("healthy low-value packets do not drive failure or buffer changes", () => {
+      resetFractalDrive();
+      const base = buildIdleVizFrame(0.5);
+      const lowPackets: VizDataFrame = {
+        ...base,
+        packets: [
+          { proto: "icmp", size: 32, field: 0.01 },
+          { proto: "dns", size: 48, field: 0.02 },
+          { proto: "udp", size: 64, field: 0.03 },
+        ],
+        sys: { ...base.sys!, failed: 0, psi: 0, temp: 0, cpu: 0, mem: 0, disk: 0, gpu: 0, watts: 0, sockets: 0, udev: 0 },
+      };
+      const failedSys: VizDataFrame = {
+        ...lowPackets,
+        sys: { ...lowPackets.sys!, failed: 1 },
+      };
+      const opts = { preset: "bulb-classic" };
+      const healthy = fractalPackSlot0(lowPackets, opts);
+      resetFractalDrive();
+      const withFailed = fractalPackSlot0(failedSys, opts);
+      expect(healthy).toEqual(withFailed);
+    });
   });
 
   it("smoke: default preset draws a non-black centre pixel when WebGL2 is available", () => {
