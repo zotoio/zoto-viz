@@ -1,38 +1,81 @@
 # Voxel World
 
-Stage-only **blocky voxel** landscape for zoto-viz. Terrain, textures, trees, water, clouds, and animals are **procedural** (generated in the GLSL sky shader and TypeScript director). No external images or trademarked names.
+Blocky procedural voxel terrain on the **plugin sky**. Greedy-meshed chunks (hidden-face removal, one atlas, one draw call per chunk) run in the sandbox iframe for GPU accounting; the visible stage is ray-marched in `sky/fragment.glsl` from host UBO slots written each frame.
 
-## View
+All options, caps, presets, and **live-data bindings** are in `plugin.yml` and read only through **config.read** (`zoto.getConfig` / `onConfig`).
 
-Select **Voxel World** (`plugin:voxel-world`). The host golden LAN fixture keeps the board lit on a fresh install; the pack does not require live graph traffic.
+## Live data bindings (plugin.yml)
 
-## Presets
+| Config key | Source (VizDataFrame) | Effect |
+| --- | --- | --- |
+| `bind_sysLoad_weather` | `sys.cpu` (0–1) | Scales rain/snow mix |
+| `bind_packetField_torch` | new `packets[]` samples | Spawns torch glow when `field` exceeds threshold |
+| `bind_sysFailed_failTint` | `sys.failed` (0–1) | Zoto fail red tint ahead of spectacle |
 
-| Preset | Feel |
-| --- | --- |
-| Classic | Midday flyover, temperate hills |
-| Snowy Peaks | Boreal snow, gentle walk |
-| Desert | Arid sunset, sparse life |
-| Night Torches | Orbit a hamlet with torch glow |
-| Archipelago | Islands, rain, candy palette |
-| Custom | Your sliders only |
+Idle uses `viz.idle.fixture: host` — metric shows **demo** on the OSD when `frame.demo` is set.
 
-Use **randomise**, **undo**, and **reset** on This view (next to arcade controls).
+## Caps (plugin.yml config, fixed)
 
-## Options
+- `cap_maxChunks`: 8  
+- `cap_maxViewDist`: 48  
+- `cap_maxVertexBudget`: 65536  
+- `cap_chunksPerFrame`: 2  
 
-Seed, biome mix, view distance (16–48), time of day, day cycle speed, weather, camera mode (fly / walk / orbit village), camera speed, fog, texture style, mob count (0–6), clouds, and colour palette.
+## Mosaic layout (screenshots on `main`)
 
-Reduced system motion (`prefers-reduced-motion`) slows camera paths automatically.
+View dropdown may black-tile until a host CSP fix lands; place the pack via saved anim:
 
-## Layout
+**2×2 wall — one tile**
 
+```json
+{
+  "anim": {
+    "mosaic": "4",
+    "mosaicTiles": ["plugin:voxel-world", "plugin:topology", "plugin:memory", "plugin:disk"]
+  }
+}
 ```
-plugin.yml
-visualisation.yml
-frontend/index.ts      # accent colours only; host writes buffers
-frontend/world.ts      # camera, options, caps, presets
-sky/fragment.glsl      # voxel ray march + sky
+
+**4×4 wall — one tile**
+
+```json
+{
+  "anim": {
+    "mosaic": "8",
+    "mosaicTiles": [
+      "plugin:voxel-world", "plugin:topology", "plugin:memory", "plugin:disk",
+      "plugin:cores", "plugin:gpu", "plugin:sockets", "plugin:watch"
+    ]
+  }
+}
 ```
 
-Hard caps: view distance 48, mobs 6, 96 ray steps, 8 chunk columns — safe on mosaic walls.
+Persist under your zoto-viz profile or patch via MCP `set_settings` with the same `anim` fields.
+
+## Consent
+
+TypeScript frontend + GLSL sky require plugin consent (`consent_plugin` or Settings → auto-consent for shipped src).
+
+## Screenshot pins
+
+| Shot | Preset | Seed |
+| --- | --- | --- |
+| Classic | classic | 4242 |
+| Snowy | snowy | 9001 |
+| Desert | desert | 1337 |
+| Night | night | 2048 |
+| Archipelago | archipelago | 7777 |
+
+Camera uses **frame time `t` only** (deterministic).
+
+## Tests
+
+```bash
+./zoto-viz plugin validate plugins/src/voxel-world/
+pytest tests/test_voxel_world_pack.py
+cd web && pnpm exec vitest run --config ../plugins/src/voxel-world/vitest.config.mts
+```
+
+## Host API note
+
+On-screen HUD for pack/skip/metric is drawn in the sky shader from UBO slots (no per-pack host branches). A future versioned host hook could expose skip counts directly to `ui.overlay`.

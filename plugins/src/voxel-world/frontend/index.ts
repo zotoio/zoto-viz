@@ -1,12 +1,58 @@
-/** Voxel World — host runs `world.ts` on the sky clock and writes slots 0–1 each frame. */
+/** Voxel World — config.read only; drives sky slots + GPU mesh stats from viz frames. */
+
+import {
+  disposeVoxelWorld,
+  initVoxelWorld,
+  setVoxConfig,
+  tickVoxelWorld,
+} from "./engine";
+
+type VizFrame = {
+  t: number;
+  dt: number;
+  audio: number;
+  demo?: boolean;
+  packets: { field: number }[];
+  sys?: { cpu: number; mem: number; disk: number; gpu: number; temp: number; watts: number; psi: number; sockets: number; failed: number; udev: number };
+};
 
 declare const zoto: {
-  onFrame: (() => void) | null;
+  onFrame: ((frame: VizFrame) => void) | null;
+  onConfig: ((cfg: Record<string, string>) => void) | null;
+  getConfig?: () => Record<string, string>;
+  writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };
 
-zoto.onFrame = () => {
-  zoto.writeUniform("uAccent", [0.42, 0.78, 0.38]);
-  zoto.writeUniform("uBg", [0.45, 0.62, 0.92]);
-  zoto.writeUniform("uBright", 1.05);
+let ready = false;
+
+function boot(cfg: Record<string, string>): void {
+  setVoxConfig(cfg);
+  if (!ready) {
+    initVoxelWorld();
+    ready = true;
+  }
+}
+
+zoto.onConfig = (cfg) => boot(cfg);
+
+zoto.onFrame = (frame) => {
+  if (!ready) boot(zoto.getConfig?.() ?? {});
+  const out = tickVoxelWorld(
+    {
+      t: frame.t,
+      demo: frame.demo,
+      packets: frame.packets,
+      sys: frame.sys ? { cpu: frame.sys.cpu, failed: frame.sys.failed } : undefined,
+    },
+    1.6,
+  );
+  zoto.writeBuffer(0, out.slot0);
+  zoto.writeBuffer(1, out.slot1);
+  zoto.writeUniform("uBright", out.bright);
+  zoto.writeUniform("uAccent", out.accent);
+  zoto.writeUniform("uBg", out.bg);
+  zoto.writeUniform("uAudio", frame.audio);
 };
+
+export { disposeVoxelWorld };

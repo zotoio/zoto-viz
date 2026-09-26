@@ -265,13 +265,25 @@ void main() {
     col += vec3(1.0, 0.75, 0.35) * slot(20) * exp(-dist * 0.08) * 0.35;
   }
   col += mobCol(ro, rd);
+  float fail = slot(23);
+  float wMix = slot(24);
   float w = slot(12);
-  if (w > 0.5) {
+  if (w > 0.5 || wMix > 0.2) {
     float precip = hf(ivec3(int(ro.x + uTime * 10.0), int(ro.y * 3.0), int(ro.z * 2.0)));
-    col += vec3(0.7, 0.75, 0.85) * step(0.92, precip) * 0.15;
+    col += vec3(0.7, 0.75, 0.85) * step(0.92, precip) * (0.08 + wMix * 0.2);
   }
-  col = mix(col, uAccent * 0.15, uAudio * 0.25);
+  col = mix(col, vec3(0.92, 0.14, 0.18), fail * 0.65);
+  col = mix(col, uAccent * 0.15, uAudio * 0.15 * (1.0 - fail));
   col *= uBright;
-  col = max(col, vec3(0.04, 0.06, 0.1));
+  float osdY = vDir.y + 0.93;
+  if (osdY > 0.0) {
+    vec3 bar = vec3(0.04, 0.07, 0.11);
+    col = mix(col, bar, smoothstep(0.0, 0.04, osdY));
+    float demo = slot(25);
+    float pulse = 0.5 + 0.5 * sin(uTime * 3.0);
+    col += vec3(0.2, 0.85, 0.45) * demo * pulse * smoothstep(0.0, 0.03, osdY);
+    col += vec3(0.85, 0.55, 0.2) * smoothstep(0.0, 0.03, osdY) * (slot(26) / 100.0);
+  }
+  col = max(col, vec3(0.06, 0.08, 0.12));
   fragColor = vec4(col, uOpacity);
 }
