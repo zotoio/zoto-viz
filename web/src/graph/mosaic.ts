@@ -12,6 +12,7 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
+import { syncVizTileScope } from "../plugins/viz-tile-budget";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -1026,6 +1027,7 @@ export class Mosaic {
   }
 
   private teardown(): void {
+    syncVizTileScope([]);
     for (const e of this.extras) e.scene.dispose();
     this.extras = [];
     for (const id of [...this.tileArcade.keys()]) this.releaseArcade(id);

@@ -95,6 +95,7 @@ import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
+import { vizClockMs } from "../core/viz-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -1028,7 +1029,7 @@ function feed(m: StateMsg): void {
       stats: vizBudget.stats,
       frame: vizBudget.lastBuilt,
       state: shown,
-      now: performance.now(),
+      now: vizClockMs(),
     });
   }
 

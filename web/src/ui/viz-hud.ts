@@ -1,5 +1,8 @@
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
+import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
+import { tileHudChrome } from "../plugins/viz-tile-hud";
+import { TILE_LIMITED_SHARING_TOOLTIP, formatHudSkipsPerSec } from "./viz-copy";
 import { morphCopy, Select } from "./ui";
 
 /** First-party demoscene viz packs that share the host UBO frame. */
@@ -72,6 +75,28 @@ export interface VizHudTick {
   frame: VizDataFrame | null;
   state: StateMsg;
   now: number;
+  tileBudget?: VizTileBudgetStats;
+}
+
+export function tileHudSkipLabel(
+  tile: VizTileBudgetStats,
+  skipRate: number,
+  activeTiles = 1,
+  nowTick = 0,
+): string {
+  const chrome = tileHudChrome(tile, nowTick, activeTiles);
+  if (chrome.limitedLabel) return chrome.limitedLabel;
+  if (chrome.state === "over_budget") return formatSkipRate(skipRate);
+  return formatHudSkipsPerSec(skipRate);
+}
+
+/** Shedding tiles keep the last delivered frame on screen (never blank). */
+export function tileHudDisplayFrame(
+  tile: VizTileBudgetStats,
+  built: VizDataFrame | null,
+): VizDataFrame | null {
+  if (tile.shedding && tile.lastDeliveredFrame) return tile.lastDeliveredFrame;
+  return built ?? tile.lastDeliveredFrame;
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -253,8 +278,9 @@ export class VizHud {
 
   tick(input: VizHudTick): void {
     if (!this.activeId) return;
-    const { stats, frame, state, now } = input;
-    const metric = vizHudMetric(this.activeId, frame, state);
+    const { stats, frame, state, now, tileBudget } = input;
+    const displayFrame = tileBudget ? tileHudDisplayFrame(tileBudget, frame) : frame;
+    const metric = vizHudMetric(this.activeId, displayFrame, state);
     this.metricLabelEl.textContent = metric.label;
     this.metricValueEl.textContent = metric.value;
 
@@ -272,7 +298,17 @@ export class VizHud {
     const cutoff = now - SKIP_WINDOW_MS;
     while (this.skipSamples.length && this.skipSamples[0].t < cutoff) this.skipSamples.shift();
 
-    this.skipEl.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, now));
+    const rate = skipRatePerSec(this.skipSamples, now);
+    if (tileBudget) {
+      const chrome = tileHudChrome(tileBudget, Math.round(now * 300), 1);
+      this.skipEl.textContent = chrome.limitedLabel ?? formatSkipRate(rate);
+      this.skipEl.title = chrome.limitedLabel ? TILE_LIMITED_SHARING_TOOLTIP : this.skipEl.title;
+      this.skipEl.classList.toggle("viz-hud-skip-limited", Boolean(chrome.limitedLabel));
+      this.skipEl.classList.toggle("viz-hud-skip-fail", chrome.useFailTone);
+    } else {
+      this.skipEl.textContent = formatSkipRate(rate);
+      this.skipEl.classList.remove("viz-hud-skip-limited", "viz-hud-skip-fail");
+    }
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
   }
 }

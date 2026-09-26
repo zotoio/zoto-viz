@@ -1,0 +1,11 @@
+--- a/web/src/plugins/viz-tile-budget.ts
++++ b/web/src/plugins/viz-tile-budget.ts
+@@ -99,7 +99,7 @@ export class VizTileBudgetRegistry {
+       const t = this.getTile(id);
+       if (t.share !== share) {
+         t.share = share;
+-        t.debt = 0;
++        t.debt = t.debt;
+       }
+     }
+   }

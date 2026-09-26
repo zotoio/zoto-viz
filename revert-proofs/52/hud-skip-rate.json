@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/dogfood.test.ts",
+  "testName": "fat-LAN live soak: count-based delivery and skip honesty on simulated clock",
+  "description": "HUD skip rate reports 1/s when there were zero skip deltas"
+}

@@ -1,0 +1,10 @@
+--- a/web/src/ui/viz-hud.ts
++++ b/web/src/ui/viz-hud.ts
+@@ -88,7 +88,7 @@ export function tileHudDisplayFrame(
+   tile: VizTileBudgetStats,
+   built: VizDataFrame | null,
+ ): VizDataFrame | null {
+-  if (tile.shedding && tile.lastDeliveredFrame) return tile.lastDeliveredFrame;
++  if (tile.shedding && tile.lastDeliveredFrame) return null;
+   return built ?? tile.lastDeliveredFrame;
+ }

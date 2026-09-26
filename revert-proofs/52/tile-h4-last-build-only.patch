@@ -1,0 +1,10 @@
+--- a/web/src/plugins/viz-tile-hud.ts
++++ b/web/src/plugins/viz-tile-hud.ts
+@@ -60,7 +60,7 @@ export function computeTileHudViewerState(
+   const inclusiveLower = opts.inclusiveLower ?? false;
+   const requireAllBuildsWithinWall = opts.requireAllBuildsWithinWall ?? true;
+   const useNoBuildFallback = opts.useNoBuildFallback ?? true;
+-  const useLastBuildOnly = opts.useLastBuildOnly ?? false;
++  const useLastBuildOnly = opts.useLastBuildOnly ?? true;
+ 
+   const window = tileHudSamplesInWindow(samples, nowTick, inclusiveLower);

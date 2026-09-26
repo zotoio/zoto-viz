@@ -1,3 +1,4 @@
+import { vizClockMs } from "../core/viz-clock";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import type { VizDataFrame, VizUniformValue } from "./viz-host";
 import {
@@ -49,8 +50,8 @@ export function resetHnTermPack(): void {
   termScript = "";
 }
 
-function termNow(frame: VizDataFrame): number {
-  return typeof performance !== "undefined" ? performance.now() / 1000 : frame.t;
+function termNow(_frame: VizDataFrame): number {
+  return vizClockMs() / 1000;
 }
 
 function hnTermFrameBuffer(frame: VizDataFrame): number[] {
@@ -201,7 +202,7 @@ export function runPackFrameHandler(
     case "nixie-clock": {
       const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
       handlers.writeBuffer(0, packNixieBuffer(
-        new Date(),
+        new Date(vizClockMs()),
         parseNixieLook(opts),
         frame.audio,
         peak,

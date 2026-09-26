@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/dogfood.test.ts",
+  "testName": "fat-LAN live soak: patterned over-budget skips on simulated clock",
+  "description": "20 ms injected costs no longer exceed budget threshold (25 ms cap)"
+}
