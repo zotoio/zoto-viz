@@ -1120,6 +1120,7 @@ export class NetScene implements HostedView {
     pluginId?: string;
     packLabel?: string;
     mirrorsTile?: number;
+    tileCount?: number;
   } | null = null;
   private vizHeadlineText = "";
   private now = Date.now() / 1000;
@@ -1562,6 +1563,7 @@ export class NetScene implements HostedView {
     pluginId?: string;
     packLabel?: string;
     mirrorsTile?: number;
+    tileCount?: number;
   } | null): void {
     this.packCoalesce = role;
   }
@@ -1572,6 +1574,14 @@ export class NetScene implements HostedView {
 
   get isPackMirrorPrimary(): boolean {
     return this.packCoalesce?.role === "primary";
+  }
+
+  get packCoalesceTileCount(): number {
+    return this.packCoalesce?.tileCount ?? 0;
+  }
+
+  get usesPackMirrorRt(): boolean {
+    return this.isPackMirrorPrimary && this.packCoalesceTileCount >= 2;
   }
 
   surfaceLetterboxFill(): SurfaceLetterboxFill {

@@ -371,27 +371,33 @@ export class RenderHost {
     const rd = this.renderer as THREE.WebGLRenderer;
     const gl = this.gl;
     const pr = rd.getPixelRatio();
+    const tileCount = (view as { packCoalesceTileCount?: number }).packCoalesceTileCount ?? 0;
     const packPrimary = (view as { isPackMirrorPrimary?: boolean }).isPackMirrorPrimary === true;
-    if (packPrimary && gl) {
+    const antialias = gl?.getContextAttributes?.().antialias === true;
+    if (gl) this.packMirrorGl.setDuplicateScope(packPrimary && tileCount >= 2, gl, rd, { antialias });
+    if (packPrimary && tileCount >= 2 && gl) {
       const sw = Math.round(w * pr);
       const sh = Math.round(h * pr);
-      const rt = this.packMirrorGl.ensureRenderTarget(rd, sw, sh);
-      if (rt) {
-        const drawPack = () => {
-          const prev = rd.getRenderTarget();
-          rd.setRenderTarget(rt);
-          rd.setViewport(0, 0, sw, sh);
-          rd.setScissor(0, 0, sw, sh);
-          rd.setScissorTest(true);
-          rd.setClearColor(clearHex, 1);
-          rd.render(scene, camera);
-          rd.setRenderTarget(prev);
-          this.packMirrorGl.markPackRendered();
-          this.packMirrorGl.blitPrimaryToDefault(gl, rd, { x, y, w, h }, pr);
-        };
-        timeGpu(gl, drawPack, (ms) => view.noteFrameCost?.(ms));
-        return { x: x * pr, y: y * pr, w: w * pr, h: h * pr };
-      }
+      const drawRt = this.packMirrorGl.ensurePackTargets(gl, rd, sw, sh, antialias);
+      const drawPack = () => {
+        const prev = rd.getRenderTarget();
+        if (drawRt) {
+          rd.setRenderTarget(drawRt);
+        } else {
+          this.packMirrorGl.bindResolveDrawFramebuffer(gl);
+        }
+        rd.setViewport(0, 0, sw, sh);
+        rd.setScissor(0, 0, sw, sh);
+        rd.setScissorTest(true);
+        rd.setClearColor(clearHex, 1);
+        rd.render(scene, camera);
+        if (drawRt) rd.setRenderTarget(prev);
+        else this.packMirrorGl.endResolveDrawFramebuffer(gl);
+        this.packMirrorGl.resolvePackRender(gl, rd, antialias);
+        this.packMirrorGl.blitPrimaryToDefault(gl, rd, { x, y, w, h }, pr);
+      };
+      timeGpu(gl, drawPack, (ms) => view.noteFrameCost?.(ms));
+      return { x: x * pr, y: y * pr, w: w * pr, h: h * pr };
     }
     const draw = () => {
       rd.setViewport(x, y, w, h);

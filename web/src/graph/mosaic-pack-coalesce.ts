@@ -160,6 +160,7 @@ export function applyPackCoalesceLayout(
       mirrorKind,
       pluginId: g.pluginId ?? undefined,
       packLabel,
+      tileCount: g.slots.length,
     };
     for (const slot of g.slots) {
       grouped.add(slot);

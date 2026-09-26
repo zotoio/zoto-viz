@@ -9,8 +9,10 @@ export type GlMirror = Pick<
   | "blitFramebuffer"
   | "createFramebuffer"
   | "createTexture"
+  | "createRenderbuffer"
   | "deleteFramebuffer"
   | "deleteTexture"
+  | "deleteRenderbuffer"
   | "enable"
   | "disable"
   | "scissor"
@@ -21,15 +23,19 @@ export type GlMirror = Pick<
   | "texImage2D"
   | "texSubImage2D"
   | "framebufferTexture2D"
+  | "framebufferRenderbuffer"
+  | "renderbufferStorageMultisample"
   | "bindTexture"
   | "readPixels"
   | "COLOR_BUFFER_BIT"
   | "FRAMEBUFFER"
   | "READ_FRAMEBUFFER"
   | "DRAW_FRAMEBUFFER"
+  | "RENDERBUFFER"
   | "COLOR_ATTACHMENT0"
   | "TEXTURE_2D"
   | "RGBA"
+  | "RGBA8"
   | "UNSIGNED_BYTE"
   | "LINEAR"
   | "NEAREST"
@@ -51,6 +57,8 @@ export type MirrorRenderer = Pick<
   | "render"
   | "properties"
 >;
+
+const PACK_MSAA_SAMPLES = 4;
 
 function clearRgb(hex: number): [number, number, number] {
   return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
@@ -101,56 +109,171 @@ export function paintLetterboxBarsGl(
   gl.disable(gl.SCISSOR_TEST);
 }
 
-function packRtFramebuffer(renderer: MirrorRenderer, rt: THREE.WebGLRenderTarget): WebGLFramebuffer | null {
-  const props = renderer.properties.get(rt) as { __webGLFramebuffer?: WebGLFramebuffer };
+function rtFramebuffer(renderer: MirrorRenderer, rt: THREE.WebGLRenderTarget): WebGLFramebuffer | null {
+  const props = renderer.properties.get(rt) as {
+    __webGLFramebuffer?: WebGLFramebuffer;
+    __webGLMultisampledFramebuffer?: WebGLFramebuffer;
+  };
   return props.__webGLFramebuffer ?? null;
 }
 
+function msaaFramebuffer(renderer: MirrorRenderer, rt: THREE.WebGLRenderTarget): WebGLFramebuffer | null {
+  const props = renderer.properties.get(rt) as { __webGLMultisampledFramebuffer?: WebGLFramebuffer };
+  return props.__webGLMultisampledFramebuffer ?? null;
+}
+
 /**
- * Non-MSAA render target for a coalesced pack (render here, then blit to default — never read blit MSAA default).
+ * Pack mirror GPU path — active only when the same pack is on 2+ tiles.
+ * Renders into MSAA FBO when the canvas context uses antialiasing, resolves to a non-MSAA target, then blits to tiles.
  */
 export class PackMirrorGl {
-  private rt: THREE.WebGLRenderTarget | null = null;
+  private duplicateScope = false;
+  private packAntialias = false;
+  private drawRt: THREE.WebGLRenderTarget | null = null;
+  private resolveFb: WebGLFramebuffer | null = null;
+  private resolveTex: WebGLTexture | null = null;
+  private msaaFb: WebGLFramebuffer | null = null;
+  private msaaRb: WebGLRenderbuffer | null = null;
   private tw = 0;
   private th = 0;
   private packReady = false;
   private readonly scratchBox = { x: 0, y: 0, w: 0, h: 0 };
   private readonly scratchInner = { x: 0, y: 0, w: 0, h: 0 };
 
+  get isDuplicateScope(): boolean {
+    return this.duplicateScope;
+  }
+
   beginFrame(): void {
     this.packReady = false;
   }
 
   hasCapture(): boolean {
-    return this.packReady;
+    return this.duplicateScope && this.packReady;
   }
 
-  dispose(_gl: GlMirror, renderer?: MirrorRenderer): void {
-    if (this.rt && renderer) renderer.properties.remove(this.rt);
-    this.rt?.dispose();
-    this.rt = null;
+  /**
+   * Enable/disable the RT mirror path. Turning off releases GPU targets immediately (same call).
+   */
+  setDuplicateScope(
+    on: boolean,
+    gl: GlMirror,
+    renderer: MirrorRenderer,
+    opts?: { antialias?: boolean },
+  ): void {
+    if (opts?.antialias != null) this.packAntialias = opts.antialias;
+    if (on === this.duplicateScope) return;
+    this.duplicateScope = on;
+    if (!on) this.releaseTargets(gl, renderer);
+  }
+
+  dispose(gl: GlMirror, renderer?: MirrorRenderer): void {
+    if (renderer) this.releaseTargets(gl, renderer);
+    this.duplicateScope = false;
+    this.packReady = false;
+  }
+
+  private releaseTargets(gl: GlMirror, renderer: MirrorRenderer): void {
+    if (this.drawRt && renderer) renderer.properties.remove(this.drawRt);
+    this.drawRt?.dispose();
+    this.drawRt = null;
+    if (this.msaaRb) gl.deleteRenderbuffer(this.msaaRb);
+    if (this.msaaFb) gl.deleteFramebuffer(this.msaaFb);
+    if (this.resolveFb) gl.deleteFramebuffer(this.resolveFb);
+    if (this.resolveTex) gl.deleteTexture(this.resolveTex);
+    this.msaaRb = null;
+    this.msaaFb = null;
+    this.resolveFb = null;
+    this.resolveTex = null;
     this.tw = 0;
     this.th = 0;
     this.packReady = false;
   }
 
-  /** Non-MSAA target sized to the primary tile (framebuffer pixels). */
-  ensureRenderTarget(renderer: MirrorRenderer, w: number, h: number): THREE.WebGLRenderTarget | null {
-    if (w < 2 || h < 2) return null;
-    if (this.rt && this.rt.width === w && this.rt.height === h) return this.rt;
-    this.rt?.dispose();
-    this.rt = new THREE.WebGLRenderTarget(w, h, {
-      depthBuffer: true,
-      stencilBuffer: false,
-      samples: 0,
-    });
+  /** Allocate / resize pack targets (resolve texture FBO + optional MSAA RB FBO). */
+  ensurePackTargets(
+    gl: GlMirror,
+    renderer: MirrorRenderer,
+    w: number,
+    h: number,
+    antialias: boolean,
+  ): THREE.WebGLRenderTarget | null {
+    if (!this.duplicateScope || w < 2 || h < 2) return null;
+    this.packAntialias = antialias;
+    const sizeChanged = w !== this.tw || h !== this.th;
+    const aaChanged = antialias !== (this.msaaFb != null);
+    if (!sizeChanged && !aaChanged && this.resolveFb) return this.drawRt;
+
+    this.releaseTargets(gl, renderer);
+
     this.tw = w;
     this.th = h;
-    return this.rt;
+
+    this.resolveTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.resolveTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    this.resolveFb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.resolveFb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.resolveTex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    if (antialias) {
+      this.msaaRb = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaRb);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, PACK_MSAA_SAMPLES, gl.RGBA8, w, h);
+      this.msaaFb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.msaaFb);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, this.msaaRb);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+
+      this.drawRt = new THREE.WebGLRenderTarget(w, h, {
+        depthBuffer: true,
+        stencilBuffer: false,
+        samples: PACK_MSAA_SAMPLES,
+      });
+    } else {
+      this.drawRt = null;
+    }
+    return this.drawRt;
+  }
+
+  /** Non-MSAA duplicate path: draw straight into the resolve FBO (one target). */
+  bindResolveDrawFramebuffer(gl: GlMirror): WebGLFramebuffer | null {
+    if (!this.duplicateScope || !this.resolveFb || this.packAntialias) return null;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.resolveFb);
+    return this.resolveFb;
+  }
+
+  endResolveDrawFramebuffer(gl: GlMirror): void {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /** After `render()` into `drawRt`, resolve MSAA → resolve texture when antialiasing is on. */
+  resolvePackRender(gl: GlMirror, renderer: MirrorRenderer, antialias: boolean): void {
+    if (!this.duplicateScope) return;
+    if (antialias && this.drawRt && this.resolveFb) {
+      const msaaFb = msaaFramebuffer(renderer, this.drawRt) ?? this.msaaFb;
+      if (msaaFb) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaaFb);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.resolveFb);
+        gl.blitFramebuffer(0, 0, this.tw, this.th, 0, 0, this.tw, this.th, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        renderer.resetState();
+      }
+    }
+    this.packReady = true;
   }
 
   markPackRendered(): void {
-    this.packReady = true;
+    if (this.duplicateScope) this.packReady = true;
+  }
+
+  readResolveFramebuffer(_renderer: MirrorRenderer): WebGLFramebuffer | null {
+    return this.resolveFb;
   }
 
   private layoutLetterbox(
@@ -207,7 +330,7 @@ export class PackMirrorGl {
       iw = dW;
       ih = dH;
     }
-    const readFbo = this.rt ? packRtFramebuffer(renderer, this.rt) : null;
+    const readFbo = this.readResolveFramebuffer(renderer);
     if (readFbo && iw > 1 && ih > 1) {
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readFbo);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
@@ -221,7 +344,6 @@ export class PackMirrorGl {
     return { x: ix, y: iy, w: iw, h: ih };
   }
 
-  /** Blit pack RT into the primary tile (full viewport, no letterbox). */
   blitPrimaryToDefault(
     gl: GlMirror,
     renderer: MirrorRenderer,
@@ -233,7 +355,6 @@ export class PackMirrorGl {
     });
   }
 
-  /** Blit pack RT into a duplicate tile's letterboxed inner rect; bars via scissored clear. */
   blitDuplicateToDefault(
     gl: GlMirror,
     renderer: MirrorRenderer,
@@ -283,7 +404,6 @@ export class SandboxBitmapGl {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  /** Upload sandbox bitmap pixels, then close it (no readback). */
   uploadFrame(gl: GlMirror, renderer: MirrorRenderer, bitmap: ImageBitmap): void {
     this.ensureTarget(gl, bitmap.width, bitmap.height);
     if (!this.tex) return;
@@ -345,7 +465,7 @@ export function sandboxBitmapGl(pluginId: string): SandboxBitmapGl {
   return gpu;
 }
 
-export function resetSandboxBitmapGl(gl?: GlMirror, renderer?: MirrorRenderer): void {
+export function resetSandboxBitmapGl(gl?: GlMirror): void {
   if (gl) {
     for (const gpu of sandboxGpu.values()) gpu.dispose(gl);
   }

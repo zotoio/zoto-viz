@@ -12,6 +12,10 @@ import { surfaceLetterboxFill } from "./letterbox-fill";
 export type GlCounts = {
   createTexture: number;
   createFramebuffer: number;
+  createRenderbuffer: number;
+  deleteFramebuffer: number;
+  deleteTexture: number;
+  deleteRenderbuffer: number;
   blitFramebuffer: number;
   readPixels: number;
   texSubImage2D: number;
@@ -20,6 +24,7 @@ export type GlCounts = {
 };
 
 export type BlitCall = {
+  readFb: WebGLFramebuffer | null;
   readIsDefault: boolean;
   sx0: number;
   sy0: number;
@@ -35,33 +40,50 @@ export function createCountingGl(): { gl: GlMirror; counts: GlCounts } {
   const counts: GlCounts = {
     createTexture: 0,
     createFramebuffer: 0,
+    createRenderbuffer: 0,
+    deleteFramebuffer: 0,
+    deleteTexture: 0,
+    deleteRenderbuffer: 0,
     blitFramebuffer: 0,
     readPixels: 0,
     texSubImage2D: 0,
     resetState: 0,
     pixelStorei: 0,
   };
-  const fb = {} as WebGLFramebuffer;
+  const fbs: WebGLFramebuffer[] = [];
   const tex = {} as WebGLTexture;
+  const rb = {} as WebGLRenderbuffer;
   const gl = {
     COLOR_BUFFER_BIT: 0x4000,
     FRAMEBUFFER: 0x8d40,
     READ_FRAMEBUFFER: 0x8ca8,
     DRAW_FRAMEBUFFER: 0x8ca9,
+    RENDERBUFFER: 0x8d41,
     COLOR_ATTACHMENT0: 0x8ce0,
     TEXTURE_2D: 0x0de1,
     RGBA: 0x1908,
+    RGBA8: 0x8058,
     UNSIGNED_BYTE: 0x1401,
     LINEAR: 0x2601,
     NEAREST: 0x2600,
     SCISSOR_TEST: 0x0c11,
     bindFramebuffer() {},
     bindTexture() {},
+    bindRenderbuffer() {},
     blitFramebuffer() { counts.blitFramebuffer += 1; },
-    createFramebuffer() { counts.createFramebuffer += 1; return fb; },
+    createFramebuffer() {
+      counts.createFramebuffer += 1;
+      const fb = {} as WebGLFramebuffer;
+      fbs.push(fb);
+      return fb;
+    },
     createTexture() { counts.createTexture += 1; return tex; },
-    deleteFramebuffer() {},
-    deleteTexture() {},
+    createRenderbuffer() { counts.createRenderbuffer += 1; return rb; },
+    deleteFramebuffer() { counts.deleteFramebuffer += 1; },
+    deleteTexture() { counts.deleteTexture += 1; },
+    deleteRenderbuffer() { counts.deleteRenderbuffer += 1; },
+    renderbufferStorageMultisample() {},
+    framebufferRenderbuffer() {},
     enable() {},
     disable() {},
     scissor() {},
@@ -75,10 +97,10 @@ export function createCountingGl(): { gl: GlMirror; counts: GlCounts } {
     pixelStorei() { counts.pixelStorei += 1; },
     readPixels() { counts.readPixels += 1; },
   } as GlMirror;
-  return { gl, counts };
+  return { gl, counts, fbs };
 }
 
-/** Stub: antialias default FB + INVALID_OPERATION when READ default blit resizes. */
+/** Stub: antialias default FB + INVALID_OPERATION when READ default blit mismatches. */
 export function createMsaaValidationGl(): {
   gl: GlMirror;
   counts: GlCounts;
@@ -111,7 +133,7 @@ export function createMsaaValidationGl(): {
       const dw = dx1 - dx0;
       const dh = dy1 - dy0;
       const readIsDefault = readFb === null;
-      blitCalls.push({ readIsDefault, sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1 });
+      blitCalls.push({ readFb, readIsDefault, sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1 });
       if (readIsDefault && (sx0 !== dx0 || sy0 !== dy0 || sw !== Math.abs(dw) || sh !== Math.abs(dh))) {
         invalid.ops += 1;
       }
@@ -121,14 +143,15 @@ export function createMsaaValidationGl(): {
   return {
     gl,
     counts: base.counts,
+    fbs: base.fbs,
     get invalidBlitOps() { return invalid.ops; },
     blitCalls,
     contextAttributes: { antialias: true },
   };
 }
 
-function countingRenderer(counts: GlCounts, packFb: WebGLFramebuffer): MirrorRenderer {
-  const props = new Map<THREE.WebGLRenderTarget, { __webGLFramebuffer: WebGLFramebuffer }>();
+function countingRenderer(counts: GlCounts, packFb?: WebGLFramebuffer): MirrorRenderer {
+  const props = new Map<THREE.WebGLRenderTarget, { __webGLFramebuffer?: WebGLFramebuffer }>();
   return {
     resetState() { counts.resetState += 1; },
     setScissorTest() {},
@@ -149,7 +172,6 @@ function countingRenderer(counts: GlCounts, packFb: WebGLFramebuffer): MirrorRen
   };
 }
 
-/** Removed product path — MSAA default READ blit with mismatched src/dst (invalid on 1x). */
 function capturePrimaryFromDefaultMsaaTrap(
   gl: GlMirror,
   sx: number,
@@ -164,49 +186,131 @@ function capturePrimaryFromDefaultMsaaTrap(
   gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
 }
 
-describe("PackMirrorGl MSAA stub", () => {
-  const fill = surfaceLetterboxFill(0x0a1020, 0.25);
+function framePackMirror(
+  mirror: PackMirrorGl,
+  gl: GlMirror,
+  rd: MirrorRenderer,
+  antialias: boolean,
+  dst: { x: number; y: number; w: number; h: number },
+  fill: ReturnType<typeof surfaceLetterboxFill>,
+): void {
+  mirror.beginFrame();
+  mirror.ensurePackTargets(gl, rd, 64, 48, antialias);
+  mirror.resolvePackRender(gl, rd, antialias);
+  mirror.blitPrimaryToDefault(gl, rd, { x: 0, y: 0, w: 64, h: 48 }, 1);
+  mirror.blitDuplicateToDefault(gl, rd, fill, dst, 1, 64 / 48);
+}
 
-  it("records INVALID_OPERATION for default READ blit when primary is off-origin (legacy capture)", () => {
+describe("PackMirrorGl duplicate scope", () => {
+  const fill = surfaceLetterboxFill(0x0a1020, 0.25);
+  const dst = { x: 10, y: 10, w: 200, h: 100 };
+  it("single tile: 300 frames with scope off — zero framebuffer and blit", () => {
+    const { gl, counts } = createCountingGl();
+    const rd = countingRenderer(counts);
+    const mirror = new PackMirrorGl();
+    mirror.setDuplicateScope(false, gl, rd, { antialias: false });
+    for (let i = 0; i < 300; i++) {
+      mirror.beginFrame();
+      mirror.ensurePackTargets(gl, rd, 64, 48, false);
+    }
+    expect(counts.createFramebuffer).toBe(0);
+    expect(counts.blitFramebuffer).toBe(0);
+    mirror.dispose(gl, rd);
+  });
+
+  it("enabling duplicate scope creates exactly one resolve framebuffer", () => {
+    const { gl, counts } = createCountingGl();
+    const rd = countingRenderer(counts);
+    const mirror = new PackMirrorGl();
+    mirror.setDuplicateScope(true, gl, rd, { antialias: false });
+    mirror.ensurePackTargets(gl, rd, 64, 48, false);
+    expect(counts.createFramebuffer).toBe(1);
+    mirror.dispose(gl, rd);
+  });
+
+  it("removing duplicate scope deletes targets on the same call", () => {
+    const { gl, counts } = createCountingGl();
+    const rd = countingRenderer(counts);
+    const mirror = new PackMirrorGl();
+    mirror.setDuplicateScope(true, gl, rd, { antialias: false });
+    mirror.ensurePackTargets(gl, rd, 64, 48, false);
+    mirror.setDuplicateScope(false, gl, rd);
+    expect(counts.deleteFramebuffer).toBeGreaterThanOrEqual(1);
+    expect(counts.deleteTexture).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("PackMirrorGl MSAA resolve stub", () => {
+  const fill = surfaceLetterboxFill(0x0a1020, 0.25);
+  const dst = { x: 200, y: 10, w: 100, h: 80 };
+  it("records INVALID_OPERATION for legacy default READ capture off-origin", () => {
     const stub = createMsaaValidationGl();
-    expect(stub.contextAttributes.antialias).toBe(true);
     capturePrimaryFromDefaultMsaaTrap(stub.gl, 40, 30, 64, 48);
     expect(stub.invalidBlitOps).toBe(1);
   });
 
-  it("pack RT path: off-origin primary + duplicate blits — zero MSAA-invalid default READ ops", () => {
+  it("antialias on: one equal-bounds resolve blit per frame, one scaled blit per tile, zero invalid ops", () => {
     const stub = createMsaaValidationGl();
-    const { gl, counts } = stub;
-    const packFb = {} as WebGLFramebuffer;
-    const rd = countingRenderer(counts, packFb);
+    const rd = countingRenderer(stub.counts);
     const mirror = new PackMirrorGl();
-    mirror.ensureRenderTarget(rd, 64, 48);
-    mirror.markPackRendered();
-    mirror.blitPrimaryToDefault(gl, rd, { x: 40, y: 30, w: 64, h: 48 }, 1);
-    mirror.blitDuplicateToDefault(gl, rd, fill, { x: 200, y: 10, w: 100, h: 80 }, 1, 64 / 48);
+    mirror.setDuplicateScope(true, stub.gl, rd, { antialias: true });
+    mirror.ensurePackTargets(stub.gl, rd, 64, 48, true);
+    const resolveFb = stub.fbs[0]!;
+    const msaaReadFb = stub.fbs[1]!;
+    for (let i = 0; i < 3; i++) framePackMirror(mirror, stub.gl, rd, true, dst, fill);
+    const resolveBlits = stub.blitCalls.filter((b) =>
+      b.readFb === msaaReadFb
+      && b.sx0 === 0 && b.sy0 === 0 && b.sx1 === 64 && b.sy1 === 48
+      && b.dx0 === 0 && b.dy0 === 0 && b.dx1 === 64 && b.dy1 === 48);
+    expect(resolveBlits).toHaveLength(3);
+    const tileBlits = stub.blitCalls.filter((b) => b.readFb === resolveFb);
+    expect(tileBlits.length).toBeGreaterThanOrEqual(6);
     expect(stub.invalidBlitOps).toBe(0);
-    expect(counts.blitFramebuffer).toBeGreaterThanOrEqual(2);
-    mirror.dispose(gl, rd);
+    mirror.dispose(stub.gl, rd);
+  });
+
+  it("antialias off: no MSAA resolve blit from multisample read FBO", () => {
+    const stub = createMsaaValidationGl();
+    const rd = countingRenderer(stub.counts);
+    const mirror = new PackMirrorGl();
+    mirror.setDuplicateScope(true, stub.gl, rd, { antialias: false });
+    mirror.ensurePackTargets(stub.gl, rd, 64, 48, false);
+    const resolveFb = stub.fbs[0]!;
+    framePackMirror(mirror, stub.gl, rd, false, dst, fill);
+    const resolveBlits = stub.blitCalls.filter((b) =>
+      b.readFb !== resolveFb && b.sx1 - b.sx0 === 64 && b.dx1 - b.dx0 === 64);
+    expect(resolveBlits).toHaveLength(0);
+    mirror.dispose(stub.gl, rd);
+  });
+
+  it("pack RT path off-origin: zero MSAA-invalid default READ ops", () => {
+    const stub = createMsaaValidationGl();
+    const rd = countingRenderer(stub.counts);
+    const mirror = new PackMirrorGl();
+    mirror.setDuplicateScope(true, stub.gl, rd, { antialias: true });
+    framePackMirror(mirror, stub.gl, rd, true, dst, fill);
+    mirror.blitPrimaryToDefault(stub.gl, rd, { x: 40, y: 30, w: 64, h: 48 }, 1);
+    expect(stub.invalidBlitOps).toBe(0);
+    mirror.dispose(stub.gl, rd);
   });
 });
 
 describe("PackMirrorGl (counting GL stub)", () => {
   const fill = surfaceLetterboxFill(0x0a1020, 0.25);
   const dst = { x: 10, y: 10, w: 200, h: 100 };
-  const packFb = {} as WebGLFramebuffer;
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("300 frames / two tiles: one RT, primary+duplicate blit per frame, resetState per blit, zero readPixels", () => {
+  it("300 frames / two tiles: primary+duplicate blit per frame, resetState per blit, zero readPixels", () => {
     const { gl, counts } = createCountingGl();
-    const rd = countingRenderer(counts, packFb);
+    const rd = countingRenderer(counts);
     const mirror = new PackMirrorGl();
+    mirror.setDuplicateScope(true, gl, rd, { antialias: false });
+    mirror.ensurePackTargets(gl, rd, 64, 48, false);
     for (let i = 0; i < 300; i++) {
       mirror.beginFrame();
-      mirror.ensureRenderTarget(rd, 64, 48);
-      mirror.markPackRendered();
+      mirror.resolvePackRender(gl, rd, false);
       mirror.blitPrimaryToDefault(gl, rd, { x: 0, y: 0, w: 64, h: 48 }, 1);
       mirror.blitDuplicateToDefault(gl, rd, fill, dst, 1, 64 / 48);
     }
@@ -215,26 +319,12 @@ describe("PackMirrorGl (counting GL stub)", () => {
     expect(counts.readPixels).toBe(0);
     mirror.dispose(gl, rd);
   });
-
-  it("resize reallocates WebGLRenderTarget exactly once", () => {
-    const { gl, counts } = createCountingGl();
-    const rd = countingRenderer(counts, packFb);
-    const mirror = new PackMirrorGl();
-    const rt1 = mirror.ensureRenderTarget(rd, 64, 48);
-    mirror.markPackRendered();
-    mirror.blitPrimaryToDefault(gl, rd, { x: 0, y: 0, w: 64, h: 48 }, 1);
-    expect(rt1).not.toBeNull();
-    const rt2 = mirror.ensureRenderTarget(rd, 128, 96);
-    expect(rt2).not.toBe(rt1);
-    mirror.dispose(gl, rd);
-  });
 });
 
 describe("SandboxBitmapGl (counting GL stub)", () => {
   it("texSubImage2D once per frame, Y-flipped blit, no UNPACK_FLIP_Y; realloc on size change only", async () => {
     const { gl, counts, blitCalls } = createMsaaValidationGl();
-    const packFb = {} as WebGLFramebuffer;
-    const rd = countingRenderer(counts, packFb);
+    const rd = countingRenderer(counts);
     const gpu = new SandboxBitmapGl();
     const fill = surfaceLetterboxFill(0x0a1020, 0.25);
     const dst = { x: 0, y: 0, w: 100, h: 80 };
