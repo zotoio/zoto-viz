@@ -21,9 +21,15 @@ import {
   failureVisuals,
   packNameCheck,
   applyConfigActions,
+  assignTalkerSlots,
   coalescePresetConfig,
   configActionEdges,
   packFishMeta,
+  PARTICLE_KIND_PACKET,
+  PARTICLE_KIND_SCHEDULE_FEED,
+  slottedTalkerIds,
+  TALKER_SLOT_CHALLENGER_MARGIN,
+  TALKER_SLOT_HOLD_S,
   parseAquariumOptions,
   scanPackTrademarks,
   speciesForTalker,
@@ -296,6 +302,76 @@ describe("aquarium shipped pack", () => {
     sim.setOptions(parseAquariumOptions({ preset: "night_reef", seed: "42" }));
     const packed = sim.advance(frame({ demo: true }));
     expect(packed.slot0[0]).toBe(1);
+  });
+
+  it("voxel #22 slots: hold, challenger margin, empty fill, release on talker leave", () => {
+    let slots: (null | { id: string; assignedAt: number; rate: number })[] = [null, null];
+    const a = { id: "a", rate: 100 };
+    const b = { id: "b", rate: 80 };
+    slots = assignTalkerSlots([a, b], slots, 2, 0);
+    expect(slottedTalkerIds(slots).sort()).toEqual(["a", "b"]);
+
+    const c = { id: "c", rate: 200 };
+    slots = assignTalkerSlots([a, b, c], slots, 2, 0.5);
+    expect(slottedTalkerIds(slots)).toContain("a");
+
+    slots = assignTalkerSlots([a, b, c], slots, 2, TALKER_SLOT_HOLD_S + 0.1);
+    expect(slottedTalkerIds(slots)).toContain("c");
+    expect(c.rate).toBeGreaterThanOrEqual(a.rate * TALKER_SLOT_CHALLENGER_MARGIN);
+
+    slots = assignTalkerSlots([b, c], slots, 2, TALKER_SLOT_HOLD_S + 1);
+    expect(slottedTalkerIds(slots)).not.toContain("a");
+  });
+
+  it("keeps fish bodies when a talker loses its slot but stays on the LAN", () => {
+    const sim = new AquariumSim(parseAquariumOptions({ fishCount: "2", temperament: "0.9" }));
+    const low = { id: "low", rate: 50, role: "lan" };
+    const high = { id: "high", rate: 120, role: "gateway" };
+    const mega = { id: "mega", rate: 260, role: "internet" };
+    sim.advance(frame({ t: 0, talkers: [low, high] }));
+    expect(sim.slottedFishCount()).toBe(2);
+    sim.advance(frame({ t: TALKER_SLOT_HOLD_S + 0.2, talkers: [low, high, mega] }));
+    expect(sim.slottedFishCount()).toBe(2);
+    expect(sim.fishBodiesCount()).toBeGreaterThanOrEqual(2);
+    expect(sim.fishSpeciesById().has("low")).toBe(true);
+    const slots = sim.talkerSlotsSnapshot().map((s) => s?.id);
+    expect(slots).toContain("mega");
+    sim.advance(frame({ t: TALKER_SLOT_HOLD_S + 0.5, talkers: [high, mega] }));
+    expect(sim.fishBodiesCount()).toBe(2);
+    expect(sim.fishSpeciesById().has("low")).toBe(false);
+  });
+
+  it("high temperament does not remove fish while talkers remain", () => {
+    const sim = new AquariumSim(parseAquariumOptions({ temperament: "0.95", fishCount: "3" }));
+    for (let i = 0; i < 30; i++) {
+      sim.advance(frame({ t: i * 0.05, talkers }));
+    }
+    expect(sim.fishBodiesCount()).toBe(3);
+    expect(sim.slottedFishCount()).toBe(3);
+  });
+
+  it("schedule feed particles use a distinct kind from packet bubbles", () => {
+    const sim = new AquariumSim(parseAquariumOptions({ feedingMin: "0.01", feedingTraffic: "false" }));
+    sim.advance(frame({ t: 0, packets: [{ proto: "udp", size: 96, field: 0.3 }] }));
+    const packetKind = sim.particleScratch[3];
+    expect(packetKind).toBeGreaterThan(0);
+    expect(packetKind).toBeLessThan(PARTICLE_KIND_SCHEDULE_FEED);
+    for (let i = 1; i <= 60; i++) {
+      sim.advance(frame({ t: i * 0.02, packets: [] }));
+    }
+    const kinds = Array.from(sim.particleScratch).filter((v, i) => i % 4 === 3 && v > 0);
+    expect(kinds.some((k) => k >= PARTICLE_KIND_SCHEDULE_FEED)).toBe(true);
+  });
+
+  it("idle-failed frame clouds water more than healthy idle", () => {
+    const simOk = new AquariumSim(DEFAULT_OPTIONS);
+    const simFail = new AquariumSim(DEFAULT_OPTIONS);
+    const idle = buildIdleVizFrame(3);
+    const ok = simOk.advance({ ...idle, demo: true, sys: { failed: 0.05 } });
+    const bad = simFail.advance({ ...idle, demo: true, sys: { failed: 0.62 } });
+    expect(bad.murk).toBeGreaterThan(ok.murk);
+    expect(bad.murk).toBeGreaterThan(0.2);
+    expect(bad.slot0[59]).toBeGreaterThan(0);
   });
 
   it("no per-frame allocation after warm-up", () => {

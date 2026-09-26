@@ -62,14 +62,14 @@ float sdEllipsoid(vec3 p, vec3 r) {
 
 vec3 fishColor(float sp, float vig) {
   float s = floor(sp + 0.01);
-  vec3 c = mix(vec3(0.9, 0.2, 0.15), vec3(0.1, 0.55, 0.95), 0.35);
-  if (s < 0.5) c = vec3(0.15, 0.85, 0.75);
-  else if (s < 1.5) c = vec3(0.95, 0.85, 0.25);
-  else if (s < 2.5) c = vec3(0.95, 0.35, 0.55);
-  else if (s < 3.5) c = vec3(0.55, 0.55, 0.6);
-  else if (s < 4.5) c = vec3(0.85, 0.25, 0.15);
-  else c = vec3(0.75, 0.45, 0.15);
-  return mix(c, c * 1.35, vig);
+  vec3 c = vec3(0.15, 0.85, 0.75);
+  if (s < 0.5) c = vec3(0.05, 0.95, 0.82);
+  else if (s < 1.5) c = vec3(1.0, 0.88, 0.12);
+  else if (s < 2.5) c = vec3(1.0, 0.28, 0.62);
+  else if (s < 3.5) c = vec3(0.48, 0.52, 0.68);
+  else if (s < 4.5) c = vec3(0.95, 0.18, 0.08);
+  else c = vec3(0.88, 0.52, 0.08);
+  return mix(c, c * 1.22, vig);
 }
 
 float mapDecor(vec3 p, float reef, float dens) {
@@ -273,19 +273,35 @@ void main() {
     float fk = float(k * 4);
     vec3 pp = vec3(slotF(2, fk), slotF(2, fk + 1.0), slotF(2, fk + 2.0));
     float kind = slotF(2, fk + 3.0);
-    float dp = length(ro + dir * min(dist, 2.8) - pp) - mix(0.01, 0.035, kind);
-    col += mix(vec3(0.7, 0.95, 1.0), uAccent, kind) * exp(-dp * 120.0) * 0.5;
+    float radius = 0.012;
+    vec3 pcol = vec3(0.75, 0.95, 1.0);
+    if (kind > 1.6) {
+      radius = 0.022;
+      pcol = vec3(0.95, 0.55, 0.12);
+      float flake = abs(pp.x * 3.0 + pp.y * 7.0);
+      radius *= 0.65 + 0.35 * smoothstep(0.2, 0.0, fract(flake));
+    } else if (kind > 1.0) {
+      radius = 0.018;
+      pcol = vec3(0.55, 0.92, 0.35);
+    } else {
+      radius = mix(0.008, 0.028, fract(kind * 3.1));
+    }
+    float dp = length(ro + dir * min(dist, 2.8) - pp) - radius;
+    col += pcol * exp(-dp * 120.0) * 0.55;
   }
 
+  float feedMode = slotF(0, 58.0);
   if (feed > 0.05) {
     vec3 crumb = vec3(0.0, feedY, 0.15);
-    float df = length(ro + dir * 1.6 - crumb) - 0.04;
-    col += vec3(0.55, 0.35, 0.12) * exp(-df * 80.0) * feed;
+    float df = length(ro + dir * 1.6 - crumb) - (feedMode > 1.5 ? 0.05 : 0.035);
+    vec3 fcol = feedMode > 1.5 ? vec3(0.92, 0.48, 0.1) : vec3(0.45, 0.85, 0.25);
+    col += fcol * exp(-df * 80.0) * feed;
   }
 
   float glass = smoothstep(0.02, 0.0, abs(sdRoundBox(ro + dir * 2.4, vec3(1.28, 0.88, 1.08), 0.04)));
   col = mix(col, vec3(0.85, 0.95, 1.0), glass * 0.12);
-  col = mix(col, vec3(0.55, 0.08, 0.12), murk * 0.55);
+  col = mix(col, vec3(0.45, 0.06, 0.1), murk * 0.72);
+  col = mix(col, vec3(0.25, 0.04, 0.08), murk * murk * 0.35);
   if (fail > 0.5) {
     float band = smoothstep(0.35, 0.0, abs(uv.y - 0.38));
     col = mix(col, vec3(0.95, 0.15, 0.2), band * 0.65);
@@ -301,6 +317,15 @@ void main() {
     if (labelMetric > 1.5) {
       float demoBar = smoothstep(0.12, 0.0, abs(uv.x + 0.22));
       col = mix(col, vec3(0.95, 0.92, 0.55), band * demoBar * 0.45);
+    }
+    float legendMask = slotF(0, 59.0);
+    vec2 legendUv = uv - vec2(0.34, -0.36);
+    for (int li = 0; li < 6; li++) {
+      float bit = mod(floor(legendMask / pow(2.0, float(li))), 2.0);
+      if (bit < 0.5) continue;
+      vec2 chip = legendUv - vec2(float(li) * 0.055, 0.0);
+      float chipOn = smoothstep(0.028, 0.0, length(chip - vec2(0.018, 0.0)));
+      col = mix(col, fishColor(float(li), 0.35) * 0.85, chipOn * 0.9);
     }
   }
   col = min(col, vec3(0.98));

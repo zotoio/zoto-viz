@@ -3,6 +3,21 @@
  * Procedural only; no bundled assets.
  */
 
+import {
+  assignTalkerSlots,
+  slottedTalkerIds,
+  TALKER_SLOT_CHALLENGER_MARGIN,
+  TALKER_SLOT_HOLD_S,
+  type TalkerSlot,
+} from "./talker-slots";
+
+export {
+  assignTalkerSlots,
+  slottedTalkerIds,
+  TALKER_SLOT_CHALLENGER_MARGIN,
+  TALKER_SLOT_HOLD_S,
+} from "./talker-slots";
+
 export type WaterKind = "fresh" | "reef";
 export type PresetId =
   | "planted"
@@ -52,6 +67,13 @@ export const PARTICLE_STRIDE = 4;
 export const FIXED_SIM_DT = 1 / 60;
 export const MAX_SIM_CATCHUP_STEPS = 3;
 export const MAX_TALKER_SAMPLES = 24;
+
+/** Particle kind in slot2.w — shader distinguishes shape/colour/motion. */
+export const PARTICLE_KIND_PACKET = 0.25;
+export const PARTICLE_KIND_TRAFFIC_FEED = 1.15;
+export const PARTICLE_KIND_SCHEDULE_FEED = 1.85;
+
+export type FeedMode = "none" | "schedule" | "traffic";
 
 /** Per-frame work budget (counts only; must match plugin.yml caps and sky loop). */
 export const AQUARIUM_WORK_BUDGET = {
@@ -130,6 +152,8 @@ export const AQU_SLOT = {
   labelMetric: 25,
   fishSpecies0: 26,
   fishVigor0: 42,
+  feedMode: 58,
+  speciesLegend: 59,
 } as const;
 
 const FISH_ATTR_SLOTS = 16;
@@ -459,15 +483,10 @@ function mulberry32(seed: number): () => number {
 export class AquariumSim {
   private readonly fish = new Map<string, FishBody>();
   private readonly particles: ParticleBody[] = [];
-  private readonly talkerScratch: TalkerRow[] = Array.from({ length: MAX_TALKER_SAMPLES }, () => ({
-    id: "",
-    rate: 0,
-    role: "lan",
-  }));
-  private readonly seenIds = new Set<string>();
-  private talkerLayoutSig = 0;
+  private talkerSlots: (TalkerSlot | null)[] = [];
   private feedTimer = 0;
   private feedActive = 0;
+  private feedMode: FeedMode = "none";
   private feedY = 0.85;
   private camPhase = 0;
   private packetCursor = 0;
@@ -516,6 +535,15 @@ export class AquariumSim {
     return m;
   }
 
+  /** Fish bodies retained off-slot until the talker leaves the host list. */
+  fishBodiesCount(): number {
+    return this.fish.size;
+  }
+
+  slottedFishCount(): number {
+    return slottedTalkerIds(this.talkerSlots).length;
+  }
+
   randomiseSeed(): void {
     this.seedUndo = this.opts.seed;
     this.opts = { ...this.opts, seed: Math.floor(this.rng() * 99999) };
@@ -526,7 +554,7 @@ export class AquariumSim {
   }
 
   resetLayout(): void {
-    this.talkerLayoutSig = 0;
+    this.talkerSlots = [];
     this.fish.clear();
     this.packetCursor = 0;
     this.simAccumulator = 0;
@@ -549,8 +577,7 @@ export class AquariumSim {
     this.feedActive = 0;
     this.packetCursor = 0;
     this.simAccumulator = 0;
-    this.talkerLayoutSig = 0;
-    this.seenIds.clear();
+    this.talkerSlots = [];
     for (const p of this.particles) {
       p.life = 0;
       p.y = -2;
@@ -561,70 +588,42 @@ export class AquariumSim {
     return this.warmed;
   }
 
-  private pickTalkerCount = 0;
-
-  private layoutSigForPick(count: number): number {
-    let sig = 0;
-    for (let i = 0; i < count; i++) {
-      sig ^= Math.imul(Math.floor(idHash(this.talkerScratch[i]!.id) * 1e6), 2654435761);
-    }
-    return sig;
-  }
-
-  private pickTalkersByRate(talkers: TalkerRow[]): number {
-    const cap = Math.min(
+  fishSlotCap(): number {
+    return Math.min(
       this.opts.fishCount,
       PRESET_CAPS[this.opts.preset].maxFish,
       MAX_FISH,
-      talkers.length,
     );
-    const n = Math.min(talkers.length, MAX_TALKER_SAMPLES);
-    for (let i = 0; i < n; i++) {
-      const t = talkers[i]!;
-      const row = this.talkerScratch[i]!;
-      row.id = t.id;
-      row.rate = t.rate;
-      row.role = t.role;
-    }
-    for (let i = 0; i < n - 1; i++) {
-      for (let j = i + 1; j < n; j++) {
-        if (this.talkerScratch[j]!.rate > this.talkerScratch[i]!.rate) {
-          const a = this.talkerScratch[i]!;
-          const b = this.talkerScratch[j]!;
-          const tid = a.id;
-          const tr = a.rate;
-          const tro = a.role;
-          a.id = b.id;
-          a.rate = b.rate;
-          a.role = b.role;
-          b.id = tid;
-          b.rate = tr;
-          b.role = tro;
-        }
-      }
-    }
-    this.pickTalkerCount = Math.min(cap, n);
-    return this.pickTalkerCount;
   }
 
-  private syncFish(talkers: TalkerRow[]): void {
-    const count = this.pickTalkersByRate(talkers);
-    const sig = this.layoutSigForPick(count);
-    const layoutChanged = sig !== this.talkerLayoutSig;
-    if (layoutChanged) this.talkerLayoutSig = sig;
-    this.seenIds.clear();
-    for (let i = 0; i < count; i++) {
-      const t = this.talkerScratch[i]!;
-      this.seenIds.add(t.id);
+  talkerSlotsSnapshot(): (TalkerSlot | null)[] {
+    return this.talkerSlots.slice();
+  }
+
+  private slottedTalkers(all: TalkerRow[], simT: number): TalkerRow[] {
+    const cap = this.fishSlotCap();
+    this.talkerSlots = assignTalkerSlots(all, this.talkerSlots, cap, simT);
+    const byId = new Map(all.map((t) => [t.id, t]));
+    const out: TalkerRow[] = [];
+    for (const id of slottedTalkerIds(this.talkerSlots)) {
+      const t = byId.get(id);
+      if (t) out.push(t);
+    }
+    return out;
+  }
+
+  private syncFish(slotted: TalkerRow[], allTalkerIds: Set<string>, all: TalkerRow[]): void {
+    const slottedSet = new Set(slotted.map((t) => t.id));
+    const byId = new Map(all.map((t) => [t.id, t]));
+    for (const t of all) {
+      const inSlot = slottedSet.has(t.id);
       let f = this.fish.get(t.id);
-      const species = speciesForTalker(t.id, t.role, this.opts);
-      const vigor = vigorFromRate(t.rate);
-      if (!f) {
+      if (!f && inSlot) {
         const h = idHash(t.id);
         f = {
           id: t.id,
-          species,
-          vigor,
+          species: speciesForTalker(t.id, t.role, this.opts),
+          vigor: vigorFromRate(t.rate),
           x: (h - 0.5) * 1.2,
           y: 0.1 + (h * 0.7) % 0.35,
           z: ((h * 3.1) % 1 - 0.5) * 1.4,
@@ -634,13 +633,14 @@ export class AquariumSim {
           yaw: h * 6.28,
         };
         this.fish.set(t.id, f);
-      } else {
-        f.species = species;
-        f.vigor = vigor;
+      } else if (f && inSlot) {
+        const row = byId.get(t.id)!;
+        f.species = speciesForTalker(row.id, row.role, this.opts);
+        f.vigor = vigorFromRate(row.rate);
       }
     }
     for (const id of [...this.fish.keys()]) {
-      if (!this.seenIds.has(id)) this.fish.delete(id);
+      if (!allTalkerIds.has(id)) this.fish.delete(id);
     }
   }
 
@@ -681,7 +681,7 @@ export class AquariumSim {
       slot.x = (h - 0.5) * 1.5;
       slot.y = -0.6 + p.size / 2000;
       slot.z = (idHash(p.proto + "z") - 0.5) * 1.2;
-      slot.kind = clamp01(p.size / 1500) * 0.7 + h * 0.3;
+      slot.kind = PARTICLE_KIND_PACKET + clamp01(p.size / 1500) * 0.35;
       slot.life = 2.5 + p.field;
       n++;
       this.lastPacketIngest++;
@@ -701,6 +701,25 @@ export class AquariumSim {
     }
   }
 
+  private spawnFeedParticles(kind: number, count: number): void {
+    for (let n = 0; n < count; n++) {
+      let slot: ParticleBody | null = null;
+      for (const q of this.particles) {
+        if (q.life <= 0) {
+          slot = q;
+          break;
+        }
+      }
+      if (!slot) break;
+      const h = idHash(`feed:${n}:${this.lastT}`);
+      slot.x = (h - 0.5) * 0.35;
+      slot.y = this.feedY + (idHash(`fy${n}`) - 0.5) * 0.08;
+      slot.z = 0.1 + (idHash(`fz${n}`) - 0.5) * 0.25;
+      slot.kind = kind;
+      slot.life = kind >= PARTICLE_KIND_SCHEDULE_FEED ? 4.5 : 3.2;
+    }
+  }
+
   private maybeFeed(dt: number, packets: PacketRow[]): void {
     if (this.opts.feedingMin > 0) {
       this.feedTimer += dt;
@@ -708,25 +727,35 @@ export class AquariumSim {
         this.feedTimer = 0;
         this.feedActive = 9;
         this.feedY = 0.82;
+        this.feedMode = "schedule";
+        this.spawnFeedParticles(PARTICLE_KIND_SCHEDULE_FEED, 6);
       }
     }
     if (this.opts.feedingTraffic && packets.length >= 3) {
       const burst = packets.reduce((s, p) => s + (p.field ?? 0), 0) / packets.length;
-      if (burst > 0.55) this.feedActive = Math.max(this.feedActive, 5);
+      if (burst > 0.55) {
+        this.feedActive = Math.max(this.feedActive, 5);
+        if (this.feedMode !== "schedule") this.feedMode = "traffic";
+        this.spawnFeedParticles(PARTICLE_KIND_TRAFFIC_FEED, 4);
+      }
     }
     if (this.feedActive > 0) {
       this.feedActive -= dt;
       this.feedY -= dt * 0.06;
+    } else {
+      this.feedMode = "none";
     }
   }
 
-  private stepFish(simT: number, dt: number, talkers: TalkerRow[]): void {
+  private stepFish(simT: number, dt: number, slotted: TalkerRow[]): void {
     const calm = 1 - this.opts.temperament;
     const school = 0.35 + calm * 0.45;
     const chase = this.opts.temperament * 0.9;
     const feedPt = this.feedActive > 0 ? { x: 0, y: this.feedY, z: 0.2 } : null;
+    const slottedSet = new Set(slotted.map((t) => t.id));
     for (const f of this.fish.values()) {
-      const talker = talkers.find((t) => t.id === f.id);
+      if (!slottedSet.has(f.id)) continue;
+      const talker = slotted.find((t) => t.id === f.id);
       const vigor = talker ? vigorFromRate(talker.rate) : f.vigor;
       f.vigor = vigor;
       const wobble = Math.sin(simT * (1.2 + vigor) + idHash(f.id) * 9) * 0.15 * school;
@@ -737,15 +766,9 @@ export class AquariumSim {
         tx = feedPt.x + (idHash(f.id) - 0.5) * 0.2;
         ty = feedPt.y + (idHash(f.id + "y") - 0.5) * 0.1;
         tz = feedPt.z;
-      } else if (chase > 0.35 && talkers.length > 1) {
-        const rival = talkers.find((t) => t.id !== f.id && idHash(t.id) > 0.7);
-        if (rival && this.opts.temperament > 0.55) {
-          const other = this.fish.get(rival.id);
-          if (other) {
-            tx = other.x + (f.x - other.x) * 0.3;
-            tz = other.z + (f.z - other.z) * 0.3;
-          }
-        }
+      } else if (chase > 0.35) {
+        tx += Math.sin(simT * 0.9 + idHash(f.id) * 5) * chase * 0.12;
+        tz += Math.cos(simT * 0.85 + idHash(f.id) * 4) * chase * 0.12;
       }
       const ax = (tx - f.x) * (0.8 + vigor) * dt;
       const ay = (ty - f.y) * (0.6 + vigor * 0.4) * dt;
@@ -768,18 +791,28 @@ export class AquariumSim {
     }
   }
 
-  private stepOnce(simT: number, talkers: TalkerRow[]): void {
-    this.syncFish(talkers);
+  private stepOnce(simT: number, allTalkers: TalkerRow[]): void {
+    const allIds = new Set(allTalkers.map((t) => t.id));
+    const slotted = this.slottedTalkers(allTalkers, simT);
+    this.syncFish(slotted, allIds, allTalkers);
     this.maybeFeed(FIXED_SIM_DT, []);
-    this.stepFish(simT, FIXED_SIM_DT, talkers);
+    this.stepFish(simT, FIXED_SIM_DT, slotted);
     const motion = this.opts.reducedMotion || this.opts.camera === "hold";
     const camRate = motion ? 0 : 0.35;
     this.camPhase += FIXED_SIM_DT * camRate;
     for (const p of this.particles) {
       if (p.life > 0) {
         p.life -= FIXED_SIM_DT;
-        p.y += 0.12 * FIXED_SIM_DT;
-        if (this.opts.bubbles) p.y += 0.08 * FIXED_SIM_DT;
+        if (p.kind >= PARTICLE_KIND_SCHEDULE_FEED) {
+          p.y -= 0.05 * FIXED_SIM_DT;
+          p.x += Math.sin(simT * 2.2 + p.z * 8) * 0.02 * FIXED_SIM_DT;
+        } else if (p.kind >= PARTICLE_KIND_TRAFFIC_FEED) {
+          p.y -= 0.02 * FIXED_SIM_DT;
+          p.x += Math.cos(simT * 3.5 + p.x * 5) * 0.03 * FIXED_SIM_DT;
+        } else {
+          p.y += 0.12 * FIXED_SIM_DT;
+          if (this.opts.bubbles) p.y += 0.08 * FIXED_SIM_DT;
+        }
       }
     }
     let activeParticles = 0;
@@ -822,7 +855,9 @@ export class AquariumSim {
   } {
     const o = this.opts;
     const failed = clamp01(frameFailed(this.lastSys));
-    const murk = failed > FAIL_MURK_THRESHOLD ? clamp01((failed - FAIL_MURK_THRESHOLD) / 0.5) : 0;
+    const murk = failed > FAIL_MURK_THRESHOLD
+      ? clamp01((failed - FAIL_MURK_THRESHOLD) / 0.38)
+      : 0;
     const failBanner = murk > 0.05 ? 1 : 0;
     const dayPhase = o.dayNight
       ? 0.5 + 0.5 * Math.sin((this.lastT * 0.035 + o.seed * 0.001) % 6.283)
@@ -847,7 +882,8 @@ export class AquariumSim {
     s0[AQU_SLOT.labelOn] = o.label ? 1 : 0;
     s0[AQU_SLOT.presetNorm] = PRESET_IDS.indexOf(o.preset) / Math.max(1, PRESET_IDS.length - 1);
     s0[AQU_SLOT.seedFrac] = (o.seed % 1000) / 1000;
-    s0[AQU_SLOT.fishCount] = this.fish.size;
+    const packedIds = slottedTalkerIds(this.talkerSlots);
+    s0[AQU_SLOT.fishCount] = packedIds.length;
     s0[AQU_SLOT.demo] = this.lastDemo ? 1 : 0;
     s0[AQU_SLOT.trafficBurst] = clamp01(this.lastTraffic);
     s0[AQU_SLOT.timeScale] = o.reducedMotion || o.camera === "hold" ? 0.2 : 1;
@@ -867,13 +903,20 @@ export class AquariumSim {
             ? 1
             : 0;
     s0[AQU_SLOT.labelMetric] = labelMetric;
+    s0[AQU_SLOT.feedMode] = this.feedMode === "schedule" ? 2 : this.feedMode === "traffic" ? 1 : 0;
+    const spFlags = o.water === "reef" ? o.reefSpecies : o.freshSpecies;
+    let legendMask = 0;
+    for (let i = 0; i < Math.min(6, spFlags.length); i++) if (spFlags[i]) legendMask |= 1 << i;
+    s0[AQU_SLOT.speciesLegend] = legendMask;
     for (let i = 0; i < FISH_ATTR_SLOTS; i++) {
       s0[AQU_SLOT.fishSpecies0 + i] = 0;
       s0[AQU_SLOT.fishVigor0 + i] = 0;
     }
     let fishIdx = 0;
-    for (const f of this.fish.values()) {
+    for (const id of packedIds) {
       if (fishIdx >= FISH_ATTR_SLOTS) break;
+      const f = this.fish.get(id);
+      if (!f) continue;
       s0[AQU_SLOT.fishSpecies0 + fishIdx] = f.species;
       s0[AQU_SLOT.fishVigor0 + fishIdx] = f.vigor;
       fishIdx++;
@@ -882,8 +925,10 @@ export class AquariumSim {
     const s1 = this.slot1;
     s1.fill(0);
     let fi = 0;
-    for (const f of this.fish.values()) {
+    for (const id of packedIds) {
       if (fi >= MAX_FISH * 4) break;
+      const f = this.fish.get(id);
+      if (!f) continue;
       s1[fi++] = f.x;
       s1[fi++] = f.y;
       s1[fi++] = f.z;
