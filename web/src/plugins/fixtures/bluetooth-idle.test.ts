@@ -26,7 +26,7 @@ describe("air-bt idle on an empty board", () => {
       slotId: "plugin:air-bt",
       idle: { fixture: "host" },
       target: hostIdleTargetForMode(bluetooth),
-    }]).state;
+    }]).slotPaints.get("plugin:air-bt")!;
     const devices = capBluetoothDevices(merged.views?.bluetooth?.devices ?? [], defaultOpts(bluetooth));
     expect(devices.length).toBeGreaterThan(1);
     expect(devices.some((d) => d.hostnames.some((n) => /Hue/i.test(n)))).toBe(true);
@@ -62,11 +62,12 @@ describe("air-bt idle on an empty board", () => {
         },
       },
     };
-    const { state: merged, demoSlots } = mergeHostIdleForViews(live, [{
+    const { slotPaints, demoSlots } = mergeHostIdleForViews(live, [{
       slotId: "plugin:air-bt",
       idle: { fixture: "host" },
       target: hostIdleTargetForMode(bluetooth),
     }]);
+    const merged = slotPaints.get("plugin:air-bt")!;
     expect(merged.views?.bluetooth?.devices?.[0]?.hostnames).toContain("REAL-PHONE");
     expect(demoSlots.size).toBe(0);
   });
@@ -74,11 +75,12 @@ describe("air-bt idle on an empty board", () => {
   it("fills bluetooth demo on a busy LAN with no BT advertisers", () => {
     const busy = goldenLanFixture();
     delete busy.views?.bluetooth;
-    const { state: merged, demoSlots } = mergeHostIdleForViews(busy, [{
+    const { slotPaints, demoSlots } = mergeHostIdleForViews(busy, [{
       slotId: "plugin:air-bt",
       idle: { fixture: "host" },
       target: hostIdleTargetForMode(bluetooth),
     }]);
+    const merged = slotPaints.get("plugin:air-bt")!;
     expect(stateNeedsGolden(busy)).toBe(false);
     expect(merged.views?.bluetooth?.devices?.some((d) => /Hue/i.test(d.names.join(" ")))).toBe(true);
     expect(demoSlots.has("plugin:air-bt")).toBe(true);

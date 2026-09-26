@@ -42,6 +42,7 @@ import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
 import { Mosaic } from "../graph/mosaic";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { RenderHost } from "../graph/render-host";
 import {
   applyPluginConfigs,
@@ -103,7 +104,7 @@ import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
-import { paintFeedState } from "./feed-paint";
+import { applyFeedSlotPaints, paintFeedState } from "./feed-paint";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -964,7 +965,7 @@ function feed(m: StateMsg): void {
   const feedT0 = performance.now();
   lastRaw = m;
   applyLive(m);
-  const { state: paint, demoSlots } = paintFeedState({
+  const feedPaint = paintFeedState({
     raw: m,
     heroModeId: liveMode || modeSel.value,
     mosaicOn: !!mosaic?.on,
@@ -972,23 +973,17 @@ function feed(m: StateMsg): void {
     modeById,
     pluginSpecForMode,
   });
-  applyDemoDataLabels(demoSlots);
-  let shown = paint;
-  if (mergeToggle.checked) {
-    const c = collapseByName(paint);
-    scene.setAliasMap(c.map);
-    mosaic?.eachGraph((s) => { if (s !== scene) s.setAliasMap(c.map); });
-    scene.update(c.msg);
-    mosaic?.update(c.msg);
-    for (const a of Object.values(arcade)) a.view.update(c.msg);
-    shown = c.msg;
-  } else {
-    scene.setAliasMap(new Map());
-    scene.update(paint);
-    mosaic?.eachGraph((s) => { if (s !== scene) s.setAliasMap(new Map()); });
-    mosaic?.update(paint);
-    for (const a of Object.values(arcade)) a.view.update(paint);
-  }
+  applyDemoDataLabels(feedPaint.demoSlots);
+  let shown = applyFeedSlotPaints({
+    result: feedPaint,
+    mergeNames: mergeToggle.checked,
+    collapseByName,
+    heroScene: scene,
+    mosaicOn: !!mosaic?.on,
+    mosaicTileIds: mosaic?.tileIds ?? [],
+    graphScene: (id) => mosaic?.graphScene(id) ?? null,
+    arcadeViews: Object.values(arcade).map((a) => a.view),
+  });
   applyStats(shown);
   feedCtl.feed?.setSourceHeadlines(sourceHeadlines(m.sources));
   nestCams.sync(m.sdm);
@@ -1109,7 +1104,7 @@ settings.onPluginChange = () => {
   if (!mosaic?.on) return;
   const focus = mosaic.focusedId;
   if (!focus) return;
-  const pane = modeById(focus);
+  const pane = modeById(mosaicTileViewId(focus));
   mosaic.graphScene(focus)?.setMode(pane, optsFor(pane));
 };
 settings.onInstancesChange = () => {

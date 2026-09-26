@@ -50,11 +50,12 @@ describe("withGoldenIfIdle", () => {
   it("merges only the bluetooth slice when that view declares host idle", () => {
     const busy = goldenLanFixture();
     delete busy.views?.bluetooth;
-    const { state: merged } = mergeHostIdleForViews(busy, [{
+    const { slotPaints } = mergeHostIdleForViews(busy, [{
       slotId: "tile-bt",
       idle,
       target: hostIdleTargetForMode(bluetooth),
     }]);
+    const merged = slotPaints.get("tile-bt")!;
     expect(merged.devices[0]!.packets).toBe(busy.devices[0]!.packets);
     expect(merged.views?.bluetooth?.devices?.some((d) => d.names.includes("Hue bulb"))).toBe(true);
   });
