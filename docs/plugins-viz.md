@@ -117,6 +117,12 @@ with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,
 legend) for every demo pack — `viz.read` / `viz.write`, `backdrop: plugin`,
 or a sky shader. Set `look.stageOnly: false` only when the graph should stay.
 
+## Dev fixture switch
+
+On the Vite dev server only, `?vizFixture=idle|idle-failed|golden-live|vm-live`
+feeds shared SDK fixtures to every viz pack instead of live traffic (see
+`plugins/sdk/README.md`). Production builds omit this path.
+
 ## Tests
 
 ```bash
