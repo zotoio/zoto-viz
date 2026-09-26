@@ -37,6 +37,35 @@ describe("apiFetch CSRF", () => {
     expect(seen.at(-1)).toBe("tok");
   });
 
+  it("clears csrf before booting a fresh session after stale token", async () => {
+    const bootCsrf: string[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      const h = new Headers(init?.headers);
+      if (path.includes("/api/session")) {
+        bootCsrf.push(csrfToken());
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
+          json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
+        } as Response;
+      }
+      if ((h.get("X-Zoto-Viz-Csrf") || "") !== "fresh") {
+        return {
+          ok: false,
+          status: 403,
+          headers: new Headers(),
+          clone() { return this; },
+          json: async () => ({ error: "csrf required" }),
+        } as Response;
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
+    }) as typeof fetch;
+    await apiFetch("/api/profiles/user", { method: "PUT" });
+    expect(bootCsrf[0]).toBe("");
+  });
+
   it("after restart stale csrf refreshes once retries once and shows restart notice", async () => {
     const seen: string[] = [];
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
