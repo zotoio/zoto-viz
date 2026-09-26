@@ -1,0 +1,15 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -428,8 +428,12 @@ export class RenderHost {
+     this.gfxNotice.onContextRestored();
+     for (const slot of this.tileShaders.values()) {
+       if (slot.fallback && slot.compileFailed) {
++        this.untrackFallback(slot.fallback);
++        slot.fallback.dispose();
++        slot.fallback = null;
++        slot.mountedFallbackPackKey = "";
+         slot.latch.reset();
+         continue;
+       }
+       slot.latch.reset();

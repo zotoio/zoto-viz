@@ -93,6 +93,7 @@ class TileShaderSlot {
   supportsPackFallback = false;
   compileFailed = false;
   mountedFallbackPackKey = "";
+  stagedPush: string | null = null;
 
   /** New pack on this pane — clears fallback and compile latch. */
   swapPack(
@@ -110,6 +111,7 @@ class TileShaderSlot {
       this.fallback?.dispose();
       this.fallback = null;
       this.mountedFallbackPackKey = "";
+      this.stagedPush = null;
     }
     this.packName = packName;
     this.mount = mount;
@@ -346,10 +348,13 @@ export class RenderHost {
     if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;
     this.untrackFallback(slot.fallback);
     slot.fallback?.dispose();
+    const staged = slot.stagedPush?.trim() || "";
     slot.fallback = new TileShaderFallback(slot.mount, {
       packName: slot.packName,
       packPush: slot.supportsPackFallback && !contextLoss,
       contextLoss,
+      skipGrace: !!staged && slot.supportsPackFallback && !contextLoss,
+      initialText: staged || undefined,
     });
     slot.mountedFallbackPackKey = slot.packKey;
     this.liveFallbacks.push(slot.fallback);
@@ -357,8 +362,11 @@ export class RenderHost {
 
   receiveFallbackPush(tileId: string, text: string): void {
     const slot = this.tileSlot(tileId);
-    if (!slot.fallback) this.mountShaderFallback(tileId);
-    slot.fallback?.pushPackText(text);
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    slot.stagedPush = trimmed;
+    if (!slot.fallback) return;
+    slot.fallback.pushPackText(trimmed);
   }
 
   clearShaderFallback(tileId: string): void {
@@ -369,6 +377,11 @@ export class RenderHost {
     slot.fallback = null;
     slot.mountedFallbackPackKey = "";
     slot.compileFailed = false;
+    slot.stagedPush = null;
+  }
+
+  fallbackGraceFrames(tileId: string): number {
+    return this.tileSlot(tileId).fallback?.graceFramesLeft ?? 0;
   }
 
   driveShaderFallbacks(_frame: VizDataFrame): void {
@@ -412,15 +425,16 @@ export class RenderHost {
     this.contextGen = mintContextGen((this.contextGen as number) + 1);
     this.gfxNotice.onContextRestored();
     for (const slot of this.tileShaders.values()) {
-      if (slot.latch.dead) continue;
+      if (slot.fallback && slot.compileFailed) {
+        slot.latch.reset();
+        continue;
+      }
       slot.latch.reset();
       if (slot.fallback && !slot.compileFailed) {
         this.untrackFallback(slot.fallback);
         slot.fallback.dispose();
         slot.fallback = null;
         slot.mountedFallbackPackKey = "";
-      } else if (slot.fallback && slot.compileFailed) {
-        slot.fallback.setShowChip(false);
       }
     }
   }

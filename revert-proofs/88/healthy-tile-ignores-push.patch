@@ -1,0 +1,14 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -365,8 +365,8 @@ export class RenderHost {
+     const trimmed = text.trim();
+     if (!trimmed) return;
+     slot.stagedPush = trimmed;
+-    if (!slot.fallback) return;
+-    slot.fallback.pushPackText(trimmed);
++    if (!slot.fallback) this.mountShaderFallback(tileId);
++    slot.fallback?.pushPackText(trimmed);
+   }
+ 
+   clearShaderFallback(tileId: string): void {

@@ -8,6 +8,8 @@ export interface TileShaderFallbackOpts {
   packPush?: boolean;
   /** Context-loss overlay — generic copy + chip immediately. */
   contextLoss?: boolean;
+  skipGrace?: boolean;
+  initialText?: string;
 }
 
 /** One centred fallback line (+ optional chip) over the idle backdrop for a pane. */
@@ -41,8 +43,20 @@ export class TileShaderFallback {
       this.reveal();
       this.setShowChip(true);
     } else if (this.packPush) {
-      this.graceLeft = FALLBACK_GRACE_FRAMES;
-      this.root.style.visibility = "hidden";
+      if (opts.skipGrace || opts.initialText) {
+        this.graceLeft = 0;
+        this.gotValidPush = !!opts.initialText?.trim();
+        if (opts.initialText?.trim()) {
+          this.reveal();
+          this.setShowChip(true);
+          this.writeText(opts.initialText);
+        } else {
+          this.root.style.visibility = "hidden";
+        }
+      } else {
+        this.graceLeft = FALLBACK_GRACE_FRAMES;
+        this.root.style.visibility = "hidden";
+      }
     } else {
       this.reveal();
       this.writeText(genericShaderFallbackMessage(this.packName));
@@ -55,6 +69,14 @@ export class TileShaderFallback {
 
   get writes(): number {
     return (this.text as HTMLSpanElement & { __writes?: number }).__writes ?? 0;
+  }
+
+  get graceFramesLeft(): number {
+    return this.graceLeft;
+  }
+
+  get chipElement(): HTMLSpanElement {
+    return this.chip;
   }
 
   setShowChip(on: boolean): void {

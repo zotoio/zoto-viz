@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "../graph/render-host";
 import { TileShaderFallback, FALLBACK_GRACE_FRAMES } from "../graph/tile-shader-fallback";
@@ -192,6 +193,110 @@ describe("shader fallback push contract", () => {
     expect(fb.writes).toBe(2);
     fb.dispose();
     mount.remove();
+  });
+
+  it("failed-tile-survives-restore", () => {
+    const wall = document.createElement("div");
+    const pane = document.createElement("div");
+    wall.appendChild(pane);
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    Object.defineProperty(host, "software", { value: false });
+    const rd = host.renderer as THREE.WebGLRenderer;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const log = vi.fn();
+    const compile = vi.fn(() => {
+      host.tileSlot("t").latch.fail("compile error", log);
+    });
+    rd.compile = compile as typeof rd.compile;
+    host.beginTilePack("t", "k", "nixie-clock", pane, "Nixie", true);
+    expect(host.compilePluginSky("t", scene, camera, log)).toBe(false);
+    host.onTileShaderCompileFailed("t");
+    host.receiveFallbackPush("t", "01 05 00");
+    const chipBefore = pane.querySelector(".tile-shader-fallback-chip");
+    const textEl = pane.querySelector(".tile-shader-fallback__text") as HTMLElement & { __writes?: number };
+    const writesBefore = textEl.__writes ?? 0;
+    const graceBefore = host.fallbackGraceFrames("t");
+    const generic = genericShaderFallbackMessage("Nixie");
+    for (let cycle = 0; cycle < 3; cycle++) {
+      host.dispatchContextLost();
+      host.dispatchContextRestored();
+      compile.mockClear();
+      expect(host.compilePluginSky("t", scene, camera, log)).toBe(false);
+      expect(compile).toHaveBeenCalledTimes(1);
+      expect(pane.querySelector(".tile-shader-fallback-chip")).toBe(chipBefore);
+      expect(host.fallbackGraceFrames("t")).toBe(graceBefore);
+      expect(textEl.__writes ?? 0).toBe(writesBefore);
+      expect(pane.textContent).not.toContain(generic);
+    }
+    host.dispose();
+    wall.remove();
+  });
+
+  it("healthy-tile-ignores-push", () => {
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { value: 640 });
+    Object.defineProperty(wall, "clientHeight", { value: 480 });
+    const panes = new Map<string, HTMLElement>();
+    for (const id of ["t1", "t2", "t3", "t4"]) {
+      const p = document.createElement("div");
+      panes.set(id, p);
+      wall.appendChild(p);
+    }
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    vi.spyOn(host, "compilePluginSky").mockReturnValue(true);
+    const look = parseNixieLook({ format: "24", seconds: "1" });
+    for (const [id, pane] of panes) {
+      host.beginTilePack(id, `k:${id}`, "nixie-clock", pane, "Nixie", true);
+      expect(host.compilePluginSky(id, {} as never, {} as never)).toBe(true);
+    }
+    for (const id of panes.keys()) {
+      vi.setSystemTime(new Date(2026, 0, 1, 1, 5, 0, 0));
+      let pushes = 0;
+      nixiePackPushLoop((text) => {
+        pushes++;
+        host.receiveFallbackPush(id, text);
+      }, look, 600);
+      expect(pushes).toBe(10);
+    }
+    for (const pane of panes.values()) {
+      expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(0);
+      expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(0);
+    }
+    for (const id of panes.keys()) {
+      expect(host.fallbackGraceFrames(id)).toBe(0);
+    }
+    host.dispose();
+    wall.remove();
+  });
+
+  it("staged-push-before-fail-immediate", () => {
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    const host = new RenderHost(pane);
+    host.beginTilePack("t", "k", "nixie-clock", pane, "Nixie", true);
+    const look = parseNixieLook({ format: "24", seconds: "1" });
+    const now = new Date();
+    const scratch = { h: 0, m: 0, s: 0 };
+    const cache = { key: -1, text: "" };
+    for (let i = 0; i < 5; i++) {
+      vi.advanceTimersByTime(16);
+      now.setTime(Date.now());
+      host.receiveFallbackPush("t", formatNixieFallbackLine(now, look, scratch, cache));
+    }
+    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(0);
+    for (let i = 0; i < 95; i++) drive(host, 1);
+    host.onTileShaderCompileFailed("t");
+    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(1);
+    const text = pane.querySelector(".tile-shader-fallback__text") as HTMLElement & { __writes?: number };
+    expect(text.textContent).toMatch(/01 05/);
+    expect(text.__writes ?? 0).toBe(1);
+    expect(pane.textContent).not.toContain(genericShaderFallbackMessage("Nixie"));
+    drive(host, FALLBACK_GRACE_FRAMES + 5);
+    expect(text.__writes ?? 0).toBe(1);
+    pane.remove();
   });
 
   it("tunnel-idle-fake-clock", () => {
