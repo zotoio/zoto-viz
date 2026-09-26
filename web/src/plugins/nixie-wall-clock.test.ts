@@ -1,16 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resetVizClockInjectors, setVizWallClockInjector } from "../core/viz-clock";
+import {
+  resetVizClockInjectors,
+  setVizClockInjector,
+  setVizWallClockInjector,
+} from "../core/viz-clock";
 import {
   createNixieWallClock,
   digitsFromWallMs,
+  nixieSimWallMs,
+  packNixieWallBuffer,
   resetNixieFormatterCache,
 } from "./nixie-wall-clock";
 import { DEFAULT_LOOK } from "../../../plugins/src/nixie-clock/frontend/tubes";
 
 const SYDNEY = "Australia/Sydney";
-const TICKS_PER_FRAME = 5000;
-const MS_PER_TICK = 1 / 300;
-
 describe("nixie wall clock rows", () => {
   afterEach(() => {
     resetVizClockInjectors();
@@ -27,7 +30,7 @@ describe("nixie wall clock rows", () => {
     let prevCalls = 0;
     let bufRef: number[] | null = null;
     for (let i = 0; i < 600; i++) {
-      const wallMs = t0 + Math.floor((i * TICKS_PER_FRAME) * MS_PER_TICK);
+      const wallMs = nixieSimWallMs(t0, i);
       const buf = clock.tick(wallMs, DEFAULT_LOOK);
       if (clock.formatCalls > prevCalls) {
         formatFrames.push(i);
@@ -39,6 +42,9 @@ describe("nixie wall clock rows", () => {
     }
     expect(spy.mock.calls.filter((c) => c[1]?.timeZone === SYDNEY)).toHaveLength(1);
     expect(formatFrames).toEqual([0, 60, 120, 180, 240, 300, 360, 420, 480, 540]);
+    for (const i of [1, 17, 60, 119]) {
+      expect(nixieSimWallMs(t0, i)).toBe(t0 + Math.floor((i * 5000) / 300));
+    }
   });
 
   it("N2: Sydney DST spring — 01:59:59 to 03:00:00", () => {
@@ -51,15 +57,18 @@ describe("nixie wall clock rows", () => {
     expect(d1).toEqual([0, 3, 0, 0, 0, 0]);
   });
 
-  it("N3: after reload, digits follow injected wall hour not uptime", async () => {
-    const wallHour = Date.parse("2026-06-15T14:30:00.000Z");
-    setVizWallClockInjector(() => wallHour + 500);
-    vi.resetModules();
+  it("N3: after reload, the display still shows the local wall hour, not page uptime", async () => {
+    const wallMs = Date.parse("2026-06-15T14:30:00.000Z") + 500;
+    resetVizClockInjectors();
+    setVizWallClockInjector(() => wallMs);
+    setVizClockInjector(() => 42_000);
+    resetNixieFormatterCache();
     const mod = await import("./nixie-wall-clock");
     const clock = mod.createNixieWallClock(SYDNEY);
-    const digits = mod.digitsFromWallMs(wallHour + 500, DEFAULT_LOOK, SYDNEY);
-    expect(digits[0]).toBeGreaterThanOrEqual(0);
-    expect(clock.tick(wallHour + 500, DEFAULT_LOOK)).toBe(clock.digitBuffer);
-    expect(clock.formatCalls).toBe(1);
+    const expected = mod.digitsFromWallMs(wallMs, DEFAULT_LOOK, SYDNEY);
+    const uptimeDigits = mod.digitsFromWallMs(42_000, DEFAULT_LOOK, SYDNEY);
+    mod.packNixieWallBuffer(clock, DEFAULT_LOOK);
+    expect(clock.digitBuffer.slice(0, 6)).toEqual(expected);
+    expect(clock.digitBuffer.slice(0, 6)).not.toEqual(uptimeDigits);
   });
 });

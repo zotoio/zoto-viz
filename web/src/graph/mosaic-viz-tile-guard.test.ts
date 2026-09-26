@@ -4,8 +4,8 @@ import { mosaicWallLayoutRefusedMessage } from "../ui/viz-copy";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import { applyDreamAnimWithTileLimit, countMosaicTiles } from "./mosaic-viz-tile-guard";
 
-describe("mosaic viz tile guard H6", () => {
-  it("H6: reload with nine mosaicTiles is refused; current anim unchanged", () => {
+describe("mosaic viz tile guard", () => {
+  it("applyDreamAnimWithTileLimit refuses nine tiles with formatted copy", () => {
     const current = {
       ...DEFAULT_DREAM,
       mosaic: "8" as const,

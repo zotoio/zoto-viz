@@ -1,0 +1,12 @@
+--- a/web/src/plugins/nixie-wall-clock.ts
++++ b/web/src/plugins/nixie-wall-clock.ts
+@@ -1,4 +1,4 @@
+-import { vizWallMs } from "../core/viz-clock";
++import { vizClockMs, vizWallMs } from "../core/viz-clock";
+@@ -109,5 +109,5 @@ export function packNixieWallBuffer(
+   pulse = 0,
+   canvas?: { w: number; h: number },
+ ): number[] {
+-  return clock.tick(vizWallMs(), look, audio, pulse, canvas);
++  return clock.tick(vizClockMs(), look, audio, pulse, canvas);
+ }

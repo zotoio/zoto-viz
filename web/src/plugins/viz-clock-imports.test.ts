@@ -15,7 +15,7 @@ const BLOCKED = [
 ];
 
 describe("viz wall clock import guard", () => {
-  it("budget and scheduler paths do not import vizWallMs", () => {
+  it("import lint: budget and scheduler paths do not import vizWallMs", () => {
     for (const rel of BLOCKED) {
       const src = readFileSync(join(ROOT, rel), "utf8");
       expect(src.includes("vizWallMs"), rel).toBe(false);

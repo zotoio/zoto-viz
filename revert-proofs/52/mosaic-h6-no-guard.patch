@@ -1,0 +1,27 @@
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1723,21 +1723,9 @@ export class Settings {
+       mosaicUniqueSkies: a.mosaicUniqueSkies,
+       mosaicSkies: a.mosaicSkies,
+     });
+-    const forGuard: DreamAnim = {
+-      ...candidate,
+-      mosaicTiles: Array.isArray(a.mosaicTiles) ? a.mosaicTiles : candidate.mosaicTiles,
+-    };
+-    const { anim, refused, message } = applyDreamAnimWithTileLimit(forGuard, this.anim);
+-    if (refused) {
+-      this.lastMosaicTileLimitMessage = message
+-        ?? mosaicWallLayoutRefusedMessage(
+-          countMosaicTiles(candidate),
+-          VIZ_MAX_ACTIVE_TILES,
+-        );
+-      this.renderMosaicWallStatus();
+-      return;
+-    }
+     this.lastMosaicTileLimitMessage = "";
+     this.renderMosaicWallStatus();
+-    this.anim = anim;
++    this.anim = candidate;
+     this.syncAnimUi();
+     this.syncTheme();
+     this.persistAnim();

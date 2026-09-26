@@ -5,6 +5,13 @@ import {
   parseNixieLook,
 } from "../../../plugins/src/nixie-clock/frontend/tubes";
 
+export const NIXIE_SIM_TICKS_PER_FRAME = 5000;
+
+/** Dogfood N1: wall ms from integer ticks (5000 ticks per frame, 300 ticks/ms). */
+export function nixieSimWallMs(t0Ms: number, frameIndex: number): number {
+  return t0Ms + Math.floor((frameIndex * NIXIE_SIM_TICKS_PER_FRAME) / 300);
+}
+
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function formatterForZone(timeZone?: string): Intl.DateTimeFormat {
