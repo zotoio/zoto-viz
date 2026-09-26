@@ -280,7 +280,7 @@ export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCount
     let prevTs = 0;
     let delivered = 0;
 
-    const instrumentedBuild = (s: StateMsg, pt: number, a: number) => {
+    const instrumentedBuild: typeof buildVizFrame = (s, pt = 0, a = 0) => {
       const work = emptyVizBuildWorkCounters();
       const frame = buildVizFrameForPlugin(s, pt, a, contract.idle, undefined, work);
       maxWork.deviceScoreCalls = Math.max(maxWork.deviceScoreCalls, work.deviceScoreCalls);
