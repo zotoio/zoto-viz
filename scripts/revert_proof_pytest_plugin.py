@@ -6,15 +6,20 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 _reports: list[dict] = []
 
 
-def pytest_runtest_logreport(report) -> None:
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
     if report.when != "call":
         return
     revert_proof_assertion = False
     if report.failed:
-        excinfo = getattr(report, "excinfo", None)
+        excinfo = call.excinfo
         if excinfo is not None:
             revert_proof_assertion = excinfo.errisinstance(AssertionError)
     _reports.append(
