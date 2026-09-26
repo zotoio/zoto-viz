@@ -97,9 +97,19 @@ render:
 ```
 
 When `render.scale` is absent the host keeps today’s behaviour at scale **1.0**.
-When present, **each rendered view or mosaic tile** gets its own governor,
-fed by that pane’s frame time against a share of the page budget
-(`16.7 ms / visible rendering panes`). GPU timer queries drive hysteresis when
+When present, **each rendered view or mosaic tile** gets its own
+`RenderScaleGovernor` (timing samples + pane budget share in, suggested scale
+out). A **page arbiter** sits above them: at most one pane may step **down**
+per tick among panes at the **peak measured cost** (furthest over budget share
+among those — the heaviest view on the wall), and at most one may step **up**
+(cheapest first, after its own up-hysteresis). With a single governed view the
+arbiter is a no-op and matches the plain governor.
+
+Tiles today each measure frame time on a **shared GPU with separate contexts**,
+so cheap panes can inherit queue wait from an expensive neighbour and look
+over budget. The arbiter prevents the whole wall stepping down together until
+the host moves to a **single shared WebGL context** (the arbiter is written to
+drop in unchanged there). GPU timer queries drive hysteresis when
 `EXT_disjoint_timer_query_webgl2` is available (otherwise honest **CPU**
 present-to-present timing). Step **down** one notch after p95 stays over the
 pane budget for ~0.5 s; step **up** after ~2 s with p95 below 80% of budget.

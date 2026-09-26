@@ -1,5 +1,6 @@
 import type { RenderScaleConfig } from "./render-scale-governor";
 import { RenderScaleGovernor } from "./render-scale-governor";
+import { arbitrateRenderScaleSteps, type RenderScaleArbiterEntry } from "./render-scale-arbiter";
 import type { VizFrameBudgetStats } from "./viz-host";
 import { VizFrameBudget, VIZ_FRAME_BUDGET_MS } from "./viz-host";
 
@@ -8,11 +9,10 @@ export class RenderScaleViewState {
   readonly frameBudget = new VizFrameBudget();
   private governor: RenderScaleGovernor | null = null;
   private config: RenderScaleConfig | null = null;
-  private scale = 1;
   private lastAnimTs = -1;
 
   get renderScale(): number {
-    return this.config ? this.scale : 1;
+    return this.governor?.scale ?? 1;
   }
 
   get hasGovernor(): boolean {
@@ -23,13 +23,11 @@ export class RenderScaleViewState {
     this.config = config ?? null;
     if (!this.config) {
       this.governor = null;
-      this.scale = 1;
       this.frameBudget.reset();
       this.lastAnimTs = -1;
       return;
     }
     this.governor = new RenderScaleGovernor(this.config);
-    this.scale = this.governor.scale;
   }
 
   setGpuTimerAvailable(ok: boolean): void {
@@ -49,14 +47,13 @@ export class RenderScaleViewState {
     this.lastAnimTs = ts;
   }
 
-  tickGovernor(now: number, budgetMs: number): number {
-    if (!this.governor) return 1;
-    this.scale = this.governor.tick({
-      now,
-      p95Ms: this.frameBudget.p95ForGovernor(),
-      budgetMs,
-    });
-    return this.scale;
+  p95ForGovernor(): number {
+    return this.frameBudget.p95ForGovernor();
+  }
+
+  /** Exposed for the page arbiter; null when `render.scale` is absent. */
+  governorForArbiter(): RenderScaleGovernor | null {
+    return this.governor;
   }
 
   stats(): VizFrameBudgetStats {
@@ -87,12 +84,27 @@ export function sharedRenderBudgetMs(
   return pageBudgetMs / visibleRenderingPaneCount(panes);
 }
 
-/** Advance every pane governor that declared `render.scale`. */
+/** Advance every pane governor that declared `render.scale` (page arbiter gated). */
 export function tickRenderScalePanes(panes: readonly RenderScalePane[], now: number): void {
   const share = sharedRenderBudgetMs(panes);
-  for (const pane of panes) {
-    if (!pane.renderScaleActive || !pane.renderScaleState.hasGovernor) continue;
-    const scale = pane.renderScaleState.tickGovernor(now, share);
-    pane.applyRenderScale(scale);
+  const governed = panes.filter((p) => p.renderScaleActive && p.renderScaleState.hasGovernor);
+  if (!governed.length) return;
+
+  const entries: RenderScaleArbiterEntry[] = [];
+  for (const pane of governed) {
+    const governor = pane.renderScaleState.governorForArbiter();
+    if (!governor) continue;
+    const proposal = governor.evaluate({
+      now,
+      p95Ms: pane.renderScaleState.p95ForGovernor(),
+      budgetMs: share,
+    });
+    entries.push({ governor, proposal });
+  }
+
+  arbitrateRenderScaleSteps(entries, now);
+
+  for (const pane of governed) {
+    pane.applyRenderScale(pane.renderScaleState.renderScale);
   }
 }

@@ -28,6 +28,18 @@ export interface RenderScaleGovernorState {
   underSince: number;
 }
 
+/** Per-tick proposal before a page arbiter may commit a step (multi-view). */
+export interface RenderScaleGovernorProposal {
+  /** Applied scale after any commit this tick. */
+  scale: number;
+  stepDownReady: boolean;
+  stepUpReady: boolean;
+  /** How far p95 is above the pane budget share (ms); used to rank step-down winner. */
+  overshootMs: number;
+  /** Latest p95 sample (ms); used to rank step-up (cheapest first). */
+  costMs: number;
+}
+
 function normalizeSteps(raw: readonly number[], min: number): number[] {
   const seen = new Set<number>();
   const out: number[] = [];
@@ -102,34 +114,66 @@ export class RenderScaleGovernor {
     this.underSince = -1;
   }
 
-  /** Advance hysteresis from one timing sample window. */
-  tick(input: RenderScaleGovernorInput): number {
+  /**
+   * Advance hysteresis timers and report whether a step is ready.
+   * Does not change scale until {@link commitStepDown} / {@link commitStepUp}.
+   */
+  evaluate(input: RenderScaleGovernorInput): RenderScaleGovernorProposal {
     const now = input.now;
     const budget = input.budgetMs > 0 ? input.budgetMs : this.budgetMs;
     const p95 = input.p95Ms;
     const over = p95 > budget;
     const comfortableUnder = p95 < budget * RENDER_SCALE_UP_RATIO;
+    let stepDownReady = false;
+    let stepUpReady = false;
 
     if (over) {
       if (this.overSince < 0) this.overSince = now;
       this.underSince = -1;
       if (now - this.overSince >= RENDER_SCALE_STEP_DOWN_MS && this.index < this.steps.length - 1) {
-        this.index++;
-        this.overSince = now;
-        this.underSince = -1;
+        stepDownReady = true;
       }
     } else if (comfortableUnder) {
       if (this.underSince < 0) this.underSince = now;
       this.overSince = -1;
       if (now - this.underSince >= RENDER_SCALE_STEP_UP_MS && this.index > 0) {
-        this.index--;
-        this.underSince = now;
-        this.overSince = -1;
+        stepUpReady = true;
       }
     } else {
       this.overSince = -1;
       this.underSince = -1;
     }
+
+    return {
+      scale: this.scale,
+      stepDownReady,
+      stepUpReady,
+      overshootMs: p95 - budget,
+      costMs: p95,
+    };
+  }
+
+  commitStepDown(now: number): number {
+    if (this.index >= this.steps.length - 1) return this.scale;
+    this.index++;
+    this.overSince = now;
+    this.underSince = -1;
+    return this.scale;
+  }
+
+  commitStepUp(now: number): number {
+    if (this.index <= 0) return this.scale;
+    this.index--;
+    this.underSince = now;
+    this.overSince = -1;
+    return this.scale;
+  }
+
+  /** Advance hysteresis from one timing sample window (single-view / tests). */
+  tick(input: RenderScaleGovernorInput): number {
+    const proposal = this.evaluate(input);
+    if (proposal.stepDownReady) this.commitStepDown(input.now);
+    else if (proposal.stepUpReady) this.commitStepUp(input.now);
     return this.scale;
   }
 }
