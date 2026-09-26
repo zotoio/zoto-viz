@@ -3,7 +3,8 @@ import * as fps from "../core/fps";
 import { hostWindowFps, resetFps } from "../core/fps";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import type { FrameTs } from "../core/time-ms";
-import { frameTsFromRaf, monoMs } from "../core/time-ms";
+import { frameTsFromRaf } from "../core/time-ms";
+import { monoMs } from "../core/viz-time";
 import { NetScene } from "./scene";
 
 const FRAME_MS = 16;

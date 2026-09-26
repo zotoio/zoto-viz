@@ -1,4 +1,5 @@
-import type { FrameTs, MonoMs } from "./time-ms";
+import type { FrameTs } from "./time-ms";
+import type { MonoMs } from "./viz-time";
 
 /**
  * Display framerate of the live UI. Several rAF loops (graph, mosaic tiles, arcade, feed)
