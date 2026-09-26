@@ -14,8 +14,12 @@ const { WebGLRendererMock } = vi.hoisted(() => {
     getRenderTarget = () => null;
     clear = vi.fn();
     render = vi.fn();
-    getPixelRatio = () => 1;
-    getContext = () => ({ getContextAttributes: () => ({ antialias: false }) });
+    getPixelRatio = () => 1.5;
+    getContext = () => ({
+      getContextAttributes: () => ({ antialias: false }),
+      fenceSync: () => ({}),
+      getExtension: () => null,
+    });
     forceContextLoss = vi.fn();
     dispose = vi.fn();
   }
@@ -80,7 +84,7 @@ describe("RenderHost frame allocations", () => {
     wall = document.createElement("div");
     document.body.appendChild(wall);
     const tiles = layout2x4(wall);
-    host = new RenderHost(wall, { software: false });
+    host = new RenderHost(wall, { software: false, dpr: 1.5 });
     host.canvas.getBoundingClientRect = () => wall.getBoundingClientRect();
     const primary: MirrorMetaView = {
       viewEl: tiles.get("t0")!,

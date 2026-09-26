@@ -108,6 +108,15 @@ afterAll(async () => {
   await vite?.close();
 });
 
+/** Revert row `pack-mirror-device-pixel-ratio` (unpatched assertions). */
+export const PACK_MIRROR_WINDOW_RENDERER_DPR_ASSERTIONS = {
+  file: "src/graph/pack-mirror-readback-renderer-dpr.test.ts",
+  unpatched: [
+    "expect(state.ok.quadrantTlOk).toBe(true); // 100% and 150% zoom with revert+stubbed window DPR",
+    "await expect(runQuadrantCase(pageFail, ZOOM_CASES[2], { revertWindowDpr: true, stubDevicePixelRatio: 2 })).rejects.toThrow(/quadrant orientation wrong/);",
+  ],
+} as const;
+
 describe("pack mirror readback renderer DPR boundary", () => {
   for (const c of ZOOM_CASES) {
     it(`${c.label} (windowDpr=${c.windowDpr} rendererDpr=${c.rendererDpr})`, async () => {
