@@ -185,7 +185,10 @@ export class Settings {
   } | null = null;
   private deviceUi: { cam: Toggle; mic: Toggle; sound: Toggle } | null = null;
   private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
-  private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
+  private pulseNow: () => { level: number; bass: number; listening?: boolean; awaitingClick?: boolean } = () => ({
+    level: 0,
+    bass: 0,
+  });
   private meterRaf = 0;
   private dice: DiceConfig;
   private diceUi: {
@@ -206,6 +209,7 @@ export class Settings {
   onPluginChange?: (id: string, values: Record<string, string>) => void;
   /** Live wall: swap one tile's view (returns false when the pick could not be applied). */
   onMosaicPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
+  onMicResume?: () => void;
   onInstancesChange?: () => void;
   onClose?: () => void;
   onDice?: () => void;
@@ -430,7 +434,7 @@ export class Settings {
   }
 
   /** Live pulse for the Audio tab meter. Call once the scene exists. */
-  bindPulse(fn: () => { level: number; bass: number; listening?: boolean }): void {
+  bindPulse(fn: () => { level: number; bass: number; listening?: boolean; awaitingClick?: boolean }): void {
     this.pulseNow = fn;
   }
 
@@ -1054,6 +1058,9 @@ export class Settings {
       level: meter.querySelector('[data-k="level"]')!,
       bass: meter.querySelector('[data-k="bass"]')!,
     };
+    this.audioUi.src.addEventListener("click", () => {
+      if (this.audioUi?.src.dataset.micResume === "1") this.onMicResume?.();
+    });
     const camAudio = new Slider({
       label: "audio", title: "how hard the audio / traffic pulse drives field of view, orbit speed, nod and zoom (0 = ignore the pulse)",
       min: 0, max: 200, step: 5, value: Math.round(this.anim.camAudio * 100),
@@ -2168,7 +2175,15 @@ export class Settings {
     const p = this.pulseNow();
     ui.level.style.width = `${Math.round(Math.max(0, Math.min(1, p.level)) * 100)}%`;
     ui.bass.style.width = `${Math.round(Math.max(0, Math.min(1, p.bass)) * 100)}%`;
-    ui.src.textContent = p.listening ? "mic live" : liveMic.micPolicy === "off" ? "mic off · traffic fallback" : "traffic fallback";
+    if (p.awaitingClick && liveMic.micPolicy !== "off") {
+      ui.src.textContent = "mic paused · click to resume";
+      ui.src.dataset.micResume = "1";
+    } else {
+      delete ui.src.dataset.micResume;
+      ui.src.textContent = p.listening ? "mic live" : liveMic.micPolicy === "off"
+        ? "mic off · traffic fallback"
+        : "traffic fallback";
+    }
   };
 
   private onDocDown = (e: PointerEvent) => {

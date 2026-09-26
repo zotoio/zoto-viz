@@ -1801,8 +1801,13 @@ export class NetScene implements HostedView {
 
   get isDreaming(): boolean { return this.dreaming; }
   /** Latest audio / traffic pulse, for HUD bars and other overlays. */
-  get pulseNow(): { level: number; bass: number; listening: boolean } {
-    return { level: this.pulseLevel, bass: this.pulseBass, listening: this.pulse.listening };
+  get pulseNow(): { level: number; bass: number; listening: boolean; awaitingClick: boolean } {
+    return {
+      level: this.pulseLevel,
+      bass: this.pulseBass,
+      listening: this.pulse.listening,
+      awaitingClick: this.pulse.awaitingClick,
+    };
   }
 
   /**
@@ -1891,6 +1896,10 @@ export class NetScene implements HostedView {
       || (this.wantHeard && micCaptureAllowed());
     if (mic) void this.pulse.enable();
     else this.pulse.disable();
+  }
+
+  resumePulseMic(): Promise<void> {
+    return this.pulse.resumeFromUserClick();
   }
 
   /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */

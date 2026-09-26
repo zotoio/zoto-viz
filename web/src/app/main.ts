@@ -108,6 +108,8 @@ import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import { revertModeSelection } from "./apply-mode-mosaic";
+import { resolveRestoredViewMode } from "./boot-view-restore";
+import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { mergePluginConsentLivePatch } from "./plugin-consent-live";
 import { initPluginConsentSync } from "./plugin-consent-sync";
@@ -345,6 +347,7 @@ function cycleRandomTheme(): void {
 
 let currentOpts: Record<string, string> = {};
 let pluginSpecs: PluginView[] = [];
+let catalogReady = false;
 let settings!: Settings;
 const sandbox = new PluginSandbox();
 const pluginSfx = new PluginSfx();
@@ -572,7 +575,9 @@ let tsWatchHash = "";
 
 async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   if (!spec || !pluginNeedsReview(spec)) return true;
+  if (!catalogReady) return !!spec.consent;
   if (spec.consent) return true;
+  if (!shouldPromptPluginReview(spec, catalogReady)) return false;
   if (autoconsentEnabled() && autoconsentEligible(spec)) {
     const kind = autoconsentKind(spec);
     try {
@@ -948,7 +953,9 @@ function renderLegend(m: ViewMode, opts: Record<string, string>): void {
   }
 }
 
-applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
+const initialBootMode = localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology";
+modeSel.value = initialBootMode;
+liveMode = initialBootMode;
 
 // ---------------------------------------------------------------- visibility filters
 
@@ -1355,6 +1362,7 @@ settings.onSoundPolicy = (on) => {
 };
 $("soundBox").appendChild(soundToggle.el);
 settings.bindPulse(() => scene.pulseNow);
+settings.onMicResume = () => { void scene.resumePulseMic(); };
 settings.addLiveFeed((c) => {
   liveFeed.setConfig(c);
   feedToggle.checked = c.on;
@@ -1605,18 +1613,26 @@ void (async () => {
   setTypeSafeProxyConfigured(() => typeSafeKeyOn);
   agent.setControlFromServer(session.aiControl);
   pluginSpecs = await installPlugins();
+  catalogReady = true;
   modeSel.setOptions(viewSelectOptions());
   settings.refreshMosaicSlots();
+  const live = readSessionLive();
+  const bootMode = resolveRestoredViewMode({
+    sessionMode: live?.settings?.mode,
+    localMode: localStorage.getItem("zoto-viz.mode"),
+    fallback: defaultCatalogMode()?.id ?? "topology",
+  });
+  modeSel.value = bootMode;
+  localStorage.setItem("zoto-viz.mode", bootMode);
+  liveMode = bootMode;
   if (settings.animSettings.mosaic !== "off") {
-    mosaic.setSize(settings.animSettings.mosaic, modeSel.value, settings.animSettings.hero, {
+    mosaic.setSize(settings.animSettings.mosaic, bootMode, settings.animSettings.hero, {
       tree: settings.animSettings.mosaicTree,
       maximized: settings.animSettings.mosaicMaxId || null,
       tiles: settings.animSettings.mosaicTiles,
     });
     mosaic.hydrate();
   }
-  const live = readSessionLive();
-  applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
   const restored = await profiles.boot(live);
   await agent.syncStatus();
   if (!agent.savedBackend() && agent.cursorReady()) {

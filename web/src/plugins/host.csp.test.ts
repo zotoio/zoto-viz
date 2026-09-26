@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginSandbox, pluginSandboxFrameUrl } from "./host";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -47,6 +47,28 @@ describe("PluginSandbox", () => {
     await box.load("pulse", "globalThis.ok = true;", ["graph.read"], {});
     box.unload();
     document.removeEventListener("securitypolicyviolation", onViolation);
+    expect(violations.length).toBe(0);
+  });
+
+  it("backrooms full-screen pack uses the module bootstrap without CSP violations", async () => {
+    const violations: Event[] = [];
+    const onViolation = (e: Event) => violations.push(e);
+    document.addEventListener("securitypolicyviolation", onViolation);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/plugins/backrooms/module.js")) {
+        return new Response("export {};", { status: 200, headers: { "content-type": "text/javascript" } });
+      }
+      return new Response("", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const box = new PluginSandbox();
+    await box.loadModule("backrooms", ["graph.read", "viz.read"], {}, "stage-hash");
+    expect(box.liveFrame?.src).toContain("plugin-sandbox.html");
+    expect(box.liveFrame?.srcdoc).toBeFalsy();
+    box.unload();
+    document.removeEventListener("securitypolicyviolation", onViolation);
+    vi.unstubAllGlobals();
     expect(violations.length).toBe(0);
   });
 
