@@ -34,8 +34,7 @@ import {
   totalTalkerRate,
   unpackKoiMeta,
 } from "./koi-pond";
-import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../sdk/viz-contract";
-import { VIZ_FIXTURE_IDLE } from "../../../sdk/viz-fixtures";
+import type { VizDataFrame, VizSysTelemetry } from "../../../sdk/viz-contract";
 import { probePluginSkyCompile, wrapPluginSky } from "./sky-compile";
 
 const talkers = [
@@ -116,7 +115,7 @@ describe("koi-pond shipped pack", () => {
     const sim = new KoiPondSim(o);
     const packed = sim.advance(demoFrame(2));
     expect(packed.label).toContain("demo");
-    const idlePacked = sim.advance({ ...VIZ_FIXTURE_IDLE, demo: true, t: 3 });
+    const idlePacked = sim.advance({ ...demoFrame(3), demo: true });
     expect(idlePacked.slot0[26]).toBe(1);
   });
 
@@ -144,7 +143,18 @@ describe("koi-pond shipped pack", () => {
       rf: [],
       talkers: [],
       headlines: [],
-      sys: { ...EMPTY_SYS_TELEMETRY },
+      sys: {
+        cpu: 0,
+        mem: 0,
+        disk: 0,
+        gpu: 0,
+        temp: 0,
+        watts: 0,
+        psi: 0,
+        sockets: 0,
+        failed: 0,
+        udev: 0,
+      } satisfies VizSysTelemetry,
       demo: false,
     });
     const sim = new KoiPondSim(
