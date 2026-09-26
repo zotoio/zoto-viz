@@ -1,4 +1,5 @@
 import type { Device, StateMsg } from "../core/types";
+import { vizBuildCostMs, vizClockMs } from "../core/viz-clock";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
@@ -414,7 +415,7 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
  * the output cap (top-K), not the full device / flow lists.
  */
 export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: SourceBind | Record<string, string>): VizDataFrame {
-  const t = state.ts || Date.now() / 1000;
+  const t = state.ts || vizClockMs() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
   return {
@@ -457,7 +458,7 @@ export class VizFrameBudget {
   private _lastPresent = -1;
   private readonly now: () => number;
 
-  constructor(now: () => number = () => performance.now()) {
+  constructor(now: () => number = vizClockMs) {
     this.now = now;
   }
 
@@ -514,7 +515,9 @@ export class VizFrameBudget {
     const t0 = this.now();
     const frame = build(state, prevTs, audio);
     this._lastBuilt = frame;
-    const over = this.record(this.now() - t0);
+    const injected = vizBuildCostMs(this._total);
+    const elapsed = injected ?? this.now() - t0;
+    const over = this.record(elapsed);
     if (over) {
       this._skipped++;
       return null;

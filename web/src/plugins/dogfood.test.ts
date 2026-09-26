@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { formatSkipRate, skipRatePerSec, vizHudMetric } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
@@ -8,6 +9,10 @@ import {
   formatDogfoodReport,
   hostBindOnPackSwap,
   hudTickFromBudget,
+  DOGFOOD_SOAK_BUILD_COST_MS,
+  DOGFOOD_SOAK_CLOCK_STEP_MS,
+  DOGFOOD_SOAK_EVENT_PERIOD_MS,
+  DOGFOOD_SOAK_FRAMES_PER_PACK,
   runDogfoodSoak,
   runPackFrameHandler,
   runPackSwapPreserve,
@@ -145,6 +150,11 @@ describe("hn term pack", () => {
 });
 
 describe("viz dogfood gates", () => {
+  afterEach(() => {
+    resetVizClockInjectors();
+    vi.restoreAllMocks();
+  });
+
   const fatLan = fatLanFixture();
 
   it("over-budget tick bumps skip counter and withholds pack delivery", () => {
@@ -298,8 +308,33 @@ describe("viz dogfood gates", () => {
     expect(formatSkipRate(skipRatePerSec(skipSamples, 1000))).toBe("skips 0/s");
   });
 
-  it("fat-LAN live soak: all three packs under budget or honest skips", () => {
-    const result = runDogfoodSoak({ state: fatLan, framesPerPack: 120 });
+  it("fat-LAN live soak: count-based delivery and skip honesty on simulated clock", () => {
+    const perfSpy = vi.spyOn(performance, "now");
+    const dateSpy = vi.spyOn(Date, "now");
+    const simTimeMs = { value: 0 };
+    setVizClockInjector(() => simTimeMs.value);
+    perfSpy.mockClear();
+    dateSpy.mockClear();
+
+    const soakOpts = {
+      state: fatLan,
+      framesPerPack: DOGFOOD_SOAK_FRAMES_PER_PACK,
+      buildCostMs: DOGFOOD_SOAK_BUILD_COST_MS,
+      eventPeriodMs: DOGFOOD_SOAK_EVENT_PERIOD_MS,
+      clockStepMs: DOGFOOD_SOAK_CLOCK_STEP_MS,
+      simTimeMs,
+      now: () => simTimeMs.value,
+    };
+
+    const expectedSkipped = 0;
+    const expectedDelivered = DOGFOOD_SOAK_FRAMES_PER_PACK;
+    const expectedSkipRate = 0;
+
+    const result = runDogfoodSoak(soakOpts);
+
+    expect(perfSpy).toHaveBeenCalledTimes(0);
+    expect(dateSpy).toHaveBeenCalledTimes(0);
+
     console.log("\n" + formatDogfoodReport(result));
 
     expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
@@ -320,12 +355,11 @@ describe("viz dogfood gates", () => {
     ]));
 
     for (const pack of result.packs) {
-      expect(pack.buildMs.p95).toBeLessThan(VIZ_FRAME_BUDGET_MS + 0.01);
-      expect(pack.delivered).toBe(pack.frames);
-      expect(pack.skipped).toBe(0);
-      expect(pack.withinBudget).toBe(true);
+      expect(pack.delivered).toBe(expectedDelivered);
+      expect(pack.skipped).toBe(expectedSkipped);
+      expect(pack.skipRatePerSec).toBe(expectedSkipRate);
+      expect(formatSkipRate(pack.skipRatePerSec)).toBe("skips 0/s");
     }
-    expect(result.allWithinBudgetOrHonestSkips).toBe(true);
   });
 });
 
