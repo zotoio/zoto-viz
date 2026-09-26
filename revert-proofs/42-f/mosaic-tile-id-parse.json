@@ -3,5 +3,5 @@
   "testFile": "src/graph/mosaic-tile-id.test.ts",
   "testName": "^mosaic tile slot ids > parseMosaicSlotId splits pack and numeric slot$",
   "description": "Stop stripping numeric !n suffixes in mosaicTileViewId.",
-  "redOutput": "AssertionError: expected { packId: 'air-bt', slot: 1, … } to deeply equal { packId: 'air-bt', slot: 1, viewId: 'plugin:air-bt' }"
+  "redOutput": "AssertionError: expected { packId: 'air-bt!1', slot: 1, …(1) } to deeply equal { packId: 'air-bt', slot: 1, …(1) }"
 }

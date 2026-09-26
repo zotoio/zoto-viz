@@ -2,6 +2,6 @@
   "runner": "vitest",
   "testFile": "src/app/duplicate-slot-scope-note-metrics.test.ts",
   "testName": "^duplicate slot shared config > pack scope note write budget > five layout patches with unchanged duplicate count: 5 recounts and 0 text writes$",
-  "description": "Always assign pack scope note textContent on layout sync even when the string is unchanged.",
-  "redOutput": "expected { recounts: 5, textWrites: 5 } to deeply equal { recounts: 5, textWrites: 0 }"
+  "description": "Write scope note text on every recount even when duplicate count is unchanged.",
+  "redOutput": "AssertionError: expected { recounts: 5, textWrites: 5 } to deeply equal { recounts: 5, textWrites: +0 }"
 }
