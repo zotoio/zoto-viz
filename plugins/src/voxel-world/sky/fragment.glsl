@@ -216,8 +216,8 @@ bool traceVoxel(vec3 ro, vec3 rd, out float dist, out vec3 n, out vec3 wp, out i
 
 vec3 beaconCol(vec3 ro, vec3 rd) {
   vec3 col = vec3(0.0);
-  for (int i = 0; i < 3; i++) {
-    int base = 44 + i * 4;
+  for (int i = 0; i < 6; i++) {
+    int base = 32 + i * 4;
     float kindF = slot(base + 3);
     if (kindF < 0.5) continue;
     int kind = int(floor(kindF));
@@ -243,7 +243,7 @@ vec3 mobCol(vec3 ro, vec3 rd) {
     int base = 32 + i * 4;
     vec3 mp = vec3(slot(base), slot(base + 1), slot(base + 2));
     float sz = slot(base + 3);
-    if (sz < 0.1) continue;
+    if (sz < 0.1 || sz >= 0.95) continue;
     vec3 h = mp - ro;
     float t = dot(h, rd);
     if (t < 0.0) continue;

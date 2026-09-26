@@ -1,6 +1,8 @@
 import type { VoxLiveState } from "./bindings";
+import { beaconScratch } from "./bindings";
 import type { VoxOptions } from "./config";
 import type { MeshEngineStats } from "./mesh";
+import { SCREEN_MARKER_SLOTS } from "./marker-select";
 import { sunDir, villageAnchor, voxelCamera } from "./world";
 
 export const VOX_SLOT = {
@@ -13,6 +15,14 @@ export const VOX_SLOT = {
 } as const;
 
 export const VOX_SLOT0_FLOATS = 32;
+export const VOX_SLOT1_FLOATS = 24;
+
+const slot0Buf: number[] = new Array(VOX_SLOT0_FLOATS).fill(0);
+const slot1Buf: number[] = new Array(VOX_SLOT1_FLOATS).fill(0);
+
+export function persistentSlotBuffers(): { slot0: number[]; slot1: number[] } {
+  return { slot0: slot0Buf, slot1: slot1Buf };
+}
 
 function biomeMix(b: VoxOptions["biome"]): number {
   return { temperate: 0.25, boreal: 0.55, arid: 0.75, islands: 0.45 }[b];
@@ -36,8 +46,8 @@ export function packSlot0(
   o: VoxOptions,
   live: VoxLiveState,
   mesh: MeshEngineStats,
-  gpuBytes: number,
-  skips: number,
+  _gpuBytes: number,
+  _skips: number,
 ): number[] {
   const dayHours = (o.timeOfDay + (o.cycleSpeed / 60) * t) % 24;
   const dayFrac = dayHours / 24;
@@ -46,70 +56,60 @@ export function packSlot0(
   const [sx, sy, sz] = sunDir(dayFrac);
   const sunPow = Math.min(1, Math.max(0.08, sy * 0.85 + 0.12));
   const torch = dayFrac < 0.28 || dayFrac > 0.72 ? 0.85 : 0.1 + live.torchPulse * 0.6;
-  const slot = new Array(VOX_SLOT0_FLOATS).fill(0);
-  slot[VOX_SLOT.mark] = 1;
-  slot[VOX_SLOT.camX] = cam.x;
-  slot[VOX_SLOT.camY] = cam.y;
-  slot[VOX_SLOT.camZ] = cam.z;
-  slot[VOX_SLOT.yaw] = cam.yaw;
-  slot[VOX_SLOT.pitch] = cam.pitch;
-  slot[VOX_SLOT.aspect] = aspect;
-  slot[VOX_SLOT.day] = dayFrac;
-  slot[VOX_SLOT.seed] = o.seed;
-  slot[VOX_SLOT.biome] = biomeMix(o.biome);
-  slot[VOX_SLOT.viewDist] = o.viewDist;
-  slot[VOX_SLOT.fog] = o.fog;
-  slot[VOX_SLOT.weather] = weatherId(o.weather);
-  slot[VOX_SLOT.camMode] = camId(o.camera);
-  slot[VOX_SLOT.camSpeed] = o.cameraSpeed;
-  slot[VOX_SLOT.flags] = (o.clouds ? 1 : 0) | (o.reducedMotion ? 2 : 0) | (live.metricLabel << 2) | (presetId(o.preset) << 4);
-  slot[VOX_SLOT.sunX] = sx;
-  slot[VOX_SLOT.sunY] = sy;
-  slot[VOX_SLOT.sunZ] = sz;
-  slot[VOX_SLOT.sunPow] = sunPow * (1 - live.failStrength * 0.65);
-  slot[VOX_SLOT.torch] = torch;
-  slot[VOX_SLOT.palette] = { verdant: 0, sunset: 1, alpine: 2, candy: 3 }[o.palette];
-  slot[VOX_SLOT.texStyle] = { crisp: 0, smooth: 1, painterly: 2 }[o.textureStyle];
-  slot[VOX_SLOT.failStrength] = live.failStrength;
-  slot[VOX_SLOT.weatherMix] = live.weatherMix;
-  slot[VOX_SLOT.demo] = live.demo ? 1 : 0;
-  slot[VOX_SLOT.metric] = live.metric;
-  slot[VOX_SLOT.cloudCover] = live.cloudCover;
-  slot[VOX_SLOT.villageX] = village.x;
-  slot[VOX_SLOT.villageZ] = village.z;
-  slot[VOX_SLOT.drawCalls] = mesh.drawCalls;
-  slot[VOX_SLOT.triangles] = mesh.triangles;
-  return slot;
+  slot0Buf.fill(0);
+  slot0Buf[VOX_SLOT.mark] = 1;
+  slot0Buf[VOX_SLOT.camX] = cam.x;
+  slot0Buf[VOX_SLOT.camY] = cam.y;
+  slot0Buf[VOX_SLOT.camZ] = cam.z;
+  slot0Buf[VOX_SLOT.yaw] = cam.yaw;
+  slot0Buf[VOX_SLOT.pitch] = cam.pitch;
+  slot0Buf[VOX_SLOT.aspect] = aspect;
+  slot0Buf[VOX_SLOT.day] = dayFrac;
+  slot0Buf[VOX_SLOT.seed] = o.seed;
+  slot0Buf[VOX_SLOT.biome] = biomeMix(o.biome);
+  slot0Buf[VOX_SLOT.viewDist] = o.viewDist;
+  slot0Buf[VOX_SLOT.fog] = o.fog;
+  slot0Buf[VOX_SLOT.weather] = weatherId(o.weather);
+  slot0Buf[VOX_SLOT.camMode] = camId(o.camera);
+  slot0Buf[VOX_SLOT.camSpeed] = o.cameraSpeed;
+  slot0Buf[VOX_SLOT.flags] = (o.clouds ? 1 : 0) | (o.reducedMotion ? 2 : 0) | (live.metricLabel << 2) | (presetId(o.preset) << 4);
+  slot0Buf[VOX_SLOT.sunX] = sx;
+  slot0Buf[VOX_SLOT.sunY] = sy;
+  slot0Buf[VOX_SLOT.sunZ] = sz;
+  slot0Buf[VOX_SLOT.sunPow] = sunPow * (1 - live.failStrength * 0.65);
+  slot0Buf[VOX_SLOT.torch] = torch;
+  slot0Buf[VOX_SLOT.palette] = { verdant: 0, sunset: 1, alpine: 2, candy: 3 }[o.palette];
+  slot0Buf[VOX_SLOT.texStyle] = { crisp: 0, smooth: 1, painterly: 2 }[o.textureStyle];
+  slot0Buf[VOX_SLOT.failStrength] = live.failStrength;
+  slot0Buf[VOX_SLOT.weatherMix] = live.weatherMix;
+  slot0Buf[VOX_SLOT.demo] = live.demo ? 1 : 0;
+  slot0Buf[VOX_SLOT.metric] = live.metric;
+  slot0Buf[VOX_SLOT.cloudCover] = live.cloudCover;
+  slot0Buf[VOX_SLOT.villageX] = village.x;
+  slot0Buf[VOX_SLOT.villageZ] = village.z;
+  slot0Buf[VOX_SLOT.drawCalls] = mesh.drawCalls;
+  slot0Buf[VOX_SLOT.triangles] = mesh.triangles;
+  return slot0Buf;
 }
 
 export function packSlot1Mobs(
-  t: number,
-  o: VoxOptions,
-  cam: { x: number; z: number },
-  live: VoxLiveState,
+  _t: number,
+  _o: VoxOptions,
+  _cam: { x: number; z: number },
+  _live: VoxLiveState,
 ): number[] {
-  const out = new Array(24).fill(0);
-  const n = Math.min(o.caps.maxMobs, Math.max(0, o.mobs));
-  for (let i = 0; i < n; i++) {
-    const h = ((o.seed + i * 17) % 97) / 97;
-    const ang = t * (0.3 + h) + i * 2;
-    const x = cam.x + Math.cos(ang) * (5 + h * 6);
-    const z = cam.z + Math.sin(ang) * (5 + h * 6);
-    const o4 = i * 4;
-    out[o4] = x;
-    out[o4 + 1] = 7;
-    out[o4 + 2] = z;
-    out[o4 + 3] = 0.5;
+  slot1Buf.fill(0);
+  const beacons = beaconScratch();
+  for (let b = 0; b < SCREEN_MARKER_SLOTS; b++) {
+    const beacon = beacons[b]!;
+    if (beacon.kind <= 0) continue;
+    const base = b * 4;
+    slot1Buf[base] = beacon.x;
+    slot1Buf[base + 1] = beacon.y;
+    slot1Buf[base + 2] = beacon.z;
+    slot1Buf[base + 3] = beacon.kind + beacon.strength * 0.1;
   }
-  for (let b = 0; b < Math.min(3, live.beacons.length); b++) {
-    const beacon = live.beacons[b]!;
-    const base = 12 + b * 4;
-    out[base] = beacon.x;
-    out[base + 1] = beacon.y;
-    out[base + 2] = beacon.z;
-    out[base + 3] = beacon.kind + beacon.strength * 0.1;
-  }
-  return out;
+  return slot1Buf;
 }
 
 /** CPU smoke — minimum centre luma bound for CI. */

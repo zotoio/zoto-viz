@@ -1,12 +1,17 @@
 import type { VoxOptions } from "./config";
 import {
-  anchorXZ,
-  MAX_FLOW_MARKERS,
+  forEachProtoMarker,
+  forEachTalkerMarker,
   syncProtoFlowMarkers,
   syncTalkerLayout,
-  type FlowMarker,
   resetFlowCaches,
 } from "./talker-cache";
+import {
+  considerTopMarker,
+  resetTopMarkers,
+  SCREEN_MARKER_SLOTS,
+  topMarkerSlots,
+} from "./marker-select";
 import type { VoxelVizInput } from "./viz-frame";
 
 export type VoxLiveFrame = VoxelVizInput;
@@ -28,15 +33,23 @@ export interface VoxLiveState {
   demo: boolean;
   metric: number;
   metricLabel: number;
-  beacons: VoxBeacon[];
+  beaconCount: number;
   torchPulse: number;
-  talkerAnchors: Map<string, { x: number; z: number; label: number }>;
 }
 
 const ZOTO_FAIL = 0.94;
+const beaconOut: VoxBeacon[] = Array.from({ length: SCREEN_MARKER_SLOTS }, () => ({
+  key: "",
+  x: 0,
+  y: 0,
+  z: 0,
+  kind: 0,
+  strength: 0,
+}));
 
 export function resetLiveMarkers(): void {
   resetFlowCaches();
+  resetTopMarkers();
 }
 
 export function applyLiveBindings(
@@ -50,17 +63,18 @@ export function applyLiveBindings(
 
   const yBase = cam.y - 1.2;
   const talkerLayout = syncTalkerLayout(frame.talkers, opts.seed, yBase);
-  let eventRate = 0;
-  for (const r of talkerLayout.rateById.values()) eventRate += r;
-  if (!talkerLayout.rateById.size) {
-    for (const p of frame.packets) eventRate += p.field * 100;
+  let eventRate = talkerLayout.eventRate;
+  if (!eventRate) {
+    const n = frame.packets.length;
+    const cap = n < 8 ? n : 8;
+    for (let i = 0; i < cap; i++) eventRate += frame.packets[i]!.field * 100;
   }
   const eventNorm = Math.min(1, eventRate / 400);
   const weatherMix = Math.min(1, load * opts.live.sysLoadWeather
     + (opts.weather === "rain" || opts.weather === "snow" ? 0.12 : 0));
   const cloudCover = Math.min(1, eventNorm * opts.live.eventRateCloud + (opts.clouds ? 0.15 : 0));
 
-  const protoFlows = syncProtoFlowMarkers(
+  syncProtoFlowMarkers(
     frame.packets,
     opts.seed,
     yBase,
@@ -68,30 +82,32 @@ export function applyLiveBindings(
     opts.live.packetFieldBlock,
   );
 
-  const merged = new Map<string, FlowMarker>();
-  for (const m of talkerLayout.markers) if (m.kind) merged.set(`t:${m.key}`, m);
-  for (const m of protoFlows) merged.set(`p:${m.key}`, m);
+  resetTopMarkers();
+  forEachTalkerMarker((m) => considerTopMarker(m));
+  forEachProtoMarker((m) => considerTopMarker(m));
 
-  const beacons: VoxBeacon[] = [...merged.values()]
-    .sort((a, b) => a.key.localeCompare(b.key))
-    .slice(0, MAX_FLOW_MARKERS)
-    .map((m) => ({
-      key: m.key,
-      x: m.x,
-      y: m.y,
-      z: m.z,
-      kind: m.kind,
-      strength: m.strength,
-      label: m.label,
-    }));
-
-  const talkerAnchors = new Map<string, { x: number; z: number; label: number }>();
-  for (const id of talkerLayout.rateById.keys()) {
-    const a = anchorXZ(id, opts.seed);
-    talkerAnchors.set(id, { x: a.x, z: a.z, label: a.label });
+  let beaconCount = 0;
+  let torchPulse = 0;
+  const tops = topMarkerSlots();
+  for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
+    const m = tops[i];
+    const b = beaconOut[i]!;
+    if (!m || m.kind <= 0) {
+      b.kind = 0;
+      b.strength = 0;
+      continue;
+    }
+    b.key = m.key;
+    b.x = m.x;
+    b.y = m.y;
+    b.z = m.z;
+    b.kind = m.kind;
+    b.strength = m.strength;
+    b.label = m.label;
+    beaconCount++;
+    if (m.kind === 1) torchPulse = 1;
   }
 
-  const torchPulse = beacons.some((b) => b.kind === 1) ? 1 : 0;
   const metric = Math.round(load * 100);
   const metricLabel = failStrength > 0.2 ? 2 : eventNorm > 0.15 ? 1 : 0;
 
@@ -102,8 +118,11 @@ export function applyLiveBindings(
     demo: !!frame.demo,
     metric,
     metricLabel,
-    beacons,
+    beaconCount,
     torchPulse,
-    talkerAnchors,
   };
+}
+
+export function beaconScratch(): readonly VoxBeacon[] {
+  return beaconOut;
 }

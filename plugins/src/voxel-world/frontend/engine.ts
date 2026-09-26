@@ -11,8 +11,6 @@ let skips = 0;
 let undoStack: VoxOptions[] = [];
 let lastT = -1;
 const FIXED_DT = 1 / 60;
-let simAccum = 0;
-let simSteps = 0;
 
 export function setVoxConfig(cfg: Record<string, string>): void {
   opts = parseVoxConfig(cfg);
@@ -71,8 +69,6 @@ export function disposeVoxelWorld(): void {
   mesh = new MeshEngine();
   skips = 0;
   lastT = -1;
-  simAccum = 0;
-  simSteps = 0;
 }
 
 export interface VoxTickOut {
@@ -84,19 +80,11 @@ export interface VoxTickOut {
   stats: ReturnType<MeshEngine["tick"]>;
 }
 
-export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = FIXED_DT): VoxTickOut {
+export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, _dt: number = FIXED_DT): VoxTickOut {
   if (lastT >= 0 && frame.t <= lastT) skips++;
   lastT = frame.t;
   const cam = voxelCamera(frame.t, opts, opts.reducedMotion);
   const live = applyLiveBindings(frame, opts, cam);
-  simAccum += dt;
-  const maxCatchUp = 3;
-  while (simAccum >= FIXED_DT && simSteps < maxCatchUp) {
-    simAccum -= FIXED_DT;
-    simSteps++;
-  }
-  if (simSteps >= maxCatchUp) simAccum = 0;
-  simSteps = 0;
   const meshStats = mesh.tick(cam.x, cam.z, opts.caps);
   if (meshStats.verticesUsed > opts.caps.vertexBudget) {
     skips++;

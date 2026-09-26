@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { VOX_CONFIG_KEYS } from "./config-manifest";
 import { parseVoxConfig, voxOptionsToConfig, voxRenderScale } from "./config";
-import { applyLiveBindings, resetLiveMarkers } from "./bindings";
+import { applyLiveBindings, beaconScratch, resetLiveMarkers } from "./bindings";
+import { goldenLiveFrame } from "./fixtures/golden-live";
 import {
   disposeVoxelWorld,
   initVoxelWorld,
@@ -13,7 +14,8 @@ import {
   undoVoxConfig,
   voxelSmokeCenterLuma,
 } from "./engine";
-import { anchorXZ, talkerLayoutStats } from "./talker-cache";
+import { anchorXZ, flowCacheHandles, talkerLayoutRebuilds } from "./talker-cache";
+import { persistentSlotBuffers } from "./slots";
 import { terrainHeight, villageAnchor } from "./world";
 import { VOX_SLOT } from "./slots";
 import type { VizDataFrame, VizPacketSample, VizTalkerSample } from "./viz-frame";
@@ -184,12 +186,37 @@ describe("voxel world pack", () => {
     const talkersB: VizTalkerSample[] = [talkersA[1]!, talkersA[0]!];
     const frameBase = { packets: [] as VizPacketSample[], headlines: [], sys: { cpu: 0.2, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 } };
     const a = applyLiveBindings(liveSlice({ t: 4, ...frameBase, talkers: talkersA }), opts, cam);
-    const rebuildsAfterFirst = talkerLayoutStats().rebuilds;
+    const rebuildsAfterFirst = talkerLayoutRebuilds();
     const b = applyLiveBindings(liveSlice({ t: 4.1, ...frameBase, talkers: talkersB }), opts, cam);
     expect(a.cloudCover).toBe(b.cloudCover);
-    expect(a.talkerAnchors.get("10.0.0.1")).toEqual(anchorXZ("10.0.0.1", opts.seed));
-    expect(a.talkerAnchors.get("10.0.0.1")).toEqual(b.talkerAnchors.get("10.0.0.1"));
-    expect(talkerLayoutStats().rebuilds).toBe(rebuildsAfterFirst);
+    const m1 = flowCacheHandles().talkerMarkers.get("10.0.0.1")!;
+    expect(m1.x).toBeCloseTo(anchorXZ("10.0.0.1", opts.seed).x, 4);
+    expect(flowCacheHandles().talkerMarkers.get("10.0.0.1")!.x).toBe(m1.x);
+    expect(talkerLayoutRebuilds()).toBe(rebuildsAfterFirst);
+  });
+
+  it("updates talker marker kind/strength every frame on cached id set", () => {
+    resetLiveMarkers();
+    const opts = parseVoxConfig({ preset: "classic" });
+    const cam = { x: 0, y: 10, z: 0 };
+    const sys = { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 };
+    const id = "10.0.0.50";
+    applyLiveBindings(
+      liveSlice({ t: 1, packets: [], talkers: [{ id, rate: 200, role: "lan" }], headlines: [], sys }),
+      opts,
+      cam,
+    );
+    let m = flowCacheHandles().talkerMarkers.get(id)!;
+    expect(m.kind).toBe(2);
+    expect(m.strength).toBeGreaterThan(0.5);
+    applyLiveBindings(
+      liveSlice({ t: 2, packets: [], talkers: [{ id, rate: 0, role: "lan" }], headlines: [], sys }),
+      opts,
+      cam,
+    );
+    m = flowCacheHandles().talkerMarkers.get(id)!;
+    expect(m.kind).toBe(0);
+    expect(m.strength).toBe(0);
   });
 
   it("does not treat low packet field as failure (sys.failed only)", () => {
@@ -211,7 +238,7 @@ describe("voxel world pack", () => {
       cam,
     );
     expect(out.failStrength).toBe(0);
-    expect(out.beacons.every((b) => b.kind !== 9)).toBe(true);
+    expect(beaconScratch().every((b) => b.kind !== 9)).toBe(true);
   });
 
   it("applies world-wide fail from sys.failed without pinning a beacon", () => {
@@ -230,31 +257,52 @@ describe("voxel world pack", () => {
       cam,
     );
     expect(out.failStrength).toBeGreaterThan(0.2);
-    expect(out.beacons.every((b) => b.kind !== 9)).toBe(true);
+    expect(beaconScratch().every((b) => b.kind !== 9)).toBe(true);
   });
 
-  it("consumes each packet in the frame up to the cap (proto-keyed, not index 0 only)", () => {
+  it("lets strong protocol markers win top slots over weak talker IPs", () => {
     resetLiveMarkers();
-    const opts = parseVoxConfig({ preset: "classic" });
-    const cam = { x: 0, y: 10, z: 0 };
-    const out = applyLiveBindings(
+    setVoxConfig({ preset: "classic", mobs: "0" });
+    const sys = { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 };
+    const talkers: VizTalkerSample[] = [
+      { id: "10.0.0.1", rate: 5, role: "lan" },
+      { id: "10.0.0.2", rate: 5, role: "lan" },
+      { id: "10.0.0.3", rate: 5, role: "lan" },
+      { id: "10.0.0.4", rate: 5, role: "lan" },
+      { id: "10.0.0.5", rate: 5, role: "lan" },
+      { id: "10.0.0.6", rate: 5, role: "lan" },
+    ];
+    const out = tickVoxelWorld(
       liveSlice({
-        t: 2,
-        packets: [
-          { proto: "tcp", size: 1200, field: 0.92 },
-          { proto: "udp", size: 800, field: 0.93 },
-          { proto: "quic", size: 600, field: 0.94 },
-        ],
-        talkers: [],
+        t: 3,
+        packets: [{ proto: "quic", size: 9000, field: 0.98 }],
+        talkers,
         headlines: [],
-        sys: { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 },
+        sys,
       }),
-      opts,
-      cam,
     );
-    const torchKeys = out.beacons.filter((b) => b.kind === 1).map((b) => b.key).sort();
-    expect(torchKeys).toEqual(["quic", "tcp", "udp"]);
-    expect(out.beacons.find((b) => b.key === "tcp")!.x).toBe(anchorXZ("tcp", opts.seed).x);
+    const keys = beaconScratch().filter((b) => b.kind === 1).map((b) => b.key);
+    expect(keys).toContain("quic");
+    expect(out.slot1[0]).toBeCloseTo(anchorXZ("quic", parseVoxConfig({ preset: "classic" }).seed).x, 3);
+  });
+
+  it("reuses flow maps and slot buffers over 300 golden-live frames", () => {
+    resetVoxConfig();
+    initVoxelWorld();
+    const before = flowCacheHandles();
+    const slotsBefore = persistentSlotBuffers();
+    for (let i = 0; i < 300; i++) {
+      const frame = goldenLiveFrame(i / 60);
+      tickVoxelWorld(liveSlice(frame), 1.6, 1 / 60);
+    }
+    const after = flowCacheHandles();
+    const slotsAfter = persistentSlotBuffers();
+    expect(after.talkerMarkers).toBe(before.talkerMarkers);
+    expect(after.rateById).toBe(before.rateById);
+    expect(after.protoMarkers).toBe(before.protoMarkers);
+    expect(slotsAfter.slot0).toBe(slotsBefore.slot0);
+    expect(slotsAfter.slot1).toBe(slotsBefore.slot1);
+    disposeVoxelWorld();
   });
 
   it("never stacks more than one GL context per tile lifecycle (4 isolated tiles)", () => {

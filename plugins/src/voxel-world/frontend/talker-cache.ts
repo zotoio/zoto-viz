@@ -11,11 +11,6 @@ export function anchorXZ(key: string, worldSeed: number): { x: number; z: number
   return { x: (a - 0.5) * 48, z: (b - 0.5) * 48, label: (h >>> 0) % 10000 };
 }
 
-export function talkerIdSetKey(talkers: readonly VizTalkerSample[]): string {
-  const ids = [...new Set(talkers.map((t) => t.id))].sort();
-  return ids.join("\0");
-}
-
 export interface FlowMarker {
   key: string;
   x: number;
@@ -24,69 +19,109 @@ export interface FlowMarker {
   kind: number;
   strength: number;
   label: number;
+  talkerTag: number;
 }
 
-export interface TalkerLayoutCache {
-  idSetKey: string;
-  markers: FlowMarker[];
-  rateById: Map<string, number>;
-  rebuilds: number;
-}
-
-let talkerLayout: TalkerLayoutCache = {
-  idSetKey: "",
-  markers: [],
-  rateById: new Map(),
-  rebuilds: 0,
-};
-
+const talkerMarkers = new Map<string, FlowMarker>();
+const rateById = new Map<string, number>();
 const protoMarkers = new Map<string, FlowMarker>();
 
+let talkerFrameTag = 0;
+let protoFrameTag = 0;
+let rebuilds = 0;
+let storedIdCount = 0;
+const storedIds: string[] = [];
+
 export function resetFlowCaches(): void {
-  talkerLayout = { idSetKey: "", markers: [], rateById: new Map(), rebuilds: 0 };
+  talkerMarkers.clear();
+  rateById.clear();
   protoMarkers.clear();
+  talkerFrameTag = 0;
+  protoFrameTag = 0;
+  rebuilds = 0;
+  storedIdCount = 0;
+  storedIds.length = 0;
 }
 
-export function talkerLayoutStats(): TalkerLayoutCache {
-  return talkerLayout;
+export function flowCacheHandles(): {
+  talkerMarkers: Map<string, FlowMarker>;
+  rateById: Map<string, number>;
+  protoMarkers: Map<string, FlowMarker>;
+} {
+  return { talkerMarkers, rateById, protoMarkers };
 }
 
-/** Rebuild talker-derived layout only when the set of talker ids changes. */
-export function syncTalkerLayout(
-  talkers: readonly VizTalkerSample[],
-  worldSeed: number,
-  yBase: number,
-): TalkerLayoutCache {
-  const key = talkerIdSetKey(talkers);
-  const rateById = new Map<string, number>();
-  for (const t of talkers) rateById.set(t.id, (rateById.get(t.id) ?? 0) + t.rate);
+export function talkerLayoutRebuilds(): number {
+  return rebuilds;
+}
 
-  if (key === talkerLayout.idSetKey && key !== "") {
-    talkerLayout.rateById = rateById;
-    return talkerLayout;
+function noteId(id: string): void {
+  for (let i = 0; i < storedIdCount; i++) {
+    if (storedIds[i] === id) return;
   }
+  storedIds[storedIdCount++] = id;
+  rebuilds++;
+}
 
-  const markers: FlowMarker[] = [];
-  for (const id of [...rateById.keys()].sort()) {
+function clearRates(): void {
+  for (let i = 0; i < storedIdCount; i++) {
+    const id = storedIds[i]!;
+    rateById.set(id, 0);
+  }
+}
+
+function updateTalkerMarker(id: string, rate: number, worldSeed: number, yBase: number): FlowMarker {
+  let m = talkerMarkers.get(id);
+  if (!m) {
     const anchor = anchorXZ(id, worldSeed);
-    const rate = rateById.get(id) ?? 0;
-    markers.push({
+    m = {
       key: id,
       x: anchor.x,
       y: yBase,
       z: anchor.z,
-      kind: rate > 0 ? 2 : 0,
-      strength: Math.min(1, rate / 200),
+      kind: 0,
+      strength: 0,
       label: anchor.label,
-    });
+      talkerTag: 0,
+    };
+    talkerMarkers.set(id, m);
+    rateById.set(id, 0);
+    noteId(id);
   }
-  talkerLayout = {
-    idSetKey: key,
-    markers,
-    rateById,
-    rebuilds: talkerLayout.rebuilds + (key === "" ? 0 : 1),
-  };
-  return talkerLayout;
+  m.y = yBase;
+  m.kind = rate > 0 ? 2 : 0;
+  m.strength = rate > 0 ? Math.min(1, rate / 200) : 0;
+  m.talkerTag = talkerFrameTag;
+  return m;
+}
+
+/** Talker layout: reuse maps; rebuild anchors only when a new id appears. */
+export function syncTalkerLayout(
+  talkers: readonly VizTalkerSample[],
+  worldSeed: number,
+  yBase: number,
+): { rateById: Map<string, number>; markers: Map<string, FlowMarker>; eventRate: number } {
+  talkerFrameTag++;
+  clearRates();
+  let eventRate = 0;
+  for (let i = 0; i < talkers.length; i++) {
+    const t = talkers[i]!;
+    const prev = rateById.get(t.id) ?? 0;
+    const next = prev + t.rate;
+    rateById.set(t.id, next);
+    eventRate += t.rate;
+    updateTalkerMarker(t.id, next, worldSeed, yBase);
+  }
+  for (let i = 0; i < storedIdCount; i++) {
+    const id = storedIds[i]!;
+    const m = talkerMarkers.get(id);
+    if (!m || m.talkerTag === talkerFrameTag) continue;
+    m.kind = 0;
+    m.strength = 0;
+    m.y = yBase;
+    m.talkerTag = talkerFrameTag;
+  }
+  return { rateById, markers: talkerMarkers, eventRate };
 }
 
 export function syncProtoFlowMarkers(
@@ -95,29 +130,55 @@ export function syncProtoFlowMarkers(
   yBase: number,
   torchField: number,
   blockField: number,
-): FlowMarker[] {
-  const active = new Set<string>();
-  const out: FlowMarker[] = [];
-  for (const p of packets.slice(0, PACKETS_PER_FRAME_CAP)) {
+): Map<string, FlowMarker> {
+  protoFrameTag++;
+  const n = packets.length < PACKETS_PER_FRAME_CAP ? packets.length : PACKETS_PER_FRAME_CAP;
+  for (let i = 0; i < n; i++) {
+    const p = packets[i]!;
     if (!p.proto) continue;
-    active.add(p.proto);
     const kind = p.field >= torchField ? 1 : p.field >= blockField ? 2 : 0;
-    if (!kind) continue;
-    const anchor = anchorXZ(p.proto, worldSeed);
-    const row: FlowMarker = {
-      key: p.proto,
-      x: anchor.x,
-      y: yBase + (kind === 1 ? 0.4 : 0),
-      z: anchor.z,
-      kind,
-      strength: 1,
-      label: anchor.label,
-    };
-    protoMarkers.set(p.proto, row);
-    out.push(row);
+    let m = protoMarkers.get(p.proto);
+    if (!m) {
+      const anchor = anchorXZ(p.proto, worldSeed);
+      m = {
+        key: p.proto,
+        x: anchor.x,
+        y: yBase,
+        z: anchor.z,
+        kind: 0,
+        strength: 0,
+        label: anchor.label,
+        talkerTag: 0,
+      };
+      protoMarkers.set(p.proto, m);
+    }
+    m.talkerTag = protoFrameTag;
+    if (kind) {
+      m.kind = kind;
+      m.strength = p.field;
+      m.y = yBase + (kind === 1 ? 0.4 : 0);
+    } else {
+      m.kind = 0;
+      m.strength = 0;
+    }
   }
-  for (const proto of protoMarkers.keys()) {
-    if (!active.has(proto)) protoMarkers.delete(proto);
+  for (const [proto, m] of protoMarkers) {
+    if (m.talkerTag !== protoFrameTag) {
+      protoMarkers.delete(proto);
+      continue;
+    }
+    if (m.kind <= 0) protoMarkers.delete(proto);
   }
-  return out;
+  return protoMarkers;
+}
+
+export function forEachTalkerMarker(fn: (m: FlowMarker) => void): void {
+  for (let i = 0; i < storedIdCount; i++) {
+    const m = talkerMarkers.get(storedIds[i]!);
+    if (m) fn(m);
+  }
+}
+
+export function forEachProtoMarker(fn: (m: FlowMarker) => void): void {
+  for (const m of protoMarkers.values()) fn(m);
 }
