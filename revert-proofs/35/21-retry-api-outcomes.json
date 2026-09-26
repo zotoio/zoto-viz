@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testFile": "tests/test_plugin_local_retry_outcomes.py",
-  "testName": "test_maps_retry_result_to_status_without_parsing_message",
+  "testName": "RetryBlockedZipOutcomesTest::test_maps_retry_result_to_status_without_parsing_message",
   "description": "test_maps_retry_result_to_status_without_parsing_message",
   "testNodeId": "tests/test_plugin_local_retry_outcomes.py::RetryBlockedZipOutcomesTest::test_maps_retry_result_to_status_without_parsing_message"
 }

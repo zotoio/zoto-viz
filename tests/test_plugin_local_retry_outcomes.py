@@ -43,7 +43,7 @@ class RetryBlockedZipOutcomesTest(AioHTTPTestCase):
             ({"ok": True, "retryResult": RETRY_RESULT_SUCCESS}, 200),
             ({"ok": False, "retryResult": RETRY_RESULT_START_FAILED, "error": "pack_install_start_failed"}, 400),
             ({"ok": False, "retryResult": RETRY_RESULT_ZIP_CHANGED, "error": "zip_hash_mismatch"}, 409),
-            ({"ok": False, "retryResult": RETRY_RESULT_IN_PROGRESS, "error": "retry_in_progress"}, 409),
+            ({"ok": False, "retryResult": RETRY_RESULT_IN_PROGRESS, "error": "retry_in_progress"}, 423),
             ({"ok": False, "retryResult": RETRY_RESULT_NOT_BLOCKED, "error": "not_blocked"}, 404),
         ]
         for info, want in cases:

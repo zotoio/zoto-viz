@@ -31,6 +31,7 @@ from .pack_install_retry import (
     format_retry_start_failed_message,
     format_retry_zip_changed_message,
 )
+from .pack_id import PACK_ID_RE, refuse_case_insensitive_id_collision
 from .pack_zip_blocks import record_zip_block, row_for_start_failure
 from .plugin_install import (
     InstallStartFailedError,
@@ -43,7 +44,7 @@ ENGINES = frozenset({
     "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
     "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
 })
-ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+ID_RE = PACK_ID_RE
 _seen: dict[str, str] = {}
 _primed = False
 
@@ -310,15 +311,24 @@ def install_local_zip(
         manifest = pz.inspect_zip(tmp_path)
         doc = plugins.validate_doc(manifest.plugin)
         pid = str(doc["id"])
+        refuse_case_insensitive_id_collision(pid)
         dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
         raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=overwrite)
         pid = str(doc["id"])
         tmp_path.write_bytes(raw)
         runtime = paths.plugin_local_runtime_dir(create=True) / pid
         incoming = pz.plugin_sha256(tmp_path)
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming and runtime.is_dir():
-            _verify_pack_bundle(runtime, doc, sha256=incoming)
-            unpacked = pz.unpack_zip(dest, runtime)
+        upgrade = dest.is_file() and runtime.is_dir()
+        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+            unpacked = install_zip_to_runtime(
+                dest,
+                dest,
+                runtime,
+                doc,
+                rel=str(dest),
+                sha256=incoming,
+                upgrade=upgrade,
+            )
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
                 info["remintedFrom"] = reminted_from
@@ -327,7 +337,6 @@ def install_local_zip(
             raise ValueError(
                 f"plugin {pid!r} already exists in the local drop zone (pass overwrite: true)"
             )
-        upgrade = dest.is_file() and runtime.is_dir()
         unpacked = install_zip_to_runtime(
             tmp_path,
             dest,
@@ -352,6 +361,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     manifest = pz.inspect_zip(path)
     doc = plugins.validate_doc(manifest.plugin)
     pid = str(doc["id"])
+    refuse_case_insensitive_id_collision(pid)
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
     raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=False)
     pid = str(doc["id"])
@@ -364,16 +374,13 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
             raise ValueError(
                 f"local zip {path.name} id is {pid!r} but {dest.name} already exists"
             )
-        if path.resolve().parent == dest.resolve().parent:
-            os.replace(path, dest)
-        else:
-            shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
-    incoming = pz.plugin_sha256(dest)
+    zip_source = path if path.is_file() else dest
+    incoming = pz.plugin_sha256(zip_source)
     upgrade = runtime.is_dir()
     try:
         unpacked = install_zip_to_runtime(
-            dest,
+            zip_source,
             dest,
             runtime,
             doc,
@@ -388,6 +395,8 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from
+    if path.resolve() != dest.resolve() and path.resolve().parent == dest.resolve().parent:
+        path.unlink(missing_ok=True)
     return _finish(info, activate=activate)
 
 
@@ -636,15 +645,19 @@ def retry_blocked_zip_http_status(info: dict[str, Any]) -> int:
     result = str(info.get("retryResult") or "")
     if result == RETRY_RESULT_NOT_BLOCKED:
         return 404
-    if result in {RETRY_RESULT_IN_PROGRESS, RETRY_RESULT_ZIP_CHANGED}:
+    if result == RETRY_RESULT_ZIP_CHANGED:
         return 409
+    if result == RETRY_RESULT_IN_PROGRESS:
+        return 423
     if result == RETRY_RESULT_START_FAILED:
         return 400
     err = str(info.get("error") or "")
     if err == "not_blocked" or err == "zip_not_found":
         return 404
-    if err in {"zip_hash_mismatch", "retry_in_progress"}:
+    if err == "zip_hash_mismatch":
         return 409
+    if err == "retry_in_progress":
+        return 423
     return 400
 
 
@@ -658,7 +671,9 @@ async def api_retry_blocked_zip(req: web.Request) -> web.Response:
     sha = str(body.get("sha256") or "").strip().lower()
     if not sha:
         return web.json_response({"error": "sha256 required"}, status=400)
-    info = retry_blocked_zip_install(sha)
+    import asyncio
+
+    info = await asyncio.to_thread(retry_blocked_zip_install, sha)
     status = retry_blocked_zip_http_status(info)
     return web.json_response(info, status=status)
 

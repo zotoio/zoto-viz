@@ -75,6 +75,7 @@ export function isPackInstallBlockedPayload(v: unknown): v is PackInstallBlocked
     || text.includes("was interrupted")
     || text.includes("couldn't start")
     || o.blockReason === "couldnt_start"
+    || o.blockReason === "block_record_unreadable"
   );
 }
 

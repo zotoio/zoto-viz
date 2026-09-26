@@ -29,10 +29,8 @@ from service.plugin_install import (
     read_install_state,
     recover_all_runtime_roots,
     recover_interrupted_swaps,
-    reset_install_hooks_for_tests,
+    reset_install_locks_for_tests,
     runtime_tree_hash,
-    set_after_first_rename,
-    set_start_runtime_hook,
     should_skip_unchanged_zip,
     staging_root,
 )
@@ -90,11 +88,16 @@ def _zip_with_symlink(plugin_yml: str, link_name: str, target: str) -> bytes:
 
 
 @pytest.fixture(autouse=True)
-def _reset_hooks() -> None:
+def _reset_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
+    import service.plugin_install as plugin_install_mod
     from service.pack_install_catalog import reset_install_catalog_records_for_tests
     from service.pack_zip_blocks import reset_zip_blocks_for_tests
 
-    reset_install_hooks_for_tests()
+    monkeypatch.setattr(plugin_install_mod, "_after_first_rename", None, raising=False)
+    monkeypatch.setattr(plugin_install_mod, "_start_runtime_hook", None, raising=False)
+    plugin_install_mod._pending_notices.clear()
+    plugin_install_mod._swap_in_progress.clear()
+    reset_install_locks_for_tests()
     drain_install_notices()
     reset_zip_blocks_for_tests()
     reset_install_catalog_records_for_tests()
@@ -209,7 +212,7 @@ def test_interrupted_swap_uses_after_first_rename_hook(
     os.close(fd)
     tmp_path_zip = Path(tmp)
     try:
-        set_after_first_rename(after_first_rename)
+        monkeypatch.setattr("service.plugin_install._after_first_rename", after_first_rename)
         with pytest.raises(RuntimeError, match="simulated kill between renames"):
             install_zip_to_runtime(
                 tmp_path_zip,
@@ -260,7 +263,7 @@ def test_v2_start_failure_restores_v1_and_zip(
     def fail_start(home: Path, doc: dict, sha: str | None) -> None:
         raise RuntimeError("compile exploded")
 
-    set_start_runtime_hook(fail_start)
+    monkeypatch.setattr("service.plugin_install._start_runtime", fail_start)
     with pytest.raises(InstallStartFailedError) as exc:
         plugin_local.install_local_zip(v2, overwrite=True)
     assert "couldn't start" in str(exc.value)
@@ -293,7 +296,10 @@ def test_start_failed_zip_hash_blocks_rescan_notice_once(
     os.close(fd)
     v2_sha = pz.plugin_sha256(Path(tmp_v2))
     Path(tmp_v2).unlink(missing_ok=True)
-    set_start_runtime_hook(lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")))
+    monkeypatch.setattr(
+        "service.plugin_install._start_runtime",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")),
+    )
     with pytest.raises(InstallStartFailedError):
         plugin_local.install_local_zip(v2, overwrite=True)
     assert zip_block_for_sha(v2_sha) is not None
@@ -337,7 +343,10 @@ def test_retry_blocked_zip_runs_full_install_keeps_v1_on_repeat_failure(
     os.close(fd)
     v2_sha = pz.plugin_sha256(Path(tmp_v2))
     Path(tmp_v2).unlink(missing_ok=True)
-    set_start_runtime_hook(lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")))
+    monkeypatch.setattr(
+        "service.plugin_install._start_runtime",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")),
+    )
     with pytest.raises(InstallStartFailedError):
         plugin_local.install_local_zip(v2, overwrite=True)
     (paths.plugin_local_dir() / f"{pid}.zip").write_bytes(v2)
@@ -385,7 +394,10 @@ def test_retry_zip_hash_mismatch_returns_409_without_installing(
     os.close(fd)
     v2_sha = pz.plugin_sha256(Path(tmp_v2))
     Path(tmp_v2).unlink(missing_ok=True)
-    set_start_runtime_hook(lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")))
+    monkeypatch.setattr(
+        "service.plugin_install._start_runtime",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")),
+    )
     with pytest.raises(InstallStartFailedError):
         plugin_local.install_local_zip(v2, overwrite=True)
     dest = paths.plugin_local_dir() / f"{pid}.zip"
@@ -405,13 +417,16 @@ def _blocked_v2_setup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[str, str, str, bytes]:
-    reset_install_hooks_for_tests()
+    reset_install_locks_for_tests()
     _repo(tmp_path, monkeypatch)
     plugins.reset_bundles()
     pid = "upgrade-probe"
     plugin_local.install_local_zip(_zip_tree(_pack_fixture("upgrade-probe")), overwrite=True)
     v2 = _bump_pack(tmp_path, 2)
-    set_start_runtime_hook(lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")))
+    monkeypatch.setattr(
+        "service.plugin_install._start_runtime",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")),
+    )
     with pytest.raises(InstallStartFailedError):
         plugin_local.install_local_zip(v2, overwrite=True)
     fd, tmp_v2 = tempfile.mkstemp(suffix=".zip")
@@ -484,14 +499,21 @@ def test_retry_and_scan_race_single_install_20_of_20(
     from service.pack_zip_blocks import reset_zip_blocks_for_tests
 
     for n in range(20):
-        reset_install_hooks_for_tests()
+        reset_install_locks_for_tests()
         drain_install_notices()
         reset_zip_blocks_for_tests()
         reset_install_catalog_records_for_tests()
         plugin_local.reset_watch_for_tests()
         plugins.reset_bundles()
         sub = tmp_path / f"race{n}"
-        test_retry_and_scan_race_single_install(sub, monkeypatch, _isolate_plugin_local)
+        local_root = sub / "plugin-local"
+        local_root.mkdir(parents=True)
+        loop_mp = pytest.MonkeyPatch()
+        loop_mp.setenv("ZOTO_VIZ_PLUGIN_LOCAL", str(local_root))
+        try:
+            test_retry_and_scan_race_single_install(sub, loop_mp, local_root)
+        finally:
+            loop_mp.undo()
 
 
 def test_failed_v2_start_next_scan_stays_on_v1(
@@ -505,7 +527,10 @@ def test_failed_v2_start_next_scan_stays_on_v1(
     plugin_local.install_local_zip(_zip_tree(_pack_fixture("upgrade-probe")), overwrite=True)
     marker_v1 = (_runtime_parent() / pid / "frontend/sdk/marker.ts").read_text(encoding="utf-8")
     v2 = _bump_pack(tmp_path, 2)
-    set_start_runtime_hook(lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")))
+    monkeypatch.setattr(
+        "service.plugin_install._start_runtime",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")),
+    )
     with pytest.raises(InstallStartFailedError):
         plugin_local.install_local_zip(v2, overwrite=True)
     bad = paths.plugin_local_dir() / f"{pid}.zip"
@@ -548,7 +573,7 @@ def test_concurrent_install_same_pack_serializes_with_barriers(
         except BaseException as e:
             errors.append(e)
 
-    set_after_first_rename(after_first_rename)
+    monkeypatch.setattr("service.plugin_install._after_first_rename", after_first_rename)
     t1 = threading.Thread(target=install_thread, args=("first", v2), daemon=True)
     t2 = threading.Thread(target=install_thread, args=("second", v3), daemon=True)
     t1.start()
@@ -573,7 +598,7 @@ def test_concurrent_install_passes_20_of_20(
     _isolate_plugin_local: Path,
 ) -> None:
     for attempt in range(20):
-        reset_install_hooks_for_tests()
+        reset_install_locks_for_tests()
         drain_install_notices()
         plugin_local.reset_watch_for_tests()
         plugins.reset_bundles()
@@ -588,7 +613,7 @@ def test_concurrent_install_passes_20_of_20(
             first_in_hook.set()
             release_hook.wait(timeout=5)
 
-        set_after_first_rename(after_first_rename)
+        monkeypatch.setattr("service.plugin_install._after_first_rename", after_first_rename)
         t1 = threading.Thread(
             target=lambda: plugin_local.install_local_zip(_bump_pack(tmp_path / f"r{attempt}", 2), overwrite=True),
             daemon=True,
@@ -630,7 +655,7 @@ def test_install_lock_serializes_swap_hooks(
         release.wait(timeout=5)
         inside -= 1
 
-    set_after_first_rename(after_first_rename)
+    monkeypatch.setattr("service.plugin_install._after_first_rename", after_first_rename)
     t1 = threading.Thread(
         target=lambda: plugin_local.install_local_zip(_bump_pack(tmp_path, 2), overwrite=True),
         daemon=True,
@@ -702,7 +727,7 @@ def test_unchanged_zip_skips_reinstall_on_three_scans(
         nonlocal swaps
         swaps += 1
 
-    set_after_first_rename(bump_swap)
+    monkeypatch.setattr("service.plugin_install._after_first_rename", bump_swap)
     plugin_local._primed = True
     plugin_local._seen[str(dest.resolve())] = "stale"
     for _ in range(3):
@@ -744,6 +769,57 @@ def test_sdk_contract_still_checked_on_install(
     raw = _zip_tree(_pack_fixture("upgrade-probe"))
     with pytest.raises(ValueError, match="zoto-viz"):
         plugin_local.install_local_zip(raw, overwrite=True)
+
+
+def test_install_local_unchanged_zip_routes_through_pipeline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    from service import plugin_install as pi
+
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    raw = _zip_tree(_pack_fixture("upgrade-probe"))
+    calls = 0
+    real = pi.install_zip_to_runtime
+
+    def counting(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(plugin_local, "install_zip_to_runtime", counting)
+    plugin_local.install_local_zip(raw, overwrite=True)
+    plugin_local.install_local_zip(raw, overwrite=True)
+    assert calls == 2
+
+
+def test_fresh_install_start_failure_removes_runtime_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    pid = "fresh-probe"
+    raw = _minimal_plugin_zip(pid)
+    monkeypatch.setattr(
+        "service.plugin_install._start_runtime",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")),
+    )
+    with pytest.raises(RuntimeError, match="nope"):
+        plugin_local.install_local_zip(raw, overwrite=True)
+    runtime = _runtime_parent() / pid
+    assert not runtime.exists()
+
+
+def _minimal_plugin_zip(plugin_id: str) -> bytes:
+    yml = f"id: {plugin_id}\nname: Fresh\nversion: 1\n"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("plugin.yml", yml)
+    return buf.getvalue()
 
 
 def test_startup_recovery_runs_in_fresh_process(

@@ -49,15 +49,6 @@ def register_install_check(check: InstallCheck) -> None:
     _INSTALL_CHECKS.append(check)
 
 
-def reset_install_hooks_for_tests() -> None:
-    global _after_first_rename, _start_runtime_hook
-    _after_first_rename = None
-    _start_runtime_hook = None
-    _pending_notices.clear()
-    _swap_in_progress.clear()
-    reset_install_locks_for_tests()
-
-
 def reset_install_locks_for_tests() -> None:
     with _pack_lock_meta:
         _pack_install_locks.clear()
@@ -74,20 +65,6 @@ def _lock_for_pack(pack_id: str) -> threading.Lock:
 
 def pack_install_lock(pack_id: str) -> threading.Lock:
     return _lock_for_pack(pack_id)
-
-
-def set_after_first_rename(hook: Callable[[], None] | None) -> None:
-    global _after_first_rename
-    _after_first_rename = hook
-
-
-def set_swap_hook_after_v1_backup(hook: Callable[[], None] | None) -> None:
-    set_after_first_rename(hook)
-
-
-def set_start_runtime_hook(hook: Callable[[Path, dict[str, Any], str | None], None] | None) -> None:
-    global _start_runtime_hook
-    _start_runtime_hook = hook
 
 
 def drain_install_notices() -> list[dict[str, str]]:
@@ -490,6 +467,8 @@ def _install_zip_to_runtime_locked(
                     ),
                 )
                 raise InstallStartFailedError(msg, reason=str(e).strip()) from e
+            if runtime.is_dir():
+                shutil.rmtree(runtime, ignore_errors=True)
             raise
         _commit_zip_after_success(zip_path, dest_zip)
         if swapped:
