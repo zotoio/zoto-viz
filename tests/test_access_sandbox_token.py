@@ -124,6 +124,35 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
         )
         assert resp.status == 403
 
+    async def test_sandbox_bootstrap_and_chunks_gate_via_path_not_sat_query(self) -> None:
+        """Bootstrap html and chunk imports must use /pack-assets/<token>/…, not ?sat= query params."""
+        import tempfile
+        from pathlib import Path
+
+        js_name = "plugin-sandbox-deadbeef.js"
+        helper = "preload-helper-cafe1234.js"
+        with tempfile.TemporaryDirectory() as tmp:
+            dist = Path(tmp)
+            dist.joinpath("plugin-sandbox.html").write_text(
+                f'<html><script type="module" src="/assets/{js_name}"></script></html>',
+                encoding="utf-8",
+            )
+            assets = dist / "assets"
+            assets.mkdir()
+            (assets / js_name).write_text(f'import "./{helper}";\nexport {{}};\n', encoding="utf-8")
+            (assets / helper).write_text("// preload", encoding="utf-8")
+            with patch.object(pack_assets, "WEB_DIST", dist):
+                html = await self.client.get(_pack_url("_sandbox", "plugin-sandbox.html"), headers=NULL)
+                chunk = await self.client.get(_pack_url("_sandbox", js_name), headers=NULL)
+        assert html.status == 200
+        assert chunk.status == 200
+        body_html = await html.text()
+        body_js = await chunk.text()
+        assert "?sat=" not in body_html and "&sat=" not in body_html
+        assert f"/pack-assets/{SAT}/_sandbox/" in body_html
+        assert "?sat=" not in body_js and "&sat=" not in body_js
+        assert f'./{helper}' in body_js
+
     async def test_null_origin_bootstrap_js_with_valid_token(self) -> None:
         import tempfile
         from pathlib import Path
