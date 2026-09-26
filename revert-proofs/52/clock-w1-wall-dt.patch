@@ -1,0 +1,11 @@
+--- a/web/src/plugins/viz-host.ts
++++ b/web/src/plugins/viz-host.ts
+@@ -426,8 +426,8 @@ export function buildVizFrame(
+   bind?: SourceBind | Record<string, string>,
+ ): VizDataFrame {
+   const t = vizFrameEpochSec(state.ts);
+-  const nowClock = vizClockMs();
+-  const dt = prevVizClockMs > 0 ? Math.max(0, (nowClock - prevVizClockMs) / 1000) : 0;
++  const wallPrev = prevVizClockMs / 1000;
++  const dt = wallPrev > 0 ? Math.max(0, t - wallPrev) : 0;
+   return {

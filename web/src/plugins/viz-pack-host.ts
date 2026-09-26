@@ -1,4 +1,5 @@
 import { vizClockMs } from "../core/viz-clock";
+import { createNixieWallClock, packNixieWallBuffer } from "./nixie-wall-clock";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import type { VizDataFrame, VizUniformValue } from "./viz-host";
 import {
@@ -7,7 +8,9 @@ import {
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { nixieCanvasSize, packNixieBuffer, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+import { nixieCanvasSize, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+
+const hostNixieClock = createNixieWallClock();
 
 export interface VizPackHandlers {
   writeBuffer: (slot: number, data: number[]) => void;
@@ -201,8 +204,8 @@ export function runPackFrameHandler(
     }
     case "nixie-clock": {
       const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
-      handlers.writeBuffer(0, packNixieBuffer(
-        new Date(vizClockMs()),
+      handlers.writeBuffer(0, packNixieWallBuffer(
+        hostNixieClock,
         parseNixieLook(opts),
         frame.audio,
         peak,

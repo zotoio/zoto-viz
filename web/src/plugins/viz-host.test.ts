@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setVizBuildCostTicksInjector } from "../core/viz-clock";
+import { resetVizClockInjectors, setVizBuildCostTicksInjector, setVizClockInjector } from "../core/viz-clock";
 import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import type { Device, StateMsg } from "../core/types";
 import {
@@ -260,6 +260,7 @@ describe("VizFrameBudget", () => {
 
 describe("buildVizFrame", () => {
   afterEach(() => {
+    resetVizClockInjectors();
     vi.restoreAllMocks();
   });
 
@@ -287,8 +288,10 @@ describe("buildVizFrame", () => {
   });
 
   it("returns capped talkers and packets for small fixtures", () => {
+    let clock = 90_000;
+    setVizClockInjector(() => clock);
     const state = minimalState();
-    const frame = buildVizFrame(state, 99, 0.2);
+    const frame = buildVizFrame(state, 89_000, 0.2);
     expect(frame.t).toBe(100);
     expect(frame.dt).toBe(1);
     expect(frame.audio).toBe(0.2);

@@ -156,7 +156,7 @@ export function percentile(samples: number[], p: number): number {
 export function dogfoodTick(
   packId: VizDemoPackId,
   state: StateMsg,
-  prevTs: number,
+  prevVizClockMs: number,
   audio: number,
   budget: VizFrameBudget,
   writer: VizBufferWriter,
@@ -178,7 +178,7 @@ export function dogfoodTick(
     writeParticles: (data, stride) => { writer.writeParticles(data, stride); },
   };
 
-  const frame = budget.deliver(state, prevTs, audio, (f) => runPackFrameHandler(packId, f, handlers), wrappedBuild);
+  const frame = budget.deliver(state, prevVizClockMs, audio, (f) => runPackFrameHandler(packId, f, handlers), wrappedBuild);
   return {
     delivered: frame !== null,
     frame,
@@ -334,7 +334,7 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
       const budget = new VizFrameBudget(now, "dogfood");
       const writer = new VizBufferWriter(contract);
       const buildTimes: number[] = [];
-      let prevTs = 0;
+      let prevVizClockMs = 0;
       let delivered = 0;
       let skippedStart = 0;
       const skipSamples: { t: number; n: number }[] = [];
@@ -345,11 +345,11 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
           ? { ...baseState, ts: baseState.ts + (i * eventPeriodMs) / 1000 }
           : baseState;
         const tickT0 = now();
-        const tick = dogfoodTick(packId, tickState, prevTs, audio, budget, writer);
+        const tick = dogfoodTick(packId, tickState, prevVizClockMs, audio, budget, writer);
         buildTimes.push(buildCostSample(buildCostOpt, i, now() - tickT0));
         if (tick.delivered && tick.frame) {
           delivered++;
-          prevTs = tick.frame.t;
+          prevVizClockMs = now();
         }
         if (presentStepMs != null) {
           presentT += presentStepMs;

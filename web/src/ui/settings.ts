@@ -27,6 +27,7 @@ import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
 import { guardReadableAnim } from "../graph/readable";
+import { applyDreamAnimWithTileLimit, MOSAIC_TILE_LIMIT_MESSAGE } from "../graph/mosaic-viz-tile-guard";
 import {
   AUTH_SETUPS,
   renderAuthSetup,
@@ -125,6 +126,7 @@ export class Settings {
   private onAnimChange: (a: DreamAnim) => void = () => {};
   private onFeedChange: (c: FeedConfig) => void = () => {};
   private onChatChange: (c: ChatConfig) => void = () => {};
+  lastMosaicTileLimitMessage = "";
   private animUi: {
     follow: Toggle; cycle: Toggle; randomize: Toggle;
     skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider; skyAi: Slider;
@@ -1702,7 +1704,7 @@ export class Settings {
   }
 
   applyAnim(a: DreamAnim): void {
-    this.anim = guardReadableAnim({
+    const candidate = guardReadableAnim({
       ...DEFAULT_DREAM,
       ...a,
       mosaicTree: parseMosaicNode(a.mosaicTree) ?? a.mosaicTree ?? null,
@@ -1712,6 +1714,13 @@ export class Settings {
       mosaicUniqueSkies: a.mosaicUniqueSkies,
       mosaicSkies: a.mosaicSkies,
     });
+    const { anim, refused, message } = applyDreamAnimWithTileLimit(candidate, this.anim);
+    if (refused) {
+      this.lastMosaicTileLimitMessage = message ?? MOSAIC_TILE_LIMIT_MESSAGE;
+      return;
+    }
+    this.lastMosaicTileLimitMessage = "";
+    this.anim = anim;
     this.syncAnimUi();
     this.syncTheme();
     this.persistAnim();

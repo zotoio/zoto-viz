@@ -1,5 +1,5 @@
 import type { Device, StateMsg } from "../core/types";
-import { vizBuildCostMs, vizBuildCostTicks, vizClockMs } from "../core/viz-clock";
+import { vizBuildCostMs, vizBuildCostTicks, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
 import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
@@ -415,9 +415,18 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
  * Build a decimated data frame from monitor state. Selection cost scales with
  * the output cap (top-K), not the full device / flow lists.
  */
-export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: SourceBind | Record<string, string>): VizDataFrame {
-  const t = state.ts || vizClockMs() / 1000;
-  const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
+/**
+ * @param prevVizClockMs previous {@link vizClockMs} sample from the last delivered frame (ms), not wall epoch.
+ */
+export function buildVizFrame(
+  state: StateMsg,
+  prevVizClockMs = 0,
+  audio = 0,
+  bind?: SourceBind | Record<string, string>,
+): VizDataFrame {
+  const t = vizFrameEpochSec(state.ts);
+  const nowClock = vizClockMs();
+  const dt = prevVizClockMs > 0 ? Math.max(0, (nowClock - prevVizClockMs) / 1000) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
   return {
     t,
@@ -441,12 +450,12 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: Sou
 /** Build a live frame and merge idle demo slices when monitor traffic is absent. */
 export function buildVizFrameForPlugin(
   state: StateMsg,
-  prevTs: number,
+  prevVizClockMs: number,
   audio: number,
   idle: VizIdleConfig,
   bind?: SourceBind | Record<string, string>,
 ): VizDataFrame {
-  return mergeVizIdleFrame(buildVizFrame(state, prevTs, audio, bind), idle);
+  return mergeVizIdleFrame(buildVizFrame(state, prevVizClockMs, audio, bind), idle);
 }
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
@@ -510,10 +519,10 @@ export class VizFrameBudget {
    */
   deliver(
     state: StateMsg,
-    prevTs: number,
+    prevVizClockMs: number,
     audio: number,
     onFrame: (frame: VizDataFrame) => void,
-    build: (state: StateMsg, prevTs: number, audio: number) => VizDataFrame = buildVizFrame,
+    build: (state: StateMsg, prevVizClockMs: number, audio: number) => VizDataFrame = buildVizFrame,
   ): VizDataFrame | null {
     const deliverIndex = this._total++;
     const tickInject = vizBuildCostTicks(deliverIndex);
@@ -522,7 +531,7 @@ export class VizFrameBudget {
       this.tileId,
       () => {
         const t0 = this.now();
-        const frame = build(state, prevTs, audio);
+        const frame = build(state, prevVizClockMs, audio);
         const elapsed = this.now() - t0;
         const costTicks = tickInject ?? msToVizTicks(msInject ?? elapsed);
         this._lastMs = msInject ?? elapsed;

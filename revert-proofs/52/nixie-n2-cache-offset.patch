@@ -1,0 +1,14 @@
+--- a/web/src/plugins/nixie-wall-clock.ts
++++ b/web/src/plugins/nixie-wall-clock.ts
+@@ -24,6 +24,12 @@ function formatterForZone(timeZone?: string): Intl.DateTimeFormat {
+   return fmt;
+ }
+ 
++let cachedOffsetMs: number | null = null;
++
+ export function wallPartsFromMs(wallMs: number, timeZone?: string): { h: number; m: number; s: number; ms: number } {
++  if (cachedOffsetMs === null) {
++    cachedOffsetMs = wallMs - Date.UTC(1970, 0, 1, 0, 0, 0);
++  }
++  wallMs = cachedOffsetMs + (wallMs - (cachedOffsetMs ?? wallMs));
+   const fmt = formatterForZone(timeZone);

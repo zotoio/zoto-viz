@@ -1,0 +1,5 @@
+{
+  "row": "W1 revert",
+  "testName": "W1: wall step-back does not change budget/HUD counts; dt stays >= 0",
+  "excerpt": "AssertionError: expected"
+}

@@ -1,0 +1,5 @@
+{
+  "row": "N1 revert format every frame",
+  "testName": "N1: 600 frames — format at [0,60,…,540], one formatter, stable buffer",
+  "excerpt": "AssertionError: expected [ +0, 1, 2, 3"
+}

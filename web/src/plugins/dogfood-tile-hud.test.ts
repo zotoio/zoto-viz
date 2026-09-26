@@ -128,7 +128,7 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     expect(tileShareTicks(8)).toBe(626);
   });
 
-  it("H6: scheduler clamps active tiles to 8 — share 626", () => {
+  it("scheduler clamp (extra): nine tile ids scope to share 626", () => {
     const nine = tileIdsForLayout(3, 3);
     expect(nine.length).toBe(9);
     syncVizTileScope(nine);
