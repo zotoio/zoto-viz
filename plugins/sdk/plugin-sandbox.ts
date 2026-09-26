@@ -2,8 +2,6 @@
  * Standalone zoto iframe host API types for plugin packs (zero runtime imports).
  */
 
-import type { VizDataFrame } from "./viz-contract";
-
 export type ZotoUniformValue = number | [number, number, number];
 
 /** Host-injected `window.zoto` surface for viz + config.read packs. */
@@ -18,10 +16,3 @@ export interface ZotoVizPluginHost<TFrame> {
   setStyle?: (style: unknown) => void;
   setNodeColor?: (id: string, hex: string) => void;
 }
-
-/** Host-injected iframe global (import this module for typing; do not redeclare in packs). */
-declare global {
-  const zoto: ZotoVizPluginHost<VizDataFrame>;
-}
-
-export {};
