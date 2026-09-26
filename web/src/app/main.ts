@@ -825,10 +825,10 @@ function applyCypherCicPanelSession(m: ViewMode): void {
   if (m.pluginId !== "cypher-cic") {
     const end = endCypherCicPanelSession(cypherCicPanelSession);
     if (end) {
-      settings.setFeedOn(end.restoreFeed, { persist: false });
-      settings.setChatOn(end.restoreChat, { persist: false });
+      settings.setCypherCicPanelCollapsed(false);
+      settings.setFeedOn(settings.readPersistedFeedOn(), { persist: false });
+      settings.setChatOn(settings.readPersistedChatOn(), { persist: false });
       cypherCicPanelSession = null;
-      settings.clearCypherCicPanelPersistOverrides();
     }
     return;
   }
@@ -838,7 +838,7 @@ function applyCypherCicPanelSession(m: ViewMode): void {
     settings.chatSettings.on,
   );
   cypherCicPanelSession = begin.session;
-  settings.setCypherCicPanelPersistOverrides(begin.session.feedOn, begin.session.chatOn);
+  settings.setCypherCicPanelCollapsed(true);
   if (begin.hideFeed) settings.setFeedOn(false, { persist: false });
   if (begin.hideChat) settings.setChatOn(false, { persist: false });
 }

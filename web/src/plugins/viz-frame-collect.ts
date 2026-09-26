@@ -48,26 +48,35 @@ function directionalPacketRate(flow: Flow, ab: boolean): number {
 }
 
 const talkerIdsScratch = new Set<string>();
-let talkerIdsCacheKey = "";
+const talkerIdsCached: string[] = [];
+let talkerIdsSetRebuilds = 0;
+
 const failGaugeScratch = new Map<string, number>();
-const talkersFailedScratch: VizTalkerSample[] = [];
-for (let i = 0; i < 32; i++) talkersFailedScratch.push({ id: "", rate: 0, role: "" });
 
 function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string> {
-  let key = `${talkers.length}\0`;
-  for (let i = 0; i < talkers.length; i++) key += `${talkers[i]!.id}\0`;
-  if (key !== talkerIdsCacheKey) {
+  let same = talkers.length === talkerIdsCached.length;
+  if (same) {
+    for (let i = 0; i < talkers.length; i++) {
+      if (talkerIdsCached[i] !== talkers[i]!.id) {
+        same = false;
+        break;
+      }
+    }
+  }
+  if (!same) {
+    talkerIdsCached.length = talkers.length;
+    for (let i = 0; i < talkers.length; i++) talkerIdsCached[i] = talkers[i]!.id;
     talkerIdsScratch.clear();
-    for (const t of talkers) talkerIdsScratch.add(t.id);
-    talkerIdsCacheKey = key;
+    for (let i = 0; i < talkerIdsCached.length; i++) talkerIdsScratch.add(talkerIdsCached[i]!);
+    talkerIdsSetRebuilds++;
   }
   return talkerIdsScratch;
 }
 
 function talkersWithConnFailed(
-  frameTalkers: readonly VizTalkerSample[],
+  frameTalkers: VizTalkerSample[],
   devices: readonly Device[],
-): readonly VizTalkerSample[] {
+): VizTalkerSample[] {
   failGaugeScratch.clear();
   let any = false;
   for (const d of devices) {
@@ -77,67 +86,53 @@ function talkersWithConnFailed(
     }
   }
   if (!any) return frameTalkers;
-  const n = frameTalkers.length;
-  talkersFailedScratch.length = n;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < frameTalkers.length; i++) {
     const t = frameTalkers[i]!;
-    let slot = talkersFailedScratch[i];
-    if (!slot) {
-      slot = { id: "", rate: 0, role: "" };
-      talkersFailedScratch[i] = slot;
-    }
-    slot.id = t.id;
-    slot.rate = t.rate;
-    slot.role = t.role;
     const live = failGaugeScratch.get(t.id);
-    if (live !== undefined) slot.failed = live;
-    else delete slot.failed;
+    if (live !== undefined) t.failed = live;
+    else delete t.failed;
   }
-  return talkersFailedScratch;
+  return frameTalkers;
 }
 
 type LinkCandidate = { src: string; dst: string; rate: number };
 
-const linkAggScratch = new Map<string, LinkCandidate>();
-const linkCandidatePool: LinkCandidate[] = [];
-for (let i = 0; i < 128; i++) linkCandidatePool.push({ src: "", dst: "", rate: 0 });
-let linkCandidatePoolUsed = 0;
+const linkPool: LinkCandidate[] = [];
+const linkBySrcDst = new Map<string, Map<string, number>>();
+let linkPoolHighWater = 0;
 
-function linkPairKey(src: string, dst: string): string {
-  return `${src}\0${dst}`;
-}
-
-function borrowLinkCandidate(src: string, dst: string, rate: number): LinkCandidate {
-  const slot = linkCandidatePool[linkCandidatePoolUsed];
-  if (slot) {
-    slot.src = src;
-    slot.dst = dst;
-    slot.rate = rate;
-  } else {
-    linkCandidatePool.push({ src, dst, rate });
-  }
-  linkCandidatePoolUsed++;
-  return linkCandidatePool[linkCandidatePoolUsed - 1]!;
-}
-
-function resetLinkCandidatePool(): void {
-  linkCandidatePoolUsed = 0;
-}
-
-function scanLinkCandidates(flows: Flow[], talkerIds: ReadonlySet<string>): void {
-  resetLinkCandidatePool();
-  for (const fl of flows) {
-    const aIn = talkerIds.has(fl.a);
-    const bIn = talkerIds.has(fl.b);
-    if (!aIn || !bIn) continue;
-    const ab = directionalPacketRate(fl, true);
-    if (ab > 0 && fl.a !== fl.b) borrowLinkCandidate(fl.a, fl.b, ab);
-    const ba = directionalPacketRate(fl, false);
-    if (ba > 0 && fl.a !== fl.b) borrowLinkCandidate(fl.b, fl.a, ba);
-  }
-}
-
+const linkActiveScratch: number[] = [];
 const linksResultScratch: VizLinkSample[] = [];
+
+function linkSlotForPair(src: string, dst: string): LinkCandidate {
+  let byDst = linkBySrcDst.get(src);
+  if (!byDst) {
+    byDst = new Map();
+    linkBySrcDst.set(src, byDst);
+  }
+  let idx = byDst.get(dst);
+  if (idx === undefined) {
+    idx = linkPoolHighWater;
+    linkPoolHighWater++;
+    let slot = linkPool[idx];
+    if (!slot) {
+      slot = { src, dst, rate: 0 };
+      linkPool[idx] = slot;
+    } else {
+      slot.src = src;
+      slot.dst = dst;
+      slot.rate = 0;
+    }
+    byDst.set(dst, idx);
+  }
+  return linkPool[idx]!;
+}
+
+function zeroLinkRatesForFrame(): void {
+  for (const byDst of linkBySrcDst.values()) {
+    for (const idx of byDst.values()) linkPool[idx]!.rate = 0;
+  }
+}
 
 /**
  * Aggregate directional host-pair rates for the monitor smoothing window (~5 s).
@@ -148,28 +143,38 @@ export function collectVizLinks(
   talkerIds: ReadonlySet<string>,
   maxLinks: number,
 ): { links: VizLinkSample[]; linksDropped: number } {
-  linkAggScratch.clear();
-  scanLinkCandidates(flows, talkerIds);
-  for (let i = 0; i < linkCandidatePoolUsed; i++) {
-    const cand = linkCandidatePool[i]!;
-    const key = linkPairKey(cand.src, cand.dst);
-    const prev = linkAggScratch.get(key);
-    if (prev) prev.rate += cand.rate;
-    else linkAggScratch.set(key, cand);
+  zeroLinkRatesForFrame();
+  for (let fi = 0; fi < flows.length; fi++) {
+    const fl = flows[fi]!;
+    const aIn = talkerIds.has(fl.a);
+    const bIn = talkerIds.has(fl.b);
+    if (!aIn || !bIn || fl.a === fl.b) continue;
+    const ab = directionalPacketRate(fl, true);
+    if (ab > 0) linkSlotForPair(fl.a, fl.b).rate += ab;
+    const ba = directionalPacketRate(fl, false);
+    if (ba > 0) linkSlotForPair(fl.b, fl.a).rate += ba;
   }
-  const total = linkAggScratch.size;
-  const top = topKByScore(linkAggScratch.values(), maxLinks, (l) => l.rate);
-  linksResultScratch.length = top.length;
-  for (let i = 0; i < top.length; i++) {
-    const l = top[i]!;
-    const slot = linksResultScratch[i] ?? { src: "", dst: "", rate: 0 };
-    slot.src = l.src;
-    slot.dst = l.dst;
-    slot.rate = l.rate;
-    linksResultScratch[i] = slot;
+
+  linkActiveScratch.length = 0;
+  for (const byDst of linkBySrcDst.values()) {
+    for (const idx of byDst.values()) {
+      if (linkPool[idx]!.rate > 0) linkActiveScratch.push(idx);
+    }
   }
-  const linksOut = top.length === 0 ? EMPTY_VIZ_LINKS : linksResultScratch;
-  return { links: linksOut as VizLinkSample[], linksDropped: Math.max(0, total - top.length) };
+
+  const total = linkActiveScratch.length;
+  const topIdx = topKByScore(linkActiveScratch, maxLinks, (idx) => linkPool[idx]!.rate);
+  linksResultScratch.length = topIdx.length;
+  for (let i = 0; i < topIdx.length; i++) {
+    const slot = linkPool[topIdx[i]!]!;
+    const out = linksResultScratch[i] ?? { src: "", dst: "", rate: 0 };
+    out.src = slot.src;
+    out.dst = slot.dst;
+    out.rate = slot.rate;
+    linksResultScratch[i] = out;
+  }
+  const linksOut = topIdx.length === 0 ? EMPTY_VIZ_LINKS : linksResultScratch;
+  return { links: linksOut as VizLinkSample[], linksDropped: Math.max(0, total - topIdx.length) };
 }
 
 /** Stamp contract v2 and optional link / failed enrichment when collection is enabled. */
@@ -187,7 +192,7 @@ export function applyVizFrameContractV2(
   }
   const talkerIds = syncTalkerIds(frame.talkers);
   const { links, linksDropped } = collectVizLinks(state.flows, talkerIds, opts.maxLinks);
-  frame.talkers = talkersWithConnFailed(frame.talkers, state.devices) as VizTalkerSample[];
+  talkersWithConnFailed(frame.talkers, state.devices);
   frame.links = links;
   if (linksDropped > 0) frame.linksDropped = linksDropped;
   else delete frame.linksDropped;
@@ -203,3 +208,32 @@ export function assertLinksMatchTalkers(frame: VizDataFrame): void {
     }
   }
 }
+
+/** Test-only introspection for allocation / pool rows (not used in production). */
+export const vizFrameCollectTestHooks = {
+  linkPoolSlot0(): LinkCandidate | undefined {
+    return linkPool[0];
+  },
+  talkerIdSet(): ReadonlySet<string> {
+    return talkerIdsScratch;
+  },
+  talkerIdSetRebuilds(): number {
+    return talkerIdsSetRebuilds;
+  },
+  resetTalkerIdSetRebuilds(): void {
+    talkerIdsSetRebuilds = 0;
+  },
+  linkPoolHighWater(): number {
+    return linkPoolHighWater;
+  },
+  clearLinkIndexForTest(): void {
+    linkBySrcDst.clear();
+    linkPool.length = 0;
+    linkPoolHighWater = 0;
+  },
+  clearTalkerIdsCacheForTest(): void {
+    talkerIdsCached.length = 0;
+    talkerIdsScratch.clear();
+    talkerIdsSetRebuilds = 0;
+  },
+};

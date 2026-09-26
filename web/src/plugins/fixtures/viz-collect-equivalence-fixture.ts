@@ -1,5 +1,5 @@
 import type { Device, Flow, StateMsg } from "../../core/types";
-import type { VizTalkerSample } from "../viz-host";
+import type { VizDataFrame, VizTalkerSample } from "../viz-host";
 import { applyVizFrameContractV2, resolveVizFrameCollectOpts } from "../viz-frame-collect";
 
 export const COLLECT_EQUIVALENCE_MAX_LINKS = 8;
@@ -70,7 +70,7 @@ export function buildCollectEquivalenceState(frameIndex: number): StateMsg {
     ts: frameIndex,
     devices,
     flows,
-    sources: [],
+    sources: {},
     host: { vizFrame: { links: true, linksMax: COLLECT_EQUIVALENCE_MAX_LINKS } },
   };
 }
@@ -81,8 +81,8 @@ export function frameTalkersForCollectEquivalence(): VizTalkerSample[] {
 
 export function captureCollectEquivalenceFrame(state: StateMsg): CollectEquivalenceFrame {
   const talkers = frameTalkersForCollectEquivalence();
-  const frame = {
-    contract: 1 as const,
+  const frame: VizDataFrame = {
+    contract: 1,
     t: state.ts ?? 0,
     dt: 0.016,
     audio: 0,
