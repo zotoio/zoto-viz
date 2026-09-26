@@ -166,3 +166,34 @@ export function parseVoxConfig(cfg: Record<string, string> = {}): VoxOptions {
 export function voxRenderScale(): number {
   return 1.0;
 }
+
+/** Full config record for host persistence (pack-side randomise / reset / undo). */
+export function voxOptionsToConfig(o: VoxOptions): Record<string, string> {
+  return {
+    preset: o.preset,
+    seed: String(o.seed),
+    biome: o.biome,
+    viewDist: String(o.viewDist),
+    timeOfDay: String(o.timeOfDay),
+    cycleSpeed: String(o.cycleSpeed),
+    weather: o.weather,
+    camera: o.camera,
+    cameraSpeed: String(o.cameraSpeed),
+    fog: String(o.fog),
+    textureStyle: o.textureStyle,
+    mobs: String(o.mobs),
+    clouds: o.clouds ? "1" : "0",
+    palette: o.palette,
+    reducedMotion: o.reducedMotion ? "1" : "0",
+    cap_maxChunks: String(o.caps.maxChunks),
+    cap_maxViewDist: String(o.caps.maxViewDist),
+    cap_vertexBudget: String(o.caps.vertexBudget),
+    cap_maxMobs: String(o.caps.maxMobs),
+    cap_chunksPerFrame: String(o.caps.chunksPerFrame),
+    bind_sysLoad_weather: String(o.live.sysLoadWeather),
+    bind_eventRate_cloudCover: String(o.live.eventRateCloud),
+    bind_packetField_torch: String(o.live.packetFieldTorch),
+    bind_packetField_block: String(o.live.packetFieldBlock),
+    bind_sysFailed_failBeacon: String(o.live.sysFailedFailBeacon),
+  };
+}

@@ -85,8 +85,8 @@ bool treeAt(ivec2 xz, float seed) {
 }
 
 int villageBlock(ivec3 p) {
-  vec2 village = vec2(0.0, 0.0);
-  ivec3 base = ivec3(int(village.x), int(floor(terrainH(village))), int(village.y));
+  vec2 village = vec2(slot(28), slot(29));
+  ivec3 base = ivec3(int(floor(village.x)), int(floor(terrainH(village))), int(floor(village.y)));
   ivec3 q = p - base;
   if (q.x >= 0 && q.x < 7 && q.z >= -3 && q.z < 4 && q.y >= 0 && q.y < 5) {
     if (q.y == 0) return 4;

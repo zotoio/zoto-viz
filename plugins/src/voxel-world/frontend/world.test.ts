@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { VOX_CONFIG_KEYS } from "./config-manifest";
-import { parseVoxConfig, voxRenderScale } from "./config";
+import { parseVoxConfig, voxOptionsToConfig, voxRenderScale } from "./config";
 import { applyLiveBindings, resetLiveMarkers } from "./bindings";
 import {
   disposeVoxelWorld,
@@ -14,6 +14,8 @@ import {
   voxelSmokeCenterLuma,
 } from "./engine";
 import { anchorXZ, talkerLayoutStats } from "./talker-cache";
+import { terrainHeight, villageAnchor } from "./world";
+import { VOX_SLOT } from "./slots";
 import type { VizDataFrame, VizPacketSample, VizTalkerSample } from "./viz-frame";
 import {
   gpuCounts as glCounts,
@@ -91,14 +93,46 @@ describe("voxel world pack", () => {
     expect(voxRenderScale()).toBe(1);
   });
 
-  it("randomise undo reset only via config", () => {
+  it("applies preset bundle when preset key is present (ignores stale fields)", () => {
+    const o = parseVoxConfig({ preset: "snowy", seed: "1", biome: "arid", fog: "0.1" });
+    expect(o.seed).toBe(9001);
+    expect(o.biome).toBe("boreal");
+    expect(o.fog).toBeGreaterThan(0.5);
+  });
+
+  it("randomise undo reset return full config and clear stale undo on reset", () => {
     resetVoxConfig();
-    const s0 = randomiseVoxConfig(() => 0.5).seed;
-    expect(undoVoxConfig()?.seed).toBe(parseVoxConfig({ preset: "classic" }).seed);
-    const s1 = randomiseVoxConfig(() => 0.1).seed;
+    const s0 = randomiseVoxConfig(() => 0.5).opts.seed;
+    const undone = undoVoxConfig();
+    expect(undone?.opts.seed).toBe(4242);
+    expect(undone?.cfg.preset).toBe("classic");
+    const s1 = randomiseVoxConfig(() => 0.1).opts.seed;
     expect(s1).not.toBe(s0);
-    resetVoxConfig();
-    expect(parseVoxConfig({ preset: "classic" }).seed).toBe(4242);
+    const back = resetVoxConfig();
+    expect(back.cfg.preset).toBe("classic");
+    expect(back.cfg.seed).toBe("4242");
+    expect(undoVoxConfig()).toBeNull();
+    expect(voxOptionsToConfig(back.opts).biome).toBe("temperate");
+  });
+
+  it("archipelago islands village sits on terrain height", () => {
+    setVoxConfig({ preset: "archipelago" });
+    const o = parseVoxConfig({ preset: "archipelago" });
+    const v = villageAnchor(o.seed, o.biome);
+    const ground = terrainHeight(v.x, v.z, o.seed, o.biome);
+    expect(ground).toBeGreaterThan(8);
+    const out = tickVoxelWorld(
+      liveSlice({
+        t: 5,
+        packets: [],
+        talkers: [],
+        headlines: [],
+        demo: true,
+        sys: { cpu: 0.2, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 },
+      }),
+    );
+    expect(out.slot0[VOX_SLOT.villageX]).toBeCloseTo(v.x, 3);
+    expect(out.slot0[VOX_SLOT.villageZ]).toBeCloseTo(v.z, 3);
   });
 
   it("does not grow GPU byte accounting after warm-up uploads", () => {

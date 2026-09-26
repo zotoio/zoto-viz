@@ -1,7 +1,7 @@
 import type { VoxLiveState } from "./bindings";
 import type { VoxOptions } from "./config";
 import type { MeshEngineStats } from "./mesh";
-import { sunDir, voxelCamera } from "./world";
+import { sunDir, villageAnchor, voxelCamera } from "./world";
 
 export const VOX_SLOT = {
   mark: 0,
@@ -9,7 +9,7 @@ export const VOX_SLOT = {
   seed: 8, biome: 9, viewDist: 10, fog: 11, weather: 12, camMode: 13, camSpeed: 14, flags: 15,
   sunX: 16, sunY: 17, sunZ: 18, sunPow: 19, torch: 20, palette: 21, texStyle: 22,
   failStrength: 23, weatherMix: 24, demo: 25, metric: 26, cloudCover: 27,
-  drawCalls: 28, triangles: 29, voxels: 30, gpuBytes: 31,
+  villageX: 28, villageZ: 29, drawCalls: 30, triangles: 31,
 } as const;
 
 export const VOX_SLOT0_FLOATS = 32;
@@ -41,7 +41,8 @@ export function packSlot0(
 ): number[] {
   const dayHours = (o.timeOfDay + (o.cycleSpeed / 60) * t) % 24;
   const dayFrac = dayHours / 24;
-  const cam = voxelCamera(t, o);
+  const cam = voxelCamera(t, o, o.reducedMotion);
+  const village = villageAnchor(o.seed, o.biome);
   const [sx, sy, sz] = sunDir(dayFrac);
   const sunPow = Math.min(1, Math.max(0.08, sy * 0.85 + 0.12));
   const torch = dayFrac < 0.28 || dayFrac > 0.72 ? 0.85 : 0.1 + live.torchPulse * 0.6;
@@ -74,10 +75,10 @@ export function packSlot0(
   slot[VOX_SLOT.demo] = live.demo ? 1 : 0;
   slot[VOX_SLOT.metric] = live.metric;
   slot[VOX_SLOT.cloudCover] = live.cloudCover;
+  slot[VOX_SLOT.villageX] = village.x;
+  slot[VOX_SLOT.villageZ] = village.z;
   slot[VOX_SLOT.drawCalls] = mesh.drawCalls;
   slot[VOX_SLOT.triangles] = mesh.triangles;
-  slot[VOX_SLOT.voxels] = mesh.voxelsDrawn;
-  slot[VOX_SLOT.gpuBytes] = gpuBytes;
   return slot;
 }
 

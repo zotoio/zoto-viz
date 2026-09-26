@@ -3,8 +3,11 @@
 import {
   disposeVoxelWorld,
   initVoxelWorld,
+  randomiseVoxConfig,
+  resetVoxConfig,
   setVoxConfig,
   tickVoxelWorld,
+  undoVoxConfig,
 } from "./engine";
 import type { VizDataFrame } from "./viz-frame";
 
@@ -14,6 +17,8 @@ declare const zoto: {
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
+  /** Optional host hook — persist pack-side randomise / undo / reset. */
+  setPluginConfig?: (cfg: Record<string, string>) => void;
 };
 
 let ready = false;
@@ -50,4 +55,9 @@ zoto.onFrame = (frame) => {
   zoto.writeUniform("uAudio", frame.audio);
 };
 
-export { disposeVoxelWorld };
+export {
+  disposeVoxelWorld,
+  randomiseVoxConfig,
+  resetVoxConfig,
+  undoVoxConfig,
+};

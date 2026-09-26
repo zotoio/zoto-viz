@@ -1,5 +1,5 @@
 import { applyLiveBindings, resetLiveMarkers, type VoxLiveFrame } from "./bindings";
-import { parseVoxConfig, type VoxOptions } from "./config";
+import { parseVoxConfig, voxOptionsToConfig, type VoxOptions } from "./config";
 import { disposeGpuRenderer, drawChunks, gpuCounts, initGpuRenderer, uploadChunkMesh } from "./gl-renderer";
 import { MeshEngine } from "./mesh";
 import { packSlot0, packSlot1Mobs, voxelSmokeCenterLuma } from "./slots";
@@ -23,8 +23,8 @@ export function voxOptions(): VoxOptions {
   return opts;
 }
 
-export function randomiseVoxConfig(rng = Math.random): VoxOptions {
-  undoStack.push({ ...opts });
+export function randomiseVoxConfig(rng = Math.random): { opts: VoxOptions; cfg: Record<string, string> } {
+  undoStack.push({ ...opts, caps: { ...opts.caps }, live: { ...opts.live } });
   const cfg: Record<string, string> = {
     preset: "custom",
     seed: String(Math.floor(1 + rng() * 999_999)),
@@ -34,32 +34,30 @@ export function randomiseVoxConfig(rng = Math.random): VoxOptions {
     weather: ["clear", "rain", "snow"][Math.floor(rng() * 3)]!,
     camera: ["fly", "walk", "orbit"][Math.floor(rng() * 3)]!,
     mobs: String(Math.floor(rng() * 7)),
-  };
-  opts = parseVoxConfig({
-    ...cfg,
     cap_maxChunks: "8",
     cap_maxViewDist: "48",
     cap_vertexBudget: "65536",
     cap_maxMobs: "6",
     cap_chunksPerFrame: "2",
-  });
+  };
+  opts = parseVoxConfig(cfg);
   mesh.reset(opts.seed);
-  return opts;
+  return { opts, cfg: voxOptionsToConfig(opts) };
 }
 
-export function undoVoxConfig(): VoxOptions | null {
+export function undoVoxConfig(): { opts: VoxOptions; cfg: Record<string, string> } | null {
   const prev = undoStack.pop();
   if (!prev) return null;
   opts = prev;
   mesh.reset(opts.seed);
-  return opts;
+  return { opts, cfg: voxOptionsToConfig(opts) };
 }
 
-export function resetVoxConfig(): VoxOptions {
+export function resetVoxConfig(): { opts: VoxOptions; cfg: Record<string, string> } {
   undoStack = [];
   opts = parseVoxConfig({ preset: "classic" });
   mesh.reset(opts.seed);
-  return opts;
+  return { opts, cfg: voxOptionsToConfig(opts) };
 }
 
 export function initVoxelWorld(): void {
@@ -89,7 +87,7 @@ export interface VoxTickOut {
 export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = FIXED_DT): VoxTickOut {
   if (lastT >= 0 && frame.t <= lastT) skips++;
   lastT = frame.t;
-  const cam = voxelCamera(frame.t, opts);
+  const cam = voxelCamera(frame.t, opts, opts.reducedMotion);
   const live = applyLiveBindings(frame, opts, cam);
   simAccum += dt;
   const maxCatchUp = 3;
