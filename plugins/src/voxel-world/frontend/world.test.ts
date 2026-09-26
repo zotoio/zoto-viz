@@ -13,7 +13,8 @@ import {
   undoVoxConfig,
   voxelSmokeCenterLuma,
 } from "./engine";
-import { hostWorldXZ } from "./hosts";
+import { anchorXZ, talkerLayoutStats } from "./talker-cache";
+import type { VizDataFrame, VizPacketSample, VizTalkerSample } from "./viz-frame";
 import {
   gpuCounts as glCounts,
   gpuUploadGrowthAfterWarmup,
@@ -37,6 +38,12 @@ function walkPackFiles(dir: string): string[] {
     else if (/\.(yml|ts|glsl|md|mts)$/.test(name) && !name.endsWith(".test.ts")) out.push(p);
   }
   return out;
+}
+
+function liveSlice(
+  partial: Pick<VizDataFrame, "t" | "packets" | "talkers" | "demo" | "sys" | "headlines">,
+): Pick<VizDataFrame, "t" | "packets" | "talkers" | "demo" | "sys" | "headlines"> {
+  return partial;
 }
 
 describe("voxel world pack", () => {
@@ -77,7 +84,9 @@ describe("voxel world pack", () => {
 
   it("smoke luma stays above near-black for pinned seed", () => {
     resetVoxConfig();
-    const out = tickVoxelWorld({ t: 12, packets: [], demo: true, sys: { cpu: 0.2, failed: 0 } });
+    const out = tickVoxelWorld(
+      liveSlice({ t: 12, packets: [], talkers: [], headlines: [], demo: true, sys: { cpu: 0.2, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 } }),
+    );
     expect(voxelSmokeCenterLuma(out.slot0)).toBeGreaterThan(0.12);
     expect(voxRenderScale()).toBe(1);
   });
@@ -95,21 +104,31 @@ describe("voxel world pack", () => {
   it("does not grow GPU byte accounting after warm-up uploads", () => {
     resetVoxConfig();
     initVoxelWorld();
+    const sys = { cpu: 0.2, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 };
     for (let i = 0; i < 120; i++) {
-      tickVoxelWorld({ t: i / 60, packets: [], demo: true, sys: { cpu: 0.2, failed: 0 } }, 1.6, 1 / 60);
+      tickVoxelWorld(liveSlice({ t: i / 60, packets: [], talkers: [], headlines: [], demo: true, sys }), 1.6, 1 / 60);
     }
     resetGpuWarmupTracker();
     for (let i = 120; i < 240; i++) {
-      tickVoxelWorld({ t: i / 60, packets: [], demo: true, sys: { cpu: 0.2, failed: 0 } }, 1.6, 1 / 60);
+      tickVoxelWorld(liveSlice({ t: i / 60, packets: [], talkers: [], headlines: [], demo: true, sys }), 1.6, 1 / 60);
     }
     expect(gpuUploadGrowthAfterWarmup()).toBe(0);
     disposeVoxelWorld();
   });
 
   it("frees GPU resources after 20 mount cycles", () => {
+    const sys = { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 };
     for (let i = 0; i < 20; i++) {
       initVoxelWorld();
-      tickVoxelWorld({ t: i * 0.5, packets: [{ host: "10.0.0.9", field: 0.9 }], sys: { cpu: 0.1, failed: 0 } });
+      tickVoxelWorld(
+        liveSlice({
+          t: i * 0.5,
+          packets: [{ proto: "tcp", size: 900, field: 0.9 }],
+          talkers: [],
+          headlines: [],
+          sys,
+        }),
+      );
       disposeVoxelWorld();
     }
     const g = glCounts();
@@ -120,77 +139,88 @@ describe("voxel world pack", () => {
     expect(g.workers).toBe(0);
   });
 
-  it("keeps host anchors stable when talkers reorder (same count)", () => {
+  it("keeps talker anchors stable when talkers reorder (same ids)", () => {
     resetLiveMarkers();
     const opts = parseVoxConfig({ preset: "classic" });
     const cam = { x: 2, y: 11, z: -3 };
-    const talkersA = [
+    const talkersA: VizTalkerSample[] = [
       { id: "10.0.0.1", rate: 120, role: "lan" },
-      { id: "10.0.0.2", rate: 80, role: "wan" },
+      { id: "10.0.0.2", rate: 80, role: "gateway" },
     ];
-    const talkersB = [talkersA[1]!, talkersA[0]!];
-    const a = applyLiveBindings(
-      { t: 4, packets: [], talkers: talkersA, sys: { cpu: 0.2, failed: 0 } },
-      opts,
-      0,
-      cam,
-    );
-    resetLiveMarkers();
-    const b = applyLiveBindings(
-      { t: 4, packets: [], talkers: talkersB, sys: { cpu: 0.2, failed: 0 } },
-      opts,
-      0,
-      cam,
-    );
+    const talkersB: VizTalkerSample[] = [talkersA[1]!, talkersA[0]!];
+    const frameBase = { packets: [] as VizPacketSample[], headlines: [], sys: { cpu: 0.2, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 } };
+    const a = applyLiveBindings(liveSlice({ t: 4, ...frameBase, talkers: talkersA }), opts, cam);
+    const rebuildsAfterFirst = talkerLayoutStats().rebuilds;
+    const b = applyLiveBindings(liveSlice({ t: 4.1, ...frameBase, talkers: talkersB }), opts, cam);
     expect(a.cloudCover).toBe(b.cloudCover);
-    expect(a.hostAnchors.get("10.0.0.1")).toEqual(hostWorldXZ("10.0.0.1", opts.seed));
-    expect(a.hostAnchors.get("10.0.0.1")).toEqual(b.hostAnchors.get("10.0.0.1"));
-    expect(a.hostAnchors.get("10.0.0.2")).toEqual(b.hostAnchors.get("10.0.0.2"));
+    expect(a.talkerAnchors.get("10.0.0.1")).toEqual(anchorXZ("10.0.0.1", opts.seed));
+    expect(a.talkerAnchors.get("10.0.0.1")).toEqual(b.talkerAnchors.get("10.0.0.1"));
+    expect(talkerLayoutStats().rebuilds).toBe(rebuildsAfterFirst);
   });
 
-  it("does not show failure visuals for healthy low-value packets", () => {
+  it("does not treat low packet field as failure (sys.failed only)", () => {
     resetLiveMarkers();
     const opts = parseVoxConfig({ preset: "classic" });
     const cam = { x: 0, y: 10, z: 0 };
     const out = applyLiveBindings(
-      {
+      liveSlice({
         t: 1,
         packets: [
-          { host: "10.0.0.5", field: 0.02 },
-          { host: "10.0.0.6", field: 0.08 },
+          { proto: "icmp", size: 40, field: 0.02 },
+          { proto: "dns", size: 80, field: 0.08 },
         ],
-        sys: { cpu: 0.1, failed: 0 },
-      },
+        talkers: [],
+        headlines: [{ id: "h1", label: "alert", text: "disk full" }],
+        sys: { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 },
+      }),
       opts,
-      0,
       cam,
     );
     expect(out.failStrength).toBe(0);
     expect(out.beacons.every((b) => b.kind !== 9)).toBe(true);
   });
 
-  it("consumes each new packet host up to the per-frame cap (not only index 0)", () => {
+  it("applies world-wide fail from sys.failed without pinning a beacon", () => {
     resetLiveMarkers();
     const opts = parseVoxConfig({ preset: "classic" });
     const cam = { x: 0, y: 10, z: 0 };
     const out = applyLiveBindings(
-      {
-        t: 2,
-        packets: [
-          { host: "host-a", field: 0.92 },
-          { host: "host-b", field: 0.93 },
-          { host: "host-c", field: 0.94 },
-        ],
-        sys: { cpu: 0.1, failed: 0 },
-      },
+      liveSlice({
+        t: 1,
+        packets: [],
+        talkers: [],
+        headlines: [],
+        sys: { cpu: 0.1, failed: 0.9, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 },
+      }),
       opts,
-      0,
       cam,
     );
-    const torchHosts = out.beacons.filter((b) => b.kind === 1).map((b) => b.hostId);
-    expect(torchHosts.sort()).toEqual(["host-a", "host-b", "host-c"]);
-    expect(out.beacons[0]!.x).toBe(hostWorldXZ("host-a", opts.seed).x);
-    expect(out.beacons[1]!.x).toBe(hostWorldXZ("host-b", opts.seed).x);
+    expect(out.failStrength).toBeGreaterThan(0.2);
+    expect(out.beacons.every((b) => b.kind !== 9)).toBe(true);
+  });
+
+  it("consumes each packet in the frame up to the cap (proto-keyed, not index 0 only)", () => {
+    resetLiveMarkers();
+    const opts = parseVoxConfig({ preset: "classic" });
+    const cam = { x: 0, y: 10, z: 0 };
+    const out = applyLiveBindings(
+      liveSlice({
+        t: 2,
+        packets: [
+          { proto: "tcp", size: 1200, field: 0.92 },
+          { proto: "udp", size: 800, field: 0.93 },
+          { proto: "quic", size: 600, field: 0.94 },
+        ],
+        talkers: [],
+        headlines: [],
+        sys: { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 },
+      }),
+      opts,
+      cam,
+    );
+    const torchKeys = out.beacons.filter((b) => b.kind === 1).map((b) => b.key).sort();
+    expect(torchKeys).toEqual(["quic", "tcp", "udp"]);
+    expect(out.beacons.find((b) => b.key === "tcp")!.x).toBe(anchorXZ("tcp", opts.seed).x);
   });
 
   it("never stacks more than one GL context per tile lifecycle (4 isolated tiles)", () => {

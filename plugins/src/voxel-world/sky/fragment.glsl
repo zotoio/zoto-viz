@@ -215,7 +215,6 @@ bool traceVoxel(vec3 ro, vec3 rd, out float dist, out vec3 n, out vec3 wp, out i
 }
 
 vec3 beaconCol(vec3 ro, vec3 rd) {
-  vec3 zotoFail = vec3(0.92, 0.14, 0.18);
   vec3 col = vec3(0.0);
   for (int i = 0; i < 3; i++) {
     int base = 44 + i * 4;
@@ -232,8 +231,7 @@ vec3 beaconCol(vec3 ro, vec3 rd) {
     float sz = kind == 9 ? 1.2 + strength : 0.65;
     if (d > sz) continue;
     float core = 1.0 - d / sz;
-    if (kind == 9) col = max(col, zotoFail * (0.85 + strength * 0.5) * core);
-    else if (kind == 1) col += vec3(1.0, 0.72, 0.25) * core * 0.9;
+    if (kind == 1) col += vec3(1.0, 0.72, 0.25) * core * 0.9;
     else col += vec3(0.55, 0.55, 0.58) * core * 0.7;
   }
   return col;

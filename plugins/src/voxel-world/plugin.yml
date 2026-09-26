@@ -198,7 +198,7 @@ config:
     min: 0
     max: 1
     step: 0.01
-    hint: Each new flow above threshold places a torch marker near the camera path.
+    hint: Each packet row in the frame (up to host cap) can place a torch keyed by proto when field exceeds threshold.
   - key: bind_packetField_block
     label: live packet field → block spawn
     type: number
@@ -206,7 +206,7 @@ config:
     min: 0
     max: 1
     step: 0.01
-    hint: Each new flow above this lower threshold places a plain block marker.
+    hint: Packet rows keyed by proto place a block marker at the lower field threshold.
   - key: bind_sysFailed_failBeacon
     label: live sys.failed → fail beacon
     type: number
@@ -214,4 +214,4 @@ config:
     min: 0
     max: 1
     step: 0.01
-    hint: Failed units spawn Zoto fail-coloured beacons that stay visible above fog and spectacle.
+    hint: Machine-wide sys.failed tints the sky and weather (no per-structure fail pins).

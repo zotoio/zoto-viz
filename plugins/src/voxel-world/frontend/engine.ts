@@ -7,7 +7,6 @@ import { voxelCamera } from "./world";
 
 let opts: VoxOptions = parseVoxConfig({});
 let mesh = new MeshEngine();
-let packetN = 0;
 let skips = 0;
 let undoStack: VoxOptions[] = [];
 let lastT = -1;
@@ -72,7 +71,6 @@ export function disposeVoxelWorld(): void {
   disposeGpuRenderer();
   resetLiveMarkers();
   mesh = new MeshEngine();
-  packetN = 0;
   skips = 0;
   lastT = -1;
   simAccum = 0;
@@ -92,8 +90,7 @@ export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = F
   if (lastT >= 0 && frame.t <= lastT) skips++;
   lastT = frame.t;
   const cam = voxelCamera(frame.t, opts);
-  const live = applyLiveBindings(frame, opts, packetN, cam);
-  packetN = frame.packets.length;
+  const live = applyLiveBindings(frame, opts, cam);
   simAccum += dt;
   const maxCatchUp = 3;
   while (simAccum >= FIXED_DT && simSteps < maxCatchUp) {
@@ -126,7 +123,14 @@ export function simulateFlyover(seconds: number, fps = 60): { maxRebuild: number
   let maxTri = 0;
   for (let i = 0; i < seconds * fps; i++) {
     const out = tickVoxelWorld(
-      { t: i / fps, packets: [], demo: true, sys: { cpu: 0.2, failed: 0 } },
+      {
+        t: i / fps,
+        packets: [],
+        talkers: [],
+        headlines: [],
+        demo: true,
+        sys: { cpu: 0.2, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 },
+      },
       1.6,
       1 / fps,
     );

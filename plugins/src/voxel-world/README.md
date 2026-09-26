@@ -10,9 +10,9 @@ All options, caps, presets, and **live-data bindings** are in `plugin.yml` and r
 | --- | --- | --- |
 | `bind_sysLoad_weather` | `sys.cpu` (0–1) | Scales rain/snow mix |
 | `bind_eventRate_cloudCover` | talker/packet event rate | Block-cloud density |
-| `bind_packetField_torch` | per-packet `host`/`id` (up to cap/frame) | Torch at host anchor when `field` exceeds threshold |
-| `bind_packetField_block` | per-packet `host`/`id` | Block marker at host anchor (not list index) |
-| `bind_sysFailed_failBeacon` | `sys.failed` (0–1) | Zoto fail beacons (never fogged out) |
+| `bind_packetField_torch` | `packets[]` `{ proto, size, field }` (up to 8/frame) | Torch marker keyed by **proto** (not list index) |
+| `bind_packetField_block` | same | Block marker keyed by **proto** |
+| `bind_sysFailed_failBeacon` | `sys.failed` only | World-wide storm / red sky (not pinned structures) |
 
 Idle uses `viz.idle.fixture: host` — metric shows **demo** on the OSD when `frame.demo` is set.
 

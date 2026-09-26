@@ -6,19 +6,10 @@ import {
   setVoxConfig,
   tickVoxelWorld,
 } from "./engine";
-
-type VizFrame = {
-  t: number;
-  dt: number;
-  audio: number;
-  demo?: boolean;
-  packets: { field: number; proto?: string; host?: string; id?: string; failed?: number }[];
-  talkers?: { id: string; rate: number; role?: string; failed?: number }[];
-  sys?: { cpu: number; mem: number; disk: number; gpu: number; temp: number; watts: number; psi: number; sockets: number; failed: number; udev: number };
-};
+import type { VizDataFrame } from "./viz-frame";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: VizDataFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;
@@ -45,7 +36,8 @@ zoto.onFrame = (frame) => {
       demo: frame.demo,
       packets: frame.packets,
       talkers: frame.talkers,
-      sys: frame.sys ? { cpu: frame.sys.cpu, failed: frame.sys.failed } : undefined,
+      headlines: frame.headlines,
+      sys: frame.sys,
     },
     1.6,
     frame.dt > 0 ? frame.dt : 1 / 60,
