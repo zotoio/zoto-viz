@@ -61,7 +61,9 @@ describe("viz build count gates", () => {
   it.todo("viz links ≤ maxLinks with linksDropped matching cuts (#27 contract v2)");
 
   it("production bundle excludes counter instrumentation", () => {
-    execFileSync("pnpm", ["build"], { cwd: webRoot, stdio: "pipe" });
+    const env = { ...process.env };
+    delete env.VITEST;
+    execFileSync("pnpm", ["build"], { cwd: webRoot, stdio: "pipe", env });
     const dist = path.join(webRoot, "dist", "assets");
     const js = readdirSync(dist).filter((f) => f.endsWith(".js"));
     expect(js.length).toBeGreaterThan(0);

@@ -24,11 +24,10 @@ jobs:
         run: |
           pnpm install
           pnpm approve-builds esbuild
-      - name: CI test gate needs guard
-        run: python scripts/check_ci_test_needs.py .github/workflows/ci.yml
       - name: Python tests
         run: |
           python -m pip install -r requirements.txt pytest
+          python scripts/check_ci_test_needs.py .github/workflows/ci.yml
           pytest tests
 
   web:

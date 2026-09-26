@@ -94,7 +94,7 @@ export function flowWorkScaleRatio(
   };
 }
 
-/** When flow count scales up, per-build work must not grow faster than flowRatio × {@link VIZ_BUILD_FLOW_SCALE_MAX}. */
+/** When flow count scales up, work ratio must stay ≤ flowRatio × ({@link VIZ_BUILD_FLOW_SCALE_MAX} / 4) (4.4× at 4× flows). */
 export function assertFlowWorkScaleBounded(
   baseFlows: number,
   base: VizBuildWorkCounters,
@@ -103,9 +103,9 @@ export function assertFlowWorkScaleBounded(
 ): boolean {
   if (scaledFlows < baseFlows) return false;
   const flowRatio = scaledFlows / baseFlows;
+  const maxWorkRatio = flowRatio * (VIZ_BUILD_FLOW_SCALE_MAX / 4);
   const { flowVisits, rateCalls } = flowWorkScaleRatio(base, scaled);
-  return flowVisits <= flowRatio * VIZ_BUILD_FLOW_SCALE_MAX
-    && rateCalls <= flowRatio * VIZ_BUILD_FLOW_SCALE_MAX;
+  return flowVisits <= maxWorkRatio && rateCalls <= maxWorkRatio;
 }
 
 /** Regression class: rescan every flow 3× per device. */
