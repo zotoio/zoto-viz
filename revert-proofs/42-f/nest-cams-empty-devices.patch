@@ -1,0 +1,25 @@
+diff --git a/web/src/plugins/nest-cams-ui.ts b/web/src/plugins/nest-cams-ui.ts
+--- a/web/src/plugins/nest-cams-ui.ts
++++ b/web/src/plugins/nest-cams-ui.ts
+@@ -88,9 +88,20 @@ function nestCamEmptyStatus(message: string): HTMLElement {
+ 
+ function cameraChips(look: NestLook, devices: SdmDevice[], onChange: (patch: NestCamPatch) => void): HTMLElement {
+   const cams = streamableCameras(devices);
+-  if (!devices.length) {
+-    return nestCamEmptyStatus(nestNoCamerasFoundForAccount());
+-  }
+   if (!cams.length) {
++    if (!devices.length) {
++      const allOn = !look.pick;
++      return chipRow(
++        "cameras",
++        "Empty / all on means every camera that can stream. Turning one off keeps the rest — extras are not filled in.",
++        [{ value: "", label: "all", hint: "every streamable camera, up to the layout cap", pressed: allOn }],
++        (value) => {
++          if (value === "") onChange({ pick: "" });
++        },
++      );
++    }
+     return nestCamEmptyStatus("No Nest cameras can stream yet (Hub displays are skipped).");
+   }
+   const allOn = !look.pick;

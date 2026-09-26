@@ -1,0 +1,10 @@
+diff --git a/web/src/ui/drawer-context-schema.ts b/web/src/ui/drawer-context-schema.ts
+--- a/web/src/ui/drawer-context-schema.ts
++++ b/web/src/ui/drawer-context-schema.ts
+@@ -20,5 +20,5 @@ export type NestCamsDrawerContext = {
+   look: Record<string, string | number | boolean | undefined> | null;
+   extras: readonly HTMLElement[];
+   wallScope: { mosaicOn: boolean; tileModeIds: readonly string[] };
+-  devices: readonly Device[];
++  devices?: readonly Device[];
+ };

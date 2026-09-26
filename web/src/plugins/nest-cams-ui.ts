@@ -1,5 +1,6 @@
 import { configStoreId, fieldDefault, specCaption, writePluginConfig, type PluginView } from "./plugin";
 import type { PluginField } from "../core/modes";
+import { nestNoCamerasFoundForAccount } from "./pack-shared-copy";
 import {
   NEST_LAYOUTS,
   nestCamHint,
@@ -78,15 +79,20 @@ function layoutChips(look: NestLook, onChange: (patch: NestCamPatch) => void): H
   );
 }
 
+function nestCamEmptyStatus(message: string): HTMLElement {
+  const empty = document.createElement("div");
+  empty.className = "sec-hint nest-cam-empty";
+  empty.textContent = message;
+  return empty;
+}
+
 function cameraChips(look: NestLook, devices: SdmDevice[], onChange: (patch: NestCamPatch) => void): HTMLElement {
   const cams = streamableCameras(devices);
+  if (!devices.length) {
+    return nestCamEmptyStatus(nestNoCamerasFoundForAccount());
+  }
   if (!cams.length) {
-    const empty = document.createElement("div");
-    empty.className = "sec-hint nest-cam-empty";
-    empty.textContent = devices.length
-      ? "No Nest cameras can stream yet (Hub displays are skipped)."
-      : "Cameras appear here once Device Access lists them.";
-    return empty;
+    return nestCamEmptyStatus("No Nest cameras can stream yet (Hub displays are skipped).");
   }
   const allOn = !look.pick;
   return chipRow(

@@ -4,6 +4,7 @@
     "types": ["vite/client", "node"]
   },
   "include": [
+    "src/ui/drawer-context.nest-devices-required.test.ts",
     "src/graph/pack-mirror-lifecycle.test.ts",
     "src/graph/pack-mirror-rect-converters.test.ts",
     "src/graph/pack-mirror-readback.test.ts",

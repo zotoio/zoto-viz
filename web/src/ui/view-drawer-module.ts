@@ -1,9 +1,8 @@
-import type { PluginField } from "../core/modes";
-import type { PluginLook, PluginView } from "../plugins/plugin";
+import type { PluginView } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import { fillPluginFields } from "../plugins/plugin-ui";
-import type { PackWallScope } from "../plugins/instances";
-import type { SdmDevice } from "../plugins/nest-cams-look";
+import type { DrawerContext } from "./drawer-context";
+import { isNestCamsDrawerContext } from "./drawer-context";
 
 function packLayerNames(spec: PluginView): string[] {
   const layers: string[] = [];
@@ -28,18 +27,25 @@ function pluginLayer(id: string, title: string, hint: string): HTMLElement {
   return wrap;
 }
 
-export type ViewDrawerBuildInput = {
-  spec: PluginView | null;
-  fields?: PluginField[];
-  look?: PluginLook | null;
-  extras?: HTMLElement[];
-  wallScope?: PackWallScope;
-  devices?: SdmDevice[];
-  draftValues?: Record<string, string>;
+export type ViewDrawerRuntime = {
   onPluginPersist: (id: string, values: Record<string, string>) => void;
   onPluginFieldInput?: (key: string, value: string) => void;
   viewMosaicSec: HTMLElement | null;
 };
+
+export type ViewDrawerBuildInput = DrawerContext & ViewDrawerRuntime;
+
+/** Clear plugin layers; keep optional mosaic section (initial / unbound view pane). */
+export function clearViewDrawerHost(host: HTMLDivElement, viewMosaicSec: HTMLElement | null): void {
+  host.replaceChildren();
+  if (!viewMosaicSec) {
+    const empty = document.createElement("div");
+    empty.className = "sec";
+    empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu or on a mosaic tile opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
+    host.append(empty);
+  }
+  if (viewMosaicSec) host.append(viewMosaicSec);
+}
 
 /** Build view drawer DOM under `host` (replaces children). */
 export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawerBuildInput): void {
@@ -50,27 +56,23 @@ export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawer
     look,
     extras,
     wallScope,
-    devices,
     draftValues,
     onPluginPersist,
     onPluginFieldInput,
     viewMosaicSec,
   } = input;
-  if (spec) {
-    const layers = packLayerNames(spec);
-    host.append(pluginLayer(
-      "pack",
-      spec.name,
-      `Plugin pack · ${layers.join(" · ")}. Datasource, backend, and frontend are reusable; this tab is the selected view. Wall composes other views.`,
-    ));
-  }
+  const devices = isNestCamsDrawerContext(input) ? [...input.devices] : undefined;
+  const layers = packLayerNames(spec);
+  host.append(pluginLayer(
+    "pack",
+    spec.name,
+    `Plugin pack · ${layers.join(" · ")}. Datasource, backend, and frontend are reusable; this tab is the selected view. Wall composes other views.`,
+  ));
   if (look && Object.keys(look).length) {
     const front = pluginLayer(
       "frontend",
       "Frontend",
-      spec
-        ? `Look pins from ${spec.name}'s visualisation — they override matching Motion / Appearance controls while this view is selected.`
-        : "Look pins from the plugin pack — they override matching Motion / Appearance controls while selected.",
+      `Look pins from ${spec.name}'s visualisation — they override matching Motion / Appearance controls while this view is selected.`,
     );
     const row = document.createElement("div");
     row.className = "pin-chips";
@@ -85,38 +87,31 @@ export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawer
     host.append(front);
   }
   const extra = extras?.filter(Boolean) ?? [];
-  if (spec) {
-    const view = pluginLayer(
-      "view",
-      "View",
-      spec.instanceId && spec.instanceId !== spec.id
-        ? `Instance ${spec.instanceId} of ${spec.id}. Corner cog on a mosaic tile opens that tile's view.`
-        : "This catalog row. Corner cog on a mosaic tile opens that tile's view.",
-    );
-    fillPluginFields(view, spec, pluginViewKnobs(spec, fields), onPluginPersist, {
-      skipEmpty: extra.length > 0,
-      devices,
-      wallScope,
-      draftValues,
-      onFieldInput: onPluginFieldInput,
-    });
-    if (extra.length) {
-      const sec = document.createElement("div");
-      sec.className = "sec";
-      const row = document.createElement("div");
-      row.className = "sec-controls";
-      for (const el of extra) row.appendChild(el);
-      sec.append(row);
-      const prompt = view.querySelector(".view-prompt");
-      if (prompt) view.insertBefore(sec, prompt);
-      else view.append(sec);
-    }
-    host.append(view);
-  } else if (!look && !extra.length && !viewMosaicSec) {
-    const empty = document.createElement("div");
-    empty.className = "sec";
-    empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu or on a mosaic tile opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
-    host.append(empty);
+  const view = pluginLayer(
+    "view",
+    "View",
+    spec.instanceId && spec.instanceId !== spec.id
+      ? `Instance ${spec.instanceId} of ${spec.id}. Corner cog on a mosaic tile opens that tile's view.`
+      : "This catalog row. Corner cog on a mosaic tile opens that tile's view.",
+  );
+  fillPluginFields(view, spec, pluginViewKnobs(spec, fields), onPluginPersist, {
+    skipEmpty: extra.length > 0,
+    devices,
+    wallScope,
+    draftValues,
+    onFieldInput: onPluginFieldInput,
+  });
+  if (extra.length) {
+    const sec = document.createElement("div");
+    sec.className = "sec";
+    const row = document.createElement("div");
+    row.className = "sec-controls";
+    for (const el of extra) row.appendChild(el);
+    sec.append(row);
+    const prompt = view.querySelector(".view-prompt");
+    if (prompt) view.insertBefore(sec, prompt);
+    else view.append(sec);
   }
+  host.append(view);
   if (viewMosaicSec) host.append(viewMosaicSec);
 }

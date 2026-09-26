@@ -25,13 +25,14 @@ import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import type { PackWallScope } from "../plugins/instances";
 import { packLastTileDiscardMessage } from "../plugins/pack-shared-copy";
-import { drawerKeyForModeId, type DrawerKey } from "../graph/mosaic-tile-id";
+import type { DrawerKey } from "../graph/mosaic-tile-id";
+import { buildDrawerContext } from "./drawer-context";
 import {
   countPackTiles,
   firstPackTileInReadingOrder,
   tileSlotOnWall,
 } from "../app/mosaic-view-drawer-layout";
-import { rebuildViewDrawerContent } from "./view-drawer-module";
+import { clearViewDrawerHost, rebuildViewDrawerContent } from "./view-drawer-module";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
@@ -470,23 +471,35 @@ export class Settings {
     const host = this.viewHost;
     if (!host) return;
     const modeForKey = modeIdForDrawerKey?.trim() || this.viewFocusId.trim() || spec?.id || "";
-    const nextKey = spec && modeForKey ? drawerKeyForModeId(modeForKey) : null;
-    if (nextKey && nextKey === this.viewDrawerKey && host.querySelector('.plugin-layer[data-layer="view"]')) {
+    const draftValues = this.viewPluginDirty ? { ...this.viewPluginDraft } : undefined;
+    if (!spec) {
+      this.viewDrawerKey = null;
+      this.viewPluginDirty = false;
+      this.viewPluginDraft = {};
+      this.pop.removeAttribute("data-view-plugin-dirty");
+      clearViewDrawerHost(host, this.viewMosaicSec);
+      this.attachViewMosaic();
       return;
     }
-    this.viewDrawerKey = nextKey;
-    const draftValues = this.viewPluginDirty ? { ...this.viewPluginDraft } : undefined;
-    this.viewPluginDirty = false;
-    this.viewPluginDraft = {};
-    this.pop.removeAttribute("data-view-plugin-dirty");
-    rebuildViewDrawerContent(host, {
+    const ctx = buildDrawerContext({
+      modeId: modeForKey,
       spec,
       fields,
       look,
       extras,
-      devices: this.nestDevices,
-      draftValues,
       wallScope: packWallScopeFromAnim(this.anim),
+      nestDevices: this.nestDevices,
+      draftValues,
+    });
+    if (ctx.key && ctx.key === this.viewDrawerKey && host.querySelector('.plugin-layer[data-layer="view"]')) {
+      return;
+    }
+    this.viewDrawerKey = ctx.key;
+    this.viewPluginDirty = false;
+    this.viewPluginDraft = {};
+    this.pop.removeAttribute("data-view-plugin-dirty");
+    rebuildViewDrawerContent(host, {
+      ...ctx,
       viewMosaicSec: this.viewMosaicSec,
       onPluginPersist: (id, values) => {
         this.onPluginChange?.(id, values);
