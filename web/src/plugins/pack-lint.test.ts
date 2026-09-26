@@ -384,6 +384,16 @@ describe("pack lint guardrails", () => {
     }
   });
 
+  it("LEGACY_DECLARE_ZOTO_PACK_IDS is empty after getVizZoto pack migration (PR C)", () => {
+    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toEqual([]);
+    expect(isLegacyDeclareZotoPackAllowed("backrooms")).toBe(false);
+    const text = readFileSync(path.join(repoRoot, OFF_ALLOWLIST_ZOTO_FIXTURE), "utf8");
+    const hits = scanPackLintFixture(OFF_ALLOWLIST_PACK_REPO_REL, text, "not-on-legacy-allowlist", repoRoot);
+    expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
+    const { disallowedLegacyZoto } = assertBaselineGuard(hits, loadBaseline(repoRoot));
+    expect(disallowedLegacyZoto.length).toBeGreaterThan(0);
+  });
+
   it("reports baseline counts per pack and per rule (documentation)", () => {
     const baseline = loadBaseline(repoRoot);
     expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(3);
