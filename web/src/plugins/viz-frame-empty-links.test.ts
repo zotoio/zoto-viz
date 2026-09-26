@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizLinkSample } from "./viz-host";
 import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
@@ -75,6 +75,10 @@ async function loadProdBundledEmptyLinksModule(): Promise<{
   rmSync(tmp, { recursive: true, force: true });
   return mod;
 }
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz frame v2 empty links contract (item 5a)", () => {
   it("dev: a pack push on empty links throws and the next frame links length is 0", () => {

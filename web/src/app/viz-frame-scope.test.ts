@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { ViewMode } from "../core/modes";
 import { VizFrameScopeCache } from "./viz-frame-scope";
 
@@ -8,6 +8,10 @@ const mode: ViewMode = {
   graphBase: "topology",
   pluginId: "talker-storm",
 };
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("VizFrameScopeCache", () => {
   it("parses source bind once per scope sync, not on 300 frame ticks", () => {

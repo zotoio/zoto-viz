@@ -14,6 +14,10 @@ const mode: ViewMode = {
   legend: () => [],
 };
 
+beforeEach(() => {
+  expect.hasAssertions();
+});
+
 describe("vizFrameHostPerFrameTick", () => {
   it("uses scope-synced bind for 300 frame ticks without extra optsFor or parseSourceBind", () => {
     const parseSourceBind = vi.spyOn(sources, "parseSourceBind");

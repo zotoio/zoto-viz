@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import type { StateMsg } from "../core/types";
 import { protocols } from "../core/modes";
 import { buildIdleVizFrameFailed, idleVizFrameFailedBadgeText } from "../plugins/fixtures/idle-viz-frame";
@@ -44,6 +44,10 @@ export function modeledHudFootBoxes(
 const FAT_PROTOCOLS_FOOT_H = 72;
 const HUD_LINE_H = 26;
 const VIEWPORT_H = 800;
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz hud helpers", () => {
   it("recognises demo pack ids", () => {
@@ -361,7 +365,7 @@ describe("viz hud helpers", () => {
       t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
       talkers: [{ id: "10.0.0.1", rate: 1, role: "lan", failed: 0.4 }],
     });
-    expect(badge).toMatch(/^⚠ DEGRADED /);
+    expect(badge).toBe("⚠ DEGRADED 40% TCP");
   });
 
   it("keeps systemd unit count separate from TCP failure percentage", () => {

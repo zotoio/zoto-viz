@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import type { ViewMode } from "../core/modes";
 import { illustratedSourceBind, parseSourceBind } from "../core/sources";
 import { VizFrameScopeCache } from "./viz-frame-scope";
@@ -14,6 +14,10 @@ const mode: ViewMode = {
   graphBase: "topology",
   legend: () => [],
 };
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz frame hot path steady-state", () => {
   it("reuses the host per-frame tick input object over 600 ticks (0 new tick inputs)", () => {

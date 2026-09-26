@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
 import { VIZ_FIXTURE_GOLDEN_LIVE, VIZ_FIXTURE_GOLDEN_LIVE_FAILED } from "../../../plugins/sdk/viz-fixtures";
 
@@ -96,6 +96,10 @@ function collectPackSources(): { packId: string; rel: string; text: string }[] {
   }
   return rows;
 }
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz contract packs", () => {
   it("records VIZ_CONTRACT_VERSION for pack lint", () => {
