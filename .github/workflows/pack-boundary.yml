@@ -1,0 +1,15 @@
+name: pack-boundary
+
+on:
+  pull_request:
+
+jobs:
+  pack-boundary:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'host-change') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Enforce pack PR boundary
+        run: python scripts/check_pack_pr_boundary.py "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
