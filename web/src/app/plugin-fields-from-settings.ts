@@ -31,7 +31,11 @@ export function syncPluginFieldsFromSettingsEdit(deps: PluginFieldsFromSettingsD
   const spec = m.pluginId ? deps.pluginSpecForMode(modeId) : null;
   const mosaic = deps.mosaic;
   if (mosaic?.on && !(m.pluginId && m.standalone)) {
-    mosaic.graphScene(m.id)?.setMode(m, opts);
+    if (spec) {
+      applySharedMosaicPluginConfig(mosaic, spec, opts, deps.optsFor, deps.hostModeById);
+    } else {
+      mosaic.graphScene(m.id)?.setMode(m, opts);
+    }
   } else {
     deps.scene.setMode(m, opts);
   }
