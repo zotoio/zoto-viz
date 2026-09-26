@@ -2,7 +2,7 @@
 
 import { packFractalDrive, resetFractalDrive } from "./drive";
 import { IDLE_POINTER } from "./interaction";
-import type { VizDataFrame } from "../../viz-frame";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
   onFrame: ((frame: VizDataFrame) => void) | null;
