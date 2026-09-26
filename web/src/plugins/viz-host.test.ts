@@ -11,10 +11,14 @@ import {
   bindVizWriterCore,
   buildVizFrame,
   defaultVizContract,
+  emptyVizBuildWorkCounters,
   parseVizContract,
   pluginNeedsVizContract,
   topKByScore,
+  vizBuildWorkWithinBudget,
+  type VizBuildWorkCounters,
 } from "./viz-host";
+import { fatLanFixture } from "./fixtures/fat-lan-state";
 
 describe("viz contract", () => {
   it("requires graphWalk false and viz.idle in schema parse", () => {
@@ -248,6 +252,18 @@ describe("buildVizFrame", () => {
     vi.restoreAllMocks();
   });
 
+  it("count budget rejects naive O(devices×flows×3) talker rescans", () => {
+    const state = fatLanFixture();
+    const naiveWork = simulateNaiveTalkerRescanWork(state.devices.length, state.flows.length);
+    expect(vizBuildWorkWithinBudget(state, naiveWork)).toBe(false);
+
+    const work = emptyVizBuildWorkCounters();
+    buildVizFrame(state, 0, 0, undefined, work);
+    expect(vizBuildWorkWithinBudget(state, work)).toBe(true);
+    expect(work.flowVisits).toBe(state.flows.length);
+    expect(work.deviceScoreCalls).toBeLessThanOrEqual(state.devices.length);
+  });
+
   it("decimates state without sorting the full device list", () => {
     let maxSorted = 0;
     const orig = Array.prototype.sort;
@@ -351,6 +367,15 @@ describe("buildVizFrame", () => {
     expect(frame.headlines.every((h) => h.kind === "rss")).toBe(true);
   });
 });
+
+/** Regression class: rescan every flow 3× per device (~1.5M rate calls on fat LAN). */
+function simulateNaiveTalkerRescanWork(devices: number, flows: number): VizBuildWorkCounters {
+  return {
+    deviceScoreCalls: devices * flows * 3,
+    flowVisits: devices * flows * 3,
+    flowProtoVisits: 0,
+  };
+}
 
 function minimalState(overrides: Partial<StateMsg> = {}): StateMsg {
   return {

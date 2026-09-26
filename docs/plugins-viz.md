@@ -124,5 +124,16 @@ cd web && pnpm test -- src/plugins/viz-host.test.ts src/plugins/host.test.ts
 .venv/bin/pytest tests/test_plugin_schema.py -k viz
 ```
 
+Cloud CI runs **`pnpm dogfood`** — a deterministic **count gate** on the fat-LAN
+fixture (fake frame clock, per-build work budgets on flow/talker decimation,
+output caps). It does **not** assert wall-clock `performance.now()` p95.
+
+Local GPU timing (p50/p95 build and present) is opt-in:
+
+```bash
+cd web && pnpm dogfood:perf
+# or: ZOTO_VIZ_PERF=1 pnpm dogfood
+```
+
 See also [TypeScript plugins](/plugins-ts) for the iframe sandbox and
 [Plugins](/plugins) for catalog layout and consent.

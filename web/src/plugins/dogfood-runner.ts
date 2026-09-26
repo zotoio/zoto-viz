@@ -7,10 +7,14 @@ import {
   VIZ_FRAME_BUDGET_MS,
   VizBufferWriter,
   VizFrameBudget,
+  assertVizFrameOutputCaps,
   bindVizWriterCore,
   buildVizFrame,
   buildVizFrameForPlugin,
+  emptyVizBuildWorkCounters,
   parseVizContract,
+  vizBuildWorkWithinBudget,
+  type VizBuildWorkCounters,
   type VizDataFrame,
   type VizFrameBudgetStats,
   type VizPluginContract,
@@ -139,6 +143,21 @@ export interface DogfoodSoakResult {
   allWithinBudgetOrHonestSkips: boolean;
 }
 
+export interface DogfoodCountGatePackResult {
+  packId: VizDemoPackId;
+  frames: number;
+  delivered: number;
+  skipped: number;
+  maxWork: VizBuildWorkCounters;
+}
+
+export interface DogfoodCountGateResult {
+  fixture: { devices: number; flows: number };
+  framesPerPack: number;
+  packs: DogfoodCountGatePackResult[];
+  ok: boolean;
+}
+
 export function percentile(samples: number[], p: number): number {
   if (!samples.length) return 0;
   const sorted = [...samples].sort((a, b) => a - b);
@@ -241,9 +260,87 @@ export function dogfoodWithinBudget(
 }
 
 /**
- * Live dogfood soak: fat-LAN fixture, all three packs, real `performance.now`
- * budget path. Passes when p95 build and present are within budget or skips are
- * recorded (never silent green on soft-FPS).
+ * Deterministic dogfood gate for cloud CI: fake-zero build times, strict
+ * delivered/skipped counts, per-build work budgets, and output caps.
+ */
+export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCountGateResult {
+  const state = opts.state ?? fatLanFixture();
+  const framesPerPack = opts.framesPerPack ?? 120;
+  const audio = opts.audio ?? 0.15;
+  const now = opts.now ?? (() => 0);
+
+  const packs: DogfoodCountGatePackResult[] = [];
+  let ok = true;
+
+  for (const packId of VIZ_DEMO_PACKS) {
+    const contract = DEMO_PACK_CONTRACTS[packId];
+    const budget = new VizFrameBudget(now);
+    const writer = new VizBufferWriter(contract);
+    const maxWork = emptyVizBuildWorkCounters();
+    let prevTs = 0;
+    let delivered = 0;
+
+    const instrumentedBuild = (s: StateMsg, pt: number, a: number) => {
+      const work = emptyVizBuildWorkCounters();
+      const frame = buildVizFrameForPlugin(s, pt, a, contract.idle, undefined, work);
+      maxWork.deviceScoreCalls = Math.max(maxWork.deviceScoreCalls, work.deviceScoreCalls);
+      maxWork.flowVisits = Math.max(maxWork.flowVisits, work.flowVisits);
+      maxWork.flowProtoVisits = Math.max(maxWork.flowProtoVisits, work.flowProtoVisits);
+      if (!vizBuildWorkWithinBudget(s, work)) ok = false;
+      try {
+        assertVizFrameOutputCaps(frame);
+      } catch {
+        ok = false;
+      }
+      return frame;
+    };
+
+    for (let i = 0; i < framesPerPack; i++) {
+      const tick = dogfoodTick(packId, state, prevTs, audio, budget, writer, undefined, instrumentedBuild);
+      if (tick.delivered && tick.frame) {
+        delivered++;
+        prevTs = tick.frame.t;
+      }
+    }
+
+    const skipped = budget.stats.skipped;
+    if (delivered !== framesPerPack || skipped !== 0) ok = false;
+    if (!vizBuildWorkWithinBudget(state, maxWork)) ok = false;
+
+    packs.push({
+      packId,
+      frames: framesPerPack,
+      delivered,
+      skipped,
+      maxWork,
+    });
+  }
+
+  return {
+    fixture: { devices: state.devices.length, flows: state.flows.length },
+    framesPerPack,
+    packs,
+    ok,
+  };
+}
+
+export function formatDogfoodCountGateReport(result: DogfoodCountGateResult): string {
+  const lines = [
+    `Fat-LAN dogfood count gate (${result.fixture.devices} devices, ${result.fixture.flows} flows, ${result.framesPerPack} frames/pack):`,
+  ];
+  for (const p of result.packs) {
+    const w = p.maxWork;
+    lines.push(
+      `  ${p.packId}: delivered ${p.delivered}/${p.frames} skips=${p.skipped} | work scores=${w.deviceScoreCalls} flowVisits=${w.flowVisits} flowProtos=${w.flowProtoVisits}`,
+    );
+  }
+  lines.push(`  gate: ${result.ok ? "PASS" : "FAIL"}`);
+  return lines.join("\n");
+}
+
+/**
+ * Local wall-clock soak (opt-in via `ZOTO_VIZ_PERF=1` / `pnpm dogfood:perf`).
+ * Uses real `performance.now()` and p95 build/present budgets.
  */
 export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult {
   const state = opts.state ?? fatLanFixture();

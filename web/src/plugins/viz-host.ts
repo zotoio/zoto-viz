@@ -15,6 +15,51 @@ export const VIZ_MAX_RF_SAMPLES = 24;
 export const VIZ_MAX_TALKER_SAMPLES = 24;
 export const VIZ_MAX_HEADLINE_SAMPLES = 64;
 
+/** Per-build work tallies for deterministic dogfood gates (no wall-clock in CI). */
+export interface VizBuildWorkCounters {
+  /** `score()` calls while selecting talkers (top-K path). */
+  deviceScoreCalls: number;
+  /** Iterations over `state.flows` while building packet samples. */
+  flowVisits: number;
+  /** Inner proto steps while scanning flows. */
+  flowProtoVisits: number;
+}
+
+export function emptyVizBuildWorkCounters(): VizBuildWorkCounters {
+  return { deviceScoreCalls: 0, flowVisits: 0, flowProtoVisits: 0 };
+}
+
+/** Loose upper bounds on decimation work — catches O(devices×flows) talker rescans. */
+export const VIZ_BUILD_WORK_BUDGET = {
+  deviceScoresPerDevice: 1,
+  flowVisitsPerFlow: 1,
+  flowProtosPerFlow: 8,
+} as const;
+
+export function vizBuildWorkWithinBudget(state: StateMsg, work: VizBuildWorkCounters): boolean {
+  const devices = state.devices.length;
+  const flows = state.flows.length;
+  if (work.deviceScoreCalls > devices * VIZ_BUILD_WORK_BUDGET.deviceScoresPerDevice) return false;
+  if (work.flowVisits > flows * VIZ_BUILD_WORK_BUDGET.flowVisitsPerFlow) return false;
+  if (work.flowProtoVisits > flows * VIZ_BUILD_WORK_BUDGET.flowProtosPerFlow) return false;
+  return true;
+}
+
+export function assertVizFrameOutputCaps(frame: VizDataFrame): void {
+  if (frame.packets.length > VIZ_MAX_PACKET_SAMPLES) {
+    throw new Error(`packets cap exceeded: ${frame.packets.length} > ${VIZ_MAX_PACKET_SAMPLES}`);
+  }
+  if (frame.rf.length > VIZ_MAX_RF_SAMPLES) {
+    throw new Error(`rf cap exceeded: ${frame.rf.length} > ${VIZ_MAX_RF_SAMPLES}`);
+  }
+  if (frame.talkers.length > VIZ_MAX_TALKER_SAMPLES) {
+    throw new Error(`talkers cap exceeded: ${frame.talkers.length} > ${VIZ_MAX_TALKER_SAMPLES}`);
+  }
+  if (frame.headlines.length > VIZ_MAX_HEADLINE_SAMPLES) {
+    throw new Error(`headlines cap exceeded: ${frame.headlines.length} > ${VIZ_MAX_HEADLINE_SAMPLES}`);
+  }
+}
+
 /** Fixed std140 UBO layout — locked in schema `$defs/vizUboLayout`. */
 export const VIZ_UBO = {
   block: "ZotoVizData",
@@ -319,11 +364,13 @@ export function topKByScore<T>(
   limit: number,
   score: (item: T) => number,
   skip: (item: T) => boolean = () => false,
+  work?: VizBuildWorkCounters,
 ): T[] {
   if (limit <= 0) return [];
   const buf: { score: number; item: T }[] = [];
   for (const item of items) {
     if (skip(item)) continue;
+    if (work) work.deviceScoreCalls++;
     const s = score(item);
     if (s <= 0) continue;
     if (buf.length < limit) {
@@ -342,12 +389,13 @@ export function topKByScore<T>(
   return buf.map((x) => x.item);
 }
 
-function topTalkers(devices: Device[], limit: number): VizTalkerSample[] {
+function topTalkers(devices: Device[], limit: number, work?: VizBuildWorkCounters): VizTalkerSample[] {
   return topKByScore(
     devices,
     limit,
     (d) => d.packets,
     (d) => d.packets <= 0,
+    work,
   ).map((d) => ({ id: d.ip, rate: d.packets, role: d.role }));
 }
 
@@ -392,11 +440,13 @@ function upsertProtoTop(top: ProtoTop[], limit: number, proto: string, count: nu
   if (count > top[minI].count) top[minI] = { proto, count };
 }
 
-function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
+function packetSamples(state: StateMsg, limit: number, work?: VizBuildWorkCounters): VizPacketSample[] {
   const counts = new Map<string, number>();
   const top: ProtoTop[] = [];
   for (const flow of state.flows) {
+    if (work) work.flowVisits++;
     for (const proto of flow.protos ?? []) {
+      if (work) work.flowProtoVisits++;
       const count = (counts.get(proto) ?? 0) + flow.packets;
       counts.set(proto, count);
       upsertProtoTop(top, limit, proto, count);
@@ -413,7 +463,13 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
  * Build a decimated data frame from monitor state. Selection cost scales with
  * the output cap (top-K), not the full device / flow lists.
  */
-export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: SourceBind | Record<string, string>): VizDataFrame {
+export function buildVizFrame(
+  state: StateMsg,
+  prevTs = 0,
+  audio = 0,
+  bind?: SourceBind | Record<string, string>,
+  work?: VizBuildWorkCounters,
+): VizDataFrame {
   const t = state.ts || Date.now() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
@@ -421,9 +477,9 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: Sou
     t,
     dt,
     audio: Math.min(1, Math.max(0, audio)),
-    packets: packetSamples(state, VIZ_MAX_PACKET_SAMPLES),
+    packets: packetSamples(state, VIZ_MAX_PACKET_SAMPLES, work),
     rf: rfBeacons(state, VIZ_MAX_RF_SAMPLES),
-    talkers: topTalkers(state.devices, VIZ_MAX_TALKER_SAMPLES),
+    talkers: topTalkers(state.devices, VIZ_MAX_TALKER_SAMPLES, work),
     headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed).map((h) => ({
       id: h.id,
       label: h.label,
@@ -443,8 +499,9 @@ export function buildVizFrameForPlugin(
   audio: number,
   idle: VizIdleConfig,
   bind?: SourceBind | Record<string, string>,
+  work?: VizBuildWorkCounters,
 ): VizDataFrame {
-  return mergeVizIdleFrame(buildVizFrame(state, prevTs, audio, bind), idle);
+  return mergeVizIdleFrame(buildVizFrame(state, prevTs, audio, bind, work), idle);
 }
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
