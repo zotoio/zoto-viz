@@ -117,13 +117,34 @@ export function metroHudLabel(opts: MetroOptions, metric: string, demo: boolean)
   return `Metro Lines · ${opts.preset.replace(/_/g, " ")} · ${demo ? "demo" : metric}`;
 }
 
+export interface MetroPacketSample {
+  proto: string;
+  size: number;
+  field: number;
+  /** Owning host id (required for packet→line/train mapping when live). */
+  host?: string;
+  /** Optional peer host for the other end of the line. */
+  peer?: string;
+  /** Legacy alias for host when the frame carries `id` instead. */
+  id?: string;
+  /** Explicit per-flow failure 0..1 — never inferred from field/size. */
+  failed?: number;
+}
+
+export interface MetroTalkerSample {
+  id: string;
+  rate: number;
+  role: string;
+  failed?: number;
+}
+
 export interface VizSliceFrame {
   t: number;
   dt: number;
   audio: number;
-  packets: { proto: string; size: number; field: number }[];
+  packets: MetroPacketSample[];
   rf: { ssid: string; rssi: number; channel: number }[];
-  talkers: { id: string; rate: number; role: string }[];
+  talkers: MetroTalkerSample[];
   headlines: { id: string; label: string; text: string }[];
   sys?: { failed: number };
   demo?: boolean;
@@ -132,6 +153,8 @@ export interface VizSliceFrame {
 
 export interface MetroStation {
   id: string;
+  /** Fixed GPU slot 0..METRO_MAX_STATIONS-1 — keyed by host id, not list rank. */
+  slot: number;
   label: string;
   role: number;
   rate: number;
@@ -139,6 +162,7 @@ export interface MetroStation {
   y: number;
   tx: number;
   ty: number;
+  /** Failure stress 0..1 from explicit host failure fields only. */
   failed: number;
   major: boolean;
 }
@@ -150,6 +174,8 @@ export interface MetroEdge {
   weight: number;
   disrupted: number;
   proto: string;
+  /** Index in the frame packet list that owns this edge (for trains). */
+  packetIndex: number;
 }
 
 export interface MetroTrain {
@@ -197,9 +223,168 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-export function fictionalLabel(id: string, index: number): string {
-  const h = hashStr(id);
-  return FICTIONAL_NAMES[(h + index) % FICTIONAL_NAMES.length]!;
+export function fictionalLabel(id: string): string {
+  return FICTIONAL_NAMES[hashStr(id) % FICTIONAL_NAMES.length]!;
+}
+
+/** Frames a vacated host slot is held before reuse (never handed to the next list entry). */
+export const METRO_HOST_VACANT_MAX = 90;
+
+function layoutTargetForHost(hostId: string, seed: number): [number, number] {
+  const rnd = mulberry32(hashStr(hostId) ^ (seed >>> 0));
+  const col = rnd();
+  const row = rnd();
+  const tx = -0.55 + col * 1.1;
+  const ty = -0.42 + row * 0.84;
+  return snapOctilinear(tx, ty);
+}
+
+function emptyStation(slot: number): MetroStation {
+  return {
+    id: "",
+    slot,
+    label: "",
+    role: 0,
+    rate: 0,
+    x: 0,
+    y: 0,
+    tx: 0,
+    ty: 0,
+    failed: 0,
+    major: false,
+  };
+}
+
+function explicitHostFailure(t: MetroTalkerSample, packets: MetroPacketSample[]): number {
+  if (typeof t.failed === "number" && Number.isFinite(t.failed)) {
+    return clamp(t.failed, 0, 1, 0);
+  }
+  let max = 0;
+  for (const p of packets) {
+    const host = packetHostId(p);
+    if (host !== t.id) continue;
+    if (typeof p.failed === "number" && Number.isFinite(p.failed)) {
+      max = Math.max(max, clamp(p.failed, 0, 1, 0));
+    }
+  }
+  return max;
+}
+
+function packetHostId(p: MetroPacketSample): string | null {
+  const host = p.host ?? p.id;
+  return host && host.length > 0 ? host : null;
+}
+
+interface HostRecord {
+  id: string;
+  rate: number;
+  role: string;
+  failed: number;
+}
+
+class MetroHostRegistry {
+  private readonly slots: {
+    hostId: string | null;
+    vacant: number;
+    station: MetroStation;
+  }[] = [];
+
+  constructor() {
+    this.reset();
+  }
+
+  reset(): void {
+    this.slots.length = 0;
+    for (let i = 0; i < METRO_MAX_STATIONS; i++) {
+      this.slots.push({ hostId: null, vacant: 0, station: emptyStation(i) });
+    }
+  }
+
+  assignedCount(): number {
+    return this.slots.filter((s) => s.hostId).length;
+  }
+
+  slotIndexFor(hostId: string): number {
+    return this.slots.find((s) => s.hostId === hostId)?.station.slot ?? -1;
+  }
+
+  sync(
+    hosts: HostRecord[],
+    packets: MetroPacketSample[],
+    seed: number,
+    maxHosts: number,
+  ): MetroStation[] {
+    const active = new Set(hosts.map((h) => h.id));
+
+    for (const row of this.slots) {
+      if (!row.hostId) continue;
+      if (!active.has(row.hostId)) {
+        row.vacant++;
+        if (row.vacant > METRO_HOST_VACANT_MAX) {
+          row.hostId = null;
+          row.vacant = 0;
+          row.station = emptyStation(row.station.slot);
+        }
+        continue;
+      }
+      row.vacant = 0;
+    }
+
+    for (const h of hosts) {
+      let row = this.slots.find((s) => s.hostId === h.id);
+      if (!row) {
+        if (this.assignedCount() >= maxHosts) continue;
+        const free = this.slots.find((s) => !s.hostId);
+        if (!free) continue;
+        const [tx, ty] = layoutTargetForHost(h.id, seed);
+        free.hostId = h.id;
+        free.vacant = 0;
+        free.station = {
+          id: h.id,
+          slot: free.station.slot,
+          label: fictionalLabel(h.id),
+          role: roleHue(h.role),
+          rate: 0,
+          x: tx,
+          y: ty,
+          tx,
+          ty,
+          failed: 0,
+          major: h.role === "gateway",
+        };
+        row = free;
+      }
+      row.station.rate = Math.min(1, h.rate / 200);
+      row.station.role = roleHue(h.role);
+      row.station.failed = h.failed;
+      row.station.major = h.role === "gateway" || h.rate > 80;
+      row.station.label = fictionalLabel(h.id);
+    }
+
+    const out: MetroStation[] = [];
+    for (const row of this.slots) {
+      if (!row.hostId) continue;
+      out.push(row.station);
+    }
+    return out;
+  }
+}
+
+let metroHostRegistry: MetroHostRegistry | null = null;
+
+export function getMetroHostRegistry(): MetroHostRegistry {
+  if (!metroHostRegistry) metroHostRegistry = new MetroHostRegistry();
+  return metroHostRegistry;
+}
+
+export function resetMetroHostRegistry(): void {
+  metroHostRegistry?.reset();
+  metroHostRegistry = null;
+}
+
+/** Packed station stress channel (failure only — not rate/field). */
+export function metroStationStressPacked(station: MetroStation): number {
+  return station.failed;
 }
 
 function roleHue(role: string): number {
@@ -224,27 +409,6 @@ function snapOctilinear(x: number, y: number): [number, number] {
   const sx = Math.round(x / g) * g;
   const sy = Math.round(y / g) * g;
   return [sx, sy];
-}
-
-function layoutStations(stations: MetroStation[], seed: number): void {
-  const rnd = mulberry32(seed);
-  const n = stations.length;
-  const cols = Math.ceil(Math.sqrt(n));
-  for (let i = 0; i < n; i++) {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const jx = (rnd() - 0.5) * 0.04;
-    const jy = (rnd() - 0.5) * 0.04;
-    const tx = -0.55 + (col / Math.max(1, cols - 1)) * 1.1 + jx;
-    const ty = -0.42 + (row / Math.max(1, Math.ceil(n / cols) - 1)) * 0.84 + jy;
-    const [sx, sy] = snapOctilinear(tx, ty);
-    stations[i]!.tx = sx;
-    stations[i]!.ty = sy;
-    if (stations[i]!.x === 0 && stations[i]!.y === 0) {
-      stations[i]!.x = sx;
-      stations[i]!.y = sy;
-    }
-  }
 }
 
 function smoothStations(stations: MetroStation[], dt: number, reduced: boolean): void {
@@ -273,15 +437,15 @@ function buildDemoTalkers(t: number): VizSliceFrame["talkers"] {
   ];
 }
 
-function buildDemoPackets(t: number): VizSliceFrame["packets"] {
+function buildDemoPackets(t: number): MetroPacketSample[] {
   const w = t * 0.5;
   return [
-    { proto: "tcp", size: 520, field: 0.55 + 0.1 * Math.sin(w) },
-    { proto: "tls", size: 900, field: 0.62 + 0.08 * Math.cos(w * 1.1) },
-    { proto: "udp", size: 180, field: 0.42 + 0.12 * Math.sin(w * 1.3) },
-    { proto: "dns", size: 96, field: 0.35 + 0.1 * Math.cos(w * 0.8) },
-    { proto: "tcp", size: 640, field: 0.58 + 0.09 * Math.sin(w + 1) },
-    { proto: "tls", size: 1100, field: 0.68 + 0.07 * Math.cos(w + 0.4) },
+    { proto: "tcp", size: 520, field: 0.55 + 0.1 * Math.sin(w), host: "hub-alpha", peer: "yard-brun" },
+    { proto: "tls", size: 900, field: 0.62 + 0.08 * Math.cos(w * 1.1), host: "yard-brun", peer: "quay-seven" },
+    { proto: "udp", size: 180, field: 0.42 + 0.12 * Math.sin(w * 1.3), host: "quay-seven", peer: "spire-v" },
+    { proto: "dns", size: 96, field: 0.35 + 0.1 * Math.cos(w * 0.8), host: "spire-v", peer: "mint-river" },
+    { proto: "tcp", size: 640, field: 0.58 + 0.09 * Math.sin(w + 1), host: "mint-river", peer: "glass-h" },
+    { proto: "tls", size: 1100, field: 0.68 + 0.07 * Math.cos(w + 0.4), host: "glass-h", peer: "hub-alpha" },
   ];
 }
 
@@ -298,78 +462,91 @@ export function buildMetroNetwork(frame: VizSliceFrame, opts: MetroOptions): Met
   const talkers = demo ? buildDemoTalkers(frame.t) : frame.talkers;
   const packets = demo ? buildDemoPackets(frame.t) : frame.packets;
   const maxS = Math.min(opts.maxStations, METRO_MAX_STATIONS);
+  const registry = getMetroHostRegistry();
 
-  const stationIds: { id: string; rate: number; role: string }[] = [];
+  const hosts: HostRecord[] = [];
+  const seen = new Set<string>();
+  const pushHost = (id: string, rate: number, role: string, failed = 0): void => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    hosts.push({ id, rate, role, failed });
+  };
+
   if (opts.stationSource === "rf" || opts.stationSource === "mixed") {
     for (const b of frame.rf) {
-      stationIds.push({ id: b.ssid || `ch-${b.channel}`, rate: b.rssi * 180, role: "lan" });
+      pushHost(b.ssid || `ch-${b.channel}`, b.rssi * 180, "lan");
     }
   }
   if (opts.stationSource !== "rf") {
-    for (const t of talkers) stationIds.push({ id: t.id, rate: t.rate, role: t.role });
-  }
-  const seen = new Set<string>();
-  const picked: { id: string; rate: number; role: string }[] = [];
-  for (const s of stationIds.sort((a, b) => b.rate - a.rate)) {
-    if (seen.has(s.id)) continue;
-    seen.add(s.id);
-    picked.push(s);
-    if (picked.length >= maxS) break;
-  }
-  while (picked.length < Math.min(6, maxS)) {
-    const id = `synth-${picked.length}`;
-    picked.push({ id, rate: 30 + picked.length * 4, role: "lan" });
+    for (const t of talkers) {
+      pushHost(t.id, t.rate, t.role, explicitHostFailure(t, packets));
+    }
   }
 
+  const stations = registry.sync(hosts, packets, opts.seed, maxS);
   const fail = clamp(frame.sys?.failed ?? 0, 0, 1, 0);
-  const stations: MetroStation[] = picked.map((s, i) => ({
-    id: s.id,
-    label: fictionalLabel(s.id, i),
-    role: roleHue(s.role),
-    rate: Math.min(1, s.rate / 200),
-    x: 0,
-    y: 0,
-    tx: 0,
-    ty: 0,
-    failed: i === 0 && fail > 0.2 ? fail : i === 2 && fail > 0.45 ? fail * 0.8 : 0,
-    major: i < 4 || s.rate > 80,
-  }));
-  layoutStations(stations, opts.seed);
+
+  const stationBySlot = (slot: number): MetroStation | undefined =>
+    stations.find((s) => s.slot === slot);
+
+  const edgeDisrupted = (slotA: number, slotB: number): number => {
+    const fa = stationBySlot(slotA)?.failed ?? 0;
+    const fb = stationBySlot(slotB)?.failed ?? 0;
+    return fa > 0 || fb > 0 ? 1 : 0;
+  };
 
   const edges: MetroEdge[] = [];
   const legendMap = new Map<string, number>();
-  const addEdge = (a: number, b: number, hue: number, weight: number, proto: string, disrupted: number): void => {
-    if (a === b || a < 0 || b < 0 || a >= stations.length || b >= stations.length) return;
+  const addEdge = (
+    a: number,
+    b: number,
+    hue: number,
+    weight: number,
+    proto: string,
+    packetIndex: number,
+  ): void => {
+    if (a === b || a < 0 || b < 0) return;
     const key = `${Math.min(a, b)}-${Math.max(a, b)}-${proto}`;
     if (edges.some((e) => `${Math.min(e.a, e.b)}-${Math.max(e.a, e.b)}-${e.proto}` === key)) return;
     if (edges.length >= METRO_MAX_EDGES) return;
-    edges.push({ a, b, hue, weight, proto, disrupted });
+    const disrupted = edgeDisrupted(a, b);
+    edges.push({ a, b, hue, weight, proto, disrupted, packetIndex });
     if (!legendMap.has(proto)) legendMap.set(proto, hue);
+  };
+
+  const gatewaySlot = (): number => {
+    const gw = stations.find((s) => s.major && s.role >= 0.8);
+    return gw?.slot ?? stations[0]?.slot ?? -1;
   };
 
   if (opts.lineSource === "packets") {
     for (let i = 0; i < packets.length && edges.length < METRO_MAX_EDGES; i++) {
       const p = packets[i]!;
-      const a = i % stations.length;
-      const b = (a + 1 + (i % 3)) % stations.length;
+      const host = packetHostId(p);
+      if (!host) continue;
+      const a = registry.slotIndexFor(host);
+      if (a < 0) continue;
+      let b = p.peer ? registry.slotIndexFor(p.peer) : -1;
+      if (b < 0) b = gatewaySlot();
+      if (b < 0 || b === a) continue;
       const w = Math.min(1, p.size / 1200);
-      addEdge(a, b, protoHue(p.proto), w, p.proto, stations[a]!.failed > 0.3 ? 1 : 0);
-    }
-    for (let i = 0; i < stations.length - 1 && edges.length < METRO_MAX_EDGES; i++) {
-      addEdge(i, i + 1, 0.25 + (i % 5) * 0.08, 0.35, "link", 0);
+      addEdge(a, b, protoHue(p.proto), w, p.proto, i);
     }
   } else {
-    for (let i = 0; i < stations.length - 1 && edges.length < METRO_MAX_EDGES; i++) {
-      addEdge(i, i + 1, stations[i]!.role, stations[i]!.rate, "talker", stations[i]!.failed > 0.3 ? 1 : 0);
+    const hub = gatewaySlot();
+    for (const h of hosts) {
+      const a = registry.slotIndexFor(h.id);
+      if (a < 0 || a === hub || hub < 0) continue;
+      addEdge(a, hub, roleHue(h.role), Math.min(1, h.rate / 200), "talker", -1);
     }
   }
 
   const legend: MetroLegendLine[] = [...legendMap.entries()].slice(0, 6).map(([label, hue]) => ({ label, hue }));
 
   const disruptions: string[] = [];
-  if (fail > 0.15) disruptions.push(`SERVICE ALERT · ${Math.round(fail * 100)}% host stress`);
+  if (fail > 0) disruptions.push(`SERVICE ALERT · ${Math.round(fail * 100)}% host stress`);
   for (const s of stations) {
-    if (s.failed > 0.25) disruptions.push(`DISRUPTION · ${s.label} limited service`);
+    if (s.failed > 0) disruptions.push(`DISRUPTION · ${s.label} limited service`);
   }
   for (const h of frame.headlines.slice(0, 2)) {
     if (/fail|down|error|outage/i.test(h.text)) disruptions.push(h.text.slice(0, 36));
@@ -426,16 +603,15 @@ export class MetroSim {
   private integrateTrains(frame: VizSliceFrame, net: MetroNetwork, opts: MetroOptions, dt: number): void {
     const demo = net.demo;
     const packets = demo ? buildDemoPackets(frame.t) : frame.packets;
-    const maxT = Math.min(opts.maxTrains, METRO_MAX_TRAINS);
+    const maxT = Math.min(opts.maxTrains, METRO_MAX_TRAINS, packets.length);
     this.trains.length = 0;
     for (let i = 0; i < maxT; i++) {
       const tr = this.trainPool[i]!;
-      const edgeIdx = i % Math.max(1, net.edges.length);
-      const edge = net.edges[edgeIdx];
-      if (!edge) continue;
-      const pkt = packets[i % Math.max(1, packets.length)];
-      const speed = (0.15 + (pkt?.field ?? 0.4) * 0.55) * opts.trainSpeed * (opts.reducedMotion ? 0.35 : 1);
-      const len = Math.min(0.22, 0.04 + (pkt?.size ?? 200) / 6000);
+      const pkt = packets[i]!;
+      const edgeIdx = net.edges.findIndex((e) => e.packetIndex === i);
+      if (edgeIdx < 0) continue;
+      const speed = (0.15 + pkt.field * 0.55) * opts.trainSpeed * (opts.reducedMotion ? 0.35 : 1);
+      const len = Math.min(0.22, 0.04 + pkt.size / 6000);
       tr.edge = edgeIdx;
       tr.u = (tr.u + speed * dt) % 1;
       tr.len = len;
@@ -458,6 +634,7 @@ export function releaseMetroSim(): void {
   sharedSim.unsubscribe();
   if (sharedSim.activeSubscriptions <= 0) {
     sharedSim = null;
+    resetMetroHostRegistry();
   }
 }
 
@@ -484,10 +661,14 @@ function packChars(text: string, max: number): number[] {
   return out;
 }
 
+function stationAtSlot(stations: MetroStation[], slot: number): MetroStation | undefined {
+  return stations.find((s) => s.slot === slot);
+}
+
 function packStationLabels(stations: MetroStation[]): number[] {
   const buf: number[] = [];
   for (let i = 0; i < METRO_MAX_STATIONS; i++) {
-    const s = stations[i];
+    const s = stationAtSlot(stations, i);
     const code = s ? s.label.slice(0, 3).toUpperCase() : "   ";
     for (let j = 0; j < 3; j++) {
       const c = code.charCodeAt(j) || 32;
@@ -529,12 +710,12 @@ export function packMetroSlots(
 
   const stBuf: number[] = [];
   for (let i = 0; i < METRO_MAX_STATIONS; i++) {
-    const s = net.stations[i];
+    const s = stationAtSlot(net.stations, i);
     stBuf.push(
       s?.x ?? 0,
       s?.y ?? 0,
       s?.role ?? 0,
-      s ? s.rate * 0.5 + s.failed * 0.5 : 0,
+      s ? metroStationStressPacked(s) : 0,
     );
   }
   slots[METRO_SLOT_STATIONS] = stBuf;
