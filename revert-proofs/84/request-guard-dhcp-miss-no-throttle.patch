@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 4353f14..aa45b15 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -305,7 +305,7 @@ def _lookup_allowed(app: web.Application, key: str) -> bool:
+     clock: Callable[[], float] = app.get("request_guard_clock", _monotonic)
+     now = clock()
+     last = float(app.get("request_guard_last_if_lookup") or 0.0)
+-    if now - last < 30.0:
++    if now - last < 0.0:
+         return False
+     app["request_guard_last_if_lookup"] = now
+     allowed = _refresh_allowed_hosts(app)

@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_hundred_unknown_hosts_zero_fresh_lookups_within_30s_after_one_startup_lookup",
+  "red": "AssertionError: configure: 1 startup lookup",
+  "description": "request-guard-hundred-startup-lookup",
+  "timeoutSec": 120
+}

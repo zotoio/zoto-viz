@@ -29,16 +29,18 @@ async def _many_reject(n: int, port: int, ip: str, host: str) -> None:
                 assert resp.status == 400
 
 
-def test_hundred_unknown_hosts_one_fresh_os_lookup_at_startup(
+def test_hundred_unknown_hosts_zero_fresh_lookups_within_30s_after_one_startup_lookup(
     stub_lan_os_interfaces: LanOsStubState,
 ) -> None:
     async def run() -> None:
         async with make_app_server(bind="0.0.0.0", insecure_lan=True) as (ip, port, _runner):
-            assert stub_lan_os_interfaces["query_calls"] == 1
+            startup = stub_lan_os_interfaces["query_calls"]
+            assert startup == 1, "configure: 1 startup lookup"
             await _many_reject(100, port, ip, "evil.example")
+            fresh = stub_lan_os_interfaces["query_calls"] - startup
+            assert fresh == 0, "100 unknown hosts within 30s: 0 fresh lookups"
 
     asyncio.run(run())
-    assert stub_lan_os_interfaces["query_calls"] == 1
 
 
 def test_thousand_accepted_requests_one_os_lookup_at_startup(
@@ -70,11 +72,15 @@ def test_dhcp_miss_within_30s_does_not_refresh_os_interfaces(
             clock=clock,
         ) as (ip, port, _runner):
             assert stub_lan_os_interfaces["query_calls"] == 1
+            startup = stub_lan_os_interfaces["query_calls"]
+            assert startup == 1, "configure: 1 startup lookup"
             await _many_reject(100, port, ip, "evil.example")
-            assert stub_lan_os_interfaces["query_calls"] == 1
+            assert stub_lan_os_interfaces["query_calls"] == startup
             now = t0 + 29.0
             await _many_reject(1, port, ip, "evil.example")
-            assert stub_lan_os_interfaces["query_calls"] == 1
+            assert stub_lan_os_interfaces["query_calls"] == startup, (
+                "within 30s: 0 fresh lookups after startup"
+            )
 
     asyncio.run(run())
 

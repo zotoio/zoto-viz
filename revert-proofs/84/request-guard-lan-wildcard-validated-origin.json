@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_wildcard_csp.py::test_lan_bind_wildcard_csp_uses_validated_host_origin",
+  "red": "assert \"default-src ...estors 'self'\" == \"default-src ...estors 'self'\"",
+  "description": "request-guard-lan-wildcard-validated-origin",
+  "timeoutSec": 120
+}

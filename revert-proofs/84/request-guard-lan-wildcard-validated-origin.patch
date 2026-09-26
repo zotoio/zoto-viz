@@ -1,0 +1,14 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 4353f14..ef8e8d4 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -331,7 +331,8 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+         return _host_reject_response()
+ 
+     scheme = request.scheme or "http"
+-    request["validated_http_origin"] = f"{scheme}://{key}".rstrip("/")
++    bind = str(request.app.get("request_guard_bind") or "127.0.0.1")
++    request["validated_http_origin"] = f"{scheme}://{bind}:{port}".rstrip("/")
+ 
+     raw_path = getattr(request, "raw_path", None) or request.path or "/"
+     _norm_path, path_err = decode_request_path(raw_path)

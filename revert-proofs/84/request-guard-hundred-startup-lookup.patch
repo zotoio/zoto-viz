@@ -1,0 +1,12 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 4353f14..d216c6a 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -278,7 +278,6 @@ def configure_request_guard(
+     app["request_guard_clock"] = clk
+     now = clk()
+     app["request_guard_last_if_lookup"] = now
+-    _refresh_allowed_hosts(app)
+ 
+ 
+ def validated_http_origin(request: web.Request) -> str:

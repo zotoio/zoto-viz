@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_miss_within_30s_does_not_refresh_os_interfaces",
+  "red": "assert 101 == 1",
+  "description": "request-guard-dhcp-miss-no-throttle",
+  "timeoutSec": 120
+}
