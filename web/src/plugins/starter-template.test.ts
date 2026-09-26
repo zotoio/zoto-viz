@@ -117,8 +117,7 @@ describe("pack starter template", () => {
     } finally {
       rmSync(stageRoot, { recursive: true, force: true });
     }
-  },
-  );
+  });
 
   it("pack entry applies saved config and drives uTime", () => {
     const indexSrc = readFileSync(path.join(starterRoot, "frontend/index.ts"), "utf8");
