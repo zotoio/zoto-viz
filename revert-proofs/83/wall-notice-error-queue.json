@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > queues a fourth error while three errors are visible until one is dismissed",
+  "red": "AssertionError: expected [ <div \u2026(2)>\u2026(1)</div>, \u2026(1) ] to have a length of 3 but got 2",
+  "description": "wall-notice-error-queue",
+  "timeoutSec": 120
+}

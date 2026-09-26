@@ -2,14 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SERVER_RESTART_NOTICE, SESSION_RETRY_FAILED_NOTICE } from "./http-copy";
 import { apiFetch, noteCsrf } from "./http";
 import { bindServerRestartWallNotice } from "./http-notice";
+import { wallNoticeRegionElement } from "./wall-notice-region";
 
 function wallNotices(): HTMLElement[] {
-  return [...document.querySelectorAll("#wall .mosaic-wall-notice")] as HTMLElement[];
+  return [...document.querySelectorAll("#wall-notice-region .mosaic-wall-notice")] as HTMLElement[];
 }
 
 function restartStatusNotices(): HTMLElement[] {
   return wallNotices().filter(
-    (el) => el.getAttribute("role") === "status" && el.textContent === SERVER_RESTART_NOTICE,
+    (el) => el.textContent === SERVER_RESTART_NOTICE,
   );
 }
 
@@ -323,7 +324,7 @@ describe("server restart wall notice", () => {
       const el = notices[0]!;
       expect(el.textContent).not.toContain(SERVER_RESTART_NOTICE);
       expect(el.querySelector("button.mosaic-wall-notice-retry")?.textContent).toBe("Retry");
-      expect(el.getAttribute("role")).toBe("status");
+      expect(wallNoticeRegionElement()?.getAttribute("role")).toBe("status");
     });
 
     it("keeps the retry failure strip after the restart auto-clear timer fires", async () => {
@@ -379,7 +380,7 @@ describe("server restart wall notice", () => {
 
     it("replays the failed mutation when Retry is clicked", async () => {
       await apiFetch("/api/profiles/user", { method: "PUT" });
-      const btn = document.querySelector("#wall .mosaic-wall-notice-retry") as HTMLButtonElement;
+      const btn = document.querySelector("#wall-notice-region .mosaic-wall-notice-retry") as HTMLButtonElement;
       btn.click();
       await vi.waitFor(() => {
         expect(profileHits).toBe(3);
@@ -389,7 +390,7 @@ describe("server restart wall notice", () => {
 
     it("does not dismiss the retry strip when Retry is clicked", async () => {
       await apiFetch("/api/profiles/user", { method: "PUT" });
-      const btn = document.querySelector("#wall .mosaic-wall-notice-retry") as HTMLButtonElement;
+      const btn = document.querySelector("#wall-notice-region .mosaic-wall-notice-retry") as HTMLButtonElement;
       btn.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(wallNotices()).toHaveLength(1);

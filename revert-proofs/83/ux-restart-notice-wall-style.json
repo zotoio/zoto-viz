@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/style.wall-notice.test.ts",
-  "testName": "mosaic wall notice layout > pins the restart strip above the wall with shared single and mosaic placement",
-  "red": "AssertionError: expected '' to be 'fixed' // Object.is equality",
-  "description": "ux-restart-notice-wall-style",
-  "timeoutSec": 120
-}

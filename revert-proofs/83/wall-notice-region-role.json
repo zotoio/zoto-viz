@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > exposes a single region container with role status",
+  "red": "AssertionError: expected null to be 'status' // Object.is equality",
+  "description": "wall-notice-region-role",
+  "timeoutSec": 120
+}

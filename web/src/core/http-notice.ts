@@ -31,6 +31,7 @@ export function bindServerRestartWallNotice(): () => void {
   const onRestart = (e: Event) => {
     const msg = (e as CustomEvent<string>).detail;
     if (msg !== SERVER_RESTART_NOTICE) return;
+    clearWallNotices();
     const el = showWallStatusNotice(msg);
     if (!el) return;
     armAutoClear(el);
@@ -41,6 +42,7 @@ export function bindServerRestartWallNotice(): () => void {
     if (!detail?.message) return;
     clearTimeout(clearTimer);
     clearTimer = undefined;
+    clearWallNotices();
     showWallRetryNotice(detail.message, detail.retry);
   };
 

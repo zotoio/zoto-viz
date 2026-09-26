@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index b315296..13f34a2 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -47,7 +47,6 @@ export function ensureWallNoticeRegion(): HTMLElement {
+   const el = document.createElement("div");
+   el.id = "wall-notice-region";
+   el.className = "wall-notice-region";
+-  el.setAttribute("role", "status");
+   document.body.appendChild(el);
+   regionEl = el;
+   return el;

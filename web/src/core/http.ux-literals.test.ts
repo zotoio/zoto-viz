@@ -72,7 +72,7 @@ describe("UX copy literals", () => {
       } as Response;
     }) as typeof fetch;
     await apiFetch("/api/profiles/user", { method: "PUT" });
-    const span = document.querySelector("#wall .mosaic-wall-notice span");
+    const span = document.querySelector("#wall-notice-region .mosaic-wall-notice span");
     expect(span?.textContent).toBe("That request still failed after the server restarted.");
     off();
     document.body.innerHTML = "";

@@ -1,13 +1,13 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index b315296..33433ed 100644
+index b315296..f03624d 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -103,6 +103,8 @@ function placeNotice(opts: PostWallNoticeOpts): HTMLElement {
+@@ -102,7 +102,7 @@ function placeNotice(opts: PostWallNoticeOpts): HTMLElement {
+     });
      el.append(btn);
    }
-   host.appendChild(el);
-+  el.tabIndex = -1;
-+  el.focus();
+-  host.appendChild(el);
++  (document.getElementById("wall") ?? host).appendChild(el);
    visible.push({ kind: opts.kind, el });
    return el;
  }

@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index b315296..157c307 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -61,7 +61,7 @@ function removeVisibleAt(index: number): void {
+ }
+ 
+ function oldestNonErrorIndex(): number {
+-  return visible.findIndex((n) => !isErrorKind(n.kind));
++  return -1;
+ }
+ 
+ function canPlaceWithoutQueue(opts: PostWallNoticeOpts): boolean {
