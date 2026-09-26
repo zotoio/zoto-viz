@@ -3,6 +3,13 @@
  * External module only — no inline script, so the app CSP never needs 'unsafe-inline'.
  */
 
+/** Matches contract v2 `VizPresentTick` (plugins/sdk/viz-contract.ts on host-change). */
+export type VizPresentTick = {
+  frameMs: number;
+  tileId: string;
+  pluginClock?: number;
+};
+
 type HostBoot = {
   source: "zoto-viz-host";
   type: "boot";
@@ -16,7 +23,21 @@ type HostMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: unknown }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: unknown }
+  | { source: "zoto-viz-host"; type: "present"; tick: VizPresentTick }
   | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
+
+export type SandboxZoto = {
+  onTick: ((nodes: { id: string; rate: number; role: string }[]) => void) | null;
+  onConfig: ((config: Record<string, string>) => void) | null;
+  onFrame: ((frame: unknown) => void) | null;
+  onPresent: ((tick: VizPresentTick) => void) | null;
+  setStyle(s: Record<string, unknown>): void;
+  setNodeColor(id: string, hex: number): void;
+  writeBuffer(_slot: number, _data: number[] | ArrayLike<number>): void;
+  writeUniform(_name: string, _value: unknown): void;
+  writeParticles(_data: number[] | ArrayLike<number>, _stride?: number): void;
+  getConfig(): Record<string, string>;
+};
 
 let allowed = new Set<string>();
 
@@ -24,19 +45,20 @@ function send(type: string, payload?: unknown): void {
   parent.postMessage({ source: "zoto-viz-plugin", type, payload }, "*");
 }
 
-const zoto = {
-  onTick: null as ((nodes: { id: string; rate: number; role: string }[]) => void) | null,
-  onConfig: null as ((config: Record<string, string>) => void) | null,
-  onFrame: null as ((frame: unknown) => void) | null,
-  setStyle(s: Record<string, unknown>) { if (allowed.has("graph.style")) send("setStyle", s); },
-  setNodeColor(id: string, hex: number) { if (allowed.has("graph.style")) send("setNodeColor", { id, hex }); },
-  writeBuffer(_slot: number, _data: number[] | ArrayLike<number>) { /* viz.write patched after boot */ },
-  writeUniform(_name: string, _value: unknown) { /* viz.write patched after boot */ },
-  writeParticles(_data: number[] | ArrayLike<number>, _stride?: number) { /* viz.write patched after boot */ },
+const zoto: SandboxZoto = {
+  onTick: null,
+  onConfig: null,
+  onFrame: null,
+  onPresent: null,
+  setStyle(s) { if (allowed.has("graph.style")) send("setStyle", s); },
+  setNodeColor(id, hex) { if (allowed.has("graph.style")) send("setNodeColor", { id, hex }); },
+  writeBuffer(_slot, _data) { /* viz.write patched after boot */ },
+  writeUniform(_name, _value) { /* viz.write patched after boot */ },
+  writeParticles(_data, _stride) { /* viz.write patched after boot */ },
   getConfig() { return (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig || {}; },
 };
 
-(globalThis as unknown as { zoto: typeof zoto }).zoto = zoto;
+(globalThis as unknown as { zoto: SandboxZoto }).zoto = zoto;
 
 function vizAllowed(cap: string): boolean {
   return allowed.has(cap);
@@ -66,16 +88,28 @@ function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: 
   patchVizWriters();
 }
 
-window.addEventListener("message", (ev) => {
-  const d = ev.data as HostMsg | HostBoot | undefined;
+/** Host → sandbox dispatch (unit-tested; hot path passes message tick by reference). */
+export function handleSandboxHostMessage(
+  d: HostMsg | HostBoot | undefined,
+  caps: Set<string>,
+  api: SandboxZoto,
+): void {
   if (!d || d.source !== "zoto-viz-host") return;
   if (d.type === "config") {
     (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
-    zoto.onConfig?.(d.config || {});
+    api.onConfig?.(d.config || {});
     return;
   }
-  if (d.type === "tick" && allowed.has("graph.read") && zoto.onTick) zoto.onTick(d.nodes);
-  if (d.type === "frame" && vizAllowed("viz.read") && zoto.onFrame) zoto.onFrame(d.frame);
+  if (d.type === "tick" && caps.has("graph.read") && api.onTick) api.onTick(d.nodes);
+  if (d.type === "frame" && caps.has("viz.read") && api.onFrame) api.onFrame(d.frame);
+  if (d.type === "present" && caps.has("viz.write")) {
+    const fn = api.onPresent;
+    if (fn) fn(d.tick);
+  }
+}
+
+window.addEventListener("message", (ev) => {
+  handleSandboxHostMessage(ev.data as HostMsg | HostBoot | undefined, allowed, zoto);
 });
 
 window.addEventListener("message", async (ev) => {
