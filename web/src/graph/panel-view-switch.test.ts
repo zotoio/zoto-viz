@@ -62,6 +62,10 @@ describe("mosaic panel view switch teardown", () => {
       mosaic.setPaneView(active, other);
       [active, other] = [other, active];
     }
+    for (const id of mosaic.tileIds) {
+      expect(panelRafCount(id), `rAF lease for ${id}`).toBe(1);
+    }
+    expect(host.viewCount).toBeLessThanOrEqual(mosaic.tileIds.length);
     document.removeEventListener("securitypolicyviolation", onViolation);
     document.removeEventListener("webglcontextlost", onContextLost);
     expect(violations).toHaveLength(0);

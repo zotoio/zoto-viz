@@ -12,11 +12,13 @@ describe("deliverMosaicDemoPacks", () => {
       { ...topology, id: "plugin:star-sines", pluginId: "star-sines", label: "Sines" },
       { ...talkers, id: "plugin:kefrens-bars", pluginId: "kefrens-bars", label: "Kefrens" },
     ]);
-    const uboCalls: string[] = [];
+    const uboByTile = new Map<string, Float32Array>();
     const mosaic = {
       tileIds: ["plugin:star-sines", "plugin:kefrens-bars"],
       graphScene: (id: string) => ({
-        setPluginUboBuffer: () => { uboCalls.push(id); },
+        setPluginUboBuffer: (buf: Float32Array) => {
+          uboByTile.set(id, buf);
+        },
         setPluginUniform: () => true,
       }),
     };
@@ -35,8 +37,15 @@ describe("deliverMosaicDemoPacks", () => {
       (id) => ({ id: id.replace("plugin:", ""), viz: { maxBuffers: 1, maxBufferFloats: 32, maxParticles: 0, uniforms: [] } }) as never,
       () => ({}),
     );
-    expect(uboCalls).toContain("plugin:star-sines");
-    expect(uboCalls).toContain("plugin:kefrens-bars");
+    expect(uboByTile.has("plugin:star-sines")).toBe(true);
+    expect(uboByTile.has("plugin:kefrens-bars")).toBe(true);
+    for (const [id, buf] of uboByTile) {
+      expect(buf.length, id).toBeGreaterThan(0);
+      expect(Array.from(buf).some((v) => v !== 0), `${id} pack UBO is all zero`).toBe(true);
+    }
+    const sines = uboByTile.get("plugin:star-sines")!;
+    const kef = uboByTile.get("plugin:kefrens-bars")!;
+    expect(Array.from(sines).join(",")).not.toBe(Array.from(kef).join(","));
     dropMosaicTileWriter("plugin:star-sines");
   });
 });
