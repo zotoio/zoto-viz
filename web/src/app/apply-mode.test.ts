@@ -11,7 +11,13 @@ import {
 import * as pluginModule from "../plugins/plugin";
 import { attachPluginFrontend } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
-import { beginModeSwitchAttempt, resetModeSwitchAttemptForTests } from "./mode-switch-attempt";
+import {
+  addModeSwitchAbortListener,
+  beginModeSwitchAttempt,
+  getActiveModeSwitchSignal,
+  modeSwitchAbortListenerCountForTests,
+  resetModeSwitchAttemptForTests,
+} from "./mode-switch-attempt";
 import { Select } from "../ui/ui";
 import { VizHud } from "../ui/viz-hud";
 import { applyModeImpl, type ApplyModeHost } from "./apply-mode";
@@ -631,6 +637,53 @@ describe("mode switch cleanup counts", () => {
     await vi.waitFor(() => {
       expect(countPluginSandboxIframes()).toBe(1);
     });
+  });
+
+  it("committed attempt detaches abort listeners so switching to C disposes B once", async () => {
+    const skyDisposals: Record<string, number> = {};
+    let liveSkyPack: string | null = null;
+    const sandbox = new PluginSandbox();
+    const unloadSpy = vi.spyOn(PluginSandbox.prototype, "unload");
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      text: async () => "export default function onPresent() {}",
+    })));
+    vi.spyOn(pluginModule, "fetchPluginSky").mockResolvedValue(
+      "#version 300 es\nprecision highp float;out vec4 o;uniform float uTime,uOpacity,uBright;void main(){o=vec4(0.2);}",
+    );
+    const host = buildHost({
+      ensureReviewed: async () => "ok",
+      loadTsPlugin: async (spec, signal) => {
+        await attachPluginFrontend(sandbox, spec, {}, signal);
+      },
+      syncPluginSky: async (spec, signal) => {
+        if (liveSkyPack && liveSkyPack !== spec?.id) {
+          skyDisposals[liveSkyPack] = (skyDisposals[liveSkyPack] ?? 0) + 1;
+          liveSkyPack = null;
+        }
+        if (!spec) return;
+        const packId = spec.id;
+        const disposeSky = () => {
+          skyDisposals[packId] = (skyDisposals[packId] ?? 0) + 1;
+          if (liveSkyPack === packId) liveSkyPack = null;
+        };
+        addModeSwitchAbortListener(signal, disposeSky, { once: true });
+        liveSkyPack = packId;
+      },
+    });
+    runApplyUser(host, "plugin:stereo-gram");
+    await flushMicrotasks();
+    const bSignal = runApplyUser(host, "plugin:packet-tunnel");
+    await vi.waitFor(() => {
+      expect(getActiveModeSwitchSignal()).toBeUndefined();
+    });
+    expect(modeSwitchAbortListenerCountForTests(bSignal)).toBe(0);
+    const unloadsAfterB = unloadSpy.mock.calls.length;
+    expect(skyDisposals["packet-tunnel"] ?? 0).toBe(0);
+    runApplyUser(host, "plugin:roto-proto");
+    await flushMicrotasks();
+    expect(unloadSpy.mock.calls.length - unloadsAfterB).toBe(1);
+    expect(skyDisposals["packet-tunnel"]).toBe(1);
   });
 });
 

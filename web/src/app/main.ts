@@ -25,7 +25,13 @@ import {
 import { applyModeImpl, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
 import type { ConsentReviewResult } from "./pack-consent";
 import { ensurePackReviewedOutcome } from "./pack-consent";
-import { beginModeSwitchAttempt, getActiveModeSwitchSignal, throwIfAborted } from "./mode-switch-attempt";
+import {
+  addModeSwitchAbortListener,
+  beginModeSwitchAttempt,
+  detachModeSwitchAbortListeners,
+  getActiveModeSwitchSignal,
+  throwIfAborted,
+} from "./mode-switch-attempt";
 import {
   getLastConsentedModeId,
   setLastConsentedModeId,
@@ -775,7 +781,7 @@ async function loadPluginSkyOnto(
     target.setPluginShader(null);
     if (target === scene) skyLoaded = "";
   };
-  signal.addEventListener("abort", disposeSky, { once: true });
+  addModeSwitchAbortListener(signal, disposeSky, { once: true });
   try {
     const source = await fetchPluginSky(spec.id, spec.shader_sha256, signal);
     throwIfAborted(signal);
@@ -793,9 +799,8 @@ async function loadPluginSkyOnto(
     if (signal.aborted) return;
     console.warn("zoto-viz plugin sky:", e);
     disposeSky();
+    detachModeSwitchAbortListeners(signal);
     throw e;
-  } finally {
-    signal.removeEventListener("abort", disposeSky);
   }
 }
 

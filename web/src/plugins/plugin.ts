@@ -44,6 +44,7 @@ import type { PluginIdleConfig } from "./fixtures/golden-state";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
+import { addModeSwitchAbortListener, detachModeSwitchAbortListeners } from "../app/mode-switch-attempt";
 
 function dimHex(hex: number, amount: number): number {
   const r = Math.round(((hex >> 16) & 255) * amount);
@@ -302,16 +303,18 @@ export async function attachPluginFrontend(
     return false;
   }
   const dispose = () => { sandbox.unload(); };
-  signal?.addEventListener("abort", dispose, { once: true });
+  addModeSwitchAbortListener(signal, dispose, { once: true });
   try {
     await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
     if (signal?.aborted) {
       sandbox.unload();
+      if (signal) detachModeSwitchAbortListeners(signal);
       return false;
     }
     return true;
-  } finally {
-    signal?.removeEventListener("abort", dispose);
+  } catch (e) {
+    if (signal) detachModeSwitchAbortListeners(signal);
+    throw e;
   }
 }
 
