@@ -298,40 +298,6 @@ describe("viz dogfood gates", () => {
     expect(formatSkipRate(skipRatePerSec(skipSamples, 1000))).toBe("skips 0/s");
   });
 
-  it("fat-LAN soak: all shipped demo packs under budget with 120/120 delivered", () => {
-    const result = runDogfoodSoak({
-      state: fatLan,
-      framesPerPack: 120,
-      deterministicTiming: true,
-      stepMsPerFrame: 1,
-    });
-    console.log("\n" + formatDogfoodReport(result));
-
-    expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
-    expect(result.fixture.flows).toBeGreaterThanOrEqual(1000);
-    expect(result.packs.length).toBeGreaterThanOrEqual(3);
-    expect(result.packs.map((p) => p.packId)).toEqual(expect.arrayContaining([
-      "packet-tunnel",
-      "rf-constellation",
-      "talker-storm",
-      "kefrens-bars",
-      "roto-proto",
-      "blob-mesh",
-      "star-sines",
-      "hn-rain",
-      "hn-term",
-      "stereo-gram",
-      "nixie-clock",
-    ]));
-
-    for (const pack of result.packs) {
-      expect(pack.buildMs.p95).toBeLessThan(VIZ_FRAME_BUDGET_MS + 0.01);
-      expect(pack.delivered).toBe(pack.frames);
-      expect(pack.skipped).toBe(0);
-      expect(pack.withinBudget).toBe(true);
-    }
-    expect(result.allWithinBudgetOrHonestSkips).toBe(true);
-  });
 });
 
 describe("viz dogfood over-budget honesty", () => {

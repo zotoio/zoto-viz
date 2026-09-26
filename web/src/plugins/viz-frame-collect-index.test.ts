@@ -237,6 +237,70 @@ describe("viz link index R7 syncTalkerIds production path", () => {
     vi.resetModules();
   });
 
+  it("runs sync-time prune when the talker list is rebuilt", async () => {
+    const mod = await freshCollect();
+    mod.resetVizCollectTestHooks();
+    const opts = { linksEnabled: true, maxLinks: 8 };
+    const flow: Flow = {
+      a: "10.0.0.1",
+      b: "10.0.0.2",
+      bytes: 1,
+      packets: 1,
+      ports: [],
+      protos: ["tcp"],
+      ifaces: [],
+      first_seen: 0,
+      last_seen: 1,
+      rate: 1,
+      rate_pkt_ab: 1,
+      rate_pkt_ba: 0,
+    };
+    const state = {
+      type: "state" as const,
+      ts: 0,
+      iface: "eth0",
+      interfaces: [],
+      network: "10.0.0.0/24",
+      local_ip: "10.0.0.1",
+      gateway: "10.0.0.1",
+      uptime: 1,
+      stats: {
+        pps: 1,
+        bps: 1,
+        devices: 2,
+        online: 2,
+        flows: 1,
+        active_flows: 1,
+        packets: 1,
+        bytes: 1,
+      },
+      devices: [],
+      flows: [flow],
+      sources: [],
+      host: { vizFrame: { links: true, linksMax: 8 } },
+    };
+    const frame = {
+      contract: 2 as const,
+      t: 0,
+      dt: 0.016,
+      audio: 0,
+      packets: [],
+      rf: [],
+      headlines: [],
+      talkers: [{ id: "10.0.0.99", rate: 1, role: "lan" as const }],
+    };
+    mod.applyVizFrameContractV2(frame, state, opts);
+    expect(mod.vizCollectSyncTalkerPruneRan).toBe(true);
+  });
+
+  it("runs collect-time prune at the start of every collectVizLinks pass", async () => {
+    const mod = await freshCollect();
+    mod.resetVizCollectTestHooks();
+    const talkers = new Set(["10.0.0.1", "10.0.0.2"]);
+    mod.collectVizLinks([], talkers, 4);
+    expect(mod.vizCollectEntryPruneRan).toBe(true);
+  });
+
   it("rebinds talker membership through applyVizFrameContractV2 when the talker list changes", async () => {
     const mod = await freshCollect();
     const opts = { linksEnabled: true, maxLinks: 8 };
