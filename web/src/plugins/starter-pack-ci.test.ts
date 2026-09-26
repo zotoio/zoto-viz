@@ -48,6 +48,7 @@ function withSysFailed(frame: VizDataFrame, failed: number): VizDataFrame {
 }
 
 const ciDrawReady = existsSync(esbuildBin) && pythonDepsReady();
+const ciCompileReady = ciDrawReady;
 
 describe("pack starter template CI", () => {
   afterAll(async () => {
