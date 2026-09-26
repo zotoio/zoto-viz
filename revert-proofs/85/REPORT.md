@@ -2,53 +2,809 @@
 
 | row | test | revert description | command | result |
 | --- | --- | --- | --- | --- |
-| allow-type-error-truthy | | | | **ERROR: row allow-type-error-truthy: red value mismatch (expected TBD, got AssertionError: expected true to be false // Object.is equality)** |
-| bad-patch-reject-fallback | | | | **ERROR: row bad-patch-reject-fallback: red value mismatch (expected TBD, got AssertionError: expected 'row bad-patch: git apply failed: Chec…' to contain 'row bad-patch: git apply --check fail…')** |
-| build-break-not-detected | | | | **ERROR: row build-break-not-detected: red value mismatch (expected TBD, got AssertionError: expected 'row build-break: patched test selecti…' to contain 'row build-break: patch breaks build (…')** |
-| describe-gt-fullname | | | | **ERROR: row describe-gt-fullname: red value mismatch (expected TBD, got AssertionError: expected 1 to be +0 // Object.is equality)** |
-| editable-python-unchecked | | | | **ERROR: row editable-python-unchecked: red value mismatch (expected TBD, got AssertionError: expected [Function] to throw an error)** |
-| escape-dot-dropped | | | | **ERROR: row escape-dot-dropped: red value mismatch (expected TBD, got AssertionError: expected '^widget \(beta\) > talkers\[\].failed$' to be '^widget \(beta\) > talkers\[\]\.faile…' // Object.is equality)** |
-| expect-red-unbranded | | | | **ERROR: row expect-red-unbranded: red value mismatch (expected TBD, got AssertionError [ERR_ASSERTION]: row expect-red: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package))** |
-| fullname-selection-leaf | | | | **ERROR: row fullname-selection-leaf: red value mismatch (expected TBD, got AssertionError: expected 'returns one' to be 'widget & alpha > returns one' // Object.is equality)** |
-| green-class-dropped | | | | **ERROR: row green-class-dropped: red value mismatch (expected TBD, got AssertionError: expected 'build break' to be 'green' // Object.is equality)** |
-| hand-built-chai-accepted | | | | **ERROR: row hand-built-chai-accepted: red value mismatch (expected TBD, got AssertionError: expected +0 to be 1 // Object.is equality)** |
-| hang-timeout-ignored | | | | **ERROR: row hang-timeout-ignored: red value mismatch (expected TBD, got AssertionError: expected 'row hang: baseline test selection fai…' to contain 'row hang: baseline timed out')** |
-| json-multi-fullname | | | | **ERROR: row json-multi-fullname: red value mismatch (expected TBD, got AssertionError: expected false to be true // Object.is equality)** |
-| main-checkout-links-unchecked | | | | **ERROR: row main-checkout-links-unchecked: red value mismatch (expected TBD, got AssertionError: expected [Function] to throw an error)** |
-| meta-spoof-accepted | | | | **ERROR: row meta-spoof-accepted: red value mismatch (expected TBD, got AssertionError: expected +0 to be 1 // Object.is equality)** |
-| multi-file-no-filter | | | | **ERROR: row multi-file-no-filter: red value mismatch (expected TBD, got AssertionError: row multi-file: baseline test selection failed (other tests not skipped; never a pass))** |
-| no-match-accepted | | | | **ERROR: row no-match-accepted: red value mismatch (expected TBD, got AssertionError: expected 'row no-match: baseline ran 0 tests (s…' to contain 'row no-match: baseline test selection…')** |
-| node-assert-red | | | | **ERROR: row node-assert-red: red value mismatch (expected TBD, got AssertionError: row node-assert-red: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package))** |
-| phantom-leaf-leaf-match | | | | **ERROR: row phantom-leaf-leaf-match: red value mismatch (expected TBD, got AssertionError: expected 'row phantom-leaf: baseline test selec…' to contain 'row phantom-leaf: baseline test selec…')** |
-| plain-object-fake-accepted | | | | **ERROR: row plain-object-fake-accepted: red value mismatch (expected TBD, got AssertionError: expected +0 to be 1 // Object.is equality)** |
-| pr-number-unchecked | | | | **ERROR: row pr-number-unchecked: red value mismatch (expected TBD, got AssertionError: expected [Function] to throw an error)** |
-| prod-reached-unreachable | | | | **ERROR: row prod-reached-unreachable: red value mismatch (expected TBD, got AssertionError: expected 1 to be +0 // Object.is equality)** |
-| proto-borrow-accepted | | | | **ERROR: row proto-borrow-accepted: red value mismatch (expected TBD, got AssertionError: expected +0 to be 1 // Object.is equality)** |
-| py-editable-no-pythonpath | | | | **ERROR: row py-editable-no-pythonpath: test stayed GREEN after revert patch (expected failure)** |
-| pytest-and-split | | | | **ERROR: row pytest-and-split: red value mismatch (expected TBD, got AssertionError: expected 1 to be +0 // Object.is equality)** |
-| pytest-brackets-stripped | | | | **ERROR: row pytest-brackets-stripped: red value mismatch (expected TBD, got AssertionError: expected 1 to be +0 // Object.is equality)** |
-| pytest-error-unknown | | | | **ERROR: row pytest-error-unknown: red value mismatch (expected TBD, got AssertionError: expected 'unknown' to be 'build break' // Object.is equality)** |
-| pytest-json-collection-clean | | | | **ERROR: row pytest-json-collection-clean: red value mismatch (expected TBD, got AssertionError: expected false to be true // Object.is equality)** |
-| pytest-json-skip-dropped | | | | **ERROR: row pytest-json-skip-dropped: red value mismatch (expected TBD, got AssertionError: expected 'other tests not skipped' to be 'target skipped' // Object.is equality)** |
-| pytest-node-id-stripped | | | | **ERROR: row pytest-node-id-stripped: red value mismatch (expected TBD, got AssertionError: expected 'tests/test_selection.py::test_bracket…' to be 'tests/test_selection.py::test_bracket…' // Object.is equality)** |
-| pytest-probe-error-accepted | | | | **ERROR: row pytest-probe-error-accepted: red value mismatch (expected TBD, got AssertionError: expected 'assertion' to be 'build break' // Object.is equality)** |
-| pytest-uses-k | | | | **ERROR: row pytest-uses-k: red value mismatch (expected TBD, got AssertionError: expected true to be false // Object.is equality)** |
-| python-env-no-pythonpath | | | | **ERROR: row python-env-no-pythonpath: red value mismatch (expected TBD, got AssertionError: expected '' to be '/wt' // Object.is equality)** |
-| python-module-unchecked | | | | **ERROR: row python-module-unchecked: red value mismatch (expected TBD, got AssertionError: expected [Function] to throw an error)** |
-| reach-exempt-ignored | | | | **ERROR: row reach-exempt-ignored: red value mismatch (expected TBD, got AssertionError: expected 'row reach-exempt-touch: revert target…' to contain 'row reach-exempt-touch: test stayed G…')** |
-| red-not-compared | | | | **ERROR: row red-not-compared: red value mismatch (expected TBD, got AssertionError: expected +0 to be 1 // Object.is equality)** |
-| regex-title-unescaped | | | | **ERROR: row regex-title-unescaped: red value mismatch (expected TBD, got AssertionError: expected 1 to be +0 // Object.is equality)** |
-| scoped-links-unchecked | | | | **ERROR: row scoped-links-unchecked: red value mismatch (expected TBD, got AssertionError: expected [Function] to throw an error)** |
-| service-relative-import | | | | **ERROR: row service-relative-import: red value mismatch (expected TBD, got AssertionError: expected 1 to be +0 // Object.is equality)** |
-| sigint-no-handler | | | | **ERROR: row sigint-no-handler: red value mismatch (expected TBD, got AssertionError: expected true to be false // Object.is equality)** |
-| skipped-target-executed | | | | **ERROR: row skipped-target-executed: red value mismatch (expected TBD, got AssertionError: expected 'row skipped-target: baseline ran 0 te…' to contain 'row skipped-target: baseline test sel…')** |
-| stays-green-accepted | | | | **ERROR: row stays-green-accepted: red value mismatch (expected TBD, got AssertionError: expected 'row stays-green: red value mismatch (…' to contain 'row stays-green: test stayed GREEN af…')** |
-| test-only-target-reachable | | | | **ERROR: row test-only-target-reachable: red value mismatch (expected TBD, got AssertionError: expected +0 to be 1 // Object.is equality)** |
-| tests-dir-not-test-path | | | | **ERROR: row tests-dir-not-test-path: red value mismatch (expected TBD, got AssertionError: expected false to be true // Object.is equality)** |
-| timeout-sec-unchecked | | | | **ERROR: row timeout-sec-unchecked: red value mismatch (expected TBD, got AssertionError: expected [Function] to throw an error)** |
-| touch-test-accepted | | | | **ERROR: row touch-test-accepted: red value mismatch (expected TBD, got AssertionError: expected 'row touch-test: git apply --check fai…' to contain 'row touch-test: patch touches test fi…')** |
-| two-match-accepted | | | | **ERROR: row two-match-accepted: red value mismatch (expected TBD, got AssertionError: expected +0 to be 1 // Object.is equality)** |
-| type-error-accepted | | | | **ERROR: row type-error-accepted: red value mismatch (expected TBD, got AssertionError: expected +0 to be 1 // Object.is equality)** |
-| valid-revert-not-applied | | | | **ERROR: row valid-revert-not-applied: red value mismatch (expected TBD, got AssertionError: expected 1 to be +0 // Object.is equality)** |
-| web-project-as-scripts | | | | **ERROR: row web-project-as-scripts: red value mismatch (expected TBD, got AssertionError: expected 1 to be +0 // Object.is equality)** |
-| wrong-outer-ctx-no-check | | | | **ERROR: row wrong-outer-ctx-no-check: red value mismatch (expected TBD, got AssertionError: expected 'row wrong-outer-ctx: git apply failed…' to contain 'row wrong-outer-ctx: git apply --chec…')** |
+| allow-type-error-truthy | scripts/revert-proof.test.ts :: revert-proof-lib guards > (allowTypeError-strict) string false does not enable allowTypeError | Treat any truthy allowTypeError as enabled | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(allowTypeError-strict\\) string false does not enable allowTypeError$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| bad-patch-reject-fallback | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (c2) patch that does not apply cleanly fails the row | Apply patches with --reject (partial hunks) | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(c2\\) patch that does not apply cleanly fails the row$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| build-break-not-detected | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > syntax break in production module is rejected as build break | Drop the build-break check on the patched run | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > syntax break in production module is rejected as build break$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| describe-gt-fullname | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (j2) describe title containing literal ' > ' selects exactly one test | Stop rebuilding fullName from ancestorTitles | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(j2\\) describe title containing literal ' > ' selects exactly one test$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| editable-python-unchecked | scripts/revert-proof.test.ts :: isolation guards > rejects editable python resolving outside the worktree | Drop the editable-install realpath check | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^isolation guards > rejects editable python resolving outside the worktree$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| escape-dot-dropped | scripts/revert-proof.test.ts :: vitest testName escaping > escapes and anchors fullTestName for -t | Stop escaping `.` in the -t pattern | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest testName escaping > escapes and anchors fullTestName for -t$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| expect-red-unbranded | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (f) real expect() failure is RED with revertProofAssertion meta | Drop chai Assertion throw-site branding in the runner | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(f\\) real expect\\(\\) failure is RED with revertProofAssertion meta$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| fullname-selection-leaf | scripts/revert-proof.test.ts :: vitest testName escaping > parseVitestJsonReport rebuilds fullName for selection | Stop rebuilding fullName from ancestorTitles | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest testName escaping > parseVitestJsonReport rebuilds fullName for selection$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| green-class-dropped | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (vitest-green-class) classifyPatchedVitest reports green when patched passes | Drop the green classification | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(vitest-green-class\\) classifyPatchedVitest reports green when patched passes$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| hand-built-chai-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (hand-built-chai) hand-built chai AssertionError without expect() is rejected | Accept any error constructed as chai.AssertionError | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(hand-built-chai\\) hand-built chai AssertionError without expect\\(\\) is rejected$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| hang-timeout-ignored | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (hang-timeout) hanging test is rejected as timeout | Stop reporting baseline timeouts | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(hang-timeout\\) hanging test is rejected as timeout$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| json-multi-fullname | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (vitest-json-multi) JSON report selects one executed test among skipped siblings | Select by leaf title instead of full name | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(vitest-json-multi\\) JSON report selects one executed test among skipped siblings$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| main-checkout-links-unchecked | scripts/revert-proof.test.ts :: isolation guards > (link-guard-main) rejects symlinks into the main checkout | Skip unscoped packages in the workspace link check | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^isolation guards > \\(link-guard-main\\) rejects symlinks into the main checkout$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| meta-spoof-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (meta-spoof) test-written revertProofAssertion with a TypeError is rejected | Leave test-writable task.meta instead of a runner-owned frozen verdict | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(meta-spoof\\) test-written revertProofAssertion with a TypeError is rejected$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| multi-file-no-filter | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (e) multi-test-file row runs exactly one test in a file with many tests | Stop passing the -t name filter to vitest | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(e\\) multi-test-file row runs exactly one test in a file with many tests$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| no-match-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > filter matching zero tests is rejected on baseline | Accept a selection that matched no test | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > filter matching zero tests is rejected on baseline$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| node-assert-red | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (g) node:assert strictEqual failure is RED | Drop node:assert acceptance in runner | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(g\\) node:assert strictEqual failure is RED$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| phantom-leaf-leaf-match | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (phantom-leaf) sidecar full name must match JSON selection | Match the sidecar by leaf title only | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(phantom-leaf\\) sidecar full name must match JSON selection$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| plain-object-fake-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (c) plain-object-fake: plain object AssertionError shape is rejected without meta | Count any thrown object as assertion red | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(c\\) plain-object-fake: plain object AssertionError shape is rejected without meta$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pr-number-unchecked | scripts/revert-proof.test.ts :: revert-proof-lib guards > (pr-number) rejects path traversal PR numbers | Drop PR number validation | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(pr-number\\) rejects path traversal PR numbers$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| prod-reached-unreachable | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (n) revert patch on production-reached module is accepted | Treat every revert target as unreachable | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(n\\) revert patch on production-reached module is accepted$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| proto-borrow-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (proto-borrow) TypeError with a borrowed chai AssertionError prototype is rejected | Accept chai.AssertionError by instanceof again | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(proto-borrow\\) TypeError with a borrowed chai AssertionError prototype is rejected$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| py-editable-main-cwd | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (py-editable) editable install row goes red only with worktree isolation | Run pytest rows from the main checkout instead of the worktree | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(py-editable\\) editable install row goes red only with worktree isolation$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pytest-and-split | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (l) pytest node id with a and b id selects one test | Split the pytest node id on spaces | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(l\\) pytest node id with a and b id selects one test$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pytest-brackets-stripped | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (k) pytest node id with bracket parametrize id selects one test | Strip the parametrize id from pytest node ids | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(k\\) pytest node id with bracket parametrize id selects one test$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pytest-error-unknown | scripts/revert-proof.test.ts :: revert-proof-lib guards > (pytest-error-tag) error outcome is not assertion red | Drop the pytest error-outcome classification | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(pytest-error-tag\\) error outcome is not assertion red$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pytest-json-collection-clean | scripts/revert-proof.test.ts :: revert-proof-lib guards > (pytest-json-collection) missing JSON on nonzero exit is collection error | Treat missing plugin JSON as a clean run | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(pytest-json-collection\\) missing JSON on nonzero exit is collection error$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pytest-json-skip-dropped | scripts/revert-proof.test.ts :: revert-proof-lib guards > (pytest-json) plugin JSON lists pass/fail/skip outcomes | Drop the skipped-target rejection for pytest | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(pytest-json\\) plugin JSON lists pass/fail/skip outcomes$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pytest-node-id-stripped | scripts/revert-proof.test.ts :: vitest testName escaping > builds pytest node ids | Strip the parametrize id from pytest node ids | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest testName escaping > builds pytest node ids$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pytest-probe-error-accepted | scripts/revert-proof.test.ts :: revert-proof-lib guards > (pytest-probe-error) failed without revertProofAssertion meta is build break | Classify every pytest failure as assertion red | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(pytest-probe-error\\) failed without revertProofAssertion meta is build break$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| pytest-uses-k | scripts/revert-proof.test.ts :: revert-proof-lib guards > (pytest-no-k) buildPytestArgv never uses -k or junitxml | Select pytest tests with -k | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(pytest-no-k\\) buildPytestArgv never uses -k or junitxml$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| python-env-no-pythonpath | scripts/revert-proof.test.ts :: revert-proof-lib guards > (python-env) PYTHONPATH is set to worktree | Stop pointing PYTHONPATH at the worktree | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(python-env\\) PYTHONPATH is set to worktree$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| python-module-unchecked | scripts/revert-proof.test.ts :: revert-proof-lib guards > (pythonModule) rejects injection in pythonModule | Drop pythonModule validation | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(pythonModule\\) rejects injection in pythonModule$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| reach-exempt-ignored | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (reach-exempt-first) reachExempt from config applies before first touched file | Ignore reachExempt from revert-proof-production.json | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(reach-exempt-first\\) reachExempt from config applies before first touched file$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| red-not-compared | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (red-mismatch) a patched failure that differs from the sidecar red is rejected | Stop comparing the patched failure line to the sidecar red | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(red-mismatch\\) a patched failure that differs from the sidecar red is rejected$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| regex-title-unescaped | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (j) testName with regex metacharacters selects exactly one test | Pass the sidecar name to -t without escaping | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(j\\) testName with regex metacharacters selects exactly one test$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| scoped-links-unchecked | scripts/revert-proof.test.ts :: isolation guards > rejects workspace symlinks that escape the worktree | Skip scoped packages in the workspace link check | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^isolation guards > rejects workspace symlinks that escape the worktree$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| service-relative-import | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (service-reach) relative import service module is production-reachable | Ignore `from . import x` when building the production graph | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(service-reach\\) relative import service module is production-reachable$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| sigint-no-handler | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (h) SIGINT during a row leaves checkout and worktrees clean | Remove the SIGINT cleanup handler | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(h\\) SIGINT during a row leaves checkout and worktrees clean$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| skipped-target-executed | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (d) row pointing at skipped test is rejected on baseline | Treat a skipped target as executed | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(d\\) row pointing at skipped test is rejected on baseline$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| stays-green-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (b) noop patch stays green fails naming the row | Remove the stays-green guard | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(b\\) noop patch stays green fails naming the row$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| test-only-target-reachable | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (m) revert patch on test-only helper is rejected as unreachable | Disable the production reach check | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(m\\) revert patch on test-only helper is rejected as unreachable$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| tests-dir-not-test-path | scripts/revert-proof.test.ts :: patchTouchesTestFiles > flags tests paths | Stop treating tests/ as a test path | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^patchTouchesTestFiles > flags tests paths$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| timeout-sec-unchecked | scripts/revert-proof.test.ts :: revert-proof-lib guards > (timeoutSec) rejects invalid timeoutSec | Drop timeoutSec validation | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof-lib guards > \\(timeoutSec\\) rejects invalid timeoutSec$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| touch-test-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (test-touch) patch touching test files is rejected | Disable production-only patch validation | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(test-touch\\) patch touching test files is rejected$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| two-match-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (filter-two) filter matching two tests is rejected | Drop the multiple-match rejection | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(filter-two\\) filter matching two tests is rejected$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| type-error-accepted | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (vitest-typeerror) TypeError patched run is rejected as build break | Classify every vitest failure as assertion red | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(vitest-typeerror\\) TypeError patched run is rejected as build break$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| valid-revert-not-applied | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (a) correct revert row produces red output and exit 0 | Skip applying the revert patch | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(a\\) correct revert row produces red output and exit 0$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| web-project-as-scripts | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (w) web project row uses web vitest config and runs exactly one test | Run web/ rows with the scripts vitest config | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(w\\) web project row uses web vitest config and runs exactly one test$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+| wrong-outer-ctx-no-check | scripts/revert-proof.test.ts :: revert-proof runner (fixture repo) > (c3) patch with wrong outer context is rejected by git apply --check | Skip git apply --check before applying | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof runner \\(fixture repo\\) > \\(c3\\) patch with wrong outer context is rejected by git apply --check$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.test.ts | RED (expected) |
+
+### allow-type-error-truthy
+
+```
+AssertionError: expected true to be false // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### bad-patch-reject-fallback
+
+```
+AssertionError: expected 'row bad-patch: git apply failed: Chec…' to contain 'row bad-patch: git apply --check fail…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### build-break-not-detected
+
+```
+AssertionError: expected 'row build-break: patched test selecti…' to contain 'row build-break: patch breaks build (…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### describe-gt-fullname
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### editable-python-unchecked
+
+```
+AssertionError: expected [Function] to throw an error
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.methodWrapper (file://<tmp>
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+```
+
+### escape-dot-dropped
+
+```
+AssertionError: expected '^widget \(beta\) > talkers\[\].failed$' to be '^widget \(beta\) > talkers\[\]\.faile…' // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### expect-red-unbranded
+
+```
+AssertionError [ERR_ASSERTION]: row expect-red: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package)
+## Revert proof
+
+| row | test | revert description | command | result |
+| --- | --- | --- | --- | --- |
+| expect-red | | | | **ERROR: row expect-red: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package)** |
+
+
+1 !== 0
+
+    at revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### fullname-selection-leaf
+
+```
+AssertionError: expected 'returns one' to be 'widget & alpha > returns one' // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### green-class-dropped
+
+```
+AssertionError: expected 'build break' to be 'green' // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### hand-built-chai-accepted
+
+```
+AssertionError: expected +0 to be 1 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### hang-timeout-ignored
+
+```
+AssertionError: expected 'row hang: baseline test selection fai…' to contain 'row hang: baseline timed out'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### json-multi-fullname
+
+```
+AssertionError: expected false to be true // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### main-checkout-links-unchecked
+
+```
+AssertionError: expected [Function] to throw an error
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.methodWrapper (file://<tmp>
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+```
+
+### meta-spoof-accepted
+
+```
+AssertionError: expected +0 to be 1 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### multi-file-no-filter
+
+```
+AssertionError: row multi-file: baseline test selection failed (other tests not skipped; never a pass)
+--- baseline output ---
+JSON report written to <tmp>
+| row | test | revert description | command | result |
+| --- | --- | --- | --- | --- |
+| multi-file | | | | **ERROR: row multi-file: baseline test selection failed (other tests not skipped; never a pass) --- baseline output --- JSON report written to <tmp>** |
+
+: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### no-match-accepted
+
+```
+AssertionError: expected 'row no-match: baseline ran 0 tests (s…' to contain 'row no-match: baseline test selection…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### node-assert-red
+
+```
+AssertionError: row node-assert-red: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package)
+## Revert proof
+
+| row | test | revert description | command | result |
+| --- | --- | --- | --- | --- |
+| node-assert-red | | | | **ERROR: row node-assert-red: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package)** |
+
+: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### phantom-leaf-leaf-match
+
+```
+AssertionError: expected 'row phantom-leaf: baseline test selec…' to contain 'row phantom-leaf: baseline test selec…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### plain-object-fake-accepted
+
+```
+AssertionError: expected +0 to be 1 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### pr-number-unchecked
+
+```
+AssertionError: expected [Function] to throw an error
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.methodWrapper (file://<tmp>
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### prod-reached-unreachable
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### proto-borrow-accepted
+
+```
+AssertionError: expected +0 to be 1 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### py-editable-main-cwd
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### pytest-and-split
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### pytest-brackets-stripped
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### pytest-error-unknown
+
+```
+AssertionError: expected 'unknown' to be 'build break' // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### pytest-json-collection-clean
+
+```
+AssertionError: expected false to be true // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### pytest-json-skip-dropped
+
+```
+AssertionError: expected 'other tests not skipped' to be 'target skipped' // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### pytest-node-id-stripped
+
+```
+AssertionError: expected 'tests/test_selection.py::test_bracket…' to be 'tests/test_selection.py::test_bracket…' // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### pytest-probe-error-accepted
+
+```
+AssertionError: expected 'assertion' to be 'build break' // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### pytest-uses-k
+
+```
+AssertionError: expected true to be false // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### python-env-no-pythonpath
+
+```
+AssertionError: expected '' to be '/wt' // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### python-module-unchecked
+
+```
+AssertionError: expected [Function] to throw an error
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.methodWrapper (file://<tmp>
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### reach-exempt-ignored
+
+```
+AssertionError: expected 'row reach-exempt-touch: revert target…' to contain 'row reach-exempt-touch: test stayed G…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### red-not-compared
+
+```
+AssertionError: expected +0 to be 1 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### regex-title-unescaped
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### scoped-links-unchecked
+
+```
+AssertionError: expected [Function] to throw an error
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.methodWrapper (file://<tmp>
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+```
+
+### service-relative-import
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### sigint-no-handler
+
+```
+AssertionError: expected true to be false // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+```
+
+### skipped-target-executed
+
+```
+AssertionError: expected 'row skipped-target: baseline ran 0 te…' to contain 'row skipped-target: baseline test sel…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### stays-green-accepted
+
+```
+AssertionError: expected 'row stays-green: red value mismatch (…' to contain 'row stays-green: test stayed GREEN af…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### test-only-target-reachable
+
+```
+AssertionError: expected +0 to be 1 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### tests-dir-not-test-path
+
+```
+AssertionError: expected false to be true // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### timeout-sec-unchecked
+
+```
+AssertionError: expected [Function] to throw an error
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.methodWrapper (file://<tmp>
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### touch-test-accepted
+
+```
+AssertionError: expected 'row touch-test: git apply --check fai…' to contain 'row touch-test: patch touches test fi…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### two-match-accepted
+
+```
+AssertionError: expected +0 to be 1 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### type-error-accepted
+
+```
+AssertionError: expected +0 to be 1 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### valid-revert-not-applied
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### web-project-as-scripts
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### wrong-outer-ctx-no-check
+
+```
+AssertionError: expected 'row wrong-outer-ctx: git apply failed…' to contain 'row wrong-outer-ctx: git apply --chec…'
+    at Proxy.revertProofBrandedAssertion (<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
