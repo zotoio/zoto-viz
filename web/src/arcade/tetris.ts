@@ -23,7 +23,7 @@ import {
 } from "../plugins/fixtures/host-idle-traffic";
 import { tickTetrisIdleFeed } from "./tetris-idle-feed";
 import { TetrisIdleScheduler } from "./tetris-idle-scheduler";
-import { TetrisTrafficBudget } from "./tetris-traffic-budget";
+import { createTetrisOneTileBudget, TetrisTrafficBudget } from "./tetris-traffic-budget";
 import { formatSkipRate, skipRatePerSec } from "../ui/viz-hud";
 
 export interface TetrisViewDeps {
@@ -83,7 +83,7 @@ export class TetrisView extends Stage3D {
   constructor(container: HTMLElement, scene: NetScene, deps: TetrisViewDeps = {}) {
     super(container, scene);
     this.clockMs = deps.clockMs ?? vizClockMs;
-    this.trafficBudget = deps.trafficBudget ?? new TetrisTrafficBudget();
+    this.trafficBudget = deps.trafficBudget ?? createTetrisOneTileBudget();
     this.picker = new DevicePicker({
       id: "tetrisWho", caption: "well", key: KEY_WHO,
       title: "whose traffic drops as pieces",
@@ -105,6 +105,10 @@ export class TetrisView extends Stage3D {
     this.camOrbit.target.set(0, 8, 0);
     this.root.add(this.well);
     this.buildWell();
+  }
+
+  protected useHostFrameLoop(): boolean {
+    return true;
   }
 
   protected query() {

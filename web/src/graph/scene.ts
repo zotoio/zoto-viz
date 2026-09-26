@@ -34,6 +34,8 @@ import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
+import { vizClockMs } from "../core/viz-clock";
+import { resetVizClockStep, vizClockStepSec } from "./scene-standalone";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import { observeResize } from "../core/resize";
@@ -1106,8 +1108,11 @@ export class NetScene implements HostedView {
   /** allow/block predicate from the settings cog; hides matching devices (defaults to show-all) */
   private nodeFilter: (d: Device) => boolean = () => true;
   private lastInteraction = performance.now();
-  /** false while a standalone view (NetPong) owns the screen: the frame loop idles instead of rendering */
+  /** false while a standalone tile owns the screen: graph layout/render idles; host may still tick the tile */
   private active = true;
+  private standaloneTileTick: ((dtSec: number) => void) | null = null;
+  private standaloneClock = { lastMs: 0 };
+  private graphRenderCount = 0;
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
   private vizHeadlineText = "";
@@ -1546,6 +1551,7 @@ export class NetScene implements HostedView {
 
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
   private present(): void {
+    this.graphRenderCount++;
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
     this.backdrop.syncCamera(this.camera);
     if (this.host) {
@@ -1698,7 +1704,33 @@ export class NetScene implements HostedView {
   setActive(on: boolean): void {
     if (on && !this.active) this.lastFrameTs = 0; // drop the idle time so the first frame back is not a jump
     this.active = on;
+    if (on) {
+      this.standaloneTileTick = null;
+      this.standaloneClock.lastMs = 0;
+    }
     if (on && this.dreaming) this.captureDreamRest();
+  }
+
+  /** Host-only tick while {@link setActive}(false) — schedules the standalone 1×1 tile, no graph draw. */
+  setStandaloneTileTick(tick: ((dtSec: number) => void) | null): void {
+    this.standaloneTileTick = tick;
+    this.standaloneClock.lastMs = 0;
+  }
+
+  /** TEST-ONLY: graph {@link present} calls while this scene is the main wall view. */
+  testGraphRenderCount(): number {
+    return this.graphRenderCount;
+  }
+
+  testResetGraphRenderCount(): void {
+    this.graphRenderCount = 0;
+  }
+
+  /** TEST-ONLY: one host tick while inactive (no graph draw, no self-scheduled rAF). */
+  testHostFrameWhileIdle(_ts: number): void {
+    if (this.active || !this.standaloneTileTick) return;
+    const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
+    this.standaloneTileTick(dtSec);
   }
 
   /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
@@ -3477,6 +3509,11 @@ export class NetScene implements HostedView {
     markFrame(ts);
     if (!this.active) {
       this.paneFps.el.hidden = true;
+      if (this.standaloneTileTick) {
+        const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
+        this.standaloneTileTick(dtSec);
+        markFrame(ts);
+      }
       return;
     }
     this.paneFps.el.hidden = false;

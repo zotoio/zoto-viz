@@ -1,14 +1,21 @@
 import type { Packet } from "../core/types";
+import { VIZ_WALL_BUDGET_TICKS } from "../plugins/viz-tile-constants";
 
 /** Shipped with `plugins/src/tetris/visualisation.yml` → `workBudget.maxPacketsPerFrame`. */
 export const TETRIS_MAX_PACKETS_PER_FRAME = 8;
 
 /** Caps idle/live packet delivery per frame and accumulates HUD skips (marble-run parity). */
 export class TetrisTrafficBudget {
+  /** Full 1×1 wall share ({@link VIZ_WALL_BUDGET_TICKS}) when Tetris owns the screen as one tile. */
+  readonly shareTicks: number;
   hudSkips = 0;
   delivered = 0;
   /** Packets offered to deliver (scheduled hands), including those capped as HUD skips. */
   recordCount = 0;
+
+  constructor(shareTicks = VIZ_WALL_BUDGET_TICKS) {
+    this.shareTicks = shareTicks;
+  }
 
   reset(): void {
     this.hudSkips = 0;
@@ -25,4 +32,8 @@ export class TetrisTrafficBudget {
     this.delivered += take;
     return fresh.slice(0, take);
   }
+}
+
+export function createTetrisOneTileBudget(): TetrisTrafficBudget {
+  return new TetrisTrafficBudget(VIZ_WALL_BUDGET_TICKS);
 }

@@ -9,6 +9,7 @@ import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
 import { probeWebGL } from "../graph/webgl";
 import { observeResize } from "../core/resize";
+import { vizClockMs } from "../core/viz-clock";
 import { POLL_MS, REPLAY_S, isKnown } from "./arcade";
 
 /**
@@ -85,8 +86,41 @@ export abstract class Stage3D {
       if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
       void this.poll();
     }
-    cancelAnimationFrame(this.raf);
-    this.raf = requestAnimationFrame(this.frame);
+    if (!this.useHostFrameLoop()) {
+      cancelAnimationFrame(this.raf);
+      this.raf = requestAnimationFrame(this.frame);
+    }
+  }
+
+  /** When true, the shared host rAF drives {@link hostFrameTick} (no private arcade loop). */
+  protected useHostFrameLoop(): boolean {
+    return false;
+  }
+
+  /** One host-frame step for standalone tiles (clock from {@link vizClockMs}, not rAF `now`). */
+  hostFrameTick(dtSec: number): void {
+    if (!this.running) return;
+    const clockMs = vizClockMs();
+    const ts = clockMs;
+    markFrame(ts);
+    this.paneFps.tick(ts);
+    const now = clockMs / 1000;
+    this.fit();
+    if (!this.W || !this.H) return;
+    this.step(now, dtSec);
+    this.applyCamera();
+    if (this.renderer) {
+      const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
+      const draw = () => this.renderer?.render(this.world, this.camera);
+      if (gl) {
+        timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
+        const vp = { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+        this.picture.tick(gl, vp, ts, (at) => this.paneFps.mark(at));
+      } else draw();
+    } else if (this.fallback && this.canvas) {
+      this.drawFallback(this.fallback, now);
+      if (this.flatPicture.sample(this.fallback, this.canvas)) this.paneFps.mark(ts);
+    }
   }
 
   stop(): void {

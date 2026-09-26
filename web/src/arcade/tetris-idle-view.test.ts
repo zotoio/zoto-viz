@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NetScene } from "../graph/scene";
+import { NetScene } from "../graph/scene";
 import type { Packet } from "../core/types";
 import { DEMO_DATA_LABEL, DEMO_DATA_SOURCE } from "../core/demo-source";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
@@ -10,6 +10,8 @@ import { TetrisView } from "./tetris";
 import { tickTetrisIdleFeed } from "./tetris-idle-feed";
 import { TETRIS_LIVE_QUIET_MS, TetrisIdleScheduler } from "./tetris-idle-scheduler";
 import { TETRIS_TOPOUT_HOLD_S } from "./tetris-topout";
+import { VIZ_WALL_BUDGET_TICKS } from "../plugins/viz-tile-constants";
+import { bindTetrisStandaloneHost } from "./tetris-standalone-host";
 import { TETRIS_MAX_PACKETS_PER_FRAME, TetrisTrafficBudget } from "./tetris-traffic-budget";
 
 const FRAME_MS = 16;
@@ -49,25 +51,31 @@ describe("TetrisView host idle feed", () => {
     const host = document.createElement("div");
     host.style.width = "400px";
     host.style.height = "300px";
+    Object.defineProperty(host, "clientWidth", { configurable: true, get: () => 400 });
+    Object.defineProperty(host, "clientHeight", { configurable: true, get: () => 300 });
     document.body.append(host);
     hosts.push(host);
     const view = new TetrisHarness(host, mockScene());
+    view.start();
     view.testSetIdleSeed(42);
     view.onPollEmpty();
     return view;
   }
 
-  function advanceFrames(view: TetrisHarness, frames: number, dt = 0.2): void {
+  function advanceFrames(view: TetrisHarness, frames: number, clockStepMs = FRAME_MS): void {
+    let prev = clock;
     for (let i = 0; i < frames; i++) {
-      clock += FRAME_MS;
-      view.tick(clock / 1000, dt);
+      clock += clockStepMs;
+      const dtSec = (clock - prev) / 1000;
+      prev = clock;
+      view.hostFrameTick(dtSec);
     }
   }
 
   it("spawns pieces and grows the stack within a bounded idle tick budget", () => {
     const view = mount();
     const before = view.testLockedCellCount();
-    advanceFrames(view, 80);
+    advanceFrames(view, 60, 200);
     expect(view.testLockedCellCount()).toBeGreaterThan(before);
     expect(view.testUsingIdleFeed()).toBe(true);
     expect(view.controls[1]?.textContent).toBe(DEMO_DATA_LABEL);
@@ -84,13 +92,33 @@ describe("TetrisView host idle feed", () => {
   });
 
   it("600 frames: piece budget, no real clock reads, HUD skips match hand count", () => {
+    const view = mount();
+    const sceneEl = document.createElement("div");
+    sceneEl.style.width = "640px";
+    sceneEl.style.height = "480px";
+    Object.defineProperty(sceneEl, "clientWidth", { configurable: true, get: () => 640 });
+    Object.defineProperty(sceneEl, "clientHeight", { configurable: true, get: () => 480 });
+    document.body.append(sceneEl);
+    hosts.push(sceneEl);
+    const graph = new NetScene(sceneEl);
+    bindTetrisStandaloneHost(graph, view);
+    graph.testResetGraphRenderCount();
     const nowSpy = vi.spyOn(Date, "now");
     const perfSpy = vi.spyOn(performance, "now");
-    const view = mount();
+    const rafSpy = vi.spyOn(globalThis, "requestAnimationFrame");
+    nowSpy.mockClear();
+    perfSpy.mockClear();
+    rafSpy.mockClear();
+    expect(view.testTrafficBudget().shareTicks).toBe(VIZ_WALL_BUDGET_TICKS);
     const beforePieces = view.testScore();
-    advanceFrames(view, FRAMES);
+    for (let i = 0; i < FRAMES; i++) {
+      clock += FRAME_MS;
+      graph.testHostFrameWhileIdle(clock);
+    }
     expect(nowSpy).not.toHaveBeenCalled();
     expect(perfSpy).not.toHaveBeenCalled();
+    expect(rafSpy).not.toHaveBeenCalled();
+    expect(graph.testGraphRenderCount()).toBe(0);
     const delivered = view.testDeliveredPackets();
     const expectedDelivered = Math.min(DUE_PACKETS, DELIVER_CAP);
     const expectedSkips = Math.max(0, DUE_PACKETS - expectedDelivered);
@@ -153,7 +181,7 @@ describe("TetrisView host idle feed", () => {
     let hold = 0;
     for (let i = 0; i < 200; i++) {
       clock += FRAME_MS;
-      view.tick(clock / 1000, 0.2);
+      view.hostFrameTick(FRAME_MS / 1000);
       hold = view.testTopoutHoldUntil();
       if (hold > 0) break;
     }
