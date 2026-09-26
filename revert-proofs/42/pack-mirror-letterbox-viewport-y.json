@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-letterbox.test.ts",
-  "testName": "^pack mirror letterbox > places letterbox inner viewport with bottom-left origin$",
-  "description": "PackTexturePresenter.draw must use bottom-left GL viewport Y for the content pass. Patched vitest: expected 120 to be 20 // Object.is equality",
-  "expectedRed": "expected 120 to be 20 // Object.is equality"
-}

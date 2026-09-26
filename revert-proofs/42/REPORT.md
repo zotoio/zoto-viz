@@ -2,17 +2,20 @@
 
 - **Base:** `6520b014472c05f831ac5204429be2affb8473cb` (`main`)
 - **Stack A:** `cursor/wall-duplicate-pack-tiles-d355` (see git head on branch)
+- **Stack A1.5:** `#TBD` `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4` (host pixel material counting-GL rows, pack-mirror lifecycle + letterbox presenter rows, device-px-ratio lint row)
 - **Stack A2:** `#81` `cursor/pack-mirror-readback-harness-d355` (frame-alloc / frame-loop / gpu-pack-present / mosaic-coalesce unit tests)
 
 ## Size (vs `origin/main`, excluding `revert-proofs/`)
 
 | Metric | Value |
 |--------|------:|
-| Insertions | 3599 |
+| Insertions | 2946 |
 | Deletions | 187 |
-| Line delta | 3786 |
+| Line delta | 3133 |
 
 Heavy host/mosaic tests (frame-alloc, frame-loop, gpu-pack-present, mosaic-coalesce, viz-frame-tick, context-restore-antialias, fb-viewport-software, rect-converters) live on **A2** `#81` only.
+
+Host pixel material counting-GL tests, pack-mirror lifecycle harness, and pack-mirror letterbox presenter rows live on **A1.5** (stacked on A).
 
 ## Commands (A head, `web/`)
 
@@ -22,6 +25,7 @@ pnpm exec tsc --noEmit
 pnpm exec tsc -p tsconfig.test.json --noEmit
 pnpm build
 pnpm exec vitest run
+pnpm lint
 ```
 
 - `tsconfig.json`: `types: ["vite/client"]` only (no `@types/node` in `package.json`).
@@ -31,16 +35,12 @@ pnpm exec vitest run
 
 1. **Letterbox fill:** `paintClear` no longer busts the cache; `getSurfaceLetterboxFill` keys on `clearHex`. `scene-letterbox-fill-production.test.ts`: 300 `paintClear` ticks → `letterboxFillStats.rebuilds === 1`. Revert `scene-paint-clear-letterbox-reset`: `expected 300 to be 1 // Object.is equality`.
 2. **GPU viewport (design b):** `WebGLRenderer.setPixelRatio(1)` always; layout DPR (cap 1.5) scales backing store via `setSize(devW, devH, false)` + CSS size. `applyDeviceRectToGlRenderer` / pack paths use per-edge `DeviceRect` only. `render-host-gpu-viewport-css.test.ts`: setup asserts `getPixelRatio() === 1`; gl.viewport/gl.scissor `[2, 87, 151, 91]` at layout pr 1.5 and window DPR 2 (capped). Reverts restore Three `devicePixelRatio`: `expected [ 3, 40, 226, 136 ] to deeply equal [ 2, 87, 151, 91 ]`.
-3. **Device px materials (design b):** `RenderHost.devicePxRatio` (`DevicePxRatio`, mint `render-host-device-px-ratio.ts`; only module that reads `window.devicePixelRatio` under `src/graph/`). `host-three-pixel-materials.ts`: points `sizeAttenuation` true → no DPR multiply (GL `size` 4 @ pr 1.5); false → multiply (GL `size` 6); `LineMaterial` linewidth + resolution both device px; glow `uResolution` device px. `host-three-pixel-materials.test.ts` uses counting GL fake (uniform1f). Reverts: `expected 6 to be 4`, `expected 4 to be 6`, `expected 200 to be 300`, `expected { x: 200, y: 120 } to deeply equal { x: 300, y: 180 }`.
+3. **Device px materials (design b):** `RenderHost.devicePxRatio` (`DevicePxRatio`, mint `render-host-device-px-ratio.ts`; only module that reads `window.devicePixelRatio` under `src/graph/`). `host-three-pixel-materials.ts`: points `sizeAttenuation` true → no DPR multiply (GL `size` 4 @ pr 1.5); false → multiply (GL `size` 6); `LineMaterial` linewidth + resolution both device px; glow `uResolution` device px. Revert rows for these behaviours ship on **A1.5** (`host-three-pixel-materials.test.ts`).
 4. **`GlRect`:** only `toGlRectInto` brands GL rects (no `glRect()` factory; probe lines unbranded).
 5. **Grain:** `letterbox-grain-stable.test.ts` uses a 2D stub; rebuild counts `randomCalls`/`stringAllocations`. Revert `letterbox-grain-stable`: `expected "random" to not be called at all, but actually been called 600 times`.
-6. **Lint:** `lint-brand-casts.mjs` includes `DevicePxRatio`; bans raw `devicePixelRatio` reads anywhere under `web/src/` outside `render-host-device-px-ratio.ts` (tests exempt). Revert `device-px-ratio-read-stray`: one lint error on `src/core/fps.ts`.
+6. **Lint:** `lint-brand-casts.mjs` includes `DevicePxRatio`; bans raw `devicePixelRatio` reads anywhere under `web/src/` outside `render-host-device-px-ratio.ts` (tests exempt). Stray-read revert row on **A1.5**.
 
-## Lifecycle / device size (corrected root cause)
-
-- `renderPrimary` uses `deviceSizeFromCssBoxInto` since `c5bb005`; be13453 lifecycle passes 9/9.
-- Exact `expected 299 to be +0` on **`pack-mirror-lifecycle.test.ts:142`** (`renderTargetSetSize`) under revert **`pack-mirror-device-size-origin`** (NaN `w` / `cssBoxDim`), not letterbox grain.
-- Revert **`pack-mirror-device-size-into`**: `expected 1 to be +0 // Object.is equality` at lifecycle:112 (`deviceSizeAllocated`).
+Pack-mirror lifecycle / letterbox presenter revert rows ship on **A1.5** (`pack-mirror-lifecycle.test.ts`, `pack-mirror-letterbox*.test.ts`).
 
 ## Revert rows (A)
 
@@ -51,35 +51,20 @@ Each `*.json` has `testFile` (under `web/`), anchored `testName` (`^…$`), and 
 | `letterbox-fill-black-nudge` | `expected true to be false // Object.is equality` |
 | `letterbox-fill-cache` | `expected { css: 'rgb(15, 18, 24)', …(3) } to be { css: 'rgb(15, 18, 24)', …(3) } // Object.is equality` |
 | `letterbox-grain-stable` | `expected "random" to not be called at all, but actually been called 600 times` |
-| `material-needs-update` | `expected 300 to be 1 // Object.is equality` |
 | `mosaic-boot-primary-pack` | `expected 'plugin:pack-a' to be 'plugin:pack-c' // Object.is equality` |
 | `mosaic-tile-slot-allocate` | `expected 'plugin:topology!2' to be 'plugin:topology!1' // Object.is equality` |
-| `one-mirror-per-pack` | `expected 1 to be 2 // Object.is equality` |
 | `pack-mirror-capture-rounding` | `expected { x: 1, y: 87, w: 152, h: 92, …(1) } to deeply equal { x: 2, y: 87, w: 151, h: 91, …(1) }` |
-| `pack-mirror-device-size-into` | `expected 1 to be +0 // Object.is equality` |
-| `pack-mirror-device-size-origin` | `expected 299 to be +0 // Object.is equality` |
-| `pack-mirror-letterbox-16x9` | `expected undefined to deeply equal { x: +0, y: 21.875, w: 100, h: 56.25 }` |
-| `pack-mirror-letterbox-viewport-y` | `expected 120 to be 20 // Object.is equality` |
 | `pack-mirror-registry-tile-threshold` | `expected 61 to be 1 // Object.is equality` |
 | `pack-mirror-renderer-gate-needle` | `expected [Function] to throw an error` |
 | `pack-mirror-rt-viewport-dpr` | `expected false to be true // Object.is equality` |
-| `present-pack-args-identity` | `expected { letterbox: false, fill: null, …(1) } to be { letterbox: false, fill: null, …(1) }` |
-| `render-host-fb-viewport-h241` | `expected { x: +0, y: -1, w: 300, h: 90, …(1) } to deeply equal { x: +0, y: +0, w: 300, h: 90, …(1) }` |
-| `render-host-gpu-viewport-css-revert` | `setViewport`/`setScissor` `[2, 87, 151, 91]` vs `[1, 58, 101, 61]` |
-| `render-host-gpu-viewport-css-dpr2-cap-revert` | `setViewport`/`setScissor` `[2, 87, 151, 91]` vs `[1, 58, 101, 61]` (window DPR 2, renderer pr capped at 1.5) |
-| `host-points-atten-true-multiply` | `expected 6 to be 4 // Object.is equality` |
-| `host-points-atten-false-no-multiply` | `expected 4 to be 6 // Object.is equality` |
-| `host-line-resolution-css-only` | `expected 200 to be 300 // Object.is equality` |
-| `host-shader-resolution-css-only` | `expected { x: 200, y: 120 } to deeply equal { x: 300, y: 180 }` |
-| `device-px-ratio-read-stray` | `src/core/fps.ts: raw \`devicePixelRatio\` read (...)` |
-| `render-host-pack-mirror-no-alloc` | `expected 30 to be +0 // Object.is equality` |
-| `samples-gated-on-antialias` | `expected +0 to be 4 // Object.is equality` |
+| `render-host-gpu-viewport-css-revert` | `expected [ 3, 40, 226, 136 ] to deeply equal [ 2, 87, 151, 91 ]` |
+| `render-host-gpu-viewport-css-dpr2-cap-revert` | `expected [ 3, 40, 226, 136 ] to deeply equal [ 2, 87, 151, 91 ]` (window DPR 2, layout pr capped at 1.5) |
 | `scene-paint-clear-letterbox-reset` | `expected 300 to be 1 // Object.is equality` |
-| `setSize-only-on-resize` | `expected +0 to be 1 // Object.is equality` |
-| `teardown-dispose-counts` | `expected +0 to be 1 // Object.is equality` |
+
+Rows on **A1.5** only: `host-points-atten-*`, `host-line-resolution-css-only`, `host-shader-resolution-css-only`, `device-px-ratio-read-stray`, `pack-mirror-device-size-*`, `setSize-only-on-resize`, `teardown-dispose-counts`, `samples-gated-on-antialias`, `one-mirror-per-pack`, `material-needs-update`, `pack-mirror-letterbox-16x9`, `pack-mirror-letterbox-viewport-y`, `render-host-pack-mirror-no-alloc`, `present-pack-args-identity`, `render-host-fb-viewport-h241`.
 
 Dropped on A (on A2 `#81` or non-shipped): `context-restore-antialias`, `mosaic-sandbox-frame`, `mirror-frame-scope-sync`, `pack-mirror-tile-edge-shared`, `render-host-fb-viewport-software`, `render-host-frame-alloc-objects`, `pack-mirror-texture-flip-y`.
 
 ## CI note
 
-GitHub Actions on prior head `c23241e` failed in 1–3 s with empty steps (infra). Re-check after push.
+Re-check Actions after push.

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "^PackMirrorSession resource lifecycle > two pack keys get two targets; dropping one duplicate leaves the other$",
-  "description": "Separate mirror session per pack group key. Patched vitest: expected 1 to be 2 // Object.is equality",
-  "expectedRed": "expected 1 to be 2 // Object.is equality"
-}

@@ -1,14 +1,15 @@
 diff --git a/web/src/graph/render-host-telemetry.ts b/web/src/graph/render-host-telemetry.ts
+index 8f5418e..172c9ac 100644
 --- a/web/src/graph/render-host-telemetry.ts
 +++ b/web/src/graph/render-host-telemetry.ts
 @@ -1,4 +1,5 @@
- /** Lightweight counters for pack-mirror host telemetry (tests only). */
+ /** Counting hooks for render-host frame-loop tests (no timing). */
 +import type { DeviceRect } from "./pack-mirror-rect";
  export const renderHostMirrorTelemetry = {
-   viewSortRuns: 0,
-   scopeDirtyChecks: 0,
-@@ -6,4 +7,5 @@ export const renderHostMirrorTelemetry = {
    scopeSyncRuns: 0,
-   getContextAttributesCalls: 0,
+   viewSortRuns: 0,
+@@ -16,3 +17,4 @@ export const renderHostMirrorTelemetry = {
+     this.getContextAttributesCalls = 0;
+   },
  };
 +void (null as DeviceRect);
