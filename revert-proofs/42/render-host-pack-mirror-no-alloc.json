@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/render-host-pack-mirror.test.ts",
+  "testName": "^RenderHost pack mirror scope > does not allocate pack RT when duplicate tile count stays below 2$",
+  "description": "syncScopes must not allocate when tileCount is 1. Patched vitest: expected 30 to be +0 // Object.is equality",
+  "expectedRed": "expected 30 to be +0 // Object.is equality"
+}

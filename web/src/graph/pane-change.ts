@@ -49,12 +49,14 @@ export class CanvasChangeProbe {
 
 export type ProbeRect = GlRect;
 
+type ProbeLine = { x: number; y: number; w: number; h: number };
+
 /**
  * Three full-width rows and three full-height columns through the pane, in
  * framebuffer pixels. Lines see motion anywhere in the pane; a centre patch
  * misses most of it.
  */
-export function probeLines(vp: ProbeRect, bufW: number, bufH: number): ProbeRect[] {
+export function probeLines(vp: ProbeRect, bufW: number, bufH: number): ProbeLine[] {
   const x0 = Math.max(0, Math.floor(vp.x));
   const y0 = Math.max(0, Math.floor(vp.y));
   const x1 = Math.min(bufW, Math.floor(vp.x + vp.w));
@@ -62,10 +64,10 @@ export function probeLines(vp: ProbeRect, bufW: number, bufH: number): ProbeRect
   const w = x1 - x0;
   const h = y1 - y0;
   if (w < 2 || h < 2) return [];
-  const out: ProbeRect[] = [];
+  const out: ProbeLine[] = [];
   for (const f of [1 / 6, 1 / 2, 5 / 6]) {
-    out.push({ x: x0, y: y0 + Math.min(h - 1, Math.floor(h * f)), w, h: 1, __unit: "gl" });
-    out.push({ x: x0 + Math.min(w - 1, Math.floor(w * f)), y: y0, w: 1, h, __unit: "gl" });
+    out.push({ x: x0, y: y0 + Math.min(h - 1, Math.floor(h * f)), w, h: 1 });
+    out.push({ x: x0 + Math.min(w - 1, Math.floor(w * f)), y: y0, w: 1, h });
   }
   return out;
 }

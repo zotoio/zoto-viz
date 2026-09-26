@@ -9,7 +9,7 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
-import { getSurfaceLetterboxFill, resetSurfaceLetterboxFillCache, type SurfaceLetterboxFill } from "./letterbox-fill";
+import { getSurfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -37,7 +37,14 @@ import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
-import type { DeviceRect } from "./pack-mirror-rect";
+import {
+  asCanvasDeviceHeight,
+  deviceRect,
+  type DeviceRect,
+  type GlRect,
+  type GlRectMut,
+  toGlRectInto,
+} from "./pack-mirror-rect";
 import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
@@ -1057,6 +1064,7 @@ export class NetScene implements HostedView {
   private readonly inputEl: HTMLElement;
   /** viewport of the last present() through the host, framebuffer pixels */
   private lastVp: Viewport | null = null;
+  private readonly glVpScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
   /** WebGL clear colour this scene wants (applied at present time so panes sharing a context differ) */
   private clearHex: number;
   readonly labelLayer: LabelLayer;
@@ -1277,7 +1285,6 @@ export class NetScene implements HostedView {
     this.satellite = !!opts.satellite;
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
-    this.invalidateSurfaceLetterboxFill();
     if (this.host) {
       // shared context: the host's canvas covers the wall; this pane is a transparent window onto it
       this.renderer = this.host.renderer;
@@ -1596,10 +1603,6 @@ export class NetScene implements HostedView {
     return getSurfaceLetterboxFill(this.clearHex, 0.25);
   }
 
-  private invalidateSurfaceLetterboxFill(): void {
-    resetSurfaceLetterboxFillCache();
-  }
-
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
   private present(): void {
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
@@ -1655,13 +1658,13 @@ export class NetScene implements HostedView {
     }
     const gl = (this.host?.gl ?? (this.renderer as THREE.WebGLRenderer).getContext()) as WebGL2RenderingContext | null;
     if (!gl) return;
-    const vp = (this.lastVp ?? {
-      x: 0,
-      y: 0,
-      w: gl.drawingBufferWidth,
-      h: gl.drawingBufferHeight,
-      __unit: "gl",
-    }) as import("./pack-mirror-rect").GlRect;
+    let vp: GlRect;
+    if (this.lastVp && this.lastVp.__unit === "gl") {
+      vp = this.lastVp;
+    } else {
+      const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      vp = toGlRectInto(dev, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);
+    }
     this.changeProbe.tick(gl, vp, this.lastFrameTs || now, (ts) => this.paneFps.mark(ts));
   }
 

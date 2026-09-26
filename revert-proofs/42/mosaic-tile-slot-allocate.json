@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic-tile-id.test.ts",
+  "testName": "^mosaic tile slot ids > round-trips pack view ids and allocates duplicate slots$",
+  "description": "allocateMosaicTileSlot must pick the lowest free duplicate index. Patched vitest: expected 'plugin:topology!2' to be 'plugin:topology!1' // Object.is equality",
+  "expectedRed": "expected 'plugin:topology!2' to be 'plugin:topology!1' // Object.is equality"
+}

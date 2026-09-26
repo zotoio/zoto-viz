@@ -53,10 +53,6 @@ export function deviceRect(x: number, y: number, w: number, h: number): DeviceRe
   return { x, y, w, h, __unit: "device" };
 }
 
-export function glRect(x: number, y: number, w: number, h: number): GlRect {
-  return { x, y, w, h, __unit: "gl" };
-}
-
 function writeDeviceEdgesFromCss(
   r: CssRect,
   pixelRatio: number,

@@ -9,7 +9,7 @@ import {
 } from "./pack-mirror-gl";
 import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 import { asCssRect, type CssRectLoose } from "./pack-mirror-rect";
-import { getSurfaceLetterboxFill, resetSurfaceLetterboxFillCache } from "./letterbox-fill";
+import { getSurfaceLetterboxFill, letterboxFillStats } from "./letterbox-fill";
 
 function stubRenderer(antialias: boolean, pr = 1): THREE.WebGLRenderer {
   const rd = {
@@ -84,12 +84,12 @@ function simulateThreeTileFrame(
 
 describe("PackMirrorSession resource lifecycle", () => {
   beforeEach(() => {
-    resetSurfaceLetterboxFillCache();
+    letterboxFillStats.reset();
     packMirrorResourceStats.reset();
     packMirrorSizeStats.reset();
   });
   afterEach(() => {
-    resetSurfaceLetterboxFillCache();
+    letterboxFillStats.reset();
     packMirrorResourceStats.reset();
     packMirrorSizeStats.reset();
   });

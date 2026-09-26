@@ -1,12 +1,20 @@
 diff --git a/web/src/graph/scene.ts b/web/src/graph/scene.ts
-index 4eca903..99a311f 100644
 --- a/web/src/graph/scene.ts
 +++ b/web/src/graph/scene.ts
-@@ -2514,6 +2514,7 @@ export class NetScene implements HostedView {
+@@ -9,7 +9,7 @@
+ } from "./physics";
+ import { LayoutClient } from "./layout";
+ import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
+-import { getSurfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
++import { getSurfaceLetterboxFill, letterboxFillStats, type SurfaceLetterboxFill } from "./letterbox-fill";
+ import { SoftwareGpu } from "./render-host";
+ import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
+ import { probeWebGL } from "./webgl";
+@@ -2517,6 +2517,7 @@
    }
  
    private paintClear(): void {
-+    resetSurfaceLetterboxFillCache();
++    letterboxFillStats.reset();
      const a = this.anim;
      const s = this.theme.scene;
      const fadeK = this.fadeT * this.fadeT * (3 - 2 * this.fadeT);

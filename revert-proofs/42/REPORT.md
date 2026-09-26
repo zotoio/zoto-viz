@@ -1,110 +1,79 @@
 # PR #42 split A — revert proof report
 
 - **Base:** `6520b014472c05f831ac5204429be2affb8473cb` (`main`)
-- **Stack A head:** `0add9cb` (`cursor/wall-duplicate-pack-tiles-d355`)
-- **Stack A2 head:** `34a2cf3` (`cursor/pack-mirror-readback-harness-d355`, draft on A)
+- **Stack A:** `cursor/wall-duplicate-pack-tiles-d355` (see git head on branch)
+- **Stack A2:** `#81` `cursor/pack-mirror-readback-harness-d355` (frame-alloc / frame-loop / gpu-pack-present / mosaic-coalesce unit tests)
 
 ## Size (vs `origin/main`, excluding `revert-proofs/`)
 
-| PR | Approx. insertions |
-|----|-------------------|
-| 42-A (production + unit tests) | ~3448 |
-| 42-A2 (readback harness delta on A) | ~1111 |
+| Metric | Value |
+|--------|------:|
+| Insertions | 2973 |
+| Deletions | 162 |
+| Line delta | 3135 |
 
-## Letterbox 16:9 on 1:1 mirror (UX Pro)
+Heavy host/mosaic tests listed above live on **A2** only. `viz-frame-tick.test.ts` and `render-host-context-restore-antialias.test.ts` stay on A for revert rows.
 
-| Stack | Test | Revert row |
-|-------|------|------------|
-| A unit | `pack-mirror-letterbox-16x9.test.ts` @ pr **1** and **1.5** — inner `setViewport`, `zotoSurfacePanelClearHex()` bar `setClearColor`, first scene row device Y | `pack-mirror-letterbox-16x9` (stretch fill) |
-| A2 harness | `pack-mirror-readback.test.ts` letterbox SwiftShader @ pr **1** / **1.5** — bar centre rgba vs panel token; `expect` only | `pack-mirror-letterbox-16x9-readback` (same stretch patch) |
+## Commands (A head, `web/`)
 
-**Unpatched (A, pr 1):** `Tests 1 passed`
+```bash
+pnpm install
+pnpm exec tsc --noEmit
+pnpm exec tsc -p tsconfig.test.json --noEmit
+pnpm build
+pnpm exec vitest run
+```
 
-**Patched (A, pr 1):** `AssertionError: expected undefined to deeply equal { x: 0, y: 21.875, w: 100, h: 56.25 }` (stretch uses full-tile viewport; centred inner vp missing)
+- `tsconfig.json`: `types: ["vite/client"]` only (no `@types/node` in `package.json`).
+- `tsconfig.test.json`: `types: ["vite/client", "vitest/globals"]`.
 
-## Build / typecheck
+## Production fixes (host review)
 
-- `pnpm build` (main `tsc` + `tsconfig.test.json` + vite): **pass** on A head
-- `tsc` projects: **0 errors** on A head
+1. **Letterbox fill:** `paintClear` no longer busts the cache; `getSurfaceLetterboxFill` keys on `clearHex`. `scene-letterbox-fill-production.test.ts`: 300 `paintClear` ticks → `letterboxFillStats.rebuilds === 1`. Revert `scene-paint-clear-letterbox-reset`: `expected 300 to be 1 // Object.is equality`.
+2. **GPU viewport units:** `runTimedViewDraw` passes CSS box to `setViewport`/`setScissor`. `render-host-gpu-viewport-css.test.ts` @ pr 1.5: `[1, 58, 101, 61]`. Revert `render-host-gpu-viewport-css-revert`: `setViewport`/`setScissor` `[2, 87, 151, 91]` vs `[1, 58, 101, 61]`.
+3. **`GlRect`:** only `toGlRectInto` brands GL rects (no `glRect()` factory; probe lines unbranded).
+4. **Grain:** `letterbox-grain-stable.test.ts` uses a 2D stub; rebuild counts `randomCalls`/`stringAllocations`. Revert `letterbox-grain-stable`: `expected "random" to not be called at all, but actually been called 600 times`.
 
-## Test suites (A head, node 22)
+## Lifecycle / device size (corrected root cause)
 
-| Suite | Result |
-|-------|--------|
-| vitest run #1 | 705 passed, 3 skipped (708 tests) (+2 letterbox 16:9 unit) |
-| vitest run #2 | (re-run at release gate) |
-| pytest | 432 passed, 1 failed (`test_node_harness_session_and_tools` — known env) |
-
-Readback on **A2**: 12 matrix + 3 zoom + **2** letterbox16x9 rows (`pack-mirror-readback.test.ts`).
-
-## Lifecycle `deviceSizeAllocated` (A, vs #73 on 4527885)
-
-| Check | Evidence |
-|-------|----------|
-| Root cause | **Not** letterbox grain — per-frame `deviceSizeFromCssBox()` in `renderPrimary` (allocating `{pw,ph}` each frame). Frame-alloc row sees **~300** `deviceSizeAllocated`; lifecycle guards **0** in the 300-frame loop (line ~102). |
-| Fix | `deviceSizeFromCssBoxInto(box, pr, devicePackSizeScratch)` + stable `lastRenderDeviceSize`; lifecycle uses cached `getSurfaceLetterboxFill` (not `surfaceLetterboxFill` per frame). |
-| Revert row | `pack-mirror-device-size-into` → `deviceSizeAllocated` ≫ 0 over 300 frames |
-
-## Typecheck (QE)
-
-- `pnpm exec tsc --noEmit` and `tsc -p tsconfig.test.json --noEmit`: **0 errors**; browser `tsconfig.json` keeps `types: ["vite/client"]` only; test project uses `vitest/globals` (no `@types/node` in either config).
-
-## Items 7–8: origin-branded rects (Platform Architect A)
-
-| Check | Evidence |
-|-------|----------|
-| `DeviceRect` top-left; `GlRect` bottom-left only via `toGlRectInto` | `pack-mirror-rect.ts`, `render-host.writeFbViewport`, `pane-change` (`ProbeRect = GlRect`, `CanvasChangeProbe` → `DeviceRect`) |
-| `CanvasDeviceHeight` from `RenderHost` (`canvas.height` on resize) | `render-host.ts` `refreshCanvasDeviceHeight` |
-| `@ts-expect-error` boundary guards | `pack-mirror-rect.boundary.ts` (double flip, GlRect on probe, plain number canvas height) |
-| H=241 bottom row `GlRect` | `render-host-fb-viewport.test.ts` → `{ x: 0, y: 0, w: 300, h: 90, __unit: "gl" }` |
-| Revert row | `render-host-fb-viewport-h241` → `y: -1` (drop canvas-height clamp on host viewBox) |
-
-## Letterbox fill / software bars (Performance Pedant B)
-
-| Check | Evidence |
-|-------|----------|
-| Fill once per `clearHex` (`css` + `hex` + baked `pattern`) | `getSurfaceLetterboxFill` / `scene.ts` `surfaceLetterboxFill()`; GPU uses `fill.hex` in `paintLetterboxBarsThree` |
-| 300 frames same instance, 0 `match`, 1 rebuild on theme change | `letterbox-fill-cache.test.ts` |
-| Software bars: scratch tuple, 0 `Math.random` / hot-path strings | `paintLetterboxBarsInto` + `letterbox-grain-stable.test.ts` |
-| Probe stability (2 identical frames → 0 changes) | `letterbox-grain-stable.test.ts` samples top bar centre in **device** space; grain uses fixed-seed tile — probe rect avoids jitter pixels |
-| Revert rows | `letterbox-fill-cache` (rebuild every call); `letterbox-grain-stable` (per-frame `Math.random` jitter → probe fires ~299/300) |
+- `renderPrimary` uses `deviceSizeFromCssBoxInto` since `c5bb005`; be13453 lifecycle passes 9/9.
+- Exact `expected 299 to be +0` on **`pack-mirror-lifecycle.test.ts:142`** (`renderTargetSetSize`) under revert **`pack-mirror-device-size-origin`** (NaN `w` / `cssBoxDim`), not letterbox grain.
+- Revert **`pack-mirror-device-size-into`**: `expected 1 to be +0 // Object.is equality` at lifecycle:112 (`deviceSizeAllocated`).
 
 ## Revert rows (A)
 
-Each patch: `git apply --check` clean (no fuzz) at A head; anchored vitest goes **red**.
+Each `*.json` has `testFile` (under `web/`), anchored `testName` (`^…$`), and `expectedRed`. Patches: `git apply --check` at head; one vitest each; unpatched pass, patched fail.
 
-| Row | Assertion (patched run) |
-|-----|-------------------------|
-| `letterbox-fill-cache` | `letterboxFillStats.rebuilds` ≫ 1 over 300 frames |
-| `letterbox-grain-stable` | `Math.random` called; probe change on 2nd identical frame |
-| `pack-mirror-letterbox-16x9` | `expected undefined to deeply equal { x: 0, y: 21.875, w: 100, h: 56.25 }` (stretch revert) |
-| `pack-mirror-capture-rounding` | `AssertionError: expected { x: 1, y: 87, w: 152, h: 92 } to deeply equal { x: 2, y: 87, w: 151, h: 92 }` (floor/ceil on `deviceRectBottomLeftCssInto`) |
-| `pack-mirror-tile-edge-shared` | `expected 152 to be 151` (`aOut.x + aOut.w` vs `bOut.x`) |
-| `pack-mirror-device-size-into` | lifecycle / Into row fails on `renderTargetSetSize` or size identity |
-| `pack-mirror-device-size-origin` | `expected N to be +0` on `renderTargetSetSize` (NaN `w` without `cssBoxDim` / finite guard) |
-| `mosaic-boot-primary-pack` | primary pack id mismatch on 4-pack boot |
-| `mosaic-sandbox-frame` | `expected "spy" to be called 10 times` → **0** (`sandbox.frame` skipped when mosaic demo coalesce) |
-| `render-host-fb-viewport-software` | `expected 270 to be +0` (`lastVp.y` on software tile0 — GL flip regression) |
-| `render-host-fb-viewport-h241` | bottom row `GlRect` `y: -1` instead of `{ x: 0, y: 0, w: 300, h: 90, __unit: "gl" }` |
-| `render-host-frame-alloc-objects` | `expected N to be +0` on `converterEdgeObjectsAllocated` |
-| `mirror-frame-scope-sync` | extra `scopeSyncRuns` / fingerprint path |
-| `present-pack-args-identity` | `presentPack` opts / viewport identity break |
-| `material-needs-update` | material update / draw regression |
-| `pack-mirror-rt-viewport-dpr` | RT viewport uses device `pw/ph` instead of CSS `cssSize` |
-| `pack-mirror-texture-flip-y` | `flipY` revert |
-| `one-mirror-per-pack` | registry allocation |
-| `setSize-only-on-resize` | per-frame `setSize` |
-| `teardown-dispose-counts` | dispose counts |
-| `context-restore-antialias` | antialias restore |
-| `samples-gated-on-antialias` | MSAA gate |
+| Row | expectedRed (patched) |
+|-----|------------------------|
+| `context-restore-antialias` | `expected 1 to be 2 // Object.is equality` |
+| `letterbox-fill-black-nudge` | `expected true to be false // Object.is equality` |
+| `letterbox-fill-cache` | `expected { css: 'rgb(15, 18, 24)', …(3) } to be { css: 'rgb(15, 18, 24)', …(3) } // Object.is equality` |
+| `letterbox-grain-stable` | `expected "random" to not be called at all, but actually been called 600 times` |
+| `material-needs-update` | `expected 300 to be 1 // Object.is equality` |
+| `mosaic-boot-primary-pack` | `expected 'plugin:pack-a' to be 'plugin:pack-c' // Object.is equality` |
+| `mosaic-sandbox-frame` | `expected "vi.fn()" to be called 10 times, but got 0 times` |
+| `mosaic-tile-slot-allocate` | `expected 'plugin:topology!2' to be 'plugin:topology!1' // Object.is equality` |
+| `one-mirror-per-pack` | `expected 1 to be 2 // Object.is equality` |
+| `pack-mirror-capture-rounding` | `expected { x: 1, y: 87, w: 152, h: 92, …(1) } to deeply equal { x: 2, y: 87, w: 151, h: 91, …(1) }` |
+| `pack-mirror-device-size-into` | `expected 1 to be +0 // Object.is equality` |
+| `pack-mirror-device-size-origin` | `expected 299 to be +0 // Object.is equality` |
+| `pack-mirror-letterbox-16x9` | `expected undefined to deeply equal { x: +0, y: 21.875, w: 100, h: 56.25 }` |
+| `pack-mirror-letterbox-viewport-y` | `expected 120 to be 20 // Object.is equality` |
+| `pack-mirror-registry-tile-threshold` | `expected 61 to be 1 // Object.is equality` |
+| `pack-mirror-renderer-gate-needle` | `expected [Function] to throw an error` |
+| `pack-mirror-rt-viewport-dpr` | `expected false to be true // Object.is equality` |
+| `present-pack-args-identity` | `expected { letterbox: false, fill: null, …(1) } to be { letterbox: false, fill: null, …(1) }` |
+| `render-host-fb-viewport-h241` | `expected { x: +0, y: -1, w: 300, h: 90, …(1) } to deeply equal { x: +0, y: +0, w: 300, h: 90, …(1) }` |
+| `render-host-gpu-viewport-css-revert` | `setViewport`/`setScissor` `[2, 87, 151, 91]` vs `[1, 58, 101, 61]` |
+| `render-host-pack-mirror-no-alloc` | `expected 30 to be +0 // Object.is equality` |
+| `samples-gated-on-antialias` | `expected +0 to be 4 // Object.is equality` |
+| `scene-paint-clear-letterbox-reset` | `expected 300 to be 1 // Object.is equality` |
+| `setSize-only-on-resize` | `expected +0 to be 1 // Object.is equality` |
+| `teardown-dispose-counts` | `expected +0 to be 1 // Object.is equality` |
 
-## Revert rows (A2 only)
+Dropped (patch does not apply or test not on A): `mirror-frame-scope-sync`, `pack-mirror-tile-edge-shared`, `render-host-fb-viewport-software`, `render-host-frame-alloc-objects`, `pack-mirror-texture-flip-y`.
 
-| Row | Assertion (patched run) |
-|-----|-------------------------|
-| `pack-mirror-device-pixel-ratio` | `expect(state.ok.quadrantTlOk).toBe(true)` → **false** at 200% zoom (`rendererDpr` follows `windowDpr` instead of capped renderer DPR) |
-| `pack-mirror-letterbox-16x9-readback` | `expect(rgbaNear(topBarRgba, expectedBarRgba)).toBe(true)` → **false** after stretch (bar samples scene green) |
+## CI note
 
-## Converter sanity (unchanged)
-
-- 100k random tile pairs × pr ∈ {1, 1.25, 1.5, 1.75, 2}: **0** gaps/overlaps on shared edges (`toDeviceRectInto` / top-left GL readback path).
+GitHub Actions on prior head `c23241e` failed in 1–3 s with empty steps (infra). Re-check after push.

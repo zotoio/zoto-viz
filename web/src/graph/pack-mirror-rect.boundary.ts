@@ -13,7 +13,6 @@ import {
   asCssRect,
   cssRect,
   deviceRect,
-  glRect,
   toDeviceRectInto,
   toGlRectInto,
 } from "./pack-mirror-rect";

@@ -1,0 +1,11 @@
+diff --git a/web/src/graph/mosaic-tile-id.ts b/web/src/graph/mosaic-tile-id.ts
+index 9cdf543..cbc7b1d 100644
+--- a/web/src/graph/mosaic-tile-id.ts
++++ b/web/src/graph/mosaic-tile-id.ts
+@@ -41,5 +41,5 @@ export function allocateMosaicTileSlot(viewId: string, existing: readonly string
+   if (!others.length) return viewId;
+   let n = 1;
+   while (existing.includes(mosaicTileSlotId(viewId, n))) n += 1;
+-  return mosaicTileSlotId(viewId, n);
++  return mosaicTileSlotId(viewId, n + 1);
+ }
