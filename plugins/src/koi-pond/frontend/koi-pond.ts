@@ -852,8 +852,12 @@ export class KoiPondSim {
           padIndex: this.padIndexForHash(h, dstHash),
         };
         this.koi.set(t.id, k);
-      } else if (k && inSlot) {
-        k.vigor = vigorFromRate(t.rate);
+      } else if (k) {
+        if (k.role !== t.role) {
+          k.role = t.role;
+          k.pattern = patternForTalker(t.id, t.role, this.opts);
+        }
+        if (inSlot) k.vigor = vigorFromRate(t.rate);
       }
     }
     for (const [id] of this.koi) {
