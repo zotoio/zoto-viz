@@ -11,6 +11,7 @@ const SKIP_WINDOW_MS = 1000;
 export type MosaicTileHudStrip = {
   root: HTMLElement;
   tick: (input: VizHudTick) => void;
+  resetSkipBaseline: () => void;
   detach: () => void;
 };
 
@@ -36,6 +37,7 @@ function makeStrip(): MosaicTileHudStrip {
   };
   root.append(packEl, sep(), metric, sep(), skipEl);
   let lastSkipped = 0;
+  let skipNeedsSync = true;
   const skipSamples: { t: number; n: number }[] = [];
   return {
     root,
@@ -49,12 +51,21 @@ function makeStrip(): MosaicTileHudStrip {
       const m = vizHudMetric(input.packId, input.frame, input.state);
       metricLabel.textContent = m.label;
       metricValue.textContent = m.value;
-      const delta = input.stats.skipped - lastSkipped;
-      lastSkipped = input.stats.skipped;
-      if (delta > 0) skipSamples.push({ t: input.now, n: delta });
+      if (skipNeedsSync) {
+        lastSkipped = input.stats.skipped;
+        skipNeedsSync = false;
+      } else {
+        const delta = input.stats.skipped - lastSkipped;
+        lastSkipped = input.stats.skipped;
+        if (delta > 0) skipSamples.push({ t: input.now, n: delta });
+      }
       const cutoff = input.now - SKIP_WINDOW_MS;
       while (skipSamples.length && skipSamples[0].t < cutoff) skipSamples.shift();
       skipEl.textContent = formatSkipRate(skipRatePerSec(skipSamples, input.now));
+    },
+    resetSkipBaseline() {
+      skipSamples.length = 0;
+      skipNeedsSync = true;
     },
     detach() {
       root.remove();
@@ -94,6 +105,10 @@ export class MosaicTileHudLayer {
   ): void {
     const tick: VizHudTick = { ...input, packId, packName };
     for (const slot of tileSlotIds) this.strips.get(slot)?.tick(tick);
+  }
+
+  resetSkipBaseline(): void {
+    for (const s of this.strips.values()) s.resetSkipBaseline();
   }
 
   clear(): void {

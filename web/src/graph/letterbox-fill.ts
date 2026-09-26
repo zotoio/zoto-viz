@@ -6,11 +6,20 @@ export type SurfaceLetterboxFill = {
 };
 
 export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLetterboxFill {
-  const r = (clearHex >> 16) & 255;
-  const g = (clearHex >> 8) & 255;
-  const b = clearHex & 255;
+  let r = (clearHex >> 16) & 255;
+  let g = (clearHex >> 8) & 255;
+  let b = clearHex & 255;
+  if (r === 0 && g === 0 && b === 0) {
+    r = g = b = 1;
+  }
   const css = `rgb(${r}, ${g}, ${b})`;
   return { css, grain: Math.min(1, Math.max(0, grain)) };
+}
+
+export function letterboxFillHex(fill: SurfaceLetterboxFill): number {
+  const m = fill.css.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  if (!m) return 0x010101;
+  return (parseInt(m[1], 10) << 16) | (parseInt(m[2], 10) << 8) | parseInt(m[3], 10);
 }
 
 export function isBlackFill(css: string): boolean {

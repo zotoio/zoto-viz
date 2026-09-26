@@ -8,6 +8,12 @@ describe("letterbox fill", () => {
     expect(fill.css).toMatch(/rgb\(58,\s*95,\s*124\)/);
   });
 
+  it("nudges exact black clear to a non-black bar fill", () => {
+    const fill = surfaceLetterboxFill(0x000000, 0);
+    expect(isBlackFill(fill.css)).toBe(false);
+    expect(fill.css).toBe("rgb(1, 1, 1)");
+  });
+
   it("rejects black bar fill", () => {
     const ctx = { save: () => {}, restore: () => {}, fillStyle: "", fillRect: () => {} } as CanvasRenderingContext2D;
     expect(() => paintLetterboxBars(

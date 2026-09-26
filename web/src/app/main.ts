@@ -423,6 +423,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   if (resetBudget) {
     vizBudget.reset();
     vizHud.resetSkipBaseline();
+    mosaicTileHud.resetSkipBaseline();
   }
   if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
 }
@@ -1068,18 +1069,6 @@ function feed(m: StateMsg): void {
             sandbox.frame(f);
           },
         });
-        mosaicTileHud.sync(wall.tileIds, (slot) => wall.paneElement(slot) ?? null);
-        const now = performance.now();
-        for (const group of mosaicPackGroups(wall.tileIds, (id) => modeById(mosaicTileViewId(id)))) {
-          if (!group.packId) continue;
-          const spec = pluginSpecForMode(mosaicTileViewId(group.primarySlot));
-          mosaicTileHud.tickForPack(group.packId, spec?.name ?? group.packId, group.slots, {
-            stats: vizBudget.stats,
-            frame: vizBudget.lastBuilt,
-            state: shown,
-            now,
-          });
-        }
       } else {
         sandbox.frame(f);
         if (packId) {
@@ -1091,6 +1080,21 @@ function feed(m: StateMsg): void {
         }
       }
     }, buildFrame);
+    if (mosaic?.on && mosaicDemoPacks) {
+      const wall = mosaic;
+      mosaicTileHud.sync(wall.tileIds, (slot) => wall.paneElement(slot) ?? null);
+      const now = performance.now();
+      for (const group of mosaicPackGroups(wall.tileIds, (id) => modeById(mosaicTileViewId(id)))) {
+        if (!group.packId) continue;
+        const spec = pluginSpecForMode(mosaicTileViewId(group.primarySlot));
+        mosaicTileHud.tickForPack(group.packId, spec?.name ?? group.packId, group.slots, {
+          stats: vizBudget.stats,
+          frame: vizBudget.lastBuilt,
+          state: shown,
+          now,
+        });
+      }
+    }
     if (frame) {
       vizFrameTs = frame.t;
       if (packId === "hn-rain" || packId === "hn-term") {
