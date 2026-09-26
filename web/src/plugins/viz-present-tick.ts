@@ -3,18 +3,18 @@ import type { VizPluginContract } from "./viz-host";
 
 /**
  * Cached when the active view mode changes — no per-frame `pluginSpecs.find`.
- * One tick per sandbox per frame. `tileId` meaning is undecided (sandbox-per-tile TBD).
+ * One tick per sandbox per frame. v3 `tileId` / `aspect` reserved pending Andrew's sandbox model.
  */
 export interface PresentDriveBinding {
   sandbox: PluginSandbox;
   contract: VizPluginContract | undefined;
-  /** Stable pack id until the sandbox-per-tile decision; not mosaic focus. */
+  /** Pack id on the wire (`tileId`); not instance or mosaic slot id. */
   tileId: string;
   pluginClock: () => number;
   stageAspect: () => number;
 }
 
-/** Neutral present-tick id: the loaded pack id (not mosaic pane / mode slug). */
+/** `VizPresentTick.tileId`: catalog pack id only. */
 export function presentTickTileId(packId: string | undefined): string {
   return packId?.trim() || "";
 }

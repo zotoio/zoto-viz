@@ -5,9 +5,10 @@
 
 /**
  * Bump when frame slice shapes or host↔pack delivery semantics change.
- * v2: `VizPresentTick` + opt-in `viz.presentTick` in plugin.yml.
+ * v2: `VizPresentTick` + opt-in `viz.presentTick` in plugin.yml (`frameMs`, `pluginClock`).
+ * v3: `tileId` (pack id) + `aspect` (tile draw size) — reserved pending Andrew's sandbox model (#27).
  */
-export const VIZ_CONTRACT_VERSION = 2;
+export const VIZ_CONTRACT_VERSION = 3;
 
 /**
  * Host → sandbox tick when `viz.presentTick` is true in plugin.yml.
@@ -17,9 +18,9 @@ export interface VizPresentTick {
   /** rAF / vsync timestamp in milliseconds (`performance.now()` clock). */
   frameMs: number;
   /**
-   * Host-supplied string; meaning undecided, pending the sandbox-per-tile decision
-   * (one sandbox per tile vs one per pack with tile-keyed state). Do not rely on
-   * `tileId` for per-tile simulation state until that decision lands.
+   * **Pack id** (`plugins/src/<id>/`), not a view-instance id or mosaic slot id.
+   * Field reserved until Andrew decides the sandbox model (one sandbox per tile vs
+   * per pack); semantics will be re-scoped together with `aspect` when that lands.
    */
   tileId: string;
   /**
@@ -29,8 +30,9 @@ export interface VizPresentTick {
    */
   pluginClock?: number;
   /**
-   * Stage viewport width/height (w/h) for layout; sandbox iframe is 0×0 so packs
-   * must not use `innerWidth`/`innerHeight` alone.
+   * Width/height of the **stage tile** the sandbox is drawing into (`w / h`), not the
+   * hidden iframe size. Reserved with `tileId` until the sandbox-per-tile decision;
+   * do not use `innerWidth`/`innerHeight` alone in the iframe.
    */
   aspect?: number;
 }
