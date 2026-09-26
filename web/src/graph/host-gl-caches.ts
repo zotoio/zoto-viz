@@ -4,10 +4,16 @@ import {
   contextCacheKey,
   type ContextCacheKey,
 } from "./context-cache-key";
-import { parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+function nixieLookFlags(look: Record<string, string>): { hour12: boolean; seconds: boolean } {
+  const seconds = look?.seconds;
+  return {
+    hour12: look?.format === "12",
+    seconds: seconds !== "0" && seconds !== "false",
+  };
+}
 
 function nixieUploadTimeKey(tSec: number, look: Record<string, string>): number {
-  const parsed = parseNixieLook(look);
+  const parsed = nixieLookFlags(look);
   const d = new Date(tSec * 1000);
   let h = d.getHours();
   const m = d.getMinutes();

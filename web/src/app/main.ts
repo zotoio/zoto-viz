@@ -427,6 +427,8 @@ function swapVizPack(packId: VizDemoPackId): void {
   preserveVizUbo = true;
   applyMode(pluginViewId(packId));
 }
+const PACK_SIMPLE_FALLBACK = new Set(["nixie-clock", "packet-tunnel"]);
+
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
   setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
@@ -437,6 +439,7 @@ sandbox.handlers = {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
+  fallbackText: (text) => { renderHost.pushPackFallbackText(scene.tileId, text); },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };
@@ -739,7 +742,6 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
     if (target === scene) skyLoaded = key;
   } catch (e) {
     console.warn("zoto-viz plugin sky:", e);
-    target.setPluginShader(null);
     if (target === scene) skyLoaded = "";
   }
 }
@@ -1021,13 +1023,7 @@ function feed(m: StateMsg): void {
     }, buildFrame);
     if (frame) {
       vizFrameTs = frame.t;
-      renderHost.driveShaderFallback(scene.tileId, frame);
-      if (mosaic?.on) {
-        for (const id of mosaic.tileIds) {
-          const extra = mosaic.graphScene(id);
-          if (extra && extra !== scene) renderHost.driveShaderFallback(extra.tileId, frame);
-        }
-      }
+      renderHost.driveShaderFallbacks(frame);
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }

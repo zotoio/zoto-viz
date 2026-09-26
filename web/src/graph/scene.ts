@@ -9,7 +9,6 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
-import { packFallbackText } from "../plugins/viz-pack-fallback";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -1896,18 +1895,31 @@ export class NetScene implements HostedView {
     opts: { id: string; source: string } | null,
     meta?: { packId: string; packName: string; look?: Record<string, string>; packKey?: string },
   ): string | null {
+    const supportsPackFallback = meta?.packId === "nixie-clock" || meta?.packId === "packet-tunnel";
     if (opts && meta && this.host) {
       this.host.beginTilePack(
         this.tileId,
         meta.packKey ?? meta.packId,
+        meta.packId,
         this.container,
         meta.packName,
-        packFallbackText(meta.packId, meta.look),
+        supportsPackFallback,
       );
     }
-    const gpuProbe = this.host
+    const gpuProbe = this.host && opts && meta
       ? (frag: string) => {
-          const ok = this.host!.buildTileShader(this.tileId, frag, (m) => console.warn("zoto-viz tile shader:", m));
+          const ok = this.host!.loadTileShader(
+            this.tileId,
+            this.container,
+            frag,
+            {
+              packKey: meta.packKey ?? meta.packId,
+              packId: meta.packId,
+              packName: meta.packName,
+              supportsPackFallback,
+            },
+            (m) => console.warn("zoto-viz tile shader:", m),
+          );
           return ok ? null : "shader failed";
         }
       : undefined;
@@ -1915,13 +1927,7 @@ export class NetScene implements HostedView {
       this.host?.clearShaderFallback(this.tileId);
       return this.backdrop.setPluginShader(null, gpuProbe);
     }
-    const err = this.backdrop.setPluginShader(opts, gpuProbe);
-    if (err && this.host && meta) {
-      this.host.showCompileFallback(this.tileId);
-    } else if (!err) {
-      this.host?.clearShaderFallback(this.tileId);
-    }
-    return err;
+    return this.backdrop.setPluginShader(opts, gpuProbe);
   }
 
   setPluginUniform(name: string, value: number | [number, number, number]): boolean {

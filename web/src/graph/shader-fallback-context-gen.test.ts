@@ -2,7 +2,10 @@ import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
 import { GFX_WALL_NOTICE_CLASS, GFX_WALL_RELOAD_CLASS } from "./gfx-wall-notice";
-import { packFallbackText } from "../plugins/viz-pack-fallback";
+import {
+  formatNixieFallbackLine,
+  parseNixieLook,
+} from "../../../plugins/src/nixie-clock/frontend/tubes";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 const FRAG = "void main() { fragColor = vec4(1.0); }";
@@ -19,6 +22,29 @@ function frameAt(ms: number): VizDataFrame {
     rf: [],
     talkers: [],
     headlines: [],
+  };
+}
+
+function mockGl() {
+  const compileShader = vi.fn();
+  return {
+    VERTEX_SHADER: 35633,
+    FRAGMENT_SHADER: 35632,
+    COMPILE_STATUS,
+    LINK_STATUS,
+    createShader: () => ({}),
+    createProgram: () => ({}),
+    shaderSource: vi.fn(),
+    compileShader,
+    attachShader: vi.fn(),
+    linkProgram: vi.fn(),
+    deleteShader: vi.fn(),
+    deleteProgram: vi.fn(),
+    getShaderParameter: () => true,
+    getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS),
+    getShaderInfoLog: () => "",
+    getProgramInfoLog: () => "",
+    compileShader,
   };
 }
 
@@ -50,28 +76,12 @@ describe("shader fallback context gen", () => {
     }
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
-    const compileShader = vi.fn();
-    const render = vi.fn();
-    const gl = {
-      VERTEX_SHADER: 35633,
-      FRAGMENT_SHADER: 35632,
-      COMPILE_STATUS,
-      LINK_STATUS,
-      createShader: () => ({}),
-      createProgram: () => ({}),
-      shaderSource: vi.fn(),
-      compileShader,
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getShaderParameter: () => true,
-      getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS),
-      getShaderInfoLog: () => "",
-      getProgramInfoLog: () => "",
-    };
+    const gl = mockGl();
     vi.spyOn(host, "gl", "get").mockReturnValue(gl as WebGL2RenderingContext);
     Object.defineProperty(host, "software", { value: false });
+    const render = vi.fn();
     vi.spyOn(host.renderer as THREE.WebGLRenderer, "render").mockImplementation(render);
-    return { host, wall, panes, compileShader, render };
+    return { host, wall, panes, compileShader: gl.compileShader, render };
   }
 
   it("restore-resets-keys", () => {
@@ -121,23 +131,32 @@ describe("shader fallback context gen", () => {
     });
     for (const v of views) host.add(v);
     for (const id of ids) {
-      host.beginTilePack(id, `nixie:${id}`, panes.get(id)!, "Nixie", packFallbackText("nixie-clock"));
+      host.beginTilePack(id, `nixie:${id}`, "nixie-clock", panes.get(id)!, "Nixie", true);
       host.buildTileShader(id, FRAG);
     }
     const t0 = new Date(2026, 0, 1, 1, 5, 0, 0).getTime();
-    const fallback = packFallbackText("nixie-clock", { seconds: "1", format: "24" })!;
+    const look = parseNixieLook({ seconds: "1", format: "24" });
+    const scratch = { h: 0, m: 0, s: 0 };
+    const cache = { key: -1, text: "" };
+    const now = new Date();
+    const lineAt = (ms: number) => {
+      now.setTime(ms);
+      return formatNixieFallbackLine(now, look, scratch, cache);
+    };
     host.dispatchContextLost();
     const compilesAfterLoss = compileShader.mock.calls.length;
     let writes = 0;
     let last = "";
     let uploads = 0;
     for (let i = 0; i < 600; i++) {
-      const next = fallback(frameAt(t0 + i * 16));
+      const ms = t0 + i * 16;
+      const next = lineAt(ms);
       if (next !== last) {
         writes++;
         last = next;
+        for (const id of ids) host.pushPackFallbackText(id, next);
       }
-      if (host.syncNixieUpload((t0 + i * 16) / 1000, { seconds: "1", format: "24" })) uploads++;
+      if (host.syncNixieUpload(ms / 1000, { seconds: "1", format: "24" })) uploads++;
       for (const id of ids) host.buildTileShader(id, FRAG);
       for (const v of views) v.hostFrame();
     }
@@ -163,35 +182,19 @@ describe("shader fallback context gen", () => {
     document.body.appendChild(wall);
     const add = vi.spyOn(HTMLCanvasElement.prototype, "addEventListener");
     const host = new RenderHost(wall);
-    const compileShader = vi.fn();
-    const gl = {
-      VERTEX_SHADER: 35633,
-      FRAGMENT_SHADER: 35632,
-      COMPILE_STATUS,
-      LINK_STATUS,
-      createShader: () => ({}),
-      createProgram: () => ({}),
-      shaderSource: vi.fn(),
-      compileShader,
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getShaderParameter: () => true,
-      getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS),
-      getShaderInfoLog: () => "",
-      getProgramInfoLog: () => "",
-    };
+    const gl = mockGl();
     vi.spyOn(host, "gl", "get").mockReturnValue(gl as WebGL2RenderingContext);
     Object.defineProperty(host, "software", { value: false });
     for (const id of ids) {
-      host.beginTilePack(id, `nixie:${id}`, panes.get(id)!, "Nixie", packFallbackText("nixie-clock"));
+      host.beginTilePack(id, `nixie:${id}`, "nixie-clock", panes.get(id)!, "Nixie", true);
       host.buildTileShader(id, FRAG);
     }
     for (let cycle = 0; cycle < 3; cycle++) {
-      const before = compileShader.mock.calls.length;
+      const before = gl.compileShader.mock.calls.length;
       host.dispatchContextLost();
       host.dispatchContextRestored();
       for (const id of ids) host.buildTileShader(id, FRAG);
-      expect(compileShader.mock.calls.length - before).toBe(ids.length * 2);
+      expect(gl.compileShader.mock.calls.length - before).toBe(ids.length * 2);
     }
     const lostRegs = add.mock.calls.filter((c) => c[0] === "webglcontextlost").length;
     const restoredRegs = add.mock.calls.filter((c) => c[0] === "webglcontextrestored").length;

@@ -2,20 +2,37 @@
 
 import type { ContextGen } from "./context-gen.mint";
 
-export const TILE_VERT = /* glsl */ `#version 300 es
+const TILE_VERT = /* glsl */ `#version 300 es
 in vec3 position;
+out vec3 vDir;
 void main() {
+  vDir = position;
   gl_Position = vec4(position, 1.0);
 }
 `;
 
-export type TileShaderBuildResult =
+type TileShaderBuildResult =
   | { ok: true }
   | { ok: false; log: string };
 
+function fragSource(frag: string): string {
+  const body = frag.replace(/^#version[^\n]*\n?/, "");
+  return `#version 300 es\nprecision highp float;\n${body}`;
+}
+
+function releaseGl(
+  gl: WebGL2RenderingContext,
+  vertSh: WebGLShader | null,
+  fragSh: WebGLShader | null,
+  prog: WebGLProgram | null,
+): void {
+  if (vertSh) gl.deleteShader(vertSh);
+  if (fragSh) gl.deleteShader(fragSh);
+  if (prog) gl.deleteProgram(prog);
+}
+
 export class TileShaderLatch {
   private failed = false;
-  private logged = false;
   private compiled = false;
   private compiledGen: ContextGen | null = null;
 
@@ -25,7 +42,6 @@ export class TileShaderLatch {
 
   reset(): void {
     this.failed = false;
-    this.logged = false;
     this.compiled = false;
     this.compiledGen = null;
   }
@@ -46,23 +62,26 @@ export class TileShaderLatch {
     const fragSh = gl.createShader(gl.FRAGMENT_SHADER);
     if (!vertSh || !fragSh) {
       this.fail("createShader failed", log);
+      releaseGl(gl, vertSh, fragSh, null);
       return { ok: false, log: "createShader failed" };
     }
     gl.shaderSource(vertSh, TILE_VERT);
     gl.compileShader(vertSh);
     const vertOk = gl.getShaderParameter(vertSh, gl.COMPILE_STATUS);
-    gl.shaderSource(fragSh, frag.startsWith("#version") ? frag : `#version 300 es\n${frag}`);
+    gl.shaderSource(fragSh, fragSource(frag));
     gl.compileShader(fragSh);
     const fragOk = gl.getShaderParameter(fragSh, gl.COMPILE_STATUS);
     if (!vertOk || !fragOk) {
       const sh = !vertOk ? vertSh : fragSh;
       const msg = (gl.getShaderInfoLog(sh) || "compile failed").trim();
       this.fail(msg, log);
+      releaseGl(gl, vertSh, fragSh, null);
       return { ok: false, log: msg };
     }
     const prog = gl.createProgram();
     if (!prog) {
       this.fail("createProgram failed", log);
+      releaseGl(gl, vertSh, fragSh, null);
       return { ok: false, log: "createProgram failed" };
     }
     gl.attachShader(prog, vertSh);
@@ -71,18 +90,18 @@ export class TileShaderLatch {
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
       const msg = (gl.getProgramInfoLog(prog) || "link failed").trim();
       this.fail(msg, log);
+      releaseGl(gl, vertSh, fragSh, prog);
       return { ok: false, log: msg };
     }
+    releaseGl(gl, vertSh, fragSh, prog);
     this.compiled = true;
     this.compiledGen = gen;
     return { ok: true };
   }
 
   private fail(msg: string, log: (m: string) => void): void {
+    if (this.failed) return;
     this.failed = true;
-    if (!this.logged) {
-      this.logged = true;
-      log(msg);
-    }
+    log(msg);
   }
 }

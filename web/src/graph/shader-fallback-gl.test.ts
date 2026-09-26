@@ -6,12 +6,33 @@ import {
   genericShaderFallbackMessage,
 } from "./shader-fallback-copy";
 import { GFX_WALL_NOTICE_CLASS, GFX_WALL_RELOAD_CLASS } from "./gfx-wall-notice";
-import { SHADER_FALLBACK_CHIP_CLASS, SHADER_FALLBACK_CLASS } from "./tile-shader-fallback";
-import { packFallbackText } from "../plugins/viz-pack-fallback";
 
 const FRAG = "void main() { fragColor = vec4(1.0); }";
 const COMPILE_STATUS = 0x8b81;
 const LINK_STATUS = 0x8b82;
+
+function mockGlBase(failTiles = new Set<string>(), tileIdForCall: { current: string }) {
+  const compileShader = vi.fn();
+  return {
+    VERTEX_SHADER: 35633,
+    FRAGMENT_SHADER: 35632,
+    COMPILE_STATUS,
+    LINK_STATUS,
+    createShader: () => ({}),
+    createProgram: () => ({}),
+    shaderSource: vi.fn(),
+    compileShader,
+    attachShader: vi.fn(),
+    linkProgram: vi.fn(),
+    deleteShader: vi.fn(),
+    deleteProgram: vi.fn(),
+    getShaderParameter: () => !failTiles.has(tileIdForCall.current),
+    getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS),
+    getShaderInfoLog: () => "",
+    getProgramInfoLog: () => "",
+    compileShader,
+  };
+}
 
 describe("shader fallback gl context", () => {
   beforeEach(() => {
@@ -37,24 +58,8 @@ describe("shader fallback gl context", () => {
     wall.appendChild(pane);
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
-    const compileShader = vi.fn();
     const tileIdForCall = { current: "t" };
-    const gl = {
-      VERTEX_SHADER: 35633,
-      FRAGMENT_SHADER: 35632,
-      COMPILE_STATUS,
-      LINK_STATUS,
-      createShader: () => ({}),
-      createProgram: () => ({}),
-      shaderSource: vi.fn(),
-      compileShader,
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getShaderParameter: () => !failTiles.has(tileIdForCall.current),
-      getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS),
-      getShaderInfoLog: () => "",
-      getProgramInfoLog: () => "",
-    };
+    const gl = mockGlBase(failTiles, tileIdForCall);
     vi.spyOn(host, "gl", "get").mockReturnValue(gl as WebGL2RenderingContext);
     Object.defineProperty(host, "software", { value: false });
     const origBuild = host.buildTileShader.bind(host);
@@ -62,12 +67,12 @@ describe("shader fallback gl context", () => {
       tileIdForCall.current = tileId;
       return origBuild(tileId, frag, log);
     };
-    return { host, wall, pane, compileShader, tileIdForCall };
+    return { host, wall, pane, compileShader: gl.compileShader, tileIdForCall };
   }
 
   it("context-loss-notice-no-generic", () => {
     const { host, wall, pane } = hostWithGl();
-    host.beginTilePack("t", "nixie:1", pane, "Nixie", packFallbackText("nixie-clock"));
+    host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie", true);
     host.buildTileShader("t", FRAG);
     host.dispatchContextLost();
     const notices = wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`);
@@ -75,8 +80,8 @@ describe("shader fallback gl context", () => {
     expect(notices[0]?.textContent).toBe(GFX_INTERRUPTED_NOTICE);
     expect(notices[0]?.getAttribute("role")).toBe("status");
     expect((notices[0] as HTMLElement).tabIndex).toBe(-1);
-    expect(pane.querySelectorAll(`.${SHADER_FALLBACK_CLASS}`).length).toBe(1);
-    expect(pane.querySelectorAll(`.${SHADER_FALLBACK_CHIP_CLASS}`).length).toBe(1);
+    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(1);
+    expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(1);
     expect(pane.textContent).not.toContain(genericShaderFallbackMessage("Nixie"));
     host.dispose();
     wall.remove();
@@ -85,13 +90,13 @@ describe("shader fallback gl context", () => {
   it("context-restore-recompile", () => {
     const failTiles = new Set(["dead"]);
     const { host, wall, pane, compileShader } = hostWithGl(failTiles);
-    host.beginTilePack("t", "nixie:1", pane, "Nixie", packFallbackText("nixie-clock"));
+    host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie", true);
     host.buildTileShader("t", FRAG);
     const deadPane = document.createElement("div");
     wall.appendChild(deadPane);
-    host.beginTilePack("dead", "g:1", deadPane, "Gone", undefined);
+    host.beginTilePack("dead", "g:1", "gone-pack", deadPane, "Gone", false);
     expect(host.buildTileShader("dead", FRAG)).toBe(false);
-    host.showCompileFallback("dead");
+    host.mountShaderFallback("dead");
     const deadBefore = compileShader.mock.calls.length;
     host.dispatchContextLost();
     host.dispatchContextRestored();
@@ -100,7 +105,7 @@ describe("shader fallback gl context", () => {
     expect(compileShader.mock.calls.length - deadBefore).toBe(2);
     expect(host.buildTileShader("dead", FRAG)).toBe(false);
     expect(compileShader.mock.calls.length - deadBefore).toBe(2);
-    expect(deadPane.querySelector(`.${SHADER_FALLBACK_CLASS}`)?.textContent)
+    expect(deadPane.querySelector(".tile-shader-fallback")?.textContent)
       .toContain(genericShaderFallbackMessage("Gone"));
     host.dispose();
     wall.remove();

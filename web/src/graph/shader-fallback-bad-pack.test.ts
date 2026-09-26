@@ -1,13 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
-import { SHADER_FALLBACK_CHIP_CLASS, SHADER_FALLBACK_CLASS } from "./tile-shader-fallback";
 import * as fallbackCopy from "./shader-fallback-copy";
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
-import type { VizDataFrame } from "../plugins/viz-host";
-
-const EMPTY_FRAME: VizDataFrame = {
-  t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [], headlines: [],
-};
+import { TileShaderFallback } from "./tile-shader-fallback";
 
 describe("shader fallback bad pack text", () => {
   beforeEach(() => {
@@ -15,28 +10,23 @@ describe("shader fallback bad pack text", () => {
   });
 
   it("fallback-throws-latched", () => {
-    const wall = document.createElement("div");
-    const pane = document.createElement("div");
-    wall.appendChild(pane);
-    document.body.appendChild(wall);
-    const host = new RenderHost(wall);
-    let calls = 0;
-    const throwing = () => {
-      calls++;
-      throw new Error("boom");
-    };
-    host.beginTilePack("t", "throw:1", pane, "Boom Pack", throwing);
-    host.showCompileFallback("t");
+    const mount = document.createElement("div");
+    document.body.appendChild(mount);
+    const fb = new TileShaderFallback(mount, { packName: "Boom Pack", showChip: true });
+    const inner = fb as unknown as { writeText: (s: string) => void };
+    const textEl = mount.querySelector(".tile-shader-fallback__text") as HTMLSpanElement;
+    vi.spyOn(inner, "writeText")
+      .mockImplementationOnce(() => { throw new Error("boom"); })
+      .mockImplementation((s: string) => { textEl.textContent = s; });
     const genSpy = vi.spyOn(fallbackCopy, "genericShaderFallbackMessage");
-    for (let i = 0; i < 600; i++) host.driveShaderFallback("t", EMPTY_FRAME);
-    expect(calls).toBe(1);
+    fb.pushPackText("01 05 00");
+    fb.pushPackText("01 05 01");
     expect(genSpy).toHaveBeenCalledTimes(1);
-    expect(host.tileSlot("t").fallback!.textNode.textContent)
+    expect(mount.querySelector(".tile-shader-fallback__text")?.textContent)
       .toBe(genericShaderFallbackMessage("Boom Pack"));
+    expect(mount.querySelectorAll(".tile-shader-fallback-chip").length).toBe(0);
     genSpy.mockRestore();
-    expect(pane.querySelectorAll(`.${SHADER_FALLBACK_CHIP_CLASS}`).length).toBe(0);
-    host.dispose();
-    wall.remove();
+    mount.remove();
   });
 
   it("fallback-empty-latched", () => {
@@ -45,21 +35,16 @@ describe("shader fallback bad pack text", () => {
     wall.appendChild(pane);
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
-    let calls = 0;
-    const empty = () => {
-      calls++;
-      return "   ";
-    };
-    host.beginTilePack("t", "empty:1", pane, "Empty Pack", empty);
-    host.showCompileFallback("t");
+    host.beginTilePack("t", "empty:1", "empty", pane, "Empty Pack", true);
+    host.mountShaderFallback("t");
     const genSpy = vi.spyOn(fallbackCopy, "genericShaderFallbackMessage");
-    for (let i = 0; i < 600; i++) host.driveShaderFallback("t", EMPTY_FRAME);
-    expect(calls).toBe(1);
+    host.pushPackFallbackText("t", "   ");
+    for (let i = 0; i < 600; i++) host.pushPackFallbackText("t", "   ");
     expect(genSpy).toHaveBeenCalledTimes(1);
-    expect(host.tileSlot("t").fallback!.textNode.textContent)
+    expect(pane.querySelector(".tile-shader-fallback__text")?.textContent)
       .toBe(genericShaderFallbackMessage("Empty Pack"));
     genSpy.mockRestore();
-    expect(pane.querySelectorAll(`.${SHADER_FALLBACK_CHIP_CLASS}`).length).toBe(0);
+    expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(0);
     host.dispose();
     wall.remove();
   });

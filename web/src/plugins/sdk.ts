@@ -12,6 +12,7 @@ window.zoto = {
   onTick: null,
   onConfig: null,
   onFrame: null,
+  fallbackText: null,
   setStyle(s) { if (allowed.has("graph.style")) send("setStyle", s); },
   setNodeColor(id, hex) { if (allowed.has("graph.style")) send("setNodeColor", { id, hex }); },
   writeBuffer() {},

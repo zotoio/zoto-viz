@@ -26,6 +26,8 @@ function mockGl(flags: { compile?: boolean; link?: boolean }) {
     getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS ? linkOk : true),
     getShaderInfoLog,
     getProgramInfoLog,
+    deleteShader: vi.fn(),
+    deleteProgram: vi.fn(),
   };
   return { gl, compileShader, linkProgram, getShaderInfoLog, getProgramInfoLog };
 }
@@ -49,13 +51,18 @@ describe("tile shader compile latch", () => {
 
   it("compile-once", () => {
     const { wall, host, gl } = hostedWall();
-    host.buildTileShader("pane-a", "void main() { fragColor = vec4(1.0); }");
-    for (let i = 0; i < 600; i++) {
-      host.buildTileShader("pane-a", "void main() { fragColor = vec4(1.0); }");
+    const log = vi.fn();
+    const src = "void main() { fragColor = vec4(1.0); }";
+    host.buildTileShader("pane-a", src, log);
+    for (let i = 0; i < 599; i++) {
+      host.buildTileShader("pane-a", src, log);
     }
-    expect(gl.compileShader).toHaveBeenCalledTimes(2);
-    expect(gl.linkProgram).toHaveBeenCalledTimes(0);
-    expect(gl.getShaderInfoLog).toHaveBeenCalledTimes(1);
+    expect(gl.gl.shaderSource.mock.calls[1]?.[1].startsWith("#version 300 es\nprecision highp float;\n")).toBe(true);
+    expect(gl.gl.compileShader).toHaveBeenCalledTimes(2);
+    expect(gl.gl.linkProgram).toHaveBeenCalledTimes(0);
+    expect(gl.gl.getShaderInfoLog).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("compile error");
     host.dispose();
     wall.remove();
   });
@@ -69,14 +76,18 @@ describe("tile shader compile latch", () => {
     const mocked = mockGl({ compile: true, link: false });
     vi.spyOn(host, "gl", "get").mockReturnValue(mocked.gl as WebGL2RenderingContext);
     Object.defineProperty(host, "software", { value: false });
-    host.buildTileShader("pane-b", "void main() { fragColor = vec4(1.0); }");
-    for (let i = 0; i < 600; i++) {
-      host.buildTileShader("pane-b", "void main() { fragColor = vec4(1.0); }");
+    const log = vi.fn();
+    const src = "void main() { fragColor = vec4(1.0); }";
+    host.buildTileShader("pane-b", src, log);
+    for (let i = 0; i < 599; i++) {
+      host.buildTileShader("pane-b", src, log);
     }
-    expect(mocked.compileShader).toHaveBeenCalledTimes(2);
     expect(mocked.linkProgram).toHaveBeenCalledTimes(1);
+    expect(mocked.compileShader).toHaveBeenCalledTimes(2);
     expect(mocked.getShaderInfoLog).toHaveBeenCalledTimes(0);
     expect(mocked.getProgramInfoLog).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("link error");
     host.dispose();
     wall.remove();
   });

@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
-import { SHADER_FALLBACK_CHIP_CLASS, SHADER_FALLBACK_CLASS } from "./tile-shader-fallback";
-import { packFallbackText } from "../plugins/viz-pack-fallback";
 import type { VizDataFrame } from "../plugins/viz-host";
-import * as tubes from "../../../plugins/src/nixie-clock/frontend/tubes";
 
 const FRAG = "void main() { fragColor = vec4(1.0); }";
 const COMPILE_STATUS = 0x8b81;
@@ -24,7 +21,6 @@ function frameAt(ms: number): VizDataFrame {
 function mockGl(failTiles: Set<string>, tileIdForCall: { current: string }) {
   const compileShader = vi.fn();
   const linkProgram = vi.fn();
-  const getShaderInfoLog = vi.fn(() => "err");
   const gl = {
     VERTEX_SHADER: 35633,
     FRAGMENT_SHADER: 35632,
@@ -36,9 +32,11 @@ function mockGl(failTiles: Set<string>, tileIdForCall: { current: string }) {
     compileShader,
     attachShader: vi.fn(),
     linkProgram,
+    deleteShader: vi.fn(),
+    deleteProgram: vi.fn(),
     getShaderParameter: () => !failTiles.has(tileIdForCall.current),
     getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS),
-    getShaderInfoLog,
+    getShaderInfoLog: () => "err",
     getProgramInfoLog: () => "link err",
   };
   return { gl, compileShader, linkProgram };
@@ -80,76 +78,23 @@ describe("shader fallback wall", () => {
     expect.hasAssertions();
   });
 
-  it("nixie-per-tile-cache", () => {
-    const wall = document.createElement("div");
-    document.body.appendChild(wall);
-    const host = new RenderHost(wall);
-    const m1 = document.createElement("div");
-    const m2 = document.createElement("div");
-    const fnOff = packFallbackText("nixie-clock", { seconds: "0" })!;
-    const fnOn = packFallbackText("nixie-clock", { seconds: "1" })!;
-    host.beginTilePack("a", "nixie:off", m1, "Nixie", fnOff);
-    host.beginTilePack("b", "nixie:on", m2, "Nixie", fnOn);
-    host.showCompileFallback("a");
-    host.showCompileFallback("b");
-    const t105 = new Date(2026, 0, 1, 1, 5, 0, 0).getTime();
-    expect(fnOff(frameAt(t105))).toBe("01 05");
-    expect(fnOn(frameAt(t105))).toBe("01 05 00");
-    const formatSpy = vi.spyOn(tubes, "formatNixieFallbackLine");
-    let buildsA = 0;
-    let buildsB = 0;
-    let lastA = "";
-    let lastB = "";
-    const RealDate = Date;
-    let dateNews = 0;
-    vi.spyOn(globalThis, "Date").mockImplementation((...args: [] | [number]) => {
-      dateNews++;
-      return new RealDate(...(args as [number]));
-    });
-    for (let i = 0; i < 600; i++) {
-      const f = frameAt(t105 + i * 16);
-      const a = fnOff(f);
-      if (a !== lastA) {
-        buildsA++;
-        lastA = a;
-      }
-      const b = fnOn(f);
-      if (b !== lastB) {
-        buildsB++;
-        lastB = b;
-      }
-      host.driveShaderFallback("a", f);
-      host.driveShaderFallback("b", f);
-    }
-    expect(formatSpy.mock.calls.length).toBeGreaterThan(0);
-    expect(buildsA).toBe(1);
-    expect(buildsB).toBe(10);
-    expect(dateNews).toBe(0);
-    formatSpy.mockRestore();
-    vi.mocked(globalThis.Date).mockRestore();
-    host.dispose();
-    wall.remove();
-  });
-
   it("healthy-wall-no-fallback", () => {
     const { wall, host, panes } = wall2x2();
-    let packCalls = 0;
     for (const [id, pane] of panes) {
-      const fn = packFallbackText("nixie-clock", { seconds: "1" });
-      const wrapped = (f: VizDataFrame) => {
-        packCalls++;
-        return fn!(f);
-      };
-      host.beginTilePack(id, `nixie:${id}`, pane, "Nixie", wrapped);
+      host.beginTilePack(id, `nixie:${id}`, "nixie-clock", pane, "Nixie", true);
       expect(host.buildTileShader(id, FRAG)).toBe(true);
     }
-    const t0 = Date.now();
+    let pushes = 0;
+    const orig = host.pushPackFallbackText.bind(host);
+    host.pushPackFallbackText = (...args) => {
+      pushes++;
+      return orig(...args);
+    };
     for (let i = 0; i < 600; i++) {
-      const f = frameAt(t0 + i * 16);
-      for (const id of panes.keys()) host.driveShaderFallback(id, f);
+      host.driveShaderFallbacks(frameAt(Date.now() + i * 16));
     }
-    expect(wall.querySelectorAll(`.${SHADER_FALLBACK_CLASS}`).length).toBe(0);
-    expect(packCalls).toBe(0);
+    expect(wall.querySelectorAll(".tile-shader-fallback").length).toBe(0);
+    expect(pushes).toBe(0);
     host.dispose();
     wall.remove();
   });
@@ -177,28 +122,21 @@ describe("shader fallback wall", () => {
       return origBuild(tileId, frag, log);
     };
     for (const [id, pane] of panes) {
-      host.beginTilePack(id, `p:${id}`, pane, "Pack", packFallbackText("nixie-clock"));
+      host.beginTilePack(id, `p:${id}`, "nixie-clock", pane, "Pack", true);
       if (id === "t1") {
         expect(host.buildTileShader(id, FRAG)).toBe(false);
-        host.showCompileFallback(id);
+        host.mountShaderFallback(id);
       } else {
         expect(host.buildTileShader(id, FRAG)).toBe(true);
       }
     }
-    let deliveries = 0;
-    const t0 = Date.now();
     for (let i = 0; i < 600; i++) {
-      const f = frameAt(t0 + i * 16);
-      for (const id of ["t2", "t3", "t4"]) {
-        host.driveShaderFallback(id, f);
-        deliveries++;
-      }
+      host.driveShaderFallbacks(frameAt(Date.now() + i * 16));
     }
-    expect(deliveries).toBe(1800);
-    expect(panes.get("t1")!.querySelectorAll(`.${SHADER_FALLBACK_CLASS}`).length).toBe(1);
+    expect(panes.get("t1")!.querySelectorAll(".tile-shader-fallback").length).toBe(1);
     for (const id of ["t2", "t3", "t4"]) {
-      expect(panes.get(id)!.querySelectorAll(`.${SHADER_FALLBACK_CLASS}`).length).toBe(0);
-      expect(panes.get(id)!.querySelectorAll(`.${SHADER_FALLBACK_CHIP_CLASS}`).length).toBe(0);
+      expect(panes.get(id)!.querySelectorAll(".tile-shader-fallback").length).toBe(0);
+      expect(panes.get(id)!.querySelectorAll(".tile-shader-fallback-chip").length).toBe(0);
     }
     host.dispose();
     wall.remove();
@@ -220,21 +158,125 @@ describe("shader fallback wall", () => {
       tileIdForCall.current = tileId;
       return origBuild(tileId, frag, log);
     };
-    host.beginTilePack("t1", "bad:1", pane, "Bad", undefined);
+    host.beginTilePack("t1", "bad:1", "bad", pane, "Bad", false);
     expect(host.buildTileShader("t1", FRAG)).toBe(false);
-    host.showCompileFallback("t1");
-    expect(pane.querySelectorAll(`.${SHADER_FALLBACK_CLASS}`).length).toBe(1);
+    host.mountShaderFallback("t1");
+    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(1);
     failTiles.clear();
-    host.beginTilePack("t1", "good:2", pane, "Good", packFallbackText("nixie-clock"));
-    expect(pane.querySelectorAll(`.${SHADER_FALLBACK_CLASS}`).length).toBe(0);
-    expect(pane.querySelectorAll(`.${SHADER_FALLBACK_CHIP_CLASS}`).length).toBe(0);
+    host.beginTilePack("t1", "good:2", "nixie-clock", pane, "Good", true);
+    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(0);
+    expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(0);
     const before = mocked.compileShader.mock.calls.length;
     expect(host.buildTileShader("t1", FRAG)).toBe(true);
     expect(mocked.compileShader.mock.calls.length - before).toBe(2);
     const after = mocked.compileShader.mock.calls.length;
-    host.beginTilePack("t1", "good:2", pane, "Good", packFallbackText("nixie-clock"));
+    host.beginTilePack("t1", "good:2", "nixie-clock", pane, "Good", true);
     expect(host.buildTileShader("t1", FRAG)).toBe(true);
     expect(mocked.compileShader.mock.calls.length).toBe(after);
+    host.dispose();
+    wall.remove();
+  });
+
+  it("drive-writes-tile", () => {
+    const wall = document.createElement("div");
+    const pane = document.createElement("div");
+    wall.appendChild(pane);
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    host.beginTilePack("pane-b", "p:1", "nixie-clock", pane, "Nixie", true);
+    host.mountShaderFallback("pane-b");
+    host.pushPackFallbackText("pane-b", "X");
+    expect(pane.querySelector(".tile-shader-fallback__text")?.textContent).toBe("X");
+    host.dispose();
+    wall.remove();
+  });
+
+  it("mosaic-tile-keyed", () => {
+    const failTiles = new Set<string>();
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { value: 640 });
+    Object.defineProperty(wall, "clientHeight", { value: 480 });
+    const panes = new Map<string, HTMLElement>();
+    for (const id of ["t1", "t2"]) {
+      const p = document.createElement("div");
+      panes.set(id, p);
+      wall.appendChild(p);
+    }
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    const tileIdForCall = { current: "t1" };
+    const mocked = mockGl(failTiles, tileIdForCall);
+    vi.spyOn(host, "gl", "get").mockReturnValue(mocked.gl as WebGL2RenderingContext);
+    Object.defineProperty(host, "software", { value: false });
+    const origBuild = host.buildTileShader.bind(host);
+    host.buildTileShader = (tileId, frag, log) => {
+      tileIdForCall.current = tileId;
+      return origBuild(tileId, frag, log);
+    };
+    failTiles.add("t1");
+    host.beginTilePack("t1", "k:t1", "nixie-clock", panes.get("t1")!, "N", true);
+    expect(host.buildTileShader("t1", FRAG)).toBe(false);
+    host.beginTilePack("t2", "k:t2", "nixie-clock", panes.get("t2")!, "N", true);
+    const beforeT2 = mocked.compileShader.mock.calls.length;
+    expect(host.buildTileShader("t2", FRAG)).toBe(true);
+    expect(mocked.compileShader.mock.calls.length - beforeT2).toBe(2);
+    host.dispose();
+    wall.remove();
+  });
+
+  it("scene-mounts-fallback", () => {
+    const wall = document.createElement("div");
+    const pane = document.createElement("div");
+    wall.appendChild(pane);
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    const failTiles = new Set(["pane-a"]);
+    const tileIdForCall = { current: "pane-a" };
+    const mocked = mockGl(failTiles, tileIdForCall);
+    vi.spyOn(host, "gl", "get").mockReturnValue(mocked.gl as WebGL2RenderingContext);
+    Object.defineProperty(host, "software", { value: false });
+    const origBuild = host.buildTileShader.bind(host);
+    host.buildTileShader = (tileId, frag, log) => {
+      tileIdForCall.current = tileId;
+      return origBuild(tileId, frag, log);
+    };
+    host.loadTileShader("pane-a", pane, FRAG, {
+      packKey: "bad:1",
+      packId: "nixie-clock",
+      packName: "Nixie",
+      supportsPackFallback: true,
+    });
+    expect(pane.querySelectorAll(".tile-shader-fallback")).toHaveLength(1);
+    host.dispose();
+    wall.remove();
+  });
+
+  it("fallback-survives-sky-reset", () => {
+    const wall = document.createElement("div");
+    const pane = document.createElement("div");
+    wall.appendChild(pane);
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    const failTiles = new Set(["main"]);
+    const tileIdForCall = { current: "main" };
+    const mocked = mockGl(failTiles, tileIdForCall);
+    vi.spyOn(host, "gl", "get").mockReturnValue(mocked.gl as WebGL2RenderingContext);
+    Object.defineProperty(host, "software", { value: false });
+    const origBuild = host.buildTileShader.bind(host);
+    host.buildTileShader = (tileId, frag, log) => {
+      tileIdForCall.current = tileId;
+      return origBuild(tileId, frag, log);
+    };
+    const meta = {
+      packKey: "k:1",
+      packId: "nixie-clock",
+      packName: "Nixie",
+      supportsPackFallback: true,
+    };
+    expect(host.loadTileShader("main", pane, FRAG, meta)).toBe(false);
+    expect(pane.querySelectorAll(".tile-shader-fallback")).toHaveLength(1);
+    expect(host.loadTileShader("main", pane, FRAG, meta)).toBe(false);
+    expect(pane.querySelectorAll(".tile-shader-fallback")).toHaveLength(1);
     host.dispose();
     wall.remove();
   });

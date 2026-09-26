@@ -90,9 +90,9 @@ export function formatNixieFallbackLine(
   cache: { key: number; text: string },
 ): string {
   nixieClockParts(date, look.hour12, scratch);
-  const key = look.seconds
-    ? scratch.h * 3600 + scratch.m * 60 + scratch.s
-    : scratch.h * 3600 + scratch.m * 60;
+  const key = ((scratch.h * 3600 + scratch.m * 60 + (look.seconds ? scratch.s : 0)) << 2)
+    | (look.hour12 ? 2 : 0)
+    | (look.seconds ? 1 : 0);
   if (key === cache.key) return cache.text;
   cache.key = key;
   const parts = [nixiePair(scratch.h), nixiePair(scratch.m)];

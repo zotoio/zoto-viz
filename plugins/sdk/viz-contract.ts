@@ -72,6 +72,14 @@ export interface VizSysTelemetry {
   udev: number;
 }
 
+/**
+ * Optional pack hooks implemented on `window.zoto` in the plugin iframe.
+ * `fallbackText` returns a plain-text “simple view” line when the host cannot run the pack sky shader.
+ */
+export interface VizZotoPluginHooks {
+  fallbackText?: (frame: VizDataFrame) => string;
+}
+
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */
 export interface VizDataFrame {
   /** Monotonic frame time in seconds. */

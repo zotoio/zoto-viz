@@ -1,45 +1,60 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
 import { sanitizePackDisplayName } from "./sanitize-pack-name";
-import { SHADER_FALLBACK_CHIP_CLASS, SHADER_FALLBACK_CLASS, TileShaderFallback } from "./tile-shader-fallback";
-import { resetWallNotices, wallNoticeTotal } from "./wall-notice";
+import { TileShaderFallback } from "./tile-shader-fallback";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 const EMPTY_FRAME: VizDataFrame = {
   t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [], headlines: [],
 };
 
+function injectStyles(): void {
+  const css = readFileSync(resolve(import.meta.dirname, "../style.css"), "utf8");
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
 describe("tile shader fallback host", () => {
   beforeEach(() => {
     expect.hasAssertions();
-    resetWallNotices();
+    document.querySelectorAll("style[data-shader-fallback-test]").forEach((n) => n.remove());
+    injectStyles();
   });
 
   it("host-generic-copy", () => {
     const mount = document.createElement("div");
+    mount.style.position = "relative";
     Object.defineProperty(mount, "clientWidth", { value: 400 });
     Object.defineProperty(mount, "clientHeight", { value: 300 });
     document.body.appendChild(mount);
+    const beforeNodes = document.body.querySelectorAll("*").length;
     const focus = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(() => {});
     const pack = "Packet Tunnel";
     const fb = new TileShaderFallback(mount, { packName: pack, genericOnly: true });
-    const nodes = mount.querySelectorAll(`.${SHADER_FALLBACK_CLASS}`);
+    const nodes = mount.querySelectorAll(".tile-shader-fallback");
     expect(nodes).toHaveLength(1);
     const el = nodes[0] as HTMLElement;
     expect(el.isConnected).toBe(true);
-    expect(el.style.display).not.toBe("none");
-    expect(el.hidden).toBe(false);
     expect(el.textContent).toBe(genericShaderFallbackMessage(pack));
-    const box = { width: 200, height: 80, top: 0, left: 0, right: 200, bottom: 80, x: 0, y: 0, toJSON() { return this; } };
+    const box = { width: 400, height: 300, top: 0, left: 0, right: 400, bottom: 300, x: 0, y: 0, toJSON() { return this; } };
     el.getBoundingClientRect = () => box as DOMRect;
-    expect(box.width).toBeGreaterThan(0);
-    expect(box.height).toBeGreaterThan(0);
-    expect(el.style.backgroundColor).not.toBe("");
-    expect(el.style.backgroundColor).not.toBe("rgb(0, 0, 0)");
+    const cs = getComputedStyle(el);
+    expect(cs.display).toBe("flex");
+    expect(cs.position).toBe("absolute");
+    expect(cs.top).toBe("0px");
+    expect(cs.right).toBe("0px");
+    expect(cs.bottom).toBe("0px");
+    expect(cs.left).toBe("0px");
+    Object.defineProperty(el, "offsetParent", { configurable: true, get: () => mount });
+    expect(el.offsetParent).toBe(mount);
     fb.frame(EMPTY_FRAME);
     expect(focus).not.toHaveBeenCalled();
-    expect(wallNoticeTotal()).toBe(0);
+    expect(document.body.querySelectorAll("*").length - beforeNodes).toBe(2);
     focus.mockRestore();
+    fb.dispose();
     mount.remove();
   });
 
@@ -48,12 +63,12 @@ describe("tile shader fallback host", () => {
     document.body.appendChild(mount);
     new TileShaderFallback(mount, {
       packName: "Nixie",
-      fallbackText: () => "01 05 00",
       showChip: true,
     });
-    const chips = mount.querySelectorAll(`.${SHADER_FALLBACK_CHIP_CLASS}`);
+    const chips = mount.querySelectorAll(".tile-shader-fallback-chip");
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe("Simple view");
+    expect(getComputedStyle(chips[0] as HTMLElement).textTransform).toBe("none");
     mount.remove();
   });
 
@@ -62,6 +77,8 @@ describe("tile shader fallback host", () => {
     const clean = sanitizePackDisplayName(raw);
     expect(clean.length).toBe(80);
     expect(clean).not.toMatch(/[<>]/);
+    expect(sanitizePackDisplayName("Ni\u0000xie <b>Clock")).toBe("Nixie bClock");
+    expect(sanitizePackDisplayName("Nixie|Clock?*")).toBe("NixieClock");
     expect(genericShaderFallbackMessage(raw)).toBe(
       `‹${clean}› can't run its graphics on this device. Other tiles aren't affected.`,
     );

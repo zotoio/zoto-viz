@@ -22,8 +22,18 @@ patch_row() {
 patch_row compile-once "sed -i '/if (this.failed) return/d' web/src/graph/tile-shader-build.ts; sed -i '/if (this.compiled) return/d' web/src/graph/tile-shader-build.ts"
 mkjson compile-once "src/graph/shader-fallback-compile.test.ts" "tile shader compile latch > compile-once" 1200
 
-# link-failure  
-cp "$DIR/compile-once.patch" "$DIR/link-failure.patch"
+# link-failure — drop link-path latch only (compile still short-circuits)
+patch_row link-failure "sed -i '/if (this.failed) return/d' web/src/graph/tile-shader-build.ts; sed -i '/if (this.compiled && this.compiledGen === gen) return/d' web/src/graph/tile-shader-build.ts; python3 - <<'PY'
+from pathlib import Path
+p = Path('web/src/graph/tile-shader-build.ts')
+lines = p.read_text().splitlines(True)
+out = []
+for i, line in enumerate(lines):
+    if 'this.fail(msg, log);' in line and i > 0 and 'link failed' in lines[i - 1]:
+        continue
+    out.append(line)
+p.write_text(''.join(out))
+PY"
 mkjson link-failure "src/graph/shader-fallback-compile.test.ts" "tile shader compile latch > link-failure" 600
 
 # host-generic-copy
@@ -79,36 +89,25 @@ export function formatNixieFallbackLine(
 }'''
 p.write_text(t.replace(old,new))
 PY"
-mkjson nixie-text "src/plugins/nixie-shader-fallback.test.ts" "nixie shader fallback text > nixie-text" "\"01 05\""
+mkjson nixie-text "src/plugins/nixie-fallback.test.ts" "nixie shader fallback text > nixie-text" "\"0 1 0 5 0 0\""
 
 # nixie-write-on-change
-patch_row nixie-write-on-change "sed -i 's/if (next !== this.lastWritten) this.writeText(next);/this.writeText(next);/' web/src/graph/tile-shader-fallback.ts"
-mkjson nixie-write-on-change "src/plugins/nixie-shader-fallback.test.ts" "nixie shader fallback text > nixie-write-on-change" 600
+patch_row nixie-write-on-change "sed -i 's/if (next === this.lastWritten) return;/if (false \&\& next === this.lastWritten) return;/' web/src/graph/tile-shader-fallback.ts"
+mkjson nixie-write-on-change "src/plugins/nixie-fallback.test.ts" "nixie shader fallback text > nixie-write-on-change" 600
 
 # pack-name-sanitise
 patch_row pack-name-sanitise "sed -i '/PACK_NAME_MAX/d' web/src/graph/sanitize-pack-name.ts; sed -i '/if (s.length > PACK_NAME_MAX)/d' web/src/graph/sanitize-pack-name.ts"
-mkjson pack-name-sanitise "src/graph/shader-fallback-host.test.ts" "tile shader fallback host > pack-name-sanitise" 133
+mkjson pack-name-sanitise "src/graph/shader-fallback-host.test.ts" "tile shader fallback host > pack-name-sanitise" 134
 
-# nixie-per-tile-cache - use module cache only in viz-pack-fallback
+# nixie-per-tile-cache — shared module cache (breaks per-pack instance isolation)
 patch_row nixie-per-tile-cache "python3 - <<'PY'
 from pathlib import Path
-vf=Path('web/src/plugins/viz-pack-fallback.ts')
-vf.write_text('''import type { VizDataFrame } from \"./viz-host\";
-import type { VizPackFallbackText } from \"../graph/tile-shader-fallback\";
-import { formatNixieFallbackLine, parseNixieLook } from \"../../../plugins/src/nixie-clock/frontend/tubes\";
-import { packetTunnelFallbackText } from \"../../../plugins/src/packet-tunnel/frontend/tunnel\";
-
-const PACK_FALLBACK: Partial<Record<string, VizPackFallbackText>> = {
-  \"nixie-clock\": (frame) => formatNixieFallbackLine(new Date(frame.t * 1000), parseNixieLook(), {h:0,m:0,s:0}, {key:-1,text:\"\"}),
-  \"packet-tunnel\": (frame) => packetTunnelFallbackText(frame),
-};
-
-export function packFallbackText(packId: string, _look?: Record<string, string> | null): VizPackFallbackText | undefined {
-  return PACK_FALLBACK[packId];
-}
-''')
+p=Path('plugins/src/nixie-clock/frontend/index.ts')
+t=p.read_text()
+t=t.replace('const NIXIE_CACHE = { key: -1, text: \"\" };', 'let NIXIE_CACHE_KEY = -1;\\nlet NIXIE_CACHE_TEXT = \"\";\\nconst NIXIE_CACHE = { get key(){return NIXIE_CACHE_KEY;}, set key(v){NIXIE_CACHE_KEY=v;}, get text(){return NIXIE_CACHE_TEXT;}, set text(v){NIXIE_CACHE_TEXT=v;} };')
+p.write_text(t)
 PY"
-mkjson nixie-per-tile-cache "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > nixie-per-tile-cache" "\"01 05\""
+mkjson nixie-per-tile-cache "src/plugins/nixie-fallback.test.ts" "nixie shader fallback text > nixie-per-tile-cache" "\"01 05 00\""
 
 # fallback-throws-latched
 patch_row fallback-throws-latched "sed -i 's/} catch {/} catch (e) { throw e; } catch {/' web/src/graph/tile-shader-fallback.ts"
@@ -134,11 +133,15 @@ patch_row healthy-wall-no-fallback "python3 - <<'PY'
 from pathlib import Path
 p=Path('web/src/graph/render-host.ts')
 t=p.read_text().replace(
-  '  driveShaderFallback(tileId: string, frame: VizDataFrame): void {\n    this.tileSlot(tileId).fallback?.frame(frame);\n  }',
-  '  driveShaderFallback(tileId: string, frame: VizDataFrame): void {\n    const slot = this.tileSlot(tileId);\n    slot.packFallbackFn?.(frame);\n    slot.fallback?.frame(frame);\n  }')
+  '''  driveShaderFallbacks(frame: VizDataFrame): void {
+    for (let i = 0; i < this.liveFallbacks.length; i++) {
+      this.liveFallbacks[i]!.frame(frame);
+    }
+  }''',
+  '  driveShaderFallbacks(_frame: VizDataFrame): void {}')
 p.write_text(t)
 PY"
-mkjson healthy-wall-no-fallback "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > healthy-wall-no-fallback" 600
+mkjson healthy-wall-no-fallback "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > healthy-wall-no-fallback" 0
 
 # isolated-tile-failure global dead
 patch_row isolated-tile-failure "python3 - <<'PY'
@@ -271,6 +274,22 @@ p.write_text(t.replace(old, new))
 PY
 EOS
 )"
-mkjson late-restore-clears-reload "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > late-restore-clears-reload-focus" "\"BODY\""
+mkjson late-restore-clears-reload "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > late-restore-clears-reload" 0
+
+# B5 rows
+patch_row scene-mounts-fallback "sed -i '/if (!ok) this.mountShaderFallback(tileId);/d' web/src/graph/render-host.ts"
+mkjson scene-mounts-fallback "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > scene-mounts-fallback" 0
+
+patch_row fallback-survives-sky-reset "sed -i '/if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;/d' web/src/graph/render-host.ts"
+mkjson fallback-survives-sky-reset "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > fallback-survives-sky-reset" 2
+
+patch_row drive-writes-tile "sed -i 's/slot.fallback?.pushPackText(text);//' web/src/graph/render-host.ts"
+mkjson drive-writes-tile "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > drive-writes-tile" "\"\""
+
+patch_row mosaic-tile-keyed "sed -i 's/return this.tileSlot(tileId).build/return this.tileSlot(\"t1\").build/' web/src/graph/render-host.ts"
+mkjson mosaic-tile-keyed "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > mosaic-tile-keyed" 0
+
+patch_row tunnel-write-on-change "sed -i '/if (key === ptKey) return ptCached;/d' plugins/src/packet-tunnel/frontend/tunnel.ts"
+mkjson tunnel-write-on-change "src/plugins/packet-tunnel-fallback.test.ts" "packet tunnel fallback text > tunnel-write-on-change" 600
 
 echo "done"
