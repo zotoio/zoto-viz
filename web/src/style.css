@@ -430,6 +430,25 @@ body.mosaic-dragging { cursor: grabbing; }
   background: var(--chip); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
   font: inherit; font-size: 12px;
 }
+.mosaic-pick-backdrop {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 10, 22, 0.55);
+}
+.mosaic-pick-panel {
+  max-width: min(22rem, 92vw); padding: 12px 14px;
+  background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.mosaic-pick-title { font: 600 13px/1.3 inherit; }
+.mosaic-pick-hint { font: 12px/1.35 inherit; color: var(--muted); }
+.mosaic-pick-btn {
+  height: 30px; padding: 0 10px; margin: 0;
+  background: var(--chip); color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
+  font: 600 12px/30px inherit; cursor: pointer; text-align: left;
+}
+.mosaic-pick-btn.link { background: transparent; border-color: transparent; color: var(--muted); }
+.mosaic-pick-btn:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 body.mosaic #scene, body.mosaic .arcade { position: absolute; inset: 0; }
 body.mosaic .arcade.mosaic-live { display: block; }
 body.mosaic.arcade #scene { visibility: visible; }

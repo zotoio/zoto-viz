@@ -8,12 +8,18 @@ import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
 import {
-  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, nextPaneTiles, parseMosaicNode,
+  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
-import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
+import { lookForMode, mergeLook } from "../plugins/plugin";
+import { mosaicTileViewId } from "./mosaic-tile-id";
+import { fillMosaicViewSelect, pickMosaicViewForSlot } from "../ui/mosaic-view-pick";
 
 export { centerSplit } from "./mosaic-layout";
+
+function lookForTile(tileSlotId: string) {
+  return lookForMode(mosaicTileViewId(tileSlotId));
+}
 
 /** Wall palette for every tile, or the next unused theme (plugin look wins when free). */
 export function mosaicTileTheme(shared: boolean, wall: Theme, used: Set<string>, prefer?: string | null): Theme {
@@ -72,7 +78,7 @@ export function mosaicAnimForTile(
   id: string,
   tileSky?: BackdropKind,
 ): DreamAnim {
-  const merged = mergeLook(wall, lookForMode(id));
+  const merged = mergeLook(wall, lookForTile(id));
   if (tileSky === "plugin") return { ...merged, backdrop: "plugin" };
   if (tileSky) return { ...merged, backdrop: tileSky };
   return merged;
@@ -111,11 +117,12 @@ function panePool(): string[] {
  * has not loaded yet, fall back to the host engine (`plugin:memory` → `memory`)
  * so a SYS wall still mounts NetScenes instead of chrome-only panes.
  */
-export function mosaicPaneMode(id: string): ViewMode {
-  const catalog = allModes().find((row) => row.id === id);
+export function mosaicPaneMode(tileSlotId: string): ViewMode {
+  const viewId = mosaicTileViewId(tileSlotId);
+  const catalog = allModes().find((row) => row.id === viewId);
   if (catalog) return catalog;
-  const raw = id.startsWith("plugin:") ? id.slice("plugin:".length) : id;
-  return hostEngine(raw) ?? hostEngine(id) ?? modeById(id);
+  const raw = viewId.startsWith("plugin:") ? viewId.slice("plugin:".length) : viewId;
+  return hostEngine(raw) ?? hostEngine(viewId) ?? modeById(viewId);
 }
 
 export function mosaicIsGraph(id: string): boolean {
@@ -456,11 +463,17 @@ export class Mosaic {
     this.emitLayout();
   }
 
-  /** Change one pane. Picking a view already on the wall swaps those two tiles. */
-  setPaneView(fromId: string, toId: string): boolean {
-    if (!this.tree || !toId || fromId === toId) return false;
-    const next = nextPaneTiles(this.tileIds, fromId, toId);
-    if (next.join("\0") === this.tileIds.join("\0")) return false;
+  /** Change one pane to a catalog view id (allocates a tile slot; duplicates need an explicit pick). */
+  setPaneView(fromSlot: string, viewId: string): boolean {
+    if (!this.tree || !viewId || mosaicTileViewId(fromSlot) === viewId) return false;
+    void this.pickPaneView(fromSlot, viewId);
+    return true;
+  }
+
+  async pickPaneView(fromSlot: string, viewId: string): Promise<boolean> {
+    if (!this.tree || !viewId) return false;
+    const next = await pickMosaicViewForSlot(this.tileIds, fromSlot, viewId);
+    if (!next || next.join("\0") === this.tileIds.join("\0")) return false;
     this.assignViews(next);
     return true;
   }
@@ -588,7 +601,7 @@ export class Mosaic {
   private paneSnap(id: string) {
     const graph = this.graphScene(id);
     const bound = this.paneBound(id);
-    const look = lookForMode(id);
+    const look = lookForTile(id);
     const tileSky = this.tileSkies.get(id);
     return {
       id,
@@ -795,7 +808,7 @@ export class Mosaic {
   private refreshChrome(): void {
     for (const [id, pane] of this.panes) {
       const pick = pane.querySelector<HTMLSelectElement>(".mosaic-pick");
-      if (pick) fillViewSelect(pick, id);
+      if (pick) fillMosaicViewSelect(pick, id, this.tileIds);
       pane.classList.toggle("hero", this.hero !== "off" && id === this.heroId);
       pane.classList.toggle("max", this.maximized === id);
       const maxBtn = pane.querySelector<HTMLButtonElement>('[data-act="max"]');
@@ -815,15 +828,17 @@ export class Mosaic {
     const pick = document.createElement("select");
     pick.className = "mosaic-pick";
     pick.setAttribute("aria-label", "pane view");
-    pick.title = "this pane's view — pick another to swap or replace";
-    fillViewSelect(pick, id);
+    pick.title = "this pane's view — pick another; duplicates ask add or move";
+    fillMosaicViewSelect(pick, id, this.tileIds);
     pick.addEventListener("pointerdown", (e) => e.stopPropagation());
     pick.addEventListener("click", (e) => e.stopPropagation());
     pick.addEventListener("change", () => {
-      const fromId = [...this.panes.entries()].find(([, el]) => el === pane)?.[0] ?? id;
-      const toId = pick.value;
-      if (fromId === toId) return;
-      if (!this.setPaneView(fromId, toId)) fillViewSelect(pick, fromId);
+      const fromSlot = [...this.panes.entries()].find(([, el]) => el === pane)?.[0] ?? id;
+      const viewId = pick.value;
+      void (async () => {
+        const ok = await this.pickPaneView(fromSlot, viewId);
+        if (!ok) fillMosaicViewSelect(pick, fromSlot, this.tileIds);
+      })();
     });
     const tools = document.createElement("div");
     tools.className = "mosaic-tools";
@@ -972,7 +987,7 @@ export class Mosaic {
     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
     if (a.mosaicUniqueSkies === true || planned) {
       const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
-      const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;
@@ -983,13 +998,13 @@ export class Mosaic {
     }
     const stale = this.tileSkies.size > 0 && this.tileIds.some((id) => !this.tileSkies.has(id));
     if (this.tileSkies.size && stale) {
-      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;
     }
     if (!this.tileSkies.size && shouldUniqueMosaicSkies()) {
-      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
     }
     this.applyRecoveredSkies();
@@ -1008,12 +1023,12 @@ export class Mosaic {
     const mainId = this.mainId || this.cfg.main.currentMode.id;
     this.tintPane(mainId, hero);
     for (const e of this.extras) {
-      const t = mosaicTileTheme(shared, hero, used, lookForMode(e.id)?.theme);
+      const t = mosaicTileTheme(shared, hero, used, lookForTile(e.id)?.theme);
       e.scene.setTheme(t, fade);
       this.tintPane(e.id, t);
     }
     for (const id of this.liveArcade) {
-      const t = mosaicTileTheme(shared, hero, used, lookForMode(id)?.theme);
+      const t = mosaicTileTheme(shared, hero, used, lookForTile(id)?.theme);
       this.tileArcade.get(id)?.view.setTheme(t);
       this.tintPane(id, t);
     }

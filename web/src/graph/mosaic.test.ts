@@ -36,6 +36,11 @@ describe("mosaicPaneMode", () => {
     expect(mosaicPaneMode("plugin:memory").id).toBe("plugin:memory");
     expect(mosaicPaneMode("plugin:memory").label).toBe("Mem wrap");
   });
+
+  it("resolves a duplicate tile slot to the same catalog mode", () => {
+    setPluginModes([{ ...memory, id: "plugin:memory", pluginId: "memory", label: "Mem wrap" }]);
+    expect(mosaicPaneMode("plugin:memory!2").id).toBe("plugin:memory");
+  });
 });
 
 describe("mosaicShouldLift", () => {

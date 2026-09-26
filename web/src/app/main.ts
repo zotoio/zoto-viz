@@ -104,6 +104,7 @@ import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { paintFeedState } from "./feed-paint";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -802,27 +803,41 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
         tiles: settings.animSettings.mosaicTiles,
       });
     }
-    if (!mosaic.tileIds.includes(m.id)) {
+    const finishMosaic = (): void => {
+      const focusId = mosaic!.tileIds.find((id) => mosaicTileViewId(id) === m.id) ?? mosaic!.tileIds[0] ?? m.id;
+      mosaic!.focus(focusId);
+      const target = mosaic!.graphScene(focusId);
+      if (target) {
+        target.setMode(m, opts);
+        target.setStageOnly(skyStage);
+      }
+      document.body.classList.remove("arcade");
+      scene.setActive(true);
+      if (target !== scene) scene.setStageOnly(false);
+      morphViewChrome(m, opts, spec, skyStage);
+      applyViewLook();
+    };
+    const onWall = mosaic.tileIds.some((id) => mosaicTileViewId(id) === m.id);
+    if (!onWall) {
       const slot = mosaic.focusedId || mosaic.tileIds[0];
-      if (!slot || !mosaic.setPaneView(slot, m.id)) {
+      if (!slot) {
         modeSel.value = prevMode || modeSel.value;
         liveMode = prevMode;
         localStorage.setItem("zoto-viz.mode", modeSel.value);
         return;
       }
+      void mosaic.pickPaneView(slot, m.id).then((ok) => {
+        if (!ok) {
+          modeSel.value = prevMode || modeSel.value;
+          liveMode = prevMode;
+          localStorage.setItem("zoto-viz.mode", modeSel.value);
+          return;
+        }
+        finishMosaic();
+      });
+      return;
     }
-    const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.tileIds[0] ?? m.id;
-    mosaic.focus(focusId);
-    const target = mosaic.graphScene(focusId);
-    if (target) {
-      target.setMode(m, opts);
-      target.setStageOnly(skyStage);
-    }
-    document.body.classList.remove("arcade");
-    scene.setActive(true);
-    if (target !== scene) scene.setStageOnly(false);
-    morphViewChrome(m, opts, spec, skyStage);
-    applyViewLook();
+    finishMosaic();
     return;
   }
 
@@ -1169,10 +1184,11 @@ mosaic = new Mosaic({
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
 });
-settings.onMosaicPanePick = (from, to) => {
+settings.onMosaicPanePick = async (from, to) => {
   if (!mosaic?.on) return false;
-  if (!mosaic.setPaneView(from, to)) return false;
-  mosaic.focus(to);
+  if (!(await mosaic.pickPaneView(from, to))) return false;
+  const slot = mosaic.tileIds.find((id) => mosaicTileViewId(id) === to) ?? from;
+  mosaic.focus(slot);
   const pm = modeById(to);
   const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(pm.id) : null);
   void (async () => {

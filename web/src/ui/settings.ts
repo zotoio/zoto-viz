@@ -5,7 +5,9 @@ import { applyFloatRect, bindFloatPanel, readFloatRect } from "./float-drag";
 import { ColorField, GroupedChips, pinFlyout, Slider, Toggle, unpinFlyout } from "./ui";
 import { MAGNET_FIELDS } from "../graph/physics";
 import type { PluginField } from "../core/modes";
-import { assignTiles, equalize, leafIds, nextPaneTiles, parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
+import { assignTiles, equalize, leafIds, parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
+import { fillMosaicViewSelect, pickMosaicViewForSlot } from "./mosaic-view-pick";
 import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, GRAPH_LAYOUT_OPTIONS, GRAPH_LINK_OPTIONS, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FabricKind, type FocusMode, type GraphLayout, type GraphLinks, type GraphSpace, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
 import { BACKDROP_OPTIONS, SKY_GROUP_TABS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
 import { invalidateSkyRecipe } from "../graph/sky-ai";
@@ -205,7 +207,7 @@ export class Settings {
   onSoundPolicy?: (on: boolean) => void;
   onPluginChange?: (id: string, values: Record<string, string>) => void;
   /** Live wall: swap one tile's view (returns false when the pick could not be applied). */
-  onMosaicPanePick?: (fromId: string, toId: string) => boolean;
+  onMosaicPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
   onInstancesChange?: () => void;
   onClose?: () => void;
   onDice?: () => void;
@@ -964,7 +966,7 @@ export class Settings {
     });
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
-    mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
+    mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. A view already on the wall can be added again or moved from another tile. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
     const mosaicBtns = document.createElement("div");
     mosaicBtns.className = "sec-links";
     mosaicBtns.append(resetBtn, equalBtn);
@@ -1766,20 +1768,27 @@ export class Settings {
       const sel = document.createElement("select");
       sel.className = "mosaic-slot";
       sel.setAttribute("aria-label", cap.textContent);
-      fillViewSelect(sel, cur);
+      fillMosaicViewSelect(sel, cur, ids);
       sel.addEventListener("change", () => {
         const from = ids[i] ?? "";
         const to = sel.value;
-        if (!from || from === to) return;
-        if (this.onMosaicPanePick) {
-          if (!this.onMosaicPanePick(from, to)) fillViewSelect(sel, from);
-        } else {
-          const next = nextPaneTiles(ids, from, to);
-          this.anim.mosaicTiles = parseMosaicTiles(next);
-          if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
-          this.persistAnim();
-        }
-        this.animUi?.syncTiles();
+        if (!from || !to || mosaicTileViewId(from) === to) return;
+        void (async () => {
+          if (this.onMosaicPanePick) {
+            const ok = await this.onMosaicPanePick(from, to);
+            if (!ok) fillMosaicViewSelect(sel, from, ids);
+          } else {
+            const next = await pickMosaicViewForSlot(ids, from, to);
+            if (!next) {
+              fillMosaicViewSelect(sel, from, ids);
+              return;
+            }
+            this.anim.mosaicTiles = parseMosaicTiles(next);
+            if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
+            this.persistAnim();
+          }
+          this.animUi?.syncTiles();
+        })();
       });
       row.append(cap, sel);
       host.appendChild(row);
