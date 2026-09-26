@@ -905,6 +905,7 @@ async function runMosaicPaneSwitch(toViewId: string, fromViewId?: string): Promi
     mountView: mountMosaicPanelView,
     persistLayout: persistMosaicPickLayout,
   });
+  if (result.ok) syncMosaicPluginHudCaptions();
   return result;
 }
 
