@@ -18,8 +18,8 @@ type VizFrame = {
   dt: number;
   audio: number;
   demo?: boolean;
-  talkers?: { rate: number }[];
-  packets?: { field: number }[];
+  talkers?: { id: string; rate: number; role?: string }[];
+  packets?: { proto: string; size?: number; field: number; host?: string }[];
   sys?: { failed?: number; udev?: number };
 };
 

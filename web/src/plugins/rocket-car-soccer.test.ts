@@ -20,11 +20,15 @@ import {
   scanRcsTrademarks,
   validatePreset,
 } from "../../../plugins/src/rocket-car-soccer/frontend/pack";
-import { RCS_LIVE_MAPPING } from "../../../plugins/src/rocket-car-soccer/frontend/live";
+import { RCS_LIVE_MAPPING, RCS_PACKET_FRAME_CAP, hostLabelHash, ingestLiveFrame } from "../../../plugins/src/rocket-car-soccer/frontend/live";
 import {
   enforceRcsCaps,
   maxSubstepsFor,
+  rcsCarHostFailVis,
+  rcsCarHostLabelHash,
   rcsEnterReplayForTest,
+  rcsHostCarIndex,
+  rcsLivePacketsConsumed,
   rcsMount,
   rcsOptionsNow,
   rcsPoolStats,
@@ -196,7 +200,7 @@ describe("rocket-car-soccer pack", () => {
   it("smoke-packs non-zero drive data (never an empty board)", () => {
     resetRcsSim(99);
     setRcsOptions({});
-    const f = rcsTick({ demo: true, talkers: [{ rate: 12 }] }, 1.0, 1 / 60, 1.777);
+    const f = rcsTick({ demo: true, talkers: [{ id: "demo-host", rate: 12, role: "lan" }] }, 1.0, 1 / 60, 1.777);
     expect(f.slot0[RCS_SLOT.mark]).toBe(1);
     expect(f.slot0[RCS_SLOT.demoFlag]).toBe(1);
     const energy = [...f.slot0, ...f.slot1, ...f.slot2].reduce((s, v) => s + Math.abs(v), 0);
@@ -213,6 +217,98 @@ describe("rocket-car-soccer pack", () => {
     rcsTriggerMaxGoalExplosion();
     const during = rcsTick({ sys: { failed: 1 } }, 0.6, 1 / 60, 1.777);
     expect(during.slot0[RCS_SLOT.goalFlash]).toBeLessThan(0.05);
+  });
+
+  it("keeps car slots keyed by host id when talkers reorder", () => {
+    resetRcsSim(1);
+    const ha = hostLabelHash("10.0.0.10");
+    const hb = hostLabelHash("10.0.0.20");
+    rcsTick(
+      {
+        talkers: [
+          { id: "10.0.0.10", rate: 120, role: "lan" },
+          { id: "10.0.0.20", rate: 5, role: "lan" },
+        ],
+      },
+      0,
+      1 / 60,
+      1.777,
+    );
+    const idxA = rcsHostCarIndex("10.0.0.10");
+    const idxB = rcsHostCarIndex("10.0.0.20");
+    expect(idxA).toBeDefined();
+    expect(idxB).toBeDefined();
+    expect(rcsCarHostLabelHash(idxA!)).toBeCloseTo(ha, 4);
+    expect(rcsCarHostLabelHash(idxB!)).toBeCloseTo(hb, 4);
+    rcsTick(
+      {
+        talkers: [
+          { id: "10.0.0.20", rate: 5, role: "lan" },
+          { id: "10.0.0.10", rate: 120, role: "lan" },
+        ],
+        sys: { failed: 0.85 },
+      },
+      1 / 60,
+      1 / 60,
+      1.777,
+    );
+    expect(rcsHostCarIndex("10.0.0.10")).toBe(idxA);
+    expect(rcsHostCarIndex("10.0.0.20")).toBe(idxB);
+    expect(rcsCarHostLabelHash(idxA!)).toBeCloseTo(ha, 4);
+    expect(rcsCarHostFailVis(idxA!)).toBeGreaterThan(0);
+  });
+
+  it("does not reassign a vacant host slot to a new host immediately", () => {
+    resetRcsSim(1);
+    rcsTick({ talkers: [{ id: "host-aaa", rate: 40, role: "lan" }] }, 0, 1 / 60, 1.777);
+    const slotA = rcsHostCarIndex("host-aaa");
+    expect(slotA).toBeDefined();
+    rcsTick({ talkers: [{ id: "host-bbb", rate: 40, role: "lan" }] }, 0.05, 1 / 60, 1.777);
+    expect(rcsHostCarIndex("host-aaa")).toBeUndefined();
+    expect(rcsHostCarIndex("host-bbb")).not.toBe(slotA);
+  });
+
+  it("never derives failure visuals from packet field values", () => {
+    resetRcsSim(1);
+    const healthy = rcsTick(
+      {
+        packets: [
+          { proto: "tcp", field: 0.02, host: "10.0.0.5" },
+          { proto: "udp", field: 0.08, host: "10.0.0.6" },
+        ],
+        sys: { failed: 0 },
+      },
+      0,
+      1 / 60,
+      1.777,
+    );
+    expect(healthy.slot0[RCS_SLOT.failAlert]).toBe(0);
+    const ingest = ingestLiveFrame({
+      packets: [{ proto: "dns", field: 0.99, host: "10.0.0.9" }],
+      sys: { failed: 0 },
+    });
+    expect(ingest.failAlert).toBe(0);
+    expect(ingest.goalPulse).toBeGreaterThan(0.5);
+  });
+
+  it("maps packet goal pulses by packet host and consumes up to the frame cap", () => {
+    const live = ingestLiveFrame({
+      talkers: [{ id: "talker-low", rate: 2, role: "lan" }],
+      packets: [
+        { proto: "tcp", field: 0.05, host: "pkt-a" },
+        { proto: "tcp", field: 0.92, host: "pkt-b" },
+      ],
+    });
+    expect(live.perHostGoalPulse.get("pkt-b")).toBeGreaterThan(0.9);
+    expect(live.perHostGoalPulse.get("talker-low")).toBeUndefined();
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      proto: "udp",
+      field: 0.2,
+      host: `host-${i}`,
+    }));
+    resetRcsSim(1);
+    rcsTick({ packets: many }, 0, 1 / 60, 1.777);
+    expect(rcsLivePacketsConsumed()).toBe(RCS_PACKET_FRAME_CAP);
   });
 
   it("keeps render scale at 1.0 behind the swappable hook", () => {

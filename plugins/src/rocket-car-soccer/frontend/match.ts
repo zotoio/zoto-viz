@@ -2,7 +2,7 @@
  * Rocket Car Soccer — fixed timestep + accumulator, replay ring, live drive, pooled FX.
  */
 
-import { driveFromFrame, type RcsLiveDrive, type RcsVizFrame } from "./live";
+import { hostLabelHash, ingestLiveFrame, type RcsLiveDrive, type RcsVizFrame } from "./live";
 import { InstancedPool } from "./pools";
 import {
   RCS_BALL_BASE,
@@ -33,6 +33,7 @@ const GOAL_H = 4;
 const BALL_R = 1.05;
 const BOOST_MAX = 1.5;
 const HISTORY_LEN = 240;
+const HOST_VACANT_SEC = 2.5;
 const PHASE_PLAY = 0;
 const PHASE_GOAL = 1;
 const PHASE_REPLAY = 2;
@@ -49,6 +50,9 @@ interface Car {
   team: number;
   jump: number;
   onGround: boolean;
+  hostId: string | null;
+  hostLabelHash: number;
+  hostFailVis: number;
 }
 
 interface Snap {
@@ -81,6 +85,10 @@ interface SimState {
   replayIdx: number;
   physicsSteps: number;
   accum: number;
+  hostToCar: Map<string, number>;
+  carToHost: (string | null)[];
+  vacantUntil: Map<number, number>;
+  lastFailPenaltyAt: number;
 }
 
 let options: RcsOptions = { ...RCS_DEFAULTS };
@@ -140,6 +148,9 @@ export function resetRcsSim(seed = options.seed): void {
       team,
       jump: 0,
       onGround: true,
+      hostId: null,
+      hostLabelHash: 0,
+      hostFailVis: 0,
     });
   }
   particlePool.warm();
@@ -158,12 +169,16 @@ export function resetRcsSim(seed = options.seed): void {
     simTime: 0,
     failAlert: 0,
     failUntil: 0,
-    live: driveFromFrame(undefined),
+    live: ingestLiveFrame(undefined),
     history: new Array(HISTORY_LEN),
     historyHead: 0,
     replayIdx: 0,
     physicsSteps: 0,
     accum: 0,
+    hostToCar: new Map(),
+    carToHost: new Array(n).fill(null),
+    vacantUntil: new Map(),
+    lastFailPenaltyAt: -999,
   };
   for (let i = 0; i < 16; i++) {
     particlePool.emit(
@@ -189,22 +204,78 @@ function pushHistory(st: SimState, cam: { yaw: number; pitch: number; dist: numb
   st.historyHead++;
 }
 
+function allocateCarForHost(st: SimState): number {
+  for (let i = 0; i < st.cars.length; i++) {
+    if (st.carToHost[i] !== null) continue;
+    const hold = st.vacantUntil.get(i);
+    if (hold !== undefined && st.simTime < hold) continue;
+    st.vacantUntil.delete(i);
+    return i;
+  }
+  return -1;
+}
+
+function syncTalkerHosts(st: SimState, live: RcsLiveDrive, dt: number): void {
+  const seen = new Set<string>();
+  for (const [hostId, boost] of live.perHostBoost) {
+    seen.add(hostId);
+    let idx = st.hostToCar.get(hostId);
+    if (idx === undefined) {
+      const slot = allocateCarForHost(st);
+      if (slot < 0) continue;
+      idx = slot;
+      st.hostToCar.set(hostId, idx);
+      st.carToHost[idx] = hostId;
+      const c = st.cars[idx]!;
+      c.hostId = hostId;
+      c.hostLabelHash = live.perHostLabel.get(hostId) ?? hostLabelHash(hostId);
+    }
+    const c = st.cars[idx]!;
+    c.hostLabelHash = live.perHostLabel.get(hostId) ?? c.hostLabelHash;
+    c.hostFailVis = live.failAlert;
+    const mix = live.demo ? 0.55 : boost;
+    c.boost = clamp(c.boost + mix * dt * 0.8, 0, BOOST_MAX);
+  }
+  for (const [hostId, idx] of [...st.hostToCar.entries()]) {
+    if (seen.has(hostId)) continue;
+    st.hostToCar.delete(hostId);
+    st.carToHost[idx] = null;
+    const c = st.cars[idx]!;
+    c.hostId = null;
+    c.hostFailVis = 0;
+    st.vacantUntil.set(idx, st.simTime + HOST_VACANT_SEC);
+  }
+}
+
 function applyLive(st: SimState, live: RcsLiveDrive, dt: number): void {
   st.live = live;
-  if (live.failAlert > 0.25) {
+  syncTalkerHosts(st, live, dt);
+
+  if (live.failAlert > 0) {
     st.failAlert = Math.max(st.failAlert, live.failAlert);
     st.failUntil = st.simTime + 5;
-    if (live.failAlert > 0.45) st.score[0] = Math.max(0, st.score[0] - 1);
+    if (live.failAlert >= 0.5 && st.simTime - st.lastFailPenaltyAt > 2) {
+      st.score[0] = Math.max(0, st.score[0] - 1);
+      st.lastFailPenaltyAt = st.simTime;
+    }
   }
-  const boostMix = live.demo ? 0.55 : live.boost;
+
   for (const c of st.cars) {
-    c.boost = clamp(c.boost + boostMix * dt * 0.8, 0, BOOST_MAX);
+    if (c.hostId) continue;
+    c.boost = clamp(c.boost + (live.demo ? 0.55 : 0.35) * dt * 0.8, 0, BOOST_MAX);
     if (live.eventPulse > 0.5 && rng(st) < live.eventPulse * dt * 0.5) {
       c.vel.y += 4;
     }
   }
-  if (live.goalPulse > 0.65 && st.phase === PHASE_PLAY && rng(st) < live.goalPulse * dt * 0.08) {
-    st.ball.vel.x += (rng(st) - 0.5) * 6;
+  for (const c of st.cars) {
+    if (!c.hostId) continue;
+    if (live.eventPulse > 0.5 && rng(st) < live.eventPulse * dt * 0.5) {
+      c.vel.y += 4;
+    }
+    const pulse = live.perHostGoalPulse.get(c.hostId);
+    if (pulse !== undefined && pulse > 0 && st.phase === PHASE_PLAY && rng(st) < pulse * dt * 0.12) {
+      st.ball.vel.x += (rng(st) - 0.5) * 6;
+    }
   }
 }
 
@@ -332,7 +403,8 @@ function goalCelebrate(st: SimState): void {
 function physicsStep(st: SimState, dt: number): void {
   st.physicsSteps++;
   for (const c of st.cars) {
-    carAi(c, st, dt, st.live.boost);
+    const liveBoost = c.hostId ? (st.live.perHostBoost.get(c.hostId) ?? 0) : 0.35;
+    carAi(c, st, dt, liveBoost);
     integrateCar(c, dt);
   }
   ballStep(st, dt);
@@ -417,7 +489,7 @@ export function rcsTick(frame: RcsVizFrame | undefined, simTime: number, dt: num
   if (!state) resetRcsSim(options.seed);
   const st = state!;
   st.simTime = simTime;
-  const live = driveFromFrame(frame);
+  const live = ingestLiveFrame(frame);
   applyLive(st, live, dt);
   particlePool.tick(dt, 0.9);
   trailPool.tick(dt, 1.4);
@@ -512,8 +584,8 @@ export function rcsTick(frame: RcsVizFrame | undefined, simTime: number, dt: num
   slot0[RCS_SLOT.shake] = 0;
   slot0[RCS_SLOT.carCount] = st.cars.length;
   slot0[RCS_SLOT.failAlert] = failShown;
-  slot0[RCS_SLOT.demoFlag] = live.demo ? 1 : 0;
-  slot0[RCS_SLOT.flowMetric] = live.flowMetric;
+  slot0[RCS_SLOT.demoFlag] = st.live.demo ? 1 : 0;
+  slot0[RCS_SLOT.flowMetric] = st.live.flowMetric;
   slot0[RCS_SLOT.presetCode] = presetCode(options.preset);
   slot0[RCS_SLOT.hudSeed] = options.seed % 997;
 
@@ -531,9 +603,9 @@ export function rcsTick(frame: RcsVizFrame | undefined, simTime: number, dt: num
     slot1[o + 1] = c.pos.y;
     slot1[o + 2] = c.pos.z;
     slot1[o + 3] = c.yaw;
-    slot1[o + 4] = c.pitch;
+    slot1[o + 4] = c.hostFailVis;
     slot1[o + 5] = c.boost;
-    slot1[o + 6] = c.flip;
+    slot1[o + 6] = c.hostLabelHash;
     slot1[o + 7] = c.team;
     slot1[o + 8] = c.onGround ? 1 : 0;
   }
@@ -672,6 +744,22 @@ export function rcsWorkBudgetAtPreset(preset: string): RcsWorkBudget {
   for (let i = 0; i < 90; i++) rcsTick(undefined, i / 60, 1 / 60, 1.777);
   const b = rcsTick(undefined, 2, 1 / 60, 1.777).budget;
   return b;
+}
+
+export function rcsHostCarIndex(hostId: string): number | undefined {
+  return state?.hostToCar.get(hostId);
+}
+
+export function rcsCarHostLabelHash(carIndex: number): number {
+  return state?.cars[carIndex]?.hostLabelHash ?? -1;
+}
+
+export function rcsCarHostFailVis(carIndex: number): number {
+  return state?.cars[carIndex]?.hostFailVis ?? 0;
+}
+
+export function rcsLivePacketsConsumed(): number {
+  return state?.live.packetsConsumed ?? 0;
 }
 
 export { RCS_CAPS };
