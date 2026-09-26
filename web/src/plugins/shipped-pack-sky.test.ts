@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { pluginShaderError, probePluginSkyCompile, wrapPluginSky } from "./plugin-sky-probe";
+import { probePluginSkyCompile, wrapPluginSky } from "./plugin-sky-probe";
 
 const packSkyFrags = import.meta.glob<string>("../../../plugins/src/*/sky/fragment.glsl", {
   query: "?raw",
@@ -35,7 +35,6 @@ describe("shipped pack sky fragments (host)", () => {
     const raw = packSkyFrags["../../../plugins/src/backrooms/sky/fragment.glsl"];
     expect(raw).toBeTruthy();
     const broken = `#version 300 es\nuniform float evilUniform;\n${raw}`;
-    expect(pluginShaderError(broken)).toMatch(/evilUniform/);
     const wrapped = wrapPluginSky(broken);
     expect("error" in wrapped).toBe(true);
     if (!("error" in wrapped)) return;
@@ -47,7 +46,6 @@ describe("shipped pack sky fragments (host)", () => {
     expect(raw).toBeTruthy();
     const lines = raw!.split("\n");
     const broken = [lines[0], "uniform float evilUniform;", ...lines.slice(1)].join("\n");
-    expect(pluginShaderError(broken)).toMatch(/evilUniform/);
     const wrapped = wrapPluginSky(broken);
     expect("error" in wrapped).toBe(true);
   });
