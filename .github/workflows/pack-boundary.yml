@@ -18,8 +18,17 @@ jobs:
   pack-boundary:
     runs-on: ubuntu-latest
     steps:
-      # Base ref only (default for pull_request_target). Never checkout the PR head.
+      # Base ref only — never checkout or fetch the PR head (HEAD_SHA is API-only below).
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+      - name: Log checked-out base revision
+        env:
+          PACK_BOUNDARY_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          echo "pack-boundary: checked out PR base ref only (no PR head checkout or git fetch)."
+          echo "pack-boundary: git HEAD=$(git rev-parse HEAD)"
+          echo "pack-boundary: pull_request.base.sha=${PACK_BOUNDARY_BASE_SHA}"
       - name: Enforce pack PR boundary
         env:
           GITHUB_TOKEN: ${{ github.token }}
