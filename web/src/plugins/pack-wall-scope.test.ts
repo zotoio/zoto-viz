@@ -42,6 +42,16 @@ describe("pack wall scope (production-shaped)", () => {
     })).toContain("Applies to all");
   });
 
+  it("keeps distinct mosaic slot ids for the same pack view", () => {
+    const scope = packWallScopeFromAnim({
+      ...DEFAULT_DREAM,
+      mosaic: "4",
+      mosaicTiles: ["plugin:settings-fixture", "plugin:settings-fixture!1"],
+    });
+    expect(scope.tileModeIds).toEqual(["plugin:settings-fixture", "plugin:settings-fixture!1"]);
+    expect(packScopeNoteText(spec, scope)).toContain("Applies to all");
+  });
+
   it("packWallScopeFromAnim dedupes tile ids so shared note stays hidden until duplicate tiles ship", () => {
     const scope = packWallScopeFromAnim({
       ...DEFAULT_DREAM,

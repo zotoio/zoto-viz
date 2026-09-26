@@ -7,6 +7,7 @@ import { cycleSkyPool, type BackdropKind } from "./backdrop";
 import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
+import { mosaicTileViewId } from "./mosaic-tile-id";
 import {
   assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
@@ -118,6 +119,9 @@ function panePool(): string[] {
 export function mosaicPaneMode(id: string): ViewMode {
   const catalog = allModes().find((row) => row.id === id);
   if (catalog) return catalog;
+  const viewId = mosaicTileViewId(id);
+  const base = allModes().find((row) => row.id === viewId);
+  if (base) return { ...base, id };
   const raw = id.startsWith("plugin:") ? id.slice("plugin:".length) : id;
   return hostEngine(raw) ?? hostEngine(id) ?? modeById(id);
 }

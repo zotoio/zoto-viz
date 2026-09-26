@@ -42,6 +42,7 @@ import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
 import { Mosaic } from "../graph/mosaic";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { RenderHost } from "../graph/render-host";
 import {
   applyPluginConfigs,
@@ -68,6 +69,7 @@ import {
   viewSelectOptions,
   writePluginConfig,
   configStoreId,
+  configStoreIdForMode,
   type PluginView,
 } from "../plugins/plugin";
 import { packConfigValues } from "../plugins/plugin-settings";
@@ -545,8 +547,7 @@ function sandboxPluginConfig(spec: PluginView): Record<string, string> {
 
 const sandboxConfigBatcher = new SandboxConfigBatcher(
   (packId, config) => {
-    const active = pluginSpecForMode(modeSel.value);
-    if (active?.id === packId) sandbox.setConfig(config);
+    if (packId === tsWatchId) sandbox.setConfig(config);
   },
   (cb) => requestAnimationFrame(cb),
   (id) => cancelAnimationFrame(id),
@@ -560,8 +561,14 @@ function cancelScheduledSandboxConfig(): void {
   sandboxConfigBatcher.cancel();
 }
 
+function settingsTargetModeId(): string {
+  const focus = settings?.viewFocus?.trim();
+  return focus || modeSel.value;
+}
+
 function onPluginFields(): void {
-  const m = modeById(modeSel.value);
+  const modeId = settingsTargetModeId();
+  const m = modeById(modeId);
   const opts = optsFor(m);
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
@@ -572,7 +579,14 @@ function onPluginFields(): void {
   renderLegend(m, opts);
   const spec = pluginSpecForMode(m.id);
   if (spec && pluginHasFrontend(spec)) scheduleSandboxSetConfig(spec.id, sandboxPluginConfig(spec));
-  else cancelScheduledSandboxConfig();
+  if (mosaic?.on && spec) {
+    const store = configStoreId(spec);
+    for (const tileId of mosaic.tileIds) {
+      if (configStoreIdForMode(tileId) !== store) continue;
+      const pm = modeById(tileId);
+      mosaic.graphScene(tileId)?.setMode(pm, optsFor(pm));
+    }
+  }
   syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
   syncMosaicPluginHudCaptions();
   const cap = pluginHudCaptions.get(m.id);
@@ -1291,13 +1305,14 @@ settings = new Settings({
   },
   onPersist: () => touch(),
 });
-settings.onPluginChange = () => {
+settings.onPluginChange = (storeId, values) => {
+  const spec = pluginSpecs.find((p) => configStoreId(p) === storeId)
+    ?? pluginSpecs.find((p) => p.id === storeId);
+  if (spec && pluginHasFrontend(spec) && tsWatchId === spec.id) {
+    scheduleSandboxSetConfig(spec.id, packConfigValues(values));
+  }
   onPluginFields();
-  if (!mosaic?.on) return;
-  const focus = mosaic.focusedId;
-  if (!focus) return;
-  const pane = modeById(focus);
-  mosaic.graphScene(focus)?.setMode(pane, optsFor(pane));
+  syncMosaicPluginHudCaptions();
 };
 settings.onInstancesChange = () => {
   void (async () => {
@@ -1400,6 +1415,9 @@ settings.addAnimation((a) => {
     });
     applyMode(modeSel.value, { keepLayout: true });
     syncFeedShift();
+    if (settings.isOpen && settings.activePaneId === "view") {
+      settings.reopenViewPane();
+    }
   }
 }, dreamCog);
 themeFollow = (t) => settings.syncTheme(t);

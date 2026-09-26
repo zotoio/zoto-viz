@@ -1,0 +1,40 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+index 816724e..a3452de 100644
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -273,7 +273,7 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
+     customOpt.textContent = "Custom";
+     presetSel.append(customOpt);
+     presetSel.value = presetIds.has(cur) || cur === CUSTOM_PRESET_ID ? cur : CUSTOM_PRESET_ID;
+-    presetSel.addEventListener("change", () => {
++    const applyPresetSelection = () => {
+       const v = presetSel.value;
+       if (v === CUSTOM_PRESET_ID) {
+         const prev = ctx.values[pf] && ctx.values[pf] !== CUSTOM_PRESET_ID
+@@ -290,7 +290,8 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
+       persistValues(ctx);
+       remountPanel(ctx, { toolbar: "preset" });
+       ctx.announce(`Preset ${label}`);
+-    });
++    };
++    presetSel.addEventListener("change", applyPresetSelection);
+     wrap.append(cap, presetSel);
+     ctx.presetSel = presetSel;
+     controls.append(wrap);
+@@ -423,6 +424,7 @@ export function fillPluginFields(
+   onPersist: (id: string, values: Record<string, string>) => void,
+   opts?: { skipEmpty?: boolean; devices?: SdmDevice[]; wallScope?: PackWallScope },
+   existingAnnouncer?: HTMLElement,
++  seedValues?: Record<string, string>,
+ ): void {
+   const announcer = existingAnnouncer ?? document.createElement("div");
+   if (!existingAnnouncer) {
+@@ -432,7 +434,7 @@ export function fillPluginFields(
+   }
+   placeSettingsAnnouncer(host, announcer);
+   panelMounts.set(host, { host, spec, fields, onPersist, opts, announcer });
+-  const values = loadPluginConfig(spec, fields);
++  const values = seedValues ? { ...seedValues } : loadPluginConfig(spec, fields);
+   if (hasDeclaredSettings(spec)) markPresetConsistency(spec, fields, values);
+   const head = document.createElement("div");
+   head.className = "sec";

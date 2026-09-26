@@ -52,7 +52,7 @@ describe("mosaic per-tile settings captions", () => {
 
     const captions = new Map<string, string | null>([
       ["plugin:pack-a", "X · Alpha"],
-      ["plugin:pack-b", "Y · Bravo"],
+      ["plugin:pack-b", "X · Alpha"],
     ]);
 
     syncMosaicPluginCaptions(

@@ -43,7 +43,8 @@ export function pluginViewId(id: string, instanceId?: string | null): string {
 
 export function parsePluginId(modeId: string): string | null {
   if (!modeId.startsWith("plugin:")) return null;
-  return modeId.slice("plugin:".length).split(":")[0] || null;
+  const canonical = mosaicTileViewId(modeId);
+  return canonical.slice("plugin:".length).split(":")[0] || null;
 }
 
 export function parsePluginInstance(modeId: string): string | null {

@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index 1c0f077..c7f99db 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -330,6 +330,8 @@ export class Settings {
+ 
+   get viewFocus(): string { return this.viewFocusId; }
+ 
++  get activePaneId(): string { return this.activePane; }
++
+   private syncViewCog(): void {
+     const on = this.isOpen && this.activePane === "view";
+     this.viewCog?.setAttribute("aria-expanded", on && !this.viewFocusId ? "true" : "false");

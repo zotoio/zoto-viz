@@ -273,7 +273,7 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
     customOpt.textContent = "Custom";
     presetSel.append(customOpt);
     presetSel.value = presetIds.has(cur) || cur === CUSTOM_PRESET_ID ? cur : CUSTOM_PRESET_ID;
-    presetSel.addEventListener("change", () => {
+    const applyPresetSelection = () => {
       const v = presetSel.value;
       if (v === CUSTOM_PRESET_ID) {
         const prev = ctx.values[pf] && ctx.values[pf] !== CUSTOM_PRESET_ID
@@ -290,7 +290,9 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
       persistValues(ctx);
       remountPanel(ctx, { toolbar: "preset" });
       ctx.announce(`Preset ${label}`);
-    });
+    };
+    presetSel.addEventListener("change", applyPresetSelection);
+    presetSel.addEventListener("input", applyPresetSelection);
     wrap.append(cap, presetSel);
     ctx.presetSel = presetSel;
     controls.append(wrap);
@@ -410,8 +412,9 @@ function remountPanel(ctx: PanelCtx, restore?: { toolbar?: string; field?: strin
   if (!mount) return;
   const fieldKey = restore?.field ?? focusedFieldKey(ctx.host);
   const { announcer } = mount;
+  const seed = { ...ctx.values };
   mount.host.replaceChildren();
-  fillPluginFields(mount.host, mount.spec, mount.fields, mount.onPersist, mount.opts, announcer);
+  fillPluginFields(mount.host, mount.spec, mount.fields, mount.onPersist, mount.opts, announcer, seed);
   if (restore?.toolbar) restoreToolbarFocus(mount.host, restore.toolbar);
   else restoreFieldFocus(mount.host, fieldKey);
 }
@@ -423,6 +426,7 @@ export function fillPluginFields(
   onPersist: (id: string, values: Record<string, string>) => void,
   opts?: { skipEmpty?: boolean; devices?: SdmDevice[]; wallScope?: PackWallScope },
   existingAnnouncer?: HTMLElement,
+  seedValues?: Record<string, string>,
 ): void {
   const announcer = existingAnnouncer ?? document.createElement("div");
   if (!existingAnnouncer) {
@@ -432,7 +436,7 @@ export function fillPluginFields(
   }
   placeSettingsAnnouncer(host, announcer);
   panelMounts.set(host, { host, spec, fields, onPersist, opts, announcer });
-  const values = loadPluginConfig(spec, fields);
+  const values = seedValues ? { ...seedValues } : loadPluginConfig(spec, fields);
   if (hasDeclaredSettings(spec)) markPresetConsistency(spec, fields, values);
   const head = document.createElement("div");
   head.className = "sec";

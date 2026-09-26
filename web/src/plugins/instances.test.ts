@@ -24,6 +24,10 @@ const pack = (over: Partial<PluginView> = {}): PluginView => ({
 });
 
 describe("plugin instances", () => {
+  it("parsePluginId ignores mosaic slot suffix", () => {
+    expect(parsePluginId("plugin:carousel!2")).toBe("carousel");
+  });
+
   it("strips mosaic duplicate-tile slot suffix for config store lookup", () => {
     expect(mosaicTileViewId("plugin:carousel!2")).toBe("plugin:carousel");
     expect(mosaicTileViewId("plugin:foo!bar")).toBe("plugin:foo!bar");

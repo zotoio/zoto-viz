@@ -104,6 +104,18 @@ describe("pack scope note", () => {
     expect(countTilesSharingConfigStore(inst, ["plugin:settings-mosaic", "plugin:settings-mosaic:tile-a"])).toBe(1);
   });
 
+  it("shows shared scope note when the same pack sits on two mosaic slots", () => {
+    const spec = fixtureView();
+    const scope = {
+      mosaicOn: true,
+      tileModeIds: ["plugin:settings-fixture", "plugin:settings-fixture!1"],
+    };
+    const host = document.createElement("div");
+    fillPluginFields(host, spec, spec.config ?? [], () => {}, { wallScope: scope });
+    expect(host.querySelector(".plugin-pack-scope-note")?.textContent).toContain("Applies to all");
+    expect(countTilesSharingConfigStore(spec, scope.tileModeIds)).toBe(2);
+  });
+
   it("wires packWallScopeFromAnim through fillPluginFields", () => {
     const spec = fixtureView();
     const scope = packWallScopeFromAnim({

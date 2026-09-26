@@ -25,6 +25,19 @@ describe("plugin settings dirty markers", () => {
     host.remove();
   });
 
+  it("shows a visible dirty marker that clears on reset", () => {
+    const spec = loadSettingsDeclFixture();
+    const host = document.createElement("div");
+    fillPluginFields(host, spec, spec.config ?? [], () => {});
+    const gainWrap = host.querySelector<HTMLElement>('[data-field-key="gain"]')!;
+    const range = gainWrap.querySelector<HTMLInputElement>('input[type="range"]')!;
+    range!.value = "8";
+    range!.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(gainWrap.classList.contains("field-dirty")).toBe(true);
+    host.querySelector<HTMLButtonElement>('[data-toolbar-action="reset"]')!.click();
+    expect(host.querySelector('[data-field-key="gain"]')?.classList.contains("field-dirty")).toBe(false);
+  });
+
   it("marks text fields dirty on input", () => {
     const spec: PluginView = {
       id: "text-dirty",

@@ -58,10 +58,10 @@ describe("close / swap / assign", () => {
     expect(parseMosaicTiles(["a", "", "a", "b", 1])).toEqual(["a", "b"]);
   });
 
-  it("replaces one pane and swaps when the target is already on the wall", () => {
+  it("replaces one pane and duplicates when the target is already on the wall", () => {
     expect(nextPaneTiles(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
-    expect(nextPaneTiles(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
-    expect(nextPaneTiles(["a", "b"], "a", "a")).toEqual(["a", "b"]);
+    expect(nextPaneTiles(["a", "b", "c"], "a", "c")).toEqual(["c!1", "b", "c"]);
+    expect(nextPaneTiles(["a", "b"], "b", "a")).toEqual(["a", "a!1"]);
     expect(nextPaneTiles(["a", "b"], "z", "x")).toEqual(["a", "b"]);
   });
 

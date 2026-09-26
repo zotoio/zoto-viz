@@ -38,7 +38,9 @@ export function syncMosaicPluginCaptions(
       host.setPaneSettingsCaption(tileId, null);
       continue;
     }
-    const suffix = captions.get(row.mode.id) ?? buildPluginHudCaption(row.spec, row.fields, row.opts);
+    const suffix = buildPluginHudCaption(row.spec, row.fields, row.opts)
+      ?? captions.get(row.mode.id)
+      ?? null;
     host.setPaneSettingsCaption(
       tileId,
       suffix ? `${row.spec.name} · ${suffix}` : null,

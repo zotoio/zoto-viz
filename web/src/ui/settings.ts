@@ -330,6 +330,18 @@ export class Settings {
 
   get viewFocus(): string { return this.viewFocusId; }
 
+  get activePaneId(): string { return this.activePane; }
+
+  /** Keep This view open across mosaic layout changes (gear / Esc still work). */
+  reopenViewPane(): void {
+    if (!this.isOpen || this.activePane !== "view") return;
+    const focus = this.viewFocusId;
+    this.showPane("view");
+    this.viewFocusId = focus;
+    this.syncViewCog();
+    this.animUi?.syncTiles();
+  }
+
   private syncViewCog(): void {
     const on = this.isOpen && this.activePane === "view";
     this.viewCog?.setAttribute("aria-expanded", on && !this.viewFocusId ? "true" : "false");

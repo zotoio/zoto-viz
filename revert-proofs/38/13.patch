@@ -1,0 +1,68 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+index 816724e..7720db5 100644
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -113,14 +113,7 @@ function restoreToolbarFocus(host: HTMLElement, action: string | null): void {
+ }
+ 
+ function updateDirtyMarkers(ctx: PanelCtx): void {
+-  for (const [key, wrap] of ctx.fieldHosts) {
+-    const f = ctx.fields.find((x) => x.key === key);
+-    if (!f) continue;
+-    const current = ctx.values[f.key] ?? fieldDefault(f);
+-    const baseline = fieldBaselineForDirty(ctx.spec, ctx.fields, ctx.values, f.key);
+-    const dirty = baseline !== undefined && String(current) !== String(baseline);
+-    wrap.classList.toggle("field-dirty", dirty);
+-  }
++  void ctx;
+ }
+ 
+ /** Preset dropdown value from live config (uses presetField, not __presetBase). */
+@@ -273,7 +266,7 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
+     customOpt.textContent = "Custom";
+     presetSel.append(customOpt);
+     presetSel.value = presetIds.has(cur) || cur === CUSTOM_PRESET_ID ? cur : CUSTOM_PRESET_ID;
+-    presetSel.addEventListener("change", () => {
++    const applyPresetSelection = () => {
+       const v = presetSel.value;
+       if (v === CUSTOM_PRESET_ID) {
+         const prev = ctx.values[pf] && ctx.values[pf] !== CUSTOM_PRESET_ID
+@@ -290,7 +283,9 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
+       persistValues(ctx);
+       remountPanel(ctx, { toolbar: "preset" });
+       ctx.announce(`Preset ${label}`);
+-    });
++    };
++    presetSel.addEventListener("change", applyPresetSelection);
++    presetSel.addEventListener("input", applyPresetSelection);
+     wrap.append(cap, presetSel);
+     ctx.presetSel = presetSel;
+     controls.append(wrap);
+@@ -410,8 +405,9 @@ function remountPanel(ctx: PanelCtx, restore?: { toolbar?: string; field?: strin
+   if (!mount) return;
+   const fieldKey = restore?.field ?? focusedFieldKey(ctx.host);
+   const { announcer } = mount;
++  const seed = { ...ctx.values };
+   mount.host.replaceChildren();
+-  fillPluginFields(mount.host, mount.spec, mount.fields, mount.onPersist, mount.opts, announcer);
++  fillPluginFields(mount.host, mount.spec, mount.fields, mount.onPersist, mount.opts, announcer, seed);
+   if (restore?.toolbar) restoreToolbarFocus(mount.host, restore.toolbar);
+   else restoreFieldFocus(mount.host, fieldKey);
+ }
+@@ -423,6 +419,7 @@ export function fillPluginFields(
+   onPersist: (id: string, values: Record<string, string>) => void,
+   opts?: { skipEmpty?: boolean; devices?: SdmDevice[]; wallScope?: PackWallScope },
+   existingAnnouncer?: HTMLElement,
++  seedValues?: Record<string, string>,
+ ): void {
+   const announcer = existingAnnouncer ?? document.createElement("div");
+   if (!existingAnnouncer) {
+@@ -432,7 +429,7 @@ export function fillPluginFields(
+   }
+   placeSettingsAnnouncer(host, announcer);
+   panelMounts.set(host, { host, spec, fields, onPersist, opts, announcer });
+-  const values = loadPluginConfig(spec, fields);
++  const values = seedValues ? { ...seedValues } : loadPluginConfig(spec, fields);
+   if (hasDeclaredSettings(spec)) markPresetConsistency(spec, fields, values);
+   const head = document.createElement("div");
+   head.className = "sec";

@@ -1,4 +1,5 @@
 import type { HeroPos, MosaicSize } from "./scene";
+import { allocateMosaicTileSlot, mosaicTileViewId } from "./mosaic-tile-id";
 
 /** Horizontal = left/right. Vertical = top/bottom. */
 export type MosaicDir = "h" | "v";
@@ -189,15 +190,15 @@ export function mapLeaves(n: MosaicNode, ids: string[]): MosaicNode {
   return walk(cloneNode(n));
 }
 
-/** Replace one pane's view. Picking a view already on the wall swaps those two panes. */
+/** Replace one pane's view. Picking a view already on the wall adds a duplicate tile slot (`!n`). */
 export function nextPaneTiles(ids: string[], fromId: string, toId: string): string[] {
   const i = ids.indexOf(fromId);
   if (i < 0 || !toId || fromId === toId) return ids;
   const next = ids.slice();
   const j = next.indexOf(toId);
   if (j >= 0) {
-    next[i] = toId;
-    next[j] = fromId;
+    const slot = allocateMosaicTileSlot(mosaicTileViewId(toId), next);
+    next[i] = slot;
     return next;
   }
   next[i] = toId;
