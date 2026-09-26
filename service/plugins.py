@@ -556,13 +556,48 @@ def _config_field_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
         for item in raw:
             if isinstance(item, dict):
                 rows.append(item)
+    elif isinstance(raw, dict):
+        for key, item in raw.items():
+            if isinstance(item, dict):
+                row = dict(item)
+                row.setdefault("key", key)
+                rows.append(row)
     return rows
+
+
+def _config_field_keys(doc: dict[str, Any]) -> set[str]:
+    return {str(f.get("key") or "") for f in _config_field_rows(doc) if f.get("key")}
 
 
 def _check_plugin_settings(doc: dict[str, Any]) -> None:
     presets, preset_field = _settings_from_doc(doc)
     if presets and not preset_field:
         raise ValueError("settings.presetField is required when presets are declared")
+    keys = _config_field_keys(doc)
+    if preset_field and preset_field not in keys:
+        raise ValueError(f"settings.presetField {preset_field!r} is not a config field")
+    viz = doc.get("visualisation") if isinstance(doc.get("visualisation"), dict) else {}
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    viz_settings = viz.get("settings") if isinstance(viz.get("settings"), dict) else {}
+    merged_hud = {**(viz_settings.get("hud") if isinstance(viz_settings.get("hud"), dict) else {}),
+                  **(settings.get("hud") if isinstance(settings.get("hud"), dict) else {})}
+    label_fields = merged_hud.get("labelFields")
+    if isinstance(label_fields, list):
+        for lf in label_fields:
+            if isinstance(lf, str) and lf.strip() and lf.strip() not in keys:
+                raise ValueError(f"settings.hud.labelFields references unknown config key {lf!r}")
+    if isinstance(presets, list):
+        for preset in presets:
+            if not isinstance(preset, dict):
+                continue
+            pid = str(preset.get("id") or "")
+            if pid == "custom":
+                raise ValueError("preset id 'custom' is reserved")
+            values = preset.get("values")
+            if isinstance(values, dict):
+                for vk in values:
+                    if str(vk) not in keys:
+                        raise ValueError(f"preset {pid!r} references unknown config key {vk!r}")
     for field in _config_field_rows(doc):
         key = str(field.get("key") or "")
         rr = field.get("randomRange")
@@ -594,9 +629,7 @@ def _check_semantics(doc: dict[str, Any]) -> None:
         default = str(opt.get("default") or "")
         if vals and default not in vals:
             raise ValueError(f"option {key!r} default {default!r} is not in values")
-    for field in doc.get("config") or []:
-        if not isinstance(field, dict):
-            continue
+    for field in _config_field_rows(doc):
         key = _take_key(keys, field)
         if field.get("type") == "select":
             vals = [v[0] for v in _pairs(field.get("values"))]
@@ -683,7 +716,7 @@ def _attach_visualisation(
     home: Path,
     errors: list[dict[str, str]],
     rel: str,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     try:
         viz = _visualisation_doc(home)
     except ValueError as e:
@@ -691,7 +724,13 @@ def _attach_visualisation(
         return row
     if viz is None:
         return row
-    return {**row, "visualisation": viz}
+    merged = {**row, "visualisation": viz}
+    try:
+        _check_plugin_settings(merged)
+    except ValueError as e:
+        errors.append({"file": rel, "error": f"{row.get('id', '?')}: {e}"})
+        return None
+    return merged
 
 
 def _typesafe_doc(home: Path) -> dict[str, Any] | None:
@@ -927,11 +966,19 @@ def _catalog_row(
     errors: list[dict[str, str]],
     rel: str,
     **more: Any,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     merged = {**doc, **more, **extra}
     kind = consent_kind(merged)
     sky = psky.catalog(merged, home, allowed=consented(merged))
     row = _attach_visualisation({**merged, "consent": kind, **sky}, home, errors, rel)
+    if row is None:
+        return None
+    if not isinstance(row.get("visualisation"), dict):
+        try:
+            _check_plugin_settings(row)
+        except ValueError as e:
+            errors.append({"file": rel, "error": f"{doc.get('id', '?')}: {e}"})
+            return None
     return _attach_typesafe(row, home, errors, rel)
 
 
@@ -974,11 +1021,13 @@ def _scan_zips(
         extra = _attach_runtime(doc, yml, errors, rel, sha256=unpacked.sha256, parts=unpacked.parts)
         if extra is None:
             continue
-        plugins.append(_catalog_row(
+        row = _catalog_row(
             doc, extra, dest, errors, rel,
             file=str(yml), zip=rel, sha256=unpacked.sha256, parts=list(unpacked.parts),
             origin=origin,
-        ))
+        )
+        if row is not None:
+            plugins.append(row)
     return _scan_payload(zips_dir, plugins, errors)
 
 
@@ -1008,7 +1057,9 @@ def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
         if origin:
             more["origin"] = origin
             more["sha256"] = _plugin_sha(path, None)
-        plugins.append(_catalog_row(doc, extra, home, errors, rel, **more))
+        row = _catalog_row(doc, extra, home, errors, rel, **more)
+        if row is not None:
+            plugins.append(row)
     return _scan_payload(root, plugins, errors)
 
 

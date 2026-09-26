@@ -52,6 +52,7 @@ MAX_VISUALISATION = {
         {
             "key": "group",
             "label": "group",
+            "type": "select",
             "default": "each",
             "values": [["each", "each"]],
         }

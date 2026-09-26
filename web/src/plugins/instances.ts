@@ -60,6 +60,16 @@ export function configStoredPerTile(spec: Pick<PluginView, "id" | "instanceId">)
   return !!(spec.instanceId && spec.instanceId !== spec.id);
 }
 
+/** Host note under plugin settings (null = hide). */
+export function packScopeNoteText(spec: PluginView): string | null {
+  if (configStoredPerTile(spec)) {
+    return "Settings apply to this tile only. Instance defaults override shared pack values.";
+  }
+  const extraInstances = spec.instances?.filter((i) => i.id !== spec.id) ?? [];
+  if (extraInstances.length < 1) return null;
+  return `Applies to all ${spec.name} views. Shared pack storage; instance defaults on a tile override pack-wide values.`;
+}
+
 export function parseInstances(raw: unknown): PluginInstance[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: PluginInstance[] = [];

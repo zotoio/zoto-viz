@@ -34,6 +34,7 @@ def test_random_range_requires_min_max() -> None:
                 "presets": [{"id": "a", "label": "A", "values": {"gain": 1}}],
             },
             "config": [
+                {"key": "preset", "type": "select", "values": [["a", "A"]]},
                 {"key": "gain", "type": "number", "randomRange": [1, 5]},
             ],
         },
@@ -69,6 +70,7 @@ def test_top_level_settings_semantics_via_validate_doc() -> None:
             "presets": [{"id": "a", "label": "A", "values": {"gain": 1}}],
         },
         "config": [
+            {"key": "preset", "type": "select", "values": [["a", "A"]]},
             {"key": "gain", "type": "number", "min": 0, "max": 10, "randomRange": [1, 5]},
         ],
     }

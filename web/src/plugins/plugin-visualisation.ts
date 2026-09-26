@@ -175,6 +175,7 @@ function parsePreset(raw: unknown): PluginPreset | undefined {
   const label = asString(rec.label);
   const values = asRecord(rec.values);
   if (!id || !label || !values) return undefined;
+  if (id === "custom") throw new Error("preset id 'custom' is reserved");
   const out: Record<string, string | number | boolean> = {};
   for (const [k, v] of Object.entries(values)) {
     if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[k] = v;
@@ -199,7 +200,9 @@ export function parsePluginSettings(raw: unknown): PluginSettingsDecl | undefine
   if (presetField) settings.presetField = presetField;
   const hudRec = asRecord(rec.hud);
   if (hudRec && Array.isArray(hudRec.labelFields)) {
-    const labelFields = hudRec.labelFields.filter((x): x is string => typeof x === "string" && x.trim()).map((x) => x.trim());
+    const labelFields = hudRec.labelFields
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .map((x) => x.trim());
     if (labelFields.length) settings.hud = { labelFields };
   }
   if (Array.isArray(rec.presets)) {
@@ -237,11 +240,6 @@ export function assertConfigFields(fields: PluginField[]): void {
       throw new Error(`config field ${f.key} with randomRange requires min and max`);
     }
   }
-}
-
-/** @deprecated use assertConfigFields */
-export function assertFieldRandomRanges(fields: PluginField[], _settings?: PluginSettingsDecl): void {
-  assertConfigFields(fields);
 }
 
 function asListOrMap<T>(raw: unknown, parse: (key: string, value: unknown) => T | undefined): T[] {
@@ -404,11 +402,15 @@ export function toPluginView(raw: unknown): PluginView {
 
   const engine = parseEngine(viz.engine ?? row.engine);
   const idle = parsePluginIdle(viz.idle);
-  const settings = parsePluginSettings(row.settings ?? viz.settings ?? {
-    presets: row.presets ?? viz.presets,
-    presetField: row.presetField ?? viz.presetField,
-    hud: row.hud ?? viz.hud,
-    sections: row.sections ?? viz.sections,
+  const vizSettings = asRecord(viz.settings);
+  const rowSettings = asRecord(row.settings);
+  const settings = parsePluginSettings({
+    ...vizSettings,
+    ...rowSettings,
+    presets: rowSettings?.presets ?? row.presets ?? vizSettings?.presets ?? viz.presets,
+    presetField: rowSettings?.presetField ?? row.presetField ?? vizSettings?.presetField ?? viz.presetField,
+    hud: rowSettings?.hud ?? row.hud ?? vizSettings?.hud ?? viz.hud,
+    sections: rowSettings?.sections ?? row.sections ?? vizSettings?.sections ?? viz.sections,
   });
   const configFields = parseConfig(viz.config ?? row.config) ?? [];
   assertConfigFields(configFields);

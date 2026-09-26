@@ -1,20 +1,15 @@
-import { fieldDefault, PRESET_BASE_META_KEY, type PluginView } from "./plugin";
+import { fieldDefault, instanceDefaultValue, PRESET_BASE_META_KEY, type PluginView } from "./plugin";
 import type { PluginField } from "../core/modes";
 import type { PluginPreset, PluginSectionDecl, PluginSettingsDecl } from "./plugin-visualisation";
-import { instanceDefaultValue } from "./plugin-settings-baseline";
+import { VIEW_PROMPT_KEY } from "./plugin-visualisation";
 
 export { PRESET_BASE_META_KEY } from "./plugin";
-export { instanceDefaultValue } from "./plugin-settings-baseline";
 
 export const CUSTOM_PRESET_ID = "custom";
 export const UNDO_RING_SIZE = 10;
 
 const sectionOpen = new Map<string, Map<string, boolean>>();
 const undoRings = new Map<string, Record<string, string>[]>();
-
-export function settingsDecl(spec: PluginView): PluginSettingsDecl | undefined {
-  return spec.settings;
-}
 
 export function hasDeclaredSettings(spec: PluginView): boolean {
   const s = spec.settings;
@@ -68,9 +63,9 @@ export function sectionOpenState(storeId: string, title: string, sectionDecl: Pl
   }
   const saved = map.get(title);
   if (saved !== undefined) return saved;
-  if (index === 0) return true;
   const decl = sectionDecl.find((s) => s.title === title);
-  return decl?.collapsed !== true;
+  if (decl) return decl.collapsed !== true;
+  return index === 0;
 }
 
 export function rememberSectionOpen(storeId: string, title: string, open: boolean): void {
@@ -137,9 +132,25 @@ export function presetById(decl: PluginSettingsDecl | undefined, id: string): Pl
   return decl?.presets?.find((p) => p.id === id);
 }
 
-export function presetValuesToStrings(values: Record<string, string | number | boolean>): Record<string, string> {
+export function presetValueForField(
+  field: PluginField | undefined,
+  value: string | number | boolean,
+): string {
+  if (field?.type === "boolean") {
+    return value === true || value === "true" || value === "1" ? "1" : "0";
+  }
+  return String(value);
+}
+
+export function presetValuesToStrings(
+  values: Record<string, string | number | boolean>,
+  fields?: PluginField[],
+): Record<string, string> {
+  const byKey = new Map(fields?.map((f) => [f.key, f]));
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(values)) out[k] = String(v);
+  for (const [k, v] of Object.entries(values)) {
+    out[k] = presetValueForField(byKey.get(k), v);
+  }
   return out;
 }
 
@@ -164,7 +175,7 @@ export function valuesMatchPreset(
   preset: PluginPreset,
   presetField?: string,
 ): boolean {
-  const want = presetValuesToStrings(preset.values);
+  const want = presetValuesToStrings(preset.values, fields);
   for (const f of fields) {
     if (presetField && f.key === presetField) continue;
     if (isMetaConfigKey(f.key)) continue;
@@ -206,7 +217,7 @@ export function fieldBaselineForDirty(
   if (!baseId) return undefined;
   const preset = presetById(decl, baseId);
   if (!preset) return undefined;
-  const mapped = presetValuesToStrings(preset.values);
+  const mapped = presetValuesToStrings(preset.values, fields);
   if (key in mapped) return mapped[key];
   const field = fields.find((f) => f.key === key);
   if (!field) return undefined;
@@ -264,7 +275,7 @@ export function applyPresetToValues(
   const preset = presetById(spec.settings, presetId);
   if (!preset) return;
   const pf = spec.settings?.presetField;
-  Object.assign(values, presetValuesToStrings(preset.values));
+  Object.assign(values, presetValuesToStrings(preset.values, fields));
   if (pf) values[pf] = presetId;
   delete values[PRESET_BASE_META_KEY];
   markPresetConsistency(spec, fields, values);
@@ -356,20 +367,25 @@ export function resetDeclaredConfig(
 ): void {
   const decl = spec.settings;
   const pf = decl?.presetField;
+  const prompt = values[VIEW_PROMPT_KEY];
   for (const f of fields) {
     if (isMetaConfigKey(f.key)) continue;
     if (pf && f.key === pf) continue;
+    if (f.type === "textarea" && f.key === VIEW_PROMPT_KEY) continue;
     resetFieldToDefault(spec, f, values);
   }
   const base = derivedPresetId(spec, values)
     ?? (pf && values[pf] && values[pf] !== CUSTOM_PRESET_ID ? values[pf] : null);
   if (base && presetById(decl, base)) {
     const preset = presetById(decl, base)!;
-    Object.assign(values, presetValuesToStrings(preset.values));
+    Object.assign(values, presetValuesToStrings(preset.values, fields));
     if (pf) values[pf] = base;
   } else if (pf && decl?.presets?.[0]) {
-    values[pf] = decl.presets[0].id;
+    const first = decl.presets[0];
+    Object.assign(values, presetValuesToStrings(first.values, fields));
+    values[pf] = first.id;
   }
+  if (prompt !== undefined) values[VIEW_PROMPT_KEY] = prompt;
   delete values[PRESET_BASE_META_KEY];
   markPresetConsistency(spec, fields, values);
 }

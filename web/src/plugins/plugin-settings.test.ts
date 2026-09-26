@@ -1,9 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import yaml from "yaml";
 import { fieldDefault } from "./plugin";
+import { loadSettingsDeclFixture } from "./fixtures/load-settings-fixture";
 import { configStoreId, expandPluginInstances } from "./instances";
 import {
   applyPresetToValues,
@@ -19,6 +16,7 @@ import {
   pushUndoSnapshot,
   randomiseDeclaredConfig,
   resetDeclaredConfig,
+  sectionOpenState,
   validateRandomRange,
 } from "./plugin-settings";
 import {
@@ -28,14 +26,19 @@ import {
 } from "./plugin-visualisation";
 import type { PluginField } from "../core/modes";
 import type { PluginView } from "./plugin";
-import { collectPluginConfigs, loadPluginConfig, removePluginConfigKeys, writePluginConfig } from "./plugin";
+import {
+  collectPluginConfigs,
+  invalidatePluginConfigCache,
+  loadPluginConfig,
+  applyPluginConfigs,
+  loadPluginConfigCached,
+  removePluginConfigKeys,
+  writePluginConfig,
+} from "./plugin";
 import { fillPluginFields } from "./plugin-ui";
 
-const FIXTURE_YAML = join(dirname(fileURLToPath(import.meta.url)), "fixtures/settings-decl-pack/plugin.yml");
-
 function fixtureSpec(): PluginView {
-  const raw = yaml.parse(readFileSync(FIXTURE_YAML, "utf8"));
-  return toPluginView(raw);
+  return loadSettingsDeclFixture();
 }
 
 function fixtureFields(spec: PluginView): PluginField[] {
@@ -170,7 +173,8 @@ describe("undo ring", () => {
     pushUndoSnapshot(ids[1], { v: "a1" });
     pushUndoSnapshot(ids[2], { v: "b1" });
     expect(popUndoSnapshot(ids[1])?.v).toBe("a1");
-    expect(popUndoSnapshot(ids[3] ?? "missing")).toBeNull();
+    expect(popUndoSnapshot(ids[2])?.v).toBe("b1");
+    expect(popUndoSnapshot(ids[0])).toBeNull();
   });
 });
 
@@ -272,5 +276,101 @@ describe("instance defaults", () => {
     expect(loadPluginConfig(row, row.config).slot).toBe("Koi Pond 1");
     writePluginConfig("koi-pond", { slot: "pack-wide" });
     expect(loadPluginConfig(row, row.config).slot).toBe("Koi Pond 1");
+  });
+});
+
+describe("boolean presets", () => {
+  it("matches toggle values stored as 1/0", () => {
+    const spec = fixtureSpec();
+    const fields: PluginField[] = [
+      ...(spec.config ?? []),
+      { key: "fx", label: "fx", type: "boolean", default: false },
+    ];
+    spec.settings = {
+      presetField: "preset",
+      presets: [{ id: "bright", label: "Bright", values: { fx: true, preset: "bright" } }],
+    };
+    const values: Record<string, string> = { preset: "bright", fx: "1", gain: "3", mode: "x", locked: "0.5" };
+    expect(isCustomConfig(spec, fields, values)).toBe(false);
+    values.fx = "0";
+    expect(isCustomConfig(spec, fields, values)).toBe(true);
+  });
+});
+
+describe("config cache", () => {
+  it("reuses the same object until invalidate", () => {
+    localStorage.clear();
+    const spec = fixtureSpec();
+    const fields = fixtureFields(spec);
+    const a = loadPluginConfigCached(spec, fields);
+    const b = loadPluginConfigCached(spec, fields);
+    expect(a).toBe(b);
+    writePluginConfig(configStoreId(spec), { ...a, gain: "5" });
+    const c = loadPluginConfigCached(spec, fields);
+    expect(c).not.toBe(a);
+    expect(c.gain).toBe("5");
+  });
+
+  it("returns the same object across many reads with no writes", () => {
+    localStorage.clear();
+    const spec = fixtureSpec();
+    const fields = fixtureFields(spec);
+    let prev = loadPluginConfigCached(spec, fields);
+    for (let i = 0; i < 64; i++) {
+      const next = loadPluginConfigCached(spec, fields);
+      expect(next).toBe(prev);
+      prev = next;
+    }
+  });
+});
+
+describe("toolbar without presets", () => {
+  it("shows randomise when only number fields are randomisable", () => {
+    const spec: PluginView = {
+      id: "rand-only",
+      name: "Rand",
+      version: 1,
+      config: [{ key: "gain", label: "gain", type: "number", min: 0, max: 10, default: 1 }],
+    };
+    const host = document.createElement("div");
+    fillPluginFields(host, spec, spec.config!, () => {});
+    expect(host.querySelector('[data-toolbar-action="randomise"]')).toBeTruthy();
+    expect(host.querySelector(".plugin-settings-toolbar")).toBeTruthy();
+  });
+});
+
+describe("boolean randomise", () => {
+  it("skips booleans unless randomise: true", () => {
+    const spec: PluginView = {
+      id: "b",
+      name: "B",
+      version: 1,
+      config: [
+        { key: "a", label: "a", type: "boolean", default: false },
+        { key: "b", label: "b", type: "boolean", default: false, randomise: true },
+      ],
+    };
+    const fields = spec.config!;
+    const values = { a: "0", b: "0" };
+    randomiseDeclaredConfig(spec, fields, values, () => 0.99);
+    expect(values.a).toBe("0");
+    expect(values.b).toBe("1");
+  });
+});
+
+describe("profile import", () => {
+  it("drops __presetBase from applied configs", () => {
+    localStorage.clear();
+    applyPluginConfigs({ "settings-fixture": { gain: "3", [PRESET_BASE_META_KEY]: "a" } });
+    expect(localStorage.getItem("zoto-viz.plugin.settings-fixture.__presetBase")).toBeNull();
+    expect(localStorage.getItem("zoto-viz.plugin.settings-fixture.gain")).toBe("3");
+  });
+});
+
+describe("section collapsed", () => {
+  it("honours collapsed: true on first section", () => {
+    const spec = fixtureSpec();
+    expect(spec.settings?.sections?.[0]?.collapsed).toBe(true);
+    expect(sectionOpenState("settings-fixture", "Tuning", spec.settings!.sections!, 0)).toBe(false);
   });
 });

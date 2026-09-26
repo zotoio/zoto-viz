@@ -304,20 +304,40 @@ export function vizContractFor(spec: PluginView | null | undefined): VizPluginCo
 
 const storeKey = (id: string, key: string) => `zoto-viz.plugin.${id}.${key}`;
 
-const pluginOptsConfigCache = new Map<string, Record<string, string>>();
+let pluginConfigCacheGen = 0;
+const pluginOptsConfigCache = new Map<string, { gen: number; values: Record<string, string> }>();
+
+export function pluginConfigCacheGeneration(): number {
+  return pluginConfigCacheGen;
+}
+
+function pluginConfigCacheKey(spec: PluginView, fields: PluginField[]): string {
+  const storeId = configStoreId(spec);
+  const fieldSig = fields.map((f) => f.key).join("\0");
+  return `${storeId}\0${fieldSig}`;
+}
 
 export function invalidatePluginConfigCache(storeId?: string): void {
-  if (storeId) pluginOptsConfigCache.delete(storeId);
-  else pluginOptsConfigCache.clear();
+  pluginConfigCacheGen += 1;
+  if (!storeId) {
+    pluginOptsConfigCache.clear();
+    return;
+  }
+  const packId = storeId.split(":")[0];
+  for (const key of [...pluginOptsConfigCache.keys()]) {
+    if (key.startsWith(`${storeId}\0`) || key.startsWith(`${packId}\0`)) {
+      pluginOptsConfigCache.delete(key);
+    }
+  }
 }
 
 /** Cached config for per-frame optsFor (invalidated on writePluginConfig). */
 export function loadPluginConfigCached(spec: PluginView, fields: PluginField[]): Record<string, string> {
-  const storeId = configStoreId(spec);
-  const hit = pluginOptsConfigCache.get(storeId);
-  if (hit) return hit;
+  const key = pluginConfigCacheKey(spec, fields);
+  const hit = pluginOptsConfigCache.get(key);
+  if (hit && hit.gen === pluginConfigCacheGen) return hit.values;
   const loaded = loadPluginConfig(spec, fields);
-  pluginOptsConfigCache.set(storeId, loaded);
+  pluginOptsConfigCache.set(key, { gen: pluginConfigCacheGen, values: loaded });
   return loaded;
 }
 
@@ -335,8 +355,16 @@ export function fieldDefault(f: PluginField): string {
 
 function instanceDefaultFor(spec: PluginView, key: string): string | undefined {
   const defs = spec.instanceDefaults;
-  if (!defs || defs[key] === undefined) return undefined;
-  return String(defs[key]);
+  if (defs && defs[key] !== undefined) return String(defs[key]);
+  const inst = spec.instances?.find((i) => i.id === (spec.instanceId ?? spec.id));
+  const row = inst?.defaults;
+  if (!row || row[key] === undefined) return undefined;
+  return String(row[key]);
+}
+
+/** Same baseline as loadPluginConfig (instance row before field default). */
+export function instanceDefaultValue(spec: PluginView, key: string): string | undefined {
+  return instanceDefaultFor(spec, key);
 }
 
 export function loadPluginConfig(spec: PluginView, fields = spec.config): Record<string, string> {
@@ -397,7 +425,15 @@ export function collectPluginConfigs(specs: PluginView[]): Record<string, Record
 
 export function applyPluginConfigs(raw: Record<string, Record<string, string>> | undefined): void {
   if (!raw) return;
-  for (const [id, values] of Object.entries(raw)) writePluginConfig(id, values);
+  for (const [id, values] of Object.entries(raw)) {
+    const cleaned: Record<string, string> = {};
+    for (const [k, v] of Object.entries(values)) {
+      if (k === PRESET_BASE_META_KEY || k.startsWith("__")) continue;
+      cleaned[k] = v;
+    }
+    writePluginConfig(id, cleaned);
+    removePluginConfigKeys(id, [PRESET_BASE_META_KEY]);
+  }
 }
 
 function mergeOptions(base: ModeOption[] | undefined, extra: ModeOption[] | undefined): ModeOption[] | undefined {

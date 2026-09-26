@@ -7,7 +7,7 @@ import {
   writePluginConfig,
   type PluginView,
 } from "./plugin";
-import { configStoredPerTile } from "./instances";
+import { packScopeNoteText } from "./instances";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
@@ -27,9 +27,11 @@ import {
   randomiseDeclaredConfig,
   rememberSectionOpen,
   resetDeclaredConfig,
+  presetById,
   sectionOpenState,
   showSettingsToolbar,
   undoRingDepth,
+  isMetaConfigKey,
 } from "./plugin-settings";
 
 export type PluginHudCaptionSink = (spec: PluginView, caption: string | null) => void;
@@ -70,9 +72,15 @@ function focusedFieldKey(host: HTMLElement): string | null {
 
 function restoreFieldFocus(host: HTMLElement, key: string | null): void {
   if (!key) return;
-  const row = host.querySelector(`[data-field-key="${key}"]`);
+  const row = host.querySelector(`[data-field-key="${CSS.escape(key)}"]`);
   const focusable = row?.querySelector<HTMLElement>("input,select,button,textarea");
   focusable?.focus();
+}
+
+function restoreToolbarFocus(host: HTMLElement, action: string | null): void {
+  if (!action) return;
+  const btn = host.querySelector<HTMLButtonElement>(`[data-toolbar-action="${CSS.escape(action)}"]`);
+  btn?.focus();
 }
 
 function updateDirtyMarkers(ctx: PanelCtx): void {
@@ -124,7 +132,6 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
   wrap.setAttribute("data-field-key", f.key);
   if (dirty) wrap.classList.add("field-dirty");
   ctx.fieldHosts.set(f.key, wrap);
-  const pf = ctx.spec.settings?.presetField;
   if (f.type === "boolean") {
     const t = new Toggle({
       label: f.label,
@@ -139,24 +146,7 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
       title: f.hint,
       options: f.values.map(([value, label]) => ({ value, label })),
       value: current,
-      onChange: (v) => {
-        values[f.key] = v;
-        if (pf && f.key === pf && v !== CUSTOM_PRESET_ID && ctx.spec.settings?.presets?.some((p) => p.id === v)) {
-          pushUndoSnapshot(ctx.storeId, { ...values });
-          applyPresetToValues(ctx.spec, ctx.fields, values, v);
-          delete values[PRESET_BASE_META_KEY];
-          persistValues(ctx);
-          ctx.announce(`Preset ${v}`);
-          remountPanel(ctx);
-          return;
-        }
-        if (pf && f.key === pf && v === CUSTOM_PRESET_ID) {
-          const prev = values[pf] && values[pf] !== CUSTOM_PRESET_ID ? values[pf] : values[PRESET_BASE_META_KEY];
-          if (prev && prev !== CUSTOM_PRESET_ID) values[PRESET_BASE_META_KEY] = prev;
-          values[pf] = CUSTOM_PRESET_ID;
-        }
-        persistValues(ctx);
-      },
+      onChange: (v) => { values[f.key] = v; persistValues(ctx); },
     });
     wrap.append(s.el);
   } else if (f.type === "number") {
@@ -186,10 +176,11 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
 }
 
 function mountPackScopeNote(host: HTMLElement, spec: PluginView): void {
-  if (configStoredPerTile(spec)) return;
+  const text = packScopeNoteText(spec);
+  if (!text) return;
   const note = document.createElement("div");
   note.className = "sec-hint plugin-pack-scope-note";
-  note.textContent = `Applies to all ${spec.name} tiles`;
+  note.textContent = text;
   host.append(note);
 }
 
@@ -201,12 +192,6 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
   row.setAttribute("aria-label", "Preset tools");
   const controls = document.createElement("div");
   controls.className = "sec-controls plugin-settings-toolbar-row";
-
-  const live = document.createElement("div");
-  live.className = "sr-only";
-  live.setAttribute("aria-live", "polite");
-  live.setAttribute("aria-atomic", "true");
-  ctx.announce = (msg) => { live.textContent = msg; };
 
   const pf = decl?.presetField ?? "preset";
   const presetField = ctx.fields.find((f) => f.key === pf);
@@ -234,61 +219,67 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
         pushUndoSnapshot(ctx.storeId, { ...ctx.values });
         applyPresetToValues(ctx.spec, ctx.fields, ctx.values, v);
         delete ctx.values[PRESET_BASE_META_KEY];
+        const label = presetById(ctx.spec.settings, v)?.label ?? v;
         persistValues(ctx);
-        ctx.announce(`Preset ${v}`);
-        remountPanel(ctx);
+        ctx.announce(`Preset ${label}`);
+        remountPanel(ctx, { toolbar: "preset" });
       },
     });
     ctx.presetSel = presetSel;
     controls.append(presetSel.el);
   }
 
-  const mkBtn = (label: string, title: string, onClick: () => void) => {
+  const mkBtn = (action: string, label: string, title: string, onClick: () => void) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "btn";
     b.textContent = label;
     b.title = title;
+    b.setAttribute("data-toolbar-action", action);
     b.addEventListener("click", onClick);
     return b;
   };
 
-  const undoBtn = mkBtn("Undo", "Undo last bulk change", () => {
+  const undoBtn = mkBtn("undo", "Undo", "Undo last bulk change", () => {
     const snap = popUndoSnapshot(ctx.storeId);
     if (!snap) return;
     for (const k of Object.keys(ctx.values)) {
-      if (k === PRESET_BASE_META_KEY || k.startsWith("__")) continue;
+      if (isMetaConfigKey(k)) continue;
       if (!(k in snap)) delete ctx.values[k];
     }
-    Object.assign(ctx.values, snap);
+    for (const k of Object.keys(snap)) {
+      if (isMetaConfigKey(k)) continue;
+      ctx.values[k] = snap[k]!;
+    }
+    delete ctx.values[PRESET_BASE_META_KEY];
     persistValues(ctx);
     syncUndoButton(ctx);
     ctx.announce("Undone");
-    remountPanel(ctx);
+    remountPanel(ctx, { toolbar: "undo" });
   });
   ctx.undoBtn = undoBtn;
 
   controls.append(
-    mkBtn("Randomise", "Randomise fields (respects randomRange and randomise:false)", () => {
+    mkBtn("randomise", "Randomise", "Randomise fields (respects randomRange and randomise:false)", () => {
       pushUndoSnapshot(ctx.storeId, { ...ctx.values });
       randomiseDeclaredConfig(ctx.spec, ctx.fields, ctx.values, Math.random);
       persistValues(ctx);
       syncUndoButton(ctx);
       ctx.announce("Randomised");
-      remountPanel(ctx);
+      remountPanel(ctx, { toolbar: "randomise" });
     }),
     undoBtn,
-    mkBtn("Reset", "Reset to active preset or defaults", () => {
+    mkBtn("reset", "Reset", "Reset to active preset or defaults", () => {
       pushUndoSnapshot(ctx.storeId, { ...ctx.values });
       resetDeclaredConfig(ctx.spec, ctx.fields, ctx.values);
       delete ctx.values[PRESET_BASE_META_KEY];
       persistValues(ctx);
       syncUndoButton(ctx);
       ctx.announce("Reset");
-      remountPanel(ctx);
+      remountPanel(ctx, { toolbar: "reset" });
     }),
   );
-  row.append(live, controls);
+  row.append(controls);
   host.append(row);
   syncUndoButton(ctx);
 }
@@ -338,17 +329,21 @@ type PanelMount = {
   fields: PluginField[];
   onPersist: (id: string, values: Record<string, string>) => void;
   opts?: { skipEmpty?: boolean; devices?: SdmDevice[] };
+  announcer: HTMLElement;
 };
 
 const panelMounts = new WeakMap<HTMLElement, PanelMount>();
 
-function remountPanel(ctx: PanelCtx): void {
+function remountPanel(ctx: PanelCtx, restore?: { toolbar?: string; field?: string }): void {
   const mount = panelMounts.get(ctx.host);
   if (!mount) return;
-  const focusKey = focusedFieldKey(ctx.host);
+  const fieldKey = restore?.field ?? focusedFieldKey(ctx.host);
+  const { announcer } = mount;
+  announcer.remove();
   mount.host.replaceChildren();
-  fillPluginFields(mount.host, mount.spec, mount.fields, mount.onPersist, mount.opts);
-  restoreFieldFocus(mount.host, focusKey);
+  fillPluginFields(mount.host, mount.spec, mount.fields, mount.onPersist, mount.opts, announcer);
+  if (restore?.toolbar) restoreToolbarFocus(mount.host, restore.toolbar);
+  else restoreFieldFocus(mount.host, fieldKey);
 }
 
 export function fillPluginFields(
@@ -357,8 +352,16 @@ export function fillPluginFields(
   fields: PluginField[],
   onPersist: (id: string, values: Record<string, string>) => void,
   opts?: { skipEmpty?: boolean; devices?: SdmDevice[] },
+  existingAnnouncer?: HTMLElement,
 ): void {
-  panelMounts.set(host, { host, spec, fields, onPersist, opts });
+  const announcer = existingAnnouncer ?? document.createElement("div");
+  if (!existingAnnouncer) {
+    announcer.className = "sr-only plugin-settings-announcer";
+    announcer.setAttribute("aria-live", "polite");
+    announcer.setAttribute("aria-atomic", "true");
+  }
+  if (!host.contains(announcer)) host.prepend(announcer);
+  panelMounts.set(host, { host, spec, fields, onPersist, opts, announcer });
   const values = loadPluginConfig(spec, fields);
   if (hasDeclaredSettings(spec)) markPresetConsistency(spec, fields, values);
   const head = document.createElement("div");
@@ -393,7 +396,7 @@ export function fillPluginFields(
     values,
     storeId,
     fieldHosts: new Map(),
-    announce: () => {},
+    announce: (msg) => { announcer.textContent = msg; },
     persist: () => {
       onPersist(storeId, packConfigValues(values));
     },
@@ -404,8 +407,8 @@ export function fillPluginFields(
     if (f.type === "textarea") notes.push(f);
     else compact.push(f);
   }
+  mountPackScopeNote(host, spec);
   if (showSettingsToolbar(spec, fields)) {
-    mountPackScopeNote(host, spec);
     mountSettingsToolbar(ctx, host);
     mountSectionedFields(ctx, host, compact);
   } else if (hasDeclaredSettings(spec)) {

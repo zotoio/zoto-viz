@@ -112,8 +112,18 @@
     "look": { "$ref": "#/$defs/look" },
     "style": { "$ref": "#/$defs/style" },
     "layout": { "$ref": "#/$defs/layout" },
-    "options": { "$ref": "#/$defs/freeMap" },
-    "config": { "$ref": "#/$defs/freeMap" },
+    "options": {
+      "oneOf": [
+        { "$ref": "#/$defs/freeMap" },
+        { "$ref": "#/$defs/pluginConfigList" }
+      ]
+    },
+    "config": {
+      "oneOf": [
+        { "$ref": "#/$defs/freeMap" },
+        { "$ref": "#/$defs/pluginConfigList" }
+      ]
+    },
     "settings": { "$ref": "#/$defs/pluginSettings" },
     "presets": {
       "type": "array",
@@ -211,8 +221,8 @@
       "description": "Graph wrap target when engine is graph. Known values today: topology, talkers, services, protocols, layers, drone-show, watch, wifi, bluetooth, cpu, cores, load, sources, memory, disk, gpu, sockets, cgroups, units, udev, bridge. Open so new wrap targets do not need a schema bump."
     },
     "freeMap": {
-      "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims.",
-      "type": ["object", "array"],
+      "description": "Legacy free-form object map (options/config as key→field objects). Lists use pluginConfigList.",
+      "type": "object",
       "additionalProperties": true
     },
     "look": {
@@ -294,7 +304,12 @@
         "look": { "$ref": "#/$defs/look" },
         "style": { "$ref": "#/$defs/style" },
         "layout": { "$ref": "#/$defs/layout" },
-        "options": { "$ref": "#/$defs/freeMap" },
+        "options": {
+          "oneOf": [
+            { "$ref": "#/$defs/freeMap" },
+            { "$ref": "#/$defs/pluginConfigList" }
+          ]
+        },
         "config": {
           "oneOf": [
             { "$ref": "#/$defs/freeMap" },
