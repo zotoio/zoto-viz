@@ -199,6 +199,10 @@ export interface PluginView {
   /** visualisation.yml idle golden mock — graph / arcade when capture is quiet. */
   idle?: PluginIdleConfig;
   viz?: VizPluginContract;
+  /** Host-clamped visualisation.yml workBudget (#45). */
+  workBudget?: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget;
+  /** Set when the host clamped workBudget below what the pack asked for. */
+  workBudgetLimited?: string;
   typesafe?: TypeSafeContract;
   hash?: string;
   service?: string;
@@ -290,7 +294,14 @@ export async function attachPluginFrontend(
     sandbox.unload();
     return false;
   }
-  await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
+  await sandbox.loadModule(
+    spec!.id,
+    spec!.capabilities ?? [],
+    config,
+    spec!.hash,
+    spec!.viz,
+    spec!.workBudget,
+  );
   return true;
 }
 

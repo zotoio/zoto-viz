@@ -1,0 +1,1 @@
+{"maxDrawCalls": 64, "maxTriangles": 120000, "maxInstances": 48, "maxGpuBytes": 8388608, "maxSimStepsPerFrame": 4, "maxPacketsPerFrame": 8}

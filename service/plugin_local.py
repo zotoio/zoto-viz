@@ -28,6 +28,30 @@ ENGINES = frozenset({
 })
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _seen: dict[str, str] = {}
+
+
+def _guard_work_budget_zip_before_install(zip_path: Path) -> None:
+    """Fail closed before writing a local zip when workBudget is far over host ceilings."""
+    preview_root = zip_path.parent / f".work-budget-guard-{zip_path.stem}"
+    if preview_root.exists():
+        shutil.rmtree(preview_root, ignore_errors=True)
+    preview_root.mkdir(parents=True, exist_ok=True)
+    try:
+        unpacked = pz.unpack_zip(zip_path, preview_root)
+        _guard_work_budget_install(unpacked.dest)
+    finally:
+        shutil.rmtree(preview_root, ignore_errors=True)
+
+
+def _guard_work_budget_install(runtime: Path) -> None:
+    viz_path = runtime / "visualisation.yml"
+    if not viz_path.is_file():
+        return
+    raw = yaml.safe_load(viz_path.read_text(encoding="utf-8"))
+    if isinstance(raw, dict) and "workBudget" in raw:
+        from service.manifest_work_budget import assert_work_budget_install_allowed
+
+        assert_work_budget_install_allowed(raw["workBudget"], pack_root=runtime)
 _primed = False
 
 
@@ -287,10 +311,12 @@ def install_local_zip(
         raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=overwrite)
         pid = str(doc["id"])
         tmp_path.write_bytes(raw)
+        _guard_work_budget_zip_before_install(tmp_path)
         runtime = paths.plugin_local_runtime_dir(create=True) / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
             unpacked = pz.unpack_zip(dest, runtime)
+            _guard_work_budget_install(runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
                 info["remintedFrom"] = reminted_from
@@ -303,6 +329,7 @@ def install_local_zip(
         shutil.copy2(tmp_path, staged)
         os.replace(staged, dest)
         unpacked = pz.unpack_zip(dest, runtime)
+        _guard_work_budget_install(runtime)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -336,6 +363,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
             shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
     unpacked = pz.unpack_zip(dest, runtime)
+    _guard_work_budget_install(runtime)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from
