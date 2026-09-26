@@ -83,6 +83,7 @@ import {
 import { MANIFEST_BLOCKED_VIEW_ID } from "../plugins/plugin-manifest-blocked";
 import { bootPluginSettingsHost } from "./app-plugin-settings-boot";
 import { applyMosaicLayoutFromAnim } from "./mosaic-layout-settings-wiring";
+import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
 import { wirePluginFrontendAttach } from "./wire-settings-host";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
