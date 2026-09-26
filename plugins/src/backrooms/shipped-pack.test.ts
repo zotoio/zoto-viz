@@ -97,9 +97,12 @@ function audit(seconds: number): Audit {
 }
 
 describe("backrooms shipped pack", () => {
-  it("ships a host-wrappable sky fragment (no web/src import in pack tests)", () => {
-    expect(FRAG).toContain("zotoVizSlots");
-    expect(FRAG).toContain("void main()");
+  it("wraps and compiles the sky fragment on the host backdrop path", () => {
+    const wrapped = wrapPluginSky(FRAG);
+    expect("error" in wrapped).toBe(false);
+    if ("error" in wrapped) return;
+    expect(wrapped.frag).toContain("zotoVizSlots");
+    expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
   it("ships the director-driven sky shader symbols", () => {
