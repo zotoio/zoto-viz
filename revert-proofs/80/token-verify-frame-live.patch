@@ -1,0 +1,13 @@
+diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
+index 29c3ce7..1f23261 100644
+--- a/service/pack_asset_tokens.py
++++ b/service/pack_asset_tokens.py
+@@ -83,7 +83,7 @@ def verify_pack_asset_token(
+         session_id.encode("utf-8")
+     except UnicodeEncodeError:
+         return False
+-    expected = hmac.new(secret, encode_binding(session_id, pack_id, frame_id), hashlib.sha256).digest()
++    expected = hmac.new(secret, encode_binding("", pack_id, frame_id), hashlib.sha256).digest()
+     if len(got_mac) != len(expected):
+         return False
+     return hmac.compare_digest(expected, got_mac)

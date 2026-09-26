@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_pack_asset_tokens.py::test_verify_rejects_non_ascii_token",
+  "description": "parse_pack_asset_token ASCII-only.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert not True"
+}

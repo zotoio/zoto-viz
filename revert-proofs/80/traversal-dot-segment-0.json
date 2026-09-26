@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_policy.py::test_dot_segments_return_400_without_sandbox_leak[/wsx/../]",
+  "description": "Dot-segment paths must 400 before static sandbox leak.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 404 == 400"
+}
