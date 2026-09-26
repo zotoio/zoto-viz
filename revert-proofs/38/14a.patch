@@ -1,0 +1,15 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index bd5217a..ba278bd 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -341,6 +341,10 @@ export class Settings {
+ 
+   /** Before mosaic.setSize: keep drawer open when the focused tile survives; else prompt discard. */
+   prepareMosaicLayoutChange(nextTiles: string[]): void {
++    if (this.isOpen && this.activePane === "view") {
++      this.close();
++      return;
++    }
+     this.lastViewCogFocus = null;
+     if (!this.isOpen || this.activePane !== "view") return;
+     const focus = this.viewFocusId.trim();
