@@ -1815,17 +1815,11 @@ export class Settings {
   private cypherCicPanelCollapsed = false;
 
   private feedOnForPersistence(): boolean {
-    if (!this.cypherCicPanelCollapsed) return this.feed.on;
-    const p = this.cfg.storePrefix;
-    const raw = localStorage.getItem(`${p}.feed.on`);
-    return raw !== "0";
+    return this.feed.on;
   }
 
   private chatOnForPersistence(): boolean {
-    if (!this.cypherCicPanelCollapsed) return this.chat.on;
-    const p = this.cfg.storePrefix;
-    const raw = localStorage.getItem(`${p}.chat.on`);
-    return raw !== "0";
+    return this.chat.on;
   }
 
   clearCypherCicPanelPersistOverrides(): void {

@@ -13,7 +13,7 @@ import {
   resolveVizFrameCollectOpts,
   VIZ_LINK_IDLE_DROP_FRAMES,
 } from "./viz-frame-collect";
-import { vizLinkFadeTracker, vizLinkRenderColor, vizLinkRenderKey } from "./viz-link-render";
+import { vizLinkRenderColor, vizLinkRenderKey, vizLinkRecordIdentity } from "./viz-link-render";
 import { buildCollectEquivalenceState, frameTalkersForCollectEquivalence } from "./fixtures/viz-collect-equivalence-fixture";
 
 function flowsUniquePairs(n: number, rateBase = 1): Flow[] {
@@ -44,8 +44,8 @@ async function freshCollect() {
 
 describe("viz link index R1 pruning", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     vi.resetModules();
-    vizLinkFadeTracker.reset();
   });
 
   it("zeroing pass visits exactly 200 slots after 200→400→200 flows when endpoints leave talkers", async () => {
@@ -142,7 +142,10 @@ describe("viz link index R1 pruning", () => {
 });
 
 describe("viz link index R2 tie-break", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => {
+    expect.hasAssertions();
+    vi.resetModules();
+  });
 
   it("returns identical top links for two arrival orders of the same 400 flows", async () => {
     const mod = await freshCollect();
@@ -160,7 +163,10 @@ describe("viz link index R2 tie-break", () => {
 });
 
 describe("viz link index R7 syncTalkerIds production path", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => {
+    expect.hasAssertions();
+    vi.resetModules();
+  });
 
   it("performs exactly 1 talker-id rebuild over 599 steady frames and 2 after one list change", async () => {
     const mod = await freshCollect();
@@ -196,27 +202,99 @@ describe("viz link index R7 syncTalkerIds production path", () => {
   });
 });
 
-describe("viz link render R6", () => {
-  it("uses stable keys and colours from (src, dst) only", () => {
-    const k1 = vizLinkRenderKey("10.0.0.1", "10.0.0.2");
-    const k2 = vizLinkRenderKey("10.0.0.1", "10.0.0.2");
-    expect(k1).toBe(k2);
-    expect(vizLinkRenderColor("10.0.0.1", "10.0.0.2")).toBe(vizLinkRenderColor("10.0.0.1", "10.0.0.2"));
+describe("viz link render R6 (collector draft — fade rows deferred)", () => {
+  beforeEach(() => expect.hasAssertions());
+
+  it("R6(a): link record identity follows (src, dst) regardless of output rank", async () => {
+    const mod = await freshCollect();
+    const talkers = new Set(["10.0.0.1", "10.0.0.2", "10.0.0.3"]);
+    const lowRank = mod.collectVizLinks(
+      [
+        {
+          a: "10.0.0.1",
+          b: "10.0.0.2",
+          bytes: 1,
+          packets: 1,
+          ports: [],
+          protos: ["tcp"],
+          ifaces: [],
+          first_seen: 0,
+          last_seen: 1,
+          rate: 1,
+          rate_pkt_ab: 1,
+          rate_pkt_ba: 0,
+        },
+        {
+          a: "10.0.0.1",
+          b: "10.0.0.3",
+          bytes: 1,
+          packets: 1,
+          ports: [],
+          protos: ["tcp"],
+          ifaces: [],
+          first_seen: 0,
+          last_seen: 1,
+          rate: 1,
+          rate_pkt_ab: 99,
+          rate_pkt_ba: 0,
+        },
+      ],
+      talkers,
+      2,
+    );
+    const highRank = mod.collectVizLinks(
+      [
+        {
+          a: "10.0.0.1",
+          b: "10.0.0.3",
+          bytes: 1,
+          packets: 1,
+          ports: [],
+          protos: ["tcp"],
+          ifaces: [],
+          first_seen: 0,
+          last_seen: 1,
+          rate: 1,
+          rate_pkt_ab: 99,
+          rate_pkt_ba: 0,
+        },
+        {
+          a: "10.0.0.1",
+          b: "10.0.0.2",
+          bytes: 1,
+          packets: 1,
+          ports: [],
+          protos: ["tcp"],
+          ifaces: [],
+          first_seen: 0,
+          last_seen: 1,
+          rate: 1,
+          rate_pkt_ab: 1,
+          rate_pkt_ba: 0,
+        },
+      ],
+      talkers,
+      2,
+    );
+    const pair = lowRank.links.find((l) => l.src === "10.0.0.1" && l.dst === "10.0.0.2")!;
+    const pairHigh = highRank.links.find((l) => l.src === "10.0.0.1" && l.dst === "10.0.0.2")!;
+    expect(vizLinkRecordIdentity(pair.src, pair.dst)).toBe(vizLinkRecordIdentity(pairHigh.src, pairHigh.dst));
+    expect(vizLinkRecordIdentity(pair.src, pair.dst)).toBe(vizLinkRecordIdentity("10.0.0.1", "10.0.0.2"));
   });
 
-  it("fade-in counts membership changes only", () => {
-    vizLinkFadeTracker.reset();
-    vizLinkFadeTracker.observeLinks([{ src: "10.0.0.1", dst: "10.0.0.2", rate: 1 }]);
-    vizLinkFadeTracker.observeLinks([{ src: "10.0.0.1", dst: "10.0.0.2", rate: 2 }]);
-    expect(vizLinkFadeTracker.fadeInCount).toBe(1);
-    vizLinkFadeTracker.notePruned("10.0.0.1", "10.0.0.2");
-    vizLinkFadeTracker.observeLinks([{ src: "10.0.0.1", dst: "10.0.0.2", rate: 3 }]);
-    expect(vizLinkFadeTracker.fadeInCount).toBe(2);
+  it("R6(b): render key and colour are pure functions of (src, dst)", () => {
+    const k1 = vizLinkRenderKey("10.0.0.1", "10.0.0.2");
+    expect(vizLinkRenderKey("10.0.0.1", "10.0.0.2")).toBe(k1);
+    expect(vizLinkRenderColor("10.0.0.1", "10.0.0.2")).toBe(vizLinkRenderColor("10.0.0.1", "10.0.0.2"));
+    expect(vizLinkRenderKey("10.0.0.2", "10.0.0.1")).not.toBe(k1);
   });
 });
 
 describe("viz link index R7b pool set count", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => {
+    expect.hasAssertions();
+    vi.resetModules();
+  });
 
   it("creates exactly 400 indexed pairs on 200+400 flows and 0 new sets on the second 200 pass", async () => {
     const mod = await freshCollect();
@@ -232,7 +310,10 @@ describe("viz link index R7b pool set count", () => {
 });
 
 describe("viz link index R4 reset on reuse", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => {
+    expect.hasAssertions();
+    vi.resetModules();
+  });
 
   it("gives a freed slot a new generation and zero idle count when reused", async () => {
     const mod = await freshCollect();

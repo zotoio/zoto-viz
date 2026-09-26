@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { beginCypherCicPanelSession, endCypherCicPanelSession } from "./cypher-cic-panels";
 
 describe("cypher-cic panel session", () => {
+  beforeEach(() => expect.hasAssertions());
+
   it("restores saved feed and chat visibility after leaving the view", () => {
     const enter = beginCypherCicPanelSession(null, true, true);
     expect(enter.hideFeed).toBe(true);

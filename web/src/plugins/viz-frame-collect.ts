@@ -2,7 +2,6 @@ import type { Device, Flow, StateMsg } from "../core/types";
 import type { VizDataFrame, VizLinkSample, VizTalkerSample } from "./viz-host";
 import { topKByScore, VIZ_CONTRACT_VERSION } from "./viz-host";
 import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
-import { vizLinkFadeTracker } from "./viz-link-render";
 
 export const VIZ_DEFAULT_MAX_LINKS = 64;
 
@@ -181,8 +180,6 @@ function dropLinkIndex(src: string, dst: string, idx: number): void {
     byDst.delete(dst);
     if (byDst.size === 0) linkBySrcDst.delete(src);
   }
-  const slot = linkPool[idx];
-  if (slot) vizLinkFadeTracker.notePruned(slot.src, slot.dst);
   linkFreeList.push(idx);
 }
 
@@ -334,7 +331,6 @@ export function applyVizFrameContractV2(
   frame.links = links;
   if (linksDropped > 0) frame.linksDropped = linksDropped;
   else delete frame.linksDropped;
-  vizLinkFadeTracker.observeLinks(links);
   return frame;
 }
 

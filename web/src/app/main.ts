@@ -107,9 +107,10 @@ import { optsForMode } from "./mode-opts";
 import { VizFrameScopeCache } from "./viz-frame-scope";
 import { vizFrameHostPerFrameTick } from "./viz-frame-host-tick";
 import {
-  beginCypherCicPanelSession,
-  endCypherCicPanelSession,
-  type CypherCicPanelSession,
+  applyCypherCicPanelSession as syncCypherCicPanelSession,
+  applyProductionChatHeaderToggle,
+  applyProductionFeedHeaderToggle,
+  type CypherCicPanelSessionHolder,
 } from "./cypher-cic-panels";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
@@ -820,28 +821,10 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
 }
 
 /** Cypher CIC mosaic is unreadable with fixed feed/chat overlays — collapse both for this session only (#49). */
-let cypherCicPanelSession: CypherCicPanelSession | null = null;
+const cypherCicPanelHolder: CypherCicPanelSessionHolder = { session: null };
 
 function applyCypherCicPanelSession(m: ViewMode): void {
-  if (m.pluginId !== "cypher-cic") {
-    const end = endCypherCicPanelSession(cypherCicPanelSession);
-    if (end) {
-      settings.setCypherCicPanelCollapsed(false);
-      settings.setFeedOn(settings.readPersistedFeedOn(), { persist: false });
-      settings.setChatOn(settings.readPersistedChatOn(), { persist: false });
-      cypherCicPanelSession = null;
-    }
-    return;
-  }
-  const begin = beginCypherCicPanelSession(
-    cypherCicPanelSession,
-    settings.feedSettings.on,
-    settings.chatSettings.on,
-  );
-  cypherCicPanelSession = begin.session;
-  settings.setCypherCicPanelCollapsed(true);
-  if (begin.hideFeed) settings.setFeedOn(false, { persist: false });
-  if (begin.hideChat) settings.setChatOn(false, { persist: false });
+  syncCypherCicPanelSession(cypherCicPanelHolder, settings, m);
 }
 
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
@@ -2116,8 +2099,8 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") scene.select(null);
   if (e.key === "r" || e.key === "R") setRedaction(!redaction.enabled);
   if (e.key === "d" || e.key === "D") setDream(!dreamToggle.checked);
-  if (e.key === "f" || e.key === "F") settings.setFeedOn(!settings.feedSettings.on);
-  if (e.key === "c" || e.key === "C") settings.setChatOn(!settings.chatSettings.on);
+  if (e.key === "f" || e.key === "F") applyProductionFeedHeaderToggle(settings);
+  if (e.key === "c" || e.key === "C") applyProductionChatHeaderToggle(settings);
   if (e.key === "b" || e.key === "B") setDebug(!debugToggle.checked);
   if (e.key === "l" || e.key === "L") setLabels(!sysLabels.checked);
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);

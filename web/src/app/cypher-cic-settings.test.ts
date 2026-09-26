@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Settings } from "../ui/settings";
 
-describe("cypher-cic saved settings", () => {
+/** Legacy direct-Settings rows — superseded by `cypher-cic-session.test.ts` (R10/R11). */
+describe("cypher-cic saved settings (legacy)", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     localStorage.clear();
   });
 
-  it("leaves persisted feed and chat toggles unchanged after session-only collapse", () => {
+  it.skip("leaves persisted feed and chat toggles unchanged after session-only collapse", () => {
     const prefix = "zoto-viz.test";
     localStorage.setItem(`${prefix}.feed.on`, "1");
     localStorage.setItem(`${prefix}.chat.on`, "1");
@@ -21,7 +23,7 @@ describe("cypher-cic saved settings", () => {
     expect(localStorage.getItem(`${prefix}.chat.on`)).toBe("1");
   });
 
-  it("row 1: other feed settings persist during collapse without clobbering saved on toggles", () => {
+  it.skip("row 1: other feed settings persist during collapse without clobbering saved on toggles", () => {
     const prefix = "zoto-viz.test";
     localStorage.setItem(`${prefix}.feed.on`, "1");
     localStorage.setItem(`${prefix}.chat.on`, "1");
@@ -46,7 +48,7 @@ describe("cypher-cic saved settings", () => {
     expect(settings.chatSettings.on).toBe(true);
   });
 
-  it("row 2: header f-key toggle persists once during cypher-cic and restores after leave", () => {
+  it.skip("row 2: header f-key toggle persists once during cypher-cic and restores after leave", () => {
     const prefix = "zoto-viz.test";
     localStorage.setItem(`${prefix}.feed.on`, "1");
     const settings = new Settings({ storePrefix: prefix, onChange: () => {} });
