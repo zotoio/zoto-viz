@@ -59,6 +59,16 @@ describe("server restart wall notice", () => {
       off();
     });
 
+    it("replaces the prior restart strip when a second restart event arrives", () => {
+      window.dispatchEvent(
+        new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
+      );
+      window.dispatchEvent(
+        new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
+      );
+      expect(wallNotices()).toHaveLength(1);
+    });
+
     it("shows exactly one status notice with the pinned literal", () => {
       window.dispatchEvent(
         new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
