@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { VOX_CONFIG_KEYS } from "./config-manifest";
 import { parseVoxConfig, voxRenderScale } from "./config";
+import { applyLiveBindings, resetLiveMarkers } from "./bindings";
 import {
   disposeVoxelWorld,
   initVoxelWorld,
@@ -12,6 +13,7 @@ import {
   undoVoxConfig,
   voxelSmokeCenterLuma,
 } from "./engine";
+import { hostWorldXZ } from "./hosts";
 import {
   gpuCounts as glCounts,
   gpuUploadGrowthAfterWarmup,
@@ -107,7 +109,7 @@ describe("voxel world pack", () => {
   it("frees GPU resources after 20 mount cycles", () => {
     for (let i = 0; i < 20; i++) {
       initVoxelWorld();
-      tickVoxelWorld({ t: i * 0.5, packets: [{ field: 0.9 }], sys: { cpu: 0.1, failed: 0 } });
+      tickVoxelWorld({ t: i * 0.5, packets: [{ host: "10.0.0.9", field: 0.9 }], sys: { cpu: 0.1, failed: 0 } });
       disposeVoxelWorld();
     }
     const g = glCounts();
@@ -116,6 +118,79 @@ describe("voxel world pack", () => {
     expect(g.textures).toBe(0);
     expect(g.buffers).toBe(0);
     expect(g.workers).toBe(0);
+  });
+
+  it("keeps host anchors stable when talkers reorder (same count)", () => {
+    resetLiveMarkers();
+    const opts = parseVoxConfig({ preset: "classic" });
+    const cam = { x: 2, y: 11, z: -3 };
+    const talkersA = [
+      { id: "10.0.0.1", rate: 120, role: "lan" },
+      { id: "10.0.0.2", rate: 80, role: "wan" },
+    ];
+    const talkersB = [talkersA[1]!, talkersA[0]!];
+    const a = applyLiveBindings(
+      { t: 4, packets: [], talkers: talkersA, sys: { cpu: 0.2, failed: 0 } },
+      opts,
+      0,
+      cam,
+    );
+    resetLiveMarkers();
+    const b = applyLiveBindings(
+      { t: 4, packets: [], talkers: talkersB, sys: { cpu: 0.2, failed: 0 } },
+      opts,
+      0,
+      cam,
+    );
+    expect(a.cloudCover).toBe(b.cloudCover);
+    expect(a.hostAnchors.get("10.0.0.1")).toEqual(hostWorldXZ("10.0.0.1", opts.seed));
+    expect(a.hostAnchors.get("10.0.0.1")).toEqual(b.hostAnchors.get("10.0.0.1"));
+    expect(a.hostAnchors.get("10.0.0.2")).toEqual(b.hostAnchors.get("10.0.0.2"));
+  });
+
+  it("does not show failure visuals for healthy low-value packets", () => {
+    resetLiveMarkers();
+    const opts = parseVoxConfig({ preset: "classic" });
+    const cam = { x: 0, y: 10, z: 0 };
+    const out = applyLiveBindings(
+      {
+        t: 1,
+        packets: [
+          { host: "10.0.0.5", field: 0.02 },
+          { host: "10.0.0.6", field: 0.08 },
+        ],
+        sys: { cpu: 0.1, failed: 0 },
+      },
+      opts,
+      0,
+      cam,
+    );
+    expect(out.failStrength).toBe(0);
+    expect(out.beacons.every((b) => b.kind !== 9)).toBe(true);
+  });
+
+  it("consumes each new packet host up to the per-frame cap (not only index 0)", () => {
+    resetLiveMarkers();
+    const opts = parseVoxConfig({ preset: "classic" });
+    const cam = { x: 0, y: 10, z: 0 };
+    const out = applyLiveBindings(
+      {
+        t: 2,
+        packets: [
+          { host: "host-a", field: 0.92 },
+          { host: "host-b", field: 0.93 },
+          { host: "host-c", field: 0.94 },
+        ],
+        sys: { cpu: 0.1, failed: 0 },
+      },
+      opts,
+      0,
+      cam,
+    );
+    const torchHosts = out.beacons.filter((b) => b.kind === 1).map((b) => b.hostId);
+    expect(torchHosts.sort()).toEqual(["host-a", "host-b", "host-c"]);
+    expect(out.beacons[0]!.x).toBe(hostWorldXZ("host-a", opts.seed).x);
+    expect(out.beacons[1]!.x).toBe(hostWorldXZ("host-b", opts.seed).x);
   });
 
   it("never stacks more than one GL context per tile lifecycle (4 isolated tiles)", () => {

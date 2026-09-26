@@ -12,8 +12,8 @@ type VizFrame = {
   dt: number;
   audio: number;
   demo?: boolean;
-  packets: { field: number }[];
-  talkers?: { rate: number }[];
+  packets: { field: number; proto?: string; host?: string; id?: string; failed?: number }[];
+  talkers?: { id: string; rate: number; role?: string; failed?: number }[];
   sys?: { cpu: number; mem: number; disk: number; gpu: number; temp: number; watts: number; psi: number; sockets: number; failed: number; udev: number };
 };
 
