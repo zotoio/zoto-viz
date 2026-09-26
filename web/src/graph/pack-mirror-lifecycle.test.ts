@@ -1,0 +1,136 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as THREE from "three";
+import {
+  PACK_MSAA_SAMPLES,
+  PackMirrorRegistry,
+  PackMirrorSession,
+  PackTexturePresenter,
+  packMirrorResourceStats,
+} from "./pack-mirror-gl";
+import { surfaceLetterboxFill } from "./letterbox-fill";
+
+function stubRenderer(antialias: boolean, pr = 1): THREE.WebGLRenderer {
+  const rd = {
+    getPixelRatio: () => pr,
+    setRenderTarget: vi.fn(),
+    setViewport: vi.fn(),
+    setScissor: vi.fn(),
+    setScissorTest: vi.fn(),
+    setClearColor: vi.fn(),
+    clear: vi.fn(),
+    render: vi.fn(),
+    getContext: () => ({ getContextAttributes: () => ({ antialias }) }),
+    getRenderTarget: () => null,
+  };
+  return rd as unknown as THREE.WebGLRenderer;
+}
+
+function emptyScene(): { scene: THREE.Scene; camera: THREE.Camera } {
+  return { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera() };
+}
+
+function simulateTwoTileFrame(
+  reg: PackMirrorRegistry,
+  rd: THREE.WebGLRenderer,
+  key: string,
+  antialias: boolean,
+  box = { w: 64, h: 48 },
+): void {
+  reg.beginFrame();
+  const { scene, camera } = emptyScene();
+  reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias);
+  reg.presentPack(key, rd, { x: 0, y: 0, w: box.w, h: box.h }, {
+    letterbox: false,
+    fill: null,
+    aspect: box.w / box.h,
+  });
+  reg.presentPack(key, rd, { x: 80, y: 0, w: 90, h: 70 }, {
+    letterbox: true,
+    fill: surfaceLetterboxFill(0x0a1020, 0.25),
+    aspect: box.w / box.h,
+  });
+}
+
+describe("PackMirrorSession resource lifecycle", () => {
+  beforeEach(() => packMirrorResourceStats.reset());
+  afterEach(() => packMirrorResourceStats.reset());
+
+  it("300 frames / 2 tiles: one RT, one quad graph, zero per-frame allocations", () => {
+    const reg = new PackMirrorRegistry();
+    const rd = stubRenderer(false);
+    reg.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
+    expect(packMirrorResourceStats.presenterCreated).toBe(1);
+    for (let i = 0; i < 300; i++) simulateTwoTileFrame(reg, rd, "plugin:pack", false);
+    expect(packMirrorResourceStats.renderTargetCreated).toBe(1);
+    expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
+    expect(packMirrorResourceStats.presenterCreated).toBe(1);
+    reg.dispose();
+  });
+
+  it("300 steady frames: 0 setSize; one resize: exactly 1 setSize", () => {
+    const session = new PackMirrorSession();
+    const rd = stubRenderer(false);
+    const { scene, camera } = emptyScene();
+    for (let i = 0; i < 300; i++) session.renderPack(rd, scene, camera, 64, 48, 0x0a1020, false);
+    expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
+    session.renderPack(rd, scene, camera, 96, 72, 0x0a1020, false);
+    expect(packMirrorResourceStats.renderTargetSetSize).toBe(1);
+    session.dispose();
+  });
+
+  it("samples=4 only when context antialias is true", () => {
+    const sessionOff = new PackMirrorSession();
+    const rtOff = sessionOff.ensure(32, 24, false);
+    expect(rtOff?.samples).toBe(0);
+    sessionOff.dispose();
+    packMirrorResourceStats.reset();
+    const sessionOn = new PackMirrorSession();
+    const rtOn = sessionOn.ensure(32, 24, true);
+    expect(rtOn?.samples).toBe(PACK_MSAA_SAMPLES);
+    sessionOn.dispose();
+  });
+
+  it("teardown disposes RT, geometry, and material; single tile creates nothing", () => {
+    const reg = new PackMirrorRegistry();
+    reg.syncScopes(new Map([["plugin:p", { tileCount: 2, antialias: false }]]));
+    const rd = stubRenderer(false);
+    simulateTwoTileFrame(reg, rd, "plugin:p", false);
+    reg.syncScopes(new Map([["plugin:p", { tileCount: 1, antialias: false }]]));
+    expect(packMirrorResourceStats.renderTargetDisposed).toBe(1);
+    expect(packMirrorResourceStats.geometryDisposed).toBe(1);
+    expect(packMirrorResourceStats.materialDisposed).toBe(1);
+    expect(packMirrorResourceStats.renderTargetCreated).toBe(1);
+    packMirrorResourceStats.reset();
+    reg.syncScopes(new Map([["plugin:lonely", { tileCount: 1, antialias: false }]]));
+    expect(packMirrorResourceStats.renderTargetCreated).toBe(0);
+    reg.dispose();
+  });
+
+  it("two pack keys get two targets; dropping one duplicate leaves the other", () => {
+    const reg = new PackMirrorRegistry();
+    reg.syncScopes(new Map([
+      ["plugin:a", { tileCount: 2, antialias: false }],
+      ["plugin:b", { tileCount: 2, antialias: false }],
+    ]));
+    expect(packMirrorResourceStats.renderTargetCreated).toBe(0);
+    const rd = stubRenderer(false);
+    simulateTwoTileFrame(reg, rd, "plugin:a", false);
+    simulateTwoTileFrame(reg, rd, "plugin:b", false);
+    expect(packMirrorResourceStats.renderTargetCreated).toBe(2);
+    const a = reg.sessionFor("plugin:a");
+    reg.syncScopes(new Map([["plugin:a", { tileCount: 2, antialias: false }]]));
+    expect(reg.sessionFor("plugin:b")).toBeUndefined();
+    expect(reg.sessionFor("plugin:a")).toBe(a);
+    expect(packMirrorResourceStats.renderTargetDisposed).toBe(1);
+    reg.dispose();
+  });
+});
+
+describe("PackTexturePresenter", () => {
+  beforeEach(() => packMirrorResourceStats.reset());
+  it("constructs quad resources once", () => {
+    const p = new PackTexturePresenter();
+    expect(packMirrorResourceStats.presenterCreated).toBe(1);
+    p.dispose();
+  });
+});

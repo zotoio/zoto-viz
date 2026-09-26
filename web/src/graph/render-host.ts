@@ -29,7 +29,6 @@ import {
   paintLetterboxBarsThree,
   resetSandboxBitmapGl,
   sandboxBitmapGl,
-  sandboxBitmapPresenter,
 } from "./pack-mirror-gl";
 
 type PackMirrorViewMeta = HostedView & {
@@ -95,14 +94,14 @@ export class RenderHost {
   private pr: number;
   readonly packMirrors = new PackMirrorRegistry();
 
-  constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
+  constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean; antialias?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
     this.pr = dpr;
     const forceSoft = opts.software === true || (opts.software !== false && !probeWebGL());
     if (!forceSoft) {
       try {
         this.renderer = new THREE.WebGLRenderer({
-          antialias: dpr < 1.3,
+          antialias: opts.antialias ?? dpr < 1.3,
           alpha: true,
           premultipliedAlpha: true,
           preserveDrawingBuffer: true,
@@ -278,9 +277,9 @@ export class RenderHost {
     const rd = this.renderer as THREE.WebGLRenderer;
     const gpu = sandboxBitmapGl(pluginId);
     const tex = gpu.uploadFrame(bitmap);
-    bitmap.close();
     if (!tex) return null;
-    const rect = gpu.present(sandboxBitmapPresenter(), rd, tex, fill, dst, aspect);
+    const rect = gpu.present(rd, tex, fill, dst, aspect);
+    bitmap.close();
     const pr = rd.getPixelRatio();
     return { x: rect.x * pr, y: rect.y * pr, w: rect.w * pr, h: rect.h * pr };
   }
