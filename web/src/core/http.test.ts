@@ -1,20 +1,22 @@
-import { afterEach, describe, expect, it } from "vitest";
-import {
-  apiFetch,
-  bootSession,
-  csrfToken,
-  noteCsrf,
-  resetSessionRecoveryStats,
-  SERVER_RESTART_NOTICE,
-  sessionRecoveryStats,
-} from "./http";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { apiFetch, bootSession, csrfToken, noteCsrf, SERVER_RESTART_NOTICE } from "./http";
 
 describe("apiFetch CSRF", () => {
+  const orig = globalThis.fetch;
+  let onRestart: ((e: Event) => void) | undefined;
+
+  beforeEach(() => {
+    expect.hasAssertions();
+    noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
+  });
+
   afterEach(() => {
     globalThis.fetch = orig;
-    resetSessionRecoveryStats();
+    if (onRestart) {
+      window.removeEventListener("zoto-viz-server-restart", onRestart);
+      onRestart = undefined;
+    }
   });
-  const orig = globalThis.fetch;
 
   it("sends the header on mutating calls after a session boot", async () => {
     const seen: string[] = [];
@@ -66,9 +68,8 @@ describe("apiFetch CSRF", () => {
       } as Response;
     }) as typeof fetch;
     const notices: string[] = [];
-    window.addEventListener("zoto-viz-server-restart", (e) => {
-      notices.push((e as CustomEvent<string>).detail);
-    });
+    onRestart = (e) => { notices.push((e as CustomEvent<string>).detail); };
+    window.addEventListener("zoto-viz-server-restart", onRestart);
     const errs: string[] = [];
     const origErr = console.error;
     console.error = (...args: unknown[]) => { errs.push(String(args[0] ?? "")); };
@@ -76,11 +77,9 @@ describe("apiFetch CSRF", () => {
     console.error = origErr;
     expect(r.ok).toBe(true);
     expect(seen.filter((s) => s.startsWith("/api/session")).length).toBe(1);
+    expect(seen.filter((s) => s === "/api/profiles/user:stale").length).toBe(1);
     expect(seen.filter((s) => s === "/api/profiles/user:fresh").length).toBe(1);
     expect(csrfToken()).toBe("fresh");
-    expect(sessionRecoveryStats.sessionFetches).toBe(1);
-    expect(sessionRecoveryStats.retries).toBe(1);
-    expect(sessionRecoveryStats.notices).toBe(1);
     expect(notices).toEqual([SERVER_RESTART_NOTICE]);
     expect(errs.length).toBe(0);
   });

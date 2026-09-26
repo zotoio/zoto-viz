@@ -3,24 +3,6 @@
 export const SERVER_RESTART_NOTICE =
   "The server restarted, so packs were reloaded.";
 
-export type SessionRecoveryStats = {
-  sessionFetches: number;
-  retries: number;
-  notices: number;
-};
-
-export const sessionRecoveryStats: SessionRecoveryStats = {
-  sessionFetches: 0,
-  retries: 0,
-  notices: 0,
-};
-
-export function resetSessionRecoveryStats(): void {
-  sessionRecoveryStats.sessionFetches = 0;
-  sessionRecoveryStats.retries = 0;
-  sessionRecoveryStats.notices = 0;
-}
-
 let csrf = "";
 
 export function csrfToken(): string {
@@ -44,9 +26,7 @@ async function send(path: string, init: RequestInit): Promise<Response> {
 
 async function refreshSessionAfterStaleToken(): Promise<void> {
   csrf = "";
-  sessionRecoveryStats.sessionFetches += 1;
   await bootSession();
-  sessionRecoveryStats.notices += 1;
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
@@ -61,7 +41,6 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     const err = await r.clone().json().catch(() => ({})) as { error?: string };
     if (err.error === "csrf required") {
       await refreshSessionAfterStaleToken();
-      sessionRecoveryStats.retries += 1;
       r = await send(path, init);
     }
   }

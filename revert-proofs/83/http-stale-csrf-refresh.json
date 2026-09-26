@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testId": "src/core/http.test.ts > apiFetch CSRF > after restart stale csrf refreshes once retries once and shows restart notice",
-  "red": "AssertionError: expected +0 to be 1",
+  "red": "AssertionError: expected false to be true",
   "description": "Stale CSRF after restart: one session fetch, one retry, one restart notice.",
   "timeoutSec": 120
 }

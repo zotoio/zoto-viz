@@ -1,11 +1,10 @@
 --- a/web/src/core/http.ts
 +++ b/web/src/core/http.ts
-@@ -60,9 +60,7 @@
+@@ -38,9 +38,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
    if (method !== "GET" && method !== "HEAD" && r.status === 403) {
      const err = await r.clone().json().catch(() => ({})) as { error?: string };
      if (err.error === "csrf required") {
 -      await refreshSessionAfterStaleToken();
--      sessionRecoveryStats.retries += 1;
 -      r = await send(path, init);
 +      r = r;
      }

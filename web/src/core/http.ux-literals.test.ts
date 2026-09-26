@@ -1,11 +1,21 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { apiFetch, noteCsrf, resetSessionRecoveryStats } from "./http";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { apiFetch, noteCsrf } from "./http";
 
 describe("UX copy literals", () => {
   const orig = globalThis.fetch;
+  let onRestart: ((e: Event) => void) | undefined;
+
+  beforeEach(() => {
+    expect.hasAssertions();
+    noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
+  });
+
   afterEach(() => {
     globalThis.fetch = orig;
-    resetSessionRecoveryStats();
+    if (onRestart) {
+      window.removeEventListener("zoto-viz-server-restart", onRestart);
+      onRestart = undefined;
+    }
   });
 
   it("pins restart notice as exact literal", async () => {
@@ -33,13 +43,9 @@ describe("UX copy literals", () => {
       return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
     }) as typeof fetch;
     const notices: string[] = [];
-    window.addEventListener("zoto-viz-server-restart", (e) => {
-      notices.push((e as CustomEvent<string>).detail);
-    });
-    noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
+    onRestart = (e) => { notices.push((e as CustomEvent<string>).detail); };
+    window.addEventListener("zoto-viz-server-restart", onRestart);
     await apiFetch("/api/profiles/user", { method: "PUT" });
-    expect(notices).toEqual([
-      "The server restarted, so packs were reloaded.",
-    ]);
+    expect(notices[0]).toBe("The server restarted, so packs were reloaded.");
   });
 });
