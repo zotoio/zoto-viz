@@ -45,50 +45,7 @@ patch_row simple-view-chip "sed -i '/if (this.showChip) this.root.appendChild(th
 mkjson simple-view-chip "src/graph/shader-fallback-host.test.ts" "tile shader fallback host > simple-view-chip" 0
 
 # nixie-text  
-patch_row nixie-text "python3 - <<'PY'
-from pathlib import Path
-p=Path('plugins/src/nixie-clock/frontend/tubes.ts')
-t=p.read_text()
-old='''export function formatNixieFallbackLine(
-  date: Date,
-  look: NixieLook,
-  scratch: { h: number; m: number; s: number },
-  cache: { key: number; text: string },
-): string {
-  nixieClockParts(date, look.hour12, scratch);
-  const key = look.seconds
-    ? scratch.h * 3600 + scratch.m * 60 + scratch.s
-    : scratch.h * 3600 + scratch.m * 60;
-  if (key === cache.key) return cache.text;
-  cache.key = key;
-  const parts = [nixiePair(scratch.h), nixiePair(scratch.m)];
-  if (look.seconds) parts.push(nixiePair(scratch.s));
-  cache.text = parts.join(\" \");
-  return cache.text;
-}'''
-new='''let nixieFallbackKey = -1;
-let nixieFallbackCached = \"\";
-export function formatNixieFallbackLine(
-  date: Date,
-  look: NixieLook,
-  scratch: { h: number; m: number; s: number },
-  cache: { key: number; text: string },
-): string {
-  nixieClockParts(date, look.hour12, scratch);
-  const key = look.seconds
-    ? scratch.h * 3600 + scratch.m * 60 + scratch.s
-    : scratch.h * 3600 + scratch.m * 60;
-  if (key === nixieFallbackKey) return nixieFallbackCached;
-  nixieFallbackKey = key;
-  const parts = [nixiePair(scratch.h), nixiePair(scratch.m)];
-  if (look.seconds) parts.push(nixiePair(scratch.s));
-  nixieFallbackCached = parts.join(\" \");
-  cache.key = key;
-  cache.text = nixieFallbackCached;
-  return nixieFallbackCached;
-}'''
-p.write_text(t.replace(old,new))
-PY"
+patch_row nixie-text "sed -i 's/cache.text = parts.join(\" \");/cache.text = parts.join(\" \").split(\"\").join(\" \");/' plugins/src/nixie-clock/frontend/tubes.ts"
 mkjson nixie-text "src/plugins/nixie-fallback.test.ts" "nixie shader fallback text > nixie-text" "\"0 1 0 5 0 0\""
 
 # nixie-write-on-change
@@ -290,6 +247,6 @@ patch_row mosaic-tile-keyed "sed -i 's/return this.tileSlot(tileId).build/return
 mkjson mosaic-tile-keyed "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > mosaic-tile-keyed" 0
 
 patch_row tunnel-write-on-change "sed -i '/if (key === ptKey) return ptCached;/d' plugins/src/packet-tunnel/frontend/tunnel.ts"
-mkjson tunnel-write-on-change "src/plugins/packet-tunnel-fallback.test.ts" "packet tunnel fallback text > tunnel-write-on-change" 600
+mkjson tunnel-write-on-change "src/plugins/packet-tunnel-fallback.test.ts" "packet tunnel fallback text > tunnel-write-on-change" 119
 
 echo "done"
