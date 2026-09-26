@@ -672,7 +672,9 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
       tileId,
       spec.name ?? spec.id,
       mosaic,
-      () => attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config)),
+      async () => {
+        await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+      },
     );
     markSandboxStartupOk(tileId);
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);

@@ -87,7 +87,9 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
         from service import pack_asset_frames
 
         frame = new_frame_id()
-        pack_asset_frames.registry_for_app(self.server.app).register("ab", frame)
+        reg = pack_asset_frames.registry_for_app(self.server.app)
+        reg.register("ab", frame)
+        reg.register("a", frame)
         tok = pack_asset_tokens.mint_pack_asset_token(SECRET, "ab", "c", frame)
         row = {"id": "c", "has_frontend": True}
         with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "c" else None):

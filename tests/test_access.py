@@ -5,7 +5,8 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from service import access
 from service.forensics import location_allowed
-from tests.pack_asset_test_util import SECRET, SESSION, mint
+from service import pack_asset_frames
+from tests.pack_asset_test_util import DEFAULT_FRAME, SECRET, SESSION, mint
 
 
 def test_bind_is_loopback() -> None:
@@ -76,7 +77,15 @@ class FakeReq:
         if header:
             self.headers[access.HEADER] = header
         self.cookies = {access.COOKIE: cookie} if cookie else {}
-        self.app = {"csrf": csrf, "insecure_lan": lan, "pack_asset_secret": pack_asset_secret}
+        reg = pack_asset_frames.PackAssetFrameRegistry()
+        if pack_asset_secret:
+            reg.register(csrf or SESSION, DEFAULT_FRAME)
+        self.app = {
+            "csrf": csrf,
+            "insecure_lan": lan,
+            "pack_asset_secret": pack_asset_secret,
+            "pack_asset_frame_registry": reg,
+        }
 
 
 def test_host_origin_csrf_helpers() -> None:

@@ -1,13 +1,12 @@
 diff --git a/service/access.py b/service/access.py
-index 63ba73b..72921b8 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -72,7 +72,7 @@ def pack_asset_token_ok(request: web.Request) -> bool:
-         secret,
-         pack_id,
-         token,
--        session_id=sid if sid else None,
-+        session_id=None,
-     )
- 
- 
+@@ -69,7 +69,7 @@ def pack_asset_token_ok(request: web.Request) -> bool:
+     secret = request.app.get("pack_asset_secret")
+     if not secret:
+         return False
+-    sid = pack_asset_tokens.session_id_from_request(request)
++    sid = str(request.app.get("csrf") or "")
+     if not sid:
+         return False
+     parsed_tok = pack_asset_tokens.parse_pack_asset_token(token)

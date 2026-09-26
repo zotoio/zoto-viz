@@ -5,21 +5,21 @@
 | access-logger-class | tests/test_monitor_access_log.py :: test_make_app_session_returns_200_with_redacting_access_logger | make_app must boot with RedactingAccessLogger so /api/session answers on AppRunner. | python -m pytest tests/test_monitor_access_log.py::test_make_app_session_returns_200_with_redacting_access_logger | RED (expected) |
 | backend-404 | tests/test_pack_assets_security.py :: PackAssetsSecurityTests::test_backend_marker_path_is_404 | Backend/service paths must not be exposed via pack-assets. | python -m pytest tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_backend_marker_path_is_404 | RED (expected) |
 | bootstrap-no-sat-query | tests/test_access_sandbox_token.py :: SandboxAssetTokenOriginTests::test_sandbox_bootstrap_and_chunks_gate_via_path_not_sat_query | Sandbox bootstrap and chunk imports must gate via path-segment token, not ?sat= on static URLs. | python -m pytest tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_sandbox_bootstrap_and_chunks_gate_via_path_not_sat_query | RED (expected) |
-| console-import-error-redaction | src/plugins/plugin-pack-feed.test.ts :: plugin pack feed notices > redacts session token from boot failure console lines | Host classify/log paths must redact session token before console.warn. | web/node_modules/.bin/vitest run src/plugins/plugin-pack-feed.test.ts -t "plugin pack feed notices > redacts session token from boot failure console lines" | RED (expected) |
-| csp-tight | src/plugins/host.csp.test.ts :: page CSP bootstrap policy > loads plugin sandbox from same-origin html + module (no srcdoc) | plugin-sandbox.html CSP must stay minimal (no broad connect-src to loopback hosts). | web/node_modules/.bin/vitest run src/plugins/host.csp.test.ts -t "page CSP bootstrap policy > loads plugin sandbox from same-origin html + module (no srcdoc)" | RED (expected) |
 | dotfile-404 | tests/test_pack_assets_security.py :: PackAssetsSecurityTests::test_dotfile_under_pack_is_404 | Dotfile paths under a pack must not be served. | python -m pytest tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_dotfile_under_pack_is_404 | RED (expected) |
 | multi-file-relative-imports | tests/test_pack_assets_security.py :: PackAssetsSecurityTests::test_sandbox_fixture_multi_serves_sibling_files | Unbundled ESM module.js must keep relative imports and serve helper.js siblings via pack-assets. | python -m pytest tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_sandbox_fixture_multi_serves_sibling_files | RED (expected) |
 | referrer-policy | tests/test_access_sandbox_token.py :: SandboxAssetTokenOriginTests::test_null_origin_module_js_with_valid_token_when_consented | Pack asset responses must send Referrer-Policy: no-referrer. | python -m pytest tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_null_origin_module_js_with_valid_token_when_consented | RED (expected) |
-| sandbox-foreign-boot | src/plugins/sandbox-frame.security.test.ts :: sandbox-frame boot security > ignores boot postMessage from a foreign frame | Sandbox must ignore boot messages not from the parent frame. | web/node_modules/.bin/vitest run src/plugins/sandbox-frame.security.test.ts -t "sandbox-frame boot security > ignores boot postMessage from a foreign frame" | RED (expected) |
 | token-log-redaction | tests/test_access_sandbox_token.py :: SandboxAssetTokenOriginTests::test_redacting_access_logger_hides_token | Access log must redact the sandbox session token path segment (revert prints raw token). | python -m pytest tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_redacting_access_logger_hides_token | RED (expected) |
-| token-pack-binding | tests/test_pack_assets_security.py :: PackAssetsSecurityTests::test_token_bound_to_pack_id | Token minted for pack X must not authorize paths under pack Y. | python -m pytest tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_token_bound_to_pack_id | RED (expected) |
-| token-session-binding | tests/test_pack_assets_security.py :: PackAssetsSecurityTests::test_token_bound_to_session_id | Pack asset token must verify the caller CSRF session id. | python -m pytest tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_token_bound_to_session_id | RED (expected) |
 | traversal-realpath | tests/test_pack_assets_security.py :: PackAssetsSecurityTests::test_traversal_realpath_outside_frontend_root | Symlink escape outside the pack frontend root must not be served. | python -m pytest tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_traversal_realpath_outside_frontend_root | RED (expected) |
-| wrong-token-cross-pack-403 | tests/test_pack_assets_security.py :: PackAssetsSecurityTests::test_wrong_token_denied_for_any_pack_path | Wrong session token in /pack-assets/<token>/… must return 403, not serve module.js. | python -m pytest tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_wrong_token_denied_for_any_pack_path | RED (expected) |
-| token-encoding | | | | **ERROR: row token-encoding: baseline ran 0 tests (selection/filter error; never a pass)** |
-| token-rebuild-on-403 | | | | **ERROR: row token-rebuild-on-403: baseline ran 0 tests (selection/filter error; never a pass)** |
-| token-revocation | | | | **ERROR: row token-revocation: baseline ran 0 tests (selection/filter error; never a pass)** |
-| token-wall-notice | | | | **ERROR: row token-wall-notice: baseline ran 0 tests (selection/filter error; never a pass)** |
+| console-import-error-redaction | | | | **ERROR: row console-import-error-redaction: patch breaks build (tsc --noEmit -p web failed; proves nothing)** |
+| csp-tight | | | | **ERROR: row csp-tight: patch breaks build (tsc --noEmit -p web failed; proves nothing)** |
+| sandbox-foreign-boot | | | | **ERROR: row sandbox-foreign-boot: patch breaks build (tsc --noEmit -p web failed; proves nothing)** |
+| token-encoding | | | | **ERROR: row token-encoding: test stayed GREEN after revert patch (expected failure)** |
+| token-pack-binding | | | | **ERROR: row token-pack-binding: git apply --check failed: error: patch failed: service/pack_asset_tokens.py:67 error: service/pack_asset_tokens.py: patch does not apply ** |
+| token-rebuild-on-403 | | | | **ERROR: row token-rebuild-on-403: git apply --check failed: error: corrupt patch at line 18 ** |
+| token-revocation | | | | **ERROR: row token-revocation: git apply --check failed: error: corrupt patch at line 12 ** |
+| token-session-binding | | | | **ERROR: row token-session-binding: git apply --check failed: error: patch failed: service/access.py:72 error: service/access.py: patch does not apply ** |
+| token-wall-notice | | | | **ERROR: row token-wall-notice: git apply --check failed: error: corrupt patch at line 13 ** |
+| wrong-token-cross-pack-403 | | | | **ERROR: row wrong-token-cross-pack-403: git apply --check failed: error: patch failed: service/access.py:63 error: service/access.py: patch does not apply ** |
 
 ### access-logger-class
 
@@ -37,10 +37,10 @@ E       AssertionError: assert 'access_log_class=access.RedactingAccessLogger' i
 tests/test_monitor_access_log.py:39: AssertionError
 =============================== warnings summary ===============================
 tests/test_monitor_access_log.py::test_make_app_session_returns_200_with_redacting_access_logger
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/access-logger-class-patched-pytest.xml -
+- generated xml file: /tmp/revert-proof-artifacts-rPUrT3/access-logger-class-patched-pytest.xml -
 =========================== short test summary info ============================
 FAILED tests/test_monitor_access_log.py::test_make_app_session_returns_200_with_redacting_access_logger
-======================== 1 failed, 4 warnings in 0.18s =========================
+======================== 1 failed, 4 warnings in 0.15s =========================
 ```
 
 ### backend-404
@@ -55,15 +55,15 @@ ___________ PackAssetsSecurityTests.test_backend_marker_path_is_404 ____________
                 resp = await self.client.get(pack_url_raw("backend-pack", "backend/leak.js"), headers={**HOST})
 >       assert resp.status == 404
 E       AssertionError: assert 200 == 404
-E        +  where 200 = <ClientResponse(http://127.0.0.1:42799/pack-assets/dGVzdC1zZXNzaW9uLWNzcmYtdG9rZW4tYWFh.1790536334.kOYCgllnCPpyy4FRBMD... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:14 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
+E        +  where 200 = <ClientResponse(http://127.0.0.1:39995/pack-assets/11111111-1111-4111-8111-111111111111.jczOPBely5t3hQ0ZvjVjXQDFfY6u7P... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:44 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
 
-tests/test_pack_assets_security.py:191: AssertionError
+tests/test_pack_assets_security.py:220: AssertionError
 =============================== warnings summary ===============================
 tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_backend_marker_path_is_404
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/backend-404-patched-pytest.xml -
+- generated xml file: /tmp/revert-proof-artifacts-rPUrT3/backend-404-patched-pytest.xml -
 =========================== short test summary info ============================
 FAILED tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_backend_marker_path_is_404
-======================== 1 failed, 3 warnings in 0.07s =========================
+======================== 1 failed, 4 warnings in 0.07s =========================
 ```
 
 ### bootstrap-no-sat-query
@@ -89,42 +89,10 @@ E         ?           +++++)
 tests/test_access_sandbox_token.py:131: AssertionError
 =============================== warnings summary ===============================
 tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_sandbox_bootstrap_and_chunks_gate_via_path_not_sat_query
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/bootstrap-no-sat-query-patched-pytest.xml -
+- generated xml file: /tmp/revert-proof-artifacts-rPUrT3/bootstrap-no-sat-query-patched-pytest.xml -
 =========================== short test summary info ============================
 FAILED tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_sandbox_bootstrap_and_chunks_gate_via_path_not_sat_query
-======================== 1 failed, 3 warnings in 0.06s =========================
-```
-
-### console-import-error-redaction
-
-```
-AssertionError: expected 'module.js fetch failed (network/CORS)…' not to contain 'super-secret-session-token'
-    at /tmp/revert-proof-wt-workspace-34335/web/src/plugins/plugin-pack-feed.test.ts:52:24
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
-```
-
-### csp-tight
-
-```
-AssertionError: expected '<!doctype html>\n<html lang="en">\n  …' to contain 'connect-src \'none\''
-    at /tmp/revert-proof-wt-workspace-34335/web/src/plugins/host.csp.test.ts:24:21
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
+======================== 1 failed, 4 warnings in 0.06s =========================
 ```
 
 ### dotfile-404
@@ -140,15 +108,15 @@ ____________ PackAssetsSecurityTests.test_dotfile_under_pack_is_404 ____________
 >                   assert resp.status == 404, tail
 E                   AssertionError: .env
 E                   assert 200 == 404
-E                    +  where 200 = <ClientResponse(http://127.0.0.1:40901/pack-assets/dGVzdC1zZXNzaW9uLWNzcmYtdG9rZW4tYWFh.1790536339.fCsYHXGit8JVrW-fVO2... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:19 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
+E                    +  where 200 = <ClientResponse(http://127.0.0.1:35927/pack-assets/11111111-1111-4111-8111-111111111111.T25tRpEP0-8feKWp_Igx0DwSxHH9ye... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:48 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
 
-tests/test_pack_assets_security.py:177: AssertionError
+tests/test_pack_assets_security.py:206: AssertionError
 =============================== warnings summary ===============================
 tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_dotfile_under_pack_is_404
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/dotfile-404-patched-pytest.xml -
+- generated xml file: /tmp/revert-proof-artifacts-rPUrT3/dotfile-404-patched-pytest.xml -
 =========================== short test summary info ============================
 FAILED tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_dotfile_under_pack_is_404
-======================== 1 failed, 3 warnings in 0.06s =========================
+======================== 1 failed, 4 warnings in 0.07s =========================
 ```
 
 ### multi-file-relative-imports
@@ -173,13 +141,13 @@ ___ PackAssetsSecurityTests.test_sandbox_fixture_multi_serves_sibling_files ____
 >       assert "./helper.js" in body
 E       assert './helper.js' in '// plugins/src/sandbox-fixture-multi/frontend/helper.js\nfunction pulse() {\n  return 0.55 + 0.45 * Math.sin(Date.now...nvar z = globalThis.zoto;\nz.onPresent = () => {\n  z.writeUniform("uBright", fixture_default.bright * pulse());\n};\n'
 
-tests/test_pack_assets_security.py:211: AssertionError
+tests/test_pack_assets_security.py:240: AssertionError
 ------------------------------ Captured log call -------------------------------
-WARNING  asyncio:base_events.py:1982 Executing <Task pending name='Task-2' coro=<PackAssetsSecurityTests.test_sandbox_fixture_multi_serves_sibling_files() running at /tmp/revert-proof-wt-workspace-34335/tests/test_pack_assets_security.py:204> wait_for=<Future pending cb=[BaseSelectorEventLoop._sock_write_done(15, handle=<Handle BaseS...events.py:317>)(), Task.task_wakeup()] created at /usr/lib/python3.12/asyncio/base_events.py:449> cb=[_run_until_complete_cb() at /usr/lib/python3.12/asyncio/base_events.py:182] created at /usr/lib/python3.12/asyncio/runners.py:100> took 0.296 seconds
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/multi-file-relative-imports-patched-pytest.xml -
+WARNING  asyncio:base_events.py:1982 Executing <Task pending name='Task-2' coro=<PackAssetsSecurityTests.test_sandbox_fixture_multi_serves_sibling_files() running at /tmp/revert-proof-wt-workspace-35672/tests/test_pack_assets_security.py:233> wait_for=<Future pending cb=[BaseSelectorEventLoop._sock_write_done(15, handle=<Handle BaseS...events.py:317>)(), Task.task_wakeup()] created at /usr/lib/python3.12/asyncio/base_events.py:449> cb=[_run_until_complete_cb() at /usr/lib/python3.12/asyncio/base_events.py:182] created at /usr/lib/python3.12/asyncio/runners.py:100> took 0.293 seconds
+- generated xml file: /tmp/revert-proof-artifacts-rPUrT3/multi-file-relative-imports-patched-pytest.xml -
 =========================== short test summary info ============================
 FAILED tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_sandbox_fixture_multi_serves_sibling_files
-======================== 1 failed, 3 warnings in 0.37s =========================
+======================== 1 failed, 4 warnings in 0.37s =========================
 ```
 
 ### referrer-policy
@@ -196,33 +164,17 @@ _ SandboxAssetTokenOriginTests.test_null_origin_module_js_with_valid_token_when_
         assert resp.headers.get("Access-Control-Allow-Origin") == "null"
 >       assert resp.headers.get("Referrer-Policy") == "no-referrer"
 E       AssertionError: assert None == 'no-referrer'
-E        +  where None = <built-in method get of multidict._multidict.CIMultiDictProxy object at 0x7f4753003e10>('Referrer-Policy')
-E        +    where <built-in method get of multidict._multidict.CIMultiDictProxy object at 0x7f4753003e10> = <CIMultiDictProxy('Content-Type': 'text/javascript; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Contro...; HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:21 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>.get
-E        +      where <CIMultiDictProxy('Content-Type': 'text/javascript; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Contro...; HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:21 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')> = <ClientResponse(http://127.0.0.1:38759/pack-assets/dGVzdC1zZXNzaW9uLWNzcmYtdG9rZW4tYWFh.1790536341.b_Z2V6zaVVSNbd83uJp... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:21 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.headers
+E        +  where None = <built-in method get of multidict._multidict.CIMultiDictProxy object at 0x7fa636e87e50>('Referrer-Policy')
+E        +    where <built-in method get of multidict._multidict.CIMultiDictProxy object at 0x7fa636e87e50> = <CIMultiDictProxy('Content-Type': 'text/javascript; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Contro...; HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:50 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>.get
+E        +      where <CIMultiDictProxy('Content-Type': 'text/javascript; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Contro...; HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:50 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')> = <ClientResponse(http://127.0.0.1:44777/pack-assets/11111111-1111-4111-8111-111111111111.YPic55R_dHDr4TYooMrmTEtvgaVVq1... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:50 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.headers
 
 tests/test_access_sandbox_token.py:49: AssertionError
 =============================== warnings summary ===============================
 tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_null_origin_module_js_with_valid_token_when_consented
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/referrer-policy-patched-pytest.xml -
+- generated xml file: /tmp/revert-proof-artifacts-rPUrT3/referrer-policy-patched-pytest.xml -
 =========================== short test summary info ============================
 FAILED tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_null_origin_module_js_with_valid_token_when_consented
-======================== 1 failed, 3 warnings in 0.06s =========================
-```
-
-### sandbox-foreign-boot
-
-```
-AssertionError: expected true to be false // Object.is equality
-    at /tmp/revert-proof-wt-workspace-34335/web/src/plugins/sandbox-frame.security.test.ts:24:26
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:1628:35
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:26
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3319:20
-    at new Promise (<anonymous>)
-    at runWithCancel (file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3314:10)
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3299:20
-    at new Promise (<anonymous>)
-    at runWithTimeout (file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3257:10)
-    at file:///tmp/revert-proof-wt-workspace-34335/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.20.2_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2.2_795fd615d962206b97849f7d61ee963d/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:3876:64
+======================== 1 failed, 4 warnings in 0.07s =========================
 ```
 
 ### token-log-redaction
@@ -241,65 +193,18 @@ ____ SandboxAssetTokenOriginTests.test_redacting_access_logger_hides_token _____
         )()
         line = access.RedactingAccessLogger._format_r(req, resp, 0.01)
 >       assert tok not in line
-E       AssertionError: assert 'dGVzdC1zZXN...dAK9vIJFKfci' not in 'GET /pack-a....js HTTP/1.1'
+E       AssertionError: assert '11111111-11...28pCtWCdo-n4' not in 'GET /pack-a....js HTTP/1.1'
 E         
-E         'dGVzdC1zZXNzaW9uLW...FNT92pqdAK9vIJFKfci' is contained here:
-E           GET /pack-assets/dGVzdC1zZXNzaW9uLWNzcmYtdG9rZW4tYWFh.1790536344.z9NfA9550RFswFNT92pqdAK9vIJFKfci/demo-pack/module.js HTTP/1.1
+E         '11111111-1111-4111...gaVVq1h28pCtWCdo-n4' is contained here:
+E           GET /pack-assets/11111111-1111-4111-8111-111111111111.YPic55R_dHDr4TYooMrmTEtvgaVVq1h28pCtWCdo-n4/demo-pack/module.js HTTP/1.1
 
 tests/test_access_sandbox_token.py:173: AssertionError
 =============================== warnings summary ===============================
 tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_redacting_access_logger_hides_token
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/token-log-redaction-patched-pytest.xml -
+- generated xml file: /tmp/revert-proof-artifacts-rPUrT3/token-log-redaction-patched-pytest.xml -
 =========================== short test summary info ============================
 FAILED tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_redacting_access_logger_hides_token
-======================== 1 failed, 3 warnings in 0.07s =========================
-```
-
-### token-pack-binding
-
-```
-tests/test_pack_assets_security.py F                                     [100%]
-
-=================================== FAILURES ===================================
-_____________ PackAssetsSecurityTests.test_token_bound_to_pack_id ______________
-
-                    ok = await self.client.get(pack_url("pack-x", "module.js", token=tok_x), headers=NULL)
-                    denied = await self.client.get(pack_url("pack-y", "module.js", token=tok_x), headers=NULL)
->       assert ok.status == 200
-E       AssertionError: assert 403 == 200
-E        +  where 403 = <ClientResponse(http://127.0.0.1:38331/pack-assets/dGVzdC1zZXNzaW9uLWNzcmYtdG9rZW4tYWFh.1790536345.CjwdQgxe0DIK_i1P_le... 'no-store', 'Content-Length': '29', 'Date': 'Sat, 26 Sep 2026 19:12:25 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
-
-tests/test_pack_assets_security.py:83: AssertionError
-=============================== warnings summary ===============================
-tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_token_bound_to_pack_id
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/token-pack-binding-patched-pytest.xml -
-=========================== short test summary info ============================
-FAILED tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_token_bound_to_pack_id
-======================== 1 failed, 3 warnings in 0.07s =========================
-```
-
-### token-session-binding
-
-```
-tests/test_pack_assets_security.py F                                     [100%]
-
-=================================== FAILURES ===================================
-____________ PackAssetsSecurityTests.test_token_bound_to_session_id ____________
-
-                        headers={**NULL, access.HEADER: SESSION_B},
-                    )
-        assert ok.status == 200
->       assert denied.status == 403
-E       AssertionError: assert 200 == 403
-E        +  where 200 = <ClientResponse(http://127.0.0.1:40021/pack-assets/dGVzdC1zZXNzaW9uLWNzcmYtdG9rZW4tYWFh.1790536346.n8VBMzYpdjkmV7ZdJZw... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:26 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
-
-tests/test_pack_assets_security.py:64: AssertionError
-=============================== warnings summary ===============================
-tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_token_bound_to_session_id
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/token-session-binding-patched-pytest.xml -
-=========================== short test summary info ============================
-FAILED tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_token_bound_to_session_id
-======================== 1 failed, 3 warnings in 0.07s =========================
+======================== 1 failed, 4 warnings in 0.07s =========================
 ```
 
 ### traversal-realpath
@@ -320,36 +225,13 @@ ____ PackAssetsSecurityTests.test_traversal_realpath_outside_frontend_root _____
 >                   assert resp.status in {403, 404}, tail
 E                   AssertionError: escape.js
 E                   assert 200 in {403, 404}
-E                    +  where 200 = <ClientResponse(http://127.0.0.1:40589/pack-assets/dGVzdC1zZXNzaW9uLWNzcmYtdG9rZW4tYWFh.1790536347.gnRfhSfyZp4i1wrp7gR... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:27 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
+E                    +  where 200 = <ClientResponse(http://127.0.0.1:34051/pack-assets/11111111-1111-4111-8111-111111111111.2D3KoKztrAJRQuXzzAp1iNfLj7Piah... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:56 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
 
-tests/test_pack_assets_security.py:162: AssertionError
+tests/test_pack_assets_security.py:191: AssertionError
 =============================== warnings summary ===============================
 tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_traversal_realpath_outside_frontend_root
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/traversal-realpath-patched-pytest.xml -
+- generated xml file: /tmp/revert-proof-artifacts-rPUrT3/traversal-realpath-patched-pytest.xml -
 =========================== short test summary info ============================
 FAILED tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_traversal_realpath_outside_frontend_root
-======================== 1 failed, 3 warnings in 0.06s =========================
-```
-
-### wrong-token-cross-pack-403
-
-```
-tests/test_pack_assets_security.py F                                     [100%]
-
-=================================== FAILURES ===================================
-______ PackAssetsSecurityTests.test_wrong_token_denied_for_any_pack_path _______
-
-                        headers=NULL,
-                    )
->       assert resp.status == 403
-E       AssertionError: assert 200 == 403
-E        +  where 200 = <ClientResponse(http://127.0.0.1:42993/pack-assets/totally-wrong-token/demo-pack/module.js) [200 OK]>\n<CIMultiDictProx... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sat, 26 Sep 2026 19:12:28 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
-
-tests/test_pack_assets_security.py:47: AssertionError
-=============================== warnings summary ===============================
-tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_wrong_token_denied_for_any_pack_path
-- generated xml file: /tmp/revert-proof-artifacts-FpKhhR/wrong-token-cross-pack-403-patched-pytest.xml -
-=========================== short test summary info ============================
-FAILED tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_wrong_token_denied_for_any_pack_path
-======================== 1 failed, 3 warnings in 0.06s =========================
+======================== 1 failed, 4 warnings in 0.07s =========================
 ```
