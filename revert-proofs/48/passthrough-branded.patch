@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
+index b600ad1..4d0fb93 100644
+--- a/scripts/revert-proof-vitest-runner.mjs
++++ b/scripts/revert-proof-vitest-runner.mjs
+@@ -17,7 +17,7 @@ const verdict = new WeakMap();
+ const isObject = (v) => (typeof v === "object" && v !== null) || typeof v === "function";
+ 
+ function brandIfThrownByAssertion(err, isAssertion, passthrough) {
+-  if (isObject(err) && isAssertion(err) && !passthrough.has(err)) {
++  if (isObject(err) && isAssertion(err)) {
+     branded.add(err);
+   }
+   return err;

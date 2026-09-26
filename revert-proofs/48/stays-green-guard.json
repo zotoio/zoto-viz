@@ -2,5 +2,6 @@
   "runner": "vitest",
   "testFile": "scripts/revert-proof.dogfood.test.ts",
   "testName": "revert-proof dogfood guards > stays-green guard rejects patched green vitest runs",
-  "description": "Remove stays-green failure guard so noop reverts are accepted"
+  "description": "Remove stays-green failure guard so noop reverts are accepted",
+  "red": "AssertionError: expected undefined to be 'row dogfood: test stayed GREEN after …' // Object.is equality"
 }

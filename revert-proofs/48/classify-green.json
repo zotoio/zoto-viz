@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "strict Vitest red from task.meta only > reports a passing patched test as green",
+  "description": "Drop the green classification",
+  "red": "AssertionError: expected 'build break' to be 'green' // Object.is equality"
+}

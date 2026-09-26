@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "sidecar red value > (red-mismatch) a different patched failure line is rejected",
+  "description": "Stop comparing the patched failure line to red",
+  "red": "AssertionError: expected undefined to be 'row r: red value mismatch (expected A…' // Object.is equality"
+}

@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
+index b600ad1..772379b 100644
+--- a/scripts/revert-proof-vitest-runner.mjs
++++ b/scripts/revert-proof-vitest-runner.mjs
+@@ -113,7 +113,7 @@ export default class RevertProofVitestRunner extends TestRunner {
+     try {
+       await fn();
+     } catch (err) {
+-      verdict.set(test, isObject(err) && branded.has(err));
++      verdict.set(test, err instanceof chai.AssertionError || (isObject(err) && branded.has(err)));
+       throw err;
+     }
+   }

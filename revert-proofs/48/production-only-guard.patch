@@ -1,8 +1,8 @@
-diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index 4aa041f..4943be5 100755
---- a/scripts/revert-proof.mjs
-+++ b/scripts/revert-proof.mjs
-@@ -192,11 +192,9 @@ function validateMeta(meta, slug) {
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..ac5cba2 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -379,11 +379,8 @@ export function sanitizeReportText(text) {
  }
  
  export function validatePatchTouchesOnlyProduction(patchText, slug) {
@@ -13,7 +13,6 @@ index 4aa041f..4943be5 100755
 -  }
 +  void patchText;
 +  void slug;
-+  return;
  }
  
  const PRODUCTION_CONFIG_NAME = "revert-proof-production.json";

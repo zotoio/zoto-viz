@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..205d7a4 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -51,7 +51,7 @@ export function parseTimeoutSec(raw, slug) {
+ }
+ 
+ export function validateRowMeta(meta, slug) {
+-  for (const key of ["runner", "testFile", "testName", "description", "red"]) {
++  for (const key of ["runner", "testFile", "testName", "description"]) {
+     if (!meta[key] || typeof meta[key] !== "string") {
+       throw new Error(`row ${slug}: sidecar JSON missing string field "${key}"`);
+     }

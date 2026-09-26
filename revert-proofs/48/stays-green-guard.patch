@@ -1,8 +1,8 @@
-diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index 4aa041f..472d4c9 100755
---- a/scripts/revert-proof.mjs
-+++ b/scripts/revert-proof.mjs
-@@ -1244,11 +1244,9 @@ function metaRunnerCount(run) {
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..25da73d 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -868,9 +868,6 @@ export function assertEditablePythonResolvesInWorktree(
  }
  
  export function rejectPatchedVitestGreen(kind, slug) {
@@ -13,7 +13,4 @@ index 4aa041f..472d4c9 100755
 -  }
 +  void kind;
 +  void slug;
-+  return;
  }
- 
- async function runRow(mainRoot, wtRoot, row, artifactsDir) {

@@ -18,15 +18,18 @@ def pytest_runtest_makereport(item, call):
     if report.when != "call":
         return
     revert_proof_assertion = False
+    failure_message = None
     if report.failed:
         excinfo = call.excinfo
         if excinfo is not None:
             revert_proof_assertion = excinfo.errisinstance(AssertionError)
+            failure_message = excinfo.exconly().split("\n")[0]
     _reports.append(
         {
             "nodeid": report.nodeid,
             "outcome": report.outcome,
             "revertProofAssertion": bool(revert_proof_assertion),
+            "failureMessage": failure_message,
         }
     )
 

@@ -1,0 +1,14 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..0f8ca4a 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -299,9 +299,6 @@ export function assessVitestSelection(tests, testName) {
+   if (matches.length === 0) {
+     return { ok: false, reason: "target not found", target: null };
+   }
+-  if (executedMatches.length > 1) {
+-    return { ok: false, reason: "multiple tests matched filter", target: null };
+-  }
+   if (executedMatches.length === 0) {
+     const skippedTarget = matches[0];
+     if (VITEST_SKIP_STATUSES.has(skippedTarget.status)) {
