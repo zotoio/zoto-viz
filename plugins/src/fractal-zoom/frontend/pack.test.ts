@@ -244,8 +244,8 @@ describe("fractal-zoom shipped pack", () => {
     expect(FRONT).toContain("onFrame");
     expect(FRONT).toContain("onConfig");
     expect(FRONT.match(/zoto\.onFrame\s*=/g)?.length).toBe(1);
-    expect(FRONT).toContain('from "../../../sdk/plugin-sandbox"');
-    expect(FRONT).not.toMatch(/declare const zoto:\s*\{/);
+    expect(FRONT).toContain('../../../sdk/plugin-sandbox');
+    expect(FRONT).not.toMatch(/declare const zoto/);
   });
 
   it("caches config from onConfig (no getConfig per frame)", () => {
