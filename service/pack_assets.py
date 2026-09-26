@@ -6,7 +6,7 @@ import mimetypes
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from aiohttp import web
 
@@ -157,20 +157,36 @@ def apply_pack_asset_headers(resp: web.StreamResponse) -> None:
     _no_store(resp)
 
 
-def _sandbox_csp(_request: web.Request) -> str:
+def _sandbox_token_asset_src(request: web.Request, token: str) -> str:
+    """CSP source for pack files: request origin + ``/pack-assets/<token>/`` (LAN-safe)."""
+    host = (request.host or "").strip()
+    if not host:
+        host = "127.0.0.1"
+    scheme = request.scheme or "http"
+    safe_tok = quote(token, safe="")
+    return f"{scheme}://{host}/pack-assets/{safe_tok}/"
+
+
+def sandbox_csp_for_token(request: web.Request, token: str) -> str:
+    src = _sandbox_token_asset_src(request, token)
     return (
         f"default-src 'none'; "
-        f"script-src 'self' blob:; "
-        f"connect-src 'none'; "
-        f"img-src data:; style-src 'none'; "
-        f"base-uri 'none'; "
+        f"script-src {src}; "
+        f"img-src {src}; "
+        f"style-src {src}; "
+        f"font-src {src}; "
+        f"object-src 'none'; "
+        f"frame-src 'none'; "
+        f"worker-src 'none'; "
         f"form-action 'none'; "
+        f"base-uri 'none'; "
+        f"connect-src 'none'; "
         f"frame-ancestors 'self'"
     )
 
 
-def _attach_sandbox_frame_policy(resp: web.Response, request: web.Request) -> None:
-    csp = _sandbox_csp(request)
+def _attach_sandbox_frame_policy(resp: web.Response, request: web.Request, token: str) -> None:
+    csp = sandbox_csp_for_token(request, token)
     resp.headers["Content-Security-Policy"] = csp
     resp.headers["X-Frame-Options"] = "SAMEORIGIN"
 
@@ -226,7 +242,7 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
         body = asset.read_bytes()
         resp = web.Response(body=body, headers={"Content-Type": _content_type(asset)})
         apply_pack_asset_headers(resp)
-        _attach_sandbox_frame_policy(resp, request)
+        _attach_sandbox_frame_policy(resp, request, _token)
         return resp
 
     row = plugins._plugin_row(pack_id)
@@ -276,7 +292,7 @@ async def _sandbox_html(request: web.Request, token: str) -> web.Response:
     body = _rewrite_sandbox_html(path.read_text(encoding="utf-8"), token)
     resp = web.Response(text=body, content_type="text/html", charset="utf-8")
     apply_pack_asset_headers(resp)
-    _attach_sandbox_frame_policy(resp, request)
+    _attach_sandbox_frame_policy(resp, request, token)
     return resp
 
 
