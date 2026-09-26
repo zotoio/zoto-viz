@@ -161,6 +161,29 @@ def _plugin_sha(path: Path, given: str | None) -> str:
         return ""
 
 
+def _catalog_pack_sha256(home: Path, yml: Path) -> str:
+    """Catalog digest: plugin.yml bytes plus every file under ``assets/`` (sorted paths)."""
+    h = hashlib.sha256()
+    try:
+        h.update(yml.read_bytes())
+    except OSError:
+        return ""
+    assets = home / _ASSET_DIR
+    if assets.is_dir() and not assets.is_symlink():
+        for fp in sorted(assets.rglob("*")):
+            if not fp.is_file() or fp.is_symlink():
+                continue
+            rel = fp.relative_to(home).as_posix()
+            if any(part.startswith(".") for part in fp.relative_to(assets).parts):
+                continue
+            h.update(rel.encode())
+            try:
+                h.update(fp.read_bytes())
+            except OSError:
+                continue
+    return h.hexdigest()
+
+
 def _cache_key(sha256: str, entry: Path) -> str:
     mtime = entry.stat().st_mtime_ns if entry.is_file() else 0
     return f"{sha256}:{mtime}"
@@ -542,18 +565,19 @@ def _plugin_assets_root(row: dict[str, Any]) -> Path | None:
     home = _plugin_pack_home(row)
     if not home:
         return None
-    assets = (home / _ASSET_DIR).resolve()
+    assets = home / _ASSET_DIR
+    if assets.is_symlink():
+        return None
+    assets = assets.resolve()
     if not assets.is_dir():
         return None
+    try:
+        if not assets.is_relative_to(home.resolve()):
+            return None
+    except AttributeError:
+        if not str(assets).startswith(str(home.resolve())):
+            return None
     return assets
-
-
-def _file_asset_etag(path: Path) -> str:
-    import hashlib
-
-    st = path.stat()
-    digest = hashlib.sha256(f"{st.st_size}:{st.st_mtime_ns}".encode()).hexdigest()[:32]
-    return f'"{digest}"'
 
 
 def api_asset(req: web.Request) -> web.StreamResponse:
@@ -566,6 +590,9 @@ def api_asset(req: web.Request) -> web.StreamResponse:
     if not _plugin_enabled_for_serve(row):
         err = str(row.get("sky_error") or psky.AWAITING_REVIEW)
         return web.json_response({"error": err}, status=403)
+    home = _plugin_pack_home(row)
+    if home and (home / _ASSET_DIR).is_symlink():
+        return web.json_response({"error": "invalid assets"}, status=400)
     root = _plugin_assets_root(row)
     if not root:
         return web.json_response({"error": "no assets"}, status=404)
@@ -597,7 +624,6 @@ def api_asset(req: web.Request) -> web.StreamResponse:
     ctype = _asset_content_type(target.suffix)
     resp = web.FileResponse(path=target, headers={"Content-Type": ctype})
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["ETag"] = _file_asset_etag(target)
     if want and pack_digest and want == pack_digest:
         resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
     else:
@@ -1084,7 +1110,7 @@ def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
         more: dict[str, Any] = {"file": rel, "parts": list(parts)}
         if origin:
             more["origin"] = origin
-            more["sha256"] = _plugin_sha(path, None)
+            more["sha256"] = _catalog_pack_sha256(home, path)
         plugins.append(_catalog_row(doc, extra, home, errors, rel, **more))
     return _scan_payload(root, plugins, errors)
 

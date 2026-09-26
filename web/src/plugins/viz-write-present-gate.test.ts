@@ -23,13 +23,19 @@ describe("viz.write without presentTick", () => {
     const binding = {
       sandbox,
       contract: defaultVizContract({ presentTick: false }),
-      tileId: "plugin:demo-pack",
+      tileId: "demo-pack",
       pluginClock: () => 1,
+      stageAspect: () => 16 / 9,
     };
+    const iframe = document.querySelector("iframe")!;
+    const postSpy = vi.spyOn(iframe.contentWindow!, "postMessage");
     deliverPluginPresentTick(binding, 16.7);
     deliverPluginPresentTick(binding, 33.4);
     expect(deliverSpy).not.toHaveBeenCalled();
     expect(hostWrites).toEqual([]);
+    const presents = postSpy.mock.calls.filter((c) => (c[0] as { type?: string }).type === "present");
+    expect(presents).toHaveLength(0);
+    postSpy.mockRestore();
     deliverSpy.mockRestore();
     sandbox.unload();
   });

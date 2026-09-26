@@ -40,28 +40,11 @@ describe("hash consent and TypeScript allow", () => {
 });
 
 describe("PluginSandbox", () => {
-  it("sends contractVersion on sandbox init", async () => {
-    const posted: { type?: string; contractVersion?: number }[] = [];
-    const create = document.createElement.bind(document);
-    const createSpy = vi.spyOn(document, "createElement").mockImplementation((tagName, options) => {
-      const el = create(tagName, options);
-      if (String(tagName).toLowerCase() === "iframe") {
-        Object.defineProperty(el, "contentWindow", {
-          configurable: true,
-          get: () => ({
-            postMessage: (msg: unknown) => {
-              posted.push(msg as { type?: string; contractVersion?: number });
-            },
-          }),
-        });
-      }
-      return el;
-    });
+  it("bakes contractVersion into sandbox srcdoc before init", async () => {
     const box = new PluginSandbox();
     await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
-    createSpy.mockRestore();
-    const init = posted.find((m) => m.type === "init");
-    expect(init?.contractVersion).toBe(VIZ_CONTRACT_VERSION);
+    const iframe = document.querySelector("iframe");
+    expect(iframe?.srcdoc).toContain(`__zotoContractVersion = ${VIZ_CONTRACT_VERSION}`);
     box.unload();
   });
 

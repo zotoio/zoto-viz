@@ -26,7 +26,7 @@ window.addEventListener("message", (ev) => {
   if (d.type === "init") {
     window.__zotoConfig = d.config || {};
     window.__zotoViz = d.viz || null;
-    window.__zotoContractVersion = d.contractVersion || 0;
+    if (typeof d.contractVersion === "number") window.__zotoContractVersion = d.contractVersion;
   }
   if (d.type === "config") { window.__zotoConfig = d.config || {}; window.zoto.onConfig && window.zoto.onConfig(d.config); }
   if (d.type === "tick" && allowed.has("graph.read") && window.zoto.onTick) window.zoto.onTick(d.nodes);

@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from service import plugins
 
 
@@ -53,7 +55,6 @@ def test_asset_private_no_cache_without_matching_digest(tmp_path: Path, monkeypa
     resp = plugins.api_asset(_req("demo-pack", "tone.mp3"))
     assert resp.status == 200
     assert resp.headers.get("Cache-Control") == "private, no-cache"
-    assert resp.headers.get("ETag")
 
 
 def test_asset_get_does_not_autoconsent(tmp_path: Path, monkeypatch) -> None:
@@ -192,11 +193,38 @@ def test_symlink_escape_rejected(tmp_path: Path, monkeypatch) -> None:
     try:
         link.symlink_to(outside)
     except OSError:
-        return
+        pytest.skip("symlinks not supported")
     row = {"id": "demo-pack", "file": str(home / "plugin.yml"), "origin": "src"}
     monkeypatch.setattr(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None)
     resp = plugins.api_asset(_req("demo-pack", "evil.mp3"))
-    assert resp.status in (400, 404)
+    assert resp.status == 400
+
+
+def test_symlinked_assets_directory_rejected(tmp_path: Path, monkeypatch) -> None:
+    home = _pack_home(tmp_path)
+    for f in (home / "assets").iterdir():
+        f.unlink()
+    (home / "assets").rmdir()
+    outside = tmp_path / "outside_assets"
+    outside.mkdir()
+    (outside / "tone.mp3").write_bytes(b"x")
+    try:
+        (home / "assets").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks not supported")
+    row = {"id": "demo-pack", "file": str(home / "plugin.yml"), "origin": "src"}
+    monkeypatch.setattr(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None)
+    resp = plugins.api_asset(_req("demo-pack", "tone.mp3"))
+    assert resp.status == 400
+
+
+def test_catalog_digest_includes_asset_bytes(tmp_path: Path) -> None:
+    home = _pack_home(tmp_path)
+    yml = home / "plugin.yml"
+    before = plugins._catalog_pack_sha256(home, yml)
+    (home / "assets" / "extra.mp3").write_bytes(b"new-bytes")
+    after = plugins._catalog_pack_sha256(home, yml)
+    assert before != after
 
 
 def test_present_tick_requires_viz_write() -> None:

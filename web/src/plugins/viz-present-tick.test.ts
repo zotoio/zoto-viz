@@ -12,7 +12,13 @@ describe("deliverPluginPresentTick", () => {
     const sandbox = new PluginSandbox();
     const spy = vi.spyOn(sandbox, "deliverPresentTick");
     deliverPluginPresentTick(
-      { sandbox, contract: defaultVizContract(), tileId: "x", pluginClock: () => 0 },
+      {
+        sandbox,
+        contract: defaultVizContract(),
+        tileId: "x",
+        pluginClock: () => 0,
+        stageAspect: () => 1,
+      },
       16,
     );
     expect(spy).not.toHaveBeenCalled();
@@ -33,8 +39,9 @@ describe("deliverPluginPresentTick", () => {
     const binding = {
       sandbox,
       contract: defaultVizContract({ presentTick: true }),
-      tileId: "plugin:demo",
+      tileId: "demo",
       pluginClock: () => 3.5,
+      stageAspect: () => 1.6,
     };
     deliverPluginPresentTick(binding, 10);
     deliverPluginPresentTick(binding, 10);

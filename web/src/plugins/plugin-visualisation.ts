@@ -327,7 +327,6 @@ export function toPluginView(raw: unknown): PluginView {
   const typesafeContract = parseTypeSafeContract(row.typesafe);
   if (typesafeContract) spec.typesafe = typesafeContract;
   if (asString(row.hash)) spec.hash = asString(row.hash);
-  else if (asString(row.sha256)) spec.hash = asString(row.sha256);
   if (asString(row.service)) spec.service = asString(row.service);
   if (row.consent === "reviewed" || row.consent === "authored" || row.consent === null) spec.consent = row.consent;
   if (row.origin === "src" || row.origin === "zip" || row.origin === "local") spec.origin = row.origin;

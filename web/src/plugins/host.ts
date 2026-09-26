@@ -30,7 +30,7 @@ export type ParentMsg =
     caps: string[];
     config: Record<string, string>;
     viz?: VizPluginContract;
-    contractVersion: number;
+    contractVersion?: number;
   }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
@@ -112,22 +112,31 @@ export class PluginSandbox {
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     const plugin = js.replace(/<\/script/gi, "<\\/script");
     iframe.srcdoc = `<!doctype html><meta charset="utf-8">
-<script>window.__zotoConfig = ${JSON.stringify(config)};</script>
+<script>window.__zotoConfig = ${JSON.stringify(config)};window.__zotoContractVersion = ${VIZ_CONTRACT_VERSION};</script>
 <script data-caps='${JSON.stringify(this.caps)}'>${PLUGIN_SDK}</script>
 <script type="module">const zoto = globalThis.zoto; ${plugin}</script>`;
     document.body.appendChild(iframe);
     this.iframe = iframe;
-    this.iframe.contentWindow?.postMessage(
-      {
-        source: "zoto-viz-host",
-        type: "init",
-        caps: this.caps,
-        config,
-        viz,
-        contractVersion: VIZ_CONTRACT_VERSION,
-      } satisfies ParentMsg,
-      "*",
-    );
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        this.iframe?.contentWindow?.postMessage(
+          {
+            source: "zoto-viz-host",
+            type: "init",
+            caps: this.caps,
+            config,
+            viz,
+          } satisfies ParentMsg,
+          "*",
+        );
+        resolve();
+      };
+      iframe.onload = () => finish();
+      if (iframe.contentDocument?.readyState === "complete") finish();
+    });
   }
 
   async loadModule(
@@ -163,7 +172,7 @@ export class PluginSandbox {
    * One {@link VizPresentTick} per sandbox per display frame (mosaic tiles share a sandbox).
    * Reuses {@link presentTickPayload}; stops after {@link unload}.
    */
-  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number): void {
+  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number, aspect?: number): void {
     if (!this.caps.includes("viz.write") || !this.vizContract?.presentTick || !this.iframe) return;
     if (frameMs === this.lastPresentFrameMs) return;
     this.lastPresentFrameMs = frameMs;
@@ -172,6 +181,8 @@ export class PluginSandbox {
     tick.tileId = tileId;
     if (pluginClock != null && Number.isFinite(pluginClock)) tick.pluginClock = pluginClock;
     else delete tick.pluginClock;
+    if (aspect != null && Number.isFinite(aspect) && aspect > 0) tick.aspect = aspect;
+    else delete tick.aspect;
     this.iframe.contentWindow?.postMessage(
       { source: "zoto-viz-host", type: "present", tick } satisfies ParentMsg,
       "*",

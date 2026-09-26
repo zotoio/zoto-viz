@@ -16,7 +16,12 @@ import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
-import { deliverPluginPresentTick, type PresentDriveBinding } from "../plugins/viz-present-tick";
+import {
+  deliverPluginPresentTick,
+  presentDriveBindingForPlugin,
+  type PresentDriveBinding,
+} from "../plugins/viz-present-tick";
+import { shouldPushSandboxPluginConfig } from "../plugins/viz-sandbox-config";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -343,12 +348,19 @@ const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
 let activePluginSpec: PluginView | null = null;
 let presentDrive: PresentDriveBinding | null = null;
 
-function refreshPluginDriveState(spec: PluginView | null, modeId: string): void {
+function stagePresentAspect(): number {
+  const a = scene.camera.aspect;
+  return Number.isFinite(a) && a > 0 ? a : 16 / 9;
+}
+
+function refreshPluginDriveState(spec: PluginView | null, _modeId: string): void {
   activePluginSpec = spec;
-  const tileId = mosaic?.on ? (mosaic.focusedId || modeId) : modeId;
-  presentDrive = spec
-    ? { sandbox, contract: spec.viz, tileId, pluginClock: () => scene.skyTime() }
-    : null;
+  presentDrive = presentDriveBindingForPlugin(
+    sandbox,
+    spec,
+    () => scene.skyTime(),
+    stagePresentAspect,
+  );
 }
 
 addPresentListener((ts) => {
@@ -471,7 +483,8 @@ function onPluginFields(): void {
   const m = modeById(modeSel.value);
   const opts = optsFor(m);
   currentOpts = opts;
-  if (m.pluginId && pluginHasFrontend(pluginSpecForMode(m.id))) {
+  if (pluginHasFrontend(pluginSpecForMode(m.id))
+    && shouldPushSandboxPluginConfig(m.pluginId, tsWatchId)) {
     sandbox.pushConfig(opts);
   }
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
@@ -755,6 +768,8 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   liveMode = m.id;
 
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
+  const prevPresentSpec = activePluginSpec;
+  const prevPresentMode = liveMode;
   refreshPluginDriveState(spec, m.id);
   const paneSpec = skySpecForMode(m.id, spec);
   const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
@@ -771,6 +786,10 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
       modeSel.value = prevMode || modeSel.value;
       liveMode = prevMode;
       localStorage.setItem("zoto-viz.mode", modeSel.value);
+      refreshPluginDriveState(
+        prevPresentMode ? pluginSpecForMode(prevPresentMode) ?? prevPresentSpec : prevPresentSpec,
+        prevPresentMode || modeSel.value,
+      );
       return;
     }
     if (m.standalone || arcadeSlotFor(m) !== "carousel") {
