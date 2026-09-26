@@ -20,6 +20,9 @@ describe("mosaic panel view switch teardown", () => {
     const violations: Event[] = [];
     const onViolation = (e: Event) => violations.push(e);
     document.addEventListener("securitypolicyviolation", onViolation);
+    const contextLost: Event[] = [];
+    const onContextLost = (e: Event) => contextLost.push(e);
+    document.addEventListener("webglcontextlost", onContextLost);
     const wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { value: 800, configurable: true });
     Object.defineProperty(wall, "clientHeight", { value: 600, configurable: true });
@@ -60,7 +63,9 @@ describe("mosaic panel view switch teardown", () => {
       [active, other] = [other, active];
     }
     document.removeEventListener("securitypolicyviolation", onViolation);
+    document.removeEventListener("webglcontextlost", onContextLost);
     expect(violations).toHaveLength(0);
+    expect(contextLost).toHaveLength(0);
     host.dispose();
     main.dispose();
     wall.remove();

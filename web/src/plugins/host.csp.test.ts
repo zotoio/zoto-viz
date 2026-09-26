@@ -1,5 +1,27 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { PluginSandbox, pluginSandboxFrameUrl } from "./host";
+
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
+describe("page CSP bootstrap policy", () => {
+  it("does not rely on hand-maintained script-src hashes for the app shell", () => {
+    const index = readFileSync(path.join(webRoot, "index.html"), "utf8");
+    const csp = index.match(/Content-Security-Policy" content="([^"]+)"/)?.[1] ?? "";
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).not.toMatch(/'sha256-/);
+    expect(csp).not.toMatch(/'nonce-/);
+  });
+
+  it("loads plugin sandbox from same-origin html + module (no srcdoc)", () => {
+    const sandbox = readFileSync(path.join(webRoot, "plugin-sandbox.html"), "utf8");
+    expect(sandbox).not.toMatch(/\bsrcdoc\b/i);
+    expect(sandbox).toMatch(/<script[^>]+src="/);
+    expect(sandbox).not.toMatch(/<script[^>]*>[^<]+/);
+  });
+});
 
 describe("PluginSandbox", () => {
   afterEach(() => {

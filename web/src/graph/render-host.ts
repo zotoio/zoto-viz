@@ -19,7 +19,7 @@
 import * as THREE from "three";
 import type { SoftRect } from "./software-draw";
 import { cssHex } from "./software-draw";
-import { probeWebGL } from "./webgl";
+import { probeWebGL, releaseThrowawayGl } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
 
@@ -219,6 +219,9 @@ export class RenderHost {
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.views = [];
+    if (!this.software) {
+      releaseThrowawayGl(this.renderer.getContext() as WebGL2RenderingContext | null);
+    }
     this.renderer.forceContextLoss();
     this.renderer.dispose();
     this.canvas.remove();
