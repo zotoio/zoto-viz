@@ -43,20 +43,12 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
   fungi: "/skies/fungi.jpg",
 };
 
-/** Ken Burns still cycle (seconds). Ping-pong ease; matches at t=0 and t=period. */
-export const PHOTO_KEN_BURNS_CYCLE_S = 75;
-/** Alias used by photo-sky helpers and tests. */
-export const PHOTO_LOOP_S = PHOTO_KEN_BURNS_CYCLE_S;
-/** Minimum zoom on photographic stills (cover-fit). */
-export const PHOTO_STILL_ZOOM_MIN = 1;
-/** Maximum zoom on photographic stills. */
-export const PHOTO_STILL_ZOOM_MAX = 1.06;
-/** Max UV pan (fraction of the image) at full Ken Burns aim. */
-export const PHOTO_STILL_PAN_MAX = 0.028;
-/** Target crossfade from the last video frames onto t=0 (capped for short clips). */
-export const PHOTO_LOOP_FADE_S = 3;
-/** Crossfade between photo sky plates when switching backdrop kind. */
-export const PHOTO_SKY_CROSSFADE_S = PHOTO_LOOP_FADE_S;
+/** Target length of a photo-sky video loop (seconds). Stills Ken-Burns on this period until a clip lands. */
+export const PHOTO_LOOP_S = 5;
+/** Crossfade from the last frames onto a second decoder at t=0 so the wrap has no hitch. */
+export const PHOTO_LOOP_FADE_S = 0.35;
+/** Crossfade between still photo plates when switching sky (seconds on the sky clock). */
+export const PHOTO_SKY_CROSSFADE_S = 3;
 
 /** 0..1 linear phase of a timed loop. */
 export function photoLoopPhase(t: number, period = PHOTO_LOOP_S): number {
@@ -64,19 +56,19 @@ export function photoLoopPhase(t: number, period = PHOTO_LOOP_S): number {
   return (((t % p) + p) % p) / p;
 }
 
-/** 0..1..0 ping-pong with smooth ease-in-out; zero velocity at wrap. */
-export function photoKenBurnsEase(t: number, period = PHOTO_KEN_BURNS_CYCLE_S): number {
-  const p = period > 0 ? period : PHOTO_KEN_BURNS_CYCLE_S;
-  const u = photoLoopPhase(t, p);
-  const tri = u < 0.5 ? u * 2 : (1 - u) * 2;
-  return tri * tri * (3 - 2 * tri);
-}
-
 /**
  * Mix of the incoming pass (start) over the outgoing pass (end).
  * 0 until the fade window; 1 at the last instant before wrap. At t === duration the phase is 0 again.
  */
-/** Seam fade for a looping video plate; never requires duration > 2× target (short clips use a shorter fade). */
+export function photoLoopMix(t: number, duration: number, fade = PHOTO_LOOP_FADE_S): number {
+  if (!(duration > 0) || !(fade > 0) || duration <= fade * 2) return 0;
+  const p = ((t % duration) + duration) % duration;
+  const start = duration - fade;
+  if (p < start) return 0;
+  return (p - start) / fade;
+}
+
+/** Seam fade for a looping video plate; capped for short clips. */
 export function photoVideoSeamFadeSec(duration: number, target = PHOTO_LOOP_FADE_S): number {
   if (!Number.isFinite(duration) || duration <= 0) return 0;
   const fade = Math.min(target, duration / 3);
@@ -84,27 +76,20 @@ export function photoVideoSeamFadeSec(duration: number, target = PHOTO_LOOP_FADE
   return fade;
 }
 
-export function photoLoopMix(t: number, duration: number, fade = PHOTO_LOOP_FADE_S): number {
-  const seam = photoVideoSeamFadeSec(duration, fade);
-  if (seam <= 0) return 0;
-  fade = seam;
-  if (!(duration > 0) || duration <= fade * 2) return 0;
-  const p = ((t % duration) + duration) % duration;
-  const start = duration - fade;
-  if (p < start) return 0;
-  return (p - start) / fade;
-}
-
-/** Cover-fit Ken Burns UV. Closed over `period` (t and t+period match). */
-export function photoStillLoopSample(u: number, v: number, t: number, period = PHOTO_KEN_BURNS_CYCLE_S): {
+/** Cover-fit Ken Burns UV + breath. Closed over `period` (t and t+period match). */
+export function photoStillLoopSample(u: number, v: number, t: number, period = PHOTO_LOOP_S): {
   x: number; y: number; zoom: number; breath: number;
 } {
-  const e = photoKenBurnsEase(t, period);
-  const zoom = PHOTO_STILL_ZOOM_MIN + (PHOTO_STILL_ZOOM_MAX - PHOTO_STILL_ZOOM_MIN) * e;
-  const pan = PHOTO_STILL_PAN_MAX * e;
-  const x0 = (u - 0.5) / zoom + 0.5 + pan * 0.62;
-  const y0 = (v - 0.5) / zoom + 0.5 + pan * 0.38;
-  return { x: x0, y: y0, zoom, breath: 1 };
+  const ang = photoLoopPhase(t, period) * Math.PI * 2;
+  const zoom = 1.08 + 0.035 * Math.sin(ang);
+  const x0 = (u - 0.5) / zoom + 0.5 + Math.cos(ang) * 0.018;
+  const y0 = (v - 0.5) / zoom + 0.5 + Math.sin(ang * 2) * 0.018;
+  return {
+    x: x0 + 0.0035 * Math.sin(ang + y0 * 5.5),
+    y: y0 + 0.0035 * Math.cos(ang + x0 * 4.5),
+    zoom,
+    breath: 0.975 + 0.04 * Math.sin(ang),
+  };
 }
 
 export function isPhotoSky(kind: BackdropKind): kind is PhotoSkyKind {
@@ -604,22 +589,11 @@ uniform float uLumaCap;
 uniform float uTime;
 uniform float uAnimate;
 uniform float uLoopMix;
-uniform float uKenCycle;
-uniform float uKenZoomMin;
-uniform float uKenZoomMax;
-uniform float uKenPanMax;
 uniform vec3 uBg;
 in vec2 vUv;
 out vec4 fragColor;
 
 ${SKY_LUMA_CAP_GLSL}
-
-float kenEase(float t, float cycle) {
-  float c = max(cycle, 1.0);
-  float u = fract(max(t, 0.0) / c);
-  float tri = u < 0.5 ? u * 2.0 : (1.0 - u) * 2.0;
-  return tri * tri * (3.0 - 2.0 * tri);
-}
 
 void main() {
   vec2 canvas = max(uCanvas, vec2(1.0));
@@ -628,14 +602,15 @@ void main() {
   float va = video.x / video.y;
   vec2 scale = ca > va ? vec2(1.0, va / ca) : vec2(ca / va, 1.0);
   float live = step(0.5, uAnimate);
-  float e = live * kenEase(uTime, uKenCycle);
-  float zoom = mix(1.0, mix(uKenZoomMin, uKenZoomMax, e), live);
-  vec2 pan = live * vec2(0.62, 0.38) * uKenPanMax * e;
+  float ang = live * fract(max(uTime, 0.0) / 5.0) * 6.28318530718;
+  float zoom = mix(1.0, 1.08 + 0.035 * sin(ang), live);
+  vec2 pan = live * vec2(cos(ang), sin(ang * 2.0)) * 0.018;
   vec2 uv = (vUv - 0.5) * scale / zoom + 0.5 + pan;
+  uv += live * 0.0035 * vec2(sin(ang + uv.y * 5.5), cos(ang + uv.x * 4.5));
   vec3 cola = texture(uVideo, uv).rgb;
   vec3 colb = texture(uVideoB, uv).rgb;
   vec3 col = mix(cola, colb, clamp(uLoopMix, 0.0, 1.0));
-  col *= uBright * (0.85 + 0.35 * uAudio);
+  col *= uBright * (0.85 + 0.35 * uAudio) * mix(1.0, 0.975 + 0.04 * sin(ang), live);
   vec3 capped = capSkyLumaTo(col, uLumaCap);
   vec3 outc = mix(uBg, capped, uOpacity);
   fragColor = vec4(capSkyLumaTo(outc, uLumaCap), 1.0);
@@ -832,6 +807,7 @@ export class Backdrop {
   private photoOutgoingUrl: string | null = null;
   private photoEvictAt = 0;
   private photoPlateMorphT = 1;
+  private photoKenBurnsDesired = false;
   private photoLoadGen = 0;
   private photoVideoUrl: string | null = null;
   private readonly unsubscribeMotion = subscribeReducedMotion(() => this.applyReducedMotion());
@@ -937,10 +913,6 @@ export class Backdrop {
         uAnimate: { value: 1 },
         uLoopMix: { value: 0 },
         uVideoB: { value: blankTex() },
-        uKenCycle: { value: PHOTO_KEN_BURNS_CYCLE_S },
-        uKenZoomMin: { value: PHOTO_STILL_ZOOM_MIN },
-        uKenZoomMax: { value: PHOTO_STILL_ZOOM_MAX },
-        uKenPanMax: { value: PHOTO_STILL_PAN_MAX },
         uBg: { value: new THREE.Color(0x0b0e14) },
       },
       vertexShader: LIVE_VERT,
@@ -1227,7 +1199,7 @@ export class Backdrop {
       const outVideo = this.photoVideoCache.get(prev)?.slots[0]?.tex;
       const outTex = outStill ?? outVideo ?? null;
       if (outTex) {
-        this.photoMat.uniforms.uVideoB.value = outTex;
+        this.photoMat.uniforms.uVideo.value = outTex;
         this.photoPlateMorphT = 0;
         this.photoMat.uniforms.uLoopMix.value = 0;
       }
@@ -1249,8 +1221,7 @@ export class Backdrop {
 
   private applyReducedMotion(): void {
     const reduce = prefersReducedMotion();
-    const animate = this.photoMat.uniforms.uAnimate.value > 0.5;
-    this.photoMat.uniforms.uAnimate.value = animate && !reduce ? 1 : 0;
+    this.photoMat.uniforms.uAnimate.value = this.photoKenBurnsDesired && !reduce ? 1 : 0;
     if (this.photoVideoUrl) {
       const pack = this.photoVideoCache.get(this.photoVideoUrl);
       if (pack) {
@@ -1267,14 +1238,17 @@ export class Backdrop {
 
   private bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void {
     if (url) this.beginPhotoTransition(url);
-    this.photoMat.uniforms.uVideo.value = t;
-    const motion = animate && !prefersReducedMotion();
-    this.photoMat.uniforms.uAnimate.value = motion ? 1 : 0;
-    if (this.photoPlateMorphT >= 1) this.photoMat.uniforms.uLoopMix.value = 0;
-    if (animate) {
-      this.photoVideoUrl = null;
-      if (this.photoPlateMorphT >= 1) this.photoMat.uniforms.uVideoB.value = t;
+    this.photoKenBurnsDesired = animate;
+    const morphing = this.photoPlateMorphT < 1 && this.photoOutgoingUrl !== null;
+    if (morphing) {
+      this.photoMat.uniforms.uVideoB.value = t;
+    } else {
+      this.photoMat.uniforms.uVideo.value = t;
+      if (this.photoPlateMorphT >= 1) this.photoMat.uniforms.uLoopMix.value = 0;
+      if (animate) this.photoMat.uniforms.uVideoB.value = t;
     }
+    this.photoMat.uniforms.uAnimate.value = animate && !prefersReducedMotion() ? 1 : 0;
+    if (animate) this.photoVideoUrl = null;
     this.syncPhotoCacheSize();
     const img = t.image as {
       naturalWidth?: number;
@@ -1536,7 +1510,8 @@ export class Backdrop {
     const target = this.speed * (1 + this.audio * PULSE_ACCEL);
     const tau = 0.04 + EASE_MAX_S * this.ease * this.ease;
     this.curSpeed += (target - this.curSpeed) * (1 - Math.exp(-dt / tau));
-    this.clock += dt * this.curSpeed;
+    const dClock = dt * this.curSpeed;
+    this.clock += dClock;
     this.mat.uniforms.uTime.value = this.clock;
     this.photoMat.uniforms.uTime.value = this.clock;
     this.syncPluginLook();
@@ -1557,17 +1532,21 @@ export class Backdrop {
     } else if (this.photoVideoUrl) {
       this.tickPhotoVideoLoop();
     }
-    this.tickPhotoPlateMorph(dt);
+    this.tickPhotoPlateMorph(dClock);
     this.tickPhotoCacheEviction();
   }
 
-  private tickPhotoPlateMorph(dt: number): void {
+  dispose(): void {
+    this.unsubscribeMotion();
+  }
+
+  private tickPhotoPlateMorph(dClock: number): void {
     if (this.photoPlateMorphT >= 1) return;
-    this.photoPlateMorphT = Math.min(1, this.photoPlateMorphT + dt / PHOTO_SKY_CROSSFADE_S);
+    this.photoPlateMorphT = Math.min(1, this.photoPlateMorphT + dClock / PHOTO_SKY_CROSSFADE_S);
     this.photoMat.uniforms.uLoopMix.value = mixFade(this.photoPlateMorphT);
     if (this.photoPlateMorphT >= 1) {
       this.photoMat.uniforms.uLoopMix.value = 0;
-      this.photoMat.uniforms.uVideoB.value = this.photoMat.uniforms.uVideo.value;
+      this.photoMat.uniforms.uVideo.value = this.photoMat.uniforms.uVideoB.value;
     }
   }
 }

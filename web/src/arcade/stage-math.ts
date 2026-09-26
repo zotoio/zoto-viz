@@ -53,13 +53,13 @@ export function carouselSpinFor(i: number, n: number, turns = 2.15): number {
 }
 
 /** One still: slow Ken Burns, then a crossfade into the next. */
-export const CAROUSEL_PERIOD = 78;
+export const CAROUSEL_PERIOD = 18;
 /** Seconds the outgoing and incoming stills overlap. */
-export const CAROUSEL_XFADE = 3.2;
+export const CAROUSEL_XFADE = 2.8;
 /** Extra cover scale at the end of a still (1 → 1+zoom). */
-export const CAROUSEL_ZOOM = 0.06;
+export const CAROUSEL_ZOOM = 0.16;
 /** Translate % at full aim (of the image box). */
-export const CAROUSEL_PAN = 3.2;
+export const CAROUSEL_PAN = 5.5;
 
 export type CarouselBeat = {
   phase: "in" | "hold" | "out";

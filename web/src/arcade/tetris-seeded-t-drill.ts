@@ -9,6 +9,8 @@ import {
   lockCells,
   scoreBoard,
   scoreBoardOldWeights,
+  seededPieceKinds,
+  SURVIVAL_PIECES_PER_SEED,
   type Board,
   type Placement,
   TETRIS_COLS,
@@ -105,6 +107,33 @@ export type FirstDivergence = {
   newScoreOldPlan: number;
   newScoreNewPlan: number;
 };
+
+export function findFirstSurvivalGameDivergence(seed: number): FirstDivergence | null {
+  const board = emptyBoard();
+  const kinds = seededPieceKinds(SURVIVAL_PIECES_PER_SEED, seed);
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i]!;
+    const planOld = bestPlacement(board, kind, scoreBoardOldWeights);
+    const planNew = bestPlacement(board, kind, scoreBoard);
+    if (!planOld || !planNew) return null;
+    if (placementKey(planOld) === placementKey(planNew)) {
+      const cells = cellsFor(kind, planOld.rot);
+      lockCells(board, cells, planOld.x, planOld.y);
+      clearFullRows(board);
+      continue;
+    }
+    return {
+      pieceIndex: i,
+      oldPlan: planOld,
+      newPlan: planNew,
+      oldScoreOldPlan: scorePlacement(board, kind, planOld, scoreBoardOldWeights),
+      oldScoreNewPlan: scorePlacement(board, kind, planNew, scoreBoardOldWeights),
+      newScoreOldPlan: scorePlacement(board, kind, planOld, scoreBoard),
+      newScoreNewPlan: scorePlacement(board, kind, planNew, scoreBoard),
+    };
+  }
+  return null;
+}
 
 export function findFirstPlannerDivergence(seed: number): FirstDivergence | null {
   const layout = seededTDrillLayout(seed);

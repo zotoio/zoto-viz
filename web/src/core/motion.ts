@@ -11,6 +11,15 @@ function notifyReducedMotionChange(): void {
 }
 
 /** React when the user toggles prefers-reduced-motion (including video sky playback). */
+/** @internal Reset global listener state between vitest cases. */
+export function resetReducedMotionSubscriptionForTests(): void {
+  if (motionMq) {
+    motionMq.removeEventListener("change", notifyReducedMotionChange);
+    motionMq = null;
+  }
+  motionListeners.clear();
+}
+
 export function subscribeReducedMotion(onChange: () => void): () => void {
   motionListeners.add(onChange);
   if (typeof matchMedia === "function" && !motionMq) {

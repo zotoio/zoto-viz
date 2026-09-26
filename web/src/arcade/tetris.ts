@@ -7,7 +7,13 @@ import { makeTetBlock } from "./models3d";
 import type { Packet } from "../core/types";
 import { bestPlacement, boardFromOccupied, cellsFor, type Placement } from "./tetris-engine";
 import { shouldHoldTopout } from "./tetris-topout";
-import { afterLockStack, beginTopoutHoldState, stepTopoutHold, type TetrisHoldState } from "./tetris-overflow";
+import {
+  afterLockStack,
+  beginTopoutHoldState,
+  stepTopoutHold,
+  TETRIS_STACK_OVERFLOW_CELLS,
+  type TetrisHoldState,
+} from "./tetris-overflow";
 
 const KEY_WHO = "zoto-viz.tetris.who";
 const COLS = 10;
@@ -195,7 +201,7 @@ export class TetrisView extends Stage3D {
     return true;
   }
 
-  private lock(now: number): void {
+  protected lock(now: number): void {
     const p = this.active;
     if (!p) return;
     p.cells.forEach(([cx, cy], i) => {
@@ -268,6 +274,35 @@ export class TetrisView extends Stage3D {
     const floor = new THREE.Mesh(new THREE.BoxGeometry(w + 0.8, 0.3, 1.2), wall);
     floor.position.set(0, -0.15, 0);
     this.well.add(left, right, floor);
+  }
+
+  testOverflowLock(now: number): void {
+    this.stack.length = 0;
+    for (let y = 0; y < 9; y++) {
+      for (let x = 0; x < 9; x++) {
+        this.stack.push({ x, y, g: new THREE.Group(), color: 0xffffff });
+      }
+    }
+    const cells = cellsFor("O", 0);
+    const blocks = cells.map(() => new THREE.Group());
+    this.active = {
+      kind: "O",
+      cells,
+      x: 0,
+      y: ROWS - 2,
+      rot: 0,
+      color: 0xffffff,
+      blocks,
+    };
+    this.lock(now);
+  }
+
+  testStackCount(): number {
+    return this.stack.length;
+  }
+
+  testTopoutHoldUntil(): number {
+    return this.topoutHoldUntil;
   }
 
   protected reset(): void {

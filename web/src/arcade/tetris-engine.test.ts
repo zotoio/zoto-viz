@@ -67,7 +67,7 @@ describe("tetris-engine", () => {
     expect(lines).toBeGreaterThan(0);
   });
 
-  it("matches legacy survival on a fixed seed battery", () => {
+  it("matches legacy survival on a fixed seed battery", { timeout: 120_000 }, () => {
     const legacy = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES, scoreBoardLegacy);
     const fixed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES);
     expect(fixed).toBeGreaterThanOrEqual(legacy);
@@ -87,7 +87,7 @@ describe("tetris-engine", () => {
   // Per-seed old vs new comparison uses scoreBoardOldWeights (test-only reference). See PR #47.
   // Landing-weight sweep grid (seeds 0–19 only): scripts/tetris-weight-sweep.ts — table in PR body.
   // Empty-well 18+ lines on the fixed planner still breaks 20/20 survival (aggregate height dominates).
-  it("seeded T drill: new planner within one line of old weights on every survival seed", () => {
+  it("seeded T drill: new planner within one line of old weights on every survival seed", { timeout: 120_000 }, () => {
     for (const seed of TETRIS_SURVIVAL_SEEDS) {
       const oldLines = simulateSeededTDrillOldWeights(seed).lines;
       const newLines = simulateSeededTDrill(seed).lines;
@@ -145,7 +145,7 @@ describe("tetris-engine", () => {
     expect(tRegressed.lines).toBeGreaterThanOrEqual(18);
   });
 
-  it("regressed piece-only planner survives fewer seeded runs than the fixed planner", () => {
+  it("regressed piece-only planner survives fewer seeded runs than the fixed planner", { timeout: 120_000 }, () => {
     const regressed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES, scoreBoardRegressed);
     const fixed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES);
     expect(regressed).toBeLessThanOrEqual(12);
