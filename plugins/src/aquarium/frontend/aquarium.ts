@@ -694,7 +694,11 @@ export class AquariumSim {
   }
 
   private spawnFeedParticles(kind: number, count: number): void {
+    const cap = PRESET_CAPS[this.opts.preset].maxParticles;
+    let active = 0;
+    for (const q of this.particles) if (q.life > 0) active++;
     for (let n = 0; n < count; n++) {
+      if (active >= cap) break;
       let slot: ParticleBody | null = null;
       for (const q of this.particles) {
         if (q.life <= 0) {
@@ -709,6 +713,7 @@ export class AquariumSim {
       slot.z = 0.1 + (idHash(`fz${n}`) - 0.5) * 0.25;
       slot.kind = kind;
       slot.life = kind >= PARTICLE_KIND_SCHEDULE_FEED ? 4.5 : 3.2;
+      active++;
     }
   }
 

@@ -32,7 +32,6 @@ const buf1 = new Float32Array(64);
 const buf2 = new Float32Array(64);
 
 const actionLatch = { reset: false, randomise: false, undo: false };
-let lastLabel = "";
 
 function canvasSize(): { w: number; h: number } {
   let root: Document | null = typeof document !== "undefined" ? document : null;
@@ -60,24 +59,6 @@ zoto.onConfig = (cfg) => {
   applyLiveConfig(cfg);
 };
 
-function syncHudLabel(text: string, on: boolean): void {
-  if (!on) {
-    lastLabel = "";
-    return;
-  }
-  if (text === lastLabel) return;
-  lastLabel = text;
-  try {
-    const doc = typeof parent !== "undefined" ? parent.document : null;
-    const el = doc?.getElementById?.("viz-hud");
-    if (!el) return;
-    const pack = el.querySelector?.(".viz-hud-pack");
-    const metric = el.querySelector?.(".viz-hud-metric");
-    if (pack) pack.textContent = "Aquarium";
-    if (metric) metric.textContent = text.replace(/^aquarium · /, "");
-  } catch { /* cross-origin */ }
-}
-
 zoto.onFrame = (frame) => {
   const liveCfg = zoto.getConfig?.();
   if (liveCfg) applyLiveConfig(liveCfg);
@@ -100,5 +81,4 @@ zoto.onFrame = (frame) => {
   zoto.writeUniform("uAudio", frame.audio);
   zoto.writeUniform("uAccent", packed.accent);
   zoto.writeUniform("uBg", packed.bg);
-  syncHudLabel(packed.label, options.label);
 };
