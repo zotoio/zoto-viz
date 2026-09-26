@@ -5,7 +5,7 @@ import { rIp, rName } from "../core/redact";
 import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
 import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame, PaneFps } from "../core/fps";
-import { devicePxRatioFromWindow, devicePxRatioNumber } from "../graph/render-host-device-px-ratio";
+import { devicePxRatioNumber, layoutBackingDevicePx, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
 import {
@@ -159,7 +159,7 @@ export abstract class Stage3D {
     const W = this.container.clientWidth, H = this.container.clientHeight;
     if (!W || !H) return;
     this.W = W; this.H = H;
-    const dpr = devicePxRatioNumber(devicePxRatioFromWindow());
+    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
     if (this.renderer) {
       this.renderer.setPixelRatio(dpr);
       this.renderer.setSize(W, H, false);
@@ -168,8 +168,8 @@ export abstract class Stage3D {
       this.canvas.style.width = `${W}px`;
       this.canvas.style.height = `${H}px`;
       if (this.fallback) {
-        this.canvas.width = Math.round(W * dpr);
-        this.canvas.height = Math.round(H * dpr);
+        this.canvas.width = layoutBackingDevicePx(W);
+        this.canvas.height = layoutBackingDevicePx(H);
         this.fallback.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
     }

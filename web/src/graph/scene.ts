@@ -45,8 +45,8 @@ import {
   toGlRectInto,
 } from "./pack-mirror-rect";
 import {
-  devicePxRatioFromWindow,
   devicePxRatioNumber,
+  layoutDevicePxRatio,
 } from "./render-host-device-px-ratio";
 import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
@@ -1286,7 +1286,7 @@ export class NetScene implements HostedView {
       container.classList.add("hosted");
       this.host.add(this);
     } else {
-      const capped = devicePxRatioFromWindow();
+      const capped = layoutDevicePxRatio();
       this.baseDpr = this.satellite
         ? Math.min(1, devicePxRatioNumber(capped))
         : devicePxRatioNumber(capped);
