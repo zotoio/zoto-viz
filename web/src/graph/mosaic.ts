@@ -200,9 +200,6 @@ export class Mosaic {
   private rematchQueued = new Set<string>();
   private skyPending = new Set<string>();
   private recoveredSkies = new Map<string, BackdropKind>();
-  /** HUD captions keyed by tile/view slot id (moves with the pane on swap). */
-  private paneCaptions = new Map<string, string>();
-
   constructor(private cfg: {
     wall: HTMLElement;
     sceneEl: HTMLElement;
@@ -475,42 +472,6 @@ export class Mosaic {
     this.emitLayout();
     resetMosaicPackCoalesceWriters();
     this.syncPackCoalesce();
-    requestAnimationFrame(() => this.repaintAllCaptions());
-  }
-
-  /** Plugin settings HUD caption for this tile (bottom of frame). */
-  setPaneSettingsCaption(id: string, text: string | null | undefined): void {
-    if (text) this.paneCaptions.set(id, text);
-    else this.paneCaptions.delete(id);
-    const pane = this.panes.get(id);
-    if (!pane) return;
-    this.paintPaneSettingsCaption(pane, text);
-  }
-
-  captionForTile(id: string): string | null {
-    return this.paneCaptions.get(id) ?? null;
-  }
-
-  private repaintAllCaptions(): void {
-    for (const id of this.tileIds) {
-      const pane = this.panes.get(id);
-      if (!pane) continue;
-      this.paintPaneSettingsCaption(pane, this.paneCaptions.get(id) ?? null);
-    }
-  }
-
-  private paintPaneSettingsCaption(pane: HTMLElement, text: string | null | undefined): void {
-    const existing = pane.querySelector(".mosaic-pane-settings-caption");
-    if (!text) {
-      existing?.remove();
-      return;
-    }
-    const el = existing instanceof HTMLElement ? existing : document.createElement("div");
-    if (!existing) {
-      el.className = "mosaic-pane-settings-caption";
-      pane.appendChild(el);
-    }
-    el.textContent = text;
   }
 
   /** Change one pane to a catalog view id (swap or allocate a duplicate tile slot). */

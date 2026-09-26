@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { fillPluginFields } from "../plugins/plugin-ui";
 import { packScopeNoteText } from "../plugins/instances";
-import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
 import { hostModeById } from "./host-mode";
 import { setPluginModes } from "../core/modes";
 import { compilePlugin } from "../plugins/plugin";
+import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
+
+const PACK = "plugin:settings-fixture";
 
 describe("duplicate slot shared config > scope note when two tiles share one store", () => {
   it("shows Changes apply to all 2 when the pack is on two mosaic slots", () => {
@@ -33,7 +35,7 @@ describe("duplicate slot shared config > scope note when two tiles share one sto
 });
 
 describe("duplicate slot shared config > live edit applies to every sharing tile on the next frame", () => {
-  it("calls setMode on both duplicate tiles via main onPluginFields mosaic sync on the next frame", async () => {
+  it("calls setMode on both duplicate tiles via main onPluginFields mosaic sync on the next frame", () => {
     const spec = loadSettingsDeclFixture();
     setPluginModes([
       compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
@@ -46,9 +48,19 @@ describe("duplicate slot shared config > live edit applies to every sharing tile
       graphScene: (id: string) => (id === "plugin:settings-fixture" ? sceneA : sceneB),
     };
     const opts = { gain: "9", preset: "a", mode: "x", locked: "0.5" };
-    // Same helper main.ts `onPluginFields` calls after a settings edit.
-    applySharedMosaicPluginConfig(mosaic, spec, opts, () => opts, hostModeById);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    const settingsFocus = `${PACK}!1`;
+    syncPluginFieldsFromSettingsEdit({
+      settingsTargetModeId: () => settingsFocus,
+      hostModeById,
+      optsFor: () => opts,
+      mosaic,
+      scene: { setMode: vi.fn() },
+      pluginSpecForMode: (modeId) => (hostModeById(modeId).pluginId === "settings-fixture" ? spec : null),
+      setCurrentOpts: () => {},
+      setSkyPrompt: () => {},
+      setNestLook: () => {},
+      viewPromptKey: "prompt",
+    });
     expect(sceneA.setMode).toHaveBeenCalled();
     expect(sceneB.setMode).toHaveBeenCalled();
     expect(sceneA.setMode.mock.calls[0]![0].id).toBe("plugin:settings-fixture");

@@ -106,8 +106,9 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { mosaicTileViewId, mosaicWallUsesView, parseMosaicSlotId } from "../graph/mosaic-tile-id";
 import { hostModeById } from "./host-mode";
-import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
+import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
+import { syncSettingsAnimToMosaic } from "./settings-mosaic-anim-sync";
 import {
   deliverCoalescedMosaicPacks,
 } from "../graph/mosaic-pack-coalesce";
@@ -497,20 +498,24 @@ function settingsTargetModeId(): string {
 }
 
 function onPluginFields(): void {
-  const modeId = settingsTargetModeId();
-  const m = hostModeById(modeId);
-  const opts = optsFor(m);
-  currentOpts = opts;
-  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
-  nestCams.setLook(opts);
-  if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
-  const spec = m.pluginId ? pluginSpecForMode(modeId) : null;
-  if (mosaic?.on && !(m.pluginId && m.standalone)) {
-    mosaic.graphScene(m.id)?.setMode(m, opts);
-    if (spec) applySharedMosaicPluginConfig(mosaic, spec, opts, optsFor, hostModeById);
-  } else scene.setMode(m, opts);
-  renderLegend(m, opts);
-  void syncWifiWatch();
+  syncPluginFieldsFromSettingsEdit({
+    settingsTargetModeId,
+    hostModeById,
+    optsFor,
+    mosaic,
+    scene,
+    pluginSpecForMode,
+    setCurrentOpts: (o) => { currentOpts = o; },
+    setSkyPrompt: (id, p) => setSkyPrompt(id, p),
+    setNestLook: (o) => nestCams.setLook(o),
+    isCarouselMode: (m) => m.pluginId === "carousel",
+    onCarouselBind: (o) => (arcade.carousel.view as CarouselView).setBind(o),
+    viewPromptKey: VIEW_PROMPT_KEY,
+    afterSync: (m, o) => {
+      renderLegend(m, o);
+      void syncWifiWatch();
+    },
+  });
 }
 
 /**
@@ -1227,28 +1232,26 @@ settings.onMosaicPanePick = (from, to) => {
   return true;
 };
 settings.addAnimation((a) => {
-  const pin = pinViewLook();
-  if (mosaic!.on) {
-    mosaic!.applyLooks(a, pin);
-    mosaic!.setTheme(scene.currentTheme);
-  } else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
-  const key = `${a.mosaic}:${a.hero}:${(a.mosaicTiles?.length ? a.mosaicTiles : []).join(",")}:${a.mosaicMaxId ?? ""}`;
-  if (key !== mosaic!.layoutKey) {
-    if (a.mosaic !== "off" && activeArcade) {
-      arcade[activeArcade].view.stop();
-      arcade[activeArcade].el.hidden = true;
-      document.body.classList.remove("arcade");
-      scene.setStageOnly(false);
-      activeArcade = null;
-    }
-    mosaic!.setSize(a.mosaic, modeSel.value, a.hero, {
-      tree: a.mosaicTree,
-      maximized: a.mosaicMaxId || null,
-      tiles: a.mosaicTiles,
-    });
-    applyMode(modeSel.value, { keepLayout: true });
-    syncFeedShift();
-  }
+  syncSettingsAnimToMosaic({
+    mosaic: mosaic!,
+    scene,
+    modeId: modeSel.value,
+    pinViewLook: pinViewLook(),
+    soloAnim: (anim) => scene.setAnim(mergeLook(anim, pinViewLook() ? lookForMode(modeSel.value) : undefined)),
+    applyMode: (id, opts) => {
+      applyMode(id, opts);
+      syncFeedShift();
+    },
+    onArcadeStop: () => {
+      if (a.mosaic !== "off" && activeArcade) {
+        arcade[activeArcade].view.stop();
+        arcade[activeArcade].el.hidden = true;
+        document.body.classList.remove("arcade");
+        scene.setStageOnly(false);
+        activeArcade = null;
+      }
+    },
+  }, a);
 }, dreamCog);
 themeFollow = (t) => settings.syncTheme(t);
 settings.syncTheme(paintedTheme(theme));

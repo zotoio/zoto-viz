@@ -124,6 +124,10 @@ export function fillPluginFields(
   }
 }
 
+function viewLayerForScopeNote(root: HTMLElement): HTMLElement {
+  return root.querySelector<HTMLElement>(".plugin-layer.view") ?? root;
+}
+
 /** Modal: the operator wrote this plugin, or they examined the source (AI IDE suggested). */
 function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWallScope): void {
   const text = packScopeNoteText(spec, wall);
@@ -132,7 +136,10 @@ function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWall
   note.className = "sec-hint plugin-pack-scope-note";
   note.textContent = text;
   recordPackScopeNoteTextWrite();
-  host.append(note);
+  const layer = viewLayerForScopeNote(host);
+  const anchor = layer.querySelector(".sec");
+  if (anchor?.nextSibling) layer.insertBefore(note, anchor.nextSibling);
+  else layer.append(note);
 }
 
 /** Keep pack scope copy in sync with the live mosaic tile list (drawer may stay open). */
@@ -153,7 +160,7 @@ export function syncPackScopeNote(root: HTMLElement, spec: PluginView, wall?: Pa
     }
     return;
   }
-  mountPackScopeNote(root, spec, wall);
+  mountPackScopeNote(viewLayerForScopeNote(root), spec, wall);
 }
 
 export function askPluginReview(spec: PluginView): Promise<"reviewed" | "authored" | null> {

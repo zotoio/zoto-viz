@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_DREAM } from "../graph/scene";
+import { setPluginModes } from "../core/modes";
+import { compilePlugin } from "../plugins/plugin";
 import { countTilesSharingConfigStore } from "../plugins/instances";
 import {
   readPackScopeNoteMetrics,
@@ -8,7 +9,7 @@ import {
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import { Settings } from "../ui/settings";
-import { applyWallLayoutPatch } from "./mosaic-wall-layout";
+import { applyMosaicTiles, mountDuplicateSlotMosaicHarness } from "./duplicate-slot-mosaic-fixture";
 
 const PACK = "plugin:settings-fixture";
 
@@ -25,49 +26,70 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     return m ? Number(m[1]) : null;
   }
 
+  function viewSection(s: Settings): HTMLElement {
+    const el = s.el.querySelector<HTMLElement>(".plugin-layer.view");
+    expect(el).toBeTruthy();
+    return el!;
+  }
+
+  function gainSlider(s: Settings): HTMLInputElement {
+    const el = s.el.querySelector<HTMLInputElement>(".plugin-layer.view .slider input[type=range]");
+    expect(el).toBeTruthy();
+    return el!;
+  }
+
   it("same drawer node, unsaved field, n=2 then 3 then removed at 1, exactly 3 note writes", async () => {
     resetPackScopeNoteMetrics();
-    const settings = new Settings({ storePrefix: "zoto-scope-note-live", onChange: () => {} });
-    settings.addAnimation(() => {}, { el: document.createElement("div") });
-    document.body.append(settings.el);
-
     const spec = loadSettingsDeclFixture();
+    setPluginModes([
+      compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
+      compilePlugin({ id: "topology", name: "Topology", version: 1, engine: "graph", base: "topology" }),
+      compilePlugin({ id: "memory", name: "Memory", version: 1, engine: "graph", base: "memory" }),
+      compilePlugin({ id: "disk", name: "Disk", version: 1, engine: "graph", base: "disk" }),
+    ]);
+
+    const settings = new Settings({ storePrefix: "zoto-scope-note-live", onChange: () => {} });
+    document.body.append(settings.el);
+    const { mosaic } = mountDuplicateSlotMosaicHarness(settings);
+
     const twoTiles = [PACK, `${PACK}!1`, "plugin:topology", "plugin:memory"];
-    settings.applyAnim({ ...DEFAULT_DREAM, mosaic: "4", mosaicTiles: twoTiles });
-    applyWallLayoutPatch(settings, { tree: null, maximized: null, tiles: twoTiles });
+    applyMosaicTiles(settings, mosaic, twoTiles);
 
     settings.bindView(spec, spec.config);
-    settings.openView(PACK);
+    settings.openView(`${PACK}!1`);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
-    const drawer = settings.el;
-    const gain = settings.el.querySelector<HTMLInputElement>(".slider input[type=range]");
-    expect(gain).toBeTruthy();
-    gain!.value = "7";
-    gain!.dispatchEvent(new Event("input", { bubbles: true }));
+    const viewLayer = viewSection(settings);
+    let gain = gainSlider(settings);
+    gain.value = "7";
+    gain.dispatchEvent(new Event("input", { bubbles: true }));
 
+    expect(viewLayer.isConnected).toBe(true);
     expect(scopeNotes(settings)).toHaveLength(1);
     expect(scopeNoteCount(settings)).toBe(2);
     expect(settings.isOpen).toBe(true);
     expect(settings.el.textContent).not.toMatch(/all 1 /);
 
     const threeTiles = [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"];
-    applyWallLayoutPatch(settings, { tree: null, maximized: null, tiles: threeTiles });
+    applyMosaicTiles(settings, mosaic, threeTiles);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(settings.el).toBe(drawer);
-    expect(gain!.value).toBe("7");
+    expect(viewSection(settings)).toBe(viewLayer);
+    expect(viewLayer.isConnected).toBe(true);
+    gain = gainSlider(settings);
+    expect(gain.value).toBe("7");
     expect(scopeNotes(settings)).toHaveLength(1);
     expect(scopeNoteCount(settings)).toBe(3);
     expect(scopeNotes(settings)[0]?.textContent).toBe(
       `Changes apply to all 3 ${spec.name} tiles on this wall`,
     );
-    expect(settings.el.textContent).not.toMatch(/all 1 /);
 
     const onePack = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"];
-    applyWallLayoutPatch(settings, { tree: null, maximized: null, tiles: onePack });
+    applyMosaicTiles(settings, mosaic, onePack);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(settings.el).toBe(drawer);
-    expect(gain!.value).toBe("7");
+    expect(viewSection(settings)).toBe(viewLayer);
+    expect(viewLayer.isConnected).toBe(true);
+    gain = gainSlider(settings);
+    expect(gain.value).toBe("7");
     expect(settings.isOpen).toBe(true);
     expect(scopeNotes(settings)).toHaveLength(0);
     expect(settings.el.textContent).not.toMatch(/Changes apply to all 1/);
