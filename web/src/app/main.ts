@@ -28,7 +28,7 @@ import { ensurePackReviewedOutcome } from "./pack-consent";
 import {
   addModeSwitchAbortListener,
   beginModeSwitchAttempt,
-  detachModeSwitchAbortListeners,
+  removeModeSwitchAbortListener,
   getActiveModeSwitchSignal,
   throwIfAborted,
 } from "./mode-switch-attempt";
@@ -799,7 +799,7 @@ async function loadPluginSkyOnto(
     if (signal.aborted) return;
     console.warn("zoto-viz plugin sky:", e);
     disposeSky();
-    detachModeSwitchAbortListeners(signal);
+    removeModeSwitchAbortListener(signal, disposeSky);
     throw e;
   }
 }

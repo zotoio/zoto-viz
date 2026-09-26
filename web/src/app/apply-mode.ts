@@ -108,7 +108,9 @@ function rollbackSwitch(
   mosaicSnap: MosaicAnimSnap | null,
   paneRevert: MosaicPaneRevert | null,
   kind: "declined" | "failed",
+  signal?: AbortSignal,
 ): string | null {
+  commitModeSwitchAttempt(signal);
   const kept = host.modeById(keptModeId);
   if (paneRevert) host.mosaicSetPaneView(paneRevert.modeId, paneRevert.slot);
   host.modeSel.value = keptModeId;
@@ -187,7 +189,7 @@ function scheduleConsentFinalize(
           settleConsentAndDrainAuto("aborted");
           return;
         }
-        rollbackSwitch(host, keptOnFailure, m, prevPresent, mosaicSnap, paneRevert, "failed");
+        rollbackSwitch(host, keptOnFailure, m, prevPresent, mosaicSnap, paneRevert, "failed", signal);
         settleConsentAndDrainAuto("failed", m.id);
         return;
       }
@@ -204,6 +206,7 @@ function scheduleConsentFinalize(
       mosaicSnap,
       paneRevert,
       result === "declined" ? "declined" : "failed",
+      signal,
     );
     settleConsentAndDrainAuto(result, m.id);
   })();
@@ -254,7 +257,7 @@ export function applyModeImpl(
       if (!mosaicSnap) mosaicSnap = host.captureMosaicSnap();
       if (!slot || !host.mosaicSetPaneView(slot, m.id)) {
         const kept = host.getLastConsentedModeId() || prevLive;
-        rollbackSwitch(host, kept, m, prevPresent, mosaicSnap, null, "failed");
+        rollbackSwitch(host, kept, m, prevPresent, mosaicSnap, null, "failed", signal);
         return;
       }
       paneRevert = { slot, modeId: m.id };
