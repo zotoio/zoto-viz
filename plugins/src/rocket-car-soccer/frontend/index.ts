@@ -69,7 +69,7 @@ function applyConfig(cfg: Record<string, string>): void {
       local.preset = "broadcast";
       local.dice = "none";
     }
-    lastDice = local.dice ?? "none";
+    lastDice = dice;
   }
   opts = setRcsOptions(local);
   const theme = themeBgAccent(opts.theme);
@@ -106,7 +106,14 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(0, out.slot0);
   zoto.writeBuffer(1, out.slot1);
   zoto.writeBuffer(2, out.slot2);
-  if (out.particles.length) zoto.writeParticles(out.particles, 4);
+  const particleFloats = out.budget.particles * 4;
+  if (particleFloats > 0) {
+    const buf = out.particles;
+    const cap = buf.length;
+    buf.length = particleFloats;
+    zoto.writeParticles(buf, 4);
+    buf.length = cap;
+  }
   zoto.writeUniform("uAudio", frame.audio);
 };
 

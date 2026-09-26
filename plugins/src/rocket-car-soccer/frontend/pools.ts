@@ -65,7 +65,7 @@ export class InstancedPool {
     return this.packScratch;
   }
 
-  /** Write active slots into `out`; sets `out.length` to bytes written (no new array). */
+  /** Write active slots into `out`; returns float count written (buffer capacity unchanged). */
   packInto(out: number[], stride = 4): number {
     let w = 0;
     for (const s of this.slots) {
@@ -77,7 +77,6 @@ export class InstancedPool {
       out[w + 3] = s.w;
       w += stride;
     }
-    out.length = w;
     return w;
   }
 
