@@ -14,6 +14,7 @@ import {
   parseVizContract,
   pluginNeedsVizContract,
   topKByScore,
+  VIZ_CONTRACT_VERSION,
 } from "./viz-host";
 
 describe("viz contract", () => {
@@ -39,6 +40,7 @@ describe("viz contract", () => {
 
   it("attaches the fixed UBO layout", () => {
     const c = parseVizContract({ graphWalk: false, idle: { fixture: "host" } });
+    expect(c?.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(c?.ubo).toEqual(VIZ_UBO);
     expect(c?.ubo.block).toBe("ZotoVizData");
     expect(c?.ubo.binding).toBe(0);

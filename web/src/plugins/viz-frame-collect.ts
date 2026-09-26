@@ -67,9 +67,14 @@ function talkersWithConnFailed(
   devices: readonly Device[],
 ): VizTalkerSample[] {
   failGaugeScratch.clear();
+  let any = false;
   for (const d of devices) {
-    if (typeof d.conn_fail === "number" && d.conn_fail > 0) failGaugeScratch.set(d.ip, clamp01(d.conn_fail));
+    if (typeof d.conn_fail === "number" && d.conn_fail > 0) {
+      any = true;
+      failGaugeScratch.set(d.ip, clamp01(d.conn_fail));
+    }
   }
+  if (!any) return frameTalkers.map((t) => ({ ...t }));
   const out: VizTalkerSample[] = [];
   for (const t of frameTalkers) {
     const live = failGaugeScratch.get(t.id);
@@ -83,14 +88,13 @@ type LinkCandidate = { src: string; dst: string; rate: number };
 
 function* linkCandidates(flows: Flow[], talkerIds: ReadonlySet<string>): Generator<LinkCandidate> {
   for (const fl of flows) {
+    const aIn = talkerIds.has(fl.a);
+    const bIn = talkerIds.has(fl.b);
+    if (!aIn || !bIn) continue;
     const ab = directionalPacketRate(fl, true);
-    if (ab > 0 && talkerIds.has(fl.a) && talkerIds.has(fl.b)) {
-      yield { src: fl.a, dst: fl.b, rate: ab };
-    }
+    if (ab > 0) yield { src: fl.a, dst: fl.b, rate: ab };
     const ba = directionalPacketRate(fl, false);
-    if (ba > 0 && talkerIds.has(fl.b) && talkerIds.has(fl.a)) {
-      yield { src: fl.b, dst: fl.a, rate: ba };
-    }
+    if (ba > 0) yield { src: fl.b, dst: fl.a, rate: ba };
   }
 }
 
