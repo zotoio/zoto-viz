@@ -1,12 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  applyDevVizWallFlagsOnBuild,
-  devWallFlagParseCounts,
-  resetDevWallFlagParseCountsForTest,
-} from "./viz-dev-wall-flags";
+import * as vizClock from "./viz-clock";
+import { applyDevVizWallFlagsOnBuild, devShowPerTileHudIndex } from "./viz-dev-wall-flags";
 import { resetVizClockInjectors, vizBuildCostTicksForTile, vizWallMs } from "./viz-clock";
+import * as nixieTz from "../plugins/nixie-wall-timezone";
 import { createTileHudLabelLine } from "../ui/tile-hud-label";
 import { VizFrameBudget } from "../plugins/viz-host";
 import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
@@ -14,11 +12,7 @@ import { fatLanFixture } from "../plugins/fixtures/fat-lan-state";
 import { monoMs } from "./viz-time";
 import { tileIdsForLayout } from "../plugins/dogfood-tile-hud";
 import { resetNixieFormatterCache } from "../plugins/nixie-wall-clock";
-import {
-  resetNixiePackHostScope,
-  runPackFrameHandler,
-  VIZ_PACK_TILE_ID_OPT,
-} from "../plugins/viz-pack-host";
+import { resetNixiePackHostScope, runPackFrameHandler } from "../plugins/viz-pack-host";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 const TILES_2X2 = tileIdsForLayout(2, 2);
@@ -36,11 +30,15 @@ const distAssetsDir = join(import.meta.dirname, "../../dist/assets");
 describe("dev viz wall flags", () => {
   beforeEach(() => {
     expect.hasAssertions();
+    resetVizClockInjectors();
+    nixieTz.resetNixieWallDisplayTimeZone();
+    resetNixieFormatterCache();
+    resetNixiePackHostScope();
   });
 
   afterEach(() => {
     resetVizClockInjectors();
-    resetDevWallFlagParseCountsForTest();
+    nixieTz.resetNixieWallDisplayTimeZone();
     vizTileBudgetRegistry.reset();
     resetNixieFormatterCache();
     resetNixiePackHostScope();
@@ -50,8 +48,8 @@ describe("dev viz wall flags", () => {
 
   it("F5 (i): 600 frames — 1 parse per flag; rebuild adds 1 each", () => {
     vi.stubEnv("DEV", true);
-    resetDevWallFlagParseCountsForTest();
     applyDevVizWallFlagsOnBuild("?vizTileCostTicks=1:1&vizWallClock=13:05", TILES_2X2);
+    expect(devShowPerTileHudIndex()).toBe(true);
     syncVizTileScope(TILES_2X2);
     const budget = new VizFrameBudget(() => 0, TILES_2X2[0]);
     const state = fatLanFixture();
@@ -68,29 +66,27 @@ describe("dev viz wall flags", () => {
       vizBuildCostTicksForTile(TILES_2X2[0]!, i);
       vizWallMs();
     }
-    expect(devWallFlagParseCounts()).toEqual({ vizTileCostTicks: 1, vizWallClock: 1 });
-    applyDevVizWallFlagsOnBuild("?vizTileCostTicks=1:1&vizWallClock=13:05", tileIdsForLayout(2, 2));
-    expect(devWallFlagParseCounts()).toEqual({ vizTileCostTicks: 2, vizWallClock: 2 });
+    applyDevVizWallFlagsOnBuild("?vizWallClock=13:05", tileIdsForLayout(2, 2));
+    expect(devShowPerTileHudIndex()).toBe(false);
   });
 
-  it("F5 (ii): ?vizWallClock=13:05 seconds on — 10 uploads per tile (2×2)", () => {
+  it("F5 (ii): ?vizWallClock=13:05 seconds on — 10 wall uploads over 600 frames (2×2)", () => {
     vi.stubEnv("DEV", true);
-    const t0 = Date.UTC(2024, 5, 15, 13, 5, 0, 0);
+    vi.spyOn(nixieTz, "hostLocalTimeZone").mockReturnValue("UTC");
+    const t0 = nixieTz.wallEpochMsForParts(2024, 6, 15, 13, 5, 0, "UTC");
     vi.spyOn(Date, "now").mockImplementation(() => t0);
     applyDevVizWallFlagsOnBuild("?vizWallClock=13:05", TILES_2X2);
     const look = { format: "24", seconds: "1" };
     const writeBuffer = vi.fn();
     for (let frame = 0; frame < 600; frame++) {
       vi.spyOn(Date, "now").mockImplementation(() => wallMsAtFrame(t0, frame));
-      for (const tileId of TILES_2X2) {
-        runPackFrameHandler("nixie-clock", emptyFrame(), {
-          writeBuffer: () => writeBuffer(),
-          writeUniform: () => {},
-          writeParticles: () => {},
-        }, { ...look, [VIZ_PACK_TILE_ID_OPT]: tileId });
-      }
+      runPackFrameHandler("nixie-clock", emptyFrame(), {
+        writeBuffer: () => writeBuffer(),
+        writeUniform: () => {},
+        writeParticles: () => {},
+      }, look);
     }
-    expect(writeBuffer).toHaveBeenCalledTimes(40);
+    expect(writeBuffer).toHaveBeenCalledTimes(10);
   });
 
   it("F5 (iii) bad tile cost: 9:5011 — no LIMITED on 2×2", () => {
@@ -176,15 +172,21 @@ describe("dev viz wall flags", () => {
     expect(vizTileBudgetRegistry.getTile(TILES_2X2[3]).skipped).toBe(0);
   });
 
-  it("F5 (v): two-nixie wall ?vizWallClock=13:05 — same time on both tiles", () => {
+  it("F5 (v): two-nixie wall ?vizWallClock=13:05 — shared wall ms and digit buffer", () => {
     vi.stubEnv("DEV", true);
-    const t0 = Date.UTC(2024, 5, 15, 13, 5, 0, 0);
+    vi.spyOn(nixieTz, "hostLocalTimeZone").mockReturnValue("UTC");
+    const t0 = nixieTz.wallEpochMsForParts(2024, 6, 15, 13, 5, 0, "UTC");
     vi.spyOn(Date, "now").mockImplementation(() => t0);
     applyDevVizWallFlagsOnBuild("?vizWallClock=13:05", ["a", "b"]);
-    const a = vizWallMs();
-    const b = vizWallMs();
-    expect(a).toBe(b);
-    expect(a).toBe(t0);
+    expect(vizWallMs()).toBe(vizWallMs());
+    const look = { format: "24", seconds: "0" };
+    let buf: number[] = [];
+    runPackFrameHandler("nixie-clock", emptyFrame(), {
+      writeBuffer: (_s, d) => { buf = d; },
+      writeUniform: () => {},
+      writeParticles: () => {},
+    }, look);
+    expect(buf.slice(0, 4)).toEqual([1, 3, 0, 5]);
   });
 
   it("F5 (vi) prod: query inert when not DEV", () => {

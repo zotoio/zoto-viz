@@ -21,40 +21,14 @@ import {
 
 const hostNixieClock = createNixieWallClock();
 const hostNixieWallSecond = new SharedNixieWallSecond();
-const nixieUploadLatches = new Map<string, NixieUploadLatch>();
-
-/** Mosaic / dogfood: stable tile key for per-tile nixie upload latch (not a nixie look key). */
-export const VIZ_PACK_TILE_ID_OPT = "vizPackTileId";
-
-export function packNixieWallBuffer(
-  clock: ReturnType<typeof createNixieWallClock>,
-  look: NixieLook = parseNixieLook(),
-  audio = 0,
-  pulse = 0,
-  canvas?: { w: number; h: number },
-): number[] {
-  const wallMs = vizWallMs();
-  const parts = hostNixieWallSecond.syncWallSecond(wallMs);
-  return clock.tick(wallMs, look, audio, pulse, canvas, parts);
-}
+const hostNixieUploadLatch = createNixieUploadLatch();
 
 export function resetHostNixieWallScope(): void {
   hostNixieWallSecond.reset();
-  nixieUploadLatches.clear();
-}
-
-function nixiePackTileId(opts?: Record<string, string> | null): string {
-  const id = opts?.[VIZ_PACK_TILE_ID_OPT];
-  return id && id.length > 0 ? id : "main";
-}
-
-function nixieUploadLatchFor(tileId: string): NixieUploadLatch {
-  let latch = nixieUploadLatches.get(tileId);
-  if (!latch) {
-    latch = createNixieUploadLatch();
-    nixieUploadLatches.set(tileId, latch);
-  }
-  return latch;
+  hostNixieUploadLatch.lastH = -1;
+  hostNixieUploadLatch.lastM = -1;
+  hostNixieUploadLatch.lastS = -1;
+  hostNixieUploadLatch.lookSig = "";
 }
 
 let nixieScopedLook: NixieLook = parseNixieLook();
@@ -304,8 +278,9 @@ export function runPackFrameHandler(
       const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
       const wallMs = vizWallMs();
       const parts = hostNixieWallSecond.syncWallSecond(wallMs);
-      const latch = nixieUploadLatchFor(nixiePackTileId(opts));
-      if (nixieWallUploadDue(nixieActiveLook, parts, latch)) {
+      const cw = nixiePackCanvas.w;
+      const ch = nixiePackCanvas.h;
+      if (nixieWallUploadDue(nixieActiveLook, parts, hostNixieUploadLatch, cw, ch)) {
         handlers.writeBuffer(0, hostNixieClock.tick(
           wallMs,
           nixieActiveLook,

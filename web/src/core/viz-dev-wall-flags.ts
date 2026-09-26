@@ -2,9 +2,11 @@ import {
   setVizBuildCostTicksForTileInjector,
   setVizWallClockInjector,
 } from "./viz-clock";
-
-let tileCostParseCount = 0;
-let wallClockParseCount = 0;
+import {
+  hostLocalTimeZone,
+  setNixieWallDisplayTimeZone,
+  wallEpochMsForParts,
+} from "../plugins/nixie-wall-timezone";
 
 /** Per-scoped-tile injected build cost (ticks); undefined slot = no override. */
 const tileCostTicks = new Map<string, number>();
@@ -15,15 +17,6 @@ const tileHudIndexById = new Map<string, number>();
 let wallAnchorRealMs = 0;
 let wallAnchorDevMs = 0;
 let wallDevActive = false;
-
-export function resetDevWallFlagParseCountsForTest(): void {
-  tileCostParseCount = 0;
-  wallClockParseCount = 0;
-}
-
-export function devWallFlagParseCounts(): { vizTileCostTicks: number; vizWallClock: number } {
-  return { vizTileCostTicks: tileCostParseCount, vizWallClock: wallClockParseCount };
-}
 
 export function devShowPerTileHudIndex(): boolean {
   return import.meta.env.DEV && showPerTileHudIndex;
@@ -38,12 +31,12 @@ function clearInjectors(): void {
   tileHudIndexById.clear();
   showPerTileHudIndex = false;
   wallDevActive = false;
+  setNixieWallDisplayTimeZone(undefined);
   setVizBuildCostTicksForTileInjector(undefined);
   setVizWallClockInjector(undefined);
 }
 
 function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[]): void {
-  tileCostParseCount++;
   if (!raw) return;
 
   const colon = raw.indexOf(":");
@@ -64,7 +57,6 @@ function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[])
 }
 
 function parseWallClockFlag(raw: string | null): void {
-  wallClockParseCount++;
   if (!raw) return;
 
   const m = /^(\d{1,2}):(\d{2})$/.exec(raw.trim());
@@ -73,7 +65,9 @@ function parseWallClockFlag(raw: string | null): void {
   const min = Number(m[2]);
   if (!Number.isInteger(h) || !Number.isInteger(min) || h < 0 || h > 23 || min < 0 || min > 59) return;
 
-  wallAnchorDevMs = Date.UTC(2024, 5, 15, h, min, 0, 0);
+  const tz = hostLocalTimeZone();
+  setNixieWallDisplayTimeZone(tz);
+  wallAnchorDevMs = wallEpochMsForParts(2024, 6, 15, h, min, 0, tz);
   wallAnchorRealMs = Date.now();
   wallDevActive = true;
   setVizWallClockInjector(() => {
