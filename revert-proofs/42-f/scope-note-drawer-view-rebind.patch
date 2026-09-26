@@ -1,14 +1,13 @@
-diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 3b59712..19ec5c4 100644
---- a/web/src/ui/settings.ts
-+++ b/web/src/ui/settings.ts
-@@ -1738,6 +1738,9 @@ export class Settings {
-     this.persistAnim();
-     this.animUi?.syncTiles();
-     this.syncPackScopeNoteFromAnim();
-+    if (this.viewBind?.spec) {
-+      this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
-+    }
-   }
- 
-   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index 42e44ec..7b8f864 100644
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -797,7 +797,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
+   feedTitleCube.setActive(rainPics);
+   nestCams.setActive(m.pluginId === "nest-cams");
+   nestCams.setLook(opts);
+-  if (!flags.keepLayout) bindThisView(m.id);
++  bindThisView(m.id);
+   $("modeOpts").replaceChildren();
+   void (async () => {
+     if (!(await ensureReviewed(spec))) {

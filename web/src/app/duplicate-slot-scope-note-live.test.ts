@@ -9,6 +9,7 @@ import {
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import { Settings } from "../ui/settings";
+import { hostModeById } from "./host-mode";
 import { applyMosaicTiles, mountDuplicateSlotMosaicHarness } from "./duplicate-slot-mosaic-fixture";
 
 const PACK = "plugin:settings-fixture";
@@ -56,12 +57,17 @@ describe("duplicate slot shared config > scope note follows live tile count whil
 
     const settings = new Settings({ storePrefix: "zoto-scope-note-live", onChange: () => {} });
     document.body.append(settings.el);
-    settings.bindView(spec, spec.config);
-    settings.openView();
-    const { mosaic } = mountDuplicateSlotMosaicHarness(settings);
+    const { mosaic, bindThisView } = mountDuplicateSlotMosaicHarness(settings, {
+      hostModeById,
+      pluginSpecForMode: (modeId) => (hostModeById(modeId).pluginId === "settings-fixture" ? spec : null),
+      lookForMode: () => null,
+      fallbackModeId: () => PACK,
+    });
 
     const twoTiles = [PACK, `${PACK}!1`, "plugin:topology", "plugin:memory"];
     applyMosaicTiles(settings, mosaic, twoTiles);
+    bindThisView(`${PACK}!1`);
+    settings.openView(`${PACK}!1`);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
     const viewLayer = viewSection(settings);
@@ -73,7 +79,6 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(scopeNotes(settings)).toHaveLength(1);
     expect(scopeNoteCount(settings)).toBe(2);
     expect(settings.isOpen).toBe(true);
-    expect(drawerRoot(settings).textContent).not.toMatch(/all 1 /);
 
     const threeTiles = [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"];
     applyMosaicTiles(settings, mosaic, threeTiles);

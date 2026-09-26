@@ -1,0 +1,14 @@
+diff --git a/web/src/app/plugin-fields-from-settings.ts b/web/src/app/plugin-fields-from-settings.ts
+index 90e431d..28c7e66 100644
+--- a/web/src/app/plugin-fields-from-settings.ts
++++ b/web/src/app/plugin-fields-from-settings.ts
+@@ -4,9 +4,8 @@ import type { Settings } from "../ui/settings";
+ import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
+ 
+ export function resolveSettingsTargetModeId(settings: Settings, fallbackModeId: () => string): string {
+-  const focus = settings.viewFocus?.trim();
+-  return focus || fallbackModeId();
++  return fallbackModeId();
+ }
+ 
+ export type PluginFieldsFromSettingsDeps = {

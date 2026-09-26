@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/duplicate-slot-shared-config.test.ts",
+  "testName": "^duplicate slot shared config > live edit applies to every sharing tile > uses settings viewFocus instead of the catalog fallback mode id$",
+  "description": "Ignore settings.viewFocus when resolving which mosaic tile receives plugin field edits.",
+  "redOutput": ""
+}

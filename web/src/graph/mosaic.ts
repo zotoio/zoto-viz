@@ -461,7 +461,7 @@ export class Mosaic {
     this.tree = assignTiles(this.tree, want);
     this.rematchTried.clear();
     this.rematchQueued.clear();
-    this.syncPanes(this.tileIds, undefined, prev);
+    this.syncPanes(this.tileIds);
     this.placeTree();
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
@@ -508,13 +508,11 @@ export class Mosaic {
     this.cfg.host?.invalidate();
   }
 
-  private syncPanes(ids: string[], _touchIds?: ReadonlySet<string>, prev?: string[]): void {
-    const prevSet = new Set(prev ?? []);
+  private syncPanes(ids: string[]): void {
     for (const id of [...this.panes.keys()]) {
       if (!ids.includes(id)) this.dropPane(id);
     }
     for (const id of ids) {
-      if (this.panes.has(id) && prevSet.has(id)) continue;
       this.ensurePane(id);
     }
   }

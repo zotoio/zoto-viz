@@ -1,10 +1,17 @@
 import type { ViewMode } from "../core/modes";
 import type { Mosaic } from "../graph/mosaic";
 import type { PluginView } from "../plugins/plugin";
+import type { Settings } from "../ui/settings";
 import { applySharedMosaicPluginConfig } from "./shared-mosaic-plugin-config";
 
+export function resolveSettingsTargetModeId(settings: Settings, fallbackModeId: () => string): string {
+  const focus = settings.viewFocus?.trim();
+  return focus || fallbackModeId();
+}
+
 export type PluginFieldsFromSettingsDeps = {
-  settingsTargetModeId: () => string;
+  settings: Settings;
+  fallbackModeId: () => string;
   hostModeById: (id: string) => ViewMode;
   optsFor: (m: ViewMode) => Record<string, string>;
   mosaic: Pick<Mosaic, "on" | "graphScene" | "tileIds"> | null;
@@ -21,7 +28,7 @@ export type PluginFieldsFromSettingsDeps = {
 
 /** main.ts `onPluginFields` body — shared mosaic sync runs once per edit. */
 export function syncPluginFieldsFromSettingsEdit(deps: PluginFieldsFromSettingsDeps): void {
-  const modeId = deps.settingsTargetModeId();
+  const modeId = resolveSettingsTargetModeId(deps.settings, deps.fallbackModeId);
   const m = deps.hostModeById(modeId);
   const opts = deps.optsFor(m);
   deps.setCurrentOpts(opts);

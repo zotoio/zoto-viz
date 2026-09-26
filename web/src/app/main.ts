@@ -108,6 +108,8 @@ import { mosaicTileViewId, mosaicWallUsesView, parseMosaicSlotId } from "../grap
 import { hostModeById } from "./host-mode";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
 import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
+import { bindThisView as bindThisViewHost } from "./host-view-bind";
+import { createMosaicPanePickHandler } from "./host-mosaic-pane-pick";
 import { syncSettingsAnimToMosaic } from "./settings-mosaic-anim-sync";
 import {
   deliverCoalescedMosaicPacks,
@@ -492,14 +494,10 @@ nestCams.onChange = (patch) => {
   onPluginFields();
 };
 
-function settingsTargetModeId(): string {
-  const focus = settings?.viewFocus?.trim();
-  return focus || modeSel.value;
-}
-
 function onPluginFields(): void {
   syncPluginFieldsFromSettingsEdit({
-    settingsTargetModeId,
+    settings,
+    fallbackModeId: () => modeSel.value,
     hostModeById,
     optsFor,
     mosaic,
@@ -567,15 +565,15 @@ function arcadeControls(m: ViewMode): HTMLElement[] {
 }
 
 function bindThisView(modeId: string): void {
-  const m = hostModeById(modeId);
-  const spec = m.pluginId ? pluginSpecForMode(modeId) : null;
-  settings?.bindView(
-    spec ? { ...spec, options: m.options, config: m.config } : null,
-    spec ? m.config : undefined,
-    lookForMode(m.id) ?? spec?.look,
-    arcadeControls(m),
-  );
-  paintViewAuth(m, spec);
+  if (!settings) return;
+  bindThisViewHost({
+    settings,
+    hostModeById,
+    pluginSpecForMode,
+    lookForMode,
+    arcadeControls,
+    paintViewAuth,
+  }, modeId);
 }
 
 let tsWatch = 0;
@@ -799,7 +797,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   feedTitleCube.setActive(rainPics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
-  bindThisView(m.id);
+  if (!flags.keepLayout) bindThisView(m.id);
   $("modeOpts").replaceChildren();
   void (async () => {
     if (!(await ensureReviewed(spec))) {
@@ -1215,22 +1213,16 @@ mosaic = new Mosaic({
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
 });
-settings.onMosaicPanePick = (from, to) => {
-  if (!mosaic?.on) return false;
-  if (!mosaic.setPaneView(from, to)) return false;
-  const slot = mosaic.tileIds.find((id) => mosaicTileViewId(id) === to) ?? from;
-  mosaic.focus(slot);
-  const pm = hostModeById(to);
-  const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(to) : null);
-  void (async () => {
-    const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
-    if (!(await ensureReviewed(spec))) return;
-    if (pm.standalone || arcadeSlotFor(pm) !== "carousel") {
-      void syncPluginSky(paneSpec);
-    }
-  })();
-  return true;
-};
+settings.onMosaicPanePick = createMosaicPanePickHandler({
+  getMosaic: () => mosaic,
+  hostModeById,
+  pluginSpecForMode,
+  ensureReviewed,
+  afterPick: (slot, to, pm) => {
+    const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(to) : null);
+    if (pm.standalone || arcadeSlotFor(pm) !== "carousel") void syncPluginSky(paneSpec);
+  },
+});
 settings.addAnimation((a) => {
   syncSettingsAnimToMosaic({
     mosaic: mosaic!,
