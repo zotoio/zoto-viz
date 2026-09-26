@@ -8,6 +8,7 @@ import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
 import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
+import { prefersReducedMotion, subscribeReducedMotion } from "../core/motion";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -46,8 +47,10 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
 export const PHOTO_LOOP_S = 5;
 /** Crossfade from the last frames onto a second decoder at t=0 so the wrap has no hitch. */
 export const PHOTO_LOOP_FADE_S = 0.35;
+/** Crossfade between still photo plates when switching sky (seconds on the sky clock). */
+export const PHOTO_SKY_CROSSFADE_S = 3;
 
-/** 0..1 phase of the photo-sky loop. */
+/** 0..1 linear phase of a timed loop. */
 export function photoLoopPhase(t: number, period = PHOTO_LOOP_S): number {
   const p = period > 0 ? period : PHOTO_LOOP_S;
   return (((t % p) + p) % p) / p;
@@ -63,6 +66,14 @@ export function photoLoopMix(t: number, duration: number, fade = PHOTO_LOOP_FADE
   const start = duration - fade;
   if (p < start) return 0;
   return (p - start) / fade;
+}
+
+/** Seam fade for a looping video plate; capped for short clips. */
+export function photoVideoSeamFadeSec(duration: number, target = PHOTO_LOOP_FADE_S): number {
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  const fade = Math.min(target, duration / 3);
+  if (fade <= 0 || duration <= fade * 2) return 0;
+  return fade;
 }
 
 /** Cover-fit Ken Burns UV + breath. Closed over `period` (t and t+period match). */
@@ -90,7 +101,7 @@ export function isPhotoVideoUrl(url: string): boolean {
   return /\.(webm|mp4|ogv)(?:[?#]|$)/i.test(url);
 }
 
-/** Prefer a 5 s muted loop, then the JPEG poster. Drop `/skies/<id>.webm` beside the still. */
+/** Prefer a muted loop clip, then the JPEG poster. Drop `/skies/<id>.webm` beside the still. */
 export function photoSkyCandidates(kind: PhotoSkyKind): string[] {
   return [`/skies/${kind}.webm`, `/skies/${kind}.mp4`, PHOTO_SKIES[kind]];
 }
@@ -583,6 +594,7 @@ in vec2 vUv;
 out vec4 fragColor;
 
 ${SKY_LUMA_CAP_GLSL}
+
 void main() {
   vec2 canvas = max(uCanvas, vec2(1.0));
   vec2 video = max(uVideoSize, vec2(1.0));
@@ -618,8 +630,68 @@ function blankTex(): THREE.DataTexture {
   return t;
 }
 
-type PhotoVideoSlot = { el: HTMLVideoElement; tex: THREE.VideoTexture };
-type PhotoVideoLoop = { url: string; slots: [PhotoVideoSlot, PhotoVideoSlot]; active: 0 | 1; incoming: boolean };
+export type PhotoVideoSlot = { el: HTMLVideoElement; tex: THREE.VideoTexture };
+export type PhotoVideoLoop = { url: string; slots: [PhotoVideoSlot, PhotoVideoSlot]; active: 0 | 1; incoming: boolean };
+
+/** Still plates: mipmapped so slow Ken Burns pan does not shimmer in small tiles. */
+export function configurePhotoStillTexture(tex: THREE.Texture): void {
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+}
+
+export function releasePhotoVideoElement(el: HTMLVideoElement): void {
+  el.pause();
+  el.removeAttribute("src");
+  el.load();
+}
+
+export function releasePhotoVideoSlot(slot: PhotoVideoSlot): void {
+  slot.tex.dispose();
+  releasePhotoVideoElement(slot.el);
+}
+
+export function disposePhotoVideoPack(pack: PhotoVideoLoop): void {
+  for (const slot of pack.slots) releasePhotoVideoSlot(slot);
+}
+
+/** URLs that may stay in the photo caches (current sky + outgoing crossfade). */
+export function photoCacheRetainUrls(current: string | null, outgoing: string | null): Set<string> {
+  const retain = new Set<string>();
+  if (current) retain.add(current);
+  if (outgoing) retain.add(outgoing);
+  return retain;
+}
+
+export function prunePhotoTextureCache(
+  cache: Map<string, THREE.Texture>,
+  retain: ReadonlySet<string>,
+): string[] {
+  const removed: string[] = [];
+  for (const [url, tex] of cache) {
+    if (retain.has(url)) continue;
+    tex.dispose();
+    cache.delete(url);
+    removed.push(url);
+  }
+  return removed;
+}
+
+export function prunePhotoVideoCache(
+  cache: Map<string, PhotoVideoLoop>,
+  retain: ReadonlySet<string>,
+): string[] {
+  const removed: string[] = [];
+  for (const [url, pack] of cache) {
+    if (retain.has(url)) continue;
+    disposePhotoVideoPack(pack);
+    cache.delete(url);
+    removed.push(url);
+  }
+  return removed;
+}
 
 function makeSkyVideo(url: string): HTMLVideoElement {
   const el = document.createElement("video");
@@ -732,8 +804,13 @@ export class Backdrop {
   private readonly photoCache = new Map<string, THREE.Texture>();
   private readonly photoVideoCache = new Map<string, PhotoVideoLoop>();
   private photoWant: string | null = null;
+  private photoOutgoingUrl: string | null = null;
+  private photoEvictAt = 0;
+  private photoPlateMorphT = 1;
+  private photoKenBurnsDesired = false;
   private photoLoadGen = 0;
   private photoVideoUrl: string | null = null;
+  private readonly unsubscribeMotion = subscribeReducedMotion(() => this.applyReducedMotion());
   private pluginMat: THREE.ShaderMaterial | null = null;
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
@@ -978,21 +1055,18 @@ export class Backdrop {
   }
 
   private loadPhotoStill(url: string, gen: number): void {
-    this.photoWant = url;
     const hit = this.photoCache.get(url);
     if (hit) {
       if (gen !== this.photoLoadGen) return;
-      this.bindPhoto(hit, true);
+      this.bindPhoto(hit, true, url);
       return;
     }
     void loadHtmlImage(new Image(), url).then((img) => {
       const t = new THREE.Texture(img);
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.minFilter = THREE.LinearFilter;
-      t.needsUpdate = true;
+      configurePhotoStillTexture(t);
       this.photoCache.set(url, t);
       if (gen !== this.photoLoadGen) return;
-      this.bindPhoto(t, true);
+      this.bindPhoto(t, true, url);
     }).catch(() => undefined);
   }
 
@@ -1037,7 +1111,7 @@ export class Backdrop {
   }
 
   private bindPhotoVideo(pack: PhotoVideoLoop): void {
-    this.photoWant = pack.url;
+    this.beginPhotoTransition(pack.url);
     this.photoVideoUrl = pack.url;
     this.pausePhotoVideos(pack.url);
     pack.active = 0;
@@ -1049,10 +1123,14 @@ export class Backdrop {
     this.photoMat.uniforms.uAnimate.value = 0;
     this.photoMat.uniforms.uLoopMix.value = 0;
     this.photoMat.uniforms.uVideoB.value = nxt.tex;
-    this.bindPhoto(cur.tex, false);
+    this.bindPhoto(cur.tex, false, pack.url);
     try { cur.el.currentTime = 0; } catch { /* */ }
-    const play = cur.el.play();
-    if (play) void play.catch(() => undefined);
+    if (!prefersReducedMotion()) {
+      const play = cur.el.play();
+      if (play) void play.catch(() => undefined);
+    } else {
+      cur.el.pause();
+    }
   }
 
   private pausePhotoVideos(except?: string): void {
@@ -1067,6 +1145,7 @@ export class Backdrop {
   }
 
   private tickPhotoVideoLoop(): void {
+    if (this.photoPlateMorphT < 1) return;
     const url = this.photoVideoUrl;
     if (!url) return;
     const pack = this.photoVideoCache.get(url);
@@ -1077,12 +1156,18 @@ export class Backdrop {
     if (cur.el.videoWidth > 0) {
       (this.photoMat.uniforms.uVideoSize.value as THREE.Vector2).set(cur.el.videoWidth, cur.el.videoHeight);
     }
-    if (!Number.isFinite(dur) || dur <= PHOTO_LOOP_FADE_S * 2) {
+    const seamFade = photoVideoSeamFadeSec(dur);
+    if (seamFade <= 0) {
       this.photoMat.uniforms.uLoopMix.value = 0;
+      if (cur.el.ended) {
+        try { cur.el.currentTime = 0; } catch { /* */ }
+        const play = cur.el.play();
+        if (play) void play.catch(() => undefined);
+      }
       return;
     }
     const t = cur.el.ended ? dur : cur.el.currentTime;
-    const mix = photoLoopMix(t, dur);
+    const mix = photoLoopMix(t, dur, seamFade);
     this.photoMat.uniforms.uLoopMix.value = mix;
     this.photoMat.uniforms.uVideoB.value = nxt.tex;
     if (mix > 0 && !pack.incoming) {
@@ -1105,14 +1190,66 @@ export class Backdrop {
     }
   }
 
-  private bindPhoto(t: THREE.Texture, animate: boolean): void {
-    this.photoMat.uniforms.uVideo.value = t;
-    this.photoMat.uniforms.uAnimate.value = animate ? 1 : 0;
-    this.photoMat.uniforms.uLoopMix.value = 0;
-    if (animate) {
-      this.photoVideoUrl = null;
-      this.photoMat.uniforms.uVideoB.value = t;
+  private beginPhotoTransition(nextUrl: string): void {
+    const prev = this.photoWant;
+    if (prev && prev !== nextUrl) {
+      this.photoOutgoingUrl = prev;
+      this.photoEvictAt = this.clock + PHOTO_SKY_CROSSFADE_S;
+      const outStill = this.photoCache.get(prev);
+      const outVideo = this.photoVideoCache.get(prev)?.slots[0]?.tex;
+      const outTex = outStill ?? outVideo ?? null;
+      if (outTex) {
+        this.photoMat.uniforms.uVideo.value = outTex;
+        this.photoPlateMorphT = 0;
+        this.photoMat.uniforms.uLoopMix.value = 0;
+      }
     }
+    this.photoWant = nextUrl;
+  }
+
+  private syncPhotoCacheSize(): void {
+    const retain = photoCacheRetainUrls(this.photoWant, this.photoOutgoingUrl);
+    prunePhotoTextureCache(this.photoCache, retain);
+    prunePhotoVideoCache(this.photoVideoCache, retain);
+  }
+
+  private tickPhotoCacheEviction(): void {
+    if (!this.photoOutgoingUrl || this.clock < this.photoEvictAt) return;
+    this.photoOutgoingUrl = null;
+    this.syncPhotoCacheSize();
+  }
+
+  private applyReducedMotion(): void {
+    const reduce = prefersReducedMotion();
+    this.photoMat.uniforms.uAnimate.value = this.photoKenBurnsDesired && !reduce ? 1 : 0;
+    if (this.photoVideoUrl) {
+      const pack = this.photoVideoCache.get(this.photoVideoUrl);
+      if (pack) {
+        for (const slot of pack.slots) {
+          if (reduce) slot.el.pause();
+          else if (slot.el.paused && slot.el.readyState >= 2) {
+            const play = slot.el.play();
+            if (play) void play.catch(() => undefined);
+          }
+        }
+      }
+    }
+  }
+
+  private bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void {
+    if (url) this.beginPhotoTransition(url);
+    this.photoKenBurnsDesired = animate;
+    const morphing = this.photoPlateMorphT < 1 && this.photoOutgoingUrl !== null;
+    if (morphing) {
+      this.photoMat.uniforms.uVideoB.value = t;
+    } else {
+      this.photoMat.uniforms.uVideo.value = t;
+      if (this.photoPlateMorphT >= 1) this.photoMat.uniforms.uLoopMix.value = 0;
+      if (animate) this.photoMat.uniforms.uVideoB.value = t;
+    }
+    this.photoMat.uniforms.uAnimate.value = animate && !prefersReducedMotion() ? 1 : 0;
+    if (animate) this.photoVideoUrl = null;
+    this.syncPhotoCacheSize();
     const img = t.image as {
       naturalWidth?: number;
       naturalHeight?: number;
@@ -1373,7 +1510,8 @@ export class Backdrop {
     const target = this.speed * (1 + this.audio * PULSE_ACCEL);
     const tau = 0.04 + EASE_MAX_S * this.ease * this.ease;
     this.curSpeed += (target - this.curSpeed) * (1 - Math.exp(-dt / tau));
-    this.clock += dt * this.curSpeed;
+    const dClock = dt * this.curSpeed;
+    this.clock += dClock;
     this.mat.uniforms.uTime.value = this.clock;
     this.photoMat.uniforms.uTime.value = this.clock;
     this.syncPluginLook();
@@ -1393,6 +1531,22 @@ export class Backdrop {
       }
     } else if (this.photoVideoUrl) {
       this.tickPhotoVideoLoop();
+    }
+    this.tickPhotoPlateMorph(dClock);
+    this.tickPhotoCacheEviction();
+  }
+
+  dispose(): void {
+    this.unsubscribeMotion();
+  }
+
+  private tickPhotoPlateMorph(dClock: number): void {
+    if (this.photoPlateMorphT >= 1) return;
+    this.photoPlateMorphT = Math.min(1, this.photoPlateMorphT + dClock / PHOTO_SKY_CROSSFADE_S);
+    this.photoMat.uniforms.uLoopMix.value = mixFade(this.photoPlateMorphT);
+    if (this.photoPlateMorphT >= 1) {
+      this.photoMat.uniforms.uLoopMix.value = 0;
+      this.photoMat.uniforms.uVideo.value = this.photoMat.uniforms.uVideoB.value;
     }
   }
 }
