@@ -384,6 +384,8 @@ def _safe_name(name: str) -> str:
     n = name.replace("\\", "/")
     if n.startswith("/") or n.startswith("//") or (len(n) >= 3 and n[1] == ":" and n[2] == "/"):
         raise ValueError(f"absolute zip path {name!r}")
+    if len(n) >= 2 and n[1] == ":":
+        raise ValueError(f"absolute zip path {name!r}")
     while n.startswith("./"):
         n = n[2:]
     if not n or n.endswith("/"):

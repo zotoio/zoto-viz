@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from . import pack_safe_zip as psz
 from . import paths
 from . import plugin_zip as pz
 from .pack_boundary import PackBundleBoundary, PackBundleBoundaryError, format_blocked_message
@@ -27,6 +28,36 @@ _pending_notices: list[dict[str, str]] = []
 _pack_lock_meta = threading.Lock()
 _pack_install_locks: dict[str, threading.Lock] = {}
 _swap_in_progress: set[str] = set()
+_last_install_staged: psz.StagedPack | None = None
+
+
+@dataclass(frozen=True)
+class PackZipReadView:
+    """Test-facing view of the last ``StagedPack`` install."""
+
+    plugin: dict[str, Any]
+    stats: psz.ZipReadStats
+    member_sha256: dict[str, str]
+    members_sorted: tuple[str, ...]
+
+
+def last_install_pack_read_for_tests() -> PackZipReadView | None:
+    s = _last_install_staged
+    if s is None:
+        return None
+    return PackZipReadView(s.manifest, s.stats, s.member_sha256, s.members_sorted)
+
+
+def reset_install_pipeline_for_tests() -> None:
+    global _after_first_rename, _start_runtime_hook, _last_install_staged
+    _after_first_rename = None
+    _start_runtime_hook = None
+    _last_install_staged = None
+    _INSTALL_CHECKS.clear()
+    _pending_notices.clear()
+    _swap_in_progress.clear()
+    with _pack_lock_meta:
+        _pack_install_locks.clear()
 
 
 class InstallV2BlockedError(Exception):
@@ -351,19 +382,19 @@ def _restore_from_bak(runtime: Path, dest_zip: Path) -> None:
     _restore_zip_from_bak(dest_zip)
 
 
-def install_zip_to_runtime(
+def install_staged_to_runtime(
+    staged: psz.StagedPack,
     zip_path: Path,
     dest_zip: Path,
     runtime: Path,
-    doc: dict[str, Any],
     *,
     rel: str,
-    sha256: str | None = None,
     upgrade: bool = False,
     force: bool = False,
 ) -> pz.UnpackResult:
+    doc = staged.manifest
     pid = str(doc["id"])
-    incoming = sha256 or pz.plugin_sha256(zip_path)
+    incoming = staged.zip_sha256
     if not force:
         blocked = zip_block_for_sha(incoming)
         if blocked is not None:
@@ -371,17 +402,17 @@ def install_zip_to_runtime(
             reason = str(blocked.get("blockReason") or blocked.get("error") or "blocked")
             raise InstallStartFailedError(msg, reason=reason)
     if not force and should_skip_unchanged_zip(dest_zip, runtime, incoming):
-        return pz.unpack_zip(dest_zip, runtime)
+        return _unpack_result_from_runtime(dest_zip, runtime, incoming)
     name = str(doc.get("name") or pid)
     version = doc.get("version")
     lock = _lock_for_pack(pid)
     lock.acquire()
     try:
-        return _install_zip_to_runtime_locked(
+        return _install_staged_to_runtime_locked(
+            staged,
             zip_path,
             dest_zip,
             runtime,
-            doc,
             rel=rel,
             sha256=incoming,
             upgrade=upgrade,
@@ -393,11 +424,56 @@ def install_zip_to_runtime(
         lock.release()
 
 
-def _install_zip_to_runtime_locked(
+def install_zip_to_runtime(
     zip_path: Path,
     dest_zip: Path,
     runtime: Path,
     doc: dict[str, Any],
+    *,
+    rel: str,
+    sha256: str | None = None,
+    upgrade: bool = False,
+    force: bool = False,
+    pack_read: psz.StagedPack | PackZipReadView | None = None,
+) -> pz.UnpackResult:
+    parent = runtime.parent
+    if isinstance(pack_read, psz.StagedPack):
+        staged = pack_read
+    else:
+        hit = psz.validate_pack_zip_path(zip_path, rel, parent)
+        if isinstance(hit, psz.Blocked):
+            raise ValueError(hit.message)
+        staged = hit
+    return install_staged_to_runtime(
+        staged,
+        zip_path,
+        dest_zip,
+        runtime,
+        rel=rel,
+        upgrade=upgrade,
+        force=force,
+    )
+
+
+def _unpack_result_from_runtime(dest_zip: Path, runtime: Path, digest: str) -> pz.UnpackResult:
+    yml = runtime / pz.REQUIRED_MEMBER
+    plugin = pz._parse_plugin_yml(yml.read_bytes()) if yml.is_file() else {}
+    members = tuple(pz._list_tree_members(runtime))
+    return pz.UnpackResult(
+        dest=runtime,
+        sha256=digest,
+        unpacked=False,
+        plugin=plugin,
+        parts=pz.detect_parts(runtime),
+        members=members,
+    )
+
+
+def _install_staged_to_runtime_locked(
+    staged: psz.StagedPack,
+    zip_path: Path,
+    dest_zip: Path,
+    runtime: Path,
     *,
     rel: str,
     sha256: str,
@@ -406,13 +482,12 @@ def _install_zip_to_runtime_locked(
     name: str,
     version: str | int | None,
 ) -> pz.UnpackResult:
-    staging: Path | None = None
+    global _last_install_staged
     swapped = False
     parent = runtime.parent
+    staging = staged.staging_dir
+    doc = dict(staged.manifest)
     try:
-        cleanup_staging_for_pack(parent, pid)
-        staging = new_staging_dir(parent, pid)
-        pz.unpack_zip(zip_path, staging)
         ctx = InstallContext(
             staging=staging,
             runtime=runtime,
@@ -447,8 +522,13 @@ def _install_zip_to_runtime_locked(
 
         if upgrade:
             _backup_zip_if_present(dest_zip)
-        swapped = _atomic_swap(staging, runtime)
-        staging = None
+        if pid in _swap_in_progress:
+            raise RuntimeError("swap already in progress")
+        _swap_in_progress.add(pid)
+        try:
+            swapped = psz.go_live(staged, runtime, after_first_rename=_after_first_rename)
+        finally:
+            _swap_in_progress.discard(pid)
         try:
             _start_runtime(runtime, doc, sha256)
         except Exception as e:
@@ -471,13 +551,10 @@ def _install_zip_to_runtime_locked(
                 shutil.rmtree(runtime, ignore_errors=True)
             raise
         _commit_zip_after_success(zip_path, dest_zip)
-        if swapped:
-            bak = bak_path(runtime)
-            shutil.rmtree(bak, ignore_errors=True)
         write_install_state(parent, pid, sha256)
-        return pz.unpack_zip(dest_zip, runtime)
+        _last_install_staged = staged
+        return _unpack_result_from_runtime(dest_zip, runtime, sha256)
     finally:
-        cleanup_staging_dir(staging)
         cleanup_staging_for_pack(parent, pid)
 
 

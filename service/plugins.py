@@ -1276,9 +1276,13 @@ def cli_validate(raw_paths: list[str]) -> int:
         path = Path(raw).expanduser().resolve()
         try:
             if path.is_file() and path.suffix.lower() == ".zip":
-                manifest = pz.inspect_zip(path)
-                doc = validate_doc(manifest.plugin)
-                plugins.append({**doc, "file": str(path), "parts": list(manifest.parts)})
+                from . import pack_safe_zip as psz
+
+                hit = psz.validate_pack_zip_path(path, str(path), paths.plugin_runtime_dir())
+                if isinstance(hit, psz.Blocked):
+                    raise ValueError(hit.message)
+                doc = validate_doc(hit.manifest)
+                plugins.append({**doc, "file": str(path), "parts": list(hit.parts)})
             elif path.is_dir() and ((path / "plugin.yml").is_file() or (path / "plugin.yaml").is_file()):
                 manifest = pz.inspect_src(path)
                 doc = validate_doc(manifest.plugin)

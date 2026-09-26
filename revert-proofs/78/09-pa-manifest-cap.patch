@@ -1,0 +1,13 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index 95e84c7..4d04eb3 100644
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -106,7 +106,7 @@ def pack_read_from_members(
+     if _REQUIRED not in members:
+         raise ValueError(f"{_REQUIRED} is required at the archive root")
+     plugin_raw = members[_REQUIRED]
+-    if len(plugin_raw) > MANIFEST_MEMBER_MAX_BYTES:
++    if len(plugin_raw) >= MANIFEST_MEMBER_MAX_BYTES:
+         raise ValueError(
+             zip_entry_error(_REQUIRED, f"exceeds {MANIFEST_MEMBER_MAX_BYTES} byte manifest read cap"),
+         )
