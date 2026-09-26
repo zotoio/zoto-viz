@@ -584,12 +584,7 @@ function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
     scheduleSandboxSetConfig(spec.id, sandboxPluginConfig(spec));
   }
   if (mosaic?.on && spec) {
-    const store = configStoreId(spec);
-    for (const tileId of mosaic.tileIds) {
-      if (configStoreIdForMode(tileId) !== store) continue;
-      const pm = hostModeById(tileId);
-      mosaic.graphScene(tileId)?.setMode(pm, optsFor(pm));
-    }
+    applySharedMosaicPluginConfig(mosaic, spec, opts, optsFor, hostModeById);
   }
   syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
   syncMosaicPluginHudCaptions();
