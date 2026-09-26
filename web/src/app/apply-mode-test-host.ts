@@ -1,6 +1,6 @@
 import type { Mosaic } from "../graph/mosaic";
 import type { PluginView } from "../plugins/plugin";
-import type { ConsentReviewResult } from "./consent-review";
+import type { ConsentReviewResult } from "./pack-consent";
 import { setLastConsentedModeId } from "./mode-switch-state";
 
 export type ApplyModeTestConfig = {

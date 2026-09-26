@@ -1,6 +1,6 @@
 import type { ViewMode } from "../core/modes";
 import type { DreamAnim } from "../graph/scene";
-import type { ConsentReviewResult } from "./consent-review";
+import type { ConsentReviewResult } from "./pack-consent";
 import type { PluginView } from "../plugins/plugin";
 import type { Select } from "../ui/ui";
 import type { Mosaic } from "../graph/mosaic";

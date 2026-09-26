@@ -1,5 +1,5 @@
-import type { ConsentReviewResult } from "./consent-review";
-import { abortAllOpenPackConsents, isPackConsentPending } from "./consent-review";
+import type { ConsentReviewResult } from "./pack-consent";
+import { abortAllOpenPackConsents, isPackConsentPending } from "./pack-consent";
 import {
   bumpModeSwitchGeneration,
   getModeSwitchGeneration,
