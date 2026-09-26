@@ -1,11 +1,9 @@
-diff --git a/service/plugin_local.py b/service/plugin_local.py
-index 2096d2b..8874429 100644
 --- a/service/plugin_local.py
 +++ b/service/plugin_local.py
-@@ -318,6 +318,13 @@ def install_local_zip(
-         tmp_path.write_bytes(raw)
+@@ -319,6 +319,13 @@
          runtime = paths.plugin_local_runtime_dir(create=True) / pid
          incoming = pz.plugin_sha256(tmp_path)
+         upgrade = dest.is_file() and runtime.is_dir()
 +        if dest.is_file() and pz.plugin_sha256(dest) == incoming and runtime.is_dir():
 +            _verify_pack_bundle(runtime, doc, sha256=incoming)
 +            unpacked = pz.unpack_zip(dest, runtime)
@@ -13,6 +11,6 @@ index 2096d2b..8874429 100644
 +            if reminted_from:
 +                info["remintedFrom"] = reminted_from
 +            return _finish(info, activate=activate)
-         if dest.is_file() and pz.plugin_sha256(dest) == incoming and runtime.is_dir():
-             _verify_pack_bundle(runtime, doc, sha256=incoming)
-             unpacked = pz.unpack_zip(dest, runtime)
+         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+             unpacked = install_zip_to_runtime(
+                 dest,

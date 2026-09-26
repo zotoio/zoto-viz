@@ -1,8 +1,6 @@
-diff --git a/service/mcp.py b/service/mcp.py
-index 6b895e0..31189d7 100644
 --- a/service/mcp.py
 +++ b/service/mcp.py
-@@ -684,6 +684,14 @@ def install_catalog_zip(
+@@ -684,6 +684,14 @@
          tmp_path.write_bytes(raw)
          runtime = paths.plugin_runtime_dir() / pid
          incoming = pz.plugin_sha256(tmp_path)
@@ -14,6 +12,6 @@ index 6b895e0..31189d7 100644
 +                info["remintedFrom"] = reminted_from
 +            _refresh_plugin_python(info)
 +            return info
-         if dest.is_file() and pz.plugin_sha256(dest) == incoming and runtime.is_dir():
-             plugin_local._verify_pack_bundle(runtime, doc, incoming)
-             unpacked = pz.unpack_zip(dest, runtime)
+         dirty = pmg.dirty_tree_paths(pid)
+         if dirty and not force:
+             raise pmg.DirtyTreeError(dirty, pid)
