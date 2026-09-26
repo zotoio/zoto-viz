@@ -21,7 +21,7 @@ amendments:
     title: "Nixie fc GLSL; per-tile delivered mirror; A3 bytes + CSP notes"
     status: done
   - id: 7a
-    title: "Scope: no fallback text / host fallbackText in #52 (zoto.fallbackText in #88)"
+    title: "Scope: no fallback text / setFallbackText in #52 (#88 host.setFallbackText)"
     status: done
   - id: 7b
     title: "Coordination: write-on-change cache inventory for #88 ContextGen (body only)"

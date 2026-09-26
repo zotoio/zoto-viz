@@ -2,7 +2,7 @@
 
 ## Amendment 7 (QE 975bd59)
 
-**Shader failure / fallback copy (7a, 7c):** #52 adds no shader-failure fallback UI, no fallback text, and no host `fallbackText` field. This PR only fixes nixie-clock `'fc'` GLSL (A7 compile row). Per TSE review of #88, fallback copy is optional **`zoto.fallbackText`** in the plugin contract and SDK (**#88**); each pack owns its per-tile cache (the host-side `packFallbackText(packId, look)` path is removed in that design). #52 does not ship `zoto.fallbackText` or adopt #88 `ContextGen`.
+**Shader failure / fallback copy (7a, 7c):** #52 adds no fallback text and no `setFallbackText` calls; the shader-failure fallback is **#88**'s push API `host.setFallbackText` (pack pushes only when its text changes; host compares strings and writes). #52 must not add any pack-side fallback pushes (nixie or otherwise). This PR only fixes nixie-clock `'fc'` GLSL (A7 compile row). #52 does not adopt #88 `ContextGen`.
 
 #52 does **not** adopt host PR #88 `ContextGen` yet. When #88 lands, extend the keys below (one builder per cache) so caches reset after WebGL context restore.
 
