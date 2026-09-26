@@ -4,12 +4,15 @@ import json
 from datetime import datetime, timezone
 
 from scripts.check_pack_pr_boundary import (
+    ALLOWED_CATALOG_PATH,
     ALLOWED_SCHEMA_PATH,
     ALLOWED_TSCONFIG_PATH,
     HOST_REVIEW_FAIL_MESSAGE,
     evaluate_pack_pr,
+    pack_py_test_path,
     run_check,
     run_host_change_gate,
+    validate_catalog_py_change,
     validate_schema_py_change,
     validate_tsconfig_change,
 )
@@ -195,3 +198,51 @@ def test_dry_run_host_review_cli() -> None:
 
     payload = json.dumps({"labels": ["host-change"], "last_push_at": _iso(datetime.now(timezone.utc))})
     assert main(["--dry-run-host-review", payload]) == 1
+
+
+CATALOG_EXTRA_VIEWS_TAIL = '''\
+EXTRA_VIEWS = (
+    "lan-heat", "lan-pong", "pulse-ts", "lan-pulse", "drone-show",
+    "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
+    "memory", "disk", "gpu", "sockets", "cgroups", "units", "udev", "syscon",
+    "cypher-cic",
+    "backrooms",
+)
+'''
+
+
+def test_catalog_extra_views_id_addition_allowed() -> None:
+    pack = "voxel-world"
+    base = CATALOG_EXTRA_VIEWS_TAIL
+    head = base.replace(
+        '    "backrooms",\n)',
+        '    "backrooms",\n    "voxel-world",\n)',
+    )
+    assert not validate_catalog_py_change(base, head, pack)
+
+
+def test_voxel_world_style_pack_pr_passes() -> None:
+    pack = "voxel-world"
+    files = [
+        f"plugins/src/{pack}/plugin.yml",
+        f"plugins/src/{pack}/vitest.config.mts",
+        pack_py_test_path(pack),
+        ALLOWED_CATALOG_PATH,
+    ]
+    base = CATALOG_EXTRA_VIEWS_TAIL
+    head = base.replace(
+        '    "backrooms",\n)',
+        '    "backrooms",\n    "voxel-world",\n)',
+    )
+    contents = _contents({ALLOWED_CATALOG_PATH: (base, head)})
+    code, lines = run_check(files, contents)
+    assert code == 0
+    assert any("passed" in line for line in lines)
+
+
+def test_catalog_non_id_edit_rejected() -> None:
+    pack = "voxel-world"
+    head = CATALOG_EXTRA_VIEWS_TAIL.replace(
+        "EXTRA_VIEWS", "EXTRA_VIEWSRenamed"
+    )
+    assert validate_catalog_py_change(CATALOG_EXTRA_VIEWS_TAIL, head, pack)

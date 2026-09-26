@@ -18,6 +18,7 @@ from typing import Any
 
 PACK_SRC_RE = re.compile(r"^plugins/src/([^/]+)/")
 ALLOWED_SCHEMA_PATH = "tests/test_plugin_schema.py"
+ALLOWED_CATALOG_PATH = "tests/test_plugin_catalog.py"
 ALLOWED_TSCONFIG_PATH = "web/tsconfig.json"
 VIZ_VALIDATE_FUNC = "test_viz_plugin_yml_validates"
 HOST_CHANGE_LABEL = "host-change"
@@ -54,6 +55,14 @@ def is_pack_test_file(path: str, pack: str) -> bool:
     if stem.endswith(".test"):
         stem = stem[: -len(".test")]
     return stem == pack or stem.startswith(f"{pack}-")
+
+
+def pack_py_test_path(pack: str) -> str:
+    return f"tests/test_{pack.replace('-', '_')}_pack.py"
+
+
+def is_pack_py_test_file(path: str, pack: str) -> bool:
+    return path == pack_py_test_path(pack)
 
 
 def is_allowed_multipack_web_src(path: str, packs: set[str]) -> bool:
@@ -101,13 +110,117 @@ def _plugin_tuple_from_viz_test(tree: ast.Module) -> ast.Tuple | None:
     return None
 
 
-def _tuple_string_literals(node: ast.Tuple) -> list[str] | None:
+def _tuple_string_literals(node: ast.Tuple | ast.List) -> list[str] | None:
     values: list[str] = []
     for elt in node.elts:
         if not isinstance(elt, ast.Constant) or not isinstance(elt.value, str):
             return None
         values.append(elt.value)
     return values
+
+
+def _module_level_id_collections(tree: ast.Module) -> dict[str, ast.Tuple | ast.List]:
+    collections: dict[str, ast.Tuple | ast.List] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if not isinstance(target, ast.Name):
+            continue
+        if not isinstance(node.value, (ast.Tuple, ast.List)):
+            continue
+        if _tuple_string_literals(node.value) is None:
+            continue
+        collections[target.id] = node.value
+    return collections
+
+
+def validate_catalog_py_change(base_text: str, head_text: str, pack: str) -> list[Violation]:
+    if base_text == head_text:
+        return []
+    try:
+        base_tree = ast.parse(base_text)
+        head_tree = ast.parse(head_text)
+    except SyntaxError as exc:
+        return [
+            Violation(
+                ALLOWED_CATALOG_PATH,
+                f"could not parse {ALLOWED_CATALOG_PATH}: {exc}",
+            )
+        ]
+
+    base_collections = _module_level_id_collections(base_tree)
+    head_collections = _module_level_id_collections(head_tree)
+
+    def ids_for(collections: dict[str, ast.Tuple | ast.List], name: str) -> list[str]:
+        node = collections.get(name)
+        if node is None:
+            return []
+        return _tuple_string_literals(node) or []
+
+    changed_names = sorted(
+        name
+        for name in set(base_collections) | set(head_collections)
+        if ids_for(base_collections, name) != ids_for(head_collections, name)
+    )
+    if len(changed_names) != 1:
+        return [
+            Violation(
+                ALLOWED_CATALOG_PATH,
+                "only allowed change is adding one pack id to a module-level "
+                "id tuple or list",
+            )
+        ]
+
+    name = changed_names[0]
+    base_node = base_collections.get(name)
+    head_node = head_collections.get(name)
+    if base_node is None or head_node is None:
+        return [
+            Violation(
+                ALLOWED_CATALOG_PATH,
+                "pack id tuple/list must be updated in place, not added/removed",
+            )
+        ]
+
+    base_ids = _tuple_string_literals(base_node) or []
+    head_ids = _tuple_string_literals(head_node) or []
+
+    base_norm = ast.dump(base_tree, annotate_fields=False)
+    head_norm = ast.dump(head_tree, annotate_fields=False)
+    base_coll_dump = ast.dump(base_node, annotate_fields=False)
+    head_coll_dump = ast.dump(head_node, annotate_fields=False)
+    if base_norm.replace(base_coll_dump, "") != head_norm.replace(head_coll_dump, ""):
+        return [
+            Violation(
+                ALLOWED_CATALOG_PATH,
+                "only allowed change is adding one pack id to an id tuple or list",
+            )
+        ]
+
+    if head_ids[:-1] != base_ids and head_ids[1:] != base_ids:
+        return [
+            Violation(
+                ALLOWED_CATALOG_PATH,
+                "id list change must be exactly one added pack id (no reorder/removal)",
+            )
+        ]
+    if len(head_ids) != len(base_ids) + 1:
+        return [
+            Violation(
+                ALLOWED_CATALOG_PATH,
+                "id list change must add exactly one pack id",
+            )
+        ]
+    added = set(head_ids) - set(base_ids)
+    if added != {pack}:
+        return [
+            Violation(
+                ALLOWED_CATALOG_PATH,
+                f"added pack id must be {pack!r}, got {sorted(added)!r}",
+            )
+        ]
+    return []
 
 
 def validate_schema_py_change(base_text: str, head_text: str, pack: str) -> list[Violation]:
@@ -266,6 +379,8 @@ def evaluate_pack_pr(
             continue
         if is_pack_test_file(path, pack):
             continue
+        if is_pack_py_test_file(path, pack):
+            continue
         if path == ALLOWED_TSCONFIG_PATH:
             base_text, head_text = file_contents.get(path, (None, None))
             if base_text is None:
@@ -286,6 +401,17 @@ def evaluate_pack_pr(
                 continue
             violations.extend(
                 validate_schema_py_change(base_text or "", head_text, pack)
+            )
+            continue
+        if path == ALLOWED_CATALOG_PATH:
+            base_text, head_text = file_contents.get(path, (None, None))
+            if head_text is None:
+                violations.append(
+                    Violation(path, "missing head content for catalog test file")
+                )
+                continue
+            violations.extend(
+                validate_catalog_py_change(base_text or "", head_text, pack)
             )
             continue
         violations.append(
@@ -609,7 +735,7 @@ def main(argv: list[str] | None = None) -> int:
     changed = git_diff_name_only(args.base, args.head)
     contents: dict[str, tuple[str | None, str | None]] = {}
     for path in changed:
-        if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH):
+        if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):
             contents[path] = load_file_pair(args.base, args.head, path)
 
     code, lines = run_check(changed, contents)
