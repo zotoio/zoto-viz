@@ -1568,6 +1568,7 @@ export class NetScene implements HostedView {
     tileCount?: number;
   } | null): void {
     this.packCoalesce = role;
+    this.host?.markMirrorScopeDirty();
   }
 
   get packCoalesceGroupKey(): string | undefined {

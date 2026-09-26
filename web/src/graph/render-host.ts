@@ -120,7 +120,23 @@ export class RenderHost {
   private readonly fbViewport: Viewport = { x: 0, y: 0, w: 0, h: 0 };
   private readonly packScopeScratch = new Map<string, { tileCount: number; antialias: boolean }>();
   private readonly sandboxScopeScratch = new Map<string, number>();
-  private mirrorScopeFingerprint = "";
+  private mirrorScopeDirty = true;
+  private contextAntialias = false;
+  private readonly viewBoxScratch: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly viewBoxScratchB: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly packDrawSize = { w: 0, h: 0 };
+  private readonly packDrawViewport: MirrorRect = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly packDrawOpts = {
+    letterbox: false,
+    fill: null as SurfaceLetterboxFill | null,
+    aspect: 1,
+  };
+  private gpuTimedView: HostedView | null = null;
+  private gpuTimedPackKey: string | null = null;
+  private gpuTimedScene: THREE.Scene | null = null;
+  private gpuTimedCamera: THREE.Camera | null = null;
+  private gpuTimedClearHex = 0;
+  private gpuTimedBox: SoftRect | null = null;
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean; antialias?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -140,6 +156,7 @@ export class RenderHost {
         this.renderer.setPixelRatio(dpr);
         this.renderer.setClearColor(0x000000, 0);
         this.canvas = this.renderer.domElement;
+        this.refreshContextAntialias();
       } catch {
         this.software = true;
         this.canvas = document.createElement("canvas");
@@ -161,6 +178,8 @@ export class RenderHost {
     });
     this.canvas.addEventListener("webglcontextrestored", () => {
       this.dirty = true;
+      this.refreshContextAntialias();
+      this.markMirrorScopeDirty();
       for (const v of this.views) v.hostContextRestored();
     });
     this.attach();
@@ -204,20 +223,25 @@ export class RenderHost {
   add(v: HostedView): void {
     if (!this.views.includes(v)) this.views.push(v);
     this.dirty = true;
-    this.mirrorScopeFingerprint = "";
+    this.markMirrorScopeDirty();
   }
 
   remove(v: HostedView): void {
     const i = this.views.indexOf(v);
     if (i >= 0) this.views.splice(i, 1);
     this.dirty = true;
-    this.mirrorScopeFingerprint = "";
+    this.markMirrorScopeDirty();
   }
 
   /** Pane geometry changed (mosaic layout, hero swap): clear stale pixels outside the new viewports. */
   invalidate(): void {
     this.dirty = true;
-    this.mirrorScopeFingerprint = "";
+    this.markMirrorScopeDirty();
+  }
+
+  /** Pack-mirror tile metadata changed without add/remove (mosaic coalesce). */
+  markMirrorScopeDirty(): void {
+    this.mirrorScopeDirty = true;
   }
 
   /** Run one animation frame (tests / dogfood). */
@@ -233,9 +257,11 @@ export class RenderHost {
     mirror: HostedView,
     fill: SurfaceLetterboxFill,
   ): Viewport | null {
-    const dst = this.viewBox(mirror);
-    const src = this.viewBox(primary);
-    if (!dst || !src || dst.w < 2 || dst.h < 2) return null;
+    if (!this.viewBoxInto(mirror, this.viewBoxScratch)) return null;
+    const dst = this.viewBoxScratch;
+    if (!this.viewBoxInto(primary, this.viewBoxScratchB)) return null;
+    const src = this.viewBoxScratchB;
+    if (dst.w < 2 || dst.h < 2) return null;
     const aspect = src.w / Math.max(1, src.h);
     const box = copyViewBox(dst, this.letterboxScratch.box);
     const inner = letterboxInnerRect(dst, aspect);
@@ -287,9 +313,10 @@ export class RenderHost {
     pluginId: string,
     releaseBitmap = true,
   ): Viewport | null {
-    const dst = this.viewBox(mirror);
-    if (!dst || dst.w < 2 || dst.h < 2) return null;
     try {
+      if (!this.viewBoxInto(mirror, this.viewBoxScratch)) return null;
+      const dst = this.viewBoxScratch;
+      if (dst.w < 2 || dst.h < 2) return null;
       const box = copyViewBox(dst, this.letterboxScratch.box);
       const inner = letterboxInnerRect(dst, aspect);
       this.letterboxScratch.inner.x = inner.x + dst.x;
@@ -326,8 +353,9 @@ export class RenderHost {
     fill: SurfaceLetterboxFill,
     aspect: number,
   ): Viewport | null {
-    const dst = this.viewBox(mirror);
-    if (!dst || dst.w < 2 || dst.h < 2) return null;
+    if (!this.viewBoxInto(mirror, this.viewBoxScratch)) return null;
+    const dst = this.viewBoxScratch;
+    if (dst.w < 2 || dst.h < 2) return null;
     const box = copyViewBox(dst, this.letterboxScratch.box);
     const inner = letterboxInnerRect(dst, aspect);
     const innerAbs = this.letterboxScratch.innerAbs;
@@ -358,8 +386,9 @@ export class RenderHost {
     packName: string,
     mirrorsTile: number,
   ): Viewport | null {
-    const dst = this.viewBox(mirror);
-    if (!dst || dst.w < 2 || dst.h < 2) return null;
+    if (!this.viewBoxInto(mirror, this.viewBoxScratch)) return null;
+    const dst = this.viewBoxScratch;
+    if (dst.w < 2 || dst.h < 2) return null;
     const el = mirror.viewEl;
     let badge = el.querySelector<HTMLElement>(".pack-mirror-placeholder");
     if (!badge) {
@@ -402,8 +431,8 @@ export class RenderHost {
    * Returns the viewport in framebuffer pixels, or null when the element is off the wall.
    */
   present(view: HostedView, clearHex: number, scene: THREE.Scene, camera: THREE.Camera): Viewport | null {
-    const box = this.viewBox(view);
-    if (!box) return null;
+    if (!this.viewBoxInto(view, this.viewBoxScratch)) return null;
+    const box = this.viewBoxScratch;
     const { x, y, w, h } = box;
     if (this.software) {
       const ctx = this.ctx2d;
@@ -428,30 +457,82 @@ export class RenderHost {
     const tileCount = meta.packCoalesceTileCount ?? 0;
     const packKey = meta.packCoalesceGroupKey;
     const packPrimary = meta.isPackMirrorPrimary === true;
-    const antialias = gl?.getContextAttributes()?.antialias === true;
     if (packPrimary && tileCount >= 2 && packKey && gl) {
-      const drawPack = () => {
-        this.packMirrors.renderPrimary(packKey, rd, scene, camera, { w, h }, clearHex, antialias);
-        this.packMirrors.presentPack(packKey, rd, { x, y, w, h }, {
-          letterbox: false,
-          fill: null,
-          aspect: w / Math.max(1, h),
-        });
-      };
-      timeGpu(gl, drawPack, (ms) => view.noteFrameCost?.(ms));
+      this.gpuTimedView = view;
+      this.gpuTimedPackKey = packKey;
+      this.gpuTimedScene = scene;
+      this.gpuTimedCamera = camera;
+      this.gpuTimedClearHex = clearHex;
+      this.gpuTimedBox = box;
+      timeGpu(gl, this.runTimedPackPrimaryDraw, this.runTimedGpuNote);
+      this.gpuTimedView = null;
+      this.gpuTimedPackKey = null;
+      this.gpuTimedScene = null;
+      this.gpuTimedCamera = null;
+      this.gpuTimedBox = null;
       return this.writeFbViewport(box, pr);
     }
-    const draw = () => {
-      rd.setViewport(x, y, w, h);
-      rd.setScissor(x, y, w, h);
-      rd.setScissorTest(true);
-      rd.setClearColor(clearHex, 1);
-      rd.render(scene, camera);
-    };
-    if (gl) timeGpu(gl, draw, (ms) => view.noteFrameCost?.(ms));
-    else draw();
+    this.gpuTimedView = view;
+    this.gpuTimedScene = scene;
+    this.gpuTimedCamera = camera;
+    this.gpuTimedClearHex = clearHex;
+    this.gpuTimedBox = box;
+    if (gl) {
+      timeGpu(gl, this.runTimedViewDraw, this.runTimedGpuNote);
+    } else {
+      this.runTimedViewDraw();
+    }
+    this.gpuTimedView = null;
+    this.gpuTimedScene = null;
+    this.gpuTimedCamera = null;
+    this.gpuTimedBox = null;
     return this.writeFbViewport(box, pr);
   }
+
+  private readonly runTimedGpuNote = (ms: number): void => {
+    this.gpuTimedView?.noteFrameCost?.(ms);
+  };
+
+  private readonly runTimedPackPrimaryDraw = (): void => {
+    const packKey = this.gpuTimedPackKey;
+    const box = this.gpuTimedBox;
+    const scene = this.gpuTimedScene;
+    const camera = this.gpuTimedCamera;
+    if (!packKey || !box || !scene || !camera) return;
+    const rd = this.renderer as THREE.WebGLRenderer;
+    this.packDrawSize.w = box.w;
+    this.packDrawSize.h = box.h;
+    this.packMirrors.renderPrimary(
+      packKey,
+      rd,
+      scene,
+      camera,
+      this.packDrawSize,
+      this.gpuTimedClearHex,
+      this.contextAntialias,
+    );
+    this.packDrawViewport.x = box.x;
+    this.packDrawViewport.y = box.y;
+    this.packDrawViewport.w = box.w;
+    this.packDrawViewport.h = box.h;
+    this.packDrawOpts.letterbox = false;
+    this.packDrawOpts.fill = null;
+    this.packDrawOpts.aspect = box.w / Math.max(1, box.h);
+    this.packMirrors.presentPack(packKey, rd, this.packDrawViewport, this.packDrawOpts);
+  };
+
+  private readonly runTimedViewDraw = (): void => {
+    const box = this.gpuTimedBox;
+    const scene = this.gpuTimedScene;
+    const camera = this.gpuTimedCamera;
+    if (!box || !scene || !camera) return;
+    const rd = this.renderer as THREE.WebGLRenderer;
+    rd.setViewport(box.x, box.y, box.w, box.h);
+    rd.setScissor(box.x, box.y, box.w, box.h);
+    rd.setScissorTest(true);
+    rd.setClearColor(this.gpuTimedClearHex, 1);
+    rd.render(scene, camera);
+  };
 
   private writeFbViewport(box: SoftRect, pr: number): Viewport {
     const v = this.fbViewport;
@@ -460,21 +541,6 @@ export class RenderHost {
     v.w = box.w * pr;
     v.h = box.h * pr;
     return v;
-  }
-
-  private buildMirrorScopeFingerprint(): string {
-    const parts: string[] = [];
-    for (const v of this.views) {
-      const meta = packMirrorMeta(v);
-      parts.push([
-        meta.packCoalesceGroupKey ?? "",
-        meta.packCoalesceTileCount ?? 0,
-        meta.packSandboxMirrorPluginId ?? "",
-        meta.isPackMirrorPrimary ? 1 : 0,
-      ].join("|"));
-    }
-    parts.sort();
-    return parts.join(";");
   }
 
   private sortViewsForMirror(): void {
@@ -487,11 +553,11 @@ export class RenderHost {
   }
 
   private syncMirrorScopesIfNeeded(): void {
-    const fingerprint = this.buildMirrorScopeFingerprint();
-    if (fingerprint === this.mirrorScopeFingerprint) return;
-    this.mirrorScopeFingerprint = fingerprint;
+    renderHostMirrorTelemetry.scopeDirtyChecks += 1;
+    if (!this.mirrorScopeDirty) return;
+    this.mirrorScopeDirty = false;
     renderHostMirrorTelemetry.scopeSyncRuns += 1;
-    const antialias = this.gl?.getContextAttributes()?.antialias === true;
+    const antialias = this.contextAntialias;
     this.packScopeScratch.clear();
     for (const v of this.views) {
       const meta = packMirrorMeta(v);
@@ -532,15 +598,30 @@ export class RenderHost {
   }
 
   viewBox(view: HostedView): SoftRect | null {
+    if (!this.viewBoxInto(view, this.viewBoxScratch)) return null;
+    return this.viewBoxScratch;
+  }
+
+  private viewBoxInto(view: HostedView, out: SoftRect): boolean {
     const c = this.canvasRect ?? this.canvas.getBoundingClientRect();
     const r = view.viewEl.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2 || c.width < 2 || c.height < 2) return null;
+    if (r.width < 2 || r.height < 2 || c.width < 2 || c.height < 2) return false;
     const x = r.left - c.left;
     const y = this.software ? r.top - c.top : c.bottom - r.bottom;
     const w = r.width;
     const h = r.height;
-    if (x + w <= 0 || y + h <= 0 || x >= c.width || y >= c.height) return null;
-    return { x, y, w, h };
+    if (x + w <= 0 || y + h <= 0 || x >= c.width || y >= c.height) return false;
+    out.x = x;
+    out.y = y;
+    out.w = w;
+    out.h = h;
+    return true;
+  }
+
+  private refreshContextAntialias(): void {
+    renderHostMirrorTelemetry.getContextAttributesCalls += 1;
+    const gl = this.gl;
+    this.contextAntialias = gl?.getContextAttributes()?.antialias === true;
   }
 
   private syncSize(): void {

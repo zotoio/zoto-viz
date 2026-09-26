@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-sandbox-bitmap.test.ts",
-  "testName": "RenderHost sandbox bitmap present > closes a 1×1 ImageBitmap exactly once after presentBitmapMirror",
-  "description": "presentBitmapMirror always closes ImageBitmap in a finally block (including sub-2px software skip)."
-}

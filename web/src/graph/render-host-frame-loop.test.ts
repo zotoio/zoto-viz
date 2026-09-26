@@ -73,7 +73,7 @@ describe("RenderHost mirror frame loop", () => {
     renderHostMirrorTelemetry.reset();
   });
 
-  it("300 frames without layout change: one scope sync, zero sorts, stable viewport instance", () => {
+  it("300 frames without layout change: one scope sync, stable viewBox and viewport", () => {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
     const primary: MirrorMetaView = {
@@ -88,14 +88,20 @@ describe("RenderHost mirror frame loop", () => {
     host.advanceFrame(0);
     expect(renderHostMirrorTelemetry.scopeSyncRuns).toBe(1);
     expect(renderHostMirrorTelemetry.viewSortRuns).toBe(1);
+    const boxA = host.viewBox(primary);
+    const boxB = host.viewBox(primary);
+    expect(boxA).toBe(boxB);
     const lastVp = host.present(primary, 0x0a1020, scene, camera);
     expect(lastVp).not.toBeNull();
     for (let i = 0; i < 300; i++) {
       host.advanceFrame(i + 1);
       const vp = host.present(primary, 0x0a1020, scene, camera);
       expect(vp).toBe(lastVp);
+      expect(host.viewBox(primary)).toBe(boxA);
     }
     expect(renderHostMirrorTelemetry.scopeSyncRuns).toBe(1);
     expect(renderHostMirrorTelemetry.viewSortRuns).toBe(1);
+    expect(renderHostMirrorTelemetry.scopeDirtyChecks).toBe(301);
+    expect(renderHostMirrorTelemetry.getContextAttributesCalls).toBe(0);
   });
 });

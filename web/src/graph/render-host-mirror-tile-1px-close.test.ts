@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
 import { surfaceLetterboxFill } from "./letterbox-fill";
 
-describe("RenderHost sandbox bitmap present", () => {
-  it("closes a 1×1 ImageBitmap exactly once after presentBitmapMirror", () => {
+describe("RenderHost mirror tile shrink", () => {
+  it("closes bitmap once when mirror tile shrinks to 1px during advanceFrame", () => {
     const wall = document.createElement("div");
     wall.style.width = "120px";
     wall.style.height = "80px";
@@ -15,13 +15,14 @@ describe("RenderHost sandbox bitmap present", () => {
     });
     document.body.appendChild(wall);
     const mirrorEl = document.createElement("div");
+    let w = 100;
+    let h = 60;
     mirrorEl.getBoundingClientRect = () => ({
-      left: 0, top: 0, right: 100, bottom: 60, width: 100, height: 60, x: 0, y: 0, toJSON: () => ({}),
+      left: 0, top: 0, right: w, bottom: h, width: w, height: h, x: 0, y: 0, toJSON: () => ({}),
     });
     wall.appendChild(mirrorEl);
     const host = new RenderHost(wall, { software: true });
     host.canvas.getBoundingClientRect = () => wall.getBoundingClientRect();
-    host.advanceFrame(0);
     const mirror = {
       viewEl: mirrorEl,
       hostFrame() {},
@@ -31,12 +32,15 @@ describe("RenderHost sandbox bitmap present", () => {
     const bmp = Object.create(ImageBitmap.prototype) as ImageBitmap;
     let closed = 0;
     Object.defineProperties(bmp, {
-      width: { value: 1 },
-      height: { value: 1 },
+      width: { value: 32 },
+      height: { value: 24 },
       close: { value: vi.fn(() => { closed += 1; }) },
     });
     const fill = surfaceLetterboxFill(0x0a1020, 0.25);
-    host.presentBitmapMirror(mirror, bmp, fill, 1, "plugin:tiny");
+    host.advanceFrame(0);
+    w = 1;
+    h = 1;
+    host.presentBitmapMirror(mirror, bmp, fill, 1, "plugin:shrink");
     expect(closed).toBe(1);
     host.dispose();
     wall.remove();
