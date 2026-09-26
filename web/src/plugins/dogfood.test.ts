@@ -12,6 +12,7 @@ import {
   runPackFrameHandler,
   runPackSwapPreserve,
 } from "./dogfood-runner";
+import { VIZ_FIXTURE_IDLE, VIZ_FIXTURE_GOLDEN_LIVE } from "../../../plugins/sdk/viz-fixtures";
 import { packetTunnelFields } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
 import { packHnRainBuffer, packHnTermBuffer, packStereoDrive } from "./viz-pack-host";
 import {
@@ -174,7 +175,7 @@ describe("viz dogfood gates", () => {
   it("packet-tunnel host idle yields non-zero buffer and bright on empty state", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
     let bright = 0;
-    const frame = buildVizFrameForPlugin(emptyState(), 0, 0, { fixture: "host" });
+    const frame = VIZ_FIXTURE_IDLE;
     expect(frame.packets.length).toBeGreaterThan(0);
     runPackFrameHandler("packet-tunnel", frame, {
       writeBuffer: (slot, data) => { writer.writeBuffer(slot, data); },
@@ -192,7 +193,7 @@ describe("viz dogfood gates", () => {
 
   it("talker-storm host idle yields particles on empty state", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["talker-storm"]);
-    const frame = buildVizFrameForPlugin(emptyState(), 0, 0, { fixture: "host" });
+    const frame = VIZ_FIXTURE_IDLE;
     expect(frame.talkers.length).toBeGreaterThan(0);
     runPackFrameHandler("talker-storm", frame, {
       writeBuffer: (slot, data) => { writer.writeBuffer(slot, data); },
@@ -206,7 +207,7 @@ describe("viz dogfood gates", () => {
   it("packet-tunnel prefers live packets over host idle", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
     let bright = 0;
-    const frame = buildVizFrame(fatLan, 0, 0.1);
+    const frame = VIZ_FIXTURE_GOLDEN_LIVE;
     runPackFrameHandler("packet-tunnel", frame, {
       writeBuffer: (slot, data) => { writer.writeBuffer(slot, data); },
       writeUniform: (name, value) => {

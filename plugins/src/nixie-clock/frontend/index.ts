@@ -1,15 +1,10 @@
 /** IN-18 Nixie clock — local time packed into sky slots. */
 
 import { nixieCanvasSize, packNixieBuffer, parseNixieLook, type NixieLook } from "./tubes";
-
-type VizFrame = {
-  t: number;
-  audio: number;
-  talkers?: { rate: number }[];
-};
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "talkers">) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;

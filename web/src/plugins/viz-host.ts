@@ -58,70 +58,24 @@ export interface VizPluginContract {
   idle: VizIdleConfig;
 }
 
-export interface VizPacketSample {
-  proto: string;
-  size: number;
-  /** Normalized 0..1 field derived from packet size (no graph walk). */
-  field: number;
-}
-
-export interface VizRfBeacon {
-  ssid: string;
-  rssi: number;
-  channel: number;
-}
-
-export interface VizTalkerSample {
-  id: string;
-  rate: number;
-  role: string;
-}
-
-export interface VizHeadline {
-  id: string;
-  label: string;
-  text: string;
-  kind?: string;
-  summary?: string;
-  image?: string;
-}
-
-/** Host-decimated snapshot delivered to viz.read plugins each frame. */
-export interface VizDataFrame {
-  t: number;
-  dt: number;
-  audio: number;
-  packets: VizPacketSample[];
-  rf: VizRfBeacon[];
-  talkers: VizTalkerSample[];
-  headlines: VizHeadline[];
-  /** True when any slice was filled from viz.idle (host fixture or inline seed). */
-  demo?: boolean;
-  /** Per-slice flags for idle-filled slices — drives pack-specific HUD demo cues. */
-  demoSlices?: Partial<Record<"packets" | "rf" | "talkers" | "headlines", true>>;
-  /** Linux SYS gauges 0..1 for holotable / CIC plugins. */
-  sys?: VizSysTelemetry;
-  /** Optional spectrum bins (low frequency first) for packs that draw an analyser. */
-  spectrum?: number[];
-}
-
-/** Compact this-host gauges. Missing views stay 0. */
-export interface VizSysTelemetry {
-  cpu: number;
-  mem: number;
-  disk: number;
-  gpu: number;
-  temp: number;
-  watts: number;
-  psi: number;
-  sockets: number;
-  failed: number;
-  udev: number;
-}
-
-export const EMPTY_SYS_TELEMETRY: VizSysTelemetry = {
-  cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0,
-};
+export type {
+  VizDataFrame,
+  VizHeadline,
+  VizPacketSample,
+  VizRfBeacon,
+  VizSysTelemetry,
+  VizTalkerSample,
+} from "../../../plugins/sdk/viz-contract";
+export { EMPTY_SYS_TELEMETRY, VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
+import type {
+  VizDataFrame,
+  VizHeadline,
+  VizPacketSample,
+  VizRfBeacon,
+  VizSysTelemetry,
+  VizTalkerSample,
+} from "../../../plugins/sdk/viz-contract";
+import { EMPTY_SYS_TELEMETRY } from "../../../plugins/sdk/viz-contract";
 
 function clamp01(n: number): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;

@@ -1,16 +1,10 @@
 /** Phosphor rain — HN / host source headlines become the glyph stream. */
 
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook, type HnRainLook } from "./crawl";
-
-type VizFrame = {
-  t: number;
-  audio: number;
-  packets: { field: number }[];
-  headlines?: { id: string; label: string; text: string }[];
-};
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "packets" | "headlines">) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;

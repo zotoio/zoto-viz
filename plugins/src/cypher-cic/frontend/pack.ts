@@ -1,23 +1,13 @@
 /** Pack SYS + NET telemetry into viz slots for the Cypher CIC holodeck. */
 
-export type SysGauges = {
-  cpu: number;
-  mem: number;
-  disk: number;
-  gpu: number;
-  temp: number;
-  watts: number;
-  psi: number;
-  sockets: number;
-  failed: number;
-  udev: number;
-};
+import type {
+  VizPacketSample,
+  VizRfBeacon,
+  VizSysTelemetry,
+  VizTalkerSample,
+} from "../../../sdk/viz-contract";
 
-export type TalkerRow = { id: string; rate: number; role: string };
-export type PacketRow = { proto?: string; size?: number; field?: number };
-export type RfRow = { ssid?: string; rssi?: number; channel?: number };
-
-export const EMPTY_SYS: SysGauges = {
+export const EMPTY_SYS: VizSysTelemetry = {
   cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0,
 };
 
@@ -36,7 +26,7 @@ export function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-export function sysAlert(sys: SysGauges): number {
+export function sysAlert(sys: VizSysTelemetry): number {
   return clamp01(Math.max(sys.failed, sys.psi, sys.temp > 0.75 ? sys.temp : 0));
 }
 
@@ -85,7 +75,7 @@ export function cicCanvasSize(doc?: Document | null): { w: number; h: number } {
 
 /** Slot 0: gauges + canvas + look + aggregate load. */
 export function packSysSlot(
-  sys: Partial<SysGauges> | undefined,
+  sys: Partial<VizSysTelemetry> | undefined,
   audio: number,
   canvas: { w: number; h: number } = CANVAS_DEFAULT,
   look: CicLook = DEFAULT_LOOK,
@@ -105,7 +95,7 @@ export function packSysSlot(
 }
 
 /** Slot 1: up to 8 talkers — rate, hash, role, reserved. */
-export function packTalkers(talkers: TalkerRow[] | undefined, cap = 8): number[] {
+export function packTalkers(talkers: VizTalkerSample[] | undefined, cap = 8): number[] {
   const rows = (talkers ?? []).slice(0, cap);
   const out: number[] = [];
   for (const t of rows) {
@@ -115,7 +105,7 @@ export function packTalkers(talkers: TalkerRow[] | undefined, cap = 8): number[]
 }
 
 /** Slot 2: up to 8 protocol fields — field, size, proto-hash, reserved. */
-export function packPackets(packets: PacketRow[] | undefined, cap = 8): number[] {
+export function packPackets(packets: VizPacketSample[] | undefined, cap = 8): number[] {
   const rows = (packets ?? []).slice(0, cap);
   const out: number[] = [];
   for (const p of rows) {
@@ -130,7 +120,7 @@ export function packPackets(packets: PacketRow[] | undefined, cap = 8): number[]
 }
 
 /** Slot 3: up to 6 RF beacons — rssi, channel, ssid-hash, reserved. */
-export function packRf(rf: RfRow[] | undefined, cap = 6): number[] {
+export function packRf(rf: VizRfBeacon[] | undefined, cap = 6): number[] {
   const rows = (rf ?? []).slice(0, cap);
   const out: number[] = [];
   for (const b of rows) {
@@ -146,13 +136,13 @@ export function packRf(rf: RfRow[] | undefined, cap = 6): number[] {
   return out;
 }
 
-export function peakTalker(talkers: TalkerRow[] | undefined): number {
+export function peakTalker(talkers: VizTalkerSample[] | undefined): number {
   let peak = 0;
   for (const t of talkers ?? []) peak = Math.max(peak, t.rate);
   return clamp01(peak / 200);
 }
 
-export function peakRf(rf: RfRow[] | undefined): number {
+export function peakRf(rf: VizRfBeacon[] | undefined): number {
   let peak = 0;
   for (const b of rf ?? []) {
     const rssi = Number(b.rssi);

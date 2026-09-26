@@ -3,16 +3,10 @@
 import {
   TERM_COLS, TERM_ROWS, packScreen, preferHnStories, scriptFromStories, visibleScreen,
 } from "./teletype";
-
-type VizFrame = {
-  t: number;
-  dt: number;
-  audio: number;
-  headlines?: { id: string; label: string; text: string; summary?: string }[];
-};
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "dt" | "audio" | "headlines">) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };

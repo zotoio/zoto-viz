@@ -1,13 +1,9 @@
 /** Sine-scroll starfield — packet fields drive lanes; extra slots morph pareidolia faces. */
 
-type VizFrame = {
-  t: number;
-  audio: number;
-  packets: { field: number }[];
-};
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "packets">) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };

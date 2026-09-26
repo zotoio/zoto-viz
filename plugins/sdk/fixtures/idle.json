@@ -1,0 +1,89 @@
+{
+  "t": 10,
+  "dt": 0,
+  "audio": 0.08089879529339611,
+  "packets": [
+    {
+      "proto": "tcp",
+      "size": 480,
+      "field": 0.62
+    },
+    {
+      "proto": "udp",
+      "size": 96,
+      "field": 0.38
+    },
+    {
+      "proto": "dns",
+      "size": 64,
+      "field": 0.28
+    },
+    {
+      "proto": "tls",
+      "size": 820,
+      "field": 0.71
+    }
+  ],
+  "rf": [
+    {
+      "ssid": "host-04",
+      "rssi": 0.55,
+      "channel": 36
+    },
+    {
+      "ssid": "host-05",
+      "rssi": 0.42,
+      "channel": 6
+    }
+  ],
+  "talkers": [
+    {
+      "id": "host-01",
+      "rate": 120,
+      "role": "lan"
+    },
+    {
+      "id": "host-02",
+      "rate": 88,
+      "role": "gateway"
+    },
+    {
+      "id": "host-03",
+      "rate": 64,
+      "role": "internet"
+    }
+  ],
+  "headlines": [
+    {
+      "id": "demo:0",
+      "label": "Demo",
+      "text": "Zoto viz idle seed",
+      "kind": "demo"
+    },
+    {
+      "id": "demo:1",
+      "label": "Demo",
+      "text": "Live traffic wins when present",
+      "kind": "demo"
+    }
+  ],
+  "sys": {
+    "cpu": 0,
+    "mem": 0,
+    "disk": 0,
+    "gpu": 0,
+    "temp": 0,
+    "watts": 0,
+    "psi": 0,
+    "sockets": 0,
+    "failed": 0,
+    "udev": 0
+  },
+  "demo": true,
+  "demoSlices": {
+    "packets": true,
+    "rf": true,
+    "talkers": true,
+    "headlines": true
+  }
+}
