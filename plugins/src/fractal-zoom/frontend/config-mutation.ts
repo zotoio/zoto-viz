@@ -1,6 +1,8 @@
 import {
+  FRACTAL_DEFAULTS,
   FRACTAL_PRESETS,
   FRACTAL_TYPES,
+  applyPresetRow,
   type FractalPreset,
   randomiseFractalOptions,
 } from "./options";
@@ -56,17 +58,7 @@ function optToStrings(o: ReturnType<typeof randomiseFractalOptions>): Record<str
 }
 
 function presetRowToStrings(row: FractalPreset): Record<string, string> {
-  const o = randomiseFractalOptions(0.5);
-  o.type = row.type;
-  o.preset = row.id;
-  o.palette = row.palette;
-  o.zoomSpeed = row.zoomSpeed;
-  o.glow = row.glow;
-  o.fog = row.fog;
-  o.morph = row.morph;
-  if (row.power !== undefined) o.power = row.power;
-  if (row.scale !== undefined) o.scale = row.scale;
-  if (row.fold !== undefined) o.fold = row.fold;
+  const o = applyPresetRow({ ...FRACTAL_DEFAULTS, preset: row.id }, row);
   return optToStrings(o);
 }
 

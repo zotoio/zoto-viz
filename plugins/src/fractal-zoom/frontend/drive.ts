@@ -120,6 +120,7 @@ let pingPhase = 0;
 let morphT = 0;
 let pilotSeed = 0.37;
 let lastFrameMs = 0;
+let resetCamLatched = false;
 
 const PILOT_TARGETS = [
   [-0.745, 0.186],
@@ -147,6 +148,7 @@ export function resetFractalDrive(): void {
   optsJson = "";
   optsCache = parseFractalOptions();
   lastFrameMs = 0;
+  resetCamLatched = false;
   fractalHudCaption = "Mandelbulb · Classic Dive";
 }
 
@@ -172,7 +174,14 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   lastFrameMs = dt * 1000;
   const renderScale = fractalRenderScale();
 
-  if (opts.resetCam) resetFractalCamera();
+  if (opts.resetCam) {
+    if (!resetCamLatched) {
+      resetFractalCamera();
+      resetCamLatched = true;
+    }
+  } else {
+    resetCamLatched = false;
+  }
 
   let precisionClamp = 0;
   if (zoomLog > FRACTAL_ZOOM_LOG_LIMIT) {
@@ -186,7 +195,7 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   const ping = opts.zoomDir === "pingpong" ? Math.sin(pingPhase) : zoomSign;
 
   const driftOnly = opts.reducedMotion && opts.autoPilot;
-  const holdStill = opts.reducedMotion && opts.paused;
+  const holdStill = opts.paused || opts.zoomSpeed <= 0;
 
   if (!holdStill) {
     const zspd = opts.reducedMotion ? Math.min(opts.zoomSpeed, 0.12) : opts.zoomSpeed;
@@ -213,10 +222,12 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
 
   const [dirX, dirY, dirZ] = dirFromAngles(yaw, pitch, roll);
   const step = Math.exp(-zoomLog * 0.35);
-  if (!holdStill && !driftOnly) {
-    camX += dirX * step * dt * 0.4 * ping;
-    camY += dirY * step * dt * 0.4 * ping;
-    camZ += dirZ * step * dt * 0.4 * ping;
+  const fly = !holdStill && !driftOnly && opts.zoomSpeed > 0;
+  if (fly) {
+    const dolly = dt * 0.4 * ping * (opts.reducedMotion ? Math.min(opts.zoomSpeed, 0.12) : opts.zoomSpeed);
+    camX += dirX * step * dolly;
+    camY += dirY * step * dolly;
+    camZ += dirZ * step * dolly;
   }
 
   const power = opts.morph

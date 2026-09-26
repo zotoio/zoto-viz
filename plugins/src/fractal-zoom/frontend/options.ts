@@ -156,7 +156,7 @@ export const FRACTAL_DEFAULTS: FractalOptions = {
   reducedMotion: false,
 };
 
-function applyPresetRow(base: FractalOptions, row: FractalPreset): FractalOptions {
+export function applyPresetRow(base: FractalOptions, row: FractalPreset): FractalOptions {
   return {
     ...base,
     type: row.type,
@@ -205,58 +205,59 @@ export function parseFractalOptions(
       && typeof (globalThis as { matchMedia?: (q: string) => { matches: boolean } }).matchMedia === "function"
       && (globalThis as { matchMedia: (q: string) => { matches: boolean } }).matchMedia("(prefers-reduced-motion: reduce)").matches);
 
-  let base: FractalOptions = {
-    ...FRACTAL_DEFAULTS,
-    reducedMotion: reduced,
-    type: pick(o, "fractalType", FRACTAL_TYPES, FRACTAL_DEFAULTS.type),
-    preset: o.preset ?? FRACTAL_DEFAULTS.preset,
-    zoomSpeed: num(o, "zoomSpeed", reduced ? 0.08 : FRACTAL_DEFAULTS.zoomSpeed),
-    zoomDir: pick(o, "zoomDir", ZOOM_DIRECTIONS, reduced ? "in" : FRACTAL_DEFAULTS.zoomDir),
-    autoPilot: bool(o, "autoPilot", !reduced),
-    paused: bool(o, "paused", reduced),
-    resetCam: bool(o, "resetCam", false),
-    manualOrbit: false,
-    maxIter: num(o, "maxIter", 32),
-    maxSteps: num(o, "maxSteps", 32),
-    detail: num(o, "detail", 0.0012),
-    ao: num(o, "ao", 0.55),
-    shadow: num(o, "shadow", 0.35),
-    glow: num(o, "glow", 0.35),
-    fog: num(o, "fog", 0.22),
-    dof: bool(o, "dof", false),
-    renderScale: 1,
-    palette: pick(o, "palette", PALETTE_PRESETS, FRACTAL_DEFAULTS.palette),
-    paletteCycle: num(o, "paletteCycle", 0.25),
-    orbitTrap: bool(o, "orbitTrap", true),
-    hueShift: num(o, "hueShift", 0),
-    saturation: num(o, "saturation", 1),
-    bg: [
-      num(o, "bgR", FRACTAL_DEFAULTS.bg[0]),
-      num(o, "bgG", FRACTAL_DEFAULTS.bg[1]),
-      num(o, "bgB", FRACTAL_DEFAULTS.bg[2]),
-    ],
-    rollSpeed: num(o, "rollSpeed", reduced ? 0 : 0.15),
-    rotateSpeed: num(o, "rotateSpeed", reduced ? 0 : 0.22),
-    morph: bool(o, "morph", true),
-    morphAmount: num(o, "morphAmount", 0.35),
-    audioReactive: bool(o, "audioReactive", true),
-    power: num(o, "power", 8),
-    scale: num(o, "scale", 2.1),
-    fold: num(o, "fold", 0.55),
-    juliaCr: num(o, "juliaCr", -0.745),
-    juliaCi: num(o, "juliaCi", 0.186),
-    quatC2: num(o, "quatC2", 0.12),
-    quatC3: num(o, "quatC3", 0.08),
-    kaleidoSym: num(o, "kaleidoSym", 6),
-    mandelCx: num(o, "mandelCx", -0.743643887),
-    mandelCy: num(o, "mandelCy", 0.131825904),
-  };
-
-  const presetId = o.preset ?? base.preset;
+  const presetId = o.preset ?? FRACTAL_DEFAULTS.preset;
+  let base: FractalOptions = { ...FRACTAL_DEFAULTS, reducedMotion: reduced, preset: presetId };
   if (presetId !== "custom") {
     const row = FRACTAL_PRESETS.find((p) => p.id === presetId);
     if (row) base = applyPresetRow(base, row);
   }
+
+  const p = base;
+  base = {
+    ...p,
+    type: pick(o, "fractalType", FRACTAL_TYPES, p.type),
+    preset: o.preset ?? p.preset,
+    zoomSpeed: num(o, "zoomSpeed", reduced ? Math.min(0.08, p.zoomSpeed) : p.zoomSpeed),
+    zoomDir: pick(o, "zoomDir", ZOOM_DIRECTIONS, reduced ? "in" : p.zoomDir),
+    autoPilot: bool(o, "autoPilot", reduced ? false : p.autoPilot),
+    paused: bool(o, "paused", reduced ? true : p.paused),
+    resetCam: bool(o, "resetCam", false),
+    manualOrbit: false,
+    maxIter: num(o, "maxIter", p.maxIter),
+    maxSteps: num(o, "maxSteps", p.maxSteps),
+    detail: num(o, "detail", p.detail),
+    ao: num(o, "ao", p.ao),
+    shadow: num(o, "shadow", p.shadow),
+    glow: num(o, "glow", p.glow),
+    fog: num(o, "fog", p.fog),
+    dof: bool(o, "dof", p.dof),
+    renderScale: 1,
+    palette: pick(o, "palette", PALETTE_PRESETS, p.palette),
+    paletteCycle: num(o, "paletteCycle", p.paletteCycle),
+    orbitTrap: bool(o, "orbitTrap", p.orbitTrap),
+    hueShift: num(o, "hueShift", p.hueShift),
+    saturation: num(o, "saturation", p.saturation),
+    bg: [
+      num(o, "bgR", p.bg[0]),
+      num(o, "bgG", p.bg[1]),
+      num(o, "bgB", p.bg[2]),
+    ],
+    rollSpeed: num(o, "rollSpeed", reduced ? 0 : p.rollSpeed),
+    rotateSpeed: num(o, "rotateSpeed", reduced ? 0 : p.rotateSpeed),
+    morph: bool(o, "morph", p.morph),
+    morphAmount: num(o, "morphAmount", p.morphAmount),
+    audioReactive: bool(o, "audioReactive", p.audioReactive),
+    power: num(o, "power", p.power),
+    scale: num(o, "scale", p.scale),
+    fold: num(o, "fold", p.fold),
+    juliaCr: num(o, "juliaCr", p.juliaCr),
+    juliaCi: num(o, "juliaCi", p.juliaCi),
+    quatC2: num(o, "quatC2", p.quatC2),
+    quatC3: num(o, "quatC3", p.quatC3),
+    kaleidoSym: num(o, "kaleidoSym", p.kaleidoSym),
+    mandelCx: num(o, "mandelCx", p.mandelCx),
+    mandelCy: num(o, "mandelCy", p.mandelCy),
+  };
 
   return base;
 }

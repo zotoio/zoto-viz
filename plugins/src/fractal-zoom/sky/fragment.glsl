@@ -144,7 +144,7 @@ vec3 color2d(vec2 uv, float typ, vec2 center, float scale, float maxIterN, float
   vec2 c = center + uv * scale;
   vec2 m;
   if (typ < 6.5) {
-    m = mandel2d(uv * scale + center, center, int(maxIterN * 48.0));
+    m = mandel2d(vec2(0.0), uv * scale + center, int(maxIterN * 48.0));
   } else {
     m = mandel2d(uv * scale, vec2(jc.x, jc.y), int(maxIterN * 48.0));
   }
