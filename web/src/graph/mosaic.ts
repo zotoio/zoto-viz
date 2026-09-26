@@ -100,6 +100,36 @@ export function mosaicIds(size: MosaicSize, prefer?: string, hero: HeroPos = "of
   return [heroId, ...pool.filter((id) => id !== heroId).slice(0, n)];
 }
 
+/**
+ * Boot / profile may persist mosaicTree without mosaicTiles. Refresh leaf ids from
+ * `mosaicIds` when counts match so tile 0 shows the primary (prefer) pack view.
+ */
+export function mosaicBootLeafIds(
+  size: MosaicSize,
+  prefer: string | undefined,
+  hero: HeroPos,
+  explicitTiles: readonly string[],
+  parsedLeafIds: readonly string[],
+): string[] | null {
+  if (explicitTiles.length) return null;
+  const fresh = mosaicIds(size, prefer, hero);
+  if (!fresh.length || !parsedLeafIds.length || fresh.length !== parsedLeafIds.length) return null;
+  return fresh;
+}
+
+export function assignParsedMosaicTree(
+  parsed: MosaicNode,
+  size: MosaicSize,
+  prefer?: string,
+  hero: HeroPos = "off",
+  explicitTiles: readonly string[] = [],
+): MosaicNode {
+  const cur = leafIds(parsed);
+  const tiles = parseMosaicTiles(explicitTiles);
+  const bootIds = mosaicBootLeafIds(size, prefer, hero, tiles, cur);
+  return assignTiles(parsed, tiles.length ? tiles : bootIds ?? cur);
+}
+
 /** Graphs first so a dice / new wall is not mostly empty stills or arcade stages. */
 export function mosaicPanePool(): string[] {
   const modes = allModes();
@@ -298,7 +328,7 @@ export class Mosaic {
     }
     let tree: MosaicNode | null = null;
     if (parsed && leafIds(parsed).some(Boolean)) {
-      tree = tiles.length ? assignTiles(parsed, tiles) : parsed;
+      tree = assignParsedMosaicTree(parsed, size, prefer, hero, tiles);
     } else {
       const ids = tiles.length ? tiles : mosaicIds(size, prefer, hero);
       tree = defaultTree(ids, hero);
