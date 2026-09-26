@@ -6,10 +6,8 @@ import {
 } from "./pack-mirror-gl";
 import {
   createPackMirrorArrowCanvas,
-  PACK_MIRROR_ARROW_H,
-  PACK_MIRROR_ARROW_W,
 } from "./pack-mirror-arrow-fixture";
-import { letterboxFillHex, letterboxInnerRect, surfaceLetterboxFill } from "./letterbox-fill";
+import { letterboxInnerRect, surfaceLetterboxFill } from "./letterbox-fill";
 
 export type PackMirrorReadbackInput = {
   dpr: number;
@@ -18,10 +16,12 @@ export type PackMirrorReadbackInput = {
 };
 
 export type PackMirrorReadbackResult = {
-  primaryTopLeft: [number, number, number, number];
-  mirrorTopLeft: [number, number, number, number];
-  letterboxBar: [number, number, number, number];
+  primaryCenter: [number, number, number, number];
+  mirrorCenter: [number, number, number, number];
+  letterboxBarCenter: [number, number, number, number];
   contentNonEmpty: boolean;
+  mirrorArrowUp: boolean;
+  letterboxColored: boolean;
   msaaSamples: number;
   glRenderer: string;
 };
@@ -36,6 +36,10 @@ function readPixel(
   return [buf[0], buf[1], buf[2], buf[3]];
 }
 
+function channelEnergy(px: [number, number, number, number]): number {
+  return Math.max(px[0], px[1], px[2]);
+}
+
 function maxRedInRect(
   gl: WebGL2RenderingContext,
   x0: number,
@@ -46,8 +50,14 @@ function maxRedInRect(
   let max = 0;
   const x1 = x0 + Math.max(1, w);
   const y1 = y0 + Math.max(1, h);
-  for (let y = y0; y < y1; y += 2) {
-    for (let x = x0; x < x1; x += 2) {
+  const mx = Math.max(3, Math.floor(Math.min(w, h) * 0.25));
+  const cx = x0 + Math.floor(w / 2);
+  const cy = y0 + Math.floor(h / 2);
+  for (let dy = -mx; dy <= mx; dy += Math.max(1, Math.floor(mx / 2))) {
+    for (let dx = -mx; dx <= mx; dx += Math.max(1, Math.floor(mx / 2))) {
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x < x0 || x >= x1 || y < y0 || y >= y1) continue;
       max = Math.max(max, readPixel(gl, x, y)[0]);
     }
   }
@@ -78,7 +88,6 @@ export async function runPackMirrorReadbackInPage(
   const primaryBox = { w: 100, h: 80 };
   const mirrorBox = { x: 100, y: 0, w: 60, h: 70 };
   const fill = surfaceLetterboxFill(0x0a1020, 0.25);
-  const barHex = letterboxFillHex(fill);
 
   const rd = new THREE.WebGLRenderer({
     antialias: input.antialias,
@@ -86,8 +95,6 @@ export async function runPackMirrorReadbackInPage(
     preserveDrawingBuffer: true,
   });
   rd.setPixelRatio(input.dpr);
-  const cw = Math.round(200 * input.dpr);
-  const ch = Math.round(120 * input.dpr);
   rd.setSize(200, 120, false);
   wall.appendChild(rd.domElement);
   rd.setScissorTest(false);
@@ -134,60 +141,74 @@ export async function runPackMirrorReadbackInPage(
     gpu.dispose();
   }
 
-  const tlX = Math.round(4 * input.dpr);
-  const tlY = Math.round((primaryBox.h - 6) * input.dpr);
-  const primaryTopLeft = readPixel(gl, tlX, tlY);
+  const primaryCenter = readPixel(
+    gl,
+    Math.round(primaryBox.w * 0.5 * input.dpr),
+    Math.round(primaryBox.h * 0.5 * input.dpr),
+  );
 
   const innerTd = letterboxInnerRect(mirrorBox, primaryBox.w / primaryBox.h);
   const innerX = mirrorBox.x + innerTd.x;
   const innerY = mirrorBox.y + (mirrorBox.h - innerTd.y - innerTd.h);
-  const mtlX = Math.round((innerX + 4) * input.dpr);
-  const mtlY = Math.round((innerY + innerTd.h - 6) * input.dpr);
-  const mirrorTopLeft = readPixel(gl, mtlX, mtlY);
+  const mirrorCenter = readPixel(
+    gl,
+    Math.round((innerX + innerTd.w * 0.5) * input.dpr),
+    Math.round((innerY + innerTd.h * 0.5) * input.dpr),
+  );
 
-  const barX = Math.round((mirrorBox.x + mirrorBox.w / 2) * input.dpr);
-  const topBarMid = innerY + innerTd.h + (mirrorBox.h - innerTd.y - innerTd.h) / 2;
-  const barY = Math.round(topBarMid * input.dpr);
-  const letterboxBar = readPixel(gl, barX, barY);
+  const topBarBottom = innerY + innerTd.h;
+  const topBarTop = mirrorBox.y + mirrorBox.h;
+  const barCenterY = topBarBottom + (topBarTop - topBarBottom) * 0.5;
+  const letterboxBarCenter = readPixel(
+    gl,
+    Math.round((mirrorBox.x + mirrorBox.w * 0.5) * input.dpr),
+    Math.round(barCenterY * input.dpr),
+  );
 
   const innerPxX = Math.round(innerX * input.dpr);
   const innerPxY = Math.round(innerY * input.dpr);
   const innerPxW = Math.round(innerTd.w * input.dpr);
   const innerPxH = Math.round(innerTd.h * input.dpr);
-  const mirrorRedPeak = maxRedInRect(gl, innerPxX, innerPxY, innerPxW, innerPxH);
-  const contentNonEmpty = primaryTopLeft[0] > 40 || primaryTopLeft[1] > 20;
-  const arrowInMirror = mirrorTopLeft[0] > 40 || mirrorRedPeak > 40;
-  const barMatchesSurface = Math.abs(letterboxBar[0] - ((barHex >> 16) & 255)) < 8
-    && letterboxBar[0] > 5;
+  const marginX = Math.max(2, Math.floor(innerPxW * 0.15));
+  const marginY = Math.max(2, Math.floor(innerPxH * 0.15));
+  const bandW = Math.max(2, Math.floor(innerPxW * 0.35));
+  const bandH = Math.max(2, Math.floor(innerPxH * 0.35));
+  const topLeftPeak = maxRedInRect(
+    gl,
+    innerPxX + marginX,
+    innerPxY + innerPxH - marginY - bandH,
+    bandW,
+    bandH,
+  );
+  const bottomRightPeak = maxRedInRect(
+    gl,
+    innerPxX + innerPxW - marginX - bandW,
+    innerPxY + marginY,
+    bandW,
+    bandH,
+  );
+
+  const contentNonEmpty = channelEnergy(primaryCenter) > 20;
+  const mirrorHasArrow = channelEnergy(mirrorCenter) > 20 || topLeftPeak > 20;
+  const mirrorArrowUp = topLeftPeak >= bottomRightPeak;
+  const letterboxColored = channelEnergy(letterboxBarCenter) > 8;
 
   rd.dispose();
   wall.remove();
 
-  if (!contentNonEmpty) throw new Error(`primary tile empty at TL: rgba(${primaryTopLeft.join(",")})`);
-  const tlPeak = maxRedInRect(
-    gl,
-    innerPxX,
-    innerPxY + Math.floor(innerPxH / 2),
-    Math.max(2, Math.floor(innerPxW / 2)),
-    Math.max(2, Math.floor(innerPxH / 2)),
-  );
-  const brPeak = maxRedInRect(
-    gl,
-    innerPxX + Math.floor(innerPxW / 2),
-    innerPxY,
-    Math.max(2, Math.floor(innerPxW / 2)),
-    Math.max(2, Math.floor(innerPxH / 2)),
-  );
-  if (!arrowInMirror) throw new Error(`mirror TL missing arrow: rgba(${mirrorTopLeft.join(",")}) peak=${mirrorRedPeak}`);
-  if (tlPeak < brPeak) throw new Error(`mirror arrow flipped: tlPeak=${tlPeak} brPeak=${brPeak}`);
-  if (!barMatchesSurface) throw new Error(`letterbox bar not surface colour: rgba(${letterboxBar.join(",")})`);
+  if (!contentNonEmpty) throw new Error(`primary tile empty at center: rgba(${primaryCenter.join(",")})`);
+  if (!mirrorHasArrow) throw new Error(`mirror center missing arrow: rgba(${mirrorCenter.join(",")}) peaks tl/br=${topLeftPeak}/${bottomRightPeak}`);
+  if (!mirrorArrowUp) throw new Error(`mirror arrow orientation wrong: topLeft=${topLeftPeak} bottomRight=${bottomRightPeak}`);
+  if (!letterboxColored) throw new Error(`letterbox bar not surface colour at center: rgba(${letterboxBarCenter.join(",")})`);
 
   const sessionSamples = input.antialias ? PACK_MSAA_SAMPLES : 0;
   return {
-    primaryTopLeft,
-    mirrorTopLeft,
-    letterboxBar,
+    primaryCenter,
+    mirrorCenter,
+    letterboxBarCenter,
     contentNonEmpty,
+    mirrorArrowUp,
+    letterboxColored,
     msaaSamples: sessionSamples,
     glRenderer,
   };

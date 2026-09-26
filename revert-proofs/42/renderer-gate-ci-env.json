@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-renderer-gate.test.ts",
+  "testName": "pack mirror renderer gate > CI web job exports ZOTO_VIZ_EXPECT_RENDERER for SwiftShader readback",
+  "description": "CI sets ZOTO_VIZ_EXPECT_RENDERER explicitly instead of inferring SwiftShader from CI/VM."
+}

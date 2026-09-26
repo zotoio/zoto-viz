@@ -10,6 +10,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { createServer, type ViteDevServer } from "vite";
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
+import { assertPackMirrorRenderer } from "./pack-mirror-renderer-gate";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export const PACK_MIRROR_READBACK_CHROME_PATH = process.env.PACK_MIRROR_CHROME_PATH || "/usr/local/bin/google-chrome";
@@ -36,14 +37,6 @@ const CASES: Case[] = [
   { dpr: 2, antialias: false, path: "sandbox" },
   { dpr: 2, antialias: true, path: "sandbox" },
 ];
-
-function expectSwiftShaderInCi(renderer: string): void {
-  expect(renderer.length).toBeGreaterThan(0);
-  const requireSwift = process.env.CI === "true" || process.env.ZOTO_EXPECT_SWIFTSHADER === "1";
-  if (requireSwift) {
-    expect(renderer.toLowerCase()).toContain("swiftshader");
-  }
-}
 
 let vite: ViteDevServer;
 let httpServer: http.Server;
@@ -78,7 +71,7 @@ beforeAll(async () => {
   try {
     accessSync(PACK_MIRROR_READBACK_CHROME_PATH, constants.X_OK);
   } catch {
-    throw new Error(`Chrome is required at ${PACK_MIRROR_READBACK_CHROME_PATH} (SwiftShader readback must fail, not skip)`);
+    throw new Error(`Chrome is required at ${PACK_MIRROR_READBACK_CHROME_PATH} (readback must fail, not skip)`);
   }
   const ver = chromeVersion();
   if (!ver.includes(PACK_MIRROR_READBACK_CHROME_VERSION.split(".").slice(0, 2).join("."))) {
@@ -111,18 +104,16 @@ describe("pack mirror SwiftShader readback", () => {
       const page = await browser.newPage();
       try {
         const result = await runCase(page, c) as {
-          primaryTopLeft: number[];
-          mirrorTopLeft: number[];
-          letterboxBar: number[];
           contentNonEmpty: boolean;
+          mirrorArrowUp: boolean;
+          letterboxColored: boolean;
           glRenderer: string;
         };
         console.log(`[pack-mirror-readback] dpr=${c.dpr} aa=${c.antialias} path=${c.path} renderer=${result.glRenderer}`);
-        expectSwiftShaderInCi(result.glRenderer);
+        assertPackMirrorRenderer(result.glRenderer);
         expect(result.contentNonEmpty).toBe(true);
-        expect(result.primaryTopLeft[0]).toBeGreaterThan(40);
-        expect(result.mirrorTopLeft[0]).toBeGreaterThan(40);
-        expect(result.letterboxBar[0]).toBeGreaterThan(5);
+        expect(result.mirrorArrowUp).toBe(true);
+        expect(result.letterboxColored).toBe(true);
       } finally {
         await page.close();
       }

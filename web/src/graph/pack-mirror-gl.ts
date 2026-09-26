@@ -119,16 +119,15 @@ export class PackTexturePresenter {
     contentAspect: number,
     opts: { letterbox: boolean },
   ): MirrorRect {
-    const innerTd = opts.letterbox
-      ? letterboxInnerRectInto(dst, contentAspect, this.scratch.innerTd)
-      : (() => {
-        const t = this.scratch.innerTd;
-        t.x = 0;
-        t.y = 0;
-        t.w = dst.w;
-        t.h = dst.h;
-        return t;
-      })();
+    const innerTd = this.scratch.innerTd;
+    if (opts.letterbox) {
+      letterboxInnerRectInto(dst, contentAspect, innerTd);
+    } else {
+      innerTd.x = 0;
+      innerTd.y = 0;
+      innerTd.w = dst.w;
+      innerTd.h = dst.h;
+    }
     const ix = dst.x + innerTd.x;
     const iy = dst.y + (dst.h - innerTd.y - innerTd.h);
     const iw = innerTd.w;
@@ -348,6 +347,7 @@ export class SandboxBitmapGl {
     this.th = h;
     this.texture = new THREE.Texture();
     packMirrorResourceStats.textureCreated += 1;
+    this.texture.flipY = false;
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
     return this.texture;
