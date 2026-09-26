@@ -237,7 +237,7 @@ export class Mosaic {
   paneTheme(id: string): Theme | null { return this.themes.get(id) ?? null; }
 
   graphScene(id: string): NetScene | null {
-    if (this.mainId === id || this.cfg.main.currentMode.id === id) return this.cfg.main;
+    if (this.mainId === id) return this.cfg.main;
     return this.extras.find((e) => e.id === id)?.scene ?? null;
   }
 
@@ -440,23 +440,29 @@ export class Mosaic {
 
   assignViews(tiles: string[]): void {
     if (!this.tree) return;
-    const next = assignTiles(this.tree, tiles);
-    if (structureKey(next) === structureKey(this.tree)) return;
-    this.tree = next;
-    this.syncPanes(leafIds(next));
+    const want = parseMosaicTiles(tiles);
+    if (want.join("\0") === this.tileIds.join("\0")) return;
+    this.tree = assignTiles(this.tree, want);
+    this.rematchTried.clear();
+    this.rematchQueued.clear();
+    this.syncPanes(this.tileIds);
     this.placeTree();
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
+    this.refreshPaneModes();
+    this.holdPluginSkies();
+    this.auditPanes("bind");
     this.relayoutAll();
     this.emitLayout();
   }
 
   /** Change one pane. Picking a view already on the wall swaps those two tiles. */
-  setPaneView(fromId: string, toId: string): void {
-    if (!this.tree || !toId || fromId === toId) return;
+  setPaneView(fromId: string, toId: string): boolean {
+    if (!this.tree || !toId || fromId === toId) return false;
     const next = nextPaneTiles(this.tileIds, fromId, toId);
-    if (next.join("\0") === this.tileIds.join("\0")) return;
+    if (next.join("\0") === this.tileIds.join("\0")) return false;
     this.assignViews(next);
+    return true;
   }
 
   private emitLayout(): void {
@@ -813,7 +819,12 @@ export class Mosaic {
     fillViewSelect(pick, id);
     pick.addEventListener("pointerdown", (e) => e.stopPropagation());
     pick.addEventListener("click", (e) => e.stopPropagation());
-    pick.addEventListener("change", () => this.setPaneView(id, pick.value));
+    pick.addEventListener("change", () => {
+      const fromId = [...this.panes.entries()].find(([, el]) => el === pane)?.[0] ?? id;
+      const toId = pick.value;
+      if (fromId === toId) return;
+      if (!this.setPaneView(fromId, toId)) fillViewSelect(pick, fromId);
+    });
     const tools = document.createElement("div");
     tools.className = "mosaic-tools";
     tools.append(
