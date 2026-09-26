@@ -1,15 +1,10 @@
-diff --git a/web/src/graph/render-host-telemetry.ts b/web/src/graph/render-host-telemetry.ts
-index 8f5418e..172c9ac 100644
---- a/web/src/graph/render-host-telemetry.ts
-+++ b/web/src/graph/render-host-telemetry.ts
-@@ -1,4 +1,5 @@
- /** Counting hooks for render-host frame-loop tests (no timing). */
-+import type { DeviceRect } from "./pack-mirror-rect";
- export const renderHostMirrorTelemetry = {
-   scopeSyncRuns: 0,
-   viewSortRuns: 0,
-@@ -16,3 +17,4 @@ export const renderHostMirrorTelemetry = {
-     this.getContextAttributesCalls = 0;
-   },
- };
+diff --git a/web/src/graph/render-host-gl-adapter.ts b/web/src/graph/render-host-gl-adapter.ts
+index f730eb5..f82f76f 100644
+--- a/web/src/graph/render-host-gl-adapter.ts
++++ b/web/src/graph/render-host-gl-adapter.ts
+@@ -48,3 +48,5 @@ export function applyHostViewBoxToGlRenderer(
+   applyDeviceRectToGlRenderer(renderer, dev, canvasDeviceHeight, glScratch);
+   return dev;
+ }
++
 +void (null as DeviceRect);

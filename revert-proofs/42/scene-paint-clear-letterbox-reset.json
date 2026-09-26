@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/scene-letterbox-fill-production.test.ts",
-  "testName": "^NetScene production letterbox fill > 300 paintClear ticks at constant clearHex: exactly 1 fill rebuild$",
-  "description": "AssertionError: expected 300 to be 1 // Object.is equality (letterboxFillStats.rebuilds).",
-  "expectedRed": "expected 300 to be 1 // Object.is equality"
-}

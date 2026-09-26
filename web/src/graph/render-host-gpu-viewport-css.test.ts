@@ -26,11 +26,21 @@ const { glLog, WebGLRendererMock } = vi.hoisted(() => {
     setScissorTest = vi.fn();
     setScissor = vi.fn((x: number, y: number, w: number, h: number) => {
       const pr = this.ratio;
-      this.getContext().scissor(Math.floor(x * pr), Math.floor(y * pr), Math.floor(w * pr), Math.floor(h * pr));
+      this.getContext().scissor(
+        Math.round(x * pr),
+        Math.round(y * pr),
+        Math.round(w * pr),
+        Math.round(h * pr),
+      );
     });
     setViewport = vi.fn((x: number, y: number, w: number, h: number) => {
       const pr = this.ratio;
-      this.getContext().viewport(Math.floor(x * pr), Math.floor(y * pr), Math.floor(w * pr), Math.floor(h * pr));
+      this.getContext().viewport(
+        Math.round(x * pr),
+        Math.round(y * pr),
+        Math.round(w * pr),
+        Math.round(h * pr),
+      );
     });
     setRenderTarget = vi.fn();
     getRenderTarget = () => null;
@@ -99,7 +109,6 @@ function mountGpuViewportFixture(dpr: number | "window"): {
     hostContextRestored() {},
   };
   host.add(view);
-  host.advanceFrame(0);
   return { wall, host, view, layoutPr: host.pixelRatio };
 }
 

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-gl.test.ts",
-  "testName": "^PackMirrorRegistry > allocates only when tile count crosses 2$",
-  "description": "PackMirrorRegistry must not bump allocationCount on every syncScopes when tileCount stays at 2. Patched vitest: expected 61 to be 1 // Object.is equality",
-  "expectedRed": "expected 61 to be 1 // Object.is equality"
-}

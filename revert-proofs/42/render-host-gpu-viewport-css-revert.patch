@@ -1,8 +1,7 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index 3b70d51..f846b05 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -181,7 +181,7 @@ export class RenderHost {
+@@ -119,7 +119,7 @@ export class RenderHost {
            failIfMajorPerformanceCaveat: false,
          });
          this.software = false;
@@ -10,8 +9,8 @@ index 3b70d51..f846b05 100644
 +        this.renderer.setPixelRatio(this.pr);
          this.renderer.setClearColor(0x000000, 0);
          this.canvas = this.renderer.domElement;
-         this.refreshContextAntialias();
-@@ -367,7 +367,7 @@ export class RenderHost {
+       } catch {
+@@ -212,7 +212,7 @@ export class RenderHost {
      this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
      this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
      if (!this.software) {
@@ -20,7 +19,7 @@ index 3b70d51..f846b05 100644
        this.resizeGpuCanvas();
      } else {
        this.resizeSoftware();
-@@ -609,8 +609,8 @@ export class RenderHost {
+@@ -349,8 +349,8 @@ export class RenderHost {
      const pr = this.pr;
      const devW = Math.max(1, Math.round(this.w * pr));
      const devH = Math.max(1, Math.round(this.h * pr));

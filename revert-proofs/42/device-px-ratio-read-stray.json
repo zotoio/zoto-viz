@@ -1,7 +1,7 @@
 {
   "runner": "pnpm",
-  "testFile": "scripts/lint-brand-casts.mjs",
-  "testName": "^lint brand casts$",
+  "testFile": "src/graph/lint-brand-casts.test.ts",
+  "testName": "^lint brand casts > passes on the production tree$",
   "expectedRed": "src/core/fps.ts: raw `devicePixelRatio` read (only src/graph/render-host-device-px-ratio.ts; use RenderHost.devicePxRatio or devicePxRatioFromWindow)",
-  "description": "`window.devicePixelRatio` may be read only in render-host-device-px-ratio.ts across all of web/src (tests exempt). Patched stray read in fps.ts fails pnpm lint with exactly one error."
+  "description": "`window.devicePixelRatio` may be read only in render-host-device-px-ratio.ts across all of web/src (tests exempt)."
 }
