@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -2119,9 +2119,7 @@ export class Settings {
+     if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
+     else localStorage.removeItem(`${p}.anim.mosaicTree`);
+     localStorage.setItem(`${p}.anim.mosaicMaxId`, a.mosaicMaxId || "");
+-    if (this.mosaicBootRefusedTilesRaw !== null) {
+-      localStorage.setItem(`${p}.anim.mosaicTiles`, this.mosaicBootRefusedTilesRaw);
+-    } else if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
++    if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
+     else localStorage.removeItem(`${p}.anim.mosaicTiles`);
+     localStorage.setItem(`${p}.anim.mosaicSharedTheme`, a.mosaicSharedTheme ? "1" : "0");
