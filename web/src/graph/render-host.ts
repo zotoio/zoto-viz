@@ -45,9 +45,12 @@ import {
 import { applyDeviceRectToGlRenderer } from "./render-host-gl-adapter";
 import {
   type DevicePxRatio,
+  DEFAULT_MAX_DEVICE_PX_RATIO,
+  configureLayoutMaxDevicePxRatio,
   devicePxRatioFromNumber,
   devicePxRatioFromWindow,
   devicePxRatioNumber,
+  layoutDevicePxRatio,
 } from "./render-host-device-px-ratio";
 
 type PackMirrorViewMeta = HostedView & {
@@ -164,9 +167,13 @@ export class RenderHost {
   private gpuTimedClearHex = 0;
   private gpuTimedBox: SoftRect | null = null;
 
-  constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean; antialias?: boolean } = {}) {
+  constructor(
+    readonly wall: HTMLElement,
+    opts: { dpr?: number; software?: boolean; antialias?: boolean; maxDevicePxRatio?: number } = {},
+  ) {
+    configureLayoutMaxDevicePxRatio(opts.maxDevicePxRatio ?? DEFAULT_MAX_DEVICE_PX_RATIO);
     this.layoutDevicePxRatio =
-      opts.dpr !== undefined ? devicePxRatioFromNumber(opts.dpr) : devicePxRatioFromWindow();
+      opts.dpr !== undefined ? devicePxRatioFromNumber(opts.dpr) : layoutDevicePxRatio();
     this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
     const forceSoft = opts.software === true || (opts.software !== false && !probeWebGL());
     if (!forceSoft) {

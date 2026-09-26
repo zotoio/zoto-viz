@@ -1,0 +1,41 @@
+diff --git a/web/src/arcade/stage3d.ts b/web/src/arcade/stage3d.ts
+index 2dae0ff..369fd37 100644
+--- a/web/src/arcade/stage3d.ts
++++ b/web/src/arcade/stage3d.ts
+@@ -159,7 +159,7 @@ export abstract class Stage3D {
+     const W = this.container.clientWidth, H = this.container.clientHeight;
+     if (!W || !H) return;
+     this.W = W; this.H = H;
+-    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
++    const dpr = Math.min(1.75, devicePixelRatio || 1);
+     if (this.renderer) {
+       this.renderer.setPixelRatio(dpr);
+       this.renderer.setSize(W, H, false);
+@@ -168,8 +168,8 @@ export abstract class Stage3D {
+       this.canvas.style.width = `${W}px`;
+       this.canvas.style.height = `${H}px`;
+       if (this.fallback) {
+-        this.canvas.width = layoutBackingDevicePx(W);
+-        this.canvas.height = layoutBackingDevicePx(H);
++        this.canvas.width = Math.round(W * dpr);
++        this.canvas.height = Math.round(H * dpr);
+         this.fallback.setTransform(dpr, 0, 0, dpr, 0, 0);
+       }
+     }
+diff --git a/web/src/ui/feed.ts b/web/src/ui/feed.ts
+index 2cf5325..6fb2a44 100644
+--- a/web/src/ui/feed.ts
++++ b/web/src/ui/feed.ts
+@@ -421,9 +421,9 @@ export class LiveFeed {
+     const wrap = this.bars.parentElement!;
+     const w = Math.max(80, wrap.clientWidth);
+     const h = Math.max(80, wrap.clientHeight || 160);
+-    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
+-    const devW = layoutBackingDevicePx(w);
+-    const devH = layoutBackingDevicePx(h);
++    const dpr = Math.min(1.75, devicePixelRatio || 1);
++    const devW = Math.round(w * dpr);
++    const devH = Math.round(h * dpr);
+     if (this.bars.width !== devW || this.bars.height !== devH) {
+       this.bars.width = devW;
+       this.bars.height = devH;

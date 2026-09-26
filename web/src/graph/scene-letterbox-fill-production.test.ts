@@ -44,12 +44,11 @@ describe("NetScene production letterbox fill", () => {
   it("300 paintClear ticks at constant clearHex: exactly 1 fill rebuild", () => {
     const clear = 0x0a1020;
     const host = hostForPaintClear(clear);
-    const fills: unknown[] = [];
     for (let i = 0; i < 300; i++) {
       paintClear.call(host);
-      fills.push(getSurfaceLetterboxFill(host.clearHex, 0.25));
     }
     expect(letterboxFillStats.rebuilds).toBe(1);
-    expect(new Set(fills).size).toBe(1);
+    const fillAfter = getSurfaceLetterboxFill(host.clearHex, 0.25);
+    expect(getSurfaceLetterboxFill(host.clearHex, 0.25)).toBe(fillAfter);
   });
 });

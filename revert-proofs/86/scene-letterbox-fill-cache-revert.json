@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/scene-letterbox-fill-production.test.ts",
+  "testName": "^NetScene production letterbox fill > 300 paintClear ticks at constant clearHex: exactly 1 fill rebuild$",
+  "expectedRed": "expected 300 to be 1 // Object.is equality",
+  "description": "Letterbox fill must cache per clearHex across paintClear; patched path rebuilds every tick."
+}

@@ -1,0 +1,15 @@
+diff --git a/web/src/ui/feed.ts b/web/src/ui/feed.ts
+index 2cf5325..26e89a6 100644
+--- a/web/src/ui/feed.ts
++++ b/web/src/ui/feed.ts
+@@ -422,8 +422,8 @@ export class LiveFeed {
+     const w = Math.max(80, wrap.clientWidth);
+     const h = Math.max(80, wrap.clientHeight || 160);
+     const dpr = devicePxRatioNumber(layoutDevicePxRatio());
+-    const devW = layoutBackingDevicePx(w);
+-    const devH = layoutBackingDevicePx(h);
++    const devW = Math.round(w * 1.5);
++    const devH = Math.round(h * 1.5);
+     if (this.bars.width !== devW || this.bars.height !== devH) {
+       this.bars.width = devW;
+       this.bars.height = devH;
