@@ -496,9 +496,8 @@ export class Mosaic {
 
   /** Plugin settings HUD caption for this tile (bottom of frame). */
   setPaneSettingsCaption(id: string, text: string | null | undefined): void {
-    if (text) this.paneCaptions.set(id, text);
-    else this.paneCaptions.delete(id);
-    const pane = this.panes.get(id);
+    const idx = this.tileIds.indexOf(id);
+    const pane = idx >= 0 ? this.panes.get(this.tileIds[idx]!) : this.panes.get(id);
     if (!pane) return;
     this.paintPaneSettingsCaption(pane, text);
   }
