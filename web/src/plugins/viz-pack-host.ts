@@ -1,8 +1,8 @@
 import type { DevicePixelSize } from "../graph/render-host";
-import { vizClockMs, vizWallMs } from "../core/viz-clock";
+import { vizClockMs } from "../core/viz-clock";
 import { createNixieWallClock } from "./nixie-wall-clock";
 import { SharedNixieWallSecond } from "./nixie-wall-broadcast";
-import { createNixieUploadLatch, nixieWallUploadDue, type NixieUploadLatch } from "./nixie-wall-upload";
+import { createNixieUploadLatch, nixieWallUploadDue } from "./nixie-wall-upload";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import type { VizDataFrame, VizUniformValue } from "./viz-host";
 import {
@@ -276,13 +276,12 @@ export function runPackFrameHandler(
       syncNixiePackScope(opts);
       nixieActiveLook = nixieScopedLook;
       const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
-      const wallMs = vizWallMs();
-      const parts = hostNixieWallSecond.syncWallSecond(wallMs);
+      const parts = hostNixieWallSecond.syncWallSecond(vizClockMs());
       const cw = nixiePackCanvas.w;
       const ch = nixiePackCanvas.h;
       if (nixieWallUploadDue(nixieActiveLook, parts, hostNixieUploadLatch, cw, ch)) {
         handlers.writeBuffer(0, hostNixieClock.tick(
-          wallMs,
+          vizClockMs(),
           nixieActiveLook,
           frame.audio,
           peak,

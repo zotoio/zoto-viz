@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as vizClock from "./viz-clock";
 import { applyDevVizWallFlagsOnBuild, devShowPerTileHudIndex } from "./viz-dev-wall-flags";
 import { resetVizClockInjectors, vizBuildCostTicksForTile, vizWallMs } from "./viz-clock";
-import * as nixieTz from "../plugins/nixie-wall-timezone";
+import { clearDevWallFlagClock } from "../plugins/nixie-wall-parts";
+import { setVizClockInjector } from "./viz-clock";
 import { createTileHudLabelLine } from "../ui/tile-hud-label";
 import { VizFrameBudget } from "../plugins/viz-host";
 import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
@@ -31,14 +32,14 @@ describe("dev viz wall flags", () => {
   beforeEach(() => {
     expect.hasAssertions();
     resetVizClockInjectors();
-    nixieTz.resetNixieWallDisplayTimeZone();
+    clearDevWallFlagClock();
     resetNixieFormatterCache();
     resetNixiePackHostScope();
   });
 
   afterEach(() => {
     resetVizClockInjectors();
-    nixieTz.resetNixieWallDisplayTimeZone();
+    clearDevWallFlagClock();
     vizTileBudgetRegistry.reset();
     resetNixieFormatterCache();
     resetNixiePackHostScope();
@@ -72,14 +73,13 @@ describe("dev viz wall flags", () => {
 
   it("F5 (ii): ?vizWallClock=13:05 seconds on — 10 wall uploads over 600 frames (2×2)", () => {
     vi.stubEnv("DEV", true);
-    vi.spyOn(nixieTz, "hostLocalTimeZone").mockReturnValue("UTC");
-    const t0 = nixieTz.wallEpochMsForParts(2024, 6, 15, 13, 5, 0, "UTC");
-    vi.spyOn(Date, "now").mockImplementation(() => t0);
+    let mono = 0;
+    setVizClockInjector(() => mono);
     applyDevVizWallFlagsOnBuild("?vizWallClock=13:05", TILES_2X2);
     const look = { format: "24", seconds: "1" };
     const writeBuffer = vi.fn();
     for (let frame = 0; frame < 600; frame++) {
-      vi.spyOn(Date, "now").mockImplementation(() => wallMsAtFrame(t0, frame));
+      mono += 1000 / 60;
       runPackFrameHandler("nixie-clock", emptyFrame(), {
         writeBuffer: () => writeBuffer(),
         writeUniform: () => {},
@@ -172,20 +172,25 @@ describe("dev viz wall flags", () => {
     expect(vizTileBudgetRegistry.getTile(TILES_2X2[3]).skipped).toBe(0);
   });
 
-  it("F5 (v): two-nixie wall ?vizWallClock=13:05 — shared wall ms and digit buffer", () => {
+  it("F5 (v): two-nixie wall ?vizWallClock=13:05 — identical digits from shared buffer", () => {
     vi.stubEnv("DEV", true);
-    vi.spyOn(nixieTz, "hostLocalTimeZone").mockReturnValue("UTC");
-    const t0 = nixieTz.wallEpochMsForParts(2024, 6, 15, 13, 5, 0, "UTC");
-    vi.spyOn(Date, "now").mockImplementation(() => t0);
+    let mono = 0;
+    setVizClockInjector(() => mono);
     applyDevVizWallFlagsOnBuild("?vizWallClock=13:05", ["a", "b"]);
-    expect(vizWallMs()).toBe(vizWallMs());
     const look = { format: "24", seconds: "0" };
+    const writeBuffer = vi.fn();
     let buf: number[] = [];
     runPackFrameHandler("nixie-clock", emptyFrame(), {
-      writeBuffer: (_s, d) => { buf = d; },
+      writeBuffer: (_s, d) => { writeBuffer(); buf = d; },
       writeUniform: () => {},
       writeParticles: () => {},
     }, look);
+    runPackFrameHandler("nixie-clock", emptyFrame(), {
+      writeBuffer: () => writeBuffer(),
+      writeUniform: () => {},
+      writeParticles: () => {},
+    }, look);
+    expect(writeBuffer).toHaveBeenCalledTimes(1);
     expect(buf.slice(0, 4)).toEqual([1, 3, 0, 5]);
   });
 

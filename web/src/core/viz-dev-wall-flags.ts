@@ -1,12 +1,8 @@
 import {
   setVizBuildCostTicksForTileInjector,
-  setVizWallClockInjector,
 } from "./viz-clock";
-import {
-  hostLocalTimeZone,
-  setNixieWallDisplayTimeZone,
-  wallEpochMsForParts,
-} from "../plugins/nixie-wall-timezone";
+import { vizClockMs } from "./viz-clock";
+import { setDevWallFlagClock, clearDevWallFlagClock } from "../plugins/nixie-wall-parts";
 
 /** Per-scoped-tile injected build cost (ticks); undefined slot = no override. */
 const tileCostTicks = new Map<string, number>();
@@ -14,26 +10,12 @@ const tileCostTicks = new Map<string, number>();
 let showPerTileHudIndex = false;
 const tileHudIndexById = new Map<string, number>();
 
-let wallAnchorRealMs = 0;
-let wallAnchorDevMs = 0;
-let wallDevActive = false;
-
-export function devShowPerTileHudIndex(): boolean {
-  return import.meta.env.DEV && showPerTileHudIndex;
-}
-
-export function devPerTileHudIndexForTileId(tileId: string): number | undefined {
-  return tileHudIndexById.get(tileId);
-}
-
 function clearInjectors(): void {
   tileCostTicks.clear();
   tileHudIndexById.clear();
   showPerTileHudIndex = false;
-  wallDevActive = false;
-  setNixieWallDisplayTimeZone(undefined);
+  clearDevWallFlagClock();
   setVizBuildCostTicksForTileInjector(undefined);
-  setVizWallClockInjector(undefined);
 }
 
 function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[]): void {
@@ -65,15 +47,7 @@ function parseWallClockFlag(raw: string | null): void {
   const min = Number(m[2]);
   if (!Number.isInteger(h) || !Number.isInteger(min) || h < 0 || h > 23 || min < 0 || min > 59) return;
 
-  const tz = hostLocalTimeZone();
-  setNixieWallDisplayTimeZone(tz);
-  wallAnchorDevMs = wallEpochMsForParts(2024, 6, 15, h, min, 0, tz);
-  wallAnchorRealMs = Date.now();
-  wallDevActive = true;
-  setVizWallClockInjector(() => {
-    if (!wallDevActive) return Date.now();
-    return wallAnchorDevMs + (Date.now() - wallAnchorRealMs);
-  });
+  setDevWallFlagClock(h, min, vizClockMs());
 }
 
 /**
@@ -91,4 +65,12 @@ export function applyDevVizWallFlagsOnBuild(search: string, scopedTileIds: reado
   } catch {
     // ignored — never throw or log from dev flag parsing
   }
+}
+
+export function devShowPerTileHudIndex(): boolean {
+  return import.meta.env.DEV && showPerTileHudIndex;
+}
+
+export function devPerTileHudIndexForTileId(tileId: string): number | undefined {
+  return tileHudIndexById.get(tileId);
 }

@@ -216,7 +216,16 @@ export class Mosaic {
   get heroMode(): string { return this.heroId; }
   get focusedId(): string { return this.focused; }
   get mainMode(): string { return this.mainId; }
-  get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
+  private _tileIdsCache: string[] = [];
+  private _tileIdsTree: MosaicNode | null | undefined;
+
+  get tileIds(): string[] {
+    if (this.tree !== this._tileIdsTree) {
+      this._tileIdsTree = this.tree;
+      this._tileIdsCache = this.tree ? leafIds(this.tree) : [];
+    }
+    return this._tileIdsCache;
+  }
   get layout(): MosaicLayoutPatch {
     return {
       tree: this.tree,

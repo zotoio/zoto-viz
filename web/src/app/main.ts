@@ -1109,7 +1109,7 @@ function setRedaction(on: boolean): void {
 }
 setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
 {
-  const bootScope = mosaic?.on ? mosaic.tileIds : ["main"];
+  const bootScope = mosaic && mosaic.on ? mosaic.tileIds : ["main"];
   const bootKey = (bootScope.length ? bootScope : ["main"]).join("\0");
   vizTileScopeKey = bootKey;
   applyDevVizWallFlagsOnBuild(location.search, bootScope.length ? bootScope : ["main"]);

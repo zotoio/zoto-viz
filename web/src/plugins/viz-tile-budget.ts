@@ -95,6 +95,28 @@ function freshTile(share: number): VizTileBudgetStats {
   };
 }
 
+/** Count skip samples in the HUD window by walking the ring (no `.filter` allocation). */
+export function tileSkipsInHudWindowRing(
+  tile: VizTileBudgetStats,
+  nowTick: number,
+  inclusiveLower = false,
+): number {
+  const lo = nowTick - VIZ_HUD_WINDOW_TICKS;
+  const n = tile.hudRingCount;
+  if (n === 0) return 0;
+  const cap = VIZ_HUD_SAMPLE_CAP;
+  const start = (tile.hudRingNext - n + cap) % cap;
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    const s = tile.hudRing[(start + i) % cap]!;
+    const inWin = inclusiveLower
+      ? s.tick >= lo && s.tick <= nowTick
+      : s.tick > lo && s.tick <= nowTick;
+    if (inWin && s.kind === "skip") count++;
+  }
+  return count;
+}
+
 /** Materialize ring samples in chronological order (tests / HUD classification). */
 export function hudSamplesForTile(tile: VizTileBudgetStats): VizTileHudSample[] {
   const n = tile.hudRingCount;

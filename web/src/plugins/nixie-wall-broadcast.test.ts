@@ -1,12 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setVizWallClockInjector, resetVizClockInjectors } from "../core/viz-clock";
+import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
+import { setVizClockInjector, resetVizClockInjectors } from "../core/viz-clock";
 import { resetNixieFormatterCache } from "./nixie-wall-clock";
 import { resetNixiePackHostScope, runPackFrameHandler } from "./viz-pack-host";
 import type { VizDataFrame } from "./viz-host";
-
-function wallMsAtFrame(t0Ms: number, frame: number): number {
-  return t0Ms + Math.floor((frame * 1000) / 60);
-}
 
 function emptyFrame(): VizDataFrame {
   return { t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
@@ -24,13 +21,16 @@ describe("nixie wall upload F1 (live pack path, 60 fps)", () => {
     vi.restoreAllMocks();
   });
 
-  it("F1 seconds on: 10 wall seconds and 10 buffer uploads", () => {
-    const t0 = Date.parse("2024-06-15T12:00:00.000Z");
+  it("F1 seconds on: 10 wall seconds and 10 buffer uploads (one call per frame)", () => {
+    vi.stubEnv("DEV", true);
     const look = { format: "24", seconds: "1" };
     const writeBuffer = vi.fn();
+    let mono = 0;
+    setVizClockInjector(() => mono);
+    applyDevVizWallFlagsOnBuild("?vizWallClock=13:05", ["main"]);
     let firstBuf: number[] | undefined;
     for (let frame = 0; frame < 600; frame++) {
-      setVizWallClockInjector(() => wallMsAtFrame(t0, frame));
+      mono += 1000 / 60;
       runPackFrameHandler("nixie-clock", emptyFrame(), {
         writeBuffer: (_slot, data) => {
           writeBuffer();
@@ -45,11 +45,14 @@ describe("nixie wall upload F1 (live pack path, 60 fps)", () => {
   });
 
   it("F1 seconds off from 12:00:30: one upload per minute step", () => {
-    const t0 = Date.parse("2024-06-15T12:00:30.000Z");
+    vi.stubEnv("DEV", true);
     const look = { format: "24", seconds: "0" };
     const writeBuffer = vi.fn();
+    let mono = 30_000;
+    setVizClockInjector(() => mono);
+    applyDevVizWallFlagsOnBuild("?vizWallClock=12:00", ["main"]);
     for (let frame = 0; frame < 600; frame++) {
-      setVizWallClockInjector(() => wallMsAtFrame(t0, frame));
+      mono += 1000 / 60;
       runPackFrameHandler("nixie-clock", emptyFrame(), {
         writeBuffer: () => writeBuffer(),
         writeUniform: () => {},

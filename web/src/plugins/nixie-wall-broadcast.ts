@@ -1,27 +1,30 @@
-import { nixieWallDisplayTimeZone } from "./nixie-wall-timezone";
-import { wallPartsFromMs } from "./nixie-wall-clock";
-
-const sharedParts = { h: 0, m: 0, s: 0 };
+import { vizWallMs } from "../core/viz-clock";
+import type { MonoMs } from "../core/viz-time";
+import {
+  clearDevWallFlagClock,
+  devWallFlagClockActive,
+  fillDevWallFlagPartsScratch,
+  fillRealWallPartsScratch,
+  nixieWallPartsScratch,
+  wallSecondKeyFromScratch,
+} from "./nixie-wall-parts";
 
 /** One wall-clock format per second for every nixie tile on the wall. */
 export class SharedNixieWallSecond {
-  private lastSec = -1;
+  private lastKey = -1;
 
   reset(): void {
-    this.lastSec = -1;
+    this.lastKey = -1;
   }
 
-  /** Advance shared wall parts once per new wall second (reuses one parts object). */
-  syncWallSecond(wallMs: number, timeZone?: string): { h: number; m: number; s: number } {
-    const tz = timeZone ?? nixieWallDisplayTimeZone();
-    const sec = Math.floor(wallMs / 1000);
-    if (sec !== this.lastSec || this.lastSec < 0) {
-      this.lastSec = sec;
-      const parts = wallPartsFromMs(wallMs, tz);
-      sharedParts.h = parts.h;
-      sharedParts.m = parts.m;
-      sharedParts.s = parts.s;
-    }
-    return sharedParts;
+  /** Fill shared scratch once per new wall second; returns the same object every call. */
+  syncWallSecond(frameMono: MonoMs): typeof nixieWallPartsScratch {
+    if (devWallFlagClockActive()) fillDevWallFlagPartsScratch(frameMono);
+    else fillRealWallPartsScratch(vizWallMs());
+    const key = wallSecondKeyFromScratch();
+    if (key !== this.lastKey || this.lastKey < 0) this.lastKey = key;
+    return nixieWallPartsScratch;
   }
 }
+
+export { clearDevWallFlagClock, nixieWallPartsScratch };

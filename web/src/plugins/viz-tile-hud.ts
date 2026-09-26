@@ -1,5 +1,10 @@
 import { VIZ_HUD_WINDOW_TICKS, VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";
-import { hudSamplesForTile, type VizTileBudgetStats, type VizTileHudSample } from "./viz-tile-budget";
+import {
+  hudSamplesForTile,
+  tileSkipsInHudWindowRing,
+  type VizTileBudgetStats,
+  type VizTileHudSample,
+} from "./viz-tile-budget";
 import { tileLimitedSharingLabel } from "../ui/viz-copy";
 
 export type { VizTileHudSample, VizTileHudSampleKind } from "./viz-tile-budget";
@@ -38,6 +43,15 @@ export function tileHudSkipRatePerSec(
   return tileSkipsInHudWindow(samples, nowTick, inclusiveLower);
 }
 
+/** Live tile HUD skip rate from the ring buffer (no sample array). */
+export function tileHudSkipRateFromRing(
+  tile: VizTileBudgetStats,
+  nowTick: number,
+  inclusiveLower = false,
+): number {
+  return tileSkipsInHudWindowRing(tile, nowTick, inclusiveLower);
+}
+
 export function computeTileHudViewerState(
   samples: readonly VizTileHudSample[],
   nowTick: number,
@@ -71,7 +85,7 @@ export function tileHudChrome(
   activeTiles: number,
 ): TileHudChrome {
   const samples = hudSamplesForTile(tile);
-  const skipRate = tileHudSkipRatePerSec(samples, nowTick, false);
+  const skipRate = tileHudSkipRateFromRing(tile, nowTick, false);
   const state = computeTileHudViewerState(samples, nowTick, tile.lastBuildCostTicks);
   const limitedLabel =
     state === "limited"
