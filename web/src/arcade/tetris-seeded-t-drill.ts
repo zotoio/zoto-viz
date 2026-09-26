@@ -10,7 +10,9 @@ import {
   scoreBoard,
   scoreBoardOldWeights,
   type Board,
+  type Placement,
   TETRIS_COLS,
+  TETRIS_ROWS,
   T_DRILL_PIECES,
 } from "./tetris-engine";
 
@@ -63,7 +65,95 @@ export function formatGarbageRows(layout: SeededTDrillLayout): string {
   return layout.holeColumns.map((h, i) => `r${i} hole@${h}`).join(", ");
 }
 
-type ScoreFn = typeof scoreBoard;
+export type ScoreFn = typeof scoreBoard;
+
+export function boardToAscii(board: Board): string {
+  const lines: string[] = [];
+  for (let y = TETRIS_ROWS - 1; y >= 0; y--) {
+    let row = "";
+    for (let x = 0; x < TETRIS_COLS; x++) row += board[y]![x] ? "#" : ".";
+    lines.push(`${String(y).padStart(2, " ")} |${row}|`);
+  }
+  lines.push("    +" + "-".repeat(TETRIS_COLS) + "+");
+  lines.push("     " + Array.from({ length: TETRIS_COLS }, (_, i) => i % 10).join(""));
+  return lines.join("\n");
+}
+
+function placementKey(p: Placement): string {
+  return `${p.x},${p.y},${p.rot}`;
+}
+
+function scorePlacement(
+  board: Board,
+  kind: string,
+  plan: Placement,
+  scoreFn: ScoreFn,
+): number {
+  const cells = cellsFor(kind, plan.rot);
+  const trial = cloneBoard(board);
+  lockCells(trial, cells, plan.x, plan.y);
+  const cleared = clearFullRows(trial);
+  return scoreFn(trial, cleared, cells.length, { cells, x: plan.x });
+}
+
+export type FirstDivergence = {
+  pieceIndex: number;
+  oldPlan: Placement;
+  newPlan: Placement;
+  oldScoreOldPlan: number;
+  oldScoreNewPlan: number;
+  newScoreOldPlan: number;
+  newScoreNewPlan: number;
+};
+
+export function findFirstPlannerDivergence(seed: number): FirstDivergence | null {
+  const layout = seededTDrillLayout(seed);
+  const board = boardForSeededTDrill(layout);
+  const kinds = allTKinds(T_DRILL_PIECES);
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i]!;
+    const planOld = i === 0
+      ? bestPlacementAtSpawnColumn(board, kind, layout.startColumn, scoreBoardOldWeights)
+      : bestPlacement(board, kind, scoreBoardOldWeights);
+    const planNew = i === 0
+      ? bestPlacementAtSpawnColumn(board, kind, layout.startColumn, scoreBoard)
+      : bestPlacement(board, kind, scoreBoard);
+    if (!planOld || !planNew) return null;
+    if (placementKey(planOld) === placementKey(planNew)) {
+      const cells = cellsFor(kind, planOld.rot);
+      lockCells(board, cells, planOld.x, planOld.y);
+      clearFullRows(board);
+      continue;
+    }
+    return {
+      pieceIndex: i,
+      oldPlan: planOld,
+      newPlan: planNew,
+      oldScoreOldPlan: scorePlacement(board, kind, planOld, scoreBoardOldWeights),
+      oldScoreNewPlan: scorePlacement(board, kind, planNew, scoreBoardOldWeights),
+      newScoreOldPlan: scorePlacement(board, kind, planOld, scoreBoard),
+      newScoreNewPlan: scorePlacement(board, kind, planNew, scoreBoard),
+    };
+  }
+  return null;
+}
+
+export function finalBoardForSeededTDrill(seed: number, scoreFn: ScoreFn = scoreBoard): Board {
+  const layout = seededTDrillLayout(seed);
+  const board = boardForSeededTDrill(layout);
+  const kinds = allTKinds(T_DRILL_PIECES);
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i]!;
+    const plan = i === 0
+      ? bestPlacementAtSpawnColumn(board, kind, layout.startColumn, scoreFn)
+      : bestPlacement(board, kind, scoreFn);
+    if (!plan) break;
+    const cells = cellsFor(kind, plan.rot);
+    lockCells(board, cells, plan.x, plan.y);
+    clearFullRows(board);
+  }
+  return board;
+}
 
 function bestPlacementAtSpawnColumn(
   board: Board,

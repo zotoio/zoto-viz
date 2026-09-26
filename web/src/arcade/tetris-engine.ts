@@ -255,17 +255,23 @@ export function scoreBoardLegacy(
   );
 }
 
-export function scoreBoard(
+export type LandingWeightPair = {
+  aggregateLanding: number;
+  pieceLanding: number;
+};
+
+function scoreBoardFeatures(
   board: Board,
   cleared: number,
   pieceCells: number,
   ctx: ScoreContext,
+  pair: LandingWeightPair,
 ): number {
   const w = TETRIS_WEIGHTS;
   const pieceH = landingHeightForPiece(board, ctx.cells, ctx.x);
   return (
-    w.landingHeight * aggregateHeight(board)
-    + w.pieceLandingHeight * pieceH
+    pair.aggregateLanding * aggregateHeight(board)
+    + pair.pieceLanding * pieceH
     + w.erodedPieceCells * erodedPieceCells(cleared, pieceCells)
     + w.rowTransitions * rowTransitions(board)
     + w.colTransitions * colTransitions(board)
@@ -273,6 +279,25 @@ export function scoreBoard(
     + w.wells * wells(board)
     + w.bumpiness * bumpiness(board)
   );
+}
+
+/** Sweep / held-out validation: vary only aggregate and piece landing weights. */
+export function makeScoreBoardFromLandingWeights(pair: LandingWeightPair): typeof scoreBoard {
+  return (board, cleared, pieceCells, ctx) => scoreBoardFeatures(board, cleared, pieceCells, ctx, pair);
+}
+
+export const PRODUCTION_LANDING_WEIGHTS: LandingWeightPair = {
+  aggregateLanding: TETRIS_WEIGHTS.landingHeight,
+  pieceLanding: TETRIS_WEIGHTS.pieceLandingHeight,
+};
+
+export function scoreBoard(
+  board: Board,
+  cleared: number,
+  pieceCells: number,
+  ctx: ScoreContext,
+): number {
+  return scoreBoardFeatures(board, cleared, pieceCells, ctx, PRODUCTION_LANDING_WEIGHTS);
 }
 
 export function bestPlacement(
@@ -342,8 +367,10 @@ export function simulateAutoplayLegacy(board: Board, kinds: string[]): ReturnTyp
   return simulateAutoplay(board, kinds, scoreBoardLegacy);
 }
 
-/** Fixed seeds for deterministic survival regression (20+). */
-export const TETRIS_SURVIVAL_SEEDS = Array.from({ length: 20 }, (_, i) => i);
+/** Survival + T-drill battery seeds (0–59). Seeds 0–19 tune sweeps; 20–59 held out. */
+export const TETRIS_SURVIVAL_SEEDS = Array.from({ length: 60 }, (_, i) => i);
+
+export const SURVIVAL_PIECES_PER_SEED = 200;
 
 export function survivalRate(
   seeds: number[],

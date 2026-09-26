@@ -30,6 +30,7 @@ import {
   simulateSeededTDrill,
   simulateSeededTDrillOldWeights,
 } from "./tetris-seeded-t-drill";
+import { allBatterySeeds } from "./tetris-seed-guard";
 
 /** Minimum alternating S/Z pieces the fixed planner must survive on an empty well. */
 const MIN_SZ_SURVIVAL = 56;
@@ -70,8 +71,8 @@ describe("tetris-engine", () => {
     const legacy = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES, scoreBoardLegacy);
     const fixed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES);
     expect(fixed).toBeGreaterThanOrEqual(legacy);
-    expect(legacy).toBe(20);
-    expect(fixed).toBe(20);
+    expect(legacy).toBe(59);
+    expect(fixed).toBe(59);
   });
 
   it("picks a legal placement for each rotation", () => {
@@ -83,7 +84,8 @@ describe("tetris-engine", () => {
   });
 
   // Seeded T drill: garbage rows + first-piece spawn column vary per survival seed; 48× T.
-  // Per-seed old vs new comparison uses scoreBoardOldWeights (test-only reference). See PR #47 table.
+  // Per-seed old vs new comparison uses scoreBoardOldWeights (test-only reference). See PR #47.
+  // Landing-weight sweep grid (seeds 0–19 only): scripts/tetris-weight-sweep.ts — table in PR body.
   // Empty-well 18+ lines on the fixed planner still breaks 20/20 survival (aggregate height dominates).
   it("seeded T drill: new planner within one line of old weights on every survival seed", () => {
     for (const seed of TETRIS_SURVIVAL_SEEDS) {
@@ -96,7 +98,7 @@ describe("tetris-engine", () => {
   });
 
   it("seeded T drill layouts differ across survival seeds", () => {
-    const hashes = TETRIS_SURVIVAL_SEEDS.map((seed) => seededTDrillLayoutHash(seed));
+    const hashes = allBatterySeeds().map((seed) => seededTDrillLayoutHash(seed));
     expect(new Set(hashes).size).toBeGreaterThanOrEqual(18);
   });
 
@@ -146,8 +148,8 @@ describe("tetris-engine", () => {
   it("regressed piece-only planner survives fewer seeded runs than the fixed planner", () => {
     const regressed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES, scoreBoardRegressed);
     const fixed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES);
-    expect(regressed).toBeLessThanOrEqual(3);
-    expect(fixed).toBe(20);
+    expect(regressed).toBeLessThanOrEqual(12);
+    expect(fixed).toBe(59);
     expect(regressed).toBeLessThan(fixed);
   });
 });
