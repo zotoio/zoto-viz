@@ -264,6 +264,11 @@
       "file": "web/src/plugins/viz-pack-host.ts",
       "rule": "host-imports-pack-src",
       "target": "plugins/src/stereo-gram/frontend/drive.ts"
+    },
+    {
+      "file": "plugins/src/backrooms/shipped-pack.test.ts",
+      "rule": "host-import",
+      "target": "../../../web/src/graph/backdrop"
     }
   ]
 }

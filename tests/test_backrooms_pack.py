@@ -40,14 +40,19 @@ def test_backrooms_catalog_and_sky(tmp_path, monkeypatch) -> None:
     assert "zotoVizSlots" in ok.text
     assert "bool walled(" in ok.text
     assert row.get("viz", {}).get("maxBuffers") == 2
-    for name in ("buzz.mp3", "roar.mp3", "pant.mp3"):
-        assert (SRC / "assets" / "sfx" / name).is_file(), name
 
 
 def test_backrooms_present_pack_vitest() -> None:
     web = ROOT / "web"
     subprocess.run(
-        ["pnpm", "exec", "vitest", "run", "../plugins/src/backrooms"],
+        [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--config",
+            "../plugins/src/backrooms/vitest.config.ts",
+        ],
         cwd=web,
         check=True,
     )

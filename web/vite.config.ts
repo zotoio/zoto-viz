@@ -38,7 +38,7 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     setupFiles: ["src/test/setup.ts"],
-    include: ["src/**/*.test.ts", "../plugins/sdk/**/*.test.ts", "../plugins/src/backrooms/**/*.test.ts"],
+    include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary"],
