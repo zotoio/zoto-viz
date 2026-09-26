@@ -492,6 +492,7 @@ export class Mosaic {
       if (!ids.includes(id)) this.dropPane(id);
     }
     for (const id of ids) this.ensurePane(id);
+    syncVizTileScope(ids.length ? ids : ["main"]);
   }
 
   private paneBound(id: string): boolean {

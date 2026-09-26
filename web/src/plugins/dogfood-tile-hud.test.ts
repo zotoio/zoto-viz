@@ -26,6 +26,7 @@ import {
   syncVizTileScope,
   tileShareTicks,
   vizTileBudgetRegistry,
+  type VizTileHudSample,
 } from "./viz-tile-budget";
 
 describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => {
@@ -131,15 +132,21 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     expect(tileShareTicks(8)).toBe(626);
   });
 
-  it("HUD sample ring: 3600 frames keeps sample count at cap", () => {
+  it("B: HUD ring 3600 frames — length equals cap; slot 0 same object at frame 1 and 3600", () => {
     const reg = freshHudRegistry(["t0"]);
     const frame = { t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
+    let slot0At1: VizTileHudSample | null = null;
     for (let i = 0; i < 3600; i++) {
       reg.deliver("t0", () => ({ frame, costTicks: VIZ_COST_TICKS_4MS }), () => {}, { tick: i });
       reg.advanceTick();
+      const tile = reg.getTile("t0");
+      if (i === 0) slot0At1 = tile.hudRing[0]!;
+      if (i === 3599) {
+        expect(tile.hudRing.length).toBe(VIZ_HUD_SAMPLE_CAP);
+        expect(tile.hudRingCount).toBe(VIZ_HUD_SAMPLE_CAP);
+        expect(tile.hudRing[0]).toBe(slot0At1);
+      }
     }
-    expect(reg.getTile("t0").hudRingCount).toBeLessThanOrEqual(VIZ_HUD_SAMPLE_CAP);
-    expect(reg.getTile("t0").hudRingCount).toBe(VIZ_HUD_SAMPLE_CAP);
   });
 
   it("scheduler clamp (extra): nine tile ids scope to share 626", () => {

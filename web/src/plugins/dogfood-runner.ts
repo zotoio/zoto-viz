@@ -1,5 +1,6 @@
 import type { StateMsg } from "../core/types";
-import { resetVizClockInjectors, setVizBuildCostInjector, vizClockMs } from "../core/viz-clock";
+import { resetVizClockInjectors, setVizBuildCostInjector, vizClockMs } from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
 import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
@@ -156,7 +157,7 @@ export function percentile(samples: number[], p: number): number {
 export function dogfoodTick(
   packId: VizDemoPackId,
   state: StateMsg,
-  prevVizClockMs: number,
+  prevVizClockMs: import("../core/viz-time").MonoMs,
   audio: number,
   budget: VizFrameBudget,
   writer: VizBufferWriter,
@@ -164,9 +165,9 @@ export function dogfoodTick(
   build: typeof buildVizFrame = buildVizFrame,
 ): DogfoodTickResult {
   const contract = DEMO_PACK_CONTRACTS[packId];
-  const idleBuild = (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, contract.idle);
+  const idleBuild = (s: StateMsg, pt: import("../core/viz-time").MonoMs, a: number) => buildVizFrameForPlugin(s, pt, a, contract.idle);
   let buildCalls = 0;
-  const wrappedBuild = (s: StateMsg, pt: number, a: number) => {
+  const wrappedBuild = (s: StateMsg, pt: import("../core/viz-time").MonoMs, a: number) => {
     buildCalls++;
     if (buildSpy) buildSpy.calls++;
     return build === buildVizFrame ? idleBuild(s, pt, a) : build(s, pt, a);
@@ -334,7 +335,7 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
       const budget = new VizFrameBudget(now, "dogfood");
       const writer = new VizBufferWriter(contract);
       const buildTimes: number[] = [];
-      let prevVizClockMs = 0;
+      let prevVizClockMs = monoMs(0);
       let delivered = 0;
       let skippedStart = 0;
       const skipSamples: { t: number; n: number }[] = [];
@@ -349,7 +350,7 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
         buildTimes.push(buildCostSample(buildCostOpt, i, now() - tickT0));
         if (tick.delivered && tick.frame) {
           delivered++;
-          prevVizClockMs = now();
+          prevVizClockMs = monoMs(now());
         }
         if (presentStepMs != null) {
           presentT += presentStepMs;
@@ -418,28 +419,27 @@ export function runPackSwapPreserve(
   vizTileBudgetRegistry.reset();
   syncVizTileScope(["swap"]);
   const budget = new VizFrameBudget(now, "swap");
-  let frameTs = 0;
-  const tick1 = dogfoodTick(fromPack, state, frameTs, 0.1, budget, writer);
-  if (tick1.frame) frameTs = tick1.frame.t;
+  let prevClock = monoMs(0);
+  const tick1 = dogfoodTick(fromPack, state, prevClock, 0.1, budget, writer);
+  prevClock = monoMs(now());
 
-  dogfoodTick(fromPack, state, frameTs, 0.1, budget, writer);
+  dogfoodTick(fromPack, state, prevClock, 0.1, budget, writer);
   const uboBeforeSwap = writer.ubo.slice();
 
   const bound = hostBindOnPackSwap(
     writer,
     DEMO_PACK_CONTRACTS[toPack],
-    frameTs,
+    0,
     budget,
     true,
   );
   const nextWriter = bound.writer!;
-  frameTs = bound.frameTs;
   const uboMatch = Array.from(nextWriter.ubo).every((v, i) => v === uboBeforeSwap[i]);
 
-  dogfoodTick(toPack, state, frameTs, 0.1, budget, nextWriter);
+  dogfoodTick(toPack, state, prevClock, 0.1, budget, nextWriter);
 
   return {
-    frameTs,
+    frameTs: tick1.frame?.t ?? 0,
     skipped: budget.stats.skipped,
     uboMatch,
   };

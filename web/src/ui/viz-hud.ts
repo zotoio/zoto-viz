@@ -2,6 +2,7 @@ import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
 import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
 import { tileHudChrome } from "../plugins/viz-tile-hud";
+import { limitedSharingLabelCached, writeHudSkipText } from "./tile-hud-label";
 import { TILE_LIMITED_SHARING_TOOLTIP, formatHudSkipsPerSec } from "./viz-copy";
 import { morphCopy, Select } from "./ui";
 
@@ -76,6 +77,10 @@ export interface VizHudTick {
   state: StateMsg;
   now: number;
   tileBudget?: VizTileBudgetStats;
+  /** Active mosaic / viz tiles (for LIMITED label mate count). */
+  activeTiles?: number;
+  /** Per-tile budget lines when mosaic shares the wall budget. */
+  tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats }[];
 }
 
 export function tileHudSkipLabel(
@@ -198,6 +203,7 @@ export class VizHud {
   private readonly metricLabelEl: HTMLElement;
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly tileShareRow: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
@@ -233,6 +239,10 @@ export class VizHud {
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
+    this.tileShareRow = document.createElement("div");
+    this.tileShareRow.className = "viz-hud-tile-shares";
+    this.tileShareRow.hidden = true;
+
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
     this.packSel = new Select({
@@ -251,7 +261,7 @@ export class VizHud {
       return el;
     };
     line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
-    root.append(line);
+    root.append(line, this.tileShareRow);
 
     parent.append(root);
     this.root = root;
@@ -278,7 +288,7 @@ export class VizHud {
 
   tick(input: VizHudTick): void {
     if (!this.activeId) return;
-    const { stats, frame, state, now, tileBudget } = input;
+    const { stats, frame, state, now, tileBudget, activeTiles = 1, tileBudgetLines } = input;
     const displayFrame = tileBudget ? tileHudDisplayFrame(tileBudget, frame) : frame;
     const metric = vizHudMetric(this.activeId, displayFrame, state);
     this.metricLabelEl.textContent = metric.label;
@@ -300,15 +310,38 @@ export class VizHud {
 
     const rate = skipRatePerSec(this.skipSamples, now);
     if (tileBudget) {
-      const chrome = tileHudChrome(tileBudget, Math.round(now * 300), 1);
-      this.skipEl.textContent = chrome.limitedLabel ?? formatSkipRate(rate);
-      this.skipEl.title = chrome.limitedLabel ? TILE_LIMITED_SHARING_TOOLTIP : this.skipEl.title;
-      this.skipEl.classList.toggle("viz-hud-skip-limited", Boolean(chrome.limitedLabel));
+      const nowTick = Math.round(now * 300);
+      const chrome = tileHudChrome(tileBudget, nowTick, activeTiles);
+      const limited = chrome.state === "limited"
+        ? limitedSharingLabelCached(activeTiles, chrome.skipRatePerSec)
+        : null;
+      const skipText = limited ?? formatSkipRate(rate);
+      writeHudSkipText(this.skipEl, skipText);
+      this.skipEl.title = limited ? TILE_LIMITED_SHARING_TOOLTIP : "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
+      this.skipEl.classList.toggle("viz-hud-skip-limited", Boolean(limited));
       this.skipEl.classList.toggle("viz-hud-skip-fail", chrome.useFailTone);
     } else {
-      this.skipEl.textContent = formatSkipRate(rate);
+      writeHudSkipText(this.skipEl, formatSkipRate(rate));
       this.skipEl.classList.remove("viz-hud-skip-limited", "viz-hud-skip-fail");
     }
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
+
+    const lines = tileBudgetLines ?? [];
+    this.tileShareRow.hidden = lines.length === 0;
+    this.tileShareRow.replaceChildren();
+    for (const { tileId, tile } of lines) {
+      const nowTick = Math.round(now * 300);
+      const chrome = tileHudChrome(tile, nowTick, activeTiles);
+      const el = document.createElement("span");
+      el.className = "viz-hud-tile-share";
+      el.dataset.tileId = tileId;
+      const limited = chrome.state === "limited"
+        ? limitedSharingLabelCached(activeTiles, chrome.skipRatePerSec)
+        : null;
+      el.textContent = limited
+        ? `${tileId}: ${limited}`
+        : `${tileId}: ${formatSkipRate(chrome.skipRatePerSec)}`;
+      this.tileShareRow.append(el);
+    }
   }
 }

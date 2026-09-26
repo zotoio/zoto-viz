@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resetVizClockInjectors, setVizBuildCostTicksInjector, setVizClockInjector } from "../core/viz-clock";
+import { resetVizClockInjectors, setVizBuildCostTicksInjector, setVizClockInjector } from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
 import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import type { Device, StateMsg } from "../core/types";
 import {
@@ -179,8 +180,8 @@ describe("bindVizWriterCore (demo pack-swap preserve path)", () => {
 
     const budget = new VizFrameBudget(() => 0, "bind");
     setVizBuildCostTicksInjector((i) => (i === 0 ? 15000 : 1200));
-    budget.deliver(minimalState(), 10, 0, () => {});
-    budget.deliver(minimalState(), 10, 0, () => {});
+    budget.deliver(minimalState(), monoMs(10), 0, () => {});
+    budget.deliver(minimalState(), monoMs(10), 0, () => {});
     setVizBuildCostTicksInjector(undefined);
     expect(budget.stats.skipped).toBe(1);
 
@@ -194,8 +195,8 @@ describe("bindVizWriterCore (demo pack-swap preserve path)", () => {
   it("falls back to reset when preserveUbo is set but no prior writer exists", () => {
     const budget = new VizFrameBudget(() => 0, "bind");
     setVizBuildCostTicksInjector((i) => (i === 0 ? 15000 : 1200));
-    budget.deliver(minimalState(), 5, 0, () => {});
-    budget.deliver(minimalState(), 5, 0, () => {});
+    budget.deliver(minimalState(), monoMs(5), 0, () => {});
+    budget.deliver(minimalState(), monoMs(5), 0, () => {});
     setVizBuildCostTicksInjector(undefined);
 
     const next = hostBindState(null, 5, budget, true);
@@ -210,16 +211,16 @@ describe("VizFrameBudget", () => {
     const state = minimalState();
     const delivered: unknown[] = [];
     const onTime = new VizFrameBudget(() => 0);
-    onTime.deliver(state, 0, 0, (f) => delivered.push(f));
+    onTime.deliver(state, monoMs(0), 0, (f) => delivered.push(f));
     expect(delivered).toHaveLength(1);
     expect(onTime.stats.overBudget).toBe(0);
     expect(onTime.lastBuilt?.t).toBe(100);
 
     const slow = new VizFrameBudget(() => 0, "slow");
     setVizBuildCostTicksInjector((i) => (i === 0 ? 1200 : i === 1 ? 15000 : 1200));
-    slow.deliver(state, 0, 0, (f) => delivered.push(f));
-    slow.deliver(state, 0, 0, (f) => delivered.push(f));
-    const skipped = slow.deliver(state, 0, 0, (f) => delivered.push(f));
+    slow.deliver(state, monoMs(0), 0, (f) => delivered.push(f));
+    slow.deliver(state, monoMs(0), 0, (f) => delivered.push(f));
+    const skipped = slow.deliver(state, monoMs(0), 0, (f) => delivered.push(f));
     setVizBuildCostTicksInjector(undefined);
     expect(skipped).toBeNull();
     expect(slow.stats.skipped).toBeGreaterThanOrEqual(1);

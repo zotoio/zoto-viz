@@ -78,16 +78,23 @@ export function parseNixieLook(cfg?: Record<string, string> | null, prev?: Nixie
   };
 }
 
+/** Packed slot value: tube draws blank (12h leading zero suppression). */
+export const NIXIE_DIGIT_BLANK = -1;
+
 export function digitsOf(date: Date, hour12: boolean): [number, number, number, number, number, number] {
-  let h = date.getHours();
+  const h24 = date.getHours();
   const m = date.getMinutes();
   const s = date.getSeconds();
+  let hour = h24;
   if (hour12) {
-    h = h % 12;
-    if (h === 0) h = 12;
+    hour = h24 % 12;
+    if (hour === 0) hour = 12;
   }
+  const h10 = hour12 && hour >= 1 && hour <= 9
+    ? NIXIE_DIGIT_BLANK
+    : Math.floor(hour / 10);
   return [
-    Math.floor(h / 10), h % 10,
+    h10, hour % 10,
     Math.floor(m / 10), m % 10,
     Math.floor(s / 10), s % 10,
   ];

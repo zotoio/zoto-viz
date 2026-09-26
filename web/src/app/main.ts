@@ -81,7 +81,7 @@ import {
 } from "../plugins/typesafe-host";
 import { mainVizDeliver, mainVizBuildFrame } from "./viz-main-deliver";
 import { runPackFrameHandler, syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
-import { vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
+import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -90,13 +90,15 @@ import { stereoAiFrame } from "../plugins/stereo-ai";
 import { FeedTitleCube } from "../plugins/feed-title-cube";
 import { NestCamsLive } from "../plugins/nest-cams-live";
 import { parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
+import { monoMs, type MonoMs } from "../core/viz-time";
 import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
-import { vizClockMs } from "../core/viz-clock";
+import { setVizBuildCostTicksInjector, vizClockMs } from "../core/viz-clock";
+import { broadcastPluginUbo } from "./viz-plugin-ubo";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -342,8 +344,27 @@ let settings!: Settings;
 const sandbox = new PluginSandbox();
 const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
-let vizFrameClockMs = 0;
+let vizFrameClockMs: MonoMs = monoMs(0);
 const vizBudget = new VizFrameBudget();
+let vizTileScopeKey = "";
+
+if (import.meta.env.DEV) {
+  const devCost = new URLSearchParams(location.search).get("vizTileCostTicks");
+  if (devCost) {
+    const ticks = Number(devCost);
+    if (Number.isFinite(ticks)) setVizBuildCostTicksInjector(() => ticks);
+  }
+}
+
+function syncVizBudgetTileScope(): void {
+  const ids = mosaic?.on ? mosaic.tileIds : ["main"];
+  const scopeIds = ids.length ? ids : ["main"];
+  const key = scopeIds.join("\0");
+  if (key === vizTileScopeKey) return;
+  vizTileScopeKey = key;
+  syncVizTileScope(scopeIds);
+  vizBudget.setTileId(mosaic?.on ? (mosaic.mainMode || scopeIds[0] || "main") : "main");
+}
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
@@ -383,7 +404,7 @@ scene.afterLook = () => {
     const drive = backroomsSlots(scene.skyTime(), new Date(), innerWidth / Math.max(1, innerHeight));
     vizWriter.writeBuffer(0, drive.slot0);
     vizWriter.writeBuffer(1, drive.slot1);
-    scene.setPluginUboBuffer(vizWriter.ubo);
+    broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
     return;
   }
   if (mode.pluginId !== "stereo-gram" || !vizWriter) {
@@ -410,19 +431,19 @@ scene.afterLook = () => {
   // The sky only draws; the scene is built here once per frame.
   const frame = buildStereoFrame({ timing, clock, act: drive[0]!, level: heard.level, bins: stereoBins, ai });
   for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
-  scene.setPluginUboBuffer(vizWriter.ubo);
+  broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
 };
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
   const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
   vizWriter = writer;
-  if (resetFrameTs) vizFrameClockMs = 0;
+  if (resetFrameTs) vizFrameClockMs = monoMs(0);
   if (resetBudget) {
     vizBudget.reset();
     vizHud.resetSkipBaseline();
   }
-  if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
+  if (writer && preserveUbo && !resetFrameTs) broadcastPluginUbo(scene, writer.ubo, mosaic?.on ? mosaic : null);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
@@ -433,7 +454,7 @@ sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
   setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
   writeBuffer: (slot, data) => {
-    if (vizWriter?.writeBuffer(slot, data).ok) scene.setPluginUboBuffer(vizWriter.ubo);
+    if (vizWriter?.writeBuffer(slot, data).ok) broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
   },
   writeUniform: (name, value) => {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
@@ -999,7 +1020,8 @@ function feed(m: StateMsg): void {
     const bind = packId === "hn-rain" || packId === "hn-term"
       ? illustratedSourceBind(optsFor(mode))
       : parseSourceBind(optsFor(mode));
-    const buildFrame = (s: StateMsg, pt: number, a: number) => mainVizBuildFrame(s, pt, a, idle, bind);
+    syncVizBudgetTileScope();
+    const buildFrame = (s: StateMsg, pt: MonoMs, a: number) => mainVizBuildFrame(s, pt, a, idle, bind);
     const delivered = mainVizDeliver({
       budget: vizBudget,
       prevClockMs: vizFrameClockMs,
@@ -1031,6 +1053,11 @@ function feed(m: StateMsg): void {
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
     }
+    const activeTiles = vizTileBudgetRegistry.activeTileCount();
+    const budgetTileId = mosaic?.on ? (mosaic.mainMode || mosaic.tileIds[0] || "main") : "main";
+    const tileLines = mosaic?.on
+      ? mosaic.tileIds.map((id) => ({ tileId: id, tile: vizTileBudgetRegistry.getTile(id) }))
+      : undefined;
     vizHud.tick({
       packId,
       packName: active?.name ?? packId ?? "",
@@ -1038,7 +1065,9 @@ function feed(m: StateMsg): void {
       frame: vizBudget.lastBuilt,
       state: shown,
       now: vizClockMs(),
-      tileBudget: vizTileBudgetRegistry.getTile("main"),
+      tileBudget: vizTileBudgetRegistry.getTile(budgetTileId),
+      activeTiles,
+      tileBudgetLines: tileLines,
     });
   }
 

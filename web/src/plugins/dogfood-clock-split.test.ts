@@ -3,7 +3,8 @@ import {
   resetVizClockInjectors,
   setVizClockInjector,
   setVizWallClockInjector,
-} from "../core/viz-clock";
+} from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
   DOGFOOD_SOAK_PATTERN_EXPECTED,
@@ -44,7 +45,7 @@ describe("clock split row W1", () => {
       if (i === 60) sim.wall -= 5000;
       sim.mono += stepMs;
       sim.wall += stepMs;
-      const frame = buildVizFrame(fatLanFixture(), prevClock, 0.1);
+      const frame = buildVizFrame(fatLanFixture(), monoMs(prevClock), 0.1);
       dts.push(frame.dt);
       prevClock = sim.mono;
     }

@@ -6,7 +6,9 @@ import {
 } from "../core/viz-clock";
 import {
   createNixieWallClock,
+  digitsFromParts,
   digitsFromWallMs,
+  NIXIE_DIGIT_BLANK,
   nixieSimWallMs,
   packNixieWallBuffer,
   resetNixieFormatterCache,
@@ -63,12 +65,18 @@ describe("nixie wall clock rows", () => {
     let canvasRef: ReturnType<typeof nixiePackActiveCanvas> | null = null;
     const frame = emptyFrame();
     const bufOut: number[] = [];
+    let digitBufAt1: number[] | null = null;
     for (let i = 0; i < 600; i++) {
       const wallMs = nixieSimWallMs(t0, i);
       setVizWallClockInjector(() => wallMs);
       syncVizPackRenderCanvas(hostCanvas);
       runPackFrameHandler("nixie-clock", frame, {
-        writeBuffer: (_slot, data) => { bufOut.length = 0; bufOut.push(...data); },
+        writeBuffer: (_slot, data) => {
+          if (i === 1) digitBufAt1 = data;
+          if (i === 599) expect(data).toBe(digitBufAt1);
+          bufOut.length = 0;
+          bufOut.push(...data);
+        },
         writeUniform: () => {},
         writeParticles: () => {},
       }, { format: "24", seconds: "1" });
@@ -147,20 +155,26 @@ describe("nixie wall clock rows", () => {
     expect(nixiePackActiveLook().glow).toBe(0.4);
   });
 
-  it("N12: mixed 12h and 24h tiles — one format per second, per-tile hour conversion", () => {
-    resetNixieFormatterCache();
-    const clock = createNixieWallClock(UTC);
-    const look12 = { ...DEFAULT_LOOK, hour12: true, seconds: false };
-    const look24 = { ...DEFAULT_LOOK, hour12: false, seconds: false };
+  it("N12: reachable 12-hour tile — blank tens for hours 1–9", () => {
     const t0 = Date.parse("2024-06-15T13:05:00.000Z");
-    for (let i = 0; i < 120; i++) {
-      const wallMs = t0 + Math.floor((i * 1000) / 60);
-      const a = clock.tick(wallMs, look12);
-      expect(a.slice(0, 4)).toEqual([0, 1, 0, 5]);
-      const b = clock.tick(wallMs, look24);
-      expect(b.slice(0, 4)).toEqual([1, 3, 0, 5]);
+    const look12 = { ...DEFAULT_LOOK, hour12: true, seconds: false };
+    const d = digitsFromWallMs(t0, look12, UTC);
+    expect(d.slice(0, 4)).toEqual([NIXIE_DIGIT_BLANK, 1, 0, 5]);
+  });
+
+  it("E: 01:05 / 13:05 / 00:05 / 12:05 wall digits in 12h and 24h modes", () => {
+    const cases = [
+      { h: 1, m: 5, h12: [NIXIE_DIGIT_BLANK, 1, 0, 5], h24: [0, 1, 0, 5] },
+      { h: 13, m: 5, h12: [NIXIE_DIGIT_BLANK, 1, 0, 5], h24: [1, 3, 0, 5] },
+      { h: 0, m: 5, h12: [1, 2, 0, 5], h24: [0, 0, 0, 5] },
+      { h: 12, m: 5, h12: [1, 2, 0, 5], h24: [1, 2, 0, 5] },
+    ];
+    for (const c of cases) {
+      const d12 = digitsFromParts(c.h, c.m, 5, true);
+      const d24 = digitsFromParts(c.h, c.m, 5, false);
+      expect(d12.slice(0, 4)).toEqual(c.h12);
+      expect(d24.slice(0, 4)).toEqual(c.h24);
     }
-    expect(clock.formatCalls).toBe(2);
   });
 
   it("N2: Sydney DST spring — 01:59:59 to 03:00:00", () => {

@@ -87,6 +87,7 @@ void main() {
     if (glass < 0.01) continue;
 
     float digit = slot0(float(i));
+    float hour12 = packed > 64.0 ? step(0.5, slot0(13.0)) : 0.0;
     if (packed < 64.0) {
       float sec = floor(mod(uTime, 86400.0));
       float hh = floor(sec / 3600.0);
@@ -98,15 +99,18 @@ void main() {
       else if (i == 3) digit = mod(mm, 10.0);
       else if (i == 4) digit = floor(ss / 10.0);
       else digit = mod(ss, 10.0);
+      if (hour12 > 0.5 && i == 0 && digit < 1.0) digit = -1.0;
     }
     float ghosts = 0.0;
     float live = 0.0;
-    for (int d = 0; d < 10; d++) {
-      vec2 duv = (local - vec2(0.18, 0.16)) / vec2(0.64, 0.70);
-      duv += vec2(float(d % 3) - 1.0, float(d / 3) - 1.5) * 0.012;
-      float g = glyph(d, duv);
-      ghosts += g * 0.07;
-      if (abs(float(d) - digit) < 0.5) live = g;
+    if (digit >= 0.0) {
+      for (int d = 0; d < 10; d++) {
+        vec2 duv = (local - vec2(0.18, 0.16)) / vec2(0.64, 0.70);
+        duv += vec2(float(d % 3) - 1.0, float(d / 3) - 1.5) * 0.012;
+        float g = glyph(d, duv);
+        ghosts += g * 0.07;
+        if (abs(float(d) - digit) < 0.5) live = g;
+      }
     }
 
     float mesh = 0.0;

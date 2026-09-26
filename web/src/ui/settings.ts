@@ -267,7 +267,30 @@ export class Settings {
     bindFloatPanel(this.pop, handle, "settings", { pin: () => this.pinFloat(), min: { w: 360, h: 280 } });
     this.ensureMosaicWallStatusEl();
 
-    this.anim = loadAnim(cfg.storePrefix);
+    const storePrefix = cfg.storePrefix;
+    const rawTilesJson = localStorage.getItem(`${storePrefix}.anim.mosaicTiles`);
+    let rawTiles: unknown = [];
+    try { rawTiles = rawTilesJson ? JSON.parse(rawTilesJson) : []; } catch { rawTiles = []; }
+    const loadedAnim = loadAnim(storePrefix);
+    const bootGuard = applyDreamAnimWithTileLimit(
+      {
+        ...loadedAnim,
+        mosaicTiles: Array.isArray(rawTiles) ? rawTiles : loadedAnim.mosaicTiles,
+      },
+      DEFAULT_DREAM,
+    );
+    this.anim = bootGuard.refused ? bootGuard.anim : loadedAnim;
+    if (bootGuard.refused) {
+      this.lastMosaicTileLimitMessage = bootGuard.message
+        ?? mosaicWallLayoutRefusedMessage(
+          countMosaicTiles({
+            ...loadedAnim,
+            mosaicTiles: Array.isArray(rawTiles) ? rawTiles : loadedAnim.mosaicTiles,
+          }),
+          VIZ_MAX_ACTIVE_TILES,
+        );
+      this.renderMosaicWallStatus();
+    }
     this.feed = loadFeed(cfg.storePrefix);
     this.chat = loadChat(cfg.storePrefix);
     const split = migrateFeedChatSplit(cfg.storePrefix);

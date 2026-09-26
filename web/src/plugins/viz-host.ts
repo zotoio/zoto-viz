@@ -1,5 +1,6 @@
 import type { Device, StateMsg } from "../core/types";
 import { vizBuildCostMs, vizBuildCostTicks, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
+import { type MonoMs, monoMs, monoMsDeltaSec } from "../core/viz-time";
 import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
 import { VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
@@ -421,13 +422,13 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
  */
 export function buildVizFrame(
   state: StateMsg,
-  prevVizClockMs = 0,
+  prevVizClockMs: MonoMs = monoMs(0),
   audio = 0,
   bind?: SourceBind | Record<string, string>,
 ): VizDataFrame {
   const t = vizFrameEpochSec(state.ts);
-  const nowClock = vizClockMs();
-  const dt = prevVizClockMs > 0 ? Math.max(0, (nowClock - prevVizClockMs) / 1000) : 0;
+  const nowClock = monoMs(vizClockMs());
+  const dt = prevVizClockMs > monoMs(0) ? monoMsDeltaSec(prevVizClockMs, nowClock) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
   return {
     t,
@@ -451,7 +452,7 @@ export function buildVizFrame(
 /** Build a live frame and merge idle demo slices when monitor traffic is absent. */
 export function buildVizFrameForPlugin(
   state: StateMsg,
-  prevVizClockMs: number,
+  prevVizClockMs: MonoMs,
   audio: number,
   idle: VizIdleConfig,
   bind?: SourceBind | Record<string, string>,
@@ -469,10 +470,15 @@ export class VizFrameBudget {
   private _lastPresent = -1;
   private _lastTileSkipped = 0;
   private readonly now: () => number;
-  private readonly tileId: string;
+  private tileId: string;
 
   constructor(now: () => number = vizClockMs, tileId = "main") {
     this.now = now;
+    this.tileId = tileId;
+  }
+
+  /** Retarget deliver ledger when mosaic promotes a different header pane. */
+  setTileId(tileId: string): void {
     this.tileId = tileId;
   }
 
@@ -520,10 +526,10 @@ export class VizFrameBudget {
    */
   deliver(
     state: StateMsg,
-    prevVizClockMs: number,
+    prevVizClockMs: MonoMs,
     audio: number,
     onFrame: (frame: VizDataFrame) => void,
-    build: (state: StateMsg, prevVizClockMs: number, audio: number) => VizDataFrame = buildVizFrame,
+    build: (state: StateMsg, prevVizClockMs: MonoMs, audio: number) => VizDataFrame = buildVizFrame,
   ): VizDataFrame | null {
     const deliverIndex = this._total++;
     const tickInject = vizBuildCostTicks(deliverIndex);

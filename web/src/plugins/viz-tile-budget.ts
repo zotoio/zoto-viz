@@ -71,6 +71,14 @@ export interface VizTileBudgetStats {
   hudRingNext: number;
 }
 
+function makeHudRing(): VizTileHudSample[] {
+  const ring = new Array<VizTileHudSample>(VIZ_HUD_SAMPLE_CAP);
+  for (let i = 0; i < VIZ_HUD_SAMPLE_CAP; i++) {
+    ring[i] = { tick: 0, kind: "skip" };
+  }
+  return ring;
+}
+
 function freshTile(share: number): VizTileBudgetStats {
   return {
     debt: 0,
@@ -81,7 +89,7 @@ function freshTile(share: number): VizTileBudgetStats {
     shedding: false,
     lastDeliveredFrame: null,
     lastBuildCostTicks: null,
-    hudRing: new Array(VIZ_HUD_SAMPLE_CAP),
+    hudRing: makeHudRing(),
     hudRingCount: 0,
     hudRingNext: 0,
   };
@@ -108,7 +116,11 @@ function clampDebt(debt: number): number {
 }
 
 function recordHudSample(tile: VizTileBudgetStats, sample: VizTileHudSample): void {
-  tile.hudRing[tile.hudRingNext] = sample;
+  const slot = tile.hudRing[tile.hudRingNext]!;
+  slot.tick = sample.tick;
+  slot.kind = sample.kind;
+  if (sample.costTicks !== undefined) slot.costTicks = sample.costTicks;
+  else delete slot.costTicks;
   tile.hudRingNext = (tile.hudRingNext + 1) % VIZ_HUD_SAMPLE_CAP;
   if (tile.hudRingCount < VIZ_HUD_SAMPLE_CAP) tile.hudRingCount++;
 }

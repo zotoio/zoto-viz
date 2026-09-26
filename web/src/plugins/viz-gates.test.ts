@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { setVizBuildCostTicksInjector } from "../core/viz-clock";
+import { setVizBuildCostTicksInjector } from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
 import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import { toPluginView } from "./plugin-visualisation";
 import {
@@ -24,13 +25,13 @@ describe("viz merge gates", () => {
     const budget = new VizFrameBudget(() => mono, "gate");
     setVizBuildCostTicksInjector((i) => (i === 0 ? 1200 : 15000));
 
-    const ok = budget.deliver(fatLan, 0, 0, (f) => sandbox.frame(f), buildVizFrame);
+    const ok = budget.deliver(fatLan, monoMs(0), 0, (f) => sandbox.frame(f), buildVizFrame);
     expect(ok).not.toBeNull();
     expect(sandbox.frame).toHaveBeenCalledTimes(1);
 
     mono += 17;
-    budget.deliver(fatLan, mono, 0, (f) => sandbox.frame(f), buildVizFrame);
-    const skipped = budget.deliver(fatLan, mono, 0, (f) => sandbox.frame(f), buildVizFrame);
+    budget.deliver(fatLan, monoMs(mono), 0, (f) => sandbox.frame(f), buildVizFrame);
+    const skipped = budget.deliver(fatLan, monoMs(mono), 0, (f) => sandbox.frame(f), buildVizFrame);
     setVizBuildCostTicksInjector(undefined);
     expect(skipped).toBeNull();
     expect(budget.stats.skipped).toBe(1);

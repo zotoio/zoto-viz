@@ -7,6 +7,9 @@ import {
 
 export const NIXIE_SIM_TICKS_PER_FRAME = 5000;
 
+/** Packed slot value: tube draws blank (12h leading zero suppression). */
+export const NIXIE_DIGIT_BLANK = -1;
+
 /** Dogfood N1: wall ms from integer ticks (5000 ticks per frame, 300 ticks/ms). */
 export function nixieSimWallMs(t0Ms: number, frameIndex: number): number {
   return t0Ms + Math.floor((frameIndex * NIXIE_SIM_TICKS_PER_FRAME) / 300);
@@ -51,8 +54,12 @@ export function digitsFromParts(
   hour12: boolean,
 ): [number, number, number, number, number, number] {
   const hour = hourForDisplay(h24, hour12);
+  const h10 = hour12 && hour >= 1 && hour <= 9
+    ? NIXIE_DIGIT_BLANK
+    : Math.floor(hour / 10);
+  const h1 = hour % 10;
   return [
-    Math.floor(hour / 10), hour % 10,
+    h10, h1,
     Math.floor(m / 10), m % 10,
     Math.floor(s / 10), s % 10,
   ];

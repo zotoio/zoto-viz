@@ -4,7 +4,8 @@ import {
   setVizBuildCostTicksInjector,
   setVizClockInjector,
   setVizWallClockInjector,
-} from "../core/viz-clock";
+} from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
 import { formatSkipRate, skipRatePerSec, vizHudMetric } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
@@ -242,7 +243,7 @@ describe("viz dogfood gates", () => {
 
   it("talker-storm pack handler refuses more than 512 particles", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["talker-storm"]);
-    const frame = buildVizFrame(fatLan, 0, 0.1);
+    const frame = buildVizFrame(fatLan, monoMs(0), 0.1);
     const over: number[] = [];
     for (let i = 0; i < 513; i++) over.push(0, 0, 0, 1);
     const bad = writer.writeParticles(over, 4);
@@ -275,8 +276,8 @@ describe("viz dogfood gates", () => {
 
     const budget = new VizFrameBudget(() => 0, "swap");
     setVizBuildCostTicksInjector((i) => (i === 0 ? 1200 : 15000));
-    budget.deliver(fatLan, 0, 0.1, () => {});
-    budget.deliver(fatLan, 0, 0.1, () => {});
+    budget.deliver(fatLan, monoMs(0), 0.1, () => {});
+    budget.deliver(fatLan, monoMs(0), 0.1, () => {});
     expect(budget.stats.skipped).toBeGreaterThanOrEqual(1);
     setVizBuildCostTicksInjector(undefined);
 
