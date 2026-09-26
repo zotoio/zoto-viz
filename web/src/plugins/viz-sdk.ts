@@ -17,6 +17,14 @@ zoto.writeParticles = function(data, stride) {
   const arr = Array.isArray(data) ? data : Array.from(data);
   send("writeParticles", { data: arr, stride: stride || 4 });
 };
+if (!zoto.publishSurface) {
+  zoto.publishSurface = function(canvas) {
+    if (!vizAllowed("viz.write") || !canvas || typeof canvas.transferToImageBitmap !== "function") return;
+    const bitmap = canvas.transferToImageBitmap();
+    const pluginId = (window.__zotoConfig && window.__zotoConfig.pluginId) || "";
+    send("publishBitmap", { bitmap, pluginId }, [bitmap]);
+  };
+}
 window.addEventListener("message", (ev) => {
   const d = ev.data;
   if (!d || d.source !== "zoto-viz-host") return;

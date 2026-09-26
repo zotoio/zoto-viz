@@ -106,6 +106,7 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { paintFeedState } from "./feed-paint";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { deliverCoalescedMosaicPacks, mosaicPackGroups } from "../graph/mosaic-pack-coalesce";
+import { sandboxBitmapLane } from "../plugins/sandbox-bitmap";
 import { MosaicTileHudLayer } from "../ui/mosaic-tile-hud";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
@@ -442,6 +443,7 @@ sandbox.handlers = {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
+  publishBitmap: (pluginId, bitmap) => { sandboxBitmapLane(pluginId).ingest(bitmap); },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };

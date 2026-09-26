@@ -35,6 +35,8 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("writeBuffer", ["viz.write"])).toBe(true);
     expect(hostAllows("writeUniform", ["viz.write"])).toBe(true);
     expect(hostAllows("writeParticles", ["viz.write"])).toBe(true);
+    expect(hostAllows("publishBitmap", ["viz.write"])).toBe(true);
+    expect(hostAllows("publishBitmap", ["viz.read"])).toBe(false);
   });
 });
 

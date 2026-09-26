@@ -23,6 +23,7 @@ import { letterboxFillHex, letterboxInnerRect, paintLetterboxBars, type SurfaceL
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
+import { finishSandboxBitmapHostFrame, paintPackMirrorPlaceholder } from "../plugins/sandbox-bitmap";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
@@ -141,6 +142,7 @@ export class RenderHost {
       const mirrorRank = (v: HostedView) => ((v as { packMirrorPrimary?: unknown }).packMirrorPrimary ? 1 : 0);
       this.views.sort((a, b) => mirrorRank(a) - mirrorRank(b));
       for (const v of this.views) v.hostFrame(ts);
+      finishSandboxBitmapHostFrame();
     };
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -239,6 +241,46 @@ export class RenderHost {
     return { x: dx, y: dy, w: dw, h: dh };
   }
 
+  /**
+   * Letterbox a sandbox `ImageBitmap` into a duplicate tile (no canvas readback).
+   */
+  presentBitmapMirror(
+    mirror: HostedView,
+    bitmap: ImageBitmap,
+    fill: SurfaceLetterboxFill,
+    aspect: number,
+  ): Viewport | null {
+    const dst = this.viewBox(mirror);
+    if (!dst || dst.w < 2 || dst.h < 2) return null;
+    const inner = letterboxInnerRect(dst, aspect);
+    inner.x += dst.x;
+    inner.y += dst.y;
+    const box = { ...dst };
+    const ctx = this.software ? this.ctx2d : this.canvas.getContext("2d");
+    if (!ctx) return null;
+    const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
+    ctx.setTransform(pr, 0, 0, pr, 0, 0);
+    paintLetterboxBars(ctx, box, inner, fill);
+    ctx.drawImage(bitmap, inner.x, inner.y, inner.w, inner.h);
+    return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
+  }
+
+  presentSandboxMirrorPlaceholder(
+    mirror: HostedView,
+    fill: SurfaceLetterboxFill,
+    packName: string,
+    mirrorsTile: number,
+  ): Viewport | null {
+    const dst = this.viewBox(mirror);
+    if (!dst || dst.w < 2 || dst.h < 2) return null;
+    const ctx = this.software ? this.ctx2d : this.canvas.getContext("2d");
+    if (!ctx) return null;
+    const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
+    ctx.setTransform(pr, 0, 0, pr, 0, 0);
+    paintPackMirrorPlaceholder(ctx, dst, fill, packName, mirrorsTile);
+    return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
+  }
+
   /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
   setPixelRatio(pr: number): void {
     if (Math.abs(pr - this.pixelRatio) < 0.01) return;
@@ -303,7 +345,7 @@ export class RenderHost {
     if (this.wall.firstElementChild !== this.canvas) this.wall.prepend(this.canvas);
   }
 
-  private viewBox(view: HostedView): SoftRect | null {
+  viewBox(view: HostedView): SoftRect | null {
     const c = this.canvasRect ?? this.canvas.getBoundingClientRect();
     const r = view.viewEl.getBoundingClientRect();
     if (r.width < 2 || r.height < 2 || c.width < 2 || c.height < 2) return null;

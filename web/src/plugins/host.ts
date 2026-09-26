@@ -7,7 +7,7 @@ const ALLOWED = new Set([
 
 export function hostAllows(type: string, caps: string[]): boolean {
   if (type === "setStyle" || type === "setNodeColor") return caps.includes("graph.style");
-  if (type === "writeBuffer" || type === "writeUniform" || type === "writeParticles") {
+  if (type === "writeBuffer" || type === "writeUniform" || type === "writeParticles" || type === "publishBitmap") {
     return caps.includes("viz.write");
   }
   return false;
@@ -20,7 +20,8 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeBuffer"; payload: { slot: number; data: number[] } }
   | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
-  | { source: "zoto-viz-plugin"; type: "log"; payload: string };
+  | { source: "zoto-viz-plugin"; type: "log"; payload: string }
+  | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap; pluginId?: string } };
 
 export type ParentMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
@@ -34,6 +35,7 @@ export interface PluginHostHandlers {
   writeBuffer?: (slot: number, data: number[]) => void;
   writeUniform?: (name: string, value: VizUniformValue) => void;
   writeParticles?: (data: number[], stride?: number) => void;
+  publishBitmap?: (pluginId: string, bitmap: ImageBitmap) => void;
 }
 
 const TS_STORE = "zoto-viz.tsPlugins";
@@ -72,6 +74,8 @@ export class PluginSandbox {
   private iframe: HTMLIFrameElement | null = null;
   private caps: string[] = [];
   private vizContract: VizPluginContract | undefined;
+  /** Id passed to the last `load` / `loadModule` (for sandbox bitmap routing). */
+  loadedPluginId: string | null = null;
   handlers: PluginHostHandlers = {};
 
   constructor() {
@@ -81,6 +85,7 @@ export class PluginSandbox {
   unload(): void {
     this.iframe?.remove();
     this.iframe = null;
+    this.loadedPluginId = null;
   }
 
   async load(
@@ -91,8 +96,10 @@ export class PluginSandbox {
     viz?: VizPluginContract,
   ): Promise<void> {
     this.unload();
+    this.loadedPluginId = id;
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
+    const pluginConfig = { ...config, pluginId: id };
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");
     iframe.setAttribute("csp", "default-src 'none'; script-src 'unsafe-inline' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'");
@@ -100,13 +107,13 @@ export class PluginSandbox {
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     const plugin = js.replace(/<\/script/gi, "<\\/script");
     iframe.srcdoc = `<!doctype html><meta charset="utf-8">
-<script>window.__zotoConfig = ${JSON.stringify(config)};</script>
+<script>window.__zotoConfig = ${JSON.stringify(pluginConfig)};</script>
 <script data-caps='${JSON.stringify(this.caps)}'>${PLUGIN_SDK}</script>
 <script type="module">const zoto = globalThis.zoto; ${plugin}</script>`;
     document.body.appendChild(iframe);
     this.iframe = iframe;
     this.iframe.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "init", caps: this.caps, config, viz } satisfies ParentMsg,
+      { source: "zoto-viz-host", type: "init", caps: this.caps, config: pluginConfig, viz } satisfies ParentMsg,
       "*",
     );
   }
@@ -154,5 +161,11 @@ export class PluginSandbox {
     if (d.type === "writeBuffer") this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
     if (d.type === "writeUniform") this.handlers.writeUniform?.(d.payload.name, d.payload.value);
     if (d.type === "writeParticles") this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+    if (d.type === "publishBitmap") {
+      const bitmap = d.payload.bitmap;
+      if (!(bitmap instanceof ImageBitmap)) return;
+      const pluginId = d.payload.pluginId || this.loadedPluginId || "";
+      if (pluginId) this.handlers.publishBitmap?.(pluginId, bitmap);
+    }
   };
 }

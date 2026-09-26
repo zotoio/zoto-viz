@@ -141,12 +141,22 @@ export function applyPackCoalesceLayout(
   const grouped = new Set<string>();
   for (const g of groups) {
     const primary = mosaic.graphScene(g.primarySlot);
+    const viewId = mosaicTileViewId(g.primarySlot);
+    const mode = modeById(viewId);
+    const mirrorKind: "hostCanvas" | "sandboxSurface" = g.packId ? "hostCanvas" : "sandboxSurface";
+    const packLabel = mode.label ?? g.pluginId ?? "pack";
+    const mirrorsTile = mosaic.tileIds.indexOf(g.primarySlot) + 1;
+    const coalesceBase = {
+      mirrorKind,
+      pluginId: g.pluginId ?? undefined,
+      packLabel,
+    };
     for (const slot of g.slots) {
       grouped.add(slot);
       const scene = mosaic.graphScene(slot);
       if (!scene) continue;
-      if (slot === g.primarySlot) scene.setPackCoalesce({ role: "primary", primary: null });
-      else scene.setPackCoalesce({ role: "mirror", primary: primary ?? null });
+      if (slot === g.primarySlot) scene.setPackCoalesce({ role: "primary", primary: null, ...coalesceBase });
+      else scene.setPackCoalesce({ role: "mirror", primary: primary ?? null, ...coalesceBase, mirrorsTile });
     }
   }
   for (const slot of mosaic.tileIds) {

@@ -54,6 +54,7 @@ import {
   type LayoutXyz,
 } from "./graph-layouts";
 import { VIEW_MORPH_S, mixFade, mixShape } from "./morph";
+import { sandboxBitmapLane } from "../plugins/sandbox-bitmap";
 
 export { FABRIC_KINDS, FABRIC_OPTIONS, FABRIC_DICE, GRAPH_SPACE_OPTIONS, type FabricKind, type GraphSpace } from "./fabric";
 export {
@@ -1112,7 +1113,14 @@ export class NetScene implements HostedView {
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
   /** Duplicate mosaic tiles of the same pack: one tick/draw on primary, letterboxed mirrors. */
-  private packCoalesce: { role: "primary" | "mirror"; primary: NetScene | null } | null = null;
+  private packCoalesce: {
+    role: "primary" | "mirror";
+    primary: NetScene | null;
+    mirrorKind?: "hostCanvas" | "sandboxSurface";
+    pluginId?: string;
+    packLabel?: string;
+    mirrorsTile?: number;
+  } | null = null;
   private vizHeadlineText = "";
   private now = Date.now() / 1000;
   /** Host-engine stub so an empty catalog still constructs; catalog default is applied via setMode. */
@@ -1547,7 +1555,14 @@ export class NetScene implements HostedView {
     this.present();
   }
 
-  setPackCoalesce(role: { role: "primary" | "mirror"; primary: NetScene | null } | null): void {
+  setPackCoalesce(role: {
+    role: "primary" | "mirror";
+    primary: NetScene | null;
+    mirrorKind?: "hostCanvas" | "sandboxSurface";
+    pluginId?: string;
+    packLabel?: string;
+    mirrorsTile?: number;
+  } | null): void {
     this.packCoalesce = role;
   }
 
@@ -1563,14 +1578,39 @@ export class NetScene implements HostedView {
   private present(): void {
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
     this.backdrop.syncCamera(this.camera);
-    if (this.host && this.packCoalesce?.role === "mirror" && this.packCoalesce.primary) {
-      this.lastVp = this.host.presentPackMirror(
-        this.packCoalesce.primary,
-        this,
-        this.surfaceLetterboxFill(),
-      );
-      this.notePaneChange();
-      return;
+    if (this.host && this.packCoalesce?.role === "mirror") {
+      const fill = this.surfaceLetterboxFill();
+      if (this.packCoalesce.mirrorKind === "sandboxSurface" && this.packCoalesce.pluginId) {
+        const lane = sandboxBitmapLane(this.packCoalesce.pluginId);
+        const primary = this.packCoalesce.primary;
+        const aspect = primary
+          ? (() => {
+            const src = this.host!.viewBox(primary);
+            return src ? src.w / Math.max(1, src.h) : 16 / 9;
+          })()
+          : 16 / 9;
+        if (lane.peek()) {
+          this.lastVp = this.host.presentBitmapMirror(this, lane.peek()!, fill, aspect);
+        } else {
+          this.lastVp = this.host.presentSandboxMirrorPlaceholder(
+            this,
+            fill,
+            this.packCoalesce.packLabel ?? this.packCoalesce.pluginId,
+            this.packCoalesce.mirrorsTile ?? 1,
+          );
+        }
+        this.notePaneChange();
+        return;
+      }
+      if (this.packCoalesce.primary) {
+        this.lastVp = this.host.presentPackMirror(
+          this.packCoalesce.primary,
+          this,
+          fill,
+        );
+        this.notePaneChange();
+        return;
+      }
     }
     if (this.host) {
       this.lastVp = this.host.present(this, this.clearHex, this.scene, this.camera);

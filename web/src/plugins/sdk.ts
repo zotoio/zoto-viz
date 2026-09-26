@@ -5,8 +5,8 @@ import { VIZ_PLUGIN_SDK } from "./viz-sdk";
 export const PLUGIN_SDK = `
 const allowed = new Set(JSON.parse(document.currentScript.dataset.caps || "[]"));
 const parent = window.parent;
-function send(type, payload) {
-  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, "*");
+function send(type, payload, transfer) {
+  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, "*", transfer || []);
 }
 window.zoto = {
   onTick: null,
@@ -18,6 +18,12 @@ window.zoto = {
   writeUniform() {},
   writeParticles() {},
   getConfig() { return window.__zotoConfig || {}; },
+  publishSurface(canvas) {
+    if (!vizAllowed("viz.write") || !canvas || typeof canvas.transferToImageBitmap !== "function") return;
+    const bitmap = canvas.transferToImageBitmap();
+    const pluginId = (window.__zotoConfig && window.__zotoConfig.pluginId) || "";
+    send("publishBitmap", { bitmap, pluginId }, [bitmap]);
+  },
 };
 window.addEventListener("message", (ev) => {
   const d = ev.data;
