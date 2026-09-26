@@ -346,10 +346,28 @@ const vizBudget = new VizFrameBudget();
 type VizDevFixtureModule = typeof import("../plugins/viz-dev-fixture");
 let vizDevFixtureMod: VizDevFixtureModule | null = null;
 let vizDevFixtureName: import("../plugins/viz-dev-fixture").VizDevFixtureName | null = null;
-if (import.meta.env.DEV) {
-  const mod = await import("../plugins/viz-dev-fixture");
-  vizDevFixtureMod = mod;
-  vizDevFixtureName = mod.parseVizDevFixtureQuery(globalThis.location?.search ?? "", true);
+let vizDevFixtureLoad: Promise<void> | null = null;
+
+function vizFixtureQueryRaw(): string | null {
+  if (!import.meta.env.DEV) return null;
+  const search = globalThis.location?.search ?? "";
+  const q = search.startsWith("?") ? search.slice(1) : search;
+  const raw = new URLSearchParams(q).get("vizFixture")?.trim();
+  return raw || null;
+}
+
+function ensureVizDevFixtureLoaded(): Promise<void> {
+  if (!vizFixtureQueryRaw()) return Promise.resolve();
+  if (vizDevFixtureLoad) return vizDevFixtureLoad;
+  vizDevFixtureLoad = import("../plugins/viz-dev-fixture")
+    .then((mod) => {
+      vizDevFixtureMod = mod;
+      vizDevFixtureName = mod.parseVizDevFixtureQuery(globalThis.location?.search ?? "", true);
+    })
+    .catch((err) => {
+      console.warn("[zoto-viz] viz dev fixture failed to load", err);
+    });
+  return vizDevFixtureLoad;
 }
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
@@ -1009,9 +1027,18 @@ function feed(m: StateMsg): void {
     const buildLiveFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
-    const buildFrame = import.meta.env.DEV && vizDevFixtureName && vizDevFixtureMod
-      ? (s: StateMsg, pt: number, a: number) =>
-        vizDevFixtureMod!.buildVizDevFixtureFrame(vizDevFixtureName!, s.ts, pt > 0 ? Math.max(0, s.ts - pt) : 0, a)
+    void ensureVizDevFixtureLoaded();
+    const useDevFixture = import.meta.env.DEV && !!vizFixtureQueryRaw();
+    const buildFrame = useDevFixture
+      ? (s: StateMsg, pt: number, a: number) => {
+        if (!vizDevFixtureMod || !vizDevFixtureName) return buildLiveFrame(s, pt, a);
+        return vizDevFixtureMod.buildVizDevFixtureFrame(
+          vizDevFixtureName,
+          s.ts,
+          pt > 0 ? Math.max(0, s.ts - pt) : 0,
+          a,
+        );
+      }
       : buildLiveFrame;
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;

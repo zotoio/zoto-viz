@@ -29,14 +29,14 @@ export interface VizLinkSample {
   src: string;
   /** Talker id for the destination host. */
   dst: string;
-  /** Directional packet rate over the frame window (packets/s). */
+  /** Directional sent-packet rate over the frame window (sent packets/s). */
   rate: number;
 }
 
 export interface VizTalkerSample {
   /** Stable talker id (often IP or alias). */
   id: string;
-  /** With live flow rates: summed directional packets/s for the host (same units as `links[].rate`). When no host has live rates, the whole top-K uses lifetime packet counts — never both in one frame. */
+  /** With live flow rates: summed directional sent packets/s for the host (same units as `links[].rate`). When no host has live rates, the whole top-K uses lifetime packet counts — never both in one frame. */
   rate: number;
   /** Role bucket: gateway, internet, lan, self, etc. */
   role: string;
@@ -97,7 +97,7 @@ export interface VizDataFrame {
   packets: VizPacketSample[];
   /** Wi-Fi / RF beacon rows from the watch slice. */
   rf: VizRfBeacon[];
-  /** Top talkers by traffic. In live mode, `rate` is the sum of directional flow packet rates (packets/s) for that host; when no flow rates exist, the whole top-K uses lifetime `packets` counts instead (never mixed in one frame). */
+  /** Top talkers by traffic. In live mode, `rate` is the sum of directional sent flow packet rates (sent packets/s) for that host; when no flow rates exist, the whole top-K uses lifetime `packets` counts instead (never mixed in one frame). */
   talkers: VizTalkerSample[];
   /** Directional host-pair rates (v2); omitted when link collection is disabled. */
   links?: VizLinkSample[];

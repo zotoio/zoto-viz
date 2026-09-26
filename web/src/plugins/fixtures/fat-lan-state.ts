@@ -27,9 +27,12 @@ export function fatLanFixture(): StateMsg {
 
   const flows: Flow[] = Array.from({ length: 1200 }, (_, i) => {
     const pktRate = 1 + (i % 5);
+    const ai = i % devices.length;
+    let bi = (i * 3 + 1) % devices.length;
+    if (bi === ai) bi = (bi + 1) % devices.length;
     return {
-      a: devices[i % devices.length]!.ip,
-      b: devices[(i * 3) % devices.length]!.ip,
+      a: devices[ai]!.ip,
+      b: devices[bi]!.ip,
       bytes: 100 + i,
       packets: 1 + (i % 40),
       ports: [`tcp/${443 + (i % 20)}`],

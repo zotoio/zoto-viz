@@ -86,38 +86,42 @@ function talkersWithConnFailed(
 
 type LinkCandidate = { src: string; dst: string; rate: number };
 
+const linkAggScratch = new Map<string, LinkCandidate>();
+
+function linkPairKey(src: string, dst: string): string {
+  return `${src}\0${dst}`;
+}
+
 function* linkCandidates(flows: Flow[], talkerIds: ReadonlySet<string>): Generator<LinkCandidate> {
   for (const fl of flows) {
     const aIn = talkerIds.has(fl.a);
     const bIn = talkerIds.has(fl.b);
     if (!aIn || !bIn) continue;
     const ab = directionalPacketRate(fl, true);
-    if (ab > 0) yield { src: fl.a, dst: fl.b, rate: ab };
+    if (ab > 0 && fl.a !== fl.b) yield { src: fl.a, dst: fl.b, rate: ab };
     const ba = directionalPacketRate(fl, false);
-    if (ba > 0) yield { src: fl.b, dst: fl.a, rate: ba };
+    if (ba > 0 && fl.a !== fl.b) yield { src: fl.b, dst: fl.a, rate: ba };
   }
 }
 
 /**
  * Aggregate directional host-pair rates for the monitor smoothing window (~5 s).
- * `src`/`dst` match talker ids; `rate` is packets/s (same basis as `talkers[].rate`).
+ * `src`/`dst` match talker ids; `rate` is sent packets/s (same basis as `talkers[].rate`).
  */
 export function collectVizLinks(
   flows: Flow[],
   talkerIds: ReadonlySet<string>,
   maxLinks: number,
 ): { links: VizLinkSample[]; linksDropped: number } {
-  let total = 0;
-  const top = topKByScore(
-    (function* () {
-      for (const cand of linkCandidates(flows, talkerIds)) {
-        total += 1;
-        yield cand;
-      }
-    })(),
-    maxLinks,
-    (l) => l.rate,
-  );
+  linkAggScratch.clear();
+  for (const cand of linkCandidates(flows, talkerIds)) {
+    const key = linkPairKey(cand.src, cand.dst);
+    const prev = linkAggScratch.get(key);
+    if (prev) prev.rate += cand.rate;
+    else linkAggScratch.set(key, { src: cand.src, dst: cand.dst, rate: cand.rate });
+  }
+  const total = linkAggScratch.size;
+  const top = topKByScore(linkAggScratch.values(), maxLinks, (l) => l.rate);
   const links = top.map((l) => ({ src: l.src, dst: l.dst, rate: l.rate }));
   return { links, linksDropped: Math.max(0, total - links.length) };
 }

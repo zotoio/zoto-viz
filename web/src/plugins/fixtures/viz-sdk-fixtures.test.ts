@@ -127,6 +127,18 @@ describe("viz sdk frozen fixtures", () => {
     expect(frame.headlines.some((h) => h.label && !/^host-\d+$/.test(h.label))).toBe(true);
   });
 
+  it("fat-live links have no duplicate pairs or self-links", () => {
+    for (const name of ["fat-live", "fat-live-failed"] as const) {
+      const seen = new Set<string>();
+      for (const link of VIZ_FIXTURES[name].links ?? []) {
+        expect(link.src, name).not.toBe(link.dst);
+        const key = `${link.src}\0${link.dst}`;
+        expect(seen.has(key), `${name} duplicate ${key}`).toBe(false);
+        seen.add(key);
+      }
+    }
+  });
+
   it("fat-live ships v2 links when enrichment is on", () => {
     const frame = VIZ_FIXTURES["fat-live"];
     expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);

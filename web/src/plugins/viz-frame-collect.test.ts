@@ -18,6 +18,26 @@ import {
 const DEMO_LAN_IP = "10.0.0.42";
 
 describe("viz frame v2 collector", () => {
+  it("aggregates duplicate directional pairs and ignores self-links", () => {
+    const flows: Flow[] = [
+      {
+        a: "10.0.0.1", b: "10.0.0.2", bytes: 1000, packets: 100, ports: [], protos: ["tcp"],
+        ifaces: [], first_seen: 0, last_seen: 1, rate: 1, rate_pkt_ab: 5, rate_pkt_ba: 0,
+      },
+      {
+        a: "10.0.0.1", b: "10.0.0.2", bytes: 500, packets: 50, ports: [], protos: ["tcp"],
+        ifaces: [], first_seen: 0, last_seen: 1, rate: 1, rate_pkt_ab: 7, rate_pkt_ba: 0,
+      },
+      {
+        a: "10.0.0.1", b: "10.0.0.1", bytes: 100, packets: 10, ports: [], protos: ["tcp"],
+        ifaces: [], first_seen: 0, last_seen: 1, rate: 1, rate_pkt_ab: 99, rate_pkt_ba: 0,
+      },
+    ];
+    const talkers = new Set(["10.0.0.1", "10.0.0.2"]);
+    const { links } = collectVizLinks(flows, talkers, 64);
+    expect(links).toEqual([{ src: "10.0.0.1", dst: "10.0.0.2", rate: 12 }]);
+  });
+
   it("aggregates directional pair rates and drops links whose ids are not talkers", () => {
     const flows: Flow[] = [
       {
@@ -38,7 +58,7 @@ describe("viz frame v2 collector", () => {
     ]);
   });
 
-  it("caps links and reports dropped count", () => {
+  it("caps links and reports dropped count on unique pairs", () => {
     const flows: Flow[] = Array.from({ length: 80 }, (_, i) => ({
       a: "10.0.0.1",
       b: `10.0.0.${i + 2}`,

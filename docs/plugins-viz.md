@@ -55,9 +55,9 @@ Each frame the host sends a **decimated** `VizDataFrame` (see
 | `audio` | scene pulse bass 0..1 | — |
 | `packets[]` | flow proto tallies | 32 |
 | `rf[]` | Wi-Fi watch SSIDs + RSSI | 24 |
-| `talkers[]` | top devices — summed **packets/s** per host when flow rates exist; else lifetime packet counts (never mixed in one frame) | 24 |
+| `talkers[]` | top devices — summed **sent packets/s** per host when flow rates exist; else lifetime packet counts (never mixed in one frame) | 24 |
 | `talkers[].failed` | per-host TCP failure ratio 0..1 (when link collection is on) | optional |
-| `links[]` | directional host-pair **packets/s** (same units as `talkers[].rate`) | 64 default |
+| `links[]` | directional host-pair **sent packets/s** (same units as `talkers[].rate`) | 64 default |
 | `linksDropped` | pairs over the cap | optional |
 | `headlines[]` | host sources: RSS titles + `summary` blurbs, HTTP JSON strings, file lines (`kind`) | 8 |
 
