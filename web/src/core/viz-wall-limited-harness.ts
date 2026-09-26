@@ -3,7 +3,11 @@ import { resetVizClockInjectors, setVizClockInjector, vizBuildCostTicks } from "
 import { VizFrameBudget, type VizDataFrame } from "../plugins/viz-host";
 import { fatLanFixture } from "../plugins/fixtures/fat-lan-state";
 import { monoMs } from "./viz-time";
-import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
+import {
+  mirrorMosaicTileCadenceFromPrimary,
+  syncVizTileScope,
+  vizTileBudgetRegistry,
+} from "../plugins/viz-tile-budget";
 import { VizHud } from "../ui/viz-hud";
 import {
   bindMosaicTileBudgetLines,
@@ -13,6 +17,8 @@ import {
 export interface WallHarnessResult {
   skipped: number;
   delivered: number;
+  /** Delivered build count per mosaic tile id (primary cadence mirrored to siblings). */
+  perTileDelivered: Record<string, number>;
   limitedWallLines: number;
   perTileLimitedLines: number;
   /** Final `.viz-hud-skip` text when LIMITED was shown. */
@@ -67,11 +73,7 @@ export function runWallHarness(
     vizTileBudgetRegistry.advanceTick();
     const budgetTile = vizTileBudgetRegistry.getTile(primary);
     if (tiles.length > 1) {
-      for (const id of tiles) {
-        const t = vizTileBudgetRegistry.getTile(id);
-        t.shedding = budgetTile.shedding;
-        if (budgetTile.lastDeliveredFrame) t.lastDeliveredFrame = budgetTile.lastDeliveredFrame;
-      }
+      mirrorMosaicTileCadenceFromPrimary(primary, tiles);
     }
     const nowTick = vizTileBudgetRegistry.currentTick();
     hud.tick({
@@ -100,9 +102,14 @@ export function runWallHarness(
     buildGaps.push(buildAt[g]! - buildAt[g - 1]!);
   }
   const primaryTile = vizTileBudgetRegistry.getTile(primary);
+  const perTileDelivered: Record<string, number> = {};
+  for (const id of tiles) {
+    perTileDelivered[id] = vizTileBudgetRegistry.getTile(id).delivered;
+  }
   return {
     skipped: primaryTile.skipped,
     delivered: primaryTile.delivered,
+    perTileDelivered,
     limitedWallLines: limitedWall,
     perTileLimitedLines: perTileLimited,
     wallLimitedText: limitedWall ? skipText : null,
@@ -178,6 +185,7 @@ export function runWallHarnessLayoutShrink(
   return {
     skipped: soloTile.skipped,
     delivered: soloTile.delivered,
+    perTileDelivered: { solo: soloTile.delivered },
     limitedWallLines: limitedWall,
     perTileLimitedLines: 0,
     wallLimitedText: limitedWall ? skipText : null,

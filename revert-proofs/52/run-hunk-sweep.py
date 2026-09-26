@@ -42,6 +42,7 @@ EXTRA_TESTS: dict[str, list[str]] = {
     "web/src/plugins/nixie-wall-clock.ts": [
         "src/plugins/nixie-wall-clock.test.ts",
         "src/plugins/nixie-wall-clock-source-rows.test.ts",
+        "src/plugins/nixie-clock-sky.test.ts",
     ],
     "web/src/graph/mosaic.ts": ["src/graph/mosaic-viz-tile-sync.test.ts"],
     "web/src/app/main.ts": [

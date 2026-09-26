@@ -6,6 +6,7 @@ import { fatLanFixture } from "../plugins/fixtures/fat-lan-state";
 import { monoMs } from "./viz-time";
 import { tileIdsForLayout } from "../plugins/dogfood-tile-hud";
 import {
+  mirrorMosaicTileCadenceFromPrimary,
   syncVizTileScope,
   VIZ_COST_TICKS_10MS,
   VIZ_WALL_BUDGET_TICKS,
@@ -54,6 +55,14 @@ describe("Amendment 4 wall LIMITED harness (VizFrameBudget + VizHud)", () => {
     expect(r.skipped).toBe(400);
     expect(r.limitedWallLines).toBe(1);
     expect(r.perTileLimitedLines).toBe(0);
+  });
+
+  it("Amendment 7 A5: 2×2 @3000 — each tile delivered=200 over 600 frames (mirrored cadence)", () => {
+    const r = runWallHarness(TILES_2X2, String(IN_RANGE_TICKS));
+    expect(r.delivered).toBe(200);
+    for (const id of TILES_2X2) {
+      expect(r.perTileDelivered[id]).toBe(200);
+    }
   });
 
   it("Amendment 5 P2: every gap between runs is exactly 3 over 600 frames", () => {
@@ -197,10 +206,9 @@ describe("Amendment 4 wall LIMITED harness (VizFrameBudget + VizHud)", () => {
       vizBuildCostTicks(i);
       vizTileBudgetRegistry.advanceTick();
       const primaryTile = vizTileBudgetRegistry.getTile(primary);
+      mirrorMosaicTileCadenceFromPrimary(primary, TILES_2X2);
       for (const id of TILES_2X2) {
         const t = vizTileBudgetRegistry.getTile(id);
-        t.shedding = primaryTile.shedding;
-        if (primaryTile.lastDeliveredFrame) t.lastDeliveredFrame = primaryTile.lastDeliveredFrame;
         const shown = tileHudDisplayFrame(t, null);
         if (!shown && primaryTile.lastDeliveredFrame) {
           clears++;

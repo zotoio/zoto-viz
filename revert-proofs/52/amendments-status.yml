@@ -17,3 +17,10 @@ amendments:
       - revert-proofs/52/pr-52a-hunk-to-row.md
       - revert-proofs/52/pr-52b-hunk-to-row.md
       - revert-proofs/52/run-hunk-sweep.py
+  - id: 7
+    title: "Nixie fc GLSL; per-tile delivered mirror; A3 bytes + CSP notes"
+    status: done
+    artifacts:
+      - revert-proofs/52/amendment-7-pr-body.md
+      - revert-proofs/52/nixie-fc-glsl-revert.json
+      - revert-proofs/52/shot-3-per-tile-mirror-revert.json
