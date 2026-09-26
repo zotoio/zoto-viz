@@ -251,12 +251,12 @@ export function dogfoodSoakPatternedBuildCostMs(index: number): number {
 }
 
 /**
- * Tile debt hand-work (see TILE_BUDGET_R4_PATTERN): 81 delivered, 39 skipped at 120 frames.
+ * Tile cadence hand-work (see TILE_BUDGET_R4_PATTERN): 100 delivered, 20 skipped at 120 frames.
  */
 export const DOGFOOD_SOAK_PATTERN_EXPECTED = {
-  delivered: 81,
-  skipped: 39,
-  /** 19 skip deltas land in the final 1000 ms HUD window (39 total over 2 s). */
+  delivered: 100,
+  skipped: 20,
+  /** Skip deltas in the final 1000 ms HUD window (20 total over 2 s). */
   skipRatePerSec: 20,
 } as const;
 

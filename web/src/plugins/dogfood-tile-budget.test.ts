@@ -3,7 +3,7 @@ import { resetVizClockInjectors } from "../core/viz-clock";
 import { tileHudDisplayFrame, tileHudSkipLabel } from "../ui/viz-hud";
 import {
   TILE_BUDGET_R1_EXPECTED,
-  TILE_BUDGET_R2_DEBT_SEQUENCE,
+  TILE_BUDGET_R2_NEXT_BUILD_ATTEMPT,
   TILE_BUDGET_R2_SKIPS_AFTER_SPIKE,
   TILE_BUDGET_R3_EXPECTED,
   TILE_BUDGET_R4_ALL_20MS,
@@ -12,7 +12,6 @@ import {
   TILE_BUDGET_R5_HEAVY,
   TILE_BUDGET_R5_LIGHT_SKIPS,
   TILE_BUDGET_R5_TOTAL_BUILT_TICKS,
-  TILE_BUDGET_R6_DEBT_AFTER_12_SKIPS,
   TILE_BUDGET_R6_SPIKE_SKIPS,
   dogfoodPatternCostTicks,
   freshTileRegistry,
@@ -58,27 +57,25 @@ describe("tile frame budget rows", () => {
     expect(r.skipped).toBe(TILE_BUDGET_R1_EXPECTED.skipped);
   });
 
-  it("R2: 1x1 spike then 4 ms sheds debt 15030 to 0 in 3 skips", () => {
+  it("R2: 1x1 spike then cadence k=30 — 29 skips before next build", () => {
     const reg = freshTileRegistry(["t0"]);
-    const spike = reg.deliver("t0", () => ({ frame: frame(1), costTicks: VIZ_COST_SPIKE_500MS }), () => {});
-    expect(spike.debt).toBe(TILE_BUDGET_R2_DEBT_SEQUENCE[0]);
-    const skipDebt: number[] = [];
+    const spike = reg.deliver("t0", () => ({ frame: frame(1), costTicks: VIZ_COST_SPIKE_500MS }), () => {}, { deliverIndex: 0 });
+    expect(spike.delivered).toBe(true);
     for (let s = 0; s < TILE_BUDGET_R2_SKIPS_AFTER_SPIKE; s++) {
-      const res = reg.deliver("t0", () => ({ frame: frame(1), costTicks: VIZ_COST_TICKS_4MS }), () => {});
+      const res = reg.deliver("t0", () => ({ frame: frame(1), costTicks: VIZ_COST_TICKS_4MS }), () => {}, { deliverIndex: s + 1 });
       expect(res.delivered).toBe(false);
-      skipDebt.push(res.debt);
     }
-    expect(skipDebt).toEqual([
-      TILE_BUDGET_R2_DEBT_SEQUENCE[1],
-      TILE_BUDGET_R2_DEBT_SEQUENCE[2],
-      TILE_BUDGET_R2_DEBT_SEQUENCE[3],
-    ]);
-    const next = reg.deliver("t0", () => ({ frame: frame(2), costTicks: VIZ_COST_TICKS_4MS }), () => {});
-    expect(next.delivered).toBe(true);
     expect(reg.getTile("t0").skipped).toBe(TILE_BUDGET_R2_SKIPS_AFTER_SPIKE);
+    const next = reg.deliver(
+      "t0",
+      () => ({ frame: frame(2), costTicks: VIZ_COST_TICKS_4MS }),
+      () => {},
+      { deliverIndex: TILE_BUDGET_R2_NEXT_BUILD_ATTEMPT },
+    );
+    expect(next.delivered).toBe(true);
   });
 
-  it("R3: zero floor — 4 ms then 20 ms yields exactly one skip", () => {
+  it("R3: cadence — 4 ms then 20 ms then 4 ms all deliver", () => {
     const reg = freshTileRegistry(["t0"]);
     const r = runTileBudgetAttempts(reg, "t0", 3, (i) => (
       i === 0 ? VIZ_COST_TICKS_4MS : i === 1 ? VIZ_COST_TICKS_20MS : VIZ_COST_TICKS_4MS
@@ -110,8 +107,9 @@ describe("tile frame budget rows", () => {
     expect(heavy.delivered).toBe(TILE_BUDGET_R5_HEAVY.delivered);
     expect(heavy.skipped).toBe(TILE_BUDGET_R5_HEAVY.skipped);
     const reg2 = freshTileRegistry(tiles);
-    const firstBuild = reg2.deliver("heavy", () => ({ frame: frame(1), costTicks: VIZ_COST_TICKS_50MS }), () => {});
-    expect(firstBuild.debt).toBe(TILE_BUDGET_R5_HEAVY.finalDebt);
+    const firstBuild = reg2.deliver("heavy", () => ({ frame: frame(1), costTicks: VIZ_COST_TICKS_50MS }), () => {}, { deliverIndex: 0 });
+    expect(reg2.getTile("heavy").cadenceK).toBe(TILE_BUDGET_R5_HEAVY.cadenceK);
+    expect(firstBuild.delivered).toBe(true);
     let totalBuilt = heavy.totalBuiltTicks;
     for (const id of ["a", "b", "c"]) {
       const light = runTileBudgetAttempts(reg, id, 120, () => VIZ_COST_TICKS_4MS, { simTimeMs: sim });
@@ -124,20 +122,18 @@ describe("tile frame budget rows", () => {
 
   it("R6: 2x2 spike on one tile yields 13 share skips", () => {
     const reg = freshTileRegistry(["t0", "t1", "t2", "t3"]);
-    reg.deliver("t0", () => ({ frame: frame(1), costTicks: VIZ_COST_SPIKE_500MS }), () => {});
-    let debtAfter12 = 0;
+    reg.deliver("t0", () => ({ frame: frame(1), costTicks: VIZ_COST_SPIKE_500MS }), () => {}, { deliverIndex: 0 });
     for (let i = 0; i < TILE_BUDGET_R6_SPIKE_SKIPS; i++) {
-      const res = reg.deliver("t0", () => ({ frame: frame(1), costTicks: VIZ_COST_TICKS_4MS }), () => {});
-      if (i === 11) debtAfter12 = res.debt;
+      const res = reg.deliver("t0", () => ({ frame: frame(1), costTicks: VIZ_COST_TICKS_4MS }), () => {}, { deliverIndex: i + 1 });
+      expect(res.delivered).toBe(false);
     }
     expect(reg.getTile("t0").skipped).toBe(TILE_BUDGET_R6_SPIKE_SKIPS);
-    expect(debtAfter12).toBe(TILE_BUDGET_R6_DEBT_AFTER_12_SKIPS);
   });
 
-  it("R7: share change zeroes debt; view pick leaves debt", () => {
+  it("R7: share change recomputes cadence and clears HUD; view pick is inert", () => {
     const reg = freshTileRegistry(["t0"]);
     runTileBudgetAttempts(reg, "t0", 5, () => VIZ_COST_TICKS_50MS);
-    expect(reg.getTile("t0").debt).toBeGreaterThan(0);
+    expect(reg.getTile("t0").cadenceK).toBeGreaterThan(1);
     const before = reg.getTile("t0");
     before.hudRing[before.hudRingNext] = { tick: 1000, kind: "skip" };
     before.hudRingCount = 1;
@@ -145,14 +141,13 @@ describe("tile frame budget rows", () => {
     expect(reg.getTile("t0").debt).toBe(0);
     expect(reg.getTile("t0").hudRingCount).toBe(0);
     expect(reg.getTile("t0").share).toBe(1252);
-    runTileBudgetAttempts(reg, "t0", 1, () => VIZ_COST_TICKS_50MS);
-    const debtBefore = reg.getTile("t0").debt;
-    expect(debtBefore).toBeGreaterThan(0);
+    expect(reg.getTile("t0").cadenceK).toBeGreaterThan(1);
+    const cadenceBefore = reg.getTile("t0").cadenceK;
     reg.noteViewPick("t0");
-    expect(reg.getTile("t0").debt).toBe(debtBefore);
+    expect(reg.getTile("t0").cadenceK).toBe(cadenceBefore);
     expect(reg.getTile("t0").share).toBe(1252);
-    reg.deliver("t0", () => ({ frame: frame(9), costTicks: VIZ_COST_SPIKE_500MS }), () => {});
-    expect(reg.getTile("t0").debt).toBeLessThanOrEqual(15030);
+    reg.deliver("t0", () => ({ frame: frame(9), costTicks: VIZ_COST_SPIKE_500MS }), () => {}, { deliverIndex: 99 });
+    expect(reg.getTile("t0").cadenceK).toBeGreaterThan(1);
     expect(reg.getTile("t0").share).toBe(1252);
   });
 

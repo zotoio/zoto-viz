@@ -40,7 +40,7 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
   });
 
   it("H1: 10 ms at 2×2 — debt 1748 → 2 skips per build; i=119 → 20 frames, 40 skipped/s LIMITED label", () => {
-    // share 1252; build 3000 → debt 1748; two skips shed 1252+1252 → build every 3rd attempt.
+    // ceil(4×3000/5010)=3 → build every 3rd attempt from frame 0.
     // Window at i=119: 60 attempts → 20 builds, 40 skips → 40/s.
     const tiles = tileIdsForLayout(2, 2);
     const reg = freshHudRegistry(tiles);
@@ -102,14 +102,14 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     expect(firstOver).toBeGreaterThan(firstLimited);
   });
 
-  it("H5: direct scheduler — share 200, 15000 at i=0 → 74 skips then build at i=75; fallback over budget at i=74", () => {
+  it("H5: direct scheduler — share 200, 15000 at i=0 → cadence k=75, 74 skips then build at i=75", () => {
     syncVizTileSchedulerScope(25, ["t0"]);
     const reg = vizTileBudgetRegistry;
     const frame = { t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
-    reg.deliver("t0", () => ({ frame, costTicks: COST_50 }), () => {}, { tick: 0 });
-    expect(reg.getTile("t0").debt).toBe(14800);
+    reg.deliver("t0", () => ({ frame, costTicks: COST_50 }), () => {}, { tick: 0, deliverIndex: 0 });
+    expect(reg.getTile("t0").cadenceK).toBe(75);
     for (let i = 1; i <= 74; i++) {
-      const res = reg.deliver("t0", () => ({ frame, costTicks: 1200 }), () => {}, { tick: i * VIZ_CLOCK_STEP_TICKS });
+      const res = reg.deliver("t0", () => ({ frame, costTicks: 1200 }), () => {}, { tick: i * VIZ_CLOCK_STEP_TICKS, deliverIndex: i });
       expect(res.delivered).toBe(false);
     }
     expect(reg.getTile("t0").skipped).toBe(74);
@@ -125,7 +125,7 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     expect(inWin.filter((s) => s.kind === "skip").length).toBeGreaterThan(0);
     const state74 = computeTileHudViewerState(hudSamplesForTile(tile), now74, tile.lastBuildCostTicks);
     expect(state74).toBe("over_budget");
-    const build = reg.deliver("t0", () => ({ frame, costTicks: 1200 }), () => {}, { tick: 75 * VIZ_CLOCK_STEP_TICKS });
+    const build = reg.deliver("t0", () => ({ frame, costTicks: 1200 }), () => {}, { tick: 75 * VIZ_CLOCK_STEP_TICKS, deliverIndex: 75 });
     expect(build.delivered).toBe(true);
   });
 

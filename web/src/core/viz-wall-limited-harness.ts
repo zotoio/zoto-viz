@@ -12,8 +12,11 @@ import {
 
 export interface WallHarnessResult {
   skipped: number;
+  delivered: number;
   limitedWallLines: number;
   perTileLimitedLines: number;
+  /** Gaps between consecutive builds (attempt indices). */
+  buildGaps: number[];
 }
 
 function emptyBuild(): VizDataFrame {
@@ -52,9 +55,11 @@ export function runWallHarness(
   let mono = 0;
   setVizClockInjector(() => mono);
   let prevClock = monoMs(0);
+  const buildAt: number[] = [];
   for (let i = 0; i < frames; i++) {
     budget.setTileId(primary);
-    budget.deliver(state, prevClock, 0, () => {}, () => emptyBuild());
+    const built = budget.deliver(state, prevClock, 0, () => {}, () => emptyBuild());
+    if (built) buildAt.push(i);
     vizBuildCostTicks(i);
     mono += 1000 / 60;
     vizTileBudgetRegistry.advanceTick();
@@ -87,10 +92,90 @@ export function runWallHarness(
   for (const el of parent.querySelectorAll(".viz-hud-tile-share")) {
     if (el.textContent?.includes("LIMITED")) perTileLimited++;
   }
+  const buildGaps: number[] = [];
+  for (let g = 1; g < buildAt.length; g++) {
+    buildGaps.push(buildAt[g]! - buildAt[g - 1]!);
+  }
+  const primaryTile = vizTileBudgetRegistry.getTile(primary);
   return {
-    skipped: vizTileBudgetRegistry.getTile(primary).skipped,
+    skipped: primaryTile.skipped,
+    delivered: primaryTile.delivered,
     limitedWallLines: limitedWall,
     perTileLimitedLines: perTileLimited,
+    buildGaps,
+  };
+}
+
+/** P4: run on 2×2 then re-scope to 1×1 mid-harness; counts are post layout change only. */
+export function runWallHarnessLayoutShrink(
+  tiles2x2: readonly string[],
+  flag: string,
+  framesBefore = 300,
+  framesAfter = 300,
+): WallHarnessResult {
+  resetDevVizWallFlagsStateForTests();
+  resetVizClockInjectors();
+  vizTileBudgetRegistry.reset();
+  applyDevVizWallFlagsOnBuild(`?vizTileCostTicks=${flag}`, tiles2x2);
+  syncVizTileScope(tiles2x2);
+  const primary = tiles2x2[0]!;
+  const budget = new VizFrameBudget(() => 0, primary);
+  const state = fatLanFixture();
+  const parent = document.createElement("div");
+  document.body.append(parent);
+  const hud = new VizHud(parent, () => {});
+  hud.setActive("packet-tunnel", "tunnel");
+  hud.syncMosaicTileHudLines(tiles2x2);
+  const lines = mosaicTileBudgetLines(tiles2x2);
+  if (lines) bindMosaicTileBudgetLines(lines, (id) => vizTileBudgetRegistry.getTile(id));
+
+  let mono = 0;
+  setVizClockInjector(() => mono);
+  let prevClock = monoMs(0);
+  const buildAt: number[] = [];
+  const totalFrames = framesBefore + framesAfter;
+  for (let i = 0; i < totalFrames; i++) {
+    if (i === framesBefore) {
+      syncVizTileScope(["solo"]);
+      budget.setTileId("solo");
+      hud.syncMosaicTileHudLines([]);
+    }
+    const tileId = i < framesBefore ? primary : "solo";
+    budget.setTileId(tileId);
+    const built = budget.deliver(state, prevClock, 0, () => {}, () => emptyBuild());
+    if (i >= framesBefore && built) buildAt.push(i - framesBefore);
+    vizBuildCostTicks(i);
+    mono += 1000 / 60;
+    vizTileBudgetRegistry.advanceTick();
+    const budgetTile = vizTileBudgetRegistry.getTile(tileId);
+    const nowTick = vizTileBudgetRegistry.currentTick();
+    hud.tick({
+      packId: "packet-tunnel",
+      packName: "tunnel",
+      stats: budget.stats,
+      frame: budget.lastBuilt,
+      state,
+      now: nowTick / 300,
+      tileBudget: budgetTile,
+      activeTiles: i < framesBefore ? tiles2x2.length : 1,
+      tileBudgetLines: i < framesBefore ? lines : undefined,
+    });
+    if (budget.lastBuilt) prevClock = monoMs((i + 1) * (1000 / 60));
+  }
+
+  const skipEl = parent.querySelector(".viz-hud-skip");
+  const limitedWall = skipEl?.textContent?.includes("LIMITED") ? 1 : 0;
+  const soloTile = vizTileBudgetRegistry.getTile("solo");
+  const buildGaps: number[] = [];
+  for (let g = 1; g < buildAt.length; g++) {
+    buildGaps.push(buildAt[g]! - buildAt[g - 1]!);
+  }
+  return {
+    skipped: soloTile.skipped,
+    delivered: soloTile.delivered,
+    limitedWallLines: limitedWall,
+    perTileLimitedLines: 0,
+    buildGaps,
   };
 }
 

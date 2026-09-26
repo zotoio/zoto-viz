@@ -66,7 +66,7 @@ export function runTileHudSim(
       tileId,
       () => ({ frame: build(), costTicks: costForAttempt(i) }),
       () => {},
-      { tick },
+      { tick, deliverIndex: i },
     );
     registry.advanceTick();
   }

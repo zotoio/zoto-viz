@@ -15,7 +15,8 @@ import { tileHudDisplayFrame } from "../ui/viz-hud";
 import { tileLimitedSharingLabel } from "../ui/viz-copy";
 import { createTileHudLabelLine } from "../ui/tile-hud-label";
 import { tileHudChrome } from "../plugins/viz-tile-hud";
-import { runWallHarness } from "./viz-wall-limited-harness";
+import { runWallHarness, runWallHarnessLayoutShrink } from "./viz-wall-limited-harness";
+import { vizWallCadenceFrames } from "../plugins/viz-tile-budget";
 
 const TILES_2X2 = tileIdsForLayout(2, 2);
 const IN_RANGE_TICKS = VIZ_COST_TICKS_10MS;
@@ -46,11 +47,36 @@ describe("Amendment 4 wall LIMITED harness (VizFrameBudget + VizHud)", () => {
     vi.unstubAllEnvs();
   });
 
-  it("D positive: in-range ticks 600 frames 2×2 → skips 400, 1 wall LIMITED, 0 per-tile LIMITED", () => {
+  it("D positive: ceil(4×3000/5010)=3 cadence — 600 frames 2×2 → 200 runs, 400 skips, 1 wall LIMITED", () => {
+    expect(vizWallCadenceFrames(4, IN_RANGE_TICKS)).toBe(3);
     const r = runWallHarness(TILES_2X2, String(IN_RANGE_TICKS));
+    expect(r.delivered).toBe(200);
     expect(r.skipped).toBe(400);
     expect(r.limitedWallLines).toBe(1);
     expect(r.perTileLimitedLines).toBe(0);
+  });
+
+  it("Amendment 5 P2: every gap between runs is exactly 3 over 600 frames", () => {
+    const r = runWallHarness(TILES_2X2, String(IN_RANGE_TICKS));
+    expect(r.buildGaps.length).toBe(199);
+    expect(r.buildGaps.every((g) => g === 3)).toBe(true);
+  });
+
+  it("Amendment 5 P3: 2505 → 300/300; 2506 → 200 runs at 2×2", () => {
+    const r2505 = runWallHarness(TILES_2X2, "2505");
+    expect(r2505.delivered).toBe(300);
+    expect(r2505.skipped).toBe(300);
+    expect(vizWallCadenceFrames(4, 2505)).toBe(2);
+    const r2506 = runWallHarness(TILES_2X2, "2506");
+    expect(r2506.delivered).toBe(200);
+    expect(vizWallCadenceFrames(4, 2506)).toBe(3);
+  });
+
+  it("Amendment 5 P4: 2×2→1×1 recomputes cadence next frame — 0 skips and no LIMITED after shrink", () => {
+    const r = runWallHarnessLayoutShrink(TILES_2X2, String(IN_RANGE_TICKS), 300, 300);
+    expect(r.delivered).toBe(300);
+    expect(r.skipped).toBe(0);
+    expect(r.limitedWallLines).toBe(0);
   });
 
   it("D negative: 1×1 in-range → 0 LIMITED lines, 0 skips", () => {

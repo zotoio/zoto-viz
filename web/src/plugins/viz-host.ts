@@ -546,6 +546,7 @@ export class VizFrameBudget {
         return { frame, costTicks };
       },
       (frame) => onFrame(frame),
+      { deliverIndex },
     );
     const tile = vizTileBudgetRegistry.getTile(this.tileId);
     const tileSkips = tile.skipped;
@@ -569,6 +570,8 @@ export class VizFrameBudget {
     this._lastTileSkipped = 0;
     const tile = vizTileBudgetRegistry.getTile(this.tileId);
     tile.debt = 0;
+    tile.cadenceK = 1;
+    tile.deliverAttempt = 0;
     tile.skipped = 0;
     tile.delivered = 0;
     tile.shareLimitedSkips = 0;

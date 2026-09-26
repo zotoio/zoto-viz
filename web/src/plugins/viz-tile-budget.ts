@@ -56,9 +56,23 @@ export function debtIsClear(debt: number): boolean {
   return debt <= 0;
 }
 
+/**
+ * TSE wall cadence: build every k frames from attempt 0, where
+ * k = ceil(N × costTicks / {@link VIZ_WALL_BUDGET_TICKS}) and credit never carries.
+ */
+export function vizWallCadenceFrames(activeTiles: number, costTicks: number): number {
+  const n = Math.max(1, activeTiles);
+  const wallTicks = n * Math.max(0, costTicks);
+  if (wallTicks <= VIZ_WALL_BUDGET_TICKS) return 1;
+  return Math.ceil(wallTicks / VIZ_WALL_BUDGET_TICKS);
+}
+
 export interface VizTileBudgetStats {
   debt: number;
   share: number;
+  /** Frames between builds after the last successful deliver (ceil wall cadence). */
+  cadenceK: number;
+  deliverAttempt: number;
   skipped: number;
   delivered: number;
   shareLimitedSkips: number;
@@ -83,6 +97,8 @@ function freshTile(share: number): VizTileBudgetStats {
   return {
     debt: 0,
     share,
+    cadenceK: 1,
+    deliverAttempt: 0,
     skipped: 0,
     delivered: 0,
     shareLimitedSkips: 0,
@@ -130,13 +146,6 @@ export function hudSamplesForTile(tile: VizTileBudgetStats): VizTileHudSample[] 
   return out;
 }
 
-function clampDebt(debt: number): number {
-  let d = debt;
-  if (d < 0) d = 0;
-  if (d > VIZ_DEBT_CAP_TICKS) d = VIZ_DEBT_CAP_TICKS;
-  return d;
-}
-
 function recordHudSample(tile: VizTileBudgetStats, sample: VizTileHudSample): void {
   const slot = tile.hudRing[tile.hudRingNext]!;
   slot.tick = sample.tick;
@@ -161,6 +170,11 @@ export class VizTileBudgetRegistry {
   private activeTiles = 1;
   private nowTick = 0;
   private clampActiveTiles = true;
+
+  private cadenceTileCount(): number {
+    if (!this.clampActiveTiles) return Math.max(1, this.activeTiles);
+    return Math.min(VIZ_MAX_ACTIVE_TILES, Math.max(1, this.activeTiles));
+  }
 
   getTile(tileId: string): VizTileBudgetStats {
     const share = Math.floor(VIZ_WALL_BUDGET_TICKS / this.activeTiles);
@@ -212,6 +226,7 @@ export class VizTileBudgetRegistry {
 
   private applyScope(n: number, activeTileIds: readonly string[], clampTileCount: boolean): void {
     const counted = clampTileCount ? Math.min(VIZ_MAX_ACTIVE_TILES, Math.max(1, n)) : Math.max(1, n);
+    const prevActive = this.activeTiles;
     const effectiveShare = Math.floor(VIZ_WALL_BUDGET_TICKS / counted);
     this.activeTiles = counted;
     this.clampActiveTiles = clampTileCount;
@@ -222,9 +237,14 @@ export class VizTileBudgetRegistry {
         t = freshTile(effectiveShare);
         this.tiles.set(id, t);
         vizTileBudgetLifecycle.created++;
-      } else if (t.share !== effectiveShare) {
+      } else if (t.share !== effectiveShare || prevActive !== counted) {
         t.share = effectiveShare;
         t.debt = 0;
+        const scheduleCost = t.lastBuildCostTicks ?? effectiveShare;
+        const cadenceN = clampTileCount
+          ? Math.min(VIZ_MAX_ACTIVE_TILES, Math.max(1, counted))
+          : Math.max(1, counted);
+        t.cadenceK = vizWallCadenceFrames(cadenceN, scheduleCost);
         clearHudWindow(t);
       }
     }
@@ -251,40 +271,45 @@ export class VizTileBudgetRegistry {
 
   /**
    * One deliver attempt for a tile.
-   * - debt > 0: skip (share limit), debt -= share, floor at 0
-   * - else build, debt += cost - share, floor at 0, cap at {@link VIZ_DEBT_CAP_TICKS}
+   * Wall cadence: skip when attempt mod k ≠ 0; k = ceil(N×cost/5010) from the built cost.
+   * No carry-forward credit between frames or scope changes.
    */
   deliver(
     tileId: string,
     attempt: () => { frame: VizDataFrame; costTicks: number },
     onFrame: (frame: VizDataFrame) => void,
-    opts?: { tick?: number },
+    opts?: { tick?: number; deliverIndex?: number },
   ): { delivered: boolean; frame: VizDataFrame | null; debt: number } {
     const tick = opts?.tick ?? this.nowTick;
     const tile = this.getTile(tileId);
-    if (!debtIsClear(tile.debt)) {
+    const deliverIndex = opts?.deliverIndex ?? tile.deliverAttempt;
+    const k = tile.deliverAttempt === 0
+      ? 1
+      : tile.cadenceK;
+    const cadenceSkip = tile.deliverAttempt % k !== 0;
+    tile.deliverAttempt++;
+    if (cadenceSkip) {
       tile.skipped++;
       tile.shareLimitedSkips++;
       tile.shedding = true;
-      tile.debt -= tile.share;
-      tile.debt = clampDebt(tile.debt);
+      tile.debt = 0;
       recordHudSample(tile, { tick, kind: "skip" });
       return {
         delivered: false,
         frame: tile.lastDeliveredFrame,
-        debt: tile.debt,
+        debt: 0,
       };
     }
     const { frame, costTicks } = attempt();
-    tile.debt += costTicks - tile.share;
-    tile.debt = clampDebt(tile.debt);
-    tile.shedding = tile.debt > 0;
+    tile.cadenceK = vizWallCadenceFrames(this.cadenceTileCount(), costTicks);
+    tile.debt = 0;
+    tile.shedding = tile.cadenceK > 1;
     onFrame(frame);
     tile.delivered++;
     tile.lastDeliveredFrame = frame;
     tile.lastBuildCostTicks = costTicks;
     recordHudSample(tile, { tick, kind: "build", costTicks });
-    return { delivered: true, frame, debt: tile.debt };
+    return { delivered: true, frame, debt: 0 };
   }
 }
 
