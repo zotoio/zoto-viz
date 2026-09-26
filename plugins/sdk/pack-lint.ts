@@ -267,7 +267,15 @@ export function lintPackSource(
   });
 }
 
-export { scanHostLintFixture, scanWebSrc } from "./pack-lint-host";
+export {
+  disallowedHostPackSrcImports,
+  HOST_PACK_SRC_IMPORT_ALLOWLIST,
+  HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT,
+  isHostCodeRepoPath,
+  scanHostLintFixture,
+  scanService,
+  scanWebSrc,
+} from "./pack-lint-host";
 export { extractModuleSpecifiers, packSymlinkEscapes } from "./pack-lint-import";
 
 export function scanPluginsSrc(repoRoot: string): PackLintViolation[] {

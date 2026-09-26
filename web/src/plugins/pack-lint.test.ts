@@ -4,7 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  disallowedHostPackSrcImports,
   formatViolationMessage,
+  HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT,
   isLegacyDeclareZotoPackAllowed,
   LEGACY_DECLARE_ZOTO_PACK_IDS,
   scanHostLintFixture,
@@ -293,20 +295,38 @@ describe("pack lint guardrails", () => {
     if (process.env.PACK_LINT_WRITE_BASELINE !== "1") return;
     const current = scanAllGuardrails(repoRoot);
     const out = path.join(repoRoot, "plugins/sdk/pack-lint-baseline.json");
-    const baselineRows = current.map(({ file, rule, target }) => ({ file, rule, target }));
+    const baselineRows = current
+      .filter((v) => v.rule !== "host-imports-pack-src")
+      .map(({ file, rule, target }) => ({ file, rule, target }));
     writeFileSync(out, `${JSON.stringify({ violations: baselineRows }, null, 2)}\n`);
   });
 
   it("plugins/src and web/src violations do not exceed the checked-in baseline", () => {
     const current = scanAllGuardrails(repoRoot);
     const baseline = loadBaseline(repoRoot);
-    const { ok, newViolations, staleViolations, disallowedLegacyZoto } = assertBaselineGuard(current, baseline);
+    const { ok, newViolations, staleViolations, disallowedLegacyZoto, disallowedHostPackSrc } =
+      assertBaselineGuard(current, baseline);
     if (!ok) {
       expect(newViolations).toEqual([]);
       expect(staleViolations).toEqual([]);
       expect(disallowedLegacyZoto).toEqual([]);
+      expect(disallowedHostPackSrc).toEqual([]);
     }
     expect(ok).toBe(true);
+  });
+
+  it("HOST_PACK_SRC_IMPORT_ALLOWLIST only shrinks (pinned debt count)", () => {
+    expect(HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT).toBe(7);
+  });
+
+  it("host importing plugins/src outside debt allowlist fails with pack-source message", () => {
+    const hits = lintHostFixture("bad/non-allowlist-pack-import.ts");
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]?.rule).toBe("host-imports-pack-src");
+    expect(hits[0]?.target).toContain("plugins/src/cypher-cic/");
+    const msg = formatViolationMessage(hits[0]!);
+    expect(msg).toMatch(/pack source|module\.js/);
+    expect(disallowedHostPackSrcImports(hits).length).toBeGreaterThan(0);
   });
 
   it("off-allowlist inline zoto declare fails disallowedLegacyZoto guard", () => {
@@ -337,7 +357,7 @@ describe("pack lint guardrails", () => {
   it("reports baseline counts per pack and per rule (documentation)", () => {
     const baseline = loadBaseline(repoRoot);
     expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(17);
-    expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBe(38);
+    expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBe(0);
   });
 
   for (const { rel, rule, target, targetIncludes } of ALL_PACK_BAD_FIXTURES) {

@@ -9,13 +9,22 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { isHostPackSrcImportAllowlisted, packIdFromPluginsSrcTarget } from "./host-pack-src-import-allowlist";
 import { extractModuleSpecifiers } from "./pack-lint-import";
 import type { PackLintViolation } from "./pack-lint-types";
 import { violationKey } from "./pack-lint-types";
 
+export {
+  HOST_PACK_SRC_IMPORT_ALLOWLIST,
+  HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT,
+  isHostPackSrcImportAllowlisted,
+  packIdFromPluginsSrcTarget,
+} from "./host-pack-src-import-allowlist";
+
 export { extractModuleSpecifiers } from "./pack-lint-import";
 
 const WEB_SRC = "web/src";
+const SERVICE_ROOT = "service";
 const PACK_SRC = "plugins/src";
 
 const WEB_SRC_FILE_RE = /\.(tsx?|mts|cts|jsx?|mjs|cjs)$/i;
@@ -313,6 +322,90 @@ function scanWebSrcSymlinks(repoRoot: string): PackLintViolation[] {
   };
 
   walk("");
+  return violations;
+}
+
+export function isHostCodeRepoPath(repoRel: string): boolean {
+  const norm = repoRel.replace(/\\/g, "/");
+  if (norm.startsWith(`${WEB_SRC}/`)) {
+    if (norm.includes("/fixtures/")) return false;
+    if (/\.test\.(tsx?|mts|cts|jsx?)$/i.test(norm)) return false;
+    return true;
+  }
+  if (norm.startsWith(`${SERVICE_ROOT}/`)) {
+    if (norm.includes("/fixtures/")) return false;
+    if (norm.includes("/tests/")) return false;
+    const base = path.basename(norm);
+    if (base.startsWith("test_")) return false;
+    if (base.endsWith("_test.py")) return false;
+    return true;
+  }
+  return false;
+}
+
+export function disallowedHostPackSrcImports(violations: PackLintViolation[]): PackLintViolation[] {
+  return violations.filter((v) => {
+    if (v.rule !== "host-imports-pack-src") return false;
+    if (!isHostCodeRepoPath(v.file)) return false;
+    const packId = packIdFromPluginsSrcTarget(v.target);
+    if (packId && isHostPackSrcImportAllowlisted(packId)) return false;
+    return true;
+  });
+}
+
+const PY_PACK_SRC_IMPORT_RE =
+  /(?:^|\s)(?:from|import)\s+[^\n#]*\bplugins\/src\/([a-z0-9][a-z0-9-]*)\//;
+
+function pythonPackSrcImportViolations(hostRepoRel: string, text: string): PackLintViolation[] {
+  const hits: PackLintViolation[] = [];
+  const seen = new Set<string>();
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const stripped = line.trim();
+    if (!stripped || stripped.startsWith("#")) continue;
+    const m = PY_PACK_SRC_IMPORT_RE.exec(line);
+    if (!m) continue;
+    const packId = m[1]!;
+    const target = `${PACK_SRC}/${packId}/`;
+    const v = {
+      file: hostRepoRel,
+      rule: "host-imports-pack-src" as const,
+      target,
+      detail: stripped,
+      line: i + 1,
+    };
+    const k = violationKey(v);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    hits.push(v);
+  }
+  return hits;
+}
+
+function listServicePyFiles(serviceRoot: string, rel = ""): string[] {
+  const dir = path.join(serviceRoot, rel);
+  const out: string[] = [];
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (ent.name === "__pycache__" || ent.name === "node_modules") continue;
+    const sub = rel ? `${rel}/${ent.name}` : ent.name;
+    if (ent.isDirectory()) out.push(...listServicePyFiles(serviceRoot, sub));
+    else if (ent.name.endsWith(".py")) out.push(sub);
+  }
+  return out;
+}
+
+export function scanService(repoRoot: string): PackLintViolation[] {
+  const serviceRoot = path.join(repoRoot, SERVICE_ROOT);
+  if (!fs.existsSync(serviceRoot)) return [];
+  const violations: PackLintViolation[] = [];
+  for (const rel of listServicePyFiles(serviceRoot)) {
+    const repoRel = `${SERVICE_ROOT}/${rel}`.replace(/\\/g, "/");
+    if (!isHostCodeRepoPath(repoRel)) continue;
+    const text = fs.readFileSync(path.join(serviceRoot, rel), "utf8");
+    violations.push(...pythonPackSrcImportViolations(repoRel, text));
+  }
+  violations.sort((a, b) => a.file.localeCompare(b.file));
   return violations;
 }
 
