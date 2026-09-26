@@ -1,3 +1,4 @@
+import { postWallNotice } from "../core/wall-notice-region";
 import {
   GFX_INTERRUPTED_NOTICE,
   GFX_NO_RESTORE_NOTICE,
@@ -34,12 +35,10 @@ export class GfxWallNotice {
   onContextLost(): void {
     if (this.shown) return;
     this.shown = true;
-    const el = document.createElement("div");
+    const el = postWallNotice(this.wall) as HTMLDivElement;
     el.className = GFX_WALL_NOTICE_CLASS;
-    el.setAttribute("role", "status");
     el.tabIndex = -1;
     el.textContent = GFX_INTERRUPTED_NOTICE;
-    this.wall.appendChild(el);
     this.el = el;
     this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
   }

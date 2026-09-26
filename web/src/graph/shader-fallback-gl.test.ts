@@ -5,6 +5,7 @@ import {
   GFX_NO_RESTORE_NOTICE,
   genericShaderFallbackMessage,
 } from "./shader-fallback-copy";
+import { getWallNoticeRegion } from "../core/wall-notice-region";
 import { GFX_WALL_NOTICE_CLASS, GFX_WALL_RELOAD_CLASS } from "./gfx-wall-notice";
 
 describe("shader fallback gl context", () => {
@@ -33,6 +34,19 @@ describe("shader fallback gl context", () => {
     Object.defineProperty(host, "software", { value: false });
     return { host, wall, pane };
   }
+
+  it("context-loss-notice-shared-region", () => {
+    const { host, wall } = hostWithGl();
+    host.dispatchContextLost();
+    const region = getWallNoticeRegion(wall);
+    expect(region).toBeTruthy();
+    expect(region?.getAttribute("role")).toBe("status");
+    const notice = wall.querySelector(`.${GFX_WALL_NOTICE_CLASS}`);
+    expect(notice?.parentElement).toBe(region);
+    expect(wall.querySelectorAll(`[role="status"]`)).toHaveLength(1);
+    host.dispose();
+    wall.remove();
+  });
 
   it("context-loss-notice-no-generic", () => {
     const { host, wall, pane } = hostWithGl();
