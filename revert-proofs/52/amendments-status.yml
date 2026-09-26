@@ -10,3 +10,10 @@ amendments:
   - id: 6a
     title: "UX copy (the frame); N≥2 and k≥2 gate"
     status: done
+  - id: QE-hunk
+    title: "Hunk-to-row tables + sweep (52a/52b PR bodies)"
+    status: done
+    artifacts:
+      - revert-proofs/52/pr-52a-hunk-to-row.md
+      - revert-proofs/52/pr-52b-hunk-to-row.md
+      - revert-proofs/52/run-hunk-sweep.py

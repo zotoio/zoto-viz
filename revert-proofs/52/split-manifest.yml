@@ -1,0 +1,64 @@
+# Production paths under web/src for stacked PR #52a / #52b (excludes *.test.ts).
+52a:
+  - web/src/app/main-present-opts-localstorage.ts
+  - web/src/app/viz-plugin-ubo.ts
+  - web/src/core/viz-clock.ts
+  - web/src/core/viz-time.ts
+  - web/src/graph/mosaic.ts
+  - web/src/graph/render-host.ts
+  - web/src/plugins/fixtures/viz-sdk-frame-build.ts
+  - web/src/plugins/host.ts
+  - web/src/plugins/nixie-wall-broadcast.ts
+  - web/src/plugins/nixie-wall-clock.ts
+  - web/src/plugins/nixie-wall-parts.ts
+  - web/src/plugins/nixie-wall-upload.ts
+  - web/src/plugins/typesafe-host.ts
+52b:
+  - web/src/app/main-viz-tile-lines.ts
+  - web/src/app/viz-main-deliver.ts
+  - web/src/core/viz-dev-wall-flags.ts
+  - web/src/core/viz-wall-limited-harness.ts
+  - web/src/graph/mosaic-viz-tile-guard.ts
+  - web/src/plugins/dogfood-runner.ts
+  - web/src/plugins/dogfood-tile-budget.ts
+  - web/src/plugins/dogfood-tile-hud.ts
+  - web/src/plugins/viz-tile-budget.ts
+  - web/src/plugins/viz-tile-constants.ts
+  - web/src/plugins/viz-tile-hud.ts
+  - web/src/ui/tile-hud-label.ts
+  - web/src/ui/viz-copy.ts
+# Shared files: hunk indices per stacked PR (from git diff @@ order, 0-based).
+shared_hunk_splits:
+  web/src/app/main.ts:
+    52a: [0, 1, 2]
+    52b: [3, 4, 5, 6, 7, 8, 9]
+  web/src/plugins/viz-host.ts:
+    52a: [0, 1, 2, 3]
+    52b: [4, 5, 6]
+  web/src/plugins/viz-pack-host.ts:
+    52a: [0, 1, 2, 3]
+    52b: []
+  web/src/ui/settings.ts:
+    52a: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    52b: []
+  web/src/ui/viz-hud.ts:
+    52a: [0, 1, 2, 3]
+    52b: [4, 5, 6, 7]
+  web/src/plugins/dogfood-runner.ts:
+    52a: [0, 1]
+    52b: [2, 3, 4, 5, 6, 7]
+  web/src/graph/mosaic.ts:
+    52a: [0, 1, 2, 3]
+    52b: []
+  web/src/graph/render-host.ts:
+    52a: [0, 1, 2, 3]
+    52b: []
+  web/src/plugins/fixtures/viz-sdk-frame-build.ts:
+    52a: [0, 1, 2, 3]
+    52b: []
+  web/src/plugins/host.ts:
+    52a: [0]
+    52b: [1]
+  web/src/plugins/typesafe-host.ts:
+    52a: [0, 1, 2, 3, 4, 5, 6]
+    52b: []

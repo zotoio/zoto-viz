@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StateMsg } from "../core/types";
+import { resetVizClockInjectors, setVizWallClockInjector } from "../core/viz-clock";
 import { VIZ_FRAME_BUDGET_MS } from "../plugins/viz-host";
 import {
   TYPESAFE_HEADROOM_MS,
