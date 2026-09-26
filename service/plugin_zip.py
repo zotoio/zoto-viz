@@ -98,13 +98,20 @@ def detect_parts(members: Iterable[str] | Path) -> tuple[str, ...]:
 
 def inspect_zip(path: Path) -> ZipManifest:
     read = psz.read_pack_zip(Path(path))
-    return ZipManifest(
-        plugin=read.plugin,
-        members=read.members_sorted,
-        parts=read.parts,
-        compressed_bytes=read.compressed_bytes,
-        uncompressed_bytes=read.uncompressed_bytes,
-    )
+    staging = read.staging_dir
+    runtime_parent = staging.parent.parent.parent
+    pack_id = staging.parent.name
+    try:
+        uncompressed = sum(len(b) for b in read.members.values())
+        return ZipManifest(
+            plugin=read.plugin,
+            members=read.members_sorted,
+            parts=read.parts,
+            compressed_bytes=read.stats.archive_bytes_read,
+            uncompressed_bytes=uncompressed,
+        )
+    finally:
+        psz.cleanup_staging_for_pack(runtime_parent, pack_id)
 
 
 def inspect_src(src: Path) -> ZipManifest:

@@ -399,6 +399,7 @@ def install_staged_to_runtime(
             reason = str(blocked.get("blockReason") or blocked.get("error") or "blocked")
             raise InstallStartFailedError(msg, reason=reason)
     if not force and should_skip_unchanged_zip(dest_zip, runtime, incoming):
+        psz.cleanup_staging_for_pack(runtime.parent, pid)
         return _unpack_result_from_runtime(dest_zip, runtime, incoming)
     name = str(doc.get("name") or pid)
     version = doc.get("version")

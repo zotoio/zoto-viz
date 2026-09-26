@@ -27,7 +27,7 @@ from . import pack_safe_zip as psz
 from .pack_install_copy import REASON_PACK_INSTALL_FAULT, fault_message
 from .pack_zip_install_ux import zip_unsafe_blocked_payload
 from .pack_install_wall_notices import wall_notice_for_install_result
-from .plugin_install import install_zip_to_runtime
+from .plugin_install import InstallV2BlockedError, install_zip_to_runtime
 
 ENGINES = frozenset({
     "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
@@ -347,6 +347,8 @@ def install_local_zip(
     fd, tmp_name = tempfile.mkstemp(prefix="zoto-local.", suffix=".zip")
     os.close(fd)
     tmp_path = Path(tmp_name)
+    runtime_parent = paths.plugin_local_runtime_dir(create=True)
+    pack_pid = ""
     try:
         tmp_path.write_bytes(raw)
         try:
@@ -362,6 +364,7 @@ def install_local_zip(
             )
         doc = plugins.validate_doc(pack_read.manifest)
         pid = str(doc["id"])
+        pack_pid = pid
         dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
         pack_read, doc, dest, reminted_from = remint_pack_read(
             pack_read,
@@ -372,7 +375,7 @@ def install_local_zip(
         pid = str(doc["id"])
         if reminted_from:
             tmp_path.write_bytes(zip_bytes_from_staged(pack_read))
-        runtime = paths.plugin_local_runtime_dir(create=True) / pid
+        runtime = runtime_parent / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
             unpacked = pz.unpack_zip(dest, runtime)
@@ -385,21 +388,27 @@ def install_local_zip(
                 f"plugin {pid!r} already exists in the local drop zone (pass overwrite: true)"
             )
         upgrade = dest.is_file() and runtime.is_dir()
-        unpacked = install_zip_to_runtime(
-            tmp_path,
-            dest,
-            runtime,
-            doc,
-            rel=str(dest),
-            sha256=incoming,
-            upgrade=upgrade,
-            pack_read=pack_read,
-        )
+        try:
+            unpacked = install_zip_to_runtime(
+                tmp_path,
+                dest,
+                runtime,
+                doc,
+                rel=str(dest),
+                sha256=incoming,
+                upgrade=upgrade,
+                pack_read=pack_read,
+            )
+        except InstallV2BlockedError:
+            psz.cleanup_staging_for_pack(runtime.parent, pid)
+            raise
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
         return _finish(info, activate=activate)
     finally:
+        if pack_pid:
+            psz.cleanup_staging_for_pack(runtime_parent, pack_pid)
         tmp_path.unlink(missing_ok=True)
 
 
