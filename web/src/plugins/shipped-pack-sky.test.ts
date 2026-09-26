@@ -1,28 +1,38 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { probePluginSkyCompile, wrapPluginSky } from "./plugin-sky-probe";
+import {
+  countShippedPacksDeclaringSkyShader,
+  PINNED_SHIPPED_PACK_SKY_IDS,
+  scanShippedPackSkyFragments,
+} from "./shipped-pack-sky-scan";
 
-const packSkyFrags = import.meta.glob<string>("../../../plugins/src/*/sky/fragment.glsl", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-});
-
-function packIdFromPath(p: string): string {
-  const m = p.match(/plugins\/src\/([^/]+)\/sky\/fragment\.glsl$/);
-  return m?.[1] ?? p;
-}
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("shipped pack sky fragments (host)", () => {
-  const entries = Object.entries(packSkyFrags).sort(([a], [b]) => a.localeCompare(b));
+  const fragments = scanShippedPackSkyFragments(repoRoot);
+  const scannedIds = fragments.map((f) => f.packId);
 
-  it("discovers shipped pack sky fragments", () => {
-    expect(entries.length).toBeGreaterThan(10);
+  it("checks every shipped pack that declares a sky shader (count matches catalog inspect)", () => {
+    const declared = countShippedPacksDeclaringSkyShader(repoRoot);
+    expect(fragments.length).toBe(declared);
+    expect(fragments.length).toBe(PINNED_SHIPPED_PACK_SKY_IDS.length);
   });
 
-  for (const [path, raw] of entries) {
-    const packId = packIdFromPath(path);
+  it("matches pinned shipped pack sky ids (both directions)", () => {
+    const pinned = [...PINNED_SHIPPED_PACK_SKY_IDS].sort();
+    const scanned = [...scannedIds].sort();
+    const missing = pinned.filter((id) => !scanned.includes(id));
+    const extra = scanned.filter((id) => !(PINNED_SHIPPED_PACK_SKY_IDS as readonly string[]).includes(id));
+    expect(missing, `missing sky packs from scan: ${missing.join(", ") || "(none)"}`).toEqual([]);
+    expect(extra, `unexpected sky packs in scan: ${extra.join(", ") || "(none)"}`).toEqual([]);
+    expect(scanned).toEqual(pinned);
+  });
+
+  for (const { packId, source } of fragments) {
     it(`wraps and compiles ${packId} sky/fragment.glsl`, () => {
-      const wrapped = wrapPluginSky(raw);
+      const wrapped = wrapPluginSky(source);
       expect("error" in wrapped).toBe(false);
       if ("error" in wrapped) return;
       expect(wrapped.frag).toContain("zotoVizSlots");
@@ -31,9 +41,14 @@ describe("shipped pack sky fragments (host)", () => {
     });
   }
 
+  function backroomsSource(): string {
+    const row = fragments.find((f) => f.packId === "backrooms");
+    expect(row?.source, "backrooms must be in shipped sky scan").toBeTruthy();
+    return row!.source;
+  }
+
   it("backrooms: rejects non-whitelisted uniform immediately after #version", () => {
-    const raw = packSkyFrags["../../../plugins/src/backrooms/sky/fragment.glsl"];
-    expect(raw).toBeTruthy();
+    const raw = backroomsSource();
     const broken = `#version 300 es\nuniform float evilUniform;\n${raw}`;
     const wrapped = wrapPluginSky(broken);
     expect("error" in wrapped).toBe(true);
@@ -42,18 +57,16 @@ describe("shipped pack sky fragments (host)", () => {
   });
 
   it("backrooms: rejects non-whitelisted uniform in body (no #version line)", () => {
-    const raw = packSkyFrags["../../../plugins/src/backrooms/sky/fragment.glsl"];
-    expect(raw).toBeTruthy();
-    const lines = raw!.split("\n");
+    const raw = backroomsSource();
+    const lines = raw.split("\n");
     const broken = [lines[0], "uniform float evilUniform;", ...lines.slice(1)].join("\n");
     const wrapped = wrapPluginSky(broken);
     expect("error" in wrapped).toBe(true);
   });
 
   it("backrooms: compile probe fails on undeclared body identifier", () => {
-    const raw = packSkyFrags["../../../plugins/src/backrooms/sky/fragment.glsl"];
-    expect(raw).toBeTruthy();
-    const broken = raw!.replace(
+    const raw = backroomsSource();
+    const broken = raw.replace(
       /void\s+main\s*\(\s*\)\s*\{/,
       "void main() { float x = zotoUndeclaredCompileBreaker; ",
     );
