@@ -6,7 +6,8 @@ import { Stage3D } from "./stage3d";
 import { makeTetBlock } from "./models3d";
 import type { Packet } from "../core/types";
 import { bestPlacement, boardFromOccupied, cellsFor, type Placement } from "./tetris-engine";
-import { shouldHoldTopout, topoutHoldExpired, TETRIS_TOPOUT_HOLD_S } from "./tetris-topout";
+import { shouldHoldTopout } from "./tetris-topout";
+import { afterLockStack, beginTopoutHoldState, stepTopoutHold, type TetrisHoldState } from "./tetris-overflow";
 
 const KEY_WHO = "zoto-viz.tetris.who";
 const COLS = 10;
@@ -84,9 +85,10 @@ export class TetrisView extends Stage3D {
   }
 
   protected step(now: number, dt: number): void {
-    if (topoutHoldExpired(now, this.topoutHoldUntil)) {
-      this.topoutHoldUntil = 0;
-      this.clearStack();
+    const hold = stepTopoutHold(now, this.holdState());
+    if (hold.topoutHoldUntil !== this.topoutHoldUntil) {
+      this.topoutHoldUntil = hold.topoutHoldUntil;
+      if (hold.stackCells === 0) this.clearStack();
     }
     if (shouldHoldTopout(now, this.topoutHoldUntil)) {
       this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
@@ -101,7 +103,7 @@ export class TetrisView extends Stage3D {
     this.dropAcc += dt * speed;
     while (this.dropAcc >= 1 && this.active) {
       this.dropAcc -= 1;
-      if (!this.tryMove(0, -1)) this.lock();
+      if (!this.tryMove(0, -1)) this.lock(now);
     }
     this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
   }
@@ -134,9 +136,14 @@ export class TetrisView extends Stage3D {
     }
   }
 
+  private holdState(): TetrisHoldState {
+    return { stackCells: this.stack.length, topoutHoldUntil: this.topoutHoldUntil };
+  }
+
   private beginTopoutHold(now: number): void {
-    if (this.topoutHoldUntil > 0) return;
-    this.topoutHoldUntil = now + TETRIS_TOPOUT_HOLD_S;
+    const next = beginTopoutHoldState(now, this.holdState());
+    if (next.topoutHoldUntil === this.topoutHoldUntil) return;
+    this.topoutHoldUntil = next.topoutHoldUntil;
     this.plan = null;
     if (this.active) {
       for (const g of this.active.blocks) g.removeFromParent();
@@ -188,7 +195,7 @@ export class TetrisView extends Stage3D {
     return true;
   }
 
-  private lock(): void {
+  private lock(now: number): void {
     const p = this.active;
     if (!p) return;
     p.cells.forEach(([cx, cy], i) => {
@@ -197,7 +204,8 @@ export class TetrisView extends Stage3D {
     this.active = null;
     this.plan = null;
     this.clearLines();
-    if (this.stack.length > COLS * 8) this.clearStack();
+    const overflow = afterLockStack(now, this.stack.length, this.topoutHoldUntil);
+    this.topoutHoldUntil = overflow.topoutHoldUntil;
   }
 
   private hits(x: number, y: number, cells: [number, number][]): boolean {

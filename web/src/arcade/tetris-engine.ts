@@ -7,9 +7,12 @@ export type Board = boolean[][];
 
 /** Dellacherie-style feature weights (landing height, lines, holes, bumpiness, transitions). */
 export const TETRIS_WEIGHTS = {
-  /** Sum of column heights touched by the piece (not full-board aggregate). */
-  landingHeight: -4.913486,
-  erodedPieceCells: 1.0,
+  /** Full-board aggregate height (matches legacy survival on seeded runs). */
+  landingHeight: -4.0,
+  /** Extra penalty on columns the piece occupies (S/Z/T drills without sacrificing survival). */
+  pieceLandingHeight: -0.4,
+  /** El-Tetris-style eroded cells weight — line clears beat legacy on S/Z and T drills. */
+  erodedPieceCells: 4,
   rowTransitions: -3.0,
   colTransitions: -3.0,
   holes: -7.0,
@@ -185,6 +188,55 @@ function erodedPieceCells(cleared: number, pieceCells: number): number {
 export type ScoreContext = { cells: [number, number][]; x: number };
 
 /** @internal Legacy scoring used full-board aggregate height with the landing-height weight. */
+const LEGACY_ERODED_WEIGHT = 1.0;
+
+/** Mis-tuned landing height on aggregate (fails T drill; kept for regression tests). */
+export function scoreBoardOldWeights(
+  board: Board,
+  cleared: number,
+  pieceCells: number,
+  _ctx?: ScoreContext,
+): number {
+  const w = TETRIS_WEIGHTS;
+  return (
+    -4.913486 * aggregateHeight(board)
+    + LEGACY_ERODED_WEIGHT * erodedPieceCells(cleared, pieceCells)
+    + w.rowTransitions * rowTransitions(board)
+    + w.colTransitions * colTransitions(board)
+    + w.holes * holes(board)
+    + w.wells * wells(board)
+    + w.bumpiness * bumpiness(board)
+  );
+}
+
+export function simulateAutoplayOldWeights(board: Board, kinds: string[]): ReturnType<typeof simulateAutoplay> {
+  return simulateAutoplay(board, kinds, scoreBoardOldWeights);
+}
+
+/** Pre-fix planner: piece-column landing height only (regresses multi-seed survival). */
+export function scoreBoardRegressed(
+  board: Board,
+  cleared: number,
+  pieceCells: number,
+  ctx: ScoreContext,
+): number {
+  const w = TETRIS_WEIGHTS;
+  const pieceH = landingHeightForPiece(board, ctx.cells, ctx.x);
+  return (
+    -4.913486 * pieceH
+    + LEGACY_ERODED_WEIGHT * erodedPieceCells(cleared, pieceCells)
+    + w.rowTransitions * rowTransitions(board)
+    + w.colTransitions * colTransitions(board)
+    + w.holes * holes(board)
+    + w.wells * wells(board)
+    + w.bumpiness * bumpiness(board)
+  );
+}
+
+export function simulateAutoplayRegressed(board: Board, kinds: string[]): ReturnType<typeof simulateAutoplay> {
+  return simulateAutoplay(board, kinds, scoreBoardRegressed);
+}
+
 export function scoreBoardLegacy(
   board: Board,
   cleared: number,
@@ -194,7 +246,7 @@ export function scoreBoardLegacy(
   const w = TETRIS_WEIGHTS;
   return (
     -4.0 * aggregateHeight(board)
-    + w.erodedPieceCells * erodedPieceCells(cleared, pieceCells)
+    + LEGACY_ERODED_WEIGHT * erodedPieceCells(cleared, pieceCells)
     + w.rowTransitions * rowTransitions(board)
     + w.colTransitions * colTransitions(board)
     + w.holes * holes(board)
@@ -210,8 +262,10 @@ export function scoreBoard(
   ctx: ScoreContext,
 ): number {
   const w = TETRIS_WEIGHTS;
+  const pieceH = landingHeightForPiece(board, ctx.cells, ctx.x);
   return (
-    w.landingHeight * landingHeightForPiece(board, ctx.cells, ctx.x)
+    w.landingHeight * aggregateHeight(board)
+    + w.pieceLandingHeight * pieceH
     + w.erodedPieceCells * erodedPieceCells(cleared, pieceCells)
     + w.rowTransitions * rowTransitions(board)
     + w.colTransitions * colTransitions(board)
@@ -286,6 +340,22 @@ export function simulateAutoplay(
 
 export function simulateAutoplayLegacy(board: Board, kinds: string[]): ReturnType<typeof simulateAutoplay> {
   return simulateAutoplay(board, kinds, scoreBoardLegacy);
+}
+
+/** Fixed seeds for deterministic survival regression (20+). */
+export const TETRIS_SURVIVAL_SEEDS = Array.from({ length: 20 }, (_, i) => i);
+
+export function survivalRate(
+  seeds: number[],
+  pieceCount: number,
+  scoreFn: typeof scoreBoard = scoreBoard,
+): number {
+  let survived = 0;
+  for (const salt of seeds) {
+    const kinds = seededPieceKinds(pieceCount, salt);
+    if (!simulateAutoplay(emptyBoard(), kinds, scoreFn).toppedOut) survived++;
+  }
+  return survived;
 }
 
 /** Fixed-length alternating S/Z or all-T sequences for regression tests. */

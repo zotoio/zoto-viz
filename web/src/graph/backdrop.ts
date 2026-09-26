@@ -8,7 +8,7 @@ import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
 import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
-import { prefersReducedMotion } from "../core/motion";
+import { prefersReducedMotion, subscribeReducedMotion } from "../core/motion";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -831,8 +831,10 @@ export class Backdrop {
   private photoWant: string | null = null;
   private photoOutgoingUrl: string | null = null;
   private photoEvictAt = 0;
+  private photoPlateMorphT = 1;
   private photoLoadGen = 0;
   private photoVideoUrl: string | null = null;
+  private readonly unsubscribeMotion = subscribeReducedMotion(() => this.applyReducedMotion());
   private pluginMat: THREE.ShaderMaterial | null = null;
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
@@ -1151,8 +1153,12 @@ export class Backdrop {
     this.photoMat.uniforms.uVideoB.value = nxt.tex;
     this.bindPhoto(cur.tex, false, pack.url);
     try { cur.el.currentTime = 0; } catch { /* */ }
-    const play = cur.el.play();
-    if (play) void play.catch(() => undefined);
+    if (!prefersReducedMotion()) {
+      const play = cur.el.play();
+      if (play) void play.catch(() => undefined);
+    } else {
+      cur.el.pause();
+    }
   }
 
   private pausePhotoVideos(except?: string): void {
@@ -1167,6 +1173,7 @@ export class Backdrop {
   }
 
   private tickPhotoVideoLoop(): void {
+    if (this.photoPlateMorphT < 1) return;
     const url = this.photoVideoUrl;
     if (!url) return;
     const pack = this.photoVideoCache.get(url);
@@ -1216,9 +1223,16 @@ export class Backdrop {
     if (prev && prev !== nextUrl) {
       this.photoOutgoingUrl = prev;
       this.photoEvictAt = this.clock + PHOTO_SKY_CROSSFADE_S;
+      const outStill = this.photoCache.get(prev);
+      const outVideo = this.photoVideoCache.get(prev)?.slots[0]?.tex;
+      const outTex = outStill ?? outVideo ?? null;
+      if (outTex) {
+        this.photoMat.uniforms.uVideoB.value = outTex;
+        this.photoPlateMorphT = 0;
+        this.photoMat.uniforms.uLoopMix.value = 0;
+      }
     }
     this.photoWant = nextUrl;
-    this.syncPhotoCacheSize();
   }
 
   private syncPhotoCacheSize(): void {
@@ -1233,16 +1247,35 @@ export class Backdrop {
     this.syncPhotoCacheSize();
   }
 
+  private applyReducedMotion(): void {
+    const reduce = prefersReducedMotion();
+    const animate = this.photoMat.uniforms.uAnimate.value > 0.5;
+    this.photoMat.uniforms.uAnimate.value = animate && !reduce ? 1 : 0;
+    if (this.photoVideoUrl) {
+      const pack = this.photoVideoCache.get(this.photoVideoUrl);
+      if (pack) {
+        for (const slot of pack.slots) {
+          if (reduce) slot.el.pause();
+          else if (slot.el.paused && slot.el.readyState >= 2) {
+            const play = slot.el.play();
+            if (play) void play.catch(() => undefined);
+          }
+        }
+      }
+    }
+  }
+
   private bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void {
     if (url) this.beginPhotoTransition(url);
     this.photoMat.uniforms.uVideo.value = t;
     const motion = animate && !prefersReducedMotion();
     this.photoMat.uniforms.uAnimate.value = motion ? 1 : 0;
-    this.photoMat.uniforms.uLoopMix.value = 0;
+    if (this.photoPlateMorphT >= 1) this.photoMat.uniforms.uLoopMix.value = 0;
     if (animate) {
       this.photoVideoUrl = null;
-      this.photoMat.uniforms.uVideoB.value = t;
+      if (this.photoPlateMorphT >= 1) this.photoMat.uniforms.uVideoB.value = t;
     }
+    this.syncPhotoCacheSize();
     const img = t.image as {
       naturalWidth?: number;
       naturalHeight?: number;
@@ -1524,6 +1557,17 @@ export class Backdrop {
     } else if (this.photoVideoUrl) {
       this.tickPhotoVideoLoop();
     }
+    this.tickPhotoPlateMorph(dt);
     this.tickPhotoCacheEviction();
+  }
+
+  private tickPhotoPlateMorph(dt: number): void {
+    if (this.photoPlateMorphT >= 1) return;
+    this.photoPlateMorphT = Math.min(1, this.photoPlateMorphT + dt / PHOTO_SKY_CROSSFADE_S);
+    this.photoMat.uniforms.uLoopMix.value = mixFade(this.photoPlateMorphT);
+    if (this.photoPlateMorphT >= 1) {
+      this.photoMat.uniforms.uLoopMix.value = 0;
+      this.photoMat.uniforms.uVideoB.value = this.photoMat.uniforms.uVideo.value;
+    }
   }
 }

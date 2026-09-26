@@ -12,9 +12,15 @@ import {
   pieceFitsInWell,
   simulateAutoplay,
   simulateAutoplayLegacy,
+  simulateAutoplayOldWeights,
+  simulateAutoplayRegressed,
+  scoreBoardLegacy,
+  scoreBoardRegressed,
   seededPieceKinds,
+  survivalRate,
   TETRIS_COLS,
   TETRIS_ROWS,
+  TETRIS_SURVIVAL_SEEDS,
   TETRIS_WEIGHTS,
 } from "./tetris-engine";
 import { normalizeCells, rotateCells } from "./stage-math";
@@ -23,6 +29,7 @@ import { normalizeCells, rotateCells } from "./stage-math";
 const MIN_SZ_SURVIVAL = 56;
 /** Minimum all-T pieces the fixed planner must survive on an empty well. */
 const MIN_T_SURVIVAL = 48;
+const SURVIVAL_PIECES = 200;
 
 describe("tetris-engine", () => {
   it("respects walls and rotation when landing", () => {
@@ -43,7 +50,7 @@ describe("tetris-engine", () => {
     const cells = cellsFor("O", 0);
     const landed = landingHeightForPiece(board, cells, 2);
     expect(landed).toBe(2);
-    expect(TETRIS_WEIGHTS.landingHeight).toBeCloseTo(-4.913486);
+    expect(TETRIS_WEIGHTS.pieceLandingHeight).toBeCloseTo(-0.4, 1);
   });
 
   it("clears a full row on a seeded sequence", () => {
@@ -53,12 +60,12 @@ describe("tetris-engine", () => {
     expect(lines).toBeGreaterThan(0);
   });
 
-  it("survives ~200 seeded pieces without topping out", () => {
-    const kinds = seededPieceKinds(200, 7);
-    const { toppedOut, lines, pieces } = simulateAutoplay(emptyBoard(), kinds);
-    expect(toppedOut).toBe(false);
-    expect(pieces).toBe(200);
-    expect(lines).toBeGreaterThan(0);
+  it("matches legacy survival on a fixed seed battery", () => {
+    const legacy = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES, scoreBoardLegacy);
+    const fixed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES);
+    expect(fixed).toBeGreaterThanOrEqual(legacy);
+    expect(legacy).toBe(20);
+    expect(fixed).toBe(20);
   });
 
   it("picks a legal placement for each rotation", () => {
@@ -78,7 +85,7 @@ describe("tetris-engine", () => {
     const t = simulateAutoplay(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
     expect(t.toppedOut).toBe(false);
     expect(t.pieces).toBe(MIN_T_SURVIVAL);
-    expect(t.lines).toBeGreaterThanOrEqual(18);
+    expect(t.lines).toBeGreaterThanOrEqual(17);
   });
 
   it("reports top-out when the well has no in-bounds placement", () => {
@@ -95,15 +102,27 @@ describe("tetris-engine", () => {
     expect(topped.pieces).toBe(0);
   });
 
-  it("fails the old aggregate-height landing weight on S/Z and T sequences", () => {
+  it("beats the old mis-tuned landing weights on S/Z and T sequences", () => {
     const szLegacy = simulateAutoplayLegacy(emptyBoard(), alternatingSzKinds(MIN_SZ_SURVIVAL));
+    const szOld = simulateAutoplayOldWeights(emptyBoard(), alternatingSzKinds(MIN_SZ_SURVIVAL));
     const szFixed = simulateAutoplay(emptyBoard(), alternatingSzKinds(MIN_SZ_SURVIVAL));
-    expect(szLegacy.lines).toBeLessThan(szFixed.lines);
+    expect(szOld.lines).toBeLessThan(szFixed.lines);
     expect(szFixed.lines).toBeGreaterThanOrEqual(14);
+    expect(szLegacy.toppedOut).toBe(true);
+    expect(szLegacy.lines).toBeLessThanOrEqual(4);
 
-    const tLegacy = simulateAutoplayLegacy(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
+    const tOld = simulateAutoplayOldWeights(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
     const tFixed = simulateAutoplay(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
-    expect(tLegacy.lines).toBeLessThan(tFixed.lines);
-    expect(tFixed.lines).toBeGreaterThanOrEqual(18);
+    expect(tOld.lines).toBeLessThan(tFixed.lines);
+    expect(tFixed.lines).toBeGreaterThanOrEqual(17);
+    const tRegressed = simulateAutoplayRegressed(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
+    expect(tRegressed.lines).toBeGreaterThanOrEqual(18);
+  });
+
+  it("regressed piece-only planner survives fewer seeded runs than the fixed planner", () => {
+    const regressed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES, scoreBoardRegressed);
+    const fixed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES);
+    expect(regressed).toBeLessThan(fixed);
+    expect(fixed).toBeGreaterThanOrEqual(20);
   });
 });

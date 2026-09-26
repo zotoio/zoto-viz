@@ -247,6 +247,47 @@ describe("photo sky cache", () => {
     expect(tex.minFilter).toBe(THREE.LinearMipmapLinearFilter);
   });
 
+  it("keeps outgoing still bound through the crossfade before cache prune", () => {
+    const sky = new Backdrop();
+    sky.setKind("reef");
+    const cache = (sky as unknown as { photoCache: Map<string, THREE.Texture> }).photoCache;
+    const outgoing = new THREE.Texture();
+    outgoing.image = { width: 16, height: 9 };
+    const incoming = new THREE.Texture();
+    incoming.image = { width: 16, height: 9 };
+    cache.set("/out.jpg", outgoing);
+    cache.set("/in.jpg", incoming);
+    const bindPhoto = (sky as unknown as { bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void }).bindPhoto.bind(sky);
+    const state = sky as unknown as { photoWant: string | null; photoOutgoingUrl: string | null };
+    state.photoWant = "/out.jpg";
+    bindPhoto(incoming, true, "/in.jpg");
+    expect(cache.has("/out.jpg")).toBe(true);
+    expect(cache.has("/in.jpg")).toBe(true);
+    expect(state.photoOutgoingUrl).toBe("/out.jpg");
+    expect(state.photoWant).toBe("/in.jpg");
+  });
+
+  it("crossfades photo plates over PHOTO_SKY_CROSSFADE_S", () => {
+    const sky = new Backdrop();
+    sky.setKind("reef");
+    const photoMat = (sky as unknown as { photoMat: THREE.ShaderMaterial }).photoMat;
+    const internal = sky as unknown as { photoPlateMorphT: number; clock: number };
+    internal.photoPlateMorphT = 0;
+    photoMat.uniforms.uLoopMix.value = 0;
+    let t = 0;
+    for (let i = 0; i < 30; i++) {
+      t += 0.1;
+      sky.tick(t);
+    }
+    expect(photoMat.uniforms.uLoopMix.value).toBeGreaterThan(0.2);
+    for (let i = 0; i < 20; i++) {
+      t += 0.1;
+      sky.tick(t);
+    }
+    expect(photoMat.uniforms.uLoopMix.value).toBe(0);
+    expect(internal.photoPlateMorphT).toBe(1);
+  });
+
   it("evicts outgoing photo after the crossfade window on tick", () => {
     const sky = new Backdrop();
     sky.setKind("reef");
