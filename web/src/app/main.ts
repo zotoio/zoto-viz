@@ -107,6 +107,11 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
+import {
+  bindVizDriveElement,
+  clearVizDrive,
+  noteHostDirect,
+} from "../plugins/viz-drive";
 import { revertModeSelection } from "./apply-mode-mosaic";
 import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
@@ -359,6 +364,7 @@ const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
+bindVizDriveElement("main", $("scene"));
 addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
@@ -612,8 +618,12 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
 }
 
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
+  const tileId = mosaic?.on
+    ? (mosaic.tileIds.includes(modeSel.value) ? modeSel.value : mosaic.focusedId || mosaic.tileIds[0] || "main")
+    : "main";
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
+    clearVizDrive(tileId);
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
@@ -621,6 +631,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   }
   if (!tsPluginsAllowed()) {
     sandbox.unload();
+    clearVizDrive(tileId);
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
@@ -628,12 +639,14 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
     sandbox.unload();
+    clearVizDrive(tileId);
     bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
     return;
   }
   try {
+    sandbox.setActiveTile(tileId);
     await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
@@ -1098,6 +1111,7 @@ function feed(m: StateMsg): void {
         if (mosaic?.on) {
           deliverMosaicDemoPacks(mosaic, f, modeById, pluginSpecForMode, optsFor);
         } else if (packId) {
+          noteHostDirect("main");
           runPackFrameHandler(packId, f, {
             writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
             writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),

@@ -1,5 +1,6 @@
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
+import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
 
 const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
@@ -93,12 +94,20 @@ export class PluginSandbox {
   private vizContract: VizPluginContract | undefined;
   private moduleBlobUrl: string | null = null;
   handlers: PluginHostHandlers = {};
+  /** Mosaic tile or `main` receiving sandbox plugin writes. */
+  activeTileId = "main";
+
+  setActiveTile(tileId: string): void {
+    const id = tileId.trim();
+    this.activeTileId = id || "main";
+  }
 
   constructor() {
     window.addEventListener("message", this.onMessage);
   }
 
   unload(): void {
+    setSandboxReady(false);
     if (this.moduleBlobUrl) {
       URL.revokeObjectURL(this.moduleBlobUrl);
       this.moduleBlobUrl = null;
@@ -217,14 +226,24 @@ export class PluginSandbox {
     if (!d || d.source !== "zoto-viz-plugin") return;
     if (d.type === "frame-ready" || d.type === "ready") {
       recordSandboxBoot(d.type);
+      if (d.type === "ready") setSandboxReady(true);
       return;
     }
     if (!hostAllows(d.type, this.caps)) return;
     if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);
     if (d.type === "setNodeColor") this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
-    if (d.type === "writeBuffer") this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
-    if (d.type === "writeUniform") this.handlers.writeUniform?.(d.payload.name, d.payload.value);
-    if (d.type === "writeParticles") this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+    if (d.type === "writeBuffer") {
+      noteSandboxWrite(this.activeTileId);
+      this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
+    }
+    if (d.type === "writeUniform") {
+      noteSandboxWrite(this.activeTileId);
+      this.handlers.writeUniform?.(d.payload.name, d.payload.value);
+    }
+    if (d.type === "writeParticles") {
+      noteSandboxWrite(this.activeTileId);
+      this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+    }
   };
 }
 
