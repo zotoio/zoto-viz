@@ -1,0 +1,13 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -278,6 +278,9 @@
+                 f.reason,
+                 f.message,
+             )
++        if len(failures) > 1:
++            joined = "; ".join(f.message for f in failures)
++            failures[0] = InstallFailure(failures[0].validator, failures[0].reason, joined)
+         return failures[0], failures
+     return None, []
+ 
