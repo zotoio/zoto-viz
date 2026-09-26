@@ -1,0 +1,3 @@
+# Host CI and scripts — belt-and-braces (branch protection may require review separately).
+/.github/ @wyvern8
+/scripts/ @wyvern8

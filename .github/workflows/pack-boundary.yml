@@ -1,31 +1,33 @@
 name: pack-boundary
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+      - ready_for_review
 
 permissions:
   contents: read
   pull-requests: read
-  issues: read
 
 jobs:
   pack-boundary:
     runs-on: ubuntu-latest
     steps:
+      # Base ref only (default for pull_request_target). Never checkout the PR head.
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Enforce pack PR boundary
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          if ! git show "${{ github.event.pull_request.base.sha }}:scripts/check_pack_pr_boundary.py" \
-            > /tmp/check_pack_pr_boundary.py 2>/dev/null; then
-            cp scripts/check_pack_pr_boundary.py /tmp/check_pack_pr_boundary.py
-          fi
-          python3 /tmp/check_pack_pr_boundary.py \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}" \
-            --repo "${{ github.repository }}" \
-            --pr-number "${{ github.event.pull_request.number }}"
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PACK_BOUNDARY_EVENT_ACTION: ${{ github.event.action }}
+          PACK_BOUNDARY_EVENT_LABEL_NAME: ${{ github.event.label.name }}
+          PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ${{ github.event.label.created_at }}
+        run: python3 scripts/check_pack_pr_boundary.py --from-github-api

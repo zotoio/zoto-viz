@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import base64
 import json
 import os
 import re
@@ -580,6 +581,14 @@ def _github_request(url: str, token: str) -> tuple[Any, str | None]:
         return json.loads(body), next_url
 
 
+def fetch_pull_labels(repo: str, pull_number: int, token: str) -> set[str]:
+    """Current PR labels via pulls API (pull-requests: read)."""
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}"
+    doc, _ = _github_request(url, token)
+    return {label["name"] for label in doc.get("labels", [])}
+
+
 def fetch_issue_labels(repo: str, issue_number: int, token: str) -> set[str]:
     owner, name = repo.split("/", 1)
     url = (
@@ -587,6 +596,70 @@ def fetch_issue_labels(repo: str, issue_number: int, token: str) -> set[str]:
     )
     doc, _ = _github_request(url, token)
     return {label["name"] for label in doc.get("labels", [])}
+
+
+def paths_from_pull_files_pages(pages: list[list[dict]]) -> list[str]:
+    """Collect paths from mocked or real pulls/{n}/files API pages."""
+    paths: set[str] = set()
+    for page in pages:
+        for row in page:
+            filename = row.get("filename")
+            if filename:
+                paths.add(filename)
+            previous = row.get("previous_filename")
+            if previous:
+                paths.add(previous)
+    return sorted(paths)
+
+
+def fetch_pull_changed_files(repo: str, pull_number: int, token: str) -> list[str]:
+    """Changed file paths from pulls/{n}/files (paginated)."""
+    owner, name = repo.split("/", 1)
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}/files"
+        "?per_page=100"
+    )
+    pages: list[list[dict]] = []
+    while url:
+        page, url = _github_request(url, token)
+        if not isinstance(page, list):
+            break
+        pages.append(page)
+    return paths_from_pull_files_pages(pages)
+
+
+def fetch_repo_file_at_ref(
+    repo: str, path: str, ref: str, token: str
+) -> str | None:
+    """File text at ref via contents API; None if missing."""
+    owner, name = repo.split("/", 1)
+    from urllib.parse import quote
+
+    encoded = quote(path, safe="/")
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/contents/{encoded}?ref={ref}"
+    )
+    try:
+        doc, _ = _github_request(url, token)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+    if not isinstance(doc, dict):
+        return None
+    raw = doc.get("content")
+    if not raw:
+        return None
+    return base64.b64decode(raw).decode("utf-8", errors="replace")
+
+
+def load_file_pair_from_api(
+    repo: str, path: str, base_ref: str, head_ref: str, token: str
+) -> tuple[str | None, str | None]:
+    return (
+        fetch_repo_file_at_ref(repo, path, base_ref, token),
+        fetch_repo_file_at_ref(repo, path, head_ref, token),
+    )
 
 
 def fetch_pull_head_commit_date(
@@ -630,9 +703,6 @@ def fetch_labeled_events(repo: str, issue_number: int, token: str) -> list[dict]
     return items
 
 
-    return items
-
-
 def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]:
     owner, name = repo.split("/", 1)
     url = (
@@ -648,14 +718,37 @@ def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]
     return items
 
 
+def merge_workflow_label_event(timeline: list[dict]) -> list[dict]:
+    """Append labeled/unlabeled from Actions env when this run was label-driven."""
+    action = os.environ.get("PACK_BOUNDARY_EVENT_ACTION", "")
+    if action not in ("labeled", "unlabeled"):
+        return timeline
+    name = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_NAME", "")
+    if not name:
+        return timeline
+    created = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", "")
+    if not created:
+        return timeline
+    row = {
+        "event": action,
+        "label": {"name": name},
+        "created_at": created,
+    }
+    return [*timeline, row]
+
+
 def load_pr_review_context(
     repo: str, issue_number: int, token: str
 ) -> tuple[set[str], list[dict], datetime | None]:
-    labels = fetch_issue_labels(repo, issue_number, token)
+    try:
+        labels = fetch_pull_labels(repo, issue_number, token)
+    except urllib.error.HTTPError:
+        labels = fetch_issue_labels(repo, issue_number, token)
     try:
         timeline = fetch_issue_timeline(repo, issue_number, token)
     except urllib.error.HTTPError:
         timeline = fetch_labeled_events(repo, issue_number, token)
+    timeline = merge_workflow_label_event(timeline)
     push_at = last_push_at_from_timeline(timeline)
     head_commit_at = fetch_pull_head_commit_date(repo, issue_number, token)
     if head_commit_at is not None and (push_at is None or head_commit_at > push_at):
@@ -775,7 +868,74 @@ def main(argv: list[str] | None = None) -> int:
         help="JSON object with labels, timeline, optional last_push_at (ISO); "
         "skips git diff and pack rules",
     )
+    parser.add_argument(
+        "--from-github-api",
+        action="store_true",
+        help="Use GitHub API for changed files and allowlist file contents "
+        "(env: GITHUB_REPOSITORY, PR_NUMBER, GITHUB_TOKEN, BASE_SHA, HEAD_SHA)",
+    )
     args = parser.parse_args(argv)
+
+    if args.from_github_api:
+        repo = os.environ.get("GITHUB_REPOSITORY", "")
+        pr_raw = os.environ.get("PR_NUMBER", "")
+        base_ref = os.environ.get("BASE_SHA", "")
+        head_ref = os.environ.get("HEAD_SHA", "")
+        token = os.environ.get("GITHUB_TOKEN", "")
+        if not repo or not pr_raw or not base_ref or not head_ref:
+            print(
+                "pack-boundary: FAILED — --from-github-api requires "
+                "GITHUB_REPOSITORY, PR_NUMBER, BASE_SHA, HEAD_SHA",
+                file=sys.stderr,
+            )
+            return 1
+        if not token:
+            print(
+                "pack-boundary: FAILED — GITHUB_TOKEN is required for --from-github-api",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            pr_number = int(pr_raw)
+        except ValueError:
+            print("pack-boundary: FAILED — PR_NUMBER must be an integer", file=sys.stderr)
+            return 1
+        try:
+            labels, timeline, push_at = load_pr_review_context(repo, pr_number, token)
+        except urllib.error.HTTPError as exc:
+            print(
+                f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
+                file=sys.stderr,
+            )
+            return 1
+        host_review_ok = False
+        if HOST_CHANGE_LABEL in labels:
+            code, lines = run_host_change_gate(
+                labels, timeline, last_push_at=push_at
+            )
+            for line in lines:
+                print(line)
+            if code != 0:
+                return code
+            host_review_ok = True
+        try:
+            changed = fetch_pull_changed_files(repo, pr_number, token)
+        except urllib.error.HTTPError as exc:
+            print(
+                f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
+                file=sys.stderr,
+            )
+            return 1
+        contents: dict[str, tuple[str | None, str | None]] = {}
+        for path in changed:
+            if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):
+                contents[path] = load_file_pair_from_api(
+                    repo, path, base_ref, head_ref, token
+                )
+        code, lines = run_check(changed, contents, allow_host_infra=host_review_ok)
+        for line in lines:
+            print(line)
+        return code
 
     if args.dry_run_host_review:
         payload = json.loads(args.dry_run_host_review)

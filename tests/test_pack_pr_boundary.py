@@ -10,8 +10,10 @@ from scripts.check_pack_pr_boundary import (
     HOST_REVIEW_FAIL_MESSAGE,
     PACK_PR_HOST_INFRA_FAIL,
     evaluate_pack_pr,
+    merge_workflow_label_event,
     pack_py_test_path,
     paths_from_name_status,
+    paths_from_pull_files_pages,
     run_check,
     run_host_change_gate,
     validate_catalog_py_change,
@@ -302,6 +304,48 @@ def test_name_status_includes_rename_source_and_dest() -> None:
         "plugins/src/foo/frontend/host.ts",
         "web/src/plugins/viz-host.ts",
     ]
+
+
+def test_paths_from_pull_files_fixture_includes_rename_and_host_script() -> None:
+    import json
+    from pathlib import Path
+
+    pages = json.loads(
+        (Path(__file__).parent / "fixtures/pack-boundary/pull-files-pages.json").read_text()
+    )
+    paths = paths_from_pull_files_pages(pages)
+    assert "plugins/src/ant-colony/plugin.yml" in paths
+    assert "scripts/check_pack_pr_boundary.py" in paths
+    code, lines = run_check(paths, {})
+    assert code == 1
+    assert any(PACK_PR_HOST_INFRA_FAIL in line or "host infra" in line for line in lines)
+
+
+def test_pack_pr_editing_workflow_yaml_is_host_infra() -> None:
+    """CI runs base-branch script via pull_request_target; these paths need host labels."""
+    files = [
+        "plugins/src/demo-pack/plugin.yml",
+        ".github/workflows/pack-boundary.yml",
+    ]
+    code, lines = run_check(files, {})
+    assert code == 1
+    assert any("pack-boundary.yml" in line for line in lines)
+
+
+def test_merge_workflow_label_event_appends_host_reviewed() -> None:
+    import os
+
+    os.environ["PACK_BOUNDARY_EVENT_ACTION"] = "labeled"
+    os.environ["PACK_BOUNDARY_EVENT_LABEL_NAME"] = "host-reviewed"
+    os.environ["PACK_BOUNDARY_EVENT_LABEL_CREATED_AT"] = "2026-09-26T14:00:00Z"
+    try:
+        merged = merge_workflow_label_event([])
+    finally:
+        os.environ.pop("PACK_BOUNDARY_EVENT_ACTION", None)
+        os.environ.pop("PACK_BOUNDARY_EVENT_LABEL_NAME", None)
+        os.environ.pop("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", None)
+    assert len(merged) == 1
+    assert merged[0]["event"] == "labeled"
 
 
 def test_committed_event_timestamp_uses_committer_date() -> None:
