@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_static_path_normalization.py::test_plugin_sandbox_html_not_served_from_static_root",
-  "description": "plugin-sandbox.html only via pack-assets.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert 200 == 404"
-}

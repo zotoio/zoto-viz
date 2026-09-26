@@ -109,7 +109,9 @@ def test_lan_bind_wildcard_csp_uses_validated_host_origin() -> None:
 async def _lan_host_csp() -> None:
     lan = "192.168.1.20"
     dist = _dist_with_sandbox()
-    async with make_app_server(web_dist=dist) as (ip, port, runner):
+    port_pin = 18420
+    async with make_app_server(web_dist=dist, listen_port=port_pin) as (ip, port, runner):
+        assert port == port_pin
         request_guard.configure_request_guard(
             runner.app, bind="127.0.0.1", port=port, allowed_hosts=[f"{lan}:{port}"],
         )
@@ -153,11 +155,31 @@ def test_lan_host_csp_uses_validated_origin_not_wildcard() -> None:
 
 async def _localhost_csp() -> None:
     dist = _dist_with_sandbox()
-    async with make_app_server(web_dist=dist) as (ip, port, runner):
+    port_pin = 18421
+    async with make_app_server(web_dist=dist, listen_port=port_pin) as (ip, port, runner):
+        assert port == port_pin
         runner.app["pack_asset_secret"] = SECRET
         frame = new_frame_id()
         pack_asset_frames.registry_for_app(runner.app).register(SESSION, frame)
         tok = mint("_sandbox", session_id=SESSION, frame_id=frame, app=runner.app)
+        from urllib.parse import quote
+
+        tok_q = quote(tok, safe="")
+        origin = f"http://localhost:{port}"
+        want_csp = (
+            f"default-src 'none'; "
+            f"script-src {origin}/pack-assets/{tok_q}/; "
+            f"img-src {origin}/pack-assets/{tok_q}/; "
+            f"style-src {origin}/pack-assets/{tok_q}/; "
+            f"font-src {origin}/pack-assets/{tok_q}/; "
+            f"object-src 'none'; "
+            f"frame-src 'none'; "
+            f"worker-src 'none'; "
+            f"form-action 'none'; "
+            f"base-uri 'none'; "
+            f"connect-src 'none'; "
+            f"frame-ancestors 'self'"
+        )
         async with ClientSession() as session:
             async with session.get(
                 f"http://{ip}:{port}{access.pack_asset_url(tok, '_sandbox', 'plugin-sandbox.html')}",
@@ -168,9 +190,7 @@ async def _localhost_csp() -> None:
                 },
             ) as resp:
                 assert resp.status == 200
-                csp = resp.headers.get("Content-Security-Policy") or ""
-                assert f"http://localhost:{port}/pack-assets/{tok}/" in csp
-                assert "*" not in csp
+                assert resp.headers.get("Content-Security-Policy") == want_csp
 
 
 def test_localhost_host_csp_shape() -> None:

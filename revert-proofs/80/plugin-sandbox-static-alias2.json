@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_static_path_normalization.py::test_traversal_cannot_reach_sandbox_html",
-  "description": "plugin-sandbox.html only via pack-assets.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert 200 == 404"
-}

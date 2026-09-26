@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_main_passes_resolved_allowed_hosts_to_make_app",
+  "red": "KeyError: 'access_log'",
+  "description": "main() must pass production access_log=None into web.run_app.",
+  "timeoutSec": 120
+}

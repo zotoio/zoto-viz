@@ -3,5 +3,5 @@
   "description": "Symlink escape outside the pack frontend root must not be served.",
   "timeoutSec": 60,
   "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_traversal_realpath_outside_frontend_root",
-  "red": "AssertionError: escape.js"
+  "red": "AssertionError: assert 200 == 404"
 }

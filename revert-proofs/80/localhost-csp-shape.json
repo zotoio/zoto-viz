@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_policy.py::test_localhost_host_csp_shape",
-  "description": "localhost Host must drive sandbox CSP origin.",
-  "timeoutSec": 120,
-  "red": "AssertionError: assert 'http://localhost:34421/pack-assets/91404d21-b1a7-454d-8942-26977ebf7991.GwIRa8VWYVmTYKnYWaBxxaVpqyeaTn9LP5mPA3jUBXE/' in \"default-src 'none'; script-src http://127.0.0.1:34421/pack-assets/91404d21-b1a7-454d-8942-26977ebf7991.GwIRa8VWYVmTYK...; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'; connect-src 'none'; frame-ancestors 'self'\""
-}

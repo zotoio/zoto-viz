@@ -8,7 +8,7 @@ from pathlib import Path
 from aiohttp.test_utils import AioHTTPTestCase
 
 from service import pack_assets
-from tests.pack_asset_test_util import HOST, NULL, SESSION, mint, pack_url, test_app
+from tests.pack_asset_test_util import HOST, NULL, SESSION, mint, pack_url, make_test_app
 
 _DIST = Path(tempfile.mkdtemp())
 _ASSETS = _DIST / "assets"
@@ -33,7 +33,7 @@ class PackAssetsSandboxCspTests(AioHTTPTestCase):
         super().tearDownClass()
 
     async def get_application(self):
-        return test_app()
+        return make_test_app()
 
     def _csp(self, resp) -> str:
         return resp.headers.get("Content-Security-Policy") or ""
@@ -69,7 +69,9 @@ class PackAssetsSandboxCspTests(AioHTTPTestCase):
         js_name = m.group(0)
         js = await self.client.get(pack_url("_sandbox", js_name, token=tok), headers=NULL)
         assert js.status == 200, await js.text()
-        assert self._csp(js) == self._csp(html)
+        js_csp = self._csp(js)
+        assert len(js_csp) > 0
+        assert js_csp == self._csp(html)
 
     def test_sandbox_csp_builder_unit(self) -> None:
         class _Req:

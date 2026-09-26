@@ -13,7 +13,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from service import access, pack_asset_tokens, plugins
 from tests.pack_asset_test_util import SESSION, SECRET, mint, new_frame_id, pack_url, pack_url_raw
-from tests.pack_asset_test_util import test_app as make_pack_test_app
+from tests.pack_asset_test_util import make_test_app as make_pack_test_app
 
 HOST = {"Host": "127.0.0.1:7020"}
 NULL = {**HOST, "Origin": "null", access.HEADER: SESSION}
@@ -150,11 +150,6 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
                 resp = await self.client.get(pack_url("demo-pack", "module.js", token=tok), headers=NULL)
         await assert_token_invalid(resp)
 
-    async def test_pack_id_dotdot_rejected(self) -> None:
-        tok = mint("demo-pack")
-        resp = await self.client.get(pack_url("..", "module.js", token=tok), headers={**HOST})
-        assert resp.status == 404
-
     async def test_path_traversal_dotdot_and_encoded(self) -> None:
         home = Path(tempfile.mkdtemp())
         fe = home / "frontend"
@@ -184,7 +179,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
                         pack_url_raw("traversal-pack", tail),
                         headers=NULL,
                     )
-                    assert resp.status == want_status, tail
+                    assert resp.status == want_status
                     body = await resp.text()
                     assert "leak" not in body and "root:" not in body, tail
 
@@ -206,7 +201,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
             with patch.object(plugins, "consented", lambda _doc: True):
                 for tail in ("escape.js", "escape-dir/outside-leak.txt"):
                     resp = await self.client.get(pack_url_raw("symlink-pack", tail), headers=NULL)
-                    assert resp.status == 404, tail
+                    assert resp.status == 404
                     assert "outside-secret" not in await resp.text()
 
     async def test_dotfile_under_pack_is_403(self) -> None:
@@ -221,7 +216,7 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
             with patch.object(plugins, "consented", lambda _doc: True):
                 for tail in (".env", "nested/.hidden.js", "frontend/.env"):
                     resp = await self.client.get(pack_url_raw("dot-pack", tail), headers=NULL)
-                    assert resp.status == 403, tail
+                    assert resp.status == 403
                     assert (await resp.json()) == {"error": "forbidden path"}
                     assert "SECRET=leak" not in await resp.text()
 

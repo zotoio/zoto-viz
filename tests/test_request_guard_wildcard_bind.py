@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 from aiohttp import ClientSession
@@ -35,7 +36,7 @@ def test_wildcard_bind_rejects_unlisted_hosts(bind: str) -> None:
             port_s = str(port)
             bad_hosts = [
                 f"evil.example:{port}",
-                f"172.30.0.2:{port}",
+                f"192.0.2.10:{port}",
                 f"0.0.0.0:{port}",
                 f"[::]:{port}",
             ]
@@ -52,7 +53,8 @@ def test_wildcard_bind_rejects_unlisted_hosts(bind: str) -> None:
             for h in good_hosts:
                 status, body = await _get_status(ip, port, h)
                 assert status == 200
-                assert body  # session JSON
+                data = json.loads(body)
+                assert "csrf" in data
 
     asyncio.run(run())
 

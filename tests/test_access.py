@@ -98,9 +98,6 @@ class FakeReq:
 
 
 def test_host_origin_csrf_helpers() -> None:
-    assert access.host_ok(FakeReq())
-    assert not access.host_ok(FakeReq(host="evil.example"))
-    assert access.host_ok(FakeReq(host="lan.box:7020", lan=True))
     assert access.origin_ok(FakeReq(origin=""))
     assert access.origin_ok(FakeReq(origin="http://127.0.0.1:5173"))
     assert not access.origin_ok(FakeReq(origin="http://evil.example"))

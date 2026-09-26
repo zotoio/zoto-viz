@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_access.py::test_bind_is_loopback",
-  "description": "bind_is_loopback recognises loopback addresses.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert False"
-}

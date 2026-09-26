@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_static_sandbox_bypass.py::StaticSandboxBypassTests::test_trailing_slash_plugin_sandbox_html",
-  "description": "Legacy plugin-sandbox.html not served from static root.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert 200 == 404"
-}

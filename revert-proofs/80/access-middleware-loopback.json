@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_access.py::AccessMiddlewareTests::test_loopback_get_and_csrf_post",
-  "description": "CSRF required on mutating routes.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert 200 == 403"
-}
