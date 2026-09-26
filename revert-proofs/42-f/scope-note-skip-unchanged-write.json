@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/duplicate-slot-scope-note-metrics.test.ts",
+  "testName": "five layout patches with unchanged duplicate count perform 0 pack scope note text writes",
+  "description": "Always assign pack scope note textContent on layout sync even when the string is unchanged.",
+  "redOutput": "expected { recounts: 0, textWrites: 5 } to deeply equal { recounts: 0, textWrites: 0 }"
+}

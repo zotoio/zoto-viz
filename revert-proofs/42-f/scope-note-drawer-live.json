@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/duplicate-slot-scope-note-live.test.ts",
+  "testName": "same drawer node, unsaved field, and n=2 then 3 then 1 while the view tab stays open",
+  "description": "Stop syncing pack scope note when mosaic layout changes while the view drawer is open.",
+  "redOutput": "expected 2 to be 3"
+}

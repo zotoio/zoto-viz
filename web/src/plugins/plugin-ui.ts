@@ -1,5 +1,6 @@
 import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
 import { packScopeNoteText, type PackWallScope } from "./instances";
+import { recordPackScopeNoteTextWrite } from "./pack-scope-note-metrics";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
@@ -130,6 +131,7 @@ function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWall
   const note = document.createElement("div");
   note.className = "sec-hint plugin-pack-scope-note";
   note.textContent = text;
+  recordPackScopeNoteTextWrite();
   host.append(note);
 }
 
@@ -142,7 +144,10 @@ export function syncPackScopeNote(root: HTMLElement, spec: PluginView, wall?: Pa
     return;
   }
   if (existing instanceof HTMLElement) {
-    existing.textContent = text;
+    if (existing.textContent !== text) {
+      existing.textContent = text;
+      recordPackScopeNoteTextWrite();
+    }
     return;
   }
   mountPackScopeNote(root, spec, wall);

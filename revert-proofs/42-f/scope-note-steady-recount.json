@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/duplicate-slot-scope-note-metrics.test.ts",
+  "testName": "600 steady frames with drawer open: 0 recounts and 0 writes; one tile-count change: 1 and 1",
+  "description": "Recount pack scope on every mosaic layout patch instead of only when duplicate tile count changes.",
+  "redOutput": "expected { recounts: 601, textWrites: 1 } to deeply equal { recounts: 1, textWrites: 1 }"
+}

@@ -1,0 +1,17 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+index a6eb3af..bbbbbbb 100644
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -144,10 +144,8 @@ export function syncPackScopeNote(root: HTMLElement, spec: PluginView, wall?: Pa
+     return;
+   }
+   if (existing instanceof HTMLElement) {
+-    if (existing.textContent !== text) {
+-      existing.textContent = text;
+-      recordPackScopeNoteTextWrite();
+-    }
++    existing.textContent = text;
++    recordPackScopeNoteTextWrite();
+     return;
+   }
+   mountPackScopeNote(root, spec, wall);
