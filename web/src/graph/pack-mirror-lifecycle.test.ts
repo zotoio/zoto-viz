@@ -9,7 +9,7 @@ import {
 } from "./pack-mirror-gl";
 import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 import { asCssRect, type CssRectLoose } from "./pack-mirror-rect";
-import { surfaceLetterboxFill } from "./letterbox-fill";
+import { getSurfaceLetterboxFill, resetSurfaceLetterboxFillCache } from "./letterbox-fill";
 
 function stubRenderer(antialias: boolean, pr = 1): THREE.WebGLRenderer {
   const rd = {
@@ -31,6 +31,8 @@ function emptyScene(): { scene: THREE.Scene; camera: THREE.Camera } {
   return { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera() };
 }
 
+const lifecycleLetterboxFill = getSurfaceLetterboxFill(0x0a1020, 0.25);
+
 function simulateTwoTileFrame(
   reg: PackMirrorRegistry,
   rd: THREE.WebGLRenderer,
@@ -48,7 +50,7 @@ function simulateTwoTileFrame(
   });
   reg.presentPack(key, rd, asCssRect({ x: 80, y: 0, w: 90, h: 70 }), {
     letterbox: true,
-    fill: surfaceLetterboxFill(0x0a1020, 0.25),
+    fill: lifecycleLetterboxFill,
     aspect: box.w / box.h,
   });
 }
@@ -70,22 +72,24 @@ function simulateThreeTileFrame(
   });
   reg.presentPack(key, rd, asCssRect({ x: 70, y: 0, w: 50, h: 40 }), {
     letterbox: true,
-    fill: surfaceLetterboxFill(0x0a1020, 0.25),
+    fill: lifecycleLetterboxFill,
     aspect: box.w / box.h,
   });
   reg.presentPack(key, rd, asCssRect({ x: 130, y: 0, w: 50, h: 40 }), {
     letterbox: true,
-    fill: surfaceLetterboxFill(0x0a1020, 0.25),
+    fill: lifecycleLetterboxFill,
     aspect: box.w / box.h,
   });
 }
 
 describe("PackMirrorSession resource lifecycle", () => {
   beforeEach(() => {
+    resetSurfaceLetterboxFillCache();
     packMirrorResourceStats.reset();
     packMirrorSizeStats.reset();
   });
   afterEach(() => {
+    resetSurfaceLetterboxFillCache();
     packMirrorResourceStats.reset();
     packMirrorSizeStats.reset();
   });
@@ -105,6 +109,7 @@ describe("PackMirrorSession resource lifecycle", () => {
       simulateTwoTileFrame(reg, rd, "plugin:pack", false);
       expect(session.presenter.scratch.bars).toBe(barsRef);
       expect(session.presenter.scratch.innerTd).toBe(innerRef);
+      expect(packMirrorSizeStats.deviceSizeAllocated).toBe(0);
       expect(session.presenter.scratch.out).toBe(outRef);
       expect(reg.devicePackSizeScratch).toBe(sizeScratchRef);
       if (packSizeRef === null) packSizeRef = session.lastRenderDeviceSize;

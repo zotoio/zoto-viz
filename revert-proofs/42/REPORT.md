@@ -37,6 +37,18 @@
 
 Readback on **A2**: 12 matrix + 3 zoom + **2** letterbox16x9 rows (`pack-mirror-readback.test.ts`).
 
+## Lifecycle `deviceSizeAllocated` (A, vs #73 on 4527885)
+
+| Check | Evidence |
+|-------|----------|
+| Root cause | **Not** letterbox grain — per-frame `deviceSizeFromCssBox()` in `renderPrimary` (allocating `{pw,ph}` each frame). Frame-alloc row sees **~300** `deviceSizeAllocated`; lifecycle guards **0** in the 300-frame loop (line ~102). |
+| Fix | `deviceSizeFromCssBoxInto(box, pr, devicePackSizeScratch)` + stable `lastRenderDeviceSize`; lifecycle uses cached `getSurfaceLetterboxFill` (not `surfaceLetterboxFill` per frame). |
+| Revert row | `pack-mirror-device-size-into` → `deviceSizeAllocated` ≫ 0 over 300 frames |
+
+## Typecheck (QE)
+
+- `pnpm exec tsc --noEmit` and `tsc -p tsconfig.test.json --noEmit`: **0 errors**; browser `tsconfig.json` keeps `types: ["vite/client"]` only; test project uses `vitest/globals` (no `@types/node` in either config).
+
 ## Items 7–8: origin-branded rects (Platform Architect A)
 
 | Check | Evidence |
