@@ -662,6 +662,18 @@ export {
 } from "../plugins/plugin-sky-probe";
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
 
+let pluginSkyMaterialsCreated = 0;
+let pluginSkyMaterialsDisposed = 0;
+
+export function pluginSkyMaterialStats(): { created: number; disposed: number } {
+  return { created: pluginSkyMaterialsCreated, disposed: pluginSkyMaterialsDisposed };
+}
+
+export function resetPluginSkyMaterialStatsForTests(): void {
+  pluginSkyMaterialsCreated = 0;
+  pluginSkyMaterialsDisposed = 0;
+}
+
 export class Backdrop {
   readonly mesh: THREE.Mesh;
   readonly fadeMesh: THREE.Mesh;
@@ -1108,6 +1120,7 @@ export class Backdrop {
       fog: false,
       toneMapped: false,
     });
+    pluginSkyMaterialsCreated += 1;
     this.mesh.material = this.pluginMat;
   }
 
@@ -1145,6 +1158,7 @@ export class Backdrop {
     if (this.mesh.material === this.pluginMat) this.mesh.material = this.mat;
     if (this.pluginMat) {
       this.pluginMat.dispose();
+      pluginSkyMaterialsDisposed += 1;
       this.pluginMat = null;
     }
     if (clear) {

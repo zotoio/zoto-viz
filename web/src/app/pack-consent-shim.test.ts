@@ -8,13 +8,13 @@ describe("pack-consent single map (shim)", () => {
   });
 
   it("consent started via consent-review shim is pending in pack-consent", () => {
-    void runSharedPackConsent("pack-shim", () => new Promise(() => {}));
+    void runSharedPackConsent("pack-shim", () => new Promise(() => {}), new AbortController().signal);
     expect(isPendingViaShim("pack-shim")).toBe(true);
     expect(isPackConsentPending("pack-shim")).toBe(true);
   });
 
   it("consent started via pack-consent is pending via consent-review shim", () => {
-    void ensurePackConsent("pack-shim", () => new Promise(() => {}));
+    void ensurePackConsent("pack-shim", () => new Promise(() => {}), new AbortController().signal);
     expect(isPackConsentPending("pack-shim")).toBe(true);
     expect(isPendingViaShim("pack-shim")).toBe(true);
   });

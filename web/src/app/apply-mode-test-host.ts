@@ -5,7 +5,7 @@ import type { askPluginReview } from "../plugins/plugin-ui";
 import { setLastConsentedModeId } from "./mode-switch-state";
 
 export type ApplyModeTestConfig = {
-  ensureReviewed?: (spec: PluginView | null) => Promise<ConsentReviewResult>;
+  ensureReviewed?: (spec: PluginView | null, signal: AbortSignal) => Promise<ConsentReviewResult>;
   askPluginReview?: typeof askPluginReview;
   mosaic?: Mosaic | null;
   pluginSpecs?: PluginView[];
@@ -14,7 +14,7 @@ export type ApplyModeTestConfig = {
 };
 
 type ApplyModeTestBindings = {
-  setEnsureReviewedOverride: (fn: ((spec: PluginView | null) => Promise<ConsentReviewResult>) | null) => void;
+  setEnsureReviewedOverride: (fn: ((spec: PluginView | null, signal: AbortSignal) => Promise<ConsentReviewResult>) | null) => void;
   setAskPluginReviewOverride: (fn: typeof askPluginReview | null) => void;
   setMosaic: (m: Mosaic | null) => void;
   setPluginSpecs: (specs: PluginView[]) => void;

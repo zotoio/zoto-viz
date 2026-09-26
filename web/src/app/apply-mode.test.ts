@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PluginSandbox } from "../plugins/host";
+import { countPluginSandboxIframes, PluginSandbox } from "../plugins/host";
 import { defaultVizContract } from "../plugins/viz-host";
 import type { ViewMode } from "../core/modes";
 import type { PluginView } from "../plugins/plugin";
 import {
-  abortAllOpenPackConsents,
   ensurePackReviewedOutcome,
   resetPackConsentForTests,
   type ConsentReviewResult,
 } from "./pack-consent";
+import * as pluginModule from "../plugins/plugin";
 import { attachPluginFrontend } from "../plugins/plugin";
 import { askPluginReview } from "../plugins/plugin-ui";
+import { beginModeSwitchAttempt, resetModeSwitchAttemptForTests } from "./mode-switch-attempt";
 import { Select } from "../ui/ui";
 import { VizHud } from "../ui/viz-hud";
 import { applyModeImpl, type ApplyModeHost } from "./apply-mode";
@@ -22,9 +23,7 @@ import {
   initModeSwitchStatusStrip,
 } from "./mode-switch-message";
 import {
-  bumpModeSwitchGeneration,
   getLastConsentedModeId as readLastConsentedModeId,
-  isModeSwitchStale,
   resetModeSwitchStateForTests,
   setLastConsentedModeId,
 } from "./mode-switch-state";
@@ -32,7 +31,16 @@ import {
   beginCoordinatedModeSwitch,
   resetModeSwitchCoordinatorForTests,
 } from "./mode-switch-coordinator";
-import { getPresentDriveTileId, refreshPluginDriveState } from "./present-drive-app";
+import {
+  getPresentDriveTileId,
+  presentDrive,
+  refreshPluginDriveState,
+} from "./present-drive-app";
+import {
+  deliverPluginPresentTick,
+  presentTickStats,
+  resetPresentTickStatsForTests,
+} from "../plugins/viz-present-tick";
 
 const stereoSpec: PluginView = {
   id: "stereo-gram",
@@ -171,7 +179,6 @@ function buildHost(
     modeLabel: (m) => m.label,
     onConsentDeclined: () => {},
     shouldLoadPluginRuntime: () => true,
-    isModeSwitchStale: (gen) => isModeSwitchStale(gen),
     getLastConsentedModeId: () => readLastConsentedModeId(),
     getFallbackKeptModeId: () => "plugin:stereo-gram",
     markModeConsented: (id) => setLastConsentedModeId(id),
@@ -180,6 +187,7 @@ function buildHost(
       if (kind === "declined") return flashModeKeptPrevious(kept);
       return flashModeLoadFailed(declined.label, kept);
     },
+    focusModePicker: () => { modeSel.focus(); },
     bindThisViewSpy: bindThisView,
     vizHud,
     ...overrides,
@@ -193,7 +201,7 @@ function deferConsentForPack(packId: string): {
   resolve: (r: ConsentReviewResult) => void;
 } {
   let settleReview!: (r: ConsentReviewResult) => void;
-  const ensureReviewed: ApplyModeHost["ensureReviewed"] = (spec) =>
+  const ensureReviewed: ApplyModeHost["ensureReviewed"] = (spec, attemptSignal) =>
     ensurePackReviewedOutcome(spec, (signal) => {
       if (spec?.id !== packId) return Promise.resolve("ok");
       return new Promise<ConsentReviewResult>((res) => {
@@ -207,7 +215,7 @@ function deferConsentForPack(packId: string): {
           res(r);
         };
       });
-    });
+    }, attemptSignal);
   return {
     ensureReviewed,
     whenPending: async () => {
@@ -217,14 +225,14 @@ function deferConsentForPack(packId: string): {
   };
 }
 
-function runApply(host: ApplyModeHost, id: string, flags: Record<string, unknown> = {}): number {
-  const { switchGen, proceed } = beginCoordinatedModeSwitch({ channel: "user" }, id, flags);
-  if (proceed) applyModeImpl(host, id, flags, switchGen);
-  return switchGen;
+function runApply(host: ApplyModeHost, id: string, flags: Record<string, unknown> = {}): AbortSignal {
+  const { proceed } = beginCoordinatedModeSwitch({ channel: "user" }, id, flags);
+  const signal = beginModeSwitchAttempt();
+  if (proceed) applyModeImpl(host, id, flags, signal);
+  return signal;
 }
 
-function runApplyUser(host: ApplyModeHost, id: string, flags: Record<string, unknown> = {}): number {
-  abortAllOpenPackConsents();
+function runApplyUser(host: ApplyModeHost, id: string, flags: Record<string, unknown> = {}): AbortSignal {
   return runApply(host, id, flags);
 }
 
@@ -246,6 +254,7 @@ describe("applyModeImpl rollback", () => {
     document.getElementById("apply-mode-test-root")?.replaceChildren();
     document.querySelectorAll("iframe").forEach((el) => el.remove());
     resetModeSwitchStateForTests();
+    resetModeSwitchAttemptForTests();
     resetPackConsentForTests();
     resetModeSwitchCoordinatorForTests();
     clearModeSwitchStatus();
@@ -254,7 +263,7 @@ describe("applyModeImpl rollback", () => {
   it("decline with empty last consented falls back to default kept mode", async () => {
     setLastConsentedModeId("");
     const host = buildHost({
-      ensureReviewed: async () => "declined",
+      ensureReviewed: async (_spec, _signal) => "declined",
     });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
@@ -262,7 +271,7 @@ describe("applyModeImpl rollback", () => {
   });
 
   it("decline: restores picker, HUD, focus, Kept message, present drive (not failure wording)", async () => {
-    const host = buildHost({ ensureReviewed: async () => "declined" });
+    const host = buildHost({ ensureReviewed: async (_spec, _signal) => "declined" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
     expect(host.modeSel.value).toBe("plugin:stereo-gram");
@@ -275,7 +284,7 @@ describe("applyModeImpl rollback", () => {
   });
 
   it("failure: shows Couldn't load, visible status strip, HUD and focus", async () => {
-    const host = buildHost({ ensureReviewed: async () => "failed" });
+    const host = buildHost({ ensureReviewed: async (_spec, _signal) => "failed" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
     expect(host.modeSel.value).toBe("plugin:stereo-gram");
@@ -287,7 +296,7 @@ describe("applyModeImpl rollback", () => {
   });
 
   it("presentDrive stays on previous pack after rollback (reapply refreshes drive)", async () => {
-    const host = buildHost({ ensureReviewed: async () => "declined" });
+    const host = buildHost({ ensureReviewed: async (_spec, _signal) => "declined" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
     expect(getPresentDriveTileId()).toBe("stereo-gram");
@@ -297,8 +306,8 @@ describe("applyModeImpl rollback", () => {
   it("present drive capture order: mosaic failure restores via reapply refresh (not loadTs stub)", async () => {
     const loadTs = vi.fn(async () => {});
     const host = buildHost({
-      ensureReviewed: async () => "ok",
-      loadTsPlugin: loadTs,
+      ensureReviewed: async (_spec, _signal) => "ok",
+      loadTsPlugin: async (spec, signal) => loadTs(spec, signal),
       mosaic: {
         on: true,
         heroPos: "off",
@@ -322,7 +331,7 @@ describe("applyModeImpl rollback", () => {
     const mosaicSetSizeForMode = vi.fn();
     const restoreMosaicSnap = vi.fn();
     const host = buildHost({
-      ensureReviewed: async () => "ok",
+      ensureReviewed: async (_spec, _signal) => "ok",
       mosaic: { on: true, heroPos: "left", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
       mosaicShouldResize: () => true,
       mosaicHasTile: () => false,
@@ -342,7 +351,7 @@ describe("applyModeImpl rollback", () => {
     const setPaneView = vi.fn(() => true);
     const applyMosaicModeVisuals = vi.fn();
     const host = buildHost({
-      ensureReviewed: async () => "declined",
+      ensureReviewed: async (_spec, _signal) => "declined",
       mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setPaneView, setSize: vi.fn() } as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: setPaneView,
@@ -361,12 +370,12 @@ describe("applyModeImpl rollback", () => {
     const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
     const loadTs = vi.fn(async () => {});
     const host = buildHost({
-      ensureReviewed: async (spec) => {
+      ensureReviewed: async (spec, _signal) => {
         if (spec?.id === "roto-proto") return bPending;
         if (spec?.id === "packet-tunnel") return "ok";
         return "ok";
       },
-      loadTsPlugin: loadTs,
+      loadTsPlugin: async (spec, signal) => loadTs(spec, signal),
     });
     runApply(host, "plugin:roto-proto");
     runApplyUser(host, "plugin:packet-tunnel");
@@ -383,7 +392,7 @@ describe("applyModeImpl rollback", () => {
   });
 
   it("rollback restores getLiveMode to kept mode", async () => {
-    const host = buildHost({ ensureReviewed: async () => "declined" });
+    const host = buildHost({ ensureReviewed: async (_spec, _signal) => "declined" });
     let live = "plugin:stereo-gram";
     host.getLiveMode = () => live;
     host.setLiveMode = (id) => { live = id; };
@@ -395,7 +404,7 @@ describe("applyModeImpl rollback", () => {
   it("mosaic failure rollback returns before applyMosaicModeVisuals", async () => {
     const applyMosaicModeVisuals = vi.fn();
     const host = buildHost({
-      ensureReviewed: async () => "ok",
+      ensureReviewed: async (_spec, _signal) => "ok",
       applyMosaicModeVisuals,
       mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
@@ -407,7 +416,7 @@ describe("applyModeImpl rollback", () => {
   });
 
   it("aborted consent does not rollback or show Kept message", async () => {
-    const host = buildHost({ ensureReviewed: async () => "aborted" });
+    const host = buildHost({ ensureReviewed: async (_spec, _signal) => "aborted" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
     expect(host.modeSel.value).toBe("plugin:packet-tunnel");
@@ -416,7 +425,7 @@ describe("applyModeImpl rollback", () => {
 
   it("ensureReviewed rejection rolls back with failure path", async () => {
     const host = buildHost({
-      ensureReviewed: async () => { throw new Error("dialog dismissed"); },
+      ensureReviewed: async (_spec, _signal) => { throw new Error("dialog dismissed"); },
     });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
@@ -431,7 +440,7 @@ describe("applyModeImpl rollback", () => {
     const applySolo = vi.fn();
     const host = buildHost({
       ensureReviewed: consent.ensureReviewed,
-      loadTsPlugin: loadTs,
+      loadTsPlugin: async (spec, signal) => loadTs(spec, signal),
       syncPluginSky: syncSky,
       applySoloModeVisuals: applySolo,
     });
@@ -467,13 +476,39 @@ describe("applyModeImpl rollback", () => {
     });
   });
 
+  it("user switch during consent focuses picker with no status announcement", async () => {
+    const consent = deferConsentForPack("packet-tunnel");
+    const host = buildHost({ ensureReviewed: consent.ensureReviewed });
+    runApply(host, "plugin:packet-tunnel");
+    await consent.whenPending();
+    runApplyUser(host, "plugin:stereo-gram");
+    await flushMicrotasks();
+    expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
+    expect(document.getElementById("modeSwitchStatus")?.textContent).toBe("");
+  });
+
+  it("held scene: last consented pack keeps present ticks while B consent pending", async () => {
+    resetPresentTickStatsForTests();
+    const consent = deferConsentForPack("packet-tunnel");
+    const host = buildHost({ ensureReviewed: consent.ensureReviewed });
+    runApply(host, "plugin:packet-tunnel");
+    await consent.whenPending();
+    const stereoBefore = presentTickStats().byTile["stereo-gram"] ?? 0;
+    deliverPluginPresentTick(presentDrive, 16);
+    deliverPluginPresentTick(presentDrive, 32);
+    expect(presentTickStats().byTile["packet-tunnel"] ?? 0).toBe(0);
+    expect(presentTickStats().byTile["stereo-gram"] ?? 0).toBeGreaterThan(stereoBefore);
+    consent.resolve("declined");
+    await flushMicrotasks();
+  });
+
   it("user switch while B consent open closes dialog; return to B shows one dialog", async () => {
     const host = buildHost({
-      ensureReviewed: (spec) =>
+      ensureReviewed: (spec, attemptSignal) =>
         ensurePackReviewedOutcome(spec, (signal) => {
           if (spec?.id !== "packet-tunnel") return Promise.resolve("ok");
-          return askPluginReview(spec, { signal }).then((kind) => (kind ? "ok" : "declined"));
-        }),
+          return askPluginReview(spec, { signal }).then((kind) => (signal.aborted ? "aborted" : (kind ? "ok" : "declined")));
+        }, attemptSignal),
     });
     runApply(host, "plugin:packet-tunnel");
     await vi.waitFor(() => {
@@ -486,19 +521,18 @@ describe("applyModeImpl rollback", () => {
     await vi.waitFor(() => {
       expect(document.querySelectorAll(".modal.ask")).toHaveLength(1);
     });
-    abortAllOpenPackConsents();
     await flushMicrotasks();
   });
 
-  it("stale load: real attachPluginFrontend skips when generation advances before load", async () => {
+  it("abort before load skips real attachPluginFrontend", async () => {
     const consent = deferConsentForPack("packet-tunnel");
     const sandbox = new PluginSandbox();
     const loadSpy = vi.spyOn(sandbox, "loadModule");
     const host = buildHost({
       ensureReviewed: consent.ensureReviewed,
-      loadTsPlugin: async (spec, switchGen) => {
-        bumpModeSwitchGeneration();
-        await attachPluginFrontend(sandbox, spec, {}, switchGen, isModeSwitchStale);
+      loadTsPlugin: async (spec, signal) => {
+        beginModeSwitchAttempt();
+        await attachPluginFrontend(sandbox, spec, {}, signal);
       },
     });
     runApply(host, "plugin:packet-tunnel");
@@ -510,7 +544,7 @@ describe("applyModeImpl rollback", () => {
 
   it("loadTsPlugin failure rolls back with Couldn't load message", async () => {
     const host = buildHost({
-      ensureReviewed: async () => "ok",
+      ensureReviewed: async (_spec, _signal) => "ok",
       loadTsPlugin: async () => { throw new Error("boom"); },
     });
     runApply(host, "plugin:packet-tunnel");
@@ -523,7 +557,7 @@ describe("applyModeImpl rollback", () => {
     let resolveB!: (r: ConsentReviewResult) => void;
     const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
     const host = buildHost({
-      ensureReviewed: async (spec) => {
+      ensureReviewed: async (spec, _signal) => {
         if (spec?.id === "roto-proto") return bPending;
         if (spec?.id === "packet-tunnel") return "failed";
         return "ok";
@@ -538,6 +572,65 @@ describe("applyModeImpl rollback", () => {
     resolveB("ok");
     await flushMicrotasks();
     expect(host.modeSel.value).toBe("plugin:stereo-gram");
+  });
+});
+
+describe("mode switch cleanup counts", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    document.querySelectorAll("iframe[sandbox]").forEach((el) => el.remove());
+    vi.useRealTimers();
+  });
+
+  it("20 fast A,B,C switches with slow sky and real loadTs leave one sandbox iframe", async () => {
+    const sandbox = new PluginSandbox();
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      text: async () => "export default function onPresent() {}",
+    })));
+    vi.spyOn(pluginModule, "fetchPluginSky").mockImplementation(
+      (_id, _hash, signal) => new Promise((resolve, reject) => {
+        const t = setTimeout(() => {
+          if (signal?.aborted) reject(new DOMException("Aborted", "AbortError"));
+          else resolve("#version 300 es\nprecision highp float;out vec4 o;uniform float uTime,uOpacity,uBright;void main(){o=vec4(0.2);}");
+        }, 40);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(t);
+          reject(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+      }),
+    );
+    const host = buildHost({
+      ensureReviewed: async (_spec, _signal) => "ok",
+      loadTsPlugin: async (spec, signal) => {
+        await attachPluginFrontend(sandbox, spec, {}, signal);
+      },
+      syncPluginSky: async (_spec, signal) => {
+        await pluginModule.fetchPluginSky("packet-tunnel", "tunnel-hash", signal).catch(() => {});
+      },
+    });
+    const modes = ["plugin:stereo-gram", "plugin:packet-tunnel", "plugin:roto-proto"];
+    for (let i = 0; i < 20; i++) {
+      runApplyUser(host, modes[i % 3]!);
+      await Promise.resolve();
+      await Promise.resolve();
+      vi.advanceTimersByTime(5);
+    }
+    vi.advanceTimersByTime(200);
+    await vi.waitFor(() => {
+      expect(countPluginSandboxIframes()).toBeLessThanOrEqual(1);
+    });
+    runApplyUser(host, "plugin:packet-tunnel");
+    await flushMicrotasks();
+    vi.advanceTimersByTime(200);
+    await vi.waitFor(() => {
+      expect(countPluginSandboxIframes()).toBe(1);
+    });
   });
 });
 

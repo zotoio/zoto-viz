@@ -275,10 +275,18 @@ export function pluginSkyPath(id: string, hash?: string): string {
 }
 
 /** Fetch `/api/plugins/<id>/sky/fragment.glsl` (403 without consent). */
-export async function fetchPluginSky(id: string, hash?: string): Promise<string> {
+export async function fetchPluginSky(
+  id: string,
+  hash?: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const r = await apiFetch(pluginSkyPath(id, hash));
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   if (!r.ok) throw new Error(`plugin sky ${r.status}`);
-  return r.text();
+  const text = await r.text();
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  return text;
 }
 
 /** Fetch `/plugins/<id>/module.js` and load it in the iframe sandbox. */
@@ -286,17 +294,25 @@ export async function attachPluginFrontend(
   sandbox: PluginSandbox,
   spec: PluginView | null,
   config: Record<string, string> = {},
-  switchGen?: number,
-  isStale?: (generation: number) => boolean,
+  signal?: AbortSignal,
 ): Promise<boolean> {
-  if (switchGen !== undefined && isStale?.(switchGen)) return false;
+  if (signal?.aborted) return false;
   if (!pluginHasFrontend(spec)) {
     sandbox.unload();
     return false;
   }
-  if (switchGen !== undefined && isStale?.(switchGen)) return false;
-  await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
-  return true;
+  const dispose = () => { sandbox.unload(); };
+  signal?.addEventListener("abort", dispose, { once: true });
+  try {
+    await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
+    if (signal?.aborted) {
+      sandbox.unload();
+      return false;
+    }
+    return true;
+  } finally {
+    signal?.removeEventListener("abort", dispose);
+  }
 }
 
 export function vizContractFor(spec: PluginView | null | undefined): VizPluginContract | undefined {

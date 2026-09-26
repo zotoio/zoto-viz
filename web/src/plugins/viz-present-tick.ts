@@ -35,8 +35,23 @@ export function presentDriveBindingForPlugin(
   };
 }
 
+let presentTickDeliveries = 0;
+let presentTickByTile: Record<string, number> = {};
+
+export function resetPresentTickStatsForTests(): void {
+  presentTickDeliveries = 0;
+  presentTickByTile = {};
+}
+
+export function presentTickStats(): { total: number; byTile: Record<string, number> } {
+  return { total: presentTickDeliveries, byTile: { ...presentTickByTile } };
+}
+
 export function deliverPluginPresentTick(binding: PresentDriveBinding | null, frameMs: number): void {
   if (!binding?.contract?.presentTick) return;
+  presentTickDeliveries += 1;
+  const tile = binding.tileId || "_";
+  presentTickByTile[tile] = (presentTickByTile[tile] ?? 0) + 1;
   binding.sandbox.deliverPresentTick(
     frameMs,
     binding.tileId,

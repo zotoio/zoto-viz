@@ -7,9 +7,13 @@ import {
   resetModeSwitchCoordinatorForTests,
   settleConsentAndDrainAuto,
 } from "./mode-switch-coordinator";
-import { getModeSwitchGeneration, resetModeSwitchStateForTests } from "./mode-switch-state";
+import { resetModeSwitchStateForTests } from "./mode-switch-state";
 import {
-  abortAllOpenPackConsents,
+  beginModeSwitchAttempt,
+  getActiveModeSwitchSignal,
+  resetModeSwitchAttemptForTests,
+} from "./mode-switch-attempt";
+import {
   ensurePackConsent,
   isPackConsentPending,
   resetPackConsentForTests,
@@ -20,20 +24,21 @@ describe("mode-switch-coordinator", () => {
     resetModeSwitchCoordinatorForTests();
     resetModeSwitchStateForTests();
     resetPackConsentForTests();
+    resetModeSwitchAttemptForTests();
   });
 
-  it("does not bump generation when queuing automatic switch during consent", () => {
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
-    const gen0 = getModeSwitchGeneration();
+  it("queued automatic switch does not replace the active attempt signal", () => {
+    const attemptSignal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), attemptSignal);
     for (let i = 0; i < 5; i++) {
       beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, `plugin:x${i}`, {});
     }
-    expect(getModeSwitchGeneration()).toBe(gen0);
-    abortAllOpenPackConsents();
+    expect(getActiveModeSwitchSignal()).toBe(attemptSignal);
   });
 
   it("queues dream-cycle while consent is open and does not proceed", () => {
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal);
     expect(isPackConsentPending()).toBe(true);
     const { proceed } = beginCoordinatedModeSwitch(
       { channel: "automatic", auto: "dream-cycle" },
@@ -45,28 +50,33 @@ describe("mode-switch-coordinator", () => {
   });
 
   it("replaces older queued automatic switch with a newer one", () => {
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal);
     beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:a", {});
     beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:c", {});
     expect(getPendingAutoSwitch()?.modeId).toBe("plugin:c");
   });
 
   it("user switch clears queued automatic switch", () => {
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal);
     beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:c", {});
     beginCoordinatedModeSwitch({ channel: "user" }, "plugin:c", {});
     expect(getPendingAutoSwitch()).toBeNull();
   });
 
-  it("user switch aborts open pack consent silently", async () => {
-    const pending = ensurePackConsent("pack-b", () => new Promise(() => {}));
-    beginCoordinatedModeSwitch({ channel: "user" }, "plugin:other", {});
+  it("user switch aborts open pack consent via attempt signal", async () => {
+    const first = beginModeSwitchAttempt();
+    const pending = ensurePackConsent("pack-b", () => new Promise(() => {}), first);
+    beginModeSwitchAttempt();
     await expect(pending).resolves.toBe("aborted");
+    await Promise.resolve();
     expect(isPackConsentPending()).toBe(false);
   });
 
   it("automatic switch never aborts open pack consent", () => {
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal);
     expect(isPackConsentPending()).toBe(true);
     const { proceed } = beginCoordinatedModeSwitch(
       { channel: "automatic", auto: "dream-cycle" },
@@ -75,18 +85,18 @@ describe("mode-switch-coordinator", () => {
     );
     expect(proceed).toBe(false);
     expect(isPackConsentPending()).toBe(true);
-    abortAllOpenPackConsents();
+    expect(signal.aborted).toBe(false);
   });
 
   it("drops queued dream-cycle and resets pulse when consent declines", () => {
     const reset = vi.fn();
     registerDreamPulseReset(reset);
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal);
     beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:next", {});
     settleConsentAndDrainAuto("declined");
     expect(getPendingAutoSwitch()).toBeNull();
     expect(reset).toHaveBeenCalled();
-    abortAllOpenPackConsents();
   });
 
   it("restarts dream pulse interval after consent settles with no queued auto", () => {
@@ -99,33 +109,35 @@ describe("mode-switch-coordinator", () => {
   it("drops queued dream-cycle and resets pulse when consent accepts", () => {
     const reset = vi.fn();
     registerDreamPulseReset(reset);
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal);
     beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:next", {});
     expect(getPendingAutoSwitch()?.modeId).toBe("plugin:next");
     settleConsentAndDrainAuto("ok");
     expect(getPendingAutoSwitch()).toBeNull();
     expect(reset).toHaveBeenCalled();
-    abortAllOpenPackConsents();
   });
 
   it("runs profile-restore once after decline only", () => {
     const run = vi.fn();
     registerAutoSwitchRunner(run);
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal);
     beginCoordinatedModeSwitch({ channel: "automatic", auto: "profile-restore" }, "plugin:topology", {});
     settleConsentAndDrainAuto("declined");
     expect(run).toHaveBeenCalledTimes(1);
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal2 = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal2);
     beginCoordinatedModeSwitch({ channel: "automatic", auto: "profile-restore" }, "plugin:topology", {});
     settleConsentAndDrainAuto("ok");
     expect(run).toHaveBeenCalledTimes(1);
-    abortAllOpenPackConsents();
   });
 
   it("does not run profile-restore after accept", () => {
     const run = vi.fn();
     registerAutoSwitchRunner(run);
-    void ensurePackConsent("pack-b", () => new Promise(() => {}));
+    const signal = beginModeSwitchAttempt();
+    void ensurePackConsent("pack-b", () => new Promise(() => {}), signal);
     beginCoordinatedModeSwitch({ channel: "automatic", auto: "profile-restore" }, "plugin:topology", {});
     settleConsentAndDrainAuto("ok");
     expect(run).not.toHaveBeenCalled();

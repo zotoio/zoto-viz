@@ -1,10 +1,5 @@
 import type { ConsentReviewResult } from "./pack-consent";
-import { abortAllOpenPackConsents, isPackConsentPending } from "./pack-consent";
-import {
-  bumpModeSwitchGeneration,
-  getModeSwitchGeneration,
-  isModeSwitchStale,
-} from "./mode-switch-state";
+import { isPackConsentPending } from "./pack-consent";
 import type { ApplyModeFlags } from "./apply-mode";
 
 export type AutoSwitchKind = "dream-cycle" | "profile-restore";
@@ -45,32 +40,28 @@ export function registerAutoSwitchRunner(fn: (pending: PendingAutoSwitch) => voi
 }
 
 export type CoordinatorRun = {
-  switchGen: number;
   proceed: boolean;
 };
 
 /**
- * Gate every mode switch. Returns generation + whether to call `applyModeImpl` now.
+ * Gate every mode switch. Queued automatic switches do not create an attempt.
  */
 export function beginCoordinatedModeSwitch(
   source: ModeSwitchSource,
-  modeId: string,
+  _modeId: string,
   flags: ApplyModeFlags = {},
 ): CoordinatorRun {
   if (source.channel === "user") {
-    const switchGen = bumpModeSwitchGeneration();
-    abortAllOpenPackConsents();
     pendingAutoSwitch = null;
-    return { switchGen, proceed: true };
+    return { proceed: true };
   }
 
   if (isPackConsentPending()) {
-    pendingAutoSwitch = { auto: source.auto, modeId, flags };
-    return { switchGen: getModeSwitchGeneration(), proceed: false };
+    pendingAutoSwitch = { auto: source.auto, modeId: _modeId, flags };
+    return { proceed: false };
   }
 
-  const switchGen = bumpModeSwitchGeneration();
-  return { switchGen, proceed: true };
+  return { proceed: true };
 }
 
 /** After consent settles: drop queued dream-cycle; maybe run profile restore once. */
@@ -98,5 +89,3 @@ export function settleConsentAndDrainAuto(
   }
   if (result === "ok" || result === "declined" || result === "failed") dreamPulseReset?.();
 }
-
-export { getModeSwitchGeneration, isModeSwitchStale };

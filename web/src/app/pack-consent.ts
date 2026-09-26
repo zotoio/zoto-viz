@@ -5,7 +5,7 @@ export type ConsentReviewResult = "ok" | "declined" | "failed" | "aborted";
 
 type PendingEntry = {
   promise: Promise<ConsentReviewResult>;
-  abort: () => void;
+  signal: AbortSignal;
 };
 
 /** Single in-flight consent per pack id (session-scoped). PR #42 lands the same map here. */
@@ -16,14 +16,8 @@ export function isPackConsentPending(packId?: string | null): boolean {
   return pendingByPackId.size > 0;
 }
 
-/** Abort every open consent (user mode switch). Resolves waiters with `aborted`. */
-export function abortAllOpenPackConsents(): void {
-  for (const entry of pendingByPackId.values()) entry.abort();
-  pendingByPackId.clear();
-}
-
 export function resetPackConsentForTests(): void {
-  abortAllOpenPackConsents();
+  pendingByPackId.clear();
 }
 
 /**
@@ -33,32 +27,35 @@ export function resetPackConsentForTests(): void {
 export async function ensurePackConsent(
   packId: string | null | undefined,
   review: PackReviewRunner,
+  signal: AbortSignal,
 ): Promise<ConsentReviewResult> {
-  if (!packId) return review(new AbortController().signal);
+  if (signal.aborted) return "aborted";
+  if (!packId) return review(signal);
   const existing = pendingByPackId.get(packId);
-  if (existing) return existing.promise;
+  if (existing && existing.signal === signal) return existing.promise;
 
   let settle!: (r: ConsentReviewResult) => void;
   const promise = new Promise<ConsentReviewResult>((resolve) => { settle = resolve; });
   let done = false;
+  const entry: PendingEntry = { promise, signal };
+
   const finish = (r: ConsentReviewResult) => {
     if (done) return;
     done = true;
-    settle(r);
-  };
-  const ac = new AbortController();
-  const abort = () => {
-    ac.abort();
-    finish("aborted");
+    settle(signal.aborted ? "aborted" : r);
+    if (pendingByPackId.get(packId) === entry) pendingByPackId.delete(packId);
   };
 
-  const entry: PendingEntry = { promise, abort };
   pendingByPackId.set(packId, entry);
 
-  void review(ac.signal)
+  const onAbort = () => finish("aborted");
+  signal.addEventListener("abort", onAbort, { once: true });
+
+  void review(signal)
     .then((r) => finish(r))
-    .catch(() => finish("failed"))
+    .catch(() => finish(signal.aborted ? "aborted" : "failed"))
     .finally(() => {
+      signal.removeEventListener("abort", onAbort);
       if (pendingByPackId.get(packId) === entry) pendingByPackId.delete(packId);
     });
 
@@ -69,27 +66,24 @@ export type PackReviewRunner = (signal: AbortSignal) => Promise<ConsentReviewRes
 
 /**
  * Full tri-state outcome for mode switch / rollback (#37).
- * PR #42 adds `ensurePackReviewed(spec): Promise<boolean>` with server grant inlined here;
- * until then the host passes the review runner from `main.ts`.
+ * PR #42: `ensurePackReviewed(spec, review?, signal?)` — optional attempt signal on rebase.
  */
 export async function ensurePackReviewedOutcome(
   spec: PluginView | null,
   review: PackReviewRunner,
+  signal: AbortSignal,
 ): Promise<ConsentReviewResult> {
   if (!spec || !pluginNeedsReview(spec)) return "ok";
   if (spec.consent) return "ok";
-  return ensurePackConsent(spec.id, review);
+  return ensurePackConsent(spec.id, review, signal);
 }
 
-/**
- * PR #42 contract (`1f8f785`): server-checked grant, one pending promise per pack id.
- * After #42 merges, move autoconsent / `askPluginReview` / `grantPluginConsent` into this
- * function and delete the `review` parameter from `ensurePackReviewedOutcome`.
- */
 export async function ensurePackReviewed(
   spec: PluginView | null,
   review: PackReviewRunner,
+  signal?: AbortSignal,
 ): Promise<boolean> {
-  const outcome = await ensurePackReviewedOutcome(spec, review);
+  const sig = signal ?? new AbortController().signal;
+  const outcome = await ensurePackReviewedOutcome(spec, review, sig);
   return outcome === "ok";
 }
