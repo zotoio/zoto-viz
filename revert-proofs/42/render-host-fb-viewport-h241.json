@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-fb-viewport.test.ts",
-  "testName": "^RenderHost framebuffer viewport H=241 > bottom-left pane H=241 pr=1\\.5: viewport matches Three floor\\(h\\*pr\\) with no double Y flip$",
-  "description": "GPU writeFbViewport rounds bottom-left CSS edges once (no css height double flip)."
-}

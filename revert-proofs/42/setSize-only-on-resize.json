@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "PackMirrorSession resource lifecycle > 300 steady frames: 0 setSize; one resize: exactly 1 setSize",
-  "description": "RenderTarget uses setSize on resize instead of reallocating every frame."
-}

@@ -41,6 +41,22 @@ export function asCssRect(r: CssRectLoose): CssRect {
   return r as CssRect;
 }
 
+export function viewMutAsDeviceRect(m: DeviceRectMut): DeviceRect {
+  return m as DeviceRect;
+}
+
+export function viewMutAsGlRect(m: GlRectMut): GlRect {
+  return m as GlRect;
+}
+
+export function isDeviceRect(vp: { __unit?: string }): vp is DeviceRect {
+  return vp.__unit === "device";
+}
+
+export function isGlRect(vp: { __unit?: string }): vp is GlRect {
+  return vp.__unit === "gl";
+}
+
 /** Host viewBox is bottom-left CSS; converters expect top-left CSS (y down). */
 export function cssRectTopFromBottomLeft(
   box: CssRectLoose,
@@ -51,10 +67,6 @@ export function cssRectTopFromBottomLeft(
 
 export function deviceRect(x: number, y: number, w: number, h: number): DeviceRect {
   return { x, y, w, h, __unit: "device" };
-}
-
-export function glRect(x: number, y: number, w: number, h: number): GlRect {
-  return { x, y, w, h, __unit: "gl" };
 }
 
 function writeDeviceEdgesFromCss(

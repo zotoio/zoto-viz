@@ -9,7 +9,7 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
-import { getSurfaceLetterboxFill, resetSurfaceLetterboxFillCache, type SurfaceLetterboxFill } from "./letterbox-fill";
+import { getSurfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -37,7 +37,24 @@ import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
-import type { DeviceRect } from "./pack-mirror-rect";
+import {
+  asCanvasDeviceHeight,
+  deviceRect,
+  type DeviceRect,
+  type GlRect,
+  type GlRectMut,
+  isDeviceRect,
+  toGlRectInto,
+} from "./pack-mirror-rect";
+import {
+  applyHostPointsMaterialSize,
+  hostShaderResolutionUniform,
+} from "./host-three-pixel-materials";
+import {
+  devicePxRatioFromNumber,
+  devicePxRatioFromWindow,
+  devicePxRatioNumber,
+} from "./render-host-device-px-ratio";
 import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
@@ -592,6 +609,7 @@ function glowMaterial(): THREE.ShaderMaterial {
       uAmt: { value: 1 },
       uMode: { value: 0 },
       uAdditive: { value: 1 },
+      uResolution: { value: new THREE.Vector2(1, 1) },
     },
     vertexShader: GLOW_VERT,
     fragmentShader: GLOW_FRAG,
@@ -1057,6 +1075,7 @@ export class NetScene implements HostedView {
   private readonly inputEl: HTMLElement;
   /** viewport of the last present() through the host, framebuffer pixels */
   private lastVp: Viewport | null = null;
+  private readonly glVpScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
   /** WebGL clear colour this scene wants (applied at present time so panes sharing a context differ) */
   private clearHex: number;
   readonly labelLayer: LabelLayer;
@@ -1277,7 +1296,6 @@ export class NetScene implements HostedView {
     this.satellite = !!opts.satellite;
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
-    this.invalidateSurfaceLetterboxFill();
     if (this.host) {
       // shared context: the host's canvas covers the wall; this pane is a transparent window onto it
       this.renderer = this.host.renderer;
@@ -1287,12 +1305,14 @@ export class NetScene implements HostedView {
       container.classList.add("hosted");
       this.host.add(this);
     } else {
-      const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
-      this.baseDpr = dpr;
-      this.lastTuneDpr = dpr;
+      const capped = devicePxRatioFromWindow();
+      this.baseDpr = this.satellite
+        ? Math.min(1, devicePxRatioNumber(capped))
+        : devicePxRatioNumber(capped);
+      this.lastTuneDpr = this.baseDpr;
       this.renderer = ownRenderer(container, {
         satellite: this.satellite,
-        dpr,
+        dpr: this.baseDpr,
         clearHex: this.clearHex,
         onLost: () => this.hostContextLost(),
         onRestored: () => this.hostContextRestored(),
@@ -1596,10 +1616,6 @@ export class NetScene implements HostedView {
     return getSurfaceLetterboxFill(this.clearHex, 0.25);
   }
 
-  private invalidateSurfaceLetterboxFill(): void {
-    resetSurfaceLetterboxFillCache();
-  }
-
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
   private present(): void {
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
@@ -1647,21 +1663,19 @@ export class NetScene implements HostedView {
     if (this.software) {
       const canvas = this.host?.canvas ?? (this.renderer instanceof SoftwareGpu ? this.renderer.domElement : null);
       const ctx = canvas?.getContext("2d");
-      const devVp = this.lastVp && (this.lastVp as DeviceRect).__unit === "device"
-        ? (this.lastVp as DeviceRect)
-        : null;
+      const devVp = this.lastVp && isDeviceRect(this.lastVp) ? this.lastVp : null;
       if (ctx && canvas && devVp && this.canvasProbe.sample(ctx, canvas, devVp)) this.paneFps.mark(now);
       return;
     }
     const gl = (this.host?.gl ?? (this.renderer as THREE.WebGLRenderer).getContext()) as WebGL2RenderingContext | null;
     if (!gl) return;
-    const vp = (this.lastVp ?? {
-      x: 0,
-      y: 0,
-      w: gl.drawingBufferWidth,
-      h: gl.drawingBufferHeight,
-      __unit: "gl",
-    }) as import("./pack-mirror-rect").GlRect;
+    let vp: GlRect;
+    if (this.lastVp && this.lastVp.__unit === "gl") {
+      vp = this.lastVp;
+    } else {
+      const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      vp = toGlRectInto(dev, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);
+    }
     this.changeProbe.tick(gl, vp, this.lastFrameTs || now, (ts) => this.paneFps.mark(ts));
   }
 
@@ -2070,7 +2084,16 @@ export class NetScene implements HostedView {
     const host = this.satellite ? this.container : document.documentElement;
     host.style.setProperty("--label-scale", String(a.labelWeight));
     host.style.setProperty("--label-fw", String(Math.round(400 + 350 * Math.max(0, Math.min(1, a.labelWeight)))));
-    (this.particles.material as THREE.PointsMaterial).size = 3.2 * a.edgeWeight * (t?.partSize ?? a.partSize);
+    const partCssSize = 3.2 * a.edgeWeight * (t?.partSize ?? a.partSize);
+    if (this.host) {
+      applyHostPointsMaterialSize(
+        this.particles.material as THREE.PointsMaterial,
+        partCssSize,
+        this.host.devicePxRatio,
+      );
+    } else {
+      (this.particles.material as THREE.PointsMaterial).size = partCssSize;
+    }
     (this.lines.material as THREE.LineBasicMaterial).opacity = Math.min(1, 0.5 + 0.5 * a.edgeWeight);
     this.syncGlow();
   }
@@ -2084,6 +2107,14 @@ export class NetScene implements HostedView {
     u.uSpeed.value = a.edgeGlowSpeed;
     u.uMode.value = a.edgeGlow === "pulse" ? 1 : 0;
     u.uAdditive.value = this.additiveMarks() ? 1 : 0;
+    if (this.host) {
+      hostShaderResolutionUniform(
+        this.host.layoutCssWidth,
+        this.host.layoutCssHeight,
+        this.host.devicePxRatio,
+        u.uResolution.value,
+      );
+    }
   }
 
   private audioLive(): boolean {
@@ -2532,12 +2563,10 @@ export class NetScene implements HostedView {
       const k = Math.min(1, this.pulseBass);
       painted = this.mixHex(baseClear, s.rim, (0.08 + 0.52 * k) * op);
       this.clearHex = painted;
-      this.invalidateSurfaceLetterboxFill();
       if (fog) fog.color.setHex(this.mixHex(baseFog, s.rim, (0.06 + 0.42 * k) * op));
       this.backdrop.setColors(rim, painted);
     } else {
       this.clearHex = baseClear;
-      this.invalidateSurfaceLetterboxFill();
       if (fog) fog.color.setHex(baseFog);
       this.backdrop.setColors(rim, baseClear);
     }
@@ -3596,7 +3625,16 @@ export class NetScene implements HostedView {
       this.rebuildParticles();
     }
     if (this.tune.k > 0.001 || this.lastTuneK > 0.001) {
-      (this.particles.material as THREE.PointsMaterial).size = 3.2 * this.anim.edgeWeight * this.tune.partSize;
+      const partCssSize = 3.2 * this.anim.edgeWeight * this.tune.partSize;
+      if (this.host) {
+        applyHostPointsMaterialSize(
+          this.particles.material as THREE.PointsMaterial,
+          partCssSize,
+          this.host.devicePxRatio,
+        );
+      } else {
+        (this.particles.material as THREE.PointsMaterial).size = partCssSize;
+      }
       this.syncGlow();
     }
     this.lastTuneK = this.tune.k;

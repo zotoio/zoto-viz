@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
+index b5943ba..89b5fbf 100644
+--- a/web/src/graph/pack-mirror-gl.ts
++++ b/web/src/graph/pack-mirror-gl.ts
+@@ -287,6 +287,7 @@ export class PackMirrorRegistry {
+       }
+     }
+     for (const [key, scope] of scopes) {
++      this.allocationCount += 1;
+       if (scope.tileCount < 2) continue;
+       if (!this.sessions.has(key)) {
+         this.sessions.set(key, new PackMirrorSession());

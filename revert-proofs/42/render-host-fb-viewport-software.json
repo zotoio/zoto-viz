@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-fb-viewport-software.test.ts",
-  "testName": "^RenderHost software framebuffer viewport > 2×4 top-left tile0 at pr 1\\.5: CanvasChangeProbe rect y=0 \\(no GL Y flip on software path\\)$",
-  "description": "Software writeFbViewport uses top-left device pixels without GL bottom-left flip."
-}

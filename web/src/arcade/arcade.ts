@@ -8,6 +8,7 @@ import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame, PaneFps } from "../core/fps";
 import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
+import { devicePxRatioFromWindow, devicePxRatioNumber } from "../graph/render-host-device-px-ratio";
 
 /**
  * Shared machinery for the arcade views (NetPong's siblings: Invaders, Command, Frogger). Each is a standalone
@@ -478,7 +479,8 @@ export abstract class ArcadeView {
   // ---- frame
 
   protected fit(): void {
-    const W = this.container.clientWidth, H = this.container.clientHeight, dpr = Math.min(1.5, devicePixelRatio || 1);
+    const W = this.container.clientWidth, H = this.container.clientHeight;
+    const dpr = devicePxRatioNumber(devicePxRatioFromWindow());
     if (W === this.W && H === this.H && dpr === this.dpr) return;
     this.W = W; this.H = H; this.dpr = dpr;
     this.canvas.width = Math.round(W * dpr);

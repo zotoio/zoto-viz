@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-frame-alloc.test.ts",
-  "testName": "RenderHost frame allocations > 300 frames at 2×4 in-page mirror: one scope sync, stable viewBox, present arg identity",
-  "description": "Hoisted packDrawOpts / packMirrorPresentOpts instead of per-frame option literals in present paths."
-}

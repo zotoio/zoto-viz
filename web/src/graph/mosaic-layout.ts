@@ -210,10 +210,11 @@ export function placePaneTileView(ids: string[], fromSlot: string, viewId: strin
   return next;
 }
 
-/** Drawer / wall pane pick: allocate another tile slot for the same catalog view when needed. */
+/** @deprecated Use placePaneTileView / movePaneTileView via mosaic view pick helpers. */
 export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
   if (!viewId || fromSlot === viewId) return ids;
-  if (mosaicTileViewId(fromSlot) === viewId) return ids;
+  const j = ids.findIndex((id, k) => k !== ids.indexOf(fromSlot) && mosaicTileViewId(id) === viewId);
+  if (j >= 0) return movePaneTileView(ids, fromSlot, ids[j]!);
   return placePaneTileView(ids, fromSlot, viewId);
 }
 

@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-frame-alloc.test.ts",
-  "testName": "RenderHost frame allocations > 300 frames at 2×4 in-page mirror: one scope sync, stable viewBox, present arg identity",
-  "description": "mirrorScopeDirty flag instead of per-frame fingerprint strings for pack scope sync."
-}

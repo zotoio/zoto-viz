@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/viz-frame-tick.test.ts",
-  "testName": "^deliverVizPluginFrame > mosaic with demo + TS plugin: exactly one sandbox\\.frame per frame over 10 frames$",
-  "description": "Mosaic demo coalesce must not skip sandbox.frame for TS plugin tiles."
-}

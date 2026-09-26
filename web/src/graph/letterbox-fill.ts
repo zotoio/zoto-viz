@@ -19,8 +19,13 @@ export const letterboxFillStats = {
     this.regexMatchCalls = 0;
     this.randomCalls = 0;
     this.stringAllocations = 0;
+    cachedClearHex = -1;
+    cachedFill = null;
   },
 };
+
+let cachedClearHex = -1;
+let cachedFill: SurfaceLetterboxFill | null = null;
 
 /** Fixed-seed PRNG for repeatable grain tiles (Mulberry32). */
 function mulberry32(seed: number): () => number {
@@ -44,22 +49,24 @@ function buildGrainPattern(hex: number, grain: number): CanvasPattern | null {
   const r = (hex >> 16) & 255;
   const g = (hex >> 8) & 255;
   const b = hex & 255;
+  letterboxFillStats.stringAllocations += 1;
   ctx.fillStyle = `rgb(${r},${g},${b})`;
   ctx.fillRect(0, 0, 64, 64);
   const rand = mulberry32((hex ^ 0x5a5a5a5a) >>> 0);
   const n = 180;
   for (let i = 0; i < n; i++) {
+    letterboxFillStats.randomCalls += 1;
     const px = rand() * 64;
+    letterboxFillStats.randomCalls += 1;
     const py = rand() * 64;
+    letterboxFillStats.randomCalls += 1;
     const a = (0.04 + grain * 0.08) * rand();
+    letterboxFillStats.stringAllocations += 1;
     ctx.fillStyle = `rgba(255,255,255,${a})`;
     ctx.fillRect(px, py, 1, 1);
   }
   return ctx.createPattern(tile, "repeat");
 }
-
-let cachedClearHex = -1;
-let cachedFill: SurfaceLetterboxFill | null = null;
 
 export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLetterboxFill {
   let r = (clearHex >> 16) & 255;
@@ -73,6 +80,7 @@ export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLet
     b = Math.min(255, Math.round(b + lift * 255));
   }
   const css = `rgb(${r}, ${g}, ${b})`;
+  letterboxFillStats.stringAllocations += 1;
   const hex = (r << 16) | (g << 8) | b;
   const gNorm = Math.min(1, Math.max(0, grain));
   return {
@@ -90,11 +98,6 @@ export function getSurfaceLetterboxFill(clearHex: number, grain = 0.25): Surface
   cachedClearHex = clearHex;
   cachedFill = surfaceLetterboxFill(clearHex, grain);
   return cachedFill;
-}
-
-export function resetSurfaceLetterboxFillCache(): void {
-  cachedClearHex = -1;
-  cachedFill = null;
 }
 
 export function letterboxFillHex(fill: SurfaceLetterboxFill): number {

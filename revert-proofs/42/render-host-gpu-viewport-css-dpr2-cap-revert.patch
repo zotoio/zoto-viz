@@ -1,0 +1,33 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 3b70d51..f846b05 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -181,7 +181,7 @@ export class RenderHost {
+           failIfMajorPerformanceCaveat: false,
+         });
+         this.software = false;
+-        this.renderer.setPixelRatio(1);
++        this.renderer.setPixelRatio(this.pr);
+         this.renderer.setClearColor(0x000000, 0);
+         this.canvas = this.renderer.domElement;
+         this.refreshContextAntialias();
+@@ -367,7 +367,7 @@ export class RenderHost {
+     this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
+     this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
+     if (!this.software) {
+-      this.renderer.setPixelRatio(1);
++      this.renderer.setPixelRatio(pr);
+       this.resizeGpuCanvas();
+     } else {
+       this.resizeSoftware();
+@@ -609,8 +609,8 @@ export class RenderHost {
+     const pr = this.pr;
+     const devW = Math.max(1, Math.round(this.w * pr));
+     const devH = Math.max(1, Math.round(this.h * pr));
+-    this.renderer.setPixelRatio(1);
+-    this.renderer.setSize(devW, devH, false);
++    this.renderer.setPixelRatio(pr);
++    this.renderer.setSize(this.w, this.h, false);
+     this.canvas.style.width = "100%";
+     this.canvas.style.height = "100%";
+     this.refreshCanvasDeviceHeight();

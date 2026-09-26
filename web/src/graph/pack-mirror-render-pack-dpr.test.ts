@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { PackMirrorRegistry } from "./pack-mirror-gl";
+import { asCanvasDeviceHeight } from "./pack-mirror-rect";
 
 describe("PackMirrorSession renderPack DPR", () => {
-  it("uses CSS-pixel viewport on the render target at dpr=2", () => {
+  it("uses device-pixel viewport on the render target at layout dpr=2", () => {
     const reg = new PackMirrorRegistry();
     reg.syncScopes(new Map([["plugin:dpr", { tileCount: 2, antialias: false }]]));
     const scene = new THREE.Scene();
@@ -20,13 +21,18 @@ describe("PackMirrorSession renderPack DPR", () => {
       getRenderTarget: () => null,
       clear: vi.fn(),
       render: vi.fn(),
-      getPixelRatio: () => 2,
+      getPixelRatio: () => 1,
       getContext: () => null,
       forceContextLoss: vi.fn(),
       dispose: vi.fn(),
     };
-    reg.renderPrimary("plugin:dpr", renderer as never, scene, camera, { w: 50, h: 40 }, 0x0a1020, false);
-    expect(viewports.some((v) => v.w === 50 && v.h === 40)).toBe(true);
+    const hostGl = {
+      layoutPixelRatio: 2,
+      canvasCssHeight: 120,
+      canvasDeviceHeight: asCanvasDeviceHeight(240),
+    };
+    reg.renderPrimary("plugin:dpr", renderer as never, scene, camera, { w: 50, h: 40 }, 0x0a1020, false, hostGl);
+    expect(viewports.some((v) => v.w === 100 && v.h === 80)).toBe(true);
     reg.dispose();
   });
 });

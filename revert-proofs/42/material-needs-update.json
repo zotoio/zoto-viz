@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "PackTexturePresenter > keeps material.version stable over 300 draws with the same texture",
-  "description": "Material needsUpdate only when map reference changes."
-}

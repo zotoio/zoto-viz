@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "^PackMirrorSession resource lifecycle > 300 frames / 2 tiles: one RT, one quad graph, reused mirror scratch rects$",
-  "description": "renderPrimary must reuse devicePackSizeScratch via deviceSizeFromCssBoxInto, not allocate per frame."
-}

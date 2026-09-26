@@ -39,8 +39,17 @@ import {
   asCssRect,
   deviceRectFromHostViewBoxInto,
   toGlRectInto,
+  viewMutAsDeviceRect,
+  viewMutAsGlRect,
 } from "./pack-mirror-rect";
 import { renderHostMirrorTelemetry } from "./render-host-telemetry";
+import { applyDeviceRectToGlRenderer } from "./render-host-gl-adapter";
+import {
+  type DevicePxRatio,
+  devicePxRatioFromNumber,
+  devicePxRatioFromWindow,
+  devicePxRatioNumber,
+} from "./render-host-device-px-ratio";
 
 type PackMirrorViewMeta = HostedView & {
   packCoalesceGroupKey?: string;
@@ -111,6 +120,7 @@ export class RenderHost {
   private readonly frame: (ts: number) => void;
   private disposed = false;
   private pr: number;
+  private layoutDevicePxRatio: DevicePxRatio;
   readonly packMirrors = new PackMirrorRegistry();
   private readonly letterboxScratch = {
     box: { x: 0, y: 0, w: 0, h: 0 },
@@ -156,13 +166,14 @@ export class RenderHost {
   private gpuTimedBox: SoftRect | null = null;
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean; antialias?: boolean } = {}) {
-    const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
-    this.pr = dpr;
+    this.layoutDevicePxRatio =
+      opts.dpr !== undefined ? devicePxRatioFromNumber(opts.dpr) : devicePxRatioFromWindow();
+    this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
     const forceSoft = opts.software === true || (opts.software !== false && !probeWebGL());
     if (!forceSoft) {
       try {
         this.renderer = new THREE.WebGLRenderer({
-          antialias: opts.antialias ?? dpr < 1.3,
+          antialias: opts.antialias ?? this.pr < 1.3,
           alpha: true,
           premultipliedAlpha: true,
           preserveDrawingBuffer: true,
@@ -170,20 +181,20 @@ export class RenderHost {
           failIfMajorPerformanceCaveat: false,
         });
         this.software = false;
-        this.renderer.setPixelRatio(dpr);
+        this.renderer.setPixelRatio(1);
         this.renderer.setClearColor(0x000000, 0);
         this.canvas = this.renderer.domElement;
         this.refreshContextAntialias();
       } catch {
         this.software = true;
         this.canvas = document.createElement("canvas");
-        this.renderer = new SoftwareGpu(this.canvas, dpr);
+        this.renderer = new SoftwareGpu(this.canvas, this.pr);
         this.ctx2d = this.canvas.getContext("2d");
       }
     } else {
       this.software = true;
       this.canvas = document.createElement("canvas");
-      this.renderer = new SoftwareGpu(this.canvas, dpr);
+      this.renderer = new SoftwareGpu(this.canvas, this.pr);
       this.ctx2d = this.canvas.getContext("2d");
     }
     this.canvas.className = "render-host";
@@ -228,7 +239,16 @@ export class RenderHost {
     this.raf = requestAnimationFrame(this.frame);
   }
 
-  get pixelRatio(): number { return this.software ? this.pr : this.renderer.getPixelRatio(); }
+  /** Layout DPR (capped); WebGLRenderer `getPixelRatio()` stays 1. */
+  get pixelRatio(): number { return this.pr; }
+
+  /** Capped device pixel ratio used for canvas backing store and pixel-sized materials. */
+  get devicePxRatio(): DevicePxRatio {
+    return this.layoutDevicePxRatio;
+  }
+
+  get layoutCssWidth(): number { return this.w; }
+  get layoutCssHeight(): number { return this.h; }
   get viewCount(): number { return this.views.length; }
 
   /** WebGL2 context, or null when lost / unavailable. */
@@ -325,22 +345,41 @@ export class RenderHost {
     const rd = this.renderer as THREE.WebGLRenderer;
     const key = packMirrorMeta(mirror).packCoalesceGroupKey;
     if (!key) return null;
+    this.packMirrorHostGl.layoutPixelRatio = this.pr;
+    this.packMirrorHostGl.canvasCssHeight = this.h;
+    this.packMirrorHostGl.canvasDeviceHeight = this.canvasDeviceHeight;
     this.packMirrorPresentOpts.fill = fill;
     this.packMirrorPresentOpts.aspect = aspect;
-    const rect = this.packMirrors.presentPack(key, rd, asCssRect(dst), this.packMirrorPresentOpts);
+    const rect = this.packMirrors.presentPack(
+      key,
+      rd,
+      asCssRect(dst),
+      this.packMirrorPresentOpts,
+      this.packMirrorHostGl,
+    );
     if (!rect) return null;
-    return this.writeFbViewport(dst, rd.getPixelRatio());
+    return this.writeFbViewport(dst, this.pr);
   }
 
-  /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
+  /** Whole-wall layout DPR (auto-tune). Backing store scales here; renderer pixel ratio stays 1. */
   setPixelRatio(pr: number): void {
     if (Math.abs(pr - this.pixelRatio) < 0.01) return;
-    this.pr = pr;
-    this.renderer.setPixelRatio(pr);
-    if (!this.software) this.renderer.setSize(this.w, this.h, false);
-    else this.resizeSoftware();
+    this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
+    this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
+    if (!this.software) {
+      this.renderer.setPixelRatio(1);
+      this.resizeGpuCanvas();
+    } else {
+      this.resizeSoftware();
+    }
     this.dirty = true;
   }
+
+  private readonly packMirrorHostGl = {
+    layoutPixelRatio: 1,
+    canvasCssHeight: 1,
+    canvasDeviceHeight: asCanvasDeviceHeight(1),
+  };
 
   /**
    * Draw `scene` through `camera` into the viewport under `view.viewEl`, clearing it to `clearHex`.
@@ -368,7 +407,10 @@ export class RenderHost {
     }
     const rd = this.renderer as THREE.WebGLRenderer;
     const gl = this.gl;
-    const pr = rd.getPixelRatio();
+    const pr = this.pr;
+    this.packMirrorHostGl.layoutPixelRatio = pr;
+    this.packMirrorHostGl.canvasCssHeight = this.h;
+    this.packMirrorHostGl.canvasDeviceHeight = this.canvasDeviceHeight;
     const meta = packMirrorMeta(view);
     const tileCount = meta.packCoalesceTileCount ?? 0;
     const packKey = meta.packCoalesceGroupKey;
@@ -426,6 +468,7 @@ export class RenderHost {
       asCssRect(box),
       this.gpuTimedClearHex,
       this.contextAntialias,
+      this.packMirrorHostGl,
     );
     this.packDrawViewport.x = box.x;
     this.packDrawViewport.y = box.y;
@@ -434,19 +477,26 @@ export class RenderHost {
     this.packDrawOpts.letterbox = false;
     this.packDrawOpts.fill = null;
     this.packDrawOpts.aspect = box.w / Math.max(1, box.h);
-    this.packMirrors.presentPack(packKey, rd, asCssRect(this.packDrawViewport), this.packDrawOpts);
+    this.packMirrors.presentPack(
+      packKey,
+      rd,
+      asCssRect(this.packDrawViewport),
+      this.packDrawOpts,
+      this.packMirrorHostGl,
+    );
   };
 
   private readonly runTimedViewDraw = (): void => {
-    const box = this.gpuTimedBox;
     const scene = this.gpuTimedScene;
     const camera = this.gpuTimedCamera;
-    if (!box || !scene || !camera) return;
+    if (!scene || !camera) return;
     const rd = this.renderer as THREE.WebGLRenderer;
-    const vp = this.fbGlViewport;
-    rd.setViewport(vp.x, vp.y, vp.w, vp.h);
-    rd.setScissor(vp.x, vp.y, vp.w, vp.h);
-    rd.setScissorTest(true);
+    applyDeviceRectToGlRenderer(
+      rd,
+      viewMutAsDeviceRect(this.fbDeviceViewport),
+      this.canvasDeviceHeight,
+      this.fbGlViewport,
+    );
     rd.setClearColor(this.gpuTimedClearHex, 1);
     rd.render(scene, camera);
   };
@@ -461,14 +511,14 @@ export class RenderHost {
       this.software ? undefined : this.canvasDeviceHeight,
     );
     if (this.software) {
-      return this.fbDeviceViewport as DeviceRect;
+      return viewMutAsDeviceRect(this.fbDeviceViewport);
     }
     toGlRectInto(
-      this.fbDeviceViewport as DeviceRect,
+      viewMutAsDeviceRect(this.fbDeviceViewport),
       this.canvasDeviceHeight,
       this.fbGlViewport,
     );
-    return this.fbGlViewport as GlRect;
+    return viewMutAsGlRect(this.fbGlViewport);
   }
 
   private refreshCanvasDeviceHeight(): void {
@@ -550,10 +600,20 @@ export class RenderHost {
     if (w < 2 || h < 2 || (w === this.w && h === this.h)) return;
     this.w = w;
     this.h = h;
-    if (!this.software) this.renderer.setSize(w, h, false);
+    if (!this.software) this.resizeGpuCanvas();
     else this.resizeSoftware();
-    this.refreshCanvasDeviceHeight();
     this.dirty = true;
+  }
+
+  private resizeGpuCanvas(): void {
+    const pr = this.pr;
+    const devW = Math.max(1, Math.round(this.w * pr));
+    const devH = Math.max(1, Math.round(this.h * pr));
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(devW, devH, false);
+    this.canvas.style.width = "100%";
+    this.canvas.style.height = "100%";
+    this.refreshCanvasDeviceHeight();
   }
 
   private resizeSoftware(): void {
