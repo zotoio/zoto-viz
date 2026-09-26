@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..517cf3b 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -75,7 +75,7 @@ export function assertRedValue(slug, expected, actual) {
+ }
+ 
+ export function allowTypeErrorEnabled(meta) {
+-  return meta.allowTypeError === true;
++  return Boolean(meta.allowTypeError);
+ }
+ 
+ export function validatePatchStructure(patchText, slug) {

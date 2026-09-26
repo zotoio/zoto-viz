@@ -1,0 +1,24 @@
+diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
+index 069edc9..959db3a 100755
+--- a/scripts/revert-proof.mjs
++++ b/scripts/revert-proof.mjs
+@@ -671,9 +671,6 @@ function trimFailureOutput(output, maxLines = 40) {
+ }
+ 
+ function assertExactlyOneTest(slug, phase, run, meta) {
+-  if (run.timedOut) {
+-    throw new Error(`row ${slug}: ${phase} timed out`);
+-  }
+   const sel = run.counts.selection;
+   if (!sel?.ok) {
+     const reason = sel?.reason ?? "unknown";
+@@ -726,9 +723,6 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
+     timeoutMs,
+     artifactsDir,
+   );
+-  if (baseline.timedOut) {
+-    throw new Error(`row ${slug}: baseline timed out`);
+-  }
+   try {
+     assertExactlyOneTest(slug, "baseline", baseline, meta);
+   } catch (err) {

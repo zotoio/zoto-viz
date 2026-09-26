@@ -1,0 +1,16 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..2be83b9 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -660,10 +660,7 @@ function pyImportsInFile(wtRoot, relFile) {
+         const r = pyModuleToPath(wtRoot, mod, relFile);
+         if (r) resolved.push(r);
+       } else {
+-        for (const name of names) {
+-          const r = pyRelativeImportTarget(wtRoot, relFile, levelPrefix, "", name);
+-          if (r) resolved.push(r);
+-        }
++        void names;
+       }
+       continue;
+     }

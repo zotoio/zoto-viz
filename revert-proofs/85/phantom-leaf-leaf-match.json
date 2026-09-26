@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (phantom-leaf) sidecar full name must match JSON selection",
+  "description": "Match the sidecar by leaf title only",
+  "red": "TBD"
+}

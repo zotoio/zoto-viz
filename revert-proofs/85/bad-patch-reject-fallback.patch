@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
+index 069edc9..97e316b 100755
+--- a/scripts/revert-proof.mjs
++++ b/scripts/revert-proof.mjs
+@@ -583,7 +583,7 @@ function runTscCheck(wtRoot) {
+   return { ok: r.status === 0, skipped: false, output };
+ }
+ 
+-const GIT_APPLY_OPTS = ["--whitespace=error"];
++const GIT_APPLY_OPTS = ["--whitespace=error", "--reject"];
+ 
+ function findPatchArtifactFiles(wtRoot) {
+   const found = [];

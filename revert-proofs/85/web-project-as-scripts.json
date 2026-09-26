@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (w) web project row uses web vitest config and runs exactly one test",
+  "description": "Run web/ rows with the scripts vitest config",
+  "red": "TBD"
+}

@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..4398427 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -148,7 +148,7 @@ export function pytestNodeId(testFile, testName) {
+   if (testName.startsWith(`${file}::`)) {
+     return testName;
+   }
+-  return `${file}::${testName}`;
++  return `${file}::${testName.replace(/\[.*\]$/, "")}`;
+ }
+ 
+ export function buildPytestArgv(nodeId, pluginModule, { includeNoCov = true } = {}) {

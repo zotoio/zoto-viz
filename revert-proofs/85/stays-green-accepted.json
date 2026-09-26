@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (b) noop patch stays green fails naming the row",
+  "description": "Remove the stays-green guard",
+  "red": "TBD"
+}

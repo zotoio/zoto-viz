@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (c) plain-object-fake: plain object AssertionError shape is rejected without meta",
+  "description": "Count any thrown object as assertion red",
+  "red": "TBD"
+}

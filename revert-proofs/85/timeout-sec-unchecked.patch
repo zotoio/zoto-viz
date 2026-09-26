@@ -1,0 +1,14 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..50f7b84 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -38,9 +38,6 @@ export function parseTimeoutSec(raw, slug) {
+   if (raw === undefined || raw === null) {
+     return 120;
+   }
+-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+-    throw new Error(`row ${slug}: timeoutSec must be a positive finite number`);
+-  }
+   const ms = raw * 1000;
+   if (ms > MAX_TIMER_MS) {
+     throw new Error(

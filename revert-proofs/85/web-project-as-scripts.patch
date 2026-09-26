@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..dce2c9c 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -186,7 +186,7 @@ export function resolveVitestProject(wtRoot, meta) {
+   if (!project) {
+     if (rel.startsWith("scripts/")) project = "scripts";
+     else if (rel.startsWith("web/revert-proof/")) project = "scripts";
+-    else if (rel.startsWith("web/")) project = "web";
++    else if (rel.startsWith("web/")) project = "scripts";
+     else project = "root";
+   }
+   const rootBin = path.join(wtRoot, "node_modules", ".bin", "vitest");

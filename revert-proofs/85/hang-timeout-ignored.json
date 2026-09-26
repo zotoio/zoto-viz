@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (hang-timeout) hanging test is rejected as timeout",
+  "description": "Stop reporting baseline timeouts",
+  "red": "TBD"
+}

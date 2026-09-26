@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (e) multi-test-file row runs exactly one test in a file with many tests",
+  "description": "Stop passing the -t name filter to vitest",
+  "red": "TBD"
+}

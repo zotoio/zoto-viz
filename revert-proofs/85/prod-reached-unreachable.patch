@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..4f7e653 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -748,7 +748,7 @@ export function validatePatchProductionReachable(patchText, slug, wtRoot) {
+     if (reachExempt.has(file)) {
+       continue;
+     }
+-    if (!isRevertTargetReachableFromProduction(wtRoot, file)) {
++    if (true) {
+       throw new Error(
+         `row ${slug}: revert target unreachable from production: ${file}`,
+       );

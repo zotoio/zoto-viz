@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof-lib guards > (pytest-json-collection) missing JSON on nonzero exit is collection error",
+  "description": "Treat missing plugin JSON as a clean run",
+  "red": "TBD"
+}

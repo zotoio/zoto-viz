@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (g) node:assert strictEqual failure is RED",
+  "description": "Drop node:assert acceptance in runner",
+  "red": "TBD"
+}

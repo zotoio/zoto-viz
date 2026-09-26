@@ -1,0 +1,24 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..4c8e766 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -807,19 +807,6 @@ export function assertWorkspaceLinksInWorktree(wtRoot) {
+       }
+       const full = path.join(nmRoot, name);
+       if (name.startsWith("@")) {
+-        let scopeStat;
+-        try {
+-          scopeStat = fs.statSync(full);
+-        } catch {
+-          continue;
+-        }
+-        if (!scopeStat.isDirectory()) {
+-          checkSymlinkInsideWorktree(full, wtReal);
+-          continue;
+-        }
+-        for (const pkg of fs.readdirSync(full)) {
+-          checkSymlinkInsideWorktree(path.join(full, pkg), wtReal);
+-        }
+         continue;
+       }
+       checkSymlinkInsideWorktree(full, wtReal);

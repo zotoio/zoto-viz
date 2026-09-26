@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (f) real expect() failure is RED with revertProofAssertion meta",
+  "description": "Drop chai Assertion throw-site branding in the runner",
+  "red": "TBD"
+}

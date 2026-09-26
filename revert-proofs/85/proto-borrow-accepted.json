@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (proto-borrow) TypeError with a borrowed chai AssertionError prototype is rejected",
+  "description": "Accept chai.AssertionError by instanceof again",
+  "red": "TBD"
+}

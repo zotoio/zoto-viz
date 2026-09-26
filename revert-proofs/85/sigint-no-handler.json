@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (h) SIGINT during a row leaves checkout and worktrees clean",
+  "description": "Remove the SIGINT cleanup handler",
+  "red": "TBD"
+}

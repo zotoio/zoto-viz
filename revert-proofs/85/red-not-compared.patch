@@ -1,0 +1,12 @@
+diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
+index 069edc9..139269e 100755
+--- a/scripts/revert-proof.mjs
++++ b/scripts/revert-proof.mjs
+@@ -831,7 +831,6 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
+       );
+     }
+   }
+-  assertRedValue(slug, meta.red, patched.counts.selection.target.failureMessage);
+ 
+   const failureText = vitestFailureSnippet(patched.reportPath, patched.output);
+ 

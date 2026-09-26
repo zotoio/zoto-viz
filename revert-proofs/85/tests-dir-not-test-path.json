@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "patchTouchesTestFiles > flags tests paths",
+  "description": "Stop treating tests/ as a test path",
+  "red": "TBD"
+}

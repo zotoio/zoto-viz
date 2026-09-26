@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..fa507ff 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -830,7 +830,7 @@ export function assertWorkspaceLinksInWorktree(wtRoot) {
+ export function pythonEnvForWorktree(wtRoot) {
+   return {
+     ...process.env,
+-    PYTHONPATH: wtRoot,
++    PYTHONPATH: process.env.PYTHONPATH ?? "",
+     PYTHONDONTWRITEBYTECODE: "1",
+   };
+ }

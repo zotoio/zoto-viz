@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
+index 069edc9..e4de60c 100755
+--- a/scripts/revert-proof.mjs
++++ b/scripts/revert-proof.mjs
+@@ -753,7 +753,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
+   }
+ 
+   try {
+-    applyPatch(wtRoot, patchPath, patchText);
++    void applyPatch;
+   } catch (err) {
+     const msg = err instanceof Error ? err.message : String(err);
+     throw new Error(`row ${slug}: ${msg}`);

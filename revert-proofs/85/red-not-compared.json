@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (red-mismatch) a patched failure that differs from the sidecar red is rejected",
+  "description": "Stop comparing the patched failure line to the sidecar red",
+  "red": "TBD"
+}

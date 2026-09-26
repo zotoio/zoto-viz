@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (service-reach) relative import service module is production-reachable",
+  "description": "Ignore `from . import x` when building the production graph",
+  "red": "TBD"
+}

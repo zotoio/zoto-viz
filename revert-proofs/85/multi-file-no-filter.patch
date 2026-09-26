@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
+index 069edc9..7862386 100755
+--- a/scripts/revert-proof.mjs
++++ b/scripts/revert-proof.mjs
+@@ -446,8 +446,6 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
+     "run",
+     "--config",
+     overlayRel,
+-    "-t",
+-    testPattern,
+     "--reporter=json",
+     `--outputFile.json=${jsonOut}`,
+     "--",

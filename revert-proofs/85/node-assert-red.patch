@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
+index b600ad1..e54f3ce 100644
+--- a/scripts/revert-proof-vitest-runner.mjs
++++ b/scripts/revert-proof-vitest-runner.mjs
+@@ -102,8 +102,6 @@ function wrapNodeAssertExports(mod, isNodeAssertion) {
+ const nodeRequire = createRequire(import.meta.url);
+ const nodeAssert = nodeRequire("node:assert");
+ const isNodeAssertion = (e) => e instanceof nodeAssert.AssertionError;
+-wrapNodeAssertExports(nodeAssert, isNodeAssertion);
+-wrapNodeAssertExports(nodeAssert.strict, isNodeAssertion);
+ syncBuiltinESMExports();
+ 
+ export default class RevertProofVitestRunner extends TestRunner {

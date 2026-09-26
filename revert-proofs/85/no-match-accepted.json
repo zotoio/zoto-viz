@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > filter matching zero tests is rejected on baseline",
+  "description": "Accept a selection that matched no test",
+  "red": "TBD"
+}

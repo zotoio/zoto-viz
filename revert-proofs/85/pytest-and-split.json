@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (l) pytest node id with a and b id selects one test",
+  "description": "Split the pytest node id on spaces",
+  "red": "TBD"
+}

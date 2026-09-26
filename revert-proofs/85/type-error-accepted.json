@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (vitest-typeerror) TypeError patched run is rejected as build break",
+  "description": "Classify every vitest failure as assertion red",
+  "red": "TBD"
+}

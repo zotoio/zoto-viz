@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (d) row pointing at skipped test is rejected on baseline",
+  "description": "Treat a skipped target as executed",
+  "red": "TBD"
+}

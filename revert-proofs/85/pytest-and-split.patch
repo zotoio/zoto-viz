@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..36f816e 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -159,7 +159,7 @@ export function buildPytestArgv(nodeId, pluginModule, { includeNoCov = true } =
+     "no:cacheprovider",
+     "-p",
+     pluginModule,
+-    nodeId,
++    ...nodeId.split(" "),
+   ];
+   if (includeNoCov) {
+     args.splice(2, 0, "--no-cov");

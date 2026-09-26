@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (hand-built-chai) hand-built chai AssertionError without expect() is rejected",
+  "description": "Accept any error constructed as chai.AssertionError",
+  "red": "TBD"
+}

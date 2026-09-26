@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (m) revert patch on test-only helper is rejected as unreachable",
+  "description": "Disable the production reach check",
+  "red": "TBD"
+}

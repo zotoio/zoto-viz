@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (k) pytest node id with bracket parametrize id selects one test",
+  "description": "Strip the parametrize id from pytest node ids",
+  "red": "TBD"
+}

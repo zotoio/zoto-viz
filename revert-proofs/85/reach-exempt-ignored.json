@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (reach-exempt-first) reachExempt from config applies before first touched file",
+  "description": "Ignore reachExempt from revert-proof-production.json",
+  "red": "TBD"
+}
