@@ -278,9 +278,18 @@ def _merged_settings_check_zip(zip_path: Path) -> None:
 
 def _install_unpacked_tree(zip_path: Path, runtime: Path) -> pz.UnpackResult:
     """Unpack into the local runtime directory (validation runs before commit only)."""
-    if runtime.exists():
-        shutil.rmtree(runtime)
     return pz.unpack_zip(zip_path, runtime)
+
+
+def _merged_settings_check_bytes(raw: bytes) -> None:
+    fd, tmp_name = tempfile.mkstemp(prefix="zoto-plugin-check.", suffix=".zip")
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        tmp_path.write_bytes(raw)
+        _merged_settings_check_zip(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def install_local_zip(
@@ -338,6 +347,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
     raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=False)
     pid = str(doc["id"])
+    _merged_settings_check_bytes(raw)
     if reminted_from:
         dest.write_bytes(raw)
         if path.resolve() != dest.resolve() and path.resolve().parent == dest.resolve().parent:
@@ -352,7 +362,6 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
         else:
             shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
-    _merged_settings_check_zip(dest)
     unpacked = _install_unpacked_tree(dest, runtime)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:

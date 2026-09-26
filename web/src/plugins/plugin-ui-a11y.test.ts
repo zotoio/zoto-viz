@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import { configStoreId } from "./instances";
 import { clearUndoRing, undoRingDepth } from "./plugin-settings";
@@ -13,6 +13,8 @@ function mountPanel() {
 }
 
 describe("plugin settings a11y", () => {
+  beforeEach(() => localStorage.clear());
+
   it("keeps aria-live announcer outside the rebuilt host subtree", async () => {
     const spec = loadSettingsDeclFixture();
     const { wrap, host } = mountPanel();
@@ -60,11 +62,13 @@ describe("plugin settings a11y", () => {
     clearUndoRing(configStoreId(spec));
     const { host } = mountPanel();
     fillPluginFields(host, spec, spec.config ?? [], () => {});
-    const presetSel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')!;
+    let presetSel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')!;
     expect(presetSel.value).toBe("a");
     host.querySelector<HTMLButtonElement>('[data-toolbar-action="randomise"]')?.click();
+    presetSel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')!;
     expect(presetSel.value).toBe("custom");
     host.querySelector<HTMLButtonElement>('[data-toolbar-action="undo"]')?.click();
+    presetSel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')!;
     expect(presetSel.value).toBe("a");
   });
 

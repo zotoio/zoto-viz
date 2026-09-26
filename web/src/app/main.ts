@@ -75,9 +75,10 @@ import { pluginOptsFromSpec } from "./plugin-mode-opts";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import {
   hudCaptionFromOpts,
-  syncMosaicPluginCaptions,
   syncPluginHudForMode,
 } from "../plugins/plugin-hud-sync";
+import { syncMosaicPluginHudCaptions as pushMosaicHudCaptions } from "./mosaic-hud-wiring";
+import { attachPluginFrontendAfterConfigReset } from "./plugin-frontend-attach";
 import { setPluginHudCaptionSink } from "../plugins/plugin-ui";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
@@ -122,7 +123,6 @@ import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } fro
 import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import { revertModeSelection } from "./apply-mode-mosaic";
 import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
-import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
@@ -379,22 +379,14 @@ function mosaicHudOn(): boolean {
 }
 
 function syncMosaicPluginHudCaptions(): void {
-  if (!mosaic?.on) return;
-  syncMosaicPluginCaptions(
-    {
-      on: true,
+  pushMosaicHudCaptions(
+    mosaic ? {
+      on: mosaic.on,
       tileIds: mosaic.tileIds,
       setPaneSettingsCaption: (id, text) => mosaic!.setPaneSettingsCaption(id, text),
-    },
+    } : null,
     pluginHudCaptions,
-    (tileId) => {
-      const m = modeById(tileId);
-      if (!m.pluginId) return null;
-      const spec = pluginSpecForMode(tileId);
-      if (!spec?.settings?.hud?.labelFields?.length) return null;
-      const fields = pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config);
-      return { mode: m, spec, opts: optsFor(m), fields };
-    },
+    { modeById, pluginSpecForMode, optsFor },
   );
 }
 
@@ -718,8 +710,9 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     return;
   }
   try {
-    sandboxConfigBatcher.reset();
-    await attachPluginFrontend(sandbox, spec, sandboxPluginConfig(spec));
+    await attachPluginFrontendAfterConfigReset(sandboxConfigBatcher, () =>
+      attachPluginFrontend(sandbox, spec, sandboxPluginConfig(spec)),
+    );
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);

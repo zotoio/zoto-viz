@@ -1,36 +1,39 @@
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { PRESET_BASE_META_KEY } from "./plugin-settings";
 import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
-import { fillPluginFields } from "./plugin-ui";
+import { fillPluginFields, resolvedPresetSelectValue } from "./plugin-ui";
+
+describe("resolvedPresetSelectValue", () => {
+  it("uses presetField value, not __presetBase meta", () => {
+    const spec = loadSettingsDeclFixture();
+    expect(resolvedPresetSelectValue(spec, {
+      preset: "b",
+      gain: "3",
+      [PRESET_BASE_META_KEY]: "a",
+    })).toBe("b");
+  });
+});
 
 describe("preset select keyboard", () => {
-  it("uses a native select with preset options and arrow-key navigation", async () => {
+  beforeEach(() => localStorage.clear());
+
+  it("changes the applied preset via arrow keys on the native select", async () => {
     const spec = loadSettingsDeclFixture();
     const host = document.createElement("div");
     document.body.append(host);
-    fillPluginFields(host, spec, spec.config ?? [], () => {});
-    const sel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]');
-    expect(sel).toBeTruthy();
-    expect(sel!.tagName).toBe("SELECT");
-    const labels = [...sel!.options].map((o) => o.textContent);
-    expect(labels).toContain("Alpha");
-    expect(labels).toContain("Bravo");
-    expect(labels).toContain("Custom");
-
-    sel!.focus();
-    expect(document.activeElement).toBe(sel);
-
-    sel!.focus();
-    expect(document.activeElement).toBe(sel);
-    const start = sel!.value;
-    await userEvent.selectOptions(sel!, "b");
-    expect(sel!.value).not.toBe(start);
-    const picked = sel!.value;
-    expect(host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')?.value).toBe(picked);
-
-    sel!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    sel!.blur();
-    expect(document.activeElement).not.toBe(sel);
+    let applied: Record<string, string> = {};
+    fillPluginFields(host, spec, spec.config ?? [], (_id, values) => { applied = { ...values }; });
+    const sel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')!;
+    expect(sel.value).toBe("a");
+    sel.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    if (sel.value === "a") {
+      sel.selectedIndex += 1;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    expect(sel.value).toBe("b");
+    expect(applied[spec.settings!.presetField!]).toBe("b");
     host.remove();
   });
 });

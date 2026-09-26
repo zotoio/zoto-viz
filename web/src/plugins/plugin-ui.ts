@@ -123,13 +123,22 @@ function updateDirtyMarkers(ctx: PanelCtx): void {
   }
 }
 
+/** Preset dropdown value from live config (uses presetField, not __presetBase). */
+export function resolvedPresetSelectValue(
+  spec: PluginView,
+  values: Record<string, string>,
+): string {
+  const decl = spec.settings;
+  const pf = decl?.presetField ?? "preset";
+  const presetIds = new Set((decl?.presets ?? []).map((p) => p.id));
+  const cur = values[pf] ?? decl?.presets?.[0]?.id ?? CUSTOM_PRESET_ID;
+  return presetIds.has(cur) || cur === CUSTOM_PRESET_ID ? cur : CUSTOM_PRESET_ID;
+}
+
 function syncPresetPicker(ctx: PanelCtx): void {
   const decl = ctx.spec.settings;
   if (!ctx.presetSel || !decl?.presets?.length) return;
-  const pf = decl.presetField ?? "preset";
-  const presetIds = new Set(decl.presets.map((p) => p.id));
-  const cur = ctx.values[pf] ?? decl.presets[0]?.id ?? CUSTOM_PRESET_ID;
-  ctx.presetSel.value = presetIds.has(cur) || cur === CUSTOM_PRESET_ID ? cur : CUSTOM_PRESET_ID;
+  ctx.presetSel.value = resolvedPresetSelectValue(ctx.spec, ctx.values);
 }
 
 function syncUndoButton(ctx: PanelCtx): void {

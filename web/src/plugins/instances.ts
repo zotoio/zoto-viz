@@ -1,5 +1,8 @@
 import type { PluginField } from "../core/modes";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import type { PluginView } from "./plugin";
+
+export { mosaicTileViewId } from "../graph/mosaic-tile-id";
 
 export type PluginInstance = {
   id: string;
@@ -48,12 +51,6 @@ export function parsePluginInstance(modeId: string): string | null {
   const rest = modeId.slice("plugin:".length);
   const i = rest.indexOf(":");
   return i >= 0 ? rest.slice(i + 1) || null : null;
-}
-
-/** Mosaic tile view id without duplicate-tile slot suffix (`!n`, #42). */
-export function mosaicTileViewId(modeId: string): string {
-  const bang = modeId.lastIndexOf("!");
-  return bang > 0 ? modeId.slice(0, bang) : modeId;
 }
 
 /** localStorage namespace for plugin config (per catalog instance row). */

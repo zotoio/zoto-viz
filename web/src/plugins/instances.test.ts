@@ -26,6 +26,8 @@ const pack = (over: Partial<PluginView> = {}): PluginView => ({
 describe("plugin instances", () => {
   it("strips mosaic duplicate-tile slot suffix for config store lookup", () => {
     expect(mosaicTileViewId("plugin:carousel!2")).toBe("plugin:carousel");
+    expect(mosaicTileViewId("plugin:foo!bar")).toBe("plugin:foo!bar");
+    expect(mosaicTileViewId("plugin:foo!2")).toBe("plugin:foo");
     expect(configStoreIdForMode("plugin:carousel:apod!1")).toBe("carousel:apod");
     expect(configStoreIdForMode("plugin:carousel!0")).toBe("carousel");
   });

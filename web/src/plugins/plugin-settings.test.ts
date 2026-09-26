@@ -526,4 +526,5 @@ describe("undo restores meta", () => {
     const snap = popUndoSnapshot(store)!;
     expect(snap[PRESET_BASE_META_KEY]).toBe("a");
   });
+
 });

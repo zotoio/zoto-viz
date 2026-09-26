@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import zipfile
@@ -16,6 +17,19 @@ from service import plugins
 
 
 MINIMAL = "id: local-demo\nname: Local demo\nversion: 1\n"
+
+
+def _hash_tree(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(root)).encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _hash_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _zip(files: dict[str, str | bytes]) -> bytes:
@@ -242,8 +256,12 @@ def test_invalid_overwrite_keeps_previous_pack(
         "visualisation.yml": GOOD_INSTALL_VIZ,
     })
     plugin_local.install_local_zip(good)
+    runtime = paths.plugin_local_runtime_dir() / "keep-pack"
+    zip_path = paths.plugin_local_dir() / "keep-pack.zip"
+    tree_before = _hash_tree(runtime)
+    zip_before = _hash_file(zip_path)
     bad = _zip({
-        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
         "visualisation.yml": (
             "engine: graph\n"
             "settings:\n"
@@ -260,10 +278,12 @@ def test_invalid_overwrite_keeps_previous_pack(
     })
     with pytest.raises(ValueError, match="presetField"):
         plugin_local.install_local_zip(bad, overwrite=True)
-    plugins.validate_plugin_home(paths.plugin_local_runtime_dir() / "keep-pack")
+    assert _hash_tree(runtime) == tree_before
+    assert _hash_file(zip_path) == zip_before
+    plugins.validate_plugin_home(runtime)
 
 
-def test_fixed_zip_reinstalls_without_overwrite_after_failed_overwrite(
+def test_bad_overwrite_then_good_overwrite_installs_v2(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
 ) -> None:
     _repo(tmp_path, monkeypatch)
@@ -272,6 +292,10 @@ def test_fixed_zip_reinstalls_without_overwrite_after_failed_overwrite(
         "visualisation.yml": GOOD_INSTALL_VIZ,
     })
     plugin_local.install_local_zip(good)
+    runtime = paths.plugin_local_runtime_dir() / "keep-pack"
+    zip_path = paths.plugin_local_dir() / "keep-pack.zip"
+    tree_before = _hash_tree(runtime)
+    zip_before = _hash_file(zip_path)
     bad = _zip({
         "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
         "visualisation.yml": (
@@ -290,13 +314,45 @@ def test_fixed_zip_reinstalls_without_overwrite_after_failed_overwrite(
     })
     with pytest.raises(ValueError, match="presetField"):
         plugin_local.install_local_zip(bad, overwrite=True)
+    assert _hash_tree(runtime) == tree_before
+    assert _hash_file(zip_path) == zip_before
     fixed = _zip({
         "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
         "visualisation.yml": GOOD_INSTALL_VIZ,
     })
     info = plugin_local.install_local_zip(fixed, overwrite=True)
     assert info["wrote"] is True
-    plugins.validate_plugin_home(paths.plugin_local_runtime_dir() / "keep-pack")
+    plugins.validate_plugin_home(runtime)
+    assert _hash_tree(runtime) != tree_before
+
+
+def test_unpack_failure_preserves_runtime_on_overwrite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
+        "visualisation.yml": GOOD_INSTALL_VIZ,
+    })
+    plugin_local.install_local_zip(good)
+    runtime = paths.plugin_local_runtime_dir() / "keep-pack"
+    zip_path = paths.plugin_local_dir() / "keep-pack.zip"
+    tree_before = _hash_tree(runtime)
+    v2 = _zip({
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+        "visualisation.yml": GOOD_INSTALL_VIZ,
+    })
+    real_unpack = plugin_local.pz.unpack_zip
+
+    def flaky_unpack(path: Path, dest: Path):
+        if path == zip_path and dest == runtime:
+            raise OSError("simulated extract failure")
+        return real_unpack(path, dest)
+
+    monkeypatch.setattr(plugin_local.pz, "unpack_zip", flaky_unpack)
+    with pytest.raises(OSError, match="simulated extract failure"):
+        plugin_local.install_local_zip(v2, overwrite=True)
+    assert _hash_tree(runtime) == tree_before
 
 
 def test_install_rejects_invalid_merged_settings(
