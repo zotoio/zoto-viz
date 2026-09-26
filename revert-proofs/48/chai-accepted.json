@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "scripts/revert-proof.lib.test.ts",
-  "testName": "revert-proof vitest runner through the overlay > (f) real expect() failure sets revertProofAssertion",
+  "testName": "revert-proof vitest runner through the overlay > (f) real expect() failures set revertProofAssertion",
   "description": "Drop chai Assertion throw-site branding",
   "red": "AssertionError [ERR_ASSERTION]: expect toBe"
 }
