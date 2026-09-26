@@ -1,5 +1,5 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index cf8f533..e7dd2d5 100644
+index cf8f533..a36efc9 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
 @@ -120,7 +120,7 @@ export class RenderHost {
@@ -20,11 +20,12 @@ index cf8f533..e7dd2d5 100644
    }
  
    /** Run one animation frame (tests / dogfood). */
-@@ -552,10 +552,26 @@ export class RenderHost {
+@@ -552,10 +552,27 @@ export class RenderHost {
      });
    }
  
 +  private buildMirrorScopeFingerprint(): string {
++    renderHostMirrorTelemetry.scopeFingerprintBuilds += 1;
 +    const parts: string[] = [];
 +    for (const v of this.views) {
 +      const meta = packMirrorMeta(v);

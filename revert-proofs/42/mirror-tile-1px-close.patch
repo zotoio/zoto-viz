@@ -1,5 +1,5 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index cf8f533..c2333f6 100644
+index cf8f533..37685de 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
 @@ -313,10 +313,10 @@ export class RenderHost {
@@ -16,3 +16,12 @@ index cf8f533..c2333f6 100644
        const box = copyViewBox(dst, this.letterboxScratch.box);
        const inner = letterboxInnerRect(dst, aspect);
        this.letterboxScratch.inner.x = inner.x + dst.x;
+@@ -343,7 +343,7 @@ export class RenderHost {
+       gpu.present(rd, tex, fill, dst, aspect);
+       return this.writeFbViewport(dst, pr);
+     } finally {
+-      if (releaseBitmap) bitmap.close();
++      bitmap.close();
+     }
+   }
+ 
