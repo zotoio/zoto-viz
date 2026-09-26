@@ -113,7 +113,7 @@ describe("TetrisView host idle feed", () => {
     const beforePieces = view.testScore();
     for (let i = 0; i < FRAMES; i++) {
       clock += FRAME_MS;
-      graph.testHostFrameWhileIdle(clock);
+      graph.hostFrame(clock);
     }
     expect(nowSpy).not.toHaveBeenCalled();
     expect(perfSpy).not.toHaveBeenCalled();

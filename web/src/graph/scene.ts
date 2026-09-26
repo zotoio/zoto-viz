@@ -1526,7 +1526,7 @@ export class NetScene implements HostedView {
     });
     this.animate = this.animate.bind(this);
     // the host drives hosted scenes from its own loop
-    if (!this.host) this.raf = requestAnimationFrame(this.animate);
+    if (!this.host && this.active) this.raf = requestAnimationFrame(this.animate);
   }
 
   // ------------------------------------------------------------------ HostedView
@@ -1724,13 +1724,6 @@ export class NetScene implements HostedView {
 
   testResetGraphRenderCount(): void {
     this.graphRenderCount = 0;
-  }
-
-  /** TEST-ONLY: one host tick while inactive (no graph draw, no self-scheduled rAF). */
-  testHostFrameWhileIdle(_ts: number): void {
-    if (this.active || !this.standaloneTileTick) return;
-    const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
-    this.standaloneTileTick(dtSec);
   }
 
   /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
@@ -3504,18 +3497,21 @@ export class NetScene implements HostedView {
 
   private lastFrameTs = 0;
 
+  /** Standalone 1×1 tile while {@link setActive}(false): host-driven, no graph draw. */
+  private idleFrame(_ts: number): void {
+    this.paneFps.el.hidden = true;
+    if (!this.standaloneTileTick) return;
+    const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
+    this.standaloneTileTick(dtSec);
+  }
+
   private animate(ts: number): void {
-    if (!this.host) this.raf = requestAnimationFrame(this.animate);
-    markFrame(ts);
+    if (!this.host && this.active) this.raf = requestAnimationFrame(this.animate);
     if (!this.active) {
-      this.paneFps.el.hidden = true;
-      if (this.standaloneTileTick) {
-        const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
-        this.standaloneTileTick(dtSec);
-        markFrame(ts);
-      }
+      this.idleFrame(ts);
       return;
     }
+    markFrame(ts);
     this.paneFps.el.hidden = false;
     this.paneFps.tick(ts);
     if (this.satellite && this.satelliteCameraBroken()) {
