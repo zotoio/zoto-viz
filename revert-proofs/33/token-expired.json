@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_assets_security.py",
+  "testName": "PackAssetsSecurityTests::test_expired_token_denied",
+  "description": "Expired pack asset tokens must be rejected.",
+  "timeoutSec": 60
+}

@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import { chromium } from "playwright";
+import { fetchPackAssetToken, packAssetUrl } from "./pack-asset-smoke-util.mjs";
 
 const base = (process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/").replace(/\/?$/, "/");
 const WAIT_MS = 120_000;
@@ -23,24 +24,10 @@ const PACKS = [
   { mode: "plugin:sandbox-fixture-multi", label: "sandbox-fixture-multi", multiFile: true },
 ];
 
-function packAssetUrl(base, token, packId, ...parts) {
-  const root = base.replace(/\/?$/, "/");
-  const segs = [encodeURIComponent(token), encodeURIComponent(packId), ...parts.map((p) => encodeURIComponent(p))];
-  return `${root}pack-assets/${segs.join("/")}`;
-}
-
 function sandboxJsName() {
   const html = readFileSync(path.join(webRoot, "../dist/plugin-sandbox.html"), "utf8");
   const m = html.match(/assets\/(plugin-sandbox-[^"]+\.js)/);
   return m?.[1] ?? null;
-}
-
-async function fetchSessionToken() {
-  const r = await fetch(`${base}api/session`, { headers: { Host: "127.0.0.1:7020" } });
-  if (!r.ok) throw new Error(`session ${r.status}`);
-  const data = await r.json();
-  if (!data.sandboxAssetToken) throw new Error("sandboxAssetToken missing");
-  return data.sandboxAssetToken;
 }
 
 function installProfile(mode) {
@@ -101,21 +88,22 @@ async function waitForDraw(page, label) {
 }
 
 async function main() {
-  const sat = await fetchSessionToken();
+  const sandboxTok = await fetchPackAssetToken(base, "_sandbox");
+  const multiTok = await fetchPackAssetToken(base, "sandbox-fixture-multi");
   const jsName = sandboxJsName();
   let bootstrapJsStatus = null;
   let moduleJsStatus = null;
   if (jsName) {
-    const boot = await fetch(packAssetUrl(base, sat, "_sandbox", jsName), {
+    const boot = await fetch(packAssetUrl(base, sandboxTok, "_sandbox", jsName), {
       headers: { Origin: "null", Host: "127.0.0.1:7020" },
     });
     bootstrapJsStatus = boot.status;
   }
 
-  const multiMod = await fetch(packAssetUrl(base, sat, "sandbox-fixture-multi", "module.js"), {
+  const multiMod = await fetch(packAssetUrl(base, multiTok, "sandbox-fixture-multi", "module.js"), {
     headers: { Origin: "null", Host: "127.0.0.1:7020" },
   });
-  const multiHelper = await fetch(packAssetUrl(base, sat, "sandbox-fixture-multi", "helper.js"), {
+  const multiHelper = await fetch(packAssetUrl(base, multiTok, "sandbox-fixture-multi", "helper.js"), {
     headers: { Origin: "null", Host: "127.0.0.1:7020" },
   });
   assert.equal(multiMod.status, 200, `fixture module.js ${multiMod.status}`);

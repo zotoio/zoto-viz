@@ -1,0 +1,13 @@
+diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
+index 0000000..0000001 100644
+--- a/service/pack_asset_tokens.py
++++ b/service/pack_asset_tokens.py
+@@ -65,8 +65,6 @@ def verify_pack_asset_token(
+     except ValueError:
+         return False
+     t = now if now is not None else time.time()
+-    if exp < t:
+-        return False
+     msg = f"{token_session}\0{pack_id}\0{exp}".encode("utf-8")
+     expected = hmac.new(secret, msg, hashlib.sha256).digest()[:24]
+     got = _b64url_decode(parts[2])

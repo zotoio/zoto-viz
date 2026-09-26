@@ -17,14 +17,37 @@ type HostBoot = {
   config: Record<string, string>;
   viz?: unknown;
   moduleSrc: string;
-  /** Session asset token for opaque-origin pack fetches (follow-up: host-posted blob module). */
-  sandboxAssetToken?: string;
+  bootNonce: string;
+  parentOrigin: string;
 };
 
 const PACK_ASSETS = "/pack-assets/";
 const TOKEN_REDACT = "<sandbox-token>";
 
-function moduleSrcForSandbox(src: string, token?: string): string {
+export function packAssetTokenFromLocation(href = location.href): string {
+  try {
+    const p = new URL(href).pathname;
+    const m = p.match(/^\/pack-assets\/([^/]+)\//);
+    return m?.[1] ? decodeURIComponent(m[1]) : "";
+  } catch {
+    return "";
+  }
+}
+
+export function bootNonceFromLocation(href = location.href): string {
+  try {
+    const h = new URL(href).hash.replace(/^#/, "");
+    const params = new URLSearchParams(h.startsWith("zoto-boot=") ? h : h.replace(/^.*\?/, ""));
+    if (h.startsWith("zoto-boot=")) {
+      return decodeURIComponent(h.slice("zoto-boot=".length));
+    }
+    return params.get("zoto-boot") || "";
+  } catch {
+    return "";
+  }
+}
+
+function moduleSrcForSandbox(src: string, token: string): string {
   if (src.startsWith("blob:")) return src;
   try {
     const u = new URL(src, location.href);
@@ -46,11 +69,12 @@ function moduleSrcForSandbox(src: string, token?: string): string {
 
 /** Redact session token segments before posting to the host console. */
 export function redactSandboxAssetPath(text: string, token?: string): string {
-  if (!text || !token) return text;
+  const t = (token ?? packAssetTokenFromLocation()).trim();
+  if (!text || !t) return text;
   return text
-    .split(token)
+    .split(t)
     .join(TOKEN_REDACT)
-    .split(`/pack-assets/${token}/`)
+    .split(`/pack-assets/${t}/`)
     .join(`/pack-assets/${TOKEN_REDACT}/`);
 }
 
@@ -75,9 +99,12 @@ export type SandboxZoto = {
 };
 
 let allowed = new Set<string>();
+let bootDone = false;
+let postTargetOrigin = "";
 
 function send(type: string, payload?: unknown): void {
-  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, "*");
+  const origin = postTargetOrigin || location.origin;
+  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, origin);
 }
 
 const zoto: SandboxZoto = {
@@ -128,8 +155,11 @@ export function handleSandboxHostMessage(
   d: HostMsg | HostBoot | undefined,
   caps: Set<string>,
   api: SandboxZoto,
+  opts?: { source?: MessageEventSource | null; bootNonce?: string; bootDone?: boolean },
 ): void {
   if (!d || d.source !== "zoto-viz-host") return;
+  if (d.type === "boot") return;
+  if (opts?.source && opts.source !== window.parent) return;
   if (d.type === "config") {
     (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
     api.onConfig?.(d.config || {});
@@ -143,20 +173,47 @@ export function handleSandboxHostMessage(
   }
 }
 
+export function handleSandboxBootMessage(
+  ev: MessageEvent,
+  opts: { bootDone: boolean; bootNonce: string },
+): { bootDone: boolean; postTargetOrigin: string } {
+  const d = ev.data as HostBoot | undefined;
+  if (opts.bootDone) return { bootDone: true, postTargetOrigin: postTargetOrigin };
+  if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") {
+    return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+  }
+  if (ev.source !== window.parent) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+  if (!d.bootNonce || d.bootNonce !== opts.bootNonce) {
+    return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+  }
+  if (!d.parentOrigin) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+  applyInit(d);
+  return { bootDone: true, postTargetOrigin: d.parentOrigin };
+}
+
 window.addEventListener("message", (ev) => {
-  handleSandboxHostMessage(ev.data as HostMsg | HostBoot | undefined, allowed, zoto);
+  handleSandboxHostMessage(ev.data as HostMsg | HostBoot | undefined, allowed, zoto, {
+    source: ev.source,
+    bootDone,
+    bootNonce: bootNonceFromLocation(),
+  });
 });
 
 window.addEventListener("message", async (ev) => {
-  const d = ev.data as HostBoot | undefined;
-  if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") return;
-  applyInit(d);
+  const nonce = bootNonceFromLocation();
+  const out = handleSandboxBootMessage(ev, { bootDone, bootNonce: nonce });
+  bootDone = out.bootDone;
+  postTargetOrigin = out.postTargetOrigin;
+  if (!bootDone) return;
+  const d = ev.data as HostBoot;
+  if (d.type !== "boot") return;
+  const token = packAssetTokenFromLocation();
   try {
-    await import(/* @vite-ignore */ moduleSrcForSandbox(d.moduleSrc, d.sandboxAssetToken));
+    await import(/* @vite-ignore */ moduleSrcForSandbox(d.moduleSrc, token));
     send("ready");
   } catch (e) {
     const raw = String(e);
-    send("log", redactSandboxAssetPath(raw, d.sandboxAssetToken));
+    send("log", redactSandboxAssetPath(raw, token));
   }
 });
 

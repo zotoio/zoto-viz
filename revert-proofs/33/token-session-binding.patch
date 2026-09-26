@@ -1,0 +1,15 @@
+diff --git a/service/access.py b/service/access.py
+index 0000000..0000001 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -68,11 +68,10 @@ def pack_asset_token_ok(request: web.Request) -> bool:
+     if not secret:
+         return False
+     sid = pack_asset_tokens.session_id_from_request(request)
+     return pack_asset_tokens.verify_pack_asset_token(
+         secret,
+         pack_id,
+         token,
+-        session_id=sid if sid else None,
++        session_id=None,
+     )

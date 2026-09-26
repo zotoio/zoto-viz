@@ -5,6 +5,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from service import access
 from service.forensics import location_allowed
+from tests.pack_asset_test_util import SECRET, SESSION, mint
 
 
 def test_bind_is_loopback() -> None:
@@ -16,8 +17,9 @@ def test_bind_is_loopback() -> None:
     assert not access.bind_is_loopback("192.168.1.5")
     assert not access.bind_is_loopback("nope")
     assert access.new_token()
-    sat = access.new_sandbox_asset_token()
-    assert len(sat) >= 22
+    secret = access.new_pack_asset_secret()
+    assert len(secret) >= 16
+    sat = mint("pulse-ts")
     url = access.pack_asset_url(sat, "pulse-ts", "module.js")
     assert url.startswith("/pack-assets/")
     assert sat in url
@@ -58,7 +60,7 @@ class FakeReq:
         header="",
         lan=False,
         csrf="tok",
-        sandbox_asset_token="sat-token",
+        pack_asset_secret=SECRET,
         path="/poke",
         query=None,
     ):
@@ -74,7 +76,7 @@ class FakeReq:
         if header:
             self.headers[access.HEADER] = header
         self.cookies = {access.COOKIE: cookie} if cookie else {}
-        self.app = {"csrf": csrf, "insecure_lan": lan, "sandbox_asset_token": sandbox_asset_token}
+        self.app = {"csrf": csrf, "insecure_lan": lan, "pack_asset_secret": pack_asset_secret}
 
 
 def test_host_origin_csrf_helpers() -> None:
@@ -86,10 +88,11 @@ def test_host_origin_csrf_helpers() -> None:
     assert not access.origin_ok(FakeReq(origin="http://evil.example"))
     assert not access.origin_ok(FakeReq(origin="null"))
     assert not access.origin_ok(FakeReq(origin="null", path="/api/profiles"))
+    tok = mint("_sandbox")
     assert access.origin_ok(FakeReq(
         origin="null",
-        path=access.pack_asset_url("sat-token", "_sandbox", "plugin-sandbox.html"),
-        sandbox_asset_token="sat-token",
+        path=access.pack_asset_url(tok, "_sandbox", "plugin-sandbox.html"),
+        csrf=SESSION,
     ))
     assert access.parse_pack_assets_path("/pack-assets/tok/pid/module.js")
     assert access.origin_ok(FakeReq(host="lan.box:7020", origin="http://lan.box:7020", lan=True))
@@ -120,7 +123,7 @@ class AccessMiddlewareTests(AioHTTPTestCase):
 
         app = web.Application(middlewares=[access.middleware])
         app["csrf"] = "token-aaa"
-        app["sandbox_asset_token"] = "sat-token"
+        app["pack_asset_secret"] = SECRET
         app["insecure_lan"] = False
         app.router.add_get("/ok", ok)
         app.router.add_post("/poke", poke)

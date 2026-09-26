@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/host.csp.test.ts",
+  "testName": "page CSP bootstrap policy > loads plugin sandbox from same-origin html + module (no srcdoc)",
+  "description": "plugin-sandbox.html CSP must stay minimal (no broad connect-src to loopback hosts).",
+  "timeoutSec": 60
+}

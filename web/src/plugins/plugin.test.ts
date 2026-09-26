@@ -7,7 +7,7 @@ import {
 import { pluginViewKnobs, toPluginView, VIEW_PROMPT_KEY } from "./plugin-visualisation";
 import { PluginSandbox } from "./host";
 import { DEFAULT_DREAM } from "../graph/scene";
-import { setSandboxAssetTokenForTests } from "../core/http";
+import { setPackAssetTokenForTests } from "../core/http";
 import type { GNode } from "../graph/scene";
 import type { Device } from "../core/types";
 
@@ -228,7 +228,8 @@ describe("compilePlugin", () => {
     expect(viewSelectOptions().some((o) => o.value === "plugin:topology")).toBe(true);
     expect(viewSelectOptions().some((o) => o.value === "topology")).toBe(false);
     const origFetch = globalThis.fetch;
-    setSandboxAssetTokenForTests("test-pack-token");
+    setPackAssetTokenForTests("_sandbox", "test-pack-token");
+    setPackAssetTokenForTests("pulse", "test-pack-token");
     const box = new PluginSandbox();
     await attachPluginFrontend(box, pulse, { g: "1" });
     expect(document.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
@@ -236,7 +237,7 @@ describe("compilePlugin", () => {
     box.unload();
     await attachPluginFrontend(box, list.find((p) => p.id === "topology")!, {});
     expect(document.querySelector("iframe")).toBeNull();
-    setSandboxAssetTokenForTests("");
+    setPackAssetTokenForTests("_sandbox", "");
     globalThis.fetch = (async () => ({ ok: false, status: 500, json: async () => ({}) })) as never;
     await expect(fetchPlugins()).rejects.toThrow(/plugins/);
     globalThis.fetch = (async () => { throw new Error("offline"); }) as never;

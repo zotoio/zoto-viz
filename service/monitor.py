@@ -1714,7 +1714,6 @@ async def api_session(request: web.Request) -> web.Response:
     from . import typesafe_proxy
     return web.json_response({
         "csrf": request.app.get("csrf") or "",
-        "sandboxAssetToken": request.app.get("sandbox_asset_token") or "",
         "aiControl": agent.ai_control_on(),
         "pluginService": plugins.python_enabled(),
         "insecureLan": bool(request.app.get("insecure_lan")),
@@ -1809,13 +1808,9 @@ async def index(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(idx)
 
 
-async def api_plugin_sandbox_html(request: web.Request) -> web.Response:
-    """Legacy path — redirect callers to token-in-path pack assets."""
-    token = request.app.get("sandbox_asset_token") or ""
-    if not token:
-        return web.json_response({"error": "unavailable"}, status=503)
-    loc = access.pack_asset_url(token, pack_assets.PACK_ID_SANDBOX, "plugin-sandbox.html")
-    raise web.HTTPFound(location=loc)
+async def api_legacy_plugin_sandbox_html(_request: web.Request) -> web.Response:
+    """Bare /plugin-sandbox.html is not served (use token-gated pack-assets URL)."""
+    return web.Response(status=404, text="not found")
 
 
 async def on_startup(app: web.Application) -> None:
@@ -1881,7 +1876,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app = web.Application(middlewares=[access.middleware], client_max_size=agent.MAX_BODY)
     app["state"], app["bpf"], app["clients"], app["wifi_keys"] = state, bpf, set(), wifi_keys
     app["csrf"] = access.new_token()
-    app["sandbox_asset_token"] = access.new_sandbox_asset_token()
+    app["pack_asset_secret"] = access.new_pack_asset_secret()
     app["insecure_lan"] = insecure_lan
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
@@ -1954,8 +1949,9 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_put("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     app.router.add_delete("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     app.router.add_get(r"/pack-assets/{token}/{pack_id}/{tail:.+}", pack_assets.api_pack_assets)
+    app.router.add_post("/api/pack-assets/token/{pack_id}", pack_assets.api_pack_asset_token)
     if WEB_DIST.exists():
-        app.router.add_get("/plugin-sandbox.html", api_plugin_sandbox_html)
+        app.router.add_get("/plugin-sandbox.html", api_legacy_plugin_sandbox_html)
         app.router.add_static("/", WEB_DIST, show_index=False)
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
@@ -2032,7 +2028,7 @@ def main() -> None:
             host=listen["bind"],
             port=listen["port"],
             print=None,
-            access_log=access.sandbox_access_log(app),
+            access_log_class=access.RedactingAccessLogger,
             shutdown_timeout=3,
         )
     finally:

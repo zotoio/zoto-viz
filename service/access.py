@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import logging
 import re
-import secrets
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from aiohttp import web
+from aiohttp.web_log import AccessLogger
+
+from . import pack_asset_tokens
 
 COOKIE = "zoto-viz-csrf"
 HEADER = "X-Zoto-Viz-Csrf"
@@ -40,12 +43,15 @@ def pack_asset_url(token: str, pack_id: str, *parts: str) -> str:
 
 
 def new_token() -> str:
+    import secrets
+
     return secrets.token_urlsafe(32)
 
 
-def new_sandbox_asset_token() -> str:
-    """Per-process opaque-origin sandbox asset gate (>=128 bits). Never log."""
-    return secrets.token_urlsafe(32)
+def new_pack_asset_secret() -> bytes:
+    import secrets
+
+    return secrets.token_bytes(32)
 
 
 def read_sandbox_asset_token(request: web.Request) -> str:
@@ -53,12 +59,21 @@ def read_sandbox_asset_token(request: web.Request) -> str:
     return parsed[0] if parsed else ""
 
 
-def sandbox_asset_token_ok(request: web.Request) -> bool:
-    expected = request.app.get("sandbox_asset_token") or ""
-    got = read_sandbox_asset_token(request)
-    if not expected or not got:
+def pack_asset_token_ok(request: web.Request) -> bool:
+    parsed = parse_pack_assets_path(request.path or "")
+    if not parsed:
         return False
-    return hmac.compare_digest(got, expected)
+    token, pack_id, _tail = parsed
+    secret = request.app.get("pack_asset_secret")
+    if not secret:
+        return False
+    sid = pack_asset_tokens.session_id_from_request(request)
+    return pack_asset_tokens.verify_pack_asset_token(
+        secret,
+        pack_id,
+        token,
+        session_id=sid if sid else None,
+    )
 
 
 def redact_sandbox_token(text: str, token: str) -> str:
@@ -85,7 +100,7 @@ def sandbox_null_origin_allowed(request: web.Request) -> bool:
         return False
     if not parse_pack_assets_path(request.path or ""):
         return False
-    if not sandbox_asset_token_ok(request):
+    if not pack_asset_token_ok(request):
         return False
     _token, pack_id, _tail = parse_pack_assets_path(request.path or "")  # type: ignore[misc]
     if pack_id == "_sandbox":
@@ -106,6 +121,11 @@ def attach_sandbox_cors(resp: web.StreamResponse) -> None:
 
 def attach_sandbox_referrer_policy(resp: web.StreamResponse) -> None:
     resp.headers["Referrer-Policy"] = "no-referrer"
+
+
+def attach_pack_asset_json_headers(resp: web.StreamResponse) -> None:
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "no-store"
 
 
 def bind_is_loopback(bind: str) -> bool:
@@ -183,7 +203,9 @@ def csrf_ok(request: web.Request) -> bool:
 
 
 def _deny(msg: str, status: int = 403) -> web.Response:
-    return web.json_response({"error": msg}, status=status)
+    resp = web.json_response({"error": msg}, status=status)
+    attach_pack_asset_json_headers(resp)
+    return resp
 
 
 @web.middleware
@@ -200,24 +222,25 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
         attach_sandbox_cors(resp)
     if parse_pack_assets_path(request.path or ""):
         attach_sandbox_referrer_policy(resp)
-    elif (request.path or "").rstrip("/") == "/plugin-sandbox.html":
-        attach_sandbox_referrer_policy(resp)
     attach_csrf(request, resp)
     if request.method in MUTATE:
-        sat = request.app.get("sandbox_asset_token") or ""
-        safe = redact_request_path(request.path or "", sat)
+        sat = read_sandbox_asset_token(request)
+        safe = redact_request_path(request.path or "", sat) if sat else request.path
         print(f"[monitor] {request.method} {safe} -> {getattr(resp, 'status', '?')}", flush=True)
     return resp
 
 
-def sandbox_access_log(app: web.Application):
-    """Access log handler that redacts the sandbox asset token path segment."""
+class RedactingAccessLogger(AccessLogger):
+    """aiohttp access logger that redacts pack-asset session tokens in the request line."""
 
-    def log(request: web.Request, response: web.StreamResponse, time: float) -> None:
-        sat = app.get("sandbox_asset_token") or ""
-        remote = request.remote or "-"
-        request_line = f"{request.method} {request.path_qs} {getattr(response, 'status', '?')}"
-        line = f'{remote} - "{request_line}" {time:.4f}s'
-        print(redact_sandbox_token(line, sat), flush=True)
-
-    return log
+    @staticmethod
+    def _format_r(request, response, time):  # noqa: ANN001
+        if request is None:
+            return "-"
+        path_qs = request.path_qs
+        token = read_sandbox_asset_token(request)
+        if token:
+            path_qs = redact_sandbox_token(path_qs, token)
+        return (
+            f"{request.method} {path_qs} HTTP/{request.version.major}.{request.version.minor}"
+        )

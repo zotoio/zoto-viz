@@ -14,6 +14,10 @@ function stubApiResponse(url: string): Response | null {
   if (path === "/api/session") {
     return json({ csrf: "test-csrf", aiControl: false, pluginService: false, typesafeConfigured: false });
   }
+  if (path.startsWith("/api/pack-assets/token/")) {
+    const packId = decodeURIComponent(path.slice("/api/pack-assets/token/".length));
+    return json({ packId, token: `test-token-${packId}` });
+  }
   if (path === "/api/sources") return json({ sources: [], live: {} });
   if (path === "/api/plugin-instances") return json({ instances: [] });
   if (path === "/api/sdm") return json({ linked: false });

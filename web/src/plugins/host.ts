@@ -1,4 +1,4 @@
-import { sandboxAssetToken } from "../core/http";
+import { mintPackAssetToken } from "../core/http";
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
 import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
@@ -26,12 +26,9 @@ const ALLOWED = new Set([
 const PACK_ASSETS_PREFIX = "/pack-assets/";
 const SANDBOX_PACK = "_sandbox";
 
-/** Same-origin pack asset URL with the session token in the path (never query). */
-export function packAssetUrl(packId: string, ...parts: string[]): string {
-  const token = sandboxAssetToken();
-  if (!token) {
-    return `${PACK_ASSETS_PREFIX}${encodeURIComponent(packId)}/${parts.map((p) => encodeURIComponent(p)).join("/")}`;
-  }
+/** Pack asset path with an already-minted token (never omit the token). */
+export function packAssetUrlWithToken(token: string, packId: string, ...parts: string[]): string {
+  if (!token) throw new Error("pack asset token required");
   const segs = [
     encodeURIComponent(token),
     encodeURIComponent(packId),
@@ -40,10 +37,23 @@ export function packAssetUrl(packId: string, ...parts: string[]): string {
   return `${PACK_ASSETS_PREFIX}${segs.join("/")}`;
 }
 
+export async function packAssetUrl(packId: string, ...parts: string[]): Promise<string> {
+  const token = await mintPackAssetToken(packId);
+  return packAssetUrlWithToken(token, packId, ...parts);
+}
+
+let sandboxBootNonce = "";
+
+export function sandboxBootNonceForTests(): string {
+  return sandboxBootNonce;
+}
+
 /** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
-export function pluginSandboxFrameUrl(): string {
-  const href = `${location.origin}${packAssetUrl(SANDBOX_PACK, "plugin-sandbox.html")}`;
-  return href;
+export async function pluginSandboxFrameUrl(): Promise<string> {
+  const token = await mintPackAssetToken(SANDBOX_PACK);
+  sandboxBootNonce = crypto.randomUUID();
+  const path = packAssetUrlWithToken(token, SANDBOX_PACK, "plugin-sandbox.html");
+  return `${location.origin}${path}#zoto-boot=${encodeURIComponent(sandboxBootNonce)}`;
 }
 
 export function hostAllows(type: string, caps: string[]): boolean {
@@ -72,7 +82,8 @@ export type ParentMsg =
     config: Record<string, string>;
     viz?: VizPluginContract;
     moduleSrc: string;
-    sandboxAssetToken?: string;
+    bootNonce: string;
+    parentOrigin: string;
   }
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
@@ -121,8 +132,9 @@ export function pluginModuleUrl(id: string, hash?: string): string {
 }
 
 /** Pack module URL for opaque-origin sandbox import (token in path). */
-export function pluginModuleSandboxUrl(id: string, hash?: string): string {
-  let url = `${location.origin}${packAssetUrl(id, "module.js")}`;
+export async function pluginModuleSandboxUrl(id: string, hash?: string): Promise<string> {
+  const path = await packAssetUrl(id, "module.js");
+  let url = `${location.origin}${path}`;
   if (hash) url += `?h=${encodeURIComponent(hash)}`;
   return url;
 }
@@ -190,7 +202,7 @@ export class PluginSandbox {
     hash?: string,
     viz?: VizPluginContract,
   ): Promise<void> {
-    await this.loadModuleUrl(pluginModuleSandboxUrl(id, hash), caps, config, viz);
+    await this.loadModuleUrl(await pluginModuleSandboxUrl(id, hash), caps, config, viz);
   }
 
   async loadModuleUrl(
@@ -214,7 +226,7 @@ export class PluginSandbox {
     iframe.setAttribute("sandbox", "allow-scripts");
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
-    iframe.src = pluginSandboxFrameUrl();
+    iframe.src = await pluginSandboxFrameUrl();
     document.body.appendChild(iframe);
     this.iframe = iframe;
     if (iframe.srcdoc) {
@@ -232,8 +244,9 @@ export class PluginSandbox {
       config,
       viz,
       moduleSrc,
-      sandboxAssetToken: sandboxAssetToken(),
-    } satisfies ParentMsg, "*");
+      bootNonce: sandboxBootNonce,
+      parentOrigin: location.origin,
+    } satisfies ParentMsg, location.origin);
     if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
       await Promise.resolve();
     } else {
@@ -246,7 +259,7 @@ export class PluginSandbox {
     if (!this.caps.includes("graph.read")) return;
     this.iframe?.contentWindow?.postMessage(
       { source: "zoto-viz-host", type: "tick", nodes } satisfies ParentMsg,
-      "*",
+      location.origin,
     );
   }
 
@@ -254,7 +267,7 @@ export class PluginSandbox {
     if (!this.caps.includes("viz.read")) return;
     this.iframe?.contentWindow?.postMessage(
       { source: "zoto-viz-host", type: "frame", frame: data } satisfies ParentMsg,
-      "*",
+      location.origin,
     );
   }
 

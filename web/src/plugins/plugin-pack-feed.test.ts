@@ -13,7 +13,7 @@ import {
   resetPluginPackFeedState,
   setTileExpectsVizFeed,
 } from "./plugin-pack-feed";
-import { setSandboxAssetTokenForTests } from "../core/http";
+import { setPackAssetTokenForTests } from "../core/http";
 
 describe("plugin pack feed notices", () => {
   afterEach(() => resetPluginPackFeedState());
@@ -46,7 +46,7 @@ describe("plugin pack feed notices", () => {
   });
 
   it("redacts session token from boot failure console lines", () => {
-    setSandboxAssetTokenForTests("super-secret-session-token");
+    setPackAssetTokenForTests("_sandbox", "super-secret-session-token");
     const raw = `Failed to fetch ${location.origin}/pack-assets/super-secret-session-token/demo/module.js`;
     const reason = classifySandboxBootError(new Error(raw));
     expect(reason).not.toContain("super-secret-session-token");
@@ -56,7 +56,7 @@ describe("plugin pack feed notices", () => {
     expect(warn.mock.calls[0]?.[0]).toMatch(/pack=demo/);
     expect(String(warn.mock.calls[0]?.[0])).not.toContain("super-secret-session-token");
     warn.mockRestore();
-    setSandboxAssetTokenForTests("");
+    setPackAssetTokenForTests("_sandbox", "");
   });
 
   it("redactSandboxTokenInText handles path segments", () => {

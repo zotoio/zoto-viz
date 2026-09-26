@@ -1,19 +1,24 @@
 /** Same-origin fetches that carry the CSRF header minted by GET /api/session. */
 
 let csrf = "";
-let sandboxAssetTokenValue = "";
+const packTokenCache = new Map<string, string>();
 
 export function csrfToken(): string {
   return csrf;
 }
 
+/** @deprecated use per-pack tokens from {@link mintPackAssetToken} */
 export function sandboxAssetToken(): string {
-  return sandboxAssetTokenValue;
+  return packTokenCache.get("_sandbox") ?? "";
 }
 
-/** Vitest: seed session asset token without /api/session. */
+/** Vitest: seed a pack asset token without POST /api/pack-assets/token/… */
+export function setPackAssetTokenForTests(packId: string, token: string): void {
+  packTokenCache.set(packId, token);
+}
+
 export function setSandboxAssetTokenForTests(token: string): void {
-  sandboxAssetTokenValue = token;
+  setPackAssetTokenForTests("_sandbox", token);
 }
 
 export function noteCsrf(r: Response): void {
@@ -45,9 +50,20 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return r;
 }
 
+export async function mintPackAssetToken(packId: string): Promise<string> {
+  const cached = packTokenCache.get(packId);
+  if (cached) return cached;
+  await bootSession();
+  const r = await apiFetch(`/api/pack-assets/token/${encodeURIComponent(packId)}`, { method: "POST" });
+  if (!r.ok) throw new Error(`pack asset token unavailable (${packId})`);
+  const data = await r.json() as { token?: string };
+  if (!data.token) throw new Error("pack asset token missing");
+  packTokenCache.set(packId, data.token);
+  return data.token;
+}
+
 export async function bootSession(): Promise<{
   csrf: string;
-  sandboxAssetToken: string;
   aiControl: boolean;
   pluginService: boolean;
   typesafeConfigured: boolean;
@@ -57,7 +73,6 @@ export async function bootSession(): Promise<{
     if (!r.ok) {
       return {
         csrf,
-        sandboxAssetToken: sandboxAssetTokenValue,
         aiControl: false,
         pluginService: false,
         typesafeConfigured: false,
@@ -65,21 +80,16 @@ export async function bootSession(): Promise<{
     }
     const data = await r.json() as {
       csrf?: string;
-      sandboxAssetToken?: string;
       aiControl?: boolean;
       pluginService?: boolean;
       typesafeConfigured?: boolean;
     };
     if (typeof data.csrf === "string" && data.csrf) csrf = data.csrf;
-    if (typeof data.sandboxAssetToken === "string" && data.sandboxAssetToken) {
-      sandboxAssetTokenValue = data.sandboxAssetToken;
-    }
     const typesafeConfigured = typeof data.typesafeConfigured === "boolean"
       ? data.typesafeConfigured
       : await fetchTypeSafeConfiguredFallback();
     return {
       csrf,
-      sandboxAssetToken: sandboxAssetTokenValue,
       aiControl: !!data.aiControl,
       pluginService: !!data.pluginService,
       typesafeConfigured,
@@ -87,7 +97,6 @@ export async function bootSession(): Promise<{
   } catch {
     return {
       csrf,
-      sandboxAssetToken: sandboxAssetTokenValue,
       aiControl: false,
       pluginService: false,
       typesafeConfigured: false,

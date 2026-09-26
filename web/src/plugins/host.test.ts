@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setSandboxAssetTokenForTests } from "../core/http";
+import { setPackAssetTokenForTests } from "../core/http";
 import {
   PluginSandbox,
   consentHash,
   hashConsented,
   hostAllows,
-  packAssetUrl,
+  packAssetUrlWithToken,
   pluginModuleSandboxUrl,
   pluginModuleUrl,
   setTsPluginsAllowed,
@@ -50,14 +50,20 @@ describe("hash consent and TypeScript allow", () => {
 });
 
 describe("pack asset URLs", () => {
-  afterEach(() => setSandboxAssetTokenForTests(""));
+  afterEach(() => {
+    setPackAssetTokenForTests("_sandbox", "");
+    setPackAssetTokenForTests("pulse-ts", "");
+  });
 
-  it("puts the session token in the path segment", () => {
-    setSandboxAssetTokenForTests("sess-tok-abc");
-    const url = packAssetUrl("pulse-ts", "module.js");
+  it("puts the session token in the path segment", async () => {
+    setPackAssetTokenForTests("pulse-ts", "sess-tok-abc");
+    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
+    const url = packAssetUrlWithToken("sess-tok-abc", "pulse-ts", "module.js");
     expect(url).toBe("/pack-assets/sess-tok-abc/pulse-ts/module.js");
     expect(url).not.toContain("?");
-    expect(pluginModuleSandboxUrl("pulse-ts", "deadbeef")).toContain("/pack-assets/sess-tok-abc/pulse-ts/module.js?h=deadbeef");
+    expect(await pluginModuleSandboxUrl("pulse-ts", "deadbeef")).toContain(
+      "/pack-assets/sess-tok-abc/pulse-ts/module.js?h=deadbeef",
+    );
   });
 });
 
@@ -65,11 +71,12 @@ describe("PluginSandbox module load", () => {
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
     vi.restoreAllMocks();
-    setSandboxAssetTokenForTests("");
+    setPackAssetTokenForTests("_sandbox", "");
   });
 
   it("loads pack-assets module.js in the bootstrap frame", async () => {
-    setSandboxAssetTokenForTests("sess-tok-abc");
+    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
+    setPackAssetTokenForTests("pulse", "sess-tok-abc");
     const box = new PluginSandbox();
     expect(pluginModuleUrl("pulse", "deadbeef")).toBe("/api/plugins/pulse/module.js?h=deadbeef");
     const boot = box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");

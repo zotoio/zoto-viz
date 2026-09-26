@@ -2,7 +2,6 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Connect } from "vite";
 import { defineConfig } from "vite";
 
 const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
@@ -21,39 +20,7 @@ function gitShortRev(): string {
   }
 }
 
-/** Dev-only: opaque-origin sandbox iframe may load sandbox-frame.ts without a monitor token. */
-function sandboxNullOriginDevPath(pathname: string): boolean {
-  return pathname.startsWith("/src/plugins/sandbox-frame");
-}
-
-function sandboxNullOriginCorsPlugin() {
-  return {
-    name: "zoto-sandbox-null-origin-cors",
-    configureServer(server: { middlewares: Connect.Server }) {
-      server.middlewares.use((req, res, next) => {
-        if (req.headers.origin !== "null" || req.method !== "GET") {
-          next();
-          return;
-        }
-        const pathname = (req.url ?? "").split("?")[0] ?? "";
-        if (!sandboxNullOriginDevPath(pathname)) {
-          next();
-          return;
-        }
-        const end = res.end.bind(res);
-        res.end = ((chunk?: unknown, encoding?: unknown, cb?: unknown) => {
-          res.setHeader("Access-Control-Allow-Origin", "null");
-          res.setHeader("Vary", "Origin");
-          return end(chunk as never, encoding as never, cb as never);
-        }) as typeof res.end;
-        next();
-      });
-    },
-  };
-}
-
 export default defineConfig({
-  plugins: [sandboxNullOriginCorsPlugin()],
   define: {
     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
   },
@@ -63,6 +30,7 @@ export default defineConfig({
     proxy: {
       "/ws": { target: `ws://127.0.0.1:${monitorPort}`, ws: true },
       "/api": { target: `http://127.0.0.1:${monitorPort}` },
+      "/pack-assets": { target: `http://127.0.0.1:${monitorPort}` },
     },
   },
   // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same

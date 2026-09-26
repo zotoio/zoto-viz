@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { fetchPackAssetToken, packAssetUrl } from "./pack-asset-smoke-util.mjs";
 
 const monitor = (process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/").replace(/\/?$/, "/");
 const WAIT_MS = 60_000;
@@ -23,28 +24,15 @@ function sandboxJsName() {
   return m[1];
 }
 
-async function fetchSessionToken() {
-  const r = await fetch(`${monitor}api/session`, { headers: { Host: "127.0.0.1:7020" } });
-  assert.equal(r.status, 200, `session ${r.status}`);
-  const data = await r.json();
-  assert.ok(data.sandboxAssetToken, "sandboxAssetToken missing from /api/session");
-  return data.sandboxAssetToken;
-}
-
-function packAssetUrl(token, packId, ...parts) {
-  const segs = [encodeURIComponent(token), encodeURIComponent(packId), ...parts.map((p) => encodeURIComponent(p))];
-  return `${monitor}pack-assets/${segs.join("/")}`;
-}
-
 function formatDiag(diag) {
   return JSON.stringify(diag, null, 2);
 }
 
 async function main() {
-  const sat = await fetchSessionToken();
+  const sat = await fetchPackAssetToken(monitor, "_sandbox");
   const jsName = sandboxJsName();
   const diag = {
-    sandboxAssetTokenPresent: !!sat,
+    packAssetTokenPresent: !!sat,
     bootstrapJsStatus: null,
     bootstrapJsCors: null,
     moduleJsStatus: null,

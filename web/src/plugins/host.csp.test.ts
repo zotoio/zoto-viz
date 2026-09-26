@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { setSandboxAssetTokenForTests } from "../core/http";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setPackAssetTokenForTests } from "../core/http";
 import { PluginSandbox, pluginSandboxFrameUrl } from "./host";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -21,14 +21,20 @@ describe("page CSP bootstrap policy", () => {
     expect(sandbox).not.toMatch(/\bsrcdoc\b/i);
     expect(sandbox).toMatch(/<script[^>]+src="/);
     expect(sandbox).not.toMatch(/<script[^>]*>[^<]+/);
-    expect(sandbox).toContain("connect-src blob:");
+    expect(sandbox).toContain("connect-src 'none'");
   });
 });
 
 describe("PluginSandbox", () => {
+  beforeEach(() => {
+    setPackAssetTokenForTests("_sandbox", "test-sandbox-token");
+    setPackAssetTokenForTests("backrooms", "test-backrooms-token");
+  });
+
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
-    setSandboxAssetTokenForTests("");
+    setPackAssetTokenForTests("_sandbox", "");
+    setPackAssetTokenForTests("backrooms", "");
   });
 
   it("loads a same-origin bootstrap frame instead of srcdoc", async () => {
@@ -84,8 +90,8 @@ describe("PluginSandbox", () => {
     expect(document.querySelectorAll("iframe").length).toBe(0);
   });
 
-  it("points the bootstrap at a token-gated pack-assets html url", () => {
-    setSandboxAssetTokenForTests("tok");
-    expect(pluginSandboxFrameUrl()).toMatch(/\/pack-assets\/tok\/_sandbox\/plugin-sandbox\.html$/);
+  it("points the bootstrap at a token-gated pack-assets html url", async () => {
+    setPackAssetTokenForTests("_sandbox", "tok");
+    expect(await pluginSandboxFrameUrl()).toMatch(/\/pack-assets\/tok\/_sandbox\/plugin-sandbox\.html#/);
   });
 });

@@ -1,19 +1,17 @@
 /** Mosaic tile copy: sandbox boot failure vs running pack with an empty viz feed. */
 
-import { sandboxAssetToken } from "../core/http";
-
 export const NO_PACK_FEED = "NO PACK FEED";
 const TOKEN_REDACT = "<sandbox-token>";
 const PACK_ASSETS = "/pack-assets/";
 
 export function redactSandboxTokenInText(text: string, token?: string): string {
-  const sat = (token ?? sandboxAssetToken()).trim();
-  if (!text || !sat) return text;
-  return text
-    .split(sat)
-    .join(TOKEN_REDACT)
-    .split(`${PACK_ASSETS}${sat}/`)
-    .join(`${PACK_ASSETS}${TOKEN_REDACT}/`);
+  if (!text) return text;
+  let out = text;
+  const sat = (token ?? "").trim();
+  if (sat) {
+    out = out.split(sat).join(TOKEN_REDACT);
+  }
+  return out.replace(/\/pack-assets\/[^/]+\//g, `${PACK_ASSETS}${TOKEN_REDACT}/`);
 }
 
 export function formatSandboxStartupFailure(packName: string): string {

@@ -1,0 +1,13 @@
+diff --git a/web/plugin-sandbox.html b/web/plugin-sandbox.html
+index 0000000..0000001 100644
+--- a/web/plugin-sandbox.html
++++ b/web/plugin-sandbox.html
+@@ -5,7 +5,7 @@
+     <title>zoto-viz plugin sandbox</title>
+     <meta
+       http-equiv="Content-Security-Policy"
+-      content="default-src 'none'; script-src 'self' blob:; connect-src 'none'; img-src data:; style-src 'none'; base-uri 'none'; form-action 'none';"
++      content="default-src 'none'; script-src blob: http://127.0.0.1:*; connect-src blob: http://127.0.0.1:*; img-src data:; style-src 'none';"
+     />
+   </head>
+   <body>
