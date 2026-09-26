@@ -262,9 +262,7 @@ def test_committed_event_timestamp_uses_committer_date() -> None:
 
     ts = _committed_event_timestamp(
         {
-            "commit": {
-                "committer": {"date": "2026-09-26T15:00:00Z"},
-            }
+            "committer": {"date": "2026-09-26T15:00:00Z"},
         }
     )
     assert ts is not None

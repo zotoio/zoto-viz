@@ -611,8 +611,9 @@ def load_pr_review_context(
     except urllib.error.HTTPError:
         timeline = fetch_labeled_events(repo, issue_number, token)
     push_at = last_push_at_from_timeline(timeline)
-    if push_at is None:
-        push_at = fetch_pull_head_commit_date(repo, issue_number, token)
+    head_commit_at = fetch_pull_head_commit_date(repo, issue_number, token)
+    if head_commit_at is not None and (push_at is None or head_commit_at > push_at):
+        push_at = head_commit_at
     return labels, timeline, push_at
 
 
@@ -640,6 +641,10 @@ def _committed_event_timestamp(item: dict) -> datetime | None:
     created = item.get("created_at")
     if created:
         return parse_github_timestamp(created)
+    for role in ("committer", "author"):
+        date = (item.get(role) or {}).get("date")
+        if date:
+            return parse_github_timestamp(date)
     commit = item.get("commit") or {}
     for role in ("committer", "author"):
         date = (commit.get(role) or {}).get("date")
