@@ -681,7 +681,6 @@ def install_catalog_zip(
         raw, doc, dest, reminted_from = plugin_local.remint_zip(raw, dest, overwrite=overwrite)
         pid = str(doc["id"])
         tmp_path.write_bytes(raw)
-        plugin_local._guard_work_budget_zip_before_install(tmp_path)
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
