@@ -33,6 +33,10 @@
       "rule": "inline-zoto-declare"
     },
     {
+      "file": "plugins/src/marble-run/frontend/index.ts",
+      "rule": "inline-zoto-declare"
+    },
+    {
       "file": "plugins/src/nixie-clock/frontend/index.ts",
       "rule": "inline-zoto-declare"
     },
