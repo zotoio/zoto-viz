@@ -639,6 +639,12 @@ class State:
                 if n not in d["hostnames"] and useful_name(n):
                     d["hostnames"].append(n)
             self.alias_to_ip[v6] = v4
+            for bucket in (self._fail_buckets, self._conn_attempt_buckets):
+                v6_b = bucket.pop(v6, None)
+                if v6_b:
+                    v4_b = bucket[v4]
+                    for sec, n in v6_b.items():
+                        v4_b[sec] = v4_b.get(sec, 0) + n
             for key in [k for k in self.flows if v6 in k.split("|")]:
                 del self.flows[key]
                 self._flow_buckets.pop(key, None)
