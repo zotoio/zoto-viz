@@ -11,12 +11,16 @@ export const VIZ_CONTRACT_VERSION = 2;
 
 /**
  * Host → sandbox tick when `viz.presentTick` is true in plugin.yml.
- * Delivered once per mosaic tile per display frame (or once for a single-stage view).
+ * Delivered once per sandbox per display frame (mosaic panes may share one sandbox).
  */
 export interface VizPresentTick {
   /** rAF / vsync timestamp in milliseconds (`performance.now()` clock). */
   frameMs: number;
-  /** Mosaic pane / view mode id; empty string for a single full-wall stage. */
+  /**
+   * Host-supplied string; meaning undecided, pending the sandbox-per-tile decision
+   * (one sandbox per tile vs one per pack with tile-keyed state). Do not rely on
+   * `tileId` for per-tile simulation state until that decision lands.
+   */
   tileId: string;
   /** Optional secondary clock in seconds (e.g. sky shader time); omit when unused. */
   pluginClock?: number;

@@ -56,7 +56,7 @@ export interface VizPluginContract {
   uniforms: VizSkyUniform[];
   ubo: typeof VIZ_UBO;
   idle: VizIdleConfig;
-  /** When true, host delivers {@link VizPresentTick} once per tile per frame. */
+  /** When true, host delivers {@link VizPresentTick} once per sandbox per display frame. */
   presentTick?: boolean;
 }
 

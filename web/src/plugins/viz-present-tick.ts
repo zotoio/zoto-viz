@@ -3,7 +3,7 @@ import type { VizPluginContract } from "./viz-host";
 
 /**
  * Cached when the active view mode changes — no per-frame `pluginSpecs.find`.
- * `tileId` is informational (mosaic focus / stage mode); one tick per sandbox per frame.
+ * One tick per sandbox per frame. `tileId` meaning is undecided (sandbox-per-tile TBD).
  */
 export interface PresentDriveBinding {
   sandbox: PluginSandbox;

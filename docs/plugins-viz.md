@@ -67,12 +67,12 @@ advertises `VIZ_CONTRACT_VERSION` on sandbox `init` (`contractVersion`).
 ### Present tick (opt-in, `viz.write`)
 
 When `viz.presentTick: true`, the host sends one `VizPresentTick` per sandbox
-per display frame (mosaic panes share one iframe). Fields:
+per display frame (mosaic panes may share one iframe). Fields:
 
 | Field | Meaning |
 | --- | --- |
 | `frameMs` | rAF timestamp (ms) |
-| `tileId` | informational mosaic / view mode id |
+| `tileId` | undecided, pending the sandbox-per-tile decision — do not assume per-tile state |
 | `pluginClock?` | optional secondary clock (e.g. sky time in seconds) |
 
 ```ts
