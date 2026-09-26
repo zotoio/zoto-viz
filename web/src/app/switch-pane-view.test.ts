@@ -65,7 +65,7 @@ describe("switchPaneView", () => {
       expect(result.ok).toBe(false);
       expect(m.setPaneView).not.toHaveBeenCalled();
       expect(mountView).not.toHaveBeenCalled();
-      expect(m.setPaneNotice).toHaveBeenCalledWith(expect.any(String), expect.stringMatching(/needs review/));
+      expect(m.setPaneNotice).toHaveBeenCalledWith(expect.any(String), expect.stringMatching(/Not approved yet.*Settings → Plugins/));
     });
 
     it("uses focus fallback when the requested tile id is stale", async () => {

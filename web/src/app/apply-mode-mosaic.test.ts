@@ -38,6 +38,7 @@ describe("revertModeSelection", () => {
 
 describe("consentBlockMessage", () => {
   it("names the plugin when available", () => {
-    expect(consentBlockMessage({ name: "Heat map" })).toMatch(/Heat map needs review/);
+    expect(consentBlockMessage({ name: "Heat map" })).toMatch(/Heat map.*Settings → Plugins/);
+    expect(consentBlockMessage(null)).toMatch(/Not approved yet.*Settings → Plugins/);
   });
 });

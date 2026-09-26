@@ -29,6 +29,7 @@ export function revertModeSelection(
 }
 
 export function consentBlockMessage(spec: { name?: string } | null | undefined): string {
-  if (spec?.name) return `${spec.name} needs review before it can run — open This view or enable auto-consent.`;
-  return "This plugin needs review before it can run — open This view or enable auto-consent.";
+  const where = "Approve it in Settings → Plugins.";
+  if (spec?.name) return `Not approved yet. ${spec.name}: ${where}`;
+  return `Not approved yet. ${where}`;
 }
