@@ -242,8 +242,20 @@ export class VizV1FrameAdapter {
   private readonly packs = new Map<string, V1PackSlot>();
   private work: V1PackSlot | null = null;
   private workTalkers: VizTalkerSample[] = preallocateTalkers(VIZ_MAX_TALKER_SAMPLES);
+  /** View option snapshot from scope sync; stable between delivers until replaced. */
+  private viewOpts: Readonly<Record<string, string>> | null = null;
   /** Incremented once per deliver when at least one v1 pack is registered (tests). */
   convertCalls = 0;
+
+  /** Called from host scope sync when mode/plugin options change (not per frame). */
+  syncViewOpts(opts: Readonly<Record<string, string>>): void {
+    this.viewOpts = opts;
+  }
+
+  /** Exposed for tests — deliver must not rebuild or re-read per-view options each frame. */
+  viewOptsSnapshot(): Readonly<Record<string, string>> | null {
+    return this.viewOpts;
+  }
 
   hasV1Packs(): boolean {
     return this.packs.size > 0;

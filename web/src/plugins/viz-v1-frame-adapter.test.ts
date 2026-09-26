@@ -66,6 +66,22 @@ describe("VizV1FrameAdapter", () => {
     expect(a.talkers[0]!.rate).toBe(100);
   });
 
+  it("keeps the same view options object across delivers until syncViewOpts replaces it", () => {
+    const adapter = new VizV1FrameAdapter();
+    const opts = { source: "lan", layout: "grid" };
+    adapter.syncViewOpts(opts);
+    adapter.register("pack-a");
+    adapter.deliver(sampleV2(0));
+    const held = adapter.viewOptsSnapshot();
+    expect(held).toBe(opts);
+    for (let i = 0; i < 300; i++) adapter.deliver(sampleV2(i));
+    expect(adapter.viewOptsSnapshot()).toBe(held);
+    const next = { source: "wan", layout: "list" };
+    adapter.syncViewOpts(next);
+    expect(adapter.viewOptsSnapshot()).toBe(next);
+    expect(adapter.viewOptsSnapshot()).not.toBe(opts);
+  });
+
   it("restores full talker list after a pack splices talkers out", () => {
     const adapter = new VizV1FrameAdapter();
     const a = adapter.register("pack-a", defaultV1WorkBudget({ maxTalkers: 8 }));

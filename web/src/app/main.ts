@@ -444,6 +444,19 @@ scene.afterLook = () => {
   scene.setPluginUboBuffer(vizWriter.ubo);
 };
 let v1AdapterPackId: string | null = null;
+let vizSourceBind = parseSourceBind({});
+let vizSourceBindOpts: Record<string, string> | null = null;
+
+/** Parse viz source bind and adapter view opts once per scope sync (not each frame). */
+function syncVizFrameScope(m: ViewMode, opts: Record<string, string>): void {
+  vizV1FrameAdapter.syncViewOpts(opts);
+  if (vizSourceBindOpts === opts) return;
+  vizSourceBindOpts = opts;
+  const demoPack = normalizeVizDemoPackId(m.pluginId);
+  vizSourceBind = demoPack === "hn-rain" || demoPack === "hn-term"
+    ? illustratedSourceBind(opts)
+    : parseSourceBind(opts);
+}
 
 function syncV1PackAdapter(spec: PluginView | null): void {
   if (v1AdapterPackId) {
@@ -535,6 +548,7 @@ function onPluginFields(): void {
   const m = modeById(modeSel.value);
   const opts = optsFor(m);
   currentOpts = opts;
+  syncVizFrameScope(m, opts);
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   nestCams.setLook(opts);
   if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
@@ -839,6 +853,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const opts = optsFor(m);
   const prevMode = liveMode;
   currentOpts = opts;
+  syncVizFrameScope(m, opts);
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   modeSel.value = m.id;
   localStorage.setItem("zoto-viz.mode", m.id);
@@ -1072,9 +1087,7 @@ function feed(m: StateMsg): void {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
-    const bind = packId === "hn-rain" || packId === "hn-term"
-      ? illustratedSourceBind(optsFor(mode))
-      : parseSourceBind(optsFor(mode));
+    const bind = vizSourceBind;
     const useV1Adapter = vizV1FrameAdapter.hasV1Packs() || active?.viz?.contract === 1;
     const buildLiveFrame = idle
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
@@ -1111,7 +1124,7 @@ function feed(m: StateMsg): void {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, optsFor(mode));
+        }, currentOpts);
       }
     }, buildFrame);
     if (frame) {
@@ -1120,7 +1133,7 @@ function feed(m: StateMsg): void {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }
       if (packId === "hn-rain") {
-        const pics = parseHnRainLook(optsFor(mode)).pics && !mosaic?.on;
+        const pics = parseHnRainLook(currentOpts).pics && !mosaic?.on;
         feedTitleCube.setActive(pics);
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
