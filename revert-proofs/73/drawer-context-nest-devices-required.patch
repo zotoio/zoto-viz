@@ -1,10 +1,13 @@
-diff --git a/web/src/ui/drawer-context-schema.ts b/web/src/ui/drawer-context-schema.ts
---- a/web/src/ui/drawer-context-schema.ts
-+++ b/web/src/ui/drawer-context-schema.ts
-@@ -20,5 +20,5 @@ export type NestCamsDrawerContext = {
-   look: Record<string, string | number | boolean | undefined> | null;
-   extras: readonly HTMLElement[];
-   wallScope: { mosaicOn: boolean; tileModeIds: readonly string[] };
+diff --git a/web/src/ui/drawer-context.ts b/web/src/ui/drawer-context.ts
+index 1111111..2222222 100644
+--- a/web/src/ui/drawer-context.ts
++++ b/web/src/ui/drawer-context.ts
+@@ -18,7 +18,7 @@ type DrawerContextBase = {
+ 
+ export type NestCamsDrawerContext = DrawerContextBase & {
+   spec: PluginView & { id: "nest-cams" };
 -  devices: readonly Device[];
 +  devices?: readonly Device[];
  };
+ 
+ export type GenericDrawerContext = DrawerContextBase & {

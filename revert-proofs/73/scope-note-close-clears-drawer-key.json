@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/duplicate-slot-scope-note-guards.test.ts",
+  "testName": "^duplicate slot shared config > drawer rebind guards > closing settings clears view drawer key so reopening the same view rebuilds$",
+  "description": "Closing the settings flyout must clear cached view drawer key so the next open rebuilds content.",
+  "redOutput": "AssertionError: expected \"rebuildViewDrawerContent\" to be called 1 times, but got 0 times"
+}

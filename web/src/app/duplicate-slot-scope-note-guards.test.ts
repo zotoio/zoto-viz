@@ -78,4 +78,15 @@ describe("duplicate slot shared config > drawer rebind guards", () => {
     expect(viewLayer(settings)).toBe(layer);
     settings.el.remove();
   });
+
+  it("closing settings clears view drawer key so reopening the same view rebuilds", async () => {
+    const { settings, spec } = await harness();
+    rebuildDrawerSpy.mockClear();
+    settings.close();
+    settings.openView(PACK);
+    rebuildDrawerSpy.mockClear();
+    settings.bindView(spec, spec.config, undefined, undefined, PACK);
+    expect(rebuildDrawerSpy).toHaveBeenCalledTimes(1);
+    settings.el.remove();
+  });
 });

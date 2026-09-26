@@ -4,6 +4,8 @@
     "types": ["vite/client", "vitest/globals"]
   },
   "include": [
+    "src/core/d3-force-3d.d.ts",
+    "src/plugins/glsl-raw.d.ts",
     "src/ui/drawer-context.nest-devices-required.typecheck.ts",
     "src/graph/render-host-fb-viewport.test.ts"
   ],

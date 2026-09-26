@@ -78,6 +78,7 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
     }
     expect(syncSpy).toHaveBeenCalledTimes(0);
+    settings.close();
     settings.el.remove();
   });
 
@@ -98,6 +99,7 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
     }
     expect(syncSpy).toHaveBeenCalledTimes(0);
 
+    settings.close();
     settings.el.remove();
   });
 });

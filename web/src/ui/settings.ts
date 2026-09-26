@@ -189,8 +189,6 @@ export class Settings {
   private viewPluginDirty = false;
   private viewPluginDraft: Record<string, string> = {};
   private readonly viewDrawerStatusEl: HTMLDivElement;
-  private lastMosaicSlotEl: HTMLSelectElement | null = null;
-  private lastMosaicSlotPaneIndex = 0;
   private mosaicLayoutPickerTrigger: HTMLButtonElement | null = null;
   /** Focus target when the view drawer closes (Layout picker or the menu/cog that opened it). */
   private viewDrawerReturnFocus: HTMLElement | null = null;
@@ -543,10 +541,6 @@ export class Settings {
 
   private focusViewDrawerReturnTarget(): void {
     (this.viewDrawerReturnFocus ?? this.mosaicLayoutPickerTrigger)?.focus();
-  }
-
-  mosaicLayoutPickerTriggerEl(): HTMLButtonElement | null {
-    return this.mosaicLayoutPickerTrigger;
   }
 
   /** Refresh Nest camera chips when Device Access lists devices. */
@@ -1870,7 +1864,7 @@ export class Settings {
     this.viewDrawerStatusEl.classList.remove("fail");
   }
 
-  clearViewDrawerStatus(): void {
+  private clearViewDrawerStatus(): void {
     this.viewDrawerStatusEl.textContent = "";
     this.viewDrawerStatusEl.hidden = true;
   }
@@ -1938,8 +1932,6 @@ export class Settings {
       sel.setAttribute("aria-label", cap.textContent);
       fillViewSelect(sel, cur);
       sel.addEventListener("change", () => {
-        this.lastMosaicSlotEl = sel;
-        this.lastMosaicSlotPaneIndex = i;
         const from = ids[i] ?? "";
         const to = sel.value;
         if (!from || from === to) return;
@@ -1950,14 +1942,6 @@ export class Settings {
           this.anim.mosaicTiles = parseMosaicTiles(next);
           if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
           this.persistAnim();
-        }
-        if (!this.isOpen) return;
-        this.animUi?.syncTiles();
-        if (this.viewPluginDirty) {
-          const gain = this.viewHost?.querySelector<HTMLInputElement>(
-            '.plugin-layer[data-layer="view"] .slider input[type=range]',
-          );
-          gain?.focus();
         }
       });
       row.append(cap, sel);
@@ -2341,7 +2325,6 @@ export class Settings {
   private tickMeter = (): void => {
     if (!this.isOpen) return;
     this.meterRaf = requestAnimationFrame(this.tickMeter);
-    if (this.activePane === "view" && this.viewBind?.spec) this.syncPackScopeNoteFromAnim();
     const ui = this.audioUi;
     if (!ui || this.activePane !== "audio") return;
     const p = this.pulseNow();

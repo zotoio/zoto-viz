@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
+  "testName": "^pack shared copy literals > per-tile instance scope note$",
+  "description": "Per-tile instance scope note must include the instance-defaults override sentence.",
+  "redOutput": "AssertionError: expected 'Settings apply to this tile only.' to be 'Settings apply to this tile only. Ins…' // Object.is equality"
+}

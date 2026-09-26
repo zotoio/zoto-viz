@@ -239,7 +239,6 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     layoutTrigger.focus();
     settings.openView(PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    settings.clearViewDrawerStatus();
 
     const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
     pickMosaicSlot(settings, 0, "plugin:memory");
@@ -269,7 +268,6 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     paneCog.focus();
     paneCog.click();
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    settings.clearViewDrawerStatus();
 
     const layoutTrigger = mosaicLayoutPickerTrigger(settings);
     const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");

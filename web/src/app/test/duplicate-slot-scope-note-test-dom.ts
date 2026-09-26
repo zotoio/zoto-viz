@@ -18,8 +18,7 @@ export function mosaicLayoutSelects(settings: Settings): HTMLSelectElement[] {
 }
 
 export function mosaicLayoutPickerTrigger(settings: Settings): HTMLButtonElement {
-  const el = settings.mosaicLayoutPickerTriggerEl()
-    ?? settings.el.querySelector<HTMLButtonElement>(".mosaic-layout-picker-trigger");
+  const el = settings.el.querySelector<HTMLButtonElement>(".mosaic-layout-picker-trigger");
   if (!el) throw new Error("missing mosaic layout picker trigger");
   return el;
 }
