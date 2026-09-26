@@ -24,10 +24,14 @@ from . import plugin_zip as pz
 from . import plugins
 from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
 from . import pack_safe_zip as psz
-from .pack_install_copy import REASON_PACK_INSTALL_FAULT, fault_message
+from .pack_install_copy import REASON_PACK_INSTALL_BLOCKED, REASON_PACK_INSTALL_FAULT, fault_message
 from .pack_zip_install_ux import zip_unsafe_blocked_payload
 from .pack_install_wall_notices import wall_notice_for_install_result
-from .plugin_install import InstallV2BlockedError, install_zip_to_runtime
+from .plugin_install import (
+    InstallUpgradeRollbackError,
+    InstallV2BlockedError,
+    install_zip_to_runtime,
+)
 
 ENGINES = frozenset({
     "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
@@ -290,6 +294,17 @@ def _refresh_python(info: dict[str, Any]) -> None:
         info["pythonReloadError"] = str(e)
 
 
+def _upgrade_rollback_result(err: InstallUpgradeRollbackError) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error": REASON_PACK_INSTALL_BLOCKED,
+        "message": str(err),
+        "id": err.pack_id,
+        "sha256": err.sha256,
+        "zip": err.zip_path,
+    }
+
+
 def _zip_blocked_result(
     exc: ValueError,
     *,
@@ -322,7 +337,11 @@ def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
         info["packInstallBlocked"] = blocked
     _refresh_python(info)
     safe = not info.get("consentRequired")
-    mode = f"plugin:{info['id']}" if activate and safe and info.get("id") else None
+    mode = (
+        f"plugin:{info['id']}"
+        if activate and safe and info.get("ok") and info.get("id")
+        else None
+    )
     notify_catalog(mode=mode)
     info["activated"] = bool(mode)
     if mode:
@@ -402,6 +421,9 @@ def install_local_zip(
         except InstallV2BlockedError:
             psz.cleanup_staging_for_pack(runtime.parent, pid)
             raise
+        except InstallUpgradeRollbackError as e:
+            psz.cleanup_staging_for_pack(runtime.parent, pid)
+            return _finish(_upgrade_rollback_result(e), activate=activate)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -450,16 +472,20 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
     incoming = pz.plugin_sha256(dest)
     upgrade = runtime.is_dir()
-    unpacked = install_zip_to_runtime(
-        dest,
-        dest,
-        runtime,
-        doc,
-        rel=str(dest),
-        sha256=incoming,
-        upgrade=upgrade,
-        pack_read=pack_read,
-    )
+    try:
+        unpacked = install_zip_to_runtime(
+            dest,
+            dest,
+            runtime,
+            doc,
+            rel=str(dest),
+            sha256=incoming,
+            upgrade=upgrade,
+            pack_read=pack_read,
+        )
+    except InstallUpgradeRollbackError as e:
+        psz.cleanup_staging_for_pack(runtime.parent, pid)
+        return _finish(_upgrade_rollback_result(e), activate=activate)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from

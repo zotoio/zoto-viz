@@ -20,7 +20,9 @@ from service import paths
 from service import plugin_install as pi
 from service import plugin_local
 from service import plugin_zip as pz
-from service.pack_install_copy import REASON_ZIP_UNSAFE, zip_rejection_log_message
+from service.pack_install_blocked_store import pack_info_blocked_line, reset_blocked_store_for_tests
+from service.pack_install_copy import REASON_ZIP_UNSAFE, upgrade_rollback_user_message, zip_rejection_log_message
+from service.pack_install_wall_notices import reset_wall_notices_for_tests
 
 MINIMAL = "id: sample\nname: Sample\nversion: 1\n"
 VIZ = "engine: graph\nbase: topology\n"
@@ -73,9 +75,6 @@ def _local() -> Path:
 def _reset() -> None:
     pi.reset_install_pipeline_for_tests()
     plugin_local.reset_watch_for_tests()
-    from service.pack_install_blocked_store import reset_blocked_store_for_tests
-    from service.pack_install_wall_notices import reset_wall_notices_for_tests
-
     reset_blocked_store_for_tests()
     reset_wall_notices_for_tests()
 
@@ -655,18 +654,32 @@ def test_qe_upgrade_rollback_restores_v1_and_cleans_bak(
     runtime = paths.plugin_local_runtime_dir() / "sample"
     old_tree = pi.runtime_tree_hash(runtime)
     v2 = _zip_bytes({"plugin.yml": "id: sample\nname: Sample\nversion: 2\n", "visualisation.yml": VIZ})
+    expected = upgrade_rollback_user_message("Sample", 2, 1)
 
     def boom() -> None:
         raise OSError("rename failed")
 
     pi.set_after_first_rename(boom)
     try:
-        with pytest.raises(OSError):
-            plugin_local.publish_local(
-                {"zip_b64": base64.b64encode(v2).decode(), "overwrite": True},
-            )
+        blocked = plugin_local.publish_local(
+            {"zip_b64": base64.b64encode(v2).decode(), "overwrite": True},
+        )
+        again = plugin_local.publish_local(
+            {"zip_b64": base64.b64encode(v2).decode(), "overwrite": True},
+        )
     finally:
         pi.set_after_first_rename(None)
+    assert blocked["ok"] is False
+    assert again["ok"] is False
+    assert blocked["message"] == expected
+    assert pack_info_blocked_line("sample") == expected
+    assert blocked.get("packInstallBlocked") == expected
+    notices = blocked.get("installNotices") or []
+    assert len(notices) == 1
+    assert notices[0]["message"] == expected
+    assert len(again.get("installNotices") or []) == 0
+    assert "rename failed" not in str(blocked)
+    assert "Traceback" not in str(blocked)
     assert pi.runtime_tree_hash(runtime) == old_tree
     assert pi.list_staging_dirs(runtime.parent) == []
 
@@ -676,6 +689,37 @@ def test_qe_upgrade_rollback_restores_v1_and_cleans_bak(
     assert runtime.is_dir()
     pi.recover_leftover_bak_dirs(runtime.parent)
     assert not bak.is_dir()
+
+
+def test_qe_upgrade_succeeds_when_bak_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    assert plugin_local.publish_local({"zip_b64": base64.b64encode(good).decode()})["ok"] is True
+    v2 = _zip_bytes(
+        {
+            "plugin.yml": "id: sample\nname: Sample\nversion: 2\n",
+            "visualisation.yml": VIZ,
+        },
+    )
+    real_rmtree = shutil.rmtree
+    bak_path = paths.plugin_local_runtime_dir() / "sample.bak"
+
+    def flaky_rmtree(path, *args, **kwargs):
+        if Path(path) == bak_path:
+            raise OSError("delete failed")
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", flaky_rmtree)
+    out = plugin_local.publish_local({"zip_b64": base64.b64encode(v2).decode(), "overwrite": True})
+    assert out["ok"] is True
+    assert out.get("version") == 2
+    assert not (out.get("installNotices") or [])
+    assert pack_info_blocked_line("sample") is None
+    runtime = paths.plugin_local_runtime_dir() / "sample"
+    assert (runtime / "plugin.yml").read_text(encoding="utf-8").startswith("id: sample\nname: Sample\nversion: 2")
 
 
 def test_qe_crash_staging_removed_at_boot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

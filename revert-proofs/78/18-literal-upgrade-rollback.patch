@@ -1,0 +1,14 @@
+diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
+--- a/service/pack_install_copy.py
++++ b/service/pack_install_copy.py
+@@ -16,10 +16,7 @@ REASON_BOUNDARY_BLOCKED = "pack_boundary"
+ ZIP_UX_OVERSIZE_TAIL = "It unpacks to more than packs are allowed."
+ 
+ # UX Pro — upgrade swap rollback (literal pin; revert row blanks this template).
+-UPGRADE_ROLLBACK_UX_MESSAGE = (
+-    "Couldn't update {name} to version {new_version}, so version {old_version} is still installed. "
+-    "Try again, and if it keeps failing, check the server log."
+-)
++UPGRADE_ROLLBACK_UX_MESSAGE = ""
+ 
+ _DEFAULT_ZIP_STEM = "pack"

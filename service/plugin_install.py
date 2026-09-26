@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -17,9 +18,14 @@ from . import plugin_zip as pz
 from .pack_boundary import PackBundleBoundary, PackBundleBoundaryError, format_blocked_message
 from .pack_install_lint import merge_lint_warnings, run_install_pack_lint
 from .pack_zip_blocks import record_zip_block, row_for_start_failure, zip_block_for_sha
+from .pack_install_blocked_store import record_blocked_zip
+from .pack_install_copy import REASON_PACK_INSTALL_BLOCKED, upgrade_rollback_user_message
 from .pack_sdk_contract import assert_pack_sdk_compatible, read_cached_sdk_manifest
+from .pack_zip_install_ux import installed_runtime_version
 
 InstallCheck = Callable[["InstallContext"], None]
+
+_LOG = logging.getLogger(__name__)
 
 _INSTALL_CHECKS: list[InstallCheck] = []
 _after_first_rename: Callable[[], None] | None = None
@@ -69,6 +75,23 @@ class InstallV2BlockedError(Exception):
 class InstallStartFailedError(Exception):
     def __init__(self, message: str, *, reason: str = "") -> None:
         self.reason = reason
+        super().__init__(message)
+
+
+class InstallUpgradeRollbackError(Exception):
+    """Upgrade swap failed after ``.bak`` was taken; live tree was rolled back."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        pack_id: str,
+        sha256: str,
+        zip_path: str,
+    ) -> None:
+        self.pack_id = pack_id
+        self.sha256 = sha256
+        self.zip_path = zip_path
         super().__init__(message)
 
 
@@ -524,7 +547,27 @@ def _install_staged_to_runtime_locked(
             raise RuntimeError("swap already in progress")
         _swap_in_progress.add(pid)
         try:
-            swapped = psz.go_live(staged, runtime, after_first_rename=_after_first_rename)
+            try:
+                swapped = psz.go_live(staged, runtime, after_first_rename=_after_first_rename)
+            except OSError as e:
+                if upgrade and runtime.is_dir():
+                    old_version = installed_runtime_version(runtime)
+                    msg = upgrade_rollback_user_message(name, version, old_version)
+                    _LOG.info("pack upgrade swap failed; rolled back to prior version: %s", e)
+                    record_blocked_zip(
+                        pack_id=pid,
+                        sha256=sha256,
+                        message=msg,
+                        zip_path=rel,
+                        reason=REASON_PACK_INSTALL_BLOCKED,
+                    )
+                    raise InstallUpgradeRollbackError(
+                        msg,
+                        pack_id=pid,
+                        sha256=sha256,
+                        zip_path=rel,
+                    ) from e
+                raise
         finally:
             _swap_in_progress.discard(pid)
         try:

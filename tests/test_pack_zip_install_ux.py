@@ -9,11 +9,14 @@ from service import mcp as plugin_mcp
 from service import pack_install_copy as copy
 from service import plugin_local
 from service.pack_install_copy import (
+    UPGRADE_ROLLBACK_UX_MESSAGE,
     ZIP_UX_CORRUPT_PRIOR_SUFFIX,
     ZIP_UX_CORRUPT_TAIL,
     ZIP_UX_ENCRYPTED_TAIL,
     ZIP_UX_OVERSIZE_TAIL,
+    sanitize_manifest_display_text,
     sanitize_zip_display_stem,
+    upgrade_rollback_user_message,
     zip_rejection_log_message,
     zip_unsafe_user_message,
 )
@@ -39,11 +42,27 @@ def test_zip_ux_literal_oversize_tail() -> None:
 
 
 def test_zip_ux_sanitize_strips_path_and_keeps_markup_plain() -> None:
-    stem = sanitize_zip_display_stem("../packs/<img src=x>.zip")
+    raw = "../packs/<img src=x>"
+    stem = sanitize_zip_display_stem(f"{raw}.zip")
     assert stem == "<img src=x>"
+    assert sanitize_manifest_display_text(raw) == "<img src=x>"
     assert "<" in stem
     assert ".." not in stem
     assert "/" not in stem
+
+
+def test_zip_ux_literal_upgrade_rollback_message() -> None:
+    assert UPGRADE_ROLLBACK_UX_MESSAGE == (
+        "Couldn't update {name} to version {new_version}, so version {old_version} is still installed. "
+        "Try again, and if it keeps failing, check the server log."
+    )
+
+
+def test_zip_ux_upgrade_rollback_example() -> None:
+    assert upgrade_rollback_user_message("Sample", 2, 1) == (
+        "Couldn't update Sample to version 2, so version 1 is still installed. "
+        "Try again, and if it keeps failing, check the server log."
+    )
 
 
 def test_zip_ux_user_message_examples() -> None:

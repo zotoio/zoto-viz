@@ -262,14 +262,17 @@ def test_atomic_swap_failure_keeps_old_and_cleans_staging(tmp_path: Path, monkey
     def boom() -> None:
         raise OSError("rename failed")
 
+    from service.pack_install_copy import upgrade_rollback_user_message
+
     pi.set_after_first_rename(boom)
     v2 = _zip({"plugin.yml": "id: sample\nname: Sample\nversion: 2\n", "visualisation.yml": "engine: graph\nbase: topology\n"})
     try:
-        with pytest.raises(OSError):
-            plugin_local.publish_local(
-                {"zip_b64": __import__("base64").b64encode(v2).decode(), "overwrite": True},
-            )
+        blocked = plugin_local.publish_local(
+            {"zip_b64": __import__("base64").b64encode(v2).decode(), "overwrite": True},
+        )
     finally:
         pi.set_after_first_rename(None)
+    assert blocked["ok"] is False
+    assert blocked["message"] == upgrade_rollback_user_message("Sample", 2, 1)
     assert pi.runtime_tree_hash(runtime) == old_hash
     assert not pi.list_staging_dirs(paths.plugin_local_runtime_dir())

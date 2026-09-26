@@ -16,6 +16,12 @@ ZIP_UX_CORRUPT_PRIOR_SUFFIX = ", so version {version} is still installed."
 ZIP_UX_ENCRYPTED_TAIL = "It's password-protected. Zip it again without a password."
 ZIP_UX_OVERSIZE_TAIL = "It unpacks to more than packs are allowed."
 
+# UX Pro — upgrade swap rollback (literal pin; revert row blanks this template).
+UPGRADE_ROLLBACK_UX_MESSAGE = (
+    "Couldn't update {name} to version {new_version}, so version {old_version} is still installed. "
+    "Try again, and if it keeps failing, check the server log."
+)
+
 _DEFAULT_ZIP_STEM = "pack"
 _DISPLAY_STEM_MAX = 80
 _LOG_ZIP_REJECTED = "pack zip install rejected: %s"
@@ -31,19 +37,47 @@ def fault_message(detail: str) -> str:
     return f"Pack install store is unreadable. {detail.strip()}"
 
 
+def _sanitize_display_label(raw: str, *, default: str) -> str:
+    base = "".join(ch for ch in raw if ch.isprintable() and ch not in "\t\n\r\f\v")
+    base = base.strip()
+    if not base:
+        base = default
+    if len(base) > _DISPLAY_STEM_MAX:
+        base = base[: _DISPLAY_STEM_MAX - 3] + "..."
+    return base
+
+
+def sanitize_manifest_display_text(raw: str | None, *, default: str = "Plugin") -> str:
+    """Manifest name/version as plain text: basename only, no controls, max 80 chars."""
+    text = str(raw or default).replace("\\", "/")
+    base = text.rsplit("/", 1)[-1]
+    return _sanitize_display_label(base, default=default)
+
+
 def sanitize_zip_display_stem(raw: str | None) -> str:
     """User-supplied zip label as plain text: basename only, no controls, max 80 chars."""
     text = str(raw or _DEFAULT_ZIP_STEM).replace("\\", "/")
     base = text.rsplit("/", 1)[-1]
     if base.lower().endswith(".zip"):
         base = base[:-4]
-    base = "".join(ch for ch in base if ch.isprintable() and ch not in "\t\n\r\f\v")
-    base = base.strip()
-    if not base:
-        base = _DEFAULT_ZIP_STEM
-    if len(base) > _DISPLAY_STEM_MAX:
-        base = base[: _DISPLAY_STEM_MAX - 3] + "..."
-    return base
+    return _sanitize_display_label(base, default=_DEFAULT_ZIP_STEM)
+
+
+def upgrade_rollback_user_message(
+    pack_name: str | None,
+    new_version: str | int | None,
+    old_version: str | int | None,
+) -> str:
+    name = sanitize_manifest_display_text(pack_name, default="Plugin")
+    new_v = sanitize_manifest_display_text(
+        str(new_version) if new_version is not None else "",
+        default="?",
+    )
+    old_v = sanitize_manifest_display_text(
+        str(old_version) if old_version is not None else "",
+        default="?",
+    )
+    return UPGRADE_ROLLBACK_UX_MESSAGE.format(name=name, new_version=new_v, old_version=old_v)
 
 
 def zip_display_stem_from_path(path: str | Path | None) -> str:

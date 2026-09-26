@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import io
+import logging
 import secrets
 import shutil
 import struct
@@ -18,6 +19,8 @@ from typing import Any, BinaryIO, Callable
 import yaml
 
 from . import plugin_zip as pz
+
+_LOG = logging.getLogger(__name__)
 
 # Fixed cap for manifest/metadata member reads (plugin.yml); packs cannot raise this.
 MANIFEST_MEMBER_MAX_BYTES = 65_536
@@ -416,8 +419,12 @@ def go_live(
     if bak.is_dir():
         try:
             shutil.rmtree(bak)
-        except OSError:
-            shutil.rmtree(bak, ignore_errors=True)
+        except OSError as exc:
+            _LOG.warning(
+                "pack upgrade left .bak directory after successful swap: %s",
+                bak,
+                exc_info=exc,
+            )
     return True
 
 
