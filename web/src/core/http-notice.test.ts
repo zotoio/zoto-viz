@@ -111,6 +111,61 @@ describe("server restart wall notice", () => {
     });
   });
 
+  describe("burst auto-clear timer", () => {
+    const origFetch = globalThis.fetch;
+    let off: () => void;
+    let setTimeoutSpy: ReturnType<typeof vi.spyOn<typeof globalThis, "setTimeout">>;
+
+    beforeEach(() => {
+      expect.hasAssertions();
+      vi.useFakeTimers();
+      setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+      document.body.innerHTML = "<div id=\"wall\"></div>";
+      noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
+      globalThis.fetch = (async (url: string, init?: RequestInit) => {
+        const path = String(url);
+        const h = new Headers(init?.headers);
+        const sent = h.get("X-Zoto-Viz-Csrf") || "";
+        if (path.includes("/api/session")) {
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
+            json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
+          } as Response;
+        }
+        if (sent !== "fresh") {
+          return {
+            ok: false,
+            status: 403,
+            headers: new Headers(),
+            clone() { return this; },
+            json: async () => ({ error: "csrf required" }),
+          } as Response;
+        }
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
+      }) as typeof fetch;
+      off = bindServerRestartWallNotice();
+    });
+
+    afterEach(() => {
+      setTimeoutSpy.mockRestore();
+      globalThis.fetch = origFetch;
+      off();
+    });
+
+    it("arms exactly one eight-second auto-clear for three stale-token hits", async () => {
+      await Promise.all([
+        apiFetch("/api/a", { method: "PUT" }),
+        apiFetch("/api/b", { method: "PUT" }),
+        apiFetch("/api/c", { method: "PUT" }),
+      ]);
+      const autoClearArms = setTimeoutSpy.mock.calls.filter((call) => call[1] === 8000);
+      expect(autoClearArms).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(1);
+    });
+  });
+
   describe("auto clear", () => {
     let off: () => void;
 
