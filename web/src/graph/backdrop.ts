@@ -10,7 +10,7 @@ import { loadHtmlImage } from "../core/load-image";
 import {
   probePluginSkyCompile,
   wrapPluginSky,
-} from "../../../plugins/sdk/plugin-sky-probe";
+} from "../plugins/plugin-sky-probe";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -659,7 +659,7 @@ export {
   pluginShaderError,
   probePluginSkyCompile,
   wrapPluginSky,
-} from "../../../plugins/sdk/plugin-sky-probe";
+} from "../plugins/plugin-sky-probe";
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
 
 export class Backdrop {
