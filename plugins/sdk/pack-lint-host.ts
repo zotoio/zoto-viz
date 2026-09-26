@@ -113,14 +113,22 @@ function resolvesIntoPackSrc(repoRel: string | null): boolean {
   return false;
 }
 
+/** Map template-literal `${…}` segments to `*` so glob-style resolution can match pack paths. */
+function normalizeTemplateSpec(spec: string): string {
+  return spec.includes("${") ? spec.replace(/\$\{[^}]*\}/g, "*") : spec;
+}
+
 export function extractModuleSpecifiers(source: string): string[] {
   const specs: string[] = [];
   const patterns = [
     /\bimport\s+(?:type\s+)?[\s\S]*?\sfrom\s+["']([^"']+)["']/g,
     /\bexport\s+(?:type\s+)?[\s\S]*?\sfrom\s+["']([^"']+)["']/g,
     /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+    /\bimport\s*\(\s*`([^`]+)`\s*\)/g,
     /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g,
+    /\brequire\s*\(\s*`([^`]+)`\s*\)/g,
     /\bimport\.meta\.glob\s*\(\s*["']([^"']+)["']/g,
+    /\bimport\.meta\.glob\s*\(\s*`([^`]+)`\s*\)/g,
     /\bimport\.meta\.glob\s*\(\s*\[([^\]]+)\]/g,
   ];
   for (const re of patterns) {
@@ -128,7 +136,7 @@ export function extractModuleSpecifiers(source: string): string[] {
     while ((m = re.exec(source)) !== null) {
       if (re.source.includes("\\[")) {
         const inner = m[1]!;
-        for (const part of inner.match(/["']([^"']+)["']/g) ?? []) {
+        for (const part of inner.match(/["'`]([^"'`]+)["'`]/g) ?? []) {
           specs.push(part.slice(1, -1));
         }
       } else {
@@ -150,14 +158,15 @@ export function hostImportsPackSrcViolations(
   const specs = extractModuleSpecifiers(text);
   const hits: PackLintViolation[] = [];
   for (const spec of specs) {
-    const resolved = resolveToRepoRel(spec, hostRepoRel, repoRoot, pathConfig, extraPaths);
+    const bare = normalizeTemplateSpec(spec);
+    const resolved = resolveToRepoRel(bare, hostRepoRel, repoRoot, pathConfig, extraPaths);
     if (resolvesIntoPackSrc(resolved)) {
       hits.push({ file: hostRepoRel, rule });
       break;
     }
-    if (spec.includes("*") || spec.includes("?")) {
-      const globBase = stripImportSuffix(spec).split("*")[0] ?? "";
-      const globResolved = resolveToRepoRel(globBase || spec, hostRepoRel, repoRoot, pathConfig, extraPaths);
+    if (bare.includes("*") || bare.includes("?")) {
+      const globBase = stripImportSuffix(bare).split("*")[0] ?? "";
+      const globResolved = resolveToRepoRel(globBase || bare, hostRepoRel, repoRoot, pathConfig, extraPaths);
       if (resolvesIntoPackSrc(globResolved)) {
         hits.push({ file: hostRepoRel, rule });
         break;
