@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > key routing > routes alert keys to alert and status keys to status",
+  "description": "Revert production guard (row-02-alert-routing)",
+  "red": "AssertionError: expected null not to be null"
+}

@@ -1,0 +1,19 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index cb070a8..b5bf2d1 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -150,6 +150,14 @@ function dismissNotice(key: NoticeKey): void {
+     removeLiveNotice(live);
+     queue.delete(key);
+     syncQueueCount();
++    if (visible.length === 0 && queue.size === 0 && regionNode) {
++      const root = regionNode.parentElement ?? document.getElementById("wall")!;
++      regionNode.remove();
++      regionNode = null;
++      statusContainer = null;
++      alertContainer = null;
++      mountWallNoticeRegion(root);
++    }
+     if (queue.size > 0) {
+       const next = queue.keys().next().value as NoticeKey;
+       promoteQueued(next);

@@ -1,0 +1,29 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index cb070a8..3d54a38 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -35,6 +35,7 @@ type LiveNotice = {
+   isError: boolean;
+ };
+ 
++let deferRegionUntilPost = true;
+ let regionNode: HTMLElement | null = null;
+ let statusContainer: HTMLElement | null = null;
+ let alertContainer: HTMLElement | null = null;
+@@ -160,6 +161,7 @@ function dismissNotice(key: NoticeKey): void {
+ }
+ 
+ export function mountWallNoticeRegion(root: HTMLElement): void {
++  if (deferRegionUntilPost) return;
+   if (regionNode?.isConnected) return;
+   if (regionNode && !regionNode.isConnected) {
+     for (const notice of [...visible]) removeLiveNotice(notice);
+@@ -194,6 +196,8 @@ export function postWallNotice(args: {
+   action?: NoticeAction;
+   autoClearMs?: number;
+ }): { dismiss: () => void } {
++  deferRegionUntilPost = false;
++  if (!regionNode) mountWallNoticeRegion(document.getElementById("wall") ?? document.body);
+   const { key, text, action, autoClearMs } = args;
+   const dismiss = () => dismissNotice(key);
+ 

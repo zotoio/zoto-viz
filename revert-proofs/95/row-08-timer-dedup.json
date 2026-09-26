@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > auto-clear timers > re-arms a single auto-clear timer for repeated posts on one key",
+  "description": "Revert production guard (row-08-timer-dedup)",
+  "red": "AssertionError: expected 3 to be 1 // Object.is equality"
+}

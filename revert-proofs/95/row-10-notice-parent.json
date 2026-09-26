@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > notice parents > parents each notice under one of the two region containers",
+  "description": "Revert production guard (row-10-notice-parent)",
+  "red": "AssertionError: expected undefined to be <div \u2026(3)></div> // Object.is equality"
+}

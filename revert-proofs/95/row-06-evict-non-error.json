@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > capacity eviction > evicts the oldest non-error when a fourth notice arrives",
+  "description": "Revert production guard (row-06-evict-non-error)",
+  "red": "AssertionError: expected <div class=\"wall-notice-row\" \u2026(2)>\u2026(1)</div> to be null"
+}

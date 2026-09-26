@@ -1,0 +1,14 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index cb070a8..b15bb25 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -199,8 +199,7 @@ export function postWallNotice(args: {
+ 
+   const live = keyToLive.get(key);
+   if (live) {
+-    writeRowContent(live.node, text, action);
+-    armNoticeTimer(live, autoClearMs);
++    insertVisible(key, text, action, autoClearMs);
+     if (
+       visible.length === MAX_VISIBLE &&
+       visible.every((n) => n.isError) &&

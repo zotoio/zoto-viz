@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > boot containers > keeps empty status and alert containers before the first post",
+  "description": "Revert production guard (row-01-boot-region)",
+  "red": "AssertionError: expected undefined to be true // Object.is equality"
+}

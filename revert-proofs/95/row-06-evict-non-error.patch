@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index cb070a8..d6a390a 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -223,7 +223,7 @@ export function postWallNotice(args: {
+     return { dismiss };
+   }
+ 
+-  if (!evictOldestNonError()) {
++  if (true) {
+     queue.set(key, { text, action, autoClearMs });
+     syncQueueCount();
+     return { dismiss };

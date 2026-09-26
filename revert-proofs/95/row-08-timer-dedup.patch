@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index cb070a8..dc01f6b 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -63,7 +63,6 @@ function clearNoticeTimer(notice: LiveNotice): void {
+ }
+ 
+ function armNoticeTimer(notice: LiveNotice, autoClearMs?: number): void {
+-  clearNoticeTimer(notice);
+   if (autoClearMs == null || autoClearMs <= 0) return;
+   notice.timer = setTimeout(() => {
+     dismissNotice(notice.key);

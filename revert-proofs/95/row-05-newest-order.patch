@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index cb070a8..9c8dedc 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -127,7 +127,7 @@ function insertVisible(
+   autoClearMs?: number,
+ ): void {
+   const node = makeRow(key, text, action);
+-  pickContainer(key).appendChild(node);
++  pickContainer(key).prepend(node);
+   const live: LiveNotice = { key, node, timer: null, isError: isErrorKey(key) };
+   visible.push(live);
+   keyToLive.set(key, live);

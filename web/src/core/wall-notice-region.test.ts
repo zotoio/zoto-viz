@@ -11,9 +11,9 @@ function boot() {
   document.body.innerHTML = "<div id=\"wall\"></div><div id=\"foot\"></div>";
   const wall = document.getElementById("wall")!;
   mountWallNoticeRegion(wall);
-  const region = wall.querySelector(".wall-notice-region") as HTMLElement;
-  const status = region.querySelector(".wall-notice-status") as HTMLElement;
-  const alert = region.querySelector(".wall-notice-alert") as HTMLElement;
+  const region = wall.querySelector(".wall-notice-region");
+  const status = region?.querySelector(".wall-notice-status") ?? null;
+  const alert = region?.querySelector(".wall-notice-alert") ?? null;
   return { wall, region, status, alert };
 }
 
@@ -36,14 +36,15 @@ describe("wall notice region", () => {
     beforeEach(() => expect.hasAssertions());
     it("keeps empty status and alert containers before the first post", () => {
       const { status, alert } = boot();
-      expect(status.isConnected && alert.isConnected).toBe(true);
-      expect(status.childElementCount + alert.childElementCount).toBe(0);
+      expect(status?.isConnected).toBe(true);
+      expect(alert?.isConnected).toBe(true);
+      expect((status?.childElementCount ?? 0) + (alert?.childElementCount ?? 0)).toBe(0);
       let inserts = 0;
-      const orig = status.appendChild.bind(status);
-      status.appendChild = ((n: Node) => { inserts += 1; return orig(n); }) as typeof status.appendChild;
+      const orig = status!.appendChild.bind(status!);
+      status!.appendChild = ((n: Node) => { inserts += 1; return orig(n); }) as typeof status.appendChild;
       postWallNotice({ key: "server-restarted", text: "Server restarted." });
-      status.appendChild = orig;
-      expect(status.childElementCount).toBe(1);
+      status!.appendChild = orig;
+      expect(status!.childElementCount).toBe(1);
       expect(inserts).toBe(1);
     });
   });
@@ -212,9 +213,8 @@ describe("wall notice region", () => {
       const { status, alert } = boot();
       postWallNotice({ key: "server-restarted", text: "s" });
       postWallNotice({ key: "install-failed", text: "a" });
-      for (const c of [status, alert]) {
-        for (const row of c.querySelectorAll(".wall-notice-row")) expect(row.parentElement).toBe(c);
-      }
+      expect(status.querySelector('[data-notice-key="server-restarted"]')?.parentElement).toBe(status);
+      expect(alert.querySelector('[data-notice-key="install-failed"]')?.parentElement).toBe(alert);
     });
   });
 });

@@ -1,0 +1,25 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index cb070a8..6d9871c 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -197,20 +197,6 @@ export function postWallNotice(args: {
+   const { key, text, action, autoClearMs } = args;
+   const dismiss = () => dismissNotice(key);
+ 
+-  const live = keyToLive.get(key);
+-  if (live) {
+-    writeRowContent(live.node, text, action);
+-    armNoticeTimer(live, autoClearMs);
+-    if (
+-      visible.length === MAX_VISIBLE &&
+-      visible.every((n) => n.isError) &&
+-      isErrorKey(key)
+-    ) {
+-      queue.set(key, { text, action, autoClearMs });
+-      syncQueueCount();
+-    }
+-    return { dismiss };
+-  }
+ 
+   if (queue.has(key)) {
+     queue.set(key, { text, action, autoClearMs });
