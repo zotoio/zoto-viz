@@ -128,8 +128,11 @@ PY"
 mkjson pack-swap-clears-fallback "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > pack-swap-clears-fallback" 1
 
 # context loss notice
-patch_row context-loss-notice-shared-region "sed -i 's/postWallNotice(this.wall)/document.createElement(\"div\")/' web/src/graph/gfx-wall-notice.ts; sed -i '/this.wall.appendChild(el);/d' web/src/graph/gfx-wall-notice.ts"
-mkjson context-loss-notice-shared-region "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > context-loss-notice-shared-region" 0
+patch_row context-lost-notice-in-wall-region "sed -i 's/key: \"context-lost\"/key: \"context-not-restored\"/' web/src/graph/gfx-wall-notice.ts"
+mkjson context-lost-notice-in-wall-region "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > context-lost-notice-in-wall-region" 0
+
+patch_row context-not-restored-notice-in-wall-region "sed -i 's/key: \"context-not-restored\"/key: \"context-lost\"/' web/src/graph/gfx-wall-notice.ts"
+mkjson context-not-restored-notice-in-wall-region "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > context-not-restored-notice-in-wall-region" 0
 
 patch_row context-loss-notice-no-generic "sed -i 's/this.gfxNotice.onContextLost();//' web/src/graph/render-host.ts"
 mkjson context-loss-notice-no-generic "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > context-loss-notice-no-generic" 0
@@ -205,8 +208,8 @@ python3 - <<'PY'
 from pathlib import Path
 p=Path('web/src/graph/gfx-wall-notice.ts')
 t=p.read_text()
-sel = "`." + "${GFX_WALL_RELOAD_CLASS}`)"
-old = f"""    const btn = this.el?.querySelector({sel} as HTMLButtonElement | null;
+sel = "`." + "${WALL_NOTICE_ACTION_CLASS}`)"
+old = f"""    const btn = getWallNotice(this.wall, "context-not-restored")?.querySelector({sel} as HTMLButtonElement | null;
     const focusOnReload = btn !== null && document.activeElement === btn;
     const hadLateReload = this.reloadOffered;
     this.el?.remove();

@@ -1,0 +1,101 @@
+diff --git a/web/src/graph/gfx-wall-notice.ts b/web/src/graph/gfx-wall-notice.ts
+index 0bd42eb6..067fc6e3 100644
+--- a/web/src/graph/gfx-wall-notice.ts
++++ b/web/src/graph/gfx-wall-notice.ts
+@@ -1,20 +1,21 @@
+-import { postWallNotice } from "../core/wall-notice-region";
++import {
++  clearWallNotice,
++  getWallNotice,
++  postWallNotice,
++  WALL_NOTICE_ACTION_CLASS,
++} from "../core/wall-notice-region";
+ import {
+   GFX_INTERRUPTED_NOTICE,
+   GFX_NO_RESTORE_NOTICE,
+ } from "./shader-fallback-copy";
+ 
+-export const GFX_WALL_NOTICE_CLASS = "gfx-wall-notice";
+-export const GFX_WALL_RELOAD_CLASS = "gfx-wall-reload";
+-
+ export type GfxWallNoticeOpts = {
+   /** After the no-restore reload offer was showing and the context came back. */
+   onDismissLateReload?: () => void;
+ };
+ 
+-/** Single wall-level status when the shared WebGL context is lost. */
++/** Posts gfx context-loss copy through the shared wall-notice region. */
+ export class GfxWallNotice {
+-  private el: HTMLDivElement | null = null;
+   private shown = false;
+   private restoreTimer: ReturnType<typeof setTimeout> | null = null;
+   private reloadOffered = false;
+@@ -24,10 +25,6 @@ export class GfxWallNotice {
+     private readonly opts: GfxWallNoticeOpts = {},
+   ) {}
+ 
+-  get element(): HTMLDivElement | null {
+-    return this.el;
+-  }
+-
+   get hasPendingReloadTimer(): boolean {
+     return this.restoreTimer !== null;
+   }
+@@ -35,11 +32,7 @@ export class GfxWallNotice {
+   onContextLost(): void {
+     if (this.shown) return;
+     this.shown = true;
+-    const el = postWallNotice(this.wall) as HTMLDivElement;
+-    el.className = GFX_WALL_NOTICE_CLASS;
+-    el.tabIndex = -1;
+-    el.textContent = GFX_INTERRUPTED_NOTICE;
+-    this.el = el;
++    postWallNotice({ key: "context-not-restored", text: GFX_INTERRUPTED_NOTICE }, this.wall);
+     this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
+   }
+ 
+@@ -48,11 +41,13 @@ export class GfxWallNotice {
+       clearTimeout(this.restoreTimer);
+       this.restoreTimer = null;
+     }
+-    const btn = this.el?.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement | null;
++    const btn = getWallNotice(this.wall, "context-not-restored")?.querySelector(
++      `.${WALL_NOTICE_ACTION_CLASS}`,
++    ) as HTMLButtonElement | null;
+     const focusOnReload = btn !== null && document.activeElement === btn;
+     const hadLateReload = this.reloadOffered;
+-    this.el?.remove();
+-    this.el = null;
++    clearWallNotice(this.wall, "context-lost");
++    clearWallNotice(this.wall, "context-not-restored");
+     this.shown = false;
+     this.reloadOffered = false;
+     if (focusOnReload) {
+@@ -63,17 +58,16 @@ export class GfxWallNotice {
+   }
+ 
+   private onRestoreTimeout(): void {
+-    if (!this.el) return;
++    if (!this.shown) return;
+     this.reloadOffered = true;
+-    this.el.textContent = "";
+-    const msg = document.createElement("span");
+-    msg.textContent = GFX_NO_RESTORE_NOTICE;
+-    const btn = document.createElement("button");
+-    btn.type = "button";
+-    btn.className = GFX_WALL_RELOAD_CLASS;
+-    btn.textContent = "Reload";
+-    btn.addEventListener("click", () => location.reload());
+-    this.el.appendChild(msg);
+-    this.el.appendChild(btn);
++    clearWallNotice(this.wall, "context-lost");
++    postWallNotice(
++      {
++        key: "context-not-restored",
++        text: GFX_NO_RESTORE_NOTICE,
++        action: { label: "Reload", onClick: () => location.reload() },
++      },
++      this.wall,
++    );
+   }
+ }
