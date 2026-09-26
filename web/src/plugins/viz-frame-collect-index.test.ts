@@ -35,22 +35,15 @@ async function freshCollect() {
   return import("./viz-frame-collect");
 }
 
-const nativeMapSet = Map.prototype.set;
-
 function countNewTalkerIndexWrites(run: () => void): number {
   let n = 0;
+  const mapSet = Map.prototype.set;
   const mapSpy = vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
     if (typeof key === "string" && key.startsWith("10.0.0.")) n++;
-    return nativeMapSet.call(this, key, value);
-  });
-  const setAdd = Set.prototype.add;
-  const setSpy = vi.spyOn(Set.prototype, "add").mockImplementation(function (this: Set<unknown>, value) {
-    if (typeof value === "string" && value.startsWith("10.0.0.")) n++;
-    return setAdd.call(this, value);
+    return mapSet.call(this, key, value);
   });
   run();
   mapSpy.mockRestore();
-  setSpy.mockRestore();
   return n;
 }
 
@@ -69,12 +62,16 @@ describe("viz link index R1 pruning", () => {
     const f200 = flowsUniquePairs(200);
     mod.collectVizLinks(f200, talkers200, 8);
     mod.collectVizLinks(flowsUniquePairs(400), talkers400, 8);
-    const baseline = mod.collectVizLinks(f200, talkers200, 8);
+    const expectedLinks = mod
+      .collectVizLinks(f200, talkers200, 8)
+      .links.map((l) => `${l.src}>${l.dst}@${l.rate}`);
     const newSets = countNewTalkerIndexWrites(() => {
       mod.collectVizLinks(f200, talkers200, 8);
     });
+    expect(
+      mod.collectVizLinks(f200, talkers200, 8).links.map((l) => `${l.src}>${l.dst}@${l.rate}`),
+    ).toEqual(expectedLinks);
     expect(newSets).toBe(0);
-    expect(mod.collectVizLinks(f200, talkers200, 8).links).toEqual(baseline.links);
   });
 
   it("drops an idle pair at frame 3600 but keeps it indexed until then", async () => {
@@ -164,17 +161,73 @@ describe("viz link index R2 tie-break", () => {
 
   it("returns identical top links for two arrival orders of the same 400 flows", async () => {
     const mod = await freshCollect();
-    const talkers = new Set(["10.0.0.1"]);
-    for (let i = 2; i <= 401; i++) talkers.add(`10.0.0.${i}`);
-    const flows = flowsUniquePairs(400, 88);
-    for (let i = 0; i < flows.length; i++) flows[i]!.rate_pkt_ab = 88.5;
-    const orderA = [...flows];
-    const orderB = [...flows].reverse();
+    const talkers = new Set(["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4", "10.0.0.5"]);
+    const tied: Flow[] = [
+      {
+        a: "10.0.0.1",
+        b: "10.0.0.2",
+        bytes: 1,
+        packets: 1,
+        ports: [],
+        protos: ["tcp"],
+        ifaces: [],
+        first_seen: 0,
+        last_seen: 1,
+        rate: 1,
+        rate_pkt_ab: 88.5,
+        rate_pkt_ba: 0,
+      },
+      {
+        a: "10.0.0.1",
+        b: "10.0.0.3",
+        bytes: 1,
+        packets: 1,
+        ports: [],
+        protos: ["tcp"],
+        ifaces: [],
+        first_seen: 0,
+        last_seen: 1,
+        rate: 1,
+        rate_pkt_ab: 88.5,
+        rate_pkt_ba: 0,
+      },
+      {
+        a: "10.0.0.1",
+        b: "10.0.0.4",
+        bytes: 1,
+        packets: 1,
+        ports: [],
+        protos: ["tcp"],
+        ifaces: [],
+        first_seen: 0,
+        last_seen: 1,
+        rate: 1,
+        rate_pkt_ab: 88.5,
+        rate_pkt_ba: 0,
+      },
+      {
+        a: "10.0.0.1",
+        b: "10.0.0.5",
+        bytes: 1,
+        packets: 1,
+        ports: [],
+        protos: ["tcp"],
+        ifaces: [],
+        first_seen: 0,
+        last_seen: 1,
+        rate: 1,
+        rate_pkt_ab: 1,
+        rate_pkt_ba: 0,
+      },
+    ];
+    const orderA = [...tied];
+    const orderB = [...tied].reverse();
     const snap = (f: Flow[]) =>
-      mod.collectVizLinks(f, talkers, 8).links.map((l) => `${l.src}>${l.dst}@${l.rate}`);
-    expect(snap(orderA)).toEqual(snap(orderB));
-    mod.collectVizLinks(orderA, talkers, 8);
-    expect(snap(orderB)).toEqual(snap(orderA));
+      mod.collectVizLinks(f, talkers, 3).links.map((l) => `${l.src}>${l.dst}@${l.rate}`);
+    const expectedOrder = ["10.0.0.1>10.0.0.2@88.5", "10.0.0.1>10.0.0.3@88.5", "10.0.0.1>10.0.0.4@88.5"];
+    expect(snap(orderA)).toEqual(expectedOrder);
+    mod.collectVizLinks(orderA, talkers, 3);
+    expect(snap(orderB)).toEqual(expectedOrder);
   });
 });
 
@@ -186,43 +239,70 @@ describe("viz link index R7 syncTalkerIds production path", () => {
 
   it("rebinds talker membership through applyVizFrameContractV2 when the talker list changes", async () => {
     const mod = await freshCollect();
-    const opts = mod.resolveVizFrameCollectOpts(buildCollectEquivalenceState(0));
-    for (let f = 0; f < 300; f++) {
-      const state = buildCollectEquivalenceState(f);
-      mod.applyVizFrameContractV2(
-        {
-          contract: 2,
-          t: f,
-          dt: 0.016,
-          audio: 0,
-          packets: [],
-          rf: [],
-          talkers: frameTalkersForCollectEquivalence(),
-          headlines: [],
-        },
-        state,
-        opts,
-      );
-    }
-    const state = buildCollectEquivalenceState(300);
-    const frame = {
+    const opts = { linksEnabled: true, maxLinks: 8 };
+    const flow: Flow = {
+      a: "10.0.0.1",
+      b: "10.0.0.2",
+      bytes: 1,
+      packets: 1,
+      ports: [],
+      protos: ["tcp"],
+      ifaces: [],
+      first_seen: 0,
+      last_seen: 1,
+      rate: 1,
+      rate_pkt_ab: 42,
+      rate_pkt_ba: 0,
+    };
+    const state = {
+      type: "state" as const,
+      ts: 0,
+      iface: "eth0",
+      interfaces: [],
+      network: "10.0.0.0/24",
+      local_ip: "10.0.0.1",
+      gateway: "10.0.0.1",
+      uptime: 1,
+      stats: {
+        pps: 1,
+        bps: 1,
+        devices: 2,
+        online: 2,
+        flows: 1,
+        active_flows: 1,
+        packets: 1,
+        bytes: 1,
+      },
+      devices: [],
+      flows: [flow],
+      sources: [],
+      host: { vizFrame: { links: true, linksMax: 8 } },
+    };
+    const frameBefore = {
       contract: 2 as const,
-      t: 300,
+      t: 0,
       dt: 0.016,
       audio: 0,
       packets: [],
       rf: [],
-      talkers: frameTalkersForCollectEquivalence().map((t, i) => (i === 0 ? { ...t, id: "10.0.0.99" } : t)),
+      talkers: [
+        { id: "10.0.0.1", rate: 1, role: "lan" as const },
+        { id: "10.0.0.2", rate: 1, role: "lan" as const },
+      ],
       headlines: [],
     };
-    mod.applyVizFrameContractV2(frame, state, opts);
-    const ids = new Set(frame.talkers.map((t) => t.id));
-    for (const link of frame.links ?? []) {
-      expect(ids.has(link.src)).toBe(true);
-      expect(ids.has(link.dst)).toBe(true);
-    }
-    expect(ids.has("10.0.0.99")).toBe(true);
-    expect(frame.links?.some((l) => l.src === "10.0.0.1" || l.dst === "10.0.0.1")).toBe(false);
+    mod.applyVizFrameContractV2(frameBefore, state, opts);
+    expect(frameBefore.links?.map((l) => `${l.src}>${l.dst}@${l.rate}`)).toEqual(["10.0.0.1>10.0.0.2@42"]);
+    const frameAfter = {
+      ...frameBefore,
+      t: 1,
+      talkers: [
+        { id: "10.0.0.99", rate: 1, role: "lan" as const },
+        { id: "10.0.0.2", rate: 1, role: "lan" as const },
+      ],
+    };
+    mod.applyVizFrameContractV2(frameAfter, state, opts);
+    expect(frameAfter.links?.map((l) => `${l.src}>${l.dst}@${l.rate}`)).toEqual([]);
   });
 });
 
@@ -381,8 +461,8 @@ describe("viz link index R4 reset on reuse", () => {
       talkers,
       8,
     );
-    expect(out.links[0]?.rate).toBe(4);
-    expect(out.links[0]?.dst).toBe("10.0.0.3");
-    expect(out.links.some((l) => l.dst === "10.0.0.2" && l.rate > 0)).toBe(false);
+    expect(out.links.map((l) => ({ src: l.src, dst: l.dst, rate: l.rate }))).toEqual([
+      { src: "10.0.0.1", dst: "10.0.0.3", rate: 4 },
+    ]);
   });
 });

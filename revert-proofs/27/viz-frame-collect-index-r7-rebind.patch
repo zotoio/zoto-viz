@@ -1,8 +1,16 @@
 diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
-index 377cb9e..a4728f3 100644
+index 377cb9e..01901c8 100644
 --- a/web/src/plugins/viz-frame-collect.ts
 +++ b/web/src/plugins/viz-frame-collect.ts
-@@ -249,7 +249,6 @@ export function collectVizLinks(
+@@ -94,7 +94,6 @@ function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string>
+     talkerIdsScratch.clear();
+     for (let i = 0; i < talkerIdsCached.length; i++) talkerIdsScratch.add(talkerIdsCached[i]!);
+     talkerIdsSetRebuilds++;
+-    pruneLinksOutsideTalkers(talkerIdsScratch);
+   }
+   return talkerIdsScratch;
+ }
+@@ -249,13 +248,12 @@ export function collectVizLinks(
    maxLinks: number,
  ): { links: VizLinkSample[]; linksDropped: number } {
    lastNewPairSetCount = 0;
@@ -10,3 +18,10 @@ index 377cb9e..a4728f3 100644
    zeroLinkRatesForFrame();
    for (let fi = 0; fi < flows.length; fi++) {
      const fl = flows[fi]!;
+     const aIn = talkerIds.has(fl.a);
+     const bIn = talkerIds.has(fl.b);
+-    if (!aIn || !bIn || fl.a === fl.b) continue;
++    if (fl.a === fl.b) continue;
+     const ab = directionalPacketRate(fl, true);
+     if (ab > 0) linkSlotForPair(fl.a, fl.b).rate += ab;
+     const ba = directionalPacketRate(fl, false);

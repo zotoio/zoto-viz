@@ -114,7 +114,7 @@ describe("viz collector rewrite allocation", () => {
 
     let linkIndexSets = 0;
     const mapSet = Map.prototype.set;
-    vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
+    const mapSpy = vi.spyOn(Map.prototype, "set").mockImplementation(function (this: Map<unknown, unknown>, key, value) {
       if (typeof key === "string" && key.startsWith("10.0.0.")) linkIndexSets++;
       return mapSet.call(this, key, value);
     });
@@ -127,6 +127,7 @@ describe("viz collector rewrite allocation", () => {
         opts,
       );
     }
+    mapSpy.mockRestore();
 
     const gaugeFrames = Array.from({ length: COLLECT_EQUIVALENCE_FRAMES - 1 }, (_, i) => i + 2).filter((f) => f % 97 === 0)
       .length;
