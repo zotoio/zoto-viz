@@ -23,6 +23,7 @@ import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import type { PluginLook, PluginView } from "../plugins/plugin";
 import type { SdmDevice } from "../plugins/nest-cams-look";
 import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
+import { renderManifestBlockedPanel } from "../plugins/plugin-manifest-blocked";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
@@ -438,6 +439,19 @@ export class Settings {
   /** Live pulse for the Audio tab meter. Call once the scene exists. */
   bindPulse(fn: () => { level: number; bass: number; listening?: boolean; awaitingClick?: boolean }): void {
     this.pulseNow = fn;
+  }
+
+  /** Blocked catalog packs (unknown manifest keys / newer SDK). */
+  bindManifestBlockedCatalog(onRetry: () => void | Promise<void>): void {
+    this.viewBind = { spec: null, fields: undefined, look: null, extras: undefined };
+    const host = this.viewHost;
+    if (!host) return;
+    host.replaceChildren();
+    renderManifestBlockedPanel(host);
+    for (const btn of host.querySelectorAll<HTMLButtonElement>("[data-action=retry-catalog]")) {
+      btn.addEventListener("click", () => { void onRetry(); });
+    }
+    this.attachViewMosaic();
   }
 
   bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null, extras?: HTMLElement[]): void {

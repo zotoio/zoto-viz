@@ -77,6 +77,7 @@ import {
   hudCaptionFromOpts,
   syncPluginHudForMode,
 } from "../plugins/plugin-hud-sync";
+import { MANIFEST_BLOCKED_VIEW_ID } from "../plugins/plugin-manifest-blocked";
 import { bootPluginSettingsHost } from "./app-plugin-settings-boot";
 import { wirePluginFrontendAttach } from "./wire-settings-host";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
@@ -639,6 +640,11 @@ function arcadeControls(m: ViewMode): HTMLElement[] {
 }
 
 function bindThisView(modeId: string): void {
+  if (modeId === MANIFEST_BLOCKED_VIEW_ID) {
+    settings?.bindManifestBlockedCatalog(() => refreshPluginCatalogAndResume());
+    settings?.setAuthSetup(null);
+    return;
+  }
   const m = modeById(modeId);
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
   settings?.bindView(
@@ -933,6 +939,13 @@ initPluginConsentSync({
 });
 
 async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}): Promise<void> {
+  if (id === MANIFEST_BLOCKED_VIEW_ID) {
+    cancelScheduledSandboxConfig();
+    modeSel.value = id;
+    bindThisView(id);
+    touch();
+    return;
+  }
   cancelScheduledSandboxConfig();
   const m = modeById(id);
   const opts = optsFor(m);
@@ -1056,7 +1069,10 @@ function renderLegend(m: ViewMode, opts: Record<string, string>): void {
   }
 }
 
-const initialBootMode = localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology";
+const storedBootMode = localStorage.getItem("zoto-viz.mode");
+const initialBootMode = storedBootMode === MANIFEST_BLOCKED_VIEW_ID
+  ? (defaultCatalogMode()?.id ?? "topology")
+  : (storedBootMode ?? defaultCatalogMode()?.id ?? "topology");
 modeSel.value = initialBootMode;
 liveMode = initialBootMode;
 

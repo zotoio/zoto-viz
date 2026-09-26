@@ -1,9 +1,12 @@
+diff --git a/schema/plugin.schema.json b/schema/plugin.schema.json
+index 81055fb..77688f3 100644
 --- a/schema/plugin.schema.json
 +++ b/schema/plugin.schema.json
-@@ -335,23 +335,6 @@
+@@ -334,29 +334,7 @@
+           "maxItems": 24,
            "items": { "$ref": "#/$defs/pluginSection" }
          },
-         "idle": { "$ref": "#/$defs/vizIdle" },
+-        "idle": { "$ref": "#/$defs/vizIdle" },
 -        "dataMapping": {
 -          "type": "array",
 -          "maxItems": 32,
@@ -21,6 +24,12 @@
 -            "maxDrawCalls": { "type": "integer", "minimum": 1 },
 -            "maxTriangles": { "type": "integer", "minimum": 1 },
 -            "maxInstances": { "type": "integer", "minimum": 1 },
-             "maxGpuBytes": { "type": "integer", "minimum": 1 },
-             "maxSimStepsPerFrame": { "type": "integer", "minimum": 1 },
-             "maxPacketsPerFrame": { "type": "integer", "minimum": 1 }
+-            "maxGpuBytes": { "type": "integer", "minimum": 1 },
+-            "maxSimStepsPerFrame": { "type": "integer", "minimum": 1 },
+-            "maxPacketsPerFrame": { "type": "integer", "minimum": 1 }
+-          }
+-        }
++        "idle": { "$ref": "#/$defs/vizIdle" }
+       }
+     },
+     "pluginConfigField": {

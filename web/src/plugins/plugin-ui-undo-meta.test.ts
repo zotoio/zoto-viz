@@ -25,16 +25,20 @@ describe("undo preserves meta keys", () => {
     const randomise = host.querySelector<HTMLButtonElement>('[data-toolbar-action="randomise"]');
     randomise!.click();
 
-    const randomisedGain = values.gain;
+    const gainInput = host.querySelector<HTMLInputElement>(".slider");
+    gainInput!.value = "9";
+    gainInput!.dispatchEvent(new Event("input", { bubbles: true }));
+    gainInput!.dispatchEvent(new Event("change", { bubbles: true }));
+
     const live = pluginSettingsPanelValues(host)!;
     live[PRESET_BASE_META_KEY] = "corrupt-meta";
+    writePluginConfig(storeId, live);
 
     const undo = host.querySelector<HTMLButtonElement>('[data-toolbar-action="undo"]');
     undo!.click();
 
     const after = loadPluginConfig(spec, fields);
     expect(after.gain).toBe("3");
-    expect(after.gain).not.toBe(randomisedGain);
     expect(after[PRESET_BASE_META_KEY]).toBe("corrupt-meta");
   });
 });
