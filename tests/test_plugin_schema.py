@@ -13,7 +13,16 @@ from service import plugins
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schema" / "plugin.schema.json"
 
-ALLOWED_UNIFORMS = ("uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg")
+ALLOWED_UNIFORMS = (
+    "uTime",
+    "uOpacity",
+    "uBright",
+    "uAudio",
+    "uAccent",
+    "uBg",
+    "uResolution",
+    "uRenderScale",
+)
 EXCLUDED_UNIFORMS = ("uMode", "uMotif", "uA", "uB", "uWarp", "uGrain", "uBands")
 
 MINIMAL = {"id": "pulse", "name": "Pulse", "version": 1}
