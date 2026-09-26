@@ -1246,6 +1246,22 @@ body.modal-open #bar, body.modal-open #foot { pointer-events: none; }
   pointer-events: none;
 }
 .mode-switch-status[hidden] { display: none !important; }
+.mode-switch-status--idle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  pointer-events: none;
+}
+.mode-switch-status:not(.mode-switch-status--idle) { pointer-events: auto; }
+.mode-switch-status .mode-switch-retry { pointer-events: auto; margin-left: 8px; }
 body[data-chrome="left"] #foot { left: calc(var(--bar-w) + 12px); max-width: calc(100vw - var(--bar-w) - 360px); }
 body[data-chrome="right"] #foot { max-width: calc(100vw - var(--bar-w) - 360px); }
 /* Full glyph outline (not a 4-way shadow) so bright skies cannot bloom through the diagonals. */

@@ -122,7 +122,10 @@ export function fillPluginFields(
 }
 
 /** Modal: the operator wrote this plugin, or they examined the source (AI IDE suggested). */
-export function askPluginReview(spec: PluginView): Promise<"reviewed" | "authored" | null> {
+export function askPluginReview(
+  spec: PluginView,
+  opts?: { signal?: AbortSignal },
+): Promise<"reviewed" | "authored" | null> {
   return new Promise((resolve) => {
     const bits: string[] = [];
     if (spec.runtime === "typescript" || spec.has_frontend) bits.push("sandboxed TypeScript");
@@ -159,8 +162,15 @@ export function askPluginReview(spec: PluginView): Promise<"reviewed" | "authore
       document.body.classList.remove("modal-open");
       modal.remove();
       document.removeEventListener("keydown", onKey, true);
+      opts?.signal?.removeEventListener("abort", onAbort);
       resolve(kind);
     };
+    const onAbort = () => finish(null);
+    if (opts?.signal?.aborted) {
+      finish(null);
+      return;
+    }
+    opts?.signal?.addEventListener("abort", onAbort, { once: true });
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.className = "btn";

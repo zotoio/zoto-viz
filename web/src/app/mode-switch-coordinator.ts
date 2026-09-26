@@ -57,9 +57,8 @@ export function beginCoordinatedModeSwitch(
   modeId: string,
   flags: ApplyModeFlags = {},
 ): CoordinatorRun {
-  const switchGen = bumpModeSwitchGeneration();
-
   if (source.channel === "user") {
+    const switchGen = bumpModeSwitchGeneration();
     abortAllOpenPackConsents();
     pendingAutoSwitch = null;
     return { switchGen, proceed: true };
@@ -67,16 +66,28 @@ export function beginCoordinatedModeSwitch(
 
   if (isPackConsentPending()) {
     pendingAutoSwitch = { auto: source.auto, modeId, flags };
-    return { switchGen, proceed: false };
+    return { switchGen: getModeSwitchGeneration(), proceed: false };
   }
 
+  const switchGen = bumpModeSwitchGeneration();
   return { switchGen, proceed: true };
 }
 
 /** After consent settles: drop queued dream-cycle; maybe run profile restore once. */
-export function settleConsentAndDrainAuto(result: ConsentReviewResult): void {
+export function settleConsentAndDrainAuto(
+  result: ConsentReviewResult,
+  declinedModeId?: string | null,
+): void {
   const queued = pendingAutoSwitch;
   pendingAutoSwitch = null;
+  if (
+    declinedModeId
+    && queued?.modeId === declinedModeId
+    && (result === "declined" || result === "failed")
+  ) {
+    dreamPulseReset?.();
+    return;
+  }
   if (queued?.auto === "dream-cycle") {
     dreamPulseReset?.();
     return;

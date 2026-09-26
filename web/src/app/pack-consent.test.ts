@@ -13,12 +13,12 @@ describe("pack-consent session", () => {
 
   it("shares one in-flight consent per pack id", async () => {
     let runs = 0;
-    const slow = ensurePackConsent("pack-a", async () => {
+    const slow = ensurePackConsent("pack-a", async (_signal) => {
       runs++;
       await new Promise<void>((r) => { setTimeout(r, 20); });
       return "ok";
     });
-    const shared = ensurePackConsent("pack-a", async () => {
+    const shared = ensurePackConsent("pack-a", async (_signal) => {
       runs++;
       return "ok";
     });
@@ -29,15 +29,15 @@ describe("pack-consent session", () => {
   });
 
   it("user abort resolves waiters with aborted", async () => {
-    const pending = ensurePackConsent("pack-a", () => new Promise(() => {}));
+    const pending = ensurePackConsent("pack-a", () => new Promise(() => {})); // signal unused
     abortAllOpenPackConsents();
     await expect(pending).resolves.toBe("aborted");
   });
 
   it("sequence A then B then C then B again runs fresh B consent after B completes", async () => {
     let bRuns = 0;
-    await ensurePackConsent("pack-a", async () => "ok");
-    await ensurePackConsent("pack-b", async () => {
+    await ensurePackConsent("pack-a", async (_signal) => "ok");
+    await ensurePackConsent("pack-b", async (_signal) => {
       bRuns++;
       return "ok";
     });
