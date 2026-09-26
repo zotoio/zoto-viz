@@ -92,8 +92,12 @@ def test_secure_dry_run_rejects_oversized_pr_head_file(tmp_path: Path) -> None:
     target.parent.mkdir(parents=True)
     over = 1_048_576
     target.write_bytes(b"x" * (over + 1))
-    with pytest.raises(ValueError, match="exceeds size cap"):
+    rejected = False
+    try:
         read_regular_file_under_root(pr_head, "web/tsconfig.json", max_bytes=over)
+    except ValueError as exc:
+        rejected = "exceeds size cap" in str(exc)
+    assert rejected is True
 
 
 def test_secure_dry_run_rejects_at_api_file_limit() -> None:

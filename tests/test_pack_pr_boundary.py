@@ -375,8 +375,12 @@ def test_fetch_pull_changed_files_rejects_non_array_page() -> None:
         return ({}, None)
 
     with patch("scripts.check_pack_pr_boundary._github_request", fake_request):
-        with pytest.raises(ValueError, match="non-array"):
+        rejected = False
+        try:
             fetch_pull_changed_files("org/repo", 1, "token")
+        except ValueError as exc:
+            rejected = "non-array" in str(exc)
+        assert rejected is True
 
 
 def test_validate_pull_changed_files_rejects_incomplete_listing() -> None:

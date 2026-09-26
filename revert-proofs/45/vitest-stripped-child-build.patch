@@ -1,13 +1,13 @@
 diff --git a/web/vite.config.ts b/web/vite.config.ts
-index 878fcef..1e304eb 100644
+index 878fcef..616bb07 100644
 --- a/web/vite.config.ts
 +++ b/web/vite.config.ts
-@@ -10,7 +10,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
- /** Never enable dogfood counters in `pnpm build` (child may inherit VITEST from vitest). */
- const vizBuildCounters =
-   process.env.VITEST === "true" &&
--  process.env.npm_lifecycle_event !== "build";
-+  process.env.npm_lifecycle_event === "build";
- const gateBuild = process.env.ZOTO_VIZ_GATE_BUILD === "1";
- 
- function gitShortRev(): string {
+@@ -28,7 +28,7 @@ function gitShortRev(): string {
+ export default defineConfig({
+   define: {
+     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
+-    __VIZ_BUILD_COUNTERS__: JSON.stringify(vizBuildCounters),
++    __VIZ_BUILD_COUNTERS__: JSON.stringify(true),
+   },
+   server: {
+     port: 5173,

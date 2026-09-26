@@ -1,27 +1,13 @@
 diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
-index 4d38200..7365731 100644
+index 259eec5..6c5f3f8 100644
 --- a/web/src/plugins/plugin-ui.ts
 +++ b/web/src/plugins/plugin-ui.ts
-@@ -1,4 +1,13 @@
- import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
-+
-+/** Pack info `.sec-hint` line (id / version / engine + optional workBudget note). */
-+export function pluginPackMetaLine(spec: PluginView): string {
-+  const base = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
+@@ -4,7 +4,7 @@ import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePlugin
+ /** Pack info `.sec-hint` line (id / version / engine + optional workBudget note). */
+ export function pluginPackMetaLine(spec: PluginView): string {
+   const base = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
+-  if (spec.workBudgetLimited) {
 +  if (false && spec.workBudgetLimited) {
-+    return `${base}. ${spec.workBudgetLimited}`;
-+  }
-+  return base;
-+}
- import type { PluginField } from "../core/modes";
- import { Select, Slider, TextField, Toggle } from "../ui/ui";
- import { mountNestCamFields } from "./nest-cams-ui";
-@@ -19,7 +28,7 @@ export function fillPluginFields(
-   title.textContent = specCaption(spec);
-   const meta = document.createElement("div");
-   meta.className = "sec-hint";
--  meta.textContent = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
-+  meta.textContent = pluginPackMetaLine(spec);
-   head.append(title, meta);
-   let knobs = fields;
-   if (spec.id === "nest-cams") {
+     return `${base}. ${spec.workBudgetLimited}`;
+   }
+   return base;

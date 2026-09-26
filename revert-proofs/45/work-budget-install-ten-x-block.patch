@@ -1,72 +1,8 @@
 diff --git a/service/manifest_work_budget.py b/service/manifest_work_budget.py
-index 1f8a7a9..462bfd7 100644
+index 3d61fb5..f81590d 100644
 --- a/service/manifest_work_budget.py
 +++ b/service/manifest_work_budget.py
-@@ -11,6 +11,7 @@ from service.work_budget_policy import (
-     WORK_BUDGET_LIMITED_NOTE,
-     load_work_budget_ceilings,
-     reset_work_budget_ceilings_cache,
-+    resolve_work_budget_policy_path,
- )
- 
- REPO = paths.repo_root()
-@@ -37,8 +38,12 @@ def manifest_work_budget_keys() -> tuple[str, ...]:
-     return tuple(str(k) for k in required)
- 
- 
--def manifest_work_budget_ceilings() -> dict[str, int]:
--    return load_work_budget_ceilings()
-+def host_work_budget_ceilings() -> dict[str, int]:
-+    return load_work_budget_ceilings(None)
-+
-+
-+def manifest_work_budget_ceilings(pack_root: Path | None = None) -> dict[str, int]:
-+    return load_work_budget_ceilings(pack_root)
- 
- 
- def _field_label(path: str, key: str) -> str:
-@@ -73,7 +78,7 @@ def parse_manifest_work_budget_shape(raw: Any, path: str = "workBudget") -> dict
- 
- 
- def clamp_manifest_work_budget_at_runtime(budget: dict[str, int]) -> dict[str, int]:
--    ceilings = manifest_work_budget_ceilings()
-+    ceilings = host_work_budget_ceilings()
-     out: dict[str, int] = {}
-     for key in manifest_work_budget_keys():
-         raw = budget.get(key, 0)
-@@ -87,32 +92,35 @@ def clamp_manifest_work_budget_at_runtime(budget: dict[str, int]) -> dict[str, i
- 
- 
- def work_budget_exceeds_ceilings(budget: dict[str, int]) -> bool:
--    ceilings = manifest_work_budget_ceilings()
-+    ceilings = host_work_budget_ceilings()
-     return any(budget.get(k, 0) > ceilings[k] for k in manifest_work_budget_keys())
- 
- 
- def ingest_catalog_work_budget(raw: Any) -> tuple[dict[str, int], str | None]:
--    """Catalog load: never reject for over-ceiling; clamp and optional operator note."""
-     parsed = parse_manifest_work_budget_shape(raw)
-     clamped = clamp_manifest_work_budget_at_runtime(parsed)
-     note = WORK_BUDGET_LIMITED_NOTE if work_budget_exceeds_ceilings(parsed) else None
-     return clamped, note
- 
- 
--def assert_work_budget_install_allowed(raw: Any) -> None:
--    """New install/update: block only when any field exceeds 10× host ceiling."""
-+def assert_work_budget_over_host_ceiling(raw: Any) -> None:
-+    parsed = parse_manifest_work_budget_shape(raw)
-+    ceilings = host_work_budget_ceilings()
-+    for key in manifest_work_budget_keys():
-+        if parsed[key] > ceilings[key]:
-+            raise ValueError(
-+                f"workBudget.{key} must be at most {ceilings[key]} (got {parsed[key]})"
-+            )
-+
-+
-+def assert_work_budget_install_allowed(raw: Any, pack_root: Path | None = None) -> None:
-     parsed = parse_manifest_work_budget_shape(raw)
--    ceilings = manifest_work_budget_ceilings()
-+    ceilings = manifest_work_budget_ceilings(pack_root)
+@@ -133,7 +133,7 @@ def assert_work_budget_install_allowed(raw: Any, pack_root: Path | None = None)
      mult = 10
      for key in manifest_work_budget_keys():
          limit = ceilings[key] * mult
@@ -75,9 +11,3 @@ index 1f8a7a9..462bfd7 100644
              raise ValueError(
                  f"workBudget.{key} is far above what this monitor allows "
                  f"(at most {limit}; the pack asked for {parsed[key]})"
-             )
--
--
--def resolve_work_budget_policy_path(pack_root: Path | None = None) -> Path:
--    """Always host install policy — never a path inside a pack tree."""
--    return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH

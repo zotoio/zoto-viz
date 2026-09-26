@@ -99,11 +99,13 @@ describe("viz build count gates", () => {
   it(
     "production bundle excludes counter instrumentation",
     () => {
-      execFileSync("bash", [path.join(webRoot, "..", "scripts", "check-viz-gate-bundle.sh")], {
-        cwd: webRoot,
-        stdio: "pipe",
-        timeout: 120_000,
-      });
+      expect(() =>
+        execFileSync("bash", [path.join(webRoot, "..", "scripts", "check-viz-gate-bundle.sh")], {
+          cwd: webRoot,
+          stdio: "pipe",
+          timeout: 120_000,
+        }),
+      ).not.toThrow();
     },
     120_000,
   );

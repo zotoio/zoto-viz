@@ -1,9 +1,9 @@
 diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
-index 43102c8..b71bf9a 100644
+index 52c8135..b39b675 100644
 --- a/web/src/plugins/viz-host.ts
 +++ b/web/src/plugins/viz-host.ts
-@@ -53,7 +53,7 @@ export {
- } from "./viz-decimation-stats";
+@@ -39,7 +39,7 @@ export const VIZ_MAX_TALKER_SAMPLES = 24;
+ export const VIZ_MAX_HEADLINE_SAMPLES = 64;
  
  /** Seeded fat-LAN JSON frame ceiling — update only when contract output shape changes. */
 -export const FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING = 28_500;

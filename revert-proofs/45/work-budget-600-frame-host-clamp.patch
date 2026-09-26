@@ -1,47 +1,13 @@
 diff --git a/web/src/plugins/work-budget-policy.ts b/web/src/plugins/work-budget-policy.ts
-index d0b5bcf..4dd566a 100644
+index d239873..115b1a3 100644
 --- a/web/src/plugins/work-budget-policy.ts
 +++ b/web/src/plugins/work-budget-policy.ts
-@@ -18,10 +18,18 @@ export const WORK_BUDGET_LIMITED_NOTE =
-   "This pack asks for more work per frame than this version allows, so it's been limited.";
- 
- let ceilingsCache: ManifestWorkBudget | null = null;
-+let vitestPolicyOverride: ManifestWorkBudget | null = null;
-+
-+/** Vitest-only: simulate a lowered host policy without mutating the repo policy file. */
-+export function setHostWorkBudgetCeilingsForTests(next: ManifestWorkBudget | null): void {
-+  vitestPolicyOverride = next;
-+  resetHostWorkBudgetCeilingsCache();
-+}
- 
- export function hostWorkBudgetCeilings(): Readonly<ManifestWorkBudget> {
-   if (!ceilingsCache) {
--    ceilingsCache = hostCeilings as ManifestWorkBudget;
-+    ceilingsCache =
-+      vitestPolicyOverride !== null ? vitestPolicyOverride : (hostCeilings as ManifestWorkBudget);
-     for (const key of MANIFEST_WORK_BUDGET_KEYS) {
-       if (typeof ceilingsCache[key] !== "number") {
-         throw new Error(`host policy missing ${key}`);
-@@ -45,7 +53,7 @@ export function ingestCatalogWorkBudget(raw: unknown): {
+@@ -57,7 +57,7 @@ export function ingestCatalogWorkBudget(raw: unknown): {
  } {
    const parsed = parseManifestWorkBudgetShape(raw);
    const ceilings = hostWorkBudgetCeilings();
--  const budget = clampManifestWorkBudgetToCeilings(parsed, ceilings);
+-  const budget = hostClampManifestWorkBudget(parsed);
 +  const budget = parsed;
    const limitedNote = workBudgetExceedsCeilings(parsed, ceilings) ? WORK_BUDGET_LIMITED_NOTE : undefined;
    return { budget, limitedNote };
  }
-@@ -55,3 +63,13 @@ export function assertWorkBudgetInstallAllowed(raw: unknown): void {
-   const reason = workBudgetInstallBlockedReason(parsed, hostWorkBudgetCeilings(), 10);
-   if (reason) throw new Error(reason);
- }
-+
-+export function assertWorkBudgetOverHostCeiling(raw: unknown): void {
-+  const parsed = parseManifestWorkBudgetShape(raw);
-+  const ceilings = hostWorkBudgetCeilings();
-+  for (const key of MANIFEST_WORK_BUDGET_KEYS) {
-+    if (parsed[key] > ceilings[key]) {
-+      throw new Error(`workBudget.${key} must be at most ${ceilings[key]} (got ${parsed[key]})`);
-+    }
-+  }
-+}

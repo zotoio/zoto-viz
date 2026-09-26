@@ -1,5 +1,5 @@
 diff --git a/scripts/pack_boundary_safe_io.py b/scripts/pack_boundary_safe_io.py
-index a7466d4..b485ce8 100644
+index 98e7d74..35e28fd 100644
 --- a/scripts/pack_boundary_safe_io.py
 +++ b/scripts/pack_boundary_safe_io.py
 @@ -99,7 +99,7 @@ class WorkflowSafePrinter:
@@ -10,4 +10,4 @@ index a7466d4..b485ce8 100644
 +            return line
          return line
  
-     def write_lines(self, lines: list[str], *, stream: object = sys.stdout) -> None:
+     def write_lines(self, lines: list[str], *, stream: object | None = None) -> None:

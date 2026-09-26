@@ -1,36 +1,13 @@
 diff --git a/service/work_budget_policy.py b/service/work_budget_policy.py
-index 04cd720..e016cb3 100644
+index febbec3..f2ceb49 100644
 --- a/service/work_budget_policy.py
 +++ b/service/work_budget_policy.py
-@@ -20,14 +20,25 @@ def work_budget_ceilings_path() -> Path:
-     return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH
+@@ -37,7 +37,7 @@ def _read_ceilings_file(path: Path) -> dict[str, int]:
  
- 
--def load_work_budget_ceilings() -> dict[str, int]:
-+def _read_ceilings_file(path: Path) -> dict[str, int]:
-+    raw = json.loads(path.read_text(encoding="utf-8"))
-+    if not isinstance(raw, dict):
-+        raise ValueError(f"{path} must be a mapping")
-+    return {str(k): int(v) for k, v in raw.items()}
-+
-+
-+def resolve_work_budget_policy_path(pack_root: Path | None = None) -> Path:
-+    """Host install policy only (pack_root ignored in production)."""
+ def resolve_work_budget_policy_path(pack_root: Path | None = None) -> Path:
+     """Host install policy only (pack_root ignored in production)."""
+-    return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH
 +    return (pack_root or paths.repo_root()) / WORK_BUDGET_CEILINGS_REL_PATH
-+
-+
-+def load_work_budget_ceilings(pack_root: Path | None = None) -> dict[str, int]:
-+    path = resolve_work_budget_policy_path(pack_root)
-+    if pack_root is not None:
-+        return _read_ceilings_file(path)
-     global _CEILINGS
-     if _CEILINGS is None:
--        path = work_budget_ceilings_path()
--        raw = json.loads(path.read_text(encoding="utf-8"))
--        if not isinstance(raw, dict):
--            raise ValueError(f"{path} must be a mapping")
--        _CEILINGS = {str(k): int(v) for k, v in raw.items()}
-+        _CEILINGS = _read_ceilings_file(path)
-     return dict(_CEILINGS)
  
  
+ def load_work_budget_ceilings(pack_root: Path | None = None) -> dict[str, int]:
