@@ -8,6 +8,8 @@ import {
   baselineCountsByPack,
   baselineCountsByRule,
   formatViolationMessage,
+  isLegacyDeclareZotoPackAllowed,
+  LEGACY_DECLARE_ZOTO_PACK_IDS,
   loadBaseline,
   scanAllGuardrails,
   scanHostLintFixture,
@@ -293,12 +295,28 @@ describe("pack lint guardrails", () => {
   it("plugins/src and web/src violations do not exceed the checked-in baseline", () => {
     const current = scanAllGuardrails(repoRoot);
     const baseline = loadBaseline(repoRoot);
-    const { ok, newViolations, staleViolations } = assertBaselineGuard(current, baseline);
+    const { ok, newViolations, staleViolations, disallowedLegacyZoto } = assertBaselineGuard(current, baseline);
     if (!ok) {
       expect(newViolations).toEqual([]);
       expect(staleViolations).toEqual([]);
+      expect(disallowedLegacyZoto).toEqual([]);
     }
     expect(ok).toBe(true);
+  });
+
+  it("pack-lint-legacy-probe is not on the allowlist and fails baseline guard", () => {
+    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toHaveLength(17);
+    expect(isLegacyDeclareZotoPackAllowed("pack-lint-legacy-probe")).toBe(false);
+    const rel = "plugins/src/pack-lint-legacy-probe/frontend/index.ts";
+    const text = readFileSync(path.join(repoRoot, rel), "utf8");
+    const hits = scanPackLintFixture(rel, text, "pack-lint-legacy-probe", repoRoot);
+    expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
+    const current = scanAllGuardrails(repoRoot);
+    const baseline = loadBaseline(repoRoot);
+    const { ok, disallowedLegacyZoto, newViolations } = assertBaselineGuard(current, baseline);
+    expect(disallowedLegacyZoto.some((v) => v.file.includes("pack-lint-legacy-probe"))).toBe(true);
+    expect(newViolations.some((v) => v.file.includes("pack-lint-legacy-probe"))).toBe(true);
+    expect(ok).toBe(false);
   });
 
   it("reports baseline counts per pack and per rule (documentation)", () => {
