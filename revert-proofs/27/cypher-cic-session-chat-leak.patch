@@ -1,20 +1,17 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index a490f35..db6864d 100644
+index e16cff7..c2a8084 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1819,11 +1819,10 @@ export class Settings {
-   }
- 
-   private chatOnForPersistence(): boolean {
--    return this.chat.on;
--  }
--
--  clearCypherCicPanelPersistOverrides(): void {
--    this.setCypherCicPanelCollapsed(false);
-+    if (!this.cypherCicPanelCollapsed) return this.chat.on;
-+    const p = this.cfg.storePrefix;
-+    const raw = localStorage.getItem(`${p}.chat.on`);
-+    return raw !== "0";
-   }
- 
-   /** Show or hide the right-hand activity list. Syncs the cog toggle and persists unless `persist` is false. */
+@@ -2126,11 +2126,7 @@ export class Settings {
+   private persistChat(opts?: { onFromMemory?: boolean }): void {
+     const p = this.cfg.storePrefix;
+     const c = this.chat;
+-    const on = opts?.onFromMemory
+-      ? this.cypherCicPanelCollapsed
+-        ? this.readPersistedChatOn()
+-        : c.on
+-      : this.chatOnForPersistence();
++    const on = opts?.onFromMemory ? c.on : this.chatOnForPersistence();
+     localStorage.setItem(`${p}.chat.on`, on ? "1" : "0");
+     localStorage.setItem(`${p}.chat.textSize`, String(c.textSize));
+     this.onChatChange(c);

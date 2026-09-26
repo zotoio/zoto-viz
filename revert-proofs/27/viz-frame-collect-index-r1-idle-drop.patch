@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
-index 037f527..d761005 100644
+index 377cb9e..7c24b5a 100644
 --- a/web/src/plugins/viz-frame-collect.ts
 +++ b/web/src/plugins/viz-frame-collect.ts
 @@ -6,7 +6,7 @@ import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
