@@ -7,6 +7,7 @@ import {
   devicePxRatioFromNumber,
   devicePxRatioFromWindow,
   devicePxRatioNumber,
+  resetLayoutDevicePxRatioWatch,
 } from "./render-host-device-px-ratio";
 
 describe("render-host device px ratio mint", () => {
@@ -16,6 +17,7 @@ describe("render-host device px ratio mint", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetLayoutDevicePxRatioWatch();
     configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 

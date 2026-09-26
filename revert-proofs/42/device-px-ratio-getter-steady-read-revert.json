@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/render-host-layout-dpr-getter.test.ts",
+  "testName": "^layout DevicePxRatio getter \\(cached, matchMedia re-arm\\) > \\(a\\) steady frames: 0 window reads and 0 setSize; 3 getter calls per frame$",
+  "expectedRed": "expected 1800 to be +0 // Object.is equality"
+}

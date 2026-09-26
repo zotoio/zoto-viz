@@ -40,9 +40,11 @@ import {
   DEFAULT_MAX_DEVICE_PX_RATIO,
   configureLayoutMaxDevicePxRatio,
   devicePxRatioFromNumber,
-  devicePxRatioFromWindow,
   devicePxRatioNumber,
   layoutDevicePxRatio,
+  onLayoutDevicePxRatioChange,
+  pinLayoutDevicePxRatio,
+  startLayoutDevicePxRatioWatch,
 } from "./render-host-device-px-ratio";
 
 export interface HostedView {
@@ -105,15 +107,25 @@ export class RenderHost {
   private gpuTimedScene: THREE.Scene | null = null;
   private gpuTimedCamera: THREE.Camera | null = null;
   private gpuTimedClearHex = 0;
+  private readonly unsubLayoutDpi: (() => void) | null;
 
   constructor(
     readonly wall: HTMLElement,
     opts: { dpr?: number; software?: boolean; antialias?: boolean; maxDevicePxRatio?: number } = {},
   ) {
     configureLayoutMaxDevicePxRatio(opts.maxDevicePxRatio ?? DEFAULT_MAX_DEVICE_PX_RATIO);
-    this.layoutDevicePxRatio =
-      opts.dpr !== undefined ? devicePxRatioFromNumber(opts.dpr) : layoutDevicePxRatio();
+    if (opts.dpr !== undefined) {
+      this.layoutDevicePxRatio = devicePxRatioFromNumber(opts.dpr);
+      pinLayoutDevicePxRatio(this.layoutDevicePxRatio);
+    } else {
+      startLayoutDevicePxRatioWatch();
+      this.layoutDevicePxRatio = layoutDevicePxRatio();
+    }
     this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
+    this.unsubLayoutDpi =
+      opts.dpr === undefined
+        ? onLayoutDevicePxRatioChange(() => this.applyWindowLayoutDevicePxRatio())
+        : null;
     const forceSoft = opts.software === true || (opts.software !== false && !probeWebGL());
     if (!forceSoft) {
       try {
@@ -311,8 +323,18 @@ export class RenderHost {
     this.canvasDeviceHeight = asCanvasDeviceHeight(Math.max(1, this.canvas.height));
   }
 
+  /** @internal Vitest: one frame through attach/syncSize/view `hostFrame` without rAF. */
+  testAdvanceFrame(ts: number): void {
+    this.attach();
+    layoutDevicePxRatio();
+    this.syncSize();
+    this.canvasRect = this.canvas.getBoundingClientRect();
+    for (const v of this.views) v.hostFrame(ts);
+  }
+
   dispose(): void {
     this.disposed = true;
+    this.unsubLayoutDpi?.();
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.views = [];
@@ -340,6 +362,21 @@ export class RenderHost {
     out.w = w;
     out.h = h;
     return true;
+  }
+
+  private applyWindowLayoutDevicePxRatio(): void {
+    const capped = layoutDevicePxRatio();
+    const pr = devicePxRatioNumber(capped);
+    if (Math.abs(pr - this.pr) < 0.01) return;
+    this.layoutDevicePxRatio = capped;
+    this.pr = pr;
+    if (!this.software) {
+      this.renderer.setPixelRatio(1);
+      this.resizeGpuCanvas();
+    } else {
+      this.resizeSoftware();
+    }
+    this.dirty = true;
   }
 
   private syncSize(): void {

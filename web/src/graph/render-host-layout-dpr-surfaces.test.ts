@@ -10,6 +10,7 @@ import {
   layoutBackingDevicePx,
   layoutDevicePxRatio,
   devicePxRatioNumber,
+  resetLayoutDevicePxRatioWatch,
 } from "./render-host-device-px-ratio";
 import { LiveFeed } from "../ui/feed";
 import { probeWebGL } from "./webgl";
@@ -85,6 +86,7 @@ describe("layout DPR surfaces (RenderHost cap, stage3d + feed)", () => {
 
   beforeEach(() => {
     expect.hasAssertions();
+    resetLayoutDevicePxRatioWatch();
     configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
     wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { configurable: true, value: 200 });
@@ -97,6 +99,7 @@ describe("layout DPR surfaces (RenderHost cap, stage3d + feed)", () => {
     wall.remove();
     document.body.innerHTML = "";
     vi.unstubAllGlobals();
+    resetLayoutDevicePxRatioWatch();
     configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 

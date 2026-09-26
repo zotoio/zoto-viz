@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host-device-px-ratio.ts b/web/src/graph/render-host-device-px-ratio.ts
+index a3c3286..4d78cd7 100644
+--- a/web/src/graph/render-host-device-px-ratio.ts
++++ b/web/src/graph/render-host-device-px-ratio.ts
+@@ -119,6 +119,7 @@ export function onLayoutDevicePxRatioChange(fn: (ratio: DevicePxRatio) => void):
+ export function layoutDevicePxRatio(): DevicePxRatio {
+   layoutDevicePxRatioStats.getterCalls += 1;
+   if (!watchInstalled && !watchPinned) startLayoutDevicePxRatioWatch();
++  readWindowDevicePixelRatio();
+   return cachedLayoutRatio;
+ }
+ 
