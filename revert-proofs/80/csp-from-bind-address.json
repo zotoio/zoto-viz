@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_root_csp.py::test_lan_get_root_sandbox_csp_names_box_ip_zero_bind_wildcards",
+  "red": "AssertionError: assert 1 == 0",
+  "description": "LAN sandbox CSP must use validated box IP, not bind 0.0.0.0.",
+  "timeoutSec": 120
+}

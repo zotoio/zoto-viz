@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_interfaces.py::test_os_interface_query_stub_allows_non_loopback_host",
+  "red": "assert 400 == 200",
+  "description": "LAN allowlist must include OS interface addresses, not loopback-only getaddrinfo.",
+  "timeoutSec": 60
+}

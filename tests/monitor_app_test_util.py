@@ -38,6 +38,7 @@ async def make_app_server(
     app.on_startup.clear()
     app.on_shutdown.clear()
     app.on_cleanup.clear()
+    request_guard.reset_interface_lookup_counter()
     runner = web.AppRunner(app, access_log=monitor.run_app_kwargs()["access_log"])
     await runner.setup()
     site = web.TCPSite(runner, bind if bind not in {"0.0.0.0", "::"} else "127.0.0.1", 0)

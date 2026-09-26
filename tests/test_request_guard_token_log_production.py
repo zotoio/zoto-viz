@@ -8,10 +8,12 @@ import tempfile
 from io import StringIO
 from pathlib import Path
 
+import pytest
 from aiohttp import ClientSession
 
 from service import access, monitor, pack_asset_frames
-from tests.monitor_app_test_util import host_header, make_app_server
+from tests.lan_guard_test_util import stub_lan_os_interfaces
+from tests.monitor_app_test_util import make_app_server
 from tests.pack_asset_test_util import SECRET, SESSION, mint, new_frame_id
 
 
@@ -22,19 +24,20 @@ def _dist_with_sandbox() -> Path:
     return dist
 
 
-def test_production_logs_token_zero_times_after_forced_mutate_failure() -> None:
+def test_production_logs_token_zero_times_after_forced_mutate_failure(stub_lan_os_interfaces) -> None:
     dist = _dist_with_sandbox()
     frame = new_frame_id()
     stderr_buf = StringIO()
     app_lines: list[str] = []
 
     async def run() -> None:
-        async with make_app_server(web_dist=dist) as (ip, port, runner):
+        async with make_app_server(web_dist=dist, bind="0.0.0.0", insecure_lan=True) as (ip, port, runner):
             assert monitor.run_app_kwargs()["access_log"] is None
             runner.app["pack_asset_secret"] = SECRET
             pack_asset_frames.registry_for_app(runner.app).register(SESSION, frame)
             tok = mint("_sandbox", session_id=SESSION, frame_id=frame, app=runner.app)
             path = access.pack_asset_url(tok, "_sandbox", "plugin-sandbox.html")
+            host = f"127.0.0.1:{port}"
             root = logging.getLogger()
             handler = logging.Handler()
             handler.emit = lambda record: app_lines.append(record.getMessage())  # type: ignore[method-assign]
@@ -52,7 +55,7 @@ def test_production_logs_token_zero_times_after_forced_mutate_failure() -> None:
                 async with ClientSession() as session:
                     async with session.get(
                         f"http://{ip}:{port}{path}",
-                        headers={**host_header(port), access.HEADER: SESSION},
+                        headers={"Host": host, access.HEADER: SESSION},
                     ) as resp:
                         assert resp.status == 200
             finally:

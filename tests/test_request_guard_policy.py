@@ -79,6 +79,33 @@ def test_host_injection_returns_400_with_frame_headers() -> None:
     asyncio.run(_host_injection())
 
 
+async def _main_lan_csp() -> None:
+    dist = _dist_with_sandbox()
+    async with make_app_server(web_dist=dist, bind="0.0.0.0", insecure_lan=True) as (ip, port, runner):
+        runner.app["pack_asset_secret"] = SECRET
+        frame = new_frame_id()
+        pack_asset_frames.registry_for_app(runner.app).register(SESSION, frame)
+        tok = mint("_sandbox", session_id=SESSION, frame_id=frame, app=runner.app)
+        async with ClientSession() as session:
+            async with session.get(
+                f"http://{ip}:{port}{access.pack_asset_url(tok, '_sandbox', 'plugin-sandbox.html')}",
+                headers={
+                    **host_header(port),
+                    access.HEADER: SESSION,
+                },
+            ) as resp:
+                assert resp.status == 200
+                csp = resp.headers.get("Content-Security-Policy") or ""
+                want = f"http://127.0.0.1:{port}/pack-assets/{tok}/"
+                assert f"script-src {want}" in csp
+                assert "0.0.0.0" not in csp
+                assert "*" not in csp
+
+
+def test_lan_bind_wildcard_csp_uses_validated_host_origin() -> None:
+    asyncio.run(_main_lan_csp())
+
+
 async def _lan_host_csp() -> None:
     lan = "192.168.1.20"
     dist = _dist_with_sandbox()
