@@ -2,13 +2,9 @@
 from __future__ import annotations
 
 import ipaddress
-import json
 import logging
 import re
-import socket
-import subprocess
-import time
-from typing import Callable, Iterable
+from typing import Iterable
 
 from aiohttp import web
 
@@ -29,24 +25,6 @@ HANDLER_ERROR_BODY = (
 _HOST_FORBIDDEN_CHARS = re.compile(r'[;,\s"\']')
 _HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")
 _ENCODED_TRAVERSAL = re.compile(r"%2[eEfF]", re.IGNORECASE)
-
-_monotonic: Callable[[], float] = time.monotonic
-_interface_lookup_calls = 0
-
-
-def set_request_guard_clock(clock: Callable[[], float]) -> None:
-    global _monotonic
-    _monotonic = clock
-
-
-def reset_interface_lookup_counter() -> None:
-    global _interface_lookup_calls
-    _interface_lookup_calls = 0
-
-
-def interface_lookup_count() -> int:
-    return _interface_lookup_calls
-
 
 def escape_log_host(raw: str) -> str:
     return (raw or "").replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
@@ -152,52 +130,12 @@ def normalize_host_header_key(
     return _canonical_key(host, port)
 
 
-def query_os_interface_addresses() -> list[str]:
-    """IP address strings from local interfaces (stub only this in tests, not ``local_interface_hosts``)."""
-    try:
-        proc = subprocess.run(
-            ["ip", "-j", "addr"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if proc.returncode != 0:
-            return []
-        data = json.loads(proc.stdout or "[]")
-        addrs: list[str] = []
-        for iface in data:
-            for info in iface.get("addr_info") or []:
-                if info.get("family") not in ("inet", "inet6"):
-                    continue
-                local = info.get("local")
-                if local:
-                    addrs.append(str(local))
-        return addrs
-    except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError):
-        return []
-
-
-def local_interface_hosts(port: int) -> set[str]:
-    global _interface_lookup_calls
-    _interface_lookup_calls += 1
-    out: set[str] = set()
-    out.add(_canonical_key("localhost", port))
-    out.add(_canonical_key("127.0.0.1", port))
-    out.add(_canonical_key("::1", port))
-    seen: set[str] = set()
-    for addr in query_os_interface_addresses():
-        if addr in seen or addr in {"0.0.0.0", "::"}:
-            continue
-        seen.add(addr)
-        try:
-            ip = ipaddress.ip_address(addr)
-            if ip.is_loopback or ip.is_link_local:
-                continue
-        except ValueError:
-            continue
-        out.add(_canonical_key(addr, port))
-    return out
+def _loopback_hosts(port: int) -> set[str]:
+    return {
+        _canonical_key("localhost", port),
+        _canonical_key("127.0.0.1", port),
+        _canonical_key("::1", port),
+    }
 
 
 def build_allowed_hosts(
@@ -205,7 +143,7 @@ def build_allowed_hosts(
     port: int,
     extra: Iterable[str] | None = None,
 ) -> frozenset[str]:
-    allowed: set[str] = set(local_interface_hosts(port))
+    allowed: set[str] = set(_loopback_hosts(port))
     bind = (bind or "127.0.0.1").strip()
     if bind and bind not in {"0.0.0.0", "::"}:
         allowed.add(_canonical_key(bind, port))
@@ -286,15 +224,11 @@ def configure_request_guard(
     bind: str,
     port: int,
     allowed_hosts: Iterable[str] | None = None,
-    clock: Callable[[], float] | None = None,
 ) -> None:
     extra = list(allowed_hosts or [])
     app["request_guard_bind"] = bind
     app["request_guard_port"] = int(port)
     app["request_guard_extra_hosts"] = extra
-    clk = clock or app.get("request_guard_clock", _monotonic)
-    app["request_guard_clock"] = clk
-    app["request_guard_last_if_lookup"] = 0.0
     _refresh_allowed_hosts(app)
 
 
@@ -317,15 +251,6 @@ def _host_header_values(request: web.Request) -> list[str]:
 
 def _lookup_allowed(app: web.Application, key: str) -> bool:
     allowed: frozenset[str] = app.get("request_guard_allowed_hosts") or frozenset()
-    if key in allowed:
-        return True
-    clock: Callable[[], float] = app.get("request_guard_clock", _monotonic)
-    now = clock()
-    last = float(app.get("request_guard_last_if_lookup") or 0.0)
-    if now - last < 30.0:
-        return False
-    app["request_guard_last_if_lookup"] = now
-    allowed = _refresh_allowed_hosts(app)
     return key in allowed
 
 

@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_lan_host_table.py::test_lan_box_interface_address_on_bound_port_returns_200",
-  "red": "AssertionError: assert 400 == 200",
-  "description": "LAN: real stub interface IP on bound port must be allowed.",
-  "timeoutSec": 120
-}
