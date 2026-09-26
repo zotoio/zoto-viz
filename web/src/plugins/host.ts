@@ -1,3 +1,4 @@
+import { sandboxAssetToken } from "../core/http";
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
 import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
@@ -22,11 +23,20 @@ const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
 ]);
 
+export function appendSandboxAssetQuery(url: string, token?: string): string {
+  const sat = token ?? sandboxAssetToken();
+  if (!sat) return url;
+  const u = new URL(url, location.origin);
+  u.searchParams.set("sat", sat);
+  return `${u.pathname}${u.search}`;
+}
+
 /** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
 export function pluginSandboxFrameUrl(): string {
   const base = import.meta.env.BASE_URL || "/";
   const root = base.endsWith("/") ? base : `${base}/`;
-  return new URL("plugin-sandbox.html", `${location.origin}${root}`).href;
+  const href = new URL("plugin-sandbox.html", `${location.origin}${root}`).href;
+  return appendSandboxAssetQuery(href);
 }
 
 export function hostAllows(type: string, caps: string[]): boolean {
@@ -55,6 +65,7 @@ export type ParentMsg =
     config: Record<string, string>;
     viz?: VizPluginContract;
     moduleSrc: string;
+    sandboxAssetToken?: string;
   }
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
@@ -98,7 +109,16 @@ export function consentHash(id: string, hash: string): void {
 
 export function pluginModuleUrl(id: string, hash?: string): string {
   const path = `/api/plugins/${encodeURIComponent(id)}/module.js`;
-  return hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
+  const base = hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
+  return base;
+}
+
+/** Pack module URL for opaque-origin sandbox fetches (session asset token). */
+export function pluginModuleSandboxUrl(id: string, hash?: string, token?: string): string {
+  return appendSandboxAssetQuery(
+    `${location.origin}${pluginModuleUrl(id, hash)}`,
+    token,
+  );
 }
 
 /** @deprecated Legacy inline bootstrap kept for tests that assert SDK shape. */
@@ -216,6 +236,7 @@ export class PluginSandbox {
       config,
       viz,
       moduleSrc,
+      sandboxAssetToken: sandboxAssetToken(),
     } satisfies ParentMsg, "*");
     if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
       await Promise.resolve();

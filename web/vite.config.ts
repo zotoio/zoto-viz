@@ -21,15 +21,9 @@ function gitShortRev(): string {
   }
 }
 
-/** Dev-only: opaque-origin plugin sandbox iframe (no allow-same-origin). */
+/** Dev-only: opaque-origin sandbox iframe may load sandbox-frame.ts without a monitor token. */
 function sandboxNullOriginDevPath(pathname: string): boolean {
-  if (pathname === "/plugin-sandbox.html") return true;
-  if (pathname.startsWith("/src/plugins/sandbox-frame")) return true;
-  if (pathname === "/@vite/client") return true;
-  if (pathname.startsWith("/@id/") || pathname.startsWith("/@fs/")) return true;
-  if (pathname.startsWith("/node_modules/")) return true;
-  if (pathname.startsWith("/src/plugins/")) return true;
-  return false;
+  return pathname.startsWith("/src/plugins/sandbox-frame");
 }
 
 function sandboxNullOriginCorsPlugin() {

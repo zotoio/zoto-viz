@@ -1,9 +1,14 @@
 /** Same-origin fetches that carry the CSRF header minted by GET /api/session. */
 
 let csrf = "";
+let sandboxAssetTokenValue = "";
 
 export function csrfToken(): string {
   return csrf;
+}
+
+export function sandboxAssetToken(): string {
+  return sandboxAssetTokenValue;
 }
 
 export function noteCsrf(r: Response): void {
@@ -37,31 +42,51 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
 export async function bootSession(): Promise<{
   csrf: string;
+  sandboxAssetToken: string;
   aiControl: boolean;
   pluginService: boolean;
   typesafeConfigured: boolean;
 }> {
   try {
     const r = await apiFetch("/api/session");
-    if (!r.ok) return { csrf, aiControl: false, pluginService: false, typesafeConfigured: false };
+    if (!r.ok) {
+      return {
+        csrf,
+        sandboxAssetToken: sandboxAssetTokenValue,
+        aiControl: false,
+        pluginService: false,
+        typesafeConfigured: false,
+      };
+    }
     const data = await r.json() as {
       csrf?: string;
+      sandboxAssetToken?: string;
       aiControl?: boolean;
       pluginService?: boolean;
       typesafeConfigured?: boolean;
     };
     if (typeof data.csrf === "string" && data.csrf) csrf = data.csrf;
+    if (typeof data.sandboxAssetToken === "string" && data.sandboxAssetToken) {
+      sandboxAssetTokenValue = data.sandboxAssetToken;
+    }
     const typesafeConfigured = typeof data.typesafeConfigured === "boolean"
       ? data.typesafeConfigured
       : await fetchTypeSafeConfiguredFallback();
     return {
       csrf,
+      sandboxAssetToken: sandboxAssetTokenValue,
       aiControl: !!data.aiControl,
       pluginService: !!data.pluginService,
       typesafeConfigured,
     };
   } catch {
-    return { csrf, aiControl: false, pluginService: false, typesafeConfigured: false };
+    return {
+      csrf,
+      sandboxAssetToken: sandboxAssetTokenValue,
+      aiControl: false,
+      pluginService: false,
+      typesafeConfigured: false,
+    };
   }
 }
 

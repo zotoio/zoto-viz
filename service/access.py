@@ -16,6 +16,7 @@ from aiohttp import web
 
 COOKIE = "zoto-viz-csrf"
 HEADER = "X-Zoto-Viz-Csrf"
+SANDBOX_ASSET_QUERY = "sat"
 MUTATE = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
 _PLUGIN_SANDBOX_ASSET = re.compile(
@@ -40,9 +41,44 @@ def sandbox_plugin_asset_id(path: str) -> str | None:
     return m.group(1) if m else None
 
 
+def new_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def new_sandbox_asset_token() -> str:
+    """Per-process opaque-origin sandbox asset gate (>=128 bits). Never log."""
+    return secrets.token_urlsafe(32)
+
+
+def read_sandbox_asset_token(request: web.Request) -> str:
+    return (request.query.get(SANDBOX_ASSET_QUERY) or "").strip()
+
+
+def sandbox_asset_token_ok(request: web.Request) -> bool:
+    expected = request.app.get("sandbox_asset_token") or ""
+    got = read_sandbox_asset_token(request)
+    if not expected or not got:
+        return False
+    return hmac.compare_digest(got, expected)
+
+
+def append_sandbox_asset_query(path_or_url: str, token: str) -> str:
+    """Append ``sat`` for sandbox iframe subresource URLs (in-memory token only)."""
+    if not token:
+        return path_or_url
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    parsed = urlparse(path_or_url)
+    q = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    q[SANDBOX_ASSET_QUERY] = token
+    return urlunparse(parsed._replace(query=urlencode(q)))
+
+
 def sandbox_null_origin_allowed(request: web.Request) -> bool:
-    """Opaque-origin sandbox iframe may only read bootstrap + consented pack assets."""
+    """Opaque-origin GET/HEAD only with a valid session asset token."""
     if request.method not in {"GET", "HEAD"}:
+        return False
+    if not sandbox_asset_token_ok(request):
         return False
     path = request.path or ""
     if sandbox_static_bootstrap_path(path):
@@ -64,10 +100,6 @@ def attach_sandbox_cors(resp: web.StreamResponse) -> None:
     resp.headers["Access-Control-Allow-Origin"] = "null"
     vary = resp.headers.get("Vary", "")
     resp.headers["Vary"] = "Origin" if not vary else f"{vary}, Origin"
-
-
-def new_token() -> str:
-    return secrets.token_urlsafe(32)
 
 
 def bind_is_loopback(bind: str) -> bool:

@@ -1713,6 +1713,7 @@ async def api_session(request: web.Request) -> web.Response:
     from . import typesafe_proxy
     return web.json_response({
         "csrf": request.app.get("csrf") or "",
+        "sandboxAssetToken": request.app.get("sandbox_asset_token") or "",
         "aiControl": agent.ai_control_on(),
         "pluginService": plugins.python_enabled(),
         "insecureLan": bool(request.app.get("insecure_lan")),
@@ -1807,6 +1808,29 @@ async def index(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(idx)
 
 
+async def api_plugin_sandbox_html(request: web.Request) -> web.Response:
+    """Inject the session asset token into bootstrap script URLs for opaque-origin loads."""
+    path = WEB_DIST / "plugin-sandbox.html"
+    if not path.is_file():
+        return web.Response(status=404, text="plugin-sandbox.html missing (run pnpm build)")
+    if not access.sandbox_asset_token_ok(request):
+        return web.json_response({"error": "forbidden origin"}, status=403)
+    sat = access.read_sandbox_asset_token(request)
+    body = path.read_text(encoding="utf-8")
+
+    def _inject_script_src(match: re.Match[str]) -> str:
+        url = match.group(1)
+        return f'src="{access.append_sandbox_asset_query(url, sat)}"'
+
+    body = re.sub(
+        r'src="(/assets/plugin-sandbox-[^"]+\.js)"',
+        _inject_script_src,
+        body,
+        count=1,
+    )
+    return web.Response(text=body, content_type="text/html", charset="utf-8")
+
+
 async def on_startup(app: web.Application) -> None:
     state: State = app["state"]
     pool = ThreadPoolExecutor(max_workers=20)
@@ -1870,6 +1894,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app = web.Application(middlewares=[access.middleware], client_max_size=agent.MAX_BODY)
     app["state"], app["bpf"], app["clients"], app["wifi_keys"] = state, bpf, set(), wifi_keys
     app["csrf"] = access.new_token()
+    app["sandbox_asset_token"] = access.new_sandbox_asset_token()
     app["insecure_lan"] = insecure_lan
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
@@ -1942,6 +1967,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_put("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     app.router.add_delete("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     if WEB_DIST.exists():
+        app.router.add_get("/plugin-sandbox.html", api_plugin_sandbox_html)
         app.router.add_static("/", WEB_DIST, show_index=False)
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)

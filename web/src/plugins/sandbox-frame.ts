@@ -17,7 +17,21 @@ type HostBoot = {
   config: Record<string, string>;
   viz?: unknown;
   moduleSrc: string;
+  /** Session asset token for opaque-origin pack fetches (follow-up: host-posted blob module). */
+  sandboxAssetToken?: string;
 };
+
+function moduleSrcWithAssetToken(src: string, token?: string): string {
+  if (!token || src.startsWith("blob:")) return src;
+  try {
+    const u = new URL(src, location.href);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return src;
+    u.searchParams.set("sat", token);
+    return u.href;
+  } catch {
+    return src;
+  }
+}
 
 type HostMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: unknown }

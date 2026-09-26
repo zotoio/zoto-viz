@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
  * Sandbox pack draws-or-not smoke (headless Chromium + running monitor).
- * Revert proof: revert `plugin-pack-feed.ts` startup-failure branch, then
- * `pnpm test:sandbox-draws-smoke` → `plugin-pack-feed.test.ts` red first;
- * locally: `pnpm vitest run src/plugins/plugin-pack-feed.test.ts` after reverting
- * the startup-failure assertion → expect "shows startup failure copy" to fail.
+ * On failure, logs CSP violations, CORS console lines, bootstrap/module status separately.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import { chromium } from "playwright";
 
@@ -14,13 +14,27 @@ const base = (process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/").replace(/\/?
 const WAIT_MS = 120_000;
 const NEAR_BLACK = { r: 5, g: 10, b: 22 };
 const NEAR_BLACK_TOL = 14;
+const webRoot = path.dirname(fileURLToPath(import.meta.url));
 
-/** Shipped sandbox viz packs exercised after opaque-origin bootstrap (koi not in catalog). */
 const PACKS = [
   { mode: "plugin:talker-storm", label: "talker-storm" },
   { mode: "plugin:blob-mesh", label: "blob-mesh" },
   { mode: "plugin:marble-run", label: "marble-run" },
 ];
+
+function sandboxJsName() {
+  const html = readFileSync(path.join(webRoot, "../dist/plugin-sandbox.html"), "utf8");
+  const m = html.match(/assets\/(plugin-sandbox-[^"]+\.js)/);
+  return m?.[1] ?? null;
+}
+
+async function fetchSessionToken() {
+  const r = await fetch(`${base}api/session`, { headers: { Host: "127.0.0.1:7020" } });
+  if (!r.ok) throw new Error(`session ${r.status}`);
+  const data = await r.json();
+  if (!data.sandboxAssetToken) throw new Error("sandboxAssetToken missing");
+  return data.sandboxAssetToken;
+}
 
 function installProfile(mode) {
   localStorage.clear();
@@ -63,43 +77,74 @@ async function sampleScene(page) {
   const png = PNG.sync.read(await canvas.screenshot({ type: "png" }));
   const w = png.width;
   const h = png.height;
-  const center = avgBlock(png.data, w, h, w / 2, h / 2);
-  const side = avgBlock(png.data, w, h, Math.floor(w * 0.2), Math.floor(h * 0.35));
-  return { center, side, w, h };
+  return {
+    center: avgBlock(png.data, w, h, w / 2, h / 2),
+    side: avgBlock(png.data, w, h, Math.floor(w * 0.2), Math.floor(h * 0.35)),
+  };
 }
 
 async function waitForDraw(page, label) {
   const deadline = Date.now() + WAIT_MS;
   while (Date.now() < deadline) {
     const { center, side } = await sampleScene(page);
-    if (!nearBlack(center) || !nearBlack(side)) {
-      return { center, side };
-    }
+    if (!nearBlack(center) || !nearBlack(side)) return { center, side };
     await page.waitForTimeout(500);
   }
-  throw new Error(`${label}: canvas stayed near-black (sandbox likely did not draw)`);
+  throw new Error(`${label}: canvas stayed near-black`);
 }
 
 async function main() {
+  const sat = await fetchSessionToken();
+  const jsName = sandboxJsName();
+  let bootstrapJsStatus = null;
+  let moduleJsStatus = null;
+  if (jsName) {
+    const boot = await fetch(`${base}assets/${jsName}?sat=${encodeURIComponent(sat)}`, {
+      headers: { Origin: "null", Host: "127.0.0.1:7020" },
+    });
+    bootstrapJsStatus = boot.status;
+  }
+
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  const diag = { cspViolations: [], corsConsole: [], bootstrapJsStatus, moduleJsStatus, jsName };
+
   page.on("console", (msg) => {
-    if (/blocked by CORS policy/i.test(msg.text())) {
-      throw new Error(msg.text());
-    }
+    const t = msg.text();
+    if (/blocked by CORS policy/i.test(t)) diag.corsConsole.push(t);
+    const m = t.match(/module (\d{3})/i);
+    if (m) moduleJsStatus = Number(m[1]);
+  });
+  await page.addInitScript(() => {
+    window.__zotoCspViolations = [];
+    document.addEventListener("securitypolicyviolation", (e) => {
+      window.__zotoCspViolations.push({
+        blockedURI: e.blockedURI,
+        violatedDirective: e.violatedDirective,
+      });
+    });
   });
 
   for (const pack of PACKS) {
     await page.goto(base, { waitUntil: "domcontentloaded", timeout: WAIT_MS });
     await page.evaluate(installProfile, pack.mode);
     await page.reload({ waitUntil: "networkidle", timeout: WAIT_MS });
-    await page.waitForFunction(
-      () => document.querySelector("#mode")?.textContent?.length,
-      undefined,
-      { timeout: WAIT_MS },
-    );
-    const pixels = await waitForDraw(page, pack.label);
-    console.log("sandbox-draws-smoke:", pack.label, JSON.stringify(pixels));
+    try {
+      await waitForDraw(page, pack.label);
+    } catch (err) {
+      diag.cspViolations = await page.evaluate(() => window.__zotoCspViolations ?? []);
+      diag.moduleJsStatus = moduleJsStatus;
+      const srcdoc = diag.cspViolations.filter((v) => String(v.blockedURI || "").includes("srcdoc"));
+      console.error("sandbox-draws-smoke: FAIL", JSON.stringify({
+        pack: pack.label,
+        ...diag,
+        srcdocViolations: srcdoc,
+        message: err?.message,
+      }, null, 2));
+      await browser.close();
+      process.exit(1);
+    }
+    console.log("sandbox-draws-smoke:", pack.label, "ok");
   }
 
   await browser.close();
