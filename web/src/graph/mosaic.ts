@@ -241,6 +241,10 @@ export class Mosaic {
     return this.extras.find((e) => e.id === id)?.scene ?? null;
   }
 
+  paneElement(id: string): HTMLElement | null {
+    return this.panes.get(id) ?? null;
+  }
+
   private restoreSolo(): void {
     this.size = "off";
     this.hero = "off";

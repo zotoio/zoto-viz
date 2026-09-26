@@ -165,6 +165,14 @@ export class RenderHost {
   /** Pane geometry changed (mosaic layout, hero swap): clear stale pixels outside the new viewports. */
   invalidate(): void { this.dirty = true; }
 
+  /** Force a WebGL context loss so panes can rebuild GL state (tile heal ladder). */
+  recreateContext(): void {
+    if (this.software) return;
+    try {
+      (this.renderer as THREE.WebGLRenderer).forceContextLoss();
+    } catch { /* already lost */ }
+  }
+
   /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
   setPixelRatio(pr: number): void {
     if (Math.abs(pr - this.pixelRatio) < 0.01) return;

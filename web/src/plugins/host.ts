@@ -20,7 +20,9 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeBuffer"; payload: { slot: number; data: number[] } }
   | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
-  | { source: "zoto-viz-plugin"; type: "log"; payload: string };
+  | { source: "zoto-viz-plugin"; type: "log"; payload: string }
+  | { source: "zoto-viz-plugin"; type: "drawState"; payload: { drawing: boolean } }
+  | { source: "zoto-viz-plugin"; type: "loseHostContext"; payload?: Record<string, never> };
 
 export type ParentMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
@@ -34,6 +36,8 @@ export interface PluginHostHandlers {
   writeBuffer?: (slot: number, data: number[]) => void;
   writeUniform?: (name: string, value: VizUniformValue) => void;
   writeParticles?: (data: number[], stride?: number) => void;
+  drawState?: (drawing: boolean) => void;
+  loseHostContext?: () => void;
 }
 
 const TS_STORE = "zoto-viz.tsPlugins";
@@ -154,5 +158,7 @@ export class PluginSandbox {
     if (d.type === "writeBuffer") this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
     if (d.type === "writeUniform") this.handlers.writeUniform?.(d.payload.name, d.payload.value);
     if (d.type === "writeParticles") this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+    if (d.type === "drawState") this.handlers.drawState?.(d.payload.drawing);
+    if (d.type === "loseHostContext") this.handlers.loseHostContext?.();
   };
 }

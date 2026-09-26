@@ -94,6 +94,7 @@ export class PaneFps {
   private stamps: number[] = [];
   private lastTs = -1;
   private shown = "";
+  private changes = 0;
 
   constructor(parent: HTMLElement) {
     const badge = document.createElement("span");
@@ -108,10 +109,16 @@ export class PaneFps {
     this.el.title = text;
   }
 
+  /** Monotonic count of picture changes (tile health stillness probe). */
+  get changeCount(): number {
+    return this.changes;
+  }
+
   /** This pane's pixels differed from the previous sample. */
   mark(ts: number): void {
     if (ts === this.lastTs) return;
     this.lastTs = ts;
+    this.changes++;
     this.stamps.push(ts);
     this.expire(ts);
     this.paint(ts);

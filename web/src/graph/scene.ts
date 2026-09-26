@@ -1529,11 +1529,30 @@ export class NetScene implements HostedView {
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: number): void { this.animate(ts); }
   noteFrameCost(ms: number): void { this.paneFps.noteGpu(ms); }
+  private _gpuContextLost = false;
+
+  /** True after webglcontextlost until restored. */
+  get gpuContextLost(): boolean {
+    return this._gpuContextLost;
+  }
+
+  get pictureSerial(): number {
+    return this.paneFps.changeCount;
+  }
+
+  get lastViewport(): Viewport | null {
+    return this.lastVp;
+  }
+
   hostContextLost(): void {
+    this._gpuContextLost = true;
     this.lumaProbe.reset();
     this.changeProbe.reset();
   }
-  hostContextRestored(): void { this.relayout(); }
+  hostContextRestored(): void {
+    this._gpuContextLost = false;
+    this.relayout();
+  }
 
   get software(): boolean {
     return this.host?.software ?? this.renderer instanceof SoftwareGpu;

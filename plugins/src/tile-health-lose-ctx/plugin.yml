@@ -1,0 +1,22 @@
+id: tile-health-lose-ctx
+name: Tile health — lose context
+version: 1
+hint: Host dogfood pack — calls loseHostContext after 40 frames.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 4
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAccent
+    - uBg
+    - uOpacity
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts
