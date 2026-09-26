@@ -1,0 +1,16 @@
+diff --git a/web/src/plugins/pack-asset-frame.ts b/tmp/no-abort-frame.ts
+index c34db91..217c7c8 100644
+--- a/web/src/plugins/pack-asset-frame.ts
++++ b/tmp/no-abort-frame.ts
+@@ -91,11 +91,6 @@ export function clearPackAssetRebuildAbort(tileId: string, packName: string): vo
+ }
+ 
+ export function beginActivePackLoad(tileId: string, packName: string): void {
+-  const prev = activePackByTile.get(tileId);
+-  if (prev && prev !== packName) {
+-    abortPackAssetRebuildForTile(tileId, prev);
+-    tileRebuild.delete(rebuildAttemptKey(tileId, prev));
+-  }
+   activePackByTile.set(tileId, packName);
+ }
+ 

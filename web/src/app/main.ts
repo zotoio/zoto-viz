@@ -102,7 +102,6 @@ import {
 } from "../plugins/plugin-pack-feed";
 import {
   registerPackAssetRetry,
-  resetTileRebuildAttempts,
 } from "../plugins/pack-asset-frame";
 import { releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
@@ -629,16 +628,23 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   const packLabel = spec.name ?? spec.id;
   setTileExpectsVizFeed(tileId, !!(spec.capabilities?.includes("viz.read") || spec.capabilities?.includes("viz.write")));
   clearTilePackFeed(tileId);
-  registerPackAssetRetry(tileId, () => {
-    resetTileRebuildAttempts(tileId, packLabel);
-    void loadTsPlugin(spec);
+  const mosaicHost = mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost & {
+    focusPaneTile?: (id: string) => void;
+    setWallNotice?: (text: string | null | undefined) => void;
+  } | null;
+  registerPackAssetRetry(tileId, packLabel, () => {
+    void import("../plugins/pack-asset-rebuild").then(({ retryPackAssetProtectedLoad }) =>
+      retryPackAssetProtectedLoad(tileId, packLabel, mosaicHost, async () => {
+        await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+      }),
+    );
   });
   try {
     const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
     await runPackAssetProtectedLoad(
       tileId,
       packLabel,
-      mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost | null,
+      mosaicHost,
       async () => {
       await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
     });

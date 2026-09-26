@@ -3,6 +3,7 @@
 import { packSandboxStartFailed } from "./plugin-copy";
 import {
   invokePackAssetRetry,
+  isActivePackLoad,
   tileRebuildState,
   tileReconnectingNotice,
 } from "./pack-asset-frame";
@@ -139,9 +140,11 @@ export function packFeedPaneNotice(
 ): { text: string; recipe: PaneNoticeRecipe } | null {
   const r = tiles.get(tileId);
   if (!r) return null;
-  const rebuild = tileRebuildState(tileId);
+  const label = packName ?? "Pack";
+  if (!isActivePackLoad(tileId, label) && packName) return null;
+  const rebuild = tileRebuildState(tileId, label);
   if (rebuild.phase === "reconnecting") {
-    return { text: tileReconnectingNotice(packName ?? "Pack"), recipe: "reconnecting" };
+    return { text: tileReconnectingNotice(label), recipe: "reconnecting" };
   }
   if (r.startupFailed || rebuild.phase === "failed") {
     return { text: formatSandboxStartupFailure(packName ?? "Pack"), recipe: "fail" };
@@ -166,6 +169,7 @@ export type MosaicNoticeHost = {
     recipe?: PaneNoticeRecipe,
     opts?: { showRetry?: boolean; onRetry?: () => void },
   ) => void;
+  focusPaneTile?: (id: string) => void;
 };
 
 /** Push pack-feed / sandbox-startup copy to a mosaic tile without clobbering unrelated notices. */
@@ -175,18 +179,19 @@ export function applyPackFeedPaneNotice(
   packName: string | null | undefined,
 ): void {
   if (!mosaic) return;
+  const label = packName ?? "";
+  if (label && !isActivePackLoad(tileId, label)) {
+    if (feedNoticeShown.delete(tileId)) mosaic.setPaneNotice(tileId, null);
+    return;
+  }
   const next = packFeedPaneNotice(tileId, packName);
   if (next) {
     feedNoticeShown.add(tileId);
-    const rebuild = tileRebuildState(tileId);
+    const rebuild = tileRebuildState(tileId, label || "Pack");
     const showRetry = next.recipe === "fail" && rebuild.phase === "failed";
     mosaic.setPaneNotice(tileId, next.text, next.recipe, {
       showRetry,
-      onRetry: showRetry
-        ? () => {
-          if (invokePackAssetRetry(tileId)) return;
-        }
-        : undefined,
+      onRetry: showRetry ? () => { invokePackAssetRetry(tileId); } : undefined,
     });
     return;
   }

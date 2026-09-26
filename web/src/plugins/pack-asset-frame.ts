@@ -11,7 +11,8 @@ const tileFrameOpenCounts = new Map<string, number>();
 const tileRebuildAttempts = new Map<string, number>();
 const tileRebuildInflight = new Set<string>();
 const rebuildAbort = new Map<string, AbortController>();
-const retryHandlers = new Map<string, () => void>();
+const retryHandlers = new Map<string, { packName: string; run: () => void }>();
+const activePackByTile = new Map<string, string>();
 let wallNoticePending = false;
 let wallNoticeShown = false;
 
@@ -39,6 +40,7 @@ export function resetPackAssetFrameState(): void {
   tileRebuildInflight.clear();
   rebuildAbort.clear();
   retryHandlers.clear();
+  activePackByTile.clear();
   tileRebuild.clear();
   wallNoticePending = false;
   wallNoticeShown = false;
@@ -88,49 +90,72 @@ export function clearPackAssetRebuildAbort(tileId: string, packName: string): vo
   rebuildAbort.delete(rebuildAttemptKey(tileId, packName));
 }
 
+export function beginActivePackLoad(tileId: string, packName: string): void {
+  const prev = activePackByTile.get(tileId);
+  if (prev && prev !== packName) {
+    abortPackAssetRebuildForTile(tileId, prev);
+    tileRebuild.delete(rebuildAttemptKey(tileId, prev));
+  }
+  activePackByTile.set(tileId, packName);
+}
+
+export function endActivePackLoad(tileId: string, packName: string): void {
+  if (activePackByTile.get(tileId) === packName) activePackByTile.delete(tileId);
+}
+
+export function isActivePackLoad(tileId: string, packName: string): boolean {
+  return activePackByTile.get(tileId) === packName;
+}
+
+export function activePackForTile(tileId: string): string | undefined {
+  return activePackByTile.get(tileId);
+}
+
 export async function closePackAssetFrameForTile(tileId: string): Promise<void> {
   abortPackAssetRebuildForTile(tileId);
+  activePackByTile.delete(tileId);
   const frameId = tileFrames.get(tileId);
   if (!frameId) return;
   tileFrames.delete(tileId);
   await unregisterPackAssetFrame(frameId);
 }
 
-export function registerPackAssetRetry(tileId: string, handler: () => void): void {
-  retryHandlers.set(tileId, handler);
+export function registerPackAssetRetry(tileId: string, packName: string, run: () => void): void {
+  retryHandlers.set(tileId, { packName, run });
 }
 
 export function invokePackAssetRetry(tileId: string): boolean {
-  const fn = retryHandlers.get(tileId);
-  if (!fn) return false;
-  fn();
+  const row = retryHandlers.get(tileId);
+  if (!row) return false;
+  row.run();
   return true;
 }
 
-export function tileRebuildState(tileId: string): TileRebuildState {
-  let row = tileRebuild.get(tileId);
+export function tileRebuildState(tileId: string, packName: string): TileRebuildState {
+  const key = rebuildAttemptKey(tileId, packName);
+  let row = tileRebuild.get(key);
   if (!row) {
     row = { phase: "idle", failedOnce: false, keepVisible: true };
-    tileRebuild.set(tileId, row);
+    tileRebuild.set(key, row);
   }
   return row;
 }
 
-export function markTileReconnecting(tileId: string): void {
-  const row = tileRebuildState(tileId);
+export function markTileReconnecting(tileId: string, packName: string): void {
+  const row = tileRebuildState(tileId, packName);
   row.phase = "reconnecting";
   row.keepVisible = true;
 }
 
-export function markTileRebuildFailed(tileId: string): void {
-  const row = tileRebuildState(tileId);
+export function markTileRebuildFailed(tileId: string, packName: string): void {
+  const row = tileRebuildState(tileId, packName);
   row.phase = "failed";
   row.failedOnce = true;
   row.keepVisible = true;
 }
 
-export function markTileRebuildIdle(tileId: string): void {
-  const row = tileRebuildState(tileId);
+export function markTileRebuildIdle(tileId: string, packName: string): void {
+  const row = tileRebuildState(tileId, packName);
   row.phase = "idle";
   row.failedOnce = false;
 }
@@ -149,6 +174,9 @@ export function tileRebuildAttemptCount(tileId: string, packName: string): numbe
 
 export function resetTileRebuildAttempts(tileId: string, packName: string): void {
   tileRebuildAttempts.delete(rebuildAttemptKey(tileId, packName));
+  const row = tileRebuildState(tileId, packName);
+  row.phase = "idle";
+  row.failedOnce = false;
 }
 
 export function rebuildBackoffMs(attemptIndex: number): number {
