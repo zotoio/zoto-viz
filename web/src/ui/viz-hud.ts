@@ -221,6 +221,8 @@ export class VizHud {
   private lastMetricValue = "";
   private lastSkipTitle = "";
   private readonly lastMosaicLineText = new Map<string, string>();
+  private readonly devBadInputEl: HTMLDivElement;
+  private lastDevBadInput = "";
 
   constructor(parent: HTMLElement, onSwap: (packId: VizDemoPackId) => void) {
     this.onSwap = onSwap;
@@ -269,10 +271,23 @@ export class VizHud {
       return el;
     };
     line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
-    root.append(line, this.tileShareRow);
+    this.devBadInputEl = document.createElement("div");
+    this.devBadInputEl.className = "viz-hud-dev-bad-input sec-hint";
+    this.devBadInputEl.dataset.testid = "viz-hud-dev-bad-input";
+    this.devBadInputEl.hidden = true;
+    root.append(line, this.devBadInputEl, this.tileShareRow);
 
     parent.append(root);
     this.root = root;
+  }
+
+  /** Dev dogfood flag bad-input strip (wall rebuild path only). */
+  syncDevWallBadInputMessage(message: string | null): void {
+    const msg = message?.trim() ?? "";
+    if (msg === this.lastDevBadInput) return;
+    this.lastDevBadInput = msg;
+    this.devBadInputEl.textContent = msg;
+    this.devBadInputEl.hidden = !msg;
   }
 
   setActive(packId: string | null, packName: string): void {

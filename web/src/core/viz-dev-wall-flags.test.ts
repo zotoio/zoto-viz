@@ -23,6 +23,10 @@ import { tileIdsForLayout } from "../plugins/dogfood-tile-hud";
 import { resetNixieFormatterCache } from "../plugins/nixie-wall-clock";
 import { resetNixiePackHostScope, runPackFrameHandler } from "../plugins/viz-pack-host";
 import type { VizDataFrame } from "../plugins/viz-host";
+import { devVizWallFlagBadInputMessage } from "../ui/viz-copy";
+import {
+  devVizWallTileCostBadInputMessage,
+} from "./viz-dev-wall-flags";
 
 const TILES_2X2 = tileIdsForLayout(2, 2);
 /** In-range dogfood cost (not 5010/5011 wall boundary). */
@@ -97,22 +101,22 @@ describe("dev viz wall flags", () => {
     expect(writeBuffer).toHaveBeenCalledTimes(10);
   });
 
-  it("F5 (iii) bad tile cost: 1:5011 — no injector on 2×2", () => {
+  it("F5 (iii) bad tile cost: 1:5011 — bad-input message, no injector on 2×2", () => {
     vi.stubEnv("DEV", true);
     applyDevVizWallFlagsOnBuild("?vizTileCostTicks=1:5011", TILES_2X2);
-    expectBadWallCostAbsent();
+    expectBadWallCostAbsent("1:5011");
   });
 
-  it("F5 (iii) bad tile cost: 1:abc — no injector on 2×2", () => {
+  it("F5 (iii) bad tile cost: 1:abc — bad-input message, no injector on 2×2", () => {
     vi.stubEnv("DEV", true);
     applyDevVizWallFlagsOnBuild("?vizTileCostTicks=1:abc", TILES_2X2);
-    expectBadWallCostAbsent();
+    expectBadWallCostAbsent("1:abc");
   });
 
-  it("F5 (iii) bad tile cost: 1:-5 — no injector on 2×2", () => {
+  it("F5 (iii) bad tile cost: 1:-5 — bad-input message, no injector on 2×2", () => {
     vi.stubEnv("DEV", true);
     applyDevVizWallFlagsOnBuild("?vizTileCostTicks=1:-5", TILES_2X2);
-    expectBadWallCostAbsent();
+    expectBadWallCostAbsent("1:-5");
   });
 
   it("F5 (iii) whole-wall 5011 — injector set (over-budget path, not bad input)", () => {
@@ -247,13 +251,16 @@ describe("dev viz wall flags", () => {
   });
 });
 
-function expectBadWallCostAbsent(): void {
+function expectBadWallCostAbsent(raw: string): void {
   expect(vizBuildCostTicks(0)).toBeUndefined();
+  expect(devVizWallTileCostBadInputMessage()).toBe(
+    devVizWallFlagBadInputMessage("vizTileCostTicks", raw),
+  );
 }
 
 function expectBadWallCostToken(flag: string): void {
   applyDevVizWallFlagsOnBuild(`?vizTileCostTicks=${flag}`, TILES_2X2);
-  expectBadWallCostAbsent();
+  expectBadWallCostAbsent(flag.trim() || flag);
   resetDevVizWallFlagsStateForTests();
   applyDevVizWallFlagsOnBuild(`?vizTileCostTicks=${LIMITED_DOGFOOD_TICKS}`, TILES_2X2);
   expect(vizBuildCostTicks(0)).toBe(LIMITED_DOGFOOD_TICKS);

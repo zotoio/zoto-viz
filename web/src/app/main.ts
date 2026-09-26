@@ -97,7 +97,7 @@ import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
-import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
+import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
 import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
 import {
   bindMosaicTileBudgetLines,
@@ -361,6 +361,7 @@ function syncVizBudgetTileScope(): void {
   if (key === vizTileScopeKey) return;
   vizTileScopeKey = key;
   applyDevVizWallFlagsOnBuild(location.search, scopeIds);
+  vizHud.syncDevWallBadInputMessage(devVizWallTileCostBadInputMessage());
   syncVizTileScope(scopeIds);
   vizBudget.setTileId(mosaic?.on ? (mosaic.mainMode || scopeIds[0] || "main") : "main");
   if (mosaic?.on) vizHud.syncMosaicTileHudLines(scopeIds);
@@ -1125,6 +1126,7 @@ setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
   vizTileScopeKey = bootScope.join("\0");
   bootNixieRealWallClock();
   applyDevVizWallFlagsOnBuild(location.search, bootScope);
+  vizHud.syncDevWallBadInputMessage(devVizWallTileCostBadInputMessage());
 }
 
 // ---------------------------------------------------------------- settings cog: allow/block filters + the moved show / privacy switches

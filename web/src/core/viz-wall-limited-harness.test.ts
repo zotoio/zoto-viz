@@ -11,15 +11,11 @@ import {
   VIZ_WALL_BUDGET_TICKS,
   vizTileBudgetRegistry,
 } from "../plugins/viz-tile-budget";
-import { VizHud, tileHudDisplayFrame } from "../ui/viz-hud";
-import {
-  bindMosaicTileBudgetLines,
-  mosaicTileBudgetLines,
-} from "../app/main-viz-tile-lines";
+import { tileHudDisplayFrame } from "../ui/viz-hud";
 import { tileLimitedSharingLabel } from "../ui/viz-copy";
 import { createTileHudLabelLine } from "../ui/tile-hud-label";
 import { tileHudChrome } from "../plugins/viz-tile-hud";
-import { hudSamplesForTile } from "../plugins/viz-tile-budget";
+import { runWallHarness } from "./viz-wall-limited-harness";
 
 const TILES_2X2 = tileIdsForLayout(2, 2);
 const IN_RANGE_TICKS = VIZ_COST_TICKS_10MS;
@@ -33,78 +29,6 @@ function emptyBuild() {
     rf: [] as const,
     talkers: [] as const,
     headlines: [] as const,
-  };
-}
-
-interface WallHarnessResult {
-  skipped: number;
-  limitedWallLines: number;
-  perTileLimitedLines: number;
-}
-
-function runWallHarness(
-  tiles: readonly string[],
-  flag: string | null,
-  frames = 600,
-): WallHarnessResult {
-  resetDevVizWallFlagsStateForTests();
-  resetVizClockInjectors();
-  vizTileBudgetRegistry.reset();
-  applyDevVizWallFlagsOnBuild(flag !== null ? `?vizTileCostTicks=${flag}` : "", tiles);
-  syncVizTileScope(tiles);
-  const primary = tiles[0]!;
-  const budget = new VizFrameBudget(() => 0, primary);
-  const state = fatLanFixture();
-  const parent = document.createElement("div");
-  document.body.append(parent);
-  const hud = new VizHud(parent, () => {});
-  hud.setActive("packet-tunnel", "tunnel");
-  hud.syncMosaicTileHudLines(tiles.length > 1 ? tiles : []);
-  const lines = mosaicTileBudgetLines(tiles.length > 1 ? tiles : ["main"]);
-  if (lines) bindMosaicTileBudgetLines(lines, (id) => vizTileBudgetRegistry.getTile(id));
-
-  let mono = 0;
-  setVizClockInjector(() => mono);
-  let prevClock = monoMs(0);
-  for (let i = 0; i < frames; i++) {
-    budget.setTileId(primary);
-    budget.deliver(state, prevClock, 0, () => {}, () => emptyBuild());
-    vizBuildCostTicks(i);
-    mono += 1000 / 60;
-    vizTileBudgetRegistry.advanceTick();
-    const budgetTile = vizTileBudgetRegistry.getTile(primary);
-    if (tiles.length > 1) {
-      for (const id of tiles) {
-        const t = vizTileBudgetRegistry.getTile(id);
-        t.shedding = budgetTile.shedding;
-        if (budgetTile.lastDeliveredFrame) t.lastDeliveredFrame = budgetTile.lastDeliveredFrame;
-      }
-    }
-    const nowTick = vizTileBudgetRegistry.currentTick();
-    hud.tick({
-      packId: "packet-tunnel",
-      packName: "tunnel",
-      stats: budget.stats,
-      frame: budget.lastBuilt,
-      state,
-      now: nowTick / 300,
-      tileBudget: budgetTile,
-      activeTiles: tiles.length,
-      tileBudgetLines: lines,
-    });
-    if (budget.lastBuilt) prevClock = monoMs((i + 1) * (1000 / 60));
-  }
-
-  const skipEl = parent.querySelector(".viz-hud-skip");
-  const limitedWall = skipEl?.textContent?.includes("LIMITED") ? 1 : 0;
-  let perTileLimited = 0;
-  for (const el of parent.querySelectorAll(".viz-hud-tile-share")) {
-    if (el.textContent?.includes("LIMITED")) perTileLimited++;
-  }
-  return {
-    skipped: vizTileBudgetRegistry.getTile(primary).skipped,
-    limitedWallLines: limitedWall,
-    perTileLimitedLines: perTileLimited,
   };
 }
 

@@ -10,6 +10,11 @@ export function mosaicWallLayoutBootRefusedMessage(requestedTiles: number, limit
   return `Couldn't load your saved wall layout. It has ${requestedTiles} tiles and the limit is ${limit}, so the default view is showing.`;
 }
 
+/** Dev-only dogfood URL flag rejected at wall build (normal status tone, not an error). */
+export function devVizWallFlagBadInputMessage(param: "vizTileCostTicks", raw: string): string {
+  return `Couldn't use ?${param}=${raw}; use a whole-wall decimal integer.`;
+}
+
 export function tileLimitedSharingLabel(activeTiles: number, skipsPerSec: number): string {
   const n = Math.max(0, activeTiles);
   const rate = formatHudSkipsPerSec(skipsPerSec);
