@@ -125,6 +125,10 @@ export class Select {
   }
 
   get value(): string { return this.current; }
+  /** Move focus to the view picker control (after a rolled-back switch). */
+  focus(): void {
+    this.btn.focus();
+  }
   /** Set the value without firing onChange. */
   set value(v: string) {
     const opt = this.options.find((o) => o.value === v) ?? this.options[0];

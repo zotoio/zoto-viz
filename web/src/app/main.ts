@@ -19,11 +19,10 @@ import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
 import { deliverPluginPresentTick } from "../plugins/viz-present-tick";
 import {
   activePluginSpec,
-  capturePresentDriveBeforeLiveModeCommit,
   presentDrive,
   refreshPluginDriveState,
-  restorePresentDriveAfterModeRollback,
 } from "./present-drive-app";
+import { applyModeImpl, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
 import { shouldPushSandboxPluginConfig } from "../plugins/viz-sandbox-config";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
@@ -560,7 +559,9 @@ let tsWatch = 0;
 let tsWatchId = "";
 let tsWatchHash = "";
 
-async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
+let ensureReviewedOverride: ((spec: PluginView | null) => Promise<boolean>) | null = null;
+
+async function ensureReviewedImpl(spec: PluginView | null): Promise<boolean> {
   if (!spec || !pluginNeedsReview(spec)) return true;
   if (spec.consent) return true;
   if (autoconsentEnabled() && autoconsentEligible(spec)) {
@@ -588,6 +589,11 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
     console.warn("zoto-viz plugin consent:", e);
     return false;
   }
+}
+
+async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
+  if (ensureReviewedOverride) return ensureReviewedOverride(spec);
+  return ensureReviewedImpl(spec);
 }
 
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
@@ -755,95 +761,57 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
   await loadPluginSkyOnto(scene, spec, true);
 }
 
-function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
-  const m = modeById(id);
-  const opts = optsFor(m);
-  const prevMode = liveMode;
-  currentOpts = opts;
-  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
-  modeSel.value = m.id;
-  localStorage.setItem("zoto-viz.mode", m.id);
-  touch();
-  applyPluginWall(m.id, { ...flags, prevMode });
+function computeSkyStage(m: ViewMode, spec: PluginView | null): boolean {
+  return !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
+}
 
-  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  const { prevPresentSpec, prevPresentMode } = capturePresentDriveBeforeLiveModeCommit(liveMode);
-  liveMode = m.id;
-  refreshPluginDriveForMode(spec, m.id);
-  const paneSpec = skySpecForMode(m.id, spec);
-  const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
-  document.body.classList.toggle("stage-only", skyStage);
+function applyModeFeedExtras(m: ViewMode, opts: Record<string, string>): void {
   const rainPics = m.pluginId === "hn-rain" && parseHnRainLook(opts).pics && !mosaic?.on;
   feedTitleCube.setActive(rainPics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
-  bindThisView(m.id);
-  $("modeOpts").replaceChildren();
-  void (async () => {
-    if (!(await ensureReviewed(spec))) {
-      preserveVizUbo = false;
-      modeSel.value = prevMode || modeSel.value;
-      liveMode = prevMode;
-      localStorage.setItem("zoto-viz.mode", modeSel.value);
-      restorePresentDriveAfterModeRollback(
-        prevPresentSpec,
-        prevPresentMode,
-        modeSel.value,
-        (id) => pluginSpecForMode(id) ?? null,
-        presentDriveDeps,
-      );
-      return;
-    }
-    if (m.standalone || arcadeSlotFor(m) !== "carousel") {
-      void loadTsPlugin(paneSpec);
-      void syncPluginSky(paneSpec);
-    }
-  })();
-  feedCtl.feed?.setGraphBase(m.graphBase);
-  if (m.graphBase === "wifi") void syncWifiWatch();
+}
 
-  if (mosaic?.on && !(m.pluginId && m.standalone)) {
-    if (!flags.keepLayout && mosaic.heroPos !== "off" && mosaic.heroMode !== m.id) {
-      mosaic.setSize(mosaic.current, m.id, mosaic.heroPos, {
-        tree: settings.animSettings.mosaicTree,
-        maximized: settings.animSettings.mosaicMaxId || null,
-        tiles: settings.animSettings.mosaicTiles,
-      });
-    }
-    if (!mosaic.tileIds.includes(m.id)) {
-      const slot = mosaic.focusedId || mosaic.tileIds[0];
-      if (!slot || !mosaic.setPaneView(slot, m.id)) {
-        modeSel.value = prevMode || modeSel.value;
-        liveMode = prevMode;
-        localStorage.setItem("zoto-viz.mode", modeSel.value);
-        restorePresentDriveAfterModeRollback(
-          prevPresentSpec,
-          prevPresentMode,
-          modeSel.value,
-          (id) => pluginSpecForMode(id) ?? null,
-          presentDriveDeps,
-        );
-        return;
-      }
-    }
-    const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.tileIds[0] ?? m.id;
-    mosaic.focus(focusId);
-    const target = mosaic.graphScene(focusId);
-    if (target) {
-      target.setMode(m, opts);
-      target.setStageOnly(skyStage);
-    }
-    document.body.classList.remove("arcade");
-    scene.setActive(true);
-    if (target !== scene) scene.setStageOnly(false);
-    morphViewChrome(m, opts, spec, skyStage);
-    applyViewLook();
-    return;
+function syncModeHud(m: ViewMode, spec: PluginView | null): void {
+  vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label);
+}
+
+function captureMosaicAnimSnap(): MosaicAnimSnap {
+  const a = settings.animSettings;
+  return {
+    size: a.mosaic,
+    hero: a.hero,
+    tree: a.mosaicTree,
+    maximized: a.mosaicMaxId || null,
+    tiles: [...a.mosaicTiles],
+  };
+}
+
+function restoreMosaicAnimSnap(snap: MosaicAnimSnap, preferMode: string): void {
+  if (!mosaic) return;
+  mosaic.setSize(snap.size, preferMode, snap.hero, {
+    tree: snap.tree,
+    maximized: snap.maximized,
+    tiles: snap.tiles,
+  });
+}
+
+function applyMosaicModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
+  const focusId = mosaic!.tileIds.includes(m.id) ? m.id : mosaic!.tileIds[0] ?? m.id;
+  mosaic!.focus(focusId);
+  const target = mosaic!.graphScene(focusId);
+  if (target) {
+    target.setMode(m, opts);
+    target.setStageOnly(skyStage);
   }
+  document.body.classList.remove("arcade");
+  scene.setActive(true);
+  if (target !== scene) scene.setStageOnly(false);
+  morphViewChrome(m, opts, spec, skyStage, false);
+}
 
+function applySoloModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
   scene.setMode(m, opts);
-
-  // standalone arcade, or NASA catalog views which share the contain-fit slideshow stage
   const next = arcadeSlotFor(m);
   document.body.classList.toggle("arcade", next !== null);
   scene.setActive(true);
@@ -853,12 +821,92 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   if (next === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
   activeArcade = next;
   syncFeedShift();
-
-  morphViewChrome(m, opts, spec, skyStage);
-  applyViewLook();
+  morphViewChrome(m, opts, spec, skyStage, false);
 }
 
-function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
+function reapplyCommittedModeSurfaces(modeId: string): void {
+  const m = modeById(modeId);
+  const opts = optsFor(m);
+  currentOpts = opts;
+  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
+  const spec = m.pluginId ? pluginSpecForMode(modeId) : null;
+  const skyStage = computeSkyStage(m, spec);
+  document.body.classList.toggle("stage-only", skyStage);
+  applyModeFeedExtras(m, opts);
+  bindThisView(modeId);
+  refreshPluginDriveForMode(spec, modeId);
+  if (mosaic?.on && !(m.pluginId && m.standalone)) {
+    applyMosaicModeVisuals(m, opts, spec, skyStage);
+    return;
+  }
+  applySoloModeVisuals(m, opts, spec, skyStage);
+}
+
+function buildApplyModeHost(): ApplyModeHost {
+  return {
+    modeById,
+    optsFor,
+    getLiveMode: () => liveMode,
+    setLiveMode: (id) => { liveMode = id; },
+    modeSel,
+    touch,
+    applyPluginWall,
+    pluginSpecForMode,
+    skySpecForMode,
+    refreshPluginDrive: refreshPluginDriveForMode,
+    presentDriveDeps,
+    applySkyPrompt: (m, opts) => {
+      currentOpts = opts;
+      setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
+    },
+    reapplyCommittedModeSurfaces,
+    computeSkyStage: (m, spec) => computeSkyStage(m, spec),
+    applyStageOnly: (skyStage) => { document.body.classList.toggle("stage-only", skyStage); },
+    applyModeFeedExtras,
+    bindThisView,
+    clearModeOpts: () => { $("modeOpts").replaceChildren(); },
+    ensureReviewed,
+    loadTsPlugin,
+    syncPluginSky,
+    mosaic,
+    settingsAnim: () => settings.animSettings,
+    captureMosaicSnap: captureMosaicAnimSnap,
+    restoreMosaicSnap: restoreMosaicAnimSnap,
+    mosaicSetSizeForMode: (modeId) => {
+      mosaic!.setSize(mosaic!.current, modeId, mosaic!.heroPos, {
+        tree: settings.animSettings.mosaicTree,
+        maximized: settings.animSettings.mosaicMaxId || null,
+        tiles: settings.animSettings.mosaicTiles,
+      });
+    },
+    mosaicShouldResize: (modeId, keepLayout) =>
+      !keepLayout && !!mosaic && mosaic.heroPos !== "off" && mosaic.heroMode !== modeId,
+    mosaicSetPaneView: (from, to) => mosaic!.setPaneView(from, to),
+    mosaicFocusSlot: () => mosaic?.focusedId || mosaic?.tileIds[0],
+    mosaicHasTile: (modeId) => !!mosaic?.tileIds.includes(modeId),
+    applyMosaicModeVisuals,
+    applySoloModeVisuals,
+    syncModeHud,
+    applyViewLook,
+    feedSetGraphBase: (base) => { feedCtl.feed?.setGraphBase(base); },
+    syncWifiIfNeeded: (m) => { if (m.graphBase === "wifi") void syncWifiWatch(); },
+    modeLabel: (m) => m.label,
+    onConsentDeclined: () => { preserveVizUbo = false; },
+    shouldLoadPluginRuntime: (m) => m.standalone || arcadeSlotFor(m) !== "carousel",
+  };
+}
+
+export function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
+  applyModeImpl(buildApplyModeHost(), id, flags);
+}
+
+function morphViewChrome(
+  m: ViewMode,
+  opts: Record<string, string>,
+  spec: PluginView | null,
+  skyStage: boolean,
+  syncHud = true,
+): void {
   morphCopy($("hint"), m.hint);
   const legend = $("legend");
   const paint = (): void => {
@@ -872,7 +920,7 @@ function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: Plugin
   } else {
     paint();
   }
-  vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label);
+  if (syncHud) syncModeHud(m, spec);
 }
 
 function renderLegend(m: ViewMode, opts: Record<string, string>): void {
@@ -890,7 +938,23 @@ function renderLegend(m: ViewMode, opts: Record<string, string>): void {
   }
 }
 
-applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
+if (!import.meta.env.VITEST) {
+  applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
+}
+
+export function configureApplyModeForTests(cfg: {
+  ensureReviewed?: (spec: PluginView | null) => Promise<boolean>;
+  mosaic?: Mosaic | null;
+  pluginSpecs?: PluginView[];
+  liveMode?: string;
+}): void {
+  ensureReviewedOverride = cfg.ensureReviewed ?? null;
+  if (cfg.mosaic !== undefined) mosaic = cfg.mosaic;
+  if (cfg.pluginSpecs) pluginSpecs = cfg.pluginSpecs;
+  if (cfg.liveMode != null) liveMode = cfg.liveMode;
+}
+
+export { getPresentDriveTileId } from "./present-drive-app";
 
 // ---------------------------------------------------------------- visibility filters
 
