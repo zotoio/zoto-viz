@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   resetVizClockInjectors,
   setVizClockInjector,
@@ -14,6 +14,10 @@ import { buildVizFrame } from "./viz-host";
 import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 
 describe("clock split row W1", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetVizClockInjectors();
     vizTileBudgetRegistry.reset();

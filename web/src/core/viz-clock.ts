@@ -1,3 +1,5 @@
+import { monoMs, wallMs, type MonoMs, type WallMs } from "./viz-time";
+
 /**
  * Injectable clocks for viz:
  * - {@link vizClockMs} — monotonic budget / dt / HUD (defaults to `performance.now()`).
@@ -5,19 +7,19 @@
  */
 
 let clockMs: () => number = () => performance.now();
-let wallMs: () => number = () => Date.now();
+let wallEpochMs: () => number = () => Date.now();
 let buildCostMs: ((deliverIndex: number) => number) | undefined;
 let buildCostTicks: ((deliverIndex: number) => number) | undefined;
 let buildCostTicksForTile: ((tileId: string, deliverIndex: number) => number | undefined) | undefined;
 
 /** Monotonic host clock for frame budget, dt, and HUD skip rate. */
-export function vizClockMs(): number {
-  return clockMs();
+export function vizClockMs(): MonoMs {
+  return monoMs(clockMs());
 }
 
 /** Wall epoch clock for display (`state.ts`, nixie digits). */
-export function vizWallMs(): number {
-  return wallMs();
+export function vizWallMs(): WallMs {
+  return wallMs(wallEpochMs());
 }
 
 /** Wall epoch seconds for viz frames (`state.ts` when set). */
@@ -32,7 +34,7 @@ export function setVizClockInjector(inject: (() => number) | undefined): void {
 
 /** Override wall epoch clock (pass `undefined` to restore default). */
 export function setVizWallClockInjector(inject: (() => number) | undefined): void {
-  wallMs = inject ?? (() => Date.now());
+  wallEpochMs = inject ?? (() => Date.now());
 }
 
 /**
@@ -74,7 +76,7 @@ export function vizBuildCostTicksForTile(tileId: string, deliverIndex: number): 
 
 export function resetVizClockInjectors(): void {
   clockMs = () => performance.now();
-  wallMs = () => Date.now();
+  wallEpochMs = () => Date.now();
   buildCostMs = undefined;
   buildCostTicks = undefined;
   buildCostTicksForTile = undefined;

@@ -427,7 +427,7 @@ export function buildVizFrame(
   bind?: SourceBind | Record<string, string>,
 ): VizDataFrame {
   const t = vizFrameEpochSec(state.ts);
-  const nowClock = monoMs(vizClockMs());
+  const nowClock = vizClockMs();
   const dt = prevVizClockMs > monoMs(0) ? monoMsDeltaSec(prevVizClockMs, nowClock) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
   return {

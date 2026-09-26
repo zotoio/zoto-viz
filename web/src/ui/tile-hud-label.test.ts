@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTileHudLabelLine } from "./tile-hud-label";
 
 const LABEL = "LIMITED · sharing frame with 3 tiles · 40 skipped/s";
@@ -11,6 +11,10 @@ function skipRateAtSecond(sec: number): number {
 }
 
 describe("tile HUD LIMITED label (60 fps, per line)", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     document.body.innerHTML = "";
   });

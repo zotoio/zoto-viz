@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, beforeEach, expect, it, vi } from "vitest";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
 
 describe("viz plugin UBO broadcast", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("F1: nixie buffer reaches header and a non-header mosaic graph scene", () => {
     const buf = new Float32Array([1, 2, 3]);
     const main = { setPluginUboBuffer: vi.fn() };

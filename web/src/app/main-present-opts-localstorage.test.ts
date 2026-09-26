@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewMode } from "../core/modes";
 import {
   MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME_6520B01,
@@ -8,6 +8,10 @@ import {
 import type { PluginView } from "../plugins/plugin";
 
 describe("present-loop optsFor localStorage (main @6520b01)", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();

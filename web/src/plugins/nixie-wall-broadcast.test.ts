@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setVizWallClockInjector, resetVizClockInjectors } from "../core/viz-clock";
 import { resetNixieFormatterCache } from "./nixie-wall-clock";
 import { resetNixiePackHostScope, runPackFrameHandler, VIZ_PACK_TILE_ID_OPT } from "./viz-pack-host";
@@ -15,6 +15,10 @@ function emptyFrame(): VizDataFrame {
 }
 
 describe("nixie wall upload F1 (live pack path, 2×2, 60 fps)", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetNixieFormatterCache();
     resetNixiePackHostScope();

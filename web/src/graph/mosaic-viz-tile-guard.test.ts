@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, beforeEach, expect, it } from "vitest";
 import { DEFAULT_DREAM } from "./scene";
 import { mosaicWallLayoutRefusedMessage } from "../ui/viz-copy";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import { applyDreamAnimWithTileLimit, countMosaicTiles } from "./mosaic-viz-tile-guard";
 
 describe("mosaic viz tile guard", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("applyDreamAnimWithTileLimit refuses nine tiles with formatted copy", () => {
     const current = {
       ...DEFAULT_DREAM,

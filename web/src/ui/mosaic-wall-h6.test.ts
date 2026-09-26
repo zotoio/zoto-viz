@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_DREAM } from "../graph/scene";
 import { mosaicWallLayoutBootRefusedMessage, mosaicWallLayoutRefusedMessage } from "./viz-copy";
 import { Settings } from "./settings";
 
 describe("mosaic viz tile guard H6", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     localStorage.clear();
   });

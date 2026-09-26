@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetVizClockInjectors } from "../core/viz-clock";
 import { tileHudDisplayFrame, tileHudSkipLabel } from "../ui/viz-hud";
 import {
@@ -40,6 +40,10 @@ const frame = (tag: number): VizDataFrame => ({
 });
 
 describe("tile frame budget rows", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetVizClockInjectors();
     vizTileBudgetRegistry.reset();

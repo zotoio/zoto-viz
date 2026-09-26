@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, beforeEach, expect, it } from "vitest";
 import {
   NIXIE_LOOK_FIELD_BY_KEY,
   NIXIE_LOOK_KEYS,
@@ -7,6 +7,10 @@ import {
 } from "../../../shared/nixie-tubes";
 
 describe("nixie look option keys", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("maps every plugin key to a distinct NixieLook field", () => {
     const m: Record<NixieLookKey, keyof NixieLook> = NIXIE_LOOK_FIELD_BY_KEY;
     expect(m.format).toBe("hour12");

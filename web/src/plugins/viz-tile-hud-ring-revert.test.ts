@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, beforeEach, expect, it } from "vitest";
 import { VIZ_HUD_SAMPLE_CAP, type VizTileHudSample } from "./viz-tile-budget";
 
 function makeHudRing(): VizTileHudSample[] {
@@ -8,6 +8,10 @@ function makeHudRing(): VizTileHudSample[] {
 }
 
 describe("HUD ring revert row B", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("B revert: push on a preallocated ring grows past the cap", () => {
     const ring = makeHudRing();
     for (let i = 0; i < 3600; i++) {

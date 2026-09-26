@@ -1,10 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VizHud } from "./viz-hud";
 import { fatLanFixture } from "../plugins/fixtures/fat-lan-state";
 import { VizFrameBudget } from "../plugins/viz-host";
 import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
 
 describe("VizHud steady DOM writes", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     vizTileBudgetRegistry.reset();
     document.body.innerHTML = "";

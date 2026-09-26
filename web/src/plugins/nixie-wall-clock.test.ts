@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   resetVizClockInjectors,
   setVizClockInjector,
@@ -42,6 +42,10 @@ function emptyFrame(): VizDataFrame {
 }
 
 describe("nixie wall clock rows", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetVizClockInjectors();
     resetNixieFormatterCache();

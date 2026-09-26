@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, beforeEach, expect, it } from "vitest";
 import { RenderHost } from "./render-host";
 
 describe("RenderHost.bufferPixelSize", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("RH1: returns the same backing-store object across calls", () => {
     const parent = document.createElement("div");
     parent.style.width = "800px";

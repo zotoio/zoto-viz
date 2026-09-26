@@ -1,6 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyDevVizWallFlagsOnBuild,
   devWallFlagParseCounts,
@@ -31,7 +31,13 @@ function wallMsAtFrame(t0Ms: number, frame: number): number {
   return t0Ms + Math.floor((frame * 1000) / 60);
 }
 
+const distAssetsDir = join(import.meta.dirname, "../../dist/assets");
+
 describe("dev viz wall flags", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetVizClockInjectors();
     resetDevWallFlagParseCountsForTest();
@@ -189,15 +195,10 @@ describe("dev viz wall flags", () => {
     expect(vizWallMs()).toBe(real);
   });
 
-  it("F5 (vi) prod bundle: dist has no vizWallClock string", () => {
-    const assets = join(import.meta.dirname, "../../dist/assets");
+  it.skipIf(!existsSync(distAssetsDir), "F5 (vi) prod bundle: dist has no vizWallClock string", () => {
     let js = "";
-    try {
-      for (const name of readdirSync(assets)) {
-        if (name.endsWith(".js")) js += readFileSync(join(assets, name), "utf8");
-      }
-    } catch {
-      return;
+    for (const name of readdirSync(distAssetsDir)) {
+      if (name.endsWith(".js")) js += readFileSync(join(distAssetsDir, name), "utf8");
     }
     expect(js.includes("vizWallClock")).toBe(false);
   });

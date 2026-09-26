@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetVizClockInjectors } from "../core/viz-clock";
 import { VizHud } from "../ui/viz-hud";
 import { fatLanFixture } from "../plugins/fixtures/fat-lan-state";
@@ -7,6 +7,10 @@ import { tileIdsForLayout, runTileHudSim, freshHudRegistry } from "../plugins/do
 import { VIZ_CLOCK_STEP_TICKS, VIZ_COST_TICKS_10MS, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
 
 describe("main HUD tileBudget revert", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetVizClockInjectors();
     vizTileBudgetRegistry.reset();

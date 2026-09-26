@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   bindMosaicTileBudgetLines,
   mosaicTileBudgetLines,
@@ -14,6 +14,10 @@ import {
 } from "../plugins/viz-tile-budget";
 
 describe("mosaic HUD lines and tile budgets F4", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     vizTileBudgetRegistry.reset();
     resetVizTileBudgetLifecycle();

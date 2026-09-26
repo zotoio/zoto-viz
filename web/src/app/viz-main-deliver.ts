@@ -25,7 +25,7 @@ export interface MainVizDeliverResult {
 export function mainVizDeliver(input: MainVizDeliverInput): MainVizDeliverResult {
   const { budget, prevClockMs, state, audio, onFrame, buildFrame } = input;
   const frame = budget.deliver(state, prevClockMs, audio, onFrame, buildFrame);
-  const nextClockMs = frame ? monoMs(vizClockMs()) : prevClockMs;
+  const nextClockMs = frame ? vizClockMs() : prevClockMs;
   return { frame, nextClockMs };
 }
 

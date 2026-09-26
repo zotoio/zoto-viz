@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, beforeEach, expect, it } from "vitest";
 import { epochSec, monoMs, wallMs } from "./viz-time";
 import { buildVizFrame } from "../plugins/viz-host";
 import { vizWallMs } from "./viz-clock";
@@ -16,6 +16,10 @@ function emptyState(): StateMsg {
 }
 
 describe("viz time brands", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("rejects wall epoch and wall ms where MonoMs is required", () => {
     const state = emptyState();
     const frameT = 1_700_000_000;

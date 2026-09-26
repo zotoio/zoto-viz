@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { monoMs } from "../core/viz-time";
 import { fatLanFixture } from "../plugins/fixtures/fat-lan-state";
@@ -7,6 +7,10 @@ import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-bud
 import { mainVizDeliver, mainVizBuildFrame } from "./viz-main-deliver";
 
 describe("main.ts viz deliver path", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetVizClockInjectors();
     vizTileBudgetRegistry.reset();

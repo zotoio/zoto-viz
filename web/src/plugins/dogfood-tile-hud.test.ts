@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetVizClockInjectors } from "../core/viz-clock";
 import { TILE_LIMITED_SHARING_TOOLTIP } from "../ui/viz-copy";
 import {
@@ -30,6 +30,10 @@ import {
 } from "./viz-tile-budget";
 
 describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetVizClockInjectors();
     vizTileBudgetRegistry.reset();
@@ -160,6 +164,10 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
 });
 
 describe("tile HUD copy", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("exposes LIMITED tooltip without ticks or shares", () => {
     expect(TILE_LIMITED_SHARING_TOOLTIP).not.toMatch(/5010|1252|tick/i);
   });
