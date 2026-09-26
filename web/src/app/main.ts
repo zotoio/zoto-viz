@@ -38,7 +38,7 @@ import {
   type ModeSwitchSource,
   type PendingAutoSwitch,
 } from "./mode-switch-coordinator";
-import { configureApplyModeForTests, registerApplyModeTestBindings } from "./apply-mode-test-host";
+import { registerApplyModeTestBindings } from "./apply-mode-test-host";
 import {
   flashModeKeptPrevious,
   flashModeLoadFailed,
