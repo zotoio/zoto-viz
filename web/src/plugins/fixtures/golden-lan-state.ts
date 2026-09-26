@@ -145,40 +145,6 @@ export function goldenLanFixture(): StateMsg {
         hub: "cpu:host",
         self: "cpu:host",
       },
-      bluetooth: {
-        devices: [
-          lanDevice("bt:aa:aa:aa:aa:aa:aa", "self", 12, {
-            names: ["zoto-host"],
-            hostnames: ["zoto-bt"],
-            ports: ["BTLE"],
-            sources: ["golden"],
-          }),
-          lanDevice("bt:11:22:33:44:55:66", "lan", 18, {
-            names: ["Hue bulb"],
-            hostnames: ["Hue bulb"],
-            ports: ["BTLE"],
-            sources: ["golden"],
-          }),
-          lanDevice("bt:77:88:99:aa:bb:cc", "lan", 14, {
-            names: ["Pixel demo"],
-            hostnames: ["Pixel demo"],
-            ports: ["BTLE"],
-            sources: ["golden"],
-          }),
-          lanDevice("bt:de:ad:be:ef:00:01", "lan", 9, {
-            names: ["TV"],
-            hostnames: ["Living room TV"],
-            ports: ["BTLE"],
-            sources: ["golden"],
-          }),
-        ],
-        flows: [
-          flow("bt:aa:aa:aa:aa:aa:aa", "bt:11:22:33:44:55:66", 3, "BTLE"),
-          flow("bt:aa:aa:aa:aa:aa:aa", "bt:77:88:99:aa:bb:cc", 2, "BTLE"),
-        ],
-        hub: "bt:aa:aa:aa:aa:aa:aa",
-        self: "bt:aa:aa:aa:aa:aa:aa",
-      },
     },
     sources: {
       nasa: {

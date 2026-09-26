@@ -49,20 +49,9 @@ jobs:
         run: |
           pnpm install
           pnpm approve-builds esbuild
-      - uses: browser-actions/setup-chrome@v1
-        id: chrome
       - name: Web tests and coverage
         working-directory: web
-        env:
-          ZOTO_VIZ_EXPECT_RENDERER: swiftshader
-          PACK_MIRROR_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: pnpm test:coverage
-      - name: Revert proof rows (PR 42)
-        if: hashFiles('revert-proofs/42/*.json') != ''
-        run: |
-          git fetch origin cursor/scripted-revert-proof-runner-615e --depth=1
-          git checkout origin/cursor/scripted-revert-proof-runner-615e -- scripts/revert-proof.mjs scripts/vitest.config.mjs
-          node scripts/revert-proof.mjs 42
 
   build:
     runs-on: ubuntu-latest

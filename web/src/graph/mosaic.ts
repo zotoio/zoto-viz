@@ -8,14 +8,13 @@ import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
 import {
-  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, parseMosaicNode,
+  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, nextPaneTiles, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
-import { lookForMode, mergeLook } from "../plugins/plugin";
+import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
 import { applyPackCoalesceLayout, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
 import type { PluginView } from "../plugins/plugin";
 import { mosaicTileViewId } from "./mosaic-tile-id";
-import { fillMosaicViewSelect, pickMosaicViewForSlot } from "../ui/mosaic-view-pick";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -475,16 +474,11 @@ export class Mosaic {
     this.syncPackCoalesce();
   }
 
-  /** Change one pane to a catalog view id (allocates a tile slot; duplicates need an explicit pick). */
-  setPaneView(fromSlot: string, viewId: string): Promise<boolean> {
-    if (!this.tree || !viewId || mosaicTileViewId(fromSlot) === viewId) return Promise.resolve(false);
-    return this.pickPaneView(fromSlot, viewId);
-  }
-
-  async pickPaneView(fromSlot: string, viewId: string): Promise<boolean> {
-    if (!this.tree || !viewId) return false;
-    const next = await pickMosaicViewForSlot(this.tileIds, fromSlot, viewId);
-    if (!next || next.join("\0") === this.tileIds.join("\0")) return false;
+  /** Change one pane to a catalog view id (swap or allocate a duplicate tile slot). */
+  setPaneView(fromSlot: string, viewId: string): boolean {
+    if (!this.tree || !viewId || mosaicTileViewId(fromSlot) === viewId) return false;
+    const next = nextPaneTiles(this.tileIds, fromSlot, viewId);
+    if (next.join("\0") === this.tileIds.join("\0")) return false;
     this.assignViews(next);
     return true;
   }
@@ -823,7 +817,7 @@ export class Mosaic {
   private refreshChrome(): void {
     for (const [id, pane] of this.panes) {
       const pick = pane.querySelector<HTMLSelectElement>(".mosaic-pick");
-      if (pick) fillMosaicViewSelect(pick, id, this.tileIds);
+      if (pick) fillViewSelect(pick, mosaicTileViewId(id));
       pane.classList.toggle("hero", this.hero !== "off" && id === this.heroId);
       pane.classList.toggle("max", this.maximized === id);
       const maxBtn = pane.querySelector<HTMLButtonElement>('[data-act="max"]');
@@ -843,17 +837,14 @@ export class Mosaic {
     const pick = document.createElement("select");
     pick.className = "mosaic-pick";
     pick.setAttribute("aria-label", "pane view");
-    pick.title = "this pane's view — pick another; duplicates ask add or move";
-    fillMosaicViewSelect(pick, id, this.tileIds);
+    pick.title = "this pane's view — pick another";
+    fillViewSelect(pick, mosaicTileViewId(id));
     pick.addEventListener("pointerdown", (e) => e.stopPropagation());
     pick.addEventListener("click", (e) => e.stopPropagation());
     pick.addEventListener("change", () => {
       const fromSlot = [...this.panes.entries()].find(([, el]) => el === pane)?.[0] ?? id;
       const viewId = pick.value;
-      void (async () => {
-        const ok = await this.pickPaneView(fromSlot, viewId);
-        if (!ok) fillMosaicViewSelect(pick, fromSlot, this.tileIds);
-      })();
+      if (!this.setPaneView(fromSlot, viewId)) fillViewSelect(pick, mosaicTileViewId(fromSlot));
     });
     const tools = document.createElement("div");
     tools.className = "mosaic-tools";

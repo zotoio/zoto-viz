@@ -1,6 +1,4 @@
 import type { StateMsg } from "../../core/types";
-import type { ViewMode } from "../../core/modes";
-import { isSysBase } from "../../core/modes";
 import type { PluginView } from "../plugin";
 import type { VizIdleConfig } from "../viz-host";
 import { goldenLanFixture } from "./golden-lan-state";
@@ -37,98 +35,24 @@ export function stateNeedsGolden(state: StateMsg): boolean {
   return !hasLiveGraph(state);
 }
 
-export type HostIdleTarget =
-  | { kind: "main" }
-  | { kind: "view"; base: string };
-
-export function hostIdleTargetForMode(mode: ViewMode): HostIdleTarget {
-  const base = mode.graphBase;
-  if (base === "bluetooth" || base === "wifi" || base === "cpu" || (base && isSysBase(base))) {
-    return { kind: "view", base };
-  }
-  return { kind: "main" };
-}
-
-function viewSliceEmpty(state: StateMsg, target: HostIdleTarget): boolean {
-  if (target.kind === "view") {
-    return (state.views?.[target.base]?.devices?.length ?? 0) === 0;
-  }
-  return stateNeedsGolden(state);
-}
-
-function applyGoldenSlice(live: StateMsg, target: HostIdleTarget): { state: StateMsg; applied: boolean } {
-  const golden = goldenLanFixture();
-  if (target.kind === "view") {
-    const slice = golden.views?.[target.base];
-    if (!slice) return { state: live, applied: false };
-    return {
-      state: { ...live, views: { ...live.views, [target.base]: slice } },
-      applied: true,
-    };
-  }
-  return {
-    state: {
-      ...live,
-      devices: golden.devices,
-      flows: golden.flows,
-      stats: golden.stats,
-      ts: live.ts,
-      iface: live.iface || golden.iface,
-      interfaces: live.interfaces?.length ? live.interfaces : golden.interfaces,
-      links: live.links ?? golden.links,
-      network: live.network || golden.network,
-      local_ip: live.local_ip || golden.local_ip,
-      gateway: live.gateway || golden.gateway,
-      uptime: live.uptime || golden.uptime,
-      live: live.live,
-      gateway_status: live.gateway_status,
-      plugin_state: live.plugin_state,
-      sdm: live.sdm,
-      sources: hasLiveSources(live) ? live.sources : golden.sources,
-      views: live.views,
-    },
-    applied: true,
-  };
-}
-
-export type HostIdleViewRequest = {
-  /** Mosaic tile slot id or `"hero"` for the focused main graph. */
-  slotId: string;
-  idle?: PluginIdleConfig;
-  target: HostIdleTarget;
-};
-
-export type HostIdleMergeResult = {
-  /** Per-slot paint snapshots (`hero` + mosaic tile slot ids). */
-  slotPaints: ReadonlyMap<string, StateMsg>;
-  /** Tile slots (or `hero`) that are showing host-idle demo data this frame. */
-  demoSlots: ReadonlySet<string>;
-};
-
-/** One tile's host-idle merge from the live snapshot (no cross-tile accumulation). */
-export function mergeHostIdleForSlot(live: StateMsg, req: HostIdleViewRequest): { state: StateMsg; isDemo: boolean } {
-  if (!req.idle || !("fixture" in req.idle) || req.idle.fixture !== "host") {
-    return { state: live, isDemo: false };
-  }
-  if (!viewSliceEmpty(live, req.target)) return { state: live, isDemo: false };
-  const { state, applied } = applyGoldenSlice(live, req.target);
-  return { state, isDemo: applied };
-}
-
-/** Per-view host golden: only declared `idle: fixture: host` slices, only when that slice is empty. */
-export function mergeHostIdleForViews(live: StateMsg, requests: HostIdleViewRequest[]): HostIdleMergeResult {
-  const demoSlots = new Set<string>();
-  const slotPaints = new Map<string, StateMsg>();
-  for (const req of requests) {
-    const { state, isDemo } = mergeHostIdleForSlot(live, req);
-    slotPaints.set(req.slotId, state);
-    if (isDemo) demoSlots.add(req.slotId);
-  }
-  return { slotPaints, demoSlots };
-}
-
-/** Merge the shared golden LAN when idle is declared and live capture is empty (main graph only). */
+/** Merge the shared golden LAN when idle is declared and live capture is empty. */
 export function withGoldenIfIdle(live: StateMsg, idle?: PluginIdleConfig): StateMsg {
   if (!idle || !("fixture" in idle) || idle.fixture !== "host" || !stateNeedsGolden(live)) return live;
-  return applyGoldenSlice(live, { kind: "main" }).state;
+  const golden = goldenLanFixture();
+  return {
+    ...golden,
+    ts: live.ts,
+    iface: live.iface || golden.iface,
+    interfaces: live.interfaces?.length ? live.interfaces : golden.interfaces,
+    links: live.links ?? golden.links,
+    network: live.network || golden.network,
+    local_ip: live.local_ip || golden.local_ip,
+    gateway: live.gateway || golden.gateway,
+    uptime: live.uptime || golden.uptime,
+    live: live.live,
+    gateway_status: live.gateway_status,
+    plugin_state: live.plugin_state,
+    sdm: live.sdm,
+    sources: hasLiveSources(live) ? live.sources : golden.sources,
+  };
 }
