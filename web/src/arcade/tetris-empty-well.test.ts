@@ -3,6 +3,7 @@ import type { NetScene } from "../graph/scene";
 import { DEMO_DATA_LABEL } from "../core/demo-source";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { TetrisView } from "./tetris";
+import { monoMs } from "../core/time-ms";
 import { shouldHoldTopout, TETRIS_TOPOUT_HOLD_S } from "./tetris-topout";
 
 const FRAME_MS = 16;
@@ -50,7 +51,7 @@ describe("TetrisView never-empty well", () => {
 
   function hostTick(view: TetrisHarness, dtSec = FRAME_MS / 1000): void {
     clock += FRAME_MS;
-    view.hostFrameTick(dtSec);
+    view.hostFrameTick(monoMs(clock), dtSec);
   }
 
   it("frame 0: active piece and Demo data label on idle feed", () => {

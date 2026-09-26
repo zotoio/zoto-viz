@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { addPresentListener, bindFps, bindPresentListener, markFrame, PaneFps, resetFps } from "./fps";
+import { monoMs } from "./time-ms";
 
 describe("markFrame", () => {
   afterEach(() => resetFps());
@@ -7,22 +8,22 @@ describe("markFrame", () => {
   it("does not count the same timestamp twice", () => {
     const el = document.createElement("span");
     bindFps(el);
-    markFrame(0);
-    markFrame(0);
-    markFrame(500);
-    markFrame(1000);
+    markFrame(monoMs(0));
+    markFrame(monoMs(0));
+    markFrame(monoMs(500));
+    markFrame(monoMs(1000));
     expect(el.textContent).toBe("2");
-    markFrame(1100);
+    markFrame(monoMs(1100));
     expect(el.textContent).toBeTruthy();
   });
 
   it("notifies the present listener once per unique vsync", () => {
     const onPresent = vi.fn();
     bindPresentListener(onPresent);
-    markFrame(0);
-    markFrame(0);
-    markFrame(16.7);
-    markFrame(33.4);
+    markFrame(monoMs(0));
+    markFrame(monoMs(0));
+    markFrame(monoMs(16.7));
+    markFrame(monoMs(33.4));
     expect(onPresent).toHaveBeenCalledTimes(3);
     expect(onPresent).toHaveBeenLastCalledWith(33.4);
   });
@@ -32,7 +33,7 @@ describe("markFrame", () => {
     const b = vi.fn();
     addPresentListener(a);
     addPresentListener(b);
-    markFrame(42);
+    markFrame(monoMs(42));
     expect(a).toHaveBeenCalledTimes(1);
     expect(b).toHaveBeenCalledTimes(1);
     expect(a).toHaveBeenCalledWith(42);
@@ -45,8 +46,8 @@ describe("markFrame", () => {
     addPresentListener(keep);
     const unsub = addPresentListener(drop);
     unsub();
-    markFrame(100);
-    markFrame(120);
+    markFrame(monoMs(100));
+    markFrame(monoMs(120));
     expect(keep).toHaveBeenCalledTimes(2);
     expect(drop).not.toHaveBeenCalled();
   });

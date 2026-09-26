@@ -3,6 +3,7 @@ import { NetScene } from "../graph/scene";
 import type { Packet } from "../core/types";
 import { DEMO_DATA_LABEL, DEMO_DATA_SOURCE } from "../core/demo-source";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
+import { monoMs } from "../core/time-ms";
 import { goldenLanFixture } from "../plugins/fixtures/golden-lan-state";
 import { hostIdlePacketsDueByMs, TETRIS_IDLE_TOPOUT_SEED } from "../plugins/fixtures/host-idle-traffic";
 import { withGoldenIfIdle } from "../plugins/fixtures/golden-state";
@@ -68,7 +69,7 @@ describe("TetrisView host idle feed", () => {
       clock += clockStepMs;
       const dtSec = (clock - prev) / 1000;
       prev = clock;
-      view.hostFrameTick(dtSec);
+      view.hostFrameTick(monoMs(clock), dtSec);
     }
   }
 
@@ -181,7 +182,7 @@ describe("TetrisView host idle feed", () => {
     let hold = 0;
     for (let i = 0; i < 200; i++) {
       clock += FRAME_MS;
-      view.hostFrameTick(FRAME_MS / 1000);
+      view.hostFrameTick(monoMs(clock), FRAME_MS / 1000);
       hold = view.testTopoutHoldUntil();
       if (hold > 0) break;
     }

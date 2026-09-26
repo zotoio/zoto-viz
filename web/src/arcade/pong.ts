@@ -8,6 +8,7 @@ import { compileMatcher } from "../ui/settings";
 import { LookStage } from "../graph/look";
 import { fitText, isExchangeStart, noReplyExpected, portRole, roundRect } from "./arcade";
 import { markFrame, PaneFps } from "../core/fps";
+import { monoMs } from "../core/time-ms";
 import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
 
@@ -772,7 +773,7 @@ export class PongView {
   private frame = (ts: number): void => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.frame);
-    markFrame(ts);
+    markFrame(monoMs(ts));
     this.paneFps.tick(ts);
     const now = ts / 1000;
     const dt = Math.min(0.05, this.lastFrame ? now - this.lastFrame : 0.016);

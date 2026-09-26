@@ -34,6 +34,8 @@ import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
+import type { MonoMs } from "../core/time-ms";
+import { monoMs } from "../core/time-ms";
 import { vizClockMs } from "../core/viz-clock";
 import { vizClockStepSec } from "./scene-standalone";
 import { timeGpu } from "../core/gpu-time";
@@ -1110,7 +1112,7 @@ export class NetScene implements HostedView {
   private lastInteraction = performance.now();
   /** false while a standalone tile owns the screen: graph layout/render idles; host may still tick the tile */
   private active = true;
-  private standaloneTileTick: ((dtSec: number) => void) | null = null;
+  private standaloneTileTick: ((dtSec: number, presentTs: MonoMs) => void) | null = null;
   private standaloneClock = { lastMs: 0 };
   private graphRenderCount = 0;
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
@@ -1550,8 +1552,8 @@ export class NetScene implements HostedView {
   }
 
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
-  private present(): void {
-    this.graphRenderCount++;
+  private present(countGraphRender = true): void {
+    if (countGraphRender) this.graphRenderCount++;
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
     this.backdrop.syncCamera(this.camera);
     if (this.host) {
@@ -1575,7 +1577,7 @@ export class NetScene implements HostedView {
       if (gl) timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
       else draw();
     }
-    this.notePaneChange();
+    if (countGraphRender) this.notePaneChange();
   }
 
   /** Count a frame only when this pane's own pixels differ from the previous sample. */
@@ -1712,7 +1714,7 @@ export class NetScene implements HostedView {
   }
 
   /** Host-only tick while {@link setActive}(false) — schedules the standalone 1×1 tile, no graph draw. */
-  setStandaloneTileTick(tick: ((dtSec: number) => void) | null): void {
+  setStandaloneTileTick(tick: ((dtSec: number, presentTs: MonoMs) => void) | null): void {
     this.standaloneTileTick = tick;
     this.standaloneClock.lastMs = 0;
   }
@@ -1729,8 +1731,16 @@ export class NetScene implements HostedView {
   /** TEST-ONLY: one host present stamp + standalone tile tick (production idle path). */
   testIdleHostFrame(ts: number): void {
     if (this.active) return;
-    markFrame(ts);
-    this.idleFrame(ts);
+    const present = monoMs(ts);
+    markFrame(present);
+    this.idleFrame(present);
+  }
+
+  /** TEST-ONLY: authored far-field sky is active (lit shader path, not flat fill). */
+  testFarFieldLitSkyToken(): string {
+    const k = this.anim.backdrop;
+    if (k === "none" || k === "plugin") return `flat:${k}`;
+    return `lit:${k}`;
   }
 
   /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
@@ -3505,22 +3515,35 @@ export class NetScene implements HostedView {
   private lastFrameTs = 0;
 
   /** Host frame while inactive: standalone tile tick only (no graph draw). */
-  private idleFrame(_ts: number): void {
+  private idleFrame(presentTs: MonoMs): void {
     this.paneFps.el.hidden = true;
     if (this.standaloneTileTick) {
       const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
-      this.standaloneTileTick(dtSec);
+      this.standaloneTileTick(dtSec, presentTs);
     }
+    this.presentIdleFarField(presentTs);
+  }
+
+  /** Keep the mosaic far-field sky painted while a standalone tile owns the host loop. */
+  private presentIdleFarField(presentTs: MonoMs): void {
+    const wall = Number(presentTs);
+    this.backdrop.tick(wall);
+    this.backdrop.syncCamera(this.camera);
+    this.sampleFocus(0);
+    this.frameCamera(0);
+    this.controls.update();
+    this.present(false);
   }
 
   private animate(ts: number): void {
     if (!this.host && this.active) this.raf = requestAnimationFrame(this.animate);
+    const present = monoMs(ts);
     if (!this.active) {
-      markFrame(ts);
-      this.idleFrame(ts);
+      markFrame(present);
+      this.idleFrame(present);
       return;
     }
-    markFrame(ts);
+    markFrame(present);
     this.paneFps.el.hidden = false;
     this.paneFps.tick(ts);
     if (this.satellite && this.satelliteCameraBroken()) {

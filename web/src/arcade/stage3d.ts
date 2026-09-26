@@ -5,11 +5,12 @@ import { rIp, rName } from "../core/redact";
 import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
 import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame, PaneFps } from "../core/fps";
+import type { MonoMs } from "../core/time-ms";
+import { monoMs } from "../core/time-ms";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
 import { probeWebGL } from "../graph/webgl";
 import { observeResize } from "../core/resize";
-import { vizClockMs } from "../core/viz-clock";
 import { POLL_MS, REPLAY_S, isKnown } from "./arcade";
 
 /**
@@ -97,14 +98,13 @@ export abstract class Stage3D {
     return false;
   }
 
-  /** One host-frame step for standalone tiles (clock from {@link vizClockMs}, not rAF `now`). */
-  hostFrameTick(dtSec: number): void {
+  /** One host-frame step for standalone tiles; caller supplies the sole present timestamp. */
+  hostFrameTick(presentTs: MonoMs, dtSec: number): void {
     if (!this.running) return;
-    const clockMs = vizClockMs();
-    const ts = clockMs;
-    if (!this.useHostFrameLoop()) markFrame(ts);
+    const ts = Number(presentTs);
+    if (!this.useHostFrameLoop()) markFrame(presentTs);
     this.paneFps.tick(ts);
-    const now = clockMs / 1000;
+    const now = ts / 1000;
     this.fit();
     if (!this.W || !this.H) return;
     this.step(now, dtSec);
@@ -154,6 +154,17 @@ export abstract class Stage3D {
   /** Called when `/api/traffic` returns no new packets (subclasses may enable demo feeds). */
   protected onTrafficPollEmpty(): void {}
   protected variant(): string { return ""; }
+
+  /** TEST-ONLY: lit well stage signature (lights + fog), not a flat grey fill. */
+  testWellLitSkySignature(): string {
+    let lights = 0;
+    for (const ch of this.world.children) {
+      if (ch instanceof THREE.Light) lights++;
+    }
+    const bg = this.world.background instanceof THREE.Color ? this.world.background.getHexString() : "none";
+    const fog = this.world.fog instanceof THREE.FogExp2 ? this.world.fog.color.getHexString() : "none";
+    return `lights:${lights},bg:${bg},fog:${fog}`;
+  }
 
   protected reset(): void {
     this.gen++;
@@ -273,7 +284,7 @@ export abstract class Stage3D {
   private frame = (ts: number): void => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.frame);
-    markFrame(ts);
+    markFrame(monoMs(ts));
     this.paneFps.tick(ts);
     const now = ts / 1000;
     const dt = Math.min(0.05, this.lastFrame ? now - this.lastFrame : 0.016);
