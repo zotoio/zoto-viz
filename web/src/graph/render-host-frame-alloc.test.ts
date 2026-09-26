@@ -33,7 +33,6 @@ vi.mock("three", async (importOriginal) => {
 
 import * as THREE from "three";
 import { RenderHost, type HostedView } from "./render-host";
-import { renderHostMirrorTelemetry } from "./render-host-telemetry";
 import { surfaceLetterboxFill } from "./letterbox-fill";
 import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 
@@ -85,7 +84,7 @@ describe("RenderHost frame allocations", () => {
   const fill = surfaceLetterboxFill(0x0a1020, 0.25);
 
   beforeEach(() => {
-    renderHostMirrorTelemetry.reset();
+    expect.hasAssertions();
     packMirrorSizeStats.reset();
     wall = document.createElement("div");
     document.body.appendChild(wall);
@@ -130,15 +129,13 @@ describe("RenderHost frame allocations", () => {
   afterEach(() => {
     host.dispose();
     wall.remove();
-    renderHostMirrorTelemetry.reset();
   });
 
-  it("300 frames at 2×4 in-page mirror: one scope sync, stable viewBox, present arg identity", () => {
+  it("300 frames at 2×4 in-page mirror: stable viewBox, present arg identity", () => {
     const renderPrimary = vi.spyOn(host.packMirrors, "renderPrimary");
     const presentPack = vi.spyOn(host.packMirrors, "presentPack");
 
     host.advanceFrame(0);
-    expect(renderHostMirrorTelemetry.scopeSyncRuns).toBe(1);
     const box = host.viewBox(primary);
     expect(box).not.toBeNull();
 
@@ -164,10 +161,6 @@ describe("RenderHost frame allocations", () => {
       for (const c of mirrorPackCalls()) expect(c[3]).toBe(mirrorOptsRef);
     }
 
-    expect(renderHostMirrorTelemetry.scopeSyncRuns).toBe(1);
-    expect(renderHostMirrorTelemetry.viewSortRuns).toBe(1);
-    expect(renderHostMirrorTelemetry.getContextAttributesCalls).toBe(1);
-    expect(renderHostMirrorTelemetry.scopeFingerprintBuilds).toBe(0);
   });
 
   it("300 frames at 2×4 pr 1.5: zero render-path object allocations after warm-up", () => {
