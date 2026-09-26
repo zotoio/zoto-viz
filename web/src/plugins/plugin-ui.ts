@@ -273,8 +273,11 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
     customOpt.textContent = "Custom";
     presetSel.append(customOpt);
     presetSel.value = presetIds.has(cur) || cur === CUSTOM_PRESET_ID ? cur : CUSTOM_PRESET_ID;
+    let lastPresetPick = presetSel.value;
     const applyPresetSelection = () => {
       const v = presetSel.value;
+      if (v === lastPresetPick) return;
+      lastPresetPick = v;
       if (v === CUSTOM_PRESET_ID) {
         const prev = ctx.values[pf] && ctx.values[pf] !== CUSTOM_PRESET_ID
           ? ctx.values[pf] : ctx.values[PRESET_BASE_META_KEY];
@@ -292,7 +295,6 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
       ctx.announce(`Preset ${label}`);
     };
     presetSel.addEventListener("change", applyPresetSelection);
-    presetSel.addEventListener("input", applyPresetSelection);
     wrap.append(cap, presetSel);
     ctx.presetSel = presetSel;
     controls.append(wrap);
@@ -313,11 +315,9 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
     const snap = popUndoSnapshot(ctx.storeId);
     if (!snap) return;
     for (const k of Object.keys(ctx.values)) {
-      if (isMetaConfigKey(k)) continue;
       if (!(k in snap)) delete ctx.values[k];
     }
     for (const k of Object.keys(snap)) {
-      if (isMetaConfigKey(k)) continue;
       ctx.values[k] = snap[k]!;
     }
     persistValues(ctx);

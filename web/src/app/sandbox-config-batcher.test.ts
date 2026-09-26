@@ -32,6 +32,19 @@ describe("SandboxConfigBatcher", () => {
     expect(posts).toEqual(['pack-a:{"gain":"3"}', 'pack-a:{"gain":"3"}']);
   });
 
+  it("posts each distinct pack scheduled in the same frame", () => {
+    const posted: { packId: string; config: Record<string, string> }[] = [];
+    const batcher = new SandboxConfigBatcher(
+      (packId, config) => posted.push({ packId, config }),
+      (cb) => { cb(); return 1; },
+      () => {},
+    );
+    batcher.schedule("pack-a", { gain: "0" });
+    batcher.schedule("pack-b", { gain: "0" });
+    expect(posted).toHaveLength(2);
+    expect(posted.map((p) => p.packId).sort()).toEqual(["pack-a", "pack-b"]);
+  });
+
   it("posts when schedule is called with an empty config object", () => {
     const posts: string[] = [];
     const batcher = new SandboxConfigBatcher(

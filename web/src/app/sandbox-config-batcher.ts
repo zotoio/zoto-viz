@@ -1,10 +1,9 @@
-/** Coalesce sandbox setConfig to once per frame; skip identical payloads. */
+/** Coalesce sandbox setConfig to once per frame per pack; skip identical payloads. */
 export class SandboxConfigBatcher {
-  private pending: { packId: string; config: Record<string, string> } | null = null;
+  private pending = new Map<string, Record<string, string>>();
   private scheduled = false;
   private rafId = 0;
-  private lastJson = "";
-  private lastPackId = "";
+  private lastJson = new Map<string, string>();
 
   constructor(
     private readonly onPost: (packId: string, config: Record<string, string>) => void,
@@ -14,31 +13,31 @@ export class SandboxConfigBatcher {
 
   schedule(packId: string, config: Record<string, string>): void {
     const json = JSON.stringify(config);
-    if (packId === this.lastPackId && json === this.lastJson) {
-      this.pending = null;
-      if (this.scheduled) {
+    if (this.lastJson.get(packId) === json) {
+      this.pending.delete(packId);
+      if (this.pending.size === 0 && this.scheduled) {
         this.cancelFrame(this.rafId);
         this.scheduled = false;
       }
       return;
     }
-    this.pending = { packId, config };
+    this.pending.set(packId, config);
     if (this.scheduled) return;
     this.scheduled = true;
     this.rafId = this.scheduleFrame(() => {
       this.scheduled = false;
-      const pending = this.pending;
-      this.pending = null;
-      if (!pending) return;
-      const nextJson = JSON.stringify(pending.config);
-      this.lastPackId = pending.packId;
-      this.lastJson = nextJson;
-      this.onPost(pending.packId, pending.config);
+      const batch = new Map(this.pending);
+      this.pending.clear();
+      for (const [id, cfg] of batch) {
+        const nextJson = JSON.stringify(cfg);
+        this.lastJson.set(id, nextJson);
+        this.onPost(id, cfg);
+      }
     });
   }
 
   cancel(): void {
-    this.pending = null;
+    this.pending.clear();
     if (this.scheduled) {
       this.cancelFrame(this.rafId);
       this.scheduled = false;
@@ -47,7 +46,6 @@ export class SandboxConfigBatcher {
 
   reset(): void {
     this.cancel();
-    this.lastJson = "";
-    this.lastPackId = "";
+    this.lastJson.clear();
   }
 }

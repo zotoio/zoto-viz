@@ -413,7 +413,7 @@ export function resetDeclaredConfig(
       if (isMetaConfigKey(f.key)) continue;
       if (pf && f.key === pf) continue;
       if (f.type === "textarea" && f.key === VIEW_PROMPT_KEY) continue;
-      if (f.type === "text") continue;
+      if (f.type === "text" || f.type === "textarea") continue;
       resetFieldToDefault(spec, f, values);
     }
   }

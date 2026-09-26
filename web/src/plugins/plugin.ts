@@ -372,7 +372,7 @@ export function encodeStoredConfigValue(
   value: string | number | boolean,
 ): string {
   if (field?.type === "boolean") {
-    return value === true || value === "true" || value === "1" ? "1" : "0";
+    return value === true || value === 1 || value === "true" || value === "1" ? "1" : "0";
   }
   return String(value);
 }

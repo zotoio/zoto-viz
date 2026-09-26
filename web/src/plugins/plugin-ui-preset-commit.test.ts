@@ -1,9 +1,9 @@
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import { loadPluginConfig, writePluginConfig } from "./plugin";
+import { configStoreId, loadPluginConfig, writePluginConfig } from "./plugin";
 import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import { fillPluginFields, resolvedPresetSelectValue } from "./plugin-ui";
-import { resetDeclaredConfig } from "./plugin-settings";
+import { resetDeclaredConfig, undoRingDepth } from "./plugin-settings";
 
 describe("preset select single source of truth", () => {
   beforeEach(() => localStorage.clear());
@@ -15,10 +15,9 @@ describe("preset select single source of truth", () => {
     document.body.append(host);
     fillPluginFields(host, spec, fields, () => {});
     const sel = host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')!;
-    sel.focus();
-    sel.value = "b";
-    sel.dispatchEvent(new Event("input", { bubbles: true }));
+    await userEvent.selectOptions(sel, "b");
     expect(sel.value).toBe("b");
+    expect(undoRingDepth(configStoreId(spec))).toBe(1);
     const stored = loadPluginConfig(spec, fields);
     expect(resolvedPresetSelectValue(spec, stored)).toBe("b");
     expect(stored.gain).toBe("6");

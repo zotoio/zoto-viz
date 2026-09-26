@@ -334,8 +334,8 @@ export class Settings {
 
   /** Keep This view open across mosaic layout changes (gear / Esc still work). */
   reopenViewPane(): void {
-    if (!this.isOpen || this.activePane !== "view") return;
     const focus = this.viewFocusId;
+    if (!this.isOpen) this.open();
     this.showPane("view");
     this.viewFocusId = focus;
     this.syncViewCog();

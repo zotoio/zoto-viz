@@ -42,6 +42,8 @@ import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
 import { Mosaic } from "../graph/mosaic";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
+import { hostModeById } from "./host-mode";
 import { RenderHost } from "../graph/render-host";
 import {
   applyPluginConfigs,
@@ -385,7 +387,7 @@ function mosaicHudOn(): boolean {
 }
 
 const syncMosaicPluginHudCaptions = bootPluginSettingsHost({
-  modeById,
+  modeById: hostModeById,
   pluginSpecForMode,
   optsFor,
   captions: pluginHudCaptions,
@@ -565,9 +567,9 @@ function settingsTargetModeId(): string {
   return focus || modeSel.value;
 }
 
-function onPluginFields(): void {
+function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
   const modeId = settingsTargetModeId();
-  const m = modeById(modeId);
+  const m = hostModeById(modeId);
   const opts = optsFor(m);
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
@@ -577,12 +579,14 @@ function onPluginFields(): void {
   else scene.setMode(m, opts);
   renderLegend(m, opts);
   const spec = pluginSpecForMode(m.id);
-  if (spec && pluginHasFrontend(spec)) scheduleSandboxSetConfig(spec.id, sandboxPluginConfig(spec));
+  if (!flags.skipSandboxPush && spec && pluginHasFrontend(spec)) {
+    scheduleSandboxSetConfig(spec.id, sandboxPluginConfig(spec));
+  }
   if (mosaic?.on && spec) {
     const store = configStoreId(spec);
     for (const tileId of mosaic.tileIds) {
       if (configStoreIdForMode(tileId) !== store) continue;
-      const pm = modeById(tileId);
+      const pm = hostModeById(tileId);
       mosaic.graphScene(tileId)?.setMode(pm, optsFor(pm));
     }
   }
@@ -643,8 +647,9 @@ function optsFor(m: ViewMode): Record<string, string> {
       if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
     }
   }
-  modeOptsCache.set(m.id, o);
-  return o;
+  const frozen = Object.freeze(o);
+  modeOptsCache.set(m.id, frozen);
+  return frozen;
 }
 
 function arcadeControls(m: ViewMode): HTMLElement[] {
@@ -743,6 +748,10 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(spec, preserve);
     tsWatchId = spec.id;
     tsWatchHash = spec.hash;
+    if (pendingSandboxPush?.packId === spec.id) {
+      scheduleSandboxSetConfig(pendingSandboxPush.packId, pendingSandboxPush.config);
+      pendingSandboxPush = null;
+    }
     const m = modeById(modeSel.value);
     if (m.pluginId === spec.id) {
       syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
@@ -802,11 +811,12 @@ function applyPluginWall(modeId: string, flags: { keepLayout?: boolean; prevMode
 }
 
 function pluginSpecForMode(modeId: string): PluginView | null {
-  const id = parsePluginId(modeId);
+  const canonical = mosaicTileViewId(modeId);
+  const id = parsePluginId(canonical);
   if (!id) return null;
   const raw = pluginSpecs.find((p) => p.id === id);
   if (!raw) return null;
-  const inst = parsePluginInstance(modeId);
+  const inst = parsePluginInstance(canonical);
   if (!inst || inst === raw.id) return { ...raw, instanceId: inst || raw.id };
   const row = (raw.instances ?? []).find((i) => i.id === inst);
   return row ? applyInstance(raw, row) : { ...raw, instanceId: inst };
@@ -1304,14 +1314,28 @@ settings = new Settings({
   },
   onPersist: () => touch(),
 });
-settings.onPluginChange = (storeId, values) => {
-  const spec = pluginSpecs.find((p) => configStoreId(p) === storeId)
-    ?? pluginSpecs.find((p) => p.id === storeId);
-  if (spec && pluginHasFrontend(spec) && tsWatchId === spec.id) {
-    scheduleSandboxSetConfig(spec.id, packConfigValues(values));
+let pendingSandboxPush: { packId: string; config: Record<string, string> } | null = null;
+
+function pluginSpecForStoreId(storeId: string): PluginView | null {
+  return pluginSpecs.find((p) => configStoreId(p) === storeId)
+    ?? pluginSpecs.find((p) => p.id === storeId)
+    ?? null;
+}
+
+function maybePushSandboxForStore(storeId: string, values: Record<string, string>): void {
+  const spec = pluginSpecForStoreId(storeId);
+  if (!spec || !pluginHasFrontend(spec)) return;
+  const config = packConfigValues(values);
+  if (tsWatchId === spec.id) {
+    scheduleSandboxSetConfig(spec.id, config);
+    return;
   }
-  onPluginFields();
-  syncMosaicPluginHudCaptions();
+  pendingSandboxPush = { packId: spec.id, config };
+}
+
+settings.onPluginChange = (storeId, values) => {
+  maybePushSandboxForStore(storeId, values);
+  onPluginFields({ skipSandboxPush: true });
 };
 settings.onInstancesChange = () => {
   void (async () => {

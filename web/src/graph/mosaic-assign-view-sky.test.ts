@@ -122,17 +122,14 @@ describe("assignViews selective sky hold", () => {
     wall.remove();
   });
 
-  it("duplicate-on-wall refreshes only the replaced tile and the new slot", () => {
+  it("swap-on-wall touches only the two swapped plugin-sky tiles", () => {
     const { mosaic, ids, skyHold, modeRefresh, auditBind, rebind, host, main, wall } = mosaic2x2();
     const [a, b, c, d] = ids;
-    const prev = [...mosaic.tileIds];
-    const next = nextPaneTiles(prev, a, b);
-    expect(next[0]).toBe("plugin:b!1");
     expect(mosaic.setPaneView(a, b)).toBe(true);
 
     expectQuiet([c, d], [skyHold, modeRefresh, auditBind, rebind]);
-    expect((modeRefresh.get(a) ?? 0) + (modeRefresh.get("plugin:b!1") ?? 0)).toBeGreaterThan(0);
-    expect((rebind.get(a) ?? 0) + (rebind.get("plugin:b!1") ?? 0)).toBeGreaterThan(0);
+    expect((modeRefresh.get(a) ?? 0) + (modeRefresh.get(b) ?? 0)).toBeGreaterThan(0);
+    expect((rebind.get(a) ?? 0) + (rebind.get(b) ?? 0)).toBeGreaterThan(0);
     host.dispose();
     main.dispose();
     wall.remove();
