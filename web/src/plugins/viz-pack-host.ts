@@ -4,7 +4,7 @@ import {
   TERM_COLS, TERM_ROWS, packScreen, preferHnStories, scriptFromStories, visibleScreen,
 } from "../../../plugins/src/hn-term/frontend/teletype";
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
-import { packStereoOrbs } from "../../../plugins/src/stereo-gram/frontend/orbs";
+import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
 import { nixieCanvasSize, packNixieBuffer, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
 
@@ -22,7 +22,7 @@ function roleHue(role: string): number {
 }
 
 /** ASCII 32–126 packed as (code-32)/95 so the sky can draw a 5×7 font. */
-export { packHnRainBuffer, packStereoOrbs };
+export { packHnRainBuffer, packStereoDrive };
 
 export function packHnTermBuffer(
   headlines: { id: string; label: string; text: string; summary?: string }[],
@@ -189,7 +189,11 @@ export function runPackFrameHandler(
       break;
     }
     case "stereo-gram": {
-      handlers.writeBuffer(0, packStereoOrbs(frame.talkers, frame.t));
+      handlers.writeBuffer(0, packStereoDrive(frame.talkers, parseStereoTiming(opts), {
+        clock: stereoClockNow(),
+        level: frame.audio,
+        bins: frame.spectrum,
+      }));
       handlers.writeUniform("uAccent", [0.95, 0.35, 0.72]);
       handlers.writeUniform("uBg", [0.06, 0.03, 0.1]);
       break;

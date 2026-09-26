@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { compileAgentSky, wrapAgentSky } from "./sky-agent";
 
 describe("wrapAgentSky", () => {
@@ -25,5 +25,30 @@ describe("wrapAgentSky", () => {
 
   it("skips compile when WebGL2 is missing", () => {
     expect(compileAgentSky("vec3 color(vec3 dir, float t) { return uAccent; }")).toBeNull();
+  });
+
+  it("releases the compile context", () => {
+    const lose = vi.fn();
+    const gl = {
+      FRAGMENT_SHADER: 0x8b30,
+      COMPILE_STATUS: 0x8b81,
+      createShader: () => ({}),
+      shaderSource() {},
+      compileShader() {},
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => "",
+      getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext: lose } : null),
+    };
+    const orig = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type: string) {
+      if (type === "webgl2") return gl as never;
+      return orig.call(this, type as never);
+    } as typeof orig;
+    try {
+      expect(compileAgentSky("vec3 color(vec3 dir, float t) { return uAccent; }")).toBeNull();
+      expect(lose).toHaveBeenCalledOnce();
+    } finally {
+      HTMLCanvasElement.prototype.getContext = orig;
+    }
   });
 });

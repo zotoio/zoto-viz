@@ -990,56 +990,195 @@ def parse_sky_recipe(raw: Any) -> dict[str, Any] | None:
     }
 
 
+async def _json_body(req: web.Request) -> dict[str, Any]:
+    if req.content_type and "json" not in req.content_type:
+        return {}
+    try:
+        raw = await req.json()
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+async def _ollama_once(base: str, model: str, system: str, user: str, timeout_s: float = 90) -> str:
+    """One non-streaming Ollama turn at the sky temperature. Raises RuntimeError on a bad reply.
+
+    A requested tag that is not installed falls back to the first installed model.
+    """
+    temp = live.sky_temperature(live.temper())
+    payload: dict[str, Any] = {
+        "model": model,
+        "stream": False,
+        "think": False,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        "options": {**chat_options(model), "temperature": temp},
+    }
+    async with ClientSession(timeout=ClientTimeout(total=timeout_s)) as s:
+        try:
+            async with s.get(f"{base}/api/tags") as tags:
+                names = _tag_names(await tags.json())
+            picked = match_model(model, names)
+            payload["model"] = picked if picked in names or not names else names[0]
+            payload["options"] = {**chat_options(payload["model"]), "temperature": temp}
+        except Exception:
+            pass
+        async with s.post(f"{base}/api/chat", json=payload) as r:
+            data = await r.json(content_type=None)
+    if not isinstance(data, dict):
+        raise RuntimeError("bad ollama reply")
+    if data.get("error"):
+        raise RuntimeError(str(data["error"]))
+    msg = data.get("message") if isinstance(data.get("message"), dict) else {}
+    return str(msg.get("content") or "")
+
+
 async def api_sky(req: web.Request) -> web.Response:
     """One-shot Gemma sky. Not stored on the chat transcript."""
-    body: dict[str, Any] = {}
-    if not req.content_type or "json" in req.content_type:
-        try:
-            raw = await req.json()
-            if isinstance(raw, dict):
-                body = raw
-        except Exception:
-            body = {}
+    body = await _json_body(req)
     try:
         base = ollama_url()
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=400)
-    model = _model(body)
     try:
         n = len(getattr(req.app["state"], "devices", {}) or {})
     except Exception:
         n = 0
     hour = time.localtime().tm_hour
-    payload: dict[str, Any] = {
-        "model": model,
-        "stream": False,
-        "think": False,
-        "messages": [
-            {"role": "system", "content": SKY_SYSTEM},
-            {"role": "user", "content": sky_user(body, hour, n)},
-        ],
-        "options": {**chat_options(model), "temperature": live.sky_temperature(live.temper())},
-    }
     try:
-        timeout = ClientTimeout(total=90)
-        async with ClientSession(timeout=timeout) as s:
-            try:
-                async with s.get(f"{base}/api/tags") as tags:
-                    payload["model"] = match_model(model, _tag_names(await tags.json()))
-                    payload["options"] = {**chat_options(payload["model"]), "temperature": live.sky_temperature(live.temper())}
-            except Exception:
-                pass
-            async with s.post(f"{base}/api/chat", json=payload) as r:
-                data = await r.json(content_type=None)
-        if not isinstance(data, dict):
-            return web.json_response({"error": "bad ollama reply"}, status=502)
-        if data.get("error"):
-            return web.json_response({"error": str(data["error"])}, status=502)
-        msg = data.get("message") if isinstance(data.get("message"), dict) else {}
-        content = str(msg.get("content") or "")
+        content = await _ollama_once(base, _model(body), SKY_SYSTEM, sky_user(body, hour, n))
         recipe = parse_sky_recipe(content)
         if not recipe:
             return web.json_response({"error": "no recipe", "raw": content[:400]}, status=502)
+        return web.json_response({"ok": True, "recipe": recipe})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=502)
+
+
+STEREO_BINS = 6
+STEREO_PARTS = 16
+STEREO_SHAPES = ("ball", "capsule", "box", "dent")
+STEREO_REACTS = ("none", "size", "rise", "forward", "stretch")
+
+STEREO_SYSTEM = """You design hidden 3D scenes for a Magic Eye autostereogram. The viewer sees only depth, so build a few big, simple solids; thin or tiny parts vanish. Reply with ONLY a JSON object:
+{"name":"short-slug","spin":0,"bob":0.03,"parts":[{"shape":"ball","at":[0,0.05,0.3],"r":0.14,"bin":-1,"react":"size","amt":0.6}]}
+Units: x -0.75 (left) to 0.75 (right), y -0.4 (bottom) to 0.38 (top), z 0 (the back wall) to 0.5 (nearest the eye).
+shape: ball (at, r); capsule (at, to, r: a rounded rod from at to to); box (at = centre, size [width, height]; a solid block seen from a fixed three-quarter view); dent (at, r: carves a hollow into a solid it overlaps).
+r 0.02-0.3. Solids at least 0.08 wide. Separate distinct things by at least 0.15 in x, or overlap parts on purpose to build one form. 1-16 parts.
+bin: -1 overall loudness, 0 bass up to 5 treble (six log bands). react: none, size (swell up to 2.5x), rise (up to +0.3 in y), forward (up to +0.3 toward the eye), stretch (grow up to 4x along a rod; a box grows upward from its base; a ball stretches tall). amt 0-1 scales the reaction.
+spin: turntable radians per second (-1 to 1) about the scene centre; only for compact objects within 0.3 of the centre, else 0. bob: gentle vertical sway 0-0.1.
+Invent a new subject every reply: a creature, machine, plant, instrument, building, symbol, abstract sculpture, or a new kind of audio visualiser. No markdown, no talk."""
+
+
+def stereo_user(body: dict[str, Any], hour: int) -> str:
+    """User turn for one stereogram scene. Audio reactive asks for a sound-driven form."""
+    brief = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", str(body.get("prompt") or "").strip())[:SKY_PROMPT_MAX]
+    line = f"Invent a new stereogram scene. hour={hour}."
+    if body.get("audio"):
+        line += (
+            " Audio reactive is on: make it audio focused. Bind most parts to bins 0-5 (spread across the range)"
+            " so the sound visibly drives the form: a band that dances, a speaker, a fountain, rings, orbs, bars, or something new."
+        )
+    else:
+        line += " Audio reactive is off: bin -1 follows LAN traffic, other bins stay still. Use spin and bob for motion."
+    prev = body.get("previous")
+    if isinstance(prev, list):
+        names = [re.sub(r"[\x00-\x1f]", "", str(n).strip())[:40] for n in prev[:6]]
+        names = [n for n in names if n]
+        if names:
+            line += f" Recent scenes: {', '.join(names)}. Make something clearly different."
+    if brief:
+        line += f"\nOperator brief: {brief}"
+    return line
+
+
+def _num(v: Any, lo: float, hi: float, fallback: float) -> float:
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return fallback
+    return fallback if n != n else max(lo, min(hi, n))
+
+
+def _stereo_vec(v: Any, fallback: list[float]) -> list[float]:
+    if not isinstance(v, (list, tuple)) or len(v) < 3:
+        return list(fallback)
+    return [_num(v[0], -0.8, 0.8, fallback[0]), _num(v[1], -0.45, 0.38, fallback[1]), _num(v[2], 0.0, 0.55, fallback[2])]
+
+
+def _stereo_part(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    shape = str(raw.get("shape") or "").strip().lower()
+    if shape not in STEREO_SHAPES:
+        return None
+    react = str(raw.get("react") or "none").strip().lower()
+    react = react if react in STEREO_REACTS else "none"
+    try:
+        bin_ = int(round(float(raw.get("bin"))))
+    except (TypeError, ValueError):
+        bin_ = -1
+    out: dict[str, Any] = {
+        "shape": shape,
+        "at": _stereo_vec(raw.get("at"), [0.0, 0.0, 0.3]),
+        "bin": max(-1, min(STEREO_BINS - 1, bin_)),
+        "react": react,
+        "amt": 0.0 if react == "none" else _num(raw.get("amt"), 0.0, 1.0, 0.5),
+    }
+    if shape == "box":
+        size = raw.get("size") if isinstance(raw.get("size"), (list, tuple)) else []
+        out["size"] = [
+            _num(size[0] if len(size) > 0 else None, 0.03, 0.6, 0.1),
+            _num(size[1] if len(size) > 1 else None, 0.03, 0.8, 0.1),
+        ]
+    else:
+        out["r"] = _num(raw.get("r"), 0.012, 0.3, 0.08)
+        if shape == "capsule":
+            out["to"] = _stereo_vec(raw.get("to"), out["at"])
+    return out
+
+
+def parse_stereo_recipe(raw: Any) -> dict[str, Any] | None:
+    """Model stereogram scene, clamped to the view. None without one solid part."""
+    obj: Any = raw
+    if isinstance(raw, str):
+        text = raw
+        fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.I)
+        if fence:
+            text = fence.group(1)
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            obj = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(obj, dict):
+        return None
+    parts = [p for p in (_stereo_part(r) for r in (obj.get("parts") or [])[:STEREO_PARTS * 2]) if p][:STEREO_PARTS]
+    if not any(p["shape"] != "dent" for p in parts):
+        return None
+    return {
+        "name": re.sub(r"[\x00-\x1f]", "", str(obj.get("name") or "scene"))[:40],
+        "spin": _num(obj.get("spin"), -1.0, 1.0, 0.0),
+        "bob": _num(obj.get("bob"), 0.0, 0.1, 0.0),
+        "parts": parts,
+    }
+
+
+async def api_stereo(req: web.Request) -> web.Response:
+    """One-shot stereogram scene from the local model. Not stored on the chat transcript."""
+    body = await _json_body(req)
+    try:
+        base = ollama_url()
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
+    hour = time.localtime().tm_hour
+    try:
+        content = await _ollama_once(base, _model(body), STEREO_SYSTEM, stereo_user(body, hour), timeout_s=150)
+        recipe = parse_stereo_recipe(content)
+        if not recipe:
+            return web.json_response({"error": "no scene", "raw": content[:400]}, status=502)
         return web.json_response({"ok": True, "recipe": recipe})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=502)

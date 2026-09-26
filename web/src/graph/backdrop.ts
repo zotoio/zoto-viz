@@ -6,6 +6,7 @@ import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
 import { currentSkyRecipe, DEFAULT_SKY_RECIPE, cloneSkyRecipe, lerpSkyRecipe, skyRecipeKey, type SkyRecipe } from "./sky-ai";
 import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
+import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
 
 /**
@@ -650,14 +651,15 @@ let lastCustomFrag: string | null = null;
 let lastPlugin: { id: string; frag: string } | null = null;
 
 export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
-export const PLUGIN_SKY_MAX = 16_000;
+export const PLUGIN_SKY_MAX = 32_000;
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
 
 /** Compile the wrapped fragment on a throwaway WebGL2 context. `null` if no GPU or it linked. */
 export function probePluginSkyCompile(frag: string): string | null {
   if (typeof document === "undefined") return null;
+  let gl: WebGL2RenderingContext | null = null;
   try {
-    const gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: false });
+    gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: false });
     if (!gl) return null;
     const sh = gl.createShader(gl.FRAGMENT_SHADER);
     if (!sh) return null;
@@ -667,6 +669,8 @@ export function probePluginSkyCompile(frag: string): string | null {
     return (gl.getShaderInfoLog(sh) || "compile failed").replace(/\0/g, "").trim() || "compile failed";
   } catch {
     return null;
+  } finally {
+    releaseThrowawayGl(gl);
   }
 }
 

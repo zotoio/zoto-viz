@@ -1,15 +1,15 @@
 id: stereo-gram
 name: 3D Stereogram
 version: 1
-hint: Magic Eye wallpaper — cross your eyes on the two dots; talkers are hidden 3D orbs.
-description: Stage-only autostereogram. A repeating 90s tile encodes a torus and LAN talker blobs as stereo depth. Two fuse dots sit at the far-plane separation.
+hint: Magic Eye wallpaper — look through the screen until the two dots become three. A ring, a talking skull, a counting hand and more take turns.
+description: Stage-only autostereogram. Audio reactive (on by default) is six microphone bins, low on the left, in front of the concave room. By default round bars turn into balls and back, each ball's size following its tone; oblong blocks, cubes or balls alone are options. Every solid stays at one depth; only that bin's level changes its size and height. The rack stays still. Silence stays small; mic Off leaves it quiet. Pace matches that level. While the header AI switch is on, the local model invents new scenes — creatures, machines, sculptures, audio visualisers — whose parts follow the microphone bins. Off plays eight turning objects at the animation speed (half the original pace by default) in front of a concave room that morphs between a sphere, a box, a cylinder and a tunnel — a ring rolls and spins like a coin, a skull talks, a hand counts and waves, a heart beats with LAN traffic, DNA unzips, a butterfly visits a flower, an octopus jet-swims, a moon orbits a ringed planet. Objects move in short bursts between still spells so they have to be found with the eyes. Each morphs into the next. Two fuse dots sit at the far-plane separation.
 capabilities:
   - viz.read
   - viz.write
 viz:
   graphWalk: false
-  maxBuffers: 1
-  maxBufferFloats: 32
+  maxBuffers: 8
+  maxBufferFloats: 64
   maxParticles: 0
   uniforms:
     - uTime

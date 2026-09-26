@@ -25,12 +25,12 @@ export function aiMosaicLayoutOn(store: Pick<Storage, "getItem"> | null = typeof
   }
 }
 
-/** Header AI cycling. Unset means on; only an explicit `"0"` is off. */
+/** Header AI cycling. Unset means off; only an explicit `"1"` turns it on. */
 export function aiCyclePrefOn(store: Pick<Storage, "getItem"> | null = typeof localStorage === "undefined" ? null : localStorage): boolean {
   try {
-    return store?.getItem(CYCLE_KEY) !== "0";
+    return store?.getItem(CYCLE_KEY) === "1";
   } catch {
-    return true;
+    return false;
   }
 }
 const MODEL_KEY = "zoto-viz.aiModel";
@@ -163,6 +163,8 @@ export class AgentPanel {
   private speechWait: (() => void) | null = null;
   onControl?: (on: boolean) => void;
   onCycle?: (on: boolean) => void;
+  /** Backend, model, or key changed — write them onto the open profile. */
+  onPrefs?: () => void;
   onOpen?: () => void;
   onApplySettings?: (patch: Record<string, unknown>) => void | Promise<void>;
   onApplyLook?: (look: AgentLookInput) => Promise<void>;
@@ -275,6 +277,7 @@ export class AgentPanel {
         this.paintModels();
         this.paintCursorKey();
         void this.refreshStatus();
+        this.onPrefs?.();
       },
     });
     this.modelSel = new Select({
@@ -287,6 +290,7 @@ export class AgentPanel {
         if (this.backend === "cursor") localStorage.setItem(CURSOR_MODEL_KEY, v);
         else localStorage.setItem(MODEL_KEY, v);
         this.paintPull();
+        this.onPrefs?.();
       },
     });
     this.pullBtn = document.createElement("button");
@@ -388,7 +392,50 @@ export class AgentPanel {
   /** Set the header switch without firing onCycle. */
   setCycleChecked(on: boolean): void {
     this.headerToggle.checked = on;
+    try { localStorage.setItem(CYCLE_KEY, on ? "1" : "0"); } catch { /* private mode */ }
     this.paintHeader();
+  }
+
+  /** Backend, model, and header AI as stored on the profile. The key stays on the monitor. */
+  aiPrefs(): { backend: "" | "ollama" | "cursor"; model: string; cursorModel: string; cycle: boolean } {
+    const backend = this.backendSel?.value === "cursor" ? "cursor" : (this.backendSel?.value === "ollama" ? "ollama" : "");
+    return {
+      backend,
+      model: localStorage.getItem(MODEL_KEY) || "",
+      cursorModel: localStorage.getItem(CURSOR_MODEL_KEY) || "",
+      cycle: this.cycleOn,
+    };
+  }
+
+  private profileBackend: "" | "ollama" | "cursor" = "";
+
+  /** Backend last applied from a profile. Empty means the file never recorded one. */
+  savedBackend(): "" | "ollama" | "cursor" { return this.profileBackend; }
+
+  /** Apply a profile's agent block. Does not start header AI (that switches profiles). */
+  applyAi(ai: { backend?: string; model?: string; cursorModel?: string; cycle?: boolean }): void {
+    this.profileBackend = ai.backend === "cursor" || ai.backend === "ollama" ? ai.backend : "";
+    if (ai.backend === "cursor" || ai.backend === "ollama") {
+      localStorage.setItem(BACKEND_KEY, ai.backend);
+      this.backendSel.value = ai.backend;
+    }
+    if (ai.model) localStorage.setItem(MODEL_KEY, ai.model);
+    if (ai.cursorModel) localStorage.setItem(CURSOR_MODEL_KEY, ai.cursorModel);
+    this.setCycleChecked(ai.cycle === true);
+    this.paintModels();
+    this.paintCursorKey();
+  }
+
+  /** Show Cursor when the monitor already has a key and this profile never chose a backend. */
+  useBackend(backend: "ollama" | "cursor"): void {
+    localStorage.setItem(BACKEND_KEY, backend);
+    this.backendSel.value = backend;
+    this.paintModels();
+    this.paintCursorKey();
+  }
+
+  syncStatus(): Promise<void> {
+    return this.refreshStatus();
   }
 
   async setControl(on: boolean): Promise<void> {
@@ -527,20 +574,28 @@ export class AgentPanel {
 
   private paintCursorKey(): void {
     this.cursorKey.hidden = this.backend !== "cursor";
-    this.cursorKey.input.placeholder = this.lastCursor.configured ? "key saved on the monitor" : "cursor_…";
-    if (this.cursorHelp) this.cursorHelp.hidden = this.backend !== "cursor" || this.lastCursor.configured;
+    const saved = this.lastCursor.configured;
+    this.cursorKey.input.placeholder = saved ? "key saved on the monitor" : "cursor_…";
+    const cap = this.cursorKey.el.querySelector(".cap");
+    if (cap) cap.textContent = saved ? "Cursor API key · saved" : "Cursor API key";
+    if (this.cursorHelp) this.cursorHelp.hidden = this.backend !== "cursor" || saved;
     if (this.ttsHelp) this.ttsHelp.hidden = this.ttsEngine === "elevenlabs";
   }
 
   private paintModels(): void {
     if (this.backend === "cursor") {
-      const opts: SelectOption[] = (this.lastCursor.models.length ? this.lastCursor.models : [
-        { id: "grok-4.5", label: "Grok 4.5", hint: "default" },
-      ]).map((m) => ({ value: m.id, label: m.label, hint: m.hint, group: "Cursor" }));
+      const saved = localStorage.getItem(CURSOR_MODEL_KEY) || "";
+      const listed = this.lastCursor.models.length
+        ? this.lastCursor.models
+        : [{ id: saved || "grok-4.6", label: saved || "Grok 4.6", hint: "default" }];
+      let opts: SelectOption[] = listed.map((m) => ({ value: m.id, label: m.label, hint: m.hint, group: "Cursor" }));
+      if (saved && !opts.some((o) => o.value === saved)) {
+        opts = [{ value: saved, label: saved, group: "Cursor" }, ...opts];
+      }
       this.modelSel.setOptions(opts);
-      const want = localStorage.getItem(CURSOR_MODEL_KEY) || this.lastCursor.models.find((m) => /^grok/i.test(m.id))?.id || "grok-4.5";
+      const want = saved || listed.find((m) => /^grok/i.test(m.id))?.id || opts[0]?.value || "grok-4.6";
       this.modelSel.value = opts.some((o) => o.value === want) ? want : (opts[0]?.value || want);
-      localStorage.setItem(CURSOR_MODEL_KEY, this.modelSel.value);
+      if (this.modelSel.value) localStorage.setItem(CURSOR_MODEL_KEY, this.modelSel.value);
     } else {
       const opts = this.ollamaOptions();
       this.modelSel.setOptions(opts);
@@ -599,6 +654,7 @@ export class AgentPanel {
       this.cursorKey.value = "";
       if (!r.ok) this.note(d.error || `Cursor key failed (${r.status})`);
       await this.refreshStatus();
+      this.onPrefs?.();
     } catch (e) {
       this.note(String(e));
     }

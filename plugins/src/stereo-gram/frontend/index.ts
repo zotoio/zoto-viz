@@ -1,21 +1,13 @@
-/** Talker orbs packed as hidden stereogram depth. */
-
-import { packStereoOrbs } from "./orbs";
-
-type VizFrame = {
-  t: number;
-  audio: number;
-  talkers: { id: string; rate: number; role: string }[];
-};
+/** Accent colours for the stereogram sky. The host writes the drive buffer. */
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
-  writeBuffer: (slot: number, data: number[]) => void;
+  onFrame: (() => void) | null;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };
 
-zoto.onFrame = (frame) => {
-  zoto.writeBuffer(0, packStereoOrbs(frame.talkers, frame.t));
+zoto.onFrame = () => {
+  // The host writes the drive buffer every frame (clock, pulse, spectrum).
+  // A late iframe write would replace that with a stale clock.
   zoto.writeUniform("uAccent", [0.95, 0.35, 0.72]);
   zoto.writeUniform("uBg", [0.06, 0.03, 0.1]);
 };

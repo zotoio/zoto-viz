@@ -1,6 +1,7 @@
 /** Gemma-authored far-field fragment. Host uniforms match the plugin sky contract plus uPhoto. */
 
 import { SKY_LUMA_CAP_GLSL } from "../core/themes";
+import { releaseThrowawayGl } from "./webgl";
 
 export const AGENT_SKY_MAX = 16_000;
 
@@ -73,15 +74,19 @@ export function compileAgentSky(raw: string): string | null {
   const wrapped = wrapAgentSky(raw);
   if ("error" in wrapped) return wrapped.error;
   if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  const gl = canvas.getContext("webgl2");
-  if (!gl) return null;
-  const sh = gl.createShader(gl.FRAGMENT_SHADER);
-  if (!sh) return "no shader";
-  gl.shaderSource(sh, `#version 300 es\nprecision highp float;\n${wrapped.frag}`);
-  gl.compileShader(sh);
-  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    return (gl.getShaderInfoLog(sh) || "compile failed").slice(0, 400);
+  let gl: WebGL2RenderingContext | null = null;
+  try {
+    gl = document.createElement("canvas").getContext("webgl2");
+    if (!gl) return null;
+    const sh = gl.createShader(gl.FRAGMENT_SHADER);
+    if (!sh) return "no shader";
+    gl.shaderSource(sh, `#version 300 es\nprecision highp float;\n${wrapped.frag}`);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      return (gl.getShaderInfoLog(sh) || "compile failed").slice(0, 400);
+    }
+    return null;
+  } finally {
+    releaseThrowawayGl(gl);
   }
-  return null;
 }

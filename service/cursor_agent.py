@@ -4,7 +4,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -66,12 +68,81 @@ def bridge_dir() -> Path:
     return paths.repo_root() / "service" / "cursor-bridge"
 
 
+_MIN_NODE = (22, 12)
+_node_cache: str | None = None
+
+
+def _parse_node_version(text: str) -> tuple[int, int] | None:
+    match = re.search(r"v?(\d+)\.(\d+)", text or "")
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _probe_node(path: str) -> tuple[int, int] | None:
+    try:
+        proc = subprocess.run(
+            [path, "-v"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return _parse_node_version(proc.stdout or proc.stderr)
+
+
+def _node_candidates() -> list[Path]:
+    home = Path.home()
+    roots = [
+        Path(os.environ.get("NVM_DIR") or home / ".nvm") / "versions" / "node",
+        Path(os.environ.get("FNM_DIR") or home / ".local" / "share" / "fnm" / "node-versions"),
+        Path(os.environ.get("VOLTA_HOME") or home / ".volta") / "tools" / "image" / "node",
+    ]
+    found: list[Path] = []
+    for root in roots:
+        try:
+            kids = list(root.iterdir())
+        except OSError:
+            continue
+        for child in kids:
+            for cand in (child / "bin" / "node", child / "installation" / "bin" / "node"):
+                if cand.is_file():
+                    found.append(cand)
+    return found
+
+
+def _find_node() -> str:
+    """Node 22.12+ for the Cursor bridge. systemd's PATH does not include nvm."""
+    which = shutil.which("node")
+    if which:
+        ver = _probe_node(which)
+        if ver and ver >= _MIN_NODE:
+            return which
+    best: tuple[tuple[int, int], Path] | None = None
+    for cand in _node_candidates():
+        ver = _probe_node(str(cand))
+        if ver and ver >= _MIN_NODE and (best is None or ver > best[0]):
+            best = (ver, cand)
+    if best:
+        return str(best[1])
+    return which or "node"
+
+
 def node_bin() -> str:
-    return shutil.which("node") or "node"
+    global _node_cache
+    if not _node_cache:
+        _node_cache = _find_node()
+    return _node_cache
 
 
 def _env(key: str) -> dict[str, str]:
     env = os.environ.copy()
+    node = node_bin()
+    if os.path.isabs(node):
+        bindir = str(Path(node).parent)
+        env["PATH"] = bindir + os.pathsep + env.get("PATH", "")
     env["CURSOR_API_KEY"] = key
     env["ZOTO_VIZ_MCP"] = os.environ.get("ZOTO_VIZ_MCP", "http://127.0.0.1:7020/mcp")
     env["ZOTO_VIZ_REPO_ROOT"] = str(paths.repo_root())

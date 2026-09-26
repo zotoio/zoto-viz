@@ -1,10 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { probeWebGL } from "./webgl";
 import { RenderHost } from "./render-host";
 
 describe("probeWebGL", () => {
   it("is false under happy-dom (no GPU)", () => {
     expect(probeWebGL()).toBe(false);
+  });
+
+  it("releases the probe context so it does not count against Chrome's context cap", () => {
+    const lose = vi.fn();
+    const gl = {
+      VENDOR: 0x1f00,
+      RENDERER: 0x1f01,
+      getParameter: () => "NVIDIA",
+      getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext: lose } : null),
+    };
+    const orig = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type: string) {
+      if (String(type).includes("webgl")) return gl as never;
+      return orig.call(this, type as never);
+    } as typeof orig;
+    try {
+      expect(probeWebGL()).toBe(true);
+      expect(lose).toHaveBeenCalledOnce();
+    } finally {
+      HTMLCanvasElement.prototype.getContext = orig;
+    }
   });
 });
 

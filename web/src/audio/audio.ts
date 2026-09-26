@@ -6,12 +6,44 @@
 
 import { askUserMedia } from "../ui/media-ask";
 
+/**
+ * Log-spaced 0–1 bands from an analyser byte spectrum (dB, low frequency first).
+ * Skips DC. Empty capture stays at 0 — no invented shape.
+ */
+export function logSpectrum(
+  bins: ArrayLike<number>,
+  sampleRate: number,
+  fftSize: number,
+  count: number,
+): number[] {
+  const out = new Array<number>(count).fill(0);
+  if (count < 1 || fftSize < 4 || sampleRate <= 0 || bins.length < 2) return out;
+  const hzPer = sampleRate / fftSize;
+  const nyquist = sampleRate / 2;
+  const f0 = 40;
+  const f1 = Math.min(nyquist * 0.95, 16000);
+  if (f1 <= f0) return out;
+  for (let i = 0; i < count; i++) {
+    const aHz = f0 * Math.pow(f1 / f0, i / count);
+    const bHz = f0 * Math.pow(f1 / f0, (i + 1) / count);
+    const a = Math.max(1, Math.floor(aHz / hzPer));
+    const b = Math.min(bins.length, Math.max(a + 1, Math.ceil(bHz / hzPer)));
+    let s = 0;
+    for (let j = a; j < b; j++) s += bins[j]! / 255;
+    out[i] = s / (b - a);
+  }
+  return out;
+}
+
 export class AudioPulse {
   level = 0;
   bass = 0;
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private bins: Uint8Array | null = null;
+  /** Higher-resolution analyser for a real spectrum. Not the traffic stand-in. */
+  private spectrumNode: AnalyserNode | null = null;
+  private specBins: Uint8Array | null = null;
   private frames: number[][] = [];
   private stream: MediaStream | null = null;
   private wanted = false;
@@ -32,13 +64,23 @@ export class AudioPulse {
         return;
       }
       const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.72;
-      ctx.createMediaStreamSource(stream).connect(analyser);
+      source.connect(analyser);
+      const spectrumNode = ctx.createAnalyser();
+      spectrumNode.fftSize = 2048;
+      spectrumNode.smoothingTimeConstant = 0.35;
+      spectrumNode.minDecibels = -90;
+      spectrumNode.maxDecibels = -20;
+      source.connect(spectrumNode);
+      void ctx.resume();
       this.ctx = ctx;
       this.analyser = analyser;
       this.bins = new Uint8Array(analyser.frequencyBinCount);
+      this.spectrumNode = spectrumNode;
+      this.specBins = new Uint8Array(spectrumNode.frequencyBinCount);
       this.stream = stream;
     } catch {
       // permission denied or no device — traffic fallback still runs
@@ -57,9 +99,40 @@ export class AudioPulse {
     this.ctx = null;
     this.analyser = null;
     this.bins = null;
+    this.spectrumNode = null;
+    this.specBins = null;
     this.frames = [];
     this.level = 0;
     this.bass = 0;
+  }
+
+  /**
+   * Log-frequency bands of the live microphone. All zeros when the mic is not capturing —
+   * traffic is not substituted.
+   */
+  heard(count = 16): number[] {
+    if (!this.spectrumNode || !this.specBins || !this.ctx) return new Array(count).fill(0);
+    if (this.ctx.state === "suspended") void this.ctx.resume();
+    this.spectrumNode.getByteFrequencyData(this.specBins as Uint8Array<ArrayBuffer>);
+    return logSpectrum(this.specBins, this.ctx.sampleRate, this.spectrumNode.fftSize, count);
+  }
+
+  /**
+   * Last tick's spectrum, resampled to `count` bins, low frequency first.
+   * Mic FFT when the analyser is running; otherwise the traffic-shaped frame `tick` stored.
+   */
+  bands(count = 16): number[] {
+    const frame = this.frames[this.frames.length - 1];
+    const out = new Array<number>(count).fill(0);
+    if (!frame?.length || count < 1) return out;
+    for (let i = 0; i < count; i++) {
+      const a = Math.floor((i * frame.length) / count);
+      const b = Math.max(a + 1, Math.floor(((i + 1) * frame.length) / count));
+      let s = 0;
+      for (let j = a; j < b; j++) s += frame[j] ?? 0;
+      out[i] = s / (b - a);
+    }
+    return out;
   }
 
   /** Downsampled 0–1 FFT magnitudes (mic). Empty when the analyser is off — layouts then DFT traffic. */

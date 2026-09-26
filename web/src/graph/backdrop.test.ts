@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BACKDROP_OPTIONS, CYCLE_SKIES, cycleSkyPool, Backdrop, RECIPE_EASE_MAX_S,
-  PLUGIN_SKY_FALLBACK, PHOTO_LOOP_S, PHOTO_LOOP_FADE_S, PHOTO_SKIES, isPhotoSky, isPhotoVideoUrl, photoSkyCandidates, photoLoopPhase, photoLoopMix, photoStillLoopSample, pluginShaderError, wrapPluginSky, skyGroup,
+  PLUGIN_SKY_FALLBACK, PHOTO_LOOP_S, PHOTO_LOOP_FADE_S, PHOTO_SKIES, isPhotoSky, isPhotoVideoUrl, photoSkyCandidates, photoLoopPhase, photoLoopMix, photoStillLoopSample, pluginShaderError, probePluginSkyCompile, wrapPluginSky, skyGroup,
 } from "./backdrop";
 import { liveCam } from "../camera/livecam";
 
@@ -96,6 +96,31 @@ describe("plugin sky contract", () => {
     expect("frag" in wrapped && wrapped.frag.includes("binding")).toBe(false);
     expect(pluginShaderError("layout(std140, binding = 0) uniform ZotoVizData { vec4 zotoVizSlots[128]; };\nvoid main() {}"))
       .toMatch(/UBO|binding/);
+  });
+
+  it("releases the compile-probe context", () => {
+    const lose = vi.fn();
+    const gl = {
+      FRAGMENT_SHADER: 0x8b30,
+      COMPILE_STATUS: 0x8b81,
+      createShader: () => ({}),
+      shaderSource() {},
+      compileShader() {},
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => "",
+      getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext: lose } : null),
+    };
+    const orig = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type: string) {
+      if (type === "webgl2") return gl as never;
+      return orig.call(this, type as never);
+    } as typeof orig;
+    try {
+      expect(probePluginSkyCompile("void main() {}")).toBeNull();
+      expect(lose).toHaveBeenCalledOnce();
+    } finally {
+      HTMLCanvasElement.prototype.getContext = orig;
+    }
   });
 
   it("swaps in a plugin program and falls back on compile failure", () => {

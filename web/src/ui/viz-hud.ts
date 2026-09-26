@@ -118,7 +118,7 @@ function vizHudMetricLive(
     case "hn-term":
       return { label: "stories", value: String(frame?.headlines.length ?? 0) };
     case "stereo-gram":
-      return { label: "orbs", value: String(Math.min(8, frame?.talkers.length ?? 0)) };
+      return { label: "talkers", value: String(frame?.talkers.length ?? 0) };
     case "nixie-clock":
       return { label: "nixie", value: "clock" };
   }

@@ -4,7 +4,9 @@ import { hashColor } from "../core/modes";
 import { rIp, rName } from "../core/redact";
 import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
 import { DEFAULT_THEME, type Theme } from "../core/themes";
-import { markFrame } from "../core/fps";
+import { markFrame, PaneFps } from "../core/fps";
+import { timeGpu } from "../core/gpu-time";
+import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
 import { probeWebGL } from "../graph/webgl";
 import { observeResize } from "../core/resize";
 import { POLL_MS, REPLAY_S, isKnown } from "./arcade";
@@ -43,7 +45,12 @@ export abstract class Stage3D {
   private readonly rim = new THREE.PointLight(0x90caf9, 0.55, 80, 2);
   private readonly fog = new THREE.FogExp2(0x0b1220, 0.012);
 
+  private readonly paneFps: PaneFps;
+  private readonly picture = new PaneChangeProbe();
+  private readonly flatPicture = new CanvasChangeProbe();
+
   constructor(protected readonly container: HTMLElement, protected readonly scene: NetScene) {
+    this.paneFps = new PaneFps(container);
     this.world.add(this.hemi);
     this.key.position.set(18, 28, 14);
     this.key.castShadow = true;
@@ -183,9 +190,13 @@ export abstract class Stage3D {
   }
 
   private releaseRenderer(): void {
-    this.renderer?.dispose();
+    const r = this.renderer;
     this.renderer = null;
     this.fallback = null;
+    if (r) {
+      r.forceContextLoss();
+      r.dispose();
+    }
     this.canvas?.remove();
     this.canvas = null;
   }
@@ -223,6 +234,7 @@ export abstract class Stage3D {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.frame);
     markFrame(ts);
+    this.paneFps.tick(ts);
     const now = ts / 1000;
     const dt = Math.min(0.05, this.lastFrame ? now - this.lastFrame : 0.016);
     this.lastFrame = now;
@@ -230,8 +242,18 @@ export abstract class Stage3D {
     if (!this.W || !this.H) return;
     this.step(now, dt);
     this.applyCamera();
-    if (this.renderer) this.renderer.render(this.world, this.camera);
-    else if (this.fallback && this.canvas) this.drawFallback(this.fallback, now);
+    if (this.renderer) {
+      const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
+      const draw = () => this.renderer?.render(this.world, this.camera);
+      if (gl) {
+        timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
+        const vp = { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+        this.picture.tick(gl, vp, ts, (at) => this.paneFps.mark(at));
+      } else draw();
+    } else if (this.fallback && this.canvas) {
+      this.drawFallback(this.fallback, now);
+      if (this.flatPicture.sample(this.fallback, this.canvas)) this.paneFps.mark(ts);
+    }
   };
 
   private drawFallback(g: CanvasRenderingContext2D, now: number): void {

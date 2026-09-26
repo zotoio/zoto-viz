@@ -165,8 +165,8 @@ describe("agentPhase", () => {
 });
 
 describe("aiCyclePrefOn", () => {
-  it("defaults on and only an explicit 0 is off", () => {
-    expect(aiCyclePrefOn({ getItem: () => null })).toBe(true);
+  it("defaults off and only an explicit 1 is on", () => {
+    expect(aiCyclePrefOn({ getItem: () => null })).toBe(false);
     expect(aiCyclePrefOn({ getItem: () => "1" })).toBe(true);
     expect(aiCyclePrefOn({ getItem: () => "0" })).toBe(false);
     expect(CYCLE_KEY).toBe("zoto-viz.aiCycle");

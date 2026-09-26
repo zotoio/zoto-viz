@@ -32,8 +32,10 @@ import { Gaze } from "../camera/gaze";
 import { FloorGrid, easeFloorPose, floorPose, type FloorPose, type FloorShape } from "./floor";
 import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
-import { liveMic, shouldRunMic } from "../audio/want";
-import { markFrame, setFpsHint } from "../core/fps";
+import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
+import { markFrame, PaneFps } from "../core/fps";
+import { timeGpu } from "../core/gpu-time";
+import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
@@ -1153,11 +1155,15 @@ export class NetScene implements HostedView {
   private lastFloor: FloorPose = floorPose({ x: 0, y: 0, z: 0, hx: 280, hz: 280, n: 0 });
   private backdrop = new Backdrop();
   private pulse = new AudioPulse();
+  /** Spectrum scene wants the microphone even when the pulse drive is traffic. */
+  private wantHeard = false;
   onSelect: (d: Device | null) => void = () => {};
   /** fired on the dream cadence so the app can cycle views / reshuffle motion */
   onDreamPulse: () => void = () => {};
   /** fired on a bass transient when theme cycle is set to beat */
   onThemePulse: () => void = () => {};
+  /** After this frame's look pass, so pulse and spectrum are current. */
+  afterLook: (() => void) | null = null;
   /** live webcam colour for camTheme, or null when the option is off / the camera is dark */
   onCamTheme: (hex: number | null) => void = () => {};
   /** last smoothed webcam colour (packed RGB), for a theme switch to retint immediately */
@@ -1251,7 +1257,10 @@ export class NetScene implements HostedView {
     };
   }
 
+  private readonly paneFps: PaneFps;
+
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
+    this.paneFps = new PaneFps(container);
     this.satellite = !!opts.satellite;
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
@@ -1519,7 +1528,11 @@ export class NetScene implements HostedView {
 
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: number): void { this.animate(ts); }
-  hostContextLost(): void { this.lumaProbe.reset(); }
+  noteFrameCost(ms: number): void { this.paneFps.noteGpu(ms); }
+  hostContextLost(): void {
+    this.lumaProbe.reset();
+    this.changeProbe.reset();
+  }
   hostContextRestored(): void { this.relayout(); }
 
   get software(): boolean {
@@ -1533,23 +1546,46 @@ export class NetScene implements HostedView {
 
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
   private present(): void {
+    // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
+    this.backdrop.syncCamera(this.camera);
     if (this.host) {
       this.lastVp = this.host.present(this, this.clearHex, this.scene, this.camera);
-      return;
-    }
-    if (this.renderer instanceof SoftwareGpu) {
+    } else if (this.renderer instanceof SoftwareGpu) {
       const canvas = this.renderer.domElement;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const pr = this.renderer.getPixelRatio();
-      ctx.setTransform(pr, 0, 0, pr, 0, 0);
-      ctx.fillStyle = cssHex(this.clearHex);
-      ctx.fillRect(0, 0, this.viewW, this.viewH);
-      this.paintSoftware(ctx, { x: 0, y: 0, w: this.viewW, h: this.viewH });
+      if (ctx) {
+        const pr = this.renderer.getPixelRatio();
+        ctx.setTransform(pr, 0, 0, pr, 0, 0);
+        ctx.fillStyle = cssHex(this.clearHex);
+        ctx.fillRect(0, 0, this.viewW, this.viewH);
+        this.paintSoftware(ctx, { x: 0, y: 0, w: this.viewW, h: this.viewH });
+      }
+    } else {
+      const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
+      const draw = () => {
+        this.renderer.setClearColor(this.clearHex);
+        this.renderer.render(this.scene, this.camera);
+      };
+      if (gl) timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
+      else draw();
+    }
+    this.notePaneChange();
+  }
+
+  /** Count a frame only when this pane's own pixels differ from the previous sample. */
+  private notePaneChange(): void {
+    if (this.host && !this.lastVp) return;
+    const now = performance.now();
+    if (this.software) {
+      const canvas = this.host?.canvas ?? (this.renderer instanceof SoftwareGpu ? this.renderer.domElement : null);
+      const ctx = canvas?.getContext("2d");
+      if (ctx && canvas && this.canvasProbe.sample(ctx, canvas, this.lastVp)) this.paneFps.mark(now);
       return;
     }
-    this.renderer.setClearColor(this.clearHex);
-    this.renderer.render(this.scene, this.camera);
+    const gl = (this.host?.gl ?? (this.renderer as THREE.WebGLRenderer).getContext()) as WebGL2RenderingContext | null;
+    if (!gl) return;
+    const vp = this.lastVp ?? { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+    this.changeProbe.tick(gl, vp, this.lastFrameTs || now, (ts) => this.paneFps.mark(ts));
   }
 
   paintSoftware(ctx: CanvasRenderingContext2D, rect: SoftRect): void {
@@ -1761,6 +1797,24 @@ export class NetScene implements HostedView {
   get pulseNow(): { level: number; bass: number; listening: boolean } {
     return { level: this.pulseLevel, bass: this.pulseBass, listening: this.pulse.listening };
   }
+
+  /**
+   * Open the microphone for a true spectrum while this view is the analyser.
+   * Header mic Off still wins. Does not invent bins from traffic.
+   */
+  setHeard(on: boolean): void {
+    if (this.satellite || this.wantHeard === on) return;
+    this.wantHeard = on;
+    this.syncPulse();
+  }
+
+  /** Live mic spectrum, low frequency first. Zeros when the mic is not capturing. */
+  heardSpectrum(count = 16): { level: number; spectrum: number[] } {
+    const spectrum = this.pulse.heard(count);
+    let sum = 0;
+    for (const v of spectrum) sum += v;
+    return { level: spectrum.length ? sum / spectrum.length : 0, spectrum };
+  }
   /** Live animation settings so arcade views can share the sky and floor. */
   get dreamAnim(): DreamAnim { return this.anim; }
   private get smallPane(): boolean { return this.satellite || this.compactLabels; }
@@ -1826,7 +1880,9 @@ export class NetScene implements HostedView {
   /** Start or stop the pulse microphone from the current drive + header mic toggle. */
   syncPulse(): void {
     if (this.satellite) return;
-    if (shouldRunMic(liveMic.micPolicy, this.anim.audioDrive, this.audioLive())) void this.pulse.enable();
+    const mic = shouldRunMic(liveMic.micPolicy, this.anim.audioDrive, this.audioLive())
+      || (this.wantHeard && micCaptureAllowed());
+    if (mic) void this.pulse.enable();
     else this.pulse.disable();
   }
 
@@ -2096,7 +2152,9 @@ export class NetScene implements HostedView {
     const skySp = this.tune?.skySpeed ?? a.skySpeed;
     this.paintClear();
     this.easeVisibility(dt);
-    const visK = this.visScale;
+    // Stage-only skies have no graph to protect. Scaling them from the luma probe
+    // dims the picture on every sample, then eases back — a flash per drawn frame.
+    const visK = this.stageOnly ? 1 : this.visScale;
     const stageSky = this.stageOnly || a.backdrop === "plugin";
     this.backdrop.setLook(
       stageSky ? skyOp : (a.skyAudio ? Math.min(1, skyOp * (0.28 + 0.85 * skyP)) : skyOp),
@@ -2415,6 +2473,8 @@ export class NetScene implements HostedView {
   /** Last sampled WebGL luma behind labels; -1 until the first read. */
   private sampledLuma = -1;
   private readonly lumaProbe = new LumaProbe(16, 150);
+  private readonly changeProbe = new PaneChangeProbe();
+  private readonly canvasProbe = new CanvasChangeProbe();
   private lastVis: VisibilityReport | null = null;
   private visCap = SKY_LUMA_CAP;
   private visScale = 1;
@@ -3415,7 +3475,12 @@ export class NetScene implements HostedView {
   private animate(ts: number): void {
     if (!this.host) this.raf = requestAnimationFrame(this.animate);
     markFrame(ts);
-    if (!this.active) return;
+    if (!this.active) {
+      this.paneFps.el.hidden = true;
+      return;
+    }
+    this.paneFps.el.hidden = false;
+    this.paneFps.tick(ts);
     if (this.satellite && this.satelliteCameraBroken()) {
       this.resize();
       this.recoverSatelliteCamera();
@@ -3425,11 +3490,11 @@ export class NetScene implements HostedView {
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();
-      setFpsHint((s > 0.04
+      this.paneFps.hint((s > 0.04
         ? (perfWant() > 0.5
-          ? "display framerate · auto-tune easing labels, sparks, glow, and sky down"
-          : "display framerate · auto-tune easing back up after a 1-minute recovered average")
-        : "display framerate, averaged over the last second"
+          ? "this pane · auto-tune easing labels, sparks, glow, and sky down"
+          : "this pane · auto-tune easing back up after a 1-minute recovered average")
+        : "how often this pane's picture changed in the last second"
           + (this.lastVis && !this.lastVis.ok
             ? ` · visibility: ${this.lastVis.issues.map((i) => i.code).join(", ")}`
             : ""))
@@ -3455,9 +3520,9 @@ export class NetScene implements HostedView {
     this.easePhys(dt);
     const wall = ts / 1000;
     this.backdrop.tick(wall);
-    this.backdrop.syncCamera(this.camera);
     if (!this.satellite && this.anim.backdrop === "dynamic") ensureSkyRecipe(this.anim.skyAiMin * 60_000);
     this.applyLook(dt);
+    if (!this.satellite) this.afterLook?.();
     if (this.pruneCpuIdle(wall)) {
       this.rebuildLineBuffers();
       this.applyVisibility();
@@ -3491,7 +3556,6 @@ export class NetScene implements HostedView {
         }
         this.tickViewShift(dt);
         this.present();
-        this.captureBackdropLuma();
       return;
     }
 
@@ -3951,6 +4015,8 @@ export class NetScene implements HostedView {
       this.renderer.forceContextLoss();
       this.renderer.dispose();
     }
+    this.paneFps.dispose();
+    this.changeProbe.reset();
     this.container.replaceChildren();
   }
 

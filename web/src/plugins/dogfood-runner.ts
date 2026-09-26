@@ -96,8 +96,8 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "stereo-gram": parseVizContract({
     graphWalk: false,
-    maxBuffers: 1,
-    maxBufferFloats: 32,
+    maxBuffers: 8,
+    maxBufferFloats: 64,
     maxParticles: 0,
     uniforms: ["uTime", "uAudio", "uAccent", "uBg"],
     idle: { fixture: "host" },

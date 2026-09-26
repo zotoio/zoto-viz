@@ -268,7 +268,7 @@ describe("viz hud helpers", () => {
     expect(vizHudMetric("stereo-gram", {
       t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
       talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
-    }, state)).toEqual({ label: "orbs", value: "1" });
+    }, state)).toEqual({ label: "talkers", value: "1" });
   });
 });
 

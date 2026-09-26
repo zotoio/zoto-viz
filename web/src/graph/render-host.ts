@@ -21,6 +21,7 @@ import type { SoftRect } from "./software-draw";
 import { cssHex } from "./software-draw";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
+import { harvestGpu, timeGpu } from "../core/gpu-time";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
@@ -31,6 +32,8 @@ export interface HostedView {
   hostContextRestored(): void;
   /** Canvas 2D fallback when `host.software` is set */
   paintSoftware?(ctx: CanvasRenderingContext2D, rect: SoftRect): void;
+  /** GPU milliseconds for this pane's last draw, once the timer query resolves. */
+  noteFrameCost?(ms: number): void;
 }
 
 /** A viewport in framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
@@ -133,6 +136,7 @@ export class RenderHost {
         }
       }
       this.canvasRect = this.canvas.getBoundingClientRect();
+      harvestGpu();
       for (const v of this.views) v.hostFrame(ts);
     };
     this.raf = requestAnimationFrame(this.frame);
@@ -196,11 +200,16 @@ export class RenderHost {
       return { x: x * this.pr, y: y * this.pr, w: w * this.pr, h: h * this.pr };
     }
     const rd = this.renderer as THREE.WebGLRenderer;
-    rd.setViewport(x, y, w, h);
-    rd.setScissor(x, y, w, h);
-    rd.setScissorTest(true);
-    rd.setClearColor(clearHex, 1);
-    rd.render(scene, camera);
+    const gl = this.gl;
+    const draw = () => {
+      rd.setViewport(x, y, w, h);
+      rd.setScissor(x, y, w, h);
+      rd.setScissorTest(true);
+      rd.setClearColor(clearHex, 1);
+      rd.render(scene, camera);
+    };
+    if (gl) timeGpu(gl, draw, (ms) => view.noteFrameCost?.(ms));
+    else draw();
     const pr = rd.getPixelRatio();
     return { x: x * pr, y: y * pr, w: w * pr, h: h * pr };
   }
@@ -210,6 +219,7 @@ export class RenderHost {
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.views = [];
+    this.renderer.forceContextLoss();
     this.renderer.dispose();
     this.canvas.remove();
   }

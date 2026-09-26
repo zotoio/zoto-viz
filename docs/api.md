@@ -44,6 +44,7 @@ Host must be loopback (unless `--insecure-lan`). Browser `Origin` must also be l
 | `POST /api/ai/plugin` | validate `{files, install}` (legacy `yaml` → `plugin.yml`); write `plugins/src/<id>/` only when server AI Control is on and `install` is true. Never packs or git-commits |
 | `POST /api/ai/plugin/local` | `{zip_b64 \| files \| description}` → `~/.zoto-viz/plugins/local/<id>.zip`; hot-load and activate when the zip is YAML-only or already consented |
 | `POST /api/ai/sky` | one-shot Gemma far-field recipe (`{name,motif,a,b,warp,grain,bands}`). Optional `{prompt, view}` from the profile's This view prompt. Not stored on the chat transcript. Used by the AI Dynamic sky |
+| `POST /api/ai/stereo` | one-shot local-model stereogram scene (`{name,spin,bob,parts:[{shape,at,to?,r?,size?,bin,react,amt}]}`, up to 16 parts, clamped to the view). Optional `{audio, prompt, previous}`: audio asks for a scene driven by the six mic bins. Not stored on the chat transcript. Used by `plugin:stereo-gram` AI scenes while the header AI switch is on |
 | `POST /api/ai/speak` | `{text, voice?}`. Streams `audio/pcm` (ElevenLabs / Kokoro / Piper) or JSON if espeak spoke on the host |
 | `DELETE /api/ai/speak` | stop the current utterance |
 

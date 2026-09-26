@@ -49,16 +49,6 @@ float glyph(int code, vec2 uv) {
   return mix(mix(s00, s10, w.x), mix(s01, s11, w.x), w.y);
 }
 
-float glyphSharp(int code, vec2 uv) {
-  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
-  vec2 p = vec2(uv.x * 5.0, (1.0 - uv.y) * 7.0);
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  float s = fontBit(code, int(i.x), int(i.y));
-  float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
-  return s * smoothstep(0.0, 0.16, edge + 0.1);
-}
-
 int packedChar(float idx, int n) {
   if (n < 1) return 32;
   float fi = mod(idx, float(n));
@@ -123,11 +113,12 @@ void main() {
     float uvY = (cy - (crawlY - crawlH * 0.5)) / crawlH;
     float italic = (uvY - 0.5) * 0.22;
     float pace = max(0.15, slot0(8.0));
-    float x = fc.x / cw2 + italic + uTime * pace * (1.85 + aud * 1.1);
+    // Pace stays a constant rate. Multiplying uTime by the live level teleports the line.
+    float x = fc.x / cw2 + italic + uTime * pace * 1.85;
     vec2 uv2 = vec2(fract(x), uvY);
     int big = packedChar(x, nChars);
-    float g2 = glyphSharp(big, (uv2 - vec2(0.06, 0.1)) / vec2(0.88, 0.78));
-    float ink = smoothstep(0.2, 0.55, g2);
+    float g2 = glyph(big, (uv2 - vec2(0.06, 0.1)) / vec2(0.88, 0.78));
+    float ink = smoothstep(0.12, 0.62, g2);
     col += mix(vec3(0.42, 0.9, 0.46), vec3(0.95, 1.0, 0.9), ink) * ink * 1.7 * crawlBand;
   }
 

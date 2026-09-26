@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addPresentListener, bindFps, bindPresentListener, markFrame, resetFps } from "./fps";
+import { addPresentListener, bindFps, bindPresentListener, markFrame, PaneFps, resetFps } from "./fps";
 
 describe("markFrame", () => {
   afterEach(() => resetFps());
@@ -49,5 +49,23 @@ describe("markFrame", () => {
     markFrame(120);
     expect(keep).toHaveBeenCalledTimes(2);
     expect(drop).not.toHaveBeenCalled();
+  });
+});
+
+describe("PaneFps", () => {
+  it("counts picture changes in one pane, and falls to zero when the picture stops changing", () => {
+    const host = document.createElement("div");
+    const pane = new PaneFps(host);
+    expect(host.querySelector(".pane-fps")).toBe(pane.el);
+    pane.mark(0);
+    pane.mark(100);
+    pane.mark(200);
+    expect(pane.el.textContent).toBe("10 fps");
+    pane.noteGpu(200);
+    expect(pane.el.textContent).toBe("10 fps");
+    pane.tick(2000);
+    expect(pane.el.textContent).toBe("0 fps");
+    pane.dispose();
+    expect(host.querySelector(".pane-fps")).toBeNull();
   });
 });

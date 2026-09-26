@@ -38,7 +38,7 @@ config:
     label: title stills
     type: boolean
     default: true
-    hint: Composer 2.5 illustration for each headline, top-left. Needs a Cursor API key — https://cursor.com/dashboard/api — paste it in Settings → Agent.
+    hint: Composer 2.5 illustration for each headline, on a spinning cube that drifts around the screen. Needs a Cursor API key — https://cursor.com/dashboard/api — paste it in Settings → Agent.
   - key: source
     label: source
     type: text

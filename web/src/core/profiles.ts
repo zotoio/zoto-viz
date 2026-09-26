@@ -62,6 +62,18 @@ export interface ProfileSettings {
   dice: DiceConfig;
   /** always true; kept on the blob so older files upgrade on the next write */
   autosave: boolean;
+  /** Agent backend and model. The Cursor key itself stays in ~/.zoto-viz/cursor-key. */
+  ai: ProfileAi;
+}
+
+/** Agent choices stored on the profile so a new tab or the other port keeps them. */
+export interface ProfileAi {
+  /** Empty until this profile has been saved with an explicit backend. */
+  backend: "" | "ollama" | "cursor";
+  model: string;
+  cursorModel: string;
+  /** Header AI. Off unless this profile saved it on — a missing blob must not switch profiles. */
+  cycle: boolean;
 }
 
 export interface ProfileHost {
@@ -89,6 +101,7 @@ export function aiCycleSettings(base: ProfileSettings, opts: { keepLook?: boolea
     ...base,
     dream: true,
     autosave: true,
+    ai: { ...base.ai, cycle: true },
     anim: {
       ...base.anim,
       follow: true,
@@ -124,6 +137,23 @@ export function shippedSettings(): ProfileSettings {
     agent: { ...EMPTY_LOOK },
     dice: { ...DEFAULT_DICE, include: { ...DEFAULT_DICE.include } },
     autosave: true,
+    ai: emptyAi(),
+  };
+}
+
+export function emptyAi(): ProfileAi {
+  return { backend: "", model: "", cursorModel: "", cycle: false };
+}
+
+export function normalizeAi(raw: unknown): ProfileAi {
+  const d = emptyAi();
+  const s = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const backend = s.backend === "cursor" || s.backend === "ollama" ? s.backend : d.backend;
+  return {
+    backend,
+    model: typeof s.model === "string" ? s.model.slice(0, 64) : d.model,
+    cursorModel: typeof s.cursorModel === "string" ? s.cursorModel.slice(0, 64) : d.cursorModel,
+    cycle: s.cycle === true,
   };
 }
 
@@ -193,6 +223,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     agent: normalizeAgentLook(s.agent),
     dice: normalizeDice(s.dice),
     autosave: true,
+    ai: normalizeAi(s.ai),
   };
 }
 
@@ -268,6 +299,8 @@ export class ProfileStore {
   autosave = true;
   private saveTimer = 0;
   private saveGen = 0;
+  /** Last id sent to the startup-default route, so a reload does not retarget it. */
+  private pinSent = "";
   private adopting = false;
   private recoverTimer = 0;
   private recoverDelay = 2000;
@@ -540,6 +573,7 @@ export class ProfileStore {
     }
     try {
       await this.load(id);
+      void this.pinStartup();
     } catch (e) {
       this.sel.value = this.current;
       flash(this.bar, String(e));
@@ -558,6 +592,24 @@ export class ProfileStore {
     if (opts.quiet) quiet(apply); else quiet(apply);
     this.adoptAutosave(settings.autosave);
     this.syncChrome();
+  }
+
+  /**
+   * Choosing a profile makes it the one a cold start loads. Header AI and a
+   * same-tab session must not retarget it — that was swapping in the model profile.
+   */
+  async pinStartup(): Promise<void> {
+    const id = this.current;
+    if (!this.available || !id || id === this.defaultId || id === this.pinSent) return;
+    this.pinSent = id;
+    try {
+      await api("/api/profiles/default", { method: "PUT", body: JSON.stringify({ id }) });
+      this.defaultId = id;
+      this.syncChrome();
+    } catch (e) {
+      this.pinSent = "";
+      console.warn("zoto-viz profiles:", e);
+    }
   }
 
   /** Create or load the profile named after `model`. Creates only when the model is online. */
@@ -648,9 +700,11 @@ export class ProfileStore {
     if (!this.available) return;
     const tag = model.trim();
     const slug = tag ? agentProfileId(tag) : "";
-    const id = (slug && this.list.some((p) => p.id === slug))
-      ? slug
-      : (this.isAgent() ? this.current : "");
+    // Only the profile whose id is this model. A different agent profile
+    // (for example gemma4 while Cursor is on Grok) must keep its own name.
+    const id = slug && (this.list.some((p) => p.id === slug) || this.current === slug)
+      ? (this.list.some((p) => p.id === slug) ? slug : this.current)
+      : "";
     if (!id || this.meta(id)?.shipped) return;
     const label = tag || this.meta(id)?.model || this.meta(id)?.label || id;
     const body: Record<string, unknown> = { settings: next, label };

@@ -108,7 +108,7 @@ budget.
 | `plugins/src/star-sines/` | 3D sine-scroll starfield; pareidolia faces morph from the lanes |
 | `plugins/src/hn-rain/` | phosphor rain of a bound host source (HN by default; Lobsters / Guardian / Mastodon instances) |
 | `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
-| `plugins/src/stereo-gram/` | Magic Eye autostereogram — hidden torus + talker orbs |
+| `plugins/src/stereo-gram/` | Magic Eye autostereogram — eight morphing objects, a six-bin mic analyser, and local-model AI scenes (`POST /api/ai/stereo`) while the header AI switch is on |
 | `plugins/src/cypher-cic/` | Cypherpunk CIC wall — neon holodeck infograph of SYS + NET, center-hero mosaic |
 | `plugins/src/backrooms/` | Liminal yellow halls — distant organic entity (no nose, white eyes, wide sharp grin) until a charge (arms and fingers out), stays in halls (no wall clip), roar then look / turn back / run (never chase), rare unsynced tube flicks (shared strobe only when close); CC0 tube-buzz, brief music box, entity scream |
 

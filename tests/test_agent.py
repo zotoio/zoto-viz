@@ -242,6 +242,96 @@ def test_sky_user_prefixes_view_prompt() -> None:
     assert "far-apart palette" in again
 
 
+def test_parse_stereo_recipe_clamps_to_view() -> None:
+    rec = agent.parse_stereo_recipe(
+        '```json\n{"name":"fountain","spin":4,"bob":1,"parts":['
+        '{"shape":"capsule","at":[-2,1,-1],"to":[0.1,0,0.9],"r":5,"bin":99,"react":"stretch","amt":3},'
+        '{"shape":"box","at":[0.3,-0.2,0.2],"size":[9,0],"react":"wobble"},'
+        '{"shape":"blob","at":[0,0,0]}]}\n```'
+    )
+    assert rec is not None
+    assert rec["name"] == "fountain"
+    assert rec["spin"] == 1.0
+    assert rec["bob"] == 0.1
+    cap, box = rec["parts"]
+    assert cap["at"] == [-0.8, 0.38, 0.0]
+    assert cap["to"] == [0.1, 0.0, 0.55]
+    assert cap["r"] == 0.3
+    assert cap["bin"] == agent.STEREO_BINS - 1
+    assert cap["amt"] == 1.0
+    assert box["size"] == [0.6, 0.03]
+    assert box["react"] == "none"
+    assert box["amt"] == 0.0
+    assert agent.parse_stereo_recipe({"parts": [{"shape": "dent", "at": [0, 0, 0.3], "r": 0.1}]}) is None
+    assert agent.parse_stereo_recipe("nope") is None
+    many = {"parts": [{"shape": "ball", "at": [0, 0, 0.3], "r": 0.05}] * 40}
+    assert len(agent.parse_stereo_recipe(many)["parts"]) == agent.STEREO_PARTS
+
+
+def test_stereo_user_asks_for_audio_scenes_and_novelty() -> None:
+    text = agent.stereo_user({"audio": True, "prompt": "a turtle\x00", "previous": ["orb", "", "rack"]}, hour=9)
+    assert "audio focused" in text
+    assert "bins 0-5" in text
+    assert "Recent scenes: orb, rack." in text
+    assert "Operator brief: a turtle" in text
+    assert "\x00" not in text
+    quiet = agent.stereo_user({}, hour=9)
+    assert "LAN traffic" in quiet
+    assert "Operator brief" not in quiet
+    assert "Recent scenes" not in quiet
+
+
+def test_api_stereo_parses_ollama(monkeypatch) -> None:
+    seen: dict = {}
+
+    class Reply:
+        def __init__(self, data):
+            self._data = data
+
+        async def json(self, content_type=None):
+            return self._data
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class Sess:
+        def __init__(self, chat):
+            self._chat = chat
+
+        def get(self, url):
+            return Reply({"models": [{"name": "llama3:70b"}]})
+
+        def post(self, url, json=None):
+            seen["payload"] = json
+            return Reply(self._chat)
+
+    class CM:
+        def __init__(self, chat):
+            self._chat = chat
+
+        async def __aenter__(self):
+            return Sess(self._chat)
+
+        async def __aexit__(self, *a):
+            return False
+
+    scene = {"name": "orb", "parts": [{"shape": "ball", "at": [0, 0, 0.3], "r": 0.14, "bin": 0, "react": "size"}]}
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM({"message": {"content": json.dumps(scene)}}))
+    ok = asyncio.run(agent.api_stereo(Req({"audio": True})))
+    assert ok.status == 200
+    assert json.loads(ok.body)["recipe"]["parts"][0]["amt"] == 0.5
+    assert seen["payload"]["messages"][0]["content"] == agent.STEREO_SYSTEM
+    assert seen["payload"]["model"] == "llama3:70b"
+    monkeypatch.setattr(agent, "ClientSession", lambda timeout=None: CM({"message": {"content": "nope"}}))
+    assert asyncio.run(agent.api_stereo(Req({}))).status == 502
+    monkeypatch.setattr(agent, "OLLAMA", "http://10.0.0.9:11434")
+    assert asyncio.run(agent.api_stereo(Req({}))).status == 400
+    monkeypatch.setattr(agent, "OLLAMA", "http://127.0.0.1:11434")
+
+
 def test_system_drafts_unified_plugin_tree() -> None:
     prompt = agent.SYSTEM
     assert "plugin.yml" in prompt

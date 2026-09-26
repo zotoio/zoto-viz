@@ -101,6 +101,8 @@ export interface VizDataFrame {
   demoSlices?: Partial<Record<"packets" | "rf" | "talkers" | "headlines", true>>;
   /** Linux SYS gauges 0..1 for holotable / CIC plugins. */
   sys?: VizSysTelemetry;
+  /** Optional spectrum bins (low frequency first) for packs that draw an analyser. */
+  spectrum?: number[];
 }
 
 /** Compact this-host gauges. Missing views stay 0. */

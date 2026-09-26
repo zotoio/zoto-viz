@@ -84,3 +84,87 @@ export function markFrame(ts: number): void {
 export function setFpsHint(text: string): void {
   if (el) el.parentElement?.setAttribute("title", text);
 }
+
+/**
+ * Framerate badge for one pane. `mark` is one picture change in that pane.
+ * `tick` ages the window so a pane that stops changing falls to 0.
+ */
+export class PaneFps {
+  readonly el: HTMLElement;
+  private stamps: number[] = [];
+  private lastTs = -1;
+  private shown = "";
+
+  constructor(parent: HTMLElement) {
+    const badge = document.createElement("span");
+    badge.className = "pane-fps";
+    badge.title = "how often this pane's picture changed in the last second";
+    badge.textContent = "– fps";
+    parent.append(badge);
+    this.el = badge;
+  }
+
+  hint(text: string): void {
+    this.el.title = text;
+  }
+
+  /** This pane's pixels differed from the previous sample. */
+  mark(ts: number): void {
+    if (ts === this.lastTs) return;
+    this.lastTs = ts;
+    this.stamps.push(ts);
+    this.expire(ts);
+    this.paint(ts);
+  }
+
+  /** Drop changes older than a second and refresh the badge. Does not count a frame. */
+  tick(now: number): void {
+    this.expire(now);
+    this.paint(now);
+  }
+
+  /** Kept so draw-cost probes can call in without changing the change-rate. */
+  noteGpu(_ms: number): void { /* picture changes, not GPU elapsed time, own the badge */ }
+
+  dispose(): void {
+    this.el.remove();
+  }
+
+  private expire(now: number): void {
+    const cutoff = now - SHOW_MS;
+    let i = 0;
+    while (i < this.stamps.length && this.stamps[i]! < cutoff) i++;
+    if (i) this.stamps.splice(0, i);
+  }
+
+  private paint(now: number): void {
+    const loop = this.loopFps(now);
+    if (loop == null) {
+      if (this.lastTs >= 0 && now - this.lastTs >= SHOW_MS) this.set("0 fps");
+      return;
+    }
+    this.set(`${Math.round(loop)} fps`);
+  }
+
+  private set(next: string): void {
+    if (next === this.shown) return;
+    this.shown = next;
+    this.el.textContent = next;
+  }
+
+  private loopFps(now: number): number | null {
+    if (this.stamps.length < 2) return null;
+    const cutoff = now - SHOW_MS;
+    let first = -1;
+    let n = 0;
+    for (const t of this.stamps) {
+      if (t < cutoff) continue;
+      if (first < 0) first = t;
+      n++;
+    }
+    if (n < 2 || first < 0) return null;
+    const span = this.stamps[this.stamps.length - 1]! - first;
+    if (span < 80) return null;
+    return ((n - 1) * 1000) / span;
+  }
+}

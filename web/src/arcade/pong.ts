@@ -7,7 +7,8 @@ import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { compileMatcher } from "../ui/settings";
 import { LookStage } from "../graph/look";
 import { fitText, isExchangeStart, noReplyExpected, portRole, roundRect } from "./arcade";
-import { markFrame } from "../core/fps";
+import { markFrame, PaneFps } from "../core/fps";
+import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
 
 /**
@@ -214,8 +215,11 @@ export class PongView {
   private W = 0; private H = 0; private dpr = 1;
   private geom = { top: 0, bottom: 0, xL: 0, xP: 0, maxLeft: 1, maxRight: 1 };
   private readonly look: LookStage;
+  private readonly paneFps: PaneFps;
+  private readonly picture = new CanvasChangeProbe();
 
   constructor(private readonly container: HTMLElement, private readonly scene: NetScene) {
+    this.paneFps = new PaneFps(container);
     this.look = new LookStage(container);
     this.canvas = document.createElement("canvas");
     this.g = this.canvas.getContext("2d")!;
@@ -769,6 +773,7 @@ export class PongView {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.frame);
     markFrame(ts);
+    this.paneFps.tick(ts);
     const now = ts / 1000;
     const dt = Math.min(0.05, this.lastFrame ? now - this.lastFrame : 0.016);
     this.lastFrame = now;
@@ -789,6 +794,7 @@ export class PongView {
     this.drawRings(now);
     this.drawHud(now);
     this.drawLog(now);
+    if (this.picture.sample(g, this.canvas)) this.paneFps.mark(ts);
   };
 
   private step(now: number, dt: number): void {

@@ -25,6 +25,7 @@ describe("profiles", () => {
     expect(s.dice.include.theme).toBe(true);
     expect(s.dice.mosaicMax).toBe("6");
     expect(s.autosave).toBe(true);
+    expect(s.ai).toEqual({ backend: "", model: "", cursorModel: "", cycle: false });
     expect(s.sound).toBe(false);
     expect(normalizeSettings({ theme: "ember" }).sound).toBe(false);
     expect(normalizeSettings({ sound: true }).sound).toBe(true);
@@ -55,6 +56,11 @@ describe("profiles", () => {
       anim: { follow: true, audioCamera: true, camInertia: 0.05, gravity: 1.9, partCap: 2420, partSize: 2.4, labelWeight: 2 },
     }).anim).toMatchObject({ camInertia: 0.45, gravity: 1, partCap: 800, labelWeight: 1.2 });
     expect(normalizeSettings(null).theme).toBe(shippedSettings().theme);
+    expect(normalizeSettings({ ai: { backend: "cursor", cursorModel: "grok-4.6", cycle: true } }).ai).toEqual({
+      backend: "cursor", model: "", cursorModel: "grok-4.6", cycle: true,
+    });
+    expect(normalizeSettings({ ai: { backend: "nope", cycle: "yes" } }).ai.cycle).toBe(false);
+    expect(aiCycleSettings(shippedSettings()).ai.cycle).toBe(true);
     expect(quiet(() => 7)).toBe(7);
     expect(isQuiet()).toBe(false);
     quiet(() => { expect(isQuiet()).toBe(true); });
@@ -123,6 +129,35 @@ describe("profiles", () => {
     expect(store.dirty).toBe(true);
     expect(applied.at(-1)?.theme).toBe("ember");
     expect(applied.at(-1)?.dream).toBe(true);
+  });
+
+  it("does not rename a different agent profile when saving AI settings", async () => {
+    const puts: string[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if ((init?.method || "GET").toUpperCase() === "PUT") puts.push(String(url));
+      return jsonOk({});
+    }) as typeof fetch;
+    try {
+      const store = new ProfileStore(
+        { collect: shippedSettings, apply: () => {} },
+        { value: "", el: document.createElement("div"), setOptions() {} },
+        document.createElement("div"),
+        document.createElement("div"),
+      );
+      store.available = true;
+      store.current = "default";
+      store.list = [
+        { id: "default", label: "gemma4", shipped: false, model: "gemma4" },
+        { id: "grok-4-6", label: "grok-4.6", shipped: false, model: "grok-4.6" },
+      ];
+      await store.writeAi(shippedSettings(), "grok-4.7");
+      expect(puts).toEqual([]);
+      await store.writeAi(shippedSettings(), "grok-4.6");
+      expect(puts.some((url) => url.includes("/api/profiles/grok-4-6"))).toBe(true);
+    } finally {
+      globalThis.fetch = orig;
+    }
   });
 
   it("maps a leftover shipped session onto user", () => {

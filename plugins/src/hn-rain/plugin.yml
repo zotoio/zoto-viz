@@ -2,7 +2,7 @@ id: hn-rain
 name: HN Rain
 version: 1
 hint: Phosphor rain of host-source headlines plus a Composer still for each title.
-description: Matrix-style digital rain packed from a host source (Hacker News by default). Instances retarget Lobsters, Guardian world, or a Mastodon tag without a second plugin tree.
+description: Matrix-style digital rain packed from a host source (Hacker News by default). Instances retarget Lobsters, Guardian world, or a Mastodon tag without a second plugin tree. Each headline is drawn as a still and shown on a spinning cube that drifts around the screen.
 instances:
   - id: hn-rain
     name: HN Rain

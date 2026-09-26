@@ -9,5 +9,200 @@ look:
   skyOpacity: 1
   skyBright: 1.18
   skyAudio: false
-  skySpeed: 0.18
+  # A breathing FOV zooms the whole pattern, so the background crawls around still objects.
+  audioCamera: false
+  skySpeed: 1
   gridOpacity: 0
+config:
+  - key: audio
+    label: audio reactive
+    type: boolean
+    default: true
+    hint: Microphone bins, low frequency on the left, in front of the concave room. Each bin is the same 3D solid; size and position follow only that bin. The rack stays still. Silence stays small. Header mic Off leaves it quiet. Pace matches that level instead of animation speed.
+  - key: ai
+    label: AI scenes
+    type: boolean
+    default: true
+    hint: While the header AI switch is on, the local model invents new objects and scenes on the weather cadence, with the prompt below as its brief. With audio reactive on it favours audio-driven scenes whose parts follow the microphone bins. Off, or until the model answers, shows the analyser or the eight shipped objects.
+  - key: shape
+    label: bin shape
+    type: select
+    values:
+      - [morph, bars into balls]
+      - [oblong, oblong bars]
+      - [cubes, cubes]
+      - [balls, balls]
+    default: morph
+    hint: Bars into balls rounds each bar into a ball and back on the seconds-per-object and morph-seconds timer, at the audio pace. Oblong bars and cubes are solid blocks seen from a three-quarter view. Every solid stays at the resting depth, where the effect is easiest on the eyes. Balls hold still and show their tone by width alone; bars and blocks by height.
+  - key: ballGrow
+    label: ball growth
+    type: select
+    values:
+      - [stretch, "stretch right (steadiest)"]
+      - [swell, swell wider]
+    default: stretch
+    hint: How a louder ball grows. Stretch right keeps its left half fixed and only moves its right end, so the pattern on it holds still and it stays fused. Swell widens the whole ball, which slides the pattern under it and can break into double vision while it moves.
+  - key: rack
+    label: rack spacing
+    type: select
+    values:
+      - [a, "A · 6 solids · gap 1.6"]
+      - [b, "B · 6 solids · gap 2.2"]
+      - [c, "C · 5 solids · gap 2.8"]
+      - [d, "D · 4 solids · gap 4"]
+      - [e, "E · 3 solids · gap 5.5"]
+      - [custom, "custom (sliders below)"]
+    default: c
+    hint: How many solids and how far apart, with gaps in pattern repeats. A gap under about one repeat stays in stereo with its neighbours, so it moves with them; wider gaps are plain room and hold still. A stretching ball never reaches its neighbour. Fewer solids means wider frequency bands. Custom uses the solids, gap and width sliders.
+  - key: solids
+    label: solids (custom)
+    type: number
+    default: 5
+    min: 3
+    max: 6
+    step: 1
+    hint: Number of solids, each one frequency band. Only with rack spacing custom.
+  - key: gap
+    label: gap in repeats (custom)
+    type: number
+    default: 2.8
+    min: 0.3
+    max: 6
+    step: 0.1
+    hint: Space between resting solids, in pattern repeats. Only with rack spacing custom.
+  - key: width
+    label: width in repeats (custom)
+    type: number
+    default: 1.1
+    min: 0.5
+    max: 2.5
+    step: 0.1
+    hint: Resting width of each solid, in pattern repeats. Only with rack spacing custom.
+  - key: growth
+    label: growth
+    type: number
+    default: 100
+    min: 0
+    max: 200
+    step: 10
+    hint: Percent of its resting width a ball or cube gains at full level (a stretching ball gains it as length). 0 keeps every solid the same size.
+  - key: depth
+    label: object depth
+    type: number
+    default: 40
+    min: 0
+    max: 100
+    step: 5
+    hint: Where every object sits, in percent from the far wall toward the eye. 40 is the usual place. Lower moves the rack, the eight objects and AI scenes back, which can weaken a concave twin; higher brings them forward.
+  - key: spacing
+    label: spacing
+    type: number
+    default: 100
+    min: 50
+    max: 200
+    step: 5
+    hint: Distance between objects, in percent of the usual gap. 100 keeps the authored layout. On the rack this is the gap between solids. An AI scene and the object cycle spread their parts by the same amount.
+  - key: origin
+    label: morph origin
+    type: number
+    default: 25
+    min: -100
+    max: 100
+    step: 5
+    hint: Where a swelling ball or a cube grows from as it changes size, in percent of its resting width left of its centre. Solids never slide; they grow about this point. 0 grows evenly about the centre; negative is right of centre.
+  - key: rise
+    label: rise ms
+    type: number
+    default: 150
+    min: 20
+    max: 600
+    step: 10
+    hint: How fast a solid follows a louder tone. Longer is calmer and easier to keep fused.
+  - key: fall
+    label: fall ms
+    type: number
+    default: 500
+    min: 50
+    max: 2000
+    step: 50
+    hint: How fast a solid settles as its tone fades.
+  - key: speed
+    label: animation speed
+    type: number
+    default: 50
+    min: 10
+    max: 200
+    step: 5
+    hint: Percent of the original object pace. 50 is half. Unused while audio reactive is on.
+  - key: hold
+    label: seconds per object
+    type: number
+    default: 16
+    min: 4
+    max: 120
+    step: 1
+    hint: How long each object performs before it morphs into the next.
+  - key: morph
+    label: morph seconds
+    type: number
+    default: 3
+    min: 0.5
+    max: 12
+    step: 0.5
+    hint: How long one object takes to morph into the next.
+  - key: still
+    label: still seconds
+    type: number
+    default: 4
+    min: 0
+    max: 60
+    step: 0.5
+    hint: Each object holds still this long before each burst of motion, so it has to be found with the eyes rather than spotted moving. 0 moves all the time.
+  - key: move
+    label: motion seconds
+    type: number
+    default: 2
+    min: 0.5
+    max: 30
+    step: 0.5
+    hint: Length of each burst of motion.
+  - key: repeat
+    label: repeat width
+    type: number
+    default: 8
+    min: 4
+    max: 16
+    step: 0.5
+    hint: Width of one pattern repeat as a percentage of the pane height. Narrower is finer and easier to fuse; wider leaves room for more depth.
+  - key: bands
+    label: bands per repeat
+    type: number
+    default: 14
+    min: 4
+    max: 40
+    step: 1
+    hint: Colour bands across one repeat. More is finer.
+  - key: motionBands
+    label: bands while moving
+    type: number
+    default: 2
+    min: 1
+    max: 4
+    step: 0.5
+    hint: Band count multiplier from just before each burst of motion until the object is still again, so the texture is finer while it moves. 1 keeps bands steady.
+  - key: palette
+    label: palette changes
+    type: select
+    values:
+      - [objects, with each object]
+      - [timer, on its own timer]
+    default: objects
+    hint: Dot colours cross-fade to the next palette during each morph, or every palette seconds.
+  - key: paletteSeconds
+    label: palette seconds
+    type: number
+    default: 30
+    min: 5
+    max: 600
+    step: 5
+    hint: Seconds per palette when palette changes is on its own timer.

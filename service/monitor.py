@@ -1918,6 +1918,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_post("/api/ai/plugin", agent.api_draft_plugin)
     app.router.add_post("/api/ai/plugin/local", plugin_local.api_publish_local)
     app.router.add_post("/api/ai/sky", agent.api_sky)
+    app.router.add_post("/api/ai/stereo", agent.api_stereo)
     app.router.add_post("/api/ai/speak", agent.api_speak)
     app.router.add_delete("/api/ai/speak", agent.api_speak)
     app.router.add_get("/api/ai/assets", agent_assets.api_assets)

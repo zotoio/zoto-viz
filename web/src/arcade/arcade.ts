@@ -5,7 +5,8 @@ import { hashColor } from "../core/modes";
 import { rIp, rName } from "../core/redact";
 import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
 import { DEFAULT_THEME, type Theme } from "../core/themes";
-import { markFrame } from "../core/fps";
+import { markFrame, PaneFps } from "../core/fps";
+import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
 
 /**
@@ -350,8 +351,11 @@ export abstract class ArcadeView {
   private lastFrame = 0;
   private dataKey = "";
   private readonly look: LookStage;
+  private readonly paneFps: PaneFps;
+  private readonly picture = new CanvasChangeProbe();
 
   constructor(protected readonly container: HTMLElement, protected readonly scene: NetScene) {
+    this.paneFps = new PaneFps(container);
     this.look = new LookStage(container);
     this.canvas = document.createElement("canvas");
     this.g = this.canvas.getContext("2d")!;
@@ -499,6 +503,7 @@ export abstract class ArcadeView {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.frame);
     markFrame(ts);
+    this.paneFps.tick(ts);
     const now = ts / 1000;
     const dt = Math.min(0.05, this.lastFrame ? now - this.lastFrame : 0.016);
     this.lastFrame = now;
@@ -508,6 +513,7 @@ export abstract class ArcadeView {
     this.look.frame(this.scene, this.theme, dt, now);
     this.g.clearRect(0, 0, this.W, this.H);
     this.draw(now);
+    if (this.picture.sample(this.g, this.canvas)) this.paneFps.mark(ts);
   };
 
   // ---- helpers

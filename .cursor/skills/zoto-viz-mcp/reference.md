@@ -120,7 +120,7 @@ Consent after a src shader/frontend edit:
 - `look.backdrop: plugin` + `sky/fragment.glsl`. Host injects uniforms + `vDir`.
 - Multi-panel: `look.mosaic: "4"|"6"|"8"`, `hero`, `mosaicTiles: [plugin:…]`.
 - Validate: `./zoto-viz plugin validate plugins/src/<id>`
-- Shader max 16000 bytes (`service/plugin_sky.py`).
+- Shader max 32000 characters (`service/plugin_sky.py`, `web/src/graph/backdrop.ts`).
 
 ## Cursor IDE config
 

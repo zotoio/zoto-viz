@@ -13,7 +13,12 @@ import {
   runPackSwapPreserve,
 } from "./dogfood-runner";
 import { packetTunnelFields } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { packHnRainBuffer, packHnTermBuffer, packStereoOrbs } from "./viz-pack-host";
+import { packHnRainBuffer, packHnTermBuffer, packStereoDrive } from "./viz-pack-host";
+import {
+  easeStereoBins, parseStereoTiming, STEREO_BANDS, STEREO_BINS, STEREO_GAP, STEREO_RACKS,
+  STEREO_RISE_MS, STEREO_SOLIDS, STEREO_HOLD, STEREO_MORPH, STEREO_MOTION_BANDS, STEREO_MOVE,
+  STEREO_PALETTE_SECONDS, STEREO_REPEAT, STEREO_SPEED, STEREO_STILL,
+} from "../../../plugins/src/stereo-gram/frontend/drive";
 import {
   VIZ_FRAME_BUDGET_MS,
   VizBufferWriter,
@@ -38,11 +43,87 @@ describe("hn rain pack", () => {
 });
 
 describe("stereo gram pack", () => {
-  it("packs talker orbs for the depth field", () => {
-    const buf = packStereoOrbs([{ id: "10.0.0.1", rate: 80, role: "lan" }], 0);
-    expect(buf.length).toBe(4);
-    expect(buf[2]).toBeGreaterThan(0.1);
-    expect(buf[3]).toBeCloseTo(0.45);
+  it("packs traffic level, object, palette, burst and pattern settings into one slot", () => {
+    const timing = {
+      hold: 20, morph: 4, palette: "timer" as const, paletteSeconds: 45, still: 5, move: 1.5,
+      repeat: 7, bands: 18, motionBands: 2.5, speed: 0.5, audio: true, shape: "oblong" as const, ai: true,
+      spacing: 1,
+      rack: parseStereoTiming().rack,
+    };
+    const bins = Array.from({ length: STEREO_BINS }, (_, i) => i / STEREO_BINS);
+    const buf = packStereoDrive([{ rate: 100 }, { rate: 50 }], timing, { level: 0.4, clock: 1.5, bins });
+    expect(buf).toHaveLength(32);
+    expect(buf[0]).toBeCloseTo(1 - Math.exp(-1));
+    expect(buf[1]).toBeCloseTo(0.25);
+    expect(buf.slice(2, 11)).toEqual([20, 4, 1, 45, 5, 1.5, 7, 18, 2.5]);
+    expect(buf[11]).toBeCloseTo(0.5);
+    expect(buf[12]).toBe(1);
+    expect(buf[13]).toBeCloseTo(0.4);
+    expect(buf[14]).toBeCloseTo(1.5);
+    expect(buf[15]).toBe(0);
+    expect(buf.slice(16, 16 + STEREO_BINS)).toEqual(bins);
+    expect(buf.slice(16 + STEREO_BINS)).toEqual(new Array(32 - 16 - STEREO_BINS).fill(0));
+    const head = [1, 3, 0.5, 0.02, 0.1, -0.1, 0.3, 0];
+    expect(packStereoDrive([], timing, { scene: head }).slice(24)).toEqual(head);
+    expect(packStereoDrive([], timing, { scene: [1, 2] }).slice(24)).toEqual(new Array(8).fill(0));
+    expect(packStereoDrive([], { ...timing, shape: "cubes" })[15]).toBe(1);
+    expect(packStereoDrive([], { ...timing, shape: "balls" })[15]).toBe(2);
+    expect(packStereoDrive([], { ...timing, shape: "morph" })[15]).toBe(3);
+    expect(packStereoDrive([], { ...timing, palette: "objects", audio: false })[4]).toBe(0);
+    expect(packStereoDrive([], { ...timing, audio: false })[12]).toBe(0);
+  });
+
+  it("eases bins like a meter: quick rise, slower fall", () => {
+    const rise = STEREO_RISE_MS.def / 1000;
+    const up = easeStereoBins([0], [1], rise)[0]!;
+    expect(up).toBeCloseTo(1 - Math.exp(-1));
+    const down = easeStereoBins([1], [0], rise)[0]!;
+    expect(down).toBeGreaterThan(1 - up);
+    expect(easeStereoBins([0.5], [0.2], 0)).toEqual([0.5]);
+    expect(easeStereoBins([], [0.3, 0.6], 10)[1]).toBeCloseTo(0.6);
+    expect(easeStereoBins([0], [1], 0.05, 0.05, 1)[0]).toBeCloseTo(1 - Math.exp(-1));
+  });
+
+  it("picks rack spacing from a preset or the custom sliders", () => {
+    const a = parseStereoTiming().rack;
+    expect(a).toEqual({
+      preset: "c", ...STEREO_RACKS.c, growth: 1, depth: 0.4, origin: 0.25, ballGrow: "stretch", rise: 0.15, fall: 0.5,
+    });
+    expect(parseStereoTiming({ ballGrow: "swell" }).rack.ballGrow).toBe("swell");
+    expect(parseStereoTiming({ rack: "a" }).rack).toMatchObject({ preset: "a", solids: 6, gap: 1.6 });
+    expect(parseStereoTiming({ rack: "d", solids: "3", gap: "1" }).rack).toMatchObject({ preset: "d", ...STEREO_RACKS.d });
+    expect(parseStereoTiming({ rack: "custom", solids: "9", gap: "0.1", width: "2" }).rack)
+      .toMatchObject({ preset: "custom", solids: STEREO_SOLIDS.max, gap: STEREO_GAP.min, width: 2 });
+    expect(parseStereoTiming({ rack: "zzz", origin: "-300", depth: "-5", rise: "1000" }).rack)
+      .toMatchObject({ preset: "c", origin: -1, depth: 0, rise: 0.6 });
+    expect(parseStereoTiming({ spacing: "999" }).spacing).toBe(2);
+    expect(parseStereoTiming({ spacing: "10" }).spacing).toBe(0.5);
+  });
+
+  it("reads timing from view config, clamped, with defaults", () => {
+    const defaults = {
+      hold: STEREO_HOLD.def, morph: STEREO_MORPH.def, palette: "objects", paletteSeconds: STEREO_PALETTE_SECONDS.def,
+      still: STEREO_STILL.def, move: STEREO_MOVE.def,
+      repeat: STEREO_REPEAT.def, bands: STEREO_BANDS.def, motionBands: STEREO_MOTION_BANDS.def,
+      speed: STEREO_SPEED.def / 100, audio: true, shape: "morph" as const, ai: true,
+      spacing: 1,
+      rack: parseStereoTiming().rack,
+    };
+    expect(parseStereoTiming()).toEqual(defaults);
+    expect(parseStereoTiming({ hold: "", morph: "abc", palette: "rainbow" })).toEqual(defaults);
+    expect(parseStereoTiming({
+      hold: "30", morph: "5", palette: "timer", paletteSeconds: "60", still: "0", move: "3",
+      repeat: "6", bands: "20.4", motionBands: "3",
+    })).toEqual({
+      hold: 30, morph: 5, palette: "timer", paletteSeconds: 60, still: 0, move: 3, repeat: 6, bands: 20, motionBands: 3,
+      speed: 0.5, audio: true, shape: "morph", ai: true, spacing: 1, rack: parseStereoTiming().rack,
+    });
+    expect(parseStereoTiming({ ai: "false", shape: "balls" })).toMatchObject({ ai: false, shape: "balls" });
+    expect(parseStereoTiming({ hold: "1", morph: "99", paletteSeconds: "1", move: "0" }))
+      .toEqual({
+        ...defaults, hold: STEREO_HOLD.min, morph: STEREO_MORPH.max, paletteSeconds: STEREO_PALETTE_SECONDS.min,
+        move: STEREO_MOVE.min,
+      });
   });
 });
 

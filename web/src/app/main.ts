@@ -75,16 +75,21 @@ import {
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
 import { runPackFrameHandler } from "../plugins/viz-pack-host";
-import { HnRainStills } from "../plugins/hn-rain-stills";
+import {
+  easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
+} from "../../../plugins/src/stereo-gram/frontend/drive";
+import { buildStereoFrame, STEREO_FRAME_SLOTS } from "../../../plugins/src/stereo-gram/frontend/frame";
+import { stereoAiFrame } from "../plugins/stereo-ai";
+import { FeedTitleCube } from "../plugins/feed-title-cube";
 import { NestCamsLive } from "../plugins/nest-cams-live";
 import { parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
-import { addPresentListener, bindFps } from "../core/fps";
+import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
-import { AgentPanel, aiCyclePrefOn, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
+import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
@@ -130,7 +135,6 @@ applyThemeChrome(theme);
 const renderHost = new RenderHost($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
-bindFps($("fps"));
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
 scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
@@ -346,6 +350,36 @@ addPresentListener((ts) => {
   } else pluginSfx.silence();
 });
 addPresentListener(markPresent);
+let stereoBins: number[] = [];
+let stereoBinsAt = 0;
+scene.afterLook = () => {
+  const mode = modeById(modeSel.value);
+  if (mode.pluginId !== "stereo-gram" || !vizWriter) {
+    scene.setHeard(false);
+    return;
+  }
+  const opts = optsFor(mode);
+  const timing = parseStereoTiming(opts);
+  scene.setHeard(timing.audio);
+  const aiWanted = timing.ai && agent.cycleOn;
+  const bands = aiWanted ? STEREO_BINS : timing.rack.solids;
+  const heard = timing.audio ? scene.heardSpectrum(bands) : { level: 0, spectrum: [] as number[] };
+  const now = performance.now();
+  const dt = stereoBinsAt ? Math.min(0.1, (now - stereoBinsAt) / 1000) : 0;
+  stereoBins = easeStereoBins(stereoBins.length === bands ? stereoBins : [], heard.spectrum, dt, timing.rack.rise, timing.rack.fall);
+  stereoBinsAt = now;
+  const clock = stepStereoClock(now / 1000, stereoRate(timing, heard.level));
+  const ai = aiWanted
+    ? stereoAiFrame({ audio: timing.audio, prompt: opts[VIEW_PROMPT_KEY] ?? "", morphMs: timing.morph * 1000 }, now, clock)
+    : null;
+  const talkers = (lastState?.devices ?? []).map((d) => ({ rate: d.packets }));
+  const drive = packStereoDrive(talkers, timing, { clock, level: heard.level, bins: stereoBins, scene: ai?.head });
+  vizWriter.writeBuffer(0, drive);
+  // The sky only draws; the scene is built here once per frame.
+  const frame = buildStereoFrame({ timing, clock, act: drive[0]!, level: heard.level, bins: stereoBins, ai });
+  for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
+  scene.setPluginUboBuffer(vizWriter.ubo);
+};
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
@@ -406,7 +440,7 @@ const modeSel = new Select({
   onChange: (id) => applyMode(id),
 });
 $("modeBox").append(modeSel.el);
-const hnRainStills = new HnRainStills($("wall"));
+const feedTitleCube = new FeedTitleCube($("wall"));
 const nestCams = new NestCamsLive($("wall"));
 nestCams.onSettings = (camId) => {
   bindThisView("plugin:nest-cams");
@@ -708,8 +742,8 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const paneSpec = skySpecForMode(m.id, spec);
   const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
   document.body.classList.toggle("stage-only", skyStage);
-  hnRainStills.setActive(m.pluginId === "hn-rain");
-  hnRainStills.sync([], parseHnRainLook(opts).pics);
+  const rainPics = m.pluginId === "hn-rain" && parseHnRainLook(opts).pics && !mosaic?.on;
+  feedTitleCube.setActive(rainPics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
   bindThisView(m.id);
@@ -925,6 +959,7 @@ function feed(m: StateMsg): void {
       ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
+      if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       sandbox.frame(f);
       if (packId) {
         runPackFrameHandler(packId, f, {
@@ -940,7 +975,9 @@ function feed(m: StateMsg): void {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }
       if (packId === "hn-rain") {
-        hnRainStills.sync(frame.headlines, parseHnRainLook(optsFor(mode)).pics);
+        const pics = parseHnRainLook(optsFor(mode)).pics && !mosaic?.on;
+        feedTitleCube.setActive(pics);
+        if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
     }
     vizHud.tick({
@@ -1264,6 +1301,7 @@ agent.captureView = () => {
   return packView(hud, canvas);
 };
 agent.onApplySettings = (patch) => { void applyAgentPatch(patch); };
+agent.onPrefs = () => touch();
 agent.onApplyLook = (look) => applyAgentLook(look);
 $("aiBox").appendChild(agent.headerEl);
 const diceToggle = new Toggle({
@@ -1419,7 +1457,7 @@ settings.prependSection(
 );
 settings.prependSection(
   "Profile",
-  "Saved in ~/.zoto-viz/profiles.yml. zoto viz is the shipped default. Header AI writes a profile named after the Ollama model (settings, shader, photos, SVG, cadence). Selecting that profile while the model is offline loads the saved look only.",
+  "Saved in ~/.zoto-viz/profiles.yml. Choosing a profile makes it the one a new tab loads. zoto viz is the shipped default. Backend and model are stored on that profile; the Cursor key stays in ~/.zoto-viz/cursor-key.",
   profileHost,
 );
 uiReady = true;
@@ -1443,6 +1481,11 @@ void (async () => {
   const live = readSessionLive();
   applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
   const restored = await profiles.boot(live);
+  await agent.syncStatus();
+  if (!agent.savedBackend() && agent.cursorReady()) {
+    agent.useBackend("cursor");
+    touch();
+  }
   quiet(() => {
     applyMode(modeSel.value);
     applyViewLook();
@@ -1450,7 +1493,7 @@ void (async () => {
   });
   if (restored && live?.selected) scene.selectIp(live.selected);
   if (restored) agent.setCycleChecked(!!live?.aiCycle);
-  else if (aiCyclePrefOn()) await setAiCycle(true);
+  else if (agent.cycleOn) await setAiCycle(true);
   liveReady = true;
   persistLive(true);
   void syncWifiWatch();
@@ -1621,6 +1664,7 @@ function collectSettings(): ProfileSettings {
     agent: sceneAgentLook(),
     dice: { ...settings.diceSettings, include: { ...settings.diceSettings.include } },
     autosave: true,
+    ai: agent.aiPrefs(),
   };
 }
 
@@ -1660,6 +1704,7 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   settings.applyFeed(s.feed);
   settings.applyChat(s.chat ?? settings.chatSettings);
   settings.applyDice(s.dice ?? settings.diceSettings);
+  agent.applyAi(s.ai);
   if (s.camera) settings.setCamPolicy(s.camera);
   if (s.mic) settings.setMicPolicy(s.mic);
   settings.setSoundOn(!!s.sound);
