@@ -8,6 +8,7 @@ describe("apiFetch CSRF", () => {
 
   beforeEach(() => {
     expect.hasAssertions();
+    window.dispatchEvent(new Event("zoto-viz-server-restart-cleared"));
     noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
   });
 

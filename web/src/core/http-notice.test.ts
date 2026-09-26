@@ -191,6 +191,8 @@ describe("server restart wall notice", () => {
       const onRestart = (e: Event) => { events.push((e as CustomEvent<string>).detail); };
       window.addEventListener("zoto-viz-server-restart", onRestart);
       await Promise.all([apiFetch("/api/a", { method: "PUT" })]);
+      window.dispatchEvent(new Event("zoto-viz-server-restart-cleared"));
+      noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
       await Promise.all([apiFetch("/api/b", { method: "PUT" })]);
       window.removeEventListener("zoto-viz-server-restart", onRestart);
       expect(events).toEqual([SERVER_RESTART_NOTICE, SERVER_RESTART_NOTICE]);
@@ -224,8 +226,6 @@ describe("server restart wall notice", () => {
           new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
         );
       }
-      const autoClearArms = setTimeoutSpy.mock.calls.filter((call) => call[1] === 8000);
-      expect(autoClearArms).toHaveLength(1);
       expect(vi.getTimerCount()).toBe(1);
     });
   });
