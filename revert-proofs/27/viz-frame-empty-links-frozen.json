@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/viz-frame-empty-links.test.ts",
+  "testName": "viz frame v2 empty links contract (item 5a) > revert shared unfrozen empty: second tile sees links length 1 on the same frame",
+  "description": "One-line revert: use a mutable shared [] instead of frozen EMPTY_VIZ_LINKS when no pairs qualify."
+}

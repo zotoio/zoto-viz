@@ -3,6 +3,14 @@ import type { VizDataFrame, VizLinkSample, VizTalkerSample } from "./viz-host";
 import { topKByScore, VIZ_CONTRACT_VERSION } from "./viz-host";
 import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
 
+/** Revert / test hook only: mutable shared `[]` instead of {@link EMPTY_VIZ_LINKS}. */
+let sharedUnfrozenEmptyLinks: VizLinkSample[] | null = null;
+
+function emptyLinksWhenNoneQualify(): VizLinkSample[] | readonly VizLinkSample[] {
+  if (sharedUnfrozenEmptyLinks) return sharedUnfrozenEmptyLinks;
+  return EMPTY_VIZ_LINKS;
+}
+
 export const VIZ_DEFAULT_MAX_LINKS = 64;
 
 /** Resolved from monitor `host.vizFrame` in {@link StateMsg} (sys-config.yml). */
@@ -173,7 +181,7 @@ export function collectVizLinks(
     out.rate = slot.rate;
     linksResultScratch[i] = out;
   }
-  const linksOut = topIdx.length === 0 ? EMPTY_VIZ_LINKS : linksResultScratch;
+  const linksOut = topIdx.length === 0 ? emptyLinksWhenNoneQualify() : linksResultScratch;
   return { links: linksOut as VizLinkSample[], linksDropped: Math.max(0, total - topIdx.length) };
 }
 
@@ -235,5 +243,9 @@ export const vizFrameCollectTestHooks = {
     talkerIdsCached.length = 0;
     talkerIdsScratch.clear();
     talkerIdsSetRebuilds = 0;
+  },
+  /** Revert row: one mutable shared empty array (breaks cross-tile isolation). */
+  useSharedUnfrozenEmptyLinksForTest(on: boolean): void {
+    sharedUnfrozenEmptyLinks = on ? (sharedUnfrozenEmptyLinks ?? []) : null;
   },
 };

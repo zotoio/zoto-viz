@@ -81,6 +81,7 @@ import {
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
 import { runPackFrameHandler } from "../plugins/viz-pack-host";
+import { deliverVizFrameToPackTiles } from "../plugins/viz-frame-pack-deliver";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -1119,11 +1120,14 @@ function feed(m: StateMsg): void {
       if (packId === "stereo-gram") pluginFrame.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       sandbox.frame(pluginFrame);
       if (packId) {
-        runPackFrameHandler(packId, pluginFrame, {
-          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, vizPackOpts);
+        deliverVizFrameToPackTiles(pluginFrame, [{
+          tileId: packId,
+          onFrame: (pf) => runPackFrameHandler(packId, pf, {
+            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+          }, vizPackOpts),
+        }]);
       }
     }, buildFrame);
     if (frame) {
