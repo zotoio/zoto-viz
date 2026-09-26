@@ -23,6 +23,12 @@ from .pack_install_copy import (
     REASON_ZIP_UNSAFE,
     blocked_message,
 )
+from .pack_zip_install_ux import (
+    installed_runtime_version,
+    log_zip_install_rejection,
+    resolve_zip_display_stem,
+    zip_unsafe_user_message,
+)
 from .pack_sdk_contract import assert_pack_sdk_compatible
 
 _LOG = logging.getLogger(__name__)
@@ -205,7 +211,7 @@ def _check_zip_safety(ctx: InstallContext) -> None:
     if read is None:
         raise InstallBlocked(
             REASON_ZIP_UNSAFE,
-            blocked_message(str(ctx.doc.get("name") or ctx.doc.get("id")), "zip was not read through the safe reader"),
+            "zip was not read through the safe reader",
             validator="zip_safety",
         )
     name = str(ctx.doc.get("name") or ctx.doc.get("id") or "Plugin")
@@ -214,14 +220,14 @@ def _check_zip_safety(ctx: InstallContext) -> None:
         if not path.is_file():
             raise InstallBlocked(
                 REASON_ZIP_UNSAFE,
-                blocked_message(name, psz.zip_entry_error(rel, "missing from staging")),
+                psz.zip_entry_error(rel, "missing from staging"),
                 validator="zip_safety",
             )
         got = hashlib.sha256(path.read_bytes()).hexdigest()
         if got != want:
             raise InstallBlocked(
                 REASON_ZIP_UNSAFE,
-                blocked_message(name, psz.zip_entry_error(rel, "staged bytes do not match zip entry")),
+                psz.zip_entry_error(rel, "staged bytes do not match zip entry"),
                 validator="zip_safety",
             )
 
@@ -307,11 +313,25 @@ def run_staging_validators(ctx: InstallContext) -> tuple[InstallFailure | None, 
     return None, []
 
 
-def blocked_result(first: InstallFailure, *, pack_id: str, sha256: str, zip_path: str) -> dict[str, Any]:
+def blocked_result(
+    first: InstallFailure,
+    *,
+    pack_id: str,
+    sha256: str,
+    zip_path: str,
+    zip_display_name: str | None = None,
+    runtime: Path | None = None,
+) -> dict[str, Any]:
+    message = first.message
+    if first.reason == REASON_ZIP_UNSAFE:
+        log_zip_install_rejection(first.message)
+        prior = installed_runtime_version(runtime) if runtime is not None and runtime.is_dir() else None
+        stem = resolve_zip_display_stem(zip_display_name=zip_display_name, zip_path=zip_path)
+        message = zip_unsafe_user_message(stem, first.message, prior_version=prior)
     record_blocked_zip(
         pack_id=pack_id,
         sha256=sha256,
-        message=first.message,
+        message=message,
         zip_path=zip_path,
         reason=first.reason,
     )
@@ -319,7 +339,7 @@ def blocked_result(first: InstallFailure, *, pack_id: str, sha256: str, zip_path
         "ok": False,
         "error": first.reason,
         "reason": first.reason,
-        "message": first.message,
+        "message": message,
         "id": pack_id,
         "sha256": sha256,
         "zip": zip_path,
@@ -531,8 +551,15 @@ def _install_zip_to_runtime_locked(
         pack_zip = pack_read or psz.read_pack_zip(zip_path)
     except ValueError as e:
         _rollback_blocked_install(runtime, dest_zip, old_zip_bytes, old_runtime_hash)
-        fail = InstallFailure("zip_safety", REASON_ZIP_UNSAFE, blocked_message(name, str(e)))
-        return blocked_result(fail, pack_id=pid, sha256=sha256, zip_path=rel)
+        fail = InstallFailure("zip_safety", REASON_ZIP_UNSAFE, str(e))
+        return blocked_result(
+            fail,
+            pack_id=pid,
+            sha256=sha256,
+            zip_path=rel,
+            zip_display_name=dest_zip.stem,
+            runtime=runtime,
+        )
     _last_install_pack_read = pack_zip
     try:
         cleanup_staging_for_pack(parent, pid)
@@ -541,8 +568,15 @@ def _install_zip_to_runtime_locked(
             psz.write_pack_zip_to_staging(staging, pack_zip, zip_sha256=sha256)
         except (ValueError, OSError) as e:
             _rollback_blocked_install(runtime, dest_zip, old_zip_bytes, old_runtime_hash)
-            fail = InstallFailure("zip_safety", REASON_ZIP_UNSAFE, blocked_message(name, str(e)))
-            return blocked_result(fail, pack_id=pid, sha256=sha256, zip_path=rel)
+            fail = InstallFailure("zip_safety", REASON_ZIP_UNSAFE, str(e))
+            return blocked_result(
+                fail,
+                pack_id=pid,
+                sha256=sha256,
+                zip_path=rel,
+                zip_display_name=dest_zip.stem,
+                runtime=runtime,
+            )
         ctx = InstallContext(
             staging=staging,
             runtime=runtime,
@@ -558,7 +592,14 @@ def _install_zip_to_runtime_locked(
         if first is not None:
             if not swapped:
                 _rollback_blocked_install(runtime, dest_zip, old_zip_bytes, old_runtime_hash)
-            return blocked_result(first, pack_id=pid, sha256=sha256, zip_path=rel)
+            return blocked_result(
+                first,
+                pack_id=pid,
+                sha256=sha256,
+                zip_path=rel,
+                zip_display_name=dest_zip.stem,
+                runtime=runtime,
+            )
         if upgrade:
             _backup_zip_if_present(dest_zip)
         swapped = _atomic_swap(staging, runtime)

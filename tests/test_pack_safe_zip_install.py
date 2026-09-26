@@ -4,6 +4,8 @@ import base64
 import hashlib
 import io
 import json
+import logging
+import re
 import struct
 import zipfile
 from pathlib import Path
@@ -16,7 +18,7 @@ from service import paths
 from service import plugin_install as pi
 from service import plugin_local
 from service import plugin_zip as pz
-from service.pack_install_copy import REASON_ZIP_UNSAFE, blocked_message
+from service.pack_install_copy import REASON_ZIP_UNSAFE, zip_rejection_log_message, zip_unsafe_user_message
 
 MINIMAL = "id: sample\nname: Sample\nversion: 1\n"
 VIZ = "engine: graph\nbase: topology\n"
@@ -26,10 +28,12 @@ PEDANT_VIZ = VIZ
 PEDANT_ARCHIVE_BYTES_READ = 312
 PEDANT_CENTRAL_DIRECTORY_PARSES = 1
 
-DUPLICATE_ZIP_MSG = (
-    "Plugin was blocked. zip entry './plugin.yml': duplicate name "
-    "(same as 'plugin.yml' after normalization) Nothing was installed and the current wall is unchanged."
+ZIP_NAME_SAMPLE = "sample"
+DUPLICATE_TECHNICAL = (
+    "zip entry './plugin.yml': duplicate name (same as 'plugin.yml' after normalization)"
 )
+DUPLICATE_USER_MSG = zip_unsafe_user_message(ZIP_NAME_SAMPLE, DUPLICATE_TECHNICAL, prior_version=1)
+DUPLICATE_LOG = zip_rejection_log_message(DUPLICATE_TECHNICAL)
 
 
 def _zip_bytes(files: dict[str, bytes | str]) -> bytes:
@@ -136,11 +140,15 @@ def test_qe_duplicate_name_rejected_before_staging(
 
     bad = _duplicate_name_zip()
     blocked = plugin_local.publish_local(
-        {"zip_b64": base64.b64encode(bad).decode(), "overwrite": True},
+        {
+            "zip_b64": base64.b64encode(bad).decode(),
+            "overwrite": True,
+            "zip_name": ZIP_NAME_SAMPLE,
+        },
     )
     assert blocked["ok"] is False
     assert blocked["error"] == REASON_ZIP_UNSAFE
-    assert blocked["message"] == DUPLICATE_ZIP_MSG
+    assert blocked["message"] == DUPLICATE_USER_MSG
     assert dest.read_bytes() == old_zip
     assert pi.runtime_tree_hash(runtime) == old_hash
     assert staging_writes == []
@@ -189,11 +197,11 @@ def test_qe_staged_bytes_match_and_outside_staging_untouched(
         sha256=pz.plugin_sha256(bad_path),
     )
     assert blocked["ok"] is False
-    want = blocked_message(
-        "Sample",
+    assert blocked["message"] == zip_unsafe_user_message(
+        dest.stem,
         psz.zip_entry_error("../escape.yml", "illegal zip path '../escape.yml'"),
+        prior_version=1,
     )
-    assert blocked["message"] == want
 
 
 def test_qe_size_cap_uses_inflated_bytes_exact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -335,20 +343,40 @@ def test_pedant_single_cd_parse_remint_path(
     _assert_one_cd_parse(cd_parse_counter, remint_install)
 
 
-def test_ux_zip_error_names_file_all_entry_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ux_zip_error_names_file_all_entry_points(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO)
     _repo(tmp_path, monkeypatch)
     local = _local()
+    good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
+    good_b64 = base64.b64encode(good).decode()
+    assert plugin_local.publish_local({"zip_b64": good_b64})["ok"] is True
+    plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": good_b64, "force": True})
     bad = _duplicate_name_zip()
     b64 = base64.b64encode(bad).decode()
-    web = plugin_local.publish_local({"zip_b64": b64})
-    drop = local / "drop.zip"
+    caplog.clear()
+    web = plugin_local.publish_local({"zip_b64": b64, "overwrite": True, "zip_name": ZIP_NAME_SAMPLE})
+    caplog.clear()
+    drop = local / f"{ZIP_NAME_SAMPLE}.zip"
     drop.write_bytes(bad)
     scan = plugin_local.adopt_local_zip_file(drop, activate=True)
-    mcp = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": b64, "force": True})
+    caplog.clear()
+    mcp = plugin_mcp.call_tool(
+        "install_plugin_zip",
+        {"zip_b64": b64, "force": True, "overwrite": True, "zip_name": ZIP_NAME_SAMPLE},
+    )
     mcp_payload = json.loads(mcp["content"][0]["text"])
-    for payload in (web, scan, mcp_payload):
-        assert payload.get("ok") is False
-        assert payload.get("message") == DUPLICATE_ZIP_MSG
+    for label, payload in (("web", web), ("scan", scan), ("mcp", mcp_payload)):
+        assert payload.get("ok") is False, label
+        assert payload.get("message") == DUPLICATE_USER_MSG, label
+        msg = payload.get("message") or ""
+        assert "zip entry" not in msg
+        assert "plugin.yml" not in msg
+        assert not re.search(r"\b\d{2,}\b", msg.replace("version 1", ""))
+    assert DUPLICATE_LOG in caplog.text
 
 
 def _patch_cd_field(blob: bytes, member: str, *, flag_bits: int | None = None, compress_type: int | None = None) -> bytes:
@@ -405,59 +433,102 @@ def _zip_name_mismatch() -> bytes:
 def _assert_zip_unsafe_all_entry_points(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
     blob: bytes,
-    needle: str,
+    *,
+    user_message: str,
+    log_technical: str,
+    zip_name: str = "unsafe",
 ) -> None:
+    caplog.set_level(logging.INFO)
     _repo(tmp_path, monkeypatch)
     b64 = base64.b64encode(blob).decode()
-    web = plugin_local.publish_local({"zip_b64": b64})
-    drop = _local() / "unsafe.zip"
+    caplog.clear()
+    web = plugin_local.publish_local({"zip_b64": b64, "zip_name": zip_name})
+    drop = _local() / f"{zip_name}.zip"
     drop.write_bytes(blob)
+    caplog.clear()
     scan = plugin_local.adopt_local_zip_file(drop, activate=True)
-    mcp = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": b64, "force": True})
+    caplog.clear()
+    mcp = plugin_mcp.call_tool(
+        "install_plugin_zip",
+        {"zip_b64": b64, "force": True, "zip_name": zip_name},
+    )
     mcp_payload = json.loads(mcp["content"][0]["text"])
     for label, payload in (("web", web), ("scan", scan), ("mcp", mcp_payload)):
         assert payload.get("ok") is False, label
         assert payload.get("error") == REASON_ZIP_UNSAFE, label
-        assert needle in payload.get("message", ""), label
+        assert payload.get("message") == user_message, label
+        msg = payload.get("message") or ""
+        assert "BadZipFile" not in msg and "ValueError" not in msg
+        assert "zip entry" not in msg
+    assert zip_rejection_log_message(log_technical) in caplog.text
 
 
-def test_zip_crc_mismatch_all_entry_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_zip_crc_mismatch_all_entry_points(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    technical = "zip entry 'visualisation.yml': Bad CRC-32 for file 'visualisation.yml'"
     _assert_zip_unsafe_all_entry_points(
         tmp_path,
         monkeypatch,
+        caplog,
         _zip_crc_mismatch(),
-        "zip entry 'visualisation.yml'",
+        user_message=zip_unsafe_user_message("unsafe", technical),
+        log_technical=technical,
     )
 
 
-def test_zip_encrypted_all_entry_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_zip_encrypted_all_entry_points(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    technical = "zip entry 'plugin.yml': encrypted entries are not allowed"
     _assert_zip_unsafe_all_entry_points(
         tmp_path,
         monkeypatch,
+        caplog,
         _zip_encrypted_member(),
-        "zip entry 'plugin.yml': encrypted entries are not allowed",
+        user_message=zip_unsafe_user_message("unsafe", technical),
+        log_technical=technical,
     )
 
 
 def test_zip_unsupported_compression_all_entry_points(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    technical = "zip entry 'plugin.yml': unsupported compression method"
     _assert_zip_unsafe_all_entry_points(
         tmp_path,
         monkeypatch,
+        caplog,
         _zip_unsupported_compression(),
-        "zip entry 'plugin.yml': unsupported compression method",
+        user_message=zip_unsafe_user_message("unsafe", technical),
+        log_technical=technical,
     )
 
 
-def test_zip_name_mismatch_all_entry_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_zip_name_mismatch_all_entry_points(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    technical = (
+        "zip entry 'visualisation.yml': "
+        "File name in directory 'visualisation.yml' and header b'visualisatioX.yml' differ."
+    )
     _assert_zip_unsafe_all_entry_points(
         tmp_path,
         monkeypatch,
+        caplog,
         _zip_name_mismatch(),
-        "zip entry",
+        user_message=zip_unsafe_user_message("unsafe", technical),
+        log_technical=technical,
     )
 
 

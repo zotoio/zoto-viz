@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_zip_install_ux.py",
+  "testName": "test_zip_ux_literal_oversize_tail",
+  "description": "Pins oversize zip user-facing tail copy."
+}

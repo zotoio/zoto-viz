@@ -666,6 +666,7 @@ def install_catalog_zip(
     *,
     overwrite: bool = False,
     force: bool = False,
+    zip_display_name: str | None = None,
 ) -> dict[str, Any]:
     """Validate, write ``plugins/<id>.zip``, unpack. Never git-add or git-commit."""
     tmp_path: Path | None = None
@@ -679,7 +680,7 @@ def install_catalog_zip(
         try:
             pack_read = psz.read_pack_zip(tmp_path)
         except ValueError as e:
-            return plugin_local._zip_blocked_result(e)
+            return plugin_local._zip_blocked_result(e, zip_display_name=zip_display_name, zip_path=tmp_path)
         doc = plugins.validate_doc(pack_read.plugin)
         pid = str(doc["id"])
         dest = paths.plugin_zips_dir() / f"{pid}.zip"
@@ -1058,10 +1059,13 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             return _tool_text(info, is_error=not info.get("ok"))
         if name == "install_plugin_zip":
             raw = decode_zip_b64(str(args.get("zip_b64") or ""))
+            zip_name = args.get("zip_name") or args.get("filename")
+            display = str(zip_name).strip() if isinstance(zip_name, str) and zip_name.strip() else None
             info = install_catalog_zip(
                 raw,
                 overwrite=bool(args.get("overwrite")),
                 force=bool(args.get("force")),
+                zip_display_name=display,
             )
             return _tool_text(info, is_error=bool(info.get("consentRequired")))
         return _tool_text({"error": f"unknown tool {name}"}, is_error=True)

@@ -24,7 +24,8 @@ from . import plugin_zip as pz
 from . import plugins
 from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
 from . import pack_safe_zip as psz
-from .pack_install_copy import REASON_PACK_INSTALL_FAULT, REASON_ZIP_UNSAFE, blocked_message, fault_message
+from .pack_install_copy import REASON_PACK_INSTALL_FAULT, fault_message
+from .pack_zip_install_ux import zip_unsafe_blocked_payload
 from .pack_install_wall_notices import wall_notice_for_install_result
 from .plugin_install import install_zip_to_runtime
 
@@ -270,14 +271,23 @@ def _refresh_python(info: dict[str, Any]) -> None:
         info["pythonReloadError"] = str(e)
 
 
-def _zip_blocked_result(exc: ValueError, doc: dict[str, Any] | None = None) -> dict[str, Any]:
-    name = str((doc or {}).get("name") or (doc or {}).get("id") or "Plugin")
-    return {
-        "ok": False,
-        "error": REASON_ZIP_UNSAFE,
-        "reason": REASON_ZIP_UNSAFE,
-        "message": blocked_message(name, str(exc)),
-    }
+def _zip_blocked_result(
+    exc: ValueError,
+    *,
+    zip_display_name: str | None = None,
+    zip_path: str | Path | None = None,
+    pack_id: str = "",
+    sha256: str = "",
+    runtime: Path | None = None,
+) -> dict[str, Any]:
+    return zip_unsafe_blocked_payload(
+        str(exc),
+        zip_display_name=zip_display_name,
+        zip_path=zip_path,
+        pack_id=pack_id,
+        sha256=sha256,
+        runtime=runtime,
+    )
 
 
 def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
@@ -312,6 +322,7 @@ def install_local_zip(
     *,
     overwrite: bool = False,
     activate: bool = True,
+    zip_display_name: str | None = None,
 ) -> dict[str, Any]:
     """Validate, write ``~/.zoto-viz/plugins/local/<id>.zip``, unpack, maybe activate."""
     fd, tmp_name = tempfile.mkstemp(prefix="zoto-local.", suffix=".zip")
@@ -322,7 +333,14 @@ def install_local_zip(
         try:
             pack_read = psz.read_pack_zip(tmp_path)
         except ValueError as e:
-            return _finish(_zip_blocked_result(e), activate=False)
+            return _finish(
+                _zip_blocked_result(
+                    e,
+                    zip_display_name=zip_display_name,
+                    zip_path=tmp_path,
+                ),
+                activate=False,
+            )
         doc = plugins.validate_doc(pack_read.plugin)
         pid = str(doc["id"])
         dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
@@ -383,7 +401,10 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     try:
         pack_read = psz.read_pack_zip(path)
     except ValueError as e:
-        return _finish(_zip_blocked_result(e), activate=False)
+        return _finish(
+            _zip_blocked_result(e, zip_display_name=path.stem, zip_path=path),
+            activate=False,
+        )
     doc = plugins.validate_doc(pack_read.plugin)
     pid = str(doc["id"])
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
@@ -442,7 +463,14 @@ def publish_local(body: dict[str, Any] | None) -> dict[str, Any]:
     activate = True if args.get("activate") is None else bool(args.get("activate"))
     try:
         raw = _payload_bytes(args)
-        return install_local_zip(raw, overwrite=bool(args.get("overwrite")), activate=activate)
+        zip_name = args.get("zip_name") or args.get("filename")
+        display = str(zip_name).strip() if isinstance(zip_name, str) and zip_name.strip() else None
+        return install_local_zip(
+            raw,
+            overwrite=bool(args.get("overwrite")),
+            activate=activate,
+            zip_display_name=display,
+        )
     except pmg.SrcOwnedError as e:
         return {
             "ok": False,

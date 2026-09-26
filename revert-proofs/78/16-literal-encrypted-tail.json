@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_zip_install_ux.py",
+  "testName": "test_zip_ux_literal_encrypted_tail",
+  "description": "Pins encrypted zip user-facing tail copy."
+}
