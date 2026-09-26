@@ -7,12 +7,20 @@ declare const zoto: {
   onFrame: ((frame: Pick<VizDataFrame, "t" | "packets">) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
-  fallbackText: ((frame: VizDataFrame) => string) | null;
+  setFallbackText: (text: string) => void;
 };
 
-zoto.fallbackText = (frame) => packetTunnelFallbackText(frame);
+let lastPushed = "";
+
+function pushFallbackIfChanged(frame: Pick<VizDataFrame, "t" | "packets">): void {
+  const line = packetTunnelFallbackText(frame);
+  if (line === lastPushed) return;
+  lastPushed = line;
+  zoto.setFallbackText(line);
+}
 
 zoto.onFrame = (frame) => {
+  pushFallbackIfChanged(frame);
   const sample = packetTunnelSample(frame);
   zoto.writeBuffer(0, sample.buffer);
   zoto.writeUniform("uBright", sample.bright);

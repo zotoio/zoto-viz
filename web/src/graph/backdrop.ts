@@ -903,7 +903,7 @@ export class Backdrop {
    */
   setPluginShader(
     opts: { id: string; source: string } | null,
-    gpuProbe?: (frag: string) => string | null,
+    gpuProbe?: () => string | null,
   ): string | null {
     if (!opts) {
       lastPlugin = null;
@@ -922,7 +922,8 @@ export class Backdrop {
       if (this.kind === "plugin") this.setKind("plugin");
       return wrapped.error;
     }
-    const gpuErr = gpuProbe ? gpuProbe(wrapped.frag) : probePluginSkyCompile(wrapped.frag);
+    this.ensurePluginMat(opts.id, wrapped.frag);
+    const gpuErr = gpuProbe ? gpuProbe() : probePluginSkyCompile(wrapped.frag);
     if (gpuErr) {
       lastPlugin = null;
       this.pluginId = null;

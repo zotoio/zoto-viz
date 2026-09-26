@@ -1,93 +1,85 @@
+import * as THREE from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
+import { Backdrop } from "./backdrop";
 
-const COMPILE_STATUS = 0x8b81;
-const LINK_STATUS = 0x8b82;
-
-function mockGl(flags: { compile?: boolean; link?: boolean }) {
-  const compileOk = flags.compile ?? true;
-  const linkOk = flags.link ?? true;
-  const compileShader = vi.fn();
-  const linkProgram = vi.fn();
-  const getShaderInfoLog = vi.fn(() => "compile error");
-  const getProgramInfoLog = vi.fn(() => "link error");
-  const gl = {
-    VERTEX_SHADER: 35633,
-    FRAGMENT_SHADER: 35632,
-    COMPILE_STATUS,
-    LINK_STATUS,
-    createShader: () => ({}),
-    createProgram: () => ({}),
-    shaderSource: vi.fn(),
-    compileShader,
-    attachShader: vi.fn(),
-    linkProgram,
-    getShaderParameter: (_sh: unknown, p: number) => (p === COMPILE_STATUS ? compileOk : true),
-    getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS ? linkOk : true),
-    getShaderInfoLog,
-    getProgramInfoLog,
-    deleteShader: vi.fn(),
-    deleteProgram: vi.fn(),
-  };
-  return { gl, compileShader, linkProgram, getShaderInfoLog, getProgramInfoLog };
-}
-
-function hostedWall(): { wall: HTMLElement; host: RenderHost; gl: ReturnType<typeof mockGl> } {
-  const wall = document.createElement("div");
-  Object.defineProperty(wall, "clientWidth", { value: 320 });
-  Object.defineProperty(wall, "clientHeight", { value: 240 });
-  document.body.appendChild(wall);
-  const host = new RenderHost(wall);
-  const mocked = mockGl({ compile: false });
-  vi.spyOn(host, "gl", "get").mockReturnValue(mocked.gl as WebGL2RenderingContext);
-  Object.defineProperty(host, "software", { value: false });
-  return { wall, host, gl: mocked };
-}
+const OK = `void main() { fragColor = vec4(1.0); }`;
 
 describe("tile shader compile latch", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });
 
-  it("compile-once", () => {
-    const { wall, host, gl } = hostedWall();
-    const log = vi.fn();
-    const src = "void main() { fragColor = vec4(1.0); }";
-    host.buildTileShader("pane-a", src, log);
-    for (let i = 0; i < 599; i++) {
-      host.buildTileShader("pane-a", src, log);
-    }
-    expect(gl.gl.shaderSource.mock.calls[1]?.[1].startsWith("#version 300 es\nprecision highp float;\n")).toBe(true);
-    expect(gl.gl.compileShader).toHaveBeenCalledTimes(2);
-    expect(gl.gl.linkProgram).toHaveBeenCalledTimes(0);
-    expect(gl.gl.getShaderInfoLog).toHaveBeenCalledTimes(1);
-    expect(log).toHaveBeenCalledTimes(1);
-    expect(log).toHaveBeenCalledWith("compile error");
-    host.dispose();
-    wall.remove();
-  });
-
-  it("link-failure", () => {
+  function wallHost(): { host: RenderHost; wall: HTMLElement } {
     const wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { value: 320 });
     Object.defineProperty(wall, "clientHeight", { value: 240 });
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
-    const mocked = mockGl({ compile: true, link: false });
-    vi.spyOn(host, "gl", "get").mockReturnValue(mocked.gl as WebGL2RenderingContext);
     Object.defineProperty(host, "software", { value: false });
+    return { host, wall };
+  }
+
+  it("compile-once", () => {
+    const { host, wall } = wallHost();
+    const rd = host.renderer as THREE.WebGLRenderer;
+    const compile = vi.fn();
+    rd.compile = compile as typeof rd.compile;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
     const log = vi.fn();
-    const src = "void main() { fragColor = vec4(1.0); }";
-    host.buildTileShader("pane-b", src, log);
-    for (let i = 0; i < 599; i++) {
-      host.buildTileShader("pane-b", src, log);
-    }
-    expect(mocked.linkProgram).toHaveBeenCalledTimes(1);
-    expect(mocked.compileShader).toHaveBeenCalledTimes(2);
-    expect(mocked.getShaderInfoLog).toHaveBeenCalledTimes(0);
-    expect(mocked.getProgramInfoLog).toHaveBeenCalledTimes(1);
+    host.compilePluginSky("pane-a", scene, camera, log);
+    for (let i = 0; i < 599; i++) host.compilePluginSky("pane-a", scene, camera, log);
+    expect(compile).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledTimes(0);
+    compile.mockRestore();
+    host.dispose();
+    wall.remove();
+  });
+
+  it("link-failure", () => {
+    const { host, wall } = wallHost();
+    const rd = host.renderer as THREE.WebGLRenderer;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const log = vi.fn();
+    const compile = vi.fn(() => {
+      host.tileSlot("pane-b").latch.fail("link error", log);
+    });
+    rd.compile = compile as typeof rd.compile;
+    host.compilePluginSky("pane-b", scene, camera, log);
+    for (let i = 0; i < 599; i++) host.compilePluginSky("pane-b", scene, camera, log);
+    expect(compile).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith("link error");
+    compile.mockRestore();
+    host.dispose();
+    wall.remove();
+  });
+});
+
+describe("plugin sky one compile", () => {
+  it("one-compile-per-shader", () => {
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { value: 320 });
+    Object.defineProperty(wall, "clientHeight", { value: 240 });
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    Object.defineProperty(host, "software", { value: false });
+    const rd = host.renderer as THREE.WebGLRenderer;
+    const compile = vi.fn();
+    rd.compile = compile as typeof rd.compile;
+    const backdrop = new Backdrop();
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    scene.add(backdrop.mesh);
+    const err = backdrop.setPluginShader({ id: "demo", source: OK }, () => {
+      const ok = host.compilePluginSky("pane-a", scene, camera);
+      return ok ? null : "shader failed";
+    });
+    expect(err).toBeNull();
+    expect(compile).toHaveBeenCalledTimes(1);
+    compile.mockRestore();
     host.dispose();
     wall.remove();
   });

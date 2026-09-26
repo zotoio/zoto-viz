@@ -22,7 +22,7 @@ import { cssHex } from "./software-draw";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
-import { TileShaderLatch } from "./tile-shader-build";
+import { TileShaderLatch } from "./tile-shader-latch";
 import { GfxWallNotice } from "./gfx-wall-notice";
 import { mintContextGen, type ContextGen } from "./context-gen.mint";
 import {
@@ -93,10 +93,6 @@ class TileShaderSlot {
   supportsPackFallback = false;
   compileFailed = false;
   mountedFallbackPackKey = "";
-
-  build(gl: WebGL2RenderingContext, frag: string, log: (msg: string) => void, gen: ContextGen): boolean {
-    return this.latch.build(gl, frag, log, gen).ok;
-  }
 
   /** New pack on this pane — clears fallback and compile latch. */
   swapPack(
@@ -265,34 +261,57 @@ export class RenderHost {
   /**
    * Compile a plugin sky for one tile and mount or clear the shader fallback overlay.
    */
-  loadTileShader(
+  /**
+   * Compile the plugin sky material already on the scene (one Three.js compile).
+   * Returns false when latched after a shader error.
+   */
+  compilePluginSky(
     tileId: string,
-    mount: HTMLElement,
-    frag: string,
-    meta: { packKey: string; packId: string; packName: string; supportsPackFallback?: boolean },
+    scene: THREE.Scene,
+    camera: THREE.Camera,
     log: (msg: string) => void = () => {},
   ): boolean {
-    this.beginTilePack(
-      tileId,
-      meta.packKey,
-      meta.packId,
-      mount,
-      meta.packName,
-      meta.supportsPackFallback ?? false,
-    );
-    const ok = this.buildTileShader(tileId, frag, log);
-    if (!ok) this.mountShaderFallback(tileId);
-    else this.clearShaderFallback(tileId);
-    return ok;
-  }
-
-  /** Compile + link a tile fragment once at wall build. Returns false when the GL path is latched off. */
-  buildTileShader(tileId: string, frag: string, log: (msg: string) => void = () => {}): boolean {
     if (this.software) return true;
     if (this.glContextLost) return false;
-    const gl = this.gl;
-    if (!gl) return false;
-    return this.tileSlot(tileId).build(gl, frag, log, this.contextGen);
+    const rd = this.renderer as THREE.WebGLRenderer;
+    if (typeof rd.compile !== "function") return true;
+    const slot = this.tileSlot(tileId);
+    const latch = slot.latch;
+    const gen = this.contextGen;
+    if (latch.dead) return false;
+    if (latch.isFresh(gen)) return true;
+
+    if (!rd.debug) {
+      rd.debug = { checkShaderErrors: true, onShaderError: null };
+    }
+    const prevCheck = rd.debug.checkShaderErrors;
+    const prevOn = rd.debug.onShaderError;
+    rd.debug.checkShaderErrors = true;
+    rd.debug.onShaderError = (gl, program, _vs, fs) => {
+      const msg = (
+        gl.getShaderInfoLog(fs)
+        || gl.getProgramInfoLog(program)
+        || "shader failed"
+      ).trim();
+      latch.fail(msg || "shader failed", log);
+    };
+    try {
+      rd.compile(scene, camera);
+    } finally {
+      rd.debug.checkShaderErrors = prevCheck;
+      rd.debug.onShaderError = prevOn;
+    }
+    if (latch.dead) return false;
+    latch.markCompiled(gen);
+    return true;
+  }
+
+  onTileShaderCompileFailed(tileId: string): void {
+    this.mountShaderFallback(tileId);
+  }
+
+  onTileShaderCompileOk(tileId: string): void {
+    this.clearShaderFallback(tileId);
   }
 
   /** Write-on-change nixie clock UBO upload for the shared wall. */
@@ -327,17 +346,16 @@ export class RenderHost {
     if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;
     this.untrackFallback(slot.fallback);
     slot.fallback?.dispose();
-    const genericOnly = !slot.supportsPackFallback && !contextLoss;
     slot.fallback = new TileShaderFallback(slot.mount, {
       packName: slot.packName,
-      genericOnly,
-      showChip: slot.supportsPackFallback || contextLoss,
+      packPush: slot.supportsPackFallback && !contextLoss,
+      contextLoss,
     });
     slot.mountedFallbackPackKey = slot.packKey;
     this.liveFallbacks.push(slot.fallback);
   }
 
-  pushPackFallbackText(tileId: string, text: string): void {
+  receiveFallbackPush(tileId: string, text: string): void {
     const slot = this.tileSlot(tileId);
     if (!slot.fallback) this.mountShaderFallback(tileId);
     slot.fallback?.pushPackText(text);
@@ -353,9 +371,9 @@ export class RenderHost {
     slot.compileFailed = false;
   }
 
-  driveShaderFallbacks(frame: VizDataFrame): void {
+  driveShaderFallbacks(_frame: VizDataFrame): void {
     for (let i = 0; i < this.liveFallbacks.length; i++) {
-      this.liveFallbacks[i]!.frame(frame);
+      this.liveFallbacks[i]!.tickGrace();
     }
   }
 

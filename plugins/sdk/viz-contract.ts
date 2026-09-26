@@ -77,7 +77,8 @@ export interface VizSysTelemetry {
  * `fallbackText` returns a plain-text “simple view” line when the host cannot run the pack sky shader.
  */
 export interface VizZotoPluginHooks {
-  fallbackText?: (frame: VizDataFrame) => string;
+  /** Push simple-view text when the displayed line changes (host dedupes). */
+  setFallbackText?: (text: string) => void;
 }
 
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */

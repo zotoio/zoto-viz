@@ -439,7 +439,7 @@ sandbox.handlers = {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
-  fallbackText: (text) => { renderHost.pushPackFallbackText(scene.tileId, text); },
+  setFallbackText: (text) => { renderHost.receiveFallbackPush(scene.tileId, text); },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };

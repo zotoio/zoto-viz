@@ -1907,20 +1907,19 @@ export class NetScene implements HostedView {
       );
     }
     const gpuProbe = this.host && opts && meta
-      ? (frag: string) => {
-          const ok = this.host!.loadTileShader(
+      ? () => {
+          const ok = this.host!.compilePluginSky(
             this.tileId,
-            this.container,
-            frag,
-            {
-              packKey: meta.packKey ?? meta.packId,
-              packId: meta.packId,
-              packName: meta.packName,
-              supportsPackFallback,
-            },
+            this.scene,
+            this.camera,
             (m) => console.warn("zoto-viz tile shader:", m),
           );
-          return ok ? null : "shader failed";
+          if (!ok) {
+            this.host!.onTileShaderCompileFailed(this.tileId);
+            return "shader failed";
+          }
+          this.host!.onTileShaderCompileOk(this.tileId);
+          return null;
         }
       : undefined;
     if (!opts) {

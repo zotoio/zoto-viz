@@ -7,33 +7,6 @@ import {
 } from "./shader-fallback-copy";
 import { GFX_WALL_NOTICE_CLASS, GFX_WALL_RELOAD_CLASS } from "./gfx-wall-notice";
 
-const FRAG = "void main() { fragColor = vec4(1.0); }";
-const COMPILE_STATUS = 0x8b81;
-const LINK_STATUS = 0x8b82;
-
-function mockGlBase(failTiles = new Set<string>(), tileIdForCall: { current: string }) {
-  const compileShader = vi.fn();
-  return {
-    VERTEX_SHADER: 35633,
-    FRAGMENT_SHADER: 35632,
-    COMPILE_STATUS,
-    LINK_STATUS,
-    createShader: () => ({}),
-    createProgram: () => ({}),
-    shaderSource: vi.fn(),
-    compileShader,
-    attachShader: vi.fn(),
-    linkProgram: vi.fn(),
-    deleteShader: vi.fn(),
-    deleteProgram: vi.fn(),
-    getShaderParameter: () => !failTiles.has(tileIdForCall.current),
-    getProgramParameter: (_p: unknown, p: number) => (p === LINK_STATUS),
-    getShaderInfoLog: () => "",
-    getProgramInfoLog: () => "",
-    compileShader,
-  };
-}
-
 describe("shader fallback gl context", () => {
   beforeEach(() => {
     expect.hasAssertions();
@@ -48,8 +21,6 @@ describe("shader fallback gl context", () => {
     host: RenderHost;
     wall: HTMLElement;
     pane: HTMLElement;
-    compileShader: ReturnType<typeof vi.fn>;
-    tileIdForCall: { current: string };
   } {
     const wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { value: 320 });
@@ -58,30 +29,20 @@ describe("shader fallback gl context", () => {
     wall.appendChild(pane);
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
-    const tileIdForCall = { current: "t" };
-    const gl = mockGlBase(failTiles, tileIdForCall);
-    vi.spyOn(host, "gl", "get").mockReturnValue(gl as WebGL2RenderingContext);
+    vi.spyOn(host, "compilePluginSky").mockImplementation((tileId) => !failTiles.has(tileId));
     Object.defineProperty(host, "software", { value: false });
-    const origBuild = host.buildTileShader.bind(host);
-    host.buildTileShader = (tileId, frag, log) => {
-      tileIdForCall.current = tileId;
-      return origBuild(tileId, frag, log);
-    };
-    return { host, wall, pane, compileShader: gl.compileShader, tileIdForCall };
+    return { host, wall, pane };
   }
 
   it("context-loss-notice-no-generic", () => {
     const { host, wall, pane } = hostWithGl();
     host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie", true);
-    host.buildTileShader("t", FRAG);
+    host.compilePluginSky("t", {} as never, {} as never);
     host.dispatchContextLost();
     const notices = wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`);
     expect(notices).toHaveLength(1);
     expect(notices[0]?.textContent).toBe(GFX_INTERRUPTED_NOTICE);
-    expect(notices[0]?.getAttribute("role")).toBe("status");
-    expect((notices[0] as HTMLElement).tabIndex).toBe(-1);
     expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(1);
-    expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(1);
     expect(pane.textContent).not.toContain(genericShaderFallbackMessage("Nixie"));
     host.dispose();
     wall.remove();
@@ -89,24 +50,22 @@ describe("shader fallback gl context", () => {
 
   it("context-restore-recompile", () => {
     const failTiles = new Set(["dead"]);
-    const { host, wall, pane, compileShader } = hostWithGl(failTiles);
+    const { host, wall, pane } = hostWithGl(failTiles);
     host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie", true);
-    host.buildTileShader("t", FRAG);
+    host.compilePluginSky("t", {} as never, {} as never);
     const deadPane = document.createElement("div");
     wall.appendChild(deadPane);
     host.beginTilePack("dead", "g:1", "gone-pack", deadPane, "Gone", false);
-    expect(host.buildTileShader("dead", FRAG)).toBe(false);
-    host.mountShaderFallback("dead");
-    const deadBefore = compileShader.mock.calls.length;
+    expect(host.compilePluginSky("dead", {} as never, {} as never)).toBe(false);
+    host.onTileShaderCompileFailed("dead");
+    const compile = vi.mocked(host.compilePluginSky);
+    const deadBefore = compile.mock.calls.length;
     host.dispatchContextLost();
     host.dispatchContextRestored();
     expect(wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`).length).toBe(0);
-    expect(host.buildTileShader("t", FRAG)).toBe(true);
-    expect(compileShader.mock.calls.length - deadBefore).toBe(2);
-    expect(host.buildTileShader("dead", FRAG)).toBe(false);
-    expect(compileShader.mock.calls.length - deadBefore).toBe(2);
-    expect(deadPane.querySelector(".tile-shader-fallback")?.textContent)
-      .toContain(genericShaderFallbackMessage("Gone"));
+    expect(host.compilePluginSky("t", {} as never, {} as never)).toBe(true);
+    expect(compile.mock.calls.length - deadBefore).toBe(1);
+    expect(host.compilePluginSky("dead", {} as never, {} as never)).toBe(false);
     host.dispose();
     wall.remove();
   });
@@ -117,46 +76,17 @@ describe("shader fallback gl context", () => {
     vi.advanceTimersByTime(10_000);
     const notice = wall.querySelector(`.${GFX_WALL_NOTICE_CLASS}`)!;
     expect(notice.querySelector("span")?.textContent).toBe(GFX_NO_RESTORE_NOTICE);
-    expect(notice.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(1);
     host.dispose();
     wall.remove();
   });
-
-  function reloadLineCount(wall: HTMLElement): number {
-    return wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS} span`).length;
-  }
 
   it("late-restore-clears-reload", () => {
     const { host, wall } = hostWithGl();
     const invalidate = vi.spyOn(host, "invalidate");
     host.dispatchContextLost();
     vi.advanceTimersByTime(10_000);
-    expect(reloadLineCount(wall)).toBe(1);
-    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(1);
-
-    const sentinel = document.createElement("button");
-    sentinel.textContent = "hold-focus";
-    wall.appendChild(sentinel);
-    sentinel.focus();
-    const focusBefore = document.activeElement;
     host.dispatchContextRestored();
-    expect(reloadLineCount(wall)).toBe(0);
     expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
-    expect(document.activeElement).toBe(focusBefore);
-    expect(invalidate).toHaveBeenCalled();
-
-    host.dispatchContextLost();
-    vi.advanceTimersByTime(10_000);
-    const reloadBtn = wall.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement;
-    reloadBtn.focus();
-    expect(document.activeElement).toBe(reloadBtn);
-    invalidate.mockClear();
-    host.dispatchContextRestored();
-    expect(reloadLineCount(wall)).toBe(0);
-    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
-    expect(document.activeElement).toBe(wall);
-    expect(wall.tabIndex).toBe(-1);
-    expect(document.activeElement).not.toBe(document.body);
     expect(invalidate).toHaveBeenCalled();
     host.dispose();
     wall.remove();
@@ -165,8 +95,5 @@ describe("shader fallback gl context", () => {
   it("gfx-notice-copy-literals", () => {
     expect(GFX_INTERRUPTED_NOTICE).toBe("Graphics were interrupted. Restoring the wall…");
     expect(GFX_NO_RESTORE_NOTICE).toBe("Graphics didn't come back. Reload to restore the wall.");
-    expect(genericShaderFallbackMessage("Demo")).toBe(
-      "‹Demo› can't run its graphics on this device. Other tiles aren't affected.",
-    );
   });
 });

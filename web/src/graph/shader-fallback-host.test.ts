@@ -33,7 +33,7 @@ describe("tile shader fallback host", () => {
     const beforeNodes = document.body.querySelectorAll("*").length;
     const focus = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(() => {});
     const pack = "Packet Tunnel";
-    const fb = new TileShaderFallback(mount, { packName: pack, genericOnly: true });
+    const fb = new TileShaderFallback(mount, { packName: pack, packPush: false });
     const nodes = mount.querySelectorAll(".tile-shader-fallback");
     expect(nodes).toHaveLength(1);
     const el = nodes[0] as HTMLElement;
@@ -50,7 +50,7 @@ describe("tile shader fallback host", () => {
     expect(cs.left).toBe("0px");
     Object.defineProperty(el, "offsetParent", { configurable: true, get: () => mount });
     expect(el.offsetParent).toBe(mount);
-    fb.frame(EMPTY_FRAME);
+    fb.tickGrace();
     expect(focus).not.toHaveBeenCalled();
     expect(document.body.querySelectorAll("*").length - beforeNodes).toBe(2);
     focus.mockRestore();
@@ -61,10 +61,8 @@ describe("tile shader fallback host", () => {
   it("simple-view-chip", () => {
     const mount = document.createElement("div");
     document.body.appendChild(mount);
-    new TileShaderFallback(mount, {
-      packName: "Nixie",
-      showChip: true,
-    });
+    const fb = new TileShaderFallback(mount, { packName: "Nixie", packPush: true });
+    fb.pushPackText("01 05 00");
     const chips = mount.querySelectorAll(".tile-shader-fallback-chip");
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe("Simple view");

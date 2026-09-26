@@ -1,14 +1,13 @@
-import type { VizDataFrame } from "../plugins/viz-host";
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
 
-export type VizPackFallbackText = (frame: VizDataFrame) => string;
+export const FALLBACK_GRACE_FRAMES = 30;
 
 export interface TileShaderFallbackOpts {
   packName: string;
-  /** Shader compile failure without pack text — show generic line immediately. */
-  genericOnly?: boolean;
-  /** Show the “Simple view” chip (pack simple view or context loss). */
-  showChip?: boolean;
+  /** Shader compile failure on a pack that can push simple-view text. */
+  packPush?: boolean;
+  /** Context-loss overlay — generic copy + chip immediately. */
+  contextLoss?: boolean;
 }
 
 /** One centred fallback line (+ optional chip) over the idle backdrop for a pane. */
@@ -18,14 +17,17 @@ export class TileShaderFallback {
   private readonly chip: HTMLSpanElement;
   private lastWritten = "";
   private readonly packName: string;
-  private readonly genericOnly: boolean;
-  private showChip: boolean;
+  private readonly packPush: boolean;
+  private readonly contextLoss: boolean;
+  private showChip = false;
   private packFnDead = false;
+  private graceLeft = 0;
+  private gotValidPush = false;
 
   constructor(readonly mount: HTMLElement, opts: TileShaderFallbackOpts) {
     this.packName = opts.packName;
-    this.genericOnly = !!opts.genericOnly;
-    this.showChip = !!opts.showChip;
+    this.packPush = !!opts.packPush;
+    this.contextLoss = !!opts.contextLoss;
     this.root = document.createElement("div");
     this.root.className = "tile-shader-fallback";
     this.text = document.createElement("span");
@@ -34,9 +36,15 @@ export class TileShaderFallback {
     this.chip = document.createElement("span");
     this.chip.className = "tile-shader-fallback-chip";
     this.chip.textContent = "Simple view";
-    if (this.showChip) this.root.appendChild(this.chip);
     mount.appendChild(this.root);
-    if (this.genericOnly) {
+    if (this.contextLoss) {
+      this.reveal();
+      this.setShowChip(true);
+    } else if (this.packPush) {
+      this.graceLeft = FALLBACK_GRACE_FRAMES;
+      this.root.style.visibility = "hidden";
+    } else {
+      this.reveal();
       this.writeText(genericShaderFallbackMessage(this.packName));
     }
   }
@@ -45,38 +53,53 @@ export class TileShaderFallback {
     return this.showChip;
   }
 
+  get writes(): number {
+    return (this.text as HTMLSpanElement & { __writes?: number }).__writes ?? 0;
+  }
+
   setShowChip(on: boolean): void {
     this.showChip = on;
     if (on && !this.chip.parentElement) this.root.appendChild(this.chip);
     if (!on) this.chip.remove();
   }
 
-  /** Host path: pack contract `fallbackText` updates (write-on-change). */
+  /** Pack contract push — host dedupes; whitespace is not a push. */
   pushPackText(text: string): void {
-    if (this.genericOnly || this.packFnDead) return;
+    if (this.packFnDead || this.contextLoss) return;
+    if (!text.trim()) return;
+    this.gotValidPush = true;
+    this.graceLeft = 0;
     try {
-      if (!text.trim()) {
-        this.latchGeneric();
-        return;
-      }
+      this.reveal();
+      if (this.packPush) this.setShowChip(true);
       this.writeText(text);
     } catch {
       this.latchGeneric();
     }
   }
 
-  frame(_frame: VizDataFrame): void {
-    /* pack lines arrive via pushPackText from the plugin contract */
+  tickGrace(): void {
+    if (this.packFnDead || this.contextLoss || !this.packPush) return;
+    if (this.gotValidPush) return;
+    if (this.graceLeft <= 0) return;
+    this.graceLeft--;
+    if (this.graceLeft === 0) this.latchGeneric();
+  }
+
+  private reveal(): void {
+    this.root.style.visibility = "";
   }
 
   private latchGeneric(): void {
     if (this.packFnDead) return;
     this.packFnDead = true;
+    this.graceLeft = 0;
     this.setShowChip(false);
+    this.reveal();
     try {
       this.writeText(genericShaderFallbackMessage(this.packName));
     } catch {
-      /* latched — generic copy must not throw out of pushPackText */
+      /* latched */
     }
   }
 
@@ -84,6 +107,8 @@ export class TileShaderFallback {
     if (next === this.lastWritten) return;
     this.lastWritten = next;
     this.text.textContent = next;
+    const tagged = this.text as HTMLSpanElement & { __writes?: number };
+    tagged.__writes = (tagged.__writes ?? 0) + 1;
   }
 
   dispose(): void {
