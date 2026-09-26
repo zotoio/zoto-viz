@@ -67,9 +67,10 @@ function applyTsPaths(
 
 function isAllowedPackLoadSpecifier(spec: string): boolean {
   const bare = stripImportSuffix(spec);
-  if (/^\/api\/plugins\/[^/]+\/module\.js/.test(bare)) return true;
   if (/^https?:\/\//.test(bare)) return true;
-  return false;
+  if (!/^\/api\/plugins\/[^/]+\/module\.js/.test(bare)) return false;
+  if (bare.includes("..")) return false;
+  return true;
 }
 
 function resolveToRepoRel(
@@ -90,6 +91,8 @@ function resolveToRepoRel(
       : path.resolve(pathConfig.baseUrlAbs, pathMapped);
   } else if (bare.startsWith(".")) {
     resolvedAbs = path.normalize(path.join(repoRoot, path.dirname(hostRepoRel), bare));
+  } else if (bare.startsWith("/")) {
+    resolvedAbs = path.normalize(path.join(repoRoot, bare));
   } else if (bare.includes(`${PACK_SRC}/`) || bare.startsWith(`${PACK_SRC}`)) {
     resolvedAbs = path.normalize(path.join(repoRoot, bare.replace(/^\.\/+/, "")));
   } else {

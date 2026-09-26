@@ -46,10 +46,40 @@ const OTHER_BAD_FIXTURES: BadFixture[] = [
 
 const ALL_PACK_BAD_FIXTURES = [...SANDBOX_BAD_FIXTURES, ...OTHER_BAD_FIXTURES];
 
-const HOST_BAD_FIXTURES: { rel: string; extraPaths?: Record<string, string[]> }[] = [
-  { rel: "bad/static-pack-import.ts" },
-  { rel: "bad/dynamic-pack-import.ts" },
-  { rel: "bad/alias-pack-import.ts", extraPaths: hostAliasPaths },
+/** Each form the host reverse-boundary rule must catch — one dedicated fixture per form. */
+const HOST_BAD_FIXTURES: {
+  rel: string;
+  form: string;
+  extraPaths?: Record<string, string[]>;
+}[] = [
+  { rel: "bad/static-pack-import.ts", form: "static import" },
+  { rel: "bad/dynamic-pack-import.ts", form: "dynamic import()" },
+  { rel: "bad/alias-pack-import.ts", form: "tsconfig paths alias", extraPaths: hostAliasPaths },
+  { rel: "bad/reexport-named-pack.ts", form: "export { … } from" },
+  { rel: "bad/reexport-star-pack.ts", form: "export * from" },
+  { rel: "bad/require-pack.ts", form: "require()" },
+  { rel: "bad/glob-pack.ts", form: "import.meta.glob" },
+  { rel: "bad/loader-bypass-pack-source.ts", form: "loader-shaped path → pack source" },
+];
+
+const HOST_PASS_FIXTURES: { label: string; run: () => ReturnType<typeof scanHostLintFixture> }[] = [
+  {
+    label: "clean/plugin-yml-presets.ts (read plugin.yml via fs)",
+    run: () => {
+      const text = readFileSync(path.join(hostFixtureRoot, "clean/plugin-yml-presets.ts"), "utf8");
+      return scanHostLintFixture("web/src/ui/pack-presets.ts", text, repoRoot);
+    },
+  },
+  {
+    label: "inline /api/plugins/<id>/module.js import()",
+    run: () => scanHostLintFixture(
+      "web/src/plugins/host.ts",
+      `export async function load(id: string) {
+        return import("/api/plugins/" + id + "/module.js?h=abc");
+      }`,
+      repoRoot,
+    ),
+  },
 ];
 
 function virtualPackPath(relUnderFixtureRoot: string): string {
@@ -110,8 +140,8 @@ describe("pack lint guardrails", () => {
     expect(lintPackFixture("clean.ts")).toEqual([]);
   });
 
-  for (const { rel, extraPaths } of HOST_BAD_FIXTURES) {
-    it(`known-bad host fixture ${rel} reports host-imports-pack-src`, () => {
+  for (const { rel, form, extraPaths } of HOST_BAD_FIXTURES) {
+    it(`host FAIL [${form}] ${rel}`, () => {
       const text = readFileSync(path.join(hostFixtureRoot, rel), "utf8");
       expect(extractModuleSpecifiers(text).length).toBeGreaterThan(0);
       const hits = lintHostFixture(rel, extraPaths);
@@ -119,19 +149,32 @@ describe("pack lint guardrails", () => {
     });
   }
 
-  it("known-good host fixture passes host boundary", () => {
-    const text = readFileSync(path.join(hostFixtureRoot, "clean/plugin-yml-presets.ts"), "utf8");
-    const hits = scanHostLintFixture("web/src/ui/pack-presets.ts", text, repoRoot);
-    expect(hits).toEqual([]);
-  });
+  for (const { label, run } of HOST_PASS_FIXTURES) {
+    it(`host PASS ${label}`, () => {
+      expect(run()).toEqual([]);
+    });
+  }
 
-  it("allows fetch-only module.js loader URL (documented exception)", () => {
-    const text = `
-      export async function load(id: string, hash: string) {
-        return import(\`/api/plugins/\${id}/module.js?h=\${hash}\`);
-      }
-    `;
-    const hits = scanHostLintFixture("web/src/plugins/host.ts", text, repoRoot);
-    expect(hits).toEqual([]);
+  it("host boundary fixture catalog (pass/fail summary)", () => {
+    const rows: { fixture: string; ci: "FAIL" | "PASS" }[] = HOST_BAD_FIXTURES.map(({ rel, form }) => ({
+      fixture: `${rel} (${form})`,
+      ci: "FAIL",
+    }));
+    for (const { label } of HOST_PASS_FIXTURES) {
+      rows.push({ fixture: label, ci: "PASS" });
+    }
+    rows.sort((a, b) => a.fixture.localeCompare(b.fixture));
+    expect(rows).toEqual([
+      { fixture: "bad/alias-pack-import.ts (tsconfig paths alias)", ci: "FAIL" },
+      { fixture: "bad/dynamic-pack-import.ts (dynamic import())", ci: "FAIL" },
+      { fixture: "bad/glob-pack.ts (import.meta.glob)", ci: "FAIL" },
+      { fixture: "bad/loader-bypass-pack-source.ts (loader-shaped path → pack source)", ci: "FAIL" },
+      { fixture: "bad/reexport-named-pack.ts (export { … } from)", ci: "FAIL" },
+      { fixture: "bad/reexport-star-pack.ts (export * from)", ci: "FAIL" },
+      { fixture: "bad/require-pack.ts (require())", ci: "FAIL" },
+      { fixture: "bad/static-pack-import.ts (static import)", ci: "FAIL" },
+      { fixture: "clean/plugin-yml-presets.ts (read plugin.yml via fs)", ci: "PASS" },
+      { fixture: "inline /api/plugins/<id>/module.js import()", ci: "PASS" },
+    ]);
   });
 });
