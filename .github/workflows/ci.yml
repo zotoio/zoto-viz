@@ -49,6 +49,9 @@ jobs:
         run: |
           pnpm install
           pnpm approve-builds esbuild
+      - name: FrameTs eslint guard
+        working-directory: web
+        run: pnpm lint
       - name: Web tests and coverage
         working-directory: web
         run: pnpm test:coverage

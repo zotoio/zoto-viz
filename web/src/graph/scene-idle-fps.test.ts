@@ -39,7 +39,7 @@ describe("NetScene idle host FPS window", () => {
       clock += FRAME_MS;
       graph.hostFrame(frameTsFromRaf(clock));
     }
-    expect(markSpy).toHaveBeenCalledTimes(FRAMES);
     expect(hostWindowFps(monoMs(clock), 1000)).toBe(62.5);
+    expect(markSpy).toHaveBeenCalledTimes(FRAMES);
   });
 });

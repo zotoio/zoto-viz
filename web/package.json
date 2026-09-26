@@ -13,7 +13,9 @@
     "preview": "vite preview",
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
-    "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs"
+    "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",
+    "lint": "node --require ./eslint-ts6-resolver.cjs ./node_modules/eslint/bin/eslint.js src",
+    "lint:verify-frame-ts": "bash scripts/verify-frame-ts-lint.sh"
   },
   "dependencies": {
     "d3-force-3d": "^3.0.6",
@@ -22,11 +24,14 @@
   },
   "devDependencies": {
     "@types/three": "^0.185.4",
+    "@typescript-eslint/parser": "8.70.1",
     "@vitest/coverage-v8": "^5.0.0",
     "assemblyscript": "^0.28.20",
     "esbuild": "^0.28.2",
+    "eslint": "^9.39.2",
     "happy-dom": "^20.14.5",
     "typescript": "^7.0.2",
+    "ts6": "npm:typescript@5.9.3",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"
   }

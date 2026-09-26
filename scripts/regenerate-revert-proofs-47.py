@@ -48,6 +48,18 @@ def vitest_excerpt(cp: subprocess.CompletedProcess[str]) -> str | None:
     return f"AssertionError: {m.group(0)}" if m else None
 
 
+def eslint_excerpt(cp: subprocess.CompletedProcess[str]) -> str | None:
+    lines = (cp.stdout + cp.stderr).splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if "error" not in stripped or "FrameTs" not in stripped or "no-restricted-syntax" not in stripped:
+            continue
+        if i > 0 and lines[i - 1].strip().endswith(".ts"):
+            return f"{lines[i - 1].strip()}\n{stripped}"
+        return stripped
+    return None
+
+
 def vitest_pass_line(cp: subprocess.CompletedProcess[str]) -> str | None:
     out = cp.stdout + cp.stderr
     for line in out.splitlines():
@@ -136,6 +148,59 @@ def write_row(
         meta["excerpt"] = excerpt
     (OUT / f"{base}.json").write_text(json.dumps(meta, indent=2) + "\n")
     print(base, excerpt or "NO EXCERPT")
+
+
+def write_lint_row(
+    base: str,
+    rel: str,
+    old: str,
+    new: str,
+    runner: str,
+    test_file: str,
+    test_name: str,
+    description: str,
+) -> None:
+    path = ROOT / rel
+    web = ROOT / "web"
+    lint_cwd = ROOT if runner.startswith("pnpm --dir web") else web
+    git_restore([rel])
+    apply_text(path, old, new)
+    patch = run(["git", "diff", "HEAD", "--", rel]).stdout
+    if not patch.strip():
+        raise SystemExit(f"empty patch {base}")
+    (OUT / f"{base}.patch").write_text(patch)
+    git_restore([rel])
+    run(["git", "apply", "--check", str(OUT / f"{base}.patch")])
+    green = run_cmd(runner, cwd=lint_cwd, check=False)
+    if green.returncode != 0:
+        raise SystemExit(f"lint should pass unpatched: {green.stderr}")
+    run(["git", "apply", str(OUT / f"{base}.patch")])
+    red = run_cmd(runner, cwd=lint_cwd, check=False)
+    excerpt = eslint_excerpt(red)
+    git_restore([rel])
+    meta = {
+        "runner": runner,
+        "testFile": test_file,
+        "testName": test_name,
+        "description": description,
+        "passLine": "lint exit 0",
+    }
+    if excerpt:
+        meta["excerpt"] = excerpt
+    (OUT / f"{base}.json").write_text(json.dumps(meta, indent=2) + "\n")
+    print(base, excerpt or "NO EXCERPT")
+
+
+def annotate_fps_double_stamp() -> None:
+    base = "scene-idle-host-fps-double-stamp"
+    meta_path = OUT / f"{base}.json"
+    meta = json.loads(meta_path.read_text())
+    meta["fpsValueOnRevert"] = 62.5
+    meta["fpsNote"] = (
+        "Real inner markFrame after standaloneTileTick uses the same presentTs; "
+        "markFrame dedupes so hostWindowFps stays 62.5 while call count doubles."
+    )
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n")
 
 
 def main() -> None:
@@ -348,7 +413,19 @@ def main() -> None:
     for row in rows:
         write_row(*row)
 
-    print("done", len(rows), "rows")
+    write_lint_row(
+        "frame-ts-cast-lint",
+        "web/src/graph/render-host.ts",
+        "      const frameTs = frameTsFromRaf(ts);",
+        "      const frameTs = ts as FrameTs;",
+        "pnpm --dir web exec node --require ./eslint-ts6-resolver.cjs ./node_modules/eslint/bin/eslint.js src/graph/render-host.ts",
+        "src/graph/render-host.ts",
+        "lint no-restricted-syntax on FrameTs cast in RenderHost rAF",
+        "Reintroduce raw as FrameTs in the mosaic host loop.",
+    )
+    annotate_fps_double_stamp()
+
+    print("done", len(rows), "rows + frame-ts-cast-lint")
 
 
 if __name__ == "__main__":
