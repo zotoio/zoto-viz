@@ -1,8 +1,13 @@
+diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
+index 20a3bae..7ca0cfd 100644
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
-@@ -88,5 +88,5 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null
+@@ -87,7 +87,7 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null
+   if (talkerPeak > 0) parts.push(`${Math.round(talkerPeak * 100)}% TCP`);
    if (failedUnits > 0) parts.push(`${failedUnits} unit${failedUnits === 1 ? "" : "s"}`);
    if (!parts.length) return null;
 -  return `⚠ DEGRADED ${parts.join(" · ")}`;
 +  return null;
  }
+ 
+ /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
