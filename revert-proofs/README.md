@@ -43,6 +43,15 @@ Optional: `node scripts/revert-proof.mjs <pr-number> --row <slug>`.
 
 Uncommitted changes in your checkout are **not** included in proofs (you get a warning). Each row must pass exactly one test on the unpatched tree, then fail that same test with a real **AssertionError** after the production revert. Red is decided only from error **type**, never message/name text: vitest sets `task.meta.revertProofAssertion` in a runner-injected overlay (`VitestRunner.runTask` on Vitest 5.0.0 — `onTestFailed` only sees serialized errors); pytest uses `revert_proof_pytest_plugin.py` (`excinfo.errisinstance(AssertionError)`). Transform/import/collection failures and `tsc` breaks (unless `allowTypeError`) are rejected as “proves nothing”.
 
+### Vitest assertion sources (room decision)
+
+Vitest rows accept **both** of these, checked with `instanceof` in the worker before JSON serialization:
+
+1. **`import { chai } from "vitest"` → `chai.AssertionError`** (from `expect()` / `assert` from vitest). A separate `chai` package copy does **not** count; if a real `expect()` failure does not set `task.meta.revertProofAssertion`, the runner reports a **mismatched chai copy**.
+2. **`import { AssertionError } from "node:assert"`** (or `node:assert/strict`) from tests that use `assert.strictEqual` / `assert.deepStrictEqual` etc.
+
+Plain objects or errors whose **message/name** look like `AssertionError` are still rejected (no meta flag).
+
 Patches must touch **production-reachable** code: for each changed file, the runner walks production importers (under `web/src`, `plugins`, `service`, `packages`, etc., excluding tests/fixtures) up to configured entry points (`scripts/revert-proof-production.json`). Otherwise the row fails with `revert target unreachable from production: <file>` (test-only helpers do not count).
 
 4. If you re-run proofs, attach or link `revert-proofs/<pr-number>/REPORT.md` in the PR thread when requested — not as an automatic merge requirement.

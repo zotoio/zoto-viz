@@ -3,12 +3,21 @@
  *
  * Live Error instances are only visible in VitestRunner.runTask (before
  * failTask → processError serializes them). onTestFailed and onAfterRunTask
- * only see plain serialized objects, so instanceof chai.AssertionError must
- * run here—not in setupFiles onTestFailed.
+ * only see plain serialized objects, so instanceof checks must run here—not
+ * in setupFiles onTestFailed. Accepts vitest chai.AssertionError and
+ * node:assert AssertionError (see revert-proofs/README.md).
  */
+import { AssertionError as NodeAssertionError } from "node:assert";
 import { TestRunner, chai } from "vitest";
 
-const { AssertionError } = chai;
+const { AssertionError: ChaiAssertionError } = chai;
+
+/** @param {unknown} err */
+export function isRevertProofVitestAssertionError(err) {
+  return (
+    err instanceof ChaiAssertionError || err instanceof NodeAssertionError
+  );
+}
 
 export default class RevertProofVitestRunner extends TestRunner {
   async runTask(test) {
@@ -16,7 +25,7 @@ export default class RevertProofVitestRunner extends TestRunner {
     try {
       await fn();
     } catch (err) {
-      if (err instanceof AssertionError) {
+      if (isRevertProofVitestAssertionError(err)) {
         test.meta.revertProofAssertion = true;
       }
       throw err;

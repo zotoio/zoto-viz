@@ -1,3 +1,4 @@
+import { strictEqual } from "node:assert";
 import { describe, expect, it } from "vitest";
 import {
   assessPytestSelection,
@@ -7,6 +8,7 @@ import {
   parsePytestPluginJson,
   parseVitestJsonReport,
 } from "./revert-proof-lib.mjs";
+import { isRevertProofVitestAssertionError } from "./revert-proof-vitest-runner.mjs";
 
 const vitestSelection = (
   tests: { fullName: string; status: string; revertProofAssertion?: boolean }[],
@@ -61,6 +63,37 @@ describe("vitest JSON selection by full name", () => {
     const sel = assessVitestSelection(tests, "widget > returns one");
     expect(sel.ok).toBe(false);
     expect(sel.reason).toBe("other tests not skipped");
+  });
+});
+
+describe("revert-proof vitest assertion instanceof", () => {
+  it("(f) recognizes vitest chai AssertionError", () => {
+    try {
+      expect(1).toBe(0);
+    } catch (err) {
+      expect(isRevertProofVitestAssertionError(err)).toBe(true);
+      return;
+    }
+    throw new Error("expected expect() to throw");
+  });
+
+  it("(g) recognizes node:assert AssertionError", () => {
+    try {
+      strictEqual(1, 0);
+    } catch (err) {
+      expect(isRevertProofVitestAssertionError(err)).toBe(true);
+      return;
+    }
+    throw new Error("expected assert to throw");
+  });
+
+  it("(c) rejects plain-object fake AssertionError", () => {
+    expect(
+      isRevertProofVitestAssertionError({
+        name: "AssertionError",
+        message: "expected 1 to be 0",
+      }),
+    ).toBe(false);
   });
 });
 
