@@ -1,13 +1,11 @@
 /** Shape of visualisation.yml → workBudget (parsed for caps). */
 
-export type MarbleWorkBudget = {
-  maxDrawCalls: number;
-  maxTriangles: number;
-  maxInstances: number;
-  maxGpuBytes: number;
-  maxSimStepsPerFrame: number;
-  maxPacketsPerFrame: number;
-};
+import {
+  clampManifestWorkBudgetAtRuntime,
+  type ManifestWorkBudget,
+} from "../../../sdk/manifest-work-budget";
+
+export type MarbleWorkBudget = ManifestWorkBudget;
 
 const INT = /^\s*([a-zA-Z]+):\s*(\d+)\s*$/;
 
@@ -22,7 +20,14 @@ export function parseMarbleWorkBudgetYaml(yaml: string): MarbleWorkBudget {
     const m = line.match(INT);
     if (m) out[m[1]!] = Number(m[2]);
   }
-  const req = ["maxDrawCalls", "maxTriangles", "maxInstances", "maxGpuBytes", "maxSimStepsPerFrame", "maxPacketsPerFrame"] as const;
+  const req = [
+    "maxDrawCalls",
+    "maxTriangles",
+    "maxInstances",
+    "maxGpuBytes",
+    "maxSimStepsPerFrame",
+    "maxPacketsPerFrame",
+  ] as const;
   for (const k of req) {
     if (!Number.isFinite(out[k])) throw new Error(`workBudget.${k} missing`);
   }
@@ -42,6 +47,9 @@ const SHIPPED_WORK_BUDGET_SNIPPET = `workBudget:
 let cached: MarbleWorkBudget | null = null;
 
 export function marbleWorkBudget(): MarbleWorkBudget {
-  if (!cached) cached = parseMarbleWorkBudgetYaml(SHIPPED_WORK_BUDGET_SNIPPET);
+  if (!cached) {
+    const parsed = parseMarbleWorkBudgetYaml(SHIPPED_WORK_BUDGET_SNIPPET);
+    cached = clampManifestWorkBudgetAtRuntime(parsed);
+  }
   return cached;
 }

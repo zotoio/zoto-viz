@@ -621,6 +621,10 @@ def _visualisation_doc(home: Path) -> dict[str, Any] | None:
         return {}
     if not isinstance(raw, dict):
         raise ValueError("visualisation.yml must be a mapping")
+    if "workBudget" in raw:
+        from service.manifest_work_budget import validate_manifest_work_budget
+
+        validate_manifest_work_budget(raw["workBudget"])
     return raw
 
 

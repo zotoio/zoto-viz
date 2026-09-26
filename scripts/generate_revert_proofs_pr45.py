@@ -352,6 +352,58 @@ ROWS: list[Row] = [
         "scripts/check_pack_pr_boundary.py",
         lambda t: replace_once(t, "    if not created:", "    if created:"),
     ),
+    Row(
+        "work-budget-schema-without-upper-bound",
+        "vitest",
+        "web/src/plugins/manifest-work-budget.test.ts",
+        "rejects a manifest at ten times the host ceiling with a plain reason",
+        "manifest workBudget schema rejects values above host ceilings.",
+        "plugins/sdk/manifest-work-budget.ts",
+        lambda t: replace_once(
+            t,
+            "    if (value > ceiling) {\n      throw new Error(`${fieldLabel(path, key)} must be at most ${ceiling} (got ${value})`);\n    }\n",
+            "",
+        ),
+    ),
+    Row(
+        "work-budget-host-without-runtime-clamp",
+        "vitest",
+        "web/src/plugins/manifest-work-budget.test.ts",
+        "clamps a direct host runtime call above the ceiling",
+        "Host runtime clamp keeps workBudget within ceilings.",
+        "web/src/plugins/manifest-work-budget-host.ts",
+        lambda t: replace_once(
+            t,
+            "  return clampManifestWorkBudgetAtRuntime(budget);",
+            "  return budget;",
+        ),
+    ),
+    Row(
+        "work-budget-schema-without-upper-bound-py",
+        "pytest",
+        "tests/test_manifest_work_budget.py",
+        "test_rejects_manifest_at_ten_times_ceiling",
+        "Python manifest workBudget schema rejects values above host ceilings.",
+        "service/manifest_work_budget.py",
+        lambda t: replace_once(
+            t,
+            "        if n > ceiling:\n            raise ValueError(f\"{_field_label(path, key)} must be at most {ceiling} (got {n})\")\n",
+            "",
+        ),
+    ),
+    Row(
+        "work-budget-host-without-runtime-clamp-py",
+        "pytest",
+        "tests/test_manifest_work_budget.py",
+        "test_runtime_clamp_direct_call",
+        "Python host runtime clamp keeps workBudget within ceilings.",
+        "service/manifest_work_budget.py",
+        lambda t: replace_once(
+            t,
+            "        out[key] = min(n, ceilings[key])",
+            "        out[key] = n",
+        ),
+    ),
 ]
 
 

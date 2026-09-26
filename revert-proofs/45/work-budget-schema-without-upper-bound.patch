@@ -1,0 +1,14 @@
+diff --git a/plugins/sdk/manifest-work-budget.ts b/plugins/sdk/manifest-work-budget.ts
+index 255e019..42ba592 100644
+--- a/plugins/sdk/manifest-work-budget.ts
++++ b/plugins/sdk/manifest-work-budget.ts
+@@ -82,9 +82,6 @@ export function validateManifestWorkBudget(raw: unknown, path = "workBudget"): M
+     if (value < 0) {
+       throw new Error(`${fieldLabel(path, key)} must be at least 0`);
+     }
+-    if (value > ceiling) {
+-      throw new Error(`${fieldLabel(path, key)} must be at most ${ceiling} (got ${value})`);
+-    }
+     out[key] = value;
+   }
+   return out as ManifestWorkBudget;

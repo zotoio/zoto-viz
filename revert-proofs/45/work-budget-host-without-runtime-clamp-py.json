@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_manifest_work_budget.py",
+  "testName": "test_runtime_clamp_direct_call",
+  "description": "Python host runtime clamp keeps workBudget within ceilings."
+}

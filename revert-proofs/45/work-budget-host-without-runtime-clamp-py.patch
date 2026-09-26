@@ -1,0 +1,11 @@
+diff --git a/service/manifest_work_budget.py b/service/manifest_work_budget.py
+index 9692f1e..1f576d3 100644
+--- a/service/manifest_work_budget.py
++++ b/service/manifest_work_budget.py
+@@ -90,5 +90,5 @@ def clamp_manifest_work_budget_at_runtime(budget: dict[str, int]) -> dict[str, i
+         else:
+             n = int(raw)
+         n = max(0, n)
+-        out[key] = min(n, ceilings[key])
++        out[key] = n
+     return out

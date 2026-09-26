@@ -7,6 +7,7 @@ import { parsePluginIdle } from "./fixtures/golden-state";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
+import { validateManifestWorkBudget } from "../../../plugins/sdk/manifest-work-budget";
 import type {
   PluginEngine,
   PluginLayout,
@@ -293,6 +294,9 @@ export function toPluginView(raw: unknown): PluginView {
   if (!Number.isFinite(version) || version < 1) throw new Error("plugin version is required");
 
   const engine = parseEngine(viz.engine ?? row.engine);
+  if (viz.workBudget !== undefined) {
+    validateManifestWorkBudget(viz.workBudget);
+  }
   const idle = parsePluginIdle(viz.idle);
   const spec: PluginView = {
     id,

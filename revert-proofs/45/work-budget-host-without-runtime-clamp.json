@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/manifest-work-budget.test.ts",
+  "testName": "clamps a direct host runtime call above the ceiling",
+  "description": "Host runtime clamp keeps workBudget within ceilings."
+}
