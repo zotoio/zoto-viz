@@ -41,11 +41,16 @@ Use the **preset** select in This view, or **dice → Randomise / Undo / Reset**
 
 ## Tests
 
-From `web/`:
+From repo root:
 
 ```bash
-pnpm exec vitest run src/plugins/rocket-car-soccer.test.ts
-pnpm exec tsc -p tsconfig.json --noEmit
+python3 -m pytest tests/test_rocket_car_soccer_pack.py -q
+```
+
+Pack vitest (also invoked by the pytest above):
+
+```bash
+./web/node_modules/.bin/vitest run --config plugins/src/rocket-car-soccer/vitest.config.cjs
 ```
 
 Python schema + shader stamp (when available):

@@ -1,14 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import FRAG from "../../../plugins/src/rocket-car-soccer/sky/fragment.glsl?raw";
-import FRONT from "../../../plugins/src/rocket-car-soccer/frontend/index.ts?raw";
-import VIS from "../../../plugins/src/rocket-car-soccer/visualisation.yml?raw";
-import PLUGIN from "../../../plugins/src/rocket-car-soccer/plugin.yml?raw";
-import README from "../../../plugins/src/rocket-car-soccer/README.md?raw";
+import type { VizDataFrame, VizSysTelemetry } from "../../../sdk/viz-contract";
 import {
   RCS_CAPS,
   RCS_DEFAULTS,
@@ -27,8 +23,14 @@ import {
   rcsRenderScale,
   scanRcsTrademarks,
   validatePreset,
-} from "../../../plugins/src/rocket-car-soccer/frontend/pack";
-import { RCS_LIVE_MAPPING, hostLabelHash, ingestLiveFrame, resetRcsTalkerCacheForTest } from "../../../plugins/src/rocket-car-soccer/frontend/live";
+} from "./pack";
+import {
+  RCS_LIVE_MAPPING,
+  RCS_PACKET_SLICE_CAP,
+  hostLabelHash,
+  ingestLiveFrame,
+  resetRcsTalkerCacheForTest,
+} from "./live";
 import {
   enforceRcsCaps,
   maxSubstepsFor,
@@ -53,16 +55,32 @@ import {
   rcsWorkBudgetAtPreset,
   resetRcsSim,
   setRcsOptions,
-} from "../../../plugins/src/rocket-car-soccer/frontend/match";
-import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
-import type { VizDataFrame } from "../../../plugins/sdk/viz-contract";
-import { EMPTY_SYS_TELEMETRY } from "../../../plugins/sdk/viz-contract";
-import { RCS_PACKET_SLICE_CAP } from "../../../plugins/src/rocket-car-soccer/frontend/live";
+} from "./match";
+import { probePluginSkyCompile, wrapPluginSky } from "./test/sky-compile";
 
-const PACK_ROOT = join(__dirname, "../../../plugins/src/rocket-car-soccer");
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const PACK_DIR = join(__dirname, "..");
+const FRAG = readFileSync(join(PACK_DIR, "sky/fragment.glsl"), "utf8");
+const FRONT = readFileSync(join(PACK_DIR, "frontend/index.ts"), "utf8");
+const VIS = readFileSync(join(PACK_DIR, "visualisation.yml"), "utf8");
+const PLUGIN = readFileSync(join(PACK_DIR, "plugin.yml"), "utf8");
+const README = readFileSync(join(PACK_DIR, "README.md"), "utf8");
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const ESBUILD_BIN = path.join(REPO_ROOT, "web/node_modules/.bin/esbuild");
-const PACK_ENTRY = path.join(REPO_ROOT, "plugins/src/rocket-car-soccer/frontend/index.ts");
+const PACK_ENTRY = join(PACK_DIR, "frontend/index.ts");
+
+const EMPTY_SYS: VizSysTelemetry = {
+  cpu: 0,
+  mem: 0,
+  disk: 0,
+  gpu: 0,
+  temp: 0,
+  watts: 0,
+  psi: 0,
+  sockets: 0,
+  failed: 0,
+  udev: 0,
+};
 
 function vizFrame(over: Partial<VizDataFrame> = {}): VizDataFrame {
   return {
@@ -116,7 +134,7 @@ describe("rocket-car-soccer pack", () => {
   });
 
   it("passes trademark name-check on all pack files", () => {
-    const files = listPackFiles(PACK_ROOT);
+    const files = listPackFiles(PACK_DIR);
     for (const f of files) {
       const text = readFileSync(f, "utf8");
       expect(scanRcsTrademarks(text), f).toBeNull();
@@ -255,12 +273,12 @@ describe("rocket-car-soccer pack", () => {
     setRcsOptions({});
     let failAlert = 0;
     for (let i = 0; i < 40; i++) {
-      const f = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), i / 60, 1 / 60, 1.777);
+      const f = rcsTick(vizFrame({ sys: { ...EMPTY_SYS, failed: 1 } }), i / 60, 1 / 60, 1.777);
       failAlert = f.slot0[RCS_SLOT.failAlert]!;
     }
     expect(failAlert).toBeGreaterThan(0.5);
     rcsTriggerMaxGoalExplosion();
-    const during = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0.6, 1 / 60, 1.777);
+    const during = rcsTick(vizFrame({ sys: { ...EMPTY_SYS, failed: 1 } }), 0.6, 1 / 60, 1.777);
     expect(during.slot0[RCS_SLOT.goalFlash]).toBeLessThan(0.12);
   });
 
@@ -292,7 +310,7 @@ describe("rocket-car-soccer pack", () => {
           { id: "10.0.0.20", rate: 5, role: "lan" },
           { id: "10.0.0.10", rate: 120, role: "lan" },
         ],
-        sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.85 },
+        sys: { ...EMPTY_SYS, failed: 0.85 },
       }),
       1 / 60,
       1 / 60,
@@ -309,7 +327,7 @@ describe("rocket-car-soccer pack", () => {
             { id: "10.0.0.20", rate: 5, role: "lan" },
             { id: "10.0.0.10", rate: 120, role: "lan" },
           ],
-          sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.85 },
+          sys: { ...EMPTY_SYS, failed: 0.85 },
         }),
         1 / 60 + i / 60,
         1 / 60,
@@ -339,7 +357,7 @@ describe("rocket-car-soccer pack", () => {
           { proto: "tcp", size: 64, field: 0.02 },
           { proto: "udp", size: 32, field: 0.08 },
         ],
-        sys: { ...EMPTY_SYS_TELEMETRY, failed: 0 },
+        sys: { ...EMPTY_SYS, failed: 0 },
         headlines: [{ id: "h1", label: "units", text: "3 failed services", kind: "alert" }],
       }),
       0,
@@ -350,7 +368,7 @@ describe("rocket-car-soccer pack", () => {
     const ingest = ingestLiveFrame(
       vizFrame({
         packets: [{ proto: "dns", size: 512, field: 0.99 }],
-        sys: { ...EMPTY_SYS_TELEMETRY, failed: 0 },
+        sys: { ...EMPTY_SYS, failed: 0 },
         headlines: [{ id: "h2", label: "FAIL", text: "critical", kind: "fail" }],
       }),
     );
@@ -495,9 +513,9 @@ describe("rocket-car-soccer pack", () => {
 
   it("smooths stadium fail display without strobing while sys.failed stays high", () => {
     resetRcsSim(1);
-    const f1 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0, 1 / 60, 1.777);
-    const f2 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 0.5, 1 / 60, 1.777);
-    const f3 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 1 } }), 1.0, 1 / 60, 1.777);
+    const f1 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS, failed: 1 } }), 0, 1 / 60, 1.777);
+    const f2 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS, failed: 1 } }), 0.5, 1 / 60, 1.777);
+    const f3 = rcsTick(vizFrame({ sys: { ...EMPTY_SYS, failed: 1 } }), 1.0, 1 / 60, 1.777);
     expect(f2.slot0[RCS_SLOT.failAlert]!).toBeGreaterThanOrEqual(f1.slot0[RCS_SLOT.failAlert]!);
     expect(f3.slot0[RCS_SLOT.failAlert]!).toBeGreaterThanOrEqual(f2.slot0[RCS_SLOT.failAlert]!);
     expect(Math.abs(f3.slot0[RCS_SLOT.failAlert]! - f2.slot0[RCS_SLOT.failAlert]!)).toBeLessThan(0.2);
