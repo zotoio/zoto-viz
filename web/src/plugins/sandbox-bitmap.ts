@@ -1,7 +1,6 @@
 import type { SurfaceLetterboxFill } from "../graph/letterbox-fill";
 import { letterboxInnerRect, paintLetterboxBars } from "../graph/letterbox-fill";
-import type { RenderHost } from "../graph/render-host";
-import type { HostedView } from "../graph/render-host";
+import type { HostedView, RenderHost, Viewport } from "../graph/render-host";
 
 export type SandboxBitmapStats = {
   received: number;
@@ -57,12 +56,12 @@ export class SandboxBitmapLane {
     fill: SurfaceLetterboxFill,
     aspect: number,
     releaseBitmap = true,
-  ): boolean {
+  ): Viewport | null {
     const bitmap = this.pending;
-    if (!bitmap) return false;
-    host.presentBitmapMirror(mirror, bitmap, fill, aspect, this.pluginId, releaseBitmap);
+    if (!bitmap) return null;
+    const vp = host.presentBitmapMirror(mirror, bitmap, fill, aspect, this.pluginId, releaseBitmap);
     if (releaseBitmap) this.clearPendingAfterPresent();
-    return true;
+    return vp;
   }
 
   /** Host present closed the bitmap; drop the handle without a second close. */

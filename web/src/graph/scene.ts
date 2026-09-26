@@ -1616,8 +1616,7 @@ export class NetScene implements HostedView {
           })()
           : 16 / 9;
         if (lane.peek()) {
-          const bmp = lane.peek()!;
-          this.lastVp = this.host.presentBitmapMirror(this, bmp, fill, aspect, this.packCoalesce.pluginId!);
+          this.lastVp = lane.drawMirror(this.host, this, fill, aspect) ?? undefined;
         } else if (lane.shouldShowFailurePlaceholder()) {
           this.lastVp = this.host.presentSandboxMirrorPlaceholder(
             this,
