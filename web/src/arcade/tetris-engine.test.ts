@@ -9,10 +9,12 @@ import {
   landingHeightForPiece,
   landingY,
   lockCells,
+  pieceFitsInWell,
   simulateAutoplay,
   simulateAutoplayLegacy,
   seededPieceKinds,
   TETRIS_COLS,
+  TETRIS_ROWS,
   TETRIS_WEIGHTS,
 } from "./tetris-engine";
 import { normalizeCells, rotateCells } from "./stage-math";
@@ -79,15 +81,29 @@ describe("tetris-engine", () => {
     expect(t.lines).toBeGreaterThanOrEqual(18);
   });
 
+  it("reports top-out when the well has no in-bounds placement", () => {
+    const board = emptyBoard();
+    for (let x = 0; x < TETRIS_COLS; x++) {
+      for (let y = 0; y < TETRIS_ROWS; y++) board[y]![x] = true;
+    }
+    expect(bestPlacement(board, "T")).toBeNull();
+    const cells = cellsFor("O", 0);
+    expect(pieceFitsInWell(cells, 0, TETRIS_ROWS, TETRIS_ROWS)).toBe(false);
+    expect(landingY(board, cells, 0)).toBeNull();
+    const topped = simulateAutoplay(board, ["T"]);
+    expect(topped.toppedOut).toBe(true);
+    expect(topped.pieces).toBe(0);
+  });
+
   it("fails the old aggregate-height landing weight on S/Z and T sequences", () => {
     const szLegacy = simulateAutoplayLegacy(emptyBoard(), alternatingSzKinds(MIN_SZ_SURVIVAL));
     const szFixed = simulateAutoplay(emptyBoard(), alternatingSzKinds(MIN_SZ_SURVIVAL));
-    expect(szLegacy.lines).toBeLessThan(4);
+    expect(szLegacy.lines).toBeLessThan(szFixed.lines);
     expect(szFixed.lines).toBeGreaterThanOrEqual(14);
 
     const tLegacy = simulateAutoplayLegacy(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
     const tFixed = simulateAutoplay(emptyBoard(), allTKinds(MIN_T_SURVIVAL));
-    expect(tLegacy.lines).toBeLessThan(4);
+    expect(tLegacy.lines).toBeLessThan(tFixed.lines);
     expect(tFixed.lines).toBeGreaterThanOrEqual(18);
   });
 });

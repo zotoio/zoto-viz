@@ -32,6 +32,19 @@ export function cellsFor(kind: string, rot: number): [number, number][] {
   return normalizeCells(rotateCells(base, rot));
 }
 
+export function pieceFitsInWell(
+  cells: [number, number][],
+  x: number,
+  y: number,
+  rows = TETRIS_ROWS,
+): boolean {
+  for (const [cx, cy] of cells) {
+    const py = y + cy;
+    if (py < 0 || py >= rows) return false;
+  }
+  return true;
+}
+
 export function collides(board: Board, cells: [number, number][], x: number, y: number): boolean {
   const cols = board[0]?.length ?? TETRIS_COLS;
   const rows = board.length;
@@ -54,6 +67,7 @@ export function landingY(board: Board, cells: [number, number][], x: number): nu
   }
   if (y < 0) return null;
   while (y > 0 && !collides(board, cells, x, y - 1)) y--;
+  if (!pieceFitsInWell(cells, x, y, board.length)) return null;
   return y;
 }
 

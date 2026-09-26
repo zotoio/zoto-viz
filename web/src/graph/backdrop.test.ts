@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import {
   BACKDROP_OPTIONS, CYCLE_SKIES, cycleSkyPool, Backdrop, RECIPE_EASE_MAX_S,
-  PLUGIN_SKY_FALLBACK, PHOTO_LOOP_S, PHOTO_LOOP_FADE_S, PHOTO_SKIES, configurePhotoStillTexture, isPhotoSky, isPhotoVideoUrl, photoCacheRetainUrls, photoSkyCandidates, photoLoopPhase, photoLoopMix, photoStillLoopSample, pluginShaderError, prunePhotoTextureCache, prunePhotoVideoCache, probePluginSkyCompile, wrapPluginSky, skyGroup,
+  PLUGIN_SKY_FALLBACK, PHOTO_LOOP_S, PHOTO_LOOP_FADE_S, PHOTO_SKIES, configurePhotoStillTexture, isPhotoSky, isPhotoVideoUrl, photoCacheRetainUrls, photoSkyCandidates, photoLoopPhase, photoLoopMix, photoStillLoopSample, photoVideoSeamFadeSec, pluginShaderError, prunePhotoTextureCache, prunePhotoVideoCache, probePluginSkyCompile, wrapPluginSky, skyGroup,
   type PhotoVideoLoop,
 } from "./backdrop";
 import { liveCam } from "../camera/livecam";
@@ -274,6 +274,13 @@ describe("photo sky cache", () => {
 });
 
 describe("photo sky loop seam", () => {
+  it("caps seam fade for short sky clips so loops still wrap", () => {
+    expect(photoVideoSeamFadeSec(5)).toBeCloseTo(5 / 3);
+    expect(photoVideoSeamFadeSec(6)).toBeCloseTo(2);
+    expect(photoVideoSeamFadeSec(4)).toBeGreaterThan(0);
+    expect(photoLoopMix(4.9, 5)).toBeGreaterThan(0);
+  });
+
   it("crossfades the last window onto the start and is 0 again at wrap", () => {
     const dur = 12;
     expect(photoLoopMix(0, dur)).toBe(0);

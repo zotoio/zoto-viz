@@ -53,8 +53,10 @@ export const PHOTO_STILL_ZOOM_MIN = 1;
 export const PHOTO_STILL_ZOOM_MAX = 1.06;
 /** Max UV pan (fraction of the image) at full Ken Burns aim. */
 export const PHOTO_STILL_PAN_MAX = 0.028;
-/** Crossfade from the last video frames onto t=0 so the wrap has no hitch. */
+/** Target crossfade from the last video frames onto t=0 (capped for short clips). */
 export const PHOTO_LOOP_FADE_S = 3;
+/** Crossfade between photo sky plates when switching backdrop kind. */
+export const PHOTO_SKY_CROSSFADE_S = PHOTO_LOOP_FADE_S;
 
 /** 0..1 linear phase of a timed loop. */
 export function photoLoopPhase(t: number, period = PHOTO_LOOP_S): number {
@@ -74,8 +76,19 @@ export function photoKenBurnsEase(t: number, period = PHOTO_KEN_BURNS_CYCLE_S): 
  * Mix of the incoming pass (start) over the outgoing pass (end).
  * 0 until the fade window; 1 at the last instant before wrap. At t === duration the phase is 0 again.
  */
+/** Seam fade for a looping video plate; never requires duration > 2× target (short clips use a shorter fade). */
+export function photoVideoSeamFadeSec(duration: number, target = PHOTO_LOOP_FADE_S): number {
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  const fade = Math.min(target, duration / 3);
+  if (fade <= 0 || duration <= fade * 2) return 0;
+  return fade;
+}
+
 export function photoLoopMix(t: number, duration: number, fade = PHOTO_LOOP_FADE_S): number {
-  if (!(duration > 0) || !(fade > 0) || duration <= fade * 2) return 0;
+  const seam = photoVideoSeamFadeSec(duration, fade);
+  if (seam <= 0) return 0;
+  fade = seam;
+  if (!(duration > 0) || duration <= fade * 2) return 0;
   const p = ((t % duration) + duration) % duration;
   const start = duration - fade;
   if (p < start) return 0;
@@ -1078,7 +1091,6 @@ export class Backdrop {
       const t = new THREE.Texture(img);
       configurePhotoStillTexture(t);
       this.photoCache.set(url, t);
-      this.syncPhotoCacheSize();
       if (gen !== this.photoLoadGen) return;
       this.bindPhoto(t, true, url);
     }).catch(() => undefined);
@@ -1117,7 +1129,6 @@ export class Backdrop {
         incoming: false,
       };
       this.photoVideoCache.set(url, pack);
-      this.syncPhotoCacheSize();
       this.bindPhotoVideo(pack);
     };
     a.addEventListener("error", fail);
@@ -1166,12 +1177,18 @@ export class Backdrop {
     if (cur.el.videoWidth > 0) {
       (this.photoMat.uniforms.uVideoSize.value as THREE.Vector2).set(cur.el.videoWidth, cur.el.videoHeight);
     }
-    if (!Number.isFinite(dur) || dur <= PHOTO_LOOP_FADE_S * 2) {
+    const seamFade = photoVideoSeamFadeSec(dur);
+    if (seamFade <= 0) {
       this.photoMat.uniforms.uLoopMix.value = 0;
+      if (cur.el.ended) {
+        try { cur.el.currentTime = 0; } catch { /* */ }
+        const play = cur.el.play();
+        if (play) void play.catch(() => undefined);
+      }
       return;
     }
     const t = cur.el.ended ? dur : cur.el.currentTime;
-    const mix = photoLoopMix(t, dur);
+    const mix = photoLoopMix(t, dur, seamFade);
     this.photoMat.uniforms.uLoopMix.value = mix;
     this.photoMat.uniforms.uVideoB.value = nxt.tex;
     if (mix > 0 && !pack.incoming) {
@@ -1198,7 +1215,7 @@ export class Backdrop {
     const prev = this.photoWant;
     if (prev && prev !== nextUrl) {
       this.photoOutgoingUrl = prev;
-      this.photoEvictAt = this.clock + PHOTO_LOOP_FADE_S;
+      this.photoEvictAt = this.clock + PHOTO_SKY_CROSSFADE_S;
     }
     this.photoWant = nextUrl;
     this.syncPhotoCacheSize();
