@@ -12,11 +12,14 @@ import {
   TEST_PATH_RE,
   allowTypeErrorEnabled,
   buildPytestArgv,
+  assessPytestSelection,
+  assessVitestSelection,
   classifyPatchedPytest,
   classifyPatchedVitest,
   escapeVitestTestNamePattern,
-  parsePytestJunit,
+  parsePytestPluginJson,
   parseTimeoutSec,
+  parseVitestJsonReport,
   patchTouchesTestFiles,
   pytestNodeId,
   resolveVitestProject,
@@ -26,8 +29,13 @@ import {
   validatePythonModule,
   validateTestFileRel,
   vitestTestNamePattern,
-  isVitestJunitSkipped,
 } from "./revert-proof-lib.mjs";
+
+const REVERT_PROOF_PYTEST_PLUGIN_MODULE = "revert_proof_pytest_plugin";
+
+function revertProofScriptsDir(wtRoot) {
+  return path.join(wtRoot, "scripts");
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_TIMEOUT_SEC = 120;
@@ -896,145 +904,68 @@ function runProcess(cmd, args, options) {
   });
 }
 
-function countVitestExecuted(report) {
-  let executed = 0;
-  let passed = 0;
-  let failed = 0;
-  const failedAssertions = [];
-  /** @type {{ fullName: string, status: string }[]} */
-  const ranTests = [];
-  if (!report?.testResults?.length) {
-    return {
-      executed: 0,
-      passed: 0,
-      failed: 0,
-      suiteError: report ? "no tests executed" : "no JSON report",
-      failedAssertions: [],
-      ranTests,
-    };
-  }
-  for (const file of report.testResults ?? []) {
-    if (file.status === "failed" && (!file.assertionResults || file.assertionResults.length === 0)) {
-      return {
-        executed: 0,
-        passed: 0,
-        failed: 0,
-        suiteError: file.message || "suite failed",
-        failedAssertions: [],
-        ranTests,
-      };
-    }
-    for (const t of file.assertionResults ?? []) {
-      if (t.status === "skipped" || t.status === "pending" || t.status === "todo") {
-        continue;
-      }
-      executed += 1;
-      // Vitest 5's JSON reporter flattens nested names with spaces in
-      // `fullName`. Rebuild the sidecar's `describe > … > test` form from
-      // the structured fields so literal ` > ` text in a title stays intact.
-      const fullName =
-        Array.isArray(t.ancestorTitles) && typeof t.title === "string"
-          ? [...t.ancestorTitles, t.title].join(" > ")
-          : t.fullName || t.title;
-      ranTests.push({ fullName, status: t.status });
-      if (t.status === "passed") passed += 1;
-      if (t.status === "failed") {
-        failed += 1;
-        failedAssertions.push({
-          name: fullName,
-          messages: t.failureMessages ?? [],
-        });
-      }
-    }
-  }
-  return { executed, passed, failed, suiteError: null, failedAssertions, ranTests };
+function summarizeVitestCounts(parsed, testName) {
+  const selection = assessVitestSelection(parsed.tests, testName);
+  const executed = parsed.tests.filter(
+    (t) => !["skipped", "pending", "todo"].includes(t.status),
+  ).length;
+  const target = selection.target;
+  const passed = target?.status === "passed" ? 1 : 0;
+  const failed = target?.status === "failed" ? 1 : 0;
+  return {
+    executed,
+    passed,
+    failed,
+    suiteError: parsed.suiteError,
+    selection,
+    tests: parsed.tests,
+  };
 }
 
-function decodeXmlAttribute(value) {
-  return value.replace(
-    /&(?:#(\d+)|#x([0-9a-f]+)|amp|lt|gt|quot|apos);/gi,
-    (entity, decimal, hex) => {
-      if (decimal) return String.fromCodePoint(Number.parseInt(decimal, 10));
-      if (hex) return String.fromCodePoint(Number.parseInt(hex, 16));
-      return {
-        "&amp;": "&",
-        "&lt;": "<",
-        "&gt;": ">",
-        "&quot;": '"',
-        "&apos;": "'",
-      }[entity.toLowerCase()];
-    },
-  );
-}
-
-export function vitestJunitExecutedTestNames(xmlText) {
-  const names = [];
-  const testcaseRe =
-    /<testcase\b((?:"[^"]*"|'[^']*'|[^'">/])*)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
-  let testcase;
-  while ((testcase = testcaseRe.exec(xmlText ?? ""))) {
-    const attrsText = testcase[1];
-    const body = testcase[2] ?? "";
-    if (isVitestJunitSkipped(attrsText, body)) continue;
-    const attrs = {};
-    const attrRe = /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-    let attr;
-    while ((attr = attrRe.exec(attrsText))) {
-      attrs[attr[1]] = decodeXmlAttribute(attr[2] ?? attr[3] ?? "");
-    }
-    if (attrs.name === undefined) continue;
-    const candidates = [attrs.name];
-    if (attrs.classname) {
-      candidates.push(`${attrs.classname} > ${attrs.name}`);
-    }
-    names.push(candidates);
-  }
-  return names;
-}
-
-function assertVitestTestSelection(slug, phase, meta, counts, junitXml) {
-  const ran = counts.ranTests ?? [];
-  if (ran.length !== 1) {
-    throw new Error(
-      `row ${slug}: ${phase} must run exactly 1 test (got ${ran.length})`,
-    );
-  }
-  const ranName = ran[0].fullName;
-  if (ranName !== meta.testName) {
-    throw new Error(
-      `row ${slug}: ${phase} ran "${ranName}" but sidecar expects "${meta.testName}"`,
-    );
-  }
-  const junitExecuted = vitestJunitExecutedTestNames(junitXml);
-  const junitMatches = junitExecuted.filter((cands) => cands.includes(meta.testName));
-  if (junitMatches.length !== 1) {
-    throw new Error(
-      `row ${slug}: ${phase} JUnit must have exactly 1 executed testcase matching sidecar (got ${junitMatches.length} matches among ${junitExecuted.length} executed)`,
-    );
-  }
+function summarizePytestCounts(parsed, nodeId) {
+  const selection = assessPytestSelection(parsed.tests, nodeId);
+  const executed = parsed.tests.filter((t) => t.outcome !== "skipped").length;
+  return {
+    executed,
+    collectionError: parsed.collectionError,
+    selection,
+    tests: parsed.tests,
+    cases: selection.target
+      ? [
+          {
+            name: selection.target.nodeid,
+            outcome: selection.target.outcome,
+          },
+        ]
+      : [],
+  };
 }
 
 async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   const { bin, cwd, config } = resolveVitestProject(wtRoot, meta);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
-  const junitOut = path.join(artifactsDir, `${slug}-${phase}-vitest.xml`);
   const testPattern = vitestTestNamePattern(meta.testName);
   const testFileAbs = path.join(wtRoot, meta.testFile);
   const testFileArg = path.relative(cwd, testFileAbs).replace(/\\/g, "/");
-  const configArg =
+  const baseConfigAbs =
     config && path.isAbsolute(config)
-      ? path.relative(cwd, config).split(path.sep).join("/") || config
-      : config;
+      ? config
+      : config
+        ? path.join(cwd, config)
+        : path.join(revertProofScriptsDir(wtRoot), "vitest.config.mjs");
+  const overlayAbs = path.join(
+    revertProofScriptsDir(wtRoot),
+    "revert-proof-vitest-overlay.mjs",
+  );
+  const overlayRel = path.relative(cwd, overlayAbs).split(path.sep).join("/");
   const args = [
     "run",
     "--config",
-    configArg,
+    overlayRel,
     "-t",
     testPattern,
     "--reporter=json",
     `--outputFile.json=${jsonOut}`,
-    "--reporter=junit",
-    `--outputFile.junit=${junitOut}`,
     "--",
     testFileArg,
   ];
@@ -1044,6 +975,7 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
       ...process.env,
       FORCE_COLOR: "0",
       REVERT_PROOF_ROOT: wtRoot,
+      REVERT_PROOF_VITEST_BASE_CONFIG: baseConfigAbs,
     },
     timeoutMs,
   });
@@ -1051,22 +983,14 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   if (fs.existsSync(jsonOut)) {
     report = JSON.parse(fs.readFileSync(jsonOut, "utf8"));
   }
-  const junitXml = fs.existsSync(junitOut) ? fs.readFileSync(junitOut, "utf8") : "";
-  const counts = report
-    ? countVitestExecuted(report)
-    : {
-        executed: 0,
-        passed: 0,
-        failed: 0,
-        suiteError: "no JSON report",
-        failedAssertions: [],
-        ranTests: [],
-      };
+  const parsed = report
+    ? parseVitestJsonReport(report)
+    : { tests: [], suiteError: "no JSON report" };
+  const counts = summarizeVitestCounts(parsed, meta.testName);
   return {
     command: formatCommandForReport(wtRoot, bin, args),
     ...result,
     counts,
-    junitXml,
     reportPath: jsonOut,
   };
 }
@@ -1087,29 +1011,38 @@ async function runPytest(
   timeoutMs,
   artifactsDir,
 ) {
-  const xmlOut = path.join(artifactsDir, `${slug}-${phase}-pytest.xml`);
+  const jsonOut = path.join(artifactsDir, `${slug}-${phase}-pytest.json`);
   const python = venvPython(mainRoot);
   const nodeId = pytestNodeId(meta.testFile, meta.testName);
-  const args = buildPytestArgv(nodeId, xmlOut, {
+  const args = buildPytestArgv(nodeId, REVERT_PROOF_PYTEST_PLUGIN_MODULE, {
     includeNoCov: pytestSupportsNoCov(python),
   });
+  const scriptsDir = revertProofScriptsDir(wtRoot);
+  const baseEnv = pythonEnvForWorktree(wtRoot);
+  const pythonPath = [scriptsDir, baseEnv.PYTHONPATH].filter(Boolean).join(path.delimiter);
   const result = await runProcess(python, args, {
     cwd: wtRoot,
-    env: { ...pythonEnvForWorktree(wtRoot), FORCE_COLOR: "0" },
+    env: {
+      ...baseEnv,
+      FORCE_COLOR: "0",
+      PYTHONPATH: pythonPath,
+      REVERT_PROOF_PYTEST_JSON: jsonOut,
+    },
     timeoutMs,
   });
   const exitCode = result.exitCode ?? 1;
-  let parsed = { executed: 0, cases: [], collectionError: exitCode !== 0 };
-  if (fs.existsSync(xmlOut)) {
-    parsed = parsePytestJunit(fs.readFileSync(xmlOut, "utf8"), exitCode);
+  let pluginParsed = { tests: [], collectionError: exitCode !== 0 };
+  if (fs.existsSync(jsonOut)) {
+    pluginParsed = parsePytestPluginJson(fs.readFileSync(jsonOut, "utf8"), exitCode);
   } else if (exitCode !== 0) {
-    parsed = { executed: 0, cases: [], collectionError: true };
+    pluginParsed = { tests: [], collectionError: true };
   }
+  const counts = summarizePytestCounts(pluginParsed, nodeId);
   return {
     command: formatCommandForReport(wtRoot, python, args),
     ...result,
-    counts: parsed,
-    reportPath: xmlOut,
+    counts,
+    reportPath: jsonOut,
   };
 }
 
@@ -1254,17 +1187,16 @@ function assertExactlyOneTest(slug, phase, run, meta) {
   if (run.timedOut) {
     throw new Error(`row ${slug}: ${phase} timed out`);
   }
-  const executed = metaRunnerCount(run);
-  if (executed === 0) {
+  const sel = run.counts.selection;
+  if (!sel?.ok) {
+    const reason = sel?.reason ?? "unknown";
     throw new Error(
-      `row ${slug}: ${phase} ran 0 tests (selection/filter error; never a pass)`,
+      `row ${slug}: ${phase} test selection failed (${reason}; never a pass)`,
     );
   }
-  if (run.junitXml !== undefined && meta?.runner === "vitest") {
-    assertVitestTestSelection(slug, phase, meta, run.counts, run.junitXml);
-  } else if (executed !== 1) {
+  if (metaRunnerCount(run) === 0) {
     throw new Error(
-      `row ${slug}: ${phase} must run exactly 1 test (got ${executed})`,
+      `row ${slug}: ${phase} ran 0 tests (selection/filter error; never a pass)`,
     );
   }
 }
@@ -1389,7 +1321,6 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   if (meta.runner === "vitest") {
     const kind = classifyPatchedVitest({
       counts: patched.counts,
-      junitXml: patched.junitXml,
     });
     rejectPatchedVitestGreen(kind, slug);
     if (kind === "build break" || kind === "not single assertion failure") {

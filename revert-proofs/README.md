@@ -27,7 +27,7 @@ Every regression test in a PR should prove it actually catches a production bug.
 | --- | --- | --- |
 | `runner` | yes | `vitest` or `pytest` |
 | `testFile` | yes | Path to the test file (repo-relative) |
-| `testName` | yes | Vitest **fullTestName** exactly as reported (including literal ` > ` inside describe titles); runner passes `-t "^…$"` with only regex metacharacters escaped, then checks JSON/JUnit that exactly one **executed** (non-skipped) test ran with the same full name. Pytest node suffix after `::` (e.g. `test_foo[param id]`); runner uses `testFile::testName`, never `-k` |
+| `testName` | yes | Vitest **fullTestName** exactly as reported (including literal ` > ` inside describe titles); runner passes `-t "^…$"` with only regex metacharacters escaped, then matches the JSON reporter row whose rebuilt name (`ancestorTitles` joined with ` > ` plus `title`) equals the sidecar. That test must be **passed** unpatched and **failed** patched; every other test in the JSON output must be **skipped**. Rows whose target test is skipped (`it.skipIf`, `ctx.skip()`) are rejected. Pytest: node id `testFile::testName` (never `-k`); plugin JSON must show the same node id with the same pass/fail/skip rules |
 | `description` | yes | One-line revert summary for the PR table |
 | `timeoutSec` | no | Per-row test timeout (default 120); timeouts are never counted as red |
 | `allowTypeError` | no | When true, a patched `tsc --noEmit -p web` failure is allowed (reason shown in report) |
@@ -41,7 +41,7 @@ node scripts/revert-proof.mjs <pr-number>
 
 Optional: `node scripts/revert-proof.mjs <pr-number> --row <slug>`.
 
-Uncommitted changes in your checkout are **not** included in proofs (you get a warning). Each row must pass exactly one test on the unpatched tree, then fail that same test on an **AssertionError** (vitest: JUnit `failure type="AssertionError"` only; pytest: JUnit failure `type="AssertionError"` or `message` starting with `AssertionError` / `assert `) after the production revert. Transform/import/collection failures and `tsc` breaks (unless `allowTypeError`) are rejected as “proves nothing”.
+Uncommitted changes in your checkout are **not** included in proofs (you get a warning). Each row must pass exactly one test on the unpatched tree, then fail that same test with a real **AssertionError** after the production revert. Red is decided only from error **type**, never message/name text: vitest sets `task.meta.revertProofAssertion` in a runner-injected overlay (`VitestRunner.runTask` on Vitest 5.0.0 — `onTestFailed` only sees serialized errors); pytest uses `revert_proof_pytest_plugin.py` (`excinfo.errisinstance(AssertionError)`). Transform/import/collection failures and `tsc` breaks (unless `allowTypeError`) are rejected as “proves nothing”.
 
 Patches must touch **production-reachable** code: for each changed file, the runner walks production importers (under `web/src`, `plugins`, `service`, `packages`, etc., excluding tests/fixtures) up to configured entry points (`scripts/revert-proof-production.json`). Otherwise the row fails with `revert target unreachable from production: <file>` (test-only helpers do not count).
 
@@ -71,6 +71,6 @@ pnpm revert-proof:selftest
 
 ## Pytest rows
 
-Use `"runner": "pytest"` with `testFile` / `testName` (pytest node id `file::test`, never `-k`). Red requires JUnit failure metadata indicating an assertion (`type="AssertionError"` or message starting with `AssertionError` / `assert `), not merely the word AssertionError in a traceback.
+Use `"runner": "pytest"` with `testFile` / `testName` (pytest node id `file::test`, never `-k`). Red requires `revertProofAssertion: true` in the plugin JSON (`pytest_runtest_logreport`, call phase), not text in tracebacks or messages.
 
 Optional `project` on vitest rows: `"web"` or `"scripts"` (default inferred from `testFile` prefix).

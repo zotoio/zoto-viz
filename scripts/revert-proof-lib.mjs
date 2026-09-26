@@ -126,14 +126,15 @@ export function pytestNodeId(testFile, testName) {
   return `${file}::${testName}`;
 }
 
-export function buildPytestArgv(nodeId, xmlOut, { includeNoCov = true } = {}) {
+export function buildPytestArgv(nodeId, pluginModule, { includeNoCov = true } = {}) {
   const args = [
     "-m",
     "pytest",
     "-p",
     "no:cacheprovider",
+    "-p",
+    pluginModule,
     nodeId,
-    `--junitxml=${xmlOut}`,
   ];
   if (includeNoCov) {
     args.splice(2, 0, "--no-cov");
@@ -222,114 +223,111 @@ export function patchTouchesTestFiles(patchText) {
   return [...paths].some((p) => TEST_PATH_RE.test(p));
 }
 
-export function isVitestJunitSkipped(attrsText, body) {
-  if (/<skipped\b/i.test(body ?? "")) return true;
-  const statusM = attrsText.match(/\bstatus="([^"]*)"/);
-  if (statusM && /skipped|pending|todo/i.test(statusM[1])) return true;
-  const skippedM = attrsText.match(/\bskipped="([^"]*)"/);
-  if (skippedM && /^(1|true|yes)$/i.test(skippedM[1])) return true;
-  return false;
-}
+const VITEST_SKIP_STATUSES = new Set(["skipped", "pending", "todo"]);
 
-/** @returns {string | null} */
-export function vitestJunitFailureType(xmlText) {
-  if (!xmlText?.trim()) return null;
-  const caseRe = /<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g;
-  let m;
-  let failedType = null;
-  let failedCount = 0;
-  while ((m = caseRe.exec(xmlText))) {
-    const attrs = m[1];
-    const body = m[3] ?? "";
-    if (isVitestJunitSkipped(attrs, body)) continue;
-    if (!/<failure\b/.test(body)) continue;
-    failedCount += 1;
-    const tag = body.match(/<failure\b([^>]*)>/);
-    const typeM = tag?.[1]?.match(/\btype="([^"]*)"/);
-    failedType = typeM ? typeM[1] : null;
+export function vitestAssertionFullName(assertion) {
+  if (Array.isArray(assertion.ancestorTitles) && typeof assertion.title === "string") {
+    return [...assertion.ancestorTitles, assertion.title].join(" > ");
   }
-  if (failedCount !== 1) return null;
-  return failedType;
+  return assertion.fullName || assertion.title;
 }
 
-export function isVitestAssertionFailure(_failedAssertions, junitXml) {
-  const junitType = vitestJunitFailureType(junitXml ?? "");
-  return junitType === "AssertionError";
+/** @returns {{ tests: { fullName: string, status: string, revertProofAssertion: boolean }[], suiteError: string | null }} */
+export function parseVitestJsonReport(report) {
+  /** @type {{ fullName: string, status: string, revertProofAssertion: boolean }[]} */
+  const tests = [];
+  if (!report?.testResults?.length) {
+    return {
+      tests,
+      suiteError: report ? "no tests executed" : "no JSON report",
+    };
+  }
+  for (const file of report.testResults ?? []) {
+    if (file.status === "failed" && (!file.assertionResults || file.assertionResults.length === 0)) {
+      return { tests, suiteError: file.message || "suite failed" };
+    }
+    for (const t of file.assertionResults ?? []) {
+      tests.push({
+        fullName: vitestAssertionFullName(t),
+        status: t.status,
+        revertProofAssertion: t.meta?.revertProofAssertion === true,
+      });
+    }
+  }
+  return { tests, suiteError: null };
+}
+
+/**
+ * @param {{ fullName: string, status: string, revertProofAssertion: boolean }[]} tests
+ * @param {string} testName
+ */
+export function assessVitestSelection(tests, testName) {
+  const target = tests.find((t) => t.fullName === testName);
+  if (!target) {
+    return { ok: false, reason: "target not found", target: null };
+  }
+  if (VITEST_SKIP_STATUSES.has(target.status)) {
+    return { ok: false, reason: "target skipped", target };
+  }
+  const others = tests.filter((t) => t.fullName !== testName);
+  if (!others.every((t) => VITEST_SKIP_STATUSES.has(t.status))) {
+    return { ok: false, reason: "other tests not skipped", target };
+  }
+  return { ok: true, target, reason: null };
 }
 
 export function classifyPatchedVitest(run) {
   if (run.counts.suiteError) return "build break";
-  const { executed, passed, failed } = run.counts;
-  if (executed === 1 && passed === 1 && failed === 0) return "green";
-  if (executed !== 1 || failed !== 1) return "not single assertion failure";
-  if (!isVitestAssertionFailure(run.counts.failedAssertions, run.junitXml)) {
-    return "build break";
-  }
-  return "assertion";
+  const sel = run.counts.selection;
+  if (!sel?.ok || !sel.target) return "not single assertion failure";
+  if (sel.target.status === "passed") return "green";
+  if (sel.target.status !== "failed") return "build break";
+  return sel.target.revertProofAssertion ? "assertion" : "build break";
 }
 
-export function pytestFailureMessage(body) {
-  if (!body) return "";
-  const innerM = body.match(/<failure\b[^>]*>([\s\S]*?)<\/failure>/);
-  const text = innerM ? innerM[1] : body;
-  const lines = text.replace(/&#10;/g, "\n").split("\n");
-  for (const line of lines) {
-    const t = line.trim();
-    if (t) return t;
+/** @returns {{ tests: { nodeid: string, outcome: string, revertProofAssertion: boolean }[], collectionError: boolean }} */
+export function parsePytestPluginJson(text, pytestExitCode) {
+  if (!text?.trim()) {
+    return { tests: [], collectionError: pytestExitCode !== 0 };
   }
-  return "";
+  try {
+    const data = JSON.parse(text);
+    const tests = Array.isArray(data.tests) ? data.tests : [];
+    return { tests, collectionError: false };
+  } catch {
+    return { tests: [], collectionError: true };
+  }
 }
 
-export function isPytestAssertionBody(body) {
-  const typeM = body.match(/<failure\b[^>]*\btype="([^"]*)"/);
-  if (typeM?.[1]) {
-    return typeM[1] === "AssertionError";
+/**
+ * @param {{ nodeid: string, outcome: string, revertProofAssertion: boolean }[]} tests
+ * @param {string} nodeId
+ */
+export function assessPytestSelection(tests, nodeId) {
+  const target = tests.find((t) => t.nodeid === nodeId);
+  if (!target) {
+    return { ok: false, reason: "target not found", target: null };
   }
-  const msgM = body.match(/<failure\b[^>]*\bmessage="([^"]*)"/);
-  const msg = msgM?.[1] ?? "";
-  if (msg.startsWith("AssertionError")) return true;
-  if (msg.startsWith("assert ")) return true;
-  return false;
+  if (target.outcome === "skipped") {
+    return { ok: false, reason: "target skipped", target };
+  }
+  const others = tests.filter((t) => t.nodeid !== nodeId);
+  if (!others.every((t) => t.outcome === "skipped")) {
+    return { ok: false, reason: "other tests not skipped", target };
+  }
+  return { ok: true, target, reason: null };
 }
 
 export function classifyPatchedPytest(run) {
   if (run.counts.collectionError) return "build break";
-  const cases = run.counts.cases ?? [];
-  if (cases.length !== 1) return "not single test";
-  const c = cases[0];
-  if (c.outcome === "error") return "build break";
-  if (c.outcome === "passed") return "green";
-  if (c.outcome === "failed") {
-    return isPytestAssertionBody(c.body) ? "assertion" : "build break";
+  const sel = run.counts.selection;
+  if (!sel?.ok || !sel.target) return "not single test";
+  if (sel.target.outcome === "error") return "build break";
+  if (sel.target.outcome === "passed") return "green";
+  if (sel.target.outcome === "failed") {
+    return sel.target.revertProofAssertion ? "assertion" : "build break";
   }
   return "unknown";
-}
-
-/** @returns {{ executed: number, cases: {name:string,outcome:string,body:string}[], collectionError: boolean }} */
-export function parsePytestJunit(xmlText, pytestExitCode) {
-  const cases = [];
-  if (!xmlText?.trim()) {
-    return {
-      executed: 0,
-      cases,
-      collectionError: pytestExitCode !== 0,
-    };
-  }
-  const caseRe = /<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g;
-  let m;
-  while ((m = caseRe.exec(xmlText))) {
-    const attrs = m[1];
-    const body = m[3] ?? "";
-    const nameM = attrs.match(/\bname="([^"]*)"/);
-    const name = nameM ? nameM[1] : "";
-    if (/<skipped\b/.test(body)) continue;
-    let outcome = "passed";
-    if (/<failure\b/.test(body)) outcome = "failed";
-    else if (/<error\b/.test(body)) outcome = "error";
-    cases.push({ name, outcome, body });
-  }
-  const collectionError = pytestExitCode !== 0 && cases.length === 0;
-  return { executed: cases.length, cases, collectionError };
 }
 
 export function sanitizeReportText(text) {
