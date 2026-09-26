@@ -4,7 +4,7 @@ import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, parseGraphSpace } from "../graph/fabric";
 import { parseGraphLayout, parseGraphLinks } from "../graph/graph-layouts";
 import { parsePluginIdle } from "./fixtures/golden-state";
-import { parseVizContract } from "./viz-host";
+import { parseVizContract, parseVizContractResult } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
 import type {
@@ -321,8 +321,14 @@ export function toPluginView(raw: unknown): PluginView {
       c === "graph.read" || c === "graph.style" || c === "ui.overlay" || c === "config.read"
       || c === "viz.read" || c === "viz.write" || c === "typesafe");
   }
-  const vizContract = parseVizContract(row.viz);
-  if (vizContract) spec.viz = vizContract;
+  const vizParsed = parseVizContractResult(row.viz);
+  if (vizParsed?.state === "Blocked") {
+    spec.viz_block = vizParsed.reason;
+    spec.sky_available = false;
+    spec.sky_error = vizParsed.reason;
+  } else if (vizParsed?.state === "ready") {
+    spec.viz = vizParsed.contract;
+  }
   const typesafeContract = parseTypeSafeContract(row.typesafe);
   if (typesafeContract) spec.typesafe = typesafeContract;
   if (asString(row.hash)) spec.hash = asString(row.hash);

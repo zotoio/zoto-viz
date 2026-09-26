@@ -1,0 +1,8 @@
+{
+  "provenance": {
+    "preRewriteCommit": "1631015",
+    "collectorBlob": "a3ee3cc9",
+    "note": "TSE verified regenerating at 1631015 is byte-identical to pre-rewrite collector output when the same (src,dst) tie rule is applied to both implementations."
+  },
+  "freezeCommand": "cd web && FREEZE_COLLECT_EQUIVALENCE=1 pnpm exec vitest run src/plugins/fixtures/viz-collect-equivalence.freeze.test.ts"
+}

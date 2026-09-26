@@ -24,6 +24,7 @@ export type DogfoodHostHandlers = VizPackHandlers;
 export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   "packet-tunnel": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 2,
     maxBufferFloats: 16,
     maxParticles: 0,
@@ -32,6 +33,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "rf-constellation": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 32,
     maxParticles: 0,
@@ -40,6 +42,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "talker-storm": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 8,
     maxParticles: 512,
@@ -48,6 +51,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "kefrens-bars": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 32,
     maxParticles: 0,
@@ -56,6 +60,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "roto-proto": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 8,
     maxParticles: 0,
@@ -64,6 +69,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "blob-mesh": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 32,
     maxParticles: 0,
@@ -72,6 +78,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "star-sines": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 16,
     maxParticles: 0,
@@ -80,6 +87,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "hn-rain": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 64,
     maxParticles: 0,
@@ -88,6 +96,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "hn-term": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 64,
     maxParticles: 0,
@@ -96,6 +105,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "stereo-gram": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 8,
     maxBufferFloats: 64,
     maxParticles: 0,
@@ -104,6 +114,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "nixie-clock": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 16,
     maxParticles: 0,
@@ -162,7 +173,8 @@ export function dogfoodTick(
   build: typeof buildVizFrame = buildVizFrame,
 ): DogfoodTickResult {
   const contract = DEMO_PACK_CONTRACTS[packId];
-  const idleBuild = (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, contract.idle);
+  const idleBuild = (s: StateMsg, pt: number, a: number) =>
+    buildVizFrameForPlugin(s, pt, a, contract.idle, contract.contract);
   let buildCalls = 0;
   const wrappedBuild = (s: StateMsg, pt: number, a: number) => {
     buildCalls++;
@@ -225,6 +237,10 @@ export interface DogfoodSoakOptions {
   framesPerPack?: number;
   audio?: number;
   now?: () => number;
+  /** Synthetic clock step after each frame (used with `deterministicTiming`). */
+  stepMsPerFrame?: number;
+  /** Fixed `now()` stepping — no wall clock; build time stays under budget. */
+  deterministicTiming?: boolean;
   /** Synthetic vsync step for soft-FPS honesty tests (present-to-present skips). */
   presentStepMs?: number;
 }
@@ -241,15 +257,19 @@ export function dogfoodWithinBudget(
 }
 
 /**
- * Live dogfood soak: fat-LAN fixture, all three packs, real `performance.now`
- * budget path. Passes when p95 build and present are within budget or skips are
- * recorded (never silent green on soft-FPS).
+ * Dogfood soak: fat-LAN fixture, all shipped demo packs. Uses wall `performance.now`
+ * by default; pass `deterministicTiming: true` for stepped fake time (vitest gate).
  */
 export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult {
   const state = opts.state ?? fatLanFixture();
   const framesPerPack = opts.framesPerPack ?? 120;
   const audio = opts.audio ?? 0.15;
-  const now = opts.now ?? (() => performance.now());
+  const stepMs = opts.stepMsPerFrame ?? 1;
+  let syntheticClock = 0;
+  const deterministic = opts.deterministicTiming === true;
+  const now = deterministic
+    ? () => syntheticClock
+    : (opts.now ?? (() => performance.now()));
   const presentStepMs = opts.presentStepMs;
 
   const packs: DogfoodPackStats[] = [];
@@ -270,7 +290,7 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
     for (let i = 0; i < framesPerPack; i++) {
       const tickT0 = now();
       const tick = dogfoodTick(packId, state, prevTs, audio, budget, writer);
-      buildTimes.push(now() - tickT0);
+      buildTimes.push(deterministic ? stepMs : now() - tickT0);
       if (tick.delivered && tick.frame) {
         delivered++;
         prevTs = tick.frame.t;
@@ -279,13 +299,14 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
         presentT += presentStepMs;
         const presentT0 = now();
         budget.markPresent(presentT);
-        presentTimes.push(now() - presentT0);
+        presentTimes.push(deterministic ? stepMs : now() - presentT0);
       }
       const delta = budget.stats.skipped - skippedStart;
       if (delta > 0) {
         skipSamples.push({ t: now(), n: delta });
         skippedStart = budget.stats.skipped;
       }
+      if (deterministic) syntheticClock += stepMs;
     }
 
     const skipped = budget.stats.skipped;

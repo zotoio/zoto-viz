@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+index 377cb9e..07fd650 100644
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -192,6 +192,7 @@ function linkSlotForPair(src: string, dst: string): LinkCandidate {
+     }
+     byDst.set(dst, idx);
+   }
++  byDst.set(dst, idx);
+   return linkPool[idx]!;
+ }
+ 

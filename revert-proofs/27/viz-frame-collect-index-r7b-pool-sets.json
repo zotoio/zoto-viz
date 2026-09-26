@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
+  "testName": "^viz link index R7b pool set count > creates exactly 400 indexed pairs on 200\\+400 flows and 0 new sets on the second 200 pass$",
+  "description": "Revert stable talker-id Set reuse on repeated 200-flow pass.",
+  "patchedAssertion": "AssertionError: expected 201 to be +0 // Object.is equality"
+}

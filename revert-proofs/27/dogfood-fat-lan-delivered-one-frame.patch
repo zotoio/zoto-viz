@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/dogfood-runner.ts b/web/src/plugins/dogfood-runner.ts
+index 40c7eb9..0470d1d 100644
+--- a/web/src/plugins/dogfood-runner.ts
++++ b/web/src/plugins/dogfood-runner.ts
+@@ -287,7 +287,7 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
+     const t0 = now();
+     let presentT = 0;
+ 
+-    for (let i = 0; i < framesPerPack; i++) {
++    for (let i = 0; i < framesPerPack - 1; i++) {
+       const tickT0 = now();
+       const tick = dogfoodTick(packId, state, prevTs, audio, budget, writer);
+       buildTimes.push(deterministic ? stepMs : now() - tickT0);

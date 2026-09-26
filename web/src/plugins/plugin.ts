@@ -213,6 +213,8 @@ export interface PluginView {
   shader_sha256?: string;
   sky_available?: boolean;
   sky_error?: string;
+  /** Host refused plugin.yml viz.contract — pack stays blocked until fixed. */
+  viz_block?: string;
 }
 
 const LOOK_ANIM_KEYS = [

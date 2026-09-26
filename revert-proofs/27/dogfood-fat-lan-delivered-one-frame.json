@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/dogfood.test.ts",
+  "testName": "^viz\\ dogfood\\ gates\\ >\\ fat\\-LAN\\ soak:\\ all\\ shipped\\ demo\\ packs\\ under\\ budget\\ with\\ 120/120\\ delivered$",
+  "description": "One-line production revert: runDogfoodSoak loop stops one frame early (119 delivered vs 120 frames).",
+  "patchedAssertion": "AssertionError: expected 119 to be 120 // Object.is equality"
+}

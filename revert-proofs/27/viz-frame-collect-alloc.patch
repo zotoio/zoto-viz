@@ -1,0 +1,14 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+index 377cb9e..b2c2e32 100644
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -196,6 +196,9 @@ function linkSlotForPair(src: string, dst: string): LinkCandidate {
+ }
+ 
+ function zeroLinkRatesForFrame(): void {
++  linkBySrcDst.clear();
++  linkPool.length = 0;
++  linkPoolHighWater = 0;
+   lastZeroPassVisitCount = 0;
+   const toDrop: { src: string; dst: string; idx: number }[] = [];
+   for (const [src, byDst] of linkBySrcDst) {

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
+  "testName": "^viz link index R1 pruning > drops an idle pair at frame 3600 but keeps it indexed until then$",
+  "description": "Revert idle backstop to drop on first empty frame.",
+  "patchedAssertion": "AssertionError: expected 1 to be 3600 // Object.is equality"
+}

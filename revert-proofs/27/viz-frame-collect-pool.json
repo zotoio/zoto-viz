@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/fixtures/viz-collect-equivalence.test.ts",
+  "testName": "^viz\\ collector\\ link\\ pool\\ growth\\ >\\ grows\\ the\\ link\\ pool\\ once\\ for\\ 200\u2192400\u2192200\\ flows\\ without\\ stale\\ 400\\-flow\\ slots\\ in\\ 200\\ output$",
+  "description": "Revert skips zeroLinkRatesForFrame at the start of collectVizLinks (stale slots leak into top K).",
+  "patchedAssertion": "AssertionError: expected 201 to be +0 // Object.is equality"
+}
