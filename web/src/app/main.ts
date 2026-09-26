@@ -73,6 +73,7 @@ import { vizContractFor } from "../plugins/plugin";
 import { tickRenderScalePanes, type RenderScalePane } from "../plugins/render-scale-host";
 import {
   hostRenderScaleGovernorEnabled,
+  loadVizGovernorSetting,
   refreshHostRenderScaleGovernorEnabled,
   setVizGovernorSetting,
 } from "../plugins/render-scale-governor-enable";
@@ -380,7 +381,7 @@ function renderScalePanes(): RenderScalePane[] {
 function focusedRenderScene(): NetScene {
   if (!mosaic?.on) return scene;
   return mosaic.graphScene(mosaic.focusedId)
-    ?? mosaic.graphScene(mosaic.heroId)
+    ?? mosaic.graphScene(mosaic.heroMode)
     ?? mosaic.graphs[0]
     ?? scene;
 }
