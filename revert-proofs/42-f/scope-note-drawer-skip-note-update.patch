@@ -1,0 +1,16 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index 3b59712..89f48a0 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1743,10 +1743,7 @@ export class Settings {
+   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
+ 
+   private syncPackScopeNoteFromAnim(): void {
+-    if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec || !this.viewHost) return;
+-    recordPackScopeNoteRecount();
+-    const wall = packWallScopeFromAnim(this.anim);
+-    syncPackScopeNote(this.viewHost, this.viewBind.spec, wall);
++    return;
+   }
+ 
+   private fillMosaicSlots(host: HTMLElement): void {
