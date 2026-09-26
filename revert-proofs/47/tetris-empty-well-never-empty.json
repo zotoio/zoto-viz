@@ -4,5 +4,6 @@
   "testName": "^TetrisView never-empty well > every frame outside top-out hold has an active piece \\(600 idle ticks, seed 42\\)$",
   "description": "Disable post-lock respawn so missing-active frame count goes red.",
   "passLine": "Tests  1 passed | 2 skipped (3)",
+  "passCheck": "\u2713 src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > every frame outside top-out hold has an active piece (600 idle ticks, seed 42) 150ms",
   "excerpt": "AssertionError: expected 1 to be +0 // Object.is equality"
 }

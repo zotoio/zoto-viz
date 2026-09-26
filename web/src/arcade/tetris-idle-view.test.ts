@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NetScene } from "../graph/scene";
 import type { Packet } from "../core/types";
 import { DEMO_DATA_LABEL, DEMO_DATA_SOURCE } from "../core/demo-source";
@@ -36,6 +36,10 @@ class TetrisHarness extends TetrisView {
 }
 
 describe("TetrisView host idle feed", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   const hosts: HTMLElement[] = [];
   let clock = 0;
 
@@ -190,6 +194,10 @@ describe("TetrisView host idle feed", () => {
 });
 
 describe("TetrisIdleScheduler exclusivity", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("produces zero idle packets while live-exclusive", () => {
     const sched = new TetrisIdleScheduler(42, 0);
     sched.noteLiveTraffic(100);
@@ -201,6 +209,10 @@ describe("TetrisIdleScheduler exclusivity", () => {
 });
 
 describe("TetrisTrafficBudget", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("caps delivery and counts skips like live ingest", () => {
     const b = new TetrisTrafficBudget();
     const batch = Array.from({ length: 12 }, (_, i) => [i, "in", "10.0.0.1", "tcp", "443", 64, "eth0", "", ""] as Packet);
@@ -212,6 +224,10 @@ describe("TetrisTrafficBudget", () => {
 });
 
 describe("tickTetrisIdleFeed", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("uses injected clock and budget without reading wall time", () => {
     const nowSpy = vi.spyOn(performance, "now");
     let clock = 0;

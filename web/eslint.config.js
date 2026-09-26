@@ -1,9 +1,9 @@
 import tsParser from "@typescript-eslint/parser";
+import { brandCastSyntaxRules, brandMintIgnoreGlobs } from "./eslint-brand-mints.js";
 
-/** Mint-only file and tests are ignored; all other production TS is checked. */
 export default [
   {
-    ignores: ["dist/**", "**/*.test.ts", "src/core/time-ms.ts"],
+    ignores: brandMintIgnoreGlobs(),
   },
   {
     files: ["src/**/*.ts"],
@@ -15,14 +15,7 @@ export default [
       },
     },
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: 'TSAsExpression[typeAnnotation.typeName.name="FrameTs"]',
-          message:
-            "Do not cast to FrameTs; mint only via frameTsFromRaf() in core/time-ms.ts (host / pane rAF entry).",
-        },
-      ],
+      "no-restricted-syntax": ["error", ...brandCastSyntaxRules()],
     },
   },
 ];

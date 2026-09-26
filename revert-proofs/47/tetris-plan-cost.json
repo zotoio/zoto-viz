@@ -4,5 +4,6 @@
   "testName": "^TetrisView planner cost > 600 frames: one plan per spawn and exact placement search totals$",
   "description": "Re-plan on every host frame while a piece is active.",
   "passLine": "Tests  1 passed (1)",
+  "passCheck": "\u2713 src/arcade/tetris-plan-cost.test.ts > TetrisView planner cost > 600 frames: one plan per spawn and exact placement search totals 211ms",
   "excerpt": "AssertionError: expected 602 to be 2 // Object.is equality"
 }

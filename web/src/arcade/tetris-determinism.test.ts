@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NetScene } from "../graph/scene";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { TetrisView } from "./tetris";
@@ -51,6 +51,10 @@ function idleFingerprint(seed: number): string {
 }
 
 describe("TetrisView placement determinism", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     resetVizClockInjectors();
   });

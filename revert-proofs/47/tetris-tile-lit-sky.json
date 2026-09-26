@@ -4,5 +4,6 @@
   "testName": "^Tetris standalone tile sky > well stage keeps lit sky signature while graph idles$",
   "description": "Stop binding space backdrop on standalone Tetris host.",
   "passLine": "Tests  1 passed (1)",
+  "passCheck": "\u2713 src/arcade/tetris-tile-sky.test.ts > Tetris standalone tile sky > well stage keeps lit sky signature while graph idles 53ms",
   "excerpt": "AssertionError: expected 'flat:none' to be 'lit:space' // Object.is equality"
 }

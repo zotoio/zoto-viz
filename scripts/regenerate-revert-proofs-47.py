@@ -52,7 +52,9 @@ def eslint_excerpt(cp: subprocess.CompletedProcess[str]) -> str | None:
     lines = (cp.stdout + cp.stderr).splitlines()
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if "error" not in stripped or "FrameTs" not in stripped or "no-restricted-syntax" not in stripped:
+        if "error" not in stripped or "no-restricted-syntax" not in stripped:
+            continue
+        if "Do not cast to" not in stripped:
             continue
         if i > 0 and lines[i - 1].strip().endswith(".ts"):
             return f"{lines[i - 1].strip()}\n{stripped}"
@@ -60,12 +62,17 @@ def eslint_excerpt(cp: subprocess.CompletedProcess[str]) -> str | None:
     return None
 
 
-def vitest_pass_line(cp: subprocess.CompletedProcess[str]) -> str | None:
+def vitest_pass_summary(cp: subprocess.CompletedProcess[str]) -> tuple[str | None, str | None]:
     out = cp.stdout + cp.stderr
+    tests_line = None
+    check_line = None
     for line in out.splitlines():
-        if line.strip().startswith("Tests  ") and "passed" in line:
-            return line.strip()
-    return None
+        stripped = line.strip()
+        if stripped.startswith("Tests  ") and "passed" in stripped:
+            tests_line = stripped
+        if stripped.startswith("✓") or stripped.startswith("√"):
+            check_line = stripped
+    return tests_line, check_line
 
 
 def tsc_excerpt() -> str:
@@ -126,8 +133,16 @@ def write_row(
     (OUT / f"{base}.patch").write_text(patch)
     git_restore([rel])
     run(["git", "apply", "--check", str(OUT / f"{base}.patch")])
-    green = run_cmd(runner, check=False)
-    pass_line = vitest_pass_line(green) if "vitest" in runner else "tsc clean"
+    green_runner = runner.replace("vitest run", "vitest run --reporter=verbose", 1) if "vitest run" in runner else runner
+    green = run_cmd(green_runner, check=False)
+    if "vitest" in runner:
+        pass_line, pass_check = vitest_pass_summary(green)
+        if not pass_line or "1 passed" not in pass_line:
+            raise SystemExit(f"unpatched run must show exactly 1 passed test: {base}\n{green.stdout[-600:]}")
+        if not pass_check:
+            pass_check = test_name.strip("^$").replace("\\.", ".")
+    else:
+        pass_line, pass_check = "tsc clean", None
     run(["git", "apply", str(OUT / f"{base}.patch")])
     if runner.startswith("pnpm --dir web exec tsc"):
         excerpt = tsc_excerpt()
@@ -144,6 +159,8 @@ def write_row(
     }
     if pass_line:
         meta["passLine"] = pass_line
+    if pass_check:
+        meta["passCheck"] = pass_check
     if excerpt:
         meta["excerpt"] = excerpt
     (OUT / f"{base}.json").write_text(json.dumps(meta, indent=2) + "\n")

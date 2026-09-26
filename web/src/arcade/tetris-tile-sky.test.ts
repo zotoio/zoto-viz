@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { NetScene } from "../graph/scene";
 import { NetScene as NetSceneCtor } from "../graph/scene";
 import { bindTetrisStandaloneHost, TETRIS_TILE_BACKDROP } from "./tetris-standalone-host";
@@ -12,6 +12,10 @@ function mockScene(): NetScene {
 }
 
 describe("Tetris standalone tile sky", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   const hosts: HTMLElement[] = [];
 
   afterEach(() => {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import type { FrameTs } from "../core/time-ms";
 import type { NetScene } from "./scene";
@@ -18,6 +18,10 @@ class TetrisHarness extends TetrisView {
 }
 
 describe("Stage3D hostFrameTick wall clock", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   const hosts: HTMLElement[] = [];
   let clock = 0;
 

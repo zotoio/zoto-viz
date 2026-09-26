@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fps from "../core/fps";
 import { hostWindowFps, resetFps } from "../core/fps";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
@@ -10,6 +10,10 @@ const FRAME_MS = 16;
 const FRAMES = 600;
 
 describe("NetScene idle host FPS window", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   const hosts: HTMLElement[] = [];
   let clock = 0;
 

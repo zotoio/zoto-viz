@@ -4,5 +4,6 @@
   "testName": "^TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count$",
   "description": "Read performance.now() in idle feed tick.",
   "passLine": "Tests  1 passed | 9 skipped (10)",
+  "passCheck": "\u2713 src/arcade/tetris-idle-view.test.ts > TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count 320ms",
   "excerpt": "AssertionError: expected \"now\" to not be called at all, but actually been called 600 times"
 }

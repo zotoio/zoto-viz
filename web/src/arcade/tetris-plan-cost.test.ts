@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NetScene } from "../graph/scene";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { TetrisView } from "./tetris";
@@ -25,6 +25,10 @@ class TetrisHarness extends TetrisView {
 }
 
 describe("TetrisView planner cost", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   const hosts: HTMLElement[] = [];
   let clock = 0;
 

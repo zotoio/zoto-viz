@@ -4,5 +4,6 @@
   "testName": "^Tetris T-piece handling > survives a long all-T sequence with line clears$",
   "description": "Score T pieces as O during TetrisView all-T survival.",
   "passLine": "Tests  1 passed (1)",
+  "passCheck": "\u2713 src/arcade/tetris-t-piece.test.ts > Tetris T-piece handling > survives a long all-T sequence with line clears 1155ms",
   "excerpt": "AssertionError: expected +0 to be 8 // Object.is equality"
 }

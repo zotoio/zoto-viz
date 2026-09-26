@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addPresentListener, resetFps } from "../core/fps";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { frameTsFromRaf } from "../core/time-ms";
@@ -8,6 +8,10 @@ const FRAME_MS = 16;
 const FRAMES = 600;
 
 describe("NetScene idle host present stamps", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   const hosts: HTMLElement[] = [];
   let clock = 0;
 
