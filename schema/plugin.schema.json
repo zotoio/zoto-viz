@@ -273,7 +273,7 @@
     },
     "manifestWorkBudget": {
       "title": "workBudget",
-      "description": "Per-frame work caps; ceilings and validation live in plugins/sdk/manifest-work-budget.schema.json (#45).",
+      "description": "Per-frame work caps (shape in plugins/sdk); host ceilings in service/policy/work-budget-ceilings.json (#45).",
       "$ref": "../plugins/sdk/manifest-work-budget.schema.json"
     },
     "sky": {

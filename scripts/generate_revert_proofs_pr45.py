@@ -25,6 +25,7 @@ class Row:
     description: str
     rel_path: str
     apply: Callable[[str], str]
+    entry_point: str = ""
 
 
 def replace_once(text: str, old: str, new: str) -> str:
@@ -353,56 +354,74 @@ ROWS: list[Row] = [
         lambda t: replace_once(t, "    if not created:", "    if created:"),
     ),
     Row(
-        "work-budget-schema-without-upper-bound",
+        "work-budget-600-frame-host-clamp",
         "vitest",
-        "web/src/plugins/manifest-work-budget.test.ts",
-        "rejects a manifest at ten times the host ceiling with a plain reason",
-        "manifest workBudget schema rejects values above host ceilings.",
-        "plugins/sdk/manifest-work-budget.ts",
+        "web/src/plugins/work-budget-catalog.test.ts",
+        "600-frame row: host clamps maxSimStepsPerFrame and integrate runs at most 4 times per frame",
+        "Catalog clamp before applyPluginViewWorkBudget / marble frame loop.",
+        "web/src/plugins/work-budget-policy.ts",
         lambda t: replace_once(
             t,
-            "    if (value > ceiling) {\n      throw new Error(`${fieldLabel(path, key)} must be at most ${ceiling} (got ${value})`);\n    }\n",
-            "",
+            "  const budget = clampManifestWorkBudgetToCeilings(parsed, ceilings);",
+            "  const budget = parsed;",
         ),
+        entry_point="toPluginView → applyPluginCatalog → applyPluginViewWorkBudget → ingestFrame",
     ),
     Row(
-        "work-budget-host-without-runtime-clamp",
-        "vitest",
-        "web/src/plugins/manifest-work-budget.test.ts",
-        "clamps a direct host runtime call above the ceiling",
-        "Host runtime clamp keeps workBudget within ceilings.",
-        "web/src/plugins/manifest-work-budget-host.ts",
-        lambda t: replace_once(
-            t,
-            "  return clampManifestWorkBudgetAtRuntime(budget);",
-            "  return budget;",
-        ),
-    ),
-    Row(
-        "work-budget-schema-without-upper-bound-py",
+        "work-budget-pack-policy-ignored",
         "pytest",
         "tests/test_manifest_work_budget.py",
-        "test_rejects_manifest_at_ten_times_ceiling",
-        "Python manifest workBudget schema rejects values above host ceilings.",
+        "test_policy_path_is_host_install_not_pack",
+        "Install guard uses host policy, not pack-bundled ceilings JSON.",
         "service/manifest_work_budget.py",
         lambda t: replace_once(
             t,
-            "        if n > ceiling:\n            raise ValueError(f\"{_field_label(path, key)} must be at most {ceiling} (got {n})\")\n",
-            "",
+            "    return paths.repo_root() / WORK_BUDGET_CEILINGS_REL_PATH",
+            "    return (pack_root or paths.repo_root()) / WORK_BUDGET_CEILINGS_REL_PATH",
         ),
+        entry_point="resolve_work_budget_policy_path (install/catalog policy load)",
     ),
     Row(
-        "work-budget-host-without-runtime-clamp-py",
+        "work-budget-catalog-clamp-not-block",
         "pytest",
         "tests/test_manifest_work_budget.py",
-        "test_runtime_clamp_direct_call",
-        "Python host runtime clamp keeps workBudget within ceilings.",
+        "test_catalog_clamps_without_blocking",
+        "Catalog load clamps over-ceiling workBudget instead of rejecting.",
         "service/manifest_work_budget.py",
         lambda t: replace_once(
             t,
-            "        out[key] = min(n, ceilings[key])",
-            "        out[key] = n",
+            "    clamped = clamp_manifest_work_budget_at_runtime(parsed)\n    note = WORK_BUDGET_LIMITED_NOTE if work_budget_exceeds_ceilings(parsed) else None\n    return clamped, note",
+            "    if work_budget_exceeds_ceilings(parsed):\n        raise ValueError(WORK_BUDGET_LIMITED_NOTE)\n    return parsed, None",
         ),
+        entry_point="service.plugins._visualisation_doc (catalog scan)",
+    ),
+    Row(
+        "work-budget-policy-parity-hardcode",
+        "pytest",
+        "tests/test_manifest_work_budget.py",
+        "test_ts_and_python_share_policy_fixture",
+        "TS and Python validators read the same host policy file.",
+        "service/manifest_work_budget.py",
+        lambda t: replace_once(
+            t,
+            "    return load_work_budget_ceilings()\n",
+            '    return {"maxDrawCalls": 1, "maxTriangles": 1, "maxInstances": 1, "maxGpuBytes": 1, "maxSimStepsPerFrame": 1, "maxPacketsPerFrame": 1}\n',
+        ),
+        entry_point="manifest_work_budget_ceilings → clamp_manifest_work_budget_at_runtime",
+    ),
+    Row(
+        "work-budget-install-ten-x-block",
+        "pytest",
+        "tests/test_manifest_work_budget.py",
+        "test_install_blocks_at_ten_times_ceiling",
+        "New install/update blocked above 10× host ceiling.",
+        "service/manifest_work_budget.py",
+        lambda t: replace_once(
+            t,
+            "        if parsed[key] > limit:\n            raise ValueError(",
+            "        if False and parsed[key] > limit:\n            raise ValueError(",
+        ),
+        entry_point="plugin_local._guard_work_budget_install (local zip install/update)",
     ),
 ]
 
@@ -494,6 +513,7 @@ def main() -> int:
                         "testFile": row.test_file,
                         "testName": row.test_name,
                         "description": row.description,
+                        "entryPoint": row.entry_point,
                     },
                     indent=2,
                 )
@@ -518,7 +538,7 @@ def main() -> int:
             blob = red.stdout + red.stderr
             if row.runner == "pytest" and not any(
                 x in blob
-                for x in ("AssertionError", "assert", "DID NOT RAISE", "Failed:")
+                for x in ("AssertionError", "assert", "DID NOT RAISE", "Failed:", "ValueError")
             ):
                 print(f"{row.slug}: pytest failure not assertion:\n{blob}", file=sys.stderr)
                 return 1

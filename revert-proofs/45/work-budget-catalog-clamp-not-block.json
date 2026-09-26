@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_manifest_work_budget.py",
+  "testName": "test_catalog_clamps_without_blocking",
+  "description": "Catalog load clamps over-ceiling workBudget instead of rejecting.",
+  "entryPoint": "service.plugins._visualisation_doc (catalog scan)"
+}

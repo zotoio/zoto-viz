@@ -2,5 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_pack_pr_boundary.py",
   "testName": "test_validate_pull_changed_files_rejects_incomplete_listing",
-  "description": "Fail closed when pulls/files listing length disagrees with pull.changed_files."
+  "description": "Fail closed when pulls/files listing length disagrees with pull.changed_files.",
+  "entryPoint": ""
 }

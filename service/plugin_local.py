@@ -28,6 +28,17 @@ ENGINES = frozenset({
 })
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _seen: dict[str, str] = {}
+
+
+def _guard_work_budget_install(runtime: Path) -> None:
+    viz_path = runtime / "visualisation.yml"
+    if not viz_path.is_file():
+        return
+    raw = yaml.safe_load(viz_path.read_text(encoding="utf-8"))
+    if isinstance(raw, dict) and "workBudget" in raw:
+        from service.manifest_work_budget import assert_work_budget_install_allowed
+
+        assert_work_budget_install_allowed(raw["workBudget"])
 _primed = False
 
 
@@ -291,6 +302,7 @@ def install_local_zip(
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
             unpacked = pz.unpack_zip(dest, runtime)
+            _guard_work_budget_install(runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
                 info["remintedFrom"] = reminted_from
@@ -303,6 +315,7 @@ def install_local_zip(
         shutil.copy2(tmp_path, staged)
         os.replace(staged, dest)
         unpacked = pz.unpack_zip(dest, runtime)
+        _guard_work_budget_install(runtime)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -336,6 +349,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
             shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
     unpacked = pz.unpack_zip(dest, runtime)
+    _guard_work_budget_install(runtime)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from

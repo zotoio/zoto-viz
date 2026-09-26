@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import FRAG from "../../../plugins/src/marble-run/sky/fragment.glsl?raw";
 import VIS from "../../../plugins/src/marble-run/visualisation.yml?raw";
 import PLUGIN from "../../../plugins/src/marble-run/plugin.yml?raw";
@@ -20,7 +20,7 @@ import {
   marbleSim,
   marbleWorkBudget,
   packMarbleSlots,
-  parseMarbleWorkBudgetYaml,
+  setMarbleWorkBudgetFromHost,
   setMarbleOptions,
   workWithinBudget,
   MR_SLOT,
@@ -32,6 +32,8 @@ import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../plugins/sdk/viz
 import { jarIndexForRouteKey, MarbleSim, SIM_DT, trackPieceCount } from "../../../plugins/src/marble-run/frontend/sim";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
 import { toPluginView } from "./plugin-visualisation";
+import { applyPluginViewWorkBudget } from "./manifest-work-budget-host";
+import { hostWorkBudgetCeilings } from "./work-budget-policy";
 import { parseVizContract } from "./viz-host";
 
 const TRADEMARKS = ["minecraft", "mojang", "rocket league", "psyonix"];
@@ -51,6 +53,10 @@ function liveFrame(over: Partial<VizDataFrame> = {}): VizDataFrame {
 }
 
 describe("marble-run pack", () => {
+  beforeEach(() => {
+    setMarbleWorkBudgetFromHost(hostWorkBudgetCeilings());
+  });
+
   it("validates plugin.yml viz contract and catalog row", () => {
     const contract = parseVizContract({
       graphWalk: false,
@@ -98,10 +104,20 @@ describe("marble-run pack", () => {
     expect(VIS).not.toMatch(/colorField/);
     expect(VIS).not.toMatch(/talker/);
     expect(MARBLE_DATA_MAPPING.length).toBe(4);
-    const fromYaml = parseMarbleWorkBudgetYaml(VIS);
-    expect(fromYaml).toEqual(marbleWorkBudget());
-    expect(fromYaml.maxInstances).toBe(48);
-    expect(fromYaml.maxPacketsPerFrame).toBe(8);
+    expect(VIS).toMatch(/maxInstances: 48/);
+    const view = toPluginView({
+      id: "marble-run",
+      name: "Marble Run",
+      version: 1,
+      visualisation: {
+        engine: "graph",
+        base: "protocols",
+        workBudget: hostWorkBudgetCeilings(),
+      },
+    });
+    applyPluginViewWorkBudget(view);
+    expect(marbleWorkBudget().maxInstances).toBe(48);
+    expect(marbleWorkBudget().maxPacketsPerFrame).toBe(8);
   });
 
   it("passes trademark name check on pack text", () => {

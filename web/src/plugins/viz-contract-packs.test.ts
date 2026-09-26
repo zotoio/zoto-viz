@@ -14,11 +14,6 @@ const PACK_FRAME_TYPE_ALLOWLIST: Record<string, string> = {
   "marble-run": "open PR #20 — widened local frame",
 };
 
-/** Packs allowed to value-import shared SDK helpers (not viz-contract duplicates). */
-const SDK_VALUE_IMPORT_ALLOWLIST: Record<string, string> = {
-  "marble-run/frontend/work-budget.ts": "shared manifest workBudget runtime clamp (#45)",
-};
-
 const FORBIDDEN_LOCAL_TYPE =
   /\b(?:type|interface)\s+(VizFrame|VizDataFrame|VizPacketSample|VizTalkerSample|VizSysTelemetry|VizRfBeacon|VizHeadline|PacketTunnelFrame|SysGauges|TalkerRow|PacketRow|RfRow)\b/;
 
@@ -123,8 +118,6 @@ describe("viz contract packs", () => {
       const sdkRe = new RegExp(SDK_IMPORT.source, "g");
       while ((sdkM = sdkRe.exec(text)) !== null) {
         if (sdkImportHasValueBindings(sdkM[1]!)) {
-          const allowKey = `${packId}/${rel}`;
-          if (SDK_VALUE_IMPORT_ALLOWLIST[allowKey]) continue;
           violations.push(`${packId}/${rel}: value import from plugins/sdk (type-only allowed)`);
         }
       }

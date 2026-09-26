@@ -13,7 +13,7 @@ import { marbleWorkBudget } from "./work-budget";
 export type { VizDataFrame, VizPacketSample };
 
 export { MARBLE_DATA_MAPPING, ZOTO_FAIL_RGB };
-export { marbleWorkBudget, parseMarbleWorkBudgetYaml } from "./work-budget";
+export { marbleWorkBudget, setMarbleWorkBudgetFromHost } from "./work-budget";
 
 export type MarbleIngestStats = {
   consumedPackets: number;
@@ -89,7 +89,12 @@ export function isFrameFailed(frame: VizDataFrame, opts: MarbleOptions): boolean
 }
 
 let sim: MarbleSim | null = null;
-let opts: MarbleOptions = parseMarbleOptions();
+let opts: MarbleOptions | null = null;
+
+function marbleOpts(): MarbleOptions {
+  if (!opts) opts = parseMarbleOptions();
+  return opts;
+}
 let dropCooldown = 0;
 let hudSkipCount = 0;
 let lastIngest: MarbleIngestStats = { consumedPackets: 0, poolFull: 0 };
@@ -103,7 +108,7 @@ export function marbleIngestStats(): MarbleIngestStats {
 }
 
 export function marbleOptions(): MarbleOptions {
-  return opts;
+  return marbleOpts();
 }
 
 export function setMarbleOptions(next: MarbleOptions): void {
@@ -113,7 +118,8 @@ export function setMarbleOptions(next: MarbleOptions): void {
 }
 
 export function marbleSim(): MarbleSim {
-  if (!sim) sim = new MarbleSim(opts);
+  const o = marbleOpts();
+  if (!sim) sim = new MarbleSim(o);
   return sim;
 }
 
@@ -123,19 +129,22 @@ export function disposeMarblePack(): void {
   dropCooldown = 0;
   hudSkipCount = 0;
   lastIngest = { consumedPackets: 0, poolFull: 0 };
+  opts = null;
 }
 
 function spawnFromPacket(s: MarbleSim, frame: VizDataFrame, pkt: VizPacketSample): boolean {
-  const routeKey = jarRouteKey(pkt, opts);
+  const o = marbleOpts();
+  const routeKey = jarRouteKey(pkt, o);
   const hue = marbleHueForPacket(pkt);
-  const radius = marbleRadius(pkt.size, pkt.field, opts);
-  const failed = isFrameFailed(frame, opts);
+  const radius = marbleRadius(pkt.size, pkt.field, o);
+  const failed = isFrameFailed(frame, o);
   return s.spawn(hue, radius, routeKey, failed);
 }
 
 export function ingestFrame(frame: VizDataFrame): void {
+  const o = marbleOpts();
   const s = marbleSim();
-  s.setOptions(opts);
+  s.setOptions(o);
   s.stepFrame(frame.dt > 0 ? frame.dt : SIM_DT);
   dropCooldown -= frame.dt > 0 ? frame.dt : SIM_DT;
   const pkts = frame.packets;
@@ -158,8 +167,8 @@ export function ingestFrame(frame: VizDataFrame): void {
     const pkt: VizPacketSample = { proto, size: 128, field: 0.5 };
     const hue = marbleHueForPacket(pkt);
     const radius = 0.035 + 0.02 * Math.sin(frame.t * 0.7);
-    const failed = isFrameFailed(frame, opts);
-    if (s.spawn(hue, radius, jarRouteKey(pkt, opts), failed)) {
+    const failed = isFrameFailed(frame, o);
+    if (s.spawn(hue, radius, jarRouteKey(pkt, o), failed)) {
       consumedPackets = 1;
       dropCooldown = 0.4;
     }
@@ -211,7 +220,7 @@ function cameraPose(s: MarbleSim, o: MarbleOptions, t: number): { cx: number; cy
 
 export function packMarbleSlots(frame: VizDataFrame): { slot0: number[]; slot1: number[] } {
   const s = marbleSim();
-  const o = opts;
+  const o = marbleOpts();
   const slot0 = new Array<number>(MR_SLOT0).fill(0);
   const slot1 = new Array<number>(MR_MARBLES_PER_SLOT * MR_MARBLE_FLOATS).fill(0);
   slot0[MR_SLOT.mark] = 1;
@@ -262,7 +271,7 @@ export function packMarbleSlots(frame: VizDataFrame): { slot0: number[]; slot1: 
   return { slot0, slot1 };
 }
 
-export function workWithinBudget(o: MarbleOptions = opts): boolean {
+export function workWithinBudget(o: MarbleOptions = marbleOpts()): boolean {
   const s = marbleSim();
   const w = s.work;
   const budget = marblePackWorkBudget();

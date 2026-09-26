@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zoto.io/sdk/manifest-work-budget.schema.json",
   "title": "manifestWorkBudget",
-  "description": "visualisation.yml workBudget per-frame caps. Host-owned ceilings live here (#45); #38+ edits this module only.",
+  "description": "visualisation.yml workBudget per-frame caps (shape only). Host ceilings: service/policy/work-budget-ceilings.json.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,11 +14,11 @@
     "maxPacketsPerFrame"
   ],
   "properties": {
-    "maxDrawCalls": { "type": "integer", "minimum": 0, "maximum": 256 },
-    "maxTriangles": { "type": "integer", "minimum": 0, "maximum": 2000000 },
-    "maxInstances": { "type": "integer", "minimum": 0, "maximum": 256 },
-    "maxGpuBytes": { "type": "integer", "minimum": 0, "maximum": 67108864 },
-    "maxSimStepsPerFrame": { "type": "integer", "minimum": 0, "maximum": 32 },
-    "maxPacketsPerFrame": { "type": "integer", "minimum": 0, "maximum": 128 }
+    "maxDrawCalls": { "type": "integer", "minimum": 0 },
+    "maxTriangles": { "type": "integer", "minimum": 0 },
+    "maxInstances": { "type": "integer", "minimum": 0 },
+    "maxGpuBytes": { "type": "integer", "minimum": 0 },
+    "maxSimStepsPerFrame": { "type": "integer", "minimum": 0 },
+    "maxPacketsPerFrame": { "type": "integer", "minimum": 0 }
   }
 }

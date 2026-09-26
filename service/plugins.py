@@ -622,9 +622,12 @@ def _visualisation_doc(home: Path) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         raise ValueError("visualisation.yml must be a mapping")
     if "workBudget" in raw:
-        from service.manifest_work_budget import validate_manifest_work_budget
+        from service.manifest_work_budget import ingest_catalog_work_budget
 
-        validate_manifest_work_budget(raw["workBudget"])
+        clamped, note = ingest_catalog_work_budget(raw["workBudget"])
+        raw["workBudget"] = clamped
+        if note:
+            raw["_workBudgetLimitedNote"] = note
     return raw
 
 
@@ -641,7 +644,13 @@ def _attach_visualisation(
         return row
     if viz is None:
         return row
-    return {**row, "visualisation": viz}
+    out = {**row, "visualisation": viz}
+    if isinstance(viz, dict) and "workBudget" in viz:
+        out["workBudget"] = viz["workBudget"]
+        note = viz.pop("_workBudgetLimitedNote", None)
+        if note:
+            out["workBudgetLimited"] = note
+    return out
 
 
 def _typesafe_doc(home: Path) -> dict[str, Any] | None:

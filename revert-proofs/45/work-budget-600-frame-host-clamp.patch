@@ -1,0 +1,11 @@
+--- a/web/src/plugins/work-budget-policy.ts
++++ b/web/src/plugins/work-budget-policy.ts
+@@ -45,7 +45,7 @@
+ } {
+   const parsed = parseManifestWorkBudgetShape(raw);
+   const ceilings = hostWorkBudgetCeilings();
+-  const budget = clampManifestWorkBudgetToCeilings(parsed, ceilings);
++  const budget = parsed;
+   const limitedNote = workBudgetExceedsCeilings(parsed, ceilings) ? WORK_BUDGET_LIMITED_NOTE : undefined;
+   return { budget, limitedNote };
+ }

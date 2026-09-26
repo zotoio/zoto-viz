@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_manifest_work_budget.py",
+  "testName": "test_ts_and_python_share_policy_fixture",
+  "description": "TS and Python validators read the same host policy file.",
+  "entryPoint": "manifest_work_budget_ceilings \u2192 clamp_manifest_work_budget_at_runtime"
+}

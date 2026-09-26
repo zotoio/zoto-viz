@@ -1,55 +1,18 @@
-/** Shape of visualisation.yml → workBudget (parsed for caps). */
+/** Host-passed workBudget caps (set by the monitor before the pack runs). */
 
-import {
-  clampManifestWorkBudgetAtRuntime,
-  type ManifestWorkBudget,
-} from "../../../sdk/manifest-work-budget";
+import type { ManifestWorkBudget } from "../../../sdk/manifest-work-budget";
 
 export type MarbleWorkBudget = ManifestWorkBudget;
 
-const INT = /^\s*([a-zA-Z]+):\s*(\d+)\s*$/;
-
-/** Parse the workBudget block from visualisation.yml text. */
-export function parseMarbleWorkBudgetYaml(yaml: string): MarbleWorkBudget {
-  const start = yaml.indexOf("workBudget:");
-  if (start < 0) throw new Error("workBudget block missing");
-  const end = yaml.indexOf("\nconfig:", start);
-  const slice = end >= 0 ? yaml.slice(start, end) : yaml.slice(start);
-  const out: Record<string, number> = {};
-  for (const line of slice.split("\n")) {
-    const m = line.match(INT);
-    if (m) out[m[1]!] = Number(m[2]);
-  }
-  const req = [
-    "maxDrawCalls",
-    "maxTriangles",
-    "maxInstances",
-    "maxGpuBytes",
-    "maxSimStepsPerFrame",
-    "maxPacketsPerFrame",
-  ] as const;
-  for (const k of req) {
-    if (!Number.isFinite(out[k])) throw new Error(`workBudget.${k} missing`);
-  }
-  return out as MarbleWorkBudget;
-}
-
-/** Shipped workBudget block — must stay in sync with visualisation.yml (tests assert parity). */
-const SHIPPED_WORK_BUDGET_SNIPPET = `workBudget:
-  maxDrawCalls: 64
-  maxTriangles: 120000
-  maxInstances: 48
-  maxGpuBytes: 8388608
-  maxSimStepsPerFrame: 4
-  maxPacketsPerFrame: 8
-`;
-
 let cached: MarbleWorkBudget | null = null;
+
+export function setMarbleWorkBudgetFromHost(budget: MarbleWorkBudget): void {
+  cached = budget;
+}
 
 export function marbleWorkBudget(): MarbleWorkBudget {
   if (!cached) {
-    const parsed = parseMarbleWorkBudgetYaml(SHIPPED_WORK_BUDGET_SNIPPET);
-    cached = clampManifestWorkBudgetAtRuntime(parsed);
+    throw new Error("marble-run workBudget was not set by the host");
   }
   return cached;
 }

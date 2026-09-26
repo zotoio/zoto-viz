@@ -30,6 +30,7 @@ import {
   pluginViewKnobs,
   toPluginView,
 } from "./plugin-visualisation";
+import { applyPluginViewWorkBudget } from "./manifest-work-budget-host";
 import type { GNode, DreamAnim, EdgeGlow, AudioDrive, HeroPos, MosaicSize, ThemeCycle } from "../graph/scene";
 import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, type FabricKind, type GraphSpace } from "../graph/fabric";
@@ -198,6 +199,10 @@ export interface PluginView {
   capabilities?: PluginCapability[];
   /** visualisation.yml idle golden mock — graph / arcade when capture is quiet. */
   idle?: PluginIdleConfig;
+  /** Host-clamped visualisation.yml workBudget (#45). */
+  workBudget?: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget;
+  /** Set when the host clamped workBudget below what the pack asked for. */
+  workBudgetLimited?: string;
   viz?: VizPluginContract;
   typesafe?: TypeSafeContract;
   hash?: string;
@@ -599,6 +604,7 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
       if (view.look) nextLooks.set(pluginViewId(view.id, view.instanceId), view.look);
       if (!view.engine) continue;
       try {
+        applyPluginViewWorkBudget(view);
         modes.push(compilePlugin(view));
       } catch (e) {
         console.warn("zoto-viz plugin:", view.file || view.id, e);

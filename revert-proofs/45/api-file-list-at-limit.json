@@ -2,5 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_pack_boundary_secure.py",
   "testName": "test_secure_dry_run_rejects_at_api_file_limit",
-  "description": "Fail closed when changed_files reaches the pulls/files API ceiling."
+  "description": "Fail closed when changed_files reaches the pulls/files API ceiling.",
+  "entryPoint": ""
 }
