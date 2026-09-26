@@ -1,0 +1,11 @@
+--- a/web/src/core/http.ts
++++ b/web/src/core/http.ts
+@@ -1,7 +1,6 @@
+ /** Same-origin fetches that carry the CSRF header minted by GET /api/session. */
+ 
+-export const SERVER_RESTART_NOTICE =
+-  "The server restarted, so packs were reloaded.";
++export const SERVER_RESTART_NOTICE = "";
+ 
+ export type SessionRecoveryStats = {
+   sessionFetches: number;
