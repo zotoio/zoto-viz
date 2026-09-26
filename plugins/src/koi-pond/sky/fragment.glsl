@@ -221,7 +221,7 @@ void main() {
   }
   if (legendOn > 0.5) {
     float legendMask = slotF(0, 34.0);
-    float pondTraffic = slotF(0, 49.0);
+    float pondTraffic = slotF(0, 51.0);
     vec2 legendUv = uv - vec2(0.32, -0.36);
     for (int li = 0; li < 6; li++) {
       float bit = mod(floor(legendMask / pow(2.0, float(li))), 2.0);

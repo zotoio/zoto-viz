@@ -193,12 +193,25 @@ export const KOI_SLOT = {
   varietyMix: 33,
   patternLegend: 34,
   koiMeta0: 35,
-  pondTraffic: 49,
+  /** After 16 koi meta floats (35..50); must not overlap koiMeta14+ */
+  pondTraffic: 51,
 } as const;
 
 const KOI_META_SLOTS = 16;
 const POND_TRAFFIC_SCALE = 900;
 const PAD_SLOTS = 12;
+const SLOT2_FLOATS = 64;
+
+/** Lily pad rows packed in slot2 — matches fragment.glsl `padCount`. */
+export function lilyPadSlotCount(lilyDensity: number): number {
+  return Math.min(PAD_SLOTS, Math.max(4, Math.round(4 + lilyDensity * 8)));
+}
+
+/** Particles in slot2 after pad rows (shader reads slot2, not writeParticles). */
+export function maxShaderParticlesInSlot2(lilyDensity: number): number {
+  const used = lilyPadSlotCount(lilyDensity) * 4;
+  return Math.max(0, Math.floor((SLOT2_FLOATS - used) / 4));
+}
 
 export function packKoiMeta(pattern: number, vigor: number): number {
   const p = clamp(Math.round(pattern), 0, 5);
@@ -521,10 +534,21 @@ function enabledPatterns(opts: KoiPondOptions): number[] {
 export function patternForTalker(id: string, role: string, opts: KoiPondOptions): number {
   const enabled = enabledPatterns(opts);
   const h = idHash(id);
-  if (role === "gateway") return enabled.includes(0) ? 0 : enabled[0]!;
-  if (role === "internet") return enabled.includes(2) ? 2 : enabled[Math.min(1, enabled.length - 1)]!;
-  if (role === "lan") return enabled[Math.floor(h * enabled.length) % enabled.length]!;
-  return enabled[Math.floor(h * enabled.length) % enabled.length]!;
+  const rolePick =
+    role === "gateway"
+      ? enabled.includes(0)
+        ? 0
+        : enabled[0]!
+      : role === "internet"
+        ? enabled.includes(2)
+          ? 2
+          : enabled[Math.min(1, enabled.length - 1)]!
+        : enabled[Math.floor(h * enabled.length) % enabled.length]!;
+  const variedPick = enabled[Math.floor(idHash(`${id}:variety`) * enabled.length) % enabled.length]!;
+  const mix = clamp01(opts.varietyMix);
+  if (mix <= 0) return rolePick;
+  if (mix >= 1) return variedPick;
+  return idHash(`${id}:mix`) < mix ? variedPick : rolePick;
 }
 
 export function vigorFromRate(rate: number): number {
@@ -592,7 +616,7 @@ export class KoiPondSim {
 
   private initPads(): void {
     this.pads.length = 0;
-    const n = Math.min(MAX_PADS, Math.round(4 + this.opts.lilyDensity * 8));
+    const n = Math.min(MAX_PADS, lilyPadSlotCount(this.opts.lilyDensity));
     for (let i = 0; i < n; i++) {
       const h = idHash(`pad:${i}:${this.opts.seed}`);
       this.pads.push({
@@ -843,7 +867,7 @@ export class KoiPondSim {
     if (!this.opts.petalDrift) return;
     const cap = QUALITY_CAPS[this.opts.quality];
     if (cap.maxParticles < 6) return;
-    if (Math.sin(simT * 0.3) < 0.92) return;
+    if (Math.sin(simT * 0.3) <= 0.92) return;
     let slot: ParticleBody | null = null;
     for (const q of this.particles) {
       if (q.life <= 0) {
@@ -1003,8 +1027,9 @@ export class KoiPondSim {
     s0[KOI_SLOT.demo] = this.lastDemo ? 1 : 0;
     s0[KOI_SLOT.timeScale] = o.reducedMotion ? 0.15 : 1;
     const totalRate = totalTalkerRate(this.lastTalkers);
-    s0[KOI_SLOT.metricPeak] = clamp01(totalRate / POND_TRAFFIC_SCALE);
-    s0[KOI_SLOT.pondTraffic] = s0[KOI_SLOT.metricPeak];
+    const traffic = clamp01(totalRate / POND_TRAFFIC_SCALE);
+    s0[KOI_SLOT.metricPeak] = traffic;
+    s0[KOI_SLOT.pondTraffic] = traffic;
     const q = QUALITY_CAPS[o.quality];
     s0[KOI_SLOT.raymarchSteps] = q.steps;
     s0[KOI_SLOT.tileResScale] = tileInternalResScale(canvasW, canvasH);
@@ -1055,7 +1080,8 @@ export class KoiPondSim {
     let pCount = 0;
     const scratch = this.particleScratch;
     scratch.fill(0);
-    for (let i = 0; i < Math.min(PAD_SLOTS, this.pads.length); i++) {
+    const padSlotRows = lilyPadSlotCount(o.lilyDensity);
+    for (let i = 0; i < Math.min(padSlotRows, this.pads.length); i++) {
       const pad = this.pads[i]!;
       const base = i * 4;
       s2[base] = pad.x;
@@ -1063,22 +1089,28 @@ export class KoiPondSim {
       s2[base + 2] = pad.z;
       s2[base + 3] = pad.activity;
     }
-    const particleBase = PAD_SLOTS * 4;
-    for (const p of this.particles) {
-      if (p.life <= 0) continue;
-      if (particleBase + pi >= 64) break;
-      s2[particleBase + pi++] = p.x;
-      s2[particleBase + pi++] = p.y;
-      s2[particleBase + pi++] = p.z;
-      s2[particleBase + pi++] = p.kind;
+    const particleBase = padSlotRows * 4;
+    const shaderParticleCap = maxShaderParticlesInSlot2(o.lilyDensity);
+    const activeParticles: ParticleBody[] = [];
+    for (const p of this.particles) if (p.life > 0) activeParticles.push(p);
+    activeParticles.sort((a, b) => b.life - a.life);
+    let shaderPacked = 0;
+    for (const p of activeParticles) {
       const j = pCount * 4;
       scratch[j] = p.x;
       scratch[j + 1] = p.y;
       scratch[j + 2] = p.z;
       scratch[j + 3] = p.kind;
       pCount++;
+      if (shaderPacked >= shaderParticleCap) continue;
+      if (particleBase + pi + 4 > SLOT2_FLOATS) break;
+      s2[particleBase + pi++] = p.x;
+      s2[particleBase + pi++] = p.y;
+      s2[particleBase + pi++] = p.z;
+      s2[particleBase + pi++] = p.kind;
+      shaderPacked++;
     }
-    s0[KOI_SLOT.particleCount] = pCount;
+    s0[KOI_SLOT.particleCount] = shaderPacked;
 
     const metric = this.lastDemo
       ? "demo"

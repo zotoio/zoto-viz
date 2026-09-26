@@ -180,7 +180,7 @@ describe("koi-pond shipped pack", () => {
   });
 
   it("gateway maps to kohaku when enabled", () => {
-    const o = parseKoiPondOptions({});
+    const o = parseKoiPondOptions({ varietyMix: "0" });
     expect(patternForTalker("gw", "gateway", o)).toBe(0);
   });
 

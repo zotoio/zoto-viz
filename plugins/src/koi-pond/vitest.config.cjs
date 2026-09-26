@@ -3,7 +3,7 @@ const { createRequire } = require("node:module");
 const requireFromWeb = createRequire(path.join(__dirname, "../../../web/package.json"));
 const { defineConfig } = requireFromWeb("vitest/config");
 
-const repoRoot = path.join(__dirname, "../..");
+const repoRoot = path.join(__dirname, "../../..");
 
 module.exports = defineConfig({
   root: path.join(__dirname, "frontend"),
