@@ -351,15 +351,6 @@ export function topKByScore<T>(
   return buf.map((x) => x.item);
 }
 
-function talkerPacketRate(ip: string, flows: Flow[]): number {
-  let rate = 0;
-  for (const fl of flows) {
-    if (fl.a === ip) rate += directionalPacketRate(fl, true);
-    if (fl.b === ip) rate += directionalPacketRate(fl, false);
-  }
-  return rate;
-}
-
 function directionalPacketRate(flow: Flow, ab: boolean): number {
   const direct = ab ? flow.rate_pkt_ab : flow.rate_pkt_ba;
   if (typeof direct === "number" && direct > 0) return direct;
@@ -369,18 +360,30 @@ function directionalPacketRate(flow: Flow, ab: boolean): number {
   return byteRate / Math.max(1, avgBytes);
 }
 
-function talkerRateForFrame(d: Device, flows: Flow[]): number {
-  const live = talkerPacketRate(d.ip, flows);
+function devicePacketRateMap(flows: Flow[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const fl of flows) {
+    const ab = directionalPacketRate(fl, true);
+    if (ab > 0) map.set(fl.a, (map.get(fl.a) ?? 0) + ab);
+    const ba = directionalPacketRate(fl, false);
+    if (ba > 0) map.set(fl.b, (map.get(fl.b) ?? 0) + ba);
+  }
+  return map;
+}
+
+function talkerRateForFrame(d: Device, rates: Map<string, number>): number {
+  const live = rates.get(d.ip) ?? 0;
   return live > 0 ? live : d.packets;
 }
 
 function topTalkers(devices: Device[], flows: Flow[], limit: number): VizTalkerSample[] {
+  const rates = devicePacketRateMap(flows);
   return topKByScore(
     devices,
     limit,
-    (d) => talkerRateForFrame(d, flows),
-    (d) => talkerRateForFrame(d, flows) <= 0,
-  ).map((d) => ({ id: d.ip, rate: talkerRateForFrame(d, flows), role: d.role }));
+    (d) => talkerRateForFrame(d, rates),
+    (d) => talkerRateForFrame(d, rates) <= 0,
+  ).map((d) => ({ id: d.ip, rate: talkerRateForFrame(d, rates), role: d.role }));
 }
 
 function rssiFromAliases(aliases: string[] | undefined): number {
