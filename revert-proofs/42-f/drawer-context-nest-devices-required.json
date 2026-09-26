@@ -4,6 +4,6 @@
   "testFile": "tsconfig.test.json",
   "testName": "",
   "description": "NestCamsDrawerContext must require devices (empty array allowed); type guard expects a compile error without devices.",
-  "redLine": "src/ui/drawer-context.nest-devices-required.test.ts:7",
-  "redOutput": "src/ui/drawer-context.nest-devices-required.test.ts(7,1): error TS2578: Unused '@ts-expect-error' directive."
+  "redLine": "src/ui/drawer-context.nest-devices-required.typecheck.ts:7",
+  "redOutput": "src/ui/drawer-context.nest-devices-required.typecheck.ts(7,1): error TS2578: Unused '@ts-expect-error' directive."
 }
