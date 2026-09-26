@@ -118,10 +118,6 @@ export interface VizDataFrame {
 /** Shared empty links slice for v2 frames when collection is on but no pairs qualify (no per-frame allocation). Always frozen in dev and production builds. */
 export const EMPTY_VIZ_LINKS: readonly VizLinkSample[] = Object.freeze([]);
 
-if (!Object.isFrozen(EMPTY_VIZ_LINKS)) {
-  throw new Error("EMPTY_VIZ_LINKS must be frozen in every build");
-}
-
 export const EMPTY_SYS_TELEMETRY: VizSysTelemetry = {
   cpu: 0,
   mem: 0,

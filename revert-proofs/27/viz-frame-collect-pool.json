@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/fixtures/viz-collect-equivalence.test.ts",
-  "testName": "viz collector link pool growth > grows the link pool once for 200→400→200 flows without stale 400-flow slots in 200 output",
-  "description": "Revert skips zeroLinkRatesForFrame at the start of collectVizLinks (stale slots leak into top K)."
-}

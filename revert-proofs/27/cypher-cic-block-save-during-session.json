@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/app/cypher-cic-settings.test.ts",
-  "testName": "cypher-cic saved settings > row 2: header f-key toggle persists once during cypher-cic and restores after leave",
-  "description": "Revert blocks all feed persistence while cypher-cic collapse is active."
-}

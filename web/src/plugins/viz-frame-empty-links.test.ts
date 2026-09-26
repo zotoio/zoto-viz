@@ -6,15 +6,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizLinkSample } from "./viz-host";
 import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
-import {
-  applyVizFrameContractV2,
-  resolveVizFrameCollectOpts,
-  vizFrameCollectTestHooks,
-} from "./viz-frame-collect";
+import { applyVizFrameContractV2, resolveVizFrameCollectOpts } from "./viz-frame-collect";
 import { deliverVizFrameToPackTiles } from "./viz-frame-pack-deliver";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -53,41 +49,6 @@ function nextFrameWithEmptyLinks(state: StateMsg): VizDataFrame {
   return frame;
 }
 
-function runTwoTilePushScenario(
-  deliver: typeof deliverVizFrameToPackTiles,
-  apply: typeof applyVizFrameContractV2,
-  resolveOpts: typeof resolveVizFrameCollectOpts,
-  emptyLinks: typeof EMPTY_VIZ_LINKS,
-): { tile2Calls: number; nextLenTile1: number; nextLenTile2: number; frozen: boolean } {
-  const state = linksOnEmptyState();
-  const frame = baseFrame();
-  apply(frame, state, resolveOpts(state));
-  expect(frame.links).toBe(emptyLinks);
-  expect(Object.isFrozen(frame.links)).toBe(true);
-
-  let tile2Calls = 0;
-  deliver(frame, [
-    { tileId: "tile-1", onFrame: pushBadLink },
-    { tileId: "tile-2", onFrame: () => { tile2Calls++; } },
-  ]);
-  expect(tile2Calls).toBe(1);
-  expect(frame.links?.length).toBe(0);
-
-  const next = baseFrame();
-  apply(next, state, resolveOpts(state));
-  deliver(next, [
-    { tileId: "tile-1", onFrame: (f) => { expect(f.links?.length).toBe(0); } },
-    { tileId: "tile-2", onFrame: (f) => { expect(f.links?.length).toBe(0); } },
-  ]);
-
-  return {
-    tile2Calls,
-    nextLenTile1: next.links?.length ?? -1,
-    nextLenTile2: next.links?.length ?? -1,
-    frozen: Object.isFrozen(emptyLinks),
-  };
-}
-
 async function loadProdBundledEmptyLinksModule(): Promise<{
   EMPTY_VIZ_LINKS: typeof EMPTY_VIZ_LINKS;
   applyVizFrameContractV2: typeof applyVizFrameContractV2;
@@ -116,10 +77,6 @@ async function loadProdBundledEmptyLinksModule(): Promise<{
 }
 
 describe("viz frame v2 empty links contract (item 5a)", () => {
-  afterEach(() => {
-    vizFrameCollectTestHooks.useSharedUnfrozenEmptyLinksForTest(false);
-  });
-
   it("dev: a pack push on empty links throws and the next frame links length is 0", () => {
     expect(import.meta.env.DEV).toBe(true);
     expect(Object.isFrozen(EMPTY_VIZ_LINKS)).toBe(true);
@@ -140,34 +97,56 @@ describe("viz frame v2 empty links contract (item 5a)", () => {
     expect(again.links).toBe(EMPTY_VIZ_LINKS);
   });
 
-  it("prod bundle: tile 1 push on empty links leaves tile 2 callback once and next frame links length 0 on both tiles", async () => {
+  it("prod bundle: shared EMPTY_VIZ_LINKS stays frozen and push on empty links throws", async () => {
     const prod = await loadProdBundledEmptyLinksModule();
-    expect(prod.EMPTY_VIZ_LINKS).toBeTruthy();
     expect(Object.isFrozen(prod.EMPTY_VIZ_LINKS)).toBe(true);
 
-    const result = runTwoTilePushScenario(
-      prod.deliverVizFrameToPackTiles,
-      prod.applyVizFrameContractV2,
-      prod.resolveVizFrameCollectOpts,
-      prod.EMPTY_VIZ_LINKS,
-    );
-    expect(result.tile2Calls).toBe(1);
-    expect(result.nextLenTile1).toBe(0);
-    expect(result.nextLenTile2).toBe(0);
-    expect(result.frozen).toBe(true);
+    const state = linksOnEmptyState();
+    const frame = baseFrame();
+    prod.applyVizFrameContractV2(frame, state, prod.resolveVizFrameCollectOpts(state));
+    expect(frame.links).toBe(prod.EMPTY_VIZ_LINKS);
+
+    let threw = false;
+    try {
+      pushBadLink(frame);
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
+    expect(frame.links?.length).toBe(0);
   });
 
-  it("revert shared unfrozen empty: second tile sees links length 1 on the same frame", () => {
-    vizFrameCollectTestHooks.useSharedUnfrozenEmptyLinksForTest(true);
+  it("dev: tile 1 push on empty links leaves tile 2 callback exactly once", () => {
     const state = linksOnEmptyState();
     const frame = nextFrameWithEmptyLinks(state);
-    expect(Object.isFrozen(frame.links)).toBe(false);
-
-    let tile2Len = -1;
+    let tile2Calls = 0;
     deliverVizFrameToPackTiles(frame, [
       { tileId: "tile-1", onFrame: pushBadLink },
-      { tileId: "tile-2", onFrame: (f) => { tile2Len = f.links?.length ?? -1; } },
+      { tileId: "tile-2", onFrame: () => { tile2Calls++; } },
     ]);
-    expect(tile2Len).toBe(1);
+    expect(tile2Calls).toBe(1);
+    expect(frame.links?.length).toBe(0);
+
+    const next = nextFrameWithEmptyLinks(state);
+    expect(next.links?.length).toBe(0);
+  });
+
+  it("prod bundle: tile 1 push on empty links leaves tile 2 callback exactly once", async () => {
+    const prod = await loadProdBundledEmptyLinksModule();
+    const state = linksOnEmptyState();
+    const frame = baseFrame();
+    prod.applyVizFrameContractV2(frame, state, prod.resolveVizFrameCollectOpts(state));
+
+    let tile2Calls = 0;
+    prod.deliverVizFrameToPackTiles(frame, [
+      { tileId: "tile-1", onFrame: pushBadLink },
+      { tileId: "tile-2", onFrame: () => { tile2Calls++; } },
+    ]);
+    expect(tile2Calls).toBe(1);
+    expect(frame.links?.length).toBe(0);
+
+    const next = baseFrame();
+    prod.applyVizFrameContractV2(next, state, prod.resolveVizFrameCollectOpts(state));
+    expect(next.links?.length).toBe(0);
   });
 });

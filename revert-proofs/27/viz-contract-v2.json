@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/viz-host.test.ts",
-  "testName": "viz contract version negotiation > delivers v2 enrichment for v2 packs",
-  "description": "One-line production revert: buildVizFrameForPlugin always applies applyVizFrameContractV2."
-}

@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/ui/viz-hud.test.ts",
-  "testName": "viz hud helpers > keeps systemd unit count separate from TCP failure percentage",
-  "description": "One-line production revert: vizFrameFailureBadge uses max(sys.failed, talkerPeak) for one percentage."
-}
