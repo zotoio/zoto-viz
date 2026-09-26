@@ -1,0 +1,17 @@
+diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
+index 513ae44..6f658b2 100644
+--- a/web/src/core/viz-dev-wall-flags.ts
++++ b/web/src/core/viz-dev-wall-flags.ts
+@@ -47,7 +47,11 @@ function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[])
+   if (!raw) return;
+ 
+   const colon = raw.indexOf(":");
+-  if (colon < 0) return;
++  if (colon < 0) {
++    const ticks = Number(raw);
++    if (Number.isFinite(ticks)) setVizBuildCostTicksForTileInjector(() => ticks);
++    return;
++  }
+ 
+   const idx1 = Number(raw.slice(0, colon));
+   const ticks = Number(raw.slice(colon + 1));

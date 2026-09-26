@@ -1,0 +1,7 @@
+{
+  "row": "Amendment 6 L3 revert — naive k % 10 ordinals (11th wrong)",
+  "runner": "vitest",
+  "testFile": "src/ui/viz-copy.test.ts",
+  "testName": "^vizCadenceOrdinal \\(Amendment 6 L3\\) > k=11 → 11th$",
+  "excerpt": "AssertionError: expected '11st' to be '11th'"
+}

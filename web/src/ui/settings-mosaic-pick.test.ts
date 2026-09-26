@@ -5,6 +5,7 @@ import { setPluginModes, talkers, topology } from "../core/modes";
 
 describe("settings mosaic pane pickers", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     setPluginModes([
       { ...topology, id: "plugin:topology", pluginId: "topology", label: "Topology" },
       { ...talkers, id: "plugin:talkers", pluginId: "talkers", label: "Talkers" },

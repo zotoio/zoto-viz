@@ -1,0 +1,35 @@
+diff --git a/web/src/ui/viz-copy.ts b/web/src/ui/viz-copy.ts
+--- a/web/src/ui/viz-copy.ts
++++ b/web/src/ui/viz-copy.ts
+@@ -33,10 +33,9 @@ export function vizCadenceOrdinal(k: number): string {
+ }
+ 
+ /** Wall LIMITED strip when share-limited (cadence k from budget policy, not measured skip rate). */
+-export function tileLimitedSharingLabel(activeTiles: number, cadenceK: number): string {
++export function tileLimitedSharingLabel(activeTiles: number, skipsPerSec: number): string {
+   const n = Math.max(0, activeTiles);
+-  const ord = vizCadenceOrdinal(cadenceK);
+-  return `LIMITED · sharing frame with ${n} tiles · updating every ${ord} frame`;
++  return `LIMITED · sharing frame with ${n} tiles · ${formatHudSkipsPerSec(skipsPerSec)}`;
+ }
+diff --git a/web/src/plugins/viz-tile-hud.ts b/web/src/plugins/viz-tile-hud.ts
+--- a/web/src/plugins/viz-tile-hud.ts
++++ b/web/src/plugins/viz-tile-hud.ts
+@@ -89,7 +89,7 @@ export function tileHudChrome(
+   const state = computeTileHudViewerState(samples, nowTick, tile.lastBuildCostTicks);
+   const limitedLabel =
+     state === "limited"
+-      ? tileLimitedSharingLabel(activeTiles, tile.cadenceK)
++      ? tileLimitedSharingLabel(activeTiles, skipRate)
+       : null;
+   return {
+     state,
+@@ -127,7 +127,7 @@ export function wallHudChrome(
+   );
+   const limitedLabel =
+     state === "limited" && activeTiles >= 2
+-      ? tileLimitedSharingLabel(activeTiles, budgetTile.cadenceK)
++      ? tileLimitedSharingLabel(activeTiles, skipRate)
+       : null;
+   return {
+     state,

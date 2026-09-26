@@ -1,0 +1,7 @@
+{
+  "row": "Q3 revert: whole-wall cost accepts 1e3 via Number()",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
+  "testName": "^dev viz wall flags > Q3 bad whole-wall cost 1e3 — absent$",
+  "excerpt": "AssertionError: expected 1000 to be undefined // Object.is equality"
+}

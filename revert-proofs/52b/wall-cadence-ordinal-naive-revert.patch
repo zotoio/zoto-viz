@@ -1,0 +1,26 @@
+diff --git a/web/src/ui/viz-copy.ts b/web/src/ui/viz-copy.ts
+--- a/web/src/ui/viz-copy.ts
++++ b/web/src/ui/viz-copy.ts
+@@ -17,16 +17,10 @@ export function devVizWallFlagBadInputMessage(param: "vizTileCostTicks", raw: str
+ 
+ /** English ordinal for cadence k (11th–13th and 21st–23rd are not naive % 10). */
+ export function vizCadenceOrdinal(k: number): string {
+   const n = Math.max(1, Math.floor(k));
+-  const teen = n % 100;
+-  if (teen >= 11 && teen <= 13) return `${n}th`;
+-  switch (n % 10) {
+-    case 1:
+-      return `${n}st`;
+-    case 2:
+-      return `${n}nd`;
+-    case 3:
+-      return `${n}rd`;
+-    default:
+-      return `${n}th`;
+-  }
++  const mod = n % 10;
++  if (mod === 1) return `${n}st`;
++  if (mod === 2) return `${n}nd`;
++  if (mod === 3) return `${n}rd`;
++  return `${n}th`;
+ }

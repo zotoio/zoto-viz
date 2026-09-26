@@ -1,0 +1,21 @@
+diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
+--- a/web/src/core/viz-dev-wall-flags.ts
++++ b/web/src/core/viz-dev-wall-flags.ts
+@@ -31,8 +31,14 @@ function parseWallCostTicksFlag(raw: string | null): void {
+     rejectVizTileCostTicks(raw);
+     return;
+   }
+-  if (trimmed.indexOf(":") >= 0) {
+-    rejectVizTileCostTicks(trimmed);
++  const colon = trimmed.indexOf(":");
++  if (colon >= 0) {
++    const idx = parseDecimalIntToken(trimmed.slice(0, colon));
++    const ticks = parseDecimalIntToken(trimmed.slice(colon + 1));
++    if (idx === null || ticks === null || ticks < 0) {
++      rejectVizTileCostTicks(trimmed);
++      return;
++    }
++    setVizBuildCostTicksInjector(() => ticks);
+     return;
+   }
+ 
