@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "vitest JSON selection by full name > requires target passed/failed and all others skipped",
+  "description": "Count the target itself among tests that must be skipped",
+  "red": "AssertionError: expected false to be true // Object.is equality"
+}

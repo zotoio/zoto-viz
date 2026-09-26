@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof vitest runner through the overlay > (passthrough) errors handed to an assertion and rethrown are not branded",
+  "description": "Brand errors an assertion merely rethrows",
+  "red": "AssertionError: node fail passthrough: expected true to be false // Object.is equality"
+}

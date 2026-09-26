@@ -1,0 +1,16 @@
+diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
+index d8bcf0d..c182e4a 100644
+--- a/scripts/revert-proof-vitest-runner.mjs
++++ b/scripts/revert-proof-vitest-runner.mjs
+@@ -73,10 +73,7 @@ function wrapAssertion(orig, isAssertion) {
+   };
+ }
+ 
+-chai.use((c) => {
+-  const isChaiAssertion = (e) => e instanceof c.AssertionError;
+-  c.Assertion.prototype.assert = wrapAssertion(c.Assertion.prototype.assert, isChaiAssertion);
+-});
++void chai;
+ 
+ const NODE_ASSERT_SKIP = new Set(["AssertionError", "CallTracker", "Assert", "strict"]);
+ 

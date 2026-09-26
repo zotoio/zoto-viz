@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof vitest runner through the overlay > (c) plain-object fake AssertionError is rejected",
+  "description": "Count any thrown object as assertion red",
+  "red": "AssertionError: expected true to be false // Object.is equality"
+}

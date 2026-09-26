@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 77dd88e..39a1cd3 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -280,7 +280,7 @@ export function parseVitestJsonReport(report) {
+         fullName: vitestAssertionFullName(t),
+         status: t.status,
+         revertProofAssertion: t.meta?.revertProofAssertion === true,
+-        failureMessage: t.failureMessages?.length ? firstLine(t.failureMessages[0]) : null,
++        failureMessage: null,
+       });
+     }
+   }

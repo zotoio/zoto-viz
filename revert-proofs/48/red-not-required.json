@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "sidecar red value > (red-required) sidecar without a string red field is rejected",
+  "description": "Stop requiring the red sidecar field",
+  "red": "AssertionError: expected [Function] to throw an error"
+}

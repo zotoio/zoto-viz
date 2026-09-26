@@ -1,0 +1,15 @@
+diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
+index d8bcf0d..0ed6f81 100644
+--- a/scripts/revert-proof-vitest-runner.mjs
++++ b/scripts/revert-proof-vitest-runner.mjs
+@@ -107,9 +107,7 @@ export default class RevertProofVitestRunner extends TestRunner {
+   }
+ 
+   onAfterRunTask(test) {
+-    const revertProofAssertion = verdict.get(test) === true;
+-    verdict.delete(test);
+-    test.meta = Object.freeze({ ...test.meta, revertProofAssertion });
++    if (verdict.get(test) === true) test.meta.revertProofAssertion = true;
+     return super.onAfterRunTask(test);
+   }
+ }

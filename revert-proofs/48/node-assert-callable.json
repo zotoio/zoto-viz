@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof vitest runner through the overlay > (g-callable) callable node:assert and node:assert/strict failures set revertProofAssertion",
+  "description": "Drop the callable node:assert facade alias",
+  "red": "AssertionError: node callable assert: expected false to be true // Object.is equality"
+}
