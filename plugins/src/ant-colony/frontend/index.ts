@@ -13,19 +13,10 @@ import {
   SLOT_TUNNELS,
   createColony,
 } from "./colony";
-
-type VizFrame = {
-  t: number;
-  dt: number;
-  audio: number;
-  demo?: boolean;
-  packets: { proto: string; size: number; field: number }[];
-  talkers: { id: string; rate: number; role: string }[];
-  sys?: { failed: number };
-};
+import type { AntColonyFrame } from "./frame";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: AntColonyFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   onTeardown?: (() => void) | null;
   getConfig?: () => Record<string, string>;
@@ -114,7 +105,7 @@ export function cycleColonyTeardown(times = 20): void {
       audio: 0.1,
       packets: [{ proto: "tcp", size: 120, field: 0.4 }],
       talkers: [{ id: "a", rate: 80, role: "lan" }],
-      sys: { failed: 0 },
+      sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0 },
     });
     c.packSlots({
       t: i * 0.1,
@@ -128,4 +119,5 @@ export function cycleColonyTeardown(times = 20): void {
 }
 
 export { parseAntColonyLook, ANT_DATA_MAPPING, ANT_WORK_BUDGET } from "./config";
-export { AntColonySim, createColony, PG_CELLS, type ChamberSnapshot } from "./colony";
+export { AntColonySim, createColony, PG_CELLS, NEST_ENTRANCE, type ChamberSnapshot } from "./colony";
+export type { AntColonyFrame } from "./frame";

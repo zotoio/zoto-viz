@@ -111,4 +111,4 @@ config:
     label: map failures → soldiers
     type: boolean
     default: true
-    hint: Host failed-unit gauge spawns fail-coloured soldier swarms.
+    hint: Machine-wide failed gauge — fail-coloured soldiers pour from the nest entrance across the soil (not tied to one host).

@@ -92,7 +92,7 @@ export const ANT_DATA_MAPPING = [
   { field: "packets[] / flows", effect: "tunnel dig + foraging polylines", default: "on", clamp: "mapFlows boolean" },
   { field: "packet.size", effect: "crumb radius", default: "on", clamp: "mapBytes boolean" },
   { field: "talker.rate", effect: "ant speed & spawn density", default: "on", clamp: "mapRate boolean" },
-  { field: "sys.failed", effect: "soldier swarm on hub chamber", default: "on", clamp: "mapFailures boolean" },
+  { field: "sys.failed", effect: "colony-wide soldier pour + fail label (machine gauge)", default: "on", clamp: "mapFailures boolean" },
 ] as const;
 
 /** Per-frame work budget (counts only — for light tests / caps). */

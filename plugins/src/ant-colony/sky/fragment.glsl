@@ -58,10 +58,8 @@ float chamberField(vec2 uv) {
     int o = 64 + i * 4;
     vec2 c = vec2(slot(o), slot(o + 1));
     float r = slot(o + 2);
-    float heat = slot(o + 3);
     float cd = length(uv - c) - r;
     d = min(d, cd);
-    if (cd < r * 0.35 && heat > 1.2) d = min(d, cd - 0.01);
   }
   return d;
 }
@@ -143,8 +141,10 @@ void main() {
   float rain = slot(4);
   float fail = slot(5);
   float soil = slot(10);
+  float failWash = smoothstep(0.02, 0.45, fail);
 
   vec3 col = soilColor(uv, soil);
+  col = mix(col, mix(col, FAIL_COL, 0.35 + fail * 0.25), failWash * 0.55);
   float cut = smoothstep(0.02, 0.0, abs(dir.y + 0.15));
   col = mix(col * 0.35, col, cut);
 
@@ -160,7 +160,8 @@ void main() {
   }
 
   float ad = antsField(uv);
-  vec3 antCol = mix(uAccent * 0.55, FAIL_COL, step(0.5, fail) * step(0.0, -ad));
+  vec3 antCol = mix(uAccent * 0.55, FAIL_COL, max(step(0.5, fail), 0.0) * step(0.0, -ad));
+  antCol = mix(antCol, FAIL_COL, failWash * step(0.0, -ad));
   if (ad < 0.01) col = mix(col, antCol, smoothstep(0.01, -0.005, ad));
 
   float sky = max(0.0, dir.y) * (0.35 + 0.35 * day);
