@@ -845,6 +845,23 @@ def _require_state(app: web.Application | None) -> Any:
     return state
 
 
+def _consent_plugin_result(args: dict[str, Any]) -> dict[str, Any]:
+    """Grant plugin source-review consent. Kept out of call_tool so local imports here cannot shadow module-level live."""
+    pid = str(args.get("id") or "").strip()
+    kind = str(args.get("kind") or "").strip()
+    found = plugins._plugin_row(pid) if pid else None
+    if not found:
+        raise ValueError(f"unknown plugin {pid!r}")
+    if not plugins.needs_review(found):
+        return {"ok": True, "needed": False, "id": pid}
+    plugins.grant_consent(found, kind)
+    from . import hooks
+
+    hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
+    live.queue_patch({"pluginConsent": {"id": pid, "kind": kind}})
+    return {"ok": True, "needed": True, "id": pid, "kind": kind}
+
+
 def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application | None = None) -> dict[str, Any]:
     args = arguments if isinstance(arguments, dict) else {}
     try:
@@ -980,19 +997,7 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             refresh_hop_plan(state)
             return _tool_text({"ok": True, **state.radio.watch_status(time.time())})
         if name == "consent_plugin":
-            pid = str(args.get("id") or "").strip()
-            kind = str(args.get("kind") or "").strip()
-            found = plugins._plugin_row(pid) if pid else None
-            if not found:
-                raise ValueError(f"unknown plugin {pid!r}")
-            if not plugins.needs_review(found):
-                return _tool_text({"ok": True, "needed": False, "id": pid})
-            plugins.grant_consent(found, kind)
-            from . import hooks
-            from . import live
-            hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
-            live.queue_patch({"pluginConsent": {"id": pid, "kind": kind}})
-            return _tool_text({"ok": True, "needed": True, "id": pid, "kind": kind})
+            return _tool_text(_consent_plugin_result(args))
         if name == "draft_plugin":
             info = agent.draft_plugin(args)
             return _tool_text(info, is_error=not info.get("ok"))
