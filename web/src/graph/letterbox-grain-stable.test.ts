@@ -1,30 +1,42 @@
+/** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CanvasChangeProbe } from "./pane-change";
-import { getSurfaceLetterboxFill, letterboxFillStats, paintLetterboxBarsInto, resetSurfaceLetterboxFillCache } from "./letterbox-fill";
+import { getSurfaceLetterboxFill, letterboxFillStats, paintLetterboxBarsInto } from "./letterbox-fill";
 import { zotoSurfacePanelClearHex } from "../core/themes";
+
+function stub2dContext(): CanvasRenderingContext2D {
+  const state = { fillStyle: "" };
+  return {
+    save: vi.fn(),
+    restore: vi.fn(),
+    fillRect: vi.fn(),
+    get fillStyle() { return state.fillStyle; },
+    set fillStyle(v: string) { state.fillStyle = v; },
+  } as unknown as CanvasRenderingContext2D;
+}
 
 describe("letterbox software grain stability", () => {
   let canvas: HTMLCanvasElement;
-  let ctx: CanvasRenderingContext2D | null;
+  let ctx: CanvasRenderingContext2D;
 
   beforeEach(() => {
-    resetSurfaceLetterboxFillCache();
     letterboxFillStats.reset();
     canvas = document.createElement("canvas");
     canvas.width = 200;
     canvas.height = 200;
-    ctx = canvas.getContext("2d");
+    ctx = stub2dContext();
+    vi.spyOn(canvas, "getContext").mockReturnValue(ctx);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    resetSurfaceLetterboxFillCache();
+    letterboxFillStats.reset();
   });
 
   it("300 frames: 0 Math.random and 0 new strings from letterbox module hot path", () => {
-    if (!ctx) return;
     const randomSpy = vi.spyOn(Math, "random");
     const fill = getSurfaceLetterboxFill(zotoSurfacePanelClearHex(), 0.25);
+    const strBefore = letterboxFillStats.stringAllocations;
     const bars = [
       { x: 0, y: 0, w: 0, h: 0 },
       { x: 0, y: 0, w: 0, h: 0 },
@@ -37,11 +49,17 @@ describe("letterbox software grain stability", () => {
       paintLetterboxBarsInto(ctx, box, inner, fill, bars);
     }
     expect(randomSpy).not.toHaveBeenCalled();
+    expect(letterboxFillStats.stringAllocations).toBe(strBefore);
     randomSpy.mockRestore();
   });
 
   it("two identical frames: CanvasChangeProbe reports 0 change events on a bar pixel without grain", () => {
-    if (!ctx) return;
+    const realCtx = stub2dContext();
+    const image = new Uint8ClampedArray(16 * 16 * 4);
+    image.fill(20);
+    realCtx.getImageData = vi.fn(() => ({ data: image, width: 16, height: 16 } as ImageData));
+    vi.spyOn(canvas, "getContext").mockReturnValue(realCtx);
+
     const fill = getSurfaceLetterboxFill(zotoSurfacePanelClearHex(), 0.25);
     const bars = [
       { x: 0, y: 0, w: 0, h: 0 },
@@ -51,11 +69,11 @@ describe("letterbox software grain stability", () => {
     ] as [{ x: number; y: number; w: number; h: number }, { x: number; y: number; w: number; h: number }, { x: number; y: number; w: number; h: number }, { x: number; y: number; w: number; h: number }];
     const box = { x: 0, y: 0, w: 100, h: 100 };
     const inner = { x: 0, y: 22, w: 100, h: 56 };
-    paintLetterboxBarsInto(ctx, box, inner, fill, bars);
+    paintLetterboxBarsInto(realCtx, box, inner, fill, bars);
     const probe = new CanvasChangeProbe();
     const rect = { x: 50, y: 5, w: 10, h: 10, __unit: "device" as const };
-    probe.sample(ctx, canvas, rect);
-    const changed = probe.sample(ctx, canvas, rect);
+    probe.sample(realCtx, canvas, rect);
+    const changed = probe.sample(realCtx, canvas, rect);
     expect(changed).toBe(false);
   });
 });

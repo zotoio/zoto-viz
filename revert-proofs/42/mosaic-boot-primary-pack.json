@@ -2,5 +2,6 @@
   "runner": "vitest",
   "testFile": "src/graph/mosaic.test.ts",
   "testName": "^mosaic boot primary pack tile > boot with 4 packs: primary tile shows the primary pack id exactly$",
-  "description": "Tree-only mosaic boot must refresh leaf ids from mosaicIds(prefer) so tile 0 matches the primary pack view."
+  "description": "Tree-only mosaic boot must refresh leaf ids from mosaicIds(prefer) so tile 0 matches the primary pack view. Patched vitest: expected 'plugin:pack-a' to be 'plugin:pack-c' // Object.is equality",
+  "expectedRed": "expected 'plugin:pack-a' to be 'plugin:pack-c' // Object.is equality"
 }

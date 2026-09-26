@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/pack-mirror-rect.ts b/web/src/graph/pack-mirror-rect.ts
-index 4a021a8..7bff0e5 100644
+index 44dc005..1d2a2d3 100644
 --- a/web/src/graph/pack-mirror-rect.ts
 +++ b/web/src/graph/pack-mirror-rect.ts
-@@ -46,10 +46,10 @@ function writeDeviceEdgesFromCss(
+@@ -63,10 +63,10 @@ function writeDeviceEdgesFromCss(
    out: { x0: number; x1: number; y0: number; y1: number },
  ): void {
    const pr = pixelRatio;
@@ -16,4 +16,4 @@ index 4a021a8..7bff0e5 100644
 +  out.y1 = Math.ceil((r.y + r.h) * pr);
  }
  
- function writeDeviceRectFromEdges(
+ const deviceEdgeScratch = { x0: 0, x1: 0, y0: 0, y1: 0 };

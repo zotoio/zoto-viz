@@ -1,6 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/render-host-frame-alloc.test.ts",
-  "testName": "^RenderHost frame allocations > 300 frames at 2×4 pr 1\\.5: zero render-path object allocations after warm-up$",
-  "description": "Pack-mirror render path must not allocate converter edge objects per frame."
+  "testName": "^RenderHost frame allocations > 300 frames at 2\u00d74 pr 1\\.5: zero render-path object allocations after warm-up$",
+  "description": "Pack-mirror render path must not allocate converter edge objects per frame. Patched vitest: expected 2400 to be +0 // Object.is equality",
+  "expectedRed": "expected 2400 to be +0 // Object.is equality"
 }

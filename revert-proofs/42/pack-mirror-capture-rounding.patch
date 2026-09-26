@@ -1,19 +1,23 @@
 diff --git a/web/src/graph/pack-mirror-rect.ts b/web/src/graph/pack-mirror-rect.ts
-index 4a021a8..50ca788 100644
+index 44dc005..275847f 100644
 --- a/web/src/graph/pack-mirror-rect.ts
 +++ b/web/src/graph/pack-mirror-rect.ts
-@@ -112,10 +112,10 @@ export function deviceRectBottomLeftCssInto(
-   out: DeviceRectMut,
- ): DeviceRect {
-   const pr = pixelRatio;
--  const x0 = Math.round(cssBoxDim(box.x) * pr);
--  const x1 = Math.round((cssBoxDim(box.x) + cssBoxDim(box.w)) * pr);
--  const y0 = Math.round(cssBoxDim(box.y) * pr);
--  const y1 = Math.round((cssBoxDim(box.y) + cssBoxDim(box.h)) * pr);
-+  const x0 = Math.floor(cssBoxDim(box.x) * pr);
-+  const x1 = Math.ceil((cssBoxDim(box.x) + cssBoxDim(box.w)) * pr);
-+  const y0 = Math.floor(cssBoxDim(box.y) * pr);
-+  const y1 = Math.ceil((cssBoxDim(box.y) + cssBoxDim(box.h)) * pr);
-   out.x = x0;
-   out.y = y0;
-   out.w = x1 - x0;
+@@ -113,11 +113,13 @@ export function deviceRectFromHostViewBoxInto(
+     return deviceRectTopLeftCssInto(box, pixelRatio, out);
+   }
+   const topY = canvasCssHeight - cssBoxDim(box.y) - cssBoxDim(box.h);
+-  toDeviceRectInto(
+-    cssRect(box.x, topY, box.w, box.h),
+-    pixelRatio,
+-    out,
+-  );
++  const r = cssRect(box.x, topY, box.w, box.h);
++  const pr = pixelRatio;
++  out.x = Math.floor(r.x * pr);
++  out.y = Math.floor(r.y * pr);
++  out.w = Math.ceil((r.x + r.w) * pr) - out.x;
++  out.h = Math.ceil((r.y + r.h) * pr) - out.y;
++  Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
+   if (canvasDevicePx !== undefined) {
+     const cap = canvasDevicePx;
+     const y1 = out.y + out.h;

@@ -1,6 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/letterbox-grain-stable.test.ts",
-  "testName": "^letterbox software grain stability > 300 frames: 0 Math.random",
-  "description": "Software letterbox bars must not call Math.random per frame; revert adds per-frame jitter."
+  "testName": "^letterbox software grain stability > 300 frames: 0 Math\\.random and 0 new strings from letterbox module hot path$",
+  "description": "Software letterbox bars must not call Math.random per frame; revert adds per-frame jitter. Patched vitest: expected \"random\" to not be called at all, but actually been called 600 times",
+  "expectedRed": "expected \"random\" to not be called at all, but actually been called 600 times"
 }

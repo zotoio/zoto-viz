@@ -2532,12 +2532,10 @@ export class NetScene implements HostedView {
       const k = Math.min(1, this.pulseBass);
       painted = this.mixHex(baseClear, s.rim, (0.08 + 0.52 * k) * op);
       this.clearHex = painted;
-      this.invalidateSurfaceLetterboxFill();
       if (fog) fog.color.setHex(this.mixHex(baseFog, s.rim, (0.06 + 0.42 * k) * op));
       this.backdrop.setColors(rim, painted);
     } else {
       this.clearHex = baseClear;
-      this.invalidateSurfaceLetterboxFill();
       if (fog) fog.color.setHex(baseFog);
       this.backdrop.setColors(rim, baseClear);
     }

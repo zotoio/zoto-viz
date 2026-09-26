@@ -2,5 +2,6 @@
   "runner": "vitest",
   "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
   "testName": "^PackMirrorSession resource lifecycle > renderPrimary: non-finite box dims stable RT size \\(missing origin and NaN w\\)$",
-  "description": "cssBoxDim sanitizes missing origin and NaN/Infinity w/h before edge rounding and clamp."
+  "description": "cssBoxDim sanitizes missing origin and NaN/Infinity w/h before edge rounding and clamp. Patched vitest: expected 299 to be +0 // Object.is equality",
+  "expectedRed": "expected 299 to be +0 // Object.is equality"
 }

@@ -443,9 +443,8 @@ export class RenderHost {
     const camera = this.gpuTimedCamera;
     if (!box || !scene || !camera) return;
     const rd = this.renderer as THREE.WebGLRenderer;
-    const vp = this.fbGlViewport;
-    rd.setViewport(vp.x, vp.y, vp.w, vp.h);
-    rd.setScissor(vp.x, vp.y, vp.w, vp.h);
+    rd.setViewport(box.x, box.y, box.w, box.h);
+    rd.setScissor(box.x, box.y, box.w, box.h);
     rd.setScissorTest(true);
     rd.setClearColor(this.gpuTimedClearHex, 1);
     rd.render(scene, camera);

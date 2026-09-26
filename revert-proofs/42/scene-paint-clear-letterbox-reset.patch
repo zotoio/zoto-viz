@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/scene.ts b/web/src/graph/scene.ts
+index 4eca903..99a311f 100644
+--- a/web/src/graph/scene.ts
++++ b/web/src/graph/scene.ts
+@@ -2514,6 +2514,7 @@ export class NetScene implements HostedView {
+   }
+ 
+   private paintClear(): void {
++    resetSurfaceLetterboxFillCache();
+     const a = this.anim;
+     const s = this.theme.scene;
+     const fadeK = this.fadeT * this.fadeT * (3 - 2 * this.fadeT);

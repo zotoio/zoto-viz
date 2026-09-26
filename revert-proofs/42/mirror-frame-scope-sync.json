@@ -1,6 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/render-host-frame-alloc.test.ts",
-  "testName": "RenderHost frame allocations > 300 frames at 2×4 in-page mirror: one scope sync, stable viewBox, present arg identity",
-  "description": "mirrorScopeDirty flag instead of per-frame fingerprint strings for pack scope sync."
+  "testName": "^RenderHost frame allocations > 300 frames at 2\u00d74 in-page mirror: one scope sync, stable viewBox, present arg identity$",
+  "description": "mirrorScopeDirty flag instead of per-frame fingerprint strings for pack scope sync. Patched vitest: expected 301 to be +0 // Object.is equality",
+  "expectedRed": "expected 301 to be +0 // Object.is equality"
 }

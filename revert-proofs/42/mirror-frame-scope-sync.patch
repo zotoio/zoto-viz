@@ -1,17 +1,17 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index 60f6cb2..bc07ee9 100644
+index 48982f8..a215b3d 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -121,7 +121,7 @@ export class RenderHost {
-   };
-   private readonly fbViewport: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
+@@ -133,7 +133,7 @@ export class RenderHost {
+   private readonly fbGlViewport: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
+   private canvasDeviceHeight: CanvasDeviceHeight = asCanvasDeviceHeight(1);
    private readonly packScopeScratch = new Map<string, { tileCount: number; antialias: boolean }>();
 -  private mirrorScopeDirty = true;
 +  private mirrorScopeFingerprint = "";
    private contextAntialias = false;
    private readonly viewBoxScratch: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
    private readonly viewBoxScratchB: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
-@@ -245,7 +245,7 @@ export class RenderHost {
+@@ -258,7 +258,7 @@ export class RenderHost {
  
    /** Pack-mirror tile metadata changed without add/remove (mosaic coalesce). */
    markMirrorScopeDirty(): void {
@@ -20,7 +20,7 @@ index 60f6cb2..bc07ee9 100644
    }
  
    /** Run one animation frame (tests / dogfood). */
-@@ -440,10 +440,26 @@ export class RenderHost {
+@@ -484,10 +484,26 @@ export class RenderHost {
      });
    }
  

@@ -1,13 +1,12 @@
 diff --git a/web/src/graph/letterbox-fill.ts b/web/src/graph/letterbox-fill.ts
+index fac1e5b..b0ed649 100644
 --- a/web/src/graph/letterbox-fill.ts
 +++ b/web/src/graph/letterbox-fill.ts
-@@ -133,7 +133,9 @@
-   bars[3].w = Math.max(0, box.x + box.w - inner.x - inner.w);
-   bars[3].h = inner.h;
-   ctx.save();
-+  const jitter = Math.random() * 0.02;
+@@ -136,6 +136,7 @@ export function paintLetterboxBarsInto(
    ctx.fillStyle = fill.pattern ?? fill.css;
-+  ctx.globalAlpha = 1 - jitter;
    for (const b of bars) {
      if (b.w < 1 || b.h < 1) continue;
++    void Math.random();
      ctx.fillRect(b.x, b.y, b.w, b.h);
+   }
+   ctx.restore();

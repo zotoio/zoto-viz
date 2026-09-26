@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/letterbox-fill.ts b/web/src/graph/letterbox-fill.ts
+index fac1e5b..69ae53e 100644
+--- a/web/src/graph/letterbox-fill.ts
++++ b/web/src/graph/letterbox-fill.ts
+@@ -66,7 +66,7 @@ export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLet
+   let g = (clearHex >> 8) & 255;
+   let b = clearHex & 255;
+   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+-  if (lum < 18) {
++  if (false && lum < 18) {
+     const lift = (18 - lum) / 255;
+     r = Math.min(255, Math.round(r + lift * 255));
+     g = Math.min(255, Math.round(g + lift * 255));
