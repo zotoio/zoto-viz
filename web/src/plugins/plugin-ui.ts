@@ -3,6 +3,7 @@ import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
 import type { SdmDevice } from "./nest-cams-look";
+import { parseVoxelWorldOptions, voxelWorldOptionsToConfig } from "../../../plugins/src/voxel-world/frontend/world";
 
 export function fillPluginFields(
   host: HTMLElement,
@@ -67,7 +68,13 @@ export function fillPluginFields(
           title: f.hint,
           options: f.values.map(([value, label]) => ({ value, label })),
           value: current,
-          onChange: (v) => { values[f.key] = v; persist(); },
+          onChange: (v) => {
+            values[f.key] = v;
+            if (spec.id === "voxel-world" && f.key === "preset" && v !== "custom") {
+              Object.assign(values, voxelWorldOptionsToConfig(parseVoxelWorldOptions({ preset: v })));
+            }
+            persist();
+          },
         });
         row.append(s.el);
       } else if (f.type === "number") {

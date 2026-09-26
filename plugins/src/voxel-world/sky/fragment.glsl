@@ -85,9 +85,8 @@ bool treeAt(ivec2 xz, float seed) {
 }
 
 int villageBlock(ivec3 p) {
-  float vx = slot(1) + 14.0;
-  float vz = slot(3) + 10.0;
-  ivec3 base = ivec3(int(vx), int(floor(terrainH(vec2(vx, vz)))), int(vz));
+  vec2 village = vec2(0.0, 0.0);
+  ivec3 base = ivec3(int(village.x), int(floor(terrainH(village))), int(village.y));
   ivec3 q = p - base;
   if (q.x >= 0 && q.x < 7 && q.z >= -3 && q.z < 4 && q.y >= 0 && q.y < 5) {
     if (q.y == 0) return 4;
@@ -183,12 +182,13 @@ bool traceVoxel(vec3 ro, vec3 rd, out float dist, out vec3 n, out vec3 wp, out i
   vec3 tMax = tDelta * side;
   ivec3 ip = ivec3(floor(pos));
   dist = 0.0;
+  int stepAxis = 0;
   for (int i = 0; i < MAX_STEPS; i++) {
     id = voxel(ip);
     if (id != 0) {
       wp = vec3(ip);
-      if (tMax.x < tMax.y && tMax.x < tMax.z) n = vec3(-stepDir.x, 0.0, 0.0);
-      else if (tMax.y < tMax.z) n = vec3(0.0, -stepDir.y, 0.0);
+      if (stepAxis == 0) n = vec3(-stepDir.x, 0.0, 0.0);
+      else if (stepAxis == 1) n = vec3(0.0, -stepDir.y, 0.0);
       else n = vec3(0.0, 0.0, -stepDir.z);
       return true;
     }
@@ -196,14 +196,17 @@ bool traceVoxel(vec3 ro, vec3 rd, out float dist, out vec3 n, out vec3 wp, out i
       dist = tMax.x;
       tMax.x += tDelta.x;
       ip.x += int(stepDir.x);
+      stepAxis = 0;
     } else if (tMax.y < tMax.z) {
       dist = tMax.y;
       tMax.y += tDelta.y;
       ip.y += int(stepDir.y);
+      stepAxis = 1;
     } else {
       dist = tMax.z;
       tMax.z += tDelta.z;
       ip.z += int(stepDir.z);
+      stepAxis = 2;
     }
     if (dist > maxD) break;
   }

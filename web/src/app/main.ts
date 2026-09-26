@@ -30,6 +30,7 @@ import {
   undoVoxelWorldOptions,
   voxelSlots,
   voxelWorldOptions,
+  voxelWorldOptionsToConfig,
 } from "../../../plugins/src/voxel-world/frontend/world";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
@@ -589,25 +590,7 @@ function voxelWorldControls(): HTMLElement[] {
     randomiseVoxelWorldOptions();
     const spec = pluginSpecForMode("plugin:voxel-world");
     if (!spec) return;
-    const fields = pluginViewKnobs(spec, spec.config);
-    const parsed = parseVoxelWorldOptions(loadPluginConfig(spec, fields));
-    writePluginConfig(configStoreId(spec), {
-      ...loadPluginConfig(spec, fields),
-      preset: parsed.preset,
-      seed: String(parsed.seed),
-      biome: parsed.biome,
-      viewDist: String(parsed.viewDist),
-      timeOfDay: String(parsed.timeOfDay),
-      cycleSpeed: String(parsed.cycleSpeed),
-      weather: parsed.weather,
-      camera: parsed.camera,
-      cameraSpeed: String(parsed.cameraSpeed),
-      fog: String(parsed.fog),
-      textureStyle: parsed.textureStyle,
-      mobs: String(parsed.mobs),
-      clouds: parsed.clouds ? "1" : "0",
-      palette: parsed.palette,
-    });
+    writePluginConfig(configStoreId(spec), voxelWorldOptionsToConfig(voxelWorldOptions()));
     onPluginFields();
     bindThisView("plugin:voxel-world");
   });
@@ -618,6 +601,8 @@ function voxelWorldControls(): HTMLElement[] {
   undo.title = "Undo the last randomise";
   undo.addEventListener("click", () => {
     if (!undoVoxelWorldOptions()) return;
+    const spec = pluginSpecForMode("plugin:voxel-world");
+    if (spec) writePluginConfig(configStoreId(spec), voxelWorldOptionsToConfig(voxelWorldOptions()));
     onPluginFields();
     bindThisView("plugin:voxel-world");
   });
@@ -629,7 +614,7 @@ function voxelWorldControls(): HTMLElement[] {
   reset.addEventListener("click", () => {
     resetVoxelWorldOptions();
     const spec = pluginSpecForMode("plugin:voxel-world");
-    if (spec) writePluginConfig(configStoreId(spec), {});
+    if (spec) writePluginConfig(configStoreId(spec), voxelWorldOptionsToConfig(voxelWorldOptions()));
     onPluginFields();
     bindThisView("plugin:voxel-world");
   });

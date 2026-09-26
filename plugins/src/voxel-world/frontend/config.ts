@@ -110,6 +110,31 @@ export function parseVoxConfig(cfg: Record<string, string> = {}): VoxOptions {
   const filtered: Record<string, string> = {};
   for (const k of VOX_CONFIG_KEYS) if (cfg[k] !== undefined) filtered[k] = cfg[k]!;
   const preset = pick(filtered.preset, ["classic", "snowy", "desert", "night", "archipelago", "custom"] as const, "classic");
+  const hasPresetKey = Object.prototype.hasOwnProperty.call(filtered, "preset");
+  if (preset !== "custom" && hasPresetKey) {
+    const base = { ...PRESETS[preset], reducedMotion: false };
+    const caps = capsFrom(filtered);
+    const maxV = caps.maxViewDist;
+    return {
+      preset,
+      seed: Math.round(num(undefined, base.seed!, 1, 999_999)),
+      biome: base.biome!,
+      viewDist: Math.round(num(undefined, base.viewDist!, 16, maxV)),
+      timeOfDay: num(undefined, base.timeOfDay!, 0, 24),
+      cycleSpeed: num(undefined, base.cycleSpeed!, 0, 4),
+      weather: base.weather!,
+      camera: base.camera!,
+      cameraSpeed: num(undefined, base.cameraSpeed!, 0.2, 2.5),
+      fog: num(undefined, base.fog!, 0, 1),
+      textureStyle: base.textureStyle!,
+      mobs: Math.round(num(undefined, base.mobs!, 0, 6)),
+      clouds: base.clouds!,
+      palette: base.palette!,
+      reducedMotion: false,
+      caps,
+      live: liveFrom(filtered),
+    };
+  }
   const base = preset === "custom"
     ? { preset: "custom" as const, seed: 4242, biome: "temperate" as const, viewDist: 40, timeOfDay: 14, cycleSpeed: 0,
       weather: "clear" as const, camera: "fly" as const, cameraSpeed: 1, fog: 0.55, textureStyle: "crisp" as const,
