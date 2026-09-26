@@ -94,7 +94,6 @@ function syncTalkerIds(talkers: readonly VizTalkerSample[]): ReadonlySet<string>
     talkerIdsScratch.clear();
     for (let i = 0; i < talkerIdsCached.length; i++) talkerIdsScratch.add(talkerIdsCached[i]!);
     talkerIdsSetRebuilds++;
-    pruneLinksOutsideTalkers(talkerIdsScratch);
   }
   return talkerIdsScratch;
 }
@@ -249,7 +248,6 @@ export function collectVizLinks(
   maxLinks: number,
 ): { links: VizLinkSample[]; linksDropped: number } {
   lastNewPairSetCount = 0;
-  pruneLinksOutsideTalkers(talkerIds);
   zeroLinkRatesForFrame();
   for (let fi = 0; fi < flows.length; fi++) {
     const fl = flows[fi]!;
