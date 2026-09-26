@@ -1726,6 +1726,13 @@ export class NetScene implements HostedView {
     this.graphRenderCount = 0;
   }
 
+  /** TEST-ONLY: one host present stamp + standalone tile tick (production idle path). */
+  testIdleHostFrame(ts: number): void {
+    if (this.active) return;
+    markFrame(ts);
+    this.idleFrame(ts);
+  }
+
   /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
   setStageOnly(on: boolean): void {
     this.stageOnly = on;
@@ -3497,17 +3504,19 @@ export class NetScene implements HostedView {
 
   private lastFrameTs = 0;
 
-  /** Standalone 1×1 tile while {@link setActive}(false): host-driven, no graph draw. */
+  /** Host frame while inactive: standalone tile tick only (no graph draw). */
   private idleFrame(_ts: number): void {
     this.paneFps.el.hidden = true;
-    if (!this.standaloneTileTick) return;
-    const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
-    this.standaloneTileTick(dtSec);
+    if (this.standaloneTileTick) {
+      const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
+      this.standaloneTileTick(dtSec);
+    }
   }
 
   private animate(ts: number): void {
     if (!this.host && this.active) this.raf = requestAnimationFrame(this.animate);
     if (!this.active) {
+      markFrame(ts);
       this.idleFrame(ts);
       return;
     }

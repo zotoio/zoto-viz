@@ -226,6 +226,9 @@ export class TetrisView extends Stage3D {
       this.dropAcc -= 1;
       if (!this.tryMove(0, -1)) this.lock(now);
     }
+    if (!this.active && this.queue.length && !shouldHoldTopout(now, this.topoutHoldUntil)) {
+      this.spawn(now, this.queue.shift()!);
+    }
     this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
   }
 

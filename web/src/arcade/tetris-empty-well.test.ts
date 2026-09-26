@@ -3,7 +3,7 @@ import type { NetScene } from "../graph/scene";
 import { DEMO_DATA_LABEL } from "../core/demo-source";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { TetrisView } from "./tetris";
-import { TETRIS_TOPOUT_HOLD_S } from "./tetris-topout";
+import { shouldHoldTopout, TETRIS_TOPOUT_HOLD_S } from "./tetris-topout";
 
 const FRAME_MS = 16;
 const FRAMES = 600;
@@ -73,11 +73,19 @@ describe("TetrisView never-empty well", () => {
     expect(view.testHasActivePiece()).toBe(true);
   });
 
-  it("no frame leaves stack or queue work without an active piece (except top-out hold)", () => {
+  it("every frame outside top-out hold has an active piece (600 idle ticks, seed 42)", () => {
     const view = mount();
+    let holdFrames = 0;
     for (let i = 0; i < FRAMES; i++) {
       hostTick(view);
-      expect(view.testWellNeedsActivePiece()).toBe(true);
+      const now = clock / 1000;
+      const inHold = shouldHoldTopout(now, view.testTopoutHoldUntil());
+      if (inHold) {
+        holdFrames++;
+      } else {
+        expect(view.testHasActivePiece()).toBe(true);
+      }
     }
+    expect(holdFrames).toBe(0);
   });
 });

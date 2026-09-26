@@ -63,15 +63,15 @@ describe("TetrisView planner cost", () => {
   function advanceFrames(view: TetrisHarness, graph: NetScene, frames: number): void {
     for (let i = 0; i < frames; i++) {
       clock += FRAME_MS;
-      graph.hostFrame(clock);
+      graph.testIdleHostFrame(clock);
     }
   }
 
   it("600 frames: one plan per spawn and exact placement search totals", () => {
     const { view, graph } = mount();
     advanceFrames(view, graph, FRAMES);
-    expect(view.testPlacementsEvaluated()).toBe(EXPECTED_PLACEMENT_EVALS);
     expect(view.testPlanCallCount()).toBe(EXPECTED_PLAN_CALLS);
+    expect(view.testPlacementsEvaluated()).toBe(EXPECTED_PLACEMENT_EVALS);
     expect(view.testScore()).toBe(EXPECTED_LOCKED_PIECES);
     expect(view.testHasActivePiece()).toBe(true);
     expect(view.testPlanCallCount()).toBe(view.testScore() + 1);

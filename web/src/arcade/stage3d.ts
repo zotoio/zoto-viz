@@ -102,7 +102,7 @@ export abstract class Stage3D {
     if (!this.running) return;
     const clockMs = vizClockMs();
     const ts = clockMs;
-    markFrame(ts);
+    if (!this.useHostFrameLoop()) markFrame(ts);
     this.paneFps.tick(ts);
     const now = clockMs / 1000;
     this.fit();
