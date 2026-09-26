@@ -1,23 +1,38 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PluginSandbox } from "../plugins/host";
 import { defaultVizContract } from "../plugins/viz-host";
 import type { ViewMode } from "../core/modes";
 import type { PluginView } from "../plugins/plugin";
+import type { ConsentReviewResult } from "./consent-review";
+import { resetSharedPackConsentForTests } from "./consent-review";
 import { Select } from "../ui/ui";
 import { VizHud } from "../ui/viz-hud";
 import { applyModeImpl, type ApplyModeHost } from "./apply-mode";
+import {
+  isModeSwitchStatusVisible,
+  clearModeSwitchStatus,
+  flashModeKeptPrevious,
+  flashModeLoadFailed,
+} from "./mode-switch-message";
+import {
+  bumpModeSwitchGeneration,
+  getLastConsentedModeId as readLastConsentedModeId,
+  isModeSwitchStale,
+  resetModeSwitchStateForTests,
+  setLastConsentedModeId,
+} from "./mode-switch-state";
 import { getPresentDriveTileId, refreshPluginDriveState } from "./present-drive-app";
 
-const backroomsSpec: PluginView = {
-  id: "backrooms",
-  name: "Backrooms",
+const stereoSpec: PluginView = {
+  id: "stereo-gram",
+  name: "Stereo",
   version: 1,
   capabilities: ["viz.write"],
   viz: defaultVizContract({ presentTick: true }),
 };
-const stereoSpec: PluginView = {
-  id: "stereo-gram",
-  name: "Stereo",
+const thirdSpec: PluginView = {
+  id: "packet-tunnel",
+  name: "Tunnel",
   version: 1,
   capabilities: ["viz.write"],
   viz: defaultVizContract({ presentTick: true }),
@@ -39,46 +54,62 @@ function mode(id: string, pluginId: string, label: string): ViewMode {
   } as ViewMode;
 }
 
-function buildHost(overrides: Partial<ApplyModeHost> & { ensureReviewed: ApplyModeHost["ensureReviewed"] }): ApplyModeHost {
+function hudPackLabel(): string {
+  return document.querySelector(".viz-hud-pack")?.textContent?.trim() ?? "";
+}
+
+function buildHost(
+  overrides: Partial<ApplyModeHost> & { ensureReviewed: ApplyModeHost["ensureReviewed"] },
+): ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud } {
   const sandbox = new PluginSandbox();
   const presentDriveDeps = { sandbox, pluginClock: () => 0, stageAspect: () => 16 / 9 };
-  refreshPluginDriveState(backroomsSpec, "plugin:backrooms", presentDriveDeps);
+  refreshPluginDriveState(stereoSpec, "plugin:stereo-gram", presentDriveDeps);
+  setLastConsentedModeId("plugin:stereo-gram");
 
   const sceneEl = document.createElement("div");
   sceneEl.id = "scene";
-  if (!document.getElementById("hint")) {
-    const foot = document.createElement("div");
-    foot.id = "foot";
-    foot.innerHTML = "<div id=\"hint\"></div><div id=\"legend\"></div>";
-    document.body.appendChild(foot);
+  let testRoot = document.getElementById("apply-mode-test-root");
+  if (!testRoot) {
+    testRoot = document.createElement("div");
+    testRoot.id = "apply-mode-test-root";
+    document.body.append(testRoot);
   }
-  document.body.append(sceneEl);
-
   const modeSel = new Select({
     caption: "view",
     options: [
-      { value: "plugin:backrooms", label: "Backrooms" },
       { value: "plugin:stereo-gram", label: "Stereo" },
+      { value: "plugin:packet-tunnel", label: "Tunnel" },
+      { value: "plugin:roto-proto", label: "Roto" },
     ],
-    value: "plugin:backrooms",
+    value: "plugin:stereo-gram",
     onChange: () => {},
   });
-  document.body.appendChild(modeSel.el);
+  testRoot.replaceChildren(sceneEl, modeSel.el);
   const vizHud = new VizHud(sceneEl, () => {});
-  vizHud.setActive("backrooms", "Backrooms");
+  vizHud.setActive("stereo-gram", "Stereo");
 
-  let live = "plugin:backrooms";
+  let live = "plugin:stereo-gram";
+  const rotoSpec: PluginView = {
+    id: "roto-proto",
+    name: "Roto",
+    version: 1,
+    capabilities: ["viz.write"],
+    viz: defaultVizContract({ presentTick: true }),
+  };
   const specs: Record<string, PluginView> = {
-    "plugin:backrooms": backroomsSpec,
     "plugin:stereo-gram": stereoSpec,
+    "plugin:packet-tunnel": thirdSpec,
+    "plugin:roto-proto": rotoSpec,
   };
   const modes: Record<string, ViewMode> = {
-    "plugin:backrooms": mode("plugin:backrooms", "backrooms", "Backrooms"),
     "plugin:stereo-gram": mode("plugin:stereo-gram", "stereo-gram", "Stereo"),
+    "plugin:packet-tunnel": mode("plugin:packet-tunnel", "packet-tunnel", "Tunnel"),
+    "plugin:roto-proto": mode("plugin:roto-proto", "roto-proto", "Roto"),
   };
 
   const bindThisView = vi.fn();
-  const host: ApplyModeHost = {
+  let switchGen = 0;
+  const host: ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud } = {
     modeById: (id) => modes[id]!,
     optsFor: () => ({}),
     getLiveMode: () => live,
@@ -95,6 +126,7 @@ function buildHost(overrides: Partial<ApplyModeHost> & { ensureReviewed: ApplyMo
       bindThisView(modeId);
       const m = modes[modeId]!;
       const spec = specs[modeId] ?? null;
+      host.refreshPluginDrive(spec, modeId);
       host.syncModeHud(m, spec);
     },
     computeSkyStage: () => false,
@@ -103,31 +135,24 @@ function buildHost(overrides: Partial<ApplyModeHost> & { ensureReviewed: ApplyMo
     bindThisView,
     clearModeOpts: () => {},
     ensureReviewed: overrides.ensureReviewed,
-    loadTsPlugin: vi.fn(async () => {}),
-    syncPluginSky: vi.fn(async () => {}),
-    mosaic: null,
-    settingsAnim: () => ({
-      mosaic: "off",
-      hero: "off",
-      mosaicTree: null,
-      mosaicMaxId: "",
-      mosaicTiles: [],
-    } as ApplyModeHost["settingsAnim"] extends () => infer R ? R : never),
+    loadTsPlugin: overrides.loadTsPlugin ?? vi.fn(async () => {}),
+    syncPluginSky: overrides.syncPluginSky ?? vi.fn(async () => {}),
+    mosaic: overrides.mosaic ?? null,
     captureMosaicSnap: () => ({
       size: "2",
       hero: "off",
       tree: null,
       maximized: null,
-      tiles: [],
+      tiles: ["topology"],
     }),
-    restoreMosaicSnap: vi.fn(),
-    mosaicSetSizeForMode: vi.fn(),
-    mosaicShouldResize: () => false,
-    mosaicSetPaneView: () => true,
-    mosaicFocusSlot: () => "topology",
-    mosaicHasTile: () => false,
-    applyMosaicModeVisuals: vi.fn(),
-    applySoloModeVisuals: vi.fn(),
+    restoreMosaicSnap: overrides.restoreMosaicSnap ?? vi.fn(),
+    mosaicSetSizeForMode: overrides.mosaicSetSizeForMode ?? vi.fn(),
+    mosaicShouldResize: overrides.mosaicShouldResize ?? (() => false),
+    mosaicSetPaneView: overrides.mosaicSetPaneView ?? (() => true),
+    mosaicFocusSlot: overrides.mosaicFocusSlot ?? (() => "topology"),
+    mosaicHasTile: overrides.mosaicHasTile ?? (() => false),
+    applyMosaicModeVisuals: overrides.applyMosaicModeVisuals ?? vi.fn(),
+    applySoloModeVisuals: overrides.applySoloModeVisuals ?? vi.fn(),
     syncModeHud: (m, spec) => vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label),
     applyViewLook: () => {},
     feedSetGraphBase: () => {},
@@ -135,89 +160,260 @@ function buildHost(overrides: Partial<ApplyModeHost> & { ensureReviewed: ApplyMo
     modeLabel: (m) => m.label,
     onConsentDeclined: () => {},
     shouldLoadPluginRuntime: () => true,
+    beginModeSwitch: () => {
+      switchGen = bumpModeSwitchGeneration();
+      return switchGen;
+    },
+    isModeSwitchStale: (gen) => isModeSwitchStale(gen),
+    getLastConsentedModeId: () => readLastConsentedModeId(),
+    markModeConsented: (id) => setLastConsentedModeId(id),
+    showRollbackMessage: (kind, declined, keptModeId) => {
+      const kept = modes[keptModeId]!.label;
+      if (kind === "declined") return flashModeKeptPrevious(kept);
+      return flashModeLoadFailed(declined.label, kept);
+    },
+    bindThisViewSpy: bindThisView,
+    vizHud,
     ...overrides,
   };
-  return Object.assign(host, { bindThisViewSpy: bindThisView });
+  return host;
 }
-
-type TestHost = ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn> };
 
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+  vi.advanceTimersByTime(250);
 }
 
 describe("applyModeImpl rollback", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
   afterEach(() => {
-    document.body.innerHTML = "";
+    vi.advanceTimersByTime(6000);
+    clearModeSwitchStatus();
+    vi.useRealTimers();
+    document.getElementById("apply-mode-test-root")?.replaceChildren();
     document.querySelectorAll("iframe").forEach((el) => el.remove());
+    resetModeSwitchStateForTests();
+    resetSharedPackConsentForTests();
+    clearModeSwitchStatus();
   });
 
-  it("restores picker, HUD, focus, message, and present drive after consent decline", async () => {
-    const host = buildHost({ ensureReviewed: async () => false }) as TestHost;
-    applyModeImpl(host, "plugin:stereo-gram", {});
+  it("decline: restores picker, HUD, focus, Kept message, present drive (not failure wording)", async () => {
+    const host = buildHost({ ensureReviewed: async () => "declined" });
+    applyModeImpl(host, "plugin:packet-tunnel", {});
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:backrooms");
-    expect(host.bindThisViewSpy).toHaveBeenCalledWith("plugin:backrooms");
-    expect(document.getElementById("hint")?.textContent).toContain("Couldn't load Stereo");
-    expect(document.getElementById("hint")?.textContent).toContain("kept Backrooms");
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(host.bindThisViewSpy).toHaveBeenCalledWith("plugin:stereo-gram");
+    expect(hudPackLabel()).toContain("Stereo");
+    expect(getPresentDriveTileId()).toBe("stereo-gram");
     expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
-    expect(getPresentDriveTileId()).toBe("backrooms");
+    expect(isModeSwitchStatusVisible()).toBe(true);
+    expect(document.getElementById("modeSwitchStatus")?.textContent).toMatch(/^Kept /);
   });
 
-  it("restores after mosaic setPaneView failure", async () => {
-    const mosaicSetSizeForMode = vi.fn();
-    const restoreMosaicSnap = vi.fn();
+  it("failure: shows Couldn't load, visible status strip, HUD and focus", async () => {
+    const host = buildHost({ ensureReviewed: async () => "failed" });
+    applyModeImpl(host, "plugin:packet-tunnel", {});
+    await flushMicrotasks();
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(hudPackLabel()).toContain("Stereo");
+    expect(getPresentDriveTileId()).toBe("stereo-gram");
+    expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
+    expect(isModeSwitchStatusVisible()).toBe(true);
+    expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("Couldn't load Tunnel");
+  });
+
+  it("presentDrive stays on previous pack after rollback (reapply refreshes drive)", async () => {
+    const host = buildHost({ ensureReviewed: async () => "declined" });
+    applyModeImpl(host, "plugin:packet-tunnel", {});
+    await flushMicrotasks();
+    expect(getPresentDriveTileId()).toBe("stereo-gram");
+    expect(getPresentDriveTileId()).not.toBe("packet-tunnel");
+  });
+
+  it("present drive capture order: mosaic failure restores via reapply refresh (not loadTs stub)", async () => {
+    const loadTs = vi.fn(async () => {});
     const host = buildHost({
-      ensureReviewed: async () => true,
+      ensureReviewed: async () => "ok",
+      loadTsPlugin: loadTs,
       mosaic: {
         on: true,
-        heroPos: "left",
-        heroMode: "plugin:backrooms",
+        heroPos: "off",
+        heroMode: "plugin:stereo-gram",
         current: "2",
         tileIds: ["topology"],
         focusedId: "topology",
         setPaneView: () => false,
         setSize: vi.fn(),
       } as ApplyModeHost["mosaic"],
+      mosaicHasTile: () => false,
+      mosaicSetPaneView: () => false,
+    });
+    applyModeImpl(host, "plugin:packet-tunnel", {});
+    await flushMicrotasks();
+    expect(loadTs).not.toHaveBeenCalled();
+    expect(getPresentDriveTileId()).toBe("stereo-gram");
+  });
+
+  it("mosaic setPaneView failure: failure message and present drive", async () => {
+    const mosaicSetSizeForMode = vi.fn();
+    const restoreMosaicSnap = vi.fn();
+    const host = buildHost({
+      ensureReviewed: async () => "ok",
+      mosaic: { on: true, heroPos: "left", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
       mosaicShouldResize: () => true,
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
       mosaicSetSizeForMode,
       restoreMosaicSnap,
     });
-    applyModeImpl(host, "plugin:stereo-gram", {});
+    applyModeImpl(host, "plugin:packet-tunnel", {});
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:backrooms");
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
     expect(mosaicSetSizeForMode).toHaveBeenCalled();
     expect(restoreMosaicSnap).toHaveBeenCalled();
-    expect(document.getElementById("hint")?.textContent).toMatch(/Couldn't load Stereo/);
-    expect(getPresentDriveTileId()).toBe("backrooms");
+    expect(getPresentDriveTileId()).toBe("stereo-gram");
   });
 
-  it("does not run plugin load after mosaic failure rolled back present drive", async () => {
-    const loadTs = vi.fn(async () => {
-      refreshPluginDriveState(stereoSpec, "plugin:stereo-gram", buildHost({ ensureReviewed: async () => true }).presentDriveDeps);
-    });
+  it("decline in mosaic reverts setPaneView before visuals stick", async () => {
+    const setPaneView = vi.fn(() => true);
+    const applyMosaicModeVisuals = vi.fn();
     const host = buildHost({
-      ensureReviewed: async () => true,
-      loadTsPlugin: loadTs,
-      mosaic: {
-        on: true,
-        heroPos: "off",
-        heroMode: "plugin:backrooms",
-        current: "2",
-        tileIds: ["topology"],
-        focusedId: "topology",
-        setPaneView: () => false,
-        setSize: vi.fn(),
-      } as ApplyModeHost["mosaic"],
+      ensureReviewed: async () => "declined",
+      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setPaneView, setSize: vi.fn() } as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
-      mosaicSetPaneView: () => false,
+      mosaicSetPaneView: setPaneView,
+      applyMosaicModeVisuals,
     });
-    applyModeImpl(host, "plugin:stereo-gram", {});
+    applyModeImpl(host, "plugin:packet-tunnel", {});
     await flushMicrotasks();
-    expect(loadTs).not.toHaveBeenCalled();
-    expect(getPresentDriveTileId()).toBe("backrooms");
+    expect(setPaneView).toHaveBeenCalledWith("topology", "plugin:packet-tunnel");
+    expect(setPaneView).toHaveBeenCalledWith("topology", "plugin:stereo-gram");
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+  });
+
+  it("stale consent: B pending, switch to C, resolve B — no B load, HUD shows C", async () => {
+    let resolveB!: (r: ConsentReviewResult) => void;
+    const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
+    const loadTs = vi.fn(async () => {});
+    const host = buildHost({
+      ensureReviewed: async (spec) => {
+        if (spec?.id === "roto-proto") return bPending;
+        if (spec?.id === "packet-tunnel") return "ok";
+        return "ok";
+      },
+      loadTsPlugin: loadTs,
+    });
+    applyModeImpl(host, "plugin:roto-proto", {});
+    applyModeImpl(host, "plugin:packet-tunnel", {});
+    await flushMicrotasks();
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    const loadsBefore = loadTs.mock.calls.length;
+    resolveB("ok");
+    await flushMicrotasks();
+    expect(loadTs.mock.calls.some((c) => c[0]?.id === "roto-proto")).toBe(false);
+    expect(loadTs.mock.calls.length).toBe(loadsBefore);
+    expect(hudPackLabel()).toContain("Tunnel");
+    expect(getPresentDriveTileId()).toBe("packet-tunnel");
+    expect(isModeSwitchStatusVisible()).toBe(false);
+  });
+
+  it("C fails while B consent pending: message names last consented A not B", async () => {
+    let resolveB!: (r: ConsentReviewResult) => void;
+    const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
+    const host = buildHost({
+      ensureReviewed: async (spec) => {
+        if (spec?.id === "roto-proto") return bPending;
+        if (spec?.id === "packet-tunnel") return "failed";
+        return "ok";
+      },
+    });
+    applyModeImpl(host, "plugin:roto-proto", {});
+    applyModeImpl(host, "plugin:packet-tunnel", {});
+    await flushMicrotasks();
+    expect(host.getLastConsentedModeId()).toBe("plugin:stereo-gram");
+    expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("kept Stereo");
+    expect(document.getElementById("modeSwitchStatus")?.textContent).not.toContain("Roto");
+    resolveB("ok");
+    await flushMicrotasks();
+    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+  });
+});
+
+describe("applyMode via main host", () => {
+  function mountShell(): void {
+    document.body.innerHTML = `
+      <div id="wall"><div id="scene"></div>
+        <div id="pong" class="arcade" hidden></div><div id="invaders" class="arcade" hidden></div>
+        <div id="command" class="arcade" hidden></div><div id="frogger" class="arcade" hidden></div>
+        <div id="cpupong" class="arcade" hidden></div><div id="doom" class="arcade" hidden></div>
+        <div id="waves" class="arcade" hidden></div><div id="orbits" class="arcade" hidden></div>
+        <div id="helix" class="arcade" hidden></div><div id="skyline" class="arcade" hidden></div>
+        <div id="pacman" class="arcade" hidden></div><div id="tetris" class="arcade" hidden></div>
+        <div id="portal" class="arcade" hidden></div><div id="carousel" class="arcade" hidden></div>
+      </div>
+      <header id="bar">
+        <div class="row top">
+          <span id="conn" class="dot"></span><strong class="brand">zoto-viz</strong><span id="net"></span>
+          <span id="pps">0</span><span id="bps">0</span>
+          <span id="lanDevs">0</span><span id="lanOnline">0</span>
+          <span id="netSvcs">0</span><span id="netOnline">0</span>
+          <span id="flows">0</span><span id="active">0</span>
+        </div>
+        <div class="row controls">
+          <span id="modeBox"></span><span id="modeOpts"></span>
+          <span id="dreamBox"></span><span id="feedBox"></span><span id="chatBox"></span>
+          <span id="debugBox"></span><span id="labelsBox"></span>
+          <span id="cameraBox"></span><span id="micBox"></span><span id="soundBox"></span>
+          <span id="diceBox"></span><span id="aiBox"></span><div id="quick" hidden></div>
+          <span id="settingsBox"></span>
+        </div>
+      </header>
+      <aside id="panel" hidden></aside>
+      <div id="livefeed" hidden></div><div id="livechat" hidden></div>
+      <aside id="debuglog" hidden></aside>
+      <div id="foot"><div id="hint"></div><div id="legend"></div></div>
+    `;
+  }
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    mountShell();
+    vi.stubGlobal("WebSocket", class { close() {} });
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => (k === "zoto-viz.mode" ? "topology" : null),
+      setItem: () => {},
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ plugins: [] }),
+    })));
+  });
+
+  afterEach(() => {
+    clearModeSwitchStatus();
+    resetModeSwitchStateForTests();
+    vi.unstubAllGlobals();
+  });
+
+  it("uses dedicated status element (not stuck #hint morphing) on consent decline", async () => {
+    const { applyMode, configureApplyModeForTests } = await import("./main");
+    configureApplyModeForTests({
+      ensureReviewed: async () => "declined",
+      liveMode: "topology",
+      lastConsentedMode: "topology",
+      pluginSpecs: [stereoSpec],
+    });
+    setLastConsentedModeId("topology");
+    applyMode("plugin:stereo-gram");
+    await vi.waitFor(() => {
+      expect(document.getElementById("modeSwitchStatus")?.textContent).toMatch(/^Kept /);
+      expect(isModeSwitchStatusVisible()).toBe(true);
+    });
+    const status = document.getElementById("modeSwitchStatus");
+    expect(status?.classList.contains("morphing")).not.toBe(true);
   });
 });
