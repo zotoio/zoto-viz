@@ -1006,7 +1006,6 @@ if (!import.meta.env.VITEST) {
   applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
 }
 
-export { configureApplyModeForTests } from "./apply-mode-test-host";
 export { getPresentDriveTileId } from "./present-drive-app";
 export function getApplyModeHostForTests(): ApplyModeHost {
   return buildApplyModeHost();
