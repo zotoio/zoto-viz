@@ -130,7 +130,19 @@ async function captureUnconsented() {
   }
   await waitPlugins(page);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(8000);
+  await page.evaluate(async () => {
+    await fetch("/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "set_settings", arguments: { autoconsent: false } },
+      }),
+    });
+  });
+  await page.waitForTimeout(6000);
   const pick = page.locator(".mosaic-pick").first();
   if (await pick.count()) {
     await pick.selectOption("plugin:hn-rain").catch(async () => {
