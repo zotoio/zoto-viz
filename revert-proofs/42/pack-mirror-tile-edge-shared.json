@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-rect-converters.test.ts",
+  "testName": "pack-mirror rect converters > tile-edge-shared: adjacent tiles share device x (and y) at pr 1.5",
+  "description": "toDeviceRectInto uses Math.round on edges so abutting CSS tiles share device boundaries."
+}

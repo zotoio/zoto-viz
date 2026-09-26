@@ -11,9 +11,18 @@ import {
   PACK_MIRROR_QUADRANT_RGBA,
   createPackMirrorQuadrantCanvas,
 } from "./pack-mirror-quadrant-fixture";
-import { letterboxInnerRect, surfaceLetterboxFill } from "./letterbox-fill";
-import { cssPointToDevice, cssRect } from "./pack-mirror-rect";
+import { letterboxInnerRectInto, surfaceLetterboxFill } from "./letterbox-fill";
+import {
+  cssRect,
+  cssRectTopFromBottomLeft,
+  deviceSizeFromCssBox,
+  toDeviceCaptureRectInto,
+  type DeviceRectMut,
+} from "./pack-mirror-rect";
 import { glReadPixels1x1 } from "./pack-mirror-rect.boundary";
+
+const captureScratch: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
+const innerTdScratch = { x: 0, y: 0, w: 0, h: 0 };
 
 export type PackMirrorReadbackInput = {
   /** Window / layout DPR (browser zoom). */
@@ -49,6 +58,26 @@ function readPixelDevice(
   const buf = new Uint8Array(4);
   glReadPixels1x1(gl, { x, y, w: 1, h: 1, __unit: "device" }, buf);
   return [buf[0], buf[1], buf[2], buf[3]];
+}
+
+const HARNESS_CSS_HEIGHT = 120;
+
+function readPixelCssBottomLeft(
+  gl: WebGL2RenderingContext,
+  x: number,
+  yBottom: number,
+  pr: number,
+  canvasDeviceHeight: number,
+): [number, number, number, number] {
+  toDeviceCaptureRectInto(
+    cssRect(x, HARNESS_CSS_HEIGHT - yBottom - 1, 1, 1),
+    pr,
+    canvasDeviceHeight,
+    captureScratch,
+  );
+  const cx = captureScratch.x + Math.max(0, Math.floor((captureScratch.w - 1) / 2));
+  const cy = captureScratch.y + Math.max(0, Math.floor((captureScratch.h - 1) / 2));
+  return readPixelDevice(gl, cx, cy);
 }
 
 /** Wall clear in harness (`0x222233`). */
@@ -172,8 +201,8 @@ export async function runPackMirrorReadbackInPage(
   const glRenderer = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
   if (!glRenderer) throw new Error("GL renderer string empty");
   const pr = rd.getPixelRatio();
-  const pw = Math.max(2, Math.round(primaryBox.w * pr));
-  const ph = Math.max(2, Math.round(primaryBox.h * pr));
+  const canvasDeviceHeight = rd.domElement.height;
+  const { pw, ph } = deviceSizeFromCssBox(primaryBox, pr);
   const sceneFactory = mode === "quadrant" ? quadrantScene : arrowScene;
 
   if (input.path === "host") {
@@ -213,59 +242,90 @@ export async function runPackMirrorReadbackInPage(
       x: primaryBox.x + primaryBox.w * 0.5,
       y: primaryBox.y + primaryBox.h * 0.5,
     };
-  const primaryCenterPx = cssPointToDevice(primarySampleCss.x, primarySampleCss.y, pr);
-  const primaryCenter = readPixelDevice(gl, primaryCenterPx.x, primaryCenterPx.y);
+  const primaryCenter = readPixelCssBottomLeft(
+    gl,
+    primarySampleCss.x,
+    primarySampleCss.y,
+    pr,
+    canvasDeviceHeight,
+  );
 
-  const innerTd = letterboxInnerRect(mirrorBox, primaryBox.w / primaryBox.h);
+  letterboxInnerRectInto(mirrorBox, primaryBox.w / primaryBox.h, innerTdScratch);
+  const innerTd = innerTdScratch;
   const innerX = mirrorBox.x + innerTd.x;
   const innerY = mirrorBox.y + (mirrorBox.h - innerTd.y - innerTd.h);
-  const mirrorCenterPx = cssPointToDevice(
+  const mirrorCenter = readPixelCssBottomLeft(
+    gl,
     innerX + innerTd.w * 0.5,
     innerY + innerTd.h * 0.5,
     pr,
+    canvasDeviceHeight,
   );
-  const mirrorCenter = readPixelDevice(gl, mirrorCenterPx.x, mirrorCenterPx.y);
 
   const topBarBottom = innerY + innerTd.h;
   const topBarTop = mirrorBox.y + mirrorBox.h;
   const barCenterY = topBarBottom + (topBarTop - topBarBottom) * 0.5;
-  const letterboxBarPx = cssPointToDevice(
+  const letterboxBarCenter = readPixelCssBottomLeft(
+    gl,
     mirrorBox.x + mirrorBox.w * 0.5,
     barCenterY,
     pr,
+    canvasDeviceHeight,
   );
-  const letterboxBarCenter = readPixelDevice(gl, letterboxBarPx.x, letterboxBarPx.y);
 
-  const innerDevice = cssRect(innerX, innerY, innerTd.w, innerTd.h);
-  const innerPx = cssPointToDevice(innerDevice.x, innerDevice.y, pr);
-  const innerPxW = Math.round(innerTd.w * pr);
-  const innerPxH = Math.round(innerTd.h * pr);
-  const marginX = Math.max(2, Math.floor(innerPxW * 0.15));
-  const marginY = Math.max(2, Math.floor(innerPxH * 0.15));
-  const bandW = Math.max(2, Math.floor(innerPxW * 0.35));
-  const bandH = Math.max(2, Math.floor(innerPxH * 0.35));
-  const topLeftPeak = maxRedInRect(
-    gl,
-    innerPx.x + marginX,
-    innerPx.y + innerPxH - marginY - bandH,
-    bandW,
-    bandH,
+  toDeviceCaptureRectInto(
+    cssRectTopFromBottomLeft(
+      cssRect(innerX, innerY, innerTd.w, innerTd.h),
+      HARNESS_CSS_HEIGHT,
+    ),
+    pr,
+    canvasDeviceHeight,
+    captureScratch,
   );
-  const bottomRightPeak = maxRedInRect(
-    gl,
-    innerPx.x + innerPxW - marginX - bandW,
-    innerPx.y + marginY,
-    bandW,
-    bandH,
+  const marginX = Math.max(2, innerTd.w * 0.15);
+  const marginY = Math.max(2, innerTd.h * 0.15);
+  const bandW = Math.max(2, innerTd.w * 0.35);
+  const bandH = Math.max(2, innerTd.h * 0.35);
+  const tlBand = cssRectTopFromBottomLeft(
+    cssRect(
+      innerX + marginX,
+      innerY + innerTd.h - marginY - bandH,
+      bandW,
+      bandH,
+    ),
+    HARNESS_CSS_HEIGHT,
   );
+  const brBand = cssRectTopFromBottomLeft(
+    cssRect(
+      innerX + innerTd.w - marginX - bandW,
+      innerY + marginY,
+      bandW,
+      bandH,
+    ),
+    HARNESS_CSS_HEIGHT,
+  );
+  toDeviceCaptureRectInto(tlBand, pr, canvasDeviceHeight, captureScratch);
+  const topLeftPeak = maxRedInRect(gl, captureScratch.x, captureScratch.y, captureScratch.w, captureScratch.h);
+  toDeviceCaptureRectInto(brBand, pr, canvasDeviceHeight, captureScratch);
+  const bottomRightPeak = maxRedInRect(gl, captureScratch.x, captureScratch.y, captureScratch.w, captureScratch.h);
 
   let quadrantTlOk: boolean | undefined;
   let quadrantBrOk: boolean | undefined;
   if (mode === "quadrant") {
-    const tlCss = cssPointToDevice(innerX + innerTd.w * 0.25, innerY + innerTd.h * 0.75, pr);
-    const brCss = cssPointToDevice(innerX + innerTd.w * 0.75, innerY + innerTd.h * 0.25, pr);
-    const tlPx = readPixelDevice(gl, tlCss.x, tlCss.y);
-    const brPx = readPixelDevice(gl, brCss.x, brCss.y);
+    const tlPx = readPixelCssBottomLeft(
+      gl,
+      innerX + innerTd.w * 0.25,
+      innerY + innerTd.h * 0.75,
+      pr,
+      canvasDeviceHeight,
+    );
+    const brPx = readPixelCssBottomLeft(
+      gl,
+      innerX + innerTd.w * 0.75,
+      innerY + innerTd.h * 0.25,
+      pr,
+      canvasDeviceHeight,
+    );
     quadrantTlOk = dominantChannel(tlPx) === "r";
     quadrantBrOk = dominantChannel(brPx) === "y";
     if (!quadrantTlOk || !quadrantBrOk) {

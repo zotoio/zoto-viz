@@ -6,7 +6,7 @@ import {
   type CssRect,
   type CssRectLoose,
   asCssRect,
-  deviceSizeFromCss,
+  deviceSizeFromCssBox,
 } from "./pack-mirror-rect";
 
 /** @deprecated Use `CssRect` from `./pack-mirror-rect`. */
@@ -303,7 +303,7 @@ export class PackMirrorRegistry {
     const session = this.sessions.get(key);
     if (!session) return null;
     const pr = renderer.getPixelRatio();
-    const { pw, ph } = deviceSizeFromCss(box.w, box.h, pr);
+    const { pw, ph } = deviceSizeFromCssBox(box, pr);
     return session.renderPack(renderer, scene, camera, box, pw, ph, clearHex, antialias);
   }
 

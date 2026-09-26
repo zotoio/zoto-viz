@@ -1,0 +1,18 @@
+diff --git a/web/src/graph/pack-mirror-rect.ts b/tmp/bad-capture-round.ts
+index 0000000..0000000 100644
+--- a/web/src/graph/pack-mirror-rect.ts
++++ b/tmp/bad-capture-round.ts
+@@ -54,12 +54,8 @@ function deviceEdgesFromCss(
+     };
+   }
+   return {
+-    x0: Math.floor(r.x * pr),
+-    x1: Math.ceil((r.x + r.w) * pr),
+-    y0: Math.floor(r.y * pr),
+-    y1: Math.ceil((r.y + r.h) * pr),
++    x0: Math.round(r.x * pr),
++    x1: Math.round(r.x * pr) + Math.round(r.w * pr),
++    y0: Math.round(r.y * pr),
++    y1: Math.round(r.y * pr) + Math.round(r.h * pr),
+   };
+ }

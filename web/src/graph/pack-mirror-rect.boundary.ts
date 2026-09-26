@@ -5,10 +5,13 @@ import type { MirrorRenderer } from "./pack-mirror-gl";
 import {
   type CssRect,
   type DeviceRect,
+  type DeviceRectMut,
   asCssRect,
   cssRect,
-  toDeviceRect,
+  toDeviceRectInto,
 } from "./pack-mirror-rect";
+
+const _deviceScratch: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
 
 export function setRendererViewport(renderer: MirrorRenderer, rect: CssRect): void {
   renderer.setViewport(rect.x, rect.y, rect.w, rect.h);
@@ -31,7 +34,7 @@ function _packMirrorRectBoundaryTypeChecks(
   renderer: MirrorRenderer,
 ): void {
   const css = cssRect(0, 0, 10, 10);
-  const dev = toDeviceRect(css, 1);
+  const dev = toDeviceRectInto(css, 1, 120, _deviceScratch);
   const loose = asCssRect({ x: 1, y: 2, w: 3, h: 4 });
   // @ts-expect-error DeviceRect must not be passed to Three.js viewport/scissor helpers.
   setRendererViewport(renderer, dev);
