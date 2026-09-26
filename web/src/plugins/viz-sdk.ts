@@ -23,7 +23,7 @@ window.addEventListener("message", (ev) => {
   if (!d || d.source !== "zoto-viz-host") return;
   if (d.type === "frame" && vizAllowed("viz.read") && window.zoto.onFrame) window.zoto.onFrame(d.frame);
   if (d.type === "present" && vizAllowed("viz.write") && window.zoto.onPresent) {
-    window.zoto.onPresent(d.ts, d.skyT);
+    window.zoto.onPresent(d.tick);
   }
 });
 `;

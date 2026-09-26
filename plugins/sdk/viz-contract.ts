@@ -3,8 +3,24 @@
  * Copy or type-only-import this file from shipped zips; never import host internals.
  */
 
-/** Bump when frame slice shapes or semantics change. */
-export const VIZ_CONTRACT_VERSION = 1;
+/**
+ * Bump when frame slice shapes or host↔pack delivery semantics change.
+ * v2: `VizPresentTick` + opt-in `viz.presentTick` in plugin.yml.
+ */
+export const VIZ_CONTRACT_VERSION = 2;
+
+/**
+ * Host → sandbox tick when `viz.presentTick` is true in plugin.yml.
+ * Delivered once per mosaic tile per display frame (or once for a single-stage view).
+ */
+export interface VizPresentTick {
+  /** rAF / vsync timestamp in milliseconds (`performance.now()` clock). */
+  frameMs: number;
+  /** Mosaic pane / view mode id; empty string for a single full-wall stage. */
+  tileId: string;
+  /** Optional secondary clock in seconds (e.g. sky shader time); omit when unused. */
+  pluginClock?: number;
+}
 
 export interface VizPacketSample {
   /** Uppercased protocol label from the decimated capture slice (e.g. TCP, UDP). */

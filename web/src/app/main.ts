@@ -93,6 +93,7 @@ import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisatio
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
+import { deliverPluginPresentTicks } from "../plugins/viz-present-tick";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
@@ -351,7 +352,17 @@ addPresentListener((ts) => {
   const active = mode.pluginId
     ? pluginSpecs.find((p) => p.id === mode.pluginId) ?? null
     : null;
-  if (active?.viz?.presentTick) sandbox.present(ts, scene.skyTime());
+  deliverPluginPresentTicks({
+    sandbox,
+    contract: active?.viz,
+    frameMs: ts,
+    pluginClock: scene.skyTime(),
+    mosaicOn: !!mosaic?.on,
+    tileIds: mosaic?.on ? mosaic.tileIds : [],
+    stageTileId: modeSel.value,
+    activePluginId: mode.pluginId ?? "",
+    modeForTile: (tileId) => modeById(tileId),
+  });
   if (mode.pluginId === "backrooms") {
     const br = backroomsViewOptions();
     pluginSfx.setMasterVolume(br.volume);

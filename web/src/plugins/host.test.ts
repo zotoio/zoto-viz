@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
+import { defaultVizContract } from "./viz-host";
 
 describe("hash consent and TypeScript allow", () => {
   afterEach(() => {
@@ -71,5 +72,37 @@ describe("PluginSandbox", () => {
     globalThis.fetch = (async () => ({ ok: false, status: 404, text: async () => "" }) as Response) as typeof fetch;
     await expect(box.loadModule("missing", ["graph.read"], {})).rejects.toThrow(/module 404/);
     globalThis.fetch = orig;
+  });
+
+  it("does not post present ticks after unload", async () => {
+    const box = new PluginSandbox();
+    await box.load(
+      "demo",
+      "globalThis.ok = true;",
+      ["viz.write"],
+      {},
+      defaultVizContract({ presentTick: true }),
+    );
+    const iframe = document.querySelector("iframe")!;
+    const cw = iframe.contentWindow!;
+    const spy = vi.spyOn(cw, "postMessage");
+    box.present({ frameMs: 1, tileId: "plugin:demo" });
+    expect(spy).toHaveBeenCalled();
+    box.unload();
+    spy.mockClear();
+    box.present({ frameMs: 2, tileId: "plugin:demo" });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("does not post present when presentTick is off", async () => {
+    const box = new PluginSandbox();
+    await box.load("demo", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
+    const cw = document.querySelector("iframe")!.contentWindow!;
+    const spy = vi.spyOn(cw, "postMessage");
+    box.present({ frameMs: 1, tileId: "x" });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    box.unload();
   });
 });

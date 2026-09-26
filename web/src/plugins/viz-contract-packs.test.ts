@@ -97,7 +97,7 @@ function collectPackSources(): { packId: string; rel: string; text: string }[] {
 
 describe("viz contract packs", () => {
   it("records VIZ_CONTRACT_VERSION for pack lint", () => {
-    expect(VIZ_CONTRACT_VERSION).toBeGreaterThanOrEqual(1);
+    expect(VIZ_CONTRACT_VERSION).toBe(2);
   });
 
   it("contract module has no imports", () => {

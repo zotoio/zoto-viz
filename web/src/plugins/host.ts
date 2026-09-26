@@ -1,5 +1,5 @@
 import { PLUGIN_SDK } from "./sdk";
-import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
+import type { VizDataFrame, VizPluginContract, VizPresentTick, VizUniformValue } from "./viz-host";
 
 const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
@@ -26,7 +26,7 @@ export type ParentMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
-  | { source: "zoto-viz-host"; type: "present"; ts: number; skyT?: number }
+  | { source: "zoto-viz-host"; type: "present"; tick: VizPresentTick }
   | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
 
 export interface PluginHostHandlers {
@@ -141,11 +141,11 @@ export class PluginSandbox {
     );
   }
 
-  /** rAF present time (ms) for viz.write packs with ``viz.presentTick``. */
-  present(ts: number, skyT?: number): void {
-    if (!this.caps.includes("viz.write")) return;
-    this.iframe?.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "present", ts, skyT } satisfies ParentMsg,
+  /** {@link VizPresentTick} for packs with ``viz.presentTick`` in plugin.yml. */
+  present(tick: VizPresentTick): void {
+    if (!this.caps.includes("viz.write") || !this.vizContract?.presentTick || !this.iframe) return;
+    this.iframe.contentWindow?.postMessage(
+      { source: "zoto-viz-host", type: "present", tick } satisfies ParentMsg,
       "*",
     );
   }
