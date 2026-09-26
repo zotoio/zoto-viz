@@ -307,16 +307,6 @@ describe("pack lint guardrails", () => {
     expect(ok).toBe(true);
   });
 
-  it("off-allowlist inline zoto declare fails disallowedLegacyZoto guard", () => {
-    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toHaveLength(17);
-    expect(isLegacyDeclareZotoPackAllowed("not-on-legacy-allowlist")).toBe(false);
-    const text = readFileSync(path.join(repoRoot, OFF_ALLOWLIST_ZOTO_FIXTURE), "utf8");
-    const hits = scanPackLintFixture(OFF_ALLOWLIST_PACK_REPO_REL, text, "not-on-legacy-allowlist", repoRoot);
-    expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
-    const { disallowedLegacyZoto } = assertBaselineGuard(hits, loadBaseline(repoRoot));
-    expect(disallowedLegacyZoto.length).toBeGreaterThan(0);
-  });
-
   it("off-allowlist declare const zoto blocks pack install lint", () => {
     const text = readFileSync(path.join(repoRoot, OFF_ALLOWLIST_ZOTO_FIXTURE), "utf8");
     const tmp = mkdtempSync(path.join(os.tmpdir(), "pack-install-lint-"));
@@ -333,9 +323,13 @@ describe("pack lint guardrails", () => {
   });
 
   it("LEGACY_DECLARE_ZOTO_PACK_IDS is empty after getVizZoto pack migration (PR C)", () => {
-    if (LEGACY_DECLARE_ZOTO_PACK_IDS.length > 0) return;
     expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toEqual([]);
     expect(isLegacyDeclareZotoPackAllowed("backrooms")).toBe(false);
+    const text = readFileSync(path.join(repoRoot, OFF_ALLOWLIST_ZOTO_FIXTURE), "utf8");
+    const hits = scanPackLintFixture(OFF_ALLOWLIST_PACK_REPO_REL, text, "not-on-legacy-allowlist", repoRoot);
+    expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
+    const { disallowedLegacyZoto } = assertBaselineGuard(hits, loadBaseline(repoRoot));
+    expect(disallowedLegacyZoto.length).toBeGreaterThan(0);
   });
 
   it("reports baseline counts per pack and per rule (documentation)", () => {

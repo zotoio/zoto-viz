@@ -3,7 +3,7 @@
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { getVizZoto } from "../../../sdk/viz-zoto";
-const zoto = getVizZoto();
+const host = getVizZoto();
 
 
 function roleHue(role: string): number {
@@ -13,7 +13,7 @@ function roleHue(role: string): number {
   return 0.22;
 }
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame) => {
   const buf: number[] = [];
   const n = Math.min(8, frame.talkers.length);
   for (let i = 0; i < n; i++) {
@@ -23,9 +23,9 @@ zoto.onFrame = (frame) => {
     const r = 0.25 + (h % 20) / 50;
     buf.push(Math.cos(ang) * r, Math.sin(ang) * r, 0.16 + Math.min(0.28, t.rate / 60), roleHue(t.role));
   }
-  zoto.writeBuffer(0, buf);
+  host.writeBuffer(0, buf);
   const peak = frame.talkers[0]?.rate ?? 0;
-  zoto.writeUniform("uBright", 0.8 + Math.min(0.35, peak / 80) + frame.audio * 0.2);
-  zoto.writeUniform("uAudio", frame.audio);
-  zoto.writeUniform("uAccent", [0.25, 0.75, 0.95]);
+  host.writeUniform("uBright", 0.8 + Math.min(0.35, peak / 80) + frame.audio * 0.2);
+  host.writeUniform("uAudio", frame.audio);
+  host.writeUniform("uAccent", [0.25, 0.75, 0.95]);
 };

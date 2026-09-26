@@ -1,6 +1,6 @@
 import { getVizZoto } from "../../../sdk/viz-zoto";
 
-const zoto = getVizZoto();
+const host = getVizZoto();
 type Node = { id: string; rate: number; role: string };
 
 
@@ -12,9 +12,9 @@ export function heatFrom(nodes: Node[]): number {
 }
 
 let last = 0;
-zoto.onTick = (nodes) => {
+host.onTick = (nodes) => {
   const heat = heatFrom(nodes);
   if (Math.abs(heat - last) < 0.02) return;
   last = heat;
-  zoto.setStyle({ heat });
+  host.setStyle?.({ heat });
 };

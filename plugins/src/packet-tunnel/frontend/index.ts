@@ -4,12 +4,12 @@
 import { packetTunnelSample } from "./tunnel";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { getVizZoto } from "../../../sdk/viz-zoto";
-const zoto = getVizZoto();
+const host = getVizZoto();
 
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame) => {
   const sample = packetTunnelSample(frame);
-  zoto.writeBuffer(0, sample.buffer);
-  zoto.writeUniform("uBright", sample.bright);
-  zoto.writeUniform("uAccent", sample.accent);
+  host.writeBuffer(0, sample.buffer);
+  host.writeUniform("uBright", sample.bright);
+  host.writeUniform("uAccent", sample.accent);
 };

@@ -3,7 +3,7 @@
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { getVizZoto } from "../../../sdk/viz-zoto";
-const zoto = getVizZoto();
+const host = getVizZoto();
 
 const PARTICLE_CAP = 512;
 const STRIDE = 4;
@@ -16,7 +16,7 @@ function roleHue(role: string): number {
   return 0.2;
 }
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame) => {
   const particles: number[] = [];
   let count = 0;
   for (const talker of frame.talkers) {
@@ -31,8 +31,8 @@ zoto.onFrame = (frame) => {
       );
     }
   }
-  zoto.writeParticles(particles, STRIDE);
-  zoto.writeBuffer(0, [count, frame.audio, frame.t % 1]);
-  zoto.writeUniform("uBright", 0.4 + frame.audio * 0.5);
-  zoto.writeUniform("uAudio", frame.audio);
+  host.writeParticles(particles, STRIDE);
+  host.writeBuffer(0, [count, frame.audio, frame.t % 1]);
+  host.writeUniform("uBright", 0.4 + frame.audio * 0.5);
+  host.writeUniform("uAudio", frame.audio);
 };
