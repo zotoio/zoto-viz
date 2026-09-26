@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import paths
+from .pack_id import pack_block_path, pack_id_valid, require_pack_id
 
 _LOCK = threading.Lock()
 _BY_SHA: dict[str, dict[str, str]] = {}
@@ -39,11 +40,8 @@ def _legacy_store_path() -> Path:
     return _plugin_local_dir(create=False) / LEGACY_STORE_NAME
 
 
-def _pack_block_path(pack_id: str) -> Path:
-    pid = str(pack_id or "").strip()
-    if not pid or pid in {".", ".."} or "/" in pid or "\\" in pid:
-        raise ValueError(f"invalid pack id {pack_id!r}")
-    return _blocks_dir(create=False) / f"{pid}.json"
+def _pack_block_path(pack_id: str, *, create: bool = False) -> Path:
+    return pack_block_path(pack_id, create_blocks_dir=create)
 
 
 def set_after_block_write_before_replace(hook: Callable[[], None] | None) -> None:
@@ -119,11 +117,11 @@ def _migrate_legacy_store() -> None:
             if not isinstance(row, dict):
                 continue
             pack_id = str(row.get("id") or "").strip()
-            if not pack_id:
+            if not pack_id_valid(pack_id):
                 continue
             merged = {k: str(v) for k, v in row.items()}
             merged.setdefault("sha256", str(digest).strip().lower())
-            _atomic_write_json(_pack_block_path(pack_id), merged)
+            _atomic_write_json(_pack_block_path(pack_id, create=True), merged)
     try:
         legacy.unlink(missing_ok=True)
     except OSError:
@@ -175,6 +173,8 @@ def _load_store() -> None:
         if not entry.is_file() or entry.suffix.lower() != ".json":
             continue
         pack_id = entry.stem
+        if not pack_id_valid(pack_id):
+            continue
         if pack_id in _BY_PACK or pack_id in _UNREADABLE_PACKS:
             continue
         _read_pack_block_file(pack_id)
@@ -230,13 +230,17 @@ def reset_zip_blocks_for_tests() -> None:
 def record_zip_block(sha256: str, row: dict[str, str]) -> None:
     digest = sha256.strip().lower()
     pack_id = str(row.get("id") or "").strip()
-    if not digest or not pack_id:
+    if not digest:
+        return
+    try:
+        require_pack_id(pack_id)
+    except ValueError:
         return
     payload = {k: str(v) for k, v in row.items()}
     payload["sha256"] = digest
     with _LOCK:
         _load_store()
-        path = _pack_block_path(pack_id)
+        path = _pack_block_path(pack_id, create=True)
         _atomic_write_json(path, payload)
         _UNREADABLE_PACKS.discard(pack_id)
         _BY_PACK[pack_id] = payload

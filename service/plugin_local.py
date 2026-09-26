@@ -31,6 +31,7 @@ from .pack_install_retry import (
     format_retry_start_failed_message,
     format_retry_zip_changed_message,
 )
+from .pack_id import PACK_ID_RE, refuse_case_insensitive_id_collision
 from .pack_zip_blocks import record_zip_block, row_for_start_failure
 from .plugin_install import (
     InstallStartFailedError,
@@ -43,7 +44,7 @@ ENGINES = frozenset({
     "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
     "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
 })
-ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+ID_RE = PACK_ID_RE
 _seen: dict[str, str] = {}
 _primed = False
 
@@ -310,6 +311,7 @@ def install_local_zip(
         manifest = pz.inspect_zip(tmp_path)
         doc = plugins.validate_doc(manifest.plugin)
         pid = str(doc["id"])
+        refuse_case_insensitive_id_collision(pid)
         dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
         raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=overwrite)
         pid = str(doc["id"])
@@ -352,6 +354,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     manifest = pz.inspect_zip(path)
     doc = plugins.validate_doc(manifest.plugin)
     pid = str(doc["id"])
+    refuse_case_insensitive_id_collision(pid)
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
     raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=False)
     pid = str(doc["id"])
