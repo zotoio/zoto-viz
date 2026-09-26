@@ -2,6 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_pack_assets_security.py",
   "testName": "PackAssetsSecurityTests::test_wrong_token_denied_for_any_pack_path",
-  "description": "Wrong session token in /pack-assets/<token>/… must return 403, not serve module.js.",
+  "description": "Wrong session token in /pack-assets/<token>/… must return 401 token_invalid, not serve module.js.",
   "timeoutSec": 60
 }

@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/pack-asset-rebuild.ts b/web/src/plugins/pack-asset-rebuild.ts
-index 0000000..0000000 100644
+index 439a324..564d517 100644
 --- a/web/src/plugins/pack-asset-rebuild.ts
 +++ b/web/src/plugins/pack-asset-rebuild.ts
 @@ -1,4 +1,4 @@
@@ -9,6 +9,7 @@ index 0000000..0000000 100644
  import {
    consumeServerRestartWallNotice,
 @@ -17,6 +17,7 @@ import { applyPackFeedPaneNotice } from "./plugin-pack-feed";
+ 
  export function isPackAssetTokenInvalid(err: unknown): boolean {
    if (err instanceof PackAssetTokenInvalidError) return true;
 +  if (err instanceof PackAssetForbiddenError) return true;

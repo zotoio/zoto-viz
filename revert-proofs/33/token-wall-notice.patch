@@ -1,13 +1,14 @@
 diff --git a/web/src/plugins/pack-asset-rebuild.ts b/web/src/plugins/pack-asset-rebuild.ts
-index 728adc2..3aef828 100644
+index 439a324..e1770f5 100644
 --- a/web/src/plugins/pack-asset-rebuild.ts
 +++ b/web/src/plugins/pack-asset-rebuild.ts
-@@ -39,8 +39,6 @@ export async function runPackAssetProtectedLoad(
+@@ -62,9 +62,6 @@ export async function runPackAssetProtectedLoad(
      if (opts?.serverRestart) scheduleServerRestartWallNotice();
      markTileReconnecting(tileId);
      applyPackFeedPaneNotice(mosaic, tileId, packName);
 -    const wall = consumeServerRestartWallNotice();
 -    if (wall && mosaic) mosaic.setWallNotice(wall);
-     try {
-       await attempt();
-     } catch (retryErr) {
+-
+     let lastErr: unknown = err;
+     while (!shouldCapRebuild(tileId)) {
+       const attempt = beginTileRebuild(tileId);
