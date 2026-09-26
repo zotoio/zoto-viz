@@ -783,8 +783,16 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
   await loadPluginSkyOnto(scene, spec, true);
 }
 
+/** Cypher CIC mosaic is unreadable with fixed feed/chat overlays — collapse both on entry. */
+function collapseCypherCicPanels(m: ViewMode): void {
+  if (m.pluginId !== "cypher-cic") return;
+  if (settings.feedSettings.on) settings.setFeedOn(false);
+  if (settings.chatSettings.on) settings.setChatOn(false);
+}
+
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const m = modeById(id);
+  collapseCypherCicPanels(m);
   const opts = optsFor(m);
   const prevMode = liveMode;
   currentOpts = opts;

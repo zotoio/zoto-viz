@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/viz-hud.test.ts",
+  "testName": "shows failure stage pill when frame carries talkers[].failed or sys.failed",
+  "description": "One-line production revert: omit stageFailEl show/update in VizHud.tick when failBadge is set."
+}

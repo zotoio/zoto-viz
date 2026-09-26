@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/viz-hud.test.ts",
+  "testName": "hides the HUD separator after the failure badge when peak is zero",
+  "description": "One-line production revert: stop toggling degradedSepAfter.hidden in VizHud.tick (separator stays visible when badge hidden)."
+}

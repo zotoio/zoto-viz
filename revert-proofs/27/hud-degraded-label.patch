@@ -1,0 +1,9 @@
+--- a/web/src/ui/viz-hud.ts
++++ b/web/src/ui/viz-hud.ts
+@@ -84,5 +84,5 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null
+   }
+   const peak = Math.max(sysFail, talkerPeak);
+   if (peak <= 0) return null;
+-  return `⚠ DEGRADED ${Math.round(peak * 100)}%`;
++  return `fail ${Math.round(peak * 100)}%`;
+ }

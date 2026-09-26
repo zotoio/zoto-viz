@@ -1,0 +1,11 @@
+--- a/web/src/ui/viz-hud.ts
++++ b/web/src/ui/viz-hud.ts
+@@ -319,8 +319,6 @@ export class VizHud {
+       this.degradedEl.hidden = false;
+       this.degradedSepAfter.hidden = false;
+       this.degradedEl.textContent = failBadge;
+-      this.stageFailEl.hidden = false;
+-      this.stageFailEl.textContent = failBadge;
+     } else {
+       this.degradedEl.hidden = true;
+       this.degradedSepAfter.hidden = true;

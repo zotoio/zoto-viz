@@ -1,0 +1,31 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/ui/viz-hud.test.ts (20 tests | 1 failed | 19 skipped) 16ms
+   ❯ viz hud helpers (20)
+     × shows failure badge in HUD strip when frame carries talkers[].failed or sys.failed 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/viz-hud.test.ts > viz hud helpers > shows failure badge in HUD strip when frame carries talkers[].failed or sys.failed
+AssertionError: expected 'fail 60%' to be '⚠ DEGRADED 60%' // Object.is equality
+
+Expected: "⚠ DEGRADED 60%"
+Received: "fail 60%"
+
+ ❯ src/ui/viz-hud.test.ts:331:70
+    329|       now: 1000,
+    330|     });
+    331|     expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).t…
+       |                                                                      ^
+    332|   });
+    333|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 skipped (20)
+   Start at  18:04:53
+   Duration  696ms (environment 46%, transform 41%, import 9%, tests 3%, setup 1%)
+

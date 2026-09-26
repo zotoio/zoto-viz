@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/viz-hud.test.ts",
+  "testName": "shows failure badge in HUD strip when frame carries talkers[].failed or sys.failed",
+  "description": "One-line production revert: return null instead of the DEGRADED strip string in vizFrameFailureBadge."
+}

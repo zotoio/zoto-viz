@@ -272,7 +272,42 @@ describe("viz hud helpers", () => {
     }, state)).toEqual({ label: "talkers", value: "1" });
   });
 
-  it("shows failure badge when frame carries talkers[].failed or sys.failed", () => {
+  it("hides the HUD separator after the failure badge when peak is zero", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    const healthy = {
+      packId: "talker-storm" as const,
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: {
+        t: 1,
+        dt: 0,
+        audio: 0,
+        packets: [],
+        rf: [],
+        talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" as const }],
+        headlines: [],
+      },
+      state: minimalState(),
+      now: 1000,
+    };
+    hud.tick(healthy);
+    const visibleSeps = () =>
+      [...hud.root.querySelectorAll<HTMLElement>(".viz-hud-sep")].filter((el) => !el.hidden);
+    expect(visibleSeps().length).toBe(3);
+    hud.tick({
+      ...healthy,
+      frame: {
+        ...healthy.frame,
+        talkers: [{ id: "10.0.0.1", rate: 80, role: "lan", failed: 0.4 }],
+        sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.5, udev: 0 },
+      },
+    });
+    expect(visibleSeps().length).toBe(4);
+  });
+
+  it("shows failure badge in HUD strip when frame carries talkers[].failed or sys.failed", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
     hud.setActive("talker-storm", "Talker Storm");
@@ -294,6 +329,29 @@ describe("viz hud helpers", () => {
       now: 1000,
     });
     expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe("⚠ DEGRADED 60%");
+  });
+
+  it("shows failure stage pill when frame carries talkers[].failed or sys.failed", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: {
+        t: 1,
+        dt: 0,
+        audio: 0,
+        packets: [],
+        rf: [],
+        talkers: [{ id: "10.0.0.1", rate: 80, role: "lan", failed: 0.55 }],
+        headlines: [],
+        sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.6, udev: 0 },
+      },
+      state: minimalState(),
+      now: 1000,
+    });
     expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe("⚠ DEGRADED 60%");
   });
 

@@ -1,0 +1,31 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/ui/viz-hud.test.ts (20 tests | 1 failed | 19 skipped) 21ms
+   ❯ viz hud helpers (20)
+     × shows failure stage pill when frame carries talkers[].failed or sys.failed 19ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/viz-hud.test.ts > viz hud helpers > shows failure stage pill when frame carries talkers[].failed or sys.failed
+AssertionError: expected '⚠ DEGRADED' to be '⚠ DEGRADED 60%' // Object.is equality
+
+Expected: "⚠ DEGRADED 60%"
+Received: "⚠ DEGRADED"
+
+ ❯ src/ui/viz-hud.test.ts:355:70
+    353|       now: 1000,
+    354|     });
+    355|     expect(host.querySelector(".viz-stage-fail-label")?.textContent).t…
+       |                                                                      ^
+    356|   });
+    357|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 skipped (20)
+   Start at  18:04:55
+   Duration  712ms (environment 44%, transform 42%, import 9%, tests 3%, setup 1%)
+
