@@ -1,8 +1,19 @@
+export const NIXIE_LOOK_KEYS = ["format", "seconds", "glow", "flicker"] as const;
+export type NixieLookKey = (typeof NIXIE_LOOK_KEYS)[number];
+
 export type NixieLook = {
   hour12: boolean;
   seconds: boolean;
   glow: number;
   flicker: number;
+};
+
+/** Plugin option key → parsed {@link NixieLook} field (every look field exactly once). */
+export const NIXIE_LOOK_FIELD_BY_KEY: Record<NixieLookKey, keyof NixieLook> = {
+  format: "hour12",
+  seconds: "seconds",
+  glow: "glow",
+  flicker: "flicker",
 };
 
 export const DEFAULT_LOOK: NixieLook = {
@@ -20,11 +31,14 @@ export function clamp(n: number, lo: number, hi: number): number {
 }
 
 export function parseNixieLook(cfg?: Record<string, string> | null): NixieLook {
+  const format = cfg?.format;
   const seconds = cfg?.seconds;
-  const glow = Number(cfg?.glow);
-  const flicker = Number(cfg?.flicker);
+  const glowRaw = cfg?.glow;
+  const flickerRaw = cfg?.flicker;
+  const glow = Number(glowRaw);
+  const flicker = Number(flickerRaw);
   return {
-    hour12: cfg?.format === "12",
+    hour12: format === "12",
     seconds: seconds !== "0" && seconds !== "false",
     glow: clamp(Number.isFinite(glow) ? glow : DEFAULT_LOOK.glow, 0.4, 1.6),
     flicker: clamp(Number.isFinite(flicker) ? flicker : DEFAULT_LOOK.flicker, 0, 1),

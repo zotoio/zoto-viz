@@ -9,28 +9,37 @@ import {
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { CANVAS_DEFAULT, parseNixieLook, type NixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+import {
+  CANVAS_DEFAULT,
+  NIXIE_LOOK_KEYS,
+  parseNixieLook,
+  type NixieLook,
+  type NixieLookKey,
+} from "../../../plugins/src/nixie-clock/frontend/tubes";
 
 const hostNixieClock = createNixieWallClock();
 
 let nixieScopedLook: NixieLook = parseNixieLook();
 let nixieActiveLook: NixieLook = nixieScopedLook;
-let nixieOptsKey = "";
+const nixieOptSlots: [string, string, string, string] = ["", "", "", ""];
 const nixiePackCanvas: DevicePixelSize = { w: CANVAS_DEFAULT.w, h: CANVAS_DEFAULT.h };
 
-function nixieOptsStableKey(opts?: Record<string, string> | null): string {
-  if (!opts) return "";
-  const keys = Object.keys(opts).sort();
-  const o: Record<string, string> = {};
-  for (const k of keys) o[k] = opts[k] ?? "";
-  return JSON.stringify(o);
+function nixieOptRaw(opts: Record<string, string> | null | undefined, key: NixieLookKey): string {
+  return opts?.[key] ?? "";
 }
 
-/** Parse nixie look when plugin options change (scope sync), not each frame. */
+/** Parse nixie look when tracked option values change (no per-frame key stringify). */
 export function syncNixiePackScope(opts?: Record<string, string> | null): void {
-  const key = nixieOptsStableKey(opts);
-  if (key === nixieOptsKey) return;
-  nixieOptsKey = key;
+  let changed = false;
+  for (let i = 0; i < NIXIE_LOOK_KEYS.length; i++) {
+    const key = NIXIE_LOOK_KEYS[i]!;
+    const v = nixieOptRaw(opts, key);
+    if (nixieOptSlots[i] !== v) {
+      nixieOptSlots[i] = v;
+      changed = true;
+    }
+  }
+  if (!changed) return;
   nixieScopedLook = parseNixieLook(opts);
 }
 
@@ -45,7 +54,10 @@ export function nixiePackActiveCanvas(): Readonly<DevicePixelSize> {
 }
 
 export function resetNixiePackHostScope(): void {
-  nixieOptsKey = "";
+  nixieOptSlots[0] = "";
+  nixieOptSlots[1] = "";
+  nixieOptSlots[2] = "";
+  nixieOptSlots[3] = "";
   nixieScopedLook = parseNixieLook();
   nixiePackCanvas.w = CANVAS_DEFAULT.w;
   nixiePackCanvas.h = CANVAS_DEFAULT.h;

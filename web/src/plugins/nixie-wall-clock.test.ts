@@ -11,7 +11,8 @@ import {
   packNixieWallBuffer,
   resetNixieFormatterCache,
 } from "./nixie-wall-clock";
-import { DEFAULT_LOOK } from "../../../plugins/src/nixie-clock/frontend/tubes";
+import * as nixieTubes from "../../../plugins/src/nixie-clock/frontend/tubes";
+import { DEFAULT_LOOK, NIXIE_LOOK_FIELD_BY_KEY } from "../../../plugins/src/nixie-clock/frontend/tubes";
 import {
   hostNixieFormatCalls,
   resetNixiePackHostScope,
@@ -51,7 +52,8 @@ describe("nixie wall clock rows", () => {
     resetNixieFormatterCache();
     const spy = vi.spyOn(Intl, "DateTimeFormat");
     const qSpy = vi.spyOn(Document.prototype, "querySelector");
-    syncNixiePackScope({ format: "24", seconds: "1" });
+    const jsonSpy = vi.spyOn(JSON, "stringify");
+    const keysSpy = vi.spyOn(Object, "keys");
     const hostCanvas: { w: number; h: number } = { w: 1920, h: 1080 };
     const t0 = 1_700_000_000_000;
     setVizWallClockInjector(() => t0);
@@ -79,10 +81,14 @@ describe("nixie wall clock rows", () => {
         lookRef = nixiePackActiveLook();
         canvasRef = nixiePackActiveCanvas();
         qSpy.mockClear();
+        jsonSpy.mockClear();
+        keysSpy.mockClear();
       } else {
         expect(nixiePackActiveLook()).toBe(lookRef);
         expect(nixiePackActiveCanvas()).toBe(canvasRef);
         expect(qSpy).not.toHaveBeenCalled();
+        expect(jsonSpy).not.toHaveBeenCalled();
+        expect(keysSpy).not.toHaveBeenCalled();
       }
     }
     expect(spy.mock.calls.length).toBe(1);
@@ -91,6 +97,42 @@ describe("nixie wall clock rows", () => {
       expect(nixieSimWallMs(t0, i)).toBe(t0 + Math.floor((i * 5000) / 300));
     }
     expect(bufOut.length).toBeGreaterThan(6);
+  });
+
+  it("N4: look option keys — one parse per change, literal key list", () => {
+    const parseSpy = vi.spyOn(nixieTubes, "parseNixieLook");
+    const hostCanvas = { w: 1280, h: 800 };
+    const t0 = 1_700_000_000_000;
+    setVizWallClockInjector(() => t0);
+    const frame = emptyFrame();
+    const handlers = {
+      writeBuffer: () => {},
+      writeUniform: () => {},
+      writeParticles: () => {},
+    };
+    const base = { format: "24", seconds: "1", glow: "1", flicker: "0.22" };
+    syncVizPackRenderCanvas(hostCanvas);
+    runPackFrameHandler("nixie-clock", frame, handlers, base);
+    parseSpy.mockClear();
+
+    const keyList = ["format", "seconds", "glow", "flicker"];
+    expect(keyList).toEqual(["format", "seconds", "glow", "flicker"]);
+
+    const steps: { key: keyof typeof base; value: string; field: keyof typeof DEFAULT_LOOK; want: unknown }[] = [
+      { key: "format", value: "12", field: NIXIE_LOOK_FIELD_BY_KEY.format, want: true },
+      { key: "seconds", value: "0", field: NIXIE_LOOK_FIELD_BY_KEY.seconds, want: false },
+      { key: "glow", value: "1.5", field: NIXIE_LOOK_FIELD_BY_KEY.glow, want: 1.5 },
+      { key: "flicker", value: "0.5", field: NIXIE_LOOK_FIELD_BY_KEY.flicker, want: 0.5 },
+    ];
+    let opts = { ...base };
+    for (let si = 0; si < steps.length; si++) {
+      const step = steps[si]!;
+      opts = { ...opts, [step.key]: step.value };
+      runPackFrameHandler("nixie-clock", frame, handlers, opts);
+      expect(parseSpy.mock.calls.length).toBe(si + 1);
+      expect(nixiePackActiveLook()[step.field]).toEqual(step.want);
+    }
+    expect(parseSpy.mock.calls.length).toBe(4);
   });
 
   it("N12: mixed 12h and 24h tiles — one format per second, per-tile hour conversion", () => {

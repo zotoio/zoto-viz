@@ -1,15 +1,14 @@
---- a/web/src/plugins/viz-pack-host.ts	2026-09-26 19:17:11.585943984 +0000
-+++ b/web/src/plugins/viz-pack-host.ts	2026-09-26 19:17:24.234037175 +0000
-@@ -8,7 +8,7 @@
- import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
- import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
- import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
--import { CANVAS_DEFAULT, parseNixieLook, type NixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
-+import { CANVAS_DEFAULT, nixieCanvasSize, parseNixieLook, type NixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
+--- a/web/src/plugins/viz-pack-host.ts
++++ b/web/src/plugins/viz-pack-host.ts
+@@ -15,6 +15,7 @@
+   parseNixieLook,
+   type NixieLook,
+   type NixieLookKey,
++  nixieCanvasSize,
+ } from "../../../plugins/src/nixie-clock/frontend/tubes";
  
  const hostNixieClock = createNixieWallClock();
- 
-@@ -250,15 +250,15 @@
+@@ -266,15 +267,15 @@
        break;
      }
      case "nixie-clock": {
