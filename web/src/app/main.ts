@@ -93,8 +93,9 @@ import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
+import { syncPanelPackSub } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
-import { markPresent, presentInterval } from "../core/present-clock";
+import { markPresent, presentFrameStats, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -144,6 +145,7 @@ applyThemeChrome(theme);
 const renderHost = new RenderHost($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
+scene.retargetPanel("main");
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
 scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
@@ -997,6 +999,10 @@ function feed(m: StateMsg): void {
     || pluginSpecs.find((p) => p.id === tsWatchId)
     || null;
   const packId = normalizeVizDemoPackId(active?.id ?? mode.pluginId);
+  const packPanelId = mosaic?.on
+    ? (mosaic.focusedId || mosaic.mainMode || mosaic.tileIds[0] || "main")
+    : "main";
+  syncPanelPackSub(packPanelId, !!(packId && (active?.capabilities?.includes("viz.read") || packId)));
   if (active?.capabilities?.includes("viz.read") || packId) {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
@@ -1036,6 +1042,7 @@ function feed(m: StateMsg): void {
       frame: vizBudget.lastBuilt,
       state: shown,
       now: performance.now(),
+      present: presentFrameStats(),
     });
   }
 

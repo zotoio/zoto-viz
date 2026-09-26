@@ -72,6 +72,7 @@ export interface VizHudTick {
   frame: VizDataFrame | null;
   state: StateMsg;
   now: number;
+  present?: { last: number; p95: number };
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -173,6 +174,7 @@ export class VizHud {
   private readonly metricLabelEl: HTMLElement;
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly frameEl: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
@@ -208,6 +210,10 @@ export class VizHud {
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
+    this.frameEl = document.createElement("span");
+    this.frameEl.className = "viz-hud-frame";
+    this.frameEl.title = "Real present-to-present frame time (last and rolling p95)";
+
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
     this.packSel = new Select({
@@ -225,7 +231,7 @@ export class VizHud {
       el.textContent = "·";
       return el;
     };
-    line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
+    line.append(this.packEl, sep(), metric, sep(), this.frameEl, sep(), this.skipEl, this.swapRow);
     root.append(line);
 
     parent.append(root);
@@ -274,5 +280,11 @@ export class VizHud {
 
     this.skipEl.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, now));
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
+    const pt = input.present;
+    if (pt) {
+      this.frameEl.textContent = `${pt.last.toFixed(1)} ms · p95 ${pt.p95.toFixed(1)} ms`;
+      this.frameEl.dataset.frameMs = pt.last.toFixed(2);
+      this.frameEl.dataset.frameP95 = pt.p95.toFixed(2);
+    }
   }
 }

@@ -12,6 +12,7 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
+import { releasePanelView } from "./panel-view-lifecycle";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -461,6 +462,7 @@ export class Mosaic {
     if (!this.tree || !toId || fromId === toId) return false;
     const next = nextPaneTiles(this.tileIds, fromId, toId);
     if (next.join("\0") === this.tileIds.join("\0")) return false;
+    if (!next.includes(fromId)) releasePanelView(fromId);
     this.assignViews(next);
     return true;
   }
@@ -562,12 +564,13 @@ export class Mosaic {
         pane.appendChild(this.cfg.sceneEl);
         const m = mosaicPaneMode(id);
         this.cfg.main.setMode(m, this.cfg.optsFor(m));
+        this.cfg.main.retargetPanel(id);
         this.mainId = id;
       } else {
         const host = pane.querySelector<HTMLElement>(":scope > .mosaic-scene")
           ?? Object.assign(document.createElement("div"), { className: "mosaic-scene" });
         if (!host.parentElement) pane.appendChild(host);
-        const s = new NetScene(host, { satellite: true, host: this.cfg.host });
+        const s = new NetScene(host, { satellite: true, host: this.cfg.host, panelId: id });
         this.applySync(s, id, this.cfg.sync());
         const m = mosaicPaneMode(id);
         s.setMode(m, this.cfg.optsFor(m));
@@ -711,6 +714,7 @@ export class Mosaic {
   }
 
   private dropPane(id: string): void {
+    releasePanelView(id);
     if (id === this.mainId) {
       const next = this.extras.find((e) => isGraph(e.id));
       if (next) {
@@ -722,10 +726,12 @@ export class Mosaic {
           pane.appendChild(this.cfg.sceneEl);
           const m = mosaicPaneMode(next.id);
           this.cfg.main.setMode(m, this.cfg.optsFor(m));
+          this.cfg.main.retargetPanel(next.id);
         }
         this.mainId = next.id;
       } else {
         this.mainId = "";
+        this.cfg.main.retargetPanel(null);
       }
     } else {
       const extra = this.extras.find((e) => e.id === id);
