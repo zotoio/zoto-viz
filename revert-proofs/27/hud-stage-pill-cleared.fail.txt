@@ -1,0 +1,34 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/ui/viz-hud.test.ts (24 tests | 1 failed | 23 skipped) 23ms
+   ❯ viz hud helpers (24)
+     × hides stage fail pill when demo pack is deactivated 21ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 skipped (24)
+   Start at  19:24:51
+   Duration  833ms (environment 44%, transform 42%, import 8%, tests 3%, setup 2%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/viz-hud.test.ts > viz hud helpers > hides stage fail pill when demo pack is deactivated
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/ui/viz-hud.test.ts:408:65
+    406|     expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(f…
+    407|     hud.setActive(null, "");
+    408|     expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(t…
+       |                                                                 ^
+    409|   });
+    410|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

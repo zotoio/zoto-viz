@@ -1,0 +1,34 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/plugins/viz-host.test.ts (28 tests | 1 failed | 27 skipped) 15ms
+   ❯ viz contract version negotiation (5)
+     × treats missing viz.contract as v1 14ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 27 skipped (28)
+   Start at  19:24:54
+   Duration  704ms (environment 60%, transform 32%, tests 3%, setup 2%, import 2%, worker 1%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/plugins/viz-host.test.ts > viz contract version negotiation > treats missing viz.contract as v1
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ src/plugins/viz-host.test.ts:74:33
+     72|     expect(r?.state).toBe("ready");
+     73|     if (r?.state !== "ready") return;
+     74|     expect(r.contract.contract).toBe(1);
+       |                                 ^
+     75|   });
+     76|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

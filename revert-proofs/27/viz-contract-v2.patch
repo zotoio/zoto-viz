@@ -1,9 +1,13 @@
+diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
+index 476e870..5c0b6c0 100644
 --- a/web/src/plugins/viz-host.ts
 +++ b/web/src/plugins/viz-host.ts
-@@ -552,5 +552,5 @@ export function buildVizFrameForPlugin(
+@@ -551,7 +551,7 @@ export function buildVizFrameForPlugin(
      idle,
    );
    if (version < 2) return { ...merged, contract: 1 };
 -  return applyVizFrameContractV2(merged, state, resolveVizFrameCollectOpts(state));
-+  return { ...merged, contract: 2 };
++  return { ...merged, contract: 1 };
  }
+ 
+ /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */

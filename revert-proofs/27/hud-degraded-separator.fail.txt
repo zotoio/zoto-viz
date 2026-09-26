@@ -1,13 +1,19 @@
 
  RUN  v5.0.0 /workspace/web
 
- ❯ src/ui/viz-hud.test.ts (20 tests | 1 failed | 19 skipped) 19ms
-   ❯ viz hud helpers (20)
-     × hides the HUD separator after the failure badge when peak is zero 17ms
+ ❯ src/ui/viz-hud.test.ts (24 tests | 1 failed | 23 skipped) 20ms
+   ❯ viz hud helpers (24)
+     × hides HUD separator after DEGRADED badge when failure gauges are zero 18ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 skipped (24)
+   Start at  19:24:36
+   Duration  728ms (environment 46%, transform 40%, import 9%, tests 3%, setup 1%)
+
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
- FAIL  src/ui/viz-hud.test.ts > viz hud helpers > hides the HUD separator after the failure badge when peak is zero
+ FAIL  src/ui/viz-hud.test.ts > viz hud helpers > hides HUD separator after DEGRADED badge when failure gauges are zero
 AssertionError: expected 3 to be 4 // Object.is equality
 
 - Expected
@@ -16,19 +22,13 @@ AssertionError: expected 3 to be 4 // Object.is equality
 - 4
 + 3
 
- ❯ src/ui/viz-hud.test.ts:307:34
-    305|       },
-    306|     });
-    307|     expect(visibleSeps().length).toBe(4);
+ ❯ src/ui/viz-hud.test.ts:308:34
+    306|       },
+    307|     });
+    308|     expect(visibleSeps().length).toBe(4);
        |                                  ^
-    308|   });
-    309|
+    309|   });
+    310|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-
-
- Test Files  1 failed (1)
-      Tests  1 failed | 19 skipped (20)
-   Start at  18:04:41
-   Duration  716ms (environment 44%, transform 43%, import 9%, tests 3%, setup 1%)
 

@@ -1,33 +1,33 @@
 
  RUN  v5.0.0 /workspace/web
 
- ❯ src/ui/viz-hud.test.ts (20 tests | 1 failed | 19 skipped) 22ms
-   ❯ viz hud helpers (20)
-     × shows failure badge in HUD strip when frame carries talkers[].failed or sys.failed 19ms
+ ❯ src/ui/viz-hud.test.ts (24 tests | 1 failed | 23 skipped) 19ms
+   ❯ viz hud helpers (24)
+     × shows DEGRADED strip badge from talker TCP failure ratio 17ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 skipped (24)
+   Start at  19:24:43
+   Duration  860ms (environment 50%, transform 36%, import 9%, tests 3%, setup 1%)
+
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
- FAIL  src/ui/viz-hud.test.ts > viz hud helpers > shows failure badge in HUD strip when frame carries talkers[].failed or sys.failed
-AssertionError: expected '' to be '⚠ DEGRADED 60%' // Object.is equality
+ FAIL  src/ui/viz-hud.test.ts > viz hud helpers > shows DEGRADED strip badge from talker TCP failure ratio
+AssertionError: expected '' to be '⚠ DEGRADED 55% TCP · 2 units' // Object.is equality
 
 - Expected
 + Received
 
-- ⚠ DEGRADED 60%
+- ⚠ DEGRADED 55% TCP · 2 units
 
- ❯ src/ui/viz-hud.test.ts:331:70
-    329|       now: 1000,
-    330|     });
-    331|     expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).t…
+ ❯ src/ui/viz-hud.test.ts:332:70
+    330|       now: 1000,
+    331|     });
+    332|     expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).t…
        |                                                                      ^
-    332|   });
-    333|
+    333|   });
+    334|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-
-
- Test Files  1 failed (1)
-      Tests  1 failed | 19 skipped (20)
-   Start at  18:04:52
-   Duration  755ms (transform 45%, environment 41%, import 9%, tests 3%, setup 1%)
 

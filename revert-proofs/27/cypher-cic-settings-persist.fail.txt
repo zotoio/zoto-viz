@@ -1,0 +1,31 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/app/cypher-cic-settings.test.ts (1 test | 1 failed) 28ms
+   ❯ cypher-cic saved settings (1)
+     × leaves persisted feed and chat toggles unchanged after session-only collapse 27ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:24:30
+   Duration  1.29s (transform 63%, environment 21%, import 13%, tests 2%, setup 1%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/cypher-cic-settings.test.ts > cypher-cic saved settings > leaves persisted feed and chat toggles unchanged after session-only collapse
+AssertionError: expected '0' to be '1' // Object.is equality
+
+Expected: "1"
+Received: "0"
+
+ ❯ src/app/cypher-cic-settings.test.ts:16:55
+     14|     settings.setFeedOn(false, { persist: false });
+     15|     settings.setChatOn(false, { persist: false });
+     16|     expect(localStorage.getItem(`${prefix}.feed.on`)).toBe("1");
+       |                                                       ^
+     17|     expect(localStorage.getItem(`${prefix}.chat.on`)).toBe("1");
+     18|     settings.setFeedOn(true, { persist: false });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

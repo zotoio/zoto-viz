@@ -1,30 +1,810 @@
 
  RUN  v5.0.0 /workspace/web
 
- ❯ src/plugins/viz-v1-frame-adapter.test.ts (6 tests | 1 failed | 5 skipped) 21ms
+ ❯ src/plugins/viz-v1-frame-adapter.test.ts (6 tests | 1 failed | 5 skipped) 25ms
    ❯ VizV1FrameAdapter (5)
-     × gives each pack the same frame instance every deliver and different instances across packs 20ms
+     × gives each pack the same frame instance every deliver and different instances across packs 23ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  19:25:04
+   Duration  579ms (environment 58%, transform 31%, tests 5%, import 3%, setup 2%, worker 1%)
+
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  src/plugins/viz-v1-frame-adapter.test.ts > VizV1FrameAdapter > gives each pack the same frame instance every deliver and different instances across packs
-AssertionError: expected { contract: 1, t: +0, dt: +0, …(6) } not to be { contract: 1, t: +0, dt: +0, …(6) } // Object.is equality
+AssertionError: expected { contract: 1, t: +0, dt: +0, …(6) } to be { contract: 1, t: +0, dt: 0.016, …(6) } // Object.is equality
 
-Compared values have no visual difference.
+- Expected
++ Received
 
- ❯ src/plugins/viz-v1-frame-adapter.test.ts:50:19
-     48|     const a = adapter.register("pack-a");
-     49|     const b = adapter.register("pack-b");
-     50|     expect(a).not.toBe(b);
-       |                   ^
+  {
+-   "audio": 0.2,
++   "audio": 0,
+    "contract": 1,
+-   "dt": 0.016,
++   "dt": 0,
+    "headlines": [
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
+      {
+-       "id": "h1",
+-       "label": "HN",
+-       "text": "headline",
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
+      },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
++     {
++       "id": "",
++       "label": "",
++       "text": "",
++     },
+    ],
+    "packets": [
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
+      {
+-       "field": 0.5,
+-       "proto": "tcp",
+-       "size": 100,
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
+      },
++     {
++       "field": 0,
++       "proto": "",
++       "size": 0,
++     },
+    ],
+    "rf": [
+      {
+-       "channel": 6,
+-       "rssi": 0.4,
+-       "ssid": "demo",
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
+      },
++     {
++       "channel": 0,
++       "rssi": 0,
++       "ssid": "",
++     },
+    ],
+    "sys": {
+-     "cpu": 0.1,
++     "cpu": 0,
+      "disk": 0,
+-     "failed": 0.5,
++     "failed": 0,
+      "gpu": 0,
+-     "mem": 0.2,
++     "mem": 0,
+      "psi": 0,
+      "sockets": 0,
+      "temp": 0,
+      "udev": 0,
+      "watts": 0,
+    },
+    "t": 0,
+    "talkers": [
+      {
+-       "id": "10.0.0.1",
+-       "rate": 100,
+-       "role": "lan",
++       "id": "",
++       "rate": 0,
++       "role": "",
+      },
+      {
+-       "id": "10.0.0.2",
+-       "rate": 101,
+-       "role": "lan",
++       "id": "",
++       "rate": 0,
++       "role": "",
+      },
+      {
+-       "id": "10.0.0.3",
+-       "rate": 102,
+-       "role": "lan",
++       "id": "",
++       "rate": 0,
++       "role": "",
+      },
+      {
+-       "id": "10.0.0.4",
+-       "rate": 103,
+-       "role": "lan",
++       "id": "",
++       "rate": 0,
++       "role": "",
+      },
+      {
+-       "id": "10.0.0.5",
+-       "rate": 104,
+-       "role": "lan",
++       "id": "",
++       "rate": 0,
++       "role": "",
+      },
+      {
+-       "id": "10.0.0.6",
+-       "rate": 105,
+-       "role": "lan",
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
++     },
++     {
++       "id": "",
++       "rate": 0,
++       "role": "",
+      },
+    ],
+  }
+
+ ❯ src/plugins/viz-v1-frame-adapter.test.ts:53:42
      51|     for (let i = 0; i < 300; i++) {
      52|       adapter.deliver(sampleV2(i));
+     53|       expect(adapter.frameFor("pack-a")).toBe(a);
+       |                                          ^
+     54|       expect(adapter.frameFor("pack-b")).toBe(b);
+     55|     }
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-
-
- Test Files  1 failed (1)
-      Tests  1 failed | 5 skipped (6)
-   Start at  19:07:12
-   Duration  604ms (environment 60%, transform 31%, tests 4%, setup 2%, import 2%, worker 1%)
 
