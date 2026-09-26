@@ -1,9 +1,8 @@
 diff --git a/service/access.py b/service/access.py
-index 0000000..0000001 100644
+index 63ba73b..897fc6d 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -62,12 +62,8 @@ def read_sandbox_asset_token(request: web.Request) -> str:
- def pack_asset_token_ok(request: web.Request) -> bool:
+@@ -63,17 +63,8 @@ def pack_asset_token_ok(request: web.Request) -> bool:
      parsed = parse_pack_assets_path(request.path or "")
      if not parsed:
          return False
@@ -13,8 +12,13 @@ index 0000000..0000001 100644
 -        return False
 -    sid = pack_asset_tokens.session_id_from_request(request)
 -    return pack_asset_tokens.verify_pack_asset_token(
--        secret, pack_id, token, session_id=sid if sid else None,
+-        secret,
+-        pack_id,
+-        token,
+-        session_id=sid if sid else None,
 -    )
 +    token, _pack_id, _tail = parsed
 +    return bool(token)
  
+ 
+ def redact_sandbox_token(text: str, token: str) -> str:

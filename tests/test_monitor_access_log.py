@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from unittest.mock import MagicMock
 
 from aiohttp import ClientSession, web
@@ -34,3 +35,6 @@ async def _session_smoke() -> None:
 
 def test_make_app_session_returns_200_with_redacting_access_logger() -> None:
     asyncio.run(_session_smoke())
+    main_src = inspect.getsource(monitor.main)
+    assert "access_log_class=access.RedactingAccessLogger" in main_src
+    assert "access_log=access.sandbox_access_log" not in main_src

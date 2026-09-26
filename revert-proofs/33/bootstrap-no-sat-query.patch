@@ -1,14 +1,14 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index 14e4cd7..b2c8e11 100644
+index 31b66d6..a625e5e 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
-@@ -113,8 +113,7 @@ async def _sandbox_html(request: web.Request, token: str) -> web.Response:
-     m = re.search(r'src="(/assets/(plugin-sandbox-[^"]+\.js))"', body)
-     if m:
-         rel = m.group(2)
--        src = access.pack_asset_url(token, PACK_ID_SANDBOX, rel)
--        body = body.replace(m.group(0), f'src="{src}"', 1)
-+        body = body.replace(m.group(0), f'src="{rel}?sat={token}"', 1)
-     resp = web.Response(text=body, content_type="text/html", charset="utf-8")
-     apply_pack_asset_headers(resp)
-     return resp
+@@ -223,8 +223,7 @@ def _rewrite_sandbox_html(body: str, token: str) -> str:
+     def repl_asset(m: re.Match[str]) -> str:
+         attr, path = m.group(1), m.group(2)
+         name = path.rsplit("/", 1)[-1]
+-        url = access.pack_asset_url(token, PACK_ID_SANDBOX, name)
+-        return f'{attr}="{url}"'
++        return f'{attr}="{path}?sat={token}"'
+ 
+     body = re.sub(
+         r'(?P<attr>src|href)="(?P<path>/assets/(?:plugin-sandbox|preload-helper)-[\w-]+\.js)"',

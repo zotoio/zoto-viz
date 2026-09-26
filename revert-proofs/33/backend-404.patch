@@ -1,5 +1,5 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index 0000000..0000001 100644
+index 31b66d6..71c794e 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
 @@ -101,8 +101,6 @@ def _allowed_plugin_file(home: Path, relpath: str) -> Path | None:
