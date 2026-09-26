@@ -2,5 +2,6 @@
   "runner": "vitest",
   "testFile": "src/plugins/viz-v1-frame-adapter.test.ts",
   "testName": "^VizV1FrameAdapter\\ >\\ restores\\ full\\ talker\\ list\\ after\\ a\\ pack\\ splices\\ talkers\\ out$",
-  "description": "One-line production revert: skip rebinding frame.talkers to the adapter-owned talker pool before copying talkers."
+  "description": "One-line production revert: skip rebinding frame.talkers to the adapter-owned talker pool before copying talkers.",
+  "patchedAssertion": "AssertionError: expected 5 to be 6 // Object.is equality"
 }
