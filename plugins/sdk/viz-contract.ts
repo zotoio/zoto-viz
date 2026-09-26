@@ -74,7 +74,7 @@ export interface VizSysTelemetry {
 
 /**
  * Optional pack hooks implemented on `window.zoto` in the plugin iframe.
- * `fallbackText` returns a plain-text “simple view” line when the host cannot run the pack sky shader.
+ * `setFallbackText` pushes a plain-text “simple view” line when the displayed text changes.
  */
 export interface VizZotoPluginHooks {
   /** Push simple-view text when the displayed line changes (host dedupes). */
