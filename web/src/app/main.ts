@@ -23,8 +23,8 @@ import {
   refreshPluginDriveState,
 } from "./present-drive-app";
 import { applyModeImpl, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
-import type { ConsentReviewResult } from "./consent-review";
-import { runSharedPackConsent } from "./consent-review";
+import type { ConsentReviewResult } from "./pack-consent";
+import { ensurePackReviewedOutcome } from "./pack-consent";
 import {
   getLastConsentedModeId,
   getModeSwitchGeneration,
@@ -584,7 +584,7 @@ let ensureReviewedOverride: ((spec: PluginView | null) => Promise<ConsentReviewR
 async function ensureReviewedImpl(spec: PluginView | null): Promise<ConsentReviewResult> {
   if (!spec || !pluginNeedsReview(spec)) return "ok";
   if (spec.consent) return "ok";
-  return runSharedPackConsent(spec.id, async () => {
+  return ensurePackReviewedOutcome(spec, async () => {
     if (autoconsentEnabled() && autoconsentEligible(spec)) {
       const kind = autoconsentKind(spec);
       try {
