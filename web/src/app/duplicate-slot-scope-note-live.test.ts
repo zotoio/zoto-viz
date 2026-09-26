@@ -10,7 +10,11 @@ import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import { Settings } from "../ui/settings";
 import { hostModeById } from "./host-mode";
-import { applyMosaicTiles, mountDuplicateSlotMosaicHarness } from "./duplicate-slot-mosaic-fixture";
+import {
+  applyMosaicTiles,
+  mountDuplicateSlotMosaicHarness,
+  pickMosaicSlot,
+} from "./duplicate-slot-mosaic-fixture";
 
 const PACK = "plugin:settings-fixture";
 
@@ -79,6 +83,11 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(scopeNotes(settings)).toHaveLength(1);
     expect(scopeNoteCount(settings)).toBe(2);
     expect(settings.isOpen).toBe(true);
+
+    pickMosaicSlot(settings, 3, "plugin:disk");
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    expect(viewSection(settings)).toBe(viewLayer);
+    expect(scopeNoteCount(settings)).toBe(2);
 
     const threeTiles = [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"];
     applyMosaicTiles(settings, mosaic, threeTiles);

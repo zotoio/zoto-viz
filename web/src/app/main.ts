@@ -109,6 +109,7 @@ import { hostModeById } from "./host-mode";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
 import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
 import { bindThisView as bindThisViewHost } from "./host-view-bind";
+import { rebindViewDrawerOnApplyMode } from "./host-apply-mode-rebind";
 import { createMosaicPanePickHandler } from "./host-mosaic-pane-pick";
 import { syncSettingsAnimToMosaic } from "./settings-mosaic-anim-sync";
 import {
@@ -797,7 +798,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   feedTitleCube.setActive(rainPics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
-  if (!flags.keepLayout) bindThisView(m.id);
+  rebindViewDrawerOnApplyMode(bindThisView, m.id, flags);
   $("modeOpts").replaceChildren();
   void (async () => {
     if (!(await ensureReviewed(spec))) {

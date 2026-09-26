@@ -1,13 +1,12 @@
-diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index 42e44ec..7b8f864 100644
---- a/web/src/app/main.ts
-+++ b/web/src/app/main.ts
-@@ -797,7 +797,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
-   feedTitleCube.setActive(rainPics);
-   nestCams.setActive(m.pluginId === "nest-cams");
-   nestCams.setLook(opts);
--  if (!flags.keepLayout) bindThisView(m.id);
-+  bindThisView(m.id);
-   $("modeOpts").replaceChildren();
-   void (async () => {
-     if (!(await ensureReviewed(spec))) {
+diff --git a/web/src/app/host-apply-mode-rebind.ts b/web/src/app/host-apply-mode-rebind.ts
+index 1111111..2222222 100644
+--- a/web/src/app/host-apply-mode-rebind.ts
++++ b/web/src/app/host-apply-mode-rebind.ts
+@@ -1,6 +1,6 @@
+ /** Whether mosaic layout sync should rebuild the view drawer (main `applyMode` + anim sync). */
+ export function shouldRebindViewDrawerOnApplyMode(flags: { keepLayout?: boolean }): boolean {
+-  return !flags.keepLayout;
++  return true;
+ }
+ 
+ export function rebindViewDrawerOnApplyMode(
