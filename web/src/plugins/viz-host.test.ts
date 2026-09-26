@@ -207,6 +207,10 @@ describe("bindVizWriterCore (demo pack-swap preserve path)", () => {
 });
 
 describe("VizFrameBudget", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("counts over-budget frames and skips delivery", () => {
     const state = minimalState();
     const delivered: unknown[] = [];

@@ -1,0 +1,7 @@
+{
+  "row": "Q3 tile cost parser revert accepts 1:1e3",
+  "runner": "vitest",
+  "testFile": "src/core/viz-dev-wall-flags.test.ts",
+  "testName": "^dev viz wall flags > Q3 bad tile cost 1:1e3 — absent, no LIMITED; 1:3000 would LIMITED tile 1$",
+  "patchedAssertion": "AssertionError: expected 1000 to be undefined // Object.is equality"
+}

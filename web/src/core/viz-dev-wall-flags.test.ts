@@ -2,13 +2,22 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as vizClock from "./viz-clock";
-import { applyDevVizWallFlagsOnBuild, devShowPerTileHudIndex } from "./viz-dev-wall-flags";
+import {
+  applyDevVizWallFlagsOnBuild,
+  devShowPerTileHudIndex,
+  resetDevVizWallFlagsStateForTests,
+} from "./viz-dev-wall-flags";
 import { resetVizClockInjectors, vizBuildCostTicksForTile, vizWallMs } from "./viz-clock";
 import { clearDevWallFlagClock } from "../plugins/nixie-wall-parts";
 import { setVizClockInjector } from "./viz-clock";
-import { createTileHudLabelLine } from "../ui/tile-hud-label";
 import { VizFrameBudget } from "../plugins/viz-host";
-import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
+import { tileHudChrome } from "../plugins/viz-tile-hud";
+import {
+  syncVizTileScope,
+  VIZ_COST_TICKS_10MS,
+  vizTileBudgetRegistry,
+} from "../plugins/viz-tile-budget";
+import { fillDevWallFlagPartsScratch, nixieWallPartsScratch } from "../plugins/nixie-wall-parts";
 import { fatLanFixture } from "../plugins/fixtures/fat-lan-state";
 import { monoMs } from "./viz-time";
 import { tileIdsForLayout } from "../plugins/dogfood-tile-hud";
@@ -17,6 +26,8 @@ import { resetNixiePackHostScope, runPackFrameHandler } from "../plugins/viz-pac
 import type { VizDataFrame } from "../plugins/viz-host";
 
 const TILES_2X2 = tileIdsForLayout(2, 2);
+/** Over 2×2 share (1252) but within wall budget (5010) → LIMITED, not OVER BUDGET. */
+const LIMITED_DOGFOOD_TICKS = VIZ_COST_TICKS_10MS;
 
 function emptyFrame(): VizDataFrame {
   return { t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
@@ -32,6 +43,7 @@ describe("dev viz wall flags", () => {
   beforeEach(() => {
     expect.hasAssertions();
     resetVizClockInjectors();
+    resetDevVizWallFlagsStateForTests();
     clearDevWallFlagClock();
     resetNixieFormatterCache();
     resetNixiePackHostScope();
@@ -39,6 +51,7 @@ describe("dev viz wall flags", () => {
 
   afterEach(() => {
     resetVizClockInjectors();
+    resetDevVizWallFlagsStateForTests();
     clearDevWallFlagClock();
     vizTileBudgetRegistry.reset();
     resetNixieFormatterCache();
@@ -146,9 +159,9 @@ describe("dev viz wall flags", () => {
     expect(vizWallMs()).toBe(real);
   });
 
-  it("F5 (iv): ?vizTileCostTicks=1:5011 — only tile 1 LIMITED at 2×2", () => {
+  it("F5 (iv): ?vizTileCostTicks=1:3000 — only tile 1 LIMITED at 2×2", () => {
     vi.stubEnv("DEV", true);
-    applyDevVizWallFlagsOnBuild("?vizTileCostTicks=1:5011", TILES_2X2);
+    applyDevVizWallFlagsOnBuild(`?vizTileCostTicks=1:${LIMITED_DOGFOOD_TICKS}`, TILES_2X2);
     syncVizTileScope(TILES_2X2);
     const state = fatLanFixture();
     const budgets = TILES_2X2.map((id) => new VizFrameBudget(() => 0, id));
@@ -202,39 +215,102 @@ describe("dev viz wall flags", () => {
     expect(vizWallMs()).toBe(real);
   });
 
-  it.skipIf(!existsSync(distAssetsDir))(
+  it.skipIf(!existsSync(distAssetsDir) && !process.env.CI)(
     "F5 (vi) prod bundle: dist has no vizWallClock string",
     () => {
-    let js = "";
-    for (const name of readdirSync(distAssetsDir)) {
-      if (name.endsWith(".js")) js += readFileSync(join(distAssetsDir, name), "utf8");
-    }
-    expect(js.includes("vizWallClock")).toBe(false);
+      expect(existsSync(distAssetsDir)).toBe(true);
+      let js = "";
+      for (const name of readdirSync(distAssetsDir)) {
+        if (name.endsWith(".js")) js += readFileSync(join(distAssetsDir, name), "utf8");
+      }
+      expect(js.includes("vizWallClock")).toBe(false);
+    },
+  );
+
+  it("Q4 flag clock: 01:05 +30s rebuild +1s → {h:1,m:5,s:31}", () => {
+    vi.stubEnv("DEV", true);
+    let mono = 0;
+    setVizClockInjector(() => mono);
+    applyDevVizWallFlagsOnBuild("?vizWallClock=01:05", TILES_2X2);
+    mono = 30_000;
+    applyDevVizWallFlagsOnBuild("?vizWallClock=01:05", TILES_2X2);
+    mono = 31_000;
+    fillDevWallFlagPartsScratch(mono);
+    expect({ h: nixieWallPartsScratch.h, m: nixieWallPartsScratch.m, s: nixieWallPartsScratch.s }).toEqual({
+      h: 1,
+      m: 5,
+      s: 31,
+    });
+  });
+
+  it("Q3 bad tile cost 1: — absent, no LIMITED; 1:3000 would LIMITED tile 1", () => {
+    vi.stubEnv("DEV", true);
+    expectBadTileCostAbsent("1:");
+  });
+
+  it("Q3 bad tile cost 1.0: — absent, no LIMITED; 1:3000 would LIMITED tile 1", () => {
+    vi.stubEnv("DEV", true);
+    expectBadTileCostAbsent("1.0:");
+  });
+
+  it("Q3 bad tile cost 0x1: — absent, no LIMITED; 1:3000 would LIMITED tile 1", () => {
+    vi.stubEnv("DEV", true);
+    expectBadTileCostAbsent("0x1:");
+  });
+
+  it("Q3 bad tile cost 1:1e3 — absent, no LIMITED; 1:3000 would LIMITED tile 1", () => {
+    vi.stubEnv("DEV", true);
+    expectBadTileCostAbsent("1:1e3");
+  });
+
+  it("Q3 bad tile cost 1:2.5 — absent, no LIMITED; 1:3000 would LIMITED tile 1", () => {
+    vi.stubEnv("DEV", true);
+    expectBadTileCostAbsent("1:2.5");
   });
 });
 
-function expectNoLimitedAfterSoak(tiles: readonly string[]): void {
+function soakTilesHud(tiles: readonly string[]): void {
   syncVizTileScope(tiles);
-  const budget = new VizFrameBudget(() => 0, tiles[0]);
+  const budgets = tiles.map((id) => new VizFrameBudget(() => 0, id));
   const state = fatLanFixture();
-  const line = createTileHudLabelLine();
-  const el = document.createElement("span");
-  const err = vi.spyOn(console, "error").mockImplementation(() => {});
-  for (let i = 0; i < 600; i++) {
-    budget.deliver(state, monoMs(0), 0, () => {}, () => ({
-      t: 0,
-      dt: 0,
-      audio: 0,
-      packets: [],
-      rf: [],
-      talkers: [],
-      headlines: [],
-    }));
-    const text = line.limitedLabel(1, 0);
-    if (text) line.writeText(el, text);
+  for (let i = 0; i < 120; i++) {
+    for (const budget of budgets) {
+      budget.deliver(state, monoMs(0), 0, () => {}, () => ({
+        t: 0,
+        dt: 0,
+        audio: 0,
+        packets: [],
+        rf: [],
+        talkers: [],
+        headlines: [],
+      }));
+    }
+    vizTileBudgetRegistry.advanceTick();
   }
-  expect(el.textContent).toBe("");
-  expect(el.textContent).not.toContain("LIMITED");
-  expect(err).not.toHaveBeenCalled();
-  err.mockRestore();
+}
+
+function expectNoLimitedAfterSoak(tiles: readonly string[]): void {
+  soakTilesHud(tiles);
+  for (const id of tiles) {
+    const chrome = tileHudChrome(vizTileBudgetRegistry.getTile(id), vizTileBudgetRegistry.currentTick(), tiles.length);
+    expect(chrome.state).not.toBe("limited");
+    expect(chrome.limitedLabel).toBeNull();
+  }
+}
+
+function expectBadTileCostAbsent(flag: string): void {
+  applyDevVizWallFlagsOnBuild(`?vizTileCostTicks=${flag}`, TILES_2X2);
+  expect(vizBuildCostTicksForTile(TILES_2X2[0]!, 0)).toBeUndefined();
+  expectNoLimitedAfterSoak(TILES_2X2);
+  resetDevVizWallFlagsStateForTests();
+  vizTileBudgetRegistry.reset();
+  applyDevVizWallFlagsOnBuild(`?vizTileCostTicks=1:${LIMITED_DOGFOOD_TICKS}`, TILES_2X2);
+  soakTilesHud(TILES_2X2);
+  const chrome = tileHudChrome(
+    vizTileBudgetRegistry.getTile(TILES_2X2[0]!),
+    vizTileBudgetRegistry.currentTick(),
+    TILES_2X2.length,
+  );
+  expect(chrome.state).toBe("limited");
+  expect(vizTileBudgetRegistry.getTile(TILES_2X2[1]!).skipped).toBe(0);
 }

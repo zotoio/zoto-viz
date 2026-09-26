@@ -1023,27 +1023,36 @@ function feed(m: StateMsg): void {
       : parseSourceBind(optsFor(mode));
     syncVizBudgetTileScope();
     const buildFrame = (s: StateMsg, pt: MonoMs, a: number) => mainVizBuildFrame(s, pt, a, idle, bind);
-    const delivered = mainVizDeliver({
-      budget: vizBudget,
-      prevClockMs: vizFrameClockMs,
-      state: shown,
-      audio,
-      buildFrame,
-      onFrame: (f) => {
-        if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-        sandbox.frame(f);
-        if (packId) {
-          syncVizPackRenderCanvas(renderHost.bufferPixelSize());
-          runPackFrameHandler(packId, f, {
-            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-          }, optsFor(mode));
-        }
-      },
-    });
-    vizFrameClockMs = delivered.nextClockMs;
-    const frame = delivered.frame;
+    const scopeTileIds = mosaic?.on && mosaic.tileIds.length ? mosaic.tileIds : ["main"];
+    const primaryTileId = mosaic?.on ? (mosaic.mainMode || scopeTileIds[0] || "main") : "main";
+    let frame: ReturnType<typeof mainVizDeliver>["frame"] = null;
+    for (let ti = 0; ti < scopeTileIds.length; ti++) {
+      const tileId = scopeTileIds[ti]!;
+      vizBudget.setTileId(tileId);
+      const delivered = mainVizDeliver({
+        budget: vizBudget,
+        prevClockMs: vizFrameClockMs,
+        state: shown,
+        audio,
+        buildFrame,
+        onFrame: tileId === primaryTileId
+          ? (f) => {
+            if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
+            sandbox.frame(f);
+            if (packId) {
+              syncVizPackRenderCanvas(renderHost.bufferPixelSize());
+              runPackFrameHandler(packId, f, {
+                writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+                writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+                writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+              }, optsFor(mode));
+            }
+          }
+          : () => {},
+      });
+      vizFrameClockMs = delivered.nextClockMs;
+      if (tileId === primaryTileId) frame = delivered.frame;
+    }
     if (frame) {
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");

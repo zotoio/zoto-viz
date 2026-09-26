@@ -28,7 +28,7 @@ import {
 } from "../core/shuffle";
 import { guardReadableAnim } from "../graph/readable";
 import { applyDreamAnimWithTileLimit, countMosaicTiles, dreamAnimBootFromStorage } from "../graph/mosaic-viz-tile-guard";
-import { mosaicWallLayoutRefusedMessage } from "./viz-copy";
+import { mosaicWallLayoutBootRefusedMessage, mosaicWallLayoutRefusedMessage } from "./viz-copy";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import {
   AUTH_SETUPS,
@@ -129,6 +129,12 @@ export class Settings {
   private onFeedChange: (c: FeedConfig) => void = () => {};
   private onChatChange: (c: ChatConfig) => void = () => {};
   lastMosaicTileLimitMessage = "";
+
+  bootRefusedMosaicTilesRaw(): string | null {
+    return this.mosaicBootRefusedTilesRaw;
+  }
+
+  private mosaicBootRefusedTilesRaw: string | null = null;
   private mosaicWallStatusEl: HTMLDivElement | null = null;
   private animUi: {
     follow: Toggle; cycle: Toggle; randomize: Toggle;
@@ -276,6 +282,8 @@ export class Settings {
     this.anim = boot.anim;
     if (boot.bootRefused) {
       this.lastMosaicTileLimitMessage = boot.message ?? "";
+      this.mosaicBootRefusedTilesRaw = rawTilesJson
+        ?? (Array.isArray(rawTiles) && rawTiles.length ? JSON.stringify(rawTiles) : null);
       this.renderMosaicWallStatus();
     }
     this.feed = loadFeed(cfg.storePrefix);
@@ -946,6 +954,7 @@ export class Settings {
       this.anim.mosaic = v;
       resetLayout();
       this.persistAnim();
+      this.restoreBootRefusedMosaicTilesInStorage();
       this.animUi?.syncTiles();
     });
     const hero = chips(HERO_POS, this.anim.hero, (v) => {
@@ -1744,12 +1753,31 @@ export class Settings {
       this.renderMosaicWallStatus();
       return;
     }
-    this.lastMosaicTileLimitMessage = "";
+    if (!this.mosaicBootRefusedTilesRaw) {
+      this.lastMosaicTileLimitMessage = "";
+    } else {
+      try {
+        const raw = JSON.parse(this.mosaicBootRefusedTilesRaw) as unknown;
+        const n = Array.isArray(raw) ? raw.filter((t) => typeof t === "string" && t.trim()).length : 0;
+        this.lastMosaicTileLimitMessage = mosaicWallLayoutBootRefusedMessage(n, VIZ_MAX_ACTIVE_TILES);
+      } catch {
+        this.lastMosaicTileLimitMessage = mosaicWallLayoutBootRefusedMessage(0, VIZ_MAX_ACTIVE_TILES);
+      }
+    }
     this.renderMosaicWallStatus();
     this.anim = anim;
     this.syncAnimUi();
     this.syncTheme();
     this.persistAnim();
+    this.restoreBootRefusedMosaicTilesInStorage();
+  }
+
+  private restoreBootRefusedMosaicTilesInStorage(): void {
+    if (this.mosaicBootRefusedTilesRaw === null) return;
+    localStorage.setItem(
+      `${this.cfg.storePrefix}.anim.mosaicTiles`,
+      this.mosaicBootRefusedTilesRaw,
+    );
   }
 
   private ensureMosaicWallStatusEl(): HTMLDivElement {
@@ -2089,7 +2117,9 @@ export class Settings {
     if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
     else localStorage.removeItem(`${p}.anim.mosaicTree`);
     localStorage.setItem(`${p}.anim.mosaicMaxId`, a.mosaicMaxId || "");
-    if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
+    if (this.mosaicBootRefusedTilesRaw !== null) {
+      localStorage.setItem(`${p}.anim.mosaicTiles`, this.mosaicBootRefusedTilesRaw);
+    } else if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
     else localStorage.removeItem(`${p}.anim.mosaicTiles`);
     localStorage.setItem(`${p}.anim.mosaicSharedTheme`, a.mosaicSharedTheme ? "1" : "0");
     if (a.mosaicUniqueSkies === true) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "1");

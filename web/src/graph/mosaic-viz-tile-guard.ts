@@ -55,8 +55,9 @@ export function dreamAnimBootFromStorage(
     ...loadedAnim,
     mosaicTiles: Array.isArray(rawTiles) ? (rawTiles as string[]) : loadedAnim.mosaicTiles,
   };
-  const n = countMosaicTiles(incoming);
-  if (loadedAnim.mosaic !== "off" && n > VIZ_MAX_ACTIVE_TILES) {
+  const rawCount = countRawMosaicTileIds(rawTiles);
+  const n = rawCount > 0 ? rawCount : countMosaicTiles(incoming);
+  if (n > VIZ_MAX_ACTIVE_TILES) {
     return {
       anim: { ...DEFAULT_DREAM },
       bootRefused: true,

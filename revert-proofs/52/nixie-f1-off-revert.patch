@@ -1,13 +1,12 @@
-diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
-index 389e5e2..b1c07ce 100644
---- a/web/src/plugins/viz-pack-host.ts
-+++ b/web/src/plugins/viz-pack-host.ts
-@@ -305,7 +305,7 @@ export function runPackFrameHandler(
-       const wallMs = vizWallMs();
-       const parts = hostNixieWallSecond.syncWallSecond(wallMs);
-       const latch = nixieUploadLatchFor(nixiePackTileId(opts));
--      if (nixieWallUploadDue(nixieActiveLook, parts, latch)) {
-+      if (true) {
-         handlers.writeBuffer(0, hostNixieClock.tick(
-           wallMs,
-           nixieActiveLook,
+diff --git a/web/src/plugins/nixie-wall-upload.ts b/web/src/plugins/nixie-wall-upload.ts
+--- a/web/src/plugins/nixie-wall-upload.ts
++++ b/web/src/plugins/nixie-wall-upload.ts
+@@ -27,7 +27,7 @@ export function nixieWallUploadDue(
+   const sig = nixieLookSig(look, canvasW, canvasH);
+   const timeChanged = look.seconds
+     ? parts.s !== latch.lastS || parts.m !== latch.lastM || parts.h !== latch.lastH
+-    : parts.m !== latch.lastM || parts.h !== latch.lastH;
++    : parts.s !== latch.lastS || parts.m !== latch.lastM || parts.h !== latch.lastH;
+   const lookChanged = sig !== latch.lookSig;
+   const first = latch.lastH < 0;
+   if (!first && !timeChanged && !lookChanged) return false;

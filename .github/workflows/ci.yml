@@ -49,6 +49,9 @@ jobs:
         run: |
           pnpm install
           pnpm approve-builds esbuild
+      - name: Production build (prod-bundle vitest gate)
+        working-directory: web
+        run: pnpm build
       - name: Web tests and coverage
         working-directory: web
         run: pnpm test:coverage

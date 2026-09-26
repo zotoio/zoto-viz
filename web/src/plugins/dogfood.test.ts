@@ -160,6 +160,7 @@ describe("hn term pack", () => {
 
 describe("viz dogfood gates", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     vizTileBudgetRegistry.reset();
     syncVizTileScope(["dogfood"]);
   });

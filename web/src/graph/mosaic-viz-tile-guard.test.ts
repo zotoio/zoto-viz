@@ -2,11 +2,21 @@ import { describe, beforeEach, expect, it } from "vitest";
 import { DEFAULT_DREAM } from "./scene";
 import { mosaicWallLayoutRefusedMessage } from "../ui/viz-copy";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
-import { applyDreamAnimWithTileLimit, countMosaicTiles } from "./mosaic-viz-tile-guard";
+import { applyDreamAnimWithTileLimit, countMosaicTiles, dreamAnimBootFromStorage } from "./mosaic-viz-tile-guard";
 
 describe("mosaic viz tile guard", () => {
   beforeEach(() => {
     expect.hasAssertions();
+  });
+
+  it("dreamAnimBootFromStorage refuses nine saved tile ids", () => {
+    const nine = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+    const loaded = { ...DEFAULT_DREAM, mosaic: "8", mosaicTiles: [] };
+    const boot = dreamAnimBootFromStorage(loaded, nine);
+    expect(boot.bootRefused).toBe(true);
+    expect(boot.message).toBe(
+      "Couldn't load your saved wall layout. It has 9 tiles and the limit is 8, so the default view is showing.",
+    );
   });
 
   it("applyDreamAnimWithTileLimit refuses nine tiles with formatted copy", () => {

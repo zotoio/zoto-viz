@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_DREAM } from "../graph/scene";
+import { shippedSettings } from "../core/profiles";
 import { mosaicWallLayoutBootRefusedMessage, mosaicWallLayoutRefusedMessage } from "./viz-copy";
 import { Settings } from "./settings";
 
@@ -12,7 +13,7 @@ describe("mosaic viz tile guard H6", () => {
     localStorage.clear();
   });
 
-  it("H6 boot: nine saved tiles → default view, boot copy, storage byte-identical (reload twice)", () => {
+  it("Q1 H6 boot: nine saved tiles survive constructor, profiles.boot applyAnim, and persistAnim (twice)", () => {
     const prefix = "zoto-viz-h6-boot";
     const nine = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
     const raw = JSON.stringify(nine);
@@ -23,8 +24,13 @@ describe("mosaic viz tile guard H6", () => {
       "Couldn't load your saved wall layout. It has 9 tiles and the limit is 8, so the default view is showing.";
     expect(mosaicWallLayoutBootRefusedMessage(9, 8)).toBe(bootMsg);
 
+    const profileAnim = shippedSettings().anim;
+
     for (let pass = 0; pass < 2; pass++) {
       const s = new Settings({ storePrefix: prefix, onChange: () => {} });
+      expect(s.bootRefusedMosaicTilesRaw()).toBe(raw);
+      expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(raw);
+      s.applyAnim(profileAnim);
       expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(raw);
       expect(s.lastMosaicTileLimitMessage).toBe(bootMsg);
       const status = s.el.querySelector<HTMLElement>(".mosaic-wall-status");
@@ -35,6 +41,9 @@ describe("mosaic viz tile guard H6", () => {
       expect(s.animSettings.mosaic).toBe("off");
       expect(s.animSettings.mosaicTiles).toEqual([]);
       expect(s.animSettings.mosaic).toBe(DEFAULT_DREAM.mosaic);
+      s.applyAnim(profileAnim);
+      expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(raw);
+      expect(status?.textContent).toBe(bootMsg);
     }
   });
 

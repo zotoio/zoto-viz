@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setVizBuildCostTicksInjector } from "../core/viz-clock"
 import { monoMs } from "../core/viz-time";
 import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
@@ -13,6 +13,10 @@ import {
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 
 describe("viz merge gates", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("fat LAN fixture forces over-budget skip without calling sandbox.frame", () => {
     const fatLan = fatLanFixture();
     expect(fatLan.devices.length).toBeGreaterThanOrEqual(300);
