@@ -1,10 +1,24 @@
 import {
+  fractalPresetLabel,
+  fractalTypeLabel,
+} from "./config-mutation";
+import {
   type FractalOptions,
   fractalTypeIndex,
   paletteIndex,
   parseFractalOptions,
 } from "./options";
 import type { FractalPointerState } from "./interaction";
+
+/** Host render-scale governor will replace this (see plugin.yml render.scale follow-up). */
+export function fractalRenderScale(): number {
+  return 1.0;
+}
+
+/** Hard GPU ceilings — shader loops are capped regardless of slider values. */
+export const FRACTAL_ITER_CEIL = 96;
+export const FRACTAL_STEPS_CEIL = 128;
+export const FRACTAL_ZOOM_LOG_LIMIT = 13.8;
 
 /** Slot 0 layout — must match `sky/fragment.glsl`. */
 export const FZ_SLOT = {
@@ -51,9 +65,12 @@ export const FZ_SLOT = {
   mandelScale: 40,
   frameMs: 41,
   mark: 42,
+  precisionClamp: 43,
 } as const;
 
-export const FZ_SLOT0_FLOATS = 43;
+export const FZ_SLOT0_FLOATS = 44;
+
+export let fractalHudCaption = "Mandelbulb · Classic Dive";
 
 export interface FractalDriveInput {
   t: number;
@@ -79,6 +96,7 @@ export function setFractalOptions(o: Record<string, string | undefined>): Fracta
   if (json !== optsJson) {
     optsJson = json;
     optsCache = parseFractalOptions(o);
+    fractalHudCaption = `${fractalTypeLabel(optsCache.type)} · ${fractalPresetLabel(optsCache.preset)}`;
   }
   return optsCache;
 }
@@ -98,7 +116,6 @@ let pingPhase = 0;
 let morphT = 0;
 let pilotSeed = 0.37;
 let lastFrameMs = 0;
-let adaptiveScale = 1;
 
 const PILOT_TARGETS = [
   [-0.745, 0.186],
@@ -126,15 +143,11 @@ export function resetFractalDrive(): void {
   optsJson = "";
   optsCache = parseFractalOptions();
   lastFrameMs = 0;
-  adaptiveScale = 1;
+  fractalHudCaption = "Mandelbulb · Classic Dive";
 }
 
 export function getFractalFrameMs(): number {
   return lastFrameMs;
-}
-
-export function getFractalAdaptiveScale(): number {
-  return adaptiveScale;
 }
 
 function dirFromAngles(y: number, p: number, r: number): [number, number, number] {
@@ -153,53 +166,61 @@ function dirFromAngles(y: number, p: number, r: number): [number, number, number
 export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   const { t, dt, audio, aspect, opts, pointer } = input;
   lastFrameMs = dt * 1000;
-
-  const budgetMs = 14;
-  if (dt > 0) {
-    if (lastFrameMs > budgetMs * 1.35) adaptiveScale = Math.max(0.25, adaptiveScale * 0.92);
-    else if (lastFrameMs < budgetMs * 0.75) adaptiveScale = Math.min(opts.renderScale, adaptiveScale * 1.04);
-  }
-  const renderScale = Math.min(opts.renderScale, adaptiveScale);
+  const renderScale = fractalRenderScale();
 
   if (opts.resetCam) resetFractalCamera();
+
+  let precisionClamp = 0;
+  if (zoomLog > FRACTAL_ZOOM_LOG_LIMIT) {
+    zoomLog = FRACTAL_ZOOM_LOG_LIMIT;
+    precisionClamp = 1;
+  }
 
   const audioDrv = opts.audioReactive ? audio : 0;
   const zoomSign = opts.zoomDir === "out" ? -1 : 1;
   pingPhase += dt * (opts.zoomDir === "pingpong" ? 0.45 : 0);
   const ping = opts.zoomDir === "pingpong" ? Math.sin(pingPhase) : zoomSign;
 
-  if (!opts.paused) {
-    const zspd = opts.reducedMotion ? opts.zoomSpeed * 0.25 : opts.zoomSpeed;
-    zoomLog += dt * zspd * ping * (0.65 + audioDrv * 0.5);
+  const driftOnly = opts.reducedMotion && opts.autoPilot;
+  const holdStill = opts.reducedMotion && opts.paused;
+
+  if (!holdStill) {
+    const zspd = opts.reducedMotion ? Math.min(opts.zoomSpeed, 0.12) : opts.zoomSpeed;
+    if (!driftOnly) zoomLog += dt * zspd * ping * (0.65 + audioDrv * 0.5);
     morphT += dt * (opts.morph ? 0.35 + audioDrv * 0.2 : 0);
-    roll += dt * opts.rollSpeed * (0.5 + audioDrv);
-    if (opts.autoPilot && !opts.manualOrbit) {
-      yaw += dt * opts.rotateSpeed * 0.35;
+    if (!opts.reducedMotion) roll += dt * opts.rollSpeed * (0.5 + audioDrv);
+    if (opts.autoPilot) {
+      const drift = opts.reducedMotion ? 0.08 : 0.35;
+      yaw += dt * opts.rotateSpeed * drift;
       const target = PILOT_TARGETS[Math.floor((t * 0.07 + pilotSeed) % PILOT_TARGETS.length)]!;
       camX += (target[0] * 0.35 - camX) * dt * 0.15;
       camY += (target[1] * 0.2 - camY) * dt * 0.12;
     }
   }
 
-  if (opts.manualOrbit || pointer.dragging) {
-    yaw += pointer.yaw;
-    pitch = pointer.pitch;
-    zoomLog += pointer.zoomWheel;
-    pointer.yaw = 0;
-    pointer.zoomWheel = 0;
-  } else if (!opts.autoPilot) {
+  if (!opts.autoPilot && !opts.reducedMotion) {
     yaw += dt * opts.rotateSpeed;
   }
+  yaw += pointer.yaw;
+  pitch = pointer.pitch;
+  zoomLog += pointer.zoomWheel;
+  pointer.yaw = 0;
+  pointer.zoomWheel = 0;
 
   const [dirX, dirY, dirZ] = dirFromAngles(yaw, pitch, roll);
   const step = Math.exp(-zoomLog * 0.35);
-  camX += dirX * step * dt * 0.4 * ping;
-  camY += dirY * step * dt * 0.4 * ping;
-  camZ += dirZ * step * dt * 0.4 * ping;
+  if (!holdStill && !driftOnly) {
+    camX += dirX * step * dt * 0.4 * ping;
+    camY += dirY * step * dt * 0.4 * ping;
+    camZ += dirZ * step * dt * 0.4 * ping;
+  }
 
   const power = opts.morph
     ? opts.power + Math.sin(morphT) * opts.morphAmount * 2
     : opts.power;
+
+  const iter = Math.min(opts.maxIter, FRACTAL_ITER_CEIL);
+  const steps = Math.min(opts.maxSteps, FRACTAL_STEPS_CEIL);
 
   const slot0 = new Array<number>(FZ_SLOT0_FLOATS).fill(0);
   slot0[FZ_SLOT.camX] = camX;
@@ -214,12 +235,12 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   slot0[FZ_SLOT.power] = power;
   slot0[FZ_SLOT.scale] = opts.scale;
   slot0[FZ_SLOT.fold] = opts.fold;
-  slot0[FZ_SLOT.maxIterN] = opts.maxIter / 160;
-  slot0[FZ_SLOT.maxStepsN] = (opts.maxSteps * renderScale) / 192;
-  slot0[FZ_SLOT.detail] = opts.detail / renderScale;
+  slot0[FZ_SLOT.maxIterN] = iter / FRACTAL_ITER_CEIL;
+  slot0[FZ_SLOT.maxStepsN] = (steps * renderScale) / FRACTAL_STEPS_CEIL;
+  slot0[FZ_SLOT.detail] = opts.detail / Math.max(0.25, renderScale);
   slot0[FZ_SLOT.ao] = opts.ao;
   slot0[FZ_SLOT.shadow] = opts.shadow;
-  slot0[FZ_SLOT.glow] = opts.glow;
+  slot0[FZ_SLOT.glow] = Math.max(0.2, opts.glow);
   slot0[FZ_SLOT.fog] = opts.fog;
   slot0[FZ_SLOT.dof] = opts.dof ? 1 : 0;
   slot0[FZ_SLOT.palette] = paletteIndex(opts.palette);
@@ -244,7 +265,11 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   slot0[FZ_SLOT.mandelCy] = opts.mandelCy;
   slot0[FZ_SLOT.mandelScale] = Math.exp(-zoomLog * 0.08) * aspect;
   slot0[FZ_SLOT.frameMs] = lastFrameMs;
+  slot0[FZ_SLOT.precisionClamp] = precisionClamp;
   slot0[FZ_SLOT.mark] = 1;
+
+  fractalHudCaption = `${fractalTypeLabel(opts.type)} · ${fractalPresetLabel(opts.preset)}`;
+  if (precisionClamp) fractalHudCaption += " · zoom limit";
 
   const bright = 1.05 + opts.glow * 0.45 + audioDrv * 0.3;
   const accent: [number, number, number] = [

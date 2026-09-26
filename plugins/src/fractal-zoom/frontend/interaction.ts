@@ -14,6 +14,9 @@ const state: FractalPointerState = {
   dragging: false,
 };
 
+/** Sandbox iframe has no DOM; host may attach listeners later via a generic bridge. */
+export const IDLE_POINTER: FractalPointerState = state;
+
 let attached: HTMLElement | null = null;
 let active = false;
 

@@ -1,8 +1,73 @@
 import { configStoreId, fieldDefault, loadPluginConfig, specCaption, writePluginConfig, type PluginView } from "./plugin";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
+import { applyFractalConfigActions, fractalFieldBaseline } from "./fractal-config-ui";
+import { fractalPresetConfig } from "../../../plugins/src/fractal-zoom/frontend/config-mutation";
 import { mountNestCamFields } from "./nest-cams-ui";
 import type { SdmDevice } from "./nest-cams-look";
+
+function appendFieldControl(
+  row: HTMLElement,
+  f: PluginField,
+  values: Record<string, string>,
+  spec: PluginView,
+  persist: () => void,
+): void {
+  const current = values[f.key] ?? fieldDefault(f);
+  const baseline = spec.id === "fractal-zoom" ? fractalFieldBaseline(values, f.key) : undefined;
+  const dirty = baseline !== undefined && String(current) !== String(baseline);
+  const wrap = (el: HTMLElement) => {
+    if (dirty) el.classList.add("field-dirty");
+    el.setAttribute("data-field-key", f.key);
+    row.append(el);
+  };
+  if (f.type === "boolean") {
+    const t = new Toggle({
+      label: f.label,
+      title: f.hint,
+      checked: current === "1" || current === "true",
+      onChange: (on) => { values[f.key] = on ? "1" : "0"; persist(); },
+    });
+    wrap(t.el);
+  } else if (f.type === "select" && f.values?.length) {
+    const s = new Select({
+      caption: f.label,
+      title: f.hint,
+      options: f.values.map(([value, label]) => ({ value, label })),
+      value: current,
+      onChange: (v) => {
+        values[f.key] = v;
+        if (spec.id === "fractal-zoom" && f.key === "preset" && v !== "custom") {
+          Object.assign(values, fractalPresetConfig(v), { preset: v });
+        }
+        persist();
+      },
+    });
+    wrap(s.el);
+  } else if (f.type === "number") {
+    const min = f.min ?? 0;
+    const max = f.max ?? Math.max(min + 1, 100);
+    const sl = new Slider({
+      label: f.label,
+      title: f.hint,
+      min,
+      max,
+      step: f.step ?? 1,
+      value: Number(current),
+      onInput: (v) => { values[f.key] = String(v); persist(); },
+    });
+    wrap(sl.el);
+  } else {
+    const tf = new TextField({
+      caption: f.label,
+      title: f.hint,
+      placeholder: f.default !== undefined ? String(f.default) : undefined,
+      value: current,
+      onInput: (v) => { values[f.key] = v; persist(); },
+    });
+    wrap(tf.el);
+  }
+}
 
 export function fillPluginFields(
   host: HTMLElement,
@@ -37,6 +102,7 @@ export function fillPluginFields(
     return;
   }
   const persist = () => {
+    applyFractalConfigActions(spec, values);
     writePluginConfig(configStoreId(spec), values);
     onPersist(configStoreId(spec), values);
   };
@@ -46,54 +112,45 @@ export function fillPluginFields(
     if (f.type === "textarea") notes.push(f);
     else compact.push(f);
   }
-  if (compact.length) {
+  const hasSections = compact.some((f) => f.section);
+  if (compact.length && hasSections) {
+    const groups = new Map<string, PluginField[]>();
+    for (const f of compact) {
+      const s = f.section ?? "";
+      if (!groups.has(s)) groups.set(s, []);
+      groups.get(s)!.push(f);
+    }
+    for (const [section, fields] of groups) {
+      const container = section && section !== "Presets"
+        ? document.createElement("details")
+        : document.createElement("div");
+      if (container instanceof HTMLDetailsElement) {
+        container.className = "sec sec-collapsible";
+        const sum = document.createElement("summary");
+        sum.className = "sec-title";
+        sum.textContent = section;
+        container.append(sum);
+      } else {
+        container.className = "sec";
+        if (section) {
+          const title = document.createElement("div");
+          title.className = "sec-title";
+          title.textContent = section;
+          container.append(title);
+        }
+      }
+      const row = document.createElement("div");
+      row.className = "sec-controls";
+      for (const f of fields) appendFieldControl(row, f, values, spec, persist);
+      container.append(row);
+      host.append(container);
+    }
+  } else if (compact.length) {
     const sec = document.createElement("div");
     sec.className = "sec";
     const row = document.createElement("div");
     row.className = "sec-controls";
-    for (const f of compact) {
-      const current = values[f.key] ?? fieldDefault(f);
-      if (f.type === "boolean") {
-        const t = new Toggle({
-          label: f.label,
-          title: f.hint,
-          checked: current === "1" || current === "true",
-          onChange: (on) => { values[f.key] = on ? "1" : "0"; persist(); },
-        });
-        row.append(t.el);
-      } else if (f.type === "select" && f.values?.length) {
-        const s = new Select({
-          caption: f.label,
-          title: f.hint,
-          options: f.values.map(([value, label]) => ({ value, label })),
-          value: current,
-          onChange: (v) => { values[f.key] = v; persist(); },
-        });
-        row.append(s.el);
-      } else if (f.type === "number") {
-        const min = f.min ?? 0;
-        const max = f.max ?? Math.max(min + 1, 100);
-        const sl = new Slider({
-          label: f.label,
-          title: f.hint,
-          min,
-          max,
-          step: f.step ?? 1,
-          value: Number(current),
-          onInput: (v) => { values[f.key] = String(v); persist(); },
-        });
-        row.append(sl.el);
-      } else {
-        const tf = new TextField({
-          caption: f.label,
-          title: f.hint,
-          placeholder: f.default !== undefined ? String(f.default) : undefined,
-          value: current,
-          onInput: (v) => { values[f.key] = v; persist(); },
-        });
-        row.append(tf.el);
-      }
-    }
+    for (const f of compact) appendFieldControl(row, f, values, spec, persist);
     sec.append(row);
     host.append(sec);
   }

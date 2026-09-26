@@ -131,6 +131,8 @@ function asField(key: string, raw: unknown): PluginField | undefined {
   if (typeof rec.min === "number") field.min = rec.min;
   if (typeof rec.max === "number") field.max = rec.max;
   if (typeof rec.step === "number") field.step = rec.step;
+  const section = asString(rec.section);
+  if (section) field.section = section;
   return field;
 }
 

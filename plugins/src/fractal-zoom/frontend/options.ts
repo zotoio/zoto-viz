@@ -42,22 +42,22 @@ export interface FractalPreset {
 }
 
 export const FRACTAL_PRESETS: FractalPreset[] = [
-  { id: "bulb-classic", label: "Mandelbulb dive", type: "mandelbulb", power: 8, palette: "cosmic", zoomSpeed: 0.55, glow: 0.35, fog: 0.2, morph: true },
-  { id: "box-abyss", label: "Mandelbox abyss", type: "mandelbox", scale: 2.1, fold: 0.55, palette: "ember", zoomSpeed: 0.45, glow: 0.4, fog: 0.35, morph: false },
-  { id: "menger-tunnel", label: "Menger tunnel", type: "menger", palette: "ice", zoomSpeed: 0.5, glow: 0.25, fog: 0.15, morph: false },
-  { id: "sierpinski-crystal", label: "Sierpinski crystal", type: "sierpinski", palette: "acid", zoomSpeed: 0.42, glow: 0.5, fog: 0.1, morph: true },
-  { id: "julia-quaternion", label: "Quaternion Julia", type: "julia4d", palette: "sunset", zoomSpeed: 0.48, glow: 0.45, fog: 0.25, morph: true },
-  { id: "kaleido-ifs", label: "Kaleidoscopic IFS", type: "kaleido", palette: "neon", zoomSpeed: 0.4, glow: 0.55, fog: 0.2, morph: true },
-  { id: "mandel-deep", label: "Mandelbrot deep zoom", type: "mandel2d", palette: "deep", zoomSpeed: 0.6, glow: 0.3, fog: 0.05, morph: false },
-  { id: "julia-deep", label: "Julia deep zoom", type: "julia2d", palette: "cosmic", zoomSpeed: 0.58, glow: 0.35, fog: 0.08, morph: true },
+  { id: "bulb-classic", label: "Classic Dive", type: "mandelbulb", power: 8, palette: "cosmic", zoomSpeed: 0.55, glow: 0.35, fog: 0.2, morph: true },
+  { id: "box-abyss", label: "Deep Cathedral", type: "mandelbox", scale: 2.1, fold: 0.55, palette: "ember", zoomSpeed: 0.45, glow: 0.4, fog: 0.35, morph: false },
+  { id: "menger-tunnel", label: "Menger Tunnel", type: "menger", palette: "ice", zoomSpeed: 0.5, glow: 0.25, fog: 0.15, morph: false },
+  { id: "sierpinski-crystal", label: "Crystal Spire", type: "sierpinski", palette: "acid", zoomSpeed: 0.42, glow: 0.5, fog: 0.1, morph: true },
+  { id: "julia-quaternion", label: "Quaternion Bloom", type: "julia4d", palette: "sunset", zoomSpeed: 0.48, glow: 0.45, fog: 0.25, morph: true },
+  { id: "kaleido-ifs", label: "Kaleidoscope", type: "kaleido", palette: "neon", zoomSpeed: 0.4, glow: 0.55, fog: 0.2, morph: true },
+  { id: "mandel-deep", label: "Seahorse Valley", type: "mandel2d", palette: "deep", zoomSpeed: 0.6, glow: 0.3, fog: 0.05, morph: false },
+  { id: "julia-deep", label: "Julia Spiral", type: "julia2d", palette: "cosmic", zoomSpeed: 0.58, glow: 0.35, fog: 0.08, morph: true },
 ];
 
-function num(o: Record<string, string | undefined>, key: string, def: number, min: number, max: number): number {
+/** Host sliders clamp; pack only coerces types. */
+function num(o: Record<string, string | undefined>, key: string, def: number): number {
   const raw = o[key];
   if (raw === undefined || raw === "") return def;
   const v = Number(raw);
-  if (!Number.isFinite(v)) return def;
-  return Math.min(max, Math.max(min, v));
+  return Number.isFinite(v) ? v : def;
 }
 
 function bool(o: Record<string, string | undefined>, key: string, def: boolean): boolean {
@@ -210,58 +210,52 @@ export function parseFractalOptions(
     reducedMotion: reduced,
     type: pick(o, "fractalType", FRACTAL_TYPES, FRACTAL_DEFAULTS.type),
     preset: o.preset ?? FRACTAL_DEFAULTS.preset,
-    zoomSpeed: num(o, "zoomSpeed", reduced ? 0.08 : FRACTAL_DEFAULTS.zoomSpeed, 0, 2),
+    zoomSpeed: num(o, "zoomSpeed", reduced ? 0.08 : FRACTAL_DEFAULTS.zoomSpeed),
     zoomDir: pick(o, "zoomDir", ZOOM_DIRECTIONS, reduced ? "in" : FRACTAL_DEFAULTS.zoomDir),
     autoPilot: bool(o, "autoPilot", !reduced),
     paused: bool(o, "paused", reduced),
     resetCam: bool(o, "resetCam", false),
-    manualOrbit: bool(o, "manualOrbit", false),
-    maxIter: num(o, "maxIter", 72, 16, 160),
-    maxSteps: num(o, "maxSteps", 96, 32, 192),
-    detail: num(o, "detail", 0.0012, 0.0003, 0.01),
-    ao: num(o, "ao", 0.55, 0, 1),
-    shadow: num(o, "shadow", 0.35, 0, 1),
-    glow: num(o, "glow", 0.35, 0, 1),
-    fog: num(o, "fog", 0.22, 0, 1),
+    manualOrbit: false,
+    maxIter: num(o, "maxIter", 72),
+    maxSteps: num(o, "maxSteps", 96),
+    detail: num(o, "detail", 0.0012),
+    ao: num(o, "ao", 0.55),
+    shadow: num(o, "shadow", 0.35),
+    glow: num(o, "glow", 0.35),
+    fog: num(o, "fog", 0.22),
     dof: bool(o, "dof", false),
-    renderScale: num(o, "renderScale", reduced ? 0.5 : 1, 0.25, 1),
+    renderScale: 1,
     palette: pick(o, "palette", PALETTE_PRESETS, FRACTAL_DEFAULTS.palette),
-    paletteCycle: num(o, "paletteCycle", 0.25, 0, 2),
+    paletteCycle: num(o, "paletteCycle", 0.25),
     orbitTrap: bool(o, "orbitTrap", true),
-    hueShift: num(o, "hueShift", 0, -1, 1),
-    saturation: num(o, "saturation", 1, 0, 2),
+    hueShift: num(o, "hueShift", 0),
+    saturation: num(o, "saturation", 1),
     bg: [
-      num(o, "bgR", FRACTAL_DEFAULTS.bg[0], 0, 1),
-      num(o, "bgG", FRACTAL_DEFAULTS.bg[1], 0, 1),
-      num(o, "bgB", FRACTAL_DEFAULTS.bg[2], 0, 1),
+      num(o, "bgR", FRACTAL_DEFAULTS.bg[0]),
+      num(o, "bgG", FRACTAL_DEFAULTS.bg[1]),
+      num(o, "bgB", FRACTAL_DEFAULTS.bg[2]),
     ],
-    rollSpeed: num(o, "rollSpeed", reduced ? 0 : 0.15, 0, 1),
-    rotateSpeed: num(o, "rotateSpeed", reduced ? 0 : 0.22, 0, 1),
+    rollSpeed: num(o, "rollSpeed", reduced ? 0 : 0.15),
+    rotateSpeed: num(o, "rotateSpeed", reduced ? 0 : 0.22),
     morph: bool(o, "morph", true),
-    morphAmount: num(o, "morphAmount", 0.35, 0, 1),
+    morphAmount: num(o, "morphAmount", 0.35),
     audioReactive: bool(o, "audioReactive", true),
-    power: num(o, "power", 8, 2, 16),
-    scale: num(o, "scale", 2.1, 1.2, 3.5),
-    fold: num(o, "fold", 0.55, 0.1, 1.2),
-    juliaCr: num(o, "juliaCr", -0.745, -1.5, 1.5),
-    juliaCi: num(o, "juliaCi", 0.186, -1.5, 1.5),
-    quatC2: num(o, "quatC2", 0.12, -1, 1),
-    quatC3: num(o, "quatC3", 0.08, -1, 1),
-    kaleidoSym: num(o, "kaleidoSym", 6, 3, 12),
-    mandelCx: num(o, "mandelCx", -0.743643887, -2, 1),
-    mandelCy: num(o, "mandelCy", 0.131825904, -1.5, 1.5),
+    power: num(o, "power", 8),
+    scale: num(o, "scale", 2.1),
+    fold: num(o, "fold", 0.55),
+    juliaCr: num(o, "juliaCr", -0.745),
+    juliaCi: num(o, "juliaCi", 0.186),
+    quatC2: num(o, "quatC2", 0.12),
+    quatC3: num(o, "quatC3", 0.08),
+    kaleidoSym: num(o, "kaleidoSym", 6),
+    mandelCx: num(o, "mandelCx", -0.743643887),
+    mandelCy: num(o, "mandelCy", 0.131825904),
   };
 
   const presetId = o.preset ?? base.preset;
-  if (presetId === "random") {
-    base = randomiseFractalOptions(Number(o.randomSeed ?? Date.now() % 10000) / 10000);
-  } else if (presetId !== "custom") {
+  if (presetId !== "custom") {
     const row = FRACTAL_PRESETS.find((p) => p.id === presetId);
     if (row) base = applyPresetRow(base, row);
-  }
-
-  if (o.randomise === "roll") {
-    base = { ...randomiseFractalOptions(Math.random()), preset: "custom" };
   }
 
   return base;

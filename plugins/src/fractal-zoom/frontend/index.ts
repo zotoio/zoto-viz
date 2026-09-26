@@ -1,13 +1,41 @@
-/** Fractal zoom — colours only; host runs `drive.ts` on the sky clock for stable camera buffers. */
+/** Fractal zoom — reads host config (config.read) and writes sky buffers each frame. */
+
+import { packFractalDrive, resetFractalDrive } from "./drive";
+import { IDLE_POINTER } from "./interaction";
+
+type VizFrame = { t: number; dt: number; audio: number };
 
 declare const zoto: {
-  onFrame: (() => void) | null;
+  onFrame: ((frame: VizFrame) => void) | null;
+  onConfig: ((config: Record<string, string>) => void) | null;
+  writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
+  getConfig: () => Record<string, string>;
 };
 
-zoto.onFrame = () => {
-  zoto.writeUniform("uAccent", [0.45, 0.72, 1.0]);
-  zoto.writeUniform("uBg", [0.02, 0.04, 0.09]);
-  zoto.writeUniform("uBright", 1.05);
-  zoto.writeUniform("uOpacity", 1);
+let lastT = 0;
+let lastType = "";
+
+zoto.onConfig = (config) => {
+  const t = config.fractalType ?? "";
+  if (t && t !== lastType) {
+    lastType = t;
+    lastT = 0;
+  }
 };
+
+zoto.onFrame = (frame) => {
+  const cfg = zoto.getConfig();
+  const dt = lastT > 0 ? Math.min(0.1, Math.max(1 / 240, frame.t - lastT)) : frame.dt || 1 / 60;
+  lastT = frame.t;
+  const aspect = 16 / 10;
+  const drive = packFractalDrive(frame.t, dt, frame.audio, aspect, cfg, IDLE_POINTER);
+  zoto.writeBuffer(0, drive.slot0);
+  zoto.writeUniform("uBright", drive.bright);
+  zoto.writeUniform("uAccent", drive.accent);
+  zoto.writeUniform("uBg", drive.bg);
+  zoto.writeUniform("uOpacity", 1);
+  zoto.writeUniform("uAudio", frame.audio);
+};
+
+resetFractalDrive();

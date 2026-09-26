@@ -1,5 +1,6 @@
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
+import { fractalHudCaption } from "../../../plugins/src/fractal-zoom/frontend/drive";
 import { morphCopy, Select } from "./ui";
 
 /** First-party demoscene viz packs that share the host UBO frame. */
@@ -123,7 +124,7 @@ function vizHudMetricLive(
     case "nixie-clock":
       return { label: "nixie", value: "clock" };
     case "fractal-zoom":
-      return { label: "zoom", value: "fly" };
+      return { label: "view", value: fractalHudCaption };
   }
 }
 

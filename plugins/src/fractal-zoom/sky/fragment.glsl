@@ -204,11 +204,11 @@ void main() {
     return;
   }
 
-  int steps = int(max(24.0, maxStepsN * 192.0));
+  int steps = int(min(128.0, max(24.0, maxStepsN * 128.0)));
   float t = 0.0;
   vec3 col = bg;
   float hit = 0.0;
-  for (int i = 0; i < 192; i++) {
+  for (int i = 0; i < 128; i++) {
     if (i >= steps) break;
     vec3 p = ro + rd * t;
     float d = mapDE(p, typ, powr, sc, fold, jc, sym);
@@ -250,6 +250,13 @@ void main() {
   if (lum < 0.14) {
     vec2 uv = vDir.xy / max(0.32, 1.1 - abs(vDir.z));
     col += color2d(uv, 6.0, vec2(-0.743643887, 0.131825904), 1.6, 0.55, 0.0, 0.4, hue, sat, jc) * 1.15;
+  }
+  float pClamp = mark > 0.5 ? fz0(43.0) : 0.0;
+  if (pClamp > 0.5) {
+    vec2 uv = gl_FragCoord.xy / vec2(1280.0, 800.0);
+    float band = smoothstep(0.02, 0.0, abs(uv.y - 0.08));
+    col = mix(col, vec3(1.0, 0.85, 0.35), band * 0.85);
+    col += vec3(0.15, 0.12, 0.05) * band;
   }
   fragColor = vec4(col * uBright, uOpacity);
 }

@@ -7,7 +7,7 @@ import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../pl
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
 import { packFractalDrive } from "../../../plugins/src/fractal-zoom/frontend/drive";
-import { fractalPointerState } from "../../../plugins/src/fractal-zoom/frontend/interaction";
+import { IDLE_POINTER } from "../../../plugins/src/fractal-zoom/frontend/interaction";
 import { nixieCanvasSize, packNixieBuffer, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
 
 export interface VizPackHandlers {
@@ -221,7 +221,7 @@ export function runPackFrameHandler(
         frame.audio,
         16 / 10,
         opts ?? {},
-        fractalPointerState(),
+        IDLE_POINTER,
       );
       handlers.writeBuffer(0, drive.slot0);
       handlers.writeUniform("uBright", drive.bright);
