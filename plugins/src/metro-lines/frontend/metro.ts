@@ -2,7 +2,7 @@
  * Metro Lines — schematic transit map (CPU layout + sim, GPU draw in sky).
  */
 
-import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 export const METRO_MARK = 1.047;
 export const METRO_MAX_STATIONS = 16;

@@ -1,6 +1,6 @@
 /** Metro Lines — schematic transit map (sandbox entry). */
 
-import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 import {
   acquireMetroSim,
   isMetroDemoFrame,
