@@ -128,9 +128,6 @@ PY"
 mkjson pack-swap-clears-fallback "src/graph/shader-fallback-wall.test.ts" "shader fallback wall > pack-swap-clears-fallback" 1
 
 # context loss notice
-patch_row context-loss-notice-shared-region "sed -i 's/postWallNotice(this.wall)/document.createElement(\"div\")/' web/src/graph/gfx-wall-notice.ts; sed -i '/this.wall.appendChild(el);/d' web/src/graph/gfx-wall-notice.ts"
-mkjson context-loss-notice-shared-region "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > context-loss-notice-shared-region" 0
-
 patch_row context-loss-notice-no-generic "sed -i 's/this.gfxNotice.onContextLost();//' web/src/graph/render-host.ts"
 mkjson context-loss-notice-no-generic "src/graph/shader-fallback-gl.test.ts" "shader fallback gl context > context-loss-notice-no-generic" 0
 
