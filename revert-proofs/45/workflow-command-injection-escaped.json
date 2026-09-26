@@ -2,6 +2,5 @@
   "runner": "pytest",
   "testFile": "tests/test_pack_boundary_secure.py",
   "testName": "test_secure_dry_run_workflow_command_injection_escaped",
-  "description": "Escape PR-derived lines that start with :: before printing.",
-  "entryPoint": ""
+  "description": "Escape PR-derived lines that start with :: before printing."
 }

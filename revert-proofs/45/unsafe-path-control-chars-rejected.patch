@@ -1,8 +1,6 @@
-diff --git a/scripts/pack_boundary_safe_io.py b/scripts/pack_boundary_safe_io.py
-index a7466d4..8e3afa7 100644
 --- a/scripts/pack_boundary_safe_io.py
 +++ b/scripts/pack_boundary_safe_io.py
-@@ -26,7 +26,7 @@ def path_has_control_chars(path: str) -> bool:
+@@ -26,7 +26,7 @@
  
  
  def validate_changed_path(path: str) -> str | None:

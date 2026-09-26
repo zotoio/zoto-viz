@@ -2,6 +2,5 @@
   "runner": "pytest",
   "testFile": "tests/test_ci_test_needs.py",
   "testName": "test_validate_fixture_missing_job_in_needs",
-  "description": "Missing jobs in test.needs are reported.",
-  "entryPoint": ""
+  "description": "Missing jobs in test.needs are reported."
 }

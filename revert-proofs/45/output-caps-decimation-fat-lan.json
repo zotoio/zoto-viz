@@ -2,6 +2,5 @@
   "runner": "vitest",
   "testFile": "web/src/plugins/viz-build-gates.test.ts",
   "testName": "output caps match decimation drop stats on seeded fat LAN",
-  "description": "Seeded fat-LAN frame byte ceiling and decimation drop accounting.",
-  "entryPoint": ""
+  "description": "Seeded fat-LAN frame byte ceiling and decimation drop accounting."
 }

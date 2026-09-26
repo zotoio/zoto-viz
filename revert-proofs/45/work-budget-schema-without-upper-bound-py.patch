@@ -1,0 +1,13 @@
+diff --git a/service/manifest_work_budget.py b/service/manifest_work_budget.py
+index 9692f1e..25942c8 100644
+--- a/service/manifest_work_budget.py
++++ b/service/manifest_work_budget.py
+@@ -73,8 +73,6 @@ def validate_manifest_work_budget(raw: Any, path: str = "workBudget") -> dict[st
+         n = int(value)
+         if n < 0:
+             raise ValueError(f"{_field_label(path, key)} must be at least 0")
+-        if n > ceiling:
+-            raise ValueError(f"{_field_label(path, key)} must be at most {ceiling} (got {n})")
+         out[key] = n
+     return out
+ 
