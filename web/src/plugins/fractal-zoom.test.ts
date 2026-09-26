@@ -139,11 +139,17 @@ describe("fractal-zoom shipped pack", () => {
     expect(buf[FZ_SLOT.mark]).toBe(1);
   });
 
-  describe("host-mapping pod rules (stage-only — no regions/orbits/slots by host index)", () => {
-    it("pack source does not index talkers or packets by list position", () => {
+  it("imports host VizDataFrame contract (no invented frame fields)", () => {
+    expect(FRONT).toContain('from "../../viz-frame"');
+    expect(FRONT).not.toMatch(/type VizFrame\s*=/);
+  });
+
+  describe("real data contract (stage-only — no host/region mapping)", () => {
+    it("pack source does not read talkers, packets, headlines, or sys", () => {
       for (const src of [FRONT, DRIVE]) {
         expect(src).not.toMatch(/talkers\s*\[/);
         expect(src).not.toMatch(/packets\s*\[/);
+        expect(src).not.toMatch(/headlines\s*\[/);
         expect(src).not.toMatch(/sys\.failed/);
       }
       expect(FRAG).not.toMatch(/sys\.failed/);
@@ -181,7 +187,7 @@ describe("fractal-zoom shipped pack", () => {
       expect(forward).toEqual(back);
     });
 
-    it("healthy low-value packets do not drive failure or buffer changes", () => {
+    it("low field packets and scene-wide sys.failed do not alter buffer (no failure visuals)", () => {
       resetFractalDrive();
       const base = buildIdleVizFrame(0.5);
       const lowPackets: VizDataFrame = {
@@ -191,17 +197,23 @@ describe("fractal-zoom shipped pack", () => {
           { proto: "dns", size: 48, field: 0.02 },
           { proto: "udp", size: 64, field: 0.03 },
         ],
-        sys: { ...base.sys!, failed: 0, psi: 0, temp: 0, cpu: 0, mem: 0, disk: 0, gpu: 0, watts: 0, sockets: 0, udev: 0 },
       };
-      const failedSys: VizDataFrame = {
-        ...lowPackets,
-        sys: { ...lowPackets.sys!, failed: 1 },
+      const sceneFailed: VizDataFrame = {
+        ...base,
+        sys: { ...base.sys!, failed: 1 },
+      };
+      const headlineOnly: VizDataFrame = {
+        ...base,
+        headlines: [{ id: "x", label: "alert", text: "link down", kind: "fail" }],
       };
       const opts = { preset: "bulb-classic" };
-      const healthy = fractalPackSlot0(lowPackets, opts);
+      const a = fractalPackSlot0(lowPackets, opts);
       resetFractalDrive();
-      const withFailed = fractalPackSlot0(failedSys, opts);
-      expect(healthy).toEqual(withFailed);
+      const b = fractalPackSlot0(sceneFailed, opts);
+      resetFractalDrive();
+      const c = fractalPackSlot0(headlineOnly, opts);
+      expect(a).toEqual(b);
+      expect(a).toEqual(c);
     });
   });
 

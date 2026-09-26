@@ -2,11 +2,10 @@
 
 import { packFractalDrive, resetFractalDrive } from "./drive";
 import { IDLE_POINTER } from "./interaction";
-
-type VizFrame = { t: number; dt: number; audio: number };
+import type { VizDataFrame } from "../../viz-frame";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: VizDataFrame) => void) | null;
   onConfig: ((config: Record<string, string>) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
