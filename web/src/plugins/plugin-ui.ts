@@ -70,7 +70,7 @@ function appendFieldControl(
       onChange: (v) => {
         values[f.key] = v;
         if (pf && f.key === pf && v !== "custom" && spec.settings?.presets?.some((p) => p.id === v)) {
-          pushUndoSnapshot(configStoreId(spec), { ...values });
+          pushUndoSnapshot(configStoreId(spec, spec.configViewId), { ...values });
           applyPresetToValues(spec, fields, values, v);
           persist();
           remount();
@@ -115,7 +115,7 @@ function mountSettingsToolbar(
 ): void {
   const decl = spec.settings;
   if (!decl?.presets?.length) return;
-  const storeId = configStoreId(spec);
+  const storeId = configStoreId(spec, spec.configViewId);
   const row = document.createElement("div");
   row.className = "sec plugin-settings-toolbar";
   row.setAttribute("role", "toolbar");
@@ -195,7 +195,7 @@ function mountSectionedFields(
   persist: () => void,
   remount: () => void,
 ): void {
-  const storeId = configStoreId(spec);
+  const storeId = configStoreId(spec, spec.configViewId);
   const sectionDecl = spec.settings?.sections ?? [];
   const titles = orderedSectionTitles(spec, compact);
   const pf = spec.settings?.presetField;
@@ -273,8 +273,9 @@ export function fillPluginFields(
   };
   const persist = () => {
     markPresetConsistency(spec, fields, values);
-    writePluginConfig(configStoreId(spec), values);
-    onPersist(configStoreId(spec), packConfigValues(values));
+    const storeId = configStoreId(spec, spec.configViewId);
+    writePluginConfig(storeId, values);
+    onPersist(storeId, packConfigValues(values));
     refreshPluginHudCaption(spec, fields, values);
   };
   const compact: PluginField[] = [];

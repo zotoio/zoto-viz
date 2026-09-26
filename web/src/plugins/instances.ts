@@ -50,8 +50,17 @@ export function parsePluginInstance(modeId: string): string | null {
   return i >= 0 ? rest.slice(i + 1) || null : null;
 }
 
-export function configStoreId(spec: Pick<PluginView, "id" | "instanceId">): string {
-  return spec.instanceId && spec.instanceId !== spec.id ? `${spec.id}:${spec.instanceId}` : spec.id;
+export function configStoreId(
+  spec: Pick<PluginView, "id" | "instanceId">,
+  viewModeId?: string | null,
+): string {
+  const base = spec.instanceId && spec.instanceId !== spec.id ? `${spec.id}:${spec.instanceId}` : spec.id;
+  if (!viewModeId) return base;
+  const canonical = pluginViewId(spec.id, spec.instanceId);
+  if (viewModeId === canonical) return base;
+  const suffix = viewModeId.startsWith("plugin:") ? viewModeId.slice("plugin:".length) : viewModeId;
+  if (suffix === base || suffix === spec.id) return base;
+  return `${base}@${suffix}`;
 }
 
 export function parseInstances(raw: unknown): PluginInstance[] | undefined {

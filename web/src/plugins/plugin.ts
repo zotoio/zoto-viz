@@ -184,6 +184,8 @@ export interface PluginView {
   instanceId?: string;
   /** Defaults from the matched plugin.yml instance row (before pack fallback). */
   instanceDefaults?: Record<string, string | number | boolean>;
+  /** Active catalog / mosaic pane mode id (namespaces config when it differs from the instance row). */
+  configViewId?: string;
   instances?: PluginInstance[];
   /** Absent when the zip has no visualisation.yml and plugin.yml ships no engine. */
   engine?: PluginEngine;
@@ -324,7 +326,7 @@ function instanceDefaultFor(spec: PluginView, key: string): string | undefined {
 
 export function loadPluginConfig(spec: PluginView, fields = spec.config): Record<string, string> {
   const out: Record<string, string> = {};
-  const storeId = configStoreId(spec);
+  const storeId = configStoreId(spec, spec.configViewId);
   const viewId = pluginViewId(spec.id, spec.instanceId);
   const metaKeys = [PRESET_BASE_META_KEY];
   for (const mk of metaKeys) {

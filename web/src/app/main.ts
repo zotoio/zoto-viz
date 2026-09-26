@@ -565,7 +565,10 @@ function optsFor(m: ViewMode): Record<string, string> {
   const o = defaultOpts(m);
   if (m.pluginId) {
     const spec = pluginSpecForMode(m.id);
-    if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
+    if (spec) Object.assign(o, loadPluginConfig(
+      { ...spec, configViewId: m.id },
+      pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config),
+    ));
   } else {
     for (const opt of m.options ?? []) {
       const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
@@ -584,7 +587,7 @@ function bindThisView(modeId: string): void {
   const m = modeById(modeId);
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
   settings?.bindView(
-    spec ? { ...spec, options: m.options, config: m.config } : null,
+    spec ? { ...spec, configViewId: modeId, options: m.options, config: m.config } : null,
     spec ? m.config : undefined,
     lookForMode(m.id) ?? spec?.look,
     arcadeControls(m),
