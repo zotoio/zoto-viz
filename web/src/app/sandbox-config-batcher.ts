@@ -14,7 +14,14 @@ export class SandboxConfigBatcher {
 
   schedule(packId: string, config: Record<string, string>): void {
     const json = JSON.stringify(config);
-    if (packId === this.lastPackId && json === this.lastJson) return;
+    if (packId === this.lastPackId && json === this.lastJson) {
+      this.pending = null;
+      if (this.scheduled) {
+        this.cancelFrame(this.rafId);
+        this.scheduled = false;
+      }
+      return;
+    }
     this.pending = { packId, config };
     if (this.scheduled) return;
     this.scheduled = true;
