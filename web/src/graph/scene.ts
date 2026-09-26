@@ -1117,6 +1117,7 @@ export class NetScene implements HostedView {
     role: "primary" | "mirror";
     primary: NetScene | null;
     mirrorKind?: "hostCanvas" | "sandboxSurface";
+    groupKey?: string;
     pluginId?: string;
     packLabel?: string;
     mirrorsTile?: number;
@@ -1560,12 +1561,17 @@ export class NetScene implements HostedView {
     role: "primary" | "mirror";
     primary: NetScene | null;
     mirrorKind?: "hostCanvas" | "sandboxSurface";
+    groupKey?: string;
     pluginId?: string;
     packLabel?: string;
     mirrorsTile?: number;
     tileCount?: number;
   } | null): void {
     this.packCoalesce = role;
+  }
+
+  get packCoalesceGroupKey(): string | undefined {
+    return this.packCoalesce?.groupKey;
   }
 
   get packMirrorPrimary(): NetScene | null {
@@ -1606,7 +1612,6 @@ export class NetScene implements HostedView {
         if (lane.peek()) {
           const bmp = lane.peek()!;
           this.lastVp = this.host.presentBitmapMirror(this, bmp, fill, aspect, this.packCoalesce.pluginId!);
-          if (!this.software) lane.clearPendingAfterGpuUpload();
         } else if (lane.shouldShowFailurePlaceholder()) {
           this.lastVp = this.host.presentSandboxMirrorPlaceholder(
             this,

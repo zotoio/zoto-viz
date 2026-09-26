@@ -42,7 +42,6 @@ import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
 import { Mosaic } from "../graph/mosaic";
-import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { RenderHost } from "../graph/render-host";
 import {
   applyPluginConfigs,
@@ -1191,6 +1190,7 @@ mosaic = new Mosaic({
   arcade,
   spawnArcade: (engine) => spawnArcade(engine, scene),
   optsFor,
+  pluginSpecForMode: (modeId) => pluginSpecForMode(modeId),
   onFocus: (id) => mosaic?.focus(id),
   onPromote: (id, theme) => {
     applyMode(id, { keepLayout: true });

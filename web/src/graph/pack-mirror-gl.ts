@@ -1,52 +1,10 @@
 import * as THREE from "three";
 import type { SurfaceLetterboxFill } from "./letterbox-fill";
-import { letterboxFillHex, letterboxInnerRect } from "./letterbox-fill";
+import { letterboxFillHex, letterboxInnerRect, paintLetterboxBars } from "./letterbox-fill";
 import type { WebGLRenderer } from "three";
-
-export type GlMirror = Pick<
-  WebGL2RenderingContext,
-  | "bindFramebuffer"
-  | "blitFramebuffer"
-  | "createFramebuffer"
-  | "createTexture"
-  | "createRenderbuffer"
-  | "deleteFramebuffer"
-  | "deleteTexture"
-  | "deleteRenderbuffer"
-  | "enable"
-  | "disable"
-  | "scissor"
-  | "viewport"
-  | "clearColor"
-  | "clear"
-  | "texParameteri"
-  | "texImage2D"
-  | "texSubImage2D"
-  | "framebufferTexture2D"
-  | "framebufferRenderbuffer"
-  | "renderbufferStorageMultisample"
-  | "bindTexture"
-  | "readPixels"
-  | "COLOR_BUFFER_BIT"
-  | "FRAMEBUFFER"
-  | "READ_FRAMEBUFFER"
-  | "DRAW_FRAMEBUFFER"
-  | "RENDERBUFFER"
-  | "COLOR_ATTACHMENT0"
-  | "TEXTURE_2D"
-  | "RGBA"
-  | "RGBA8"
-  | "UNSIGNED_BYTE"
-  | "LINEAR"
-  | "NEAREST"
-  | "TEXTURE_MIN_FILTER"
-  | "TEXTURE_MAG_FILTER"
-  | "SCISSOR_TEST"
->;
 
 export type MirrorRenderer = Pick<
   WebGLRenderer,
-  | "resetState"
   | "setScissorTest"
   | "setViewport"
   | "setScissor"
@@ -55,406 +13,265 @@ export type MirrorRenderer = Pick<
   | "getPixelRatio"
   | "setRenderTarget"
   | "render"
-  | "properties"
+  | "getContext"
 >;
 
 const PACK_MSAA_SAMPLES = 4;
 
-function clearRgb(hex: number): [number, number, number] {
-  return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
-}
-
-/** Scissored `gl.clear` for each letterbox bar (surface colour); no per-frame array allocation. */
-export function paintLetterboxBarsGl(
-  gl: GlMirror,
+/** Letterbox bars via scissored clears (CSS-pixel coords; renderer applies DPR). */
+export function paintLetterboxBarsThree(
+  renderer: MirrorRenderer,
   fill: SurfaceLetterboxFill,
   box: { x: number; y: number; w: number; h: number },
   inner: { x: number; y: number; w: number; h: number },
-  pr: number,
 ): void {
   const hex = letterboxFillHex(fill);
-  const [r, g, b] = clearRgb(hex);
-  gl.enable(gl.SCISSOR_TEST);
-  gl.clearColor(r, g, b, 1);
-  const bx = box.x;
-  const by = box.y;
-  const bw = box.w;
-  const bh = box.h;
-  const ix = inner.x;
-  const iy = inner.y;
-  const iw = inner.w;
-  const ih = inner.h;
-  const topH = Math.max(0, iy - by);
-  if (bw >= 1 && topH >= 1) {
-    gl.scissor(Math.round(bx * pr), Math.round(by * pr), Math.round(bw * pr), Math.round(topH * pr));
-    gl.clear(gl.COLOR_BUFFER_BIT);
+  renderer.setScissorTest(true);
+  renderer.setClearColor(hex, 1);
+  const bars = [
+    { x: box.x, y: box.y, w: box.w, h: Math.max(0, inner.y - box.y) },
+    { x: box.x, y: inner.y + inner.h, w: box.w, h: Math.max(0, box.y + box.h - inner.y - inner.h) },
+    { x: box.x, y: inner.y, w: Math.max(0, inner.x - box.x), h: inner.h },
+    { x: inner.x + inner.w, y: inner.y, w: Math.max(0, box.x + box.w - inner.x - inner.w), h: inner.h },
+  ];
+  for (const b of bars) {
+    if (b.w < 1 || b.h < 1) continue;
+    renderer.setViewport(b.x, b.y, b.w, b.h);
+    renderer.setScissor(b.x, b.y, b.w, b.h);
+    renderer.clear(true, false, false);
   }
-  const botY = iy + ih;
-  const botH = Math.max(0, by + bh - botY);
-  if (bw >= 1 && botH >= 1) {
-    gl.scissor(Math.round(bx * pr), Math.round(botY * pr), Math.round(bw * pr), Math.round(botH * pr));
-    gl.clear(gl.COLOR_BUFFER_BIT);
-  }
-  const leftW = Math.max(0, ix - bx);
-  if (leftW >= 1 && ih >= 1) {
-    gl.scissor(Math.round(bx * pr), Math.round(iy * pr), Math.round(leftW * pr), Math.round(ih * pr));
-    gl.clear(gl.COLOR_BUFFER_BIT);
-  }
-  const rightX = ix + iw;
-  const rightW = Math.max(0, bx + bw - rightX);
-  if (rightW >= 1 && ih >= 1) {
-    gl.scissor(Math.round(rightX * pr), Math.round(iy * pr), Math.round(rightW * pr), Math.round(ih * pr));
-    gl.clear(gl.COLOR_BUFFER_BIT);
-  }
-  gl.disable(gl.SCISSOR_TEST);
 }
 
-function rtFramebuffer(renderer: MirrorRenderer, rt: THREE.WebGLRenderTarget): WebGLFramebuffer | null {
-  const props = renderer.properties.get(rt) as {
-    __webGLFramebuffer?: WebGLFramebuffer;
-    __webGLMultisampledFramebuffer?: WebGLFramebuffer;
-  };
-  return props.__webGLFramebuffer ?? null;
-}
+/** Draw a texture into a tile viewport (CSS pixels). */
+export class PackTexturePresenter {
+  private readonly scene = new THREE.Scene();
+  private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private readonly mesh: THREE.Mesh;
+  private readonly material: THREE.MeshBasicMaterial;
 
-function msaaFramebuffer(renderer: MirrorRenderer, rt: THREE.WebGLRenderTarget): WebGLFramebuffer | null {
-  const props = renderer.properties.get(rt) as { __webGLMultisampledFramebuffer?: WebGLFramebuffer };
-  return props.__webGLMultisampledFramebuffer ?? null;
-}
-
-/**
- * Pack mirror GPU path — active only when the same pack is on 2+ tiles.
- * Renders into MSAA FBO when the canvas context uses antialiasing, resolves to a non-MSAA target, then blits to tiles.
- */
-export class PackMirrorGl {
-  private duplicateScope = false;
-  private packAntialias = false;
-  private drawRt: THREE.WebGLRenderTarget | null = null;
-  private resolveFb: WebGLFramebuffer | null = null;
-  private resolveTex: WebGLTexture | null = null;
-  private msaaFb: WebGLFramebuffer | null = null;
-  private msaaRb: WebGLRenderbuffer | null = null;
-  private tw = 0;
-  private th = 0;
-  private packReady = false;
-  private readonly scratchBox = { x: 0, y: 0, w: 0, h: 0 };
-  private readonly scratchInner = { x: 0, y: 0, w: 0, h: 0 };
-
-  get isDuplicateScope(): boolean {
-    return this.duplicateScope;
+  constructor() {
+    const geo = new THREE.PlaneGeometry(2, 2);
+    this.material = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
+    this.mesh = new THREE.Mesh(geo, this.material);
+    this.scene.add(this.mesh);
   }
 
-  beginFrame(): void {
-    this.packReady = false;
+  dispose(): void {
+    this.material.dispose();
+    this.mesh.geometry.dispose();
   }
 
-  hasCapture(): boolean {
-    return this.duplicateScope && this.packReady;
-  }
-
-  /**
-   * Enable/disable the RT mirror path. Turning off releases GPU targets immediately (same call).
-   */
-  setDuplicateScope(
-    on: boolean,
-    gl: GlMirror,
+  draw(
     renderer: MirrorRenderer,
-    opts?: { antialias?: boolean },
-  ): void {
-    if (opts?.antialias != null) this.packAntialias = opts.antialias;
-    if (on === this.duplicateScope) return;
-    this.duplicateScope = on;
-    if (!on) this.releaseTargets(gl, renderer);
-  }
-
-  dispose(gl: GlMirror, renderer?: MirrorRenderer): void {
-    if (renderer) this.releaseTargets(gl, renderer);
-    this.duplicateScope = false;
-    this.packReady = false;
-  }
-
-  private releaseTargets(gl: GlMirror, renderer: MirrorRenderer): void {
-    if (this.drawRt && renderer) renderer.properties.remove(this.drawRt);
-    this.drawRt?.dispose();
-    this.drawRt = null;
-    if (this.msaaRb) gl.deleteRenderbuffer(this.msaaRb);
-    if (this.msaaFb) gl.deleteFramebuffer(this.msaaFb);
-    if (this.resolveFb) gl.deleteFramebuffer(this.resolveFb);
-    if (this.resolveTex) gl.deleteTexture(this.resolveTex);
-    this.msaaRb = null;
-    this.msaaFb = null;
-    this.resolveFb = null;
-    this.resolveTex = null;
-    this.tw = 0;
-    this.th = 0;
-    this.packReady = false;
-  }
-
-  /** Allocate / resize pack targets (resolve texture FBO + optional MSAA RB FBO). */
-  ensurePackTargets(
-    gl: GlMirror,
-    renderer: MirrorRenderer,
-    w: number,
-    h: number,
-    antialias: boolean,
-  ): THREE.WebGLRenderTarget | null {
-    if (!this.duplicateScope || w < 2 || h < 2) return null;
-    this.packAntialias = antialias;
-    const sizeChanged = w !== this.tw || h !== this.th;
-    const aaChanged = antialias !== (this.msaaFb != null);
-    if (!sizeChanged && !aaChanged && this.resolveFb) return this.drawRt;
-
-    this.releaseTargets(gl, renderer);
-
-    this.tw = w;
-    this.th = h;
-
-    this.resolveTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.resolveTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    this.resolveFb = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.resolveFb);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.resolveTex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    if (antialias) {
-      this.msaaRb = gl.createRenderbuffer();
-      gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaRb);
-      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, PACK_MSAA_SAMPLES, gl.RGBA8, w, h);
-      this.msaaFb = gl.createFramebuffer();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.msaaFb);
-      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, this.msaaRb);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.bindRenderbuffer(gl.RENDERBUFFER, null);
-
-      this.drawRt = new THREE.WebGLRenderTarget(w, h, {
-        depthBuffer: true,
-        stencilBuffer: false,
-        samples: PACK_MSAA_SAMPLES,
-      });
-    } else {
-      this.drawRt = null;
-    }
-    return this.drawRt;
-  }
-
-  /** Non-MSAA duplicate path: draw straight into the resolve FBO (one target). */
-  bindResolveDrawFramebuffer(gl: GlMirror): WebGLFramebuffer | null {
-    if (!this.duplicateScope || !this.resolveFb || this.packAntialias) return null;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.resolveFb);
-    return this.resolveFb;
-  }
-
-  endResolveDrawFramebuffer(gl: GlMirror): void {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  }
-
-  /** After `render()` into `drawRt`, resolve MSAA → resolve texture when antialiasing is on. */
-  resolvePackRender(gl: GlMirror, renderer: MirrorRenderer, antialias: boolean): void {
-    if (!this.duplicateScope) return;
-    if (antialias && this.drawRt && this.resolveFb) {
-      const msaaFb = msaaFramebuffer(renderer, this.drawRt) ?? this.msaaFb;
-      if (msaaFb) {
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaaFb);
-        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.resolveFb);
-        gl.blitFramebuffer(0, 0, this.tw, this.th, 0, 0, this.tw, this.th, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        renderer.resetState();
-      }
-    }
-    this.packReady = true;
-  }
-
-  markPackRendered(): void {
-    if (this.duplicateScope) this.packReady = true;
-  }
-
-  readResolveFramebuffer(_renderer: MirrorRenderer): WebGLFramebuffer | null {
-    return this.resolveFb;
-  }
-
-  private layoutLetterbox(
+    texture: THREE.Texture,
     dst: { x: number; y: number; w: number; h: number },
-    contentAspect: number,
-  ): { ix: number; iy: number; iw: number; ih: number } {
-    const inner = letterboxInnerRect(dst, contentAspect);
-    this.scratchBox.x = dst.x;
-    this.scratchBox.y = dst.y;
-    this.scratchBox.w = dst.w;
-    this.scratchBox.h = dst.h;
-    this.scratchInner.x = dst.x + inner.x;
-    this.scratchInner.y = dst.y + inner.y;
-    this.scratchInner.w = inner.w;
-    this.scratchInner.h = inner.h;
-    return {
-      ix: this.scratchInner.x,
-      iy: this.scratchInner.y,
-      iw: this.scratchInner.w,
-      ih: this.scratchInner.h,
-    };
-  }
-
-  private blitPackToDefault(
-    gl: GlMirror,
-    renderer: MirrorRenderer,
-    fill: SurfaceLetterboxFill,
-    dst: { x: number; y: number; w: number; h: number },
-    pr: number,
+    fill: SurfaceLetterboxFill | null,
     contentAspect: number,
     opts: { letterbox: boolean; flipY?: boolean },
   ): { x: number; y: number; w: number; h: number } {
-    const dX = Math.round(dst.x * pr);
-    const dY = Math.round(dst.y * pr);
-    const dW = Math.round(dst.w * pr);
-    const dH = Math.round(dst.h * pr);
+    const inner = opts.letterbox ? letterboxInnerRect(dst, contentAspect) : { x: 0, y: 0, w: dst.w, h: dst.h };
+    const ix = dst.x + inner.x;
+    const iy = dst.y + inner.y;
+    const iw = inner.w;
+    const ih = inner.h;
+    if (fill && opts.letterbox) {
+      const innerAbs = { x: ix, y: iy, w: iw, h: ih };
+      paintLetterboxBarsThree(renderer, fill, dst, innerAbs);
+    }
+    texture.flipY = opts.flipY ?? false;
+    this.material.map = texture;
+    this.material.needsUpdate = true;
     renderer.setScissorTest(true);
-    renderer.setViewport(dX, dY, dW, dH);
-    renderer.setScissor(dX, dY, dW, dH);
-    let ix: number;
-    let iy: number;
-    let iw: number;
-    let ih: number;
-    if (opts.letterbox) {
-      const laid = this.layoutLetterbox(dst, contentAspect);
-      ix = Math.round(laid.ix * pr);
-      iy = Math.round(laid.iy * pr);
-      iw = Math.round(laid.iw * pr);
-      ih = Math.round(laid.ih * pr);
-      paintLetterboxBarsGl(gl, fill, this.scratchBox, this.scratchInner, pr);
-    } else {
-      ix = dX;
-      iy = dY;
-      iw = dW;
-      ih = dH;
-    }
-    const readFbo = this.readResolveFramebuffer(renderer);
-    if (readFbo && iw > 1 && ih > 1) {
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readFbo);
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-      const dy0 = opts.flipY ? iy + ih : iy;
-      const dy1 = opts.flipY ? iy : iy + ih;
-      gl.blitFramebuffer(0, 0, this.tw, this.th, ix, dy0, ix + iw, dy1, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-      renderer.resetState();
-    }
+    renderer.setViewport(ix, iy, iw, ih);
+    renderer.setScissor(ix, iy, iw, ih);
+    renderer.setRenderTarget(null);
+    renderer.render(this.scene, this.camera);
     return { x: ix, y: iy, w: iw, h: ih };
-  }
-
-  blitPrimaryToDefault(
-    gl: GlMirror,
-    renderer: MirrorRenderer,
-    dst: { x: number; y: number; w: number; h: number },
-    pr: number,
-  ): { x: number; y: number; w: number; h: number } {
-    return this.blitPackToDefault(gl, renderer, { css: "", grain: 0 }, dst, pr, dst.w / Math.max(1, dst.h), {
-      letterbox: false,
-    });
-  }
-
-  blitDuplicateToDefault(
-    gl: GlMirror,
-    renderer: MirrorRenderer,
-    fill: SurfaceLetterboxFill,
-    dst: { x: number; y: number; w: number; h: number },
-    pr: number,
-    contentAspect: number,
-  ): { x: number; y: number; w: number; h: number } {
-    return this.blitPackToDefault(gl, renderer, fill, dst, pr, contentAspect, { letterbox: true });
   }
 }
 
-/** One GPU texture per duplicated sandbox pack; `texSubImage2D` per frame, realloc on size change only. */
+export type PackMirrorScope = {
+  tileCount: number;
+  antialias: boolean;
+};
+
+/** One WebGLRenderTarget capture per duplicated pack group. */
+export class PackMirrorSession {
+  private rt: THREE.WebGLRenderTarget | null = null;
+  get target(): THREE.WebGLRenderTarget | null { return this.rt; }
+  private pw = 0;
+  private ph = 0;
+  private samples = 0;
+  rendered = false;
+
+  dispose(): void {
+    this.rt?.dispose();
+    this.rt = null;
+    this.pw = 0;
+    this.ph = 0;
+    this.rendered = false;
+  }
+
+  ensure(pw: number, ph: number, antialias: boolean): THREE.WebGLRenderTarget | null {
+    if (pw < 2 || ph < 2) return null;
+    const samples = antialias ? PACK_MSAA_SAMPLES : 0;
+    if (this.rt && pw === this.pw && ph === this.ph && samples === this.samples) return this.rt;
+    this.dispose();
+    this.pw = pw;
+    this.ph = ph;
+    this.samples = samples;
+    this.rt = new THREE.WebGLRenderTarget(pw, ph, {
+      depthBuffer: true,
+      stencilBuffer: false,
+      samples,
+    });
+    return this.rt;
+  }
+
+  renderPack(
+    renderer: MirrorRenderer,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    pw: number,
+    ph: number,
+    clearHex: number,
+    antialias: boolean,
+  ): THREE.Texture | null {
+    const rt = this.ensure(pw, ph, antialias);
+    if (!rt) return null;
+    const prev = (renderer as THREE.WebGLRenderer).getRenderTarget();
+    renderer.setRenderTarget(rt);
+    renderer.setViewport(0, 0, pw, ph);
+    renderer.setScissor(0, 0, pw, ph);
+    renderer.setScissorTest(true);
+    renderer.setClearColor(clearHex, 1);
+    renderer.clear(true, true, false);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(prev);
+    this.rendered = true;
+    return rt.texture;
+  }
+}
+
+export class PackMirrorRegistry {
+  private readonly sessions = new Map<string, PackMirrorSession>();
+  private readonly presenter = new PackTexturePresenter();
+  allocationCount = 0;
+
+  beginFrame(): void {
+    for (const s of this.sessions.values()) s.rendered = false;
+  }
+
+  /** Allocate / free targets only when tile count crosses 2 for a pack key. */
+  syncScopes(scopes: ReadonlyMap<string, PackMirrorScope>): void {
+    for (const [key, session] of this.sessions) {
+      if ((scopes.get(key)?.tileCount ?? 0) < 2) {
+        session.dispose();
+        this.sessions.delete(key);
+      }
+    }
+    for (const [key, scope] of scopes) {
+      if (scope.tileCount < 2) continue;
+      if (!this.sessions.has(key)) {
+        this.sessions.set(key, new PackMirrorSession());
+        this.allocationCount += 1;
+      }
+    }
+  }
+
+  sessionFor(key: string): PackMirrorSession | undefined {
+    return this.sessions.get(key);
+  }
+
+  renderPrimary(
+    key: string,
+    renderer: MirrorRenderer,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    box: { w: number; h: number },
+    clearHex: number,
+    antialias: boolean,
+  ): THREE.Texture | null {
+    const session = this.sessions.get(key);
+    if (!session) return null;
+    const pr = renderer.getPixelRatio();
+    const pw = Math.max(2, Math.round(box.w * pr));
+    const ph = Math.max(2, Math.round(box.h * pr));
+    return session.renderPack(renderer, scene, camera, pw, ph, clearHex, antialias);
+  }
+
+  presentPack(
+    key: string,
+    renderer: MirrorRenderer,
+    dst: { x: number; y: number; w: number; h: number },
+    opts: { letterbox: boolean; fill: SurfaceLetterboxFill | null; aspect: number; flipY?: boolean },
+  ): { x: number; y: number; w: number; h: number } | null {
+    const session = this.sessions.get(key);
+    const rt = session?.target;
+    if (!rt || !session.rendered) return null;
+    return this.presenter.draw(renderer, rt.texture, dst, opts.fill, opts.aspect, {
+      letterbox: opts.letterbox,
+      flipY: opts.flipY,
+    });
+  }
+
+  dispose(): void {
+    for (const s of this.sessions.values()) s.dispose();
+    this.sessions.clear();
+    this.presenter.dispose();
+  }
+}
+
+/** Sandbox duplicate: one GPU texture per plugin id, uploaded each frame. */
 export class SandboxBitmapGl {
-  private readFbo: WebGLFramebuffer | null = null;
-  private tex: WebGLTexture | null = null;
+  private texture: THREE.Texture | null = null;
   private tw = 0;
   private th = 0;
-  private readonly scratchBox = { x: 0, y: 0, w: 0, h: 0 };
-  private readonly scratchInner = { x: 0, y: 0, w: 0, h: 0 };
+  uploadCount = 0;
 
-  dispose(gl: GlMirror): void {
-    if (this.readFbo) gl.deleteFramebuffer(this.readFbo);
-    if (this.tex) gl.deleteTexture(this.tex);
-    this.readFbo = null;
-    this.tex = null;
+  dispose(): void {
+    this.texture?.dispose();
+    this.texture = null;
     this.tw = 0;
     this.th = 0;
   }
 
-  ensureTarget(gl: GlMirror, w: number, h: number): void {
-    if (w < 2 || h < 2) return;
-    if (this.tex && w === this.tw && h === this.th) return;
-    if (this.tex) gl.deleteTexture(this.tex);
-    if (this.readFbo) gl.deleteFramebuffer(this.readFbo);
+  ensureTexture(w: number, h: number): THREE.Texture | null {
+    if (w < 2 || h < 2) return null;
+    if (this.texture && w === this.tw && h === this.th) return this.texture;
+    this.texture?.dispose();
     this.tw = w;
     this.th = h;
-    this.tex = gl.createTexture();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.bindTexture(gl.TEXTURE_2D, this.tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    this.readFbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.readFbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.tex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.texture = new THREE.Texture();
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+    return this.texture;
   }
 
-  uploadFrame(gl: GlMirror, renderer: MirrorRenderer, bitmap: ImageBitmap): void {
-    this.ensureTarget(gl, bitmap.width, bitmap.height);
-    if (!this.tex) return;
-    gl.bindTexture(gl.TEXTURE_2D, this.tex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
-    bitmap.close();
-    renderer.resetState();
+  uploadFrame(bitmap: ImageBitmap): THREE.Texture | null {
+    const tex = this.ensureTexture(bitmap.width, bitmap.height);
+    if (!tex) return null;
+    tex.image = bitmap;
+    tex.flipY = true;
+    tex.needsUpdate = true;
+    this.uploadCount += 1;
+    return tex;
   }
 
-  blitToDefault(
-    gl: GlMirror,
+  present(
+    presenter: PackTexturePresenter,
     renderer: MirrorRenderer,
+    texture: THREE.Texture,
     fill: SurfaceLetterboxFill,
     dst: { x: number; y: number; w: number; h: number },
-    pr: number,
-    contentAspect: number,
+    aspect: number,
   ): { x: number; y: number; w: number; h: number } {
-    const inner = letterboxInnerRect(dst, contentAspect);
-    this.scratchBox.x = dst.x;
-    this.scratchBox.y = dst.y;
-    this.scratchBox.w = dst.w;
-    this.scratchBox.h = dst.h;
-    this.scratchInner.x = dst.x + inner.x;
-    this.scratchInner.y = dst.y + inner.y;
-    this.scratchInner.w = inner.w;
-    this.scratchInner.h = inner.h;
-    const dX = Math.round(dst.x * pr);
-    const dY = Math.round(dst.y * pr);
-    const dW = Math.round(dst.w * pr);
-    const dH = Math.round(dst.h * pr);
-    const ix = Math.round(this.scratchInner.x * pr);
-    const iy = Math.round(this.scratchInner.y * pr);
-    const iw = Math.round(this.scratchInner.w * pr);
-    const ih = Math.round(this.scratchInner.h * pr);
-    renderer.setScissorTest(true);
-    renderer.setViewport(dX, dY, dW, dH);
-    renderer.setScissor(dX, dY, dW, dH);
-    paintLetterboxBarsGl(gl, fill, this.scratchBox, this.scratchInner, pr);
-    if (this.readFbo && iw > 1 && ih > 1) {
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.readFbo);
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-      gl.blitFramebuffer(0, 0, this.tw, this.th, ix, iy + ih, ix + iw, iy, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-      renderer.resetState();
-    }
-    return { x: ix, y: iy, w: iw, h: ih };
+    return presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true, flipY: false });
   }
 }
 
 const sandboxGpu = new Map<string, SandboxBitmapGl>();
+const sharedPresenter = new PackTexturePresenter();
 
 export function sandboxBitmapGl(pluginId: string): SandboxBitmapGl {
   let gpu = sandboxGpu.get(pluginId);
@@ -465,17 +282,19 @@ export function sandboxBitmapGl(pluginId: string): SandboxBitmapGl {
   return gpu;
 }
 
-export function resetSandboxBitmapGl(gl?: GlMirror): void {
-  if (gl) {
-    for (const gpu of sandboxGpu.values()) gpu.dispose(gl);
-  }
+export function sandboxBitmapPresenter(): PackTexturePresenter {
+  return sharedPresenter;
+}
+
+export function resetSandboxBitmapGl(): void {
+  for (const gpu of sandboxGpu.values()) gpu.dispose();
   sandboxGpu.clear();
 }
 
-export function teardownSandboxBitmapGl(pluginId: string, gl: GlMirror): void {
+export function teardownSandboxBitmapGl(pluginId: string): void {
   const gpu = sandboxGpu.get(pluginId);
   if (gpu) {
-    gpu.dispose(gl);
+    gpu.dispose();
     sandboxGpu.delete(pluginId);
   }
 }

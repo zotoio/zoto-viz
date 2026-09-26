@@ -24,7 +24,23 @@ import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
 import { finishSandboxBitmapHostFrame, paintPackMirrorPlaceholder } from "../plugins/sandbox-bitmap";
-import { PackMirrorGl, resetSandboxBitmapGl, sandboxBitmapGl } from "./pack-mirror-gl";
+import {
+  PackMirrorRegistry,
+  paintLetterboxBarsThree,
+  resetSandboxBitmapGl,
+  sandboxBitmapGl,
+  sandboxBitmapPresenter,
+} from "./pack-mirror-gl";
+
+type PackMirrorViewMeta = HostedView & {
+  packCoalesceGroupKey?: string;
+  isPackMirrorPrimary?: boolean;
+  packCoalesceTileCount?: number;
+};
+
+function packMirrorMeta(view: HostedView): PackMirrorViewMeta {
+  return view as PackMirrorViewMeta;
+}
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
@@ -77,7 +93,7 @@ export class RenderHost {
   private readonly frame: (ts: number) => void;
   private disposed = false;
   private pr: number;
-  private readonly packMirrorGl = new PackMirrorGl();
+  readonly packMirrors = new PackMirrorRegistry();
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -141,8 +157,20 @@ export class RenderHost {
       }
       this.canvasRect = this.canvas.getBoundingClientRect();
       harvestGpu();
-      if (!this.software) this.packMirrorGl.beginFrame();
-      const mirrorRank = (v: HostedView) => ((v as { packMirrorPrimary?: unknown }).packMirrorPrimary ? 1 : 0);
+      if (!this.software) {
+        this.packMirrors.beginFrame();
+        const scopes = new Map<string, { tileCount: number; antialias: boolean }>();
+        const antialias = this.gl?.getContextAttributes()?.antialias === true;
+        for (const v of this.views) {
+          const meta = packMirrorMeta(v);
+          const key = meta.packCoalesceGroupKey;
+          const tileCount = meta.packCoalesceTileCount ?? 0;
+          if (!key || tileCount < 2) continue;
+          scopes.set(key, { tileCount, antialias });
+        }
+        this.packMirrors.syncScopes(scopes);
+      }
+      const mirrorRank = (v: HostedView) => (packMirrorMeta(v).isPackMirrorPrimary ? 0 : 1);
       this.views.sort((a, b) => mirrorRank(a) - mirrorRank(b));
       for (const v of this.views) v.hostFrame(ts);
       finishSandboxBitmapHostFrame();
@@ -214,11 +242,12 @@ export class RenderHost {
       return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
     }
     const rd = this.renderer as THREE.WebGLRenderer;
-    const gl = this.gl;
-    if (!gl) return null;
+    const key = packMirrorMeta(mirror).packCoalesceGroupKey;
+    if (!key) return null;
+    const rect = this.packMirrors.presentPack(key, rd, dst, { letterbox: true, fill, aspect });
+    if (!rect) return null;
     const pr = rd.getPixelRatio();
-    if (!this.packMirrorGl.hasCapture()) return null;
-    return this.packMirrorGl.blitDuplicateToDefault(gl, rd, fill, dst, pr, aspect);
+    return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
   }
 
   /**
@@ -246,13 +275,14 @@ export class RenderHost {
       ctx.drawImage(bitmap, inner.x, inner.y, inner.w, inner.h);
       return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
     }
-    const gl = this.gl;
     const rd = this.renderer as THREE.WebGLRenderer;
-    if (!gl) return null;
-    const pr = rd.getPixelRatio();
     const gpu = sandboxBitmapGl(pluginId);
-    gpu.uploadFrame(gl, rd, bitmap);
-    return gpu.blitToDefault(gl, rd, fill, dst, pr, aspect);
+    const tex = gpu.uploadFrame(bitmap);
+    bitmap.close();
+    if (!tex) return null;
+    const rect = gpu.present(sandboxBitmapPresenter(), rd, tex, fill, dst, aspect);
+    const pr = rd.getPixelRatio();
+    return { x: rect.x * pr, y: rect.y * pr, w: rect.w * pr, h: rect.h * pr };
   }
 
   /** Surface letterbox only (no bitmap yet, no publish failure). */
@@ -276,19 +306,10 @@ export class RenderHost {
       return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
     }
     const rd = this.renderer as THREE.WebGLRenderer;
-    const gl = this.gl;
-    if (!gl) return null;
+    const innerAbs = { x: dst.x + inner.x, y: dst.y + inner.y, w: inner.w, h: inner.h };
+    paintLetterboxBarsThree(rd, fill, dst, innerAbs);
     const pr = rd.getPixelRatio();
-    const dX = Math.round(dst.x * pr);
-    const dY = Math.round(dst.y * pr);
-    const dW = Math.round(dst.w * pr);
-    const dH = Math.round(dst.h * pr);
-    rd.setScissorTest(true);
-    rd.setViewport(dX, dY, dW, dH);
-    rd.setScissor(dX, dY, dW, dH);
-    rd.setClearColor(letterboxFillHex(fill), 1);
-    rd.clear(true, false, false);
-    return { x: dX, y: dY, w: dW, h: dH };
+    return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
   }
 
   presentSandboxMirrorPlaceholder(
@@ -315,20 +336,12 @@ export class RenderHost {
       ctx.setTransform(pr, 0, 0, pr, 0, 0);
       paintPackMirrorPlaceholder(ctx, dst, fill, packName, mirrorsTile);
     } else {
-      const gl = this.gl;
       const rd = this.renderer as THREE.WebGLRenderer;
-      if (gl) {
-        const pr = rd.getPixelRatio();
-        const dX = Math.round(dst.x * pr);
-        const dY = Math.round(dst.y * pr);
-        const dW = Math.round(dst.w * pr);
-        const dH = Math.round(dst.h * pr);
-        rd.setScissorTest(true);
-        rd.setViewport(dX, dY, dW, dH);
-        rd.setScissor(dX, dY, dW, dH);
-        rd.setClearColor(letterboxFillHex(fill), 1);
-        rd.clear(true, false, false);
-      }
+      rd.setScissorTest(true);
+      rd.setViewport(dst.x, dst.y, dst.w, dst.h);
+      rd.setScissor(dst.x, dst.y, dst.w, dst.h);
+      rd.setClearColor(letterboxFillHex(fill), 1);
+      rd.clear(true, false, false);
     }
     const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
     return { x: dst.x * pr, y: dst.y * pr, w: dst.w * pr, h: dst.h * pr };
@@ -371,30 +384,19 @@ export class RenderHost {
     const rd = this.renderer as THREE.WebGLRenderer;
     const gl = this.gl;
     const pr = rd.getPixelRatio();
-    const tileCount = (view as { packCoalesceTileCount?: number }).packCoalesceTileCount ?? 0;
-    const packPrimary = (view as { isPackMirrorPrimary?: boolean }).isPackMirrorPrimary === true;
-    const antialias = gl?.getContextAttributes?.().antialias === true;
-    if (gl) this.packMirrorGl.setDuplicateScope(packPrimary && tileCount >= 2, gl, rd, { antialias });
-    if (packPrimary && tileCount >= 2 && gl) {
-      const sw = Math.round(w * pr);
-      const sh = Math.round(h * pr);
-      const drawRt = this.packMirrorGl.ensurePackTargets(gl, rd, sw, sh, antialias);
+    const meta = packMirrorMeta(view);
+    const tileCount = meta.packCoalesceTileCount ?? 0;
+    const packKey = meta.packCoalesceGroupKey;
+    const packPrimary = meta.isPackMirrorPrimary === true;
+    const antialias = gl?.getContextAttributes()?.antialias === true;
+    if (packPrimary && tileCount >= 2 && packKey && gl) {
       const drawPack = () => {
-        const prev = rd.getRenderTarget();
-        if (drawRt) {
-          rd.setRenderTarget(drawRt);
-        } else {
-          this.packMirrorGl.bindResolveDrawFramebuffer(gl);
-        }
-        rd.setViewport(0, 0, sw, sh);
-        rd.setScissor(0, 0, sw, sh);
-        rd.setScissorTest(true);
-        rd.setClearColor(clearHex, 1);
-        rd.render(scene, camera);
-        if (drawRt) rd.setRenderTarget(prev);
-        else this.packMirrorGl.endResolveDrawFramebuffer(gl);
-        this.packMirrorGl.resolvePackRender(gl, rd, antialias);
-        this.packMirrorGl.blitPrimaryToDefault(gl, rd, { x, y, w, h }, pr);
+        this.packMirrors.renderPrimary(packKey, rd, scene, camera, { w, h }, clearHex, antialias);
+        this.packMirrors.presentPack(packKey, rd, { x, y, w, h }, {
+          letterbox: false,
+          fill: null,
+          aspect: w / Math.max(1, h),
+        });
       };
       timeGpu(gl, drawPack, (ms) => view.noteFrameCost?.(ms));
       return { x: x * pr, y: y * pr, w: w * pr, h: h * pr };
@@ -416,11 +418,9 @@ export class RenderHost {
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.views = [];
-    const gl = this.gl;
-    if (gl) {
-      const rd = this.renderer as THREE.WebGLRenderer;
-      this.packMirrorGl.dispose(gl, rd);
-      resetSandboxBitmapGl(gl);
+    if (!this.software) {
+      this.packMirrors.dispose();
+      resetSandboxBitmapGl();
     }
     this.renderer.forceContextLoss();
     this.renderer.dispose();

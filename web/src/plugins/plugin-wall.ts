@@ -48,8 +48,11 @@ export function wallMatches(a: Pick<WallSnap, "mosaic" | "hero" | "mosaicTiles">
 
 /** Current tiles are a 2+ subset of a catalog wall (Syscon after closes still counts). */
 function wallCoversTiles(wallTiles: string[], slots: string[]): boolean {
+  if (slots.length < 2 || wallTiles.length < 2) return false;
+  const slotViews = slots.map(mosaicTileViewId);
+  if (new Set(slotViews).size !== slotViews.length) return false;
   const want = new Set(wallTiles.map(mosaicTileViewId));
-  return slots.every((slot) => want.has(mosaicTileViewId(slot)));
+  return slotViews.every((v) => want.has(v));
 }
 
 export function isWallRemnant(tiles: string[] | undefined, walls: CatalogWall[]): boolean {

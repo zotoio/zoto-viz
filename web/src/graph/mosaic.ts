@@ -13,6 +13,7 @@ import {
 } from "./mosaic-layout";
 import { lookForMode, mergeLook } from "../plugins/plugin";
 import { applyPackCoalesceLayout, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
+import type { PluginView } from "../plugins/plugin";
 import { mosaicTileViewId } from "./mosaic-tile-id";
 import { fillMosaicViewSelect, pickMosaicViewForSlot } from "../ui/mosaic-view-pick";
 
@@ -209,6 +210,7 @@ export class Mosaic {
     arcade: Record<string, ArcadeSlot>;
     spawnArcade?: (engine: string) => ArcadeSlot | null;
     optsFor: (m: ViewMode) => Record<string, string>;
+    pluginSpecForMode?: (modeId: string) => PluginView | null;
     onFocus: (id: string) => void;
     onPromote: (id: string, theme: Theme | null) => void;
     onLayout: (patch: MosaicLayoutPatch) => void;
@@ -488,7 +490,7 @@ export class Mosaic {
   }
 
   private syncPackCoalesce(): void {
-    applyPackCoalesceLayout(this, mosaicPaneMode);
+    applyPackCoalesceLayout(this, mosaicPaneMode, this.cfg.pluginSpecForMode);
   }
 
   private emitLayout(): void {

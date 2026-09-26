@@ -42,5 +42,8 @@ export function ensurePackReviewed(spec: PluginView | null): Promise<boolean> {
     }
   })();
   session.set(spec.id, p);
+  void p.then((ok) => {
+    if (!ok) session.delete(spec.id);
+  });
   return p;
 }
