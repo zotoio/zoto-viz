@@ -81,9 +81,10 @@ zoto.onPresent = (tick) => {
 };
 ```
 
-Packs without `presentTick` keep the legacy host per-frame UBO drive until
-they opt in. `viz.presentTick` without `viz.write` is rejected at catalog
-validate time.
+Packs without `presentTick` receive **no** host present ticks and **no** host
+slot writes (only the sandbox may write via `zoto.writeBuffer` when it runs).
+`viz.presentTick` without `viz.write` is rejected at catalog validate time.
+Merge host (#37) and pack PRs that enable `presentTick` as one unit.
 
 Pack media files live under `assets/` and are served by the **host only** at
 `GET /api/plugins/<id>/asset/<path>` (reviewed / src). The sandbox CSP blocks
@@ -139,7 +140,7 @@ budget.
 | `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
 | `plugins/src/stereo-gram/` | Magic Eye autostereogram — eight morphing objects, a six-bin mic analyser, and local-model AI scenes (`POST /api/ai/stereo`) while the header AI switch is on |
 | `plugins/src/cypher-cic/` | Cypherpunk CIC wall — neon holodeck infograph of SYS + NET, center-hero mosaic |
-| `plugins/src/backrooms/` | Level 0 camcorder footage — `presentTick` moves `frontend/director.ts` into the sandbox; until then the host legacy drive writes slots 0–1 |
+| `plugins/src/backrooms/` | Level 0 camcorder footage — with `presentTick`, `frontend/director.ts` runs in the sandbox on `onPresent` |
 
 Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
 with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,

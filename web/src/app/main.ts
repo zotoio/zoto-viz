@@ -16,10 +16,11 @@ import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
-import { backroomsOptions as backroomsOptionsNow } from "../../../plugins/src/backrooms/frontend/director";
-import "../plugins/viz-write-host-drives";
-import { runLegacyVizWriteDrive } from "../plugins/viz-write-host-drive";
-import { syncBackroomsDirectorOptions } from "../plugins/viz-write-host-drives";
+import {
+  backroomsOptions as backroomsOptionsNow,
+  parseBackroomsOptions,
+  setBackroomsOptions,
+} from "../../../plugins/src/backrooms/frontend/director";
 import { deliverPluginPresentTick, type PresentDriveBinding } from "../plugins/viz-present-tick";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
@@ -368,11 +369,16 @@ addPresentListener((ts) => {
 });
 addPresentListener(markPresent);
 let brOptsSrc: Record<string, string> | null = null;
+let brOptsJson = "";
 /** Backrooms view config (UI sliders / toggles, MCP set_plugin) → director options, re-parsed only when they change. */
-function backroomsViewOptions(): ReturnType<typeof backroomsOptionsNow> {
+function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
   if (brOptsSrc !== currentOpts) {
     brOptsSrc = currentOpts;
-    syncBackroomsDirectorOptions(currentOpts);
+    const json = JSON.stringify(currentOpts);
+    if (json !== brOptsJson) {
+      brOptsJson = json;
+      setBackroomsOptions(parseBackroomsOptions(currentOpts));
+    }
   }
   return backroomsOptionsNow();
 }
@@ -380,18 +386,6 @@ let stereoBins: number[] = [];
 let stereoBinsAt = 0;
 scene.afterLook = () => {
   const mode = modeById(modeSel.value);
-  if (
-    vizWriter
-    && runLegacyVizWriteDrive(activePluginSpec, {
-      skyTime: () => scene.skyTime(),
-      aspect: () => innerWidth / Math.max(1, innerHeight),
-      writer: vizWriter,
-      syncUbo: () => scene.setPluginUboBuffer(vizWriter!.ubo),
-    })
-  ) {
-    scene.setHeard(false);
-    return;
-  }
   if (mode.pluginId !== "stereo-gram" || !vizWriter) {
     scene.setHeard(false);
     return;
