@@ -1,7 +1,11 @@
 /** Mosaic tile copy: sandbox boot failure vs running pack with an empty viz feed. */
 
 import { packSandboxStartFailed } from "./plugin-copy";
-import { tileRebuildState, tileReconnectingNotice } from "./pack-asset-frame";
+import {
+  invokePackAssetRetry,
+  tileRebuildState,
+  tileReconnectingNotice,
+} from "./pack-asset-frame";
 
 export const NO_PACK_FEED = "NO PACK FEED";
 const TOKEN_REDACT = "<sandbox-token>";
@@ -155,8 +159,13 @@ export function packFeedPaneNotice(
 
 const feedNoticeShown = new Set<string>();
 
-type MosaicNoticeHost = {
-  setPaneNotice: (id: string, text: string | null | undefined, recipe?: PaneNoticeRecipe) => void;
+export type MosaicNoticeHost = {
+  setPaneNotice: (
+    id: string,
+    text: string | null | undefined,
+    recipe?: PaneNoticeRecipe,
+    opts?: { showRetry?: boolean; onRetry?: () => void },
+  ) => void;
 };
 
 /** Push pack-feed / sandbox-startup copy to a mosaic tile without clobbering unrelated notices. */
@@ -169,7 +178,16 @@ export function applyPackFeedPaneNotice(
   const next = packFeedPaneNotice(tileId, packName);
   if (next) {
     feedNoticeShown.add(tileId);
-    mosaic.setPaneNotice(tileId, next.text, next.recipe);
+    const rebuild = tileRebuildState(tileId);
+    const showRetry = next.recipe === "fail" && rebuild.phase === "failed";
+    mosaic.setPaneNotice(tileId, next.text, next.recipe, {
+      showRetry,
+      onRetry: showRetry
+        ? () => {
+          if (invokePackAssetRetry(tileId)) return;
+        }
+        : undefined,
+    });
     return;
   }
   if (feedNoticeShown.delete(tileId)) mosaic.setPaneNotice(tileId, null);

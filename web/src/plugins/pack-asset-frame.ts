@@ -10,6 +10,8 @@ const tileFrames = new Map<string, string>();
 const tileFrameOpenCounts = new Map<string, number>();
 const tileRebuildAttempts = new Map<string, number>();
 const tileRebuildInflight = new Set<string>();
+const rebuildAbort = new Map<string, AbortController>();
+const retryHandlers = new Map<string, () => void>();
 let wallNoticePending = false;
 let wallNoticeShown = false;
 
@@ -26,11 +28,17 @@ export type TileRebuildState = {
 
 const tileRebuild = new Map<string, TileRebuildState>();
 
+export function rebuildAttemptKey(tileId: string, packName: string): string {
+  return `${tileId}\x1f${packName}`;
+}
+
 export function resetPackAssetFrameState(): void {
   tileFrames.clear();
   tileFrameOpenCounts.clear();
   tileRebuildAttempts.clear();
   tileRebuildInflight.clear();
+  rebuildAbort.clear();
+  retryHandlers.clear();
   tileRebuild.clear();
   wallNoticePending = false;
   wallNoticeShown = false;
@@ -56,11 +64,47 @@ export async function openPackAssetFrame(tileId: string): Promise<string> {
   return frameId;
 }
 
+export function abortPackAssetRebuildForTile(tileId: string, packName?: string): void {
+  if (packName) {
+    rebuildAbort.get(rebuildAttemptKey(tileId, packName))?.abort();
+    return;
+  }
+  for (const key of rebuildAbort.keys()) {
+    if (key.startsWith(`${tileId}\x1f`)) rebuildAbort.get(key)?.abort();
+  }
+}
+
+export function registerPackAssetRebuildAbort(
+  tileId: string,
+  packName: string,
+  controller: AbortController,
+): void {
+  const key = rebuildAttemptKey(tileId, packName);
+  rebuildAbort.get(key)?.abort();
+  rebuildAbort.set(key, controller);
+}
+
+export function clearPackAssetRebuildAbort(tileId: string, packName: string): void {
+  rebuildAbort.delete(rebuildAttemptKey(tileId, packName));
+}
+
 export async function closePackAssetFrameForTile(tileId: string): Promise<void> {
+  abortPackAssetRebuildForTile(tileId);
   const frameId = tileFrames.get(tileId);
   if (!frameId) return;
   tileFrames.delete(tileId);
   await unregisterPackAssetFrame(frameId);
+}
+
+export function registerPackAssetRetry(tileId: string, handler: () => void): void {
+  retryHandlers.set(tileId, handler);
+}
+
+export function invokePackAssetRetry(tileId: string): boolean {
+  const fn = retryHandlers.get(tileId);
+  if (!fn) return false;
+  fn();
+  return true;
 }
 
 export function tileRebuildState(tileId: string): TileRebuildState {
@@ -88,6 +132,7 @@ export function markTileRebuildFailed(tileId: string): void {
 export function markTileRebuildIdle(tileId: string): void {
   const row = tileRebuildState(tileId);
   row.phase = "idle";
+  row.failedOnce = false;
 }
 
 export function tileReconnectingNotice(packName: string): string {
@@ -98,36 +143,36 @@ export function tileRebuildFailedNotice(packName: string): string {
   return packSandboxStartFailed(packName);
 }
 
-export function tileRebuildAttemptCount(tileId: string): number {
-  return tileRebuildAttempts.get(tileId) ?? 0;
+export function tileRebuildAttemptCount(tileId: string, packName: string): number {
+  return tileRebuildAttempts.get(rebuildAttemptKey(tileId, packName)) ?? 0;
 }
 
-export function resetTileRebuildAttempts(tileId: string): void {
-  tileRebuildAttempts.delete(tileId);
+export function resetTileRebuildAttempts(tileId: string, packName: string): void {
+  tileRebuildAttempts.delete(rebuildAttemptKey(tileId, packName));
 }
 
 export function rebuildBackoffMs(attemptIndex: number): number {
   return REBUILD_BACKOFF_MS[Math.min(attemptIndex - 1, REBUILD_BACKOFF_MS.length - 1)] ?? 0;
 }
 
-/** Returns 1-based attempt number for this rebuild cycle (caps at {@link MAX_REBUILD_ATTEMPTS}). */
-export function beginTileRebuild(tileId: string): number {
-  tileRebuildInflight.add(tileId);
-  const next = Math.min((tileRebuildAttempts.get(tileId) ?? 0) + 1, MAX_REBUILD_ATTEMPTS);
-  tileRebuildAttempts.set(tileId, next);
+export function beginTileRebuild(tileId: string, packName: string): number {
+  const key = rebuildAttemptKey(tileId, packName);
+  tileRebuildInflight.add(key);
+  const next = Math.min((tileRebuildAttempts.get(key) ?? 0) + 1, MAX_REBUILD_ATTEMPTS);
+  tileRebuildAttempts.set(key, next);
   return next;
 }
 
-export function endTileRebuild(tileId: string): void {
-  tileRebuildInflight.delete(tileId);
+export function endTileRebuild(tileId: string, packName: string): void {
+  tileRebuildInflight.delete(rebuildAttemptKey(tileId, packName));
 }
 
-export function tileRebuildInFlight(tileId: string): boolean {
-  return tileRebuildInflight.has(tileId);
+export function tileRebuildInFlight(tileId: string, packName: string): boolean {
+  return tileRebuildInflight.has(rebuildAttemptKey(tileId, packName));
 }
 
-export function shouldCapRebuild(tileId: string): boolean {
-  return (tileRebuildAttempts.get(tileId) ?? 0) >= MAX_REBUILD_ATTEMPTS;
+export function shouldCapRebuild(tileId: string, packName: string): boolean {
+  return (tileRebuildAttempts.get(rebuildAttemptKey(tileId, packName)) ?? 0) >= MAX_REBUILD_ATTEMPTS;
 }
 
 export function scheduleServerRestartWallNotice(): void {

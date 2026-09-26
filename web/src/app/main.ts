@@ -93,6 +93,18 @@ import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
+import {
+  applyPackFeedPaneNotice,
+  clearTilePackFeed,
+  markSandboxStartupFailed,
+  markSandboxStartupOk,
+  setTileExpectsVizFeed,
+} from "../plugins/plugin-pack-feed";
+import {
+  registerPackAssetRetry,
+  resetTileRebuildAttempts,
+} from "../plugins/pack-asset-frame";
+import { releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
@@ -613,8 +625,24 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     tsWatchId = "";
     return;
   }
+  const tileId = "main";
+  const packLabel = spec.name ?? spec.id;
+  setTileExpectsVizFeed(tileId, !!(spec.capabilities?.includes("viz.read") || spec.capabilities?.includes("viz.write")));
+  clearTilePackFeed(tileId);
+  registerPackAssetRetry(tileId, () => {
+    resetTileRebuildAttempts(tileId, packLabel);
+    void loadTsPlugin(spec);
+  });
   try {
-    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
+    await runPackAssetProtectedLoad(
+      tileId,
+      packLabel,
+      mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost | null,
+      async () => {
+      await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    });
+    markSandboxStartupOk(tileId);
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
@@ -627,7 +655,10 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
     console.warn("zoto-viz plugin runtime:", e);
+    markSandboxStartupFailed(tileId);
+    applyPackFeedPaneNotice(mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost | null, tileId, packLabel);
     sandbox.unload();
+    releasePanelView(tileId);
     scene.clearPluginStyle();
   }
 }

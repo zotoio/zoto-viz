@@ -182,7 +182,8 @@ export function handleSandboxBootMessage(
   if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") {
     return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
   }
-  if (ev.source !== window.parent) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+  if (ev.source !== window.parent) return { bootDone: opts.bootDone, postTargetOrigin };
+  if (ev.origin !== d.parentOrigin) return { bootDone: opts.bootDone, postTargetOrigin };
   if (!d.bootNonce || d.bootNonce !== opts.bootNonce) {
     return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
   }
@@ -192,6 +193,8 @@ export function handleSandboxBootMessage(
 }
 
 window.addEventListener("message", (ev) => {
+  if (ev.source !== window.parent) return;
+  if (postTargetOrigin && ev.origin !== postTargetOrigin) return;
   handleSandboxHostMessage(ev.data as HostMsg | HostBoot | undefined, allowed, zoto, {
     source: ev.source,
     bootDone,
@@ -210,7 +213,7 @@ window.addEventListener("message", async (ev) => {
   const token = packAssetTokenFromLocation();
   try {
     await import(/* @vite-ignore */ moduleSrcForSandbox(d.moduleSrc, token));
-    send("ready");
+    send("ready", { bootNonce: nonce });
   } catch (e) {
     const raw = String(e);
     send("log", redactSandboxAssetPath(raw, token));

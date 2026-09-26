@@ -1,17 +1,22 @@
 import { PackAssetTokenInvalidError } from "../core/http";
-import type { Mosaic } from "../graph/mosaic";
+import type { MosaicNoticeHost } from "./plugin-pack-feed";
+
+type WallNoticeHost = { setWallNotice?: (text: string | null | undefined) => void };
 import {
+  abortPackAssetRebuildForTile,
+  beginTileRebuild,
+  clearPackAssetRebuildAbort,
   consumeServerRestartWallNotice,
+  endTileRebuild,
   markTileRebuildFailed,
   markTileRebuildIdle,
   markTileReconnecting,
+  registerPackAssetRebuildAbort,
   rebuildBackoffMs,
   resetTileRebuildAttempts,
   scheduleServerRestartWallNotice,
   shouldCapRebuild,
   tileRebuildInFlight,
-  beginTileRebuild,
-  endTileRebuild,
 } from "./pack-asset-frame";
 import { applyPackFeedPaneNotice } from "./plugin-pack-feed";
 
@@ -26,35 +31,71 @@ export function isPackAsset403(err: unknown): boolean {
   return isPackAssetTokenInvalid(err);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+let rebuildSleepImpl: (ms: number, signal: AbortSignal) => Promise<void> = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal.aborted) {
+    reject(new DOMException("aborted", "AbortError"));
+    return;
+  }
+  const timer = setTimeout(resolve, ms);
+  signal.addEventListener("abort", () => {
+    clearTimeout(timer);
+    reject(new DOMException("aborted", "AbortError"));
+  }, { once: true });
+});
+
+export function setRebuildSleepForTests(
+  fn: (ms: number, signal: AbortSignal) => Promise<void>,
+): void {
+  rebuildSleepImpl = fn;
+}
+
+export function resetRebuildSleepForTests(): void {
+  rebuildSleepImpl = (ms, signal) => new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("aborted", "AbortError"));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("aborted", "AbortError"));
+    }, { once: true });
   });
 }
 
 export async function runPackAssetProtectedLoad(
   tileId: string,
   packName: string,
-  mosaic: Mosaic | null | undefined,
+  mosaic: (MosaicNoticeHost & WallNoticeHost) | null | undefined,
   load: () => Promise<void>,
   opts?: { serverRestart?: boolean },
 ): Promise<void> {
+  abortPackAssetRebuildForTile(tileId, packName);
+  const controller = new AbortController();
+  registerPackAssetRebuildAbort(tileId, packName, controller);
+  const signal = controller.signal;
+
   const runOnce = async (): Promise<void> => {
+    if (signal.aborted) throw new DOMException("aborted", "AbortError");
     await load();
     markTileRebuildIdle(tileId);
-    resetTileRebuildAttempts(tileId);
+    resetTileRebuildAttempts(tileId, packName);
     applyPackFeedPaneNotice(mosaic, tileId, packName);
   };
 
   try {
     await runOnce();
+    clearPackAssetRebuildAbort(tileId, packName);
     return;
   } catch (err) {
+    if (signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+      throw err;
+    }
     if (!isPackAssetTokenInvalid(err)) {
       markTileRebuildFailed(tileId);
       throw err;
     }
-    if (shouldCapRebuild(tileId) || tileRebuildInFlight(tileId)) {
+    if (shouldCapRebuild(tileId, packName) || tileRebuildInFlight(tileId, packName)) {
       markTileRebuildFailed(tileId);
       applyPackFeedPaneNotice(mosaic, tileId, packName);
       throw err;
@@ -63,23 +104,28 @@ export async function runPackAssetProtectedLoad(
     markTileReconnecting(tileId);
     applyPackFeedPaneNotice(mosaic, tileId, packName);
     const wall = consumeServerRestartWallNotice();
-    if (wall && mosaic) mosaic.setWallNotice(wall);
+    if (wall && mosaic?.setWallNotice) mosaic.setWallNotice(wall);
 
     let lastErr: unknown = err;
-    while (!shouldCapRebuild(tileId)) {
-      const attempt = beginTileRebuild(tileId);
+    while (!shouldCapRebuild(tileId, packName)) {
+      if (signal.aborted) throw new DOMException("aborted", "AbortError");
+      const attempt = beginTileRebuild(tileId, packName);
       const delay = rebuildBackoffMs(attempt);
-      if (delay > 0) await sleep(delay);
+      if (delay > 0) await rebuildSleepImpl(delay, signal);
       try {
         await load();
         markTileRebuildIdle(tileId);
-        resetTileRebuildAttempts(tileId);
+        resetTileRebuildAttempts(tileId, packName);
         applyPackFeedPaneNotice(mosaic, tileId, packName);
-        endTileRebuild(tileId);
+        endTileRebuild(tileId, packName);
+        clearPackAssetRebuildAbort(tileId, packName);
         return;
       } catch (retryErr) {
         lastErr = retryErr;
-        endTileRebuild(tileId);
+        endTileRebuild(tileId, packName);
+        if (signal.aborted || (retryErr instanceof DOMException && retryErr.name === "AbortError")) {
+          throw retryErr;
+        }
         if (!isPackAssetTokenInvalid(retryErr)) {
           markTileRebuildFailed(tileId);
           applyPackFeedPaneNotice(mosaic, tileId, packName);

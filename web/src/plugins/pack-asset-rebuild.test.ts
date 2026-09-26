@@ -48,7 +48,7 @@ describe("pack asset rebuild on token_invalid", () => {
       }),
     ).rejects.toBeInstanceOf(PackAssetForbiddenError);
     expect(packAssetFrameOpenCount("plugin:dot")).toBe(1);
-    expect(tileRebuildAttemptCount("plugin:dot")).toBe(0);
+    expect(tileRebuildAttemptCount("plugin:dot", "Dot")).toBe(0);
   });
 
   it("does not leave the tile without a notice after a failed rebuild", async () => {
@@ -64,7 +64,7 @@ describe("pack asset rebuild on token_invalid", () => {
     await expect(settled).resolves.toBeInstanceOf(PackAssetTokenInvalidError);
     const last = mosaic.setPaneNotice.mock.calls.at(-1);
     expect(String(last?.[1])).toMatch(/couldn't start/i);
-    expect(tileRebuildAttemptCount("plugin:wifi")).toBe(3);
+    expect(tileRebuildAttemptCount("plugin:wifi", "Wi-Fi")).toBe(3);
   });
 
   it("backs off at 1s, 2s, then 4s across three rebuild attempts", async () => {
