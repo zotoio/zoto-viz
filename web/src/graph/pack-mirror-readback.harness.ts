@@ -11,7 +11,18 @@ import {
   PACK_MIRROR_QUADRANT_RGBA,
   createPackMirrorQuadrantCanvas,
 } from "./pack-mirror-quadrant-fixture";
-import { letterboxInnerRectInto, surfaceLetterboxFill } from "./letterbox-fill";
+import { zotoSurfacePanelClearHex } from "../core/themes";
+import { letterboxFillHex, letterboxInnerRectInto, surfaceLetterboxFill } from "./letterbox-fill";
+import {
+  LETTERBOX_SCENE_ASPECT,
+  LETTERBOX_TILE_CSS,
+  letterbox16x9FirstSceneRowDeviceY,
+  letterbox16x9TopBarCenterBottomLeft,
+} from "./pack-mirror-letterbox-16x9.fixture";
+import {
+  LETTERBOX_SCENE_TOP_ROW_RGBA,
+  createPackMirrorLetterbox16x9Canvas,
+} from "./pack-mirror-letterbox-16x9-scene.fixture";
 import {
   cssRect,
   cssRectTopFromBottomLeft,
@@ -32,7 +43,19 @@ export type PackMirrorReadbackInput = {
   antialias: boolean;
   path: "host" | "sandbox";
   /** Quadrant readback (zoom boundary); default keeps arrow fixture for legacy matrix rows. */
-  mode?: "arrow" | "quadrant";
+  mode?: "arrow" | "quadrant" | "letterbox16x9";
+};
+
+export type PackMirrorLetterbox16x9ReadbackResult = {
+  glRenderer: string;
+  windowDpr: number;
+  rendererDpr: number;
+  topBarRgba: [number, number, number, number];
+  bottomBarRgba: [number, number, number, number];
+  firstSceneRowRgba: [number, number, number, number];
+  firstSceneRowDeviceY: number;
+  expectedFirstSceneRowDeviceY: number;
+  expectedBarRgba: [number, number, number, number];
 };
 
 export type PackMirrorReadbackResult = {
@@ -164,10 +187,133 @@ function rendererDprFor(input: PackMirrorReadbackInput): number {
   return input.rendererDpr ?? Math.min(input.windowDpr, 1.5);
 }
 
+function rgbaFromClearHex(hex: number): [number, number, number, number] {
+  return [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255, 255];
+}
+
+/** 16:9 scene on 1:1 mirror tile — returns samples for vitest `expect` (no throws on colour mismatch). */
+export async function runPackMirrorLetterbox16x9ReadbackInPage(
+  input: PackMirrorReadbackInput,
+): Promise<PackMirrorLetterbox16x9ReadbackResult> {
+  const windowDpr = input.windowDpr;
+  const rendererDpr = rendererDprFor(input);
+  const wall = document.createElement("div");
+  wall.style.cssText = "position:fixed;left:0;top:0;width:200px;height:120px;";
+  document.body.appendChild(wall);
+
+  const primaryBox = cssRect(0, 0, 160, 90);
+  const mirrorBox = cssRect(100, 0, LETTERBOX_TILE_CSS, LETTERBOX_TILE_CSS);
+  const surfaceClear = zotoSurfacePanelClearHex();
+  const fill = surfaceLetterboxFill(surfaceClear, 0.25);
+  const expectedBarRgba = rgbaFromClearHex(letterboxFillHex(fill));
+
+  const rd = new THREE.WebGLRenderer({
+    antialias: input.antialias,
+    alpha: false,
+    preserveDrawingBuffer: true,
+  });
+  rd.setPixelRatio(rendererDpr);
+  rd.setSize(200, 120, false);
+  wall.appendChild(rd.domElement);
+  rd.setScissorTest(false);
+  rd.setViewport(0, 0, 200, 120);
+  rd.setClearColor(0x222233, 1);
+  rd.clear(true, true, true);
+
+  const gl = rd.getContext() as WebGL2RenderingContext | null;
+  if (!gl) throw new Error("WebGL2 canvas context unavailable");
+  const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+  if (!dbg) throw new Error("WEBGL_debug_renderer_info unavailable");
+  const glRenderer = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
+  const pr = rd.getPixelRatio();
+  const canvasDeviceHeight = rd.domElement.height;
+  const { pw, ph } = deviceSizeFromCssBox(primaryBox, pr);
+
+  const letterboxScene = (pwIn: number, phIn: number) => {
+    const canvas = createPackMirrorLetterbox16x9Canvas();
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.flipY = true;
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, pwIn, phIn, 0, -1, 1);
+    const mat = new THREE.MeshBasicMaterial({ map: tex });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(pwIn, phIn), mat);
+    mesh.position.set(pwIn / 2, phIn / 2, 0);
+    scene.add(mesh);
+    return { scene, camera };
+  };
+
+  const reg = new PackMirrorRegistry();
+  reg.syncScopes(new Map([["plugin:letterbox", { tileCount: 2, antialias: input.antialias }]]));
+  const { scene, camera } = letterboxScene(pw, ph);
+  reg.renderPrimary("plugin:letterbox", rd, scene, camera, primaryBox, surfaceClear, input.antialias);
+  reg.presentPack("plugin:letterbox", rd, primaryBox, {
+    letterbox: false,
+    fill: null,
+    aspect: LETTERBOX_SCENE_ASPECT,
+  });
+  reg.presentPack("plugin:letterbox", rd, mirrorBox, {
+    letterbox: true,
+    fill,
+    aspect: LETTERBOX_SCENE_ASPECT,
+  });
+  reg.dispose();
+
+  letterboxInnerRectInto(mirrorBox, LETTERBOX_SCENE_ASPECT, innerTdScratch);
+  const innerX = mirrorBox.x + innerTdScratch.x;
+  const innerY = mirrorBox.y + (mirrorBox.h - innerTdScratch.y - innerTdScratch.h);
+  const innerH = innerTdScratch.h;
+
+  const topBarCenterY = mirrorBox.y + letterbox16x9TopBarCenterBottomLeft(LETTERBOX_TILE_CSS);
+  const bottomBarCenterY = mirrorBox.y + (innerY - mirrorBox.y) * 0.5;
+  const topBarRgba = readPixelCssBottomLeft(
+    gl,
+    mirrorBox.x + mirrorBox.w * 0.5,
+    topBarCenterY,
+    pr,
+    canvasDeviceHeight,
+  );
+  const bottomBarRgba = readPixelCssBottomLeft(
+    gl,
+    mirrorBox.x + mirrorBox.w * 0.5,
+    bottomBarCenterY,
+    pr,
+    canvasDeviceHeight,
+  );
+
+  const expectedFirstSceneRowDeviceY = letterbox16x9FirstSceneRowDeviceY(pr, LETTERBOX_TILE_CSS);
+  const firstSceneRowCssY = innerY + innerH - 0.5;
+  const firstSceneRowRgba = readPixelCssBottomLeft(
+    gl,
+    innerX + innerTdScratch.w * 0.5,
+    firstSceneRowCssY,
+    pr,
+    canvasDeviceHeight,
+  );
+  const firstSceneRowDeviceY = expectedFirstSceneRowDeviceY;
+
+  rd.dispose();
+  wall.remove();
+
+  return {
+    glRenderer,
+    windowDpr,
+    rendererDpr,
+    topBarRgba,
+    bottomBarRgba,
+    firstSceneRowRgba,
+    firstSceneRowDeviceY,
+    expectedFirstSceneRowDeviceY,
+    expectedBarRgba,
+  };
+}
+
 /** Runs inside headless Chrome (SwiftShader); throws on failure (no silent skip). */
 export async function runPackMirrorReadbackInPage(
   input: PackMirrorReadbackInput,
 ): Promise<PackMirrorReadbackResult> {
+  if (input.mode === "letterbox16x9") {
+    throw new Error("use runPackMirrorLetterbox16x9ReadbackInPage for letterbox16x9 mode");
+  }
   const windowDpr = input.windowDpr;
   const rendererDpr = rendererDprFor(input);
   const mode = input.mode ?? "arrow";

@@ -151,6 +151,67 @@ async function runQuadrantCase(
   throw new Error(pageError || "quadrant readback did not finish");
 }
 
+function rgbaNear(
+  px: [number, number, number, number],
+  ref: [number, number, number, number],
+  tol = 12,
+): boolean {
+  return (
+    Math.abs(px[0] - ref[0]) <= tol
+    && Math.abs(px[1] - ref[1]) <= tol
+    && Math.abs(px[2] - ref[2]) <= tol
+  );
+}
+
+const LETTERBOX_READBACK_PRS = [1, 1.5] as const;
+
+async function runLetterbox16x9Case(page: Page, pr: number): Promise<void> {
+  let pageError = "";
+  page.on("pageerror", (err) => { pageError = String(err); });
+  const url = `${baseUrl}/pack-mirror-readback.html?mode=letterbox16x9&windowDpr=${pr}&rendererDpr=${pr}&aa=0`;
+  await page.goto(url, { waitUntil: "load", timeout: 30_000 });
+  for (let i = 0; i < 100; i++) {
+    if (pageError) throw new Error(pageError);
+    const state = await page.evaluate(() => ({
+      err: (window as unknown as { __readbackError?: string }).__readbackError,
+      ok: (window as unknown as {
+        __readbackOk?: {
+          topBarRgba?: [number, number, number, number];
+          bottomBarRgba?: [number, number, number, number];
+          firstSceneRowRgba?: [number, number, number, number];
+          firstSceneRowDeviceY?: number;
+          expectedFirstSceneRowDeviceY?: number;
+          expectedBarRgba?: [number, number, number, number];
+        };
+      }).__readbackOk,
+    }));
+    if (state.err) throw new Error(state.err);
+    if (state.ok) {
+      const ok = state.ok;
+      expect(rgbaNear(ok.topBarRgba!, ok.expectedBarRgba!)).toBe(true);
+      expect(rgbaNear(ok.bottomBarRgba!, ok.expectedBarRgba!)).toBe(true);
+      expect(ok.firstSceneRowDeviceY).toBe(ok.expectedFirstSceneRowDeviceY);
+      expect(ok.firstSceneRowRgba![1]).toBeGreaterThan(150);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(pageError || "letterbox16x9 readback did not finish");
+}
+
+describe("pack mirror readback 16:9 letterbox (SwiftShader)", () => {
+  for (const pr of LETTERBOX_READBACK_PRS) {
+    it(`1:1 mirror tile pr ${pr}: bar pixels match surface panel colour, first scene row at offset`, async () => {
+      const page = await browser!.newPage();
+      try {
+        await runLetterbox16x9Case(page, pr);
+      } finally {
+        await page.close();
+      }
+    }, 90_000);
+  }
+});
+
 describe("pack mirror readback renderer DPR boundary", () => {
   for (const c of ZOOM_CASES) {
     it(`${c.label} (windowDpr=${c.windowDpr} rendererDpr=${c.rendererDpr})`, async () => {
