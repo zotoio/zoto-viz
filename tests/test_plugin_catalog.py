@@ -269,3 +269,21 @@ def test_scan_memo_hits_until_files_change(tmp_path: Path) -> None:
     changed = plugins.scan(tmp_path)
     assert {p["id"] for p in changed["plugins"]} == {"solo", "duo"}
     assert plugins.scan_builds() == builds + 1
+
+
+def test_scan_memo_invalidates_on_asset_bytes(tmp_path: Path) -> None:
+    home = tmp_path / "demo-pack"
+    home.mkdir()
+    (home / "plugin.yml").write_text(
+        _MIN_YML.format(pid="demo-pack", name="Demo", version=1), encoding="utf-8",
+    )
+    assets = home / "assets"
+    assets.mkdir()
+    tone = assets / "tone.mp3"
+    tone.write_bytes(b"a")
+    plugins.reset_bundles()
+    plugins.scan(tmp_path)
+    builds = plugins.scan_builds()
+    tone.write_bytes(b"b")
+    plugins.scan(tmp_path)
+    assert plugins.scan_builds() == builds + 1

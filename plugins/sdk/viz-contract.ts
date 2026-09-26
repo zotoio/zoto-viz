@@ -24,15 +24,17 @@ export interface VizPresentTick {
    */
   tileId: string;
   /**
-   * Host sky clock in seconds (`scene.skyTime()`): monotonic (never decreases), global
-   * across views, always sent on present ticks. Frame deltas are clamped to 0.25 s;
-   * the clock follows the motion speed slider like the sky shader `uTime`.
+   * Host sky clock in seconds (`scene.skyTime()` / shader `uTime`): monotonic (never
+   * decreases), global across views, always sent on present ticks. Per-frame `dt` is
+   * clamped to 0.25 s **before** speed scaling; the integrated rate follows the motion
+   * speed slider and scene pulse (up to **2.4×** extra at full pulse, same as the sky).
    */
   pluginClock?: number;
   /**
    * Width/height of the **stage tile** the sandbox is drawing into (`w / h`), not the
-   * hidden iframe size. Reserved with `tileId` until the sandbox-per-tile decision;
-   * do not use `innerWidth`/`innerHeight` alone in the iframe.
+   * hidden iframe size. In mosaic layout the host currently uses the main scene camera
+   * aspect while this field is reserved. Re-scoped with `tileId` after the sandbox model
+   * decision; do not use `innerWidth`/`innerHeight` alone in the iframe.
    */
   aspect?: number;
 }

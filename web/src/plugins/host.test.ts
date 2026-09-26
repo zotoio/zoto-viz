@@ -48,6 +48,32 @@ describe("PluginSandbox", () => {
     box.unload();
   });
 
+  it("posts contractVersion on init", async () => {
+    const inits: { type?: string; contractVersion?: number }[] = [];
+    const append = document.body.appendChild.bind(document.body);
+    document.body.appendChild = (node: Node) => {
+      const out = append(node);
+      if (node instanceof HTMLIFrameElement && node.contentWindow) {
+        vi.spyOn(node.contentWindow, "postMessage").mockImplementation((data) => {
+          inits.push(data as { type?: string; contractVersion?: number });
+        });
+      }
+      return out;
+    };
+    const box = new PluginSandbox();
+    await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
+    document.body.appendChild = append;
+    expect(inits.find((m) => m.type === "init")?.contractVersion).toBe(VIZ_CONTRACT_VERSION);
+    box.unload();
+  });
+
+  it("resolves load when the iframe is removed before onload", async () => {
+    const box = new PluginSandbox();
+    const pending = box.load("slow", "globalThis.ok = true;", ["graph.read"], {});
+    box.unload();
+    await expect(pending).resolves.toBeUndefined();
+  });
+
   it("loads srcdoc, ticks, and unloads", async () => {
     const box = new PluginSandbox();
     const styles: Record<string, unknown>[] = [];
