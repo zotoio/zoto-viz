@@ -1,7 +1,38 @@
-/** Host-decimated viz frame slices this pack reads (no extra packet/talker fields). */
-import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
+/**
+ * Host VizDataFrame slices this pack reads — shapes match
+ * `web/src/plugins/viz-host.ts` (no runtime import across the pack boundary).
+ */
+export interface VizPacketSample {
+  proto: string;
+  size: number;
+  field: number;
+}
 
-export type AntColonyFrame = Pick<
-  VizDataFrame,
-  "t" | "dt" | "audio" | "demo" | "packets" | "talkers" | "sys"
->;
+export interface VizTalkerSample {
+  id: string;
+  rate: number;
+  role: string;
+}
+
+export interface VizSysTelemetry {
+  cpu: number;
+  mem: number;
+  disk: number;
+  gpu: number;
+  temp: number;
+  watts: number;
+  psi: number;
+  sockets: number;
+  failed: number;
+  udev: number;
+}
+
+export type AntColonyFrame = {
+  t: number;
+  dt: number;
+  audio: number;
+  demo?: boolean;
+  packets: VizPacketSample[];
+  talkers: VizTalkerSample[];
+  sys?: VizSysTelemetry;
+};

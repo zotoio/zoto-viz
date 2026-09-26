@@ -268,22 +268,41 @@ export class AntColonySim {
     }
   }
 
-  private spawnAnts(frame: AntColonyFrame): void {
+  private spawnAnts(frame: AntColonyFrame, reinit: boolean): void {
     const cap = Math.min(this.look.antCap, MAX_ANT_INSTANCES);
+    for (let i = cap; i < MAX_ANT_INSTANCES; i++) this.ants[i]!.alive = 0;
+    let avgRate = 60;
+    if (frame.talkers.length > 0) {
+      let sum = 0;
+      for (const talker of frame.talkers) sum += talker.rate;
+      avgRate = sum / frame.talkers.length;
+    }
+    const density = this.look.mapRate
+      ? Math.min(cap, Math.max(8, Math.round(avgRate * 0.45)))
+      : cap;
     let alive = 0;
     for (let i = 0; i < cap; i++) {
       const ant = this.ants[i]!;
+      if (i >= density) {
+        ant.alive = 0;
+        continue;
+      }
       const tunnel = i % Math.max(1, this.tunnels.length);
       const t = this.tunnels[tunnel];
       if (!t) {
         ant.alive = 0;
         continue;
       }
+      const wasDead = ant.alive === 0;
       ant.tunnel = tunnel;
-      ant.u = hash01(this.look.seed, i + 90);
-      const spd = this.look.mapRate ? 0.12 + t.rate * 0.55 : 0.25;
+      if (reinit || wasDead) {
+        ant.u = hash01(this.look.seed, i + 90);
+        ant.phase = hash01(this.look.seed, i + 120) * 6.28;
+      }
+      const talker = frame.talkers[i % Math.max(1, frame.talkers.length)];
+      const rateNorm = talker ? Math.min(1, talker.rate / 220) : Math.min(1, avgRate / 220);
+      const spd = this.look.mapRate ? 0.12 + rateNorm * 0.55 : 0.25;
       ant.speed = spd * (this.look.rain ? 0.55 : 1);
-      ant.phase = hash01(this.look.seed, i + 120) * 6.28;
       const pkt = frame.packets[i % Math.max(1, frame.packets.length)];
       ant.crumb = this.look.mapBytes && pkt ? 0.15 + pkt.field * 0.65 : 0.25;
       ant.soldier = 0;
@@ -368,7 +387,6 @@ export class AntColonySim {
       if (ant.u > 1) ant.u -= 1;
       ant.phase += dt * (6 + ant.speed * 12);
     }
-    this.followIdx = (this.followIdx + 1) % Math.max(1, this.look.antCap);
   }
 
   private growTunnels(dt: number): void {
@@ -395,13 +413,15 @@ export class AntColonySim {
     }
     const live = this.effectiveTalkers(frame.talkers);
     const key = talkerIdSetKey(live);
+    let reinit = false;
     if (key !== this.talkerIdKey) {
       this.syncChambers(frame.talkers, this.look.seed);
       this.layoutTunnels(frame.packets, this.look.seed);
+      reinit = true;
     } else {
       this.updateChamberRates(frame.talkers);
     }
-    this.spawnAnts(frame);
+    this.spawnAnts(frame, reinit);
   }
 
   /** Light-test: stable host-keyed chamber layout. */

@@ -17,6 +17,60 @@ float slot(int i) {
   return c == 0 ? v.x : c == 1 ? v.y : c == 2 ? v.z : v.w;
 }
 
+const uvec2 LABEL_FONT[59] = uvec2[](
+  uvec2(0u,0u), uvec2(135300u,1u), uvec2(10570u,0u), uvec2(11512810u,0u),
+  uvec2(524752836u,1u), uvec2(27070835u,0u), uvec2(2471564582u,5u), uvec2(2180u,0u),
+  uvec2(136382600u,2u), uvec2(2290360450u,0u), uvec2(719469220u,1u), uvec2(139432064u,0u),
+  uvec2(2285895680u,0u), uvec2(1015808u,0u), uvec2(0u,1u), uvec2(1118480u,0u),
+  uvec2(2738546222u,3u), uvec2(2286031044u,3u), uvec2(3292807726u,7u), uvec2(3775349263u,3u),
+  uvec2(301246856u,2u), uvec2(2735225919u,3u), uvec2(2736227404u,3u), uvec2(2216829471u,0u),
+  uvec2(2736211502u,3u), uvec2(2433697326u,1u), uvec2(4194432u,0u), uvec2(2285895808u,0u),
+  uvec2(136349832u,2u), uvec2(32537600u,0u), uvec2(2290622594u,0u), uvec2(4473390u,1u),
+  uvec2(2212165166u,3u), uvec2(1663026734u,4u), uvec2(3809986095u,3u), uvec2(2718991918u,3u),
+  uvec2(3810051631u,3u), uvec2(3256321087u,7u), uvec2(1108837439u,0u), uvec2(2736686638u,3u),
+  uvec2(1663026737u,4u), uvec2(2286030990u,3u), uvec2(2458132764u,1u), uvec2(1381078321u,4u),
+  uvec2(3255862305u,7u), uvec2(1662703473u,4u), uvec2(1662834289u,4u), uvec2(2736309806u,3u),
+  uvec2(1108854319u,0u), uvec2(2472068654u,5u), uvec2(1381484079u,4u), uvec2(2735146542u,3u),
+  uvec2(138547359u,1u), uvec2(2736309809u,3u), uvec2(353945137u,1u), uvec2(2874852913u,2u),
+  uvec2(1654794801u,4u), uvec2(138553905u,1u), uvec2(3257016863u,7u)
+);
+
+float labelFontBit(int code, int fx, int fy) {
+  if (fx < 0 || fy < 0 || fx > 4 || fy > 6) return 0.0;
+  int i = clamp(code - 32, 0, 58);
+  uint bit = uint(fy * 5 + fx);
+  uvec2 g = LABEL_FONT[i];
+  uint on = bit < 32u ? ((g.x >> bit) & 1u) : ((g.y >> (bit - 32u)) & 1u);
+  return float(on);
+}
+
+float labelGlyph(int code, vec2 uv) {
+  if (uv.x < -0.12 || uv.y < -0.12 || uv.x > 1.12 || uv.y > 1.12) return 0.0;
+  vec2 p = vec2(uv.x * 5.0, (1.0 - uv.y) * 7.0);
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  float s00 = labelFontBit(code, int(i.x), int(i.y));
+  float s10 = labelFontBit(code, int(i.x) + 1, int(i.y));
+  float s01 = labelFontBit(code, int(i.x), int(i.y) + 1);
+  float s11 = labelFontBit(code, int(i.x) + 1, int(i.y) + 1);
+  vec2 w = smoothstep(0.08, 0.92, f);
+  return mix(mix(s00, s10, w.x), mix(s01, s11, w.x), w.y);
+}
+
+float labelInk(vec2 uv, float labelLen) {
+  if (labelLen < 0.5) return 0.0;
+  vec2 plaque = vec2((uv.x - 0.04) / 0.48, (uv.y - 0.885) / 0.08);
+  if (plaque.x < 0.0 || plaque.y < 0.0 || plaque.y > 1.0 || plaque.x > 1.0) return 0.0;
+  int cols = int(min(labelLen, 8.0));
+  if (cols < 1) return 0.0;
+  int ci = int(floor(plaque.x * float(cols)));
+  if (ci < 0 || ci >= cols) return 0.0;
+  float packed = slot(16 + ci);
+  int code = int(packed * 95.0 + 0.5) + 32;
+  vec2 cellUv = vec2(fract(plaque.x * float(cols)), plaque.y);
+  return labelGlyph(code, (cellUv - vec2(0.06, 0.1)) / vec2(0.88, 0.78));
+}
+
 float hash21(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -171,6 +225,8 @@ void main() {
   float labelLen = slot(15);
   if (labelLen > 0.5 && uv.y > 0.88 && uv.x < 0.55) {
     col = mix(col, vec3(0.95, 0.92, 0.85), 0.65);
+    float ink = labelInk(uv, labelLen);
+    col = mix(col, vec3(0.18, 0.14, 0.1), smoothstep(0.15, 0.72, ink));
   }
 
   col *= uBright;

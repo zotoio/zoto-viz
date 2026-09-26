@@ -70,7 +70,12 @@ export function parseAntColonyLook(cfg?: Record<string, string>): AntColonyLook 
   const preset = pick(cfg?.preset, ["formicarium", "night-glow", "red-alert", "minimal"] as const, base.preset);
   Object.assign(base, PRESET_PATCH[preset]);
   base.preset = preset;
-  base.seed = clamp(Math.round(Number(cfg?.seed) || base.seed), 0, 999_999);
+  const seedRaw = cfg?.seed;
+  base.seed = clamp(
+    Math.round(seedRaw !== undefined && seedRaw !== "" ? Number(seedRaw) : base.seed),
+    0,
+    999_999,
+  );
   base.antCap = clamp(Math.round(Number(cfg?.antCap) || base.antCap), 24, 160);
   base.evaporation = clamp(Number(cfg?.evaporation) || base.evaporation, 0.8, 0.99);
   base.diffusion = clamp(Number(cfg?.diffusion) || base.diffusion, 0.05, 0.45);
