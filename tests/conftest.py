@@ -7,6 +7,7 @@ import pytest
 
 from service import paths
 from service import plugin_local
+from service import plugins
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +29,7 @@ def _isolate_plugin_local(tmp_path_factory: pytest.TempPathFactory, monkeypatch:
     monkeypatch.setattr(paths, "plugin_local_dir", fake_local)
     monkeypatch.setattr(paths, "plugin_local_runtime_dir", fake_runtime)
     plugin_local.reset_watch_for_tests()
+    plugins.reset_scan_memo()
     from service import live
     live.reset_for_tests()
     live.set_autoconsent(False)

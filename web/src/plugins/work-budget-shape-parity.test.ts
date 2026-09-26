@@ -6,7 +6,7 @@ import {
   MANIFEST_WORK_BUDGET_KEYS,
   parseManifestWorkBudgetShape,
 } from "../../../plugins/sdk/manifest-work-budget";
-import { hostWorkBudgetCeilings } from "./work-budget-policy";
+import { assertWorkBudgetOverHostCeiling, hostWorkBudgetCeilings } from "./work-budget-policy";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const SCHEMA_PATH = join(REPO, "plugins/sdk/manifest-work-budget.schema.json");
@@ -49,6 +49,25 @@ describe("workBudget shape parity (TS)", () => {
         expect(() => parseManifestWorkBudgetShape(raw)).toThrow();
       }
     });
+  }
+
+  for (const key of MANIFEST_WORK_BUDGET_KEYS) {
+    for (const delta of [-1, 0, 1] as const) {
+      it(`per-ceiling grid ${key} ${delta >= 0 ? "+" : ""}${delta}`, () => {
+        const ceilings = hostWorkBudgetCeilings();
+        const value = ceilings[key] + delta;
+        if (value < 0) return;
+        const budget = { ...baseBudget(), [key]: value };
+        parseManifestWorkBudgetShape(budget);
+        const clamped = clampManifestWorkBudgetToCeilings(budget, ceilings);
+        expect(clamped[key]).toBe(Math.min(value, ceilings[key]));
+        if (delta <= 0) {
+          expect(() => assertWorkBudgetOverHostCeiling(budget)).not.toThrow();
+        } else {
+          expect(() => assertWorkBudgetOverHostCeiling(budget)).toThrow();
+        }
+      });
+    }
   }
 
   it("clamp maps non-finite to zero like Python runtime_work_budget_int", () => {

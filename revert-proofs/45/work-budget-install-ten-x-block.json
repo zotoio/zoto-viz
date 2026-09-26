@@ -3,5 +3,5 @@
   "testFile": "tests/test_manifest_work_budget.py",
   "testName": "test_install_blocks_at_ten_times_ceiling",
   "description": "New install/update blocked above 10\u00d7 host ceiling.",
-  "entryPoint": "plugin_local._guard_work_budget_install (local zip install/update)"
+  "entryPoint": "service/plugin_local.py \u2014 local zip install/update guard"
 }

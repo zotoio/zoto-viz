@@ -1,13 +1,15 @@
 diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
-index 43102c8..ddeb5d0 100644
 --- a/web/src/plugins/viz-host.ts
 +++ b/web/src/plugins/viz-host.ts
-@@ -532,7 +532,7 @@ function buildVizFrameCore(
+@@ -519,6 +519,10 @@ function buildVizFrameCore(
+   const t = state.ts || vizClockMs() / 1000;
+   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
    const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
-   const headlineEligible = sourceHeadlines(
-     state.sources,
--    Number.MAX_SAFE_INTEGER,
+-  const headlineEligible = countEligibleSourceHeadlines(state.sources, parsed);
++  const headlineEligible = sourceHeadlines(
++    state.sources,
 +    VIZ_MAX_HEADLINE_SAMPLES,
-     parsed,
-   ).length;
++    parsed,
++  ).length;
    const rawHeadlines = sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed);
+   recordHeadlineDecimation(headlineEligible, rawHeadlines.length);

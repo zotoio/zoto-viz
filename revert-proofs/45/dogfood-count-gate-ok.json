@@ -3,5 +3,5 @@
   "testFile": "web/src/plugins/dogfood.test.ts",
   "testName": "viz dogfood gates > fat-LAN count gate: deterministic delivery and build work budgets",
   "description": "runDogfoodCountGate aggregates per-pack delivery and work budget success.",
-  "entryPoint": ""
+  "entryPoint": "web/src/plugins/dogfood-runner.ts \u2014 runDogfoodCountGate"
 }

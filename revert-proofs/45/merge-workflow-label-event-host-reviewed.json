@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_pr_boundary.py",
   "testName": "test_merge_workflow_label_event_appends_host_reviewed",
   "description": "Label-driven workflow runs append labeled events to the review timeline.",
-  "entryPoint": ""
+  "entryPoint": "scripts/check_pack_pr_boundary.py \u2014 run_host_change_gate"
 }

@@ -3,5 +3,5 @@
   "testFile": "tests/test_manifest_work_budget.py",
   "testName": "test_install_blocks_despite_pack_bundled_policy_ceilings",
   "description": "Install guard uses host policy, not pack-bundled ceilings JSON.",
-  "entryPoint": "resolve_work_budget_policy_path (install/catalog policy load)"
+  "entryPoint": "service/manifest_work_budget.py \u2014 resolve_work_budget_policy_path (install root only)"
 }

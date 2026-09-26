@@ -3,5 +3,5 @@
   "testFile": "tests/test_ci_test_needs.py",
   "testName": "test_validate_fixture_valid",
   "description": "validate_ci_test_needs accepts a complete test.needs fixture.",
-  "entryPoint": ""
+  "entryPoint": "scripts/lint_ci_test_needs.py \u2014 CI workflow needs lint"
 }

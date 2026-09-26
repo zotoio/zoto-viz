@@ -3,5 +3,5 @@
   "testFile": "web/src/plugins/work-budget-catalog.test.ts",
   "testName": "workBudget catalog host path (#45) > 600-frame row: host clamps maxSimStepsPerFrame and integrate runs at most 4 times per frame",
   "description": "Catalog clamp before applyPluginViewWorkBudget / marble frame loop.",
-  "entryPoint": "toPluginView \u2192 applyPluginCatalog \u2192 applyPluginViewWorkBudget \u2192 ingestFrame"
+  "entryPoint": "web/src/plugins/work-budget-policy.ts \u2014 ingestCatalogWorkBudget \u2192 applyPluginViewWorkBudget"
 }

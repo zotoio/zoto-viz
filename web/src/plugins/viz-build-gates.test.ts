@@ -15,6 +15,7 @@ import {
   FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
   VIZ_MAX_PACKET_SAMPLES,
   VIZ_MAX_TALKER_SAMPLES,
+  assertVizBuildWorkGates,
   assertVizFrameOutputCaps,
   buildVizFrame,
 } from "./viz-host";
@@ -78,6 +79,18 @@ describe("viz build count gates", () => {
     expect(drops.headlinesEligible).toBeGreaterThan(64);
     expect(drops.headlinesKept).toBeLessThanOrEqual(64);
     expect(drops.headlinesDropped).toBe(drops.headlinesEligible - drops.headlinesKept);
+  });
+
+  it("fat LAN seeded frame meets output caps and build work gates together", () => {
+    const state = fatLanFixture();
+    const frame = buildVizFrame(state, 0, 0);
+    const work = takeVizBuildWorkSnapshot();
+    const drops = takeVizDecimationDropStats();
+    assertVizBuildWorkGates(state, work);
+    assertVizFrameOutputCaps(frame, { checkDecimation: true });
+    expect(encodedVizFrameBytes(frame)).toBeLessThanOrEqual(FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING);
+    expect(drops.talkersDropped).toBe(drops.talkersEligible - drops.talkersKept);
+    expect(drops.packetsDropped).toBe(drops.packetsEligible - drops.packetsKept);
   });
 
   it("output caps match decimation drop stats on seeded fat LAN", () => {

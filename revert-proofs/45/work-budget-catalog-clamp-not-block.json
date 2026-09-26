@@ -3,5 +3,5 @@
   "testFile": "tests/test_manifest_work_budget.py",
   "testName": "test_catalog_clamps_over_ceiling_pack_stays_loaded",
   "description": "Catalog load clamps over-ceiling workBudget instead of rejecting.",
-  "entryPoint": "service.plugins._attach_visualisation (catalog scan)"
+  "entryPoint": "service/plugins.py \u2014 scan (GET /api/plugins) \u2192 _attach_visualisation"
 }

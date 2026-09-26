@@ -1,6 +1,11 @@
 import type { Device, StateMsg } from "../core/types";
 import { vizClockMs } from "../core/viz-clock";
-import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
+import {
+  countEligibleSourceHeadlines,
+  parseSourceBind,
+  sourceHeadlines,
+  type SourceBind,
+} from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
 import {
@@ -517,11 +522,7 @@ function buildVizFrameCore(
   const t = state.ts || vizClockMs() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
-  const headlineEligible = sourceHeadlines(
-    state.sources,
-    Number.MAX_SAFE_INTEGER,
-    parsed,
-  ).length;
+  const headlineEligible = countEligibleSourceHeadlines(state.sources, parsed);
   const rawHeadlines = sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed);
   recordHeadlineDecimation(headlineEligible, rawHeadlines.length);
   return {

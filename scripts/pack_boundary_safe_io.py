@@ -111,6 +111,24 @@ class WorkflowSafePrinter:
         finally:
             self.end()
 
+    @staticmethod
+    def format_github_env_value(value: str) -> str:
+        """Multiline-safe value for appending to $GITHUB_ENV (no workflow injection)."""
+        if "\n" in value or "\r" in value:
+            delim = f"PACK_BOUNDARY_{secrets.token_hex(8)}"
+            return f"<<{delim}\n{value}\n{delim}"
+        return value.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
+
+    def append_github_env(self, key: str, value: str, *, path: str | None = None) -> None:
+        env_file = path or os.environ.get("GITHUB_ENV")
+        if not env_file:
+            return
+        if not key or not all(c.isalnum() or c == "_" for c in key) or key[0].isdigit():
+            raise ValueError(f"unsafe GITHUB_ENV key: {key!r}")
+        safe = self.format_github_env_value(value)
+        with open(env_file, "a", encoding="utf-8") as f:
+            f.write(f"{key}={safe}\n")
+
 
 def validate_changed_paths(paths: list[str]) -> str | None:
     for path in paths:

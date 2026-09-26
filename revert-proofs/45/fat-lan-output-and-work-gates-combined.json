@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/viz-build-gates.test.ts",
+  "testName": "viz build count gates > fat LAN seeded frame meets output caps and build work gates together",
+  "description": "Single buildVizFrame must satisfy assertVizBuildWorkGates and assertVizFrameOutputCaps on seeded fat LAN.",
+  "entryPoint": "web/src/plugins/viz-host.ts \u2014 buildVizFrame \u2192 buildVizFrameCore"
+}

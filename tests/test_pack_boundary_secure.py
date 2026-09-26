@@ -61,6 +61,21 @@ def test_secure_dry_run_rejects_symlink_in_pr_head(tmp_path: Path) -> None:
     assert "symlink" in err.lower()
 
 
+def test_secure_dry_run_github_env_write_escaped(tmp_path: Path) -> None:
+    """(g) PR-derived values appended to GITHUB_ENV use delimiter escaping, not raw newlines."""
+    env_path = tmp_path / "github_env"
+    env_path.write_text("", encoding="utf-8")
+    printer = WorkflowSafePrinter()
+    evil = "plugins/demo\nMALICIOUS=1"
+    printer.append_github_env("PACK_BOUNDARY_NOTE", evil, path=str(env_path))
+    body = env_path.read_text(encoding="utf-8")
+    lines = body.splitlines()
+    assert lines[0].startswith("PACK_BOUNDARY_NOTE=<<PACK_BOUNDARY_")
+    delim = lines[0].split("<<", 1)[1]
+    assert lines[-1] == delim
+    assert "\n".join(lines[1:-1]) == evil
+
+
 def test_secure_dry_run_workflow_command_injection_escaped(capsys: pytest.CaptureFixture[str]) -> None:
     """(c) PR-derived paths with leading :: are escaped; stop-commands wraps output."""
     printer = WorkflowSafePrinter()

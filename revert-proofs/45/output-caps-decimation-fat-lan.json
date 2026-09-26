@@ -3,5 +3,5 @@
   "testFile": "web/src/plugins/viz-build-gates.test.ts",
   "testName": "viz build count gates > output caps match decimation drop stats on seeded fat LAN",
   "description": "Seeded fat-LAN frame byte ceiling and decimation drop accounting.",
-  "entryPoint": ""
+  "entryPoint": "web/src/plugins/viz-host.ts \u2014 buildVizFrame"
 }

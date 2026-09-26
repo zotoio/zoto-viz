@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_pr_boundary.py",
   "testName": "test_validate_pull_changed_files_rejects_over_api_cap",
   "description": "Reject PRs with changed_files above the GitHub pulls/files API cap.",
-  "entryPoint": ""
+  "entryPoint": "scripts/check_pack_pr_boundary.py \u2014 run_check"
 }

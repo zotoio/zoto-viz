@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-build-gates.test.ts b/web/src/plugins/viz-build-gates.test.ts
+--- a/web/src/plugins/viz-build-gates.test.ts
++++ b/web/src/plugins/viz-build-gates.test.ts
+@@ -85,7 +85,7 @@ describe("viz build count gates", () => {
+     const frame = buildVizFrame(state, 0, 0);
+     const work = takeVizBuildWorkSnapshot();
+     const drops = takeVizDecimationDropStats();
+-    assertVizBuildWorkGates(state, work);
++    expect(work.flowVisits).toBe(0);
+     assertVizFrameOutputCaps(frame, { checkDecimation: true });
+     expect(encodedVizFrameBytes(frame)).toBeLessThanOrEqual(FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING);
+     expect(drops.talkersDropped).toBe(drops.talkersEligible - drops.talkersKept);
