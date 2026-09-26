@@ -1,0 +1,13 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -469,6 +469,9 @@
+         )
+         first, _all = run_staging_validators(ctx)
+         if first is not None:
++            if len(_all) > 1:
++                joined = "; ".join(f.message for f in _all)
++                first = InstallFailure(first.validator, first.reason, joined)
+             return blocked_result(first, pack_id=pid, sha256=sha256, zip_path=rel)
+         if upgrade:
+             _backup_zip_if_present(dest_zip)

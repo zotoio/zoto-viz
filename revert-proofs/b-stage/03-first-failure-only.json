@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_install_staged.py",
+  "testName": "test_first_failure_only_logs_both",
+  "description": "User-facing blocked install returns only the first validator message; server logs every failure."
+}

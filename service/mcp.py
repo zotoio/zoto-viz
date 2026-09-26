@@ -693,14 +693,27 @@ def install_catalog_zip(
         dirty = pmg.dirty_tree_paths(pid)
         if dirty and not force:
             raise pmg.DirtyTreeError(dirty, pid)
-        if dest.is_file() and not overwrite:
+        if dest.is_file() and not overwrite and not force:
             raise ValueError(f"plugin {pid!r} already exists (pass overwrite: true)")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        staged = dest.with_name(dest.name + ".tmp")
-        shutil.copy2(tmp_path, staged)
-        os.replace(staged, dest)
+        from .plugin_install import install_zip_to_runtime
+
+        upgrade = dest.is_file() and runtime.is_dir()
+        pipeline = install_zip_to_runtime(
+            tmp_path,
+            dest,
+            runtime,
+            doc,
+            rel=str(dest),
+            sha256=incoming,
+            upgrade=upgrade,
+            force=force,
+        )
+        if not pipeline.get("ok"):
+            _refresh_plugin_python(pipeline)
+            return pipeline
         unpacked = pz.unpack_zip(dest, runtime)
-        info = _install_result(doc, dest, unpacked, wrote=True)
+        info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
         if reminted_from:
             info["remintedFrom"] = reminted_from
         _refresh_plugin_python(info)

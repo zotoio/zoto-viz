@@ -21,6 +21,10 @@ from . import paths
 from . import plugin_migration as pmg
 from . import plugin_zip as pz
 from . import plugins
+from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
+from .pack_install_copy import REASON_PACK_INSTALL_FAULT, fault_message
+from .pack_install_wall_notices import wall_notice_for_install_result
+from .plugin_install import install_zip_to_runtime
 
 ENGINES = frozenset({
     "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
@@ -252,6 +256,16 @@ def _refresh_python(info: dict[str, Any]) -> None:
 
 
 def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
+    if info.get("ok") and info.get("id"):
+        clear_blocked_pack(str(info["id"]))
+    notice = wall_notice_for_install_result(info)
+    if notice:
+        info.setdefault("installNotices", [])
+        if isinstance(info["installNotices"], list):
+            info["installNotices"].append(notice)
+    blocked = pack_info_blocked_line(str(info.get("id") or ""))
+    if blocked:
+        info["packInstallBlocked"] = blocked
     _refresh_python(info)
     safe = not info.get("consentRequired")
     mode = f"plugin:{info['id']}" if activate and safe and info.get("id") else None
@@ -299,11 +313,20 @@ def install_local_zip(
             raise ValueError(
                 f"plugin {pid!r} already exists in the local drop zone (pass overwrite: true)"
             )
-        staged = dest.with_name(dest.name + ".tmp")
-        shutil.copy2(tmp_path, staged)
-        os.replace(staged, dest)
+        upgrade = dest.is_file() and runtime.is_dir()
+        pipeline = install_zip_to_runtime(
+            tmp_path,
+            dest,
+            runtime,
+            doc,
+            rel=str(dest),
+            sha256=incoming,
+            upgrade=upgrade,
+        )
+        if not pipeline.get("ok"):
+            return _finish(pipeline, activate=False)
         unpacked = pz.unpack_zip(dest, runtime)
-        info = _install_result(doc, dest, unpacked, wrote=True)
+        info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
         if reminted_from:
             info["remintedFrom"] = reminted_from
         return _finish(info, activate=activate)
@@ -319,7 +342,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     doc = plugins.validate_doc(manifest.plugin)
     pid = str(doc["id"])
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
-    raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=False)
+    raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=dest.is_file())
     pid = str(doc["id"])
     if reminted_from:
         dest.write_bytes(raw)
@@ -335,8 +358,21 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
         else:
             shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
+    incoming = pz.plugin_sha256(dest)
+    upgrade = runtime.is_dir()
+    pipeline = install_zip_to_runtime(
+        dest,
+        dest,
+        runtime,
+        doc,
+        rel=str(dest),
+        sha256=incoming,
+        upgrade=upgrade,
+    )
+    if not pipeline.get("ok"):
+        return _finish(pipeline, activate=False)
     unpacked = pz.unpack_zip(dest, runtime)
-    info = _install_result(doc, dest, unpacked, wrote=True)
+    info = _install_result(doc, dest, unpacked, wrote=bool(pipeline.get("wrote", True)))
     if reminted_from:
         info["remintedFrom"] = reminted_from
     return _finish(info, activate=activate)
@@ -356,6 +392,8 @@ def publish_local(body: dict[str, Any] | None) -> dict[str, Any]:
             "path": e.path,
             "hint": "a shipped plugins/src tree already owns this id",
         }
+    except PackInstallStoreFault as e:
+        return {"ok": False, "error": REASON_PACK_INSTALL_FAULT, "message": fault_message(str(e))}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
 
@@ -381,6 +419,8 @@ def sync_local_drop() -> list[dict[str, Any]]:
             results.append(adopt_local_zip_file(z, activate=True))
         except pmg.SrcOwnedError as e:
             results.append({"ok": False, "error": "src_owns_id", "id": e.plugin_id, "path": str(z)})
+        except PackInstallStoreFault as e:
+            results.append({"ok": False, "error": REASON_PACK_INSTALL_FAULT, "message": fault_message(str(e)), "path": str(z)})
         except (ValueError, OSError) as e:
             results.append({"ok": False, "error": str(e), "path": str(z)})
     gone = [key for key in _seen if key not in current]

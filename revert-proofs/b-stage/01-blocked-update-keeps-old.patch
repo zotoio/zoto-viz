@@ -1,0 +1,23 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -494,15 +494,15 @@
+             rel=rel,
+             zip_path=zip_path,
+         )
++        if upgrade:
++            _backup_zip_if_present(dest_zip)
++        swapped = _atomic_swap(staging, runtime)
++        staging = None
+         first, _all = run_staging_validators(ctx)
+         if first is not None:
+             if not swapped:
+                 _rollback_blocked_install(runtime, dest_zip, old_zip_bytes, old_runtime_hash)
+             return blocked_result(first, pack_id=pid, sha256=sha256, zip_path=rel)
+-        if upgrade:
+-            _backup_zip_if_present(dest_zip)
+-        swapped = _atomic_swap(staging, runtime)
+-        staging = None
+         _start_runtime(runtime, doc, sha256)
+         _commit_zip_after_success(zip_path, dest_zip)
+         if swapped:

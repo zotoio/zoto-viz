@@ -1,0 +1,26 @@
+diff --git a/service/mcp.py b/service/mcp.py
+--- a/service/mcp.py
++++ b/service/mcp.py
+@@ -696,19 +696,9 @@
+         if dest.is_file() and not overwrite and not force:
+             raise ValueError(f"plugin {pid!r} already exists (pass overwrite: true)")
+         dest.parent.mkdir(parents=True, exist_ok=True)
+-        from .plugin_install import install_zip_to_runtime
+-
+-        upgrade = dest.is_file() and runtime.is_dir()
+-        pipeline = install_zip_to_runtime(
+-            tmp_path,
+-            dest,
+-            runtime,
+-            doc,
+-            rel=str(dest),
+-            sha256=incoming,
+-            upgrade=upgrade,
+-            force=force,
+-        )
++        shutil.copy2(tmp_path, dest)
++        unpacked = pz.unpack_zip(dest, runtime)
++        pipeline = {"ok": False, "error": "pack_install_blocked", "message": "direct unpack (no staging)"}
+         if not pipeline.get("ok"):
+             _refresh_plugin_python(pipeline)
+             return pipeline
