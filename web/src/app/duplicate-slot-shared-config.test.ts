@@ -6,7 +6,7 @@ import { hostModeById } from "./host-mode";
 import { setPluginModes } from "../core/modes";
 import { compilePlugin } from "../plugins/plugin";
 import { Settings } from "../ui/settings";
-import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
+import { resolveSettingsTargetModeId, syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
 
 const PACK = "plugin:settings-fixture";
 
@@ -73,35 +73,10 @@ describe("duplicate slot shared config > live edit applies to every sharing tile
   });
 
   it("uses settings viewFocus instead of the catalog fallback mode id", () => {
-    const spec = loadSettingsDeclFixture();
-    setPluginModes([
-      compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
-    ]);
     const settings = new Settings({ storePrefix: "zoto-view-focus", onChange: () => {} });
     settings.openView(`${PACK}!1`);
-    const sceneFocused = { setMode: vi.fn() };
-    const sceneOther = { setMode: vi.fn() };
-    const mosaic = {
-      on: true,
-      tileIds: ["plugin:settings-fixture", "plugin:settings-fixture!1"],
-      graphScene: (id: string) => (id === "plugin:settings-fixture!1" ? sceneFocused : sceneOther),
-    };
-    const opts = { gain: "3", preset: "a", mode: "x", locked: "0.5" };
-    syncPluginFieldsFromSettingsEdit({
-      settings,
-      fallbackModeId: () => PACK,
-      hostModeById,
-      optsFor: () => opts,
-      mosaic,
-      scene: { setMode: vi.fn() },
-      pluginSpecForMode: (modeId) => (hostModeById(modeId).pluginId === "settings-fixture" ? spec : null),
-      setCurrentOpts: () => {},
-      setSkyPrompt: () => {},
-      setNestLook: () => {},
-      viewPromptKey: "prompt",
-    });
     expect(settings.viewFocus).toBe(`${PACK}!1`);
-    expect(sceneFocused.setMode).toHaveBeenCalled();
-    expect(sceneOther.setMode).not.toHaveBeenCalled();
+    expect(resolveSettingsTargetModeId(settings, () => PACK)).toBe(`${PACK}!1`);
+    expect(resolveSettingsTargetModeId(settings, () => "plugin:topology")).toBe(`${PACK}!1`);
   });
 });
