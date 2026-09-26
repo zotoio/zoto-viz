@@ -1,12 +1,12 @@
-/** Wall-level status strip (same host + class as mosaic layout-refusal copy). */
+/** Wall-level status strip on `#wall`. */
 
-export const WALL_NOTICE_CLASS = "mosaic-wall-notice";
+const WALL_NOTICE_CLASS = "mosaic-wall-notice";
 
-export function wallNoticeHost(): HTMLElement | null {
+function wallNoticeHost(): HTMLElement | null {
   return document.getElementById("wall");
 }
 
-export function wallNoticeElements(): HTMLElement[] {
+function wallNoticeElements(): HTMLElement[] {
   const host = wallNoticeHost();
   if (!host) return [];
   return [...host.querySelectorAll(`.${WALL_NOTICE_CLASS}`)] as HTMLElement[];

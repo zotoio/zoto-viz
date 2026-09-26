@@ -2,8 +2,6 @@
 
 import { SERVER_RESTART_NOTICE, SESSION_RETRY_FAILED_NOTICE } from "./http-copy";
 
-export { SERVER_RESTART_NOTICE } from "./http-copy";
-
 let csrf = "";
 
 let sessionRefreshInFlight: Promise<void> | null = null;

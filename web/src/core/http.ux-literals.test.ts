@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { SESSION_RETRY_FAILED_NOTICE } from "./http-copy";
 import { apiFetch, noteCsrf } from "./http";
+import { bindServerRestartWallNotice } from "./http-notice";
 
 describe("UX copy literals", () => {
   const orig = globalThis.fetch;
@@ -47,5 +49,33 @@ describe("UX copy literals", () => {
     window.addEventListener("zoto-viz-server-restart", onRestart);
     await apiFetch("/api/profiles/user", { method: "PUT" });
     expect(notices[0]).toBe("The server restarted, so packs were reloaded.");
+  });
+
+  it("pins retry-failed notice as exact literal", async () => {
+    document.body.innerHTML = "<div id=\"wall\"></div>";
+    const off = bindServerRestartWallNotice();
+    globalThis.fetch = (async (url: string) => {
+      const path = String(url);
+      if (path.includes("/api/session")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
+          json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
+        } as Response;
+      }
+      return {
+        ok: false,
+        status: 403,
+        headers: new Headers(),
+        clone() { return this; },
+        json: async () => ({ error: "csrf required" }),
+      } as Response;
+    }) as typeof fetch;
+    await apiFetch("/api/profiles/user", { method: "PUT" });
+    const span = document.querySelector("#wall .mosaic-wall-notice span");
+    expect(span?.textContent).toBe(SESSION_RETRY_FAILED_NOTICE);
+    off();
+    document.body.innerHTML = "";
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { apiFetch, bootSession, csrfToken, noteCsrf, SERVER_RESTART_NOTICE } from "./http";
+import { SERVER_RESTART_NOTICE } from "./http-copy";
+import { apiFetch, bootSession, csrfToken, noteCsrf } from "./http";
 
 describe("apiFetch CSRF", () => {
   const orig = globalThis.fetch;

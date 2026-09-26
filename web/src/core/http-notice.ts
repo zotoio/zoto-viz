@@ -11,13 +11,11 @@ export function bindServerRestartWallNotice(): () => void {
   if (!host) return () => {};
 
   let clearTimer: ReturnType<typeof setTimeout> | undefined;
-  let restartNoticeLive = false;
 
   const clearNotice = () => {
     clearTimeout(clearTimer);
     clearTimer = undefined;
     clearWallNotices();
-    restartNoticeLive = false;
     window.dispatchEvent(new Event("zoto-viz-server-restart-cleared"));
   };
 
@@ -33,8 +31,6 @@ export function bindServerRestartWallNotice(): () => void {
   const onRestart = (e: Event) => {
     const msg = (e as CustomEvent<string>).detail;
     if (msg !== SERVER_RESTART_NOTICE) return;
-    if (restartNoticeLive) return;
-    restartNoticeLive = true;
     const el = showWallStatusNotice(msg);
     if (!el) return;
     armAutoClear(el);
@@ -45,7 +41,6 @@ export function bindServerRestartWallNotice(): () => void {
     if (!detail?.message) return;
     clearTimeout(clearTimer);
     clearTimer = undefined;
-    restartNoticeLive = false;
     showWallRetryNotice(detail.message, detail.retry);
   };
 
