@@ -109,6 +109,8 @@ import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } fro
 import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import { revertModeSelection } from "./apply-mode-mosaic";
 import { resolveRestoredViewMode } from "./boot-view-restore";
+import { smokeBackroomsWallClock } from "../core/smoke-harness";
+import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { mergePluginConsentLivePatch } from "./plugin-consent-live";
@@ -390,7 +392,11 @@ scene.afterLook = () => {
     // The director owns camera, creature and maze on the sky clock; the sound bed reads the same track.
     backroomsViewOptions();
     scene.setHeard(false);
-    const drive = backroomsSlots(scene.skyTime(), new Date(), innerWidth / Math.max(1, innerHeight));
+    const drive = backroomsSlots(
+      scene.skyTime(),
+      smokeBackroomsWallClock() ?? new Date(),
+      innerWidth / Math.max(1, innerHeight),
+    );
     vizWriter.writeBuffer(0, drive.slot0);
     vizWriter.writeBuffer(1, drive.slot1);
     scene.setPluginUboBuffer(vizWriter.ubo);

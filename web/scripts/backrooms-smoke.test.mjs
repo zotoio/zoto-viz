@@ -4,11 +4,17 @@
  * Requires a running monitor UI (7020 after `pnpm build`, or Vite on 5173).
  */
 import assert from "node:assert/strict";
+import { PNG } from "pngjs";
 import { chromium } from "playwright";
 
 const base = process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/";
+const PRESENT_FRAMES = 30;
+const PRESENT_WAIT_MS = 300_000;
 const NEAR_BLACK = { r: 5, g: 10, b: 22 };
-const NEAR_EPS = 10;
+const NEAR_BLACK_TOL = 12;
+/** Corridor fluoro yellow (sRGB) with tolerance — not exact pixel match. */
+const CORRIDOR_YELLOW = { r: 188, g: 168, b: 78 };
+const CORRIDOR_TOL = { r: 75, g: 75, b: 60 };
 
 function installStorage() {
   localStorage.setItem("zoto-viz.mic", "off");
@@ -17,6 +23,7 @@ function installStorage() {
   localStorage.setItem("zoto-viz.mode", "plugin:backrooms");
   localStorage.setItem("zoto-viz.anim.dice", "0");
   localStorage.setItem("zoto-viz.anim.mosaic", "off");
+  localStorage.setItem("zoto-viz.smoke.backrooms", "1");
 }
 
 function installGlErrorHooks() {
@@ -52,46 +59,59 @@ function installGlErrorHooks() {
   });
 }
 
-async function waitAnimationFrames(page, count) {
-  await page.evaluate(async (n) => {
-    let left = n;
-    await new Promise((resolve) => {
-      const step = () => {
-        left -= 1;
-        if (left <= 0) resolve(undefined);
-        else requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    });
-  }, count);
-}
-
-async function readCenterBlock(page) {
-  return page.evaluate(({ NEAR_BLACK, NEAR_EPS }) => {
-    const canvas = document.querySelector("#scene canvas") ?? document.querySelector("canvas");
-    if (!canvas) return { ok: false, reason: "no-canvas" };
-    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
-    if (!gl) return { ok: false, reason: "no-gl" };
-    const block = 8;
-    const cx = (canvas.width / 2) | 0;
-    const cy = (canvas.height / 2) | 0;
-    const x0 = Math.max(0, cx - (block / 2 | 0));
-    const y0 = Math.max(0, cy - (block / 2 | 0));
-    const px = new Uint8Array(block * block * 4);
-    gl.readPixels(x0, y0, block, block, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    let r = 0;
-    let g = 0;
-    let b = 0;
-    let n = 0;
-    for (let i = 0; i < px.length; i += 4) {
-      r += px[i];
-      g += px[i + 1];
-      b += px[i + 2];
+function averageCenterBlock(data, width, height, block = 16) {
+  const cx = (width / 2) | 0;
+  const cy = (height / 2) | 0;
+  const half = (block / 2) | 0;
+  const x0 = Math.max(0, cx - half);
+  const y0 = Math.max(0, cy - half);
+  const x1 = Math.min(width, x0 + block);
+  const y1 = Math.min(height, y0 + block);
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let n = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (width * y + x) << 2;
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
       n += 1;
     }
-    const avg = { r: r / n, g: g / n, b: b / n };
-    return { ok: true, avg, samples: n, canvas: { w: canvas.width, h: canvas.height } };
-  }, { NEAR_BLACK, NEAR_EPS });
+  }
+  return { r: r / n, g: g / n, b: b / n, samples: n };
+}
+
+function inCorridorYellowBand(avg) {
+  return (
+    Math.abs(avg.r - CORRIDOR_YELLOW.r) <= CORRIDOR_TOL.r
+    && Math.abs(avg.g - CORRIDOR_YELLOW.g) <= CORRIDOR_TOL.g
+    && Math.abs(avg.b - CORRIDOR_YELLOW.b) <= CORRIDOR_TOL.b
+    && avg.r > avg.b + 12
+    && avg.g > avg.b + 8
+  );
+}
+
+function isNearBlack(avg) {
+  return (
+    Math.abs(avg.r - NEAR_BLACK.r) < NEAR_BLACK_TOL
+    && Math.abs(avg.g - NEAR_BLACK.g) < NEAR_BLACK_TOL
+    && Math.abs(avg.b - NEAR_BLACK.b) < NEAR_BLACK_TOL
+  );
+}
+
+async function waitPresentedFrames(page, target) {
+  try {
+    await page.waitForFunction(
+      (n) => (window.__zotoSmokePresentedFrames ?? 0) >= n,
+      target,
+      { timeout: PRESENT_WAIT_MS },
+    );
+  } catch {
+    const seen = await page.evaluate(() => window.__zotoSmokePresentedFrames ?? 0);
+    assert.fail(`pack never presented ${target} frames (saw ${seen})`);
+  }
 }
 
 async function run() {
@@ -142,16 +162,18 @@ async function run() {
   assert.ok(!bootMeta.srcdoc, "plugin sandbox must not use srcdoc under page CSP");
 
   await page.evaluate(installGlErrorHooks);
-  await waitAnimationFrames(page, 30);
+  await waitPresentedFrames(page, PRESENT_FRAMES);
 
   const smoke = await page.evaluate(() => ({
     boot: window.__zotoSandboxBoot ?? [],
+    presented: window.__zotoSmokePresentedFrames ?? 0,
     glErrors: window.__zotoSmoke?.glErrors ?? [],
     sandboxGlErrors: window.__zotoSmoke?.sandboxGlErrors ?? [],
   }));
 
   assert.ok(smoke.boot.includes("ready"), "sandbox ready message must reach the host");
   assert.ok(smoke.boot.includes("frame-ready"), "sandbox frame-ready must reach the host");
+  assert.ok(smoke.presented >= PRESENT_FRAMES, `expected at least ${PRESENT_FRAMES} presented frames, saw ${smoke.presented}`);
 
   assert.equal(smoke.glErrors.length, 0, `expected zero page gl.getError() codes, got ${smoke.glErrors.join(",")}`);
   assert.equal(smoke.sandboxGlErrors.length, 0, `expected zero sandbox gl.getError() codes, got ${smoke.sandboxGlErrors.join(",")}`);
@@ -161,19 +183,19 @@ async function run() {
   assert.equal(pageWebgl.length, 0, `expected zero page WebGL: console lines, got ${JSON.stringify(pageWebgl)}`);
   assert.equal(sandboxWebgl.length, 0, `expected zero sandbox WebGL: console lines, got ${JSON.stringify(sandboxWebgl)}`);
 
-  const pixels = await readCenterBlock(page);
-  assert.ok(pixels.ok, `center pixel read failed: ${pixels.reason ?? "unknown"}`);
-  const { avg } = pixels;
-  const near =
-    Math.abs(avg.r - NEAR_BLACK.r) < NEAR_EPS
-    && Math.abs(avg.g - NEAR_BLACK.g) < NEAR_EPS
-    && Math.abs(avg.b - NEAR_BLACK.b) < NEAR_EPS;
-  assert.ok(!near, `center block average is near-black ${JSON.stringify(avg)}`);
-  assert.ok(avg.r > avg.b + 15 && avg.g > avg.b + 10, `expected yellow-ish center (R,G > B), got ${JSON.stringify(avg)}`);
-  assert.ok(avg.r >= 35 && avg.g >= 30, `expected warm yellow center, got ${JSON.stringify(avg)}`);
+  const stage = page.locator("#scene");
+  await stage.waitFor({ state: "visible", timeout: 30_000 });
+  const pngBuffer = await stage.screenshot({ type: "png" });
+  const png = PNG.sync.read(pngBuffer);
+  const avg = averageCenterBlock(png.data, png.width, png.height);
+  assert.ok(!isNearBlack(avg), `stage screenshot center is near-black ${JSON.stringify(avg)}`);
+  assert.ok(
+    inCorridorYellowBand(avg),
+    `expected corridor yellow band around ${JSON.stringify(CORRIDOR_YELLOW)} ± ${JSON.stringify(CORRIDOR_TOL)}, got ${JSON.stringify(avg)}`,
+  );
 
   await browser.close();
-  console.log("backrooms-smoke: ok", JSON.stringify({ avg, boot: smoke.boot }));
+  console.log("backrooms-smoke: ok", JSON.stringify({ avg, presented: smoke.presented, boot: smoke.boot }));
 }
 
 run().catch((err) => {
