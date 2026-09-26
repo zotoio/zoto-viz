@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { RenderHost, type HostedView } from "./render-host";
