@@ -1,6 +1,6 @@
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -327,6 +327,7 @@
+@@ -332,6 +332,7 @@
  @web.middleware
  async def middleware(request: web.Request, handler):  # noqa: ANN001
      port = int(request.app.get("request_guard_port") or 7020)

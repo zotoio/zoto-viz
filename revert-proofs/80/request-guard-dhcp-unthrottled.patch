@@ -1,7 +1,6 @@
-diff --git a/service/request_guard.py b/service/request_guard.py
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -276,12 +276,7 @@ def _lookup_allowed(app: web.Application, key: str) -> bool:
+@@ -319,12 +319,7 @@
      allowed: frozenset[str] = app.get("request_guard_allowed_hosts") or frozenset()
      if key in allowed:
          return True

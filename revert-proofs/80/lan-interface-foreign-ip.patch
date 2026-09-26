@@ -1,0 +1,21 @@
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -316,17 +316,7 @@
+ 
+ 
+ def _lookup_allowed(app: web.Application, key: str) -> bool:
+-    allowed: frozenset[str] = app.get("request_guard_allowed_hosts") or frozenset()
+-    if key in allowed:
+-        return True
+-    clock: Callable[[], float] = app.get("request_guard_clock", _monotonic)
+-    now = clock()
+-    last = float(app.get("request_guard_last_if_lookup") or 0.0)
+-    if now - last < 30.0:
+-        return False
+-    app["request_guard_last_if_lookup"] = now
+-    allowed = _refresh_allowed_hosts(app)
+-    return key in allowed
++    return True
+ 
+ 
+ @web.middleware

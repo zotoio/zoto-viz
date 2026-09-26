@@ -1,0 +1,11 @@
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -142,7 +142,7 @@
+         return None
+     if not 1 <= port <= 65535:
+         return None
+-    if host.lower() == "localhost":
++    if host == "localhost":
+         return _canonical_key("localhost", port)
+     try:
+         ipaddress.ip_address(host)

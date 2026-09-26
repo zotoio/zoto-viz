@@ -1,0 +1,23 @@
+--- a/service/monitor.py
++++ b/service/monitor.py
+@@ -2016,7 +2016,7 @@
+ 
+ def run_app_kwargs() -> dict:
+     """Shared ``web.run_app`` options (production and tests)."""
+-    return {"print": None, "access_log": None, "shutdown_timeout": 3}
++    return {"print": None, "shutdown_timeout": 3}
+ 
+ 
+ def main() -> None:
+
+--- a/service/access.py
++++ b/service/access.py
+@@ -276,7 +276,5 @@
+         attach_sandbox_referrer_policy(resp)
+     attach_csrf(request, resp)
+     if request.method in MUTATE:
+-        sat = read_sandbox_asset_token(request)
+-        safe = redact_request_path(request.path or "", sat) if sat else request.path
+-        print(f"[monitor] {request.method} {safe} -> {getattr(resp, 'status', '?')}", flush=True)
++        print(f"[monitor] {request.method} {request.path_qs} -> {getattr(resp, 'status', '?')}", flush=True)
+     return resp

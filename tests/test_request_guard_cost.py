@@ -1,40 +1,42 @@
-"""Request guard allowlist cost and DHCP refresh (real ``make_app``)."""
+"""Request guard allowlist cost and DHCP refresh (LAN bind, stubbed OS interfaces)."""
 from __future__ import annotations
 
 import asyncio
 
+import pytest
 from aiohttp import ClientSession
 
 from service import request_guard
-from tests.monitor_app_test_util import host_header, make_app_server
+from tests.lan_guard_test_util import LAN_STUB_IFACE_IP, stub_lan_os_interfaces
+from tests.monitor_app_test_util import make_app_server
 
 
-async def _many_ok(n: int, port: int, ip: str) -> None:
+async def _many_ok(n: int, port: int, ip: str, host: str) -> None:
     async with ClientSession() as session:
         for _ in range(n):
             async with session.get(
                 f"http://{ip}:{port}/api/session",
-                headers=host_header(port),
+                headers={"Host": f"{host}:{port}"},
             ) as resp:
                 assert resp.status == 200
 
 
-def test_thousand_accepted_requests_one_interface_lookup_at_startup() -> None:
+def test_thousand_accepted_requests_one_interface_lookup_at_startup(stub_lan_os_interfaces) -> None:
     async def run() -> None:
-        async with make_app_server() as (ip, port, _runner):
+        async with make_app_server(bind="0.0.0.0", insecure_lan=True) as (ip, port, _runner):
             assert request_guard.interface_lookup_count() == 1
-            await _many_ok(1000, port, ip)
+            await _many_ok(1000, port, ip, LAN_STUB_IFACE_IP)
 
     asyncio.run(run())
     assert request_guard.interface_lookup_count() == 1
 
 
-def test_dhcp_miss_refreshes_interfaces_at_most_once_per_30s() -> None:
+def test_dhcp_miss_refreshes_interfaces_at_most_once_per_30s(stub_lan_os_interfaces) -> None:
     t = 1000.0
     request_guard.reset_interface_lookup_counter()
 
     async def run() -> None:
-        async with make_app_server() as (ip, port, runner):
+        async with make_app_server(bind="0.0.0.0", insecure_lan=True) as (ip, port, runner):
             runner.app["request_guard_clock"] = lambda: t
             assert request_guard.interface_lookup_count() == 1
             async with ClientSession() as session:

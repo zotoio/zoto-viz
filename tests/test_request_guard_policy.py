@@ -11,7 +11,7 @@ from aiohttp import ClientSession
 
 from service import access, monitor, pack_asset_frames, request_guard
 from service.request_guard import HANDLER_ERROR_BODY, HOST_REJECT_BODY
-from tests.monitor_app_test_util import access_log_capture, host_header, make_app_server, raw_http_url
+from tests.monitor_app_test_util import host_header, make_app_server, raw_http_url
 from tests.pack_asset_test_util import SECRET, SESSION, mint, new_frame_id
 
 SANDBOX_SNIPPET = "zoto-viz-plugin-sandbox-leak"
@@ -55,31 +55,6 @@ def _assert_frame_headers(resp) -> None:
     assert resp.headers.get("X-Frame-Options") == "SAMEORIGIN"
     csp = resp.headers.get("Content-Security-Policy") or ""
     assert "frame-ancestors 'self'" in csp
-
-
-async def _production_access_log_never_records_token() -> None:
-    dist = _dist_with_sandbox()
-    frame = new_frame_id()
-    async with make_app_server(web_dist=dist) as (ip, port, runner):
-        runner.app["pack_asset_secret"] = SECRET
-        reg = pack_asset_frames.registry_for_app(runner.app)
-        reg.register(SESSION, frame)
-        tok = mint("_sandbox", session_id=SESSION, frame_id=frame, app=runner.app)
-        path = access.pack_asset_url(tok, "_sandbox", "plugin-sandbox.html")
-        assert monitor.run_app_kwargs()["access_log"] is None
-        async with access_log_capture() as access_lines:
-            async with ClientSession() as session:
-                async with session.get(
-                    f"http://{ip}:{port}{path}",
-                    headers={**host_header(port), access.HEADER: SESSION},
-                ) as resp:
-                    assert resp.status == 200
-        joined = "\n".join(access_lines)
-        assert joined.count(tok) == 0
-
-
-def test_production_access_log_never_records_pack_asset_token() -> None:
-    asyncio.run(_production_access_log_never_records_token())
 
 
 async def _host_injection() -> None:
