@@ -1,11 +1,15 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -512,7 +512,6 @@ export class Settings {
-     this.nestDeviceKey = key;
-     this.nestDevices = devices;
-     if (this.viewBind?.spec?.id === "nest-cams") {
--      this.viewDrawerKey = null;
-       this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
+@@ -1774,7 +1774,10 @@ export class Settings {
+       );
+       gain?.focus();
      }
+-    if (this.viewBind?.spec?.id === "nest-cams") this.syncNestCamChipPressedFromConfig();
++    if (this.viewBind?.spec?.id === "nest-cams") {
++      this.viewDrawerKey = null;
++      this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
++    }
    }
+ 
+   private shouldSyncPackScopeNoteAfterLayout(prevTiles: string[], nextTiles: string[]): boolean {

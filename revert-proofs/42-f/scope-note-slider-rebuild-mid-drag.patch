@@ -1,12 +1,13 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -474,7 +474,7 @@ export class Settings {
-       return;
+@@ -1768,6 +1768,9 @@ export class Settings {
+     if (this.shouldSyncPackScopeNoteAfterLayout(prevTiles, this.anim.mosaicTiles)) {
+       this.syncPackScopeNoteFromAnim();
      }
-     this.viewDrawerKey = nextKey;
--    const draftValues = this.viewPluginDirty ? { ...this.viewPluginDraft } : undefined;
-+    const draftValues = undefined;
-     this.viewPluginDirty = false;
-     this.viewPluginDraft = {};
-     this.pop.removeAttribute("data-view-plugin-dirty");
++    if (this.viewBind?.spec) {
++      this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
++    }
+     if (this.viewPluginDirty && this.isOpen && this.activePane === "view") {
+       const gain = this.viewHost?.querySelector<HTMLInputElement>(
+         '.plugin-layer[data-layer="view"] .slider input[type=range]',

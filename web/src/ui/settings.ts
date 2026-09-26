@@ -19,9 +19,8 @@ import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { fillPluginFields, syncPackScopeNote } from "../plugins/plugin-ui";
-import type { PluginLook, PluginView } from "../plugins/plugin";
-import type { SdmDevice } from "../plugins/nest-cams-look";
-import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
+import { loadPluginConfig, viewSelectOptions, fillViewSelect, type PluginLook, type PluginView } from "../plugins/plugin";
+import { nestPickPressed, parseNestLook, streamableCameras, type SdmDevice } from "../plugins/nest-cams-look";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import type { PackWallScope } from "../plugins/instances";
@@ -191,6 +190,7 @@ export class Settings {
   private readonly viewDrawerStatusEl: HTMLDivElement;
   private lastMosaicSlotEl: HTMLSelectElement | null = null;
   private lastMosaicSlotPaneIndex = 0;
+  private mosaicLayoutPickerTrigger: HTMLButtonElement | null = null;
   private nestDevices: SdmDevice[] = [];
   private nestDeviceKey = "";
   private viewBind: {
@@ -512,11 +512,12 @@ export class Settings {
     this.animUi?.syncTiles();
   }
 
-  private focusMosaicSlotSelect(paneIndex: number): void {
-    const slots = this.viewMosaicSec?.querySelectorAll<HTMLSelectElement>(".mosaic-slot");
-    const sel = slots?.[paneIndex];
-    sel?.focus();
-    if (sel) this.lastMosaicSlotEl = sel;
+  focusMosaicLayoutPickerTrigger(): void {
+    this.mosaicLayoutPickerTrigger?.focus();
+  }
+
+  mosaicLayoutPickerTriggerEl(): HTMLButtonElement | null {
+    return this.mosaicLayoutPickerTrigger;
   }
 
   /** Refresh Nest camera chips when Device Access lists devices. */
@@ -951,6 +952,23 @@ export class Settings {
     });
     const tileHost = document.createElement("div");
     tileHost.className = "mosaic-slots";
+    tileHost.id = `mosaic-layout-slots-${this.cfg.storePrefix}`;
+    const layoutPickerTrigger = document.createElement("button");
+    layoutPickerTrigger.type = "button";
+    layoutPickerTrigger.className = "mosaic-layout-picker-trigger";
+    layoutPickerTrigger.setAttribute("aria-label", "Layout");
+    layoutPickerTrigger.setAttribute("aria-controls", tileHost.id);
+    layoutPickerTrigger.setAttribute("aria-expanded", "true");
+    this.mosaicLayoutPickerTrigger = layoutPickerTrigger;
+    layoutPickerTrigger.addEventListener("click", () => {
+      const open = tileHost.hidden;
+      tileHost.hidden = !open;
+      layoutPickerTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) tileHost.querySelector<HTMLSelectElement>(".mosaic-slot")?.focus();
+    });
+    const tilePicker = document.createElement("div");
+    tilePicker.className = "mosaic-layout-picker";
+    tilePicker.append(layoutPickerTrigger, tileHost);
     const syncTiles = () => this.fillMosaicSlots(tileHost);
     const resetBtn = document.createElement("button");
     resetBtn.type = "button";
@@ -984,7 +1002,7 @@ export class Settings {
     mosaicBits.append(
       labeled("views", mosaic.el),
       labeled("hero", hero.el),
-      labeled("tiles", tileHost),
+      labeled("tiles", tilePicker),
       sharedTheme.el,
       mosaicHint,
       mosaicBtns,
@@ -1750,6 +1768,13 @@ export class Settings {
     if (this.shouldSyncPackScopeNoteAfterLayout(prevTiles, this.anim.mosaicTiles)) {
       this.syncPackScopeNoteFromAnim();
     }
+    if (this.viewPluginDirty && this.isOpen && this.activePane === "view") {
+      const gain = this.viewHost?.querySelector<HTMLInputElement>(
+        '.plugin-layer[data-layer="view"] .slider input[type=range]',
+      );
+      gain?.focus();
+    }
+    if (this.viewBind?.spec?.id === "nest-cams") this.syncNestCamChipPressedFromConfig();
   }
 
   private shouldSyncPackScopeNoteAfterLayout(prevTiles: string[], nextTiles: string[]): boolean {
@@ -1790,7 +1815,7 @@ export class Settings {
       this.viewDrawerKey = null;
       this.viewFocusId = "";
       this.syncViewCog();
-      this.focusMosaicSlotSelect(this.lastMosaicSlotPaneIndex);
+      this.focusMosaicLayoutPickerTrigger();
       return;
     }
     this.clearViewDrawerStatus();
@@ -1807,7 +1832,7 @@ export class Settings {
     cancelAnimationFrame(this.meterRaf);
     this.meterRaf = 0;
     this.onClose?.();
-    this.focusMosaicSlotSelect(this.lastMosaicSlotPaneIndex);
+    this.focusMosaicLayoutPickerTrigger();
   }
 
   showViewDrawerStatus(message: string): void {
@@ -1827,6 +1852,31 @@ export class Settings {
     if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec || !this.viewHost) return;
     const wall = packWallScopeFromAnim(this.anim);
     syncPackScopeNote(this.viewHost, this.viewBind.spec, wall);
+    this.syncNestCamChipPressedFromConfig();
+  }
+
+  private syncNestCamChipPressedFromConfig(): void {
+    const spec = this.viewBind?.spec;
+    const host = this.viewHost;
+    if (!spec || spec.id !== "nest-cams" || !host) return;
+    const fields = this.viewBind?.fields ?? [];
+    const values = loadPluginConfig(spec, fields);
+    const look = parseNestLook(values);
+    const cams = streamableCameras(this.nestDevices);
+    for (const field of host.querySelectorAll<HTMLElement>(".nest-cam-field")) {
+      if (field.querySelector(".subcap")?.textContent !== "cameras") continue;
+      const row = field.querySelector(".nest-cam-chips");
+      if (!row) continue;
+      for (const btn of row.querySelectorAll<HTMLButtonElement>("button")) {
+        const label = btn.textContent ?? "";
+        if (label === "all") {
+          btn.setAttribute("aria-pressed", !look.pick ? "true" : "false");
+          continue;
+        }
+        const cam = cams.find((c) => c.label === label);
+        if (cam) btn.setAttribute("aria-pressed", nestPickPressed(look.pick, cam) ? "true" : "false");
+      }
+    }
   }
 
   private fillMosaicSlots(host: HTMLElement): void {
@@ -1874,7 +1924,14 @@ export class Settings {
         }
         if (!this.isOpen) return;
         this.animUi?.syncTiles();
-        if (!this.viewPluginDirty) this.focusMosaicSlotSelect(i);
+        if (this.viewPluginDirty) {
+          const gain = this.viewHost?.querySelector<HTMLInputElement>(
+            '.plugin-layer[data-layer="view"] .slider input[type=range]',
+          );
+          gain?.focus();
+        } else {
+          this.mosaicLayoutPickerTrigger?.focus();
+        }
       });
       row.append(cap, sel);
       host.appendChild(row);

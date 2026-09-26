@@ -13,6 +13,8 @@ import {
   pickMosaicSlot,
 } from "./duplicate-slot-mosaic-fixture";
 import {
+  expectVisibleFocusTarget,
+  mosaicLayoutPickerTrigger,
   settingsViewDrawerRoot,
   viewDrawerStatusLine,
 } from "./duplicate-slot-scope-note-test-dom";
@@ -170,6 +172,7 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     gain.value = "9";
     gain.dispatchEvent(new Event("input", { bubbles: true }));
     expect(settings.pop.dataset.viewPluginDirty).toBe("1");
+    const layoutTrigger = mosaicLayoutPickerTrigger(settings);
     pickMosaicSlot(settings, 1, "plugin:memory");
     pickMosaicSlot(settings, 0, "plugin:topology");
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -177,9 +180,9 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(consoleErrorSpy).not.toHaveBeenCalled();
     expect(viewDrawerStatusLine(settings)?.textContent).toBe(DISCARD_MSG(spec.name));
     expect(viewDrawerStatusLine(settings)?.classList.contains("fail")).toBe(false);
-    const focusedSlot = settings.el.querySelector<HTMLSelectElement>(".mosaic-slot:focus");
-    expect(focusedSlot).toBeTruthy();
-    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(layoutTrigger);
+    expect(layoutTrigger.getAttribute("aria-label")).toBe("Layout");
+    expectVisibleFocusTarget(layoutTrigger);
 
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:disk"]);
     bindThisView(PACK);
@@ -191,8 +194,7 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(settings.isOpen).toBe(false);
     expect(viewDrawerStatusLine(settings)).toBeNull();
-    const closedFocus = settings.el.querySelector<HTMLSelectElement>(".mosaic-slot:focus");
-    expect(closedFocus).toBeTruthy();
+    expect(document.activeElement).toBe(layoutTrigger);
 
     settings.el.remove();
   });

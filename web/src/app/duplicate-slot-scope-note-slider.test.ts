@@ -6,6 +6,7 @@ import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { Settings } from "../ui/settings";
 import * as viewDrawer from "../ui/view-drawer-module";
 import { hostModeById } from "./host-mode";
+import { applyWallLayoutPatch } from "./mosaic-wall-layout";
 import { settingsViewDrawerRoot } from "./duplicate-slot-scope-note-test-dom";
 import {
   applyMosaicTiles,
@@ -72,19 +73,33 @@ describe("duplicate slot shared config > plugin field persist", () => {
     settings.el.remove();
   });
 
-  it("drawer rebuild mid-drag keeps unsaved range value", async () => {
-    const { settings, spec } = await openFixtureDrawer();
+  it("layout change mid-drag keeps slider focus, value, and one write on release", async () => {
+    const { settings } = await openFixtureDrawer();
     const gain = gainSlider(settings);
     gain.focus();
     gain.value = "8";
     gain.dispatchEvent(new Event("input", { bubbles: true }));
     expect(writeConfigSpy).not.toHaveBeenCalled();
     rebuildDrawerSpy.mockClear();
-    (settings as Settings & { viewDrawerKey: null }).viewDrawerKey = null;
-    settings.bindView(spec, spec.config);
-    expect(rebuildDrawerSpy).toHaveBeenCalled();
-    const gainAfter = gainSlider(settings);
-    expect(gainAfter.value).toBe("8");
+    const twoTiles = [PACK, `${PACK}!1`, "plugin:topology", "plugin:memory"];
+    applyWallLayoutPatch(settings, {
+      tree: {
+        type: "split",
+        dir: "h",
+        ratio: 0.5,
+        a: { type: "leaf", id: PACK },
+        b: { type: "leaf", id: `${PACK}!1` },
+      },
+      maximized: null,
+      tiles: twoTiles,
+    });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    expect(rebuildDrawerSpy).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(gain);
+    expect(gain.value).toBe("8");
+    writeConfigSpy.mockClear();
+    gain.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(writeConfigSpy).toHaveBeenCalledTimes(1);
     settings.el.remove();
   });
 });
