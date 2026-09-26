@@ -98,6 +98,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Python deps for monitor
+        run: python -m pip install -r requirements.txt
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -109,6 +111,9 @@ jobs:
         run: |
           pnpm install
           pnpm approve-builds esbuild
+      - name: Production build
+        working-directory: web
+        run: pnpm build
       - name: Backrooms browser smoke
         run: |
           sudo apt-get update
