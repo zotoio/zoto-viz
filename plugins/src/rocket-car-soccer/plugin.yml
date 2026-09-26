@@ -1,19 +1,46 @@
 id: rocket-car-soccer
 name: Rocket Car Soccer
-version: 1
-hint: Self-playing boost-car arena match on the plugin sky — original stylised stadium, AI kickoffs, goal bursts, and broadcast cameras.
-description: A procedural enclosed arena with glowing goals, pitch markings, crowd lights, and reflective floor. Two teams of boost cars (2v2 or 3v3) chase a physics ball with jumps, flips, wall play, and simple AI. Scoreboard, clock, kickoff resets, optional slow-mo goal replay, and director cameras. All knobs are This-view settings; no external assets required.
+version: 2
+hint: Self-playing boost-car arena on the plugin sky. Live talker rates boost cars; packet spikes and unit failures drive goals and Zoto Fail alerts. Caps 6 cars / 48 particles / 24 trail segments / 4 physics substeps.
+description: Procedural stadium, AI 2v2–3v3, fixed-timestep physics, pooled particles/trails, replay from recorded state (no re-sim). Idle host fixture keeps a lively demo match labelled demo on the HUD.
 capabilities:
   - viz.read
   - viz.write
   - config.read
+datasource:
+  consumes:
+    - talkers
+    - packets
+    - stream: sys
+liveMapping:
+  - field: talkers.rate
+    effect: carBoost
+    default: 0.35
+    clamp: [0, 1]
+  - field: packets.field
+    effect: goalPulse
+    default: 0.15
+    clamp: [0, 1]
+  - field: sys.failed
+    effect: failAlert
+    default: 0
+    clamp: [0, 1]
+  - field: sys.udev
+    effect: eventPulse
+    default: 0
+    clamp: [0, 1]
+caps:
+  maxCars: 6
+  maxParticles: 48
+  maxTrailSegments: 24
+  maxPhysicsSubsteps: 4
 viz:
   graphWalk: false
   idle:
     fixture: host
   maxBuffers: 3
   maxBufferFloats: 64
-  maxParticles: 0
+  maxParticles: 192
   uniforms:
     - uTime
     - uAudio

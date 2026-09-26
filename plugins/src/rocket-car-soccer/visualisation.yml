@@ -12,6 +12,8 @@ look:
   skySpeed: 1
   gridOpacity: 0
   mosaic: "off"
+# Live mapping (authoritative copy in plugin.yml): talkers.rate → boost, packets.field → goal pulse,
+# sys.failed → Zoto Fail alert (never hidden by goal FX), sys.udev → car jump pulses.
 config:
   - key: preset
     label: preset
@@ -23,6 +25,14 @@ config:
       - [chaos_3v3, Chaos 3v3]
       - [chill_orbit, Chill Orbit]
     hint: Applies a bundled look and match profile. Tweaks below override until you pick another preset.
+  - key: seed
+    label: seed
+    type: number
+    default: 42
+    min: 1
+    max: 999999
+    step: 1
+    hint: Pinned RNG for AI and crowd motion (deterministic replays).
   - key: dice
     label: dice
     type: select
@@ -94,15 +104,15 @@ config:
       - [ballcam, ball cam]
       - [director, auto director]
       - [orbit, slow orbit]
-    hint: Default camera; director rotates between angles using cut frequency.
-  - key: cutHz
-    label: director cut rate (Hz)
+    hint: Default camera; auto director holds each shot for at least min cut seconds.
+  - key: minCutSec
+    label: director min cut (s)
     type: number
-    default: 0.35
-    min: 0.05
-    max: 1.5
-    step: 0.05
-    hint: How often the auto director switches shots. Reduced-motion slows cuts.
+    default: 4
+    min: 3
+    max: 12
+    step: 0.5
+    hint: Minimum seconds between director cuts (no fast rolls). Reduced motion locks broadcast.
   - key: explode
     label: goal explosion style
     type: select

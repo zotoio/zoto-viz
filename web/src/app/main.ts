@@ -22,21 +22,6 @@ import {
   parseBackroomsOptions,
   setBackroomsOptions,
 } from "../../../plugins/src/backrooms/frontend/director";
-import {
-  setRcsOptions,
-  rcsFrame,
-  resetRcsSim,
-} from "../../../plugins/src/rocket-car-soccer/frontend/match";
-import {
-  parseRcsOptions,
-  popRcsUndo,
-  pushRcsUndo,
-  randomizeRcsOptions,
-  clearRcsUndo,
-  RCS_DEFAULTS,
-  hexToRgb,
-  themeBgAccent,
-} from "../../../plugins/src/rocket-car-soccer/frontend/pack";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -373,8 +358,6 @@ addPresentListener((ts) => {
 addPresentListener(markPresent);
 let brOptsSrc: Record<string, string> | null = null;
 let brOptsJson = "";
-let rcsLastSky = 0;
-let rcsDice = "none";
 /** Backrooms view config (UI sliders / toggles, MCP set_plugin) → director options, re-parsed only when they change. */
 function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
   if (brOptsSrc !== currentOpts) {
@@ -387,52 +370,6 @@ function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
   }
   return backroomsOptionsNow();
 }
-
-function rcsViewOptions(): ReturnType<typeof parseRcsOptions> {
-  const dice = currentOpts.dice ?? "none";
-  if (dice !== rcsDice) {
-    const optsNow = parseRcsOptions(currentOpts);
-    if (dice === "randomise") {
-      pushRcsUndo(optsNow);
-      const rnd = randomizeRcsOptions((performance.now() | 0) ^ 0x5a5a, optsNow);
-      currentOpts = {
-        ...currentOpts,
-        teamSize: String(rnd.teamSize),
-        theme: rnd.theme,
-        camera: rnd.camera,
-        aggress: String(rnd.aggress),
-        gameSpeed: String(rnd.gameSpeed),
-        cutHz: String(rnd.cutHz),
-        particles: String(rnd.particles),
-        ballSize: String(rnd.ballSize),
-        trail: rnd.trail,
-        explode: rnd.explode,
-        replay: rnd.replay ? "true" : "false",
-        dice: "none",
-      };
-    } else if (dice === "undo") {
-      const prev = popRcsUndo();
-      if (prev) {
-        currentOpts = {
-          ...currentOpts,
-          ...Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, String(v)])),
-          dice: "none",
-        };
-      }
-    } else if (dice === "reset") {
-      clearRcsUndo();
-      resetRcsSim(42);
-      currentOpts = {
-        ...currentOpts,
-        ...Object.fromEntries(Object.entries(RCS_DEFAULTS).map(([k, v]) => [k, String(v)])),
-        preset: "broadcast",
-        dice: "none",
-      };
-    }
-    rcsDice = dice;
-  }
-  return setRcsOptions(currentOpts);
-}
 let stereoBins: number[] = [];
 let stereoBinsAt = 0;
 scene.afterLook = () => {
@@ -444,32 +381,6 @@ scene.afterLook = () => {
     const drive = backroomsSlots(scene.skyTime(), new Date(), innerWidth / Math.max(1, innerHeight));
     vizWriter.writeBuffer(0, drive.slot0);
     vizWriter.writeBuffer(1, drive.slot1);
-    scene.setPluginUboBuffer(vizWriter.ubo);
-    return;
-  }
-  if (mode.pluginId === "rocket-car-soccer" && vizWriter) {
-    rcsViewOptions();
-    scene.setHeard(false);
-    const sky = scene.skyTime();
-    const dt = rcsLastSky > 0 ? Math.min(0.05, sky - rcsLastSky) : 1 / 60;
-    rcsLastSky = sky;
-    const aspect = innerWidth / Math.max(1, innerHeight);
-    const drive = rcsFrame(dt, aspect);
-    vizWriter.writeBuffer(0, drive.slot0);
-    vizWriter.writeBuffer(1, drive.slot1);
-    vizWriter.writeBuffer(2, drive.slot2);
-    const o = parseRcsOptions(currentOpts);
-    const theme = themeBgAccent(o.theme);
-    const orange = hexToRgb(o.teamOrange);
-    const blue = hexToRgb(o.teamBlue);
-    vizWriter.writeUniform("uBg", theme.bg);
-    vizWriter.writeUniform("uAccent", [
-      orange[0] * 0.55 + blue[0] * 0.45,
-      orange[1] * 0.55 + blue[1] * 0.45,
-      orange[2] * 0.55 + blue[2] * 0.45,
-    ]);
-    vizWriter.writeUniform("uBright", 1.08);
-    vizWriter.writeUniform("uOpacity", 1);
     scene.setPluginUboBuffer(vizWriter.ubo);
     return;
   }
@@ -505,7 +416,6 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
   vizWriter = writer;
   if (resetFrameTs) vizFrameTs = 0;
-  if (resetFrameTs) rcsLastSky = 0;
   if (resetBudget) {
     vizBudget.reset();
     vizHud.resetSkipBaseline();

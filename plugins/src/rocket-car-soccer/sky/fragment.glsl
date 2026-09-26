@@ -30,6 +30,49 @@ float smin(float a, float b, float k) {
   return mix(b, a, h) - k * h * (1.0 - h);
 }
 
+float box2(vec2 p, vec2 b) {
+  vec2 d = abs(p) - b;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+float digitSeg(vec2 uv, int seg) {
+  vec2 p = uv;
+  if (seg == 0) return box2(p - vec2(0.0, 0.22), vec2(0.14, 0.04));
+  if (seg == 1) return box2(p - vec2(0.0, 0.0), vec2(0.14, 0.04));
+  if (seg == 2) return box2(p - vec2(0.0, -0.22), vec2(0.14, 0.04));
+  if (seg == 3) return box2(p - vec2(-0.11, 0.11), vec2(0.04, 0.11));
+  if (seg == 4) return box2(p - vec2(0.11, 0.11), vec2(0.04, 0.11));
+  if (seg == 5) return box2(p - vec2(-0.11, -0.11), vec2(0.04, 0.11));
+  if (seg == 6) return box2(p - vec2(0.11, -0.11), vec2(0.04, 0.11));
+  return 1.0;
+}
+
+float drawDigit(vec2 uv, int d) {
+  float m = 1.0;
+  if (d == 0) { m = min(m, digitSeg(uv, 0)); m = min(m, digitSeg(uv, 1)); m = min(m, digitSeg(uv, 2)); m = min(m, digitSeg(uv, 3)); m = min(m, digitSeg(uv, 6)); m = min(m, digitSeg(uv, 5)); }
+  else if (d == 1) { m = min(m, digitSeg(uv, 4)); m = min(m, digitSeg(uv, 6)); }
+  else if (d == 2) { m = min(m, digitSeg(uv, 0)); m = min(m, digitSeg(uv, 4)); m = min(m, digitSeg(uv, 1)); m = min(m, digitSeg(uv, 5)); m = min(m, digitSeg(uv, 2)); }
+  else if (d == 3) { m = min(m, digitSeg(uv, 0)); m = min(m, digitSeg(uv, 4)); m = min(m, digitSeg(uv, 1)); m = min(m, digitSeg(uv, 6)); m = min(m, digitSeg(uv, 2)); }
+  else if (d == 4) { m = min(m, digitSeg(uv, 3)); m = min(m, digitSeg(uv, 4)); m = min(m, digitSeg(uv, 1)); m = min(m, digitSeg(uv, 6)); }
+  else if (d == 5) { m = min(m, digitSeg(uv, 0)); m = min(m, digitSeg(uv, 3)); m = min(m, digitSeg(uv, 1)); m = min(m, digitSeg(uv, 6)); m = min(m, digitSeg(uv, 2)); }
+  else if (d == 6) { m = min(m, digitSeg(uv, 0)); m = min(m, digitSeg(uv, 3)); m = min(m, digitSeg(uv, 1)); m = min(m, digitSeg(uv, 5)); m = min(m, digitSeg(uv, 2)); m = min(m, digitSeg(uv, 6)); }
+  else if (d == 7) { m = min(m, digitSeg(uv, 0)); m = min(m, digitSeg(uv, 4)); m = min(m, digitSeg(uv, 6)); }
+  else if (d == 8) { m = min(m, digitSeg(uv, 0)); m = min(m, digitSeg(uv, 1)); m = min(m, digitSeg(uv, 2)); m = min(m, digitSeg(uv, 3)); m = min(m, digitSeg(uv, 4)); m = min(m, digitSeg(uv, 5)); m = min(m, digitSeg(uv, 6)); }
+  else if (d == 9) { m = min(m, digitSeg(uv, 0)); m = min(m, digitSeg(uv, 1)); m = min(m, digitSeg(uv, 2)); m = min(m, digitSeg(uv, 3)); m = min(m, digitSeg(uv, 4)); m = min(m, digitSeg(uv, 6)); }
+  return 1.0 - smoothstep(0.0, 0.035, m);
+}
+
+float drawInt(vec2 uv, float val, float scale) {
+  int n = int(clamp(val, 0.0, 99.0));
+  int tens = n / 10;
+  int ones = n - tens * 10;
+  vec2 u0 = (uv - vec2(-0.18 * scale, 0.0)) / scale;
+  vec2 u1 = (uv - vec2(0.18 * scale, 0.0)) / scale;
+  float a = tens > 0 ? drawDigit(u0, tens) : 0.0;
+  float b = drawDigit(u1, ones);
+  return max(a, b);
+}
+
 float scene(vec3 p) {
   float mark = sl(0, 0.0);
   float carN = mark > 0.5 ? sl(0, 27.0) : 4.0;
@@ -95,6 +138,47 @@ void main() {
   }
 
   col += uAccent * 0.06 * (0.6 + 0.4 * sin(uTime * 2.0 + dir.x * 5.0));
+
+  float mark = sl(0, 0.0);
+  float failA = sl(0, 28.0);
+  float demoF = sl(0, 29.0);
+  float gFlash = sl(0, 13.0);
+  float scoreO = sl(0, 9.0);
+  float scoreB = sl(0, 10.0);
+  float clockS = sl(0, 8.0);
+  vec3 zotoFail = vec3(0.937, 0.325, 0.314);
+
+  vec2 hud = vDir.xy;
+  float bar = box2(hud - vec2(0.0, 0.78), vec2(0.42, 0.11));
+  float barFill = 1.0 - smoothstep(0.0, 0.02, bar);
+  vec3 barCol = vec3(0.04, 0.06, 0.1);
+  if (failA > 0.2) barCol = mix(barCol, zotoFail, clamp(failA, 0.0, 1.0));
+  col = mix(col, barCol, barFill * 0.92);
+
+  float digScale = 0.55;
+  vec2 scoreUvO = hud - vec2(-0.22, 0.78);
+  vec2 scoreUvB = hud - vec2(0.22, 0.78);
+  float dO = drawInt(scoreUvO, scoreO, digScale);
+  float dB = drawInt(scoreUvB, scoreB, digScale);
+  col = mix(col, vec3(1.0, 0.55, 0.2), dO * 0.95);
+  col = mix(col, vec3(0.35, 0.7, 1.0), dB * 0.95);
+
+  float clk = drawInt(hud - vec2(0.0, 0.62), floor(clockS), 0.45);
+  col = mix(col, vec3(0.92), clk * 0.85);
+
+  if (demoF > 0.5) {
+    float demoBox = box2(hud - vec2(-0.34, 0.62), vec2(0.08, 0.04));
+    float demoOn = 1.0 - smoothstep(0.0, 0.018, demoBox);
+    col = mix(col, vec3(0.75, 0.85, 1.0), demoOn * 0.9);
+  }
+
+  if (failA > 0.35) {
+    float failStrip = box2(hud - vec2(0.0, -0.72), vec2(0.5, 0.045));
+    col = mix(col, zotoFail, (1.0 - smoothstep(0.0, 0.02, failStrip)) * clamp(failA, 0.0, 1.0));
+  } else if (gFlash > 0.01 && mark > 0.5) {
+    col += uAccent * gFlash * 0.35;
+  }
+
   col *= uBright;
   col = max(col, mix(bot, top, 0.35) * 0.55);
   fragColor = vec4(col, uOpacity);

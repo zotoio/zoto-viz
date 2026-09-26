@@ -4,12 +4,25 @@ Self-playing boost-car arena visual for zoto-viz. Original procedural stadium, t
 
 ## Layout
 
-- `plugin.yml` — id `rocket-car-soccer`, viz contract (3×64-float buffers)
-- `visualisation.yml` — stage-only look, presets, and This-view knobs
-- `frontend/match.ts` — fixed-timestep sim (cap 4 substeps @ 120 Hz)
+- `plugin.yml` — id `rocket-car-soccer`, `liveMapping`, hard `caps`, viz contract (3×64-float buffers)
+- `visualisation.yml` — stage-only look, presets, seed, min director cut seconds
+- `frontend/match.ts` — fixed-timestep sim (accumulator + max 4 substeps @ 120 Hz), replay ring (no re-sim)
+- `frontend/live.ts` — monitor fields → boost / goal pulse / Zoto Fail alerts
+- `frontend/pools.ts` — pre-allocated particle and trail pools
 - `frontend/pack.ts` — options, presets, caps, undo/randomise helpers
-- `frontend/index.ts` — sandbox driver (`config.read`, `viz.write`)
-- `sky/fragment.glsl` — raymarched arena, cars, ball, crowd, scoreboard
+- `frontend/index.ts` — sandbox driver (`config.read`, `viz.write`, `writeBuffer`, `writeParticles`)
+- `sky/fragment.glsl` — raymarched arena + tile-legible scoreboard / fail strip / demo label
+
+## Live mapping
+
+| Field | Effect |
+|-------|--------|
+| `talkers.rate` | Car boost fill |
+| `packets.field` | Goal-line pulse on the ball |
+| `sys.failed` | Zoto Fail scoreboard alert (never covered by goal FX) |
+| `sys.udev` | Random car jump pulses |
+
+Idle host fixture keeps a lively demo match; HUD `demoFlag` drives the on-sky **demo** marker.
 
 ## Presets
 
@@ -28,21 +41,40 @@ From `web/`:
 
 ```bash
 pnpm exec vitest run src/plugins/rocket-car-soccer.test.ts
+pnpm exec tsc -p tsconfig.json --noEmit
 ```
 
-Python schema + shader stamp:
+Python schema + shader stamp (when available):
 
 ```bash
 python -m service.plugins validate plugins/src/rocket-car-soccer
 ```
 
-## Limits
+## Limits (plugin.yml `caps`)
 
-- Max 3 players per team (6 cars)
-- Particle density capped at 48 instances in sim / 16 packed for the sky
-- Physics substeps capped at 4 per frame
+- Max 6 cars (3 per team)
+- 48 pooled particles / 24 trail segments
+- 4 physics substeps per frame
 - Render scale fixed at `1.0` via `rcsRenderScale()` until the host governor ships
 
 ## CSP / sandbox
 
 Runs entirely in the consented plugin iframe and whitelisted sky uniforms. No fetches, workers, or DOM — compatible with default CSP and `sandbox="allow-scripts"`.
+
+## Wall layout (QE)
+
+Place the pack on a saved mosaic tile (not the VIEW dropdown while CSP blocks sandbox bootstrap). Example snippet for one tile on a 4×4 wall:
+
+```yaml
+mosaic:
+  cols: 4
+  rows: 4
+  tiles:
+    - col: 0
+      row: 0
+      view: rocket-car-soccer
+      preset: broadcast
+      seed: "42"
+```
+
+Consent: enable plugin consent for `rocket-car-soccer` before capture.

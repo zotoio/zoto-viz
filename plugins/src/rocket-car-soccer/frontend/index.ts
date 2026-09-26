@@ -1,18 +1,83 @@
-/** Rocket Car Soccer sky colours. Host `match.ts` fills buffers on the sky clock. */
+/** Rocket Car Soccer — sandbox driver (pack clock via viz frame time). */
 
-import { hexToRgb, parseRcsOptions, themeBgAccent, type RcsOptions } from "./pack";
+import {
+  clearRcsUndo,
+  hexToRgb,
+  parseRcsOptions,
+  popRcsUndo,
+  pushRcsUndo,
+  randomizeRcsOptions,
+  RCS_DEFAULTS,
+  themeBgAccent,
+  type RcsOptions,
+} from "./pack";
+import { rcsMount, rcsTick, rcsUnmount, setRcsOptions } from "./match";
+
+type VizFrame = {
+  t: number;
+  dt: number;
+  audio: number;
+  demo?: boolean;
+  talkers?: { rate: number }[];
+  packets?: { field: number }[];
+  sys?: { failed?: number; udev?: number };
+};
 
 declare const zoto: {
-  onFrame: (() => void) | null;
+  onFrame: ((frame: VizFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
+  writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
+  writeParticles: (data: number[], stride?: number) => void;
 };
 
 let opts: RcsOptions = parseRcsOptions(zoto.getConfig?.());
+let lastDice = "none";
+let mounted = false;
 
-function applyLook(cfg: Record<string, string>): void {
-  opts = parseRcsOptions(cfg);
+function ensureMounted(): void {
+  if (!mounted) {
+    rcsMount();
+    mounted = true;
+  }
+}
+
+function applyConfig(cfg: Record<string, string>): void {
+  const dice = cfg.dice ?? "none";
+  if (dice !== lastDice) {
+    if (dice === "randomise") {
+      pushRcsUndo(opts);
+      const rnd = randomizeRcsOptions((opts.seed ^ 0x5a5a) >>> 0, opts);
+      Object.assign(cfg, {
+        teamSize: String(rnd.teamSize),
+        theme: rnd.theme,
+        camera: rnd.camera,
+        aggress: String(rnd.aggress),
+        gameSpeed: String(rnd.gameSpeed),
+        minCutSec: String(rnd.minCutSec),
+        particles: String(rnd.particles),
+        ballSize: String(rnd.ballSize),
+        trail: rnd.trail,
+        explode: rnd.explode,
+        replay: rnd.replay ? "true" : "false",
+        dice: "none",
+      });
+    } else if (dice === "undo") {
+      const prev = popRcsUndo();
+      if (prev) {
+        for (const [k, v] of Object.entries(prev)) cfg[k] = String(v);
+        cfg.dice = "none";
+      }
+    } else if (dice === "reset") {
+      clearRcsUndo();
+      for (const [k, v] of Object.entries(RCS_DEFAULTS)) cfg[k] = String(v);
+      cfg.preset = "broadcast";
+      cfg.dice = "none";
+    }
+    lastDice = dice;
+  }
+  opts = setRcsOptions(cfg);
   const theme = themeBgAccent(opts.theme);
   const orange = hexToRgb(opts.teamOrange);
   const blue = hexToRgb(opts.teamBlue);
@@ -26,9 +91,28 @@ function applyLook(cfg: Record<string, string>): void {
   zoto.writeUniform("uOpacity", 1);
 }
 
-zoto.onConfig = (cfg) => applyLook(cfg);
-zoto.onFrame = () => {
-  /* Buffers come from the host afterLook hook — avoid double-stepping the sim. */
+zoto.onConfig = (cfg) => applyConfig(cfg);
+
+zoto.onFrame = (frame) => {
+  ensureMounted();
+  const dt = frame.dt > 0 && frame.dt < 0.2 ? frame.dt : 1 / 60;
+  const aspect = 16 / 9;
+  const out = rcsTick(frame, frame.t, dt, aspect);
+  zoto.writeBuffer(0, out.slot0);
+  zoto.writeBuffer(1, out.slot1);
+  zoto.writeBuffer(2, out.slot2);
+  if (out.particles.length) zoto.writeParticles(out.particles, 4);
+  zoto.writeUniform("uAudio", frame.audio);
 };
 
-applyLook(zoto.getConfig?.() ?? {});
+applyConfig(zoto.getConfig?.() ?? {});
+
+/** Test hook: simulate pack teardown when the view unmounts. */
+export function rcsFrontendTeardown(): ReturnType<typeof rcsUnmount> {
+  mounted = false;
+  return rcsUnmount();
+}
+
+export function rcsFrontendMounted(): boolean {
+  return mounted;
+}
