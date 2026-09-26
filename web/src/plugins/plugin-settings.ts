@@ -185,7 +185,8 @@ export function valuesMatchPreset(
   for (const f of fields) {
     if (presetField && f.key === presetField) continue;
     if (isMetaConfigKey(f.key)) continue;
-    if (f.type === "textarea" && f.key === "prompt") continue;
+    if (f.type === "text") continue;
+    if (f.type === "textarea") continue;
     const cur = values[f.key] ?? fieldDefaultForSpec(spec, f);
     const exp = want[f.key] ?? fieldDefaultForSpec(spec, f);
     if (String(cur) !== String(exp)) return false;
