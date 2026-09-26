@@ -10,14 +10,14 @@ float fz0(float fi) {
 }
 
 vec3 palette(float t, float pal, float hue, float sat) {
-  vec3 a = mix(vec3(0.12, 0.18, 0.42), vec3(0.9, 0.25, 0.08), step(1.5, pal));
-  vec3 b = mix(vec3(0.05, 0.35, 0.55), vec3(0.95, 0.45, 0.12), step(2.5, pal));
-  vec3 c = mix(vec3(0.02, 0.08, 0.18), vec3(0.2, 0.95, 0.55), step(3.5, pal));
-  vec3 d = mix(vec3(0.15, 0.15, 0.2), vec3(0.95, 0.2, 0.75), step(4.5, pal));
-  vec3 e = mix(vec3(0.08, 0.08, 0.1), vec3(0.55, 0.85, 1.0), step(5.5, pal));
-  vec3 f = mix(vec3(0.04, 0.02, 0.12), vec3(1.0, 0.35, 0.15), step(6.5, pal));
-  vec3 g = mix(vec3(0.02, 0.05, 0.14), vec3(0.15, 0.75, 0.95), step(7.5, pal));
-  vec3 col = mix(mix(mix(mix(mix(mix(mix(a, b, smoothstep(0.5, 1.5, pal)), c, smoothstep(1.5, 2.5, pal)), d, smoothstep(2.5, 3.5, pal)), e, smoothstep(3.5, 4.5, pal)), f, smoothstep(4.5, 5.5, pal)), g, smoothstep(5.5, 6.5, pal));
+  vec3 col = vec3(0.12, 0.18, 0.42);
+  if (pal > 0.5) col = mix(col, vec3(0.9, 0.25, 0.08), smoothstep(0.5, 1.5, pal));
+  if (pal > 1.5) col = mix(col, vec3(0.95, 0.45, 0.12), smoothstep(1.5, 2.5, pal));
+  if (pal > 2.5) col = mix(col, vec3(0.2, 0.95, 0.55), smoothstep(2.5, 3.5, pal));
+  if (pal > 3.5) col = mix(col, vec3(0.95, 0.2, 0.75), smoothstep(3.5, 4.5, pal));
+  if (pal > 4.5) col = mix(col, vec3(0.55, 0.85, 1.0), smoothstep(4.5, 5.5, pal));
+  if (pal > 5.5) col = mix(col, vec3(1.0, 0.35, 0.15), smoothstep(5.5, 6.5, pal));
+  if (pal > 6.5) col = mix(col, vec3(0.15, 0.75, 0.95), smoothstep(6.5, 7.5, pal));
   float h = hue * 6.28318;
   vec3 k = vec3(0.57735);
   col = mix(dot(col, k) * k, col, sat);
@@ -30,7 +30,7 @@ float mandelbulb(vec3 p, float power) {
   float r = 0.0;
   for (int i = 0; i < 96; i++) {
     r = length(z);
-    if (r > 4.0) break;
+    if (r > 4.0) return 0.5 * log(r) * r / dr;
     float theta = acos(clamp(z.z / r, -1.0, 1.0));
     float phi = atan(z.y, z.x);
     float zr = pow(r, power - 1.0);
