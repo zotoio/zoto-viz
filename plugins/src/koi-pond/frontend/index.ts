@@ -2,9 +2,13 @@
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import {
+  applyConfigActions,
+  configActionEdges,
+  hostTileSizeFromConfig,
   KoiPondSim,
   parseKoiPondOptions,
   type KoiPondOptions,
+  type KoiPondZoto,
 } from "./koi-pond";
 
 type KoiPondFrame = Pick<
@@ -12,16 +16,10 @@ type KoiPondFrame = Pick<
   "t" | "dt" | "audio" | "talkers" | "packets" | "sys" | "demo"
 >;
 
-declare const zoto: {
-  onFrame: ((frame: KoiPondFrame) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[] | Float32Array) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-  writeParticles: (data: number[] | Float32Array, stride?: number) => void;
-};
+declare const zoto: KoiPondZoto;
 
 let options: KoiPondOptions = parseKoiPondOptions(zoto.getConfig?.());
+let tileSize = hostTileSizeFromConfig(zoto.getConfig?.());
 const sim = new KoiPondSim(options);
 sim.mountTile();
 
@@ -29,54 +27,24 @@ const buf0 = new Float32Array(64);
 const buf1 = new Float32Array(64);
 const buf2 = new Float32Array(64);
 
-let lastLabel = "";
-
-function canvasSize(): { w: number; h: number } {
-  let root: Document | null = typeof document !== "undefined" ? document : null;
-  try {
-    if (!root && typeof parent !== "undefined" && parent.document) root = parent.document;
-  } catch { /* sandbox */ }
-  const canvas = (root?.querySelector?.("canvas.render-host")
-    ?? root?.querySelector?.("#wall > canvas")
-    ?? root?.querySelector?.("#scene canvas")) as { width?: number; height?: number } | null;
-  const w = canvas?.width ?? 0;
-  const h = canvas?.height ?? 0;
-  return { w: w > 64 ? w : 1280, h: h > 64 ? h : 800 };
-}
+const actionLatch = { reset: false, randomise: false, undo: false };
 
 function applyLiveConfig(cfg: Record<string, string>): void {
+  const { edges, next } = configActionEdges(cfg, actionLatch);
+  actionLatch.reset = next.reset;
+  actionLatch.randomise = next.randomise;
+  actionLatch.undo = next.undo;
+  tileSize = hostTileSizeFromConfig(cfg);
   const parsed = parseKoiPondOptions(cfg);
-  options = parsed;
-  sim.setOptions(parsed);
+  options = applyConfigActions(sim, cfg, parsed, edges);
 }
 
 zoto.onConfig = (cfg) => {
   applyLiveConfig(cfg);
 };
 
-function syncHudLabel(text: string, on: boolean): void {
-  if (!on) {
-    lastLabel = "";
-    return;
-  }
-  if (text === lastLabel) return;
-  lastLabel = text;
-  try {
-    const doc = typeof parent !== "undefined" ? parent.document : null;
-    const el = doc?.getElementById?.("viz-hud");
-    if (!el) return;
-    const pack = el.querySelector?.(".viz-hud-pack");
-    const metric = el.querySelector?.(".viz-hud-metric");
-    if (pack) pack.textContent = "Koi Pond";
-    if (metric) metric.textContent = text.replace(/^koi pond · /, "");
-  } catch { /* cross-origin */ }
-}
-
 zoto.onFrame = (frame) => {
-  const liveCfg = zoto.getConfig?.();
-  if (liveCfg) applyLiveConfig(liveCfg);
-
-  const { w, h } = canvasSize();
+  const { w, h } = tileSize;
   const packed = sim.advance(frame, w, h);
   buf0.set(packed.slot0);
   buf1.set(packed.slot1);
@@ -94,5 +62,4 @@ zoto.onFrame = (frame) => {
   zoto.writeUniform("uAudio", frame.audio);
   zoto.writeUniform("uAccent", packed.accent);
   zoto.writeUniform("uBg", packed.bg);
-  syncHudLabel(packed.label, options.label);
 };

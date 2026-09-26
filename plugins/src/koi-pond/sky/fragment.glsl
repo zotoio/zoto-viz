@@ -123,8 +123,9 @@ void main() {
     float fi = float(i * 4);
     vec2 kp = vec2(slotF(1, fi), slotF(1, fi + 2.0));
     float yaw = slotF(1, fi + 3.0);
-    float sp = slotF(0, 35.0 + float(i));
-    float vig = slotF(0, 48.0 + float(i));
+    float meta = slotF(0, 35.0 + float(i));
+    float sp = floor(meta + 0.01);
+    float vig = clamp((meta - sp) * 64.0, 0.0, 1.0);
     vec2 off = vec2(cos(yaw), sin(yaw)) * 0.08;
     vec2 p = xz - (kp + off);
     float body = sdEllipse(p, vec2(0.11 * sizeScale * (0.85 + vig * 0.35), 0.05 * sizeScale));
@@ -220,6 +221,7 @@ void main() {
   }
   if (legendOn > 0.5) {
     float legendMask = slotF(0, 34.0);
+    float pondTraffic = slotF(0, 49.0);
     vec2 legendUv = uv - vec2(0.32, -0.36);
     for (int li = 0; li < 6; li++) {
       float bit = mod(floor(legendMask / pow(2.0, float(li))), 2.0);
@@ -228,6 +230,12 @@ void main() {
       float chipOn = smoothstep(0.028, 0.0, length(chip - vec2(0.018, 0.0)));
       col = mix(col, koiPatternCol(float(li), 0.4) * 0.9, chipOn * 0.9);
     }
+    vec2 bloomLegend = legendUv - vec2(0.34, 0.055);
+    float bloomChip = smoothstep(0.032, 0.0, length(bloomLegend - vec2(0.02, 0.0)));
+    vec3 bloomInk = mix(vec3(0.55, 0.82, 0.62), vec3(0.95, 0.55, 0.72), pondTraffic);
+    col = mix(col, bloomInk * 0.85, bloomChip * 0.85);
+    float bloomBar = smoothstep(0.12, 0.0, abs(bloomLegend.y - 0.02));
+    col = mix(col, bloomInk, bloomBar * pondTraffic * 0.35);
   }
 
   col = min(col, vec3(0.98));

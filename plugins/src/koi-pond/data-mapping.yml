@@ -6,9 +6,13 @@ mappings:
     default: —
     clamp: max koi per quality / koiCap
   - field: talkers[].rate
-    effect: koi size vigor, swim speed, bloom activity
+    effect: per-koi vigor and swim speed (not lotus bloom)
     default: 0
     clamp: 0..1 via rate/220; #22 slot rules in talker-slots.ts
+  - field: talkers (pond-wide sum of rate)
+    effect: lotus/lily bloom level on all pads
+    default: 0
+    clamp: 0..1 via total rate / 900; independent of lilyDensity pad count
   - field: talkers[].role
     effect: colour pattern (gateway → kohaku, etc.)
     default: hash bucket

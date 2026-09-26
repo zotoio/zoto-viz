@@ -11,20 +11,27 @@ import {
   DEFAULT_OPTIONS,
   demoFrame,
   FAIL_MURK_THRESHOLD,
+  hostTileSizeFromConfig,
   KOI_WORK_BUDGET,
   KoiPondSim,
   koiPondHudLabel,
+  koiPondLumaVariance,
   koiPondSmokeLuma,
   failureVisuals,
   packKoiMeta,
   packNameCheck,
   parseKoiPondOptions,
   patternForTalker,
+  pondBloomFromTraffic,
+  PRESET_IDS,
+  PRESET_CAPS,
   QUALITY_CAPS,
+  randomKoiConfig,
   slottedTalkerIds,
   TALKER_SLOT_CHALLENGER_MARGIN,
   TALKER_SLOT_HOLD_S,
   tileInternalResScale,
+  totalTalkerRate,
   unpackKoiMeta,
 } from "../../../plugins/src/koi-pond/frontend/koi-pond";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
@@ -73,6 +80,11 @@ describe("koi-pond shipped pack", () => {
     expect(wrapped.frag).toContain("zotoVizSlots");
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
     expect(FRONT).toContain("KoiPondSim");
+    expect(FRONT).not.toContain("parent.document");
+    expect(FRONT).not.toMatch(/onFrame[\s\S]*getConfig/);
+    expect(VIS).toContain("Applies to all Koi Pond tiles");
+    expect(VIS).toContain("moonlit_lotus");
+    expect(MAPPING).toContain("pond-wide");
   });
 
   it("quality presets clamp koi cap", () => {
@@ -197,5 +209,143 @@ describe("koi-pond shipped pack", () => {
     const sim = new KoiPondSim(parseKoiPondOptions({ reducedMotion: "true" }));
     const packed = sim.advance(frame());
     expect(packed.slot0[27]).toBeLessThan(0.5);
+  });
+
+  it("host tile size comes from config keys, not DOM", () => {
+    expect(hostTileSizeFromConfig({ hostTileW: "640", hostTileH: "360" })).toEqual({ w: 640, h: 360 });
+    expect(hostTileSizeFromConfig({})).toEqual({ w: 1280, h: 800 });
+  });
+
+  it("presets clamp koi to per-preset caps", () => {
+    for (const preset of PRESET_IDS) {
+      const o = parseKoiPondOptions({ preset, koiCap: "99", quality: "high" });
+      expect(o.preset).toBe(preset);
+      expect(o.koiCap).toBeLessThanOrEqual(PRESET_CAPS[preset].maxKoi);
+    }
+  });
+
+  it("pond bloom follows total talker rate, not a single host", () => {
+    const low = pondBloomFromTraffic(totalTalkerRate([{ rate: 40 }]), true);
+    const high = pondBloomFromTraffic(totalTalkerRate(talkers), true);
+    expect(high).toBeGreaterThan(low);
+    const sim = new KoiPondSim(parseKoiPondOptions({ lilyDensity: "0.2" }));
+    sim.advance(frame({ talkers: [{ id: "a", rate: 400, role: "lan" }] }));
+    const packed = sim.advance(frame({ talkers }));
+    const b0 = packed.slot2[1];
+    const b1 = packed.slot2[5];
+    expect(b0).toBeCloseTo(b1, 3);
+  });
+
+  it("all-minimum settings render non-empty", () => {
+    const cfg: Record<string, string> = {
+      preset: "zen_garden",
+      koiCap: "2",
+      koiSize: "0.5",
+      varietyMix: "0",
+      swimSpeed: "0",
+      schooling: "0",
+      lilyDensity: "0",
+      lotusCount: "0",
+      waterTint: "0",
+      waterClarity: "0",
+      rippleIntensity: "0",
+      causticStrength: "0",
+      quality: "low",
+      seed: "1",
+      bloomOnActivity: "false",
+      caustics: "false",
+      petalDrift: "false",
+      dragonflies: "false",
+      rain: "false",
+      cameraDrift: "false",
+      label: "false",
+      legend: "false",
+      reducedMotion: "true",
+      pat_kohaku: "true",
+      pat_sanke: "false",
+      pat_showa: "false",
+      pat_ogon: "false",
+      pat_tancho: "false",
+      pat_asagi: "false",
+    };
+    const sim = new KoiPondSim(parseKoiPondOptions(cfg));
+    const packed = sim.advance(demoFrame(1));
+    expect(koiPondSmokeLuma(packed)).toBeGreaterThan(0.05);
+  });
+
+  it("all-maximum settings stay within caps", () => {
+    const cfg: Record<string, string> = {
+      preset: "sunrise_feed",
+      koiCap: "99",
+      koiSize: "1.8",
+      varietyMix: "1",
+      swimSpeed: "1",
+      schooling: "1",
+      lilyDensity: "1",
+      lotusCount: "8",
+      waterTint: "1",
+      waterClarity: "1",
+      rippleIntensity: "1",
+      causticStrength: "1",
+      quality: "high",
+      seed: "99999",
+      bloomOnActivity: "true",
+      caustics: "true",
+      petalDrift: "true",
+      dragonflies: "true",
+      rain: "true",
+      cameraDrift: "true",
+      label: "true",
+      legend: "true",
+      reducedMotion: "false",
+    };
+    const o = parseKoiPondOptions(cfg);
+    const sim = new KoiPondSim(o);
+    sim.advance(frame({ packets: [{ proto: "tcp", size: 200, field: 0.9 }] }));
+    expect(assertWorkBudgetUnderCaps(sim.lastWork, o.quality, o.preset)).toBe(true);
+    expect(o.koiCap).toBeLessThanOrEqual(PRESET_CAPS[o.preset].maxKoi);
+    expect(o.lotusCount).toBeLessThanOrEqual(8);
+  });
+
+  it("50 seeded randomise configs parse valid and render non-empty", () => {
+    for (let i = 0; i < 50; i++) {
+      const cfg = randomKoiConfig(1000 + i * 17);
+      const o = parseKoiPondOptions(cfg);
+      expect(PRESET_IDS).toContain(o.preset);
+      expect(o.koiCap).toBeGreaterThanOrEqual(2);
+      const sim = new KoiPondSim(o);
+      const packed = sim.advance(demoFrame(0.5 + i * 0.01));
+      expect(koiPondSmokeLuma(packed)).toBeGreaterThan(0.04);
+    }
+  });
+
+  it("Moonlit Lotus keeps visible detail (luma variance floor)", () => {
+    const sim = new KoiPondSim(parseKoiPondOptions({ preset: "moonlit_lotus", seed: "4242" }));
+    const lumas: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const scaled = talkers.map((t, j) => ({
+        ...t,
+        rate: t.rate * (0.4 + i * 0.12 + j * 0.05),
+      }));
+      const packed = sim.advance(frame({
+        t: i * 0.3,
+        talkers: scaled,
+        audio: 0.06 + (i % 5) * 0.09,
+        packets: i % 3 === 0 ? [{ proto: "udp", size: 96, field: 0.5 }] : [],
+      }));
+      lumas.push(koiPondSmokeLuma(packed));
+    }
+    expect(koiPondLumaVariance(lumas)).toBeGreaterThan(0.0003);
+    expect(Math.max(...lumas)).toBeGreaterThan(0.12);
+  });
+
+  it("packs koi pattern and vigor into one meta slot per fish", () => {
+    const sim = new KoiPondSim(parseKoiPondOptions({ koiCap: "4" }));
+    sim.advance(frame());
+    const meta = sim.slot0[35]!;
+    const unpacked = unpackKoiMeta(meta);
+    expect(unpacked.pattern).toBeGreaterThanOrEqual(0);
+    expect(unpacked.vigor).toBeGreaterThan(0);
+    expect(sim.slot0[48]).toBe(0);
   });
 });

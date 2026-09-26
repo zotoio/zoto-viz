@@ -13,6 +13,32 @@ look:
   gridOpacity: 0
   mosaic: "off"
 config:
+  - key: preset
+    label: preset
+    type: select
+    values:
+      - [zen_garden, Zen Garden]
+      - [moonlit_lotus, Moonlit Lotus]
+      - [sunrise_feed, Sunrise Feed]
+      - [storm_ripples, Storm Ripples]
+      - [festival_lanterns, Festival Lanterns]
+    default: zen_garden
+    hint: Applies to all Koi Pond tiles. Preset sets water, lotus, and motion baselines for every tile on the wall.
+  - key: randomise
+    label: randomise settings
+    type: boolean
+    default: false
+    hint: Randomise seed and decor (undo restores the previous seed).
+  - key: undoRandom
+    label: undo randomise
+    type: boolean
+    default: false
+    hint: Restore the seed from before the last randomise.
+  - key: resetSettings
+    label: reset to preset defaults
+    type: boolean
+    default: false
+    hint: Reset all knobs to the selected preset defaults.
   - key: koiCap
     label: koi count cap
     type: number
@@ -82,7 +108,7 @@ config:
     label: bloom on activity
     type: boolean
     default: true
-    hint: Lotus opens when talkers gather; closes when idle.
+    hint: Lotus bloom follows pond-wide total traffic rate (legend chip).
   - key: waterTint
     label: water tint
     type: number
@@ -167,7 +193,7 @@ config:
     label: pattern legend
     type: boolean
     default: true
-    hint: Corner chips for enabled koi patterns (2×2 / 4×4 safe).
+    hint: Corner chips for koi patterns plus lotus bloom = total traffic rate (2×2 / 4×4 safe).
   - key: quality
     label: quality
     type: select

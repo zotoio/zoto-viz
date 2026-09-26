@@ -28,8 +28,15 @@ export type TimeOfDay = "dawn" | "day" | "dusk" | "night";
 export type CameraAngle = "top" | "angled";
 export type LotusColour = "pink" | "white" | "mixed";
 export type QualityLevel = "low" | "medium" | "high";
+export type KoiPresetId =
+  | "zen_garden"
+  | "moonlit_lotus"
+  | "sunrise_feed"
+  | "storm_ripples"
+  | "festival_lanterns";
 
 export interface KoiPondOptions {
+  preset: KoiPresetId;
   koiCap: number;
   koiSize: number;
   varietyMix: number;
@@ -63,6 +70,16 @@ type KoiPondFrame = Pick<
   "t" | "dt" | "audio" | "talkers" | "packets" | "sys" | "demo"
 >;
 
+/** Sandbox `zoto` global (shape matches plugins/sdk/viz-contract VizZotoPlugin). */
+export type KoiPondZoto = {
+  onFrame: ((frame: KoiPondFrame) => void) | null;
+  onConfig: ((cfg: Record<string, string>) => void) | null;
+  getConfig?: () => Record<string, string>;
+  writeBuffer: (slot: number, data: number[] | Float32Array) => void;
+  writeUniform: (name: string, value: number | [number, number, number]) => void;
+  writeParticles: (data: number[] | Float32Array, stride?: number) => void;
+};
+
 export const FAIL_MURK_THRESHOLD = 0.35;
 export const PACKET_FRAME_CAP = 8;
 export const MAX_KOI = 16;
@@ -94,7 +111,27 @@ export const KOI_WORK_BUDGET = {
   glContextsOn4x4Wall: 0,
 } as const;
 
+export const PRESET_IDS: KoiPresetId[] = [
+  "zen_garden",
+  "moonlit_lotus",
+  "sunrise_feed",
+  "storm_ripples",
+  "festival_lanterns",
+];
+
+export const PRESET_CAPS: Record<KoiPresetId, { maxKoi: number; maxParticles: number }> = {
+  zen_garden: { maxKoi: 10, maxParticles: 14 },
+  moonlit_lotus: { maxKoi: 14, maxParticles: 18 },
+  sunrise_feed: { maxKoi: 16, maxParticles: 20 },
+  storm_ripples: { maxKoi: 12, maxParticles: 16 },
+  festival_lanterns: { maxKoi: 14, maxParticles: 22 },
+};
+
 export const CONFIG_KEYS = [
+  "preset",
+  "randomise",
+  "undoRandom",
+  "resetSettings",
   "koiCap",
   "koiSize",
   "varietyMix",
@@ -170,11 +207,12 @@ export const KOI_SLOT = {
   sizeScale: 32,
   varietyMix: 33,
   patternLegend: 34,
-  koiPattern0: 35,
-  koiVigor0: 48,
+  koiMeta0: 35,
+  pondTraffic: 49,
 } as const;
 
-const KOI_ATTR_SLOTS = 13;
+const KOI_META_SLOTS = 16;
+const POND_TRAFFIC_SCALE = 900;
 const PAD_SLOTS = 12;
 
 export function packKoiMeta(pattern: number, vigor: number): number {
@@ -197,6 +235,7 @@ export function tileInternalResScale(canvasW: number, canvasH: number): number {
 }
 
 export const DEFAULT_OPTIONS: KoiPondOptions = {
+  preset: "zen_garden",
   koiCap: 12,
   koiSize: 1,
   varietyMix: 0.65,
@@ -258,53 +297,217 @@ function parsePatternFlags(cfg?: Record<string, string> | null): number[] {
   });
 }
 
+function defaultStringForOptionKey(key: string): string | undefined {
+  const d = DEFAULT_OPTIONS as Record<string, unknown>;
+  const v = d[key];
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string") return v;
+  return undefined;
+}
+
+function presetDefaults(preset: KoiPresetId): Partial<KoiPondOptions> {
+  switch (preset) {
+    case "zen_garden":
+      return {
+        koiCap: 10,
+        schooling: 0.35,
+        lilyDensity: 0.55,
+        lotusCount: 3,
+        timeOfDay: "day",
+        waterClarity: 0.8,
+        rippleIntensity: 0.45,
+      };
+    case "moonlit_lotus":
+      return {
+        koiCap: 12,
+        schooling: 0.4,
+        lilyDensity: 0.65,
+        lotusCount: 6,
+        lotusColour: "mixed",
+        timeOfDay: "night",
+        waterClarity: 0.82,
+        caustics: true,
+        causticStrength: 0.62,
+        bloomOnActivity: true,
+        waterTint: 0.38,
+        rippleIntensity: 0.5,
+        dragonflies: false,
+      };
+    case "sunrise_feed":
+      return {
+        koiCap: 14,
+        schooling: 0.55,
+        swimSpeed: 0.65,
+        timeOfDay: "dawn",
+        rippleIntensity: 0.75,
+        petalDrift: true,
+      };
+    case "storm_ripples":
+      return {
+        koiCap: 12,
+        schooling: 0.25,
+        rain: true,
+        rippleIntensity: 0.9,
+        waterClarity: 0.55,
+        timeOfDay: "dusk",
+        cameraDrift: false,
+      };
+    case "festival_lanterns":
+      return {
+        koiCap: 14,
+        timeOfDay: "night",
+        lotusCount: 5,
+        lilyDensity: 0.75,
+        dragonflies: true,
+        petalDrift: true,
+        rippleIntensity: 0.7,
+      };
+    default:
+      return {};
+  }
+}
+
+/** Host sends global defaults; treat those as unset when they match a different preset baseline. */
+export function coalescePresetConfig(
+  cfg?: Record<string, string> | null,
+): Record<string, string> | undefined {
+  if (!cfg) return cfg ?? undefined;
+  const presetRaw = (cfg.preset ?? DEFAULT_OPTIONS.preset) as KoiPresetId;
+  const preset = PRESET_IDS.includes(presetRaw) ? presetRaw : DEFAULT_OPTIONS.preset;
+  const pd = presetDefaults(preset);
+  const out: Record<string, string> = { ...cfg };
+  const scalarKeys = [
+    "koiCap",
+    "koiSize",
+    "varietyMix",
+    "swimSpeed",
+    "schooling",
+    "lilyDensity",
+    "lotusCount",
+    "lotusColour",
+    "waterTint",
+    "waterClarity",
+    "rippleIntensity",
+    "causticStrength",
+    "timeOfDay",
+    "cameraAngle",
+    "quality",
+  ] as const;
+  for (const key of scalarKeys) {
+    const presetVal = (pd as Record<string, unknown>)[key];
+    if (presetVal === undefined) continue;
+    const presetStr =
+      typeof presetVal === "boolean"
+        ? presetVal ? "true" : "false"
+        : String(presetVal);
+    const globalDefault = defaultStringForOptionKey(key);
+    if (globalDefault !== undefined && out[key] === globalDefault && presetStr !== globalDefault) {
+      delete out[key];
+    }
+  }
+  for (const key of ["bloomOnActivity", "caustics", "petalDrift", "dragonflies", "rain", "cameraDrift"] as const) {
+    const presetVal = (pd as Record<string, unknown>)[key];
+    if (presetVal === undefined) continue;
+    const presetStr = presetVal ? "true" : "false";
+    const globalDefault = defaultStringForOptionKey(key);
+    if (globalDefault !== undefined && out[key] === globalDefault && presetStr !== globalDefault) {
+      delete out[key];
+    }
+  }
+  return out;
+}
+
+export function presetLabel(preset: KoiPresetId): string {
+  const labels: Record<KoiPresetId, string> = {
+    zen_garden: "Zen Garden",
+    moonlit_lotus: "Moonlit Lotus",
+    sunrise_feed: "Sunrise Feed",
+    storm_ripples: "Storm Ripples",
+    festival_lanterns: "Festival Lanterns",
+  };
+  return labels[preset];
+}
+
+export const KOI_POND_TILE_DEFAULT = { w: 1280, h: 800 };
+
+/** Tile size from host-injected config keys (never read parent DOM). */
+export function hostTileSizeFromConfig(
+  cfg?: Record<string, string> | null,
+): { w: number; h: number } {
+  const w = Number(cfg?.hostTileW ?? cfg?.tileW);
+  const h = Number(cfg?.hostTileH ?? cfg?.tileH);
+  return {
+    w: Number.isFinite(w) && w > 64 ? Math.round(w) : KOI_POND_TILE_DEFAULT.w,
+    h: Number.isFinite(h) && h > 64 ? Math.round(h) : KOI_POND_TILE_DEFAULT.h,
+  };
+}
+
+export function totalTalkerRate(talkers: { rate: number }[]): number {
+  let sum = 0;
+  for (const t of talkers) sum += Math.max(0, t.rate);
+  return sum;
+}
+
+export function pondBloomFromTraffic(totalRate: number, bloomOn: boolean): number {
+  if (!bloomOn) return 0.2;
+  return clamp01(0.18 + totalRate / POND_TRAFFIC_SCALE);
+}
+
 export function parseKoiPondOptions(cfg?: Record<string, string> | null): KoiPondOptions {
+  const merged = coalescePresetConfig(cfg);
+  const presetRaw = (merged?.preset ?? DEFAULT_OPTIONS.preset) as KoiPresetId;
+  const preset = PRESET_IDS.includes(presetRaw) ? presetRaw : DEFAULT_OPTIONS.preset;
+  const base = { ...DEFAULT_OPTIONS, ...presetDefaults(preset) };
   const cap = QUALITY_CAPS[
-    (cfg?.quality === "low" || cfg?.quality === "high" ? cfg.quality : "medium") as QualityLevel
+    (merged?.quality === "low" || merged?.quality === "high" ? merged.quality : "medium") as QualityLevel
   ];
-  const timeRaw = cfg?.timeOfDay ?? DEFAULT_OPTIONS.timeOfDay;
+  const presetCap = PRESET_CAPS[preset].maxKoi;
+  const timeRaw = merged?.timeOfDay ?? base.timeOfDay;
   const timeOfDay: TimeOfDay =
     timeRaw === "dawn" || timeRaw === "dusk" || timeRaw === "night" ? timeRaw : "day";
-  const lotusRaw = cfg?.lotusColour ?? DEFAULT_OPTIONS.lotusColour;
+  const lotusRaw = merged?.lotusColour ?? base.lotusColour;
   const lotusColour: LotusColour =
     lotusRaw === "pink" || lotusRaw === "white" ? lotusRaw : "mixed";
-  const camRaw = cfg?.cameraAngle ?? DEFAULT_OPTIONS.cameraAngle;
+  const camRaw = merged?.cameraAngle ?? base.cameraAngle;
   const cameraAngle: CameraAngle = camRaw === "top" ? "top" : "angled";
   const quality: QualityLevel =
-    cfg?.quality === "low" || cfg?.quality === "high" ? cfg.quality : "medium";
+    merged?.quality === "low" || merged?.quality === "high" ? merged.quality : "medium";
+  const maxKoi = Math.min(cap.maxKoi, presetCap);
   return {
-    koiCap: Math.round(clamp(parseNum(cfg?.koiCap, DEFAULT_OPTIONS.koiCap), 2, cap.maxKoi)),
-    koiSize: clamp(parseNum(cfg?.koiSize, DEFAULT_OPTIONS.koiSize), 0.5, 1.8),
-    varietyMix: clamp01(parseNum(cfg?.varietyMix, DEFAULT_OPTIONS.varietyMix)),
-    swimSpeed: clamp01(parseNum(cfg?.swimSpeed, DEFAULT_OPTIONS.swimSpeed)),
-    schooling: clamp01(parseNum(cfg?.schooling, DEFAULT_OPTIONS.schooling)),
-    lilyDensity: clamp01(parseNum(cfg?.lilyDensity, DEFAULT_OPTIONS.lilyDensity)),
-    lotusCount: Math.round(clamp(parseNum(cfg?.lotusCount, DEFAULT_OPTIONS.lotusCount), 0, 8)),
+    preset,
+    koiCap: Math.round(clamp(parseNum(merged?.koiCap, base.koiCap), 2, maxKoi)),
+    koiSize: clamp(parseNum(merged?.koiSize, base.koiSize), 0.5, 1.8),
+    varietyMix: clamp01(parseNum(merged?.varietyMix, base.varietyMix)),
+    swimSpeed: clamp01(parseNum(merged?.swimSpeed, base.swimSpeed)),
+    schooling: clamp01(parseNum(merged?.schooling, base.schooling)),
+    lilyDensity: clamp01(parseNum(merged?.lilyDensity, base.lilyDensity)),
+    lotusCount: Math.round(clamp(parseNum(merged?.lotusCount, base.lotusCount), 0, 8)),
     lotusColour,
-    bloomOnActivity: parseBool(cfg?.bloomOnActivity, DEFAULT_OPTIONS.bloomOnActivity),
-    waterTint: clamp01(parseNum(cfg?.waterTint, DEFAULT_OPTIONS.waterTint)),
-    waterClarity: clamp01(parseNum(cfg?.waterClarity, DEFAULT_OPTIONS.waterClarity)),
-    rippleIntensity: clamp01(parseNum(cfg?.rippleIntensity, DEFAULT_OPTIONS.rippleIntensity)),
-    caustics: parseBool(cfg?.caustics, DEFAULT_OPTIONS.caustics),
-    causticStrength: clamp01(parseNum(cfg?.causticStrength, DEFAULT_OPTIONS.causticStrength)),
-    petalDrift: parseBool(cfg?.petalDrift, DEFAULT_OPTIONS.petalDrift),
-    dragonflies: parseBool(cfg?.dragonflies, DEFAULT_OPTIONS.dragonflies),
+    bloomOnActivity: parseBool(merged?.bloomOnActivity, base.bloomOnActivity),
+    waterTint: clamp01(parseNum(merged?.waterTint, base.waterTint)),
+    waterClarity: clamp01(parseNum(merged?.waterClarity, base.waterClarity)),
+    rippleIntensity: clamp01(parseNum(merged?.rippleIntensity, base.rippleIntensity)),
+    caustics: parseBool(merged?.caustics, base.caustics),
+    causticStrength: clamp01(parseNum(merged?.causticStrength, base.causticStrength)),
+    petalDrift: parseBool(merged?.petalDrift, base.petalDrift),
+    dragonflies: parseBool(merged?.dragonflies, base.dragonflies),
     timeOfDay,
-    rain: parseBool(cfg?.rain, DEFAULT_OPTIONS.rain),
+    rain: parseBool(merged?.rain, base.rain),
     cameraAngle,
-    cameraDrift: parseBool(cfg?.cameraDrift, DEFAULT_OPTIONS.cameraDrift),
-    label: parseBool(cfg?.label, DEFAULT_OPTIONS.label),
-    legend: parseBool(cfg?.legend, DEFAULT_OPTIONS.legend),
+    cameraDrift: parseBool(merged?.cameraDrift, base.cameraDrift),
+    label: parseBool(merged?.label, base.label),
+    legend: parseBool(merged?.legend, base.legend),
     quality,
-    seed: Math.round(clamp(parseNum(cfg?.seed, DEFAULT_OPTIONS.seed), 0, 99999)),
-    reducedMotion: parseBool(cfg?.reducedMotion, DEFAULT_OPTIONS.reducedMotion),
-    patternFlags: parsePatternFlags(cfg),
+    seed: Math.round(clamp(parseNum(merged?.seed, base.seed), 0, 99999)),
+    reducedMotion: parseBool(merged?.reducedMotion, base.reducedMotion),
+    patternFlags: parsePatternFlags(merged),
   };
 }
 
 export function koiPondHudLabel(opts: KoiPondOptions, demo: boolean, metric: string): string {
   const tail = demo ? "demo" : metric;
-  return `koi pond · ${opts.timeOfDay} · ${tail}`;
+  return `koi pond · ${presetLabel(opts.preset)} · ${tail}`;
 }
 
 export function liveMetricLabel(
@@ -380,6 +583,8 @@ export class KoiPondSim {
   private camPhase = 0;
   private packetCursor = 0;
   private simAccumulator = 0;
+  private pondBloom = 0.2;
+  private seedUndo: number | null = null;
   lastPacketIngest = 0;
   lastWork = { koi: 0, particles: 0, raymarchSteps: KOI_WORK_BUDGET.raymarchSteps };
   private opts: KoiPondOptions;
@@ -423,6 +628,25 @@ export class KoiPondSim {
 
   getOptions(): KoiPondOptions {
     return this.opts;
+  }
+
+  resetLayout(): void {
+    this.teardown();
+    this.initPads();
+    this.pondBloom = 0.2;
+    this.camPhase = 0;
+  }
+
+  randomiseSeed(): void {
+    this.seedUndo = this.opts.seed;
+    const next = (this.opts.seed * 1103515245 + 12345) % 100000;
+    this.setOptions({ ...this.opts, seed: next });
+  }
+
+  undoSeed(): void {
+    if (this.seedUndo === null) return;
+    this.setOptions({ ...this.opts, seed: this.seedUndo });
+    this.seedUndo = null;
   }
 
   koiPatternById(): Map<string, number> {
@@ -541,21 +765,6 @@ export class KoiPondSim {
     }
   }
 
-  /** Built-in demo talkers — always lively on empty host / CI. */
-  spawnDemoTalkers(t: number): VizTalkerSample[] {
-    const n = Math.min(this.opts.koiCap, 6);
-    const out: VizTalkerSample[] = [];
-    for (let i = 0; i < n; i++) {
-      const roles = ["gateway", "lan", "internet", "lan", "internet", "lan"];
-      out.push({
-        id: `demo:${i}:${this.opts.seed}`,
-        rate: 70 + 35 * Math.sin(t * 0.45 + i * 0.9),
-        role: roles[i % roles.length]!,
-      });
-    }
-    return out;
-  }
-
   private ingestPackets(packets: VizPacketSample[]): void {
     let n = 0;
     this.lastPacketIngest = 0;
@@ -656,18 +865,13 @@ export class KoiPondSim {
       k.x = clamp(k.x + k.vx, -1.35, 1.35);
       k.z = clamp(k.z + k.vz, -1.25, 1.25);
       k.yaw = Math.atan2(k.vx, k.vz + 0.001);
-      if (pad) {
-        pad.activity = clamp01(pad.activity + k.vigor * 0.02);
-        if (this.opts.bloomOnActivity) {
-          pad.bloom = clamp01(pad.bloom + k.vigor * 0.04);
-        }
-      }
+      if (pad) pad.activity = clamp01(pad.activity + k.vigor * 0.02);
     }
-    for (const pad of this.pads) {
-      pad.activity *= 0.96;
-      if (!this.opts.bloomOnActivity) pad.bloom = 0.2;
-      else pad.bloom = clamp01(pad.bloom * 0.985 + pad.activity * 0.02);
-    }
+    for (const pad of this.pads) pad.activity *= 0.96;
+    const total = totalTalkerRate(slotted);
+    const target = pondBloomFromTraffic(total, this.opts.bloomOnActivity);
+    this.pondBloom = clamp01(this.pondBloom * 0.9 + target * 0.12);
+    for (const pad of this.pads) pad.bloom = this.pondBloom;
   }
 
   private stepOnce(simT: number, allTalkers: VizTalkerSample[]): void {
@@ -702,10 +906,7 @@ export class KoiPondSim {
   }
 
   step(frame: KoiPondFrame): void {
-    const talkers =
-      frame.demo && frame.talkers.length === 0
-        ? this.spawnDemoTalkers(frame.t)
-        : frame.talkers;
+    const talkers = frame.talkers;
     this.ingestPackets(frame.packets);
     this.simAccumulator += Math.min(0.1, frame.dt || FIXED_SIM_DT);
     let steps = 0;
@@ -775,9 +976,9 @@ export class KoiPondSim {
     s0[KOI_SLOT.koiCount] = packedIds.length;
     s0[KOI_SLOT.demo] = this.lastDemo ? 1 : 0;
     s0[KOI_SLOT.timeScale] = o.reducedMotion ? 0.15 : 1;
-    let peak = 0;
-    for (const t of this.lastTalkers) peak = Math.max(peak, t.rate);
-    s0[KOI_SLOT.metricPeak] = clamp01(peak / 220);
+    const totalRate = totalTalkerRate(this.lastTalkers);
+    s0[KOI_SLOT.metricPeak] = clamp01(totalRate / POND_TRAFFIC_SCALE);
+    s0[KOI_SLOT.pondTraffic] = s0[KOI_SLOT.metricPeak];
     const q = QUALITY_CAPS[o.quality];
     s0[KOI_SLOT.raymarchSteps] = q.steps;
     s0[KOI_SLOT.tileResScale] = tileInternalResScale(canvasW, canvasH);
@@ -799,17 +1000,13 @@ export class KoiPondSim {
       if (o.patternFlags[i]) legendMask |= 1 << i;
     }
     s0[KOI_SLOT.patternLegend] = legendMask;
-    for (let i = 0; i < KOI_ATTR_SLOTS; i++) {
-      s0[KOI_SLOT.koiPattern0 + i] = 0;
-      s0[KOI_SLOT.koiVigor0 + i] = 0;
-    }
+    for (let i = 0; i < KOI_META_SLOTS; i++) s0[KOI_SLOT.koiMeta0 + i] = 0;
     let ki = 0;
     for (const id of packedIds) {
-      if (ki >= KOI_ATTR_SLOTS) break;
+      if (ki >= KOI_META_SLOTS) break;
       const k = this.koi.get(id);
       if (!k) continue;
-      s0[KOI_SLOT.koiPattern0 + ki] = k.pattern;
-      s0[KOI_SLOT.koiVigor0 + ki] = k.vigor;
+      s0[KOI_SLOT.koiMeta0 + ki] = packKoiMeta(k.pattern, k.vigor);
       ki++;
     }
 
@@ -908,21 +1105,124 @@ export function failureVisuals(sys?: { failed?: number }): { murk: number; banne
 export function koiPondSmokeLuma(packed: ReturnType<KoiPondSim["pack"]>): number {
   const base = packed.bright * (0.4 + packed.slot0[KOI_SLOT.clarity]! * 0.35);
   const koiGlow = Math.min(0.3, packed.slot0[KOI_SLOT.koiCount]! * 0.025);
-  return clamp01(base + koiGlow - packed.murk * 0.35);
+  const traffic = packed.slot0[KOI_SLOT.pondTraffic]! * 0.12;
+  const nightLift = packed.slot0[KOI_SLOT.timeOfDay]! > 0.75 ? 0.06 : 0;
+  return clamp01(base + koiGlow + traffic + nightLift - packed.murk * 0.35);
 }
 
 export function assertWorkBudgetUnderCaps(
   work: { koi: number; particles: number; raymarchSteps: number },
   quality: QualityLevel,
+  preset: KoiPresetId = "zen_garden",
 ): boolean {
   const cap = QUALITY_CAPS[quality];
+  const presetCap = PRESET_CAPS[preset];
   return (
     work.koi <= cap.maxKoi
+    && work.koi <= presetCap.maxKoi
     && work.koi <= MAX_KOI
     && work.particles <= cap.maxParticles
+    && work.particles <= presetCap.maxParticles
     && work.particles <= MAX_PARTICLES
     && work.raymarchSteps <= KOI_WORK_BUDGET.raymarchSteps
   );
+}
+
+export type ConfigActionEdges = {
+  resetSettings?: boolean;
+  randomise?: boolean;
+  undoRandom?: boolean;
+};
+
+export function applyConfigActions(
+  sim: KoiPondSim,
+  cfg: Record<string, string> | undefined,
+  next: KoiPondOptions,
+  edges: ConfigActionEdges = {},
+): KoiPondOptions {
+  let opts = next;
+  if (edges.resetSettings) {
+    opts = parseKoiPondOptions({ preset: next.preset });
+    sim.resetLayout();
+  }
+  if (edges.randomise) sim.randomiseSeed();
+  if (edges.undoRandom) sim.undoSeed();
+  opts = { ...opts, seed: sim.getOptions().seed };
+  sim.setOptions(opts);
+  return opts;
+}
+
+export function configActionEdges(
+  cfg: Record<string, string> | undefined,
+  prev: { reset: boolean; randomise: boolean; undo: boolean },
+): { edges: ConfigActionEdges; next: typeof prev } {
+  const reset = parseBool(cfg?.resetSettings, false);
+  const randomise = parseBool(cfg?.randomise, false);
+  const undo = parseBool(cfg?.undoRandom, false);
+  return {
+    edges: {
+      resetSettings: reset && !prev.reset,
+      randomise: randomise && !prev.randomise,
+      undoRandom: undo && !prev.undo,
+    },
+    next: { reset, randomise, undo },
+  };
+}
+
+/** Seeded PRNG for settings randomise tests (deterministic). */
+export function mulberry32(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function randomKoiConfig(seed: number): Record<string, string> {
+  const rnd = mulberry32(seed);
+  const preset = PRESET_IDS[Math.floor(rnd() * PRESET_IDS.length)]!;
+  const cfg: Record<string, string> = {
+    preset,
+    koiCap: String(2 + Math.floor(rnd() * 15)),
+    koiSize: String(0.5 + rnd() * 1.3),
+    varietyMix: String(rnd()),
+    swimSpeed: String(rnd()),
+    schooling: String(rnd()),
+    lilyDensity: String(rnd()),
+    lotusCount: String(Math.floor(rnd() * 9)),
+    lotusColour: rnd() < 0.33 ? "pink" : rnd() < 0.66 ? "white" : "mixed",
+    bloomOnActivity: rnd() > 0.5 ? "true" : "false",
+    waterTint: String(rnd()),
+    waterClarity: String(rnd()),
+    rippleIntensity: String(rnd()),
+    caustics: rnd() > 0.5 ? "true" : "false",
+    causticStrength: String(rnd()),
+    petalDrift: rnd() > 0.5 ? "true" : "false",
+    dragonflies: rnd() > 0.5 ? "true" : "false",
+    timeOfDay: ["dawn", "day", "dusk", "night"][Math.floor(rnd() * 4)]!,
+    rain: rnd() > 0.85 ? "true" : "false",
+    cameraAngle: rnd() > 0.5 ? "top" : "angled",
+    cameraDrift: rnd() > 0.5 ? "true" : "false",
+    label: rnd() > 0.2 ? "true" : "false",
+    legend: rnd() > 0.2 ? "true" : "false",
+    quality: ["low", "medium", "high"][Math.floor(rnd() * 3)]!,
+    seed: String(Math.floor(rnd() * 100000)),
+    reducedMotion: rnd() > 0.8 ? "true" : "false",
+  };
+  for (const name of KOI_PATTERNS) {
+    cfg[`pat_${name}`] = rnd() > 0.15 ? "true" : "false";
+  }
+  return cfg;
+}
+
+export function koiPondLumaVariance(samples: number[]): number {
+  if (samples.length < 2) return 0;
+  const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
+  let v = 0;
+  for (const x of samples) v += (x - mean) ** 2;
+  return v / samples.length;
 }
 
 export function demoFrame(t = 1): KoiPondFrame {
