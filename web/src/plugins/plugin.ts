@@ -305,30 +305,39 @@ export function vizContractFor(spec: PluginView | null | undefined): VizPluginCo
 const storeKey = (id: string, key: string) => `zoto-viz.plugin.${id}.${key}`;
 
 let pluginConfigCacheGen = 0;
+let pluginCatalogRevision = 0;
 const pluginOptsConfigCache = new Map<string, { gen: number; values: Record<string, string> }>();
 
 export function pluginConfigCacheGeneration(): number {
   return pluginConfigCacheGen;
 }
 
+export function pluginCatalogCacheRevision(): number {
+  return pluginCatalogRevision;
+}
+
+function fieldDefaultsSignature(fields: PluginField[]): string {
+  return fields.map((f) => {
+    const d = f.default !== undefined ? String(f.default) : "";
+    return `${f.key}:${f.type}:${d}:${f.min ?? ""}:${f.max ?? ""}`;
+  }).join("\0");
+}
+
 function pluginConfigCacheKey(spec: PluginView, fields: PluginField[]): string {
   const storeId = configStoreId(spec);
   const fieldSig = fields.map((f) => f.key).join("\0");
-  return `${storeId}\0${fieldSig}`;
+  return `${pluginCatalogRevision}\0${storeId}\0${fieldSig}\0${fieldDefaultsSignature(fields)}`;
 }
 
-export function invalidatePluginConfigCache(storeId?: string): void {
+export function bumpPluginCatalogRevision(): void {
+  pluginCatalogRevision += 1;
   pluginConfigCacheGen += 1;
-  if (!storeId) {
-    pluginOptsConfigCache.clear();
-    return;
-  }
-  const packId = storeId.split(":")[0];
-  for (const key of [...pluginOptsConfigCache.keys()]) {
-    if (key.startsWith(`${storeId}\0`) || key.startsWith(`${packId}\0`)) {
-      pluginOptsConfigCache.delete(key);
-    }
-  }
+  pluginOptsConfigCache.clear();
+}
+
+export function invalidatePluginConfigCache(): void {
+  pluginConfigCacheGen += 1;
+  pluginOptsConfigCache.clear();
 }
 
 /** Cached config for per-frame optsFor (invalidated on writePluginConfig). */
@@ -402,12 +411,12 @@ export function loadPluginConfig(spec: PluginView, fields = spec.config): Record
 
 export function removePluginConfigKeys(id: string, keys: string[]): void {
   for (const k of keys) localStorage.removeItem(storeKey(id, k));
-  invalidatePluginConfigCache(id);
+  invalidatePluginConfigCache();
 }
 
 export function writePluginConfig(id: string, values: Record<string, string>): void {
   for (const [k, v] of Object.entries(values)) localStorage.setItem(storeKey(id, k), v);
-  invalidatePluginConfigCache(id);
+  invalidatePluginConfigCache();
 }
 
 export function collectPluginConfigs(specs: PluginView[]): Record<string, Record<string, string>> {
@@ -702,6 +711,9 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
 
 export async function installPlugins(): Promise<PluginView[]> {
   try {
+    bumpPluginCatalogRevision();
+    const { clearPluginSettingsUiState } = await import("./plugin-settings");
+    clearPluginSettingsUiState();
     const data = await fetchPlugins();
     for (const e of data.errors) console.warn("zoto-viz plugin:", e.file, e.error);
     const specs: PluginView[] = [];

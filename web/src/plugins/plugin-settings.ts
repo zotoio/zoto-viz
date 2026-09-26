@@ -6,7 +6,7 @@ import { VIEW_PROMPT_KEY } from "./plugin-visualisation";
 export { PRESET_BASE_META_KEY } from "./plugin";
 
 export const CUSTOM_PRESET_ID = "custom";
-export const UNDO_RING_SIZE = 10;
+const UNDO_RING_SIZE = 10;
 
 const sectionOpen = new Map<string, Map<string, boolean>>();
 const undoRings = new Map<string, Record<string, string>[]>();
@@ -21,7 +21,7 @@ export function fieldDefaultForSpec(spec: PluginView, field: PluginField): strin
   return inst !== undefined ? inst : fieldDefault(field);
 }
 
-export function hasRandomisableFields(spec: PluginView, fields: PluginField[]): boolean {
+function hasRandomisableFields(spec: PluginView, fields: PluginField[]): boolean {
   const pf = spec.settings?.presetField;
   for (const f of fields) {
     if (f.randomise === false) continue;
@@ -65,7 +65,7 @@ export function sectionOpenState(storeId: string, title: string, sectionDecl: Pl
   if (saved !== undefined) return saved;
   const decl = sectionDecl.find((s) => s.title === title);
   if (decl) return decl.collapsed !== true;
-  return index === 0;
+  return true;
 }
 
 export function rememberSectionOpen(storeId: string, title: string, open: boolean): void {
@@ -79,6 +79,12 @@ export function rememberSectionOpen(storeId: string, title: string, open: boolea
 
 export function clearUndoRing(storeId: string): void {
   undoRings.delete(storeId);
+}
+
+/** Drop UI session state after a catalog reload (sections, undo stacks). */
+export function clearPluginSettingsUiState(): void {
+  sectionOpen.clear();
+  undoRings.clear();
 }
 
 export function undoRingDepth(storeId: string): number {
@@ -372,6 +378,7 @@ export function resetDeclaredConfig(
     if (isMetaConfigKey(f.key)) continue;
     if (pf && f.key === pf) continue;
     if (f.type === "textarea" && f.key === VIEW_PROMPT_KEY) continue;
+    if (f.type === "text") continue;
     resetFieldToDefault(spec, f, values);
   }
   const base = derivedPresetId(spec, values)

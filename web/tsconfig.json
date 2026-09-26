@@ -12,5 +12,5 @@
     "types": ["vite/client"]
   },
   "include": ["src", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/drive.ts", "../plugins/src/backrooms/frontend/director.ts", "../plugins/src/stereo-gram/frontend/recipe.ts", "../plugins/src/syscon/frontend/telemetry.ts", "../plugins/src/nixie-clock/frontend/tubes.ts"],
-  "exclude": ["src/**/*.test.ts", "src/plugins/fixtures/**"]
+  "exclude": ["src/**/*.test.ts", "src/plugins/fixtures/**", "src/plugins/test/**"]
 }

@@ -250,8 +250,10 @@ export class VizHud {
     this.settingsCaptionHud = false;
     this.swapRow.hidden = false;
     this.metricEl.hidden = false;
+    this.skipEl.hidden = false;
+    this.frameEl.hidden = false;
     if (!this.activeId) {
-      if (!this.settingsCaptionHud) this.root.hidden = true;
+      this.root.hidden = true;
       return;
     }
     this.root.hidden = false;
@@ -269,6 +271,8 @@ export class VizHud {
     this.packBaseName = packName;
     this.swapRow.hidden = true;
     this.metricEl.hidden = true;
+    this.skipEl.hidden = true;
+    this.frameEl.hidden = true;
     this.renderPackLine();
   }
 

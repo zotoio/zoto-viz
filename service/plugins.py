@@ -619,11 +619,21 @@ def _check_plugin_settings(doc: dict[str, Any]) -> None:
             )
 
 
-def _check_semantics(doc: dict[str, Any]) -> None:
+def _option_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Legacy option lists from plugin.yml and/or visualisation.yml."""
+    rows: list[dict[str, Any]] = []
+    viz = doc.get("visualisation") if isinstance(doc.get("visualisation"), dict) else {}
+    for raw in (doc.get("options"), viz.get("options")):
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict):
+                    rows.append(item)
+    return rows
+
+
+def _check_semantics(doc: dict[str, Any], *, include_settings: bool = False) -> None:
     keys: set[str] = set()
-    for opt in doc.get("options") or []:
-        if not isinstance(opt, dict):
-            continue
+    for opt in _option_rows(doc):
         key = _take_key(keys, opt)
         vals = [v[0] for v in _pairs(opt.get("values"))]
         default = str(opt.get("default") or "")
@@ -631,7 +641,8 @@ def _check_semantics(doc: dict[str, Any]) -> None:
             raise ValueError(f"option {key!r} default {default!r} is not in values")
     for field in _config_field_rows(doc):
         key = _take_key(keys, field)
-        if field.get("type") == "select":
+        ftype = field.get("type") or ("select" if field.get("values") else "text")
+        if ftype == "select":
             vals = [v[0] for v in _pairs(field.get("values"))]
             default = field.get("default")
             if default is not None and vals and str(default) not in vals:
@@ -639,7 +650,8 @@ def _check_semantics(doc: dict[str, Any]) -> None:
         lo, hi = field.get("min"), field.get("max")
         if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo > hi:
             raise ValueError(f"config {key!r} min is greater than max")
-    _check_plugin_settings(doc)
+    if include_settings:
+        _check_plugin_settings(doc)
     caps = doc.get("capabilities") or []
     needs_viz = any(c in caps for c in ("viz.read", "viz.write"))
     viz = doc.get("viz")
@@ -683,8 +695,51 @@ def validate_doc(doc: Any) -> dict[str, Any]:
             loc = ".".join(str(p) for p in err.path) or "(root)"
             bits.append(f"{loc}: {err.message}")
         raise ValueError("; ".join(bits))
-    _check_semantics(doc)
+    _check_semantics(doc, include_settings=False)
     return doc
+
+
+_viz_validator = None
+
+
+def _visualisation_validator():
+    global _viz_validator
+    if _viz_validator is None:
+        from jsonschema import Draft202012Validator
+
+        schema = _schema()
+        sub = {**schema["$defs"]["visualisation"], "$defs": schema["$defs"]}
+        _viz_validator = Draft202012Validator(sub)
+    return _viz_validator
+
+
+def _validate_visualisation_yaml(viz: dict[str, Any]) -> None:
+    """JSON Schema for visualisation.yml (legacy list ``options`` checked in semantics)."""
+    payload = dict(viz)
+    opts = payload.get("options")
+    if isinstance(opts, list):
+        payload.pop("options", None)
+    errors = sorted(_visualisation_validator().iter_errors(payload), key=lambda e: list(e.path))
+    if errors:
+        bits = []
+        for err in errors:
+            loc = ".".join(str(p) for p in err.path) or "(root)"
+            bits.append(f"visualisation.yml {loc}: {err.message}")
+        raise ValueError("; ".join(bits))
+    if isinstance(opts, list):
+        keys: set[str] = set()
+        for opt in opts:
+            if not isinstance(opt, dict):
+                continue
+            key = _take_key(keys, opt)
+            vals = [v[0] for v in _pairs(opt.get("values"))]
+            default = str(opt.get("default") or "")
+            if vals and default not in vals:
+                raise ValueError(f"visualisation.yml option {key!r} default {default!r} is not in values")
+
+
+def _validate_merged_catalog_row(row: dict[str, Any]) -> None:
+    _check_semantics(row, include_settings=True)
 
 
 def load_file(path: Path) -> dict[str, Any]:
@@ -724,9 +779,14 @@ def _attach_visualisation(
         return row
     if viz is None:
         return row
+    try:
+        _validate_visualisation_yaml(viz)
+    except ValueError as e:
+        errors.append({"file": rel, "error": str(e)})
+        return None
     merged = {**row, "visualisation": viz}
     try:
-        _check_plugin_settings(merged)
+        _validate_merged_catalog_row(merged)
     except ValueError as e:
         errors.append({"file": rel, "error": f"{row.get('id', '?')}: {e}"})
         return None
@@ -975,7 +1035,7 @@ def _catalog_row(
         return None
     if not isinstance(row.get("visualisation"), dict):
         try:
-            _check_plugin_settings(row)
+            _validate_merged_catalog_row(row)
         except ValueError as e:
             errors.append({"file": rel, "error": f"{doc.get('id', '?')}: {e}"})
             return None

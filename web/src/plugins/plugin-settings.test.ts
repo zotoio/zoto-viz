@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { fieldDefault } from "./plugin";
-import { loadSettingsDeclFixture } from "./fixtures/load-settings-fixture";
+import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import { configStoreId, expandPluginInstances } from "./instances";
 import {
   applyPresetToValues,
@@ -34,6 +34,8 @@ import {
   loadPluginConfigCached,
   removePluginConfigKeys,
   writePluginConfig,
+  bumpPluginCatalogRevision,
+  pluginCatalogCacheRevision,
 } from "./plugin";
 import { fillPluginFields } from "./plugin-ui";
 
@@ -372,5 +374,52 @@ describe("section collapsed", () => {
     const spec = fixtureSpec();
     expect(spec.settings?.sections?.[0]?.collapsed).toBe(true);
     expect(sectionOpenState("settings-fixture", "Tuning", spec.settings!.sections!, 0)).toBe(false);
+  });
+});
+
+describe("catalog revision cache", () => {
+  it("picks up new field defaults after bumpPluginCatalogRevision", () => {
+    localStorage.clear();
+    const spec = fixtureSpec();
+    const fields = fixtureFields(spec);
+    const rev = pluginCatalogCacheRevision();
+    loadPluginConfigCached(spec, fields);
+    const bumped = {
+      ...spec,
+      config: (spec.config ?? []).map((f) => (f.key === "gain" ? { ...f, default: 9 } : f)),
+    };
+    bumpPluginCatalogRevision();
+    expect(pluginCatalogCacheRevision()).toBe(rev + 1);
+    const bumpedFields = fixtureFields(bumped);
+    expect(loadPluginConfig(bumped, bumpedFields).gain).toBe("9");
+  });
+});
+
+describe("reset text fields", () => {
+  it("does not reset text inputs", () => {
+    const spec: PluginView = {
+      id: "text-reset",
+      name: "Text",
+      version: 1,
+      config: [
+        { key: "gateway", label: "gw", type: "text", default: "ours" },
+        { key: "gain", label: "gain", type: "number", min: 0, max: 10, default: 1 },
+      ],
+    };
+    const fields = spec.config!;
+    const values: Record<string, string> = { gateway: "192.168.1.1", gain: "5" };
+    resetDeclaredConfig(spec, fields, values);
+    expect(values.gateway).toBe("192.168.1.1");
+    expect(values.gain).toBe("1");
+  });
+});
+
+describe("undo restores meta", () => {
+  it("restores __presetBase from the snapshot", () => {
+    const store = "settings-fixture";
+    clearUndoRing(store);
+    pushUndoSnapshot(store, { preset: "custom", gain: "3", [PRESET_BASE_META_KEY]: "a" });
+    const snap = popUndoSnapshot(store)!;
+    expect(snap[PRESET_BASE_META_KEY]).toBe("a");
   });
 });

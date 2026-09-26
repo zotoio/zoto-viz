@@ -9,7 +9,7 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 
 /** Catalog row shape: plugin.yml identity + visualisation.yml body. */
 export function loadSettingsDeclFixture(): PluginView {
-  const plugin = yaml.parse(readFileSync(join(DIR, "settings-decl-pack/plugin.yml"), "utf8"));
-  const visualisation = yaml.parse(readFileSync(join(DIR, "settings-decl-pack/visualisation.yml"), "utf8"));
+  const plugin = yaml.parse(readFileSync(join(DIR, "../fixtures/settings-decl-pack/plugin.yml"), "utf8"));
+  const visualisation = yaml.parse(readFileSync(join(DIR, "../fixtures/settings-decl-pack/visualisation.yml"), "utf8"));
   return toPluginView({ ...plugin, visualisation });
 }

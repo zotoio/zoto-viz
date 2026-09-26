@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { applyInstance, configStoreId, packScopeNoteText } from "./instances";
-import { loadSettingsDeclFixture } from "./fixtures/load-settings-fixture";
+import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import {
   applyPresetToValues,
   buildPluginHudCaption,

@@ -42,12 +42,26 @@ export function setPluginHudCaptionSink(sink: PluginHudCaptionSink | null): void
   hudCaptionSink = sink;
 }
 
-export function refreshPluginHudCaption(
+function refreshPluginHudCaption(
   spec: PluginView,
   fields: PluginField[],
   values: Record<string, string>,
 ): void {
   hudCaptionSink?.(spec, buildPluginHudCaption(spec, fields, values));
+}
+
+function placeSettingsAnnouncer(host: HTMLElement, announcer: HTMLElement): void {
+  const parent = host.parentElement;
+  if (!parent) {
+    if (!host.contains(announcer)) host.prepend(announcer);
+    return;
+  }
+  if (announcer.parentElement !== parent) parent.insertBefore(announcer, host);
+}
+
+function announceLive(announcer: HTMLElement, msg: string): void {
+  announcer.textContent = "";
+  queueMicrotask(() => { announcer.textContent = msg; });
 }
 
 type PanelCtx = {
@@ -79,8 +93,22 @@ function restoreFieldFocus(host: HTMLElement, key: string | null): void {
 
 function restoreToolbarFocus(host: HTMLElement, action: string | null): void {
   if (!action) return;
-  const btn = host.querySelector<HTMLButtonElement>(`[data-toolbar-action="${CSS.escape(action)}"]`);
-  btn?.focus();
+  const root = host.querySelector<HTMLElement>(`[data-toolbar-action="${CSS.escape(action)}"]`);
+  const focusable = root?.matches("button,input,select,textarea")
+    ? root
+    : root?.querySelector<HTMLElement>("button,input,select,textarea");
+  if (focusable && !(focusable as HTMLButtonElement).disabled) {
+    focusable.focus();
+    return;
+  }
+  for (const btn of host.querySelectorAll<HTMLButtonElement>(
+    ".plugin-settings-toolbar .btn[data-toolbar-action]",
+  )) {
+    if (!btn.disabled) {
+      btn.focus();
+      return;
+    }
+  }
 }
 
 function updateDirtyMarkers(ctx: PanelCtx): void {
@@ -116,10 +144,10 @@ function persistValues(ctx: PanelCtx, extraRemove: string[] = []): void {
   const remove = [...extraRemove];
   if (!(PRESET_BASE_META_KEY in ctx.values)) remove.push(PRESET_BASE_META_KEY);
   if (remove.length) removePluginConfigKeys(ctx.storeId, [...new Set(remove)]);
+  refreshPluginHudCaption(ctx.spec, ctx.fields, ctx.values);
   ctx.persist();
   updateDirtyMarkers(ctx);
   syncPresetPicker(ctx);
-  refreshPluginHudCaption(ctx.spec, ctx.fields, ctx.values);
 }
 
 function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): void {
@@ -221,10 +249,11 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
         delete ctx.values[PRESET_BASE_META_KEY];
         const label = presetById(ctx.spec.settings, v)?.label ?? v;
         persistValues(ctx);
-        ctx.announce(`Preset ${label}`);
         remountPanel(ctx, { toolbar: "preset" });
+        ctx.announce(`Preset ${label}`);
       },
     });
+    presetSel.el.setAttribute("data-toolbar-action", "preset");
     ctx.presetSel = presetSel;
     controls.append(presetSel.el);
   }
@@ -244,18 +273,15 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
     const snap = popUndoSnapshot(ctx.storeId);
     if (!snap) return;
     for (const k of Object.keys(ctx.values)) {
-      if (isMetaConfigKey(k)) continue;
       if (!(k in snap)) delete ctx.values[k];
     }
     for (const k of Object.keys(snap)) {
-      if (isMetaConfigKey(k)) continue;
       ctx.values[k] = snap[k]!;
     }
-    delete ctx.values[PRESET_BASE_META_KEY];
     persistValues(ctx);
     syncUndoButton(ctx);
-    ctx.announce("Undone");
     remountPanel(ctx, { toolbar: "undo" });
+    ctx.announce("Undone");
   });
   ctx.undoBtn = undoBtn;
 
@@ -265,8 +291,8 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
       randomiseDeclaredConfig(ctx.spec, ctx.fields, ctx.values, Math.random);
       persistValues(ctx);
       syncUndoButton(ctx);
-      ctx.announce("Randomised");
       remountPanel(ctx, { toolbar: "randomise" });
+      ctx.announce("Randomised");
     }),
     undoBtn,
     mkBtn("reset", "Reset", "Reset to active preset or defaults", () => {
@@ -275,8 +301,8 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
       delete ctx.values[PRESET_BASE_META_KEY];
       persistValues(ctx);
       syncUndoButton(ctx);
-      ctx.announce("Reset");
       remountPanel(ctx, { toolbar: "reset" });
+      ctx.announce("Reset");
     }),
   );
   row.append(controls);
@@ -339,7 +365,6 @@ function remountPanel(ctx: PanelCtx, restore?: { toolbar?: string; field?: strin
   if (!mount) return;
   const fieldKey = restore?.field ?? focusedFieldKey(ctx.host);
   const { announcer } = mount;
-  announcer.remove();
   mount.host.replaceChildren();
   fillPluginFields(mount.host, mount.spec, mount.fields, mount.onPersist, mount.opts, announcer);
   if (restore?.toolbar) restoreToolbarFocus(mount.host, restore.toolbar);
@@ -360,7 +385,7 @@ export function fillPluginFields(
     announcer.setAttribute("aria-live", "polite");
     announcer.setAttribute("aria-atomic", "true");
   }
-  if (!host.contains(announcer)) host.prepend(announcer);
+  placeSettingsAnnouncer(host, announcer);
   panelMounts.set(host, { host, spec, fields, onPersist, opts, announcer });
   const values = loadPluginConfig(spec, fields);
   if (hasDeclaredSettings(spec)) markPresetConsistency(spec, fields, values);
@@ -396,7 +421,7 @@ export function fillPluginFields(
     values,
     storeId,
     fieldHosts: new Map(),
-    announce: (msg) => { announcer.textContent = msg; },
+    announce: (msg) => { announceLive(announcer, msg); },
     persist: () => {
       onPersist(storeId, packConfigValues(values));
     },

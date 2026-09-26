@@ -121,9 +121,11 @@ function asField(key: string, raw: unknown): PluginField | undefined {
   if (!rec) return undefined;
   const id = asString(rec.key) ?? key;
   if (!id) return undefined;
-  const type = rec.type === "boolean" || rec.type === "select" || rec.type === "number" || rec.type === "text" || rec.type === "textarea"
+  const values = asPairs(rec.values);
+  let type: PluginField["type"] = rec.type === "boolean" || rec.type === "select" || rec.type === "number" || rec.type === "text" || rec.type === "textarea"
     ? rec.type
     : "text";
+  if (type === "text" && values.length) type = "select";
   const field: PluginField = {
     key: id,
     label: asString(rec.label) ?? id,
@@ -131,7 +133,6 @@ function asField(key: string, raw: unknown): PluginField | undefined {
   };
   if (asString(rec.hint)) field.hint = asString(rec.hint);
   if (rec.default !== undefined) field.default = rec.default as string | number | boolean;
-  const values = asPairs(rec.values);
   if (values.length) field.values = values;
   if (typeof rec.min === "number") field.min = rec.min;
   if (typeof rec.max === "number") field.max = rec.max;

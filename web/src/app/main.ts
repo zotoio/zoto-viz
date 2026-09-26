@@ -49,6 +49,7 @@ import {
   fetchPlugins,
   grantPluginConsent,
   installPlugins,
+  bumpPluginCatalogRevision,
   loadPluginConfig,
   loadPluginConfigCached,
   pluginConfigCacheGeneration,
@@ -69,9 +70,11 @@ import {
   configStoreId,
   type PluginView,
 } from "../plugins/plugin";
-import { buildPluginHudCaption, packConfigValues } from "../plugins/plugin-settings";
+import { packConfigValues } from "../plugins/plugin-settings";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
+import { hudCaptionFromOpts, syncPluginHudForMode } from "../plugins/plugin-hud-sync";
 import { setPluginHudCaptionSink } from "../plugins/plugin-ui";
+import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
@@ -371,23 +374,6 @@ setPluginHudCaptionSink((spec, caption) => {
   pluginHudCaptions.set(modeId, caption);
 });
 
-function syncPluginHudForMode(m: ViewMode, spec: PluginView | null): void {
-  const cap = spec?.settings?.hud?.labelFields?.length
-    ? (pluginHudCaptions.get(m.id) ?? null)
-    : null;
-  const demo = normalizeVizDemoPackId(m.pluginId ?? spec?.id);
-  if (demo) {
-    vizHud.setActive(demo, spec?.name ?? m.label);
-    vizHud.setPackCaption(cap);
-  } else if (spec?.settings?.hud?.labelFields?.length) {
-    vizHud.showSettingsCaptionHud(spec.name);
-    vizHud.setPackCaption(cap);
-  } else {
-    vizHud.hideSettingsCaptionHud();
-    vizHud.setActive(null, "");
-    vizHud.setPackCaption(null);
-  }
-}
 addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
@@ -535,28 +521,21 @@ function sandboxPluginConfig(spec: PluginView): Record<string, string> {
   return packConfigValues(loadPluginConfigCached(spec, pluginViewKnobs(spec)));
 }
 
-let pendingSandboxConfig: { packId: string; config: Record<string, string> } | null = null;
-let sandboxConfigRaf = 0;
+const sandboxConfigBatcher = new SandboxConfigBatcher(
+  (packId, config) => {
+    const active = pluginSpecForMode(modeSel.value);
+    if (active?.id === packId) sandbox.setConfig(config);
+  },
+  (cb) => requestAnimationFrame(cb),
+  (id) => cancelAnimationFrame(id),
+);
 
 function scheduleSandboxSetConfig(packId: string, config: Record<string, string>): void {
-  pendingSandboxConfig = { packId, config };
-  if (sandboxConfigRaf) return;
-  sandboxConfigRaf = requestAnimationFrame(() => {
-    sandboxConfigRaf = 0;
-    const pending = pendingSandboxConfig;
-    pendingSandboxConfig = null;
-    if (!pending) return;
-    const active = pluginSpecForMode(modeSel.value);
-    if (active?.id === pending.packId) sandbox.setConfig(pending.config);
-  });
+  sandboxConfigBatcher.schedule(packId, config);
 }
 
 function cancelScheduledSandboxConfig(): void {
-  pendingSandboxConfig = null;
-  if (sandboxConfigRaf) {
-    cancelAnimationFrame(sandboxConfigRaf);
-    sandboxConfigRaf = 0;
-  }
+  sandboxConfigBatcher.cancel();
 }
 
 function onPluginFields(): void {
@@ -572,7 +551,7 @@ function onPluginFields(): void {
   const spec = pluginSpecForMode(m.id);
   if (spec && pluginHasFrontend(spec)) scheduleSandboxSetConfig(spec.id, sandboxPluginConfig(spec));
   else cancelScheduledSandboxConfig();
-  syncPluginHudForMode(m, spec);
+  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud);
   const cap = pluginHudCaptions.get(m.id);
   morphCopy($("hint"), cap ? `${spec?.name ?? m.label} · ${cap}` : m.hint);
   void syncWifiWatch();
@@ -719,7 +698,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     tsWatchHash = spec.hash;
     const m = modeById(modeSel.value);
     if (m.pluginId === spec.id) {
-      vizHud.setActive(spec.id, spec.name);
+      syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud);
     }
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
@@ -1008,16 +987,14 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
 function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
   let hint = m.hint;
   const fields = spec ? pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config) : [];
-  const cap = spec?.settings?.hud?.labelFields?.length
-    ? buildPluginHudCaption(spec, fields, opts)
-    : null;
+  const cap = spec ? hudCaptionFromOpts(spec, fields, opts) : null;
   if (cap) {
     pluginHudCaptions.set(m.id, cap);
     hint = `${spec!.name} · ${cap}`;
   } else {
     pluginHudCaptions.delete(m.id);
   }
-  syncPluginHudForMode(m, spec);
+  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud);
   if (cap) vizHud.setPackCaption(cap);
   morphCopy($("hint"), hint);
   const legend = $("legend");
@@ -1936,6 +1913,8 @@ function collectSettings(): ProfileSettings {
 }
 
 function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {}): void {
+  bumpPluginCatalogRevision();
+  void import("../plugins/plugin-settings").then((m) => m.clearPluginSettingsUiState());
   profiles?.adoptAutosave(s.autosave);
   for (const k of Object.keys(localStorage)) {
     if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) localStorage.removeItem(k);

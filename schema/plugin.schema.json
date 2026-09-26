@@ -112,12 +112,7 @@
     "look": { "$ref": "#/$defs/look" },
     "style": { "$ref": "#/$defs/style" },
     "layout": { "$ref": "#/$defs/layout" },
-    "options": {
-      "oneOf": [
-        { "$ref": "#/$defs/freeMap" },
-        { "$ref": "#/$defs/pluginConfigList" }
-      ]
-    },
+    "options": { "$ref": "#/$defs/freeMap" },
     "config": {
       "oneOf": [
         { "$ref": "#/$defs/freeMap" },
@@ -304,12 +299,7 @@
         "look": { "$ref": "#/$defs/look" },
         "style": { "$ref": "#/$defs/style" },
         "layout": { "$ref": "#/$defs/layout" },
-        "options": {
-          "oneOf": [
-            { "$ref": "#/$defs/freeMap" },
-            { "$ref": "#/$defs/pluginConfigList" }
-          ]
-        },
+        "options": { "$ref": "#/$defs/freeMap" },
         "config": {
           "oneOf": [
             { "$ref": "#/$defs/freeMap" },
@@ -335,7 +325,7 @@
     "pluginConfigField": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["key", "type"],
+      "required": ["key"],
       "properties": {
         "key": { "type": "string", "maxLength": 64 },
         "label": { "type": "string", "maxLength": 64 },

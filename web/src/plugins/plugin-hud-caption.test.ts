@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyInstance } from "./instances";
 import { buildPluginHudCaption } from "./plugin-settings";
-import { loadSettingsDeclFixture } from "./fixtures/load-settings-fixture";
+import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import { applyPresetToValues } from "./plugin-settings";
 
 describe("per-tile HUD captions", () => {

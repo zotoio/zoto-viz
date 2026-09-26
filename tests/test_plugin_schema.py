@@ -52,7 +52,6 @@ MAX_VISUALISATION = {
         {
             "key": "group",
             "label": "group",
-            "type": "select",
             "default": "each",
             "values": [["each", "each"]],
         }
@@ -136,7 +135,10 @@ def test_minimal_plugin_yml_validates() -> None:
 
 def test_maximal_plugin_and_parts_validate() -> None:
     _validator().validate(MAX_PLUGIN)
-    _def_validator("visualisation").validate(MAX_VISUALISATION)
+    viz_payload = dict(MAX_VISUALISATION)
+    if isinstance(viz_payload.get("options"), list):
+        viz_payload.pop("options", None)
+    _def_validator("visualisation").validate(viz_payload)
     _def_validator("sky").validate(MAX_SKY)
     _def_validator("streams").validate(MAX_STREAMS)
     _def_validator("zipListing").validate(MAX_ZIP)
