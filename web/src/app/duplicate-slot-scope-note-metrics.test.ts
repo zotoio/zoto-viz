@@ -88,8 +88,8 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
     await openFixtureDrawer(settings);
 
     const threeTiles = [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"];
+    syncSpy.mockClear();
     applyWallLayoutPatch(settings, { tree: null, maximized: null, tiles: threeTiles });
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(syncSpy).toHaveBeenCalledTimes(1);
 
     syncSpy.mockClear();
