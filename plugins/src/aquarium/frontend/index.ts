@@ -23,7 +23,10 @@ declare const zoto: {
   writeParticles: (data: number[] | Float32Array, stride?: number) => void;
 };
 
-let options: AquariumOptions = parseAquariumOptions(zoto.getConfig?.());
+/** Latest host config from {@link zoto.onConfig} only (never polled in onFrame). */
+let hostConfigCache: Record<string, string> = {};
+
+let options: AquariumOptions = parseAquariumOptions();
 const sim = new AquariumSim(options);
 sim.mountTile();
 
@@ -45,6 +48,7 @@ function canvasSize(): { w: number; h: number } {
 }
 
 function applyLiveConfig(cfg: Record<string, string>): void {
+  hostConfigCache = cfg;
   const { edges, next } = configActionEdges(cfg, actionLatch);
   actionLatch.reset = next.reset;
   actionLatch.randomise = next.randomise;
@@ -57,10 +61,11 @@ zoto.onConfig = (cfg) => {
   applyLiveConfig(cfg);
 };
 
-zoto.onFrame = (frame) => {
-  const liveCfg = zoto.getConfig?.();
-  if (liveCfg) applyLiveConfig(liveCfg);
+if (zoto.getConfig) {
+  applyLiveConfig(zoto.getConfig());
+}
 
+zoto.onFrame = (frame) => {
   const { w, h } = canvasSize();
   const packed = sim.advance(frame, w, h);
   buf0.set(packed.slot0);

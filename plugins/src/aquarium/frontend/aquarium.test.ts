@@ -45,6 +45,22 @@ const talkers = [
   { id: "8.8.8.8", rate: 90, role: "internet" },
 ];
 
+function extractOnFrameArrowBody(src: string): string {
+  const re = /zoto\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{/g;
+  const m = re.exec(src);
+  if (!m) throw new Error("missing zoto.onFrame handler");
+  let i = m.index + m[0].length;
+  let depth = 1;
+  const start = i;
+  while (i < src.length && depth > 0) {
+    const ch = src[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    i++;
+  }
+  return src.slice(start, i - 1);
+}
+
 const frame = (over: Partial<{
   t: number;
   dt: number;
@@ -74,6 +90,12 @@ describe("aquarium shipped pack", () => {
     expect(PLUGIN).toContain("data-mapping.yml");
     const hits = scanPackTrademarks(PLUGIN, VIS, FRAG, FRONT, MAPPING);
     expect(hits).toEqual([]);
+  });
+
+  it("iframe onFrame never calls getConfig (pack lint)", () => {
+    const body = extractOnFrameArrowBody(FRONT);
+    const code = body.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/.*$/gm, "");
+    expect(code).not.toMatch(/\bgetConfig\s*\(/);
   });
 
   it("wraps and compiles the aquarium sky", () => {

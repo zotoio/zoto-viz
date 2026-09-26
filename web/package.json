@@ -11,8 +11,8 @@
     "asbuild": "asc --config asconfig.json --target release",
     "build": "pnpm asbuild && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "pnpm asbuild && vitest run && vitest run --config ../plugins/src/aquarium/vitest.config.cjs",
-    "test:coverage": "pnpm asbuild && vitest run --coverage && vitest run --config ../plugins/src/aquarium/vitest.config.cjs",
+    "test": "pnpm asbuild && vitest run",
+    "test:coverage": "pnpm asbuild && vitest run --coverage",
     "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs"
   },
   "dependencies": {
