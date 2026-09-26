@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setPackAssetTokenForTests } from "../core/http";
+import * as packAssetFrame from "./pack-asset-frame";
 import {
   PluginSandbox,
   consentHash,
@@ -68,6 +69,11 @@ describe("pack asset URLs", () => {
 });
 
 describe("PluginSandbox module load", () => {
+  beforeEach(() => {
+    vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
+    vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
+  });
+
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
     vi.restoreAllMocks();

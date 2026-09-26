@@ -41,6 +41,7 @@ export function claimPanelPack(panelId: string): () => void {
 export function releasePanelView(panelId: string): void {
   rafLeases.delete(panelId);
   packLeases.delete(panelId);
+  void import("../plugins/pack-asset-frame").then((m) => m.closePackAssetFrameForTile(panelId));
   if (packSubKey.startsWith(`${panelId}\0`)) {
     packSubRelease?.();
     packSubRelease = null;

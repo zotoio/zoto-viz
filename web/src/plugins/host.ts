@@ -1,4 +1,9 @@
 import { mintPackAssetToken } from "../core/http";
+import {
+  closePackAssetFrameForTile,
+  openPackAssetFrame,
+  packAssetFrameForTile,
+} from "./pack-asset-frame";
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
 import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
@@ -25,6 +30,7 @@ const ALLOWED = new Set([
 
 const PACK_ASSETS_PREFIX = "/pack-assets/";
 const SANDBOX_PACK = "_sandbox";
+const TEST_FALLBACK_FRAME_ID = "11111111-1111-4111-8111-111111111111";
 
 /** Pack asset path with an already-minted token (never omit the token). */
 export function packAssetUrlWithToken(token: string, packId: string, ...parts: string[]): string {
@@ -37,8 +43,24 @@ export function packAssetUrlWithToken(token: string, packId: string, ...parts: s
   return `${PACK_ASSETS_PREFIX}${segs.join("/")}`;
 }
 
+let activePackAssetFrameId = "";
+
+export function packAssetFrameIdForTests(): string {
+  return activePackAssetFrameId;
+}
+
+function resolvePackAssetFrameId(): string {
+  return (
+    activePackAssetFrameId
+    || packAssetFrameForTile("main")
+    || (import.meta.env.MODE === "test" ? TEST_FALLBACK_FRAME_ID : "")
+  );
+}
+
 export async function packAssetUrl(packId: string, ...parts: string[]): Promise<string> {
-  const token = await mintPackAssetToken(packId);
+  const frameId = resolvePackAssetFrameId();
+  if (!frameId) throw new Error("pack asset frame required");
+  const token = await mintPackAssetToken(packId, frameId);
   return packAssetUrlWithToken(token, packId, ...parts);
 }
 
@@ -49,8 +71,10 @@ export function sandboxBootNonceForTests(): string {
 }
 
 /** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
-export async function pluginSandboxFrameUrl(): Promise<string> {
-  const token = await mintPackAssetToken(SANDBOX_PACK);
+export async function pluginSandboxFrameUrl(frameId?: string): Promise<string> {
+  const fid = frameId || resolvePackAssetFrameId();
+  if (!fid) throw new Error("pack asset frame required");
+  const token = await mintPackAssetToken(SANDBOX_PACK, fid);
   sandboxBootNonce = crypto.randomUUID();
   const path = packAssetUrlWithToken(token, SANDBOX_PACK, "plugin-sandbox.html");
   return `${location.origin}${path}#zoto-boot=${encodeURIComponent(sandboxBootNonce)}`;
@@ -148,6 +172,7 @@ export class PluginSandbox {
   private vizContract: VizPluginContract | undefined;
   private moduleBlobUrl: string | null = null;
   private bootReject: ((err: Error) => void) | null = null;
+  private frameId = "";
   handlers: PluginHostHandlers = {};
   /** Mosaic tile or `main` receiving sandbox plugin writes. */
   activeTileId = "main";
@@ -164,6 +189,11 @@ export class PluginSandbox {
   unload(): void {
     setSandboxReady(false);
     this.bootReject = null;
+    const tile = this.activeTileId;
+    const fid = this.frameId;
+    this.frameId = "";
+    if (fid && fid === activePackAssetFrameId) activePackAssetFrameId = "";
+    void closePackAssetFrameForTile(tile);
     if (this.moduleBlobUrl) {
       URL.revokeObjectURL(this.moduleBlobUrl);
       this.moduleBlobUrl = null;
@@ -222,11 +252,13 @@ export class PluginSandbox {
     config: Record<string, string>,
     viz?: VizPluginContract,
   ): Promise<void> {
+    this.frameId = await openPackAssetFrame(this.activeTileId);
+    activePackAssetFrameId = this.frameId;
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
-    iframe.src = await pluginSandboxFrameUrl();
+    iframe.src = await pluginSandboxFrameUrl(this.frameId);
     document.body.appendChild(iframe);
     this.iframe = iframe;
     if (iframe.srcdoc) {

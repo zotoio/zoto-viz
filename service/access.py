@@ -60,6 +60,8 @@ def read_sandbox_asset_token(request: web.Request) -> str:
 
 
 def pack_asset_token_ok(request: web.Request) -> bool:
+    from . import pack_asset_frames
+
     parsed = parse_pack_assets_path(request.path or "")
     if not parsed:
         return False
@@ -68,11 +70,20 @@ def pack_asset_token_ok(request: web.Request) -> bool:
     if not secret:
         return False
     sid = pack_asset_tokens.session_id_from_request(request)
+    if not sid:
+        return False
+    parsed_tok = pack_asset_tokens.parse_pack_asset_token(token)
+    if not parsed_tok:
+        return False
+    frame_id, _mac = parsed_tok
+    reg = pack_asset_frames.registry_for_app(request.app)
+    live = reg.is_live(sid, frame_id)
     return pack_asset_tokens.verify_pack_asset_token(
         secret,
         pack_id,
         token,
-        session_id=sid if sid else None,
+        session_id=sid,
+        frame_live=live,
     )
 
 

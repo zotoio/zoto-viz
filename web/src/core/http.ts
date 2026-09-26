@@ -1,20 +1,27 @@
 /** Same-origin fetches that carry the CSRF header minted by GET /api/session. */
 
 let csrf = "";
-const packTokenCache = new Map<string, string>();
 
 export function csrfToken(): string {
   return csrf;
 }
 
-/** @deprecated use per-pack tokens from {@link mintPackAssetToken} */
+/** @deprecated use frame-bound tokens from {@link mintPackAssetToken} */
 export function sandboxAssetToken(): string {
-  return packTokenCache.get("_sandbox") ?? "";
+  return "";
 }
 
-/** Vitest: seed a pack asset token without POST /api/pack-assets/token/… */
+/** Vitest: seed CSRF without GET /api/session */
+export function setCsrfTokenForTests(token: string): void {
+  csrf = token;
+}
+
+const testPackTokens = new Map<string, string>();
+
+/** Vitest: bypass POST /api/pack-assets/token for a pack id. */
 export function setPackAssetTokenForTests(packId: string, token: string): void {
-  packTokenCache.set(packId, token);
+  if (token) testPackTokens.set(packId, token);
+  else testPackTokens.delete(packId);
 }
 
 export function setSandboxAssetTokenForTests(token: string): void {
@@ -36,6 +43,16 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   return r;
 }
 
+export class PackAssetForbiddenError extends Error {
+  readonly packId: string;
+
+  constructor(packId: string, message = "pack asset forbidden") {
+    super(message);
+    this.name = "PackAssetForbiddenError";
+    this.packId = packId;
+  }
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
   let r = await send(path, init);
@@ -50,15 +67,35 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return r;
 }
 
-export async function mintPackAssetToken(packId: string): Promise<string> {
-  const cached = packTokenCache.get(packId);
-  if (cached) return cached;
+export async function registerPackAssetFrame(frameId: string): Promise<void> {
   await bootSession();
-  const r = await apiFetch(`/api/pack-assets/token/${encodeURIComponent(packId)}`, { method: "POST" });
+  const r = await apiFetch("/api/pack-assets/frames", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ frameId }),
+  });
+  if (!r.ok) throw new Error("pack asset frame register failed");
+}
+
+export async function unregisterPackAssetFrame(frameId: string): Promise<void> {
+  if (!frameId) return;
+  await bootSession();
+  await apiFetch(`/api/pack-assets/frames/${encodeURIComponent(frameId)}`, { method: "DELETE" });
+}
+
+export async function mintPackAssetToken(packId: string, frameId: string): Promise<string> {
+  const stub = testPackTokens.get(packId);
+  if (stub) return stub;
+  await bootSession();
+  const r = await apiFetch(`/api/pack-assets/token/${encodeURIComponent(packId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ frameId }),
+  });
+  if (r.status === 403) throw new PackAssetForbiddenError(packId);
   if (!r.ok) throw new Error(`pack asset token unavailable (${packId})`);
   const data = await r.json() as { token?: string };
   if (!data.token) throw new Error("pack asset token missing");
-  packTokenCache.set(packId, data.token);
   return data.token;
 }
 
@@ -84,15 +121,12 @@ export async function bootSession(): Promise<{
       pluginService?: boolean;
       typesafeConfigured?: boolean;
     };
-    if (typeof data.csrf === "string" && data.csrf) csrf = data.csrf;
-    const typesafeConfigured = typeof data.typesafeConfigured === "boolean"
-      ? data.typesafeConfigured
-      : await fetchTypeSafeConfiguredFallback();
+    if (data.csrf) csrf = data.csrf;
     return {
       csrf,
       aiControl: !!data.aiControl,
       pluginService: !!data.pluginService,
-      typesafeConfigured,
+      typesafeConfigured: !!data.typesafeConfigured,
     };
   } catch {
     return {
@@ -101,16 +135,5 @@ export async function bootSession(): Promise<{
       pluginService: false,
       typesafeConfigured: false,
     };
-  }
-}
-
-async function fetchTypeSafeConfiguredFallback(): Promise<boolean> {
-  try {
-    const r = await apiFetch("/api/typesafe/status");
-    if (!r.ok) return false;
-    const data = await r.json() as { configured?: boolean };
-    return !!data.configured;
-  } catch {
-    return false;
   }
 }

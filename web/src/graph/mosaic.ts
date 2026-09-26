@@ -484,17 +484,33 @@ export class Mosaic {
   setPaneNotice(
     id: string,
     text: string | null | undefined,
-    recipe: "default" | "fail" = "default",
+    recipe: "default" | "fail" | "reconnecting" = "default",
   ): void {
     const pane = this.panes.get(id);
     if (!pane) return;
     this.paintPaneNotice(pane, text, recipe);
   }
 
+  setWallNotice(text: string | null | undefined): void {
+    const host = this.cfg.wall;
+    if (!host) return;
+    const existing = host.querySelector(".mosaic-wall-notice");
+    if (!text) {
+      existing?.remove();
+      return;
+    }
+    const el = existing instanceof HTMLElement ? existing : document.createElement("div");
+    if (!existing) {
+      el.className = "mosaic-wall-notice";
+      host.prepend(el);
+    }
+    el.textContent = text;
+  }
+
   private paintPaneNotice(
     pane: HTMLElement,
     text: string | null | undefined,
-    recipe: "default" | "fail" = "default",
+    recipe: "default" | "fail" | "reconnecting" = "default",
   ): void {
     const existing = pane.querySelector(".mosaic-pane-notice");
     if (!text) {
@@ -507,6 +523,9 @@ export class Mosaic {
       pane.appendChild(el);
     }
     el.classList.toggle("mosaic-pane-notice-fail", recipe === "fail");
+    el.classList.toggle("mosaic-pane-notice-reconnecting", recipe === "reconnecting");
+    pane.classList.toggle("mosaic-pane-reconnecting", recipe === "reconnecting");
+    if (recipe !== "reconnecting") pane.classList.remove("mosaic-pane-reconnecting");
     el.textContent = text;
   }
 

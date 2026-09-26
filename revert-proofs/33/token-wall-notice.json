@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-asset-rebuild.wall.test.ts",
+  "testName": "wall notice on secret rotation > shows one wall notice when two tiles hit a 403 rebuild",
+  "description": "Secret rotation with multiple tiles must show a single wall-level notice.",
+  "timeoutSec": 120
+}

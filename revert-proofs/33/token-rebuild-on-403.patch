@@ -1,0 +1,17 @@
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index 1111111..2222222 100644
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -667,12 +667,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
+   setTileExpectsVizFeed(tileId, expectsViz);
+   try {
+     sandbox.setActiveTile(tileId);
+-    const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
+-    await runPackAssetProtectedLoad(
+-      tileId,
+-      spec.name ?? spec.id,
+-      mosaic,
+-      () => attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config)),
+-    );
++    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+     markSandboxStartupOk(tileId);

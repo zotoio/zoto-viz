@@ -12,7 +12,7 @@ from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
 from service import access, pack_asset_tokens, plugins
-from tests.pack_asset_test_util import SESSION, SECRET, mint, pack_url, pack_url_raw
+from tests.pack_asset_test_util import SESSION, SECRET, mint, new_frame_id, pack_url, pack_url_raw
 from tests.pack_asset_test_util import test_app as make_pack_test_app
 
 HOST = {"Host": "127.0.0.1:7020"}
@@ -83,16 +83,45 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
         assert ok.status == 200
         assert denied.status == 403
 
-    async def test_expired_token_denied(self) -> None:
-        row = {"id": "demo-pack", "has_frontend": True}
-        tok = pack_asset_tokens.mint_pack_asset_token(SECRET, SESSION, "demo-pack", ttl_s=60)
-        exp = int(tok.split(".", 2)[1])
-        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None):
+    async def test_encoding_ab_c_not_verified_as_a_bc(self) -> None:
+        from service import pack_asset_frames
+
+        frame = new_frame_id()
+        pack_asset_frames.registry_for_app(self.server.app).register("ab", frame)
+        tok = pack_asset_tokens.mint_pack_asset_token(SECRET, "ab", "c", frame)
+        row = {"id": "c", "has_frontend": True}
+        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "c" else None):
             with patch.object(plugins, "consented", lambda _doc: True):
                 with patch.object(plugins, "module_response", lambda _pid: web.Response(text="export {};", content_type="text/javascript")):
-                    with patch.object(pack_asset_tokens, "time") as tmock:
-                        tmock.time.return_value = exp + 5
-                        resp = await self.client.get(pack_url("demo-pack", "module.js", token=tok), headers=NULL)
+                    ok = await self.client.get(
+                        pack_url("c", "module.js", token=tok, session_id="ab"),
+                        headers={**NULL, access.HEADER: "ab"},
+                    )
+                    denied = await self.client.get(
+                        pack_url("bc", "module.js", token=tok, session_id="a"),
+                        headers={**NULL, access.HEADER: "a"},
+                    )
+        assert ok.status == 200
+        assert denied.status == 403
+
+    async def test_revoked_frame_token_denied(self) -> None:
+        frame = new_frame_id()
+        reg = await self.client.post(
+            "/api/pack-assets/frames",
+            json={"frameId": frame},
+            headers={**HOST, access.HEADER: SESSION},
+        )
+        assert reg.status == 200
+        tok = pack_asset_tokens.mint_pack_asset_token(SECRET, SESSION, "demo-pack", frame)
+        row = {"id": "demo-pack", "has_frontend": True}
+        unreg = await self.client.delete(
+            f"/api/pack-assets/frames/{frame}",
+            headers={**HOST, access.HEADER: SESSION},
+        )
+        assert unreg.status == 200
+        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None):
+            with patch.object(plugins, "consented", lambda _doc: True):
+                resp = await self.client.get(pack_url("demo-pack", "module.js", token=tok), headers=NULL)
         assert resp.status == 403
 
     async def test_non_ascii_token_rejected(self) -> None:

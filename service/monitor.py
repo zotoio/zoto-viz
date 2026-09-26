@@ -1949,6 +1949,8 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_put("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     app.router.add_delete("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     app.router.add_get(r"/pack-assets/{token}/{pack_id}/{tail:.+}", pack_assets.api_pack_assets)
+    app.router.add_post("/api/pack-assets/frames", pack_assets.api_pack_asset_register_frame)
+    app.router.add_delete("/api/pack-assets/frames/{frame_id}", pack_assets.api_pack_asset_unregister_frame)
     app.router.add_post("/api/pack-assets/token/{pack_id}", pack_assets.api_pack_asset_token)
     if WEB_DIST.exists():
         app.router.add_get("/plugin-sandbox.html", api_legacy_plugin_sandbox_html)

@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setPackAssetTokenForTests } from "../core/http";
+import * as packAssetFrame from "./pack-asset-frame";
 import { PluginSandbox, pluginSandboxFrameUrl } from "./host";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -27,6 +28,8 @@ describe("page CSP bootstrap policy", () => {
 
 describe("PluginSandbox", () => {
   beforeEach(() => {
+    vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
+    vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
     setPackAssetTokenForTests("_sandbox", "test-sandbox-token");
     setPackAssetTokenForTests("backrooms", "test-backrooms-token");
   });
@@ -92,6 +95,8 @@ describe("PluginSandbox", () => {
 
   it("points the bootstrap at a token-gated pack-assets html url", async () => {
     setPackAssetTokenForTests("_sandbox", "tok");
-    expect(await pluginSandboxFrameUrl()).toMatch(/\/pack-assets\/tok\/_sandbox\/plugin-sandbox\.html#/);
+    expect(
+      await pluginSandboxFrameUrl("11111111-1111-4111-8111-111111111111"),
+    ).toMatch(/\/pack-assets\/tok\/_sandbox\/plugin-sandbox\.html#/);
   });
 });

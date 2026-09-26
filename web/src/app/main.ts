@@ -667,7 +667,13 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   setTileExpectsVizFeed(tileId, expectsViz);
   try {
     sandbox.setActiveTile(tileId);
-    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
+    await runPackAssetProtectedLoad(
+      tileId,
+      spec.name ?? spec.id,
+      mosaic,
+      () => attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config)),
+    );
     markSandboxStartupOk(tileId);
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;

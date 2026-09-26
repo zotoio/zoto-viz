@@ -1,5 +1,8 @@
 /** Mosaic tile copy: sandbox boot failure vs running pack with an empty viz feed. */
 
+import { packSandboxStartFailed } from "./plugin-copy";
+import { tileRebuildState, tileReconnectingNotice } from "./pack-asset-frame";
+
 export const NO_PACK_FEED = "NO PACK FEED";
 const TOKEN_REDACT = "<sandbox-token>";
 const PACK_ASSETS = "/pack-assets/";
@@ -15,8 +18,7 @@ export function redactSandboxTokenInText(text: string, token?: string): string {
 }
 
 export function formatSandboxStartupFailure(packName: string): string {
-  const name = packName.trim() || "Pack";
-  return `${name} couldn't start, its sandbox didn't respond`;
+  return packSandboxStartFailed(packName);
 }
 
 export function classifySandboxBootError(err: unknown): string {
@@ -125,7 +127,7 @@ export function logSandboxBootFailureOnce(tileId: string, reason: string, packId
   console.warn(`${prefix}: ${safe}`);
 }
 
-export type PaneNoticeRecipe = "default" | "fail";
+export type PaneNoticeRecipe = "default" | "fail" | "reconnecting";
 
 export function packFeedPaneNotice(
   tileId: string,
@@ -133,7 +135,11 @@ export function packFeedPaneNotice(
 ): { text: string; recipe: PaneNoticeRecipe } | null {
   const r = tiles.get(tileId);
   if (!r) return null;
-  if (r.startupFailed) {
+  const rebuild = tileRebuildState(tileId);
+  if (rebuild.phase === "reconnecting") {
+    return { text: tileReconnectingNotice(packName ?? "Pack"), recipe: "reconnecting" };
+  }
+  if (r.startupFailed || rebuild.phase === "failed") {
     return { text: formatSandboxStartupFailure(packName ?? "Pack"), recipe: "fail" };
   }
   if (

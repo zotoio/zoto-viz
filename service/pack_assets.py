@@ -245,9 +245,39 @@ async def _sandbox_html(request: web.Request, token: str) -> web.Response:
     return resp
 
 
+async def api_pack_asset_register_frame(request: web.Request) -> web.Response:
+    from . import pack_asset_frames, pack_asset_tokens
+
+    if not access.csrf_ok(request):
+        return access._deny("csrf required")
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "bad json"}, status=400)
+    frame_id = str(body.get("frameId") or "").strip()
+    if not pack_asset_tokens.frame_id_ok(frame_id):
+        return web.json_response({"error": "invalid frameId"}, status=400)
+    sid = pack_asset_tokens.session_id_from_request(request)
+    pack_asset_frames.registry_for_app(request.app).register(sid, frame_id)
+    return web.json_response({"frameId": frame_id})
+
+
+async def api_pack_asset_unregister_frame(request: web.Request) -> web.Response:
+    from . import pack_asset_frames, pack_asset_tokens
+
+    if not access.csrf_ok(request):
+        return access._deny("csrf required")
+    frame_id = (request.match_info.get("frame_id") or "").strip()
+    if not frame_id:
+        return web.json_response({"error": "missing frame"}, status=400)
+    sid = pack_asset_tokens.session_id_from_request(request)
+    pack_asset_frames.registry_for_app(request.app).unregister(sid, frame_id)
+    return web.json_response({"ok": True})
+
+
 async def api_pack_asset_token(request: web.Request) -> web.Response:
-    """Mint a pack-scoped asset token for the caller's CSRF session."""
-    from . import pack_asset_tokens
+    """Mint a frame-bound asset token (frame must be registered for this session)."""
+    from . import pack_asset_frames, pack_asset_tokens
 
     if not access.csrf_ok(request):
         return access._deny("csrf required")
@@ -258,9 +288,19 @@ async def api_pack_asset_token(request: web.Request) -> web.Response:
         row = plugins._plugin_row(pack_id)
         if not row or not plugins.consented(row):
             return access._deny("forbidden")
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "bad json"}, status=400)
+    frame_id = str(body.get("frameId") or "").strip()
+    if not frame_id:
+        return web.json_response({"error": "frameId required"}, status=400)
     secret = request.app.get("pack_asset_secret")
     if not secret:
         return web.json_response({"error": "unavailable"}, status=503)
     sid = pack_asset_tokens.session_id_from_request(request)
-    token = pack_asset_tokens.mint_pack_asset_token(secret, sid, pack_id)
-    return web.json_response({"packId": pack_id, "token": token})
+    reg = pack_asset_frames.registry_for_app(request.app)
+    if not reg.is_live(sid, frame_id):
+        return access._deny("frame not registered")
+    token = pack_asset_tokens.mint_pack_asset_token(secret, sid, pack_id, frame_id)
+    return web.json_response({"packId": pack_id, "frameId": frame_id, "token": token})
