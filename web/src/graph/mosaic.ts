@@ -207,6 +207,8 @@ export class Mosaic {
     onCloseLast: () => void;
     paneCog?: (id: string) => HTMLButtonElement;
     sync: () => MosaicSync;
+    /** Per-tile render-scale governor + sky uniform contract. */
+    configureGraphPane?: (scene: NetScene, modeId: string) => void;
   }) {}
 
   get on(): boolean { return this.size !== "off"; }
@@ -507,6 +509,7 @@ export class Mosaic {
     for (const e of this.extras) {
       const m = mosaicPaneMode(e.id);
       e.scene.setMode(m, this.cfg.optsFor(m));
+      this.cfg.configureGraphPane?.(e.scene, m.id);
     }
   }
 
@@ -544,6 +547,7 @@ export class Mosaic {
         this.applySync(s, id, this.cfg.sync());
         const m = mosaicPaneMode(id);
         s.setMode(m, this.cfg.optsFor(m));
+        this.cfg.configureGraphPane?.(s, m.id);
         this.extras.push({ id, scene: s });
       }
       this.auditPane(id, "bind");
@@ -945,6 +949,7 @@ export class Mosaic {
     s.setAliasMap(st.aliasMap);
     s.onSelect = this.cfg.main.onSelect;
     if (st.lastMsg) s.update(st.lastMsg);
+    this.cfg.configureGraphPane?.(s, id);
   }
 
   private animFor(id: string, wall: DreamAnim): DreamAnim {

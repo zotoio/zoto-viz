@@ -70,7 +70,7 @@ import {
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
-import { RenderScaleGovernor } from "../plugins/render-scale-governor";
+import { tickRenderScalePanes, type RenderScalePane } from "../plugins/render-scale-host";
 import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
   buildVizFrameForPlugin, defaultVizContract,
@@ -143,12 +143,12 @@ const renderHost = new RenderHost($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 const vizBudget = new VizFrameBudget();
-scene.setGpuBudgetSink((ms) => vizBudget.noteGpuMs(ms));
 {
   const gl = renderHost.gl;
-  vizBudget.setGpuTimerAvailable(!!gl?.getExtension("EXT_disjoint_timer_query_webgl2"));
+  const gpuOk = !!gl?.getExtension("EXT_disjoint_timer_query_webgl2");
+  vizBudget.setGpuTimerAvailable(gpuOk);
+  scene.renderScaleState.setGpuTimerAvailable(gpuOk);
 }
-let renderGovernor: RenderScaleGovernor | null = null;
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
 scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
@@ -353,30 +353,41 @@ const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
 
+function syncPaneRenderScale(target: NetScene, spec: PluginView | null): void {
+  target.configureRenderScale(spec?.renderScale ?? null);
+  const uniforms = spec?.viz?.uniforms;
+  target.setPluginSkyContract(uniforms);
+}
+
+function renderScalePanes(): RenderScalePane[] {
+  if (mosaic?.on) return mosaic.graphs.filter((s) => s.renderScaleActive);
+  return scene.renderScaleActive ? [scene] : [];
+}
+
+function focusedRenderScene(): NetScene {
+  if (!mosaic?.on) return scene;
+  return mosaic.graphScene(mosaic.focusedId)
+    ?? mosaic.graphScene(mosaic.heroId)
+    ?? mosaic.graphs[0]
+    ?? scene;
+}
+
 function syncRenderGovernor(spec: PluginView | null): void {
   const cfg = spec?.renderScale;
   vizHud.setBudgetOverlayVisible(!!cfg);
-  if (!cfg) {
-    renderGovernor = null;
-    scene.setPluginRenderScale(1);
-    return;
+  syncPaneRenderScale(scene, spec);
+  if (mosaic?.on) {
+    for (const s of mosaic.graphs) {
+      const m = s.currentMode;
+      syncPaneRenderScale(s, m.pluginId ? pluginSpecForMode(m.id) : null);
+    }
   }
-  renderGovernor = new RenderScaleGovernor(cfg);
-  scene.setPluginRenderScale(renderGovernor.scale);
-}
-
-function tickRenderGovernor(now: number): number | null {
-  if (!renderGovernor) return null;
-  const scale = renderGovernor.tick({
-    now,
-    p95Ms: vizBudget.p95ForGovernor(),
-    budgetMs: VIZ_FRAME_BUDGET_MS,
-  });
-  scene.setPluginRenderScale(scale);
-  return scale;
 }
 
 addPresentListener((ts) => {
+  const panes = renderScalePanes();
+  for (const p of panes) p.renderScaleState.onPaneFrame(ts);
+  tickRenderScalePanes(panes, performance.now());
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
@@ -760,6 +771,8 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
       if (target === scene) skyLoaded = "";
       return;
     }
+    target.setPluginSkyContract(spec.viz?.uniforms);
+    syncPaneRenderScale(target, spec);
     if (target === scene) skyLoaded = key;
   } catch (e) {
     console.warn("zoto-viz plugin sky:", e);
@@ -1043,11 +1056,13 @@ function feed(m: StateMsg): void {
       }
     }
     const now = performance.now();
-    const renderScale = active?.renderScale ? tickRenderGovernor(now) : null;
+    const focusRs = focusedRenderScene().renderScaleState;
+    const renderScale = focusRs.hasGovernor ? focusRs.renderScale : null;
+    const budgetStats = focusRs.hasGovernor ? focusRs.stats() : vizBudget.stats;
     vizHud.tick({
       packId,
       packName: active?.name ?? packId ?? "",
-      stats: vizBudget.stats,
+      stats: budgetStats,
       frame: vizBudget.lastBuilt,
       state: shown,
       now,
@@ -1168,6 +1183,7 @@ mosaic = new Mosaic({
     lastMsg: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).msg : lastRaw,
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
+  configureGraphPane: (s, modeId) => syncPaneRenderScale(s, pluginSpecForMode(modeId)),
 });
 settings.addAnimation((a) => {
   const pin = pinViewLook();

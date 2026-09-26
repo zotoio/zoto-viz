@@ -77,7 +77,7 @@
       "properties": {
         "scale": { "$ref": "#/$defs/renderScale" }
       },
-      "description": "Optional host-owned render hints. When render.scale is set, the web host runs the adaptive render-scale governor (GPU-timed) and exposes the active scale in $defs/vizFrameUboLayout."
+      "description": "Optional host-owned render hints. When render.scale is set, the web host runs a per-view adaptive render-scale governor (GPU-timed when available) and exposes uResolution (scaled render size) plus optional opt-in uRenderScale host uniform."
     },
     "typesafe": {
       "$ref": "#/$defs/typesafeContract",
@@ -357,36 +357,9 @@
         }
       }
     },
-    "vizFrameUboLayout": {
-      "title": "Viz host frame uniform block",
-      "description": "Host-written vec4 `zotoVizFrame` prepended beside $defs/vizUboLayout. Schema contract version 1.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "version": { "const": 1 },
-        "hostUniform": { "const": "zotoVizFrame" },
-        "renderScale": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "offset": { "const": 0 },
-            "type": { "const": "float" }
-          }
-        },
-        "layoutVersion": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "offset": { "const": 1 },
-            "type": { "const": "float" }
-          }
-        },
-        "totalFloats": { "const": 4 }
-      }
-    },
     "vizUboLayout": {
       "title": "VizPlugin GLSL UBO binding",
-      "description": "Fixed std140 buffer→shader layout for all viz packs (contract version 2 — adds $defs/vizFrameUboLayout). Slot `s` float `f` maps to `zotoVizSlots[s * 16 + f / 4][f % 4]` in the host preamble. Per-pack vertex attributes are a later escape hatch, not the default transport.",
+      "description": "Fixed std140 buffer→shader layout for all viz packs (contract version 1). Slot `s` float `f` maps to `zotoVizSlots[s * 16 + f / 4][f % 4]` in the host preamble. Per-pack vertex attributes are a later escape hatch, not the default transport. Adaptive render scale is not stored in this block — see host uniforms uResolution and optional uRenderScale.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -394,8 +367,7 @@
         "binding": { "const": 0 },
         "layout": { "const": "std140" },
         "hostUniform": { "const": "zotoVizSlots" },
-        "contractVersion": { "const": 2 },
-        "frameUbo": { "$ref": "#/$defs/vizFrameUboLayout" },
+        "contractVersion": { "const": 1 },
         "slotCount": { "const": 8 },
         "slotFloats": { "const": 64 },
         "slotVec4s": { "const": 16 },
@@ -569,9 +541,9 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "enum": ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"]
+            "enum": ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg", "uRenderScale"]
           },
-          "description": "Sky uniforms this plugin may write via viz.write (subset of $defs/shader allowedUniforms)."
+          "description": "Sky uniforms this plugin may write via viz.write (subset of $defs/shader allowedUniforms). uRenderScale is host-written when listed; packs normally rely on uResolution alone."
         },
         "idle": {
           "$ref": "#/$defs/vizIdle",
@@ -581,14 +553,14 @@
     },
     "shader": {
       "title": "Plugin sky fragment uniform contract",
-      "description": "sky/fragment.glsl may declare and read only these uniforms: uTime (float), uOpacity (float), uBright (float), uAudio (float), uAccent (vec3), uBg (vec3), plus varying in vec3 vDir from the shipped vertex program. Explicitly exclude uMode (shipped-enum index — implementation-specific). Explicitly exclude AI Dynamic uniforms uMotif / uA / uB / uWarp / uGrain / uBands (private state). Subtask 07 enforces the contract at compile time.",
+      "description": "sky/fragment.glsl may declare and read only these uniforms: uTime (float), uOpacity (float), uBright (float), uAudio (float), uAccent (vec3), uBg (vec3), plus host-injected uResolution (vec2, scaled render size) and optional uRenderScale (float) when listed under viz.uniforms. Varying in vec3 vDir comes from the shipped vertex program. Explicitly exclude uMode (shipped-enum index — implementation-specific). Explicitly exclude AI Dynamic uniforms uMotif / uA / uB / uWarp / uGrain / uBands (private state). Subtask 07 enforces the contract at compile time.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "allowedUniforms": {
           "type": "array",
           "items": { "type": "string" },
-          "const": ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"]
+          "const": ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg", "uResolution", "uRenderScale"]
         }
       }
     },

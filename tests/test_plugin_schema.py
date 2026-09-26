@@ -316,7 +316,9 @@ def test_typesafe_capability_in_schema() -> None:
 def test_render_scale_in_schema() -> None:
     text = SCHEMA_PATH.read_text(encoding="utf-8")
     assert "renderScale" in text
-    assert "vizFrameUboLayout" in text
+    assert "uRenderScale" in text
+    assert "uResolution" in text
+    assert "vizFrameUboLayout" not in text
     _validator().validate({
         "id": "scale-pack",
         "name": "Scale",

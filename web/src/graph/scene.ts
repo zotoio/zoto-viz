@@ -9,6 +9,10 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
+import type { RenderScalePane } from "../plugins/render-scale-host";
+import { RenderScaleViewState } from "../plugins/render-scale-host";
+import type { RenderScaleConfig } from "../plugins/render-scale-governor";
+import { formatVizBudgetOverlay, vizBudgetOverlayFromStats } from "../plugins/viz-budget-overlay";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -1047,7 +1051,7 @@ export interface SceneOpts {
   host?: RenderHost;
 }
 
-export class NetScene implements HostedView {
+export class NetScene implements HostedView, RenderScalePane {
   readonly renderer: HostGpu;
   /** shared renderer this scene draws through, or null when it owns `renderer` */
   private readonly host: RenderHost | null;
@@ -1272,6 +1276,7 @@ export class NetScene implements HostedView {
       this.inputEl = container;
       container.classList.add("hosted");
       this.host.add(this);
+      this.syncRenderScaleGpuProbe();
     } else {
       const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
       this.baseDpr = dpr;
@@ -1528,29 +1533,44 @@ export class NetScene implements HostedView {
 
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: number): void { this.animate(ts); }
-  private gpuBudgetSink: ((ms: number) => void) | null = null;
-  private pluginRenderScale = 1;
 
-  setGpuBudgetSink(fn: ((ms: number) => void) | null): void {
-    this.gpuBudgetSink = fn;
+  readonly renderScaleState = new RenderScaleViewState();
+  get renderScaleActive(): boolean { return this.active; }
+
+  configureRenderScale(config: RenderScaleConfig | null | undefined): void {
+    this.renderScaleState.configure(config);
+    if (!config) this.applyRenderScale(1);
+    else this.applyRenderScale(this.renderScaleState.renderScale);
   }
 
-  setPluginRenderScale(scale: number): void {
-    const s = Number.isFinite(scale) && scale > 0 ? Math.min(1, scale) : 1;
-    this.pluginRenderScale = s;
-    this.backdrop.setPluginRenderScale(s);
-    this.syncTuneDpr();
+  applyRenderScale(scale: number): void {
+    this.backdrop.setPluginRenderScale(scale);
+  }
+
+  setPluginSkyContract(uniforms: readonly string[] | undefined): void {
+    this.backdrop.setPluginSkyContract(uniforms);
   }
 
   noteFrameCost(ms: number): void {
     this.paneFps.noteGpu(ms);
-    this.gpuBudgetSink?.(ms);
+    this.renderScaleState.noteGpuMs(ms);
   }
   hostContextLost(): void {
     this.lumaProbe.reset();
     this.changeProbe.reset();
   }
-  hostContextRestored(): void { this.relayout(); }
+  hostContextRestored(): void {
+    this.syncRenderScaleGpuProbe();
+    this.relayout();
+  }
+
+  private syncRenderScaleGpuProbe(): void {
+    const gl = this.host?.gl
+      ?? (this.renderer instanceof THREE.WebGLRenderer
+        ? this.renderer.getContext() as WebGL2RenderingContext | null : null);
+    const ok = !!gl?.getExtension("EXT_disjoint_timer_query_webgl2");
+    this.renderScaleState.setGpuTimerAvailable(ok);
+  }
 
   get software(): boolean {
     return this.host?.software ?? this.renderer instanceof SoftwareGpu;
@@ -1993,15 +2013,34 @@ export class NetScene implements HostedView {
 
   private syncTuneDpr(): void {
     const k = this.tune?.dprK ?? 0;
-    const want = (this.baseDpr + (1 - this.baseDpr) * k) * this.pluginRenderScale;
+    const want = this.baseDpr + (1 - this.baseDpr) * k;
     if (Math.abs(want - this.lastTuneDpr) < 0.04) return;
     this.lastTuneDpr = want;
     if (this.host) {
       // one canvas for the wall: only the main pane's auto-tune steers its pixel ratio
       if (!this.satellite) this.host.setPixelRatio(want);
+      this.resize();
       return;
     }
     this.renderer.setPixelRatio(want);
+  }
+
+  private syncRenderScaleHud(): void {
+    const rs = this.renderScaleState;
+    if (!rs.hasGovernor) {
+      this.paneFps.setBudgetLine(null);
+      this.paneFps.setRenderScaleBadge(null);
+      return;
+    }
+    const scale = rs.renderScale;
+    if (this.satellite) {
+      this.paneFps.setBudgetLine(null);
+      this.paneFps.setRenderScaleBadge(scale);
+      return;
+    }
+    const line = formatVizBudgetOverlay(vizBudgetOverlayFromStats(rs.stats(), scale));
+    this.paneFps.setBudgetLine(line);
+    this.paneFps.setRenderScaleBadge(null);
   }
 
   private applyWeights(): void {
@@ -3504,6 +3543,7 @@ export class NetScene implements HostedView {
     }
     const dt = this.lastFrameTs ? Math.min(0.05, (ts - this.lastFrameTs) / 1000) : 0;
     this.lastFrameTs = ts;
+    if (this.renderScaleActive) this.renderScaleState.onPaneFrame(ts);
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();
@@ -3518,6 +3558,7 @@ export class NetScene implements HostedView {
         + ` · layout: ${this.layout.backend}/${this.layout.kernel}`
         + (this.software ? " · canvas 2D (this browser has no WebGL)" : ""));
     }
+    this.syncRenderScaleHud();
     this.tune = perfOverlay(this.anim, perfStress());
     this.syncTuneDpr();
     if (this.tune.labelCount !== this.lastTuneLabels) {
@@ -3957,7 +3998,9 @@ export class NetScene implements HostedView {
       }
     }
     this.labelLayer.setSize(w, h);
-    this.backdrop.setViewport(w, h);
+    const dpr = this.host?.pixelRatio
+      ?? (this.renderer instanceof SoftwareGpu ? this.renderer.getPixelRatio() : (this.renderer as THREE.WebGLRenderer).getPixelRatio());
+    this.backdrop.setViewport(w, h, dpr);
     this.applyViewShift();
     this.updateSpread();
   }

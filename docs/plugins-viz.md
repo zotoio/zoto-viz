@@ -97,23 +97,24 @@ render:
 ```
 
 When `render.scale` is absent the host keeps today’s behaviour at scale **1.0**.
-When present, `VizFrameBudget` drives hysteresis from GPU timer queries when
+When present, **each rendered view or mosaic tile** gets its own governor,
+fed by that pane’s frame time against a share of the page budget
+(`16.7 ms / visible rendering panes`). GPU timer queries drive hysteresis when
 `EXT_disjoint_timer_query_webgl2` is available (otherwise honest **CPU**
 present-to-present timing). Step **down** one notch after p95 stays over the
-16.7 ms budget for ~0.5 s; step **up** after ~2 s with p95 below 80% of budget.
+pane budget for ~0.5 s; step **up** after ~2 s with p95 below 80% of budget.
 
-The active scale is written to the host frame UBO (`$defs/vizFrameUboLayout`):
+The pack UBO (`ZotoVizData` / `zotoVizSlots`) is unchanged. The host exposes:
 
-| Field | `zotoVizFrame` offset | Meaning |
+| Uniform | Type | Meaning |
 | --- | --- | --- |
-| `renderScale` | float **0** | Current governor scale (1.0 when inactive) |
-| `layoutVersion` | float **1** | Frame UBO contract version (`1`) |
+| `uResolution` | `vec2` | Scaled render size in pixels (DPR × governor scale). Most packs should size work from this alone. |
+| `uRenderScale` | `float` | Current scale (1 when inactive). Opt in by listing `uRenderScale` under `viz.uniforms`, same as `uTime`. |
 
-Packs read `zotoVizFrame.x` in `sky/fragment.glsl` if needed; the host also
-applies the scale to the shared canvas pixel ratio for the active view.
-
-The demoscene HUD shows a budget line when `render.scale` is declared:
-`GPU` or `CPU`, unclamped last frame ms, rolling **p95**, and current scale.
+The demoscene HUD shows a budget line when `render.scale` is declared on the
+active pack (single view): `GPU` or `CPU`, unclamped last frame ms, rolling
+**p95**, and current scale. In mosaic mode the header / focused pane shows the
+full line on its pane badge; other governed tiles show a compact scale suffix.
 Dashes appear when no timing samples exist yet.
 
 ## Frame budget
