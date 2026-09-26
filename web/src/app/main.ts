@@ -440,7 +440,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
   preserveVizUbo = true;
-  applyMode(pluginViewId(packId), {}, { channel: "automatic", auto: "dream-cycle" });
+  applyMode(pluginViewId(packId), {}, { channel: "user" });
 }
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
@@ -767,7 +767,7 @@ async function loadPluginSkyOnto(
   }
   try {
     const source = await fetchPluginSky(spec.id, spec.shader_sha256);
-    if (isModeSwitchStale(switchGen)) throw new Error("stale-mode-switch");
+    if (isModeSwitchStale(switchGen)) return;
     const err = target.setPluginShader({ id: spec.id, source });
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
@@ -779,6 +779,7 @@ async function loadPluginSkyOnto(
     }
     if (target === scene) skyLoaded = key;
   } catch (e) {
+    if (isModeSwitchStale(switchGen)) return;
     console.warn("zoto-viz plugin sky:", e);
     target.setPluginShader(null);
     if (target === scene) skyLoaded = "";

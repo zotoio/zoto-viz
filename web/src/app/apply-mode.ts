@@ -182,6 +182,10 @@ function scheduleConsentFinalize(
           await host.syncPluginSky(paneSpec, switchGen);
         }
       } catch {
+        if (host.isModeSwitchStale(switchGen)) {
+          settleConsentAndDrainAuto(result);
+          return;
+        }
         rollbackSwitch(host, keptOnFailure, m, prevPresent, mosaicSnap, paneRevert, "failed");
         settleConsentAndDrainAuto("failed", m.id);
         return;
