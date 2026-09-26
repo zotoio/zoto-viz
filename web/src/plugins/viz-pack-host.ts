@@ -6,8 +6,6 @@ import {
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { packFractalDrive } from "../../../plugins/src/fractal-zoom/frontend/drive";
-import { IDLE_POINTER } from "../../../plugins/src/fractal-zoom/frontend/interaction";
 import { nixieCanvasSize, packNixieBuffer, parseNixieLook } from "../../../plugins/src/nixie-clock/frontend/tubes";
 
 export interface VizPackHandlers {
@@ -212,23 +210,6 @@ export function runPackFrameHandler(
       handlers.writeUniform("uAudio", frame.audio);
       handlers.writeUniform("uAccent", [1.0, 0.38, 0.06]);
       handlers.writeUniform("uBg", [0.06, 0.03, 0.02]);
-      break;
-    }
-    case "fractal-zoom": {
-      const drive = packFractalDrive(
-        frame.t,
-        1 / 60,
-        frame.audio,
-        16 / 10,
-        opts ?? {},
-        IDLE_POINTER,
-      );
-      handlers.writeBuffer(0, drive.slot0);
-      handlers.writeUniform("uBright", drive.bright);
-      handlers.writeUniform("uAccent", drive.accent);
-      handlers.writeUniform("uBg", drive.bg);
-      handlers.writeUniform("uOpacity", 1);
-      handlers.writeUniform("uAudio", frame.audio);
       break;
     }
   }
