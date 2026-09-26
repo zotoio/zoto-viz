@@ -122,7 +122,8 @@ describe("tetris-engine", () => {
   it("regressed piece-only planner survives fewer seeded runs than the fixed planner", () => {
     const regressed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES, scoreBoardRegressed);
     const fixed = survivalRate(TETRIS_SURVIVAL_SEEDS, SURVIVAL_PIECES);
+    expect(regressed).toBeLessThanOrEqual(3);
+    expect(fixed).toBe(20);
     expect(regressed).toBeLessThan(fixed);
-    expect(fixed).toBeGreaterThanOrEqual(20);
   });
 });
