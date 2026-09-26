@@ -81,9 +81,20 @@ def pack_asset_token_ok(request: web.Request) -> bool:
     frame_id, _mac = parsed_tok
     reg = pack_asset_frames.registry_for_app(request.app)
     live = reg.is_live(sid, frame_id)
-    return pack_asset_tokens.verify_pack_asset_token(
+    if pack_asset_tokens.verify_pack_asset_token(
         secret,
         pack_id,
+        token,
+        session_id=sid,
+        frame_live=live,
+    ):
+        return True
+    # Sandbox bootstrap token is minted for ``_sandbox`` but CSP only allows that path prefix.
+    if pack_id == "_sandbox":
+        return False
+    return pack_asset_tokens.verify_pack_asset_token(
+        secret,
+        "_sandbox",
         token,
         session_id=sid,
         frame_live=live,

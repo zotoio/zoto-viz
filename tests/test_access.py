@@ -27,6 +27,15 @@ def test_bind_is_loopback() -> None:
     assert "?" not in url
 
 
+def test_sandbox_bootstrap_token_authorizes_pack_asset_paths() -> None:
+    """CSP only allows the ``_sandbox`` token prefix; pack modules use that same token."""
+    tok = mint("_sandbox")
+    path = access.pack_asset_url(tok, "demo-pack", "module.js")
+    req = FakeReq(path=path, header=SESSION, csrf=SESSION)
+    assert access.pack_asset_token_ok(req)
+    assert not access.pack_asset_token_ok(FakeReq(path=path, header="other-session", csrf="other-session"))
+
+
 def test_header_hostname() -> None:
     assert access.header_hostname("127.0.0.1:7020") == "127.0.0.1"
     assert access.header_hostname("[::1]:7020") == "::1"
