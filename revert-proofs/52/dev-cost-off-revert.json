@@ -2,6 +2,6 @@
   "row": "F4 dev flag off revert injector",
   "runner": "vitest",
   "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
-  "testName": "F5 (iii) bad tile cost: 5011 — no LIMITED on 2×2",
+  "testName": "^dev viz wall flags > F5 \\(iii\\) bad tile cost: 5011 — no LIMITED on 2×2$",
   "excerpt": "AssertionError: expected '' to contain 'LIMITED'"
 }

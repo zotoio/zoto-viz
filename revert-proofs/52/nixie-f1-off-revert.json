@@ -2,6 +2,6 @@
   "row": "F1 off revert upload on frameIndex % 60",
   "runner": "vitest",
   "testFile": "web/src/plugins/nixie-wall-broadcast.test.ts",
-  "testName": "F1 seconds off from 12:00:30: 10 wall reads and 4 uploads (1 per tile)",
+  "testName": "^nixie wall upload F1 \\(live pack path, 2×2, 60 fps\\) > F1 seconds off from 12:00:30: 10 wall seconds and 4 uploads \\(1 per tile\\)$",
   "excerpt": "AssertionError: expected 40 to be 4 // Object.is equality"
 }

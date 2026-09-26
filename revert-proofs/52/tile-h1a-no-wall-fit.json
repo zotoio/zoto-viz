@@ -2,6 +2,6 @@
   "row": "H1 revert A without wall-fit over_budget",
   "runner": "vitest",
   "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
-  "testName": "H2: 50 ms at 2×2 — 55 skipped/s at i=119 over budget; 1×1 → 40 skipped/s over budget",
+  "testName": "^tile HUD rows \\(half-open window \\(now−300000, now\\] in ticks\\) > H2: 50 ms at 2×2 — 55 skipped/s at i=119 over budget; 1×1 → 40 skipped/s over budget$",
   "excerpt": "AssertionError: expected 'limited' to be 'over_budget' // Object.is equality"
 }

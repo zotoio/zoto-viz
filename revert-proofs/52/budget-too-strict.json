@@ -2,6 +2,6 @@
   "row": "budget honesty revert silent green on skip",
   "runner": "vitest",
   "testFile": "web/src/plugins/dogfood.test.ts",
-  "testName": "records skips when build is injected slow \u2014 never silent green",
+  "testName": "^viz dogfood over-budget honesty > records skips when build is injected slow — never silent green$",
   "excerpt": "AssertionError: expected true to be false // Object.is equality"
 }

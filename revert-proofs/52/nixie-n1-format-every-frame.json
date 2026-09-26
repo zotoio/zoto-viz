@@ -1,6 +1,6 @@
 {
   "row": "N1 revert format every frame",
-  "testName": "N1: 600 frames \u2014 format at [0,60,\u2026,540], one formatter, stable buffer",
-  "excerpt": "AssertionError: expected [ +0, 1, 2, 3, 4, 5, 6, 7, 8, \u2026(591) ] to deeply equal [ +0, 60, 120, 180, 240, 300, \u2026(4) ]",
+  "testName": "^nixie wall clock rows > N1: 600 frames — format at \\[0,60,…,540\\], one formatter, stable buffer$",
+  "excerpt": "AssertionError: expected [ +0, 1, 2, 3, 4, 5, 6, 7, 8, …(591) ] to deeply equal [ +0, 60, 120, 180, 240, 300, …(4) ]",
   "testFile": "web/src/plugins/nixie-wall-clock.test.ts"
 }

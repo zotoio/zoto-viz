@@ -2,6 +2,6 @@
   "row": "D1 steady revert LIMITED label cache",
   "runner": "vitest",
   "testFile": "web/src/ui/tile-hud-label.test.ts",
-  "testName": "D1 steady: 600 frames \u2192 exactly 1 build and 1 write per line",
+  "testName": "^tile HUD LIMITED label \\(60 fps, per line\\) > D1 steady: 600 frames → exactly 1 build and 1 write per line$",
   "excerpt": "AssertionError: expected 600 to be 1 // Object.is equality"
 }

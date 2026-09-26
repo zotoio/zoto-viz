@@ -1,6 +1,6 @@
 {
   "row": "RH1 revert fresh bufferPixelSize object",
   "testFile": "web/src/graph/render-host-buffer.test.ts",
-  "testName": "RH1: returns the same backing-store object across calls",
+  "testName": "^RenderHost\\.bufferPixelSize > RH1: returns the same backing-store object across calls$",
   "excerpt": "AssertionError: expected { w:"
 }
