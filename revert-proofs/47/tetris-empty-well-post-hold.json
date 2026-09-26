@@ -4,6 +4,6 @@
   "testName": "^TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack$",
   "description": "Block post-hold respawn when lastHoldExpiredAt is set (both spawn sites).",
   "passLine": "Tests  1 passed | 2 skipped (3)",
-  "passCheck": "\u2713 src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack 221ms",
+  "passCheck": "\u2713 src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > respawns within one host tick after top-out hold clears the stack 216ms",
   "excerpt": "AssertionError: expected false to be true // Object.is equality"
 }

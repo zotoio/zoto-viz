@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index 992ed1f..1581577 100644
+index 63e3faf..cf65259 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -139,7 +139,7 @@ export class RenderHost {
+@@ -149,7 +149,7 @@ export class RenderHost {
        }
        this.canvasRect = this.canvas.getBoundingClientRect();
        harvestGpu();

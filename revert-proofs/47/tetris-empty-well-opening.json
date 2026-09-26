@@ -4,6 +4,6 @@
   "testName": "^TetrisView never-empty well > frame 0: active piece and Demo data label on idle feed$",
   "description": "Skip opening spawn on idle-seeded queue.",
   "passLine": "Tests  1 passed | 2 skipped (3)",
-  "passCheck": "\u2713 src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > frame 0: active piece and Demo data label on idle feed 37ms",
+  "passCheck": "\u2713 src/arcade/tetris-empty-well.test.ts > TetrisView never-empty well > frame 0: active piece and Demo data label on idle feed 24ms",
   "excerpt": "AssertionError: expected false to be true // Object.is equality"
 }

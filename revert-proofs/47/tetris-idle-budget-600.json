@@ -4,6 +4,6 @@
   "testName": "^TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count$",
   "description": "Drop idle packets instead of delivering through the budget cap.",
   "passLine": "Tests  1 passed | 9 skipped (10)",
-  "passCheck": "\u2713 src/arcade/tetris-idle-view.test.ts > TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count 223ms",
+  "passCheck": "\u2713 src/arcade/tetris-idle-view.test.ts > TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count 303ms",
   "excerpt": "AssertionError: expected +0 to be 4032 // Object.is equality"
 }

@@ -1,8 +1,8 @@
 {
   "runner": "pnpm --dir web exec node --require ./eslint-ts6-resolver.cjs ./node_modules/eslint/bin/eslint.js src/graph/render-host.ts",
   "testFile": "src/graph/render-host.ts",
-  "testName": "lint no-restricted-syntax on branded cast in RenderHost rAF",
-  "description": "Reintroduce raw as FrameTs in the mosaic host loop (brand mint rule).",
+  "testName": "lint no-restricted-syntax on FrameTs cast in RenderHost rAF",
+  "description": "Reintroduce raw as FrameTs in the mosaic host loop.",
   "passLine": "lint exit 0",
-  "excerpt": "/workspace/web/src/graph/render-host.ts\n142:23  error  Do not cast to FrameTs; mint only via frameTsFromRaf() in src/core/time-ms.ts  no-restricted-syntax"
+  "excerpt": "/workspace/web/src/graph/render-host.ts\n152:23  error  Do not cast to FrameTs; mint only via frameTsFromRaf() in src/core/time-ms.ts  no-restricted-syntax"
 }

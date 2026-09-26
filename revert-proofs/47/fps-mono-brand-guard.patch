@@ -1,8 +1,8 @@
 diff --git a/web/src/core/fps.ts b/web/src/core/fps.ts
-index 5db1c0e..d5cc01e 100644
+index efade8c..2569e89 100644
 --- a/web/src/core/fps.ts
 +++ b/web/src/core/fps.ts
-@@ -65,7 +65,7 @@ export function windowFps(now: number, windowMs = SHOW_MS, since = Number.NEGATI
+@@ -66,7 +66,7 @@ export function windowFps(now: number, windowMs = SHOW_MS, since = Number.NEGATI
  }
  
  /** Call from every animation callback with that callback's rAF timestamp. */

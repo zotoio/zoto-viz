@@ -4,6 +4,6 @@
   "testName": "^Tetris survival battery > seed 0 survives at least the committed baseline with fixed placement cost$",
   "description": "Shift survival battery salt so 600-frame TetrisView metrics no longer match fixtures.",
   "passLine": "Tests  1 passed | 20 skipped (21)",
-  "passCheck": "\u2713 src/arcade/tetris-survival-battery.test.ts > Tetris survival battery > seed 0 survives at least the committed baseline with fixed placement cost 227ms",
+  "passCheck": "\u2713 src/arcade/tetris-survival-battery.test.ts > Tetris survival battery > seed 0 survives at least the committed baseline with fixed placement cost 177ms",
   "excerpt": "AssertionError: expected 2 to be 1 // Object.is equality"
 }

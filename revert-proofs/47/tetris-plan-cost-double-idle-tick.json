@@ -4,6 +4,6 @@
   "testName": "^TetrisView planner cost > 600 frames: one plan per spawn and exact placement search totals$",
   "description": "Double standaloneTileTick per idle host frame (placement eval totals).",
   "passLine": "Tests  1 passed (1)",
-  "passCheck": "\u2713 src/arcade/tetris-plan-cost.test.ts > TetrisView planner cost > 600 frames: one plan per spawn and exact placement search totals 189ms",
+  "passCheck": "\u2713 src/arcade/tetris-plan-cost.test.ts > TetrisView planner cost > 600 frames: one plan per spawn and exact placement search totals 204ms",
   "excerpt": "AssertionError: expected 5 to be 2 // Object.is equality"
 }
