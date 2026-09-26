@@ -200,6 +200,8 @@ export class Mosaic {
   private rematchQueued = new Set<string>();
   private skyPending = new Set<string>();
   private recoveredSkies = new Map<string, BackdropKind>();
+  /** HUD captions keyed by tile/view slot id (moves with the pane on swap). */
+  private paneCaptions = new Map<string, string>();
 
   constructor(private cfg: {
     wall: HTMLElement;
@@ -456,12 +458,13 @@ export class Mosaic {
 
   assignViews(tiles: string[]): void {
     if (!this.tree) return;
+    const prev = this.tileIds.slice();
     const want = parseMosaicTiles(tiles);
-    if (want.join("\0") === this.tileIds.join("\0")) return;
+    if (want.join("\0") === prev.join("\0")) return;
     this.tree = assignTiles(this.tree, want);
     this.rematchTried.clear();
     this.rematchQueued.clear();
-    this.syncPanes(this.tileIds);
+    this.syncPanes(this.tileIds, undefined, prev);
     this.placeTree();
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
@@ -472,6 +475,42 @@ export class Mosaic {
     this.emitLayout();
     resetMosaicPackCoalesceWriters();
     this.syncPackCoalesce();
+    requestAnimationFrame(() => this.repaintAllCaptions());
+  }
+
+  /** Plugin settings HUD caption for this tile (bottom of frame). */
+  setPaneSettingsCaption(id: string, text: string | null | undefined): void {
+    if (text) this.paneCaptions.set(id, text);
+    else this.paneCaptions.delete(id);
+    const pane = this.panes.get(id);
+    if (!pane) return;
+    this.paintPaneSettingsCaption(pane, text);
+  }
+
+  captionForTile(id: string): string | null {
+    return this.paneCaptions.get(id) ?? null;
+  }
+
+  private repaintAllCaptions(): void {
+    for (const id of this.tileIds) {
+      const pane = this.panes.get(id);
+      if (!pane) continue;
+      this.paintPaneSettingsCaption(pane, this.paneCaptions.get(id) ?? null);
+    }
+  }
+
+  private paintPaneSettingsCaption(pane: HTMLElement, text: string | null | undefined): void {
+    const existing = pane.querySelector(".mosaic-pane-settings-caption");
+    if (!text) {
+      existing?.remove();
+      return;
+    }
+    const el = existing instanceof HTMLElement ? existing : document.createElement("div");
+    if (!existing) {
+      el.className = "mosaic-pane-settings-caption";
+      pane.appendChild(el);
+    }
+    el.textContent = text;
   }
 
   /** Change one pane to a catalog view id (swap or allocate a duplicate tile slot). */
@@ -508,11 +547,15 @@ export class Mosaic {
     this.cfg.host?.invalidate();
   }
 
-  private syncPanes(ids: string[]): void {
+  private syncPanes(ids: string[], _touchIds?: ReadonlySet<string>, prev?: string[]): void {
+    const prevSet = new Set(prev ?? []);
     for (const id of [...this.panes.keys()]) {
       if (!ids.includes(id)) this.dropPane(id);
     }
-    for (const id of ids) this.ensurePane(id);
+    for (const id of ids) {
+      if (this.panes.has(id) && prevSet.has(id)) continue;
+      this.ensurePane(id);
+    }
   }
 
   private paneBound(id: string): boolean {

@@ -510,6 +510,20 @@ function onPluginFields(): void {
     if (spec) applySharedMosaicPluginConfig(mosaic, spec, opts, optsFor, hostModeById);
   } else scene.setMode(m, opts);
   renderLegend(m, opts);
+<<<<<<< HEAD
+=======
+  const spec = pluginSpecForMode(m.id);
+  if (!flags.skipSandboxPush && spec && pluginHasFrontend(spec)) {
+    scheduleSandboxSetConfig(spec.id, sandboxPluginConfig(spec));
+  }
+  if (mosaic?.on && spec) {
+    applySharedMosaicPluginConfig(mosaic, spec, opts, optsFor, hostModeById);
+  }
+  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
+  syncMosaicPluginHudCaptions();
+  const cap = pluginHudCaptions.get(m.id);
+  morphCopy($("hint"), cap ? `${spec?.name ?? m.label} · ${cap}` : m.hint);
+>>>>>>> db53f7e (PR F: item 15 slot-keyed captions; main onPluginFields uses shared mosaic sync)
   void syncWifiWatch();
 }
 
