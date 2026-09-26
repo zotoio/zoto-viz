@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testId": "src/core/http-notice.test.ts > server restart wall notice > auto clear > clears the restart notice after eight seconds",
+  "red": "AssertionError: expected [ <div \u2026(2)></div> ] to have a length of +0 but got 1",
+  "description": "Restart wall notice must auto-clear after eight seconds (fake timers).",
+  "timeoutSec": 120
+}

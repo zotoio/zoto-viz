@@ -1,12 +1,12 @@
 --- a/web/src/core/http.ts
 +++ b/web/src/core/http.ts
-@@ -38,9 +38,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
+@@ -58,8 +58,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<R
    if (method !== "GET" && method !== "HEAD" && r.status === 403) {
      const err = await r.clone().json().catch(() => ({})) as { error?: string };
      if (err.error === "csrf required") {
 -      await refreshSessionAfterStaleToken();
 -      r = await send(path, init);
-+      r = r;
-     }
-   }
-   return r;
++      void err;
+       if (!r.ok && typeof window !== "undefined") {
+         window.dispatchEvent(
+           new CustomEvent("zoto-viz-mutate-retry-failed", {

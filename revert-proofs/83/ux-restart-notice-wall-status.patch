@@ -1,0 +1,11 @@
+--- a/web/src/core/http-notice.ts
++++ b/web/src/core/http-notice.ts
+@@ -49,8 +49,6 @@ export function bindServerRestartWallNotice(): () => void {
+     showWallRetryNotice(detail.message, detail.retry);
+   };
+ 
+-  window.addEventListener("zoto-viz-server-restart", onRestart);
+-  window.addEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);
+   return () => {
+     window.removeEventListener("zoto-viz-server-restart", onRestart);
+     window.removeEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);

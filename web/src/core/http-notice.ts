@@ -1,12 +1,59 @@
-/** Wire restart recovery copy into the HUD hint line. */
+import { SERVER_RESTART_NOTICE } from "./http-copy";
+import { clearWallNotices, showWallRetryNotice, showWallStatusNotice } from "./wall-notice";
 
-export function bindServerRestartNoticeToHint(): () => void {
-  const hint = document.getElementById("hint");
-  if (!hint) return () => {};
+const AUTO_CLEAR_MS = 8000;
+
+type RetryFailedDetail = { message: string; retry: () => void | Promise<void> };
+
+/** Wire restart / retry-failure copy into the mosaic wall notice strip. */
+export function bindServerRestartWallNotice(): () => void {
+  const host = document.getElementById("wall");
+  if (!host) return () => {};
+
+  let clearTimer: ReturnType<typeof setTimeout> | undefined;
+  let restartNoticeLive = false;
+
+  const clearNotice = () => {
+    clearTimeout(clearTimer);
+    clearTimer = undefined;
+    clearWallNotices();
+    restartNoticeLive = false;
+    window.dispatchEvent(new Event("zoto-viz-server-restart-cleared"));
+  };
+
+  const armAutoClear = (el: HTMLElement) => {
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(() => clearNotice(), AUTO_CLEAR_MS);
+    el.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("button")) return;
+      clearNotice();
+    });
+  };
+
   const onRestart = (e: Event) => {
     const msg = (e as CustomEvent<string>).detail;
-    if (msg) hint.textContent = msg;
+    if (msg !== SERVER_RESTART_NOTICE) return;
+    if (restartNoticeLive) return;
+    restartNoticeLive = true;
+    const el = showWallStatusNotice(msg);
+    if (!el) return;
+    armAutoClear(el);
   };
+
+  const onRetryFailed = (e: Event) => {
+    const detail = (e as CustomEvent<RetryFailedDetail>).detail;
+    if (!detail?.message) return;
+    clearTimeout(clearTimer);
+    clearTimer = undefined;
+    restartNoticeLive = false;
+    showWallRetryNotice(detail.message, detail.retry);
+  };
+
   window.addEventListener("zoto-viz-server-restart", onRestart);
-  return () => window.removeEventListener("zoto-viz-server-restart", onRestart);
+  window.addEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);
+  return () => {
+    window.removeEventListener("zoto-viz-server-restart", onRestart);
+    window.removeEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);
+    clearNotice();
+  };
 }

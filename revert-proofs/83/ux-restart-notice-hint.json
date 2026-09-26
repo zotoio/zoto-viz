@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testId": "src/core/http-notice.test.ts > server restart notice > shows notice in #hint once",
-  "red": "AssertionError: expected '' to be 'The server restarted, so packs were reloaded.'",
-  "description": "Restart notice must appear in the HUD #hint when recovery fires.",
-  "timeoutSec": 120
-}

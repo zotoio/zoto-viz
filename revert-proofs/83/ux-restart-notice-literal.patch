@@ -1,11 +1,13 @@
---- a/web/src/core/http.ts
-+++ b/web/src/core/http.ts
+diff --git a/web/src/core/http-copy.ts b/web/src/core/http-copy.ts
+index a7afccd..f080eda 100644
+--- a/web/src/core/http-copy.ts
++++ b/web/src/core/http-copy.ts
 @@ -1,7 +1,6 @@
- /** Same-origin fetches that carry the CSRF header minted by GET /api/session. */
+ /** User-facing copy for stale-session recovery after a monitor restart. */
  
 -export const SERVER_RESTART_NOTICE =
 -  "The server restarted, so packs were reloaded.";
 +export const SERVER_RESTART_NOTICE = "";
  
- let csrf = "";
- 
+ export const SESSION_RETRY_FAILED_NOTICE =
+   "That request still failed after the server restarted.";

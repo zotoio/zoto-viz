@@ -1,0 +1,15 @@
+--- a/web/src/core/http-notice.ts
++++ b/web/src/core/http-notice.ts
+@@ -22,12 +22,6 @@ export function bindServerRestartWallNotice(): () => void {
+   };
+ 
+   const armAutoClear = (el: HTMLElement) => {
+-    clearTimeout(clearTimer);
+-    clearTimer = setTimeout(() => clearNotice(), AUTO_CLEAR_MS);
+-    el.addEventListener("click", (e) => {
+-      if ((e.target as HTMLElement).closest("button")) return;
+-      clearNotice();
+-    });
+   };
+ 
+   const onRestart = (e: Event) => {

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testId": "src/core/http-notice.test.ts > server restart wall notice > failed retry > replaces the restart notice with a Retry failure strip",
+  "red": "AssertionError: expected 'The server restarted, so packs were r\u2026' not to contain 'The server restarted, so packs were r\u2026'",
+  "description": "A failed CSRF retry must replace the restart strip with failure copy and Retry.",
+  "timeoutSec": 120
+}

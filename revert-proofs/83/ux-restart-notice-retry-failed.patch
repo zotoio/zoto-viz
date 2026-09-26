@@ -1,0 +1,10 @@
+--- a/web/src/core/http-notice.ts
++++ b/web/src/core/http-notice.ts
+@@ -44,7 +44,6 @@ export function bindServerRestartWallNotice(): () => void {
+     clearTimeout(clearTimer);
+     clearTimer = undefined;
+     restartNoticeLive = false;
+-    showWallRetryNotice(detail.message, detail.retry);
+   };
+ 
+   window.addEventListener("zoto-viz-server-restart", onRestart);

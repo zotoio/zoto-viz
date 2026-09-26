@@ -93,7 +93,7 @@ import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
-import { bindServerRestartNoticeToHint } from "../core/http-notice";
+import { bindServerRestartWallNotice } from "../core/http-notice";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
@@ -1989,7 +1989,7 @@ function connect(): void {
   ws.onerror = () => ws.close();
 }
 
-bindServerRestartNoticeToHint();
+bindServerRestartWallNotice();
 connect();
 
 window.addEventListener("keydown", (e) => {

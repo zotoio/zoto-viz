@@ -1,0 +1,10 @@
+--- a/web/src/core/wall-notice.ts
++++ b/web/src/core/wall-notice.ts
+@@ -22,6 +22,7 @@ export function showWallStatusNotice(text: string): HTMLElement | null {
+   el.className = WALL_NOTICE_CLASS;
+   el.setAttribute("role", "status");
+   el.textContent = text;
+   host.prepend(el);
++  el.focus();
+   return el;
+ }
