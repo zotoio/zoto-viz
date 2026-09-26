@@ -402,6 +402,50 @@ def fetch_issue_labels(repo: str, issue_number: int, token: str) -> set[str]:
     return {label["name"] for label in doc.get("labels", [])}
 
 
+def fetch_pull_head_commit_date(
+    repo: str, pull_number: int, token: str
+) -> datetime | None:
+    owner, name = repo.split("/", 1)
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}/commits"
+        "?per_page=100"
+    )
+    commits: list[dict] = []
+    while url:
+        page, url = _github_request(url, token)
+        if not isinstance(page, list):
+            break
+        commits.extend(page)
+    if not commits:
+        return None
+    last = commits[-1].get("commit", {}).get("committer", {}).get("date")
+    if not last:
+        return None
+    return parse_github_timestamp(last)
+
+
+def fetch_labeled_events(repo: str, issue_number: int, token: str) -> list[dict]:
+    """Issue events API (labeled/unlabeled); fallback if timeline is unavailable."""
+    owner, name = repo.split("/", 1)
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/issues/{issue_number}/events"
+        "?per_page=100"
+    )
+    items: list[dict] = []
+    while url:
+        page, url = _github_request(url, token)
+        if not isinstance(page, list):
+            break
+        for row in page:
+            event = row.get("event")
+            if event in ("labeled", "unlabeled"):
+                items.append(row)
+    return items
+
+
+    return items
+
+
 def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]:
     owner, name = repo.split("/", 1)
     url = (
@@ -415,6 +459,20 @@ def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]
             break
         items.extend(page)
     return items
+
+
+def load_pr_review_context(
+    repo: str, issue_number: int, token: str
+) -> tuple[set[str], list[dict], datetime | None]:
+    labels = fetch_issue_labels(repo, issue_number, token)
+    try:
+        timeline = fetch_issue_timeline(repo, issue_number, token)
+    except urllib.error.HTTPError:
+        timeline = fetch_labeled_events(repo, issue_number, token)
+    push_at = last_push_at_from_timeline(timeline)
+    if push_at is None:
+        push_at = fetch_pull_head_commit_date(repo, issue_number, token)
+    return labels, timeline, push_at
 
 
 def last_push_at_from_timeline(timeline: list[dict]) -> datetime | None:
@@ -529,15 +587,18 @@ def main(argv: list[str] | None = None) -> int:
             print("pack-boundary: FAILED — GITHUB_TOKEN is required for PR label lookup", file=sys.stderr)
             return 1
         try:
-            labels = fetch_issue_labels(args.repo, args.pr_number, token)
-            timeline = fetch_issue_timeline(args.repo, args.pr_number, token)
+            labels, timeline, push_at = load_pr_review_context(
+                args.repo, args.pr_number, token
+            )
         except urllib.error.HTTPError as exc:
             print(
                 f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
                 file=sys.stderr,
             )
             return 1
-        code, lines = run_host_change_gate(labels, timeline)
+        code, lines = run_host_change_gate(
+            labels, timeline, last_push_at=push_at
+        )
         for line in lines:
             print(line)
         if code != 0:
