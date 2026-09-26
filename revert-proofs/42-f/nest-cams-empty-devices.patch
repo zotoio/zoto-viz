@@ -1,7 +1,8 @@
 diff --git a/web/src/plugins/nest-cams-ui.ts b/web/src/plugins/nest-cams-ui.ts
+index d1e54df..7931a2b 100644
 --- a/web/src/plugins/nest-cams-ui.ts
 +++ b/web/src/plugins/nest-cams-ui.ts
-@@ -88,9 +88,20 @@ function nestCamEmptyStatus(message: string): HTMLElement {
+@@ -88,10 +88,18 @@ function nestCamEmptyStatus(message: string): HTMLElement {
  
  function cameraChips(look: NestLook, devices: SdmDevice[], onChange: (patch: NestCamPatch) => void): HTMLElement {
    const cams = streamableCameras(devices);
