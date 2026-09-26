@@ -158,4 +158,43 @@ describe("grantPluginConsent then catalog refresh", () => {
 
     expect(mountView).toHaveBeenCalledWith("plugin:heat");
   });
+
+  it("resumes every waiting tile for the same pack after one approval", async () => {
+    const m = host({
+      tileIds: ["plugin:a", "plugin:b", "plugin:c"],
+      focusedId: "plugin:a",
+    });
+    let consented = false;
+    const mountView = vi.fn();
+    const persist = vi.fn();
+
+    for (const paneId of ["plugin:a", "plugin:b", "plugin:c"]) {
+      await switchPaneView(m, "plugin:heat", {
+        fromViewId: paneId,
+        ensureReviewed: async () => consented,
+        spec: { name: "Heat map" },
+        pluginId: "heat",
+        teardownView: vi.fn(),
+        mountView,
+        persistLayout: persist,
+      });
+    }
+    expect(listConsentPending()).toHaveLength(3);
+    consented = true;
+    await resumePendingConsentPaneSwitches(
+      (id) => id === "heat",
+      (pending) =>
+        switchPaneView(m, pending.toViewId, {
+          fromViewId: pending.fromViewId,
+          ensureReviewed: async () => consented,
+          spec: { name: "Heat map" },
+          pluginId: "heat",
+          teardownView: vi.fn(),
+          mountView,
+          persistLayout: persist,
+        }),
+    );
+    expect(mountView).toHaveBeenCalledTimes(3);
+    expect(hasConsentPending()).toBe(false);
+  });
 });

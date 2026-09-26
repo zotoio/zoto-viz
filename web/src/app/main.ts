@@ -109,6 +109,8 @@ import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } fro
 import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import { revertModeSelection } from "./apply-mode-mosaic";
 import { hasConsentPending } from "./consent-pending-panes";
+import { mergePluginConsentLivePatch } from "./plugin-consent-live";
+import { initPluginConsentSync } from "./plugin-consent-sync";
 import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
 
@@ -805,7 +807,6 @@ async function runMosaicPaneSwitch(toViewId: string, fromViewId?: string): Promi
     mountView: mountMosaicPanelView,
     persistLayout: persistMosaicPickLayout,
   });
-  if (hasConsentPending()) ensureConsentPendingWatch();
   return result;
 }
 
@@ -829,22 +830,10 @@ async function refreshPluginCatalogAndResume(): Promise<void> {
   await resumeMosaicConsentPending();
 }
 
-let consentCatalogWatch = 0;
-function ensureConsentPendingWatch(): void {
-  if (consentCatalogWatch) return;
-  consentCatalogWatch = window.setInterval(() => {
-    void (async () => {
-      if (!hasConsentPending()) {
-        window.clearInterval(consentCatalogWatch);
-        consentCatalogWatch = 0;
-        return;
-      }
-      try {
-        await refreshPluginCatalogAndResume();
-      } catch { /* monitor down */ }
-    })();
-  }, 1500);
-}
+initPluginConsentSync({
+  refreshCatalogAndResume: refreshPluginCatalogAndResume,
+  pollIntervalMs: 10_000,
+});
 
 async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}): Promise<void> {
   const m = modeById(id);
@@ -1712,6 +1701,8 @@ async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
   }
   if (patch.reloadPlugins === true) {
     await refreshPluginCatalogAndResume();
+  } else if (mergePluginConsentLivePatch(pluginSpecs, patch) && hasConsentPending()) {
+    await resumeMosaicConsentPending();
   }
   const p = pickAgentSettings(patch, allModes().map((m) => m.id));
   if (p.dice) {
