@@ -1,16 +1,17 @@
 --- a/web/src/plugins/nixie-wall-clock.ts
 +++ b/web/src/plugins/nixie-wall-clock.ts
-@@ -78,7 +78,6 @@ export function createNixieWallClock(timeZone?: string, canvas: { w: number; h:
+@@ -85,14 +85,12 @@
      get formatCalls() { return formatCalls; },
      tick(wallMs, look, audio = 0, pulse = 0, size = canvas) {
        const sec = Math.floor(wallMs / 1000);
 -      if (sec !== lastSecond || lastSecond < 0) {
          lastSecond = sec;
          formatCalls++;
-         const d = digitsFromWallMs(wallMs, look, timeZone);
-@@ -88,7 +87,6 @@ export function createNixieWallClock(timeZone?: string, canvas: { w: number; h:
-         digitBuffer[3] = d[3];
-         digitBuffer[4] = d[4];
-         digitBuffer[5] = d[5];
+         const parts = wallPartsFromMs(wallMs, timeZone);
+         cachedH = parts.h;
+         cachedM = parts.m;
+         cachedS = parts.s;
 -      }
-       digitBuffer[6] = wallMs % 1000 < 500 ? 1 : 0;
+       const d = digitsFromParts(cachedH, cachedM, cachedS, look.hour12);
+       digitBuffer[0] = d[0];
+       digitBuffer[1] = d[1];

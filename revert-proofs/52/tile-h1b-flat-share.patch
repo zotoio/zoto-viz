@@ -1,11 +1,11 @@
 --- a/web/src/plugins/viz-tile-budget.ts
 +++ b/web/src/plugins/viz-tile-budget.ts
-@@ -44,8 +44,7 @@ export function msToVizTicks(ms: number): number {
-  * Active tile count is clamped to {@link VIZ_MAX_ACTIVE_TILES} before dividing.
+@@ -49,7 +49,7 @@
   */
  export function tileShareTicks(activeTiles: number): number {
--  const n = Math.min(VIZ_MAX_ACTIVE_TILES, Math.max(1, activeTiles));
+   const n = Math.min(VIZ_MAX_ACTIVE_TILES, Math.max(1, activeTiles));
 -  return Math.floor(VIZ_WALL_BUDGET_TICKS / n);
-+  return VIZ_WALL_BUDGET_TICKS;
++  return Math.floor(VIZ_WALL_BUDGET_TICKS / 1);
  }
  
+ export function debtIsClear(debt: number): boolean {

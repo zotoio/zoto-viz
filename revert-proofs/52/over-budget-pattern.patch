@@ -1,8 +1,8 @@
 --- a/web/src/plugins/viz-host.ts
 +++ b/web/src/plugins/viz-host.ts
-@@ -480,7 +480,7 @@ export class VizFrameBudget {
+@@ -493,7 +493,7 @@
+   /** Record a measured duration; returns true when over budget. */
    record(ms: number): boolean {
-     this._total++;
      this._lastMs = ms;
 -    if (ms > VIZ_FRAME_BUDGET_MS) {
 +    if (ms > 25) {

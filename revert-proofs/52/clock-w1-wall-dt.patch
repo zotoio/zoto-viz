@@ -1,22 +1,11 @@
-diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
-index ba1ab0c..dfd41f9 100644
 --- a/web/src/plugins/viz-host.ts
 +++ b/web/src/plugins/viz-host.ts
-@@ -1,5 +1,5 @@
- import type { Device, StateMsg } from "../core/types";
--import { vizBuildCostMs, vizBuildCostTicks, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
-+import { vizBuildCostMs, vizBuildCostTicks, vizClockMs, vizFrameEpochSec, vizWallMs } from "../core/viz-clock";
- import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
- import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
- import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
-@@ -425,8 +425,8 @@ export function buildVizFrame(
+@@ -426,7 +426,7 @@
    bind?: SourceBind | Record<string, string>,
  ): VizDataFrame {
    const t = vizFrameEpochSec(state.ts);
 -  const nowClock = vizClockMs();
--  const dt = prevVizClockMs > 0 ? Math.max(0, (nowClock - prevVizClockMs) / 1000) : 0;
 +  const nowClock = vizWallMs();
-+  const dt = prevVizClockMs > 0 ? Math.max(0, (nowClock - prevVizClockMs) / 1000) : 0;
+   const dt = prevVizClockMs > 0 ? Math.max(0, (nowClock - prevVizClockMs) / 1000) : 0;
    const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
    return {
-     t,

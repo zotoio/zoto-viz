@@ -1,11 +1,11 @@
 --- a/web/src/plugins/viz-tile-hud.ts
 +++ b/web/src/plugins/viz-tile-hud.ts
-@@ -31,7 +31,7 @@ export function tileSkipsInHudWindow(
- export function tileHudSkipRatePerSec(
-   samples: readonly VizTileHudSample[],
+@@ -43,7 +43,7 @@
    nowTick: number,
--  inclusiveLower = false,
-+  inclusiveLower = true,
- ): number {
-   return tileSkipsInHudWindow(samples, nowTick, inclusiveLower);
- }
+   lastBuildCostTicks: number | null,
+ ): TileHudViewerState {
+-  const window = tileHudSamplesInWindow(samples, nowTick, false);
++  const window = tileHudSamplesInWindow(samples, nowTick, true);
+   const skipCount = window.filter((s) => s.kind === "skip").length;
+   if (skipCount === 0) return "none";
+ 

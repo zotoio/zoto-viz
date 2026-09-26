@@ -1,14 +1,6 @@
 --- a/web/src/plugins/viz-pack-host.ts
 +++ b/web/src/plugins/viz-pack-host.ts
-@@ -15,6 +15,7 @@
-   parseNixieLook,
-   type NixieLook,
-   type NixieLookKey,
-+  nixieCanvasSize,
- } from "../../../plugins/src/nixie-clock/frontend/tubes";
- 
- const hostNixieClock = createNixieWallClock();
-@@ -266,15 +267,15 @@
+@@ -264,15 +264,15 @@
        break;
      }
      case "nixie-clock": {

@@ -1,11 +1,11 @@
 --- a/web/src/plugins/viz-tile-hud.ts
 +++ b/web/src/plugins/viz-tile-hud.ts
-@@ -65,7 +65,7 @@ export function computeTileHudViewerState(
-   opts: TileHudStateOptions = {},
- ): TileHudViewerState {
-   const inclusiveLower = opts.inclusiveLower ?? false;
--  const requireAllBuildsWithinWall = opts.requireAllBuildsWithinWall ?? true;
-+  const requireAllBuildsWithinWall = opts.requireAllBuildsWithinWall ?? false;
-   const useNoBuildFallback = opts.useNoBuildFallback ?? true;
-   const useLastBuildOnly = opts.useLastBuildOnly ?? false;
+@@ -53,8 +53,6 @@
+     return lastBuildCostTicks > VIZ_WALL_BUDGET_TICKS ? "over_budget" : "limited";
+   }
+ 
+-  const anyOverWall = builds.some((b) => (b.costTicks ?? 0) > VIZ_WALL_BUDGET_TICKS);
+-  if (anyOverWall) return "over_budget";
+   return "limited";
+ }
  

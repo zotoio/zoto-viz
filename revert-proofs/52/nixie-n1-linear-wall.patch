@@ -1,6 +1,6 @@
 --- a/web/src/plugins/nixie-wall-clock.ts
 +++ b/web/src/plugins/nixie-wall-clock.ts
-@@ -10,7 +10,7 @@ export const NIXIE_SIM_TICKS_PER_FRAME = 5000;
+@@ -9,7 +9,7 @@
  
  /** Dogfood N1: wall ms from integer ticks (5000 ticks per frame, 300 ticks/ms). */
  export function nixieSimWallMs(t0Ms: number, frameIndex: number): number {
@@ -8,3 +8,4 @@
 +  return t0Ms + frameIndex * (1000 / 60);
  }
  
+ const formatterCache = new Map<string, Intl.DateTimeFormat>();
