@@ -39,6 +39,11 @@ import type { BackdropKind } from "../graph/backdrop";
 import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
+import type { ManifestBlockedPlugin } from "./plugin-manifest-blocked";
+import {
+  manifestBlockedViewSelectRow,
+  setManifestBlockedCatalog,
+} from "./plugin-manifest-blocked";
 import { PluginSandbox, pluginModuleUrl } from "./host";
 import type { PluginIdleConfig } from "./fixtures/golden-state";
 import type { VizPluginContract } from "./viz-host";
@@ -252,6 +257,7 @@ export interface PluginList {
   schema: string;
   plugins: PluginView[];
   errors: { file: string; error: string }[];
+  blocked?: ManifestBlockedPlugin[];
   pythonService?: boolean;
 }
 
@@ -677,6 +683,8 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
     label: viewCaption(m),
     group: m.kind === "arcade" ? "arcade" : m.kind === "demo" ? "demo" : "graph",
   }));
+  const blockedRow = manifestBlockedViewSelectRow();
+  if (blockedRow) rows.push(blockedRow);
   rows.sort((a, b) => (CATALOG_GROUP_RANK[a.group] ?? 9) - (CATALOG_GROUP_RANK[b.group] ?? 9)
     || a.label.localeCompare(b.label));
   return rows.map((row, i) => ({
@@ -728,6 +736,7 @@ export async function installPlugins(): Promise<PluginView[]> {
     const { clearPluginSettingsUiState } = await import("./plugin-settings");
     clearPluginSettingsUiState();
     const data = await fetchPlugins();
+    setManifestBlockedCatalog((data.blocked ?? []) as ManifestBlockedPlugin[]);
     for (const e of data.errors) console.warn("zoto-viz plugin:", e.file, e.error);
     const specs: PluginView[] = [];
     for (const raw of data.plugins) {
@@ -741,6 +750,7 @@ export async function installPlugins(): Promise<PluginView[]> {
     return specs;
   } catch (e) {
     console.warn("zoto-viz plugins:", e);
+    setManifestBlockedCatalog([]);
     looks = new Map();
     setPluginModes([]);
     return [];

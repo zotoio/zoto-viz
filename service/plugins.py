@@ -31,13 +31,15 @@ from . import plugin_backend as pb
 from . import plugin_sky as psky
 from . import plugin_instances as pins
 from . import plugin_zip as pz
+from . import plugin_manifest_block as pmb
+from .plugin_schema import PLUGIN_SCHEMA_PATH, deref_schema, load_plugin_schema
 import yaml
 from aiohttp import web
 
 DIR = paths.plugins_dir()
 CONSENT_FILE = paths.user_dir() / "plugin-consent.yml"
 REPO = Path(__file__).resolve().parents[1]
-SCHEMA_FILE = REPO / "schema" / "plugin.schema.json"
+SCHEMA_FILE = PLUGIN_SCHEMA_PATH
 SUFFIXES = {".yml", ".yaml"}
 ALLOWED_CAPS = frozenset({
     "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
@@ -55,29 +57,6 @@ _scan_builds = 0
 _WATCH_NAMES = frozenset({"plugin.yml", "plugin.yaml", "visualisation.yml", "visualisation.yaml"})
 _WATCH_SUFFIX = frozenset({".ts", ".tsx", ".js", ".mjs", ".glsl", ".py", ".zip", ".yml", ".yaml"})
 _WATCH_SKIP_DIRS = frozenset({"node_modules", "__pycache__", ".git"})
-_SCHEMA_KEYS = frozenset({"$ref", "$schema", "$id", "title", "description"})
-
-
-def deref_schema(raw: dict[str, Any], origin: Path) -> dict[str, Any]:
-    """Follow a one-line sibling `$ref` shim (view/agent-plugin → plugin.schema.json)."""
-    ref = raw.get("$ref")
-    if (
-        not isinstance(ref, str)
-        or not ref.endswith(".json")
-        or "://" in ref
-        or "#" in ref
-    ):
-        return raw
-    if any(key not in _SCHEMA_KEYS for key in raw):
-        return raw
-    target = (origin.parent / ref).resolve()
-    if target.parent != origin.parent.resolve() or not target.is_file():
-        raise ValueError(f"unresolved schema $ref {ref!r}")
-    loaded = yaml.safe_load(target.read_text(encoding="utf-8"))
-    if not isinstance(loaded, dict):
-        raise ValueError(f"{target.name} is not a mapping")
-    return loaded
-
 
 def _plugin_home(path: Path) -> Path:
     if path.name in ("plugin.yml", "plugin.yaml"):
@@ -480,10 +459,7 @@ _validator = None
 
 
 def _schema() -> dict[str, Any]:
-    raw = yaml.safe_load(SCHEMA_FILE.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError(f"{SCHEMA_FILE} is not a mapping")
-    return deref_schema(raw, SCHEMA_FILE)
+    return load_plugin_schema()
 
 
 def validator():
@@ -719,11 +695,25 @@ def _visualisation_validator():
     return _viz_validator
 
 
+class VisualisationManifestError(ValueError):
+    """visualisation.yml failed manifest schema (may carry unknown top-level keys)."""
+
+    def __init__(self, message: str, *, unknown_keys: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.unknown_keys = list(unknown_keys or [])
+
+
 def _validate_visualisation_yaml(viz: dict[str, Any]) -> None:
     """JSON Schema for visualisation.yml (legacy list ``options`` checked in semantics)."""
     opts = viz.get("options")
     errors = sorted(_visualisation_validator().iter_errors(viz), key=lambda e: list(e.path))
     if errors:
+        unknown = pmb.unknown_keys_from_schema_errors(errors)
+        if unknown and all(getattr(e, "validator", None) == "additionalProperties" for e in errors):
+            raise VisualisationManifestError(
+                "; ".join(_schema_error_line(e, "visualisation.yml") for e in errors),
+                unknown_keys=unknown,
+            )
         bits = []
         for err in errors:
             bits.append(_schema_error_line(err, "visualisation.yml"))
@@ -767,7 +757,7 @@ def validate_plugin_home(home: Path) -> dict[str, Any]:
     yml = home / "plugin.yml"
     doc = load_file(yml)
     rel = str(yml)
-    merged = _attach_visualisation({**doc}, home, errors, rel)
+    merged = _attach_visualisation({**doc}, home, errors, rel, blocked=None)
     if errors:
         raise ValueError(errors[0]["error"])
     if merged is None:
@@ -798,6 +788,7 @@ def _attach_visualisation(
     home: Path,
     errors: list[dict[str, str]],
     rel: str,
+    blocked: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     try:
         viz = _visualisation_doc(home)
@@ -808,6 +799,20 @@ def _attach_visualisation(
         return row
     try:
         _validate_visualisation_yaml(viz)
+    except VisualisationManifestError as e:
+        pid = str(row.get("id") or home.name)
+        if blocked is not None and e.unknown_keys:
+            blocked.append(pmb.blocked_catalog_row(
+                plugin_id=pid,
+                name=str(row.get("name") or pid),
+                file=rel,
+                reason_code=pmb.REASON_MANIFEST_UNKNOWN_KEYS,
+                message=pmb.message_unknown_manifest_keys(pid, e.unknown_keys),
+                keys=e.unknown_keys,
+            ))
+        else:
+            errors.append({"file": rel, "error": str(e)})
+        return None
     except ValueError as e:
         errors.append({"file": rel, "error": str(e)})
         return None
@@ -919,12 +924,18 @@ def _scan_roots(root: Path | None) -> tuple[Path, Path, str]:
     return root, root, "trees"
 
 
-def _scan_payload(dir_path: Path, plugins: list[dict[str, Any]], errors: list[dict[str, str]]) -> dict[str, Any]:
+def _scan_payload(
+    dir_path: Path,
+    plugins: list[dict[str, Any]],
+    errors: list[dict[str, str]],
+    blocked: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "dir": str(dir_path),
         "schema": str(SCHEMA_FILE),
         "plugins": plugins,
         "errors": errors,
+        "blocked": list(blocked or []),
         "pythonService": python_enabled(),
     }
 
@@ -1002,6 +1013,7 @@ def _copy_scan(result: dict[str, Any]) -> dict[str, Any]:
         **result,
         "plugins": [dict(p) for p in (result.get("plugins") or [])],
         "errors": [dict(e) for e in (result.get("errors") or [])],
+        "blocked": [dict(b) for b in (result.get("blocked") or [])],
     }
 
 
@@ -1052,12 +1064,27 @@ def _catalog_row(
     home: Path,
     errors: list[dict[str, str]],
     rel: str,
+    blocked: list[dict[str, Any]] | None = None,
     **more: Any,
 ) -> dict[str, Any] | None:
+    newer = pmb.pack_sdk_newer_than_host(doc)
+    if newer is not None and blocked is not None:
+        pid = str(doc.get("id") or home.name)
+        blocked.append(pmb.blocked_catalog_row(
+            plugin_id=pid,
+            name=str(doc.get("name") or pid),
+            file=rel,
+            reason_code=pmb.REASON_MANIFEST_NEWER_SDK,
+            message=pmb.message_newer_sdk(pid, newer),
+            pack_sdk=newer,
+        ))
+        return None
     merged = {**doc, **more, **extra}
     kind = consent_kind(merged)
     sky = psky.catalog(merged, home, allowed=consented(merged))
-    row = _attach_visualisation({**merged, "consent": kind, **sky}, home, errors, rel)
+    row = _attach_visualisation(
+        {**merged, "consent": kind, **sky}, home, errors, rel, blocked,
+    )
     if row is None:
         return None
     if not isinstance(row.get("visualisation"), dict):
@@ -1078,6 +1105,7 @@ def _scan_zips(
 ) -> dict[str, Any]:
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
+    blocked: list[dict[str, Any]] = []
     seen: set[str] = set()
     owned = owned_ids or set()
     for zip_path in _zip_files(zips_dir):
@@ -1109,19 +1137,20 @@ def _scan_zips(
         if extra is None:
             continue
         row = _catalog_row(
-            doc, extra, dest, errors, rel,
+            doc, extra, dest, errors, rel, blocked,
             file=str(yml), zip=rel, sha256=unpacked.sha256, parts=list(unpacked.parts),
             origin=origin,
         )
         if row is not None:
             plugins.append(row)
-    return _scan_payload(zips_dir, plugins, errors)
+    return _scan_payload(zips_dir, plugins, errors, blocked)
 
 
 def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
     files = plugin_paths(root)
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
+    blocked: list[dict[str, Any]] = []
     seen: set[str] = set()
     for path in files:
         rel = str(path)
@@ -1144,10 +1173,10 @@ def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
         if origin:
             more["origin"] = origin
             more["sha256"] = _plugin_sha(path, None)
-        row = _catalog_row(doc, extra, home, errors, rel, **more)
+        row = _catalog_row(doc, extra, home, errors, rel, blocked, **more)
         if row is not None:
             plugins.append(row)
-    return _scan_payload(root, plugins, errors)
+    return _scan_payload(root, plugins, errors, blocked)
 
 
 def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str, Any]:
@@ -1158,17 +1187,25 @@ def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str,
     local_dir = paths.plugin_local_dir()
     local_plugins: list[dict[str, Any]] = []
     local_errors: list[dict[str, str]] = []
+    local_blocked: list[dict[str, Any]] = []
     if local_dir.is_dir():
         local = _scan_zips(
             local_dir, paths.plugin_local_runtime_dir(), owned_ids=seen, origin="local",
         )
         local_plugins = list(local["plugins"])
         local_errors = list(local["errors"])
+        local_blocked = list(local.get("blocked") or [])
     catalog_dir = zips_dir if zips_dir.is_dir() else src_dir
+    blocked = (
+        list(src.get("blocked") or [])
+        + list(zipped.get("blocked") or [])
+        + local_blocked
+    )
     return _scan_payload(
         catalog_dir,
         pins.attach(list(src["plugins"]) + list(zipped["plugins"]) + local_plugins),
         list(src["errors"]) + list(zipped["errors"]) + local_errors,
+        blocked,
     )
 
 

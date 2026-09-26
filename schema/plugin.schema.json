@@ -14,6 +14,11 @@
     },
     "name": { "type": "string", "minLength": 1, "maxLength": 48 },
     "version": { "type": "integer", "minimum": 1 },
+    "zoto_sdk_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Pack SDK / manifest contract version; values above the host support appear in Blocked."
+    },
     "description": { "type": "string", "maxLength": 2000 },
     "hint": { "type": "string", "maxLength": 280 },
     "frontend": {
@@ -333,40 +338,25 @@
         "dataMapping": {
           "type": "array",
           "maxItems": 32,
-          "description": "Maps host data fields to visual effects (e.g. marble-run packet → marble radius).",
-          "items": { "$ref": "#/$defs/vizDataMappingRow" }
+          "description": "Maps host data fields to visual effects (pack-specific rows; parsed in frontend).",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
         },
-        "workBudget": { "$ref": "#/$defs/vizWorkBudget" }
-      }
-    },
-    "vizDataMappingRow": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["field", "effect"],
-      "properties": {
-        "field": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "effect": { "type": "string", "minLength": 1, "maxLength": 256 },
-        "default": {
-          "oneOf": [
-            { "type": "string", "maxLength": 120 },
-            { "type": "number" },
-            { "type": "boolean" }
-          ]
-        },
-        "clamp": { "type": "string", "maxLength": 64 }
-      }
-    },
-    "vizWorkBudget": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Per-frame caps for heavy viz packs (marble-run frontend/work-budget.ts).",
-      "properties": {
-        "maxDrawCalls": { "type": "integer", "minimum": 1 },
-        "maxTriangles": { "type": "integer", "minimum": 1 },
-        "maxInstances": { "type": "integer", "minimum": 1 },
-        "maxGpuBytes": { "type": "integer", "minimum": 1 },
-        "maxSimStepsPerFrame": { "type": "integer", "minimum": 1 },
-        "maxPacketsPerFrame": { "type": "integer", "minimum": 1 }
+        "workBudget": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Per-frame work caps (#45 count budgets v2; marble-run frontend/work-budget.ts).",
+          "properties": {
+            "maxDrawCalls": { "type": "integer", "minimum": 1 },
+            "maxTriangles": { "type": "integer", "minimum": 1 },
+            "maxInstances": { "type": "integer", "minimum": 1 },
+            "maxGpuBytes": { "type": "integer", "minimum": 1 },
+            "maxSimStepsPerFrame": { "type": "integer", "minimum": 1 },
+            "maxPacketsPerFrame": { "type": "integer", "minimum": 1 }
+          }
+        }
       }
     },
     "pluginConfigField": {
