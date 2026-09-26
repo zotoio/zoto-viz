@@ -1,0 +1,15 @@
+diff --git a/plugins/sdk/legacy-zoto-pack-allowlist.ts bb/plugins/sdk/legacy-zoto-pack-allowlist.ts
+index 7df4442..198284b 100644
+--- a/plugins/sdk/legacy-zoto-pack-allowlist.ts
++++ bb/plugins/sdk/legacy-zoto-pack-allowlist.ts
+@@ -38,9 +38,5 @@ export function isLegacyDeclareZotoPackAllowed(packId: string): boolean {
+ 
+ /** `declare const zoto` on packs not on the pinned allowlist (always blocking). */
+ export function legacyZotoViolationsOnDisallowedPacks(violations: PackLintViolation[]): PackLintViolation[] {
+-  return violations.filter((v) => {
+-    if (!LEGACY_ZOTO_ALLOWLIST_RULES.has(v.rule)) return false;
+-    const packId = packIdFromPluginsSrcPath(v.file);
+-    return packId != null && !isLegacyDeclareZotoPackAllowed(packId);
+-  });
++  return [];
+ }

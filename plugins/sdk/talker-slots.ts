@@ -38,24 +38,13 @@ const DEFAULT_RULES: TalkerSlotRules = {
   challengerMargin: TALKER_SLOT_CHALLENGER_MARGIN,
 };
 
-/** Incremented when an empty slot runs an unassigned talker search (tests). */
-export let assignTalkerSlotsEmptySlotSearches = 0;
-
-/** Incremented each time {@link pickBestUnassigned} runs (tests / allocation guard). */
-export let pickBestUnassignedCalls = 0;
-
-/** Incremented when {@link resizeTalkerSlotArrays} allocates new buffers (tests). */
-export let resizeTalkerSlotArraysAllocations = 0;
-
-/** Incremented once per talker examined in the post-hold challenger scan (tests). */
-export let assignTalkerSlotsChallengerScans = 0;
-
-export function resetAssignTalkerSlotsStats(): void {
-  assignTalkerSlotsEmptySlotSearches = 0;
-  pickBestUnassignedCalls = 0;
-  resizeTalkerSlotArraysAllocations = 0;
-  assignTalkerSlotsChallengerScans = 0;
-}
+/** Mutable counters for vitest (assign/resize instrumentation). */
+export const talkerSlotStats = {
+  emptySlotSearches: 0,
+  pickBestUnassignedCalls: 0,
+  resizeAllocations: 0,
+  challengerScans: 0,
+};
 
 export function createTalkerSlotScratch(rules?: Partial<TalkerSlotRules>): TalkerSlotScratch {
   const merged: TalkerSlotRules = { ...DEFAULT_RULES, ...rules };
@@ -101,7 +90,7 @@ export function resizeTalkerSlotArrays(
   }
   if (cap === oldLen) return [prev, out];
 
-  resizeTalkerSlotArraysAllocations++;
+  talkerSlotStats.resizeAllocations++;
   const copyCount = Math.min(oldLen, cap);
   const newPrev: TalkerSlot[] = [];
   const newOut: TalkerSlot[] = [];
@@ -144,7 +133,7 @@ export function pickBestUnassigned(
   byId: ReadonlyMap<string, SlotTalker>,
   occupied: ReadonlySet<string>,
 ): string | null {
-  pickBestUnassignedCalls++;
+  talkerSlotStats.pickBestUnassignedCalls++;
   let bestId: string | null = null;
   let bestRate = -Infinity;
   for (const [id, t] of byId) {
@@ -210,7 +199,7 @@ export function assignTalkerSlots(
 
   for (let i = 0; i < cap; i++) {
     if (out[i].id) continue;
-    assignTalkerSlotsEmptySlotSearches++;
+    talkerSlotStats.emptySlotSearches++;
     const id = pickBestUnassigned(byId, occ);
     if (!id) break;
     const t = byId.get(id)!;
@@ -230,7 +219,7 @@ export function assignTalkerSlots(
     let bestId: string | null = null;
     let bestRate = -Infinity;
     for (const [id, t] of byId) {
-      assignTalkerSlotsChallengerScans++;
+      talkerSlotStats.challengerScans++;
       if (occ.has(id)) continue;
       if (t.rate >= incumbent.rate * rules.challengerMargin) {
         if (!bestId || t.rate > bestRate) {
