@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
+  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > returns focus once to the pane menu cog when the last pack tile leaves and the drawer was opened from that menu$",
+  "description": "Do not re-focus the Layout mosaic picker after a clean slot change while the view drawer was opened from a pane menu.",
+  "redOutput": "AssertionError: expected \"focus\" to be called 1 times, but got 2 times"
+}

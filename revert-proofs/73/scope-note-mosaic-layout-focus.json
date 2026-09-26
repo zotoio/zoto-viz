@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
-  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > closes the view drawer after the last pack tile leaves the wall$",
-  "description": "After the last pack tile is removed, focus returns to the visible Layout mosaic picker trigger (aria-label Layout), not a stand-in or slot control.",
-  "redOutput": "AssertionError: expected <select …(2)>…(1)</select> to be <button type=\"button\" …(4)></button> // Object.is equality"
-}

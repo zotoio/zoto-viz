@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1957,7 +1957,9 @@ export class Settings {
+           const gain = this.viewHost?.querySelector<HTMLInputElement>(
+             '.plugin-layer[data-layer="view"] .slider input[type=range]',
+           );
+           gain?.focus();
++        } else {
++          this.mosaicLayoutPickerTrigger?.focus();
+         }
+       });
+       row.append(cap, sel);

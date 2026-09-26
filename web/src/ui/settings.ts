@@ -192,6 +192,8 @@ export class Settings {
   private lastMosaicSlotEl: HTMLSelectElement | null = null;
   private lastMosaicSlotPaneIndex = 0;
   private mosaicLayoutPickerTrigger: HTMLButtonElement | null = null;
+  /** Focus target when the view drawer closes (Layout picker or the menu/cog that opened it). */
+  private viewDrawerReturnFocus: HTMLElement | null = null;
   private nestDevices: SdmDevice[] = [];
   private nestDeviceKey = "";
   private viewBind: {
@@ -337,6 +339,7 @@ export class Settings {
       this.close();
       return;
     }
+    this.viewDrawerReturnFocus = this.resolveViewDrawerReturnFocus();
     this.viewFocusId = want;
     this.open("view");
     this.animUi?.syncTiles();
@@ -526,7 +529,20 @@ export class Settings {
   }
 
   focusMosaicLayoutPickerTrigger(): void {
-    this.mosaicLayoutPickerTrigger?.focus();
+    this.focusViewDrawerReturnTarget();
+  }
+
+  private resolveViewDrawerReturnFocus(): HTMLElement | null {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement) {
+      if (el.classList.contains("mosaic-layout-picker-trigger")) return el;
+      if (el === this.viewCog || el.classList.contains("mosaic-pane-cog")) return el;
+    }
+    return this.mosaicLayoutPickerTrigger;
+  }
+
+  private focusViewDrawerReturnTarget(): void {
+    (this.viewDrawerReturnFocus ?? this.mosaicLayoutPickerTrigger)?.focus();
   }
 
   mosaicLayoutPickerTriggerEl(): HTMLButtonElement | null {
@@ -1942,8 +1958,6 @@ export class Settings {
             '.plugin-layer[data-layer="view"] .slider input[type=range]',
           );
           gain?.focus();
-        } else {
-          this.mosaicLayoutPickerTrigger?.focus();
         }
       });
       row.append(cap, sel);
@@ -2312,6 +2326,7 @@ export class Settings {
   close(): void {
     this.viewFocusId = "";
     this.viewDrawerKey = null;
+    this.viewDrawerReturnFocus = null;
     this.pop.hidden = true;
     this.el.classList.remove("open");
     this.btn.setAttribute("aria-expanded", "false");

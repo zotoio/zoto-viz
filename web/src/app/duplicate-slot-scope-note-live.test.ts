@@ -3,6 +3,7 @@ import { setPluginModes } from "../core/modes";
 import { compilePlugin } from "../plugins/plugin";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { Settings } from "../ui/settings";
+import { makeViewCogButton } from "../ui/view-cog";
 import * as viewDrawerModule from "../ui/view-drawer-module";
 import { hostModeById } from "./host-mode";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
@@ -230,21 +231,58 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expectVisibleFocusTarget(layoutTrigger);
   });
 
-  it("closes the view drawer after the last pack tile leaves the wall", async () => {
+  it("returns focus once to the Layout button when the last pack tile leaves and the drawer was opened from Layout", async () => {
     const { settings, mosaic, bindThisView } = mountLiveFixture();
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:disk"]);
     bindThisView(PACK);
+    const layoutTrigger = mosaicLayoutPickerTrigger(settings);
+    layoutTrigger.focus();
     settings.openView(PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     settings.clearViewDrawerStatus();
 
-    const layoutTrigger = mosaicLayoutPickerTrigger(settings);
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
     pickMosaicSlot(settings, 0, "plugin:memory");
     pickMosaicSlot(settings, 1, "plugin:disk");
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
     expect(settings.isOpen).toBe(false);
     expect(viewDrawerStatusLine(settings)).toBeNull();
+    expect(focusSpy).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(layoutTrigger);
+    focusSpy.mockRestore();
+  });
+
+  it("returns focus once to the pane menu cog when the last pack tile leaves and the drawer was opened from that menu", async () => {
+    const { settings, mosaic, bindThisView } = mountLiveFixture();
+    applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:disk"]);
+    const paneCog = makeViewCogButton({
+      className: "mosaic-pane-cog",
+      pane: PACK,
+      ariaLabel: "this pane settings",
+      onClick: () => {
+        bindThisView(PACK);
+        settings.openView(PACK);
+      },
+    });
+    document.body.append(paneCog);
+    paneCog.focus();
+    paneCog.click();
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    settings.clearViewDrawerStatus();
+
+    const layoutTrigger = mosaicLayoutPickerTrigger(settings);
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
+    pickMosaicSlot(settings, 0, "plugin:memory");
+    pickMosaicSlot(settings, 1, "plugin:disk");
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+    expect(settings.isOpen).toBe(false);
+    expect(viewDrawerStatusLine(settings)).toBeNull();
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(paneCog);
+    expect(document.activeElement).not.toBe(layoutTrigger);
+    focusSpy.mockRestore();
+    paneCog.remove();
   });
 });
