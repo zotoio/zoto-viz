@@ -239,15 +239,24 @@ vec3 beaconCol(vec3 ro, vec3 rd) {
 
 vec3 mobCol(vec3 ro, vec3 rd) {
   vec3 col = vec3(0.0);
+  int n = int(floor(slot(15) / 256.0));
+  if (n <= 0) return col;
+  vec3 cam = vec3(slot(1), slot(2), slot(3));
+  float phase = slot(7) * 62.83185;
   for (int i = 0; i < 6; i++) {
-    int base = 64 + i * 4;
-    vec3 mp = vec3(slot(base), slot(base + 1), slot(base + 2));
-    float sz = slot(base + 3);
-    if (sz < 0.1 || sz >= 0.95) continue;
-    vec3 h = mp - ro;
-    float t = dot(h, rd);
+    if (i >= n) break;
+    float fi = float(i);
+    float h = fract(fi * 0.27 + slot(8) * 0.0001);
+    float ang = phase * (0.3 + h) + fi * 2.0;
+    vec3 mp = vec3(
+      cam.x + cos(ang) * (5.0 + h * 6.0),
+      cam.y + 4.0 + sin(phase + fi) * 0.5,
+      cam.z + sin(ang) * (5.0 + h * 6.0));
+    float sz = 0.5;
+    vec3 hv = mp - ro;
+    float t = dot(hv, rd);
     if (t < 0.0) continue;
-    vec3 q = h - rd * t;
+    vec3 q = hv - rd * t;
     float d = length(q);
     if (d < sz) col += vec3(0.85, 0.55, 0.35) * (1.0 - d / sz);
   }

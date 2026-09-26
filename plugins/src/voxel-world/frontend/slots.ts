@@ -72,7 +72,13 @@ export function packSlot0(
   slot0Buf[VOX_SLOT.weather] = weatherId(o.weather);
   slot0Buf[VOX_SLOT.camMode] = camId(o.camera);
   slot0Buf[VOX_SLOT.camSpeed] = o.cameraSpeed;
-  slot0Buf[VOX_SLOT.flags] = (o.clouds ? 1 : 0) | (o.reducedMotion ? 2 : 0) | (live.metricLabel << 2) | (presetId(o.preset) << 4);
+  const mobN = Math.min(o.caps.maxMobs, Math.max(0, Math.round(o.mobs)));
+  slot0Buf[VOX_SLOT.flags] =
+    (o.clouds ? 1 : 0)
+    | (o.reducedMotion ? 2 : 0)
+    | (live.metricLabel << 2)
+    | (presetId(o.preset) << 4)
+    | (mobN << 8);
   slot0Buf[VOX_SLOT.sunX] = sx;
   slot0Buf[VOX_SLOT.sunY] = sy;
   slot0Buf[VOX_SLOT.sunZ] = sz;
