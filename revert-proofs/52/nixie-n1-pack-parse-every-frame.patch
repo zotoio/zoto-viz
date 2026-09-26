@@ -1,22 +1,12 @@
+diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
+index 389e5e2..0ef79ca 100644
 --- a/web/src/plugins/viz-pack-host.ts
 +++ b/web/src/plugins/viz-pack-host.ts
-@@ -264,15 +264,15 @@
-       break;
+@@ -78,7 +78,6 @@ export function syncNixiePackScope(opts?: Record<string, string> | null): void {
+       changed = true;
      }
-     case "nixie-clock": {
--      syncNixiePackScope(opts);
--      nixieActiveLook = nixieScopedLook;
-       const peak = Math.min(1, (frame.talkers[0]?.rate ?? 0) / 180);
-+      const look = parseNixieLook(opts);
-+      nixieActiveLook = look;
-       handlers.writeBuffer(0, packNixieWallBuffer(
-         hostNixieClock,
--        nixieActiveLook,
-+        look,
-         frame.audio,
-         peak,
--        nixiePackCanvas,
-+        nixieCanvasSize(typeof document !== "undefined" ? document : null),
-       ));
-       handlers.writeUniform("uAudio", frame.audio);
-       handlers.writeUniform("uAccent", [1.0, 0.38, 0.06]);
+   }
+-  if (!changed) return;
+   nixieScopedLook = parseNixieLook(opts, nixieScopedLook);
+ }
+ 

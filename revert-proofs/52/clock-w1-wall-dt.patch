@@ -1,9 +1,11 @@
+diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
+index a9b3133..88b2491 100644
 --- a/web/src/plugins/viz-host.ts
 +++ b/web/src/plugins/viz-host.ts
 @@ -1,5 +1,5 @@
  import type { Device, StateMsg } from "../core/types";
--import { vizBuildCostMs, vizBuildCostTicks, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
-+import { vizBuildCostMs, vizBuildCostTicks, vizClockMs, vizFrameEpochSec, vizWallMs } from "../core/viz-clock";
+-import { vizBuildCostMs, vizBuildCostTicksForTile, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
++import { vizBuildCostMs, vizBuildCostTicksForTile, vizClockMs, vizFrameEpochSec, vizWallMs } from "../core/viz-clock";
  import { type MonoMs, monoMs, monoMsDeltaSec } from "../core/viz-time";
  import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
  import { VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";

@@ -1,86 +1,12 @@
 diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index c594dd2..52a5515 100644
+index 116f984..52a5515 100644
 --- a/web/src/app/main.ts
 +++ b/web/src/app/main.ts
-@@ -98,6 +98,12 @@ import { bootSession, apiFetch } from "../core/http";
- import { addPresentListener } from "../core/fps";
- import { markPresent, presentInterval } from "../core/present-clock";
- import { readDevTileCostOnWallBuild } from "../core/viz-dev-tile-cost";
-+import { applyDevVizWallClockQuery } from "../core/viz-wall-clock-dev";
-+import { cachedModeOpts, invalidateVizModeOptsCache } from "./main-viz-opts";
-+import {
-+  bindMosaicTileBudgetLines,
-+  mosaicTileBudgetLines,
-+} from "./main-viz-tile-lines";
- import { vizClockMs } from "../core/viz-clock";
- import { broadcastPluginUbo } from "./viz-plugin-ubo";
- import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
-@@ -355,7 +361,7 @@ function syncVizBudgetTileScope(): void {
-   const key = scopeIds.join("\0");
-   if (key === vizTileScopeKey) return;
-   vizTileScopeKey = key;
--  readDevTileCostOnWallBuild(location.search);
-+  readDevTileCostOnWallBuild(location.search, scopeIds);
-   syncVizTileScope(scopeIds);
-   vizBudget.setTileId(mosaic?.on ? (mosaic.mainMode || scopeIds[0] || "main") : "main");
-   if (mosaic?.on) vizHud.syncMosaicTileHudLines(scopeIds);
-@@ -546,17 +552,20 @@ async function syncWifiWatch(): Promise<void> {
+@@ -552,6 +552,7 @@ async function syncWifiWatch(): Promise<void> {
  }
  
  function optsFor(m: ViewMode): Record<string, string> {
--  const o = defaultOpts(m);
--  if (m.pluginId) {
--    const spec = pluginSpecForMode(m.id);
--    if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
--  } else {
--    for (const opt of m.options ?? []) {
--      const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
--      if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
 +  invalidateVizModeOptsCache();
-+  return cachedModeOpts(m, () => {
-+    const o = defaultOpts(m);
-+    if (m.pluginId) {
-+      const spec = pluginSpecForMode(m.id);
-+      if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
-+    } else {
-+      for (const opt of m.options ?? []) {
-+        const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
-+        if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
-+      }
-     }
--  }
--  return o;
-+    return o;
-+  });
- }
- 
- function arcadeControls(m: ViewMode): HTMLElement[] {
-@@ -1051,9 +1060,9 @@ function feed(m: StateMsg): void {
-     }
-     const activeTiles = vizTileBudgetRegistry.activeTileCount();
-     const budgetTileId = mosaic?.on ? (mosaic.mainMode || mosaic.tileIds[0] || "main") : "main";
--    const tileLines = mosaic?.on
--      ? mosaic.tileIds.map((id) => ({ tileId: id, tile: vizTileBudgetRegistry.getTile(id) }))
--      : undefined;
-+    const tileLinesRaw = mosaic?.on ? mosaicTileBudgetLines(mosaic.tileIds) : undefined;
-+    if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
-+    const tileLines = tileLinesRaw;
-     vizHud.tick({
-       packId,
-       packName: active?.name ?? packId ?? "",
-@@ -1104,6 +1113,7 @@ function setRedaction(on: boolean): void {
-   mosaic?.eachGraph((s) => { if (s !== scene) s.refresh(); });
- }
- setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
-+applyDevVizWallClockQuery(location.search);
- 
- // ---------------------------------------------------------------- settings cog: allow/block filters + the moved show / privacy switches
- 
-@@ -1117,6 +1127,7 @@ settings = new Settings({
-   onPersist: () => touch(),
- });
- settings.onPluginChange = () => {
-+  invalidateVizModeOptsCache();
-   onPluginFields();
-   if (!mosaic?.on) return;
-   const focus = mosaic.focusedId;
+   return cachedModeOpts(m, () => {
+     const o = defaultOpts(m);
+     if (m.pluginId) {

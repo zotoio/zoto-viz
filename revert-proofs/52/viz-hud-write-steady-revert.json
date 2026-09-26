@@ -1,0 +1,7 @@
+{
+  "row": "W4 revert HUD metric textContent every frame",
+  "runner": "vitest",
+  "testFile": "web/src/ui/viz-hud-write-steady.test.ts",
+  "testName": "W4: 600 steady frames → 0 textContent/title writes after first paint",
+  "excerpt": "AssertionError: expected \"spy\" to not be called at all, but actually been called"
+}

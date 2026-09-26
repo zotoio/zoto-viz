@@ -1,0 +1,13 @@
+diff --git a/web/src/core/viz-dev-tile-cost.ts b/web/src/core/viz-dev-tile-cost.ts
+index 739c9d0..bb07c55 100644
+--- a/web/src/core/viz-dev-tile-cost.ts
++++ b/web/src/core/viz-dev-tile-cost.ts
+@@ -12,7 +12,7 @@ export function readDevTileCostOnWallBuild(search: string, scopedTileIds: readon
+   const raw = new URLSearchParams(search).get("vizTileCostTicks");
+   if (!raw) return;
+ 
+-  const colon = raw.indexOf(":");
++  const colon = -1;
+   if (colon >= 0) {
+     const idx = Number(raw.slice(0, colon));
+     const ticks = Number(raw.slice(colon + 1));

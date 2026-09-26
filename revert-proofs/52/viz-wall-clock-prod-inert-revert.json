@@ -1,0 +1,7 @@
+{
+  "row": "W6 revert prod ignores vizWallClock query",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-wall-clock-dev.test.ts",
+  "testName": "W6 prod: query is inert when not DEV",
+  "excerpt": "AssertionError: expected <number> to be <same number> // wall clock changed in prod"
+}

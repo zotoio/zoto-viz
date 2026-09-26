@@ -1,0 +1,7 @@
+{
+  "row": "F4 dev revert per-tile vizTileCostTicks index parse",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-dev-tile-cost.test.ts",
+  "testName": "F4 dev: per-tile index — only tile 0 skips at 2×2",
+  "excerpt": "AssertionError: expected 0 to be greater than 0"
+}

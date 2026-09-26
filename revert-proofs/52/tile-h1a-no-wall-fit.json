@@ -1,7 +1,7 @@
 {
-  "row": "H1 revert A",
-  "test": "web/src/plugins/dogfood-tile-hud.test.ts H2 50 ms at 2\u00d72",
-  "excerpt": "AssertionError: expected 'limited' to be 'over_budget'",
-  "testFile": "web/src/plugins/dogfood-tile-hud-revert.test.ts",
-  "testName": "H1 revert A: without wall-fit check, 50 ms tile shows LIMITED"
+  "row": "H1 revert A without wall-fit over_budget",
+  "runner": "vitest",
+  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
+  "testName": "H2: 50 ms at 2×2 — 55 skipped/s at i=119 over budget; 1×1 → 40 skipped/s over budget",
+  "excerpt": "AssertionError: expected 'limited' to be 'over_budget' // Object.is equality"
 }
