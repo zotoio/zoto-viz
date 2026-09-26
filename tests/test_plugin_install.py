@@ -451,7 +451,7 @@ def test_retry_and_scan_race_single_install(
     install_calls = 0
     hold = threading.Event()
     release = threading.Event()
-    real_locked = pi._install_zip_to_runtime_locked
+    real_locked = pi._install_staged_to_runtime_locked
 
     def wrapped(*args, **kwargs):
         nonlocal install_calls
@@ -460,7 +460,7 @@ def test_retry_and_scan_race_single_install(
         assert release.wait(timeout=5)
         return real_locked(*args, **kwargs)
 
-    monkeypatch.setattr(pi, "_install_zip_to_runtime_locked", wrapped)
+    monkeypatch.setattr(pi, "_install_staged_to_runtime_locked", wrapped)
 
     go = threading.Event()
 
