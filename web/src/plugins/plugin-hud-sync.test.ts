@@ -39,9 +39,30 @@ describe("plugin HUD sync", () => {
       spec,
       captions,
       hud,
+      false,
     );
     expect(hud.showSettingsCaptionHud).toHaveBeenCalledWith("Settings fixture");
     expect(hud.setActive).not.toHaveBeenCalled();
     expect(hud.setPackCaption).toHaveBeenCalledWith("X · Alpha");
+  });
+
+  it("does not use the global settings HUD when mosaic is on", () => {
+    const spec = loadSettingsDeclFixture();
+    const hud = {
+      setActive: vi.fn(),
+      showSettingsCaptionHud: vi.fn(),
+      hideSettingsCaptionHud: vi.fn(),
+      setPackCaption: vi.fn(),
+    };
+    const captions = new Map<string, string | null>([["plugin:settings-fixture", "X · Alpha"]]);
+    syncPluginHudForMode(
+      { id: "plugin:settings-fixture", pluginId: "settings-fixture", label: "Fixture" },
+      spec,
+      captions,
+      hud,
+      true,
+    );
+    expect(hud.showSettingsCaptionHud).not.toHaveBeenCalled();
+    expect(hud.hideSettingsCaptionHud).toHaveBeenCalled();
   });
 });

@@ -72,7 +72,11 @@ import {
 } from "../plugins/plugin";
 import { packConfigValues } from "../plugins/plugin-settings";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
-import { hudCaptionFromOpts, syncPluginHudForMode } from "../plugins/plugin-hud-sync";
+import {
+  hudCaptionFromOpts,
+  syncMosaicPluginCaptions,
+  syncPluginHudForMode,
+} from "../plugins/plugin-hud-sync";
 import { setPluginHudCaptionSink } from "../plugins/plugin-ui";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
@@ -369,9 +373,34 @@ let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
 const pluginHudCaptions = new Map<string, string | null>();
 
+function mosaicHudOn(): boolean {
+  return !!(mosaic?.on && !document.body.classList.contains("stage-only"));
+}
+
+function syncMosaicPluginHudCaptions(): void {
+  if (!mosaic?.on) return;
+  syncMosaicPluginCaptions(
+    {
+      on: true,
+      tileIds: mosaic.tileIds,
+      setPaneSettingsCaption: (id, text) => mosaic!.setPaneSettingsCaption(id, text),
+    },
+    pluginHudCaptions,
+    (tileId) => {
+      const m = modeById(tileId);
+      if (!m.pluginId) return null;
+      const spec = pluginSpecForMode(tileId);
+      if (!spec?.settings?.hud?.labelFields?.length) return null;
+      const fields = pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config);
+      return { mode: m, spec, opts: optsFor(m), fields };
+    },
+  );
+}
+
 setPluginHudCaptionSink((spec, caption) => {
   const modeId = pluginViewId(spec.id, spec.instanceId);
   pluginHudCaptions.set(modeId, caption);
+  syncMosaicPluginHudCaptions();
 });
 
 addPresentListener((ts) => {
@@ -551,7 +580,8 @@ function onPluginFields(): void {
   const spec = pluginSpecForMode(m.id);
   if (spec && pluginHasFrontend(spec)) scheduleSandboxSetConfig(spec.id, sandboxPluginConfig(spec));
   else cancelScheduledSandboxConfig();
-  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud);
+  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
+  syncMosaicPluginHudCaptions();
   const cap = pluginHudCaptions.get(m.id);
   morphCopy($("hint"), cap ? `${spec?.name ?? m.label} · ${cap}` : m.hint);
   void syncWifiWatch();
@@ -698,7 +728,8 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     tsWatchHash = spec.hash;
     const m = modeById(modeSel.value);
     if (m.pluginId === spec.id) {
-      syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud);
+      syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
+      syncMosaicPluginHudCaptions();
     }
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
@@ -994,8 +1025,8 @@ function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: Plugin
   } else {
     pluginHudCaptions.delete(m.id);
   }
-  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud);
-  if (cap) vizHud.setPackCaption(cap);
+  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
+  syncMosaicPluginHudCaptions();
   morphCopy($("hint"), hint);
   const legend = $("legend");
   const paint = (): void => {

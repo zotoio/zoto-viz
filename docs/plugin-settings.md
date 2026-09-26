@@ -27,4 +27,6 @@ Legacy top-level **`presets` / `presetField` / `hud` / `sections`** on `plugin.y
 
 ## Mosaic HUD
 
-There is a **single** stage HUD line. In mosaic mode it shows the **focused tile’s** settings caption (per-mode caption map keyed by `plugin:<id>` or `plugin:<id>:<instance>`), not separate overlays per tile.
+Each mosaic **tile** paints its own settings caption inside that tile’s frame (`.mosaic-pane-settings-caption`), keyed by the tile’s view mode id (`plugin:<id>` or `plugin:<id>:<instance>`). The global `VizHud` overlay is for demoscene packs only when the wall is on; plugin `hud.labelFields` captions are never shared across tiles.
+
+Single-view (non-mosaic) mode still uses the header hint and, when applicable, the settings `VizHud` line.

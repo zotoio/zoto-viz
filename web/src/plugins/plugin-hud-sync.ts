@@ -12,17 +12,63 @@ export type VizHudLike = {
   setPackCaption: (suffix: string | null) => void;
 };
 
-/** Single overlay HUD: shows the focused view's settings caption (mosaic uses focused tile id). */
+export type MosaicPluginCaptionHost = {
+  on: boolean;
+  tileIds: readonly string[];
+  setPaneSettingsCaption: (tileId: string, text: string | null) => void;
+};
+
+export type MosaicTileHudRow = {
+  mode: { id: string; pluginId?: string | null; label: string };
+  spec: PluginView;
+  opts: Record<string, string>;
+  fields: PluginField[];
+};
+
+/** Paint each mosaic tile's settings caption inside that tile's frame. */
+export function syncMosaicPluginCaptions(
+  host: MosaicPluginCaptionHost,
+  captions: PluginHudCaptionMap,
+  resolveTile: (tileId: string) => MosaicTileHudRow | null,
+): void {
+  if (!host.on) return;
+  for (const tileId of host.tileIds) {
+    const row = resolveTile(tileId);
+    if (!row?.spec.settings?.hud?.labelFields?.length) {
+      host.setPaneSettingsCaption(tileId, null);
+      continue;
+    }
+    const suffix = captions.get(row.mode.id) ?? buildPluginHudCaption(row.spec, row.fields, row.opts);
+    host.setPaneSettingsCaption(
+      tileId,
+      suffix ? `${row.spec.name} · ${suffix}` : null,
+    );
+  }
+}
+
+/** Global VizHud: demoscene packs only when mosaic is on (settings captions are per-tile). */
 export function syncPluginHudForMode(
   m: { id: string; pluginId?: string | null; label: string },
   spec: PluginView | null,
   captions: PluginHudCaptionMap,
   vizHud: VizHudLike,
+  mosaicOn = false,
 ): void {
   const cap = spec?.settings?.hud?.labelFields?.length
     ? (captions.get(m.id) ?? null)
     : null;
   const demo = normalizeVizDemoPackId(m.pluginId ?? spec?.id);
+  if (mosaicOn) {
+    vizHud.hideSettingsCaptionHud();
+    if (demo) {
+      vizHud.setActive(demo, spec?.name ?? m.label);
+      vizHud.setPackCaption(cap);
+    } else {
+      vizHud.setActive(null, "");
+      vizHud.setPackCaption(null);
+    }
+    return;
+  }
   if (demo) {
     vizHud.setActive(demo, spec?.name ?? m.label);
     vizHud.setPackCaption(cap);
