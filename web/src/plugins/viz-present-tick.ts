@@ -10,15 +10,9 @@ export interface PresentDriveBinding {
   contract: VizPluginContract | undefined;
   tileId: string;
   pluginClock: () => number;
-  stageAspect: () => number;
 }
 
 export function deliverPluginPresentTick(binding: PresentDriveBinding | null, frameMs: number): void {
   if (!binding?.contract?.presentTick) return;
-  binding.sandbox.deliverPresentTick(
-    frameMs,
-    binding.tileId,
-    binding.pluginClock(),
-    binding.stageAspect(),
-  );
+  binding.sandbox.deliverPresentTick(frameMs, binding.tileId, binding.pluginClock());
 }

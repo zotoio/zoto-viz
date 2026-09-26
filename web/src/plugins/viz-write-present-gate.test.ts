@@ -25,7 +25,6 @@ describe("viz.write without presentTick", () => {
       contract: defaultVizContract({ presentTick: false }),
       tileId: "plugin:demo-pack",
       pluginClock: () => 1,
-      stageAspect: () => 16 / 9,
     };
     deliverPluginPresentTick(binding, 16.7);
     deliverPluginPresentTick(binding, 33.4);

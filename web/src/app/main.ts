@@ -347,16 +347,7 @@ function refreshPluginDriveState(spec: PluginView | null, modeId: string): void 
   activePluginSpec = spec;
   const tileId = mosaic?.on ? (mosaic.focusedId || modeId) : modeId;
   presentDrive = spec
-    ? {
-      sandbox,
-      contract: spec.viz,
-      tileId,
-      pluginClock: () => scene.skyTime(),
-      stageAspect: () => {
-        const a = scene.camera.aspect;
-        return Number.isFinite(a) && a > 0 ? a : 16 / 9;
-      },
-    }
+    ? { sandbox, contract: spec.viz, tileId, pluginClock: () => scene.skyTime() }
     : null;
 }
 

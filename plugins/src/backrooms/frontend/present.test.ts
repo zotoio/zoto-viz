@@ -1,12 +1,20 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import FRONT from "../../../plugins/src/backrooms/frontend/index.ts?raw";
-import { BR_SLOT, backroomsSlots } from "../../../plugins/src/backrooms/frontend/director";
+import { BR_SLOT, backroomsSlots } from "./director";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const FRONT = readFileSync(path.join(here, "index.ts"), "utf8");
 
 describe("backrooms presentTick", () => {
   it("reads pluginClock from VizPresentTick (not legacy skyT args)", () => {
     expect(FRONT).toMatch(/onPresent\s*=\s*\(tick\)/);
     expect(FRONT).toMatch(/tick\.pluginClock/);
     expect(FRONT).not.toMatch(/skyT/);
+    expect(FRONT).toMatch(/globalThis\.zoto as VizZoto/);
+    const inlineZoto = ["declare", " const ", "zoto"].join("");
+    expect(FRONT.includes(inlineZoto)).toBe(false);
   });
 
   it("advances simulation from pluginClock", () => {

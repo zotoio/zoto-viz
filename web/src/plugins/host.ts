@@ -163,7 +163,7 @@ export class PluginSandbox {
    * One {@link VizPresentTick} per sandbox per display frame (mosaic tiles share a sandbox).
    * Reuses {@link presentTickPayload}; stops after {@link unload}.
    */
-  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number, aspect?: number): void {
+  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number): void {
     if (!this.caps.includes("viz.write") || !this.vizContract?.presentTick || !this.iframe) return;
     if (frameMs === this.lastPresentFrameMs) return;
     this.lastPresentFrameMs = frameMs;
@@ -172,8 +172,6 @@ export class PluginSandbox {
     tick.tileId = tileId;
     if (pluginClock != null && Number.isFinite(pluginClock)) tick.pluginClock = pluginClock;
     else delete tick.pluginClock;
-    if (aspect != null && Number.isFinite(aspect) && aspect > 0) tick.aspect = aspect;
-    else delete tick.aspect;
     this.iframe.contentWindow?.postMessage(
       { source: "zoto-viz-host", type: "present", tick } satisfies ParentMsg,
       "*",

@@ -1,11 +1,6 @@
 {
   "violations": [
     {
-      "file": "plugins/src/backrooms/frontend/index.ts",
-      "rule": "inline-zoto-declare",
-      "target": "declare-const-zoto"
-    },
-    {
       "file": "plugins/src/blob-mesh/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
