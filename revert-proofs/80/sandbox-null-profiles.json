@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_null_origin_profiles_denied_with_valid_token",
+  "description": "Null Origin profiles denied.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 200 == 403"
+}
