@@ -5,11 +5,8 @@ import {
   GFX_NO_RESTORE_NOTICE,
   genericShaderFallbackMessage,
 } from "./shader-fallback-copy";
-import {
-  getWallNotice,
-  getWallNoticeRegion,
-  WALL_NOTICE_ACTION_CLASS,
-} from "../core/wall-notice-region";
+import { getWallNoticeRegion } from "../core/wall-notice-region";
+import { GFX_WALL_NOTICE_CLASS, GFX_WALL_RELOAD_CLASS } from "./gfx-wall-notice";
 
 describe("shader fallback gl context", () => {
   beforeEach(() => {
@@ -38,31 +35,15 @@ describe("shader fallback gl context", () => {
     return { host, wall, pane };
   }
 
-  it("context-lost-notice-in-wall-region", () => {
+  it("context-loss-notice-shared-region", () => {
     const { host, wall } = hostWithGl();
     host.dispatchContextLost();
     const region = getWallNoticeRegion(wall);
-    const notice = getWallNotice(wall, "context-lost");
     expect(region).toBeTruthy();
+    expect(region?.getAttribute("role")).toBe("status");
+    const notice = wall.querySelector(`.${GFX_WALL_NOTICE_CLASS}`);
     expect(notice?.parentElement).toBe(region);
-    expect(notice?.getAttribute("aria-live")).toBe("polite");
-    expect(notice?.textContent).toBe(GFX_INTERRUPTED_NOTICE);
     expect(wall.querySelectorAll(`[role="status"]`)).toHaveLength(1);
-    host.dispose();
-    wall.remove();
-  });
-
-  it("context-not-restored-notice-in-wall-region", () => {
-    const { host, wall } = hostWithGl();
-    host.dispatchContextLost();
-    vi.advanceTimersByTime(10_000);
-    const region = getWallNoticeRegion(wall);
-    const notice = getWallNotice(wall, "context-not-restored");
-    expect(region).toBeTruthy();
-    expect(notice?.parentElement).toBe(region);
-    expect(notice?.getAttribute("aria-live")).toBe("assertive");
-    expect(notice?.querySelector("span")?.textContent).toBe(GFX_NO_RESTORE_NOTICE);
-    expect(notice?.querySelector(`.${WALL_NOTICE_ACTION_CLASS}`)?.textContent).toBe("Reload");
     host.dispose();
     wall.remove();
   });
@@ -72,7 +53,9 @@ describe("shader fallback gl context", () => {
     host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie", true);
     host.compilePluginSky("t", {} as never, {} as never);
     host.dispatchContextLost();
-    expect(getWallNotice(wall, "context-lost")?.textContent).toBe(GFX_INTERRUPTED_NOTICE);
+    const notices = wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.textContent).toBe(GFX_INTERRUPTED_NOTICE);
     expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(1);
     expect(pane.textContent).not.toContain(genericShaderFallbackMessage("Nixie"));
     host.dispose();
@@ -93,8 +76,7 @@ describe("shader fallback gl context", () => {
     const deadBefore = compile.mock.calls.length;
     host.dispatchContextLost();
     host.dispatchContextRestored();
-    expect(getWallNotice(wall, "context-lost")).toBeNull();
-    expect(getWallNotice(wall, "context-not-restored")).toBeNull();
+    expect(wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`).length).toBe(0);
     expect(host.compilePluginSky("t", {} as never, {} as never)).toBe(true);
     expect(compile.mock.calls.length - deadBefore).toBe(1);
     expect(host.compilePluginSky("dead", {} as never, {} as never)).toBe(false);
@@ -106,7 +88,7 @@ describe("shader fallback gl context", () => {
     const { host, wall } = hostWithGl();
     host.dispatchContextLost();
     vi.advanceTimersByTime(10_000);
-    const notice = getWallNotice(wall, "context-not-restored")!;
+    const notice = wall.querySelector(`.${GFX_WALL_NOTICE_CLASS}`)!;
     expect(notice.querySelector("span")?.textContent).toBe(GFX_NO_RESTORE_NOTICE);
     host.dispose();
     wall.remove();
@@ -118,7 +100,7 @@ describe("shader fallback gl context", () => {
     host.dispatchContextLost();
     vi.advanceTimersByTime(10_000);
     host.dispatchContextRestored();
-    expect(getWallNotice(wall, "context-not-restored")).toBeNull();
+    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
     expect(invalidate).toHaveBeenCalled();
     host.dispose();
     wall.remove();

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
-import { getWallNotice } from "../core/wall-notice-region";
+import { GFX_WALL_NOTICE_CLASS, GFX_WALL_RELOAD_CLASS } from "./gfx-wall-notice";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 const CLEAR = 0x050a16;
@@ -133,8 +133,8 @@ describe("shader fallback context gen", () => {
     host.dispatchContextLost();
     host.dispatchContextRestored();
     vi.advanceTimersByTime(10_000);
-    expect(getWallNotice(wall, "context-lost")).toBeNull();
-    expect(getWallNotice(wall, "context-not-restored")).toBeNull();
+    expect(wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`).length).toBe(0);
+    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
     host.dispose();
     wall.remove();
   });
