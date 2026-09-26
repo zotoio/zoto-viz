@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import zipfile
@@ -16,6 +17,15 @@ from service import plugins
 
 
 MINIMAL = "id: local-demo\nname: Local demo\nversion: 1\n"
+
+
+def _hash_tree(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(root)).encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def _zip(files: dict[str, str | bytes]) -> bytes:
@@ -233,32 +243,127 @@ def test_invalid_zip_leaves_no_drop_zone_or_runtime(
     assert not (paths.plugin_local_runtime_dir() / "ghost-pack").is_dir()
 
 
+def _v1_keep_pack_files() -> dict[str, str]:
+    return {
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
+        "visualisation.yml": GOOD_INSTALL_VIZ,
+    }
+
+
+def _bad_v2_keep_pack_viz() -> str:
+    return (
+        "engine: graph\n"
+        "settings:\n"
+        "  presets:\n"
+        "    - id: a\n"
+        "      label: A\n"
+        "      values: {gain: 1}\n"
+        "config:\n"
+        "  - key: gain\n"
+        "    type: number\n"
+        "    min: 0\n"
+        "    max: 10\n"
+    )
+
+
+def test_blocked_v2_overwrite_preserves_v1_catalog_message_and_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    plugin_local.publish_local({"files": _v1_keep_pack_files()})
+    runtime = paths.plugin_local_runtime_dir() / "keep-pack"
+    tree_before = _hash_tree(runtime)
+    blocked = plugin_local.publish_local({
+        "files": {
+            "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+            "visualisation.yml": _bad_v2_keep_pack_viz(),
+        },
+        "overwrite": True,
+    })
+    assert blocked["ok"] is False
+    assert blocked["error"] == "install_blocked"
+    assert blocked["message"] == "v2 was blocked; v1 is still running"
+    assert blocked["blockedVersion"] == 2
+    assert blocked["runningVersion"] == 1
+    assert blocked["id"] == "keep-pack"
+    assert _hash_tree(runtime) == tree_before
+    row = next(p for p in plugins.scan()["plugins"] if p["id"] == "keep-pack")
+    assert row["version"] == 1
+    assert row["origin"] == "local"
+    plugins.validate_plugin_home(runtime)
+
+
+def test_revert_proof_blocked_overwrite_tree_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    """Revert: skip _validate_incoming_zip guard → tree hash diverges after bad v2.
+
+    E       AssertionError: assert 'abc...' == 'def...'
+    """
+    _repo(tmp_path, monkeypatch)
+    plugin_local.publish_local({"files": _v1_keep_pack_files()})
+    runtime = paths.plugin_local_runtime_dir() / "keep-pack"
+    before = _hash_tree(runtime)
+    plugin_local.publish_local({
+        "files": {
+            "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+            "visualisation.yml": _bad_v2_keep_pack_viz(),
+        },
+        "overwrite": True,
+    })
+    assert _hash_tree(runtime) == before
+
+
+def test_revert_proof_blocked_overwrite_catalog_stays_v1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    """Revert: commit zip before validate → scan() reports version 2.
+
+    E       AssertionError: assert 2 == 1
+    """
+    _repo(tmp_path, monkeypatch)
+    plugin_local.publish_local({"files": _v1_keep_pack_files()})
+    plugin_local.publish_local({
+        "files": {
+            "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+            "visualisation.yml": _bad_v2_keep_pack_viz(),
+        },
+        "overwrite": True,
+    })
+    row = next(p for p in plugins.scan()["plugins"] if p["id"] == "keep-pack")
+    assert row["version"] == 1
+
+
+def test_revert_proof_blocked_overwrite_user_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    """Revert: plain ValueError string → no #35 message on publish_local.
+
+    E       AssertionError: assert 'presetField' == 'v2 was blocked; v1 is still running'
+    """
+    _repo(tmp_path, monkeypatch)
+    plugin_local.publish_local({"files": _v1_keep_pack_files()})
+    blocked = plugin_local.publish_local({
+        "files": {
+            "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+            "visualisation.yml": _bad_v2_keep_pack_viz(),
+        },
+        "overwrite": True,
+    })
+    assert blocked["message"] == "v2 was blocked; v1 is still running"
+
+
 def test_invalid_overwrite_keeps_previous_pack(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
 ) -> None:
     _repo(tmp_path, monkeypatch)
-    good = _zip({
-        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
-        "visualisation.yml": GOOD_INSTALL_VIZ,
-    })
+    good = _zip(_v1_keep_pack_files())
     plugin_local.install_local_zip(good)
     bad = _zip({
-        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 1\n",
-        "visualisation.yml": (
-            "engine: graph\n"
-            "settings:\n"
-            "  presets:\n"
-            "    - id: a\n"
-            "      label: A\n"
-            "      values: {gain: 1}\n"
-            "config:\n"
-            "  - key: gain\n"
-            "    type: number\n"
-            "    min: 0\n"
-            "    max: 10\n"
-        ),
+        "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
+        "visualisation.yml": _bad_v2_keep_pack_viz(),
     })
-    with pytest.raises(ValueError):
+    with pytest.raises(plugin_local.InstallBlockedError, match="v2 was blocked; v1 is still running"):
         plugin_local.install_local_zip(bad, overwrite=True)
     plugins.validate_plugin_home(paths.plugin_local_runtime_dir() / "keep-pack")
 
@@ -288,7 +393,7 @@ def test_fixed_zip_reinstalls_without_overwrite_after_failed_overwrite(
             "    max: 10\n"
         ),
     })
-    with pytest.raises(ValueError, match="presetField"):
+    with pytest.raises(plugin_local.InstallBlockedError, match="v2 was blocked"):
         plugin_local.install_local_zip(bad, overwrite=True)
     fixed = _zip({
         "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
