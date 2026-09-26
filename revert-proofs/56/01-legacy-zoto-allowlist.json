@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/plugins/pack-lint.test.ts",
+  "testFile": "src/plugins/pack-lint.test.ts",
   "testName": "pack lint guardrails > off-allowlist inline zoto declare fails disallowedLegacyZoto guard",
   "description": "disallowedLegacyZoto must block declare const zoto on packs not on LEGACY_DECLARE_ZOTO_PACK_IDS."
 }

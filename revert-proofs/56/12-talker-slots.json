@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/plugins/starter-template.test.ts",
+  "testFile": "src/plugins/starter-template.test.ts",
   "testName": "pack starter template > talker slots stay stable across reorder",
   "description": "Talker slot assignment ignores reorder."
 }
