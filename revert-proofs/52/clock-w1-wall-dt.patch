@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
-index a9b3133..88b2491 100644
+index 3bddd04..c964ea5 100644
 --- a/web/src/plugins/viz-host.ts
 +++ b/web/src/plugins/viz-host.ts
 @@ -1,5 +1,5 @@
@@ -13,8 +13,8 @@ index a9b3133..88b2491 100644
    bind?: SourceBind | Record<string, string>,
  ): VizDataFrame {
    const t = vizFrameEpochSec(state.ts);
--  const nowClock = monoMs(vizClockMs());
-+  const nowClock = monoMs(vizWallMs());
+-  const nowClock = vizClockMs();
++  const nowClock = vizWallMs();
    const dt = prevVizClockMs > monoMs(0) ? monoMsDeltaSec(prevVizClockMs, nowClock) : 0;
    const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
    return {
