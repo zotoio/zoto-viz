@@ -145,5 +145,6 @@ describe("RenderHost frame allocations", () => {
     expect(renderHostMirrorTelemetry.scopeSyncRuns).toBe(1);
     expect(renderHostMirrorTelemetry.viewSortRuns).toBe(1);
     expect(renderHostMirrorTelemetry.getContextAttributesCalls).toBe(1);
+    expect(renderHostMirrorTelemetry.scopeFingerprintBuilds).toBe(0);
   });
 });
