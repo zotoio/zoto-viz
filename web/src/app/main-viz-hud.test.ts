@@ -38,6 +38,6 @@ describe("main HUD tile budget wiring", () => {
       activeTiles: 4,
     });
     const skipEl = parent.querySelector(".viz-hud-skip");
-    expect(skipEl?.textContent).toBe("LIMITED · sharing frame with 4 tiles · 40 skipped/s");
+    expect(skipEl?.textContent).toBe("LIMITED · sharing frame with 4 tiles · updating every 3rd frame");
   });
 });

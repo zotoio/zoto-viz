@@ -1,0 +1,7 @@
+{
+  "row": "Amendment 6 L2 revert — LIMITED label from live HUD ring skip rate",
+  "runner": "vitest",
+  "testFile": "src/core/viz-wall-limited-harness.test.ts",
+  "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > Amendment 6 L2: 3000 @ 2×2 LIMITED text is every 3rd frame$",
+  "excerpt": "AssertionError: expected 'LIMITED · sharing frame with 4 tiles · 40 skipped/s' to be 'LIMITED · sharing frame with 4 tiles · updating every 3rd frame'"
+}

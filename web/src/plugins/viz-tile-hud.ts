@@ -75,6 +75,8 @@ export function computeTileHudViewerState(
 export interface TileHudChrome {
   state: TileHudViewerState;
   limitedLabel: string | null;
+  /** Round-up cadence k shown in the LIMITED label (not from the HUD ring). */
+  cadenceK: number;
   skipRatePerSec: number;
   useFailTone: boolean;
 }
@@ -89,11 +91,12 @@ export function tileHudChrome(
   const state = computeTileHudViewerState(samples, nowTick, tile.lastBuildCostTicks);
   const limitedLabel =
     state === "limited"
-      ? tileLimitedSharingLabel(activeTiles, skipRate)
+      ? tileLimitedSharingLabel(activeTiles, tile.cadenceK)
       : null;
   return {
     state,
     limitedLabel,
+    cadenceK: tile.cadenceK,
     skipRatePerSec: skipRate,
     useFailTone: false,
   };
@@ -127,11 +130,12 @@ export function wallHudChrome(
   );
   const limitedLabel =
     state === "limited" && activeTiles >= 2
-      ? tileLimitedSharingLabel(activeTiles, skipRate)
+      ? tileLimitedSharingLabel(activeTiles, budgetTile.cadenceK)
       : null;
   return {
     state,
     limitedLabel,
+    cadenceK: budgetTile.cadenceK,
     skipRatePerSec: skipRate,
     useFailTone: state === "over_budget",
   };

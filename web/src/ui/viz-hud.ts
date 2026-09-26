@@ -367,7 +367,7 @@ export class VizHud {
         ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
         : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
       const limited = chrome.state === "limited"
-        ? this.skipLabelLine.limitedLabel(activeTiles, chrome.skipRatePerSec)
+        ? this.skipLabelLine.limitedLabel(activeTiles, chrome.cadenceK)
         : null;
       const skipText = limited ?? formatSkipRate(rate);
       this.skipLabelLine.writeText(this.skipEl, skipText);

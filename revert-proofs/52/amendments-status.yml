@@ -1,0 +1,9 @@
+# PR #52 amendment rows (mirror into PR status table between markers).
+amendments:
+  - id: 5
+    title: "TSE ceil cadence; no carry-forward (P0–P4)"
+    status: done
+    sha: 535ea89
+  - id: 6
+    title: "LIMITED label from cadence k + ordinals (L1–L4)"
+    status: done

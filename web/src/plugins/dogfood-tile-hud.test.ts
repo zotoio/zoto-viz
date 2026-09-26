@@ -39,15 +39,15 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     vizTileBudgetRegistry.reset();
   });
 
-  it("H1: 10 ms at 2×2 — debt 1748 → 2 skips per build; i=119 → 20 frames, 40 skipped/s LIMITED label", () => {
+  it("H1: 10 ms at 2×2 — cadence k=3; i=119 → 20 frames, LIMITED every 3rd frame label", () => {
     // ceil(4×3000/5010)=3 → build every 3rd attempt from frame 0.
-    // Window at i=119: 60 attempts → 20 builds, 40 skips → 40/s.
+    // Window at i=119: 60 attempts → 20 builds, 40 skips → 40/s ring (label uses k, not ring).
     const tiles = tileIdsForLayout(2, 2);
     const reg = freshHudRegistry(tiles);
     const row = runTileHudSim(reg, "t0", 120, () => VIZ_COST_TICKS_10MS, 4, 119);
     expect(row.delivered).toBe(40);
     expect(row.skipRateAt).toBe(40);
-    expect(row.limitedLabel).toBe("LIMITED · sharing frame with 4 tiles · 40 skipped/s");
+    expect(row.limitedLabel).toBe("LIMITED · sharing frame with 4 tiles · updating every 3rd frame");
     expect(row.state).toBe("limited");
 
     const solo = freshHudRegistry(["solo"]);

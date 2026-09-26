@@ -7,22 +7,17 @@ export interface TileHudLabelStats {
 
 export interface TileHudLabelLine {
   readonly stats: TileHudLabelStats;
-  limitedLabel(activeTiles: number, skipsPerSec: number): string | null;
+  limitedLabel(activeTiles: number, cadenceK: number): string | null;
   writeText(el: HTMLElement, text: string): void;
   bumpBuild(): void;
   bumpWrite(): void;
   reset(): void;
 }
 
-function rateKey(skipsPerSec: number): string {
-  if (skipsPerSec < 0.05) return "0";
-  return skipsPerSec < 10 ? skipsPerSec.toFixed(1) : String(Math.round(skipsPerSec));
-}
-
 export function createTileHudLabelLine(): TileHudLabelLine {
   const stats: TileHudLabelStats = { builds: 0, writes: 0 };
   let lastTileCount = -1;
-  let lastRateKey = "";
+  let lastCadenceK = -1;
   let cachedLabel: string | null = null;
 
   return {
@@ -33,24 +28,23 @@ export function createTileHudLabelLine(): TileHudLabelLine {
       stats.builds = 0;
       stats.writes = 0;
       lastTileCount = -1;
-      lastRateKey = "";
+      lastCadenceK = -1;
       cachedLabel = null;
     },
-    limitedLabel(activeTiles: number, skipsPerSec: number): string | null {
+    limitedLabel(activeTiles: number, cadenceK: number): string | null {
       if (activeTiles < 2) {
         cachedLabel = null;
         lastTileCount = -1;
-        lastRateKey = "";
+        lastCadenceK = -1;
         return null;
       }
-      const key = rateKey(skipsPerSec);
-      if (activeTiles === lastTileCount && key === lastRateKey && cachedLabel !== null) {
+      if (activeTiles === lastTileCount && cadenceK === lastCadenceK && cachedLabel !== null) {
         return cachedLabel;
       }
       lastTileCount = activeTiles;
-      lastRateKey = key;
+      lastCadenceK = cadenceK;
       stats.builds++;
-      cachedLabel = tileLimitedSharingLabel(activeTiles, skipsPerSec);
+      cachedLabel = tileLimitedSharingLabel(activeTiles, cadenceK);
       return cachedLabel;
     },
     writeText(el: HTMLElement, text: string): void {

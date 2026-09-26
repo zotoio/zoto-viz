@@ -15,6 +15,8 @@ export interface WallHarnessResult {
   delivered: number;
   limitedWallLines: number;
   perTileLimitedLines: number;
+  /** Final `.viz-hud-skip` text when LIMITED was shown. */
+  wallLimitedText: string | null;
   /** Gaps between consecutive builds (attempt indices). */
   buildGaps: number[];
 }
@@ -87,7 +89,8 @@ export function runWallHarness(
   }
 
   const skipEl = parent.querySelector(".viz-hud-skip");
-  const limitedWall = skipEl?.textContent?.includes("LIMITED") ? 1 : 0;
+  const skipText = skipEl?.textContent ?? null;
+  const limitedWall = skipText?.includes("LIMITED") ? 1 : 0;
   let perTileLimited = 0;
   for (const el of parent.querySelectorAll(".viz-hud-tile-share")) {
     if (el.textContent?.includes("LIMITED")) perTileLimited++;
@@ -102,6 +105,7 @@ export function runWallHarness(
     delivered: primaryTile.delivered,
     limitedWallLines: limitedWall,
     perTileLimitedLines: perTileLimited,
+    wallLimitedText: limitedWall ? skipText : null,
     buildGaps,
   };
 }
@@ -164,7 +168,8 @@ export function runWallHarnessLayoutShrink(
   }
 
   const skipEl = parent.querySelector(".viz-hud-skip");
-  const limitedWall = skipEl?.textContent?.includes("LIMITED") ? 1 : 0;
+  const skipText = skipEl?.textContent ?? null;
+  const limitedWall = skipText?.includes("LIMITED") ? 1 : 0;
   const soloTile = vizTileBudgetRegistry.getTile("solo");
   const buildGaps: number[] = [];
   for (let g = 1; g < buildAt.length; g++) {
@@ -175,6 +180,7 @@ export function runWallHarnessLayoutShrink(
     delivered: soloTile.delivered,
     limitedWallLines: limitedWall,
     perTileLimitedLines: 0,
+    wallLimitedText: limitedWall ? skipText : null,
     buildGaps,
   };
 }

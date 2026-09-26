@@ -15,10 +15,28 @@ export function devVizWallFlagBadInputMessage(param: "vizTileCostTicks", raw: st
   return `Couldn't use ?${param}=${raw}; use a whole-wall decimal integer.`;
 }
 
-export function tileLimitedSharingLabel(activeTiles: number, skipsPerSec: number): string {
+/** English ordinal for cadence k (11th–13th and 21st–23rd are not naive % 10). */
+export function vizCadenceOrdinal(k: number): string {
+  const n = Math.max(1, Math.floor(k));
+  const teen = n % 100;
+  if (teen >= 11 && teen <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/** Wall LIMITED strip when share-limited (cadence k from budget policy, not measured skip rate). */
+export function tileLimitedSharingLabel(activeTiles: number, cadenceK: number): string {
   const n = Math.max(0, activeTiles);
-  const rate = formatHudSkipsPerSec(skipsPerSec);
-  return `LIMITED · sharing frame with ${n} tiles · ${rate}`;
+  const ord = vizCadenceOrdinal(cadenceK);
+  return `LIMITED · sharing frame with ${n} tiles · updating every ${ord} frame`;
 }
 
 export const TILE_LIMITED_SHARING_TOOLTIP =

@@ -97,8 +97,18 @@ describe("Amendment 4 wall LIMITED harness (VizFrameBudget + VizHud)", () => {
     expect(r.limitedWallLines).toBe(0);
   });
 
-  it("B copy literal pins tileLimitedSharingLabel template", () => {
-    expect(tileLimitedSharingLabel(4, 40)).toBe("LIMITED · sharing frame with 4 tiles · 40 skipped/s");
+  it("Amendment 6 L2: 3000 @ 2×2 LIMITED text is every 3rd frame", () => {
+    const r = runWallHarness(TILES_2X2, String(IN_RANGE_TICKS));
+    expect(r.wallLimitedText).toBe(
+      "LIMITED · sharing frame with 4 tiles · updating every 3rd frame",
+    );
+  });
+
+  it("Amendment 6 L2: 2505 @ 2×2 LIMITED text is every 2nd frame", () => {
+    const r = runWallHarness(TILES_2X2, "2505");
+    expect(r.wallLimitedText).toBe(
+      "LIMITED · sharing frame with 4 tiles · updating every 2nd frame",
+    );
   });
 
   it("D budget boundary: 5010 ticks → LIMITED on wall; 5011 → over budget, not LIMITED", () => {
@@ -128,33 +138,33 @@ describe("Amendment 4 wall LIMITED harness (VizFrameBudget + VizHud)", () => {
     expect(runAt(VIZ_WALL_BUDGET_TICKS + 1).limitedLabel).toBeNull();
   });
 
-  it("C Pedant: 2×2→2×1 steady X → 1 label write; text 2 tiles; 1×1 removes line once", () => {
+  it("C Pedant: steady N and k → 1 label write; N change once; 1×1 removes line once", () => {
     const line = createTileHudLabelLine();
     const el = document.createElement("span");
     document.body.append(el);
     for (let frame = 0; frame < 120; frame++) {
-      const text = line.limitedLabel(4, 40)!;
+      const text = line.limitedLabel(4, 3)!;
       line.writeText(el, text);
     }
     expect(line.stats.writes).toBe(1);
-    expect(el.textContent).toBe("LIMITED · sharing frame with 4 tiles · 40 skipped/s");
+    expect(el.textContent).toBe(tileLimitedSharingLabel(4, 3));
 
-    const text2 = line.limitedLabel(2, 40)!;
+    const text2 = line.limitedLabel(2, 3)!;
     line.writeText(el, text2);
     expect(line.stats.writes).toBe(2);
-    expect(el.textContent).toBe("LIMITED · sharing frame with 2 tiles · 40 skipped/s");
+    expect(el.textContent).toBe(tileLimitedSharingLabel(2, 3));
 
     for (let frame = 0; frame < 60; frame++) {
-      line.limitedLabel(2, 40);
+      line.limitedLabel(2, 3);
       line.writeText(el, text2);
     }
     expect(line.stats.writes).toBe(2);
 
-    expect(line.limitedLabel(1, 40)).toBeNull();
+    expect(line.limitedLabel(1, 3)).toBeNull();
     line.writeText(el, "skips 0/s");
     expect(line.stats.writes).toBe(3);
     for (let frame = 0; frame < 60; frame++) {
-      expect(line.limitedLabel(1, 40)).toBeNull();
+      expect(line.limitedLabel(1, 3)).toBeNull();
     }
     expect(line.stats.builds).toBe(2);
   });
