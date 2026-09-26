@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { probePluginSkyCompile, wrapPluginSky } from "../../sdk/plugin-sky-probe";
 import FRAG from "./sky/fragment.glsl?raw";
 import FRONT from "./frontend/index.ts?raw";
 import VIS from "./visualisation.yml?raw";

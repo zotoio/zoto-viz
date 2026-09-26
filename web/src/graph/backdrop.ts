@@ -6,8 +6,11 @@ import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
 import { currentSkyRecipe, DEFAULT_SKY_RECIPE, cloneSkyRecipe, lerpSkyRecipe, skyRecipeKey, type SkyRecipe } from "./sky-ai";
 import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
-import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
+import {
+  probePluginSkyCompile,
+  wrapPluginSky,
+} from "../../../plugins/sdk/plugin-sky-probe";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -651,75 +654,13 @@ let lastCustomFrag: string | null = null;
 let lastPlugin: { id: string; frag: string } | null = null;
 
 export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
-export const PLUGIN_SKY_MAX = 128_000;
+export {
+  PLUGIN_SKY_MAX,
+  pluginShaderError,
+  probePluginSkyCompile,
+  wrapPluginSky,
+} from "../../../plugins/sdk/plugin-sky-probe";
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
-
-/** Compile the wrapped fragment on a throwaway WebGL2 context. `null` if no GPU or it linked. */
-export function probePluginSkyCompile(frag: string): string | null {
-  if (typeof document === "undefined") return null;
-  let gl: WebGL2RenderingContext | null = null;
-  try {
-    gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: false });
-    if (!gl) return null;
-    const sh = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!sh) return null;
-    gl.shaderSource(sh, `#version 300 es\nprecision highp float;\n${frag}`);
-    gl.compileShader(sh);
-    if (gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return null;
-    return (gl.getShaderInfoLog(sh) || "compile failed").replace(/\0/g, "").trim() || "compile failed";
-  } catch {
-    return null;
-  } finally {
-    releaseThrowawayGl(gl);
-  }
-}
-
-const PLUGIN_UNIFORM_RE =
-  /\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234]|int|uint|bool|mat[234]|sampler(?:2D|3D|Cube))\s+(\w+)\s*;/g;
-const PLUGIN_ALLOWED = new Set<string>(PLUGIN_SKY_UNIFORMS);
-
-/** Reject includes and any uniform outside the frozen plugin sky contract. */
-export function pluginShaderError(src: string): string | null {
-  if (!src.trim()) return "empty shader";
-  if (src.length > PLUGIN_SKY_MAX) return "shader too long";
-  if (/#\s*include\b/i.test(src) || /\bimport\s/.test(src)) return "shader includes are not allowed";
-  if (/\bbinding\s*=/.test(src) || /\blayout\s*\(\s*std140/.test(src)) {
-    return "UBO layout/binding qualifiers are not portable; use zotoVizSlots";
-  }
-  const names = new Set<string>();
-  const re = new RegExp(PLUGIN_UNIFORM_RE.source, "g");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src))) names.add(m[1]!);
-  for (const n of names) {
-    if (!PLUGIN_ALLOWED.has(n)) return `non-whitelisted uniform ${n}`;
-  }
-  if (!/\bvoid\s+main\s*\(/.test(src)) return "shader needs void main()";
-  return null;
-}
-
-/** Bind the whitelist preamble to a self-contained plugin fragment. */
-export function wrapPluginSky(raw: string): { frag: string } | { error: string } {
-  const err = pluginShaderError(raw);
-  if (err) return { error: err };
-  const body = raw.replace(/#version[^\n]*\n?/g, "").replace(/\bprecision\s+\w+\s+float\s*;/g, "").trim();
-  const stripped = body
-    .replace(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234])\s+(?:uTime|uOpacity|uBright|uAudio|uAccent|uBg)\s*;/g, "")
-    .replace(/\bin\s+vec3\s+vDir\s*;/g, "")
-    .replace(/\bout\s+vec4\s+fragColor\s*;/g, "")
-    .trim();
-  const preamble = /* glsl */ `${VIZ_UBO_GLSL}
-uniform float uTime;
-uniform float uOpacity;
-uniform float uBright;
-uniform float uAudio;
-uniform vec3 uAccent;
-uniform vec3 uBg;
-in vec3 vDir;
-out vec4 fragColor;
-
-`;
-  return { frag: preamble + stripped };
-}
 
 export class Backdrop {
   readonly mesh: THREE.Mesh;

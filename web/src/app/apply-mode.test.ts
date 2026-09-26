@@ -351,6 +351,14 @@ describe("applyModeImpl rollback", () => {
     expect(applyMosaicModeVisuals).not.toHaveBeenCalled();
   });
 
+  it("aborted consent does not rollback or show Kept message", async () => {
+    const host = buildHost({ ensureReviewed: async () => "aborted" });
+    runApply(host, "plugin:packet-tunnel");
+    await flushMicrotasks();
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(isModeSwitchStatusVisible()).toBe(false);
+  });
+
   it("ensureReviewed rejection rolls back with failure path", async () => {
     const host = buildHost({
       ensureReviewed: async () => { throw new Error("dialog dismissed"); },
@@ -440,7 +448,8 @@ describe("applyMode via main host", () => {
   });
 
   it("uses dedicated status element (not stuck #hint morphing) on consent decline", async () => {
-    const { applyMode, configureApplyModeForTests } = await import("./main");
+    const { applyMode } = await import("./main");
+    const { configureApplyModeForTests } = await import("./apply-mode-test-host");
     configureApplyModeForTests({
       ensureReviewed: async () => "declined",
       liveMode: "topology",
