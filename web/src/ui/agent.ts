@@ -1124,11 +1124,20 @@ export class AgentPanel {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ files, activate: true }),
           }).then((x) => x.json()) as {
-            ok?: boolean; error?: string; id?: string; activated?: boolean; consentRequired?: boolean;
+            ok?: boolean; error?: string; message?: string; id?: string; activated?: boolean;
+            consentRequired?: boolean;
+            installNotices?: { error: string; message: string }[];
           };
           if (d.activated) this.append("agent", `plugin ${d.id} built and activated (${names})`);
           else if (d.consentRequired) this.append("agent", `plugin ${d.id} installed (${names}) — source review required`);
-          else this.append("agent", d.ok ? `plugin ${d.id} built (${names})` : `plugin invalid: ${d.error}`);
+          else if (d.message && (d.error === "pack_boundary" || d.error === "pack_install_blocked"
+            || d.error === "pack_install_start_failed" || d.error === "pack_install_interrupted")) {
+            this.append("agent", d.message);
+          } else if (d.installNotices?.length) {
+            for (const n of d.installNotices) {
+              if (n.message) this.append("agent", n.message);
+            }
+          } else this.append("agent", d.ok ? `plugin ${d.id} built (${names})` : `plugin invalid: ${d.error ?? d.message ?? "unknown"}`);
         }
       }
     } catch (e) {

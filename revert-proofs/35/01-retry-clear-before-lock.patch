@@ -1,0 +1,12 @@
+diff --git a/service/plugin_local.py b/service/plugin_local.py
+index 99eae78..ac6adb2 100644
+--- a/service/plugin_local.py
++++ b/service/plugin_local.py
+@@ -483,6 +483,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+             "actualSha256": pz.plugin_sha256(dest),
+         }
+ 
++    clear_zip_block(digest)
+     lock = pack_install_lock(pid)
+     lock.acquire()
+     try:

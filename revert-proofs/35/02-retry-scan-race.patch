@@ -1,0 +1,140 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+index a0b5e3d..e602ec0 100644
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -387,12 +387,6 @@ def install_zip_to_runtime(
+ ) -> pz.UnpackResult:
+     pid = str(doc["id"])
+     incoming = sha256 or pz.plugin_sha256(zip_path)
+-    if not force:
+-        blocked = zip_block_for_sha(incoming)
+-        if blocked is not None:
+-            msg = str(blocked.get("message") or "This zip install is blocked.")
+-            reason = str(blocked.get("blockReason") or blocked.get("error") or "blocked")
+-            raise InstallStartFailedError(msg, reason=reason)
+     if not force and should_skip_unchanged_zip(dest_zip, runtime, incoming):
+         return pz.unpack_zip(dest_zip, runtime)
+     name = str(doc.get("name") or pid)
+diff --git a/service/plugin_local.py b/service/plugin_local.py
+index 99eae78..2d85b9c 100644
+--- a/service/plugin_local.py
++++ b/service/plugin_local.py
+@@ -483,85 +483,41 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+             "actualSha256": pz.plugin_sha256(dest),
+         }
+ 
+-    lock = pack_install_lock(pid)
+-    lock.acquire()
++    zip_path = _find_local_zip_for_digest(digest, pid, row)
++    if zip_path is None:
++        return {"ok": False, "error": "zip_not_found", "id": pid}
++    clear_zip_block(digest)
++    forget_zip_block_cache_for_path(zip_path)
++    plugins.reset_scan_memo()
++    manifest = pz.inspect_zip(zip_path)
++    doc = plugins.validate_doc(manifest.plugin)
++    pid = str(doc["id"])
++    dest = folder / f"{pid}.zip"
++    if zip_path.resolve() != dest.resolve():
++        shutil.copy2(zip_path, dest)
++    runtime = paths.plugin_local_runtime_dir(create=True) / pid
++    incoming = pz.plugin_sha256(dest)
++    upgrade = runtime.is_dir()
+     try:
+-        row = zip_block_for_sha(digest)
+-        if row is None:
+-            return {"ok": False, "error": "not_blocked"}
+-        zip_path = _find_local_zip_for_digest(digest, pid, row)
+-        if zip_path is None:
+-            return {"ok": False, "error": "zip_not_found", "id": pid}
+-        if dest.is_file() and pz.plugin_sha256(dest).lower() != digest:
+-            return {
+-                "ok": False,
+-                "error": "zip_hash_mismatch",
+-                "message": "Drop-folder zip no longer matches the blocked install; replace the file or remove the block.",
+-                "id": pid,
+-                "expectedSha256": digest,
+-                "actualSha256": pz.plugin_sha256(dest),
+-            }
+-
+-        forget_zip_block_cache_for_path(zip_path)
+-        plugins.reset_scan_memo()
+-
+-        manifest = pz.inspect_zip(zip_path)
+-        doc = plugins.validate_doc(manifest.plugin)
+-        pid = str(doc["id"])
+-        dest = folder / f"{pid}.zip"
+-        if zip_path.resolve() != dest.resolve():
+-            shutil.copy2(zip_path, dest)
+-        runtime = paths.plugin_local_runtime_dir(create=True) / pid
+-        incoming = pz.plugin_sha256(dest)
+-        if incoming.lower() != digest:
+-            return {
+-                "ok": False,
+-                "error": "zip_hash_mismatch",
+-                "id": pid,
+-                "expectedSha256": digest,
+-                "actualSha256": incoming,
+-            }
+-        upgrade = runtime.is_dir()
+-        name = str(doc.get("name") or pid)
+-        version = doc.get("version")
+-        try:
+-            unpacked = _install_zip_to_runtime_locked(
+-                dest,
+-                dest,
+-                runtime,
+-                doc,
+-                rel=str(dest),
+-                sha256=incoming,
+-                upgrade=upgrade,
+-                pid=pid,
+-                name=name,
+-                version=version,
+-            )
+-        except InstallV2BlockedError as e:
+-            return {"ok": False, "error": "pack_install_blocked", "message": str(e), **e.payload}
+-        except InstallStartFailedError as e:
+-            info = {
+-                "ok": False,
+-                "error": "pack_install_start_failed",
+-                "message": str(e),
+-                "reason": e.reason,
+-                "id": pid,
+-            }
+-            return _finish(info, activate=activate)
+-        except PackBundleBoundaryError as e:
+-            return {"ok": False, **e.block.to_dict()}
+-        except ValueError as e:
+-            text = str(e)
+-            if "was blocked" in text:
+-                return {"ok": False, "error": "pack_boundary", "message": text}
+-            return {"ok": False, "error": text, "id": pid}
+-
+-        clear_zip_block(digest)
+-        forget_zip_block_cache_for_path(dest)
+-        info = _install_result(doc, dest, unpacked, wrote=True)
++        unpacked = install_zip_to_runtime(
++            dest, dest, runtime, doc, rel=str(dest), sha256=incoming, upgrade=upgrade, force=True,
++        )
++    except InstallV2BlockedError as e:
++        return {"ok": False, "error": "pack_install_blocked", "message": str(e), **e.payload}
++    except InstallStartFailedError as e:
++        info = {"ok": False, "error": "pack_install_start_failed", "message": str(e), "reason": e.reason, "id": pid}
+         return _finish(info, activate=activate)
+-    finally:
+-        lock.release()
++    except PackBundleBoundaryError as e:
++        return {"ok": False, **e.block.to_dict()}
++    except ValueError as e:
++        text = str(e)
++        if "was blocked" in text:
++            return {"ok": False, "error": "pack_boundary", "message": text}
++        return {"ok": False, "error": text, "id": pid}
++    clear_zip_block(digest)
++    forget_zip_block_cache_for_path(dest)
++    info = _install_result(doc, dest, unpacked, wrote=True)
++    return _finish(info, activate=activate)
+ 
+ 
+ async def api_retry_blocked_zip(req: web.Request) -> web.Response:

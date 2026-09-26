@@ -65,8 +65,15 @@ import {
   viewSelectOptions,
   writePluginConfig,
   configStoreId,
+  takePackInstallBlockedNotice,
   type PluginView,
 } from "../plugins/plugin";
+import {
+  PACK_BLOCKED_SELECT_VALUE,
+  formatBlockedCatalogNotice,
+  blockedCatalogEntries,
+} from "../plugins/pack-install-surface";
+import { BlockedInstallPanel } from "../plugins/pack-install-blocked-ui";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
@@ -470,6 +477,10 @@ const modeSel = new Select({
   onChange: (id) => applyMode(id),
 });
 $("modeBox").append(modeSel.el);
+const blockedInstallPanel = new BlockedInstallPanel({
+  onCatalogRefresh: () => syncPluginCatalog(),
+});
+$("modeBox").append(blockedInstallPanel.el);
 const feedTitleCube = new FeedTitleCube($("wall"));
 const nestCams = new NestCamsLive($("wall"));
 nestCams.onSettings = (camId) => {
@@ -1091,7 +1102,7 @@ settings.onPluginChange = () => {
 };
 settings.onInstancesChange = () => {
   void (async () => {
-    pluginSpecs = await installPlugins();
+    await syncPluginCatalog();
     modeSel.setOptions(viewSelectOptions());
     settings.refreshMosaicSlots();
     applyMode(modeSel.value);
@@ -1194,6 +1205,23 @@ scene.onCamTheme = (hex) => {
 if (scene.dreamAnim.camTheme && scene.liveCamColor != null) scene.onCamTheme(scene.liveCamColor);
 const liveFeed = new LiveFeed($("livefeed"), scene);
 const liveChat = new ChatPanel($("livechat"));
+
+modeSel.onChange = (id) => {
+  if (id === PACK_BLOCKED_SELECT_VALUE) {
+    const text = formatBlockedCatalogNotice(blockedCatalogEntries());
+    if (text) liveFeed.showOperatorNotice(text);
+    modeSel.value = liveMode || modeSel.value;
+    return;
+  }
+  applyMode(id);
+};
+
+async function syncPluginCatalog(): Promise<void> {
+  pluginSpecs = await installPlugins();
+  blockedInstallPanel.refresh();
+  const blocked = takePackInstallBlockedNotice();
+  if (blocked) liveFeed.showOperatorNotice(blocked);
+}
 feedCtl.feed = liveFeed;
 liveFeed.setGraphBase(modeById(modeSel.value).graphBase);
 const feedToggle = new Toggle({
@@ -1524,7 +1552,7 @@ void (async () => {
   typeSafeKeyOn = session.typesafeConfigured;
   setTypeSafeProxyConfigured(() => typeSafeKeyOn);
   agent.setControlFromServer(session.aiControl);
-  pluginSpecs = await installPlugins();
+  await syncPluginCatalog();
   modeSel.setOptions(viewSelectOptions());
   settings.refreshMosaicSlots();
   if (settings.animSettings.mosaic !== "off") {
@@ -1620,7 +1648,7 @@ async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
     return;
   }
   if (patch.reloadPlugins === true) {
-    pluginSpecs = await installPlugins();
+    await syncPluginCatalog();
     modeSel.setOptions(viewSelectOptions());
     settings.refreshMosaicSlots();
   }

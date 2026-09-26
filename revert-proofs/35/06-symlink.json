@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_symlink_zip_rejected_via_install_pipeline",
+  "description": "Symlink entries inside plugin zips are accepted."
+}

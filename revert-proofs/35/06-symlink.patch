@@ -1,0 +1,13 @@
+diff --git a/service/plugin_zip.py b/service/plugin_zip.py
+index 70a059a..96333cc 100644
+--- a/service/plugin_zip.py
++++ b/service/plugin_zip.py
+@@ -313,7 +313,7 @@ def _read_members(zf: zipfile.ZipFile) -> dict[str, bytes]:
+     for info in zf.infolist():
+         if info.is_dir():
+             continue
+-        if _is_symlink(info):
++        if False and _is_symlink(info):
+             raise ValueError(f"symlink zip member {info.filename!r}")
+         rel = _safe_name(info.filename)
+         if not rel:
