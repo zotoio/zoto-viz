@@ -12,6 +12,7 @@ function appendFieldControl(
   values: Record<string, string>,
   spec: PluginView,
   persist: () => void,
+  remount: () => void,
 ): void {
   const current = values[f.key] ?? fieldDefault(f);
   const baseline = spec.id === "fractal-zoom" ? fractalFieldBaseline(values, f.key) : undefined;
@@ -39,6 +40,9 @@ function appendFieldControl(
         values[f.key] = v;
         if (spec.id === "fractal-zoom" && f.key === "preset" && v !== "custom") {
           Object.assign(values, fractalPresetConfig(v), { preset: v });
+          persist();
+          remount();
+          return;
         }
         persist();
       },
@@ -101,10 +105,15 @@ export function fillPluginFields(
     }
     return;
   }
+  const remount = () => {
+    host.replaceChildren();
+    fillPluginFields(host, spec, fields, onPersist, opts);
+  };
   const persist = () => {
-    applyFractalConfigActions(spec, values);
+    const changed = applyFractalConfigActions(spec, values);
     writePluginConfig(configStoreId(spec), values);
     onPersist(configStoreId(spec), values);
+    if (changed) remount();
   };
   const compact: PluginField[] = [];
   const notes: PluginField[] = [];
@@ -141,7 +150,7 @@ export function fillPluginFields(
       }
       const row = document.createElement("div");
       row.className = "sec-controls";
-      for (const f of fields) appendFieldControl(row, f, values, spec, persist);
+      for (const f of fields) appendFieldControl(row, f, values, spec, persist, remount);
       container.append(row);
       host.append(container);
     }
@@ -150,7 +159,7 @@ export function fillPluginFields(
     sec.className = "sec";
     const row = document.createElement("div");
     row.className = "sec-controls";
-    for (const f of compact) appendFieldControl(row, f, values, spec, persist);
+    for (const f of compact) appendFieldControl(row, f, values, spec, persist, remount);
     sec.append(row);
     host.append(sec);
   }

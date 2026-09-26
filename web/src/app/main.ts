@@ -80,7 +80,7 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
-import { runPackFrameHandler } from "../plugins/viz-pack-host";
+import { runPackFrameHandler, syncFractalHudCaption } from "../plugins/viz-pack-host";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -496,10 +496,13 @@ function onPluginFields(): void {
   renderLegend(m, opts);
   void syncWifiWatch();
   if (tsWatchId) {
-    const spec = pluginSpecs.find((p) => p.id === tsWatchId);
-    if (spec?.capabilities?.includes("config.read")) {
-      const fields = pluginViewKnobs(spec, spec.config);
-      sandbox.setConfig(loadPluginConfig(spec, fields));
+    const m = modeById(modeSel.value);
+    if (m.pluginId === tsWatchId) {
+      const spec = pluginSpecForMode(m.id);
+      if (spec?.capabilities?.includes("config.read")) {
+        const fields = pluginViewKnobs(spec, spec.config);
+        sandbox.setConfig(loadPluginConfig(spec, fields));
+      }
     }
   }
 }
@@ -1010,7 +1013,9 @@ function feed(m: StateMsg): void {
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       sandbox.frame(f);
-      if (packId && packId !== "fractal-zoom") {
+      if (packId === "fractal-zoom") {
+        syncFractalHudCaption(f, optsFor(mode));
+      } else if (packId) {
         runPackFrameHandler(packId, f, {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),

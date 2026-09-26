@@ -71,6 +71,14 @@ function hnTermFrameBuffer(frame: VizDataFrame): number[] {
 }
 
 /** Host-side mirror of pack frontend onFrame handlers (no iframe). */
+/** Advance host-side fractal drive state for HUD caption only (iframe owns GPU buffers). */
+export function syncFractalHudCaption(
+  frame: VizDataFrame,
+  opts: Record<string, string | undefined> | undefined,
+): void {
+  packFractalDrive(frame.t, 1 / 60, frame.audio, 16 / 10, opts ?? {}, IDLE_POINTER);
+}
+
 export function runPackFrameHandler(
   packId: VizDemoPackId,
   frame: VizDataFrame,
