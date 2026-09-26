@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { goldenLanFixture } from "./golden-lan-state";
-import { parsePluginIdle, pluginIdleOf, stateNeedsGolden, withGoldenIfIdle } from "./golden-state";
+import { mergeHostIdleForViews, parsePluginIdle, pluginIdleOf, stateNeedsGolden, withGoldenIfIdle } from "./golden-state";
 import type { StateMsg } from "../../core/types";
 
 const emptyState = (): StateMsg => ({
@@ -20,11 +20,12 @@ const emptyState = (): StateMsg => ({
 });
 
 describe("goldenLanFixture", () => {
-  it("ships modest LAN, CPU, and source slices", () => {
+  it("ships modest LAN, CPU, Bluetooth, and source slices", () => {
     const golden = goldenLanFixture();
     expect(golden.devices.length).toBeGreaterThanOrEqual(8);
     expect(golden.flows.length).toBeGreaterThanOrEqual(5);
     expect(golden.views?.cpu?.devices.length).toBeGreaterThanOrEqual(4);
+    expect(golden.views?.bluetooth?.devices.length).toBeGreaterThanOrEqual(3);
     expect(golden.sources?.nasa?.items?.length).toBeGreaterThan(0);
   });
 });
@@ -36,6 +37,12 @@ describe("withGoldenIfIdle", () => {
     const merged = withGoldenIfIdle(emptyState(), idle);
     expect(merged.devices.length).toBeGreaterThanOrEqual(8);
     expect(merged.flows.length).toBeGreaterThanOrEqual(5);
+    expect(merged.views?.bluetooth?.devices.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("merges host idle when any visible view asks for it (mosaic Bluetooth tile)", () => {
+    const merged = mergeHostIdleForViews(emptyState(), [undefined, idle]);
+    expect(merged.views?.bluetooth?.devices?.some((d) => d.names.includes("Hue bulb"))).toBe(true);
   });
 
   it("keeps live traffic when the graph already has data", () => {

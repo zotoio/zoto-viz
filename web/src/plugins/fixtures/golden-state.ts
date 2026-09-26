@@ -35,6 +35,13 @@ export function stateNeedsGolden(state: StateMsg): boolean {
   return !hasLiveGraph(state);
 }
 
+/** Merge host golden when any visible view declares `idle: fixture: host`. */
+export function mergeHostIdleForViews(live: StateMsg, idleConfigs: (PluginIdleConfig | undefined)[]): StateMsg {
+  const wantsHost = idleConfigs.some((c) => c && "fixture" in c && c.fixture === "host");
+  const idle = wantsHost ? { fixture: "host" as const } : undefined;
+  return withGoldenIfIdle(live, idle);
+}
+
 /** Merge the shared golden LAN when idle is declared and live capture is empty. */
 export function withGoldenIfIdle(live: StateMsg, idle?: PluginIdleConfig): StateMsg {
   if (!idle || !("fixture" in idle) || idle.fixture !== "host" || !stateNeedsGolden(live)) return live;

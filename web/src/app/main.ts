@@ -103,7 +103,7 @@ import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
-import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
+import { mergeHostIdleForViews, pluginIdleOf } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -944,15 +944,33 @@ function applyLive(m: StateMsg): void {
   if (live.patch && Object.keys(live.patch).length) void applyAgentPatch(live.patch);
 }
 
+function mosaicCatalogModeId(tileSlotId: string): string {
+  const i = tileSlotId.lastIndexOf("!");
+  if (i > 0 && /^\d+$/.test(tileSlotId.slice(i + 1))) return tileSlotId.slice(0, i);
+  return tileSlotId;
+}
+
+function feedPaintState(m: StateMsg): StateMsg {
+  const curMode = modeById(liveMode || modeSel.value);
+  const curSpec = curMode.pluginId ? pluginSpecForMode(curMode.id) : null;
+  const idleSpecs = [pluginIdleOf(curSpec)];
+  if (mosaic?.on) {
+    for (const tileId of mosaic.tileIds) {
+      const pm = modeById(mosaicCatalogModeId(tileId));
+      idleSpecs.push(pluginIdleOf(pm.pluginId ? pluginSpecForMode(pm.id) : null));
+    }
+  }
+  return mergeHostIdleForViews(m, idleSpecs);
+}
+
 function feed(m: StateMsg): void {
   const feedT0 = performance.now();
   lastRaw = m;
   applyLive(m);
-  const curMode = modeById(liveMode || modeSel.value);
-  const curSpec = curMode.pluginId ? pluginSpecForMode(curMode.id) : null;
-  let shown = withGoldenIfIdle(m, pluginIdleOf(curSpec));
+  const paint = feedPaintState(m);
+  let shown = paint;
   if (mergeToggle.checked) {
-    const c = collapseByName(m);
+    const c = collapseByName(paint);
     scene.setAliasMap(c.map);
     mosaic?.eachGraph((s) => { if (s !== scene) s.setAliasMap(c.map); });
     scene.update(c.msg);
@@ -961,10 +979,10 @@ function feed(m: StateMsg): void {
     shown = c.msg;
   } else {
     scene.setAliasMap(new Map());
-    scene.update(m);
+    scene.update(paint);
     mosaic?.eachGraph((s) => { if (s !== scene) s.setAliasMap(new Map()); });
-    mosaic?.update(m);
-    for (const a of Object.values(arcade)) a.view.update(m);
+    mosaic?.update(paint);
+    for (const a of Object.values(arcade)) a.view.update(paint);
   }
   applyStats(shown);
   feedCtl.feed?.setSourceHeadlines(sourceHeadlines(m.sources));
