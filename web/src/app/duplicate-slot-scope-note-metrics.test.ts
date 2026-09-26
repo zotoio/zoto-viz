@@ -24,7 +24,7 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
     resetPackScopeNoteMetrics();
   }
 
-  it("five layout patches with unchanged duplicate count perform 0 pack scope note text writes", async () => {
+  it("five layout patches with unchanged duplicate count: 5 recounts and 0 text writes", async () => {
     const settings = new Settings({ storePrefix: "zoto-scope-note-writes", onChange: () => {} });
     settings.addAnimation(() => {}, { el: document.createElement("div") });
     document.body.append(settings.el);
@@ -70,7 +70,7 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
       applyWallLayoutPatch(settings, patch);
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
     }
-    expect(readPackScopeNoteMetrics()).toEqual({ recounts: 0, textWrites: 0 });
+    expect(readPackScopeNoteMetrics()).toEqual({ recounts: 5, textWrites: 0 });
     settings.el.remove();
   });
 

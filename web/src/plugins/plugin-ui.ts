@@ -140,7 +140,10 @@ export function syncPackScopeNote(root: HTMLElement, spec: PluginView, wall?: Pa
   const text = packScopeNoteText(spec, wall);
   const existing = root.querySelector(".plugin-pack-scope-note");
   if (!text) {
-    existing?.remove();
+    if (existing) {
+      existing.remove();
+      recordPackScopeNoteTextWrite();
+    }
     return;
   }
   if (existing instanceof HTMLElement) {

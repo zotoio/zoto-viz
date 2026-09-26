@@ -25,7 +25,7 @@ import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import { recordPackScopeNoteRecount } from "../plugins/pack-scope-note-metrics";
-import { countTilesSharingConfigStore, type PackWallScope } from "../plugins/instances";
+import type { PackWallScope } from "../plugins/instances";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
@@ -178,8 +178,6 @@ export class Settings {
   private viewMosaicSec: HTMLElement | null = null;
   private viewCog: HTMLButtonElement | null = null;
   private viewFocusId = "";
-  /** Last duplicate-pack tile count reflected in the scope note (metrics + skip redundant sync). */
-  private packScopeSharedTileCount: number | null = null;
   private nestDevices: SdmDevice[] = [];
   private nestDeviceKey = "";
   private viewBind: {
@@ -441,7 +439,6 @@ export class Settings {
 
   bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null, extras?: HTMLElement[]): void {
     this.viewBind = { spec, fields, look, extras };
-    this.packScopeSharedTileCount = null;
     const host = this.viewHost;
     if (!host) return;
     host.replaceChildren();
@@ -503,12 +500,6 @@ export class Settings {
       empty.className = "sec";
       empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu or on a mosaic tile opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
       host.append(empty);
-    }
-    if (spec) {
-      const wall = packWallScopeFromAnim(this.anim);
-      this.packScopeSharedTileCount = wall.mosaicOn
-        ? countTilesSharingConfigStore(spec, wall.tileModeIds)
-        : 0;
     }
     this.attachViewMosaic();
   }
@@ -1753,14 +1744,8 @@ export class Settings {
 
   private syncPackScopeNoteFromAnim(): void {
     if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec || !this.viewHost) return;
+    recordPackScopeNoteRecount();
     const wall = packWallScopeFromAnim(this.anim);
-    const shared = wall.mosaicOn
-      ? countTilesSharingConfigStore(this.viewBind.spec, wall.tileModeIds)
-      : 0;
-    if (shared !== this.packScopeSharedTileCount) {
-      recordPackScopeNoteRecount();
-      this.packScopeSharedTileCount = shared;
-    }
     syncPackScopeNote(this.viewHost, this.viewBind.spec, wall);
   }
 
