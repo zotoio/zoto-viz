@@ -1570,6 +1570,10 @@ export class NetScene implements HostedView {
     return this.packCoalesce?.role === "mirror" ? this.packCoalesce.primary : null;
   }
 
+  get isPackMirrorPrimary(): boolean {
+    return this.packCoalesce?.role === "primary";
+  }
+
   surfaceLetterboxFill(): SurfaceLetterboxFill {
     return surfaceLetterboxFill(this.clearHex, 0.25);
   }

@@ -217,13 +217,7 @@ export class RenderHost {
     const gl = this.gl;
     if (!gl) return null;
     const pr = rd.getPixelRatio();
-    const sx = Math.round(src.x * pr);
-    const sy = Math.round(src.y * pr);
-    const sw = Math.round(src.w * pr);
-    const sh = Math.round(src.h * pr);
-    if (!this.packMirrorGl.hasCapture()) {
-      this.packMirrorGl.capturePrimaryFromDefault(gl, rd, sx, sy, sw, sh);
-    }
+    if (!this.packMirrorGl.hasCapture()) return null;
     return this.packMirrorGl.blitDuplicateToDefault(gl, rd, fill, dst, pr, aspect);
   }
 
@@ -376,6 +370,29 @@ export class RenderHost {
     }
     const rd = this.renderer as THREE.WebGLRenderer;
     const gl = this.gl;
+    const pr = rd.getPixelRatio();
+    const packPrimary = (view as { isPackMirrorPrimary?: boolean }).isPackMirrorPrimary === true;
+    if (packPrimary && gl) {
+      const sw = Math.round(w * pr);
+      const sh = Math.round(h * pr);
+      const rt = this.packMirrorGl.ensureRenderTarget(rd, sw, sh);
+      if (rt) {
+        const drawPack = () => {
+          const prev = rd.getRenderTarget();
+          rd.setRenderTarget(rt);
+          rd.setViewport(0, 0, sw, sh);
+          rd.setScissor(0, 0, sw, sh);
+          rd.setScissorTest(true);
+          rd.setClearColor(clearHex, 1);
+          rd.render(scene, camera);
+          rd.setRenderTarget(prev);
+          this.packMirrorGl.markPackRendered();
+          this.packMirrorGl.blitPrimaryToDefault(gl, rd, { x, y, w, h }, pr);
+        };
+        timeGpu(gl, drawPack, (ms) => view.noteFrameCost?.(ms));
+        return { x: x * pr, y: y * pr, w: w * pr, h: h * pr };
+      }
+    }
     const draw = () => {
       rd.setViewport(x, y, w, h);
       rd.setScissor(x, y, w, h);
@@ -385,7 +402,6 @@ export class RenderHost {
     };
     if (gl) timeGpu(gl, draw, (ms) => view.noteFrameCost?.(ms));
     else draw();
-    const pr = rd.getPixelRatio();
     return { x: x * pr, y: y * pr, w: w * pr, h: h * pr };
   }
 
@@ -396,7 +412,8 @@ export class RenderHost {
     this.views = [];
     const gl = this.gl;
     if (gl) {
-      this.packMirrorGl.dispose(gl);
+      const rd = this.renderer as THREE.WebGLRenderer;
+      this.packMirrorGl.dispose(gl, rd);
       resetSandboxBitmapGl(gl);
     }
     this.renderer.forceContextLoss();
