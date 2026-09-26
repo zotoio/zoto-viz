@@ -63,6 +63,40 @@ export function nixieCanvasSize(doc?: Document | null): { w: number; h: number }
 }
 
 /** Slot 0: six digits + colon blink + look + canvas + LAN pulse. */
+const NIXIE_SCRATCH = { h: 0, m: 0, s: 0 };
+let nixieFallbackKey = -1;
+let nixieFallbackCached = "";
+
+function nixiePair(n: number): string {
+  const v = Math.max(0, Math.min(99, n));
+  return `${Math.floor(v / 10)}${v % 10}`.padStart(2, "0");
+}
+
+function nixieClockParts(date: Date, hour12: boolean, scratch = NIXIE_SCRATCH): void {
+  let h = date.getHours();
+  scratch.m = date.getMinutes();
+  scratch.s = date.getSeconds();
+  if (hour12) {
+    h = h % 12;
+    if (h === 0) h = 12;
+  }
+  scratch.h = h;
+}
+
+/** Declarative simple view when the sky shader fails (host reads this, no DOM). */
+export function nixieFallbackText(date: Date, look: NixieLook): string {
+  nixieClockParts(date, look.hour12);
+  const key = look.seconds
+    ? NIXIE_SCRATCH.h * 3600 + NIXIE_SCRATCH.m * 60 + NIXIE_SCRATCH.s
+    : NIXIE_SCRATCH.h * 3600 + NIXIE_SCRATCH.m * 60;
+  if (key === nixieFallbackKey) return nixieFallbackCached;
+  nixieFallbackKey = key;
+  const parts = [nixiePair(NIXIE_SCRATCH.h), nixiePair(NIXIE_SCRATCH.m)];
+  if (look.seconds) parts.push(nixiePair(NIXIE_SCRATCH.s));
+  nixieFallbackCached = parts.join(" ");
+  return nixieFallbackCached;
+}
+
 export function packNixieBuffer(
   date: Date,
   look: NixieLook,

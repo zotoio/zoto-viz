@@ -22,6 +22,12 @@ import { cssHex } from "./software-draw";
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
+import { TileShaderLatch } from "./tile-shader-build";
+import {
+  TileShaderFallback,
+  type TileShaderFallbackOpts,
+} from "./tile-shader-fallback";
+import type { VizDataFrame } from "../plugins/viz-host";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
@@ -59,6 +65,15 @@ export class SoftwareGpu {
 
 export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
+export class TileShaderSlot {
+  readonly latch = new TileShaderLatch();
+  fallback: TileShaderFallback | null = null;
+
+  build(gl: WebGL2RenderingContext, frag: string, log: (msg: string) => void): boolean {
+    return this.latch.build(gl, frag, log).ok;
+  }
+}
+
 export class RenderHost {
   readonly renderer: HostGpu;
   readonly canvas: HTMLCanvasElement;
@@ -74,6 +89,7 @@ export class RenderHost {
   private readonly frame: (ts: number) => void;
   private disposed = false;
   private pr: number;
+  private readonly tileShaders = new Map<string, TileShaderSlot>();
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -164,6 +180,45 @@ export class RenderHost {
 
   /** Pane geometry changed (mosaic layout, hero swap): clear stale pixels outside the new viewports. */
   invalidate(): void { this.dirty = true; }
+
+  tileSlot(tileId: string): TileShaderSlot {
+    let slot = this.tileShaders.get(tileId);
+    if (!slot) {
+      slot = new TileShaderSlot();
+      this.tileShaders.set(tileId, slot);
+    }
+    return slot;
+  }
+
+  /** Compile + link a tile fragment once at wall build. Returns false when the GL path is latched off. */
+  buildTileShader(tileId: string, frag: string, log: (msg: string) => void = () => {}): boolean {
+    if (this.software) return true;
+    const gl = this.gl;
+    if (!gl) return false;
+    return this.tileSlot(tileId).build(gl, frag, log);
+  }
+
+  tileShaderDead(tileId: string): boolean {
+    return this.tileSlot(tileId).latch.dead;
+  }
+
+  mountShaderFallback(tileId: string, mount: HTMLElement, opts: TileShaderFallbackOpts): TileShaderFallback {
+    const slot = this.tileSlot(tileId);
+    slot.fallback?.dispose();
+    const fb = new TileShaderFallback(mount, opts);
+    slot.fallback = fb;
+    return fb;
+  }
+
+  clearShaderFallback(tileId: string): void {
+    const slot = this.tileShaders.get(tileId);
+    slot?.fallback?.dispose();
+    if (slot) slot.fallback = null;
+  }
+
+  driveShaderFallback(tileId: string, frame: VizDataFrame): void {
+    this.tileSlot(tileId).fallback?.frame(frame);
+  }
 
   /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
   setPixelRatio(pr: number): void {

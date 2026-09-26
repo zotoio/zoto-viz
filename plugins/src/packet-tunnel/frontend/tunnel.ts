@@ -27,6 +27,13 @@ export function packetTunnelBright(depth: number): number {
   return Math.max(0.45, 0.55 + depth * 0.35);
 }
 
+/** Simple view line when the tunnel shader cannot link (not the no-traffic DATA fallback). */
+export function packetTunnelFallbackText(frame: Pick<VizDataFrame, "t" | "packets">): string {
+  const { lead, depth } = packetTunnelFields(frame);
+  const proto = frame.packets[0]?.proto ?? "DATA";
+  return `${proto} ${lead.toFixed(2)} · depth ${depth.toFixed(2)}`;
+}
+
 export function packetTunnelSample(frame: Pick<VizDataFrame, "t" | "packets">): {
   lead: number;
   depth: number;

@@ -546,7 +546,7 @@ export class Mosaic {
         const host = pane.querySelector<HTMLElement>(":scope > .mosaic-scene")
           ?? Object.assign(document.createElement("div"), { className: "mosaic-scene" });
         if (!host.parentElement) pane.appendChild(host);
-        const s = new NetScene(host, { satellite: true, host: this.cfg.host });
+        const s = new NetScene(host, { satellite: true, host: this.cfg.host, tileId: id });
         this.applySync(s, id, this.cfg.sync());
         const m = mosaicPaneMode(id);
         s.setMode(m, this.cfg.optsFor(m));

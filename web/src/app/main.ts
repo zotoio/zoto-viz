@@ -719,7 +719,7 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
   }
   try {
     const source = await fetchPluginSky(spec.id, spec.shader_sha256);
-    const err = target.setPluginShader({ id: spec.id, source });
+    const err = target.setPluginShader({ id: spec.id, source }, { packId: spec.id, packName: spec.name });
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
       spec.sky_error = err;
@@ -1013,6 +1013,13 @@ function feed(m: StateMsg): void {
     }, buildFrame);
     if (frame) {
       vizFrameTs = frame.t;
+      renderHost.driveShaderFallback(scene.tileId, frame);
+      if (mosaic?.on) {
+        for (const id of mosaic.tileIds) {
+          const extra = mosaic.graphScene(id);
+          if (extra && extra !== scene) renderHost.driveShaderFallback(extra.tileId, frame);
+        }
+      }
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }

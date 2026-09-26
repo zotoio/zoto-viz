@@ -901,7 +901,10 @@ export class Backdrop {
    * Compile a plugin ``sky/fragment.glsl`` onto the sphere. Returns a contract/compile
    * error, or null if the host accepted it. ``null`` source restores the shipped program.
    */
-  setPluginShader(opts: { id: string; source: string } | null): string | null {
+  setPluginShader(
+    opts: { id: string; source: string } | null,
+    gpuProbe?: (frag: string) => string | null,
+  ): string | null {
     if (!opts) {
       lastPlugin = null;
       this.pluginId = null;
@@ -919,7 +922,7 @@ export class Backdrop {
       if (this.kind === "plugin") this.setKind("plugin");
       return wrapped.error;
     }
-    const gpuErr = probePluginSkyCompile(wrapped.frag);
+    const gpuErr = gpuProbe ? gpuProbe(wrapped.frag) : probePluginSkyCompile(wrapped.frag);
     if (gpuErr) {
       lastPlugin = null;
       this.pluginId = null;
