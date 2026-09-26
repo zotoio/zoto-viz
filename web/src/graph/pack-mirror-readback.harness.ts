@@ -7,12 +7,23 @@ import {
 import {
   createPackMirrorArrowCanvas,
 } from "./pack-mirror-arrow-fixture";
+import {
+  PACK_MIRROR_QUADRANT_RGBA,
+  createPackMirrorQuadrantCanvas,
+} from "./pack-mirror-quadrant-fixture";
 import { letterboxInnerRect, surfaceLetterboxFill } from "./letterbox-fill";
+import { cssPointToDevice, cssRect } from "./pack-mirror-rect";
+import { glReadPixels1x1 } from "./pack-mirror-rect.boundary";
 
 export type PackMirrorReadbackInput = {
-  dpr: number;
+  /** Window / layout DPR (browser zoom). */
+  windowDpr: number;
+  /** Renderer `setPixelRatio` — production uses `min(windowDpr, 1.5)`. */
+  rendererDpr?: number;
   antialias: boolean;
   path: "host" | "sandbox";
+  /** Quadrant readback (zoom boundary); default keeps arrow fixture for legacy matrix rows. */
+  mode?: "arrow" | "quadrant";
 };
 
 export type PackMirrorReadbackResult = {
@@ -22,17 +33,21 @@ export type PackMirrorReadbackResult = {
   contentNonEmpty: boolean;
   mirrorArrowUp: boolean;
   letterboxColored: boolean;
+  quadrantTlOk?: boolean;
+  quadrantBrOk?: boolean;
   msaaSamples: number;
   glRenderer: string;
+  windowDpr: number;
+  rendererDpr: number;
 };
 
-function readPixel(
+function readPixelDevice(
   gl: WebGL2RenderingContext,
   x: number,
   y: number,
 ): [number, number, number, number] {
   const buf = new Uint8Array(4);
-  gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+  glReadPixels1x1(gl, { x, y, w: 1, h: 1, __unit: "device" }, buf);
   return [buf[0], buf[1], buf[2], buf[3]];
 }
 
@@ -41,6 +56,7 @@ export const PACK_MIRROR_READBACK_WALL_RGBA: [number, number, number, number] = 
 
 const ARROW_RED_MIN = 120;
 const ORIENTATION_MARGIN = 24;
+const QUADRANT_DOMINANCE = 40;
 
 function rgbaNear(
   px: [number, number, number, number],
@@ -52,6 +68,17 @@ function rgbaNear(
     && Math.abs(px[1] - ref[1]) <= tol
     && Math.abs(px[2] - ref[2]) <= tol
   );
+}
+
+function dominantChannel(
+  px: [number, number, number, number],
+): "r" | "g" | "b" | "y" | "none" {
+  const [r, g, b] = px;
+  if (r > g + QUADRANT_DOMINANCE && r > b + QUADRANT_DOMINANCE) return "r";
+  if (g > r + QUADRANT_DOMINANCE && g > b + QUADRANT_DOMINANCE) return "g";
+  if (b > r + QUADRANT_DOMINANCE && b > g + QUADRANT_DOMINANCE) return "b";
+  if (r > 150 && g > 130 && b < 140 && r + g > b + 200) return "y";
+  return "none";
 }
 
 function maxRedInRect(
@@ -72,7 +99,7 @@ function maxRedInRect(
       const x = cx + dx;
       const y = cy + dy;
       if (x < x0 || x >= x1 || y < y0 || y >= y1) continue;
-      max = Math.max(max, readPixel(gl, x, y)[0]);
+      max = Math.max(max, readPixelDevice(gl, x, y)[0]);
     }
   }
   return max;
@@ -91,16 +118,36 @@ function arrowScene(pw: number, ph: number): { scene: THREE.Scene; camera: THREE
   return { scene, camera };
 }
 
+function quadrantScene(pw: number, ph: number): { scene: THREE.Scene; camera: THREE.Camera } {
+  const canvas = createPackMirrorQuadrantCanvas();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.flipY = true;
+  const scene = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(0, pw, ph, 0, -1, 1);
+  const mat = new THREE.MeshBasicMaterial({ map: tex });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
+  mesh.position.set(pw / 2, ph / 2, 0);
+  scene.add(mesh);
+  return { scene, camera };
+}
+
+function rendererDprFor(input: PackMirrorReadbackInput): number {
+  return input.rendererDpr ?? Math.min(input.windowDpr, 1.5);
+}
+
 /** Runs inside headless Chrome (SwiftShader); throws on failure (no silent skip). */
 export async function runPackMirrorReadbackInPage(
   input: PackMirrorReadbackInput,
 ): Promise<PackMirrorReadbackResult> {
+  const windowDpr = input.windowDpr;
+  const rendererDpr = rendererDprFor(input);
+  const mode = input.mode ?? "arrow";
   const wall = document.createElement("div");
   wall.style.cssText = "position:fixed;left:0;top:0;width:200px;height:120px;";
   document.body.appendChild(wall);
 
-  const primaryBox = { w: 100, h: 80 };
-  const mirrorBox = { x: 100, y: 0, w: 60, h: 70 };
+  const primaryBox = cssRect(0, 0, 100, 80);
+  const mirrorBox = cssRect(100, 0, 60, 70);
   const fill = surfaceLetterboxFill(0x0a1020, 0.25);
 
   const rd = new THREE.WebGLRenderer({
@@ -108,7 +155,7 @@ export async function runPackMirrorReadbackInPage(
     alpha: false,
     preserveDrawingBuffer: true,
   });
-  rd.setPixelRatio(input.dpr);
+  rd.setPixelRatio(rendererDpr);
   rd.setSize(200, 120, false);
   wall.appendChild(rd.domElement);
   rd.setScissorTest(false);
@@ -124,15 +171,17 @@ export async function runPackMirrorReadbackInPage(
   if (!dbg) throw new Error("WEBGL_debug_renderer_info unavailable");
   const glRenderer = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
   if (!glRenderer) throw new Error("GL renderer string empty");
-  const pw = Math.max(2, Math.round(primaryBox.w * input.dpr));
-  const ph = Math.max(2, Math.round(primaryBox.h * input.dpr));
+  const pr = rd.getPixelRatio();
+  const pw = Math.max(2, Math.round(primaryBox.w * pr));
+  const ph = Math.max(2, Math.round(primaryBox.h * pr));
+  const sceneFactory = mode === "quadrant" ? quadrantScene : arrowScene;
 
   if (input.path === "host") {
     const reg = new PackMirrorRegistry();
     reg.syncScopes(new Map([["plugin:arrow", { tileCount: 2, antialias: input.antialias }]]));
-    const { scene, camera } = arrowScene(pw, ph);
+    const { scene, camera } = sceneFactory(pw, ph);
     reg.renderPrimary("plugin:arrow", rd, scene, camera, primaryBox, 0x0a1020, input.antialias);
-    reg.presentPack("plugin:arrow", rd, { x: 0, y: 0, w: primaryBox.w, h: primaryBox.h }, {
+    reg.presentPack("plugin:arrow", rd, primaryBox, {
       letterbox: false,
       fill: null,
       aspect: primaryBox.w / primaryBox.h,
@@ -145,77 +194,109 @@ export async function runPackMirrorReadbackInPage(
     reg.dispose();
   } else {
     const gpu = new SandboxBitmapGl();
-    const canvas = createPackMirrorArrowCanvas();
+    const canvas = mode === "quadrant" ? createPackMirrorQuadrantCanvas() : createPackMirrorArrowCanvas();
     const bmp = await createImageBitmap(canvas);
     const tex = gpu.uploadFrame(bmp);
     if (!tex) throw new Error("sandbox texture upload failed");
     gpu.present(rd, tex, fill, mirrorBox, primaryBox.w / primaryBox.h);
     bmp.close();
-    regPresentPrimaryForSandbox(rd, primaryBox, pw, ph, input.antialias);
+    regPresentPrimaryForSandbox(rd, primaryBox, pw, ph, input.antialias, sceneFactory);
     gpu.dispose();
   }
 
-  const primaryCenter = readPixel(
-    gl,
-    Math.round(primaryBox.w * 0.5 * input.dpr),
-    Math.round(primaryBox.h * 0.5 * input.dpr),
-  );
+  const primarySampleCss = mode === "quadrant"
+    ? {
+      x: primaryBox.x + primaryBox.w * 0.25,
+      y: primaryBox.y + primaryBox.h * 0.75,
+    }
+    : {
+      x: primaryBox.x + primaryBox.w * 0.5,
+      y: primaryBox.y + primaryBox.h * 0.5,
+    };
+  const primaryCenterPx = cssPointToDevice(primarySampleCss.x, primarySampleCss.y, pr);
+  const primaryCenter = readPixelDevice(gl, primaryCenterPx.x, primaryCenterPx.y);
 
   const innerTd = letterboxInnerRect(mirrorBox, primaryBox.w / primaryBox.h);
   const innerX = mirrorBox.x + innerTd.x;
   const innerY = mirrorBox.y + (mirrorBox.h - innerTd.y - innerTd.h);
-  const mirrorCenter = readPixel(
-    gl,
-    Math.round((innerX + innerTd.w * 0.5) * input.dpr),
-    Math.round((innerY + innerTd.h * 0.5) * input.dpr),
+  const mirrorCenterPx = cssPointToDevice(
+    innerX + innerTd.w * 0.5,
+    innerY + innerTd.h * 0.5,
+    pr,
   );
+  const mirrorCenter = readPixelDevice(gl, mirrorCenterPx.x, mirrorCenterPx.y);
 
   const topBarBottom = innerY + innerTd.h;
   const topBarTop = mirrorBox.y + mirrorBox.h;
   const barCenterY = topBarBottom + (topBarTop - topBarBottom) * 0.5;
-  const letterboxBarCenter = readPixel(
-    gl,
-    Math.round((mirrorBox.x + mirrorBox.w * 0.5) * input.dpr),
-    Math.round(barCenterY * input.dpr),
+  const letterboxBarPx = cssPointToDevice(
+    mirrorBox.x + mirrorBox.w * 0.5,
+    barCenterY,
+    pr,
   );
+  const letterboxBarCenter = readPixelDevice(gl, letterboxBarPx.x, letterboxBarPx.y);
 
-  const innerPxX = Math.round(innerX * input.dpr);
-  const innerPxY = Math.round(innerY * input.dpr);
-  const innerPxW = Math.round(innerTd.w * input.dpr);
-  const innerPxH = Math.round(innerTd.h * input.dpr);
+  const innerDevice = cssRect(innerX, innerY, innerTd.w, innerTd.h);
+  const innerPx = cssPointToDevice(innerDevice.x, innerDevice.y, pr);
+  const innerPxW = Math.round(innerTd.w * pr);
+  const innerPxH = Math.round(innerTd.h * pr);
   const marginX = Math.max(2, Math.floor(innerPxW * 0.15));
   const marginY = Math.max(2, Math.floor(innerPxH * 0.15));
   const bandW = Math.max(2, Math.floor(innerPxW * 0.35));
   const bandH = Math.max(2, Math.floor(innerPxH * 0.35));
   const topLeftPeak = maxRedInRect(
     gl,
-    innerPxX + marginX,
-    innerPxY + innerPxH - marginY - bandH,
+    innerPx.x + marginX,
+    innerPx.y + innerPxH - marginY - bandH,
     bandW,
     bandH,
   );
   const bottomRightPeak = maxRedInRect(
     gl,
-    innerPxX + innerPxW - marginX - bandW,
-    innerPxY + marginY,
+    innerPx.x + innerPxW - marginX - bandW,
+    innerPx.y + marginY,
     bandW,
     bandH,
   );
 
-  const contentNonEmpty = !rgbaNear(primaryCenter, PACK_MIRROR_READBACK_WALL_RGBA) && primaryCenter[0] >= ARROW_RED_MIN;
-  const mirrorHasArrow = topLeftPeak >= ARROW_RED_MIN;
-  const mirrorArrowUp = topLeftPeak > bottomRightPeak + ORIENTATION_MARGIN;
+  let quadrantTlOk: boolean | undefined;
+  let quadrantBrOk: boolean | undefined;
+  if (mode === "quadrant") {
+    const tlCss = cssPointToDevice(innerX + innerTd.w * 0.25, innerY + innerTd.h * 0.75, pr);
+    const brCss = cssPointToDevice(innerX + innerTd.w * 0.75, innerY + innerTd.h * 0.25, pr);
+    const tlPx = readPixelDevice(gl, tlCss.x, tlCss.y);
+    const brPx = readPixelDevice(gl, brCss.x, brCss.y);
+    quadrantTlOk = dominantChannel(tlPx) === "r";
+    quadrantBrOk = dominantChannel(brPx) === "y";
+    if (!quadrantTlOk || !quadrantBrOk) {
+      throw new Error(
+        `quadrant orientation wrong at windowDpr=${windowDpr} rendererDpr=${rendererDpr}: tl=${dominantChannel(tlPx)} br=${dominantChannel(brPx)} rgba tl=${tlPx.join(",")} br=${brPx.join(",")}`,
+      );
+    }
+    void PACK_MIRROR_QUADRANT_RGBA;
+  }
+
+  const contentNonEmpty = !rgbaNear(primaryCenter, PACK_MIRROR_READBACK_WALL_RGBA)
+    && (mode === "quadrant" ? dominantChannel(primaryCenter) !== "none" : primaryCenter[0] >= ARROW_RED_MIN);
+  const mirrorHasArrow = mode === "quadrant"
+    ? quadrantTlOk === true
+    : topLeftPeak >= ARROW_RED_MIN;
+  const mirrorArrowUp = mode === "quadrant"
+    ? quadrantTlOk === true && quadrantBrOk === true
+    : topLeftPeak > bottomRightPeak + ORIENTATION_MARGIN;
   const letterboxColored = !rgbaNear(letterboxBarCenter, PACK_MIRROR_READBACK_WALL_RGBA);
 
   rd.dispose();
   wall.remove();
 
   if (!contentNonEmpty) throw new Error(`primary tile empty at center: rgba(${primaryCenter.join(",")})`);
-  if (!mirrorHasArrow) throw new Error(`mirror center missing arrow: rgba(${mirrorCenter.join(",")}) peaks tl/br=${topLeftPeak}/${bottomRightPeak}`);
-  if (input.path === "host" && !mirrorArrowUp) {
+  if (!mirrorHasArrow) {
+    throw new Error(`mirror center missing content: rgba(${mirrorCenter.join(",")}) peaks tl/br=${topLeftPeak}/${bottomRightPeak}`);
+  }
+  if (input.path === "host" && mode === "arrow" && !mirrorArrowUp) {
     throw new Error(`mirror arrow orientation wrong: topLeft=${topLeftPeak} bottomRight=${bottomRightPeak}`);
   }
-  if (input.path === "sandbox" && !mirrorHasArrow) {
+  if (input.path === "sandbox" && mode === "arrow" && !mirrorHasArrow) {
     throw new Error(`sandbox mirror missing arrow: topLeft=${topLeftPeak}`);
   }
   if (!letterboxColored) throw new Error(`letterbox bar not surface colour at center: rgba(${letterboxBarCenter.join(",")})`);
@@ -228,23 +309,28 @@ export async function runPackMirrorReadbackInPage(
     contentNonEmpty,
     mirrorArrowUp: input.path === "host" ? mirrorArrowUp : mirrorHasArrow,
     letterboxColored,
+    quadrantTlOk,
+    quadrantBrOk,
     msaaSamples: sessionSamples,
     glRenderer,
+    windowDpr,
+    rendererDpr,
   };
 }
 
 function regPresentPrimaryForSandbox(
   rd: THREE.WebGLRenderer,
-  primaryBox: { w: number; h: number },
+  primaryBox: ReturnType<typeof cssRect>,
   pw: number,
   ph: number,
   antialias: boolean,
+  sceneFactory: (pw: number, ph: number) => { scene: THREE.Scene; camera: THREE.Camera },
 ): void {
   const reg = new PackMirrorRegistry();
   reg.syncScopes(new Map([["plugin:arrow", { tileCount: 2, antialias }]]));
-  const { scene, camera } = arrowScene(pw, ph);
+  const { scene, camera } = sceneFactory(pw, ph);
   reg.renderPrimary("plugin:arrow", rd, scene, camera, primaryBox, 0x0a1020, antialias);
-  reg.presentPack("plugin:arrow", rd, { x: 0, y: 0, w: primaryBox.w, h: primaryBox.h }, {
+  reg.presentPack("plugin:arrow", rd, primaryBox, {
     letterbox: false,
     fill: null,
     aspect: primaryBox.w / primaryBox.h,

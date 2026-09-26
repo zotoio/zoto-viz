@@ -2,8 +2,6 @@
  * @vitest-environment node
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { accessSync, constants } from "node:fs";
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import http from "node:http";
@@ -11,10 +9,12 @@ import type { AddressInfo } from "node:net";
 import { createServer, type ViteDevServer } from "vite";
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { assertPackMirrorRenderer } from "./pack-mirror-renderer-gate";
+import {
+  PACK_MIRROR_READBACK_CHROME_PATH,
+  requireReadbackChrome,
+} from "./pack-mirror-readback-chrome";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-export const PACK_MIRROR_READBACK_CHROME_PATH = process.env.PACK_MIRROR_CHROME_PATH || "/usr/local/bin/google-chrome";
-export const PACK_MIRROR_READBACK_CHROME_VERSION = "148.0.7778.96";
 
 const SWIFT_SHADER_ARGS = [
   "--headless=new",
@@ -34,27 +34,6 @@ const CASES: Case[] = DPR_MATRIX.flatMap((dpr) => ([
   { dpr, antialias: false, path: "sandbox" as const },
   { dpr, antialias: true, path: "sandbox" as const },
 ]));
-
-function chromeVersion(): string {
-  const out = execFileSync(PACK_MIRROR_READBACK_CHROME_PATH, ["--version"], { encoding: "utf8" }).trim();
-  const m = out.match(/(\d+\.\d+\.\d+\.\d+)/);
-  return m?.[1] ?? out;
-}
-
-/** Fail during collection (not 8 skipped) when Chrome for Testing is missing or wrong version. */
-function requireReadbackChrome(): void {
-  try {
-    accessSync(PACK_MIRROR_READBACK_CHROME_PATH, constants.X_OK);
-  } catch {
-    throw new Error(
-      `Chrome for Testing is required at ${PACK_MIRROR_READBACK_CHROME_PATH} (readback must fail, not skip)`,
-    );
-  }
-  const ver = chromeVersion();
-  if (ver !== PACK_MIRROR_READBACK_CHROME_VERSION) {
-    throw new Error(`Expected Chrome for Testing ${PACK_MIRROR_READBACK_CHROME_VERSION}, got ${ver}`);
-  }
-}
 
 requireReadbackChrome();
 
