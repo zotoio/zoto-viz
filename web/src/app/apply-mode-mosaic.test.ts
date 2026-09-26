@@ -1,9 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   consentBlockMessage,
   mosaicFocusSlot,
-  mosaicHeaderPreApply,
-  mosaicPanePickPreApply,
   mosaicSwapFrom,
   revertModeSelection,
 } from "./apply-mode-mosaic";
@@ -41,54 +39,5 @@ describe("revertModeSelection", () => {
 describe("consentBlockMessage", () => {
   it("names the plugin when available", () => {
     expect(consentBlockMessage({ name: "Heat map" })).toMatch(/Heat map needs review/);
-  });
-});
-
-describe("mosaicHeaderPreApply", () => {
-  it("denies before swapping the pane and paints the target slot", async () => {
-    const setPaneView = vi.fn(() => true);
-    const notices: [string, string][] = [];
-    const mosaic = {
-      tileIds: ["plugin:topology", "plugin:wifi"],
-      focusedId: "plugin:wifi",
-      setPaneView,
-      setPaneNotice: (id: string, text: string | null) => {
-        if (text) notices.push([id, text]);
-      },
-    };
-    const result = await mosaicHeaderPreApply(
-      mosaic,
-      "plugin:heat",
-      async () => false,
-      { name: "Heat" },
-    );
-    expect(result).toBe("denied");
-    expect(setPaneView).not.toHaveBeenCalled();
-    expect(notices).toEqual([["plugin:wifi", consentBlockMessage({ name: "Heat" })]]);
-  });
-});
-
-describe("mosaicPanePickPreApply", () => {
-  it("denies before swapping the pane and paints the slot", async () => {
-    const setPaneView = vi.fn(() => true);
-    const notices: [string, string][] = [];
-    const mosaic = {
-      tileIds: ["plugin:topology", "plugin:wifi"],
-      focusedId: "plugin:topology",
-      setPaneView,
-      setPaneNotice: (id: string, text: string | null) => {
-        if (text) notices.push([id, text]);
-      },
-    };
-    const result = await mosaicPanePickPreApply(
-      mosaic,
-      "plugin:topology",
-      "plugin:heat",
-      async () => false,
-      { name: "Heat" },
-    );
-    expect(result).toBe("denied");
-    expect(setPaneView).not.toHaveBeenCalled();
-    expect(notices[0]?.[0]).toBe("plugin:topology");
   });
 });

@@ -93,7 +93,7 @@ import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
-import { syncPanelPackSub } from "../graph/panel-view-lifecycle";
+import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentFrameStats, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
@@ -107,9 +107,8 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { dropMosaicTileWriter, deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
-import {
-  mosaicHeaderPreApply, mosaicPanePickPreApply, revertModeSelection,
-} from "./apply-mode-mosaic";
+import { revertModeSelection } from "./apply-mode-mosaic";
+import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
 
 ignoreResizeLoopError();
 
@@ -766,6 +765,44 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   void applyModeAsync(id, flags);
 }
 
+function teardownMosaicPanelView(viewId: string): void {
+  releasePanelView(viewId);
+  dropMosaicTileWriter(viewId);
+}
+
+async function mountMosaicPanelView(viewId: string): Promise<void> {
+  if (!mosaic?.on) return;
+  const pm = modeById(viewId);
+  const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
+  const o = optsFor(pm);
+  const target = mosaic.graphScene(viewId);
+  const skyStage = !pm.standalone && !!(pm.stageOnly || (lookForMode(viewId) ?? spec?.look)?.stageOnly);
+  target?.setMode(pm, o);
+  target?.setStageOnly(skyStage);
+  const paneSpec = skySpecForMode(viewId, spec);
+  if (pm.standalone || arcadeSlotFor(pm) !== "carousel") void syncPluginSky(paneSpec);
+  const packId = normalizeVizDemoPackId(pm.pluginId);
+  syncPanelPackSub(viewId, !!(packId || spec?.capabilities?.includes("viz.read")));
+}
+
+function persistMosaicPickLayout(): void {
+  settings.refreshMosaicSlots();
+}
+
+async function runMosaicPaneSwitch(toViewId: string, fromViewId?: string): Promise<SwitchPaneViewResult> {
+  if (!mosaic?.on) return { ok: false, reason: "Mosaic is off." };
+  const pm = modeById(toViewId);
+  const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
+  return switchPaneView(mosaic, toViewId, {
+    fromViewId,
+    ensureReviewed: () => ensureReviewed(spec),
+    spec,
+    teardownView: teardownMosaicPanelView,
+    mountView: mountMosaicPanelView,
+    persistLayout: persistMosaicPickLayout,
+  });
+}
+
 async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}): Promise<void> {
   const m = modeById(id);
   const opts = optsFor(m);
@@ -774,8 +811,8 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
   const mosaicGraph = mosaic?.on && !(m.pluginId && m.standalone);
 
   if (mosaicGraph && mosaic) {
-    const pre = await mosaicHeaderPreApply(mosaic, m.id, () => ensureReviewed(spec), spec);
-    if (pre === "no-target" || pre === "denied" || pre === "swap-failed") {
+    const sw = await runMosaicPaneSwitch(m.id);
+    if (!sw.ok) {
       revertModeSelection(prevMode, modeSel, { mode: liveMode });
       return;
     }
@@ -812,21 +849,15 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
         tiles: settings.animSettings.mosaicTiles,
       });
     }
-    const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.tileIds[0] ?? m.id;
-    mosaic.focus(focusId);
-    const target = mosaic.graphScene(focusId);
-    if (target) {
-      target.setMode(m, opts);
-      target.setStageOnly(skyStage);
-    }
     document.body.classList.remove("arcade");
     scene.setActive(true);
+    const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.focusedId || mosaic.tileIds[0] || m.id;
+    const target = mosaic.graphScene(focusId);
     if (target !== scene) scene.setStageOnly(false);
     morphViewChrome(m, opts, spec, skyStage);
     applyViewLook();
     if (m.standalone || arcadeSlotFor(m) !== "carousel") {
       void loadTsPlugin(paneSpec);
-      void syncPluginSky(paneSpec);
     }
     return;
   }
@@ -1170,23 +1201,11 @@ mosaic = new Mosaic({
 settings.onMosaicPanePick = (from, to) => pickMosaicPane(from, to);
 
 async function pickMosaicPane(from: string, to: string): Promise<boolean> {
-  if (!mosaic?.on) return false;
-  const pm = modeById(to);
-  const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
-  const pre = await mosaicPanePickPreApply(mosaic, from, to, () => ensureReviewed(spec), spec);
-  if (pre !== "ok") {
+  const sw = await runMosaicPaneSwitch(to, from);
+  if (!sw.ok) {
     settings.refreshMosaicSlots();
     return false;
   }
-  mosaic.focus(to);
-  const opts = optsFor(pm);
-  const target = mosaic.graphScene(to);
-  const skyStage = !pm.standalone && !!(pm.stageOnly || (lookForMode(to) ?? spec?.look)?.stageOnly);
-  target?.setMode(pm, opts);
-  target?.setStageOnly(skyStage);
-  const paneSpec = skySpecForMode(to, spec);
-  if (pm.standalone || arcadeSlotFor(pm) !== "carousel") void syncPluginSky(paneSpec);
-  settings.refreshMosaicSlots();
   return true;
 }
 
