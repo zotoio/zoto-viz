@@ -40,6 +40,8 @@ jobs:
           pnpm build
       - name: Backrooms browser smoke
         run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
           bash scripts/dev.sh start backend
           cd web && pnpm exec playwright install chromium
           xvfb-run -a env ZOTO_VIZ_URL=http://127.0.0.1:7020/ pnpm test:backrooms-smoke
