@@ -93,6 +93,28 @@ describe("viz sdk frozen fixtures", () => {
     expect(scrubbed.devices.map((d) => d.mac).sort()).toEqual(["host-mac", "host-mac-02"]);
     expect(scrubbed.views?.wifi?.self).toMatch(/^host-mac(?:-\d{2})?$/);
     expect(JSON.stringify(scrubbed)).not.toMatch(MAC_ADDRESS_IN_TEXT);
+
+    const sameNic: StateMsg = {
+      ...state,
+      devices: [
+        {
+          ...state.devices[0],
+          mac: "AA-E4-AD-CA-84-E4",
+        },
+        state.devices[1],
+      ],
+      views: {
+        wifi: {
+          devices: [],
+          flows: [],
+          hub: "wifi:hub",
+          self: "aa:e4:ad:ca:84:e4",
+        },
+      },
+    };
+    const deduped = scrubVizCaptureState(sameNic);
+    expect(new Set(deduped.devices.map((d) => d.mac)).size).toBe(2);
+    expect(deduped.views?.wifi?.self).toBe(deduped.devices[0].mac);
   });
 
   it("vm-live is a quiet real capture with idle merge demo slices", () => {

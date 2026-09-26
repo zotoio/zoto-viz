@@ -115,16 +115,26 @@ function collectHostnameTokens(state: StateMsg): Set<string> {
 }
 
 export function scrubIdentifierMap(state: StateMsg): Map<string, string> {
-  const unique = [...collectStructuralIds(state)].sort((a, b) => a.localeCompare(b));
+  const sorted = [...collectStructuralIds(state)].sort((a, b) => a.localeCompare(b));
+  const unique: string[] = [];
+  const seenMacNorm = new Set<string>();
+  for (const id of sorted) {
+    if (isMacStructuralId(id)) {
+      const norm = normalizeMacKey(id);
+      if (seenMacNorm.has(norm)) continue;
+      seenMacNorm.add(norm);
+    }
+    unique.push(id);
+  }
   const map = new Map<string, string>();
   let hostIndex = 0;
   let macIndex = 0;
   for (const id of unique) {
     if (isMacStructuralId(id)) {
       macIndex += 1;
-      map.set(id, scrubbedMacPlaceholder(macIndex));
-      const norm = normalizeMacKey(id);
-      if (norm !== id) map.set(norm, map.get(id)!);
+      const placeholder = scrubbedMacPlaceholder(macIndex);
+      map.set(id, placeholder);
+      map.set(normalizeMacKey(id), placeholder);
     } else {
       hostIndex += 1;
       map.set(id, `host-${String(hostIndex).padStart(2, "0")}`);
