@@ -6,7 +6,7 @@ import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
 import { currentSkyRecipe, DEFAULT_SKY_RECIPE, cloneSkyRecipe, lerpSkyRecipe, skyRecipeKey, type SkyRecipe } from "./sky-ai";
 import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
-import { probeWebGL, releaseThrowawayGl } from "./webgl";
+import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
 
 /**
@@ -695,21 +695,6 @@ export function probePluginSkyCompile(frag: string): string | null {
   } finally {
     releaseThrowawayGl(gl);
   }
-}
-
-/**
- * Count compile errors for plugin sky fragment + host vertex (0 or 1+).
- * Uses the throwaway GL probe when available; in jsdom falls back to known regressions (e.g. `fc.`).
- */
-export function countPluginSkyShaderCompileErrors(frag: string, vert: string): number {
-  let errors = 0;
-  if (probePluginSkyCompile(frag)) errors++;
-  if (probePluginSkyVertCompile(vert)) errors++;
-  if (errors > 0) return errors;
-  if (probeWebGL()) return 0;
-  const body = `${frag}\n${vert}`;
-  if (/\bfc\s*\./.test(body)) errors++;
-  return errors;
 }
 
 const PLUGIN_UNIFORM_RE =

@@ -2,6 +2,8 @@
 
 ## Amendment 7 (QE 975bd59)
 
+Shader-compile fallback for nixie-clock is out of scope here and goes in the separate host fallback PR.
+
 ### console errors at head
 
 - **`'fc' : undeclared identifier` / GLSL field-selection:** `plugins/src/nixie-clock/sky/fragment.glsl` (shimmer line used `fc.x`). Same bug on `origin/main`; fixed on this branch (`gl_FragCoord.x`). Row: `nixie-clock-sky.test.ts` A7 compile probe → 0 errors; revert `nixie-fc-glsl-revert` → red (1 error).

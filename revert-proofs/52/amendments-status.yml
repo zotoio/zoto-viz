@@ -20,6 +20,9 @@ amendments:
   - id: 7
     title: "Nixie fc GLSL; per-tile delivered mirror; A3 bytes + CSP notes"
     status: done
+  - id: 7a
+    title: "Scope: no host shader-failure fallback / Simple view in #52"
+    status: done
     artifacts:
       - revert-proofs/52/amendment-7-pr-body.md
       - revert-proofs/52/nixie-fc-glsl-revert.json
