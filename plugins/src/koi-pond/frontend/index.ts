@@ -53,12 +53,6 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(0, buf0);
   zoto.writeBuffer(1, buf1);
   zoto.writeBuffer(2, buf2);
-  if (packed.particleCount > 0) {
-    zoto.writeParticles(
-      packed.particles.subarray(0, packed.particleCount * 4),
-      4,
-    );
-  }
   zoto.writeUniform("uBright", packed.bright);
   zoto.writeUniform("uAudio", frame.audio);
   zoto.writeUniform("uAccent", packed.accent);

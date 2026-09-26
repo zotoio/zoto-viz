@@ -12,8 +12,10 @@ import {
   demoFrame,
   FAIL_MURK_THRESHOLD,
   hostTileSizeFromConfig,
+  KOI_SLOT,
   KOI_WORK_BUDGET,
   KoiPondSim,
+  lilyPadSlotCount,
   koiPondHudLabel,
   koiPondLumaVariance,
   koiPondSmokeLuma,
@@ -384,5 +386,77 @@ describe("koi-pond shipped pack", () => {
     expect(unpacked.pattern).toBeGreaterThanOrEqual(0);
     expect(unpacked.vigor).toBeGreaterThan(0);
     expect(sim.slot0[48]).toBe(0);
+  });
+
+  it("reuses step containers over 300 idle frames", () => {
+    const sim = new KoiPondSim(parseKoiPondOptions({ petalDrift: "false" }));
+    const empty = (t: number): VizDataFrame => ({
+      t,
+      dt: 1 / 60,
+      audio: 0,
+      packets: [],
+      rf: [],
+      talkers: [],
+      headlines: [],
+      sys: {
+        cpu: 0,
+        mem: 0,
+        disk: 0,
+        gpu: 0,
+        temp: 0,
+        watts: 0,
+        psi: 0,
+        sockets: 0,
+        failed: 0,
+        udev: 0,
+      } satisfies VizSysTelemetry,
+      demo: false,
+    });
+    let c = sim.stepContainers();
+    const { talkerById, idleTalkers, slottedIds, slottedTalkers } = c;
+    for (let i = 0; i < 300; i++) {
+      sim.advance(empty(i / 60));
+      c = sim.stepContainers();
+      expect(c.talkerById).toBe(talkerById);
+      expect(c.idleTalkers).toBe(idleTalkers);
+      expect(c.slottedIds).toBe(slottedIds);
+      expect(c.slottedTalkers).toBe(slottedTalkers);
+    }
+  });
+
+  it("reuses step containers over 300 frames with 200 host talkers", () => {
+    const sim = new KoiPondSim(parseKoiPondOptions({ koiCap: "16", quality: "high" }));
+    const many = Array.from({ length: 200 }, (_, i) => ({
+      id: `host:${i}`,
+      rate: 40 + (i % 17),
+      role: i % 5 === 0 ? "gateway" : "lan",
+    }));
+    let c = sim.stepContainers();
+    const { talkerById, idleTalkers, slottedIds, slottedTalkers } = c;
+    for (let i = 0; i < 300; i++) {
+      sim.advance(frame({ t: i / 60, talkers: many }));
+      c = sim.stepContainers();
+      expect(c.talkerById).toBe(talkerById);
+      expect(c.idleTalkers).toBe(idleTalkers);
+      expect(c.slottedIds).toBe(slottedIds);
+      expect(c.slottedTalkers).toBe(slottedTalkers);
+    }
+  });
+
+  it("clears slot2 particle region when shader particle count reaches zero", () => {
+    const o = parseKoiPondOptions({ petalDrift: "false", rippleIntensity: "0.15" });
+    const sim = new KoiPondSim(o);
+    const lan = [{ id: "burst", rate: 200, role: "lan" }];
+    sim.advance(frame({
+      talkers: lan,
+      packets: [{ proto: "udp", size: 80, field: 0.8 }],
+    }));
+    let packed = sim.advance(frame({ talkers: lan, packets: [] }));
+    for (let i = 0; i < 420; i++) {
+      packed = sim.advance(frame({ t: i / 60, talkers: lan, packets: [] }));
+    }
+    expect(packed.slot0[KOI_SLOT.particleCount]).toBe(0);
+    const base = lilyPadSlotCount(o.lilyDensity) * 4;
+    for (let i = base; i < 64; i++) expect(packed.slot2[i]).toBe(0);
   });
 });

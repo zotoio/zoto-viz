@@ -560,6 +560,8 @@ interface KoiBody {
   id: string;
   pattern: number;
   vigor: number;
+  hash: number;
+  dstHash: number;
   x: number;
   z: number;
   vx: number;
@@ -567,6 +569,14 @@ interface KoiBody {
   yaw: number;
   padIndex: number;
 }
+
+/** Reused step-once containers (stable identity for perf tests). */
+export type KoiPondStepContainers = {
+  talkerById: Map<string, VizTalkerSample>;
+  idleTalkers: VizTalkerSample[];
+  slottedIds: Set<string>;
+  slottedTalkers: VizTalkerSample[];
+};
 
 interface PadBody {
   id: string;
@@ -605,6 +615,12 @@ export class KoiPondSim {
   private subscriptions = 0;
   private rafHooks = 0;
   private glDisposals = 0;
+  private readonly talkerById = new Map<string, VizTalkerSample>();
+  private readonly idleTalkers: VizTalkerSample[] = [];
+  private idleTalkersKoiCap = -1;
+  private readonly slottedIds = new Set<string>();
+  private readonly slottedTalkersScratch: VizTalkerSample[] = [];
+  private padLayoutKey = "";
 
   constructor(opts: KoiPondOptions = DEFAULT_OPTIONS) {
     this.opts = opts;
@@ -616,6 +632,7 @@ export class KoiPondSim {
 
   private initPads(): void {
     this.pads.length = 0;
+    this.padLayoutKey = "";
     const n = Math.min(MAX_PADS, lilyPadSlotCount(this.opts.lilyDensity));
     for (let i = 0; i < n; i++) {
       const h = idHash(`pad:${i}:${this.opts.seed}`);
@@ -631,8 +648,21 @@ export class KoiPondSim {
 
   setOptions(opts: KoiPondOptions): void {
     const regen = opts.lilyDensity !== this.opts.lilyDensity || opts.seed !== this.opts.seed;
+    const capChanged = opts.koiCap !== this.opts.koiCap;
+    const lotusChanged = opts.lotusCount !== this.opts.lotusCount;
     this.opts = opts;
     if (regen) this.initPads();
+    if (capChanged) this.idleTalkersKoiCap = -1;
+    if (regen || lotusChanged) this.padLayoutKey = "";
+  }
+
+  stepContainers(): KoiPondStepContainers {
+    return {
+      talkerById: this.talkerById,
+      idleTalkers: this.idleTalkers,
+      slottedIds: this.slottedIds,
+      slottedTalkers: this.slottedTalkersScratch,
+    };
   }
 
   getOptions(): KoiPondOptions {
@@ -721,74 +751,87 @@ export class KoiPondSim {
     return Math.min(this.opts.koiCap, cap.maxKoi, MAX_KOI);
   }
 
-  private padForTalker(t: VizTalkerSample): number {
-    const h = idHash(t.id);
+  private padIndexForHash(hash: number, dstHash: number): number {
     const lotusSlots = Math.min(this.opts.lotusCount, this.pads.length);
-    if (lotusSlots > 0 && h > 0.55) return Math.floor(h * lotusSlots) % lotusSlots;
+    if (lotusSlots > 0 && hash > 0.55) return Math.floor(hash * lotusSlots) % lotusSlots;
     const start = lotusSlots;
     const count = Math.max(1, this.pads.length - start);
-    return start + Math.floor(idHash(`${t.id}:dst`) * count) % count;
+    return start + Math.floor(dstHash * count) % count;
+  }
+
+  private ensurePadIndices(): void {
+    const key = `${this.pads.length}:${this.opts.lotusCount}`;
+    if (key === this.padLayoutKey) return;
+    this.padLayoutKey = key;
+    for (const k of this.koi.values()) {
+      k.padIndex = this.padIndexForHash(k.hash, k.dstHash);
+    }
   }
 
   /** Decorative school when the host sends no talkers (standing pond, not a blackout). */
-  private idleTalkersForPond(): VizTalkerSample[] {
-    const n = Math.min(3, Math.max(2, Math.floor(this.opts.koiCap / 4)));
-    const out: VizTalkerSample[] = [];
+  private rebuildIdleTalkersIfNeeded(): void {
+    const cap = this.koiSlotCap();
+    if (cap === this.idleTalkersKoiCap && this.idleTalkers.length > 0) return;
+    this.idleTalkersKoiCap = cap;
+    this.idleTalkers.length = 0;
+    const n = Math.min(3, Math.max(2, Math.floor(cap / 4)));
     for (let i = 0; i < n; i++) {
-      out.push({
+      this.idleTalkers.push({
         id: `__koi-pond:idle:${i}`,
         rate: 18 + i * 6,
         role: "lan",
       });
     }
-    return out;
   }
 
   private effectiveTalkers(host: VizTalkerSample[]): VizTalkerSample[] {
-    return host.length > 0 ? host : this.idleTalkersForPond();
+    if (host.length > 0) return host;
+    this.rebuildIdleTalkersIfNeeded();
+    return this.idleTalkers;
   }
 
-  private slottedTalkers(all: VizTalkerSample[], simT: number): VizTalkerSample[] {
+  private rebuildSlotted(all: VizTalkerSample[], simT: number): void {
     const cap = this.koiSlotCap();
     this.talkerSlots = assignTalkerSlots(all, this.talkerSlots, cap, simT);
-    const byId = new Map(all.map((t) => [t.id, t]));
-    const out: VizTalkerSample[] = [];
+    this.slottedTalkersScratch.length = 0;
+    this.slottedIds.clear();
     for (const id of slottedTalkerIds(this.talkerSlots)) {
-      const t = byId.get(id);
-      if (t) out.push(t);
+      const t = this.talkerById.get(id);
+      if (!t) continue;
+      this.slottedIds.add(id);
+      this.slottedTalkersScratch.push(t);
     }
-    return out;
   }
 
-  private syncKoi(slotted: VizTalkerSample[], allTalkerIds: Set<string>, all: VizTalkerSample[]): void {
-    const slottedSet = new Set(slotted.map((t) => t.id));
-    const byId = new Map(all.map((t) => [t.id, t]));
-    for (const t of all) {
-      const inSlot = slottedSet.has(t.id);
+  private syncKoi(): void {
+    this.ensurePadIndices();
+    for (const t of this.talkerById.values()) {
+      const inSlot = this.slottedIds.has(t.id);
       let k = this.koi.get(t.id);
       if (!k && inSlot) {
         const h = idHash(t.id);
+        const dstHash = idHash(`${t.id}:dst`);
         k = {
           id: t.id,
           pattern: patternForTalker(t.id, t.role, this.opts),
           vigor: vigorFromRate(t.rate),
+          hash: h,
+          dstHash,
           x: (h - 0.5) * 1.2,
           z: ((h * 3.1) % 1 - 0.5) * 1.2,
           vx: 0,
           vz: 0,
           yaw: h * 6.28,
-          padIndex: this.padForTalker(t),
+          padIndex: this.padIndexForHash(h, dstHash),
         };
         this.koi.set(t.id, k);
       } else if (k && inSlot) {
-        const row = byId.get(t.id)!;
-        k.pattern = patternForTalker(row.id, row.role, this.opts);
-        k.vigor = vigorFromRate(row.rate);
-        k.padIndex = this.padForTalker(row);
+        k.pattern = patternForTalker(t.id, t.role, this.opts);
+        k.vigor = vigorFromRate(t.rate);
       }
     }
-    for (const id of [...this.koi.keys()]) {
-      if (!allTalkerIds.has(id)) this.koi.delete(id);
+    for (const [id] of this.koi) {
+      if (!this.talkerById.has(id)) this.koi.delete(id);
     }
   }
 
@@ -884,21 +927,20 @@ export class KoiPondSim {
     slot.life = 5.5;
   }
 
-  private stepKoi(simT: number, dt: number, slotted: VizTalkerSample[]): void {
+  private stepKoi(simT: number, dt: number): void {
     const school = this.opts.schooling;
     const wander = 1 - school;
     const speedMul = this.opts.swimSpeed * (this.opts.reducedMotion ? 0.45 : 1);
-    const slottedSet = new Set(slotted.map((t) => t.id));
     for (const k of this.koi.values()) {
-      if (!slottedSet.has(k.id)) continue;
+      if (!this.slottedIds.has(k.id)) continue;
       const pad = this.pads[k.padIndex % this.pads.length];
       const targetX = pad ? pad.x : 0;
       const targetZ = pad ? pad.z : 0;
       const orbit = school * 0.22;
-      const tx = targetX + Math.sin(simT * 0.8 + idHash(k.id) * 8) * orbit;
-      const tz = targetZ + Math.cos(simT * 0.75 + idHash(k.id) * 6) * orbit;
-      const wx = Math.sin(simT * 0.35 + idHash(k.id) * 4) * wander * 0.35;
-      const wz = Math.cos(simT * 0.32 + idHash(k.id) * 3) * wander * 0.35;
+      const tx = targetX + Math.sin(simT * 0.8 + k.hash * 8) * orbit;
+      const tz = targetZ + Math.cos(simT * 0.75 + k.hash * 6) * orbit;
+      const wx = Math.sin(simT * 0.35 + k.hash * 4) * wander * 0.35;
+      const wz = Math.cos(simT * 0.32 + k.hash * 3) * wander * 0.35;
       const ax = (tx + wx - k.x) * (0.9 + k.vigor) * dt;
       const az = (tz + wz - k.z) * (0.9 + k.vigor) * dt;
       k.vx = k.vx * 0.9 + ax;
@@ -916,7 +958,7 @@ export class KoiPondSim {
       if (pad) pad.activity = clamp01(pad.activity + k.vigor * 0.02);
     }
     for (const pad of this.pads) pad.activity *= 0.96;
-    const total = totalTalkerRate(slotted);
+    const total = totalTalkerRate(this.slottedTalkersScratch);
     const target = pondBloomFromTraffic(total, this.opts.bloomOnActivity);
     this.pondBloom = clamp01(this.pondBloom * 0.9 + target * 0.12);
     for (const pad of this.pads) pad.bloom = this.pondBloom;
@@ -924,10 +966,11 @@ export class KoiPondSim {
 
   private stepOnce(simT: number, hostTalkers: VizTalkerSample[]): void {
     const allTalkers = this.effectiveTalkers(hostTalkers);
-    const allIds = new Set(allTalkers.map((t) => t.id));
-    const slotted = this.slottedTalkers(allTalkers, simT);
-    this.syncKoi(slotted, allIds, allTalkers);
-    this.stepKoi(simT, FIXED_SIM_DT, slotted);
+    this.talkerById.clear();
+    for (const t of allTalkers) this.talkerById.set(t.id, t);
+    this.rebuildSlotted(allTalkers, simT);
+    this.syncKoi();
+    this.stepKoi(simT, FIXED_SIM_DT);
     const motion = this.opts.reducedMotion || !this.opts.cameraDrift;
     const camRate = motion ? 0 : 0.28;
     this.camPhase += FIXED_SIM_DT * camRate;
