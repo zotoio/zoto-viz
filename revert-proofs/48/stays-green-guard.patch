@@ -1,6 +1,7 @@
---- a/scripts/revert-proof.mjs	2026-09-26 18:07:56.726697633 +0000
-+++ b/scripts/revert-proof.mjs	2026-09-26 18:07:56.742697164 +0000
-@@ -476,12 +476,8 @@
+diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
+--- a/scripts/revert-proof.mjs
++++ b/scripts/revert-proof.mjs
+@@ -476,12 +476,8 @@ function metaRunnerCount(run) {
    return run.counts.executed;
  }
  
