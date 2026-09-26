@@ -1,9 +1,7 @@
 import { leafIds, parseMosaicNode, parseMosaicTiles } from "./mosaic-layout";
 import type { DreamAnim } from "./scene";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
-
-export const MOSAIC_TILE_LIMIT_MESSAGE =
-  "This wall supports at most eight tiles. Keeping your current layout.";
+import { mosaicWallLayoutRefusedMessage } from "../ui/viz-copy";
 
 function countRawMosaicTileIds(raw: unknown): number {
   if (!Array.isArray(raw)) return 0;
@@ -35,7 +33,11 @@ export function applyDreamAnimWithTileLimit(
 ): { anim: DreamAnim; refused: boolean; message?: string } {
   const n = countMosaicTiles(incoming);
   if (incoming.mosaic !== "off" && n > VIZ_MAX_ACTIVE_TILES) {
-    return { anim: current, refused: true, message: MOSAIC_TILE_LIMIT_MESSAGE };
+    return {
+      anim: current,
+      refused: true,
+      message: mosaicWallLayoutRefusedMessage(n, VIZ_MAX_ACTIVE_TILES),
+    };
   }
   return { anim: incoming, refused: false };
 }

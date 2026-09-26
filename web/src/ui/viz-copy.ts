@@ -1,5 +1,10 @@
 /** Viewer-facing viz HUD strings (shared with tile budget rows). */
 
+/** #35-style status when a saved/URL wall has too many tiles (normal tone, not an error). */
+export function mosaicWallLayoutRefusedMessage(requestedTiles: number, limit: number): string {
+  return `Couldn't load this wall layout. It has ${requestedTiles} tiles and the limit is ${limit}, so your current wall is still showing.`;
+}
+
 export function tileLimitedSharingLabel(activeTiles: number, skipsPerSec: number): string {
   const mates = Math.max(0, activeTiles - 1);
   const rate = formatHudSkipsPerSec(skipsPerSec);

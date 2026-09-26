@@ -27,7 +27,9 @@ import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
 import { guardReadableAnim } from "../graph/readable";
-import { applyDreamAnimWithTileLimit, MOSAIC_TILE_LIMIT_MESSAGE } from "../graph/mosaic-viz-tile-guard";
+import { applyDreamAnimWithTileLimit, countMosaicTiles } from "../graph/mosaic-viz-tile-guard";
+import { mosaicWallLayoutRefusedMessage } from "./viz-copy";
+import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import {
   AUTH_SETUPS,
   renderAuthSetup,
@@ -1716,7 +1718,11 @@ export class Settings {
     });
     const { anim, refused, message } = applyDreamAnimWithTileLimit(candidate, this.anim);
     if (refused) {
-      this.lastMosaicTileLimitMessage = message ?? MOSAIC_TILE_LIMIT_MESSAGE;
+      this.lastMosaicTileLimitMessage = message
+        ?? mosaicWallLayoutRefusedMessage(
+          countMosaicTiles(candidate),
+          VIZ_MAX_ACTIVE_TILES,
+        );
       return;
     }
     this.lastMosaicTileLimitMessage = "";
