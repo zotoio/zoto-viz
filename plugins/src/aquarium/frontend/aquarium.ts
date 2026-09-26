@@ -49,8 +49,7 @@ export interface AquariumOptions {
   reefSpecies: number[];
 }
 
-/** Host {@link VizDataFrame} slices the aquarium reads (type-only SDK contract). */
-export type AquariumHostFrame = Pick<
+type AquariumFrame = Pick<
   VizDataFrame,
   "t" | "dt" | "audio" | "talkers" | "packets" | "demo" | "sys"
 >;
@@ -442,9 +441,6 @@ export function vigorFromRate(rate: number): number {
   return clamp01(rate / 220);
 }
 
-export type TalkerRow = VizTalkerSample;
-export type PacketRow = VizPacketSample;
-
 interface FishBody {
   id: string;
   species: number;
@@ -596,11 +592,11 @@ export class AquariumSim {
     return this.talkerSlots.slice();
   }
 
-  private slottedTalkers(all: TalkerRow[], simT: number): TalkerRow[] {
+  private slottedTalkers(all: VizTalkerSample[], simT: number): VizTalkerSample[] {
     const cap = this.fishSlotCap();
     this.talkerSlots = assignTalkerSlots(all, this.talkerSlots, cap, simT);
     const byId = new Map(all.map((t) => [t.id, t]));
-    const out: TalkerRow[] = [];
+    const out: VizTalkerSample[] = [];
     for (const id of slottedTalkerIds(this.talkerSlots)) {
       const t = byId.get(id);
       if (t) out.push(t);
@@ -608,7 +604,7 @@ export class AquariumSim {
     return out;
   }
 
-  private syncFish(slotted: TalkerRow[], allTalkerIds: Set<string>, all: TalkerRow[]): void {
+  private syncFish(slotted: VizTalkerSample[], allTalkerIds: Set<string>, all: VizTalkerSample[]): void {
     const slottedSet = new Set(slotted.map((t) => t.id));
     const byId = new Map(all.map((t) => [t.id, t]));
     for (const t of all) {
@@ -640,9 +636,9 @@ export class AquariumSim {
     }
   }
 
-  private spawnDemoFish(t: number): TalkerRow[] {
+  private spawnDemoFish(t: number): VizTalkerSample[] {
     const n = Math.min(this.opts.fishCount, 6);
-    const out: TalkerRow[] = [];
+    const out: VizTalkerSample[] = [];
     for (let i = 0; i < n; i++) {
       const roles = ["gateway", "lan", "internet", "lan", "internet", "lan"];
       out.push({
@@ -654,7 +650,7 @@ export class AquariumSim {
     return out;
   }
 
-  private ingestPackets(packets: PacketRow[]): void {
+  private ingestPackets(packets: VizPacketSample[]): void {
     const cap = PRESET_CAPS[this.opts.preset].maxParticles;
     let n = 0;
     this.lastPacketIngest = 0;
@@ -716,7 +712,7 @@ export class AquariumSim {
     }
   }
 
-  private maybeFeed(dt: number, packets: PacketRow[]): void {
+  private maybeFeed(dt: number, packets: VizPacketSample[]): void {
     if (this.opts.feedingMin > 0) {
       this.feedTimer += dt;
       if (this.feedTimer >= this.opts.feedingMin * 60) {
@@ -743,7 +739,7 @@ export class AquariumSim {
     }
   }
 
-  private stepFish(simT: number, dt: number, slotted: TalkerRow[]): void {
+  private stepFish(simT: number, dt: number, slotted: VizTalkerSample[]): void {
     const calm = 1 - this.opts.temperament;
     const school = 0.35 + calm * 0.45;
     const chase = this.opts.temperament * 0.9;
@@ -787,7 +783,7 @@ export class AquariumSim {
     }
   }
 
-  private stepOnce(simT: number, allTalkers: TalkerRow[]): void {
+  private stepOnce(simT: number, allTalkers: VizTalkerSample[]): void {
     const allIds = new Set(allTalkers.map((t) => t.id));
     const slotted = this.slottedTalkers(allTalkers, simT);
     this.syncFish(slotted, allIds, allTalkers);
@@ -821,7 +817,7 @@ export class AquariumSim {
     if (!this.warmed) this.warmed = true;
   }
 
-  step(frame: AquariumHostFrame): void {
+  step(frame: AquariumFrame): void {
     const talkers = frame.demo && frame.talkers.length === 0
       ? this.spawnDemoFish(frame.t)
       : frame.talkers;
@@ -985,9 +981,9 @@ export class AquariumSim {
   private lastT = 0;
   private lastAudio = 0;
   private lastTraffic = 0;
-  private lastTalkers: TalkerRow[] = [];
+  private lastTalkers: VizTalkerSample[] = [];
 
-  advance(frame: AquariumHostFrame, canvasW = 1280, canvasH = 800): ReturnType<AquariumSim["pack"]> {
+  advance(frame: AquariumFrame, canvasW = 1280, canvasH = 800): ReturnType<AquariumSim["pack"]> {
     this.lastSys = frame.sys;
     this.lastDemo = !!frame.demo;
     this.lastT = frame.t;
@@ -1028,8 +1024,8 @@ export function aquariumSmokeLuma(packed: ReturnType<AquariumSim["pack"]>): numb
 
 export function fishIdStable(
   sim: AquariumSim,
-  talkersA: TalkerRow[],
-  talkersB: TalkerRow[],
+  talkersA: VizTalkerSample[],
+  talkersB: VizTalkerSample[],
   opts: AquariumOptions,
 ): boolean {
   sim.teardown();
