@@ -3,19 +3,16 @@
 import { packFractalDrive, resetFractalDrive } from "./drive";
 import { IDLE_POINTER } from "./interaction";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import type { ZotoVizPluginHost } from "../../../sdk/plugin-sandbox";
 
-declare const zoto: {
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  onConfig: ((config: Record<string, string>) => void) | null;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-  getConfig: () => Record<string, string>;
-};
+declare const zoto: ZotoVizPluginHost<VizDataFrame>;
 
+let cfg: Record<string, string> = {};
 let lastT = 0;
 let lastType = "";
 
 zoto.onConfig = (config) => {
+  cfg = { ...config };
   const t = config.fractalType ?? "";
   if (t && t !== lastType) {
     lastType = t;
@@ -24,7 +21,6 @@ zoto.onConfig = (config) => {
 };
 
 zoto.onFrame = (frame) => {
-  const cfg = zoto.getConfig();
   const dt = lastT > 0 ? Math.min(0.1, Math.max(1 / 240, frame.t - lastT)) : frame.dt || 1 / 60;
   lastT = frame.t;
   const aspect = 16 / 10;

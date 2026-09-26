@@ -218,10 +218,31 @@ describe("fractal-zoom shipped pack", () => {
   });
 
   it("iframe driver owns viz.write via config.read", () => {
-    expect(FRONT).toContain("getConfig");
     expect(FRONT).toContain("writeBuffer");
     expect(FRONT).toContain("onFrame");
+    expect(FRONT).toContain("onConfig");
     expect(FRONT.match(/zoto\.onFrame\s*=/g)?.length).toBe(1);
+    expect(FRONT).toContain('from "../../../sdk/plugin-sandbox"');
+    expect(FRONT).not.toMatch(/declare const zoto:\s*\{/);
+  });
+
+  it("caches config from onConfig (no getConfig per frame)", () => {
+    const onFrameStart = FRONT.indexOf("zoto.onFrame");
+    const onFrameSlice = FRONT.slice(onFrameStart, onFrameStart + 600);
+    expect(onFrameSlice).not.toContain("getConfig");
+    expect(FRONT).toMatch(/let cfg:\s*Record<string,\s*string>/);
+    expect(FRONT).toMatch(/cfg\s*=\s*\{\s*\.\.\.config\s*\}/);
+    expect(onFrameSlice).toContain("cfg");
+  });
+
+  it("onConfig push updates cached config used on the next drive tick", () => {
+    resetFractalDrive();
+    let cfg: Record<string, string> = { preset: "bulb-classic", ...fractalPresetConfig("bulb-classic") };
+    const a = packFractalDrive(0, 1 / 60, 0, 1.6, cfg, IDLE_POINTER);
+    cfg = { preset: "menger-tunnel", ...fractalPresetConfig("menger-tunnel") };
+    resetFractalDrive();
+    const b = packFractalDrive(0, 1 / 60, 0, 1.6, cfg, IDLE_POINTER);
+    expect(a.slot0[FZ_SLOT.fractalType]).not.toEqual(b.slot0[FZ_SLOT.fractalType]);
   });
 
   it("parses defaults, presets, and reduced motion", () => {
