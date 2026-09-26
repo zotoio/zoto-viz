@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Device, StateMsg } from "../core/types";
 import {
   VIZ_DEFAULT_MAX_BUFFERS,
@@ -18,6 +18,10 @@ import {
   topKByScore,
   VIZ_CONTRACT_VERSION,
 } from "./viz-host";
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz contract", () => {
   it("requires graphWalk false and viz.idle in schema parse", () => {

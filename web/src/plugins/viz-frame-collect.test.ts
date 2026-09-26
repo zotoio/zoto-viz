@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { Flow, StateMsg } from "../core/types";
 import type { ParentMsg } from "./host";
 import type { VizDataFrame } from "./viz-host";
@@ -17,6 +17,10 @@ import {
 import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
 
 const DEMO_LAN_IP = "10.0.0.42";
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz frame v2 collector", () => {
   it("aggregates duplicate directional pairs and ignores self-links", () => {

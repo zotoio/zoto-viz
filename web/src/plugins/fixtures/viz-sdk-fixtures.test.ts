@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { VIZ_FIXTURES, VIZ_FIXTURE_NAMES } from "../../../../plugins/sdk/viz-fixtures";
 import { VIZ_CONTRACT_VERSION } from "../../../../plugins/sdk/viz-contract";
 import { VIZ_SDK_FIXTURE_BUILDERS, scrubVizCaptureState, type VizSdkFixtureName } from "./viz-sdk-frame-build";
@@ -12,6 +12,10 @@ const jsonDir = path.join(repoRoot, "plugins/sdk/fixtures");
 
 /** Leaked NIC hardware addresses in committed JSON (colon or dash separators). */
 const MAC_ADDRESS_IN_TEXT = /\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b/i;
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz sdk frozen fixtures", () => {
   for (const name of VIZ_FIXTURE_NAMES) {
