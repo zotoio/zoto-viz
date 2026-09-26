@@ -337,10 +337,6 @@ export class RenderHost {
     return this.uniformUpload.upload(this.contextGen, name, value, () => {});
   }
 
-  tileShaderDead(tileId: string): boolean {
-    return this.tileSlot(tileId).latch.dead;
-  }
-
   mountShaderFallback(tileId: string, contextLoss = false): void {
     const slot = this.tileSlot(tileId);
     if (!contextLoss) slot.compileFailed = true;

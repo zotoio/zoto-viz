@@ -37,6 +37,23 @@ describe("tile shader compile latch", () => {
     wall.remove();
   });
 
+  it("compile-failure-log-once", () => {
+    const { host, wall } = wallHost();
+    const rd = host.renderer as THREE.WebGLRenderer;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const log = (m: string) => console.warn("zoto-viz tile shader:", m);
+    rd.compile = vi.fn(() => {
+      host.tileSlot("pane-a").latch.fail("compile error", log);
+    }) as typeof rd.compile;
+    for (let i = 0; i < 600; i++) host.compilePluginSky("pane-a", scene, camera, log);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    host.dispose();
+    wall.remove();
+  });
+
   it("link-failure", () => {
     const { host, wall } = wallHost();
     const rd = host.renderer as THREE.WebGLRenderer;

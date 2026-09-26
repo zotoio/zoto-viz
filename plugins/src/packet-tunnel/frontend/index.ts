@@ -1,13 +1,12 @@
 /** Packet-field tunnel raymarch scaffold — maps decimated proto fields into sky uniforms. */
 
 import { packetTunnelFallbackText, packetTunnelSample } from "./tunnel";
-import type { VizDataFrame } from "../../../sdk/viz-contract";
+import type { VizDataFrame, VizZotoPluginHooks } from "../../../sdk/viz-contract";
 
-declare const zoto: {
+declare const zoto: VizZotoPluginHooks & {
   onFrame: ((frame: Pick<VizDataFrame, "t" | "packets">) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
-  setFallbackText: (text: string) => void;
 };
 
 let lastPushed = "";

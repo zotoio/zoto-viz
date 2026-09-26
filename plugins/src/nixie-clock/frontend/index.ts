@@ -7,15 +7,14 @@ import {
   parseNixieLook,
   type NixieLook,
 } from "./tubes";
-import type { VizDataFrame } from "../../../sdk/viz-contract";
+import type { VizDataFrame, VizZotoPluginHooks } from "../../../sdk/viz-contract";
 
-declare const zoto: {
+declare const zoto: VizZotoPluginHooks & {
   onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "talkers">) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
-  setFallbackText: (text: string) => void;
 };
 
 let look: NixieLook = parseNixieLook(zoto.getConfig?.());

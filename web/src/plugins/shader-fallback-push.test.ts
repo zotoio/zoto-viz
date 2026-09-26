@@ -299,17 +299,16 @@ describe("shader fallback push contract", () => {
     pane.remove();
   });
 
-  it("tunnel-idle-fake-clock", () => {
-    const frame: VizDataFrame = { ...EMPTY, t: 1000 };
+  it("tunnel-write-on-change", () => {
     let pushes = 0;
     let last = "";
     for (let i = 0; i < 600; i++) {
-      const line = packetTunnelFallbackText(frame);
+      const line = packetTunnelFallbackText({ t: i * 0.016, packets: [] });
       if (line !== last) {
         pushes++;
         last = line;
       }
     }
-    expect(pushes).toBe(1);
+    expect(pushes).toBe(27);
   });
 });
