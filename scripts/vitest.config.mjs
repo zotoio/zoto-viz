@@ -8,6 +8,7 @@ const repoRoot = process.env.REVERT_PROOF_ROOT
 
 export default {
   root: repoRoot,
+  cacheDir: path.join(repoRoot, "web", "node_modules", ".vite"),
   test: {
     environment: "node",
     include: [path.join(scriptsDir, "**/*.test.ts")],
