@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_allowed_hosts_config_parsing_and_validation",
+  "description": "sys-config allowed_hosts parsed into listen opts.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert [] == ['lan.example...', '::1:7020']"
+}

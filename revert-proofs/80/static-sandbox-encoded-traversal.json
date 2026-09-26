@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_static_sandbox_bypass.py::StaticSandboxBypassTests::test_encoded_pack_assets_traversal_index",
+  "description": "Encoded traversal under /pack-assets must 400.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 404 == 400"
+}

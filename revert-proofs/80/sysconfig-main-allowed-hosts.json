@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_main_passes_resolved_allowed_hosts_to_make_app",
+  "description": "monitor.main passes allowed_hosts to make_app.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert [[]] == [['extra.local:7020']]"
+}

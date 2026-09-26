@@ -1,0 +1,40 @@
+diff --git a/service/monitor.py b/service/monitor.py
+index 774509d..18505d7 100644
+--- a/service/monitor.py
++++ b/service/monitor.py
+@@ -1894,11 +1894,6 @@ async def static_path_guard(request: web.Request, handler):  # noqa: ANN001
+         canon = static_paths.canonical_static_path(raw_path)
+         if canon is None:
+             return web.Response(status=404, text="not found")
+-        if not canon.startswith("/pack-assets/") and (
+-            static_paths.is_legacy_sandbox_request(raw_path)
+-            or canon.rsplit("/", 1)[-1] == "plugin-sandbox.html"
+-        ):
+-            return web.Response(status=404, text="not found")
+         if not _static_route_exempt(canon) and not static_paths.static_path_allowed(raw_path):
+             return web.Response(status=404, text="not found")
+     return await handler(request)
+@@ -2006,7 +2001,6 @@ def make_app(
+     app.router.add_delete("/api/pack-assets/frames/{frame_id}", pack_assets.api_pack_asset_unregister_frame)
+     app.router.add_post("/api/pack-assets/token/{pack_id}", pack_assets.api_pack_asset_token)
+     if WEB_DIST.exists():
+-        app.router.add_get("/plugin-sandbox.html", api_legacy_plugin_sandbox_html)
+         app.router.add_static("/", WEB_DIST, show_index=False)
+     app.on_startup.append(on_startup)
+     app.on_shutdown.append(on_shutdown)
+diff --git a/service/static_paths.py b/service/static_paths.py
+index 5f6d5b8..38d4bf4 100644
+--- a/service/static_paths.py
++++ b/service/static_paths.py
+@@ -46,11 +46,7 @@ def static_path_allowed(request_path: str) -> bool:
+         return False
+     raw = request_path.split("?", 1)[0]
+     decoded = _decode_path(raw)
+-    if decoded != canon and raw != canon:
+-        return False
+     base = canon.rsplit("/", 1)[-1]
+-    if base in _BLOCKED_STATIC:
+-        return False
+     return True
+ 
+ 
