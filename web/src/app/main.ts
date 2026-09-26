@@ -439,7 +439,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
   preserveVizUbo = true;
-  applyMode(pluginViewId(packId), {}, { channel: "automatic", auto: "dream-cycle" });
+  applyMode(pluginViewId(packId), {}, { channel: "user" });
 }
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
@@ -790,6 +790,7 @@ async function loadPluginSkyOnto(
     }
     if (target === scene) skyLoaded = key;
   } catch (e) {
+    if (signal.aborted) return;
     console.warn("zoto-viz plugin sky:", e);
     disposeSky();
     throw e;

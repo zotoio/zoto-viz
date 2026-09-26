@@ -158,6 +158,9 @@ export function askPluginReview(
     body.append(p1, p2, p3);
     const row = document.createElement("div");
     row.className = "ask-actions";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); finish(null); }
+    };
     const finish = (kind: "reviewed" | "authored" | null) => {
       document.body.classList.remove("modal-open");
       modal.remove();
@@ -190,9 +193,6 @@ export function askPluginReview(
     sheet.append(head, body, row);
     modal.append(back, sheet);
     back.addEventListener("click", () => finish(null));
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); finish(null); }
-    };
     document.addEventListener("keydown", onKey, true);
     document.body.classList.add("modal-open");
     document.body.appendChild(modal);
