@@ -36,6 +36,12 @@ export function stateNeedsGolden(state: StateMsg): boolean {
 }
 
 /** Merge the shared golden LAN when idle is declared and live capture is empty. */
+/** Force the host golden LAN snapshot (tile-heal demo step), even when live data exists. */
+export function withGoldenSnapshot(live: StateMsg, idle?: PluginIdleConfig): StateMsg {
+  if (!idle || !("fixture" in idle) || idle.fixture !== "host") return live;
+  return withGoldenIfIdle({ ...live, devices: [], flows: [] }, idle);
+}
+
 export function withGoldenIfIdle(live: StateMsg, idle?: PluginIdleConfig): StateMsg {
   if (!idle || !("fixture" in idle) || idle.fixture !== "host" || !stateNeedsGolden(live)) return live;
   const golden = goldenLanFixture();

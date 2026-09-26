@@ -69,7 +69,7 @@ export function classifyTileEmpty(input: TileEmptyInput): EmptyReason | null {
 }
 
 export function patchIsNearUniform(
-  data: Uint8ClampedArray,
+  data: Uint8Array | Uint8ClampedArray,
   spreadThreshold = TILE_UNIFORM_SPREAD,
   stdThreshold = TILE_UNIFORM_STDDEV,
 ): boolean {
@@ -261,9 +261,15 @@ export function stepTileHealth(
     return { state: next, empty: reason, heal: null, log: null };
   }
 
+  const healsInWindow = healTimesInWindow(next.healTimes, now);
+  const forceFallback = healsInWindow >= TILE_HEAL_PIN_COUNT - 1;
   const idx = Math.min(next.ladderIndex, HEAL_LADDER.length - 1);
-  const step = HEAL_LADDER[idx]!;
-  next.ladderIndex = Math.min(next.ladderIndex + 1, HEAL_LADDER.length - 1);
+  const step = forceFallback ? "fallback-pack" : HEAL_LADDER[idx]!;
+  if (!forceFallback) {
+    next.ladderIndex = Math.min(next.ladderIndex + 1, HEAL_LADDER.length - 1);
+  } else {
+    next.ladderIndex = HEAL_LADDER.length - 1;
+  }
   next.healAttempts++;
   next.backoffUntil = now + TILE_HEAL_BACKOFF_BASE_MS * (2 ** Math.min(6, next.healAttempts - 1));
   if (step === "demo-snapshot") next.forceDemo = true;
@@ -276,17 +282,21 @@ export function stepTileHealth(
   return { state: next, empty: reason, heal: step, log };
 }
 
+function healTimesInWindow(healTimes: number[], now: number): number {
+  const cutoff = now - TILE_HEAL_PIN_WINDOW_MS;
+  return healTimes.filter((t) => t >= cutoff).length;
+}
+
 function recordHeal(state: PerTileHealthState, now: number): void {
   state.healTimes.push(now);
   const cutoff = now - TILE_HEAL_PIN_WINDOW_MS;
   state.healTimes = state.healTimes.filter((t) => t >= cutoff);
-  if (state.healTimes.length >= TILE_HEAL_PIN_COUNT) state.pinnedFallback = true;
 }
 
 /** Centre of a host viewport for readPixels (origin bottom-left). */
 export function patchOrigin(vp: Viewport, patch = TILE_PATCH): { x: number; y: number } {
-  const x = Math.max(0, Math.min(vp.w - patch, Math.floor(vp.x + (vp.w - patch) / 2)));
-  const y = Math.max(0, Math.min(vp.h - patch, Math.floor(vp.y + (vp.h - patch) / 2)));
+  const x = Math.max(vp.x, Math.min(vp.x + vp.w - patch, Math.floor(vp.x + (vp.w - patch) / 2)));
+  const y = Math.max(vp.y, Math.min(vp.y + vp.h - patch, Math.floor(vp.y + (vp.h - patch) / 2)));
   return { x, y };
 }
 

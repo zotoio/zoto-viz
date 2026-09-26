@@ -168,9 +168,16 @@ export class RenderHost {
   /** Force a WebGL context loss so panes can rebuild GL state (tile heal ladder). */
   recreateContext(): void {
     if (this.software) return;
+    const r = this.renderer as THREE.WebGLRenderer;
     try {
-      (this.renderer as THREE.WebGLRenderer).forceContextLoss();
+      r.forceContextLoss();
     } catch { /* already lost */ }
+    requestAnimationFrame(() => {
+      try {
+        r.forceContextRestore();
+      } catch { /* extension missing */ }
+      this.dirty = true;
+    });
   }
 
   /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */

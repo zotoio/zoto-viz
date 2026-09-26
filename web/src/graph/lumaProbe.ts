@@ -35,8 +35,7 @@ export class LumaProbe {
       this.reset();
       return;
     }
-    this.patch.tryHarvest(gl);
-    if (this.patch.harvestedAt >= 0) this.reduce();
+    if (this.patch.tryHarvest(gl)) this.reduce();
     if (now - this.issuedAt < this.everyMs) return;
     const s = this.size;
     const w = gl.drawingBufferWidth;
@@ -46,8 +45,7 @@ export class LumaProbe {
     const y = Math.max(0, Math.min(h - s, Math.round(cy - s / 2)));
     if (this.patch.issue(gl, x, y)) {
       this.issuedAt = now;
-      this.patch.tryHarvest(gl);
-      if (this.patch.harvestedAt >= 0) this.reduce();
+      if (this.patch.tryHarvest(gl)) this.reduce();
     }
   }
 
@@ -79,5 +77,18 @@ export class LumaProbe {
     this.patch.reset(null);
     this.issuedAt = -Infinity;
     this.value = -1;
+  }
+
+  private reduce(): void {
+    const d = this.patch.bytes;
+    const vals = this.vals;
+    let n = 0;
+    for (let i = 0; i + 2 < d.length; i += 4) {
+      vals[n++] = relativeLuminance((d[i]! << 16) | (d[i + 1]! << 8) | d[i + 2]!);
+    }
+    if (n < 8) return;
+    vals.length = n;
+    vals.sort((a, b) => a - b);
+    this.value = vals[n >> 1]!;
   }
 }

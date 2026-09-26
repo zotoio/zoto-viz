@@ -112,7 +112,7 @@ import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
-import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
+import { pluginIdleOf, withGoldenIfIdle, withGoldenSnapshot } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
@@ -994,6 +994,13 @@ function applyLive(m: StateMsg): void {
   if (live.patch && Object.keys(live.patch).length) void applyAgentPatch(live.patch);
 }
 
+function graphMsgForTile(tileId: string, msg: StateMsg): StateMsg {
+  const modeId = tileId === "main" ? modeSel.value : tileId;
+  const spec = pluginSpecForMode(modeId);
+  if (tileHealth?.forceDemo(tileId)) return withGoldenSnapshot(msg, pluginIdleOf(spec));
+  return msg;
+}
+
 function feed(m: StateMsg): void {
   const feedT0 = performance.now();
   lastRaw = m;
@@ -1001,19 +1008,20 @@ function feed(m: StateMsg): void {
   const curMode = modeById(liveMode || modeSel.value);
   const curSpec = curMode.pluginId ? pluginSpecForMode(curMode.id) : null;
   let shown = withGoldenIfIdle(m, pluginIdleOf(curSpec));
+  const remap = (id: string, msg: StateMsg) => graphMsgForTile(id, msg);
   if (mergeToggle.checked) {
     const c = collapseByName(m);
     scene.setAliasMap(c.map);
     mosaic?.eachGraph((s) => { if (s !== scene) s.setAliasMap(c.map); });
-    scene.update(c.msg);
-    mosaic?.update(c.msg);
+    scene.update(graphMsgForTile("main", c.msg));
+    mosaic?.update(c.msg, remap);
     for (const a of Object.values(arcade)) a.view.update(c.msg);
     shown = c.msg;
   } else {
     scene.setAliasMap(new Map());
-    scene.update(m);
+    scene.update(graphMsgForTile("main", m));
     mosaic?.eachGraph((s) => { if (s !== scene) s.setAliasMap(new Map()); });
-    mosaic?.update(m);
+    mosaic?.update(m, remap);
     for (const a of Object.values(arcade)) a.view.update(m);
   }
   applyStats(shown);

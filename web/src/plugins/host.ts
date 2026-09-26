@@ -6,6 +6,7 @@ const ALLOWED = new Set([
 ]);
 
 export function hostAllows(type: string, caps: string[]): boolean {
+  if (type === "drawState" || type === "loseHostContext") return true;
   if (type === "setStyle" || type === "setNodeColor") return caps.includes("graph.style");
   if (type === "writeBuffer" || type === "writeUniform" || type === "writeParticles") {
     return caps.includes("viz.write");

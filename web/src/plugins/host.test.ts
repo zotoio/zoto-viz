@@ -36,6 +36,11 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("writeUniform", ["viz.write"])).toBe(true);
     expect(hostAllows("writeParticles", ["viz.write"])).toBe(true);
   });
+
+  it("allows tile-heal sandbox messages without extra caps", () => {
+    expect(hostAllows("drawState", [])).toBe(true);
+    expect(hostAllows("loseHostContext", ["viz.read"])).toBe(true);
+  });
 });
 
 describe("PluginSandbox", () => {

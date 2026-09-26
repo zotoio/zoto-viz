@@ -7,6 +7,7 @@ import {
   classifyTileEmpty,
   freshTileHealthState,
   patchIsNearUniform,
+  patchOrigin,
   stepTileHealth,
   healMessage,
 } from "./tile-health";
@@ -117,6 +118,12 @@ describe("stepTileHealth ladder", () => {
     expect(steps).toEqual([...HEAL_LADDER]);
   });
 
+  it("clamps patch origin in framebuffer space for offset viewports", () => {
+    const { x, y } = patchOrigin({ x: 40, y: 20, w: 100, h: 80 }, 16);
+    expect(x).toBe(82);
+    expect(y).toBe(52);
+  });
+
   it("pins to fallback after three heals in ten minutes", () => {
     let state = freshTileHealthState();
     let t = 0;
@@ -136,6 +143,7 @@ describe("stepTileHealth ladder", () => {
       state.healthyStreak = 0;
       state.emptyStreak = 0;
     }
+    expect(heals).toContain("fallback-pack");
     expect(state.pinnedFallback).toBe(true);
     expect(heals.length).toBeGreaterThanOrEqual(3);
     const afterPin = stepTileHealth(state, t + 6000, {

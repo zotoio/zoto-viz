@@ -377,9 +377,13 @@ export class Mosaic {
     for (const s of this.graphs) fn(s);
   }
 
-  update(msg: StateMsg): void {
-    for (const e of this.extras) e.scene.update(msg);
-    for (const slot of this.tileArcade.values()) slot.view.update(msg);
+  update(msg: StateMsg, remap?: (tileId: string, m: StateMsg) => StateMsg): void {
+    for (const e of this.extras) {
+      e.scene.update(remap ? remap(e.id, msg) : msg);
+    }
+    for (const [id, slot] of this.tileArcade) {
+      slot.view.update(remap ? remap(id, msg) : msg);
+    }
   }
 
   applyLooks(a: DreamAnim, pin = true): void {

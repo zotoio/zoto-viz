@@ -54,6 +54,7 @@ export class TileHealthMonitor {
   private readonly graceUntil = new Map<string, number>();
   private readonly onScreen = new Map<string, boolean>();
   private readonly observers = new Map<string, IntersectionObserver>();
+  private readonly observerRoots = new Map<string, Element>();
   private stagger = 0;
   private lastTick = 0;
   private vizDeliverGen = 0;
@@ -151,9 +152,12 @@ export class TileHealthMonitor {
 
   private ensureObserver(tileId: string): void {
     if (this.deps.onScreen || typeof IntersectionObserver === "undefined") return;
-    if (this.observers.has(tileId)) return;
     const root = this.deps.paneEl(tileId) ?? this.deps.sceneFor(tileId)?.viewEl;
     if (!root) return;
+    if (this.observerRoots.get(tileId) === root && this.observers.has(tileId)) return;
+    this.observers.get(tileId)?.disconnect();
+    this.observers.delete(tileId);
+    this.observerRoots.delete(tileId);
     const obs = new IntersectionObserver((entries) => {
       for (const e of entries) {
         const on = e.isIntersecting && e.intersectionRatio > 0;
@@ -163,6 +167,7 @@ export class TileHealthMonitor {
     }, { threshold: [0, 0.01] });
     obs.observe(root);
     this.observers.set(tileId, obs);
+    this.observerRoots.set(tileId, root);
   }
 
   private stateFor(tileId: string): PerTileHealthState {
@@ -210,8 +215,22 @@ export class TileHealthMonitor {
 
     const sc = this.deps.sceneFor(tileId);
     if (!sc) return;
+    if (sc.gpuContextLost) {
+      this.runTileCheck(tileId, now, sc, this.sampler.scratchBuffer);
+      return;
+    }
     const patch = this.sampleScene(sc, now);
     if (!patch) return; // async GL read pending — not empty
+    this.runTileCheck(tileId, now, sc, patch);
+  }
+
+  private runTileCheck(
+    tileId: string,
+    now: number,
+    sc: NetScene,
+    patch: Uint8Array | Uint8ClampedArray,
+  ): void {
+    const prev = this.stateFor(tileId);
     const spec = this.deps.packFor(tileId);
     const packId = spec?.id ?? tileId;
     const dataArriving = this.vizDeliverGen > 0;
@@ -240,7 +259,7 @@ export class TileHealthMonitor {
     if (outcome.heal) void this.deps.onHeal(tileId, outcome.heal, outcome.state);
   }
 
-  private sampleScene(sc: NetScene, now: number): Uint8Array | null {
+  private sampleScene(sc: NetScene, now: number): Uint8Array | Uint8ClampedArray | null {
     const vp = sc.lastViewport;
     if (!vp || vp.w < 4 || vp.h < 4) return null;
     const host = this.deps.host;
@@ -250,9 +269,7 @@ export class TileHealthMonitor {
       const pr = host.pixelRatio;
       const sx = (el.left - box.left) * pr + (el.width * pr) / 2 - TILE_PATCH / 2;
       const sy = (el.top - box.top) * pr + (el.height * pr) / 2 - TILE_PATCH / 2;
-      const sw = Math.max(1, el.width * pr);
-      const sh = Math.max(1, el.height * pr);
-      return this.sampler.sample2d(host.canvas, sx, sy, sw, sh);
+      return this.sampler.sample2d(host.canvas, sx, sy, TILE_PATCH, TILE_PATCH);
     }
     const gl = host.gl;
     if (!gl || gl.isContextLost?.()) return null;
@@ -295,6 +312,7 @@ export class TileHealthMonitor {
     this.graceUntil.delete(tileId);
     this.observers.get(tileId)?.disconnect();
     this.observers.delete(tileId);
+    this.observerRoots.delete(tileId);
     this.onScreen.delete(tileId);
     this.labels.get(tileId)?.remove();
     this.labels.delete(tileId);
