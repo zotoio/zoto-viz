@@ -25,7 +25,7 @@ def _sandbox_bootstrap_file(tail: str) -> bool:
         return True
     return bool(re.fullmatch(r"plugin-sandbox-[\w-]+\.js", tail)) or bool(
         re.fullmatch(r"preload-helper-[\w-]+\.js", tail)
-    )
+    ) or bool(re.fullmatch(r"sandbox-channel-[\w-]+\.js", tail))
 
 
 def _plugin_home(row: dict[str, Any]) -> Path | None:
