@@ -18,7 +18,7 @@ from service import paths
 from service import plugin_install as pi
 from service import plugin_local
 from service import plugin_zip as pz
-from service.pack_install_copy import REASON_ZIP_UNSAFE, zip_rejection_log_message, zip_unsafe_user_message
+from service.pack_install_copy import REASON_ZIP_UNSAFE, zip_rejection_log_message
 
 MINIMAL = "id: sample\nname: Sample\nversion: 1\n"
 VIZ = "engine: graph\nbase: topology\n"
