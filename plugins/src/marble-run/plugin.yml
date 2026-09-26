@@ -1,0 +1,30 @@
+id: marble-run
+name: Marble Run
+version: 1
+hint: Procedural wood-and-glass marble run — each packet drops a marble; colour is protocol, size is bytes, branches sort by destination into filling jars. Failures fly to the Zoto Fail reject tray.
+description: >-
+  Deterministic marble-run viz. Live packets and flows spawn marbles at the top;
+  track layout comes from seed and complexity. Data-to-effect mapping is declared
+  in visualisation.yml dataMapping and enforced in frontend/pack.ts. Per-frame work
+  caps are in visualisation.yml workBudget. Idle host fixture keeps demo marbles
+  flowing with label metric "demo".
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  maxBuffers: 4
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uOpacity
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts
