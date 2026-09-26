@@ -34,7 +34,6 @@
     "web/src/plugins/viz-pack-runtime-esbuild.test.ts"
   ],
   "groupB_install_retry": [
-    "revert-proofs/**",
     "service/mcp.py",
     "service/monitor.py",
     "service/pack_install_catalog.py",
