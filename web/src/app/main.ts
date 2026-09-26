@@ -93,6 +93,17 @@ import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
+import {
+  applyPackFeedPaneNotice,
+  clearTilePackFeed,
+  markSandboxStartupFailed,
+  markSandboxStartupOk,
+  setTileExpectsVizFeed,
+} from "../plugins/plugin-pack-feed";
+import {
+  registerPackAssetRetry,
+} from "../plugins/pack-asset-frame";
+import { releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
@@ -613,8 +624,32 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     tsWatchId = "";
     return;
   }
+  const tileId = "main";
+  const packLabel = spec.name ?? spec.id;
+  sandbox.setActivePackLabel(packLabel);
+  setTileExpectsVizFeed(tileId, !!(spec.capabilities?.includes("viz.read") || spec.capabilities?.includes("viz.write")));
+  clearTilePackFeed(tileId);
+  const mosaicHost = mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost & {
+    focusPaneTile?: (id: string) => void;
+    setWallNotice?: (text: string | null | undefined) => void;
+  } | null;
+  registerPackAssetRetry(tileId, packLabel, () => {
+    void import("../plugins/pack-asset-rebuild").then(({ retryPackAssetProtectedLoad }) =>
+      retryPackAssetProtectedLoad(tileId, packLabel, mosaicHost, async () => {
+        await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+      }),
+    );
+  });
   try {
-    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
+    await runPackAssetProtectedLoad(
+      tileId,
+      packLabel,
+      mosaicHost,
+      async () => {
+      await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    });
+    markSandboxStartupOk(tileId);
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
@@ -627,7 +662,10 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
     console.warn("zoto-viz plugin runtime:", e);
+    markSandboxStartupFailed(tileId);
+    applyPackFeedPaneNotice(mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost | null, tileId, packLabel);
     sandbox.unload();
+    releasePanelView(tileId);
     scene.clearPluginStyle();
   }
 }
@@ -1145,6 +1183,10 @@ mosaic = new Mosaic({
     lastMsg: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).msg : lastRaw,
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
+});
+sandbox.setNavigationStopHost({
+  setPaneNotice: (id, text, recipe, opts) => mosaic?.setPaneNotice(id, text, recipe, opts),
+  closeTile: (id) => mosaic?.closeTile(id),
 });
 settings.onMosaicPanePick = (from, to) => {
   if (!mosaic?.on) return false;
