@@ -1,0 +1,41 @@
+
+ RUN  v5.0.0 /workspace/web
+
+stdout | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=host
+[pack-mirror-readback] dpr=1 aa=false path=host renderer=ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+
+ ✓ src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=host 654ms
+stdout | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=host
+[pack-mirror-readback] dpr=1 aa=true path=host renderer=ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+
+ ✓ src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=host 658ms
+stdout | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=host
+[pack-mirror-readback] dpr=2 aa=false path=host renderer=ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+
+ ✓ src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=host 662ms
+stdout | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=host
+[pack-mirror-readback] dpr=2 aa=true path=host renderer=ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+
+ ✓ src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=host 936ms
+stdout | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=sandbox
+[pack-mirror-readback] dpr=1 aa=false path=sandbox renderer=ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+
+ ✓ src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=false path=sandbox 351ms
+stdout | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=sandbox
+[pack-mirror-readback] dpr=1 aa=true path=sandbox renderer=ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+
+stdout | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=sandbox
+[pack-mirror-readback] dpr=2 aa=false path=sandbox renderer=ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+
+ ✓ src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=1 antialias=true path=sandbox 329ms
+ ✓ src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=false path=sandbox 660ms
+stdout | src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=sandbox
+[pack-mirror-readback] dpr=2 aa=true path=sandbox renderer=ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+
+ ✓ src/graph/pack-mirror-readback.test.ts > pack mirror SwiftShader readback > dpr=2 antialias=true path=sandbox 790ms
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  18:45:49
+   Duration  6.04s (tests 95%, import 4%, transform 1%)
+

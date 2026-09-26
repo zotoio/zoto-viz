@@ -1,0 +1,78 @@
+
+> zoto-viz-web@0.1.0 test /workspace/web
+> pnpm asbuild && vitest run
+
+
+> zoto-viz-web@0.1.0 asbuild /workspace/web
+> asc --config asconfig.json --target release
+
+
+ RUN  v5.0.0 /workspace/web
+
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+  File "/workspace/service/plugins.py", line 32, in <module>
+    from . import plugin_instances as pins
+  File "/workspace/service/plugin_instances.py", line 13, in <module>
+    from aiohttp import web
+ModuleNotFoundError: No module named 'aiohttp'
+ ❯ src/plugins/viz-pack-runtime-esbuild.test.ts (2 tests | 1 failed) 197ms
+   ❯ viz pack runtime esbuild (2)
+     × bundles cypher-cic and syscon from zip-unpacked local runtime 80ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/plugins/viz-pack-runtime-esbuild.test.ts > viz pack runtime esbuild > bundles cypher-cic and syscon from zip-unpacked local runtime
+Error: Command failed: python3 -c 
+import shutil, sys, yaml
+from pathlib import Path
+from service import plugin_zip as pz
+from service import plugins
+from service import paths
+
+home = Path("/tmp/zoto-viz-zip-cfsHZI")
+import os
+os.environ["ZOTO_VIZ_HOME"] = str(home)
+plugins.reset_bundles()
+pack_id = "cypher-cic"
+src = Path("/workspace") / "plugins/src" / pack_id
+local = paths.plugin_local_dir(create=True)
+zip_path = local / f"{pack_id}.zip"
+pz.pack_tree(src, zip_path)
+runtime = paths.plugin_local_runtime_dir(create=True) / pack_id
+if runtime.exists():
+    shutil.rmtree(runtime)
+pz.unpack_zip(zip_path, runtime)
+doc = yaml.safe_load((runtime / "plugin.yml").read_text(encoding="utf-8"))
+out = plugins.compile_typescript(doc, runtime / "plugin.yml")
+assert out.get("hash"), out
+
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+  File "/workspace/service/plugins.py", line 32, in <module>
+    from . import plugin_instances as pins
+  File "/workspace/service/plugin_instances.py", line 13, in <module>
+    from aiohttp import web
+ModuleNotFoundError: No module named 'aiohttp'
+
+ ❯ src/plugins/viz-pack-runtime-esbuild.test.ts:102:9
+    100| assert out.get("hash"), out
+    101| `;
+    102|         execFileSync("python3", ["-c", script], {
+       |         ^
+    103|           cwd: repoRoot,
+    104|           encoding: "utf8",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 122 passed | 2 skipped (125)
+      Tests  1 failed | 733 passed | 3 skipped (737)
+   Start at  18:43:49
+   Duration  19.47s (environment 66%, tests 18%, import 8%, transform 5%, setup 2%, worker 1%)
+
+Environment  happy-dom was created 125 times · 31.46s total, 66% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+ ELIFECYCLE  Test failed. See above for more details.
