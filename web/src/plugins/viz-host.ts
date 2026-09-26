@@ -78,7 +78,7 @@ export type {
   VizSysTelemetry,
   VizTalkerSample,
 } from "../../../plugins/sdk/viz-contract";
-export { EMPTY_SYS_TELEMETRY, VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
+export { EMPTY_SYS_TELEMETRY, EMPTY_VIZ_LINKS, VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
 import type {
   VizDataFrame,
   VizHeadline,
@@ -87,7 +87,7 @@ import type {
   VizSysTelemetry,
   VizTalkerSample,
 } from "../../../plugins/sdk/viz-contract";
-import { EMPTY_SYS_TELEMETRY, VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
+import { EMPTY_SYS_TELEMETRY, EMPTY_VIZ_LINKS, VIZ_CONTRACT_VERSION } from "../../../plugins/sdk/viz-contract";
 
 function clamp01(n: number): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;

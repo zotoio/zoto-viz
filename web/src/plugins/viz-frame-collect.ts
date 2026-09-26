@@ -1,6 +1,7 @@
 import type { Device, Flow, StateMsg } from "../core/types";
 import type { VizDataFrame, VizLinkSample, VizTalkerSample } from "./viz-host";
 import { topKByScore, VIZ_CONTRACT_VERSION } from "./viz-host";
+import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
 
 export const VIZ_DEFAULT_MAX_LINKS = 64;
 
@@ -167,7 +168,8 @@ export function collectVizLinks(
     slot.rate = l.rate;
     linksResultScratch[i] = slot;
   }
-  return { links: linksResultScratch, linksDropped: Math.max(0, total - top.length) };
+  const linksOut = top.length === 0 ? EMPTY_VIZ_LINKS : linksResultScratch;
+  return { links: linksOut as VizLinkSample[], linksDropped: Math.max(0, total - top.length) };
 }
 
 /** Stamp contract v2 and optional link / failed enrichment when collection is enabled. */
@@ -177,7 +179,12 @@ export function applyVizFrameContractV2(
   opts: VizFrameCollectOpts,
 ): VizDataFrame {
   frame.contract = VIZ_CONTRACT_VERSION;
-  if (!opts.linksEnabled) return frame;
+  if (!opts.linksEnabled) {
+    delete frame.links;
+    delete frame.linksDropped;
+    for (const t of frame.talkers) delete t.failed;
+    return frame;
+  }
   const talkerIds = syncTalkerIds(frame.talkers);
   const { links, linksDropped } = collectVizLinks(state.flows, talkerIds, opts.maxLinks);
   frame.talkers = talkersWithConnFailed(frame.talkers, state.devices) as VizTalkerSample[];

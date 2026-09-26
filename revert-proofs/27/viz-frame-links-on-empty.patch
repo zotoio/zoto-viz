@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -188,7 +188,7 @@ export function applyVizFrameContractV2(
+   const talkerIds = syncTalkerIds(frame.talkers);
+   const { links, linksDropped } = collectVizLinks(state.flows, talkerIds, opts.maxLinks);
+   frame.talkers = talkersWithConnFailed(frame.talkers, state.devices) as VizTalkerSample[];
+-  frame.links = links;
++  if (links.length > 0) frame.links = links;
+   if (linksDropped > 0) frame.linksDropped = linksDropped;
+   else delete frame.linksDropped;
+   return frame;

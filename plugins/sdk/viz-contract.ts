@@ -40,7 +40,7 @@ export interface VizTalkerSample {
   rate: number;
   /** Role bucket: gateway, internet, lan, self, etc. */
   role: string;
-  /** Per-host failed-connection ratio 0..1 (RST/refused over SYN attempts in the window). */
+  /** Per-host failed-connection ratio 0..1 (RST/refused over SYN attempts in the window). Present on v2 frames when link collection is enabled and the host reports conn_fail; omitted when link collection is off. */
   failed?: number;
 }
 
@@ -85,7 +85,7 @@ export interface VizSysTelemetry {
 
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */
 export interface VizDataFrame {
-  /** Present on v2 frames; omitted on legacy v1-shaped frames. Matches {@link VIZ_CONTRACT_VERSION}. */
+  /** Present on v2 frames from the host; v1 plugin deliveries omit this key. Matches {@link VIZ_CONTRACT_VERSION} on v2 host-built frames. */
   contract?: number;
   /** Monotonic frame time in seconds. */
   t: number;
@@ -99,9 +99,9 @@ export interface VizDataFrame {
   rf: VizRfBeacon[];
   /** Top talkers by traffic. In live mode, `rate` is the sum of directional sent flow packet rates (sent packets/s) for that host; when no flow rates exist, the whole top-K uses lifetime `packets` counts instead (never mixed in one frame). */
   talkers: VizTalkerSample[];
-  /** Directional host-pair rates (v2); omitted when link collection is disabled. */
+  /** Directional host-pair rates (v2). When the monitor enables link collection, always present (use {@link EMPTY_VIZ_LINKS} when none qualify). Omitted entirely when link collection is disabled. */
   links?: VizLinkSample[];
-  /** Count of pair rows dropped by the top-N cap (v2). */
+  /** Count of pair rows dropped by the top-N cap (v2). Present when {@link links} is present and pairs were dropped; omitted when zero. */
   linksDropped?: number;
   /** Headlines from bound sources (HN, RSS, etc.). */
   headlines: VizHeadline[];
@@ -114,6 +114,9 @@ export interface VizDataFrame {
   /** Optional spectrum bins (low frequency first) for analyser skies. */
   spectrum?: number[];
 }
+
+/** Shared empty links slice for v2 frames when collection is on but no pairs qualify (no per-frame allocation). */
+export const EMPTY_VIZ_LINKS: readonly VizLinkSample[] = Object.freeze([]);
 
 export const EMPTY_SYS_TELEMETRY: VizSysTelemetry = {
   cpu: 0,

@@ -14,6 +14,7 @@ import {
   collectVizLinks,
   connFailRatio,
 } from "./viz-frame-collect";
+import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
 
 const DEMO_LAN_IP = "10.0.0.42";
 
@@ -78,6 +79,14 @@ describe("viz frame v2 collector", () => {
     expect(links).toHaveLength(8);
     expect(linksDropped).toBe(72);
     expect(links[0]?.rate).toBe(80);
+  });
+
+  it("stamps empty links as the shared EMPTY_VIZ_LINKS constant when collection is on but no pairs qualify", () => {
+    const state = syntheticState({ host: { vizFrame: { links: true } }, flows: [] });
+    const frame = buildVizFrame(state, 0, 0);
+    expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
+    expect(frame.links).toEqual([]);
+    expect(frame.links).toBe(EMPTY_VIZ_LINKS);
   });
 
   it("omits link enrichment when the monitor switch is off but stamps contract", () => {
