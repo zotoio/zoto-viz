@@ -6,7 +6,6 @@ import {
   assertBaselineGuard,
   baselineCountsByPack,
   baselineCountsByRule,
-  baselineHostPackImports,
   loadBaseline,
   scanAllGuardrails,
   scanHostLintFixture,
