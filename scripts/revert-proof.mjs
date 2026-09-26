@@ -979,7 +979,45 @@ function countVitestExecuted(report) {
   return { executed, passed, failed, suiteError: null, failedAssertions, ranTests };
 }
 
-function assertVitestTestSelection(slug, phase, meta, counts) {
+function decodeXmlAttribute(value) {
+  return value.replace(
+    /&(?:#(\d+)|#x([0-9a-f]+)|amp|lt|gt|quot|apos);/gi,
+    (entity, decimal, hex) => {
+      if (decimal) return String.fromCodePoint(Number.parseInt(decimal, 10));
+      if (hex) return String.fromCodePoint(Number.parseInt(hex, 16));
+      return {
+        "&amp;": "&",
+        "&lt;": "<",
+        "&gt;": ">",
+        "&quot;": '"',
+        "&apos;": "'",
+      }[entity.toLowerCase()];
+    },
+  );
+}
+
+export function vitestJunitTestNames(xmlText) {
+  const names = [];
+  const testcaseRe = /<testcase\b([^>]*?)(?:\/>|>[\s\S]*?<\/testcase>)/g;
+  let testcase;
+  while ((testcase = testcaseRe.exec(xmlText ?? ""))) {
+    const attrs = {};
+    const attrRe = /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+    let attr;
+    while ((attr = attrRe.exec(testcase[1]))) {
+      attrs[attr[1]] = decodeXmlAttribute(attr[2] ?? attr[3] ?? "");
+    }
+    if (attrs.name === undefined) continue;
+    const candidates = [attrs.name];
+    if (attrs.classname) {
+      candidates.push(`${attrs.classname} > ${attrs.name}`);
+    }
+    names.push(candidates);
+  }
+  return names;
+}
+
+function assertVitestTestSelection(slug, phase, meta, counts, junitXml) {
   const ran = counts.ranTests ?? [];
   if (ran.length !== 1) {
     throw new Error(
@@ -990,6 +1028,17 @@ function assertVitestTestSelection(slug, phase, meta, counts) {
   if (ranName !== meta.testName) {
     throw new Error(
       `row ${slug}: ${phase} ran "${ranName}" but sidecar expects "${meta.testName}"`,
+    );
+  }
+  const junitNames = vitestJunitTestNames(junitXml);
+  if (junitNames.length !== 1) {
+    throw new Error(
+      `row ${slug}: ${phase} JUnit must contain exactly 1 testcase (got ${junitNames.length})`,
+    );
+  }
+  if (!junitNames[0].includes(meta.testName)) {
+    throw new Error(
+      `row ${slug}: ${phase} JUnit testcase "${junitNames[0].join('" or "')}" does not match sidecar "${meta.testName}"`,
     );
   }
 }
@@ -1221,7 +1270,7 @@ function assertExactlyOneTest(slug, phase, run, meta) {
     );
   }
   if (run.junitXml !== undefined && meta?.runner === "vitest") {
-    assertVitestTestSelection(slug, phase, meta, run.counts);
+    assertVitestTestSelection(slug, phase, meta, run.counts, run.junitXml);
   } else if (executed !== 1) {
     throw new Error(
       `row ${slug}: ${phase} must run exactly 1 test (got ${executed})`,

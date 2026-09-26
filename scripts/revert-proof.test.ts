@@ -1054,6 +1054,16 @@ describe("vitest testName escaping", () => {
       "^widget \\(beta\\) > talkers\\[\\]\\.failed$",
     );
     expect(mod.escapeVitestTestNamePattern("a(b)*+?")).toBe("a\\(b\\)\\*\\+\\?");
+    expect(
+      mod.vitestJunitTestNames(
+        `<testsuite><testcase name="widget &gt; alpha &gt; returns one"/></testsuite>`,
+      ),
+    ).toEqual([["widget > alpha > returns one"]]);
+    expect(
+      mod.vitestJunitTestNames(
+        `<testsuite><testcase classname="widget &amp; alpha" name="returns one"/></testsuite>`,
+      ),
+    ).toEqual([["returns one", "widget & alpha > returns one"]]);
   });
 
   it("builds pytest node ids", async () => {
