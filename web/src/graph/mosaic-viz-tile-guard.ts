@@ -1,7 +1,8 @@
 import { leafIds, parseMosaicNode, parseMosaicTiles } from "./mosaic-layout";
 import type { DreamAnim } from "./scene";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
-import { mosaicWallLayoutRefusedMessage } from "../ui/viz-copy";
+import { mosaicWallLayoutBootRefusedMessage, mosaicWallLayoutRefusedMessage } from "../ui/viz-copy";
+import { DEFAULT_DREAM } from "./scene";
 
 function countRawMosaicTileIds(raw: unknown): number {
   if (!Array.isArray(raw)) return 0;
@@ -40,4 +41,46 @@ export function applyDreamAnimWithTileLimit(
     };
   }
   return { anim: incoming, refused: false };
+}
+
+/**
+ * Settings constructor boot: refuse oversized saved walls without mutating localStorage.
+ * Shows {@link DEFAULT_DREAM} (single view), not a truncated eight-tile wall.
+ */
+export function dreamAnimBootFromStorage(
+  loadedAnim: DreamAnim,
+  rawTiles: unknown,
+): { anim: DreamAnim; bootRefused: boolean; message?: string } {
+  const incoming: DreamAnim = {
+    ...loadedAnim,
+    mosaicTiles: Array.isArray(rawTiles) ? (rawTiles as string[]) : loadedAnim.mosaicTiles,
+  };
+  const n = countMosaicTiles(incoming);
+  if (loadedAnim.mosaic !== "off" && n > VIZ_MAX_ACTIVE_TILES) {
+    return {
+      anim: { ...DEFAULT_DREAM },
+      bootRefused: true,
+      message: mosaicWallLayoutBootRefusedMessage(n, VIZ_MAX_ACTIVE_TILES),
+    };
+  }
+  return { anim: loadedAnim, bootRefused: false };
+}
+
+/**
+ * Revert boot (dogfood red): rewrite stored tiles to eight and show a truncated wall in memory.
+ */
+export function dreamAnimBootRevertClamp(
+  storePrefix: string,
+  loadedAnim: DreamAnim,
+  rawTilesJson: string | null,
+): DreamAnim {
+  const parsed = rawTilesJson ? parseMosaicTiles(JSON.parse(rawTilesJson) as unknown) : loadedAnim.mosaicTiles;
+  if (rawTilesJson) {
+    localStorage.setItem(`${storePrefix}.anim.mosaicTiles`, JSON.stringify(parsed));
+  }
+  return {
+    ...loadedAnim,
+    mosaic: loadedAnim.mosaic === "off" ? "off" : loadedAnim.mosaic,
+    mosaicTiles: parsed,
+  };
 }

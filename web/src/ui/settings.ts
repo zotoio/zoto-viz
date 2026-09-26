@@ -27,7 +27,7 @@ import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
 import { guardReadableAnim } from "../graph/readable";
-import { applyDreamAnimWithTileLimit, countMosaicTiles } from "../graph/mosaic-viz-tile-guard";
+import { applyDreamAnimWithTileLimit, countMosaicTiles, dreamAnimBootFromStorage } from "../graph/mosaic-viz-tile-guard";
 import { mosaicWallLayoutRefusedMessage } from "./viz-copy";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import {
@@ -272,23 +272,10 @@ export class Settings {
     let rawTiles: unknown = [];
     try { rawTiles = rawTilesJson ? JSON.parse(rawTilesJson) : []; } catch { rawTiles = []; }
     const loadedAnim = loadAnim(storePrefix);
-    const bootGuard = applyDreamAnimWithTileLimit(
-      {
-        ...loadedAnim,
-        mosaicTiles: Array.isArray(rawTiles) ? rawTiles : loadedAnim.mosaicTiles,
-      },
-      DEFAULT_DREAM,
-    );
-    this.anim = bootGuard.refused ? bootGuard.anim : loadedAnim;
-    if (bootGuard.refused) {
-      this.lastMosaicTileLimitMessage = bootGuard.message
-        ?? mosaicWallLayoutRefusedMessage(
-          countMosaicTiles({
-            ...loadedAnim,
-            mosaicTiles: Array.isArray(rawTiles) ? rawTiles : loadedAnim.mosaicTiles,
-          }),
-          VIZ_MAX_ACTIVE_TILES,
-        );
+    const boot = dreamAnimBootFromStorage(loadedAnim, rawTiles);
+    this.anim = boot.anim;
+    if (boot.bootRefused) {
+      this.lastMosaicTileLimitMessage = boot.message ?? "";
       this.renderMosaicWallStatus();
     }
     this.feed = loadFeed(cfg.storePrefix);

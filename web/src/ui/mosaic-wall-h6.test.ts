@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mosaicWallLayoutRefusedMessage } from "./viz-copy";
+import { DEFAULT_DREAM } from "../graph/scene";
+import { dreamAnimBootRevertClamp } from "../graph/mosaic-viz-tile-guard";
+import { mosaicWallLayoutBootRefusedMessage, mosaicWallLayoutRefusedMessage } from "./viz-copy";
 import { Settings } from "./settings";
 
 describe("mosaic viz tile guard H6", () => {
@@ -7,16 +9,30 @@ describe("mosaic viz tile guard H6", () => {
     localStorage.clear();
   });
 
-  it("H6 boot: nine tiles in localStorage refused on Settings construct", () => {
+  it("H6 boot: nine saved tiles → default view, boot copy, storage byte-identical (reload twice)", () => {
     const prefix = "zoto-viz-h6-boot";
     const nine = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+    const raw = JSON.stringify(nine);
     localStorage.setItem(`${prefix}.anim.mosaic`, "8");
-    localStorage.setItem(`${prefix}.anim.mosaicTiles`, JSON.stringify(nine));
-    const s = new Settings({ storePrefix: prefix, onChange: () => {} });
-    expect(s.lastMosaicTileLimitMessage).toBe(mosaicWallLayoutRefusedMessage(9, 8));
-    const status = s.el.querySelector<HTMLElement>(".mosaic-wall-status");
-    expect(status?.hidden).toBe(false);
-    expect(s.animSettings.mosaicTiles.length).toBeLessThan(9);
+    localStorage.setItem(`${prefix}.anim.mosaicTiles`, raw);
+
+    const bootMsg =
+      "Couldn't load your saved wall layout. It has 9 tiles and the limit is 8, so the default view is showing.";
+    expect(mosaicWallLayoutBootRefusedMessage(9, 8)).toBe(bootMsg);
+
+    for (let pass = 0; pass < 2; pass++) {
+      const s = new Settings({ storePrefix: prefix, onChange: () => {} });
+      expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(raw);
+      expect(s.lastMosaicTileLimitMessage).toBe(bootMsg);
+      const status = s.el.querySelector<HTMLElement>(".mosaic-wall-status");
+      expect(status?.hidden).toBe(false);
+      expect(status?.classList.contains("fail")).toBe(false);
+      expect(status?.classList.contains("viz-hud-skip-fail")).toBe(false);
+      expect(status?.textContent).toBe(bootMsg);
+      expect(s.animSettings.mosaic).toBe("off");
+      expect(s.animSettings.mosaicTiles).toEqual([]);
+      expect(s.animSettings.mosaic).toBe(DEFAULT_DREAM.mosaic);
+    }
   });
 
   it("H6: reload with nine mosaicTiles is refused; current anim unchanged", () => {
@@ -49,5 +65,34 @@ describe("mosaic viz tile guard H6", () => {
     );
     expect(s.animSettings.mosaicTiles).toEqual(eight);
     expect(s.animSettings.mosaic).toBe("8");
+  });
+});
+
+describe("mosaic viz tile guard H6 boot revert", () => {
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("H6 boot revert: truncates stored tiles to eight and shows no boot status", () => {
+    const prefix = "zoto-viz-h6-boot-revert";
+    const nine = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+    const raw = JSON.stringify(nine);
+    localStorage.setItem(`${prefix}.anim.mosaic`, "8");
+    localStorage.setItem(`${prefix}.anim.mosaicTiles`, raw);
+
+    const loaded = {
+      ...DEFAULT_DREAM,
+      mosaic: "8" as const,
+      mosaicTiles: nine.slice(0, 8),
+    };
+    const clamped = dreamAnimBootRevertClamp(prefix, loaded, raw);
+    expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).not.toBe(raw);
+    expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(JSON.stringify(nine.slice(0, 8)));
+    expect(clamped.mosaicTiles).toHaveLength(8);
+    expect(clamped.mosaic).toBe("8");
+
+    const s = new Settings({ storePrefix: prefix, onChange: () => {} });
+    expect(s.lastMosaicTileLimitMessage).toBe("");
+    expect(s.el.querySelector<HTMLElement>(".mosaic-wall-status")?.hidden).toBe(true);
   });
 });
