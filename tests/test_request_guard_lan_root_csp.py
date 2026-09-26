@@ -39,8 +39,8 @@ def test_lan_get_root_sandbox_csp_names_box_ip_zero_bind_wildcards(stub_lan_os_i
                     assert resp.status == 200
                     want = f"http://{LAN_STUB_IFACE_IP}:{port}/pack-assets/{tok}/"
                     csp = resp.headers.get("Content-Security-Policy") or ""
-                    assert f"script-src {want}" in csp
                     joined = "\n".join(f"{k}: {v}" for k, v in resp.headers.items())
                     assert joined.count("0.0.0.0") == 0
+                    assert f"script-src {want}" in csp
 
     asyncio.run(run())
