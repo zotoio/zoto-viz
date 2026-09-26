@@ -592,6 +592,22 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
 }
 .field.select.dirty .field-btn { border-color: var(--warn); }
+.settings-pop .field-dirty .field-btn,
+.settings-pop .field-dirty .slider-row,
+.settings-pop .field-dirty.field.text {
+  outline: 1px solid var(--warn);
+  outline-offset: 1px;
+}
+.plugin-settings-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.plugin-settings-toolbar-row .btn {
+  height: 30px;
+  padding: 0 10px;
+}
 .field .val { display: flex; align-items: center; gap: 7px; font-weight: 600; white-space: nowrap; }
 .field .val .txt { overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 .field .chev { margin-left: auto; width: 10px; height: 10px; flex: none; color: var(--muted); transition: transform 0.15s; }

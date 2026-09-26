@@ -182,6 +182,8 @@ export interface PluginView {
   hint?: string;
   /** Catalog row when this spec was expanded from plugin.yml instances. */
   instanceId?: string;
+  /** Defaults from the matched plugin.yml instance row (before pack fallback). */
+  instanceDefaults?: Record<string, string | number | boolean>;
   instances?: PluginInstance[];
   /** Absent when the zip has no visualisation.yml and plugin.yml ships no engine. */
   engine?: PluginEngine;
@@ -213,6 +215,8 @@ export interface PluginView {
   shader_sha256?: string;
   sky_available?: boolean;
   sky_error?: string;
+  /** Host drawer: presets, HUD label fields, section order (from plugin.yml / visualisation.yml). */
+  settings?: import("./plugin-visualisation").PluginSettingsDecl;
 }
 
 const LOOK_ANIM_KEYS = [
@@ -299,6 +303,9 @@ export function vizContractFor(spec: PluginView | null | undefined): VizPluginCo
 }
 
 const storeKey = (id: string, key: string) => `zoto-viz.plugin.${id}.${key}`;
+
+/** Persisted meta: base preset for custom configs (not exported to packs). */
+export const PRESET_BASE_META_KEY = "__presetBase";
 export type { PluginInstance } from "./instances";
 
 export function fieldDefault(f: PluginField): string {
@@ -309,14 +316,30 @@ export function fieldDefault(f: PluginField): string {
   return "";
 }
 
+function instanceDefaultFor(spec: PluginView, key: string): string | undefined {
+  const defs = spec.instanceDefaults;
+  if (!defs || defs[key] === undefined) return undefined;
+  return String(defs[key]);
+}
+
 export function loadPluginConfig(spec: PluginView, fields = spec.config): Record<string, string> {
   const out: Record<string, string> = {};
   const storeId = configStoreId(spec);
   const viewId = pluginViewId(spec.id, spec.instanceId);
+  const metaKeys = [PRESET_BASE_META_KEY];
+  for (const mk of metaKeys) {
+    const saved = localStorage.getItem(storeKey(storeId, mk));
+    if (saved !== null) out[mk] = saved;
+  }
   for (const f of fields ?? []) {
     const saved = localStorage.getItem(storeKey(storeId, f.key));
     if (saved !== null) {
       out[f.key] = saved;
+      continue;
+    }
+    const instDef = instanceDefaultFor(spec, f.key);
+    if (instDef !== undefined) {
+      out[f.key] = instDef;
       continue;
     }
     const pack = spec.instanceId && spec.instanceId !== spec.id
@@ -338,7 +361,15 @@ export function writePluginConfig(id: string, values: Record<string, string>): v
 
 export function collectPluginConfigs(specs: PluginView[]): Record<string, Record<string, string>> {
   const rows = specs.flatMap((s) => expandPluginInstances(s));
-  return Object.fromEntries(rows.map((s) => [configStoreId(s), loadPluginConfig(s, pluginViewKnobs(s))]));
+  return Object.fromEntries(rows.map((s) => {
+    const raw = loadPluginConfig(s, pluginViewKnobs(s));
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (k === PRESET_BASE_META_KEY || k.startsWith("__")) continue;
+      out[k] = v;
+    }
+    return [configStoreId(s), out];
+  }));
 }
 
 export function applyPluginConfigs(raw: Record<string, Record<string, string>> | undefined): void {

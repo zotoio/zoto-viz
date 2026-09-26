@@ -67,6 +67,9 @@ import {
   configStoreId,
   type PluginView,
 } from "../plugins/plugin";
+import { buildPluginHudCaption, packConfigValues } from "../plugins/plugin-settings";
+import { pluginViewKnobs } from "../plugins/plugin-visualisation";
+import { setPluginHudCaptionSink } from "../plugins/plugin-ui";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
@@ -359,6 +362,7 @@ const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
+setPluginHudCaptionSink((caption) => vizHud.setPackCaption(caption));
 addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
@@ -502,6 +506,10 @@ nestCams.onChange = (patch) => {
   onPluginFields();
 };
 
+function sandboxPluginConfig(spec: PluginView): Record<string, string> {
+  return packConfigValues(loadPluginConfig(spec, pluginViewKnobs(spec)));
+}
+
 function onPluginFields(): void {
   const m = modeById(modeSel.value);
   const opts = optsFor(m);
@@ -512,6 +520,15 @@ function onPluginFields(): void {
   if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
   else scene.setMode(m, opts);
   renderLegend(m, opts);
+  const spec = pluginSpecForMode(m.id);
+  if (spec && pluginHasFrontend(spec)) sandbox.setConfig(sandboxPluginConfig(spec));
+  if (spec?.settings?.hud?.labelFields?.length) {
+    const cap = buildPluginHudCaption(spec, pluginViewKnobs(spec), opts);
+    vizHud.setPackCaption(cap);
+    morphCopy($("hint"), cap ? `${spec.name} · ${cap}` : m.hint);
+  } else {
+    vizHud.setPackCaption(null);
+  }
   void syncWifiWatch();
 }
 
@@ -634,7 +651,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     return;
   }
   try {
-    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    await attachPluginFrontend(sandbox, spec, sandboxPluginConfig(spec));
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
@@ -928,7 +945,15 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
 }
 
 function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
-  morphCopy($("hint"), m.hint);
+  let hint = m.hint;
+  if (spec?.settings?.hud?.labelFields?.length) {
+    const cap = buildPluginHudCaption(spec, pluginViewKnobs(spec), opts);
+    if (cap) hint = `${spec.name} · ${cap}`;
+    vizHud.setPackCaption(cap);
+  } else {
+    vizHud.setPackCaption(null);
+  }
+  morphCopy($("hint"), hint);
   const legend = $("legend");
   const paint = (): void => {
     if (skyStage) legend.replaceChildren();

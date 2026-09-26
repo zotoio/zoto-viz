@@ -207,6 +207,15 @@ export class PluginSandbox {
     );
   }
 
+  /** Push view config so plugins with config.read see live changes (meta keys stripped). */
+  setConfig(config: Record<string, string>): void {
+    if (!this.caps.includes("config.read")) return;
+    this.iframe?.contentWindow?.postMessage(
+      { source: "zoto-viz-host", type: "config", config } satisfies ParentMsg,
+      "*",
+    );
+  }
+
   contract(): VizPluginContract | undefined {
     return this.vizContract;
   }

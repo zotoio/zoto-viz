@@ -38,6 +38,12 @@ export interface PluginField {
   min?: number;
   max?: number;
   step?: number;
+  /** Settings drawer section title (see plugin settings `sections`). */
+  section?: string;
+  /** Uniform random range for host randomise (must lie within min..max). */
+  randomRange?: [number, number];
+  /** Opt out of host randomise (default: participate). */
+  randomise?: false;
 }
 export interface Legend { color: string; label: string; line?: boolean }
 export interface Overlay { id: string; x: number; y: number; z: number; html: string }

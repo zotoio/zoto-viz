@@ -63,6 +63,11 @@ export type CatalogRow = {
   parts?: unknown;
   frontend?: unknown;
   instances?: unknown;
+  settings?: unknown;
+  presets?: unknown;
+  presetField?: unknown;
+  hud?: unknown;
+  sections?: unknown;
   has_frontend?: unknown;
   has_sky?: unknown;
   has_sky_shader?: unknown;
@@ -131,7 +136,94 @@ function asField(key: string, raw: unknown): PluginField | undefined {
   if (typeof rec.min === "number") field.min = rec.min;
   if (typeof rec.max === "number") field.max = rec.max;
   if (typeof rec.step === "number") field.step = rec.step;
+  if (asString(rec.section)) field.section = asString(rec.section);
+  if (rec.randomise === false) field.randomise = false;
+  if (Array.isArray(rec.randomRange) && rec.randomRange.length >= 2
+    && typeof rec.randomRange[0] === "number" && typeof rec.randomRange[1] === "number") {
+    field.randomRange = [rec.randomRange[0], rec.randomRange[1]];
+  }
   return field;
+}
+
+export interface PluginPreset {
+  id: string;
+  label: string;
+  values: Record<string, string | number | boolean>;
+}
+
+export interface PluginHudDecl {
+  labelFields?: string[];
+}
+
+export interface PluginSectionDecl {
+  title: string;
+  collapsed?: boolean;
+}
+
+export interface PluginSettingsDecl {
+  presets?: PluginPreset[];
+  presetField?: string;
+  hud?: PluginHudDecl;
+  sections?: PluginSectionDecl[];
+}
+
+function parsePreset(raw: unknown): PluginPreset | undefined {
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  const id = asString(rec.id);
+  const label = asString(rec.label);
+  const values = asRecord(rec.values);
+  if (!id || !label || !values) return undefined;
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(values)) {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[k] = v;
+  }
+  if (!Object.keys(out).length) return undefined;
+  return { id, label, values: out };
+}
+
+function parseSectionDecl(raw: unknown): PluginSectionDecl | undefined {
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  const title = asString(rec.title);
+  if (!title) return undefined;
+  return { title, collapsed: rec.collapsed === true };
+}
+
+export function parsePluginSettings(raw: unknown): PluginSettingsDecl | undefined {
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  const settings: PluginSettingsDecl = {};
+  const presetField = asString(rec.presetField);
+  if (presetField) settings.presetField = presetField;
+  const hudRec = asRecord(rec.hud);
+  if (hudRec && Array.isArray(hudRec.labelFields)) {
+    const labelFields = hudRec.labelFields.filter((x): x is string => typeof x === "string" && x.trim()).map((x) => x.trim());
+    if (labelFields.length) settings.hud = { labelFields };
+  }
+  if (Array.isArray(rec.presets)) {
+    const presets = rec.presets.map(parsePreset).filter((p): p is PluginPreset => !!p);
+    if (presets.length) settings.presets = presets;
+  }
+  if (Array.isArray(rec.sections)) {
+    const sections = rec.sections.map(parseSectionDecl).filter((s): s is PluginSectionDecl => !!s);
+    if (sections.length) settings.sections = sections;
+  }
+  return Object.keys(settings).length ? settings : undefined;
+}
+
+/** Reject invalid randomRange against parsed fields (throws on bad catalog). */
+export function assertFieldRandomRanges(fields: PluginField[], settings?: PluginSettingsDecl): void {
+  if (!settings?.presets?.length) return;
+  for (const f of fields) {
+    if (!f.randomRange) continue;
+    const min = f.min ?? 0;
+    const max = f.max ?? Math.max(min + 1, 100);
+    const [lo, hi] = f.randomRange;
+    if (lo < min || hi > max || lo > hi) {
+      throw new Error(`config field ${f.key} randomRange [${lo}, ${hi}] outside min..max [${min}, ${max}]`);
+    }
+  }
 }
 
 function asListOrMap<T>(raw: unknown, parse: (key: string, value: unknown) => T | undefined): T[] {
@@ -294,6 +386,14 @@ export function toPluginView(raw: unknown): PluginView {
 
   const engine = parseEngine(viz.engine ?? row.engine);
   const idle = parsePluginIdle(viz.idle);
+  const settings = parsePluginSettings(row.settings ?? viz.settings ?? {
+    presets: row.presets ?? viz.presets,
+    presetField: row.presetField ?? viz.presetField,
+    hud: row.hud ?? viz.hud,
+    sections: row.sections ?? viz.sections,
+  });
+  const configFields = parseConfig(viz.config ?? row.config);
+  if (settings) assertFieldRandomRanges(configFields ?? [], settings);
   const spec: PluginView = {
     id,
     name,
@@ -302,12 +402,13 @@ export function toPluginView(raw: unknown): PluginView {
     engine,
     base: asString(viz.base) ?? asString(row.base),
     options: parseOptions(viz.options ?? row.options),
-    config: parseConfig(viz.config ?? row.config),
+    config: configFields,
     style: parseStyle(viz.style ?? row.style),
     layout: parseLayout(viz.layout ?? row.layout),
     look: parseLook(viz.look ?? row.look),
     instances: parseInstances(row.instances),
   };
+  if (settings) spec.settings = settings;
   if (idle) spec.idle = idle;
   if (asString(row.file)) spec.file = asString(row.file);
   if (row.runtime === "yaml" || row.runtime === "typescript") spec.runtime = row.runtime;

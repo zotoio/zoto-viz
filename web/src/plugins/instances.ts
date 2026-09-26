@@ -11,6 +11,8 @@ export type PluginInstance = {
   image?: string;
   link?: string;
   filter?: string;
+  /** Per-instance config defaults applied before pack-wide fallback. */
+  defaults?: Record<string, string | number | boolean>;
 };
 
 const BIND_DEFAULTS: Record<string, string> = {
@@ -65,6 +67,14 @@ export function parseInstances(raw: unknown): PluginInstance[] | undefined {
       const val = rec[key];
       if (typeof val === "string" && val.trim()) inst[key] = val.trim();
     }
+    const defs = rec.defaults;
+    if (defs && typeof defs === "object" && !Array.isArray(defs)) {
+      const map: Record<string, string | number | boolean> = {};
+      for (const [k, v] of Object.entries(defs)) {
+        if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") map[k] = v;
+      }
+      if (Object.keys(map).length) inst.defaults = map;
+    }
     out.push(inst);
   }
   return out.length ? out : undefined;
@@ -79,6 +89,7 @@ export function applyInstance(spec: PluginView, inst: PluginInstance): PluginVie
     hint: inst.hint || spec.hint,
     look: spec.look,
     config,
+    instanceDefaults: inst.defaults,
   };
 }
 

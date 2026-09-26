@@ -180,6 +180,8 @@ export class VizHud {
   private readonly onSwap: (packId: VizDemoPackId) => void;
 
   private activeId: VizDemoPackId | null = null;
+  private packBaseName = "";
+  private packCaptionSuffix: string | null = null;
   private lastSkipped = 0;
   private skipNeedsSync = true;
   private readonly skipSamples: { t: number; n: number }[] = [];
@@ -245,9 +247,23 @@ export class VizHud {
     this.root.hidden = !this.activeId;
     if (!this.activeId) return;
     if (changed) this.resetSkipBaseline();
-    if (!this.packEl.textContent) this.packEl.textContent = packName;
-    else morphCopy(this.packEl, packName);
+    this.packBaseName = packName;
+    this.renderPackLine();
     this.packSel.value = this.activeId;
+  }
+
+  setPackCaption(suffix: string | null): void {
+    this.packCaptionSuffix = suffix;
+    this.renderPackLine();
+  }
+
+  private renderPackLine(): void {
+    const text = this.packCaptionSuffix
+      ? `${this.packBaseName} · ${this.packCaptionSuffix}`
+      : this.packBaseName;
+    if (!text) return;
+    if (!this.packEl.textContent) this.packEl.textContent = text;
+    else morphCopy(this.packEl, text);
   }
 
   /** Re-sync skip delta baseline after host budget reset (avoids desync / false bursts). */

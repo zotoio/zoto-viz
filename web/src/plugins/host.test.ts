@@ -63,4 +63,8 @@ describe("PluginSandbox module load", () => {
     await expect(box.loadModule("missing", ["graph.read"], {})).rejects.toThrow(/module 404/);
     globalThis.fetch = orig;
   });
+
+  it("exposes setConfig for live config.read pushes", () => {
+    expect(typeof new PluginSandbox().setConfig).toBe("function");
+  });
 });

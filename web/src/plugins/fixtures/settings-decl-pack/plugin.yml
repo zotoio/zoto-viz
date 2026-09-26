@@ -1,0 +1,25 @@
+# Test-only catalog row — not shipped in contrib zips; used by plugin-settings.test.ts patterns.
+id: settings-fixture
+name: Settings fixture
+version: 1
+visualisation:
+  engine: graph
+  settings:
+    presetField: preset
+    presets:
+      - id: a
+        label: Alpha
+        values: { gain: 3, mode: x }
+  config:
+    - key: preset
+      label: preset
+      type: select
+      default: a
+      values: [[a, Alpha]]
+    - key: gain
+      label: gain
+      type: number
+      min: 0
+      max: 10
+      step: 0.5
+      randomRange: [2, 8]

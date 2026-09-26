@@ -114,6 +114,24 @@
     "layout": { "$ref": "#/$defs/layout" },
     "options": { "$ref": "#/$defs/freeMap" },
     "config": { "$ref": "#/$defs/freeMap" },
+    "settings": { "$ref": "#/$defs/pluginSettings" },
+    "presets": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/pluginPreset" },
+      "description": "Named config starting points (prefer settings.presets)."
+    },
+    "presetField": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Config key holding the active preset id (prefer settings.presetField)."
+    },
+    "hud": { "$ref": "#/$defs/pluginHud" },
+    "sections": {
+      "type": "array",
+      "maxItems": 24,
+      "items": { "$ref": "#/$defs/pluginSection" }
+    },
     "produces": {
       "type": "array",
       "maxItems": 16,
@@ -228,7 +246,18 @@
         "caption": { "type": "string", "maxLength": 64 },
         "image": { "type": "string", "maxLength": 64 },
         "link": { "type": "string", "maxLength": 64 },
-        "filter": { "type": "string", "maxLength": 80 }
+        "filter": { "type": "string", "maxLength": 80 },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string", "maxLength": 120 },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          },
+          "description": "Per-instance config defaults applied before pack-wide fallback."
+        }
       }
     },
     "pluginInstances": {
@@ -267,7 +296,94 @@
         "layout": { "$ref": "#/$defs/layout" },
         "options": { "$ref": "#/$defs/freeMap" },
         "config": { "$ref": "#/$defs/freeMap" },
+        "settings": { "$ref": "#/$defs/pluginSettings" },
+        "presets": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/pluginPreset" }
+        },
+        "presetField": { "type": "string", "maxLength": 64 },
+        "hud": { "$ref": "#/$defs/pluginHud" },
+        "sections": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/pluginSection" }
+        },
         "idle": { "$ref": "#/$defs/vizIdle" }
+      }
+    },
+    "pluginConfigField": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "key": { "type": "string", "maxLength": 64 },
+        "label": { "type": "string", "maxLength": 64 },
+        "type": { "type": "string", "enum": ["boolean", "select", "number", "text", "textarea"] },
+        "section": { "type": "string", "maxLength": 48 },
+        "randomise": { "type": "boolean", "const": false },
+        "randomRange": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "number" }
+        }
+      }
+    },
+    "pluginPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "values"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 48 },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string", "maxLength": 120 },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        }
+      }
+    },
+    "pluginHud": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labelFields": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "type": "string", "maxLength": 64 }
+        }
+      }
+    },
+    "pluginSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 48 },
+        "collapsed": { "type": "boolean" }
+      }
+    },
+    "pluginSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "presets": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/pluginPreset" }
+        },
+        "presetField": { "type": "string", "maxLength": 64 },
+        "hud": { "$ref": "#/$defs/pluginHud" },
+        "sections": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/pluginSection" }
+        }
       }
     },
     "sky": {
