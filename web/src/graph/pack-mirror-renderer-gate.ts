@@ -1,6 +1,11 @@
+function envVar(name: string): string | undefined {
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  return env?.[name];
+}
+
 /** Substring expected in WEBGL_debug_renderer_info when `ZOTO_VIZ_EXPECT_RENDERER` is set (e.g. CI). */
 export function expectedRendererNeedle(): string | undefined {
-  const raw = process.env.ZOTO_VIZ_EXPECT_RENDERER?.trim();
+  const raw = envVar("ZOTO_VIZ_EXPECT_RENDERER")?.trim();
   return raw || undefined;
 }
 
