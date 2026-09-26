@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runPackOnFixtures } from "../../../plugins/sdk/viz-fixtures";
 import {
   CANVAS_DEFAULT, cicCanvasSize, clamp01, DEFAULT_LOOK, EMPTY_SYS, idHash,
   packPackets, packRf, packSysSlot, packTalkers, parseCicLook, peakRf, peakTalker,
@@ -6,6 +7,16 @@ import {
 } from "../../../plugins/src/cypher-cic/frontend/pack";
 
 describe("cypher-cic pack", () => {
+  it("packs shared host fixtures into non-empty slots", () => {
+    const look = parseCicLook({});
+    runPackOnFixtures((frame) => {
+      expect(packSysSlot(frame.sys ?? EMPTY_SYS, frame.audio, cicCanvasSize(), look).length).toBe(19);
+      expect(packTalkers(frame.talkers).length).toBeGreaterThan(0);
+      expect(packPackets(frame.packets).length).toBeGreaterThan(0);
+      expect(packRf(frame.rf).length).toBeGreaterThan(0);
+    });
+  });
+
   it("packs gauges, canvas, look, and load into slot 0", () => {
     const buf = packSysSlot(
       { ...EMPTY_SYS, cpu: 0.4, mem: 0.8, failed: 0.5, temp: 0.9 },

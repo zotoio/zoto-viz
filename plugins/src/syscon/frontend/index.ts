@@ -1,15 +1,10 @@
 /** Syscon holotable — pack host SYS gauges into the plugin sky. Never writes uBright. */
 
-import { EMPTY_SYS_GAUGES, packSysGauges, sysconCanvasSize, type SysGauges } from "./telemetry";
-
-type VizFrame = {
-  t: number;
-  audio: number;
-  sys?: SysGauges;
-};
+import { EMPTY_SYS_GAUGES, packSysGauges, sysconCanvasSize } from "./telemetry";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "sys">) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };

@@ -1,16 +1,12 @@
 /** Talker-driven particle storm scaffold — hard-capped particle writes per frame. */
 
+import type { VizDataFrame } from "../../../sdk/viz-contract";
+
 const PARTICLE_CAP = 512;
 const STRIDE = 4;
 
-type VizFrame = {
-  t: number;
-  talkers: { id: string; rate: number; role: string }[];
-  audio: number;
-};
-
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "talkers" | "audio">) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
   writeParticles: (data: number[], stride?: number) => void;

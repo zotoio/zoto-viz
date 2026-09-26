@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { runPackOnFixtures } from "../../../plugins/sdk/viz-fixtures";
 import { clamp01, EMPTY_SYS_GAUGES, packSysGauges, sysAlert, sysconCanvasSize } from "../../../plugins/src/syscon/frontend/telemetry";
 
 describe("syscon gauges", () => {
+  it("packs shared host fixtures into slot 0", () => {
+    runPackOnFixtures((frame) => {
+      const buf = packSysGauges(frame.sys ?? EMPTY_SYS_GAUGES, frame.audio, sysconCanvasSize());
+      expect(buf.length).toBeGreaterThan(0);
+    });
+  });
+
   it("packs gauges plus canvas size", () => {
     const buf = packSysGauges({
       ...EMPTY_SYS_GAUGES,

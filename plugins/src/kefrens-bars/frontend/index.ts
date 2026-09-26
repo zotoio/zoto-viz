@@ -1,13 +1,9 @@
 /** Kefrens / copper bars — talker rates become bar amplitudes. */
 
-type VizFrame = {
-  t: number;
-  talkers: { id: string; rate: number; role: string }[];
-  audio: number;
-};
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: Pick<VizDataFrame, "t" | "talkers" | "audio">) => void) | null;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };

@@ -1,0 +1,568 @@
+{
+  "t": 1790434155.4645548,
+  "dt": 0,
+  "audio": 0.08002164555731918,
+  "packets": [
+    {
+      "proto": "tcp",
+      "size": 480,
+      "field": 0.62
+    },
+    {
+      "proto": "udp",
+      "size": 96,
+      "field": 0.38
+    },
+    {
+      "proto": "dns",
+      "size": 64,
+      "field": 0.28
+    },
+    {
+      "proto": "tls",
+      "size": 820,
+      "field": 0.71
+    }
+  ],
+  "rf": [
+    {
+      "ssid": "host-04",
+      "rssi": 0.55,
+      "channel": 36
+    },
+    {
+      "ssid": "host-05",
+      "rssi": 0.42,
+      "channel": 6
+    }
+  ],
+  "talkers": [
+    {
+      "id": "host-01",
+      "rate": 120,
+      "role": "lan"
+    },
+    {
+      "id": "host-02",
+      "rate": 88,
+      "role": "gateway"
+    },
+    {
+      "id": "host-03",
+      "rate": 64,
+      "role": "internet"
+    }
+  ],
+  "headlines": [
+    {
+      "id": "hn:0",
+      "label": "Hacker News",
+      "text": "Earth is tearing apart beneath the Pacific Northwest",
+      "kind": "rss",
+      "summary": "Article URL: https://www.sciencedaily.com/releases/2026/09/260924231343.htm Comments URL: https://news.ycombinator.com/item?id=49856971 Points: 3 # Comments: 0"
+    },
+    {
+      "id": "hn:1",
+      "label": "Hacker News",
+      "text": "Understanding the Impact of LLM Watermarking on AI Agent Behavior",
+      "kind": "rss",
+      "summary": "Article URL: https://www.lasso.security/blog/the-provenance-tax-understanding-the-impact-of-llm-watermarking-on-ai-agent-behavior Comments URL: https://news.ycombinator.com/item?id=49856149 Points: 43 # Comments: 26"
+    },
+    {
+      "id": "hn:2",
+      "label": "Hacker News",
+      "text": "Breaking Up with Google Play: Why Conversations Is Now Free",
+      "kind": "rss",
+      "summary": "Article URL: https://gultsch.de/posts/breaking-up-with-google-play/ Comments URL: https://news.ycombinator.com/item?id=49855315 Points: 277 # Comments: 111"
+    },
+    {
+      "id": "hn:3",
+      "label": "Hacker News",
+      "text": "One Month Without AI",
+      "kind": "rss",
+      "summary": "Article URL: https://blog.bustikiller.com/2026/09/25/one-month-without-ai.html Comments URL: https://news.ycombinator.com/item?id=49855018 Points: 123 # Comments: 129"
+    },
+    {
+      "id": "hn:4",
+      "label": "Hacker News",
+      "text": "The Copilot+ PC brand is dead",
+      "kind": "rss",
+      "summary": "Article URL: https://www.windowscentral.com/microsoft/windows-11/the-copilot-pc-brand-is-dead-microsoft-and-pc-makers-quietly-pull-back-on-tarnished-windows-11-ai-pc-branding Comments URL: https://news.ycombinator.com/item?id=49854945 Points: 43 # Comments: 25"
+    },
+    {
+      "id": "hn:5",
+      "label": "Hacker News",
+      "text": "Fifteen years later, the Apple Cards origin story",
+      "kind": "rss",
+      "summary": "Article URL: https://lexontech.org/fifteen-years-later-the-apple-cards-origin-story Comments URL: https://news.ycombinator.com/item?id=49854693 Points: 152 # Comments: 18"
+    },
+    {
+      "id": "hn:6",
+      "label": "Hacker News",
+      "text": "Floci: Locally emulating any cloud service",
+      "kind": "rss",
+      "summary": "Article URL: https://floci.io Comments URL: https://news.ycombinator.com/item?id=49854416 Points: 78 # Comments: 11"
+    },
+    {
+      "id": "hn:7",
+      "label": "Hacker News",
+      "text": "The far side of the Moon provides clues to a previous magnetic field",
+      "kind": "rss",
+      "summary": "Article URL: https://ethz.ch/en/news-and-events/eth-news/news/2026/09/the-far-side-of-the-moon-provides-clues-to-a-previous-magnetic-field.html Comments URL: https://news.ycombinator.com/item?id=49854216 Points: 17 # Comments: 1"
+    },
+    {
+      "id": "hn:8",
+      "label": "Hacker News",
+      "text": "Is your Postgres migration safe or not safe?",
+      "kind": "rss",
+      "summary": "Article URL: https://safenotsafe.dev/ Comments URL: https://news.ycombinator.com/item?id=49854161 Points: 73 # Comments: 21"
+    },
+    {
+      "id": "hn:9",
+      "label": "Hacker News",
+      "text": "A single function Jev-like wrapper for LLMs, including vision models",
+      "kind": "rss",
+      "summary": "Article URL: http://allanrbo.blogspot.com/2026/09/a-jev-like-wrapper-for-llms-including.html Comments URL: https://news.ycombinator.com/item?id=49853175 Points: 107 # Comments: 30"
+    },
+    {
+      "id": "hn:10",
+      "label": "Hacker News",
+      "text": "We're gonna need a lot more mathematicians",
+      "kind": "rss",
+      "summary": "Article URL: https://terrytao.wordpress.com/2026/09/24/were-gonna-need-a-lot-more-mathematicians/ Comments URL: https://news.ycombinator.com/item?id=49852717 Points: 213 # Comments: 296"
+    },
+    {
+      "id": "hn:11",
+      "label": "Hacker News",
+      "text": "Jury finds Facebook liable for deceiving users in Cambridge Analytica case",
+      "kind": "rss",
+      "summary": "Article URL: https://www.cbsnews.com/news/facebook-liable-deceiving-users-cambridge-analytica/ Comments URL: https://news.ycombinator.com/item?id=49852302 Points: 312 # Comments: 81"
+    },
+    {
+      "id": "hn:12",
+      "label": "Hacker News",
+      "text": "What even is an OS now?",
+      "kind": "rss",
+      "summary": "Article URL: https://sockpuppet.org/blog/2026/09/25/what-even-is-an-os-now/ Comments URL: https://news.ycombinator.com/item?id=49850305 Points: 227 # Comments: 330"
+    },
+    {
+      "id": "hn:13",
+      "label": "Hacker News",
+      "text": "Revealing the details of how OpenAI agents hacked Hugging Face",
+      "kind": "rss",
+      "summary": "Article URL: https://swarmtraces.org/ Comments URL: https://news.ycombinator.com/item?id=49849985 Points: 569 # Comments: 363"
+    },
+    {
+      "id": "hn:14",
+      "label": "Hacker News",
+      "text": "Excel now supports multiple values in a single cell",
+      "kind": "rss",
+      "summary": "Related: https://techcommunity.microsoft.com/blog/excelblog/excel-now... Comments URL: https://news.ycombinator.com/item?id=49849832 Points: 220 # Comments: 153"
+    },
+    {
+      "id": "hn:15",
+      "label": "Hacker News",
+      "text": "Ask HN: Who's still keeping a DOS machine up because the business depends on it?",
+      "kind": "rss",
+      "summary": "Do you currently work with or know anyone who is still using: * dBase/Clipper/CLARION/Paradox/other DOS RAD environments on period hardware to run business processes? * CNC mills/spectrometers/microscopes/other industrial instruments controlled by ISA cards (either bespoke or standards like GPIB)? * Anything with a parallel port dongle? If so, I'd be very interested in hearing your experience here"
+    },
+    {
+      "id": "hn:16",
+      "label": "Hacker News",
+      "text": "Ollaya – Ollama for open-source, Jev-style decision models",
+      "kind": "rss",
+      "summary": "Article URL: https://ollaya.dev/ Comments URL: https://news.ycombinator.com/item?id=49848269 Points: 515 # Comments: 126"
+    },
+    {
+      "id": "hn:17",
+      "label": "Hacker News",
+      "text": "Gravity seems holographic. What does that mean for reality?",
+      "kind": "rss",
+      "summary": "Article URL: https://www.quantamagazine.org/gravity-seems-holographic-what-does-that-mean-for-reality-20260925/ Comments URL: https://news.ycombinator.com/item?id=49845998 Points: 237 # Comments: 186"
+    },
+    {
+      "id": "hn:18",
+      "label": "Hacker News",
+      "text": "Show HN: Jev Plays Pokémon Red",
+      "kind": "rss",
+      "summary": "Hey HN! Wanted to share a fun project I've been hacking on. Given Jev can make decisions really fast (but not fast enough to play Doom yet sadly), I wanted to try and push it to play a more complex game than Tetris. So I went with Pokémon. I've spent endless hours playing this game as a child so building this was a ton of fun. I open sourced everything in case you want to hack on it yourself here:"
+    },
+    {
+      "id": "hn:19",
+      "label": "Hacker News",
+      "text": "Plan mode is dead",
+      "kind": "rss",
+      "summary": "Article URL: https://www.aymannadeem.com/artificial/intelligence,/developer/tools/2026/09/24/plan-mode-is-dead.html Comments URL: https://news.ycombinator.com/item?id=49840054 Points: 412 # Comments: 376"
+    },
+    {
+      "id": "nasa:0",
+      "label": "NASA image of the day",
+      "text": "Hubble Spots Chaotic Secret in Galaxy",
+      "kind": "rss",
+      "summary": "Though the spiral galaxy in this ESA/Hubble Picture of the Month seems serene, it hides a chaotic secret.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55534741297-34e5a9d414-o.jpg"
+    },
+    {
+      "id": "nasa:1",
+      "label": "NASA image of the day",
+      "text": "Practicing for Safe Landings on the Moon and Beyond",
+      "kind": "rss",
+      "summary": "An Alta-X drone flies an advanced guidance and navigation system known as the Safe and Precise Landing – Integrated Capabilities Evolution (SPLICE) experiment near NASA’s Armstrong Flight Research Center in Edwards, California, on Thursday, Aug. 27, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/afrc2026-0179-18orig.jpg"
+    },
+    {
+      "id": "nasa:2",
+      "label": "NASA image of the day",
+      "text": "NASA's Hubble Telescope Reaches Milestone, Looks for Elusive Supernova",
+      "kind": "rss",
+      "summary": "An image from NASA's Hubble Space Telescope of galaxy cluster MACS J0417 is part of repeated observations to monitor for the reappearance of supernova Athena, which can help astronomers measure the expansion rate of the universe.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/stsci-h-p26023a-m-2000x1207-1.jpg"
+    },
+    {
+      "id": "nasa:3",
+      "label": "NASA image of the day",
+      "text": "NASA's Chandra Finds Unusual Objects in Pinwheel Galaxy",
+      "kind": "rss",
+      "summary": "Using NASA’s Chandra X-ray Observatory, scientists have discovered a new class of objects behaving unlike any they have seen before.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/m101-lg.jpg"
+    },
+    {
+      "id": "nasa:4",
+      "label": "NASA image of the day",
+      "text": "NASA Astronaut Reid Wiseman Attends Ravens vs. Saints Game",
+      "kind": "rss",
+      "summary": "NASA astronaut and commander of the agency’s Artemis II mission, Reid Wiseman, a Baltimore native, takes a selfie with fans at an NFL game between the New Orleans Saints and the Baltimore Ravens at M&T Bank Stadium, Sunday, Sept. 20, 2026, in Baltimore.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55540215826-eb77fe7409-o.jpg"
+    },
+    {
+      "id": "nasa:5",
+      "label": "NASA image of the day",
+      "text": "COSI Telescope Comes Together",
+      "kind": "rss",
+      "summary": "UC Berkeley engineers and managers watch as the COSI (Compton Spectrometer and Imager) detector assembly is slowly raised from a table in this July 8, 2026, image.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/cosi-2026july-01.jpg"
+    },
+    {
+      "id": "nasa:6",
+      "label": "NASA image of the day",
+      "text": "NASA Unveils Enterprise, the First Space Shuttle",
+      "kind": "rss",
+      "summary": "The rollout ceremony for NASA’s first space shuttle, OV-101, coincided with Constitution Day of the nation’s bicentennial on Sept.17, 1976. Although the orbiter was originally planned to be named Constitution, Star Trek fans successfully convinced President Gerald Ford to name it Enterprise after the series’ fictional starship.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/9467279838-faa6134db8-o.jpg"
+    },
+    {
+      "id": "nasa:7",
+      "label": "NASA image of the day",
+      "text": "Indonesia's Anak Krakatau",
+      "kind": "rss",
+      "summary": "Anak Krakatau erupts ash and volcanic gases in this image acquired with the OLI (Operational Land Imager) on Landsat 8 on Sept. 5, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/krakatau-oli-20260905-lrg.jpg"
+    },
+    {
+      "id": "nasa:8",
+      "label": "NASA image of the day",
+      "text": "Artemis III Crew Visits NASA Kennedy's Vehicle Assembly Building",
+      "kind": "rss",
+      "summary": "NASA astronaut Randy Bresnik (left) and ESA (European Space Agency) astronaut Luca Parmitano view progress on the solid rocket booster integration in High Bay 3 inside the Vehicle Assembly Building at NASA's Kennedy Space Center in Florida on Wednesday, Sept. 2, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/ksc-20260902-ph-kls01-0023orig-rotated.jpg"
+    },
+    {
+      "id": "nasa:9",
+      "label": "NASA image of the day",
+      "text": "NASA Kicks Off Inspiration Tour with Steelers vs. Falcons Game",
+      "kind": "rss",
+      "summary": "Fans pose for a photo with an astronaut in the NASA Experience Zone at an NFL game between the Pittsburgh Steelers and the Atlanta Falcons at Acrisure Stadium, Sunday, Sept. 13, 2026, in Pittsburgh, Pennsylvania.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55527488950-2ce6740658-o.jpg"
+    },
+    {
+      "id": "nasa:10",
+      "label": "NASA image of the day",
+      "text": "NASA's Chandra Spots Galactic Gem",
+      "kind": "rss",
+      "summary": "Galaxies are like cosmic gems, each with characteristics including size and shape that make them distinct. A gallery from NASA’s Chandra X-ray Observatory and other telescopes displays a collection of galactic images that showcase this variety.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/galaxies-iizw096.jpg"
+    },
+    {
+      "id": "nasa:11",
+      "label": "NASA image of the day",
+      "text": "Dust and Water in Sagittarius A*",
+      "kind": "rss",
+      "summary": "Using the James Webb Space Telescope, an international team of astronomers have discovered that dust and water can form and survive surprisingly close to the supermassive black hole at the center of our Milky Way galaxy.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55459350878-2e1468b664-o.png"
+    },
+    {
+      "id": "nasa:12",
+      "label": "NASA image of the day",
+      "text": "Artemis II Crew at NASA Marshall",
+      "kind": "rss",
+      "summary": "The crew of NASA’s Artemis II mission visited NASA’s Marshall Space Flight Center in Huntsville, Alabama on Sept. 1, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/msfc-09012026-artemis-ii-crew-visit-at-msfc-1orig.jpg"
+    },
+    {
+      "id": "nasa:13",
+      "label": "NASA image of the day",
+      "text": "Superbubble in the Large Magellanic Cloud",
+      "kind": "rss",
+      "summary": "N44 is a complex nebula filled with glowing hydrogen gas, dark lanes of dust, massive stars, and many populations of stars of different ages. One of its most distinctive features, however, is the dark, starry gap called a “superbubble,” visible in this Hubble Space Telescope image in the upper central region.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/hubble-n44-wfc3-large.jpg"
+    },
+    {
+      "id": "nasa:14",
+      "label": "NASA image of the day",
+      "text": "Lunar Occultation of Venus",
+      "kind": "rss",
+      "summary": "On Wednesday, June 17, skywatchers across the United States—and parts of Canada—enjoyed a rare event: a daytime lunar occultation of Venus. A lunar occultation occurs when the Moon moves directly in front of another celestial object from our viewpoint on Earth, briefly hiding it from sight.",
+      "image": "https://images-assets.nasa.gov/image/NHQ202606170001/NHQ202606170001~large.jpg"
+    },
+    {
+      "id": "nasa:15",
+      "label": "NASA image of the day",
+      "text": "Igniting Roman's Journey",
+      "kind": "rss",
+      "summary": "Now on a three-month, million-mile journey to its final orbit, NASA’s Nancy Grace Roman Space Telescope will soon reveal the universe’s darkest secrets. The mission launched at 7:26 a.m. EDT on Aug. 30 aboard a SpaceX Falcon Heavy rocket from Launch Complex 39A at the agency’s Kennedy Space Center in Florida.",
+      "image": "https://images-assets.nasa.gov/image/NHQ202608300037/NHQ202608300037~large.jpg"
+    },
+    {
+      "id": "nasa:16",
+      "label": "NASA image of the day",
+      "text": "August Lunar Eclipse Rises Over Louisiana",
+      "kind": "rss",
+      "summary": "A lunar eclipse is visible over southern Louisiana. The lunar eclipse was visible throughout much of North and South America and part of Europe and Africa between Aug. 27-28. The Full Moon slipped through Earth’s shadow on Aug. 27, continuing into Aug. 28 for some parts of the world, resulting in the lunar eclipse. At maximum eclipse, the Moon takes on a dramatic dark, ruddy or coppery tint along",
+      "image": "https://images-assets.nasa.gov/image/MAF_20260827_LunarEclipse_01/MAF_20260827_LunarEclipse_01~large.jpg"
+    },
+    {
+      "id": "nasa:17",
+      "label": "NASA image of the day",
+      "text": "Artemis III RS-25 Engine Processing: #3 Lift",
+      "kind": "rss",
+      "summary": "Technicians prepare to transfer the #2 RS-25 SLS (Space Launch System) rocket engine (front) to the work stand with the #3 engine (back) for integration with the Artemis III core stage rocket on Tuesday, Aug. 25, 2026, inside the Vehicle Assembly Building at NASA’s Kennedy Space Center in Florida. During Artemis III, the four RS‑25 engines will launch the Orion spacecraft and its crew of four into",
+      "image": "https://images-assets.nasa.gov/image/KSC-20260825-PH-RCR01_0045/KSC-20260825-PH-RCR01_0045~large.jpg"
+    },
+    {
+      "id": "nasa:18",
+      "label": "NASA image of the day",
+      "text": "NASA's Nancy Grace Roman Space Telescope Launches",
+      "kind": "rss",
+      "summary": "A SpaceX Falcon Heavy rocket with NASA’s Nancy Grace Roman Telescope on board is seen transiting the sun during launch from Launch Complex 39A, Sunday, Aug. 30, 2026, at NASA’s Kennedy Space Center in Florida.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/nhq20260830-admin-0001orig.jpg"
+    },
+    {
+      "id": "nasa:19",
+      "label": "NASA image of the day",
+      "text": "NASA's Artemis II Crew Receives Congressional Space Medal of Honor",
+      "kind": "rss",
+      "summary": "President Donald J. Trump awarded NASA astronauts Victor Glover and Christina Koch, CSA (Canadian Space Agency) astronaut Jeremy Hansen, and NASA astronaut Reid Wiseman with the Congressional Space Medal of Honor on Aug. 28, 2026, at NASA’s Johnson Space Center in Houston.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/20260828-120552-jk1-3999-1.jpg"
+    },
+    {
+      "id": "nasa:20",
+      "label": "NASA image of the day",
+      "text": "Civil Servants Sworn in at NASA Ames",
+      "kind": "rss",
+      "summary": "New civil servants and guests pose for a group photo with NASA and Center leadership in the National Full-Scale Aerodynamics Complex (NFAC) 80-by-120-foot test section, N221.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/acd26-0108-042orig.jpg"
+    },
+    {
+      "id": "nasa:21",
+      "label": "NASA image of the day",
+      "text": "Roman Space Telescope Travels to SpaceX Hangar",
+      "kind": "rss",
+      "summary": "NASA’s Nancy Grace Roman Space Telescope, encapsulated in its payload fairing, travels to the SpaceX hangar at Launch Complex 39A at NASA’s Kennedy Space Center on Tuesday, Aug. 25, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ksc-20260825-ph-ser01-0001orig.jpg"
+    },
+    {
+      "id": "nasa:22",
+      "label": "NASA image of the day",
+      "text": "Astronauts Anil Menon and Sophie Adenot on Spacewalk",
+      "kind": "rss",
+      "summary": "From left, Expedition 75 flight engineers Anil Menon of NASA (partially obscured and wearing the spacesuit with a red stripe on the legs) and Sophie Adenot of ESA (European Space Agency) work together during a six‑hour and 23‑minute spacewalk outside the International Space Station.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55474999794-5b0f1a2c92-o.jpg"
+    },
+    {
+      "id": "nasa:23",
+      "label": "NASA image of the day",
+      "text": "NASA Astronaut Reid Wiseman at Freedom 250 Grand Prix",
+      "kind": "rss",
+      "summary": "NASA astronaut Reid Wiseman, Artemis II commander, is seen in the two-seat IndyCar as he prepares for driver Conor Daly to take him on a lap in the fastest seat in sport ahead of the start of the Freedom 250 Grand Prix, Sunday, Aug. 23, 2026, in Washington, D.C. Photo Credit: (NASA/Joel Kowsky)",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55483612275-859663d405-o.jpg"
+    },
+    {
+      "id": "nasa:24",
+      "label": "NASA image of the day",
+      "text": "Webb Opens Treasure Chest",
+      "kind": "rss",
+      "summary": "This NASA/ESA/CSA James Webb Space Telescope Picture of the Month takes us to a fantastical realm within our home galaxy, where piercing starlight and billowing winds sculpt dust clouds into inventive shapes. This scene is from the Carina Nebula, which lies just 7500 light-years away in the constellation Carina (the Keel).",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55457472091-12a8c7edb0-o.jpg"
+    },
+    {
+      "id": "nasa:25",
+      "label": "NASA image of the day",
+      "text": "Artemis Mission Patches",
+      "kind": "rss",
+      "summary": "A NASA jacket containing Artemis I and II mission patches, along with other NASA patches hangs on the back of a chair on Thursday, Aug. 6, 2026, inside Firing Room 1 of the Rocco A. Petrone Launch Control Center at NASA’s Kennedy Space Center in Florida during a terminal countdown simulation for the Artemis III mission.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ksc-20260806-ph-rcr01-0010orig.jpg"
+    },
+    {
+      "id": "nasa:26",
+      "label": "NASA image of the day",
+      "text": "Ancient Milky Way Merger",
+      "kind": "rss",
+      "summary": "About 12 billion years ago, a dwarf galaxy known as LKH collided with a young Milky Way and merged with it. This artist’s concept portrays that collision. NASA’s Hubble Space Telescope uncovered definitive evidence of this collision by studying globular star clusters.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/stsci-01kz4n4d8g9ak26cf28hd5nt5n-d2d764.png"
+    },
+    {
+      "id": "nasa:27",
+      "label": "NASA image of the day",
+      "text": "NASA's B777 Gets New Coat of Paint",
+      "kind": "rss",
+      "summary": "NASA's Boeing 777 returns to the agency's Langley Research Center after receiving a new paint scheme.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/jsc2026e407303.jpg"
+    },
+    {
+      "id": "nasa:28",
+      "label": "NASA image of the day",
+      "text": "Colorful Collage of Tarantula Nebula",
+      "kind": "rss",
+      "summary": "Like a collage made of layered sheets of colored cellophane, a vibrant new image layers observations of a famous star-forming nebula from NASA space telescopes. The resulting cosmic “craft” reveals new details about the star formation region known as 30 Doradus, or the Tarantula Nebula.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/30dor-crop.jpg"
+    },
+    {
+      "id": "nasa:29",
+      "label": "NASA image of the day",
+      "text": "Total Solar Eclipse in Sunflower Field",
+      "kind": "rss",
+      "summary": "This composite image shows the progression of a total solar eclipse over San Millán de los Caballeros, Spain on, Wednesday, Aug. 12, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55460226954-564d105934-o.jpg"
+    },
+    {
+      "id": "nasa:30",
+      "label": "NASA image of the day",
+      "text": "Perseids Meteor Shower",
+      "kind": "rss",
+      "summary": "The constellation Orion is framed by two Perseid meteors on Aug. 12, 2018, in Cedar Breaks National Monument, Utah.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/perseidsorion.webp"
+    },
+    {
+      "id": "nasa:31",
+      "label": "NASA image of the day",
+      "text": "2026 Total Solar Eclipse in Spain",
+      "kind": "rss",
+      "summary": "A total solar eclipse is seen from San Millán de los Caballeros, Spain, Wednesday, Aug. 12, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55459753868-458217b2c9-o.jpg"
+    },
+    {
+      "id": "nasa:32",
+      "label": "NASA image of the day",
+      "text": "Lion Nebula Roars in Webb's Sights",
+      "kind": "rss",
+      "summary": "NASA’s James Webb Space Telescope imaged the planetary nebula NGC 2392, the Lion Nebula, using the observatory’s NIRCam and MIRI instruments. The central star’s remains are responsible for the nebula’s structure, including a lion face-shaped bubble of ionized gas and dust “mane.”",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/stsci-01kx6d0xbhsyp7q1em5qtc43rp.png"
+    },
+    {
+      "id": "nasa:33",
+      "label": "NASA image of the day",
+      "text": "NASA Astronaut Jessica Meir Uses VR Goggles",
+      "kind": "rss",
+      "summary": "NASA astronaut and Expedition 75 commander Jessica Meir wears a set of virtual reality goggles, also called the Nevada Screening Vision System, for a test that measures visual function using a series of vision screening apps testing visual acuity, contrast sensitivity, and more.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/iss075e0000191orig.jpg"
+    },
+    {
+      "id": "nasa:34",
+      "label": "NASA image of the day",
+      "text": "NASA's IXPE Studies Magnetar",
+      "kind": "rss",
+      "summary": "A first of its kind measurement of a magnetar may have captured empty space behaving in a way physicists have predicted for 90 years, but never directly observed. The results published Wednesday in Nature.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ixpemagnetarartistsconcept-web.png"
+    },
+    {
+      "id": "nasa:35",
+      "label": "NASA image of the day",
+      "text": "Taking Flight to Prepare for Space",
+      "kind": "rss",
+      "summary": "NASA astronaut candidate Adam Fuhrmann prepares for a training flight aboard NASA’s WB-57 aircraft.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55412014375-711b8f02f7-o.jpg"
+    },
+    {
+      "id": "nasa:36",
+      "label": "NASA image of the day",
+      "text": "Artemis III Orion Crew and Service Modules Joined",
+      "kind": "rss",
+      "summary": "Engineers connect the Orion crew and service modules for the Artemis III mission inside the Neil A. Armstrong Operations and Checkout Building at NASA’s Kennedy Space Center in Florida.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ksc-20260730-ph-as01-6583.webp"
+    },
+    {
+      "id": "nasa:37",
+      "label": "NASA image of the day",
+      "text": "Roman Space Telescope Plaque Install",
+      "kind": "rss",
+      "summary": "Technicians inside the Payload Hazardous Servicing Facility at NASA’s Kennedy Space Center complete installation of a commemorative plaque on the agency’s Nancy Grace Roman Space Telescope, as photographed on Tuesday, July 28, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ksc-20260728-ph-jmt01-0003orig.jpg"
+    },
+    {
+      "id": "nasa:38",
+      "label": "NASA image of the day",
+      "text": "Guinea-Bissau Tidal Waters",
+      "kind": "rss",
+      "summary": "Relatively low tidal waters expose sandflats and mudflats in the Bijagós Archipelago of Guinea-Bissau in this image acquired on November 28, 2025, with the OLI (Operational Land Imager) on Landsat 8. These coastal landforms support an array of invertebrates, making the archipelago a popular stopover for migratory shorebirds.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/bijagosarchipelago-oli-20251128-lrg.jpg"
+    },
+    {
+      "id": "nasa:39",
+      "label": "NASA image of the day",
+      "text": "NASA's Newest Wind Tunnel Opens at NASA Langley",
+      "kind": "rss",
+      "summary": "NASA opened its newest wind tunnel, the Flight Dynamics Research Facility at NASA’s Langley Research Center in Hampton, Virginia, on Friday, providing a critical resource for the agency and its partners to test the safety and performance of future generations of aircraft, rockets, and space exploration vehicles.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/55433508350-2d4abff2f1-o.jpg"
+    },
+    {
+      "id": "nasa:40",
+      "label": "NASA image of the day",
+      "text": "Starburst Galaxy Centaurus A",
+      "kind": "rss",
+      "summary": "NASA’s James Webb Space Telescope’s Mid-Infrared Instrument (MIRI) reveals the nearby galaxy Centaurus A, exposing the dusty structures and hidden activity that shape this unusual system.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/stsci-01kvt4gqmq5mxv6xdpfpzmxg65-30d932.png"
+    },
+    {
+      "id": "nasa:41",
+      "label": "NASA image of the day",
+      "text": "Understanding How Martian Auroras Are Made",
+      "kind": "rss",
+      "summary": "This illustration depicts charged particles from a solar storm stripping away charged particles of Mars' atmosphere, one of the processes of Martian atmosphere loss studied by NASA's MAVEN mission.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/pia22076.jpg"
+    },
+    {
+      "id": "nasa:42",
+      "label": "NASA image of the day",
+      "text": "NASA Astronaut Chris Williams Returns to Earth",
+      "kind": "rss",
+      "summary": "NASA astronaut Chris Williams is seen outside the Soyuz MS-28 spacecraft after he landed with Expedition 74 Roscosmos cosmonauts Sergey Kud-Sverchkov, and Sergei Mikaev in a remote area near the town of Zhezkazgan, Kazakhstan on Sunday, July 26, 2026. The trio returned to Earth after logging 241 days in space as a members of Expeditions 73 and 74 aboard the International Space Station.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/55419246867-809993deb3-o.jpg"
+    },
+    {
+      "id": "nasa:43",
+      "label": "NASA image of the day",
+      "text": "New Crew Members Welcomed to International Space Station",
+      "kind": "rss",
+      "summary": "From left, Expedition 74 flight engineers Anna Kikina and Pyotr Dubrov of Roscosmos, and Anil Menon of NASA pose for a portrait while holding a cake celebrating their recent arrival aboard the International Space Station.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/iss074e0814792orig.jpg"
+    }
+  ],
+  "sys": {
+    "cpu": 0.005600000000000001,
+    "mem": 0.6965,
+    "disk": 1,
+    "gpu": 0,
+    "temp": 0,
+    "watts": 0,
+    "psi": 0.128,
+    "sockets": 0.15625,
+    "failed": 0,
+    "udev": 0.25
+  },
+  "demo": true,
+  "demoSlices": {
+    "packets": true,
+    "rf": true,
+    "talkers": true
+  }
+}
