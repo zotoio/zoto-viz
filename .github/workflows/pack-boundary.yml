@@ -2,14 +2,25 @@ name: pack-boundary
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   pack-boundary:
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'host-change') }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Enforce pack PR boundary
-        run: python scripts/check_pack_pr_boundary.py "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/check_pack_pr_boundary.py \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            --repo "${{ github.repository }}" \
+            --pr-number "${{ github.event.pull_request.number }}"

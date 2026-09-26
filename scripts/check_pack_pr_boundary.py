@@ -5,16 +5,24 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import PurePosixPath
+from typing import Any
 
 PACK_SRC_RE = re.compile(r"^plugins/src/([^/]+)/")
 ALLOWED_SCHEMA_PATH = "tests/test_plugin_schema.py"
 ALLOWED_TSCONFIG_PATH = "web/tsconfig.json"
 VIZ_VALIDATE_FUNC = "test_viz_plugin_yml_validates"
+HOST_CHANGE_LABEL = "host-change"
+HOST_REVIEWED_LABEL = "host-reviewed"
+HOST_REVIEW_FAIL_MESSAGE = "host change: needs human review before merge"
 CSP_SANDBOX_CONFIG_PATHS = frozenset(
     {
         "web/index.html",
@@ -358,11 +366,184 @@ def load_file_pair(base: str, head: str, path: str) -> tuple[str | None, str | N
     return git_show(base, path), git_show(head, path)
 
 
+def parse_github_timestamp(value: str) -> datetime:
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value).astimezone(timezone.utc)
+
+
+def _github_request(url: str, token: str) -> tuple[Any, str | None]:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(req) as resp:
+        body = resp.read()
+        next_url = None
+        link = resp.headers.get("Link")
+        if link:
+            for part in link.split(","):
+                if 'rel="next"' in part:
+                    next_url = part.split(";")[0].strip(" <>")
+                    break
+        return json.loads(body), next_url
+
+
+def fetch_issue_labels(repo: str, issue_number: int, token: str) -> set[str]:
+    owner, name = repo.split("/", 1)
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/issues/{issue_number}"
+    )
+    doc, _ = _github_request(url, token)
+    return {label["name"] for label in doc.get("labels", [])}
+
+
+def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]:
+    owner, name = repo.split("/", 1)
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/issues/"
+        f"{issue_number}/timeline?per_page=100"
+    )
+    items: list[dict] = []
+    while url:
+        page, url = _github_request(url, token)
+        if not isinstance(page, list):
+            break
+        items.extend(page)
+    return items
+
+
+def last_push_at_from_timeline(timeline: list[dict]) -> datetime | None:
+    latest: datetime | None = None
+    for item in timeline:
+        if item.get("event") != "committed":
+            continue
+        created = item.get("created_at")
+        if not created:
+            continue
+        ts = parse_github_timestamp(created)
+        if latest is None or ts > latest:
+            latest = ts
+    return latest
+
+
+def host_reviewed_labeled_at(
+    timeline: list[dict], current_labels: set[str]
+) -> datetime | None:
+    if HOST_REVIEWED_LABEL not in current_labels:
+        return None
+    review_at: datetime | None = None
+    for item in sorted(timeline, key=lambda row: row.get("created_at", "")):
+        event = item.get("event")
+        label = item.get("label") or {}
+        name = label.get("name")
+        if event == "labeled" and name == HOST_REVIEWED_LABEL:
+            created = item.get("created_at")
+            if created:
+                review_at = parse_github_timestamp(created)
+        elif event == "unlabeled" and name == HOST_REVIEWED_LABEL:
+            review_at = None
+    return review_at
+
+
+def run_host_change_gate(
+    labels: set[str],
+    timeline: list[dict],
+    *,
+    last_push_at: datetime | None = None,
+) -> tuple[int, list[str]]:
+    """Return exit code and log lines for host-change labelled PRs."""
+    lines: list[str] = []
+    if HOST_CHANGE_LABEL not in labels:
+        return 0, lines
+
+    lines.append("pack-boundary: host-change label present; checking review gate.")
+    push_at = last_push_at if last_push_at is not None else last_push_at_from_timeline(
+        timeline
+    )
+    review_at = host_reviewed_labeled_at(timeline, labels)
+
+    if review_at is None or push_at is None or push_at >= review_at:
+        lines.append(f"pack-boundary: FAILED — {HOST_REVIEW_FAIL_MESSAGE}")
+        if push_at is not None and review_at is not None and push_at >= review_at:
+            lines.append(
+                "  latest push is at or after host-reviewed label "
+                "(new commits need a fresh review)"
+            )
+        elif review_at is None:
+            lines.append(f"  missing {HOST_REVIEWED_LABEL!r} label on the pull request")
+        elif push_at is None:
+            lines.append("  could not determine latest push time from timeline")
+        return 1, lines
+
+    lines.append(
+        "pack-boundary: host-change PR reviewed "
+        f"(push {push_at.isoformat()} before review {review_at.isoformat()}); "
+        "check passed."
+    )
+    return 0, lines
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("base", help="base git ref (merge base side of ... range)")
-    parser.add_argument("head", help="head git ref")
+    parser.add_argument("base", nargs="?", help="base git ref (merge base side of ... range)")
+    parser.add_argument("head", nargs="?", help="head git ref")
+    parser.add_argument(
+        "--repo",
+        help="GitHub owner/repo for label and timeline lookup (requires GITHUB_TOKEN)",
+    )
+    parser.add_argument(
+        "--pr-number",
+        type=int,
+        help="Pull request number for label and timeline lookup",
+    )
+    parser.add_argument(
+        "--dry-run-host-review",
+        metavar="JSON",
+        help="JSON object with labels, timeline, optional last_push_at (ISO); "
+        "skips git diff and pack rules",
+    )
     args = parser.parse_args(argv)
+
+    if args.dry_run_host_review:
+        payload = json.loads(args.dry_run_host_review)
+        labels = set(payload.get("labels", []))
+        timeline = payload.get("timeline", [])
+        push_raw = payload.get("last_push_at")
+        push_at = parse_github_timestamp(push_raw) if push_raw else None
+        code, lines = run_host_change_gate(labels, timeline, last_push_at=push_at)
+        for line in lines:
+            print(line)
+        return code
+
+    if not args.base or not args.head:
+        parser.error("base and head refs are required unless --dry-run-host-review is set")
+
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if args.repo and args.pr_number:
+        if not token:
+            print("pack-boundary: FAILED — GITHUB_TOKEN is required for PR label lookup", file=sys.stderr)
+            return 1
+        try:
+            labels = fetch_issue_labels(args.repo, args.pr_number, token)
+            timeline = fetch_issue_timeline(args.repo, args.pr_number, token)
+        except urllib.error.HTTPError as exc:
+            print(
+                f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
+                file=sys.stderr,
+            )
+            return 1
+        code, lines = run_host_change_gate(labels, timeline)
+        for line in lines:
+            print(line)
+        if code != 0:
+            return code
+        if HOST_CHANGE_LABEL in labels:
+            return 0
 
     changed = git_diff_name_only(args.base, args.head)
     contents: dict[str, tuple[str | None, str | None]] = {}

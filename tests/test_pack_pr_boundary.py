@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+
 from scripts.check_pack_pr_boundary import (
     ALLOWED_SCHEMA_PATH,
     ALLOWED_TSCONFIG_PATH,
+    HOST_REVIEW_FAIL_MESSAGE,
     evaluate_pack_pr,
     run_check,
+    run_host_change_gate,
     validate_schema_py_change,
     validate_tsconfig_change,
 )
@@ -128,3 +133,65 @@ def test_evaluate_rejects_foreign_web_src() -> None:
     violations = evaluate_pack_pr(paths, pack, {})
     assert len(violations) == 1
     assert violations[0].path == "web/src/plugins/viz-host.ts"
+
+
+def _iso(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_host_change_without_review_fails_dry_run() -> None:
+    push = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    payload = {
+        "labels": ["host-change"],
+        "timeline": [{"event": "committed", "created_at": _iso(push)}],
+        "last_push_at": _iso(push),
+    }
+    code, lines = run_host_change_gate(
+        set(payload["labels"]), payload["timeline"], last_push_at=push
+    )
+    assert code == 1
+    assert any(HOST_REVIEW_FAIL_MESSAGE in line for line in lines)
+
+
+def test_host_change_reviewed_after_push_passes_dry_run() -> None:
+    push = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    review = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    timeline = [
+        {"event": "committed", "created_at": _iso(push)},
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+    ]
+    code, lines = run_host_change_gate(
+        {"host-change", "host-reviewed"}, timeline, last_push_at=push
+    )
+    assert code == 0
+    assert any("check passed" in line for line in lines)
+
+
+def test_host_change_push_after_review_fails_dry_run() -> None:
+    review = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    push = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+        {"event": "committed", "created_at": _iso(push)},
+    ]
+    code, lines = run_host_change_gate(
+        {"host-change", "host-reviewed"}, timeline, last_push_at=push
+    )
+    assert code == 1
+    assert any(HOST_REVIEW_FAIL_MESSAGE in line for line in lines)
+    assert any("fresh review" in line for line in lines)
+
+
+def test_dry_run_host_review_cli() -> None:
+    from scripts.check_pack_pr_boundary import main
+
+    payload = json.dumps({"labels": ["host-change"], "last_push_at": _iso(datetime.now(timezone.utc))})
+    assert main(["--dry-run-host-review", payload]) == 1
