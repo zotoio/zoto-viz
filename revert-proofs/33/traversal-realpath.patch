@@ -1,5 +1,5 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index 31b66d6..a1b2c3d 100644
+index 31b66d6..a7d5f10 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
 @@ -80,18 +80,8 @@ def _resolve_under_root(root: Path, relpath: str) -> Path | None:
@@ -19,4 +19,5 @@ index 31b66d6..a1b2c3d 100644
 -        except ValueError:
 -            return None
      return target
+ 
  

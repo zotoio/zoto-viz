@@ -627,7 +627,7 @@ async function runPytest(
     "-m",
     "pytest",
     nodeId,
-    `-junitxml=${xmlOut}`,
+    `--junitxml=${xmlOut}`,
     "-o",
     "addopts=",
   ];
