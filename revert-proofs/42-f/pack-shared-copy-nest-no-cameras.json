@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
+  "testName": "^pack shared copy literals > NEST_NO_CAMERAS$",
+  "description": "NEST_NO_CAMERAS must stay the agreed Nest zero-device account copy.",
+  "redOutput": "AssertionError: expected '' to be 'No cameras found for this Nest account.' // Object.is equality"
+}

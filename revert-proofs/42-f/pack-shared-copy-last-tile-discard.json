@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
+  "testName": "^pack shared copy literals > pack last tile discard message for Settings fixture$",
+  "description": "packLastTileDiscardMessage must produce the agreed unsaved-changes discard line for the fixture pack name.",
+  "redOutput": "AssertionError: expected '' to be 'Your unsaved Settings fixture changes were discarded because its last tile was removed.' // Object.is equality"
+}
