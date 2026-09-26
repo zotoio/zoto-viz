@@ -6,7 +6,8 @@ description: |
   Classic 45/90° schematic map with round interchange stations, bold line colours, and train dots whose speed tracks latency and length tracks bytes.
   Data mapping (live → effect, defaults in visualisation.yml):
     talkers[].id → station identity and label; talkers[].rate → line weight and interchange pulse; talkers[].role → palette lane (gateway/intercom/lan).
-    packets[].proto → line colour family; packets[].size → train length; packets[].field → train speed along its edge.
+    packets[].host (or id) → station slot for that flow; packets[].peer → other end of the line; packets[].proto → line colour; packets[].size → train length; packets[].field → train speed; packets[].failed → explicit segment failure (never inferred from field).
+    talkers[].failed → station failure badge (never from list index or rate/field thresholds).
     sys.failed → Zoto Fail disruption badge + ticker priority; headlines[].text → disruption ticker copy when present.
   Caps: 16 stations, 16 edges, 48 trains (particles), 8 buffer slots × 64 floats. Idle uses a busy fictional network labelled demo.
 capabilities:
