@@ -97,9 +97,7 @@ import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
-import { readDevTileCostOnWallBuild } from "../core/viz-dev-tile-cost";
-import { applyDevVizWallClockQuery } from "../core/viz-wall-clock-dev";
-import { cachedModeOpts, invalidateVizModeOptsCache } from "./main-viz-opts";
+import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
 import {
   bindMosaicTileBudgetLines,
   mosaicTileBudgetLines,
@@ -361,7 +359,7 @@ function syncVizBudgetTileScope(): void {
   const key = scopeIds.join("\0");
   if (key === vizTileScopeKey) return;
   vizTileScopeKey = key;
-  readDevTileCostOnWallBuild(location.search, scopeIds);
+  applyDevVizWallFlagsOnBuild(location.search, scopeIds);
   syncVizTileScope(scopeIds);
   vizBudget.setTileId(mosaic?.on ? (mosaic.mainMode || scopeIds[0] || "main") : "main");
   if (mosaic?.on) vizHud.syncMosaicTileHudLines(scopeIds);
@@ -552,19 +550,17 @@ async function syncWifiWatch(): Promise<void> {
 }
 
 function optsFor(m: ViewMode): Record<string, string> {
-  return cachedModeOpts(m, () => {
-    const o = defaultOpts(m);
-    if (m.pluginId) {
-      const spec = pluginSpecForMode(m.id);
-      if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
-    } else {
-      for (const opt of m.options ?? []) {
-        const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
-        if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
-      }
+  const o = defaultOpts(m);
+  if (m.pluginId) {
+    const spec = pluginSpecForMode(m.id);
+    if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
+  } else {
+    for (const opt of m.options ?? []) {
+      const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
+      if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
     }
-    return o;
-  });
+  }
+  return o;
 }
 
 function arcadeControls(m: ViewMode): HTMLElement[] {
@@ -1112,7 +1108,7 @@ function setRedaction(on: boolean): void {
   mosaic?.eachGraph((s) => { if (s !== scene) s.refresh(); });
 }
 setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
-applyDevVizWallClockQuery(location.search);
+applyDevVizWallFlagsOnBuild(location.search, ["main"]);
 
 // ---------------------------------------------------------------- settings cog: allow/block filters + the moved show / privacy switches
 
@@ -1126,7 +1122,6 @@ settings = new Settings({
   onPersist: () => touch(),
 });
 settings.onPluginChange = () => {
-  invalidateVizModeOptsCache();
   onPluginFields();
   if (!mosaic?.on) return;
   const focus = mosaic.focusedId;

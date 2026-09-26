@@ -1,7 +1,0 @@
-{
-  "row": "W5 revert optsFor localStorage read every frame",
-  "runner": "vitest",
-  "testFile": "web/src/app/main-viz-opts-cache.test.ts",
-  "testName": "W5: 600 cached opts reads → 1 localStorage getItem per plugin field",
-  "excerpt": "AssertionError: expected \"getItem\" to be called 1 times, but got 600 times"
-}

@@ -1,3 +1,4 @@
+import { devPerTileHudIndexForTileId, devShowPerTileHudIndex } from "../core/viz-dev-wall-flags";
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
 import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
@@ -375,9 +376,13 @@ export class VizHud {
       const limited = chrome.state === "limited"
         ? row.label.limitedLabel(activeTiles, chrome.skipRatePerSec)
         : null;
+      const indexPrefix =
+        devShowPerTileHudIndex()
+          ? `#${devPerTileHudIndexForTileId(tileId) ?? "?"} `
+          : "";
       const text = limited
-        ? `${tileId}: ${limited}`
-        : `${tileId}: ${formatSkipRate(chrome.skipRatePerSec)}`;
+        ? `${indexPrefix}${tileId}: ${limited}`
+        : `${indexPrefix}${tileId}: ${formatSkipRate(chrome.skipRatePerSec)}`;
       const prev = this.lastMosaicLineText.get(tileId);
       if (prev !== text) {
         row.label.writeText(row.el, text);

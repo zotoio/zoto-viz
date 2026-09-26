@@ -1,0 +1,55 @@
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index 0000000..0000000 100644
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -97,6 +97,7 @@ import {
+ } from "./main-viz-tile-lines";
+ import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
++import { cachedModeOpts } from "./main-viz-opts";
+ import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
+@@ -551,17 +552,19 @@ async function syncWifiWatch(): Promise<void> {
+ }
+ 
+ function optsFor(m: ViewMode): Record<string, string> {
+-  const o = defaultOpts(m);
+-  if (m.pluginId) {
+-    const spec = pluginSpecForMode(m.id);
+-    if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
+-  } else {
+-    for (const opt of m.options ?? []) {
+-      const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
+-      if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
++  return cachedModeOpts(m, () => {
++    const o = defaultOpts(m);
++    if (m.pluginId) {
++      const spec = pluginSpecForMode(m.id);
++      if (spec) Object.assign(o, loadPluginConfig(spec, pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config)));
++    } else {
++      for (const opt of m.options ?? []) {
++        const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
++        if (saved !== null && opt.values.some(([v]) => v === saved)) o[opt.key] = saved;
++      }
+     }
+-  }
+-  return o;
++    return o;
++  });
+ }
+diff --git a/web/src/app/main-viz-opts.ts b/web/src/app/main-viz-opts.ts
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/web/src/app/main-viz-opts.ts
+@@ -0,0 +1,13 @@
++import type { ViewMode } from "../core/modes";
++
++const optsCache = new Map<string, Record<string, string>>();
++
++export function cachedModeOpts(m: ViewMode, build: () => Record<string, string>): Record<string, string> {
++  let o = optsCache.get(m.id);
++  if (!o) {
++    o = build();
++    optsCache.set(m.id, o);
++  }
++  return o;
++}
