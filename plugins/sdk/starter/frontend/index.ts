@@ -1,12 +1,12 @@
 /** Pack starter entry — copy to plugins/src/<id>/frontend/index.ts */
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
-import type { VizPackZotoHost } from "../../../sdk/viz-pack-host";
+import type { VizZoto } from "../../../sdk/viz-zoto";
 import { VIZ_PACK_TILE_FALLBACK } from "../../../sdk/viz-pack-host";
 import { DEFAULT_OPTIONS, parseStarterOptions, type StarterOptions } from "./config";
 import { StarterSim } from "./sim";
 
-const zoto = globalThis.zoto as VizPackZotoHost;
+const zoto = globalThis.zoto as VizZoto;
 
 type StarterFrame = Pick<VizDataFrame, "t" | "dt" | "audio" | "talkers" | "demo" | "sys">;
 

@@ -60,56 +60,66 @@ const HOST_BAD_FIXTURES: {
   {
     rel: "bad/static-pack-import.ts",
     form: "static import",
-    targets: ["../../../plugins/src/marble-run/frontend/config"],
+    targets: ["plugins/src/marble-run/frontend/config.ts"],
   },
   {
     rel: "bad/dynamic-pack-import.ts",
     form: "dynamic import()",
-    targets: ["../../../plugins/src/marble-run/frontend/config"],
+    targets: ["plugins/src/marble-run/frontend/config.ts"],
   },
   {
     rel: "bad/alias-pack-import.ts",
     form: "tsconfig paths alias",
-    targets: ["@lint-fixture-pack/marble-run/frontend/config"],
+    targets: ["plugins/src/marble-run/frontend/config.ts"],
     extraPaths: hostAliasPaths,
   },
   {
     rel: "bad/reexport-named-pack.ts",
     form: "export { … } from",
-    targets: ["../../../plugins/src/marble-run/frontend/config"],
+    targets: ["plugins/src/marble-run/frontend/config.ts"],
   },
   {
     rel: "bad/reexport-star-pack.ts",
     form: "export * from",
-    targets: ["../../../plugins/src/marble-run/frontend/config"],
+    targets: ["plugins/src/marble-run/frontend/config.ts"],
   },
   {
     rel: "bad/require-pack.ts",
     form: "require()",
-    targets: ["../../../plugins/src/marble-run/frontend/config"],
+    targets: ["plugins/src/marble-run/frontend/config.ts"],
   },
   {
     rel: "bad/glob-pack.ts",
     form: "import.meta.glob",
-    targets: ["../../../plugins/src/marble-run/frontend/*.ts"],
+    targets: ["plugins/src/marble-run/frontend"],
   },
   {
     rel: "bad/loader-bypass-pack-source.ts",
     form: "loader-shaped path → pack source",
     targets: [
-      "../../../plugins/src/marble-run/frontend/module.js",
-      "/api/plugins/marble-run/../../../plugins/src/marble-run/frontend/config",
+      "plugins/src/marble-run/frontend/config.ts",
+      "plugins/src/marble-run/frontend/module.js",
     ],
   },
   {
     rel: "bad/raw-pack-import.ts",
     form: "import … ?raw",
-    targets: ["../../../plugins/src/marble-run/sky/fragment.glsl?raw"],
+    targets: ["plugins/src/marble-run/sky/fragment.glsl"],
   },
   {
     rel: "bad/url-pack-import.ts",
     form: "import … ?url",
-    targets: ["../../../plugins/src/marble-run/sky/fragment.glsl?url"],
+    targets: ["plugins/src/marble-run/sky/fragment.glsl"],
+  },
+  {
+    rel: "bad/http-url-pack-import.ts",
+    form: "import() http URL",
+    targets: ["plugins/src/marble-run/frontend/index.ts"],
+  },
+  {
+    rel: "bad/https-url-pack-import.ts",
+    form: "import() https URL",
+    targets: ["plugins/src/marble-run/frontend/index.ts"],
   },
 ];
 
@@ -169,7 +179,8 @@ describe("pack lint guardrails", () => {
     if (process.env.PACK_LINT_WRITE_BASELINE !== "1") return;
     const current = scanAllGuardrails(repoRoot);
     const out = path.join(repoRoot, "plugins/sdk/pack-lint-baseline.json");
-    writeFileSync(out, `${JSON.stringify({ violations: current }, null, 2)}\n`);
+    const baselineRows = current.map(({ file, rule, target }) => ({ file, rule, target }));
+    writeFileSync(out, `${JSON.stringify({ violations: baselineRows }, null, 2)}\n`);
   });
 
   it("plugins/src and web/src violations do not exceed the checked-in baseline", () => {
@@ -192,7 +203,12 @@ describe("pack lint guardrails", () => {
   for (const { rel, rule, target } of ALL_PACK_BAD_FIXTURES) {
     it(`known-bad pack fixture ${rel} reports ${rule}`, () => {
       const hits = lintPackFixture(rel);
-      expect(hits).toEqual([{ file: virtualPackPath(rel), rule, target }]);
+      expect(hits.map(({ file, rule: r, target: t }) => ({ file, rule: r, target: t }))).toEqual([
+        { file: virtualPackPath(rel), rule, target },
+      ]);
+      if (rule === "inline-zoto-declare") {
+        expect(hits[0]?.detail).toContain("VizZoto");
+      }
     });
   }
 
@@ -205,9 +221,25 @@ describe("pack lint guardrails", () => {
       const text = readFileSync(path.join(hostFixtureRoot, rel), "utf8");
       expect(extractModuleSpecifiers(text).length).toBeGreaterThan(0);
       const hits = lintHostFixture(rel, extraPaths);
-      expect(hits).toEqual(hostHits(targets));
+      expect(hits.map(({ file, rule, target }) => ({ file, rule, target }))).toEqual(
+        hostHits(targets).map(({ file, rule, target }) => ({ file, rule, target })),
+      );
+      for (const hit of hits) {
+        expect(hit.detail?.length).toBeGreaterThan(0);
+      }
     });
   }
+
+  it("host import canonical target dedupes equivalent specifiers", () => {
+    const text = `
+      import a from "../../../plugins/src/marble-run/frontend/config";
+      import b from "../../../plugins/src/marble-run/frontend/config.ts";
+    `;
+    const hits = scanHostLintFixture(HOST_FIXTURE_REL, text, repoRoot);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.target).toBe("plugins/src/marble-run/frontend/config.ts");
+    expect(hits[0]?.detail).toBe('../../../plugins/src/marble-run/frontend/config');
+  });
 
   for (const { label, run } of HOST_PASS_FIXTURES) {
     it(`host PASS ${label}`, () => {
@@ -228,6 +260,8 @@ describe("pack lint guardrails", () => {
       { fixture: "bad/alias-pack-import.ts (tsconfig paths alias)", ci: "FAIL" },
       { fixture: "bad/dynamic-pack-import.ts (dynamic import())", ci: "FAIL" },
       { fixture: "bad/glob-pack.ts (import.meta.glob)", ci: "FAIL" },
+      { fixture: "bad/http-url-pack-import.ts (import() http URL)", ci: "FAIL" },
+      { fixture: "bad/https-url-pack-import.ts (import() https URL)", ci: "FAIL" },
       { fixture: "bad/loader-bypass-pack-source.ts (loader-shaped path → pack source)", ci: "FAIL" },
       { fixture: "bad/raw-pack-import.ts (import … ?raw)", ci: "FAIL" },
       { fixture: "bad/reexport-named-pack.ts (export { … } from)", ci: "FAIL" },

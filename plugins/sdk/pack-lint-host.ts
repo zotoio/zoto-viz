@@ -1,11 +1,8 @@
 /**
  * Reverse boundary: host (`web/src/**`) must not import pack source (`plugins/src/**`).
  *
- * **Allowed exception (not scanned as a file import):** compiled pack bundles are loaded
- * only through `PluginSandbox.loadModule` → `fetch(pluginModuleUrl(id, hash))` serving
- * `/api/plugins/<id>/module.js` (see `web/src/plugins/host.ts`). That HTTP path is not an
- * ES module specifier. Dynamic `import()` / static imports of that URL are allowed here
- * so tests can mirror the loader; they do not resolve into `plugins/src/**`.
+ * **Allowed exception:** compiled pack bundles load via `/api/plugins/<id>/module.js`
+ * (optionally with query). No `..` segments. HTTP(S) URLs are never allowed.
  */
 
 import fs from "node:fs";
@@ -16,10 +13,10 @@ import { violationKey } from "./pack-lint-types";
 const WEB_SRC = "web/src";
 const PACK_SRC = "plugins/src";
 
+const WEB_SRC_FILE_RE = /\.(tsx?|mts|cts|jsx?|mjs|cjs)$/i;
+
 export type TsPathConfig = {
-  /** Absolute path to the tsconfig `baseUrl` directory (usually `web/`). */
   baseUrlAbs: string;
-  /** TypeScript `paths` entries (keys may end with `/*`). */
   paths: Record<string, string[]>;
 };
 
@@ -28,7 +25,6 @@ function stripImportSuffix(spec: string): string {
   return q >= 0 ? spec.slice(0, q) : spec;
 }
 
-/** Load `web/tsconfig.json` path mappings for alias resolution. */
 export function loadWebTsPathConfig(repoRoot: string): TsPathConfig {
   const tsconfigPath = path.join(repoRoot, "web/tsconfig.json");
   const raw = JSON.parse(fs.readFileSync(tsconfigPath, "utf8")) as {
@@ -68,10 +64,60 @@ function applyTsPaths(
 
 function isAllowedPackLoadSpecifier(spec: string): boolean {
   const bare = stripImportSuffix(spec);
-  if (/^https?:\/\//.test(bare)) return true;
   if (!/^\/api\/plugins\/[^/]+\/module\.js/.test(bare)) return false;
   if (bare.includes("..")) return false;
   return true;
+}
+
+function repoRelFromAbs(absPath: string, repoRoot: string): string | null {
+  const real = fs.realpathSync.native(absPath);
+  const repoRel = path.relative(repoRoot, real).replace(/\\/g, "/");
+  if (repoRel.startsWith("../")) return null;
+  return repoRel;
+}
+
+/** Resolve import path to an existing file or directory under the repo (realpath). */
+export function canonicalPackLintTarget(resolvedRepoRel: string, repoRoot: string): string {
+  let norm = resolvedRepoRel.replace(/\\/g, "/");
+  if (norm.includes("*")) {
+    norm = norm.split("*")[0]!.replace(/\/$/, "");
+  }
+  const abs = path.join(repoRoot, norm);
+  const bare = stripImportSuffix(norm);
+  const tries = [
+    abs,
+    `${abs}.ts`,
+    `${abs}.tsx`,
+    `${abs}.mts`,
+    `${abs}.cts`,
+    `${abs}.js`,
+    `${abs}.mjs`,
+    `${abs}.cjs`,
+    path.join(abs, "index.ts"),
+    path.join(bare, "index.ts") !== path.join(abs, "index.ts") ? path.join(repoRoot, bare, "index.ts") : "",
+  ].filter(Boolean) as string[];
+
+  for (const candidate of tries) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const rel = repoRelFromAbs(candidate, repoRoot);
+        if (rel) return rel;
+      }
+    } catch {
+      /* try next */
+    }
+  }
+
+  try {
+    if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
+      const rel = repoRelFromAbs(abs, repoRoot);
+      if (rel) return rel;
+    }
+  } catch {
+    /* fall through */
+  }
+
+  return norm;
 }
 
 function resolveToRepoRel(
@@ -84,22 +130,35 @@ function resolveToRepoRel(
   const bare = stripImportSuffix(spec);
   if (!bare || isAllowedPackLoadSpecifier(bare)) return null;
 
-  const pathMapped = applyTsPaths(bare, pathConfig, extraPaths);
-  let resolvedAbs: string;
-  if (pathMapped) {
-    resolvedAbs = path.isAbsolute(pathMapped)
-      ? pathMapped
-      : path.resolve(pathConfig.baseUrlAbs, pathMapped);
-  } else if (bare.startsWith(".")) {
-    resolvedAbs = path.normalize(path.join(repoRoot, path.dirname(hostRepoRel), bare));
-  } else if (bare.startsWith("/")) {
-    resolvedAbs = path.normalize(path.join(repoRoot, bare));
-  } else if (bare.includes(`${PACK_SRC}/`) || bare.startsWith(`${PACK_SRC}`)) {
-    resolvedAbs = path.normalize(path.join(repoRoot, bare.replace(/^\.\/+/, "")));
+  let resolvedAbs: string | null = null;
+
+  if (/^https?:\/\//i.test(bare)) {
+    try {
+      const pathname = new URL(bare).pathname;
+      if (pathname.includes(`${PACK_SRC}/`)) {
+        resolvedAbs = path.normalize(path.join(repoRoot, pathname.replace(/^\//, "")));
+      }
+    } catch {
+      return null;
+    }
   } else {
-    return null;
+    const pathMapped = applyTsPaths(bare, pathConfig, extraPaths);
+    if (pathMapped) {
+      resolvedAbs = path.isAbsolute(pathMapped)
+        ? pathMapped
+        : path.resolve(pathConfig.baseUrlAbs, pathMapped);
+    } else if (bare.startsWith(".")) {
+      resolvedAbs = path.normalize(path.join(repoRoot, path.dirname(hostRepoRel), bare));
+    } else if (bare.startsWith("/")) {
+      resolvedAbs = path.normalize(path.join(repoRoot, bare));
+    } else if (bare.includes(`${PACK_SRC}/`) || bare.startsWith(`${PACK_SRC}`)) {
+      resolvedAbs = path.normalize(path.join(repoRoot, bare.replace(/^\.\/+/, "")));
+    } else {
+      return null;
+    }
   }
 
+  if (!resolvedAbs) return null;
   const repoRel = path.relative(repoRoot, resolvedAbs).replace(/\\/g, "/");
   if (repoRel.startsWith("../")) return null;
   return repoRel;
@@ -114,7 +173,6 @@ function resolvesIntoPackSrc(repoRel: string | null): boolean {
   return false;
 }
 
-/** Map template-literal `${…}` segments to `*` so glob-style resolution can match pack paths. */
 function normalizeTemplateSpec(spec: string): string {
   return spec.includes("${") ? spec.replace(/\$\{[^}]*\}/g, "*") : spec;
 }
@@ -148,6 +206,22 @@ export function extractModuleSpecifiers(source: string): string[] {
   return specs;
 }
 
+function pushHostHit(
+  hits: PackLintViolation[],
+  seen: Set<string>,
+  hostRepoRel: string,
+  spec: string,
+  resolvedRepoRel: string,
+  repoRoot: string,
+): void {
+  const target = canonicalPackLintTarget(resolvedRepoRel, repoRoot);
+  const v = { file: hostRepoRel, rule: "host-imports-pack-src" as const, target, detail: spec };
+  const k = violationKey(v);
+  if (seen.has(k)) return;
+  seen.add(k);
+  hits.push(v);
+}
+
 export function hostImportsPackSrcViolations(
   hostRepoRel: string,
   text: string,
@@ -155,7 +229,6 @@ export function hostImportsPackSrcViolations(
   pathConfig: TsPathConfig,
   extraPaths?: Record<string, string[]>,
 ): PackLintViolation[] {
-  const rule = "host-imports-pack-src" as const;
   const specs = extractModuleSpecifiers(text);
   const hits: PackLintViolation[] = [];
   const seen = new Set<string>();
@@ -163,24 +236,14 @@ export function hostImportsPackSrcViolations(
     const bare = normalizeTemplateSpec(spec);
     const resolved = resolveToRepoRel(bare, hostRepoRel, repoRoot, pathConfig, extraPaths);
     if (resolvesIntoPackSrc(resolved)) {
-      const v = { file: hostRepoRel, rule, target: spec };
-      const k = violationKey(v);
-      if (!seen.has(k)) {
-        seen.add(k);
-        hits.push(v);
-      }
+      pushHostHit(hits, seen, hostRepoRel, spec, resolved!, repoRoot);
       continue;
     }
     if (bare.includes("*") || bare.includes("?")) {
       const globBase = stripImportSuffix(bare).split("*")[0] ?? "";
       const globResolved = resolveToRepoRel(globBase || bare, hostRepoRel, repoRoot, pathConfig, extraPaths);
       if (resolvesIntoPackSrc(globResolved)) {
-        const v = { file: hostRepoRel, rule, target: spec };
-        const k = violationKey(v);
-        if (!seen.has(k)) {
-          seen.add(k);
-          hits.push(v);
-        }
+        pushHostHit(hits, seen, hostRepoRel, spec, globResolved!, repoRoot);
       }
     }
   }
@@ -194,9 +257,59 @@ function listWebSrcFiles(webRoot: string, rel = ""): string[] {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
     const sub = rel ? `${rel}/${ent.name}` : ent.name;
     if (ent.isDirectory()) out.push(...listWebSrcFiles(webRoot, sub));
-    else if (ent.name.endsWith(".ts") || ent.name.endsWith(".tsx")) out.push(sub);
+    else if (WEB_SRC_FILE_RE.test(ent.name)) out.push(sub);
   }
   return out;
+}
+
+function scanWebSrcSymlinks(repoRoot: string): PackLintViolation[] {
+  const webRoot = path.join(repoRoot, WEB_SRC);
+  const violations: PackLintViolation[] = [];
+  const seen = new Set<string>();
+
+  const walk = (rel: string) => {
+    const dir = path.join(webRoot, rel);
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const sub = rel ? `${rel}/${ent.name}` : ent.name;
+      const full = path.join(webRoot, sub);
+      if (ent.isDirectory()) {
+        walk(sub);
+        continue;
+      }
+      if (!WEB_SRC_FILE_RE.test(ent.name)) continue;
+      let linkTarget: string | null = null;
+      try {
+        const lst = fs.lstatSync(full);
+        if (lst.isSymbolicLink()) linkTarget = fs.readlinkSync(full);
+      } catch {
+        continue;
+      }
+      if (!linkTarget) continue;
+      let real: string;
+      try {
+        real = fs.realpathSync.native(full);
+      } catch {
+        continue;
+      }
+      const packRel = path.relative(repoRoot, real).replace(/\\/g, "/");
+      if (!packRel.startsWith(`${PACK_SRC}/`)) continue;
+      const hostFile = `${WEB_SRC}/${sub}`.replace(/\\/g, "/");
+      const target = canonicalPackLintTarget(packRel, repoRoot);
+      const v = {
+        file: hostFile,
+        rule: "host-imports-pack-src" as const,
+        target,
+        detail: `symlink → ${linkTarget}`,
+      };
+      const k = violationKey(v);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      violations.push(v);
+    }
+  };
+
+  walk("");
+  return violations;
 }
 
 export function scanWebSrc(
@@ -205,18 +318,25 @@ export function scanWebSrc(
 ): PackLintViolation[] {
   const webRoot = path.join(repoRoot, WEB_SRC);
   const pathConfig = loadWebTsPathConfig(repoRoot);
-  const violations: PackLintViolation[] = [];
+  const violations: PackLintViolation[] = [...scanWebSrcSymlinks(repoRoot)];
   for (const rel of listWebSrcFiles(webRoot)) {
     const repoRel = `${WEB_SRC}/${rel}`.replace(/\\/g, "/");
     const text = fs.readFileSync(path.join(webRoot, rel), "utf8");
     violations.push(...hostImportsPackSrcViolations(repoRel, text, repoRoot, pathConfig, extraPaths));
   }
-  violations.sort((a, b) => {
+  const seen = new Set<string>();
+  const deduped = violations.filter((v) => {
+    const k = violationKey(v);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  deduped.sort((a, b) => {
     if (a.file !== b.file) return a.file.localeCompare(b.file);
     if (a.rule !== b.rule) return a.rule.localeCompare(b.rule);
     return a.target.localeCompare(b.target);
   });
-  return violations;
+  return deduped;
 }
 
 export function scanHostLintFixture(

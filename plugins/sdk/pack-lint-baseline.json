@@ -103,192 +103,197 @@
     {
       "file": "web/src/app/main.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/backrooms/frontend/director"
+      "target": "plugins/src/backrooms/frontend/director.ts"
     },
     {
       "file": "web/src/app/main.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/hn-rain/frontend/crawl"
+      "target": "plugins/src/hn-rain/frontend/crawl.ts"
     },
     {
       "file": "web/src/app/main.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/drive"
+      "target": "plugins/src/stereo-gram/frontend/drive.ts"
     },
     {
       "file": "web/src/app/main.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/frame"
+      "target": "plugins/src/stereo-gram/frontend/frame.ts"
     },
     {
       "file": "web/src/audio/plugin-sfx.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/backrooms/frontend/director"
+      "target": "plugins/src/backrooms/frontend/director.ts"
     },
     {
       "file": "web/src/plugins/backrooms.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/backrooms/frontend/director"
+      "target": "plugins/src/backrooms/frontend/director.ts"
     },
     {
       "file": "web/src/plugins/backrooms.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/backrooms/frontend/index.ts?raw"
+      "target": "plugins/src/backrooms/frontend/index.ts"
     },
     {
       "file": "web/src/plugins/backrooms.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/backrooms/sky/fragment.glsl?raw"
+      "target": "plugins/src/backrooms/sky/fragment.glsl"
     },
     {
       "file": "web/src/plugins/backrooms.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/backrooms/visualisation.yml?raw"
+      "target": "plugins/src/backrooms/visualisation.yml"
     },
     {
       "file": "web/src/plugins/cypher-cic.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/cypher-cic/frontend/pack"
+      "target": "plugins/src/cypher-cic/frontend/pack.ts"
     },
     {
       "file": "web/src/plugins/dogfood.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/packet-tunnel/frontend/tunnel"
+      "target": "plugins/src/packet-tunnel/frontend/tunnel.ts"
     },
     {
       "file": "web/src/plugins/dogfood.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/drive"
+      "target": "plugins/src/stereo-gram/frontend/drive.ts"
     },
     {
       "file": "web/src/plugins/hn-rain-crawl.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/hn-rain/frontend/crawl"
+      "target": "plugins/src/hn-rain/frontend/crawl.ts"
     },
     {
       "file": "web/src/plugins/hn-rain-stills.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/hn-rain/frontend/crawl"
+      "target": "plugins/src/hn-rain/frontend/crawl.ts"
     },
     {
       "file": "web/src/plugins/hn-term-teletype.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/hn-term/frontend/teletype"
+      "target": "plugins/src/hn-term/frontend/teletype.ts"
     },
     {
       "file": "web/src/plugins/marble-run.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/marble-run/frontend/config"
+      "target": "plugins/src/marble-run/frontend/config.ts"
     },
     {
       "file": "web/src/plugins/marble-run.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/marble-run/frontend/pack"
+      "target": "plugins/src/marble-run/frontend/pack.ts"
     },
     {
       "file": "web/src/plugins/marble-run.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/marble-run/frontend/sim"
+      "target": "plugins/src/marble-run/frontend/sim.ts"
     },
     {
       "file": "web/src/plugins/marble-run.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/marble-run/plugin.yml?raw"
+      "target": "plugins/src/marble-run/plugin.yml"
     },
     {
       "file": "web/src/plugins/marble-run.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/marble-run/sky/fragment.glsl?raw"
+      "target": "plugins/src/marble-run/sky/fragment.glsl"
     },
     {
       "file": "web/src/plugins/marble-run.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/marble-run/visualisation.yml?raw"
+      "target": "plugins/src/marble-run/visualisation.yml"
     },
     {
       "file": "web/src/plugins/nixie-clock.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/nixie-clock/frontend/tubes"
+      "target": "plugins/src/nixie-clock/frontend/tubes.ts"
+    },
+    {
+      "file": "web/src/plugins/pack-lint.test.ts",
+      "rule": "host-imports-pack-src",
+      "target": "plugins/src/marble-run/frontend/config.ts"
     },
     {
       "file": "web/src/plugins/stereo-ai.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/recipe"
+      "target": "plugins/src/stereo-gram/frontend/recipe.ts"
     },
     {
       "file": "web/src/plugins/stereo-frame.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/drive"
+      "target": "plugins/src/stereo-gram/frontend/drive.ts"
     },
     {
       "file": "web/src/plugins/stereo-frame.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/frame"
+      "target": "plugins/src/stereo-gram/frontend/frame.ts"
     },
     {
       "file": "web/src/plugins/stereo-frame.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/recipe"
+      "target": "plugins/src/stereo-gram/frontend/recipe.ts"
     },
     {
       "file": "web/src/plugins/stereo-recipe.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/recipe"
+      "target": "plugins/src/stereo-gram/frontend/recipe.ts"
     },
     {
       "file": "web/src/plugins/syscon-telemetry.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/syscon/frontend/telemetry"
+      "target": "plugins/src/syscon/frontend/telemetry.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-fixtures.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/cypher-cic/frontend/pack"
+      "target": "plugins/src/cypher-cic/frontend/pack.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-fixtures.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/hn-rain/frontend/crawl"
+      "target": "plugins/src/hn-rain/frontend/crawl.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-fixtures.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/nixie-clock/frontend/tubes"
+      "target": "plugins/src/nixie-clock/frontend/tubes.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-fixtures.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/packet-tunnel/frontend/tunnel"
+      "target": "plugins/src/packet-tunnel/frontend/tunnel.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-fixtures.test.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/syscon/frontend/telemetry"
+      "target": "plugins/src/syscon/frontend/telemetry.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-host.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/hn-rain/frontend/crawl"
+      "target": "plugins/src/hn-rain/frontend/crawl.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-host.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/hn-term/frontend/teletype"
+      "target": "plugins/src/hn-term/frontend/teletype.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-host.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/nixie-clock/frontend/tubes"
+      "target": "plugins/src/nixie-clock/frontend/tubes.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-host.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/packet-tunnel/frontend/tunnel"
+      "target": "plugins/src/packet-tunnel/frontend/tunnel.ts"
     },
     {
       "file": "web/src/plugins/viz-pack-host.ts",
       "rule": "host-imports-pack-src",
-      "target": "../../../plugins/src/stereo-gram/frontend/drive"
+      "target": "plugins/src/stereo-gram/frontend/drive.ts"
     }
   ]
 }

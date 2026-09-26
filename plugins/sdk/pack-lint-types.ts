@@ -11,8 +11,15 @@ export interface PackLintViolation {
   /** Repo-relative path (`plugins/src/...` or `web/src/...`). */
   file: string;
   rule: PackLintRule;
-  /** Import specifier, resolved pack path, or stable rule tag (baseline identity). */
+  /** Baseline identity: resolved repo path or stable rule tag. */
   target: string;
+  /** Raw import specifier or extra context (not stored in baseline). */
+  detail?: string;
+}
+
+export function formatViolationMessage(v: PackLintViolation): string {
+  const base = `${v.file}: ${v.rule} → ${v.target}`;
+  return v.detail ? `${base} (${v.detail})` : base;
 }
 
 export function violationKey(v: PackLintViolation): string {

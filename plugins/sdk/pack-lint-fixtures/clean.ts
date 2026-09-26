@@ -1,7 +1,7 @@
 import type { VizDataFrame } from "../../sdk/viz-contract";
-import type { VizPackZotoHost } from "../../sdk/viz-pack-host";
+import type { VizZoto } from "../../sdk/viz-zoto";
 
-const zoto = globalThis.zoto as VizPackZotoHost;
+const zoto = globalThis.zoto as VizZoto;
 
 let cfg: Record<string, string> = {};
 

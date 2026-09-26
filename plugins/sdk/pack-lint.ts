@@ -6,9 +6,10 @@ import fs from "node:fs";
 import path from "node:path";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
 import { violationKey } from "./pack-lint-types";
+import { INLINE_ZOTO_DECLARE_HINT } from "./viz-zoto";
 
 export type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
-export { violationKey } from "./pack-lint-types";
+export { formatViolationMessage, violationKey } from "./pack-lint-types";
 
 const PACKS_ROOT = "plugins/src";
 const SDK_ROOT = "plugins/sdk";
@@ -107,7 +108,12 @@ function importViolations(
 
 function inlineZotoDeclare(repoRel: string, text: string): PackLintViolation[] {
   if (/\bdeclare\s+const\s+zoto\b/.test(text)) {
-    return [{ file: repoRel, rule: "inline-zoto-declare", target: "declare-const-zoto" }];
+    return [{
+      file: repoRel,
+      rule: "inline-zoto-declare",
+      target: "declare-const-zoto",
+      detail: INLINE_ZOTO_DECLARE_HINT,
+    }];
   }
   return [];
 }
