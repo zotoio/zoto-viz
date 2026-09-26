@@ -1,0 +1,48 @@
+
+ RUN  v5.0.0 /workspace/web
+
+ ❯ src/ui/settings-drawer-layout.test.ts (2 tests | 2 failed) 43ms
+   ❯ settings drawer layout (2)
+     × keeps the top-chrome drawer inside the viewport at 1280px wide 29ms
+     × keeps the top-chrome drawer inside the viewport at 1024px wide 14ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/settings-drawer-layout.test.ts > settings drawer layout > keeps the top-chrome drawer inside the viewport at 1280px wide
+AssertionError: expected 'absolute' to be 'fixed' // Object.is equality
+
+Expected: "fixed"
+Received: "absolute"
+
+ ❯ src/ui/settings-drawer-layout.test.ts:85:25
+     83|
+     84|     const cs = getComputedStyle(pop);
+     85|     expect(cs.position).toBe("fixed");
+       |                         ^
+     86|     expect(cs.right).toBe(`${DRAWER_VIEW_INSET}px`);
+     87|     expect(cs.left).toBe("auto");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/ui/settings-drawer-layout.test.ts > settings drawer layout > keeps the top-chrome drawer inside the viewport at 1024px wide
+AssertionError: expected 'absolute' to be 'fixed' // Object.is equality
+
+Expected: "fixed"
+Received: "absolute"
+
+ ❯ src/ui/settings-drawer-layout.test.ts:106:25
+    104|
+    105|     const cs = getComputedStyle(pop);
+    106|     expect(cs.position).toBe("fixed");
+       |                         ^
+    107|     expect(cs.right).toBe(`${DRAWER_VIEW_INSET}px`);
+    108|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:18:43
+   Duration  361ms (environment 71%, tests 16%, transform 9%, setup 2%, worker 1%, import 1%)
+
