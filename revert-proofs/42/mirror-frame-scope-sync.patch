@@ -1,7 +1,25 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index cf8f533..51056ea 100644
+index cf8f533..e7dd2d5 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
+@@ -120,7 +120,7 @@ export class RenderHost {
+   private readonly fbViewport: Viewport = { x: 0, y: 0, w: 0, h: 0 };
+   private readonly packScopeScratch = new Map<string, { tileCount: number; antialias: boolean }>();
+   private readonly sandboxScopeScratch = new Map<string, number>();
+-  private mirrorScopeDirty = true;
++  private mirrorScopeFingerprint = "";
+   private contextAntialias = false;
+   private readonly viewBoxScratch: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
+   private readonly viewBoxScratchB: SoftRect = { x: 0, y: 0, w: 0, h: 0 };
+@@ -241,7 +241,7 @@ export class RenderHost {
+ 
+   /** Pack-mirror tile metadata changed without add/remove (mosaic coalesce). */
+   markMirrorScopeDirty(): void {
+-    this.mirrorScopeDirty = true;
++    this.mirrorScopeFingerprint = "";
+   }
+ 
+   /** Run one animation frame (tests / dogfood). */
 @@ -552,10 +552,26 @@ export class RenderHost {
      });
    }
