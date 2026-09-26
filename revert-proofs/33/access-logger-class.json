@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_monitor_access_log.py",
-  "testName": "test_make_app_session_returns_200_with_redacting_access_logger",
-  "description": "make_app must boot with RedactingAccessLogger so /api/session answers on AppRunner.",
-  "timeoutSec": 120
-}

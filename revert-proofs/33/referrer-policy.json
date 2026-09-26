@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_access_sandbox_token.py",
-  "testName": "SandboxAssetTokenOriginTests::test_null_origin_module_js_with_valid_token_when_consented",
-  "description": "Pack asset responses must send Referrer-Policy: no-referrer.",
-  "timeoutSec": 60
-}

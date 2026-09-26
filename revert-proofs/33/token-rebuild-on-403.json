@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-asset-rebuild.test.ts",
-  "testName": "pack asset rebuild on token_invalid > rebuilds the frame path and keeps reconnecting copy before success",
-  "description": "401 token_invalid must trigger a frame rebuild with reconnecting status, not a blank tile.",
-  "timeoutSec": 120
-}
