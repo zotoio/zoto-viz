@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>pack mirror readback</title>
+  </head>
+  <body>
+    <script type="module">
+      window.addEventListener("error", (e) => {
+        window.__readbackError = String(e.error ?? e.message);
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        window.__readbackError = String(e.reason);
+      });
+      import { runPackMirrorReadbackInPage } from "/src/graph/pack-mirror-readback.harness.ts";
+      const q = new URLSearchParams(location.search);
+      try {
+        const windowDpr = Number(q.get("windowDpr") || q.get("dpr") || "1");
+        const rendererDprRaw = q.get("rendererDpr");
+        window.__readbackOk = await runPackMirrorReadbackInPage({
+          windowDpr,
+          rendererDpr: rendererDprRaw != null && rendererDprRaw !== ""
+            ? Number(rendererDprRaw)
+            : undefined,
+          antialias: q.get("aa") === "1",
+          path: q.get("path") === "sandbox" ? "sandbox" : "host",
+          mode: q.get("mode") === "quadrant" ? "quadrant" : "arrow",
+        });
+      } catch (e) {
+        window.__readbackError = e instanceof Error ? e.message : String(e);
+      }
+    </script>
+  </body>
+</html>
