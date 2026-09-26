@@ -89,21 +89,6 @@ config:
     label: night mode
     type: boolean
     default: false
-  - key: stationSource
-    label: stations from
-    type: select
-    default: talkers
-    values:
-      - [talkers, top talkers]
-      - [rf, Wi‑Fi watch list]
-      - [mixed, talkers + RF]
-  - key: lineSource
-    label: lines from
-    type: select
-    default: packets
-    values:
-      - [packets, packet flows]
-      - [talkers, talker pairs]
   - key: reducedMotion
     label: reduced motion
     type: boolean

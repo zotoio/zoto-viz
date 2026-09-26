@@ -3,6 +3,7 @@ import FRAG from "../../../plugins/src/metro-lines/sky/fragment.glsl?raw";
 import PLUGIN from "../../../plugins/src/metro-lines/plugin.yml?raw";
 import VIS from "../../../plugins/src/metro-lines/visualisation.yml?raw";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
+import type { VizDataFrame } from "./viz-host";
 import {
   METRO_DEFAULTS,
   METRO_FAIL_RGB,
@@ -10,40 +11,43 @@ import {
   METRO_MAX_STATIONS,
   METRO_MAX_TRAINS,
   METRO_MARK,
+  METRO_SYS_FAIL_BANNER,
   METRO_TRADEMARK_DENY,
   METRO_WORK_BUDGET,
   MetroSim,
   acquireMetroSim,
   buildMetroNetwork,
+  buildTicker,
+  fictionalLabel,
   isMetroDemoFrame,
-  metroStationStressPacked,
   metroWorkCounts,
   packMetroSlots,
   parseMetroOptions,
   releaseMetroSim,
   resetMetroHostRegistry,
   scanMetroTrademarks,
-  fictionalLabel,
 } from "../../../plugins/src/metro-lines/frontend/metro";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 
 const PRESETS = ["classic_map", "night_network", "disruptions_only", "minimal"] as const;
 
-function emptyFrame(t = 0): ReturnType<typeof buildIdleVizFrame> {
+function liveFrame(over: Partial<VizDataFrame> = {}): VizDataFrame {
   return {
-    t,
+    t: 0,
     dt: 1 / 60,
     audio: 0,
     packets: [],
     rf: [],
     talkers: [],
     headlines: [],
+    ...over,
   };
 }
 
 describe("metro-lines pack", () => {
   beforeEach(() => {
     resetMetroHostRegistry();
+    releaseMetroSim();
   });
 
   it("wraps and compiles the schematic sky", () => {
@@ -81,70 +85,100 @@ describe("metro-lines pack", () => {
     expect(isMetroDemoFrame(frame)).toBe(true);
     const net = buildMetroNetwork(frame, parseMetroOptions({ preset: "classic_map" }));
     expect(net.demo).toBe(true);
-    expect(net.stations.length).toBeGreaterThanOrEqual(6);
+    expect(net.stations.length).toBeGreaterThanOrEqual(4);
     expect(net.edges.length).toBeGreaterThan(0);
+    expect(net.legend[0]?.label).toBe("schematic");
     expect(net.ticker.toLowerCase()).toContain("demo");
   });
 
-  it("deterministic layout for pinned seed", () => {
-    const opts = parseMetroOptions({ seed: "100" });
-    const talkers = [
-      { id: "host-a", rate: 100, role: "lan" },
-      { id: "host-b", rate: 90, role: "lan" },
-    ];
-    const frame = { ...emptyFrame(1), demo: false, talkers, packets: [] };
-    const a = buildMetroNetwork(frame, opts);
-    const b = buildMetroNetwork(frame, opts);
-    expect(a.stations.find((s) => s.id === "host-a")?.tx)
-      .toBe(b.stations.find((s) => s.id === "host-a")?.tx);
+  it("live-shaped frames show stations and schematic lines", () => {
+    const net = buildMetroNetwork(liveFrame({
+      talkers: [
+        { id: "10.1.1.10", rate: 120, role: "gateway" },
+        { id: "10.1.1.20", rate: 90, role: "lan" },
+        { id: "10.1.1.30", rate: 70, role: "lan" },
+      ],
+      packets: [
+        { proto: "tcp", size: 400, field: 0.4 },
+        { proto: "udp", size: 120, field: 0.2 },
+      ],
+    }), parseMetroOptions({ seed: "42" }));
+    expect(net.stations.length).toBe(3);
+    expect(net.edges.length).toBeGreaterThanOrEqual(2);
+    expect(net.legend[0]?.label).toBe("schematic");
   });
 
-  it("station ids, labels, and failures follow hosts when talkers reorder", () => {
-    const opts = parseMetroOptions({ seed: "777", lineSource: "packets" });
+  it("reordering talkers keeps stations keyed by id", () => {
+    const opts = parseMetroOptions({ seed: "777" });
     const talkers = [
       { id: "host-a", rate: 100, role: "lan" },
       { id: "host-b", rate: 90, role: "lan" },
-      { id: "host-c", rate: 80, role: "gateway", failed: 0.85 },
+      { id: "host-c", rate: 80, role: "gateway" },
     ];
-    const packets = [
-      { proto: "tcp", size: 200, field: 0.05, host: "host-a", peer: "host-c" },
-      { proto: "tcp", size: 180, field: 0.04, host: "host-b", peer: "host-c" },
-    ];
-    const base = { ...emptyFrame(2), demo: false, sys: { failed: 0 }, packets };
-    const net1 = buildMetroNetwork({ ...base, talkers }, opts);
-    const net2 = buildMetroNetwork({ ...base, talkers: [...talkers].reverse() }, opts);
+    const base = liveFrame({
+      talkers,
+      packets: [{ proto: "tcp", size: 200, field: 0.1 }],
+    });
+    const sim = new MetroSim();
+    const net1 = sim.runtime.tick(base, opts);
+    const net2 = sim.runtime.tick({ ...base, talkers: [...talkers].reverse() }, opts);
     for (const id of ["host-a", "host-b", "host-c"]) {
       const s1 = net1.stations.find((s) => s.id === id);
       const s2 = net2.stations.find((s) => s.id === id);
       expect(s1?.label).toBe(fictionalLabel(id));
       expect(s2?.label).toBe(s1?.label);
       expect(s2?.tx).toBe(s1?.tx);
-      expect(s2?.failed).toBe(s1?.failed);
+      expect(s2?.slot).toBe(s1?.slot);
     }
-    expect(net1.stations.find((s) => s.id === "host-c")?.failed).toBeCloseTo(0.85);
-    expect(net1.stations.find((s) => s.id === "host-a")?.failed).toBe(0);
   });
 
-  it("healthy low-field packets do not trigger failure visuals", () => {
-    const opts = parseMetroOptions({ lineSource: "packets" });
-    const talkers = [
-      { id: "host-a", rate: 50, role: "lan" },
-      { id: "host-b", rate: 40, role: "lan" },
-    ];
-    const packets = [
-      { proto: "dns", size: 64, field: 0.01, host: "host-a", peer: "host-b" },
-      { proto: "dns", size: 48, field: 0.02, host: "host-b", peer: "host-a" },
-    ];
-    const net = buildMetroNetwork({
-      ...emptyFrame(3),
-      demo: false,
-      talkers,
-      packets,
+  it("headline with down does not create disruption on healthy sys", () => {
+    const tick = buildTicker(liveFrame({
       sys: { failed: 0 },
-    }, opts);
-    expect(net.stations.every((s) => s.failed === 0)).toBe(true);
-    expect(net.edges.every((e) => e.disrupted === 0)).toBe(true);
-    expect(net.stations.every((s) => metroStationStressPacked(s) === 0)).toBe(true);
+      headlines: [{ id: "1", label: "x", text: "Markets down sharply" }],
+    }), false);
+    expect(tick.banner).toBe(false);
+    expect(tick.text).toContain("Markets down");
+    expect(tick.text.toLowerCase()).not.toContain("disruption");
+  });
+
+  it("sys.failed over threshold shows network banner", () => {
+    const tick = buildTicker(liveFrame({ sys: { failed: METRO_SYS_FAIL_BANNER + 0.1 } }), false);
+    expect(tick.banner).toBe(true);
+    expect(tick.text).toContain("NETWORK DISRUPTION");
+    const net = buildMetroNetwork(liveFrame({
+      sys: { failed: 0.5 },
+      talkers: [{ id: "gw", rate: 100, role: "gateway" }],
+    }), parseMetroOptions({}));
+    expect(net.disruptions).toBe(1);
+  });
+
+  it("300 frames steady talkers rebuild once and allocate only on rebuild", () => {
+    const sim = new MetroSim();
+    const opts = parseMetroOptions({ seed: "1" });
+    const talkers = [
+      { id: "host-a", rate: 100, role: "gateway" },
+      { id: "host-b", rate: 80, role: "lan" },
+    ];
+    const pkt = { proto: "tcp", size: 300, field: 0.5 };
+    for (let i = 0; i < 8; i++) {
+      sim.step(liveFrame({ t: i, talkers, packets: [pkt] }), opts);
+    }
+    const rebuilds = sim.runtime.structureRebuilds;
+    expect(rebuilds).toBe(1);
+    const allocs = sim.runtime.tickAllocs;
+    for (let i = 0; i < 300; i++) {
+      sim.step(liveFrame({
+        t: 10 + i,
+        talkers: [
+          { id: "host-a", rate: 100 + i, role: "gateway" },
+          { id: "host-b", rate: 80 + i * 0.5, role: "lan" },
+        ],
+        packets: [pkt, { proto: "udp", size: 100 + i, field: 0.2 }],
+      }), opts);
+    }
+    expect(sim.runtime.structureRebuilds).toBe(rebuilds);
+    expect(sim.runtime.tickAllocs).toBe(allocs);
   });
 
   it("work budget stays under plugin caps for every preset", () => {
@@ -152,8 +186,7 @@ describe("metro-lines pack", () => {
     const frame = buildIdleVizFrame(8, 1 / 60);
     for (const preset of PRESETS) {
       const opts = parseMetroOptions({ preset });
-      const net = buildMetroNetwork(frame, opts);
-      sim.step(frame, net, opts);
+      const net = sim.step(frame, opts);
       const w = metroWorkCounts(sim, net);
       expect(w.drawCalls).toBeLessThanOrEqual(METRO_WORK_BUDGET.drawCalls);
       expect(w.triangles).toBeLessThanOrEqual(METRO_WORK_BUDGET.triangles);
@@ -165,9 +198,8 @@ describe("metro-lines pack", () => {
   it("buffer slots respect maxBufferFloats and include mark", () => {
     const sim = new MetroSim();
     const frame = buildIdleVizFrame(2, 1 / 60);
-    const opts = parseMetroOptions(METRO_DEFAULTS as unknown as Record<string, string>);
-    const net = buildMetroNetwork(frame, opts);
-    sim.step(frame, net, opts);
+    const opts = parseMetroOptions({ seed: String(METRO_DEFAULTS.seed) });
+    const net = sim.step(frame, opts);
     const slots = packMetroSlots(frame, net, opts, sim, { w: 1280, h: 800 });
     for (const s of slots) {
       expect(s.length).toBeLessThanOrEqual(64);
@@ -178,7 +210,6 @@ describe("metro-lines pack", () => {
   });
 
   it("teardown frees sim subscriptions after 20 switches", () => {
-    resetMetroHostRegistry();
     for (let i = 0; i < 20; i++) {
       acquireMetroSim();
       releaseMetroSim();
@@ -200,13 +231,10 @@ describe("metro-lines pack", () => {
   it("non-black smoke: packed header has finite geometry counts", () => {
     const sim = new MetroSim();
     const frame = buildIdleVizFrame(0.5, 1 / 60);
-    const net = buildMetroNetwork(frame, parseMetroOptions({}));
-    sim.step(frame, net, parseMetroOptions({}));
+    const net = sim.step(frame, parseMetroOptions({}));
     const slots = packMetroSlots(frame, net, parseMetroOptions({}), sim, { w: 640, h: 400 });
-    const nSta = slots[0]![11];
-    const nEdge = slots[0]![12];
-    expect(nSta).toBeGreaterThan(0);
-    expect(nEdge).toBeGreaterThan(0);
+    expect(slots[0]![11]).toBeGreaterThan(0);
+    expect(slots[0]![12]).toBeGreaterThan(0);
     for (const slot of slots) {
       for (const v of slot) expect(Number.isFinite(v)).toBe(true);
     }

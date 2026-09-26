@@ -123,17 +123,11 @@ void main() {
     int b = int(slotF(2, e * 4 + 1) * 16.0 + 0.5);
     float hue = slotF(2, e * 4 + 2);
     float weight = slotF(2, e * 4 + 3);
-    float disrupted = weight > 0.45 ? 1.0 : 0.0;
-    weight = min(weight, 0.44);
     vec2 pa = vec2(slotF(1, a * 4), slotF(1, a * 4 + 1));
     vec2 pb = vec2(slotF(1, b * 4), slotF(1, b * 4 + 1));
     float w = lineW * (0.7 + weight * 0.9);
     float ink = octiSeg(p, pa, pb, w);
     vec3 c = palette(hue, pal);
-    if (disrupted > 0.5) {
-      float flash = 0.55 + 0.45 * sin(uTime * 4.0 + float(e));
-      c = mix(c, ZOTO_FAIL, flash * 0.75);
-    }
     lineCol += c * ink;
     mapInk = max(mapInk, ink);
   }
@@ -147,6 +141,7 @@ void main() {
     if (ei >= nEdge) continue;
     float u = slotF(6, t * 4 + 1);
     float len = slotF(6, t * 4 + 2);
+    float protoHue = slotF(6, t * 4 + 3);
     int a = int(slotF(2, ei * 4) * 16.0 + 0.5);
     int b = int(slotF(2, ei * 4 + 1) * 16.0 + 0.5);
     vec2 pa = vec2(slotF(1, a * 4), slotF(1, a * 4 + 1));
@@ -158,18 +153,20 @@ void main() {
     vec2 ta = mix(pa, mid, u0);
     vec2 tb = mix(pa, mid, u1);
     float d = min(seg2(p, ta, tb), seg2(p, mix(mid, pb, u0), mix(mid, pb, u1)));
-    trains = max(trains, smoothstep(0.01, 0.004, d));
+    float trainInk = smoothstep(0.01, 0.004, d);
+    vec3 trainCol = palette(protoHue, pal);
+    col += trainCol * trainInk * (0.75 + uAudio * 0.35);
+    trains = max(trains, trainInk);
   }
-  col += vec3(1.0, 0.98, 0.92) * trains * (0.65 + uAudio * 0.35);
 
   for (int s = 0; s < 16; s++) {
     if (s >= nSta) break;
     vec2 c = vec2(slotF(1, s * 4), slotF(1, s * 4 + 1));
-    float stress = slotF(1, s * 4 + 3);
-    float r = 0.018 + 0.006 * slotF(1, s * 4 + 2);
+    float rate = slotF(1, s * 4 + 3);
+    float r = 0.018 + 0.012 * rate;
     float ring = stationDisk(p, c, r * 1.55) * 0.35;
     float core = stationDisk(p, c, r);
-    vec3 sc = mix(vec3(0.12), ZOTO_FAIL, smoothstep(0.35, 0.85, stress) * (0.6 + 0.4 * sin(uTime * 5.0 + float(s))));
+    vec3 sc = vec3(0.12, 0.14, 0.18);
     col = mix(col, sc, core);
     col += vec3(1.0) * ring * (1.0 - night * 0.5);
     col += drawLabel(p, c, s, labelDensity) * mix(vec3(0.08), vec3(0.92), night);
@@ -179,6 +176,10 @@ void main() {
   if (tickerOn > 0.5) {
     vec2 board = vec2(0.0, -0.48);
     float bh = 0.07;
+    float bannerH = 0.028;
+    float bannerY = board.y + bh - bannerH;
+    float bannerInside = step(bannerY, p.y) * step(p.y, bannerY + bannerH) * step(abs(p.x), 0.92);
+    col = mix(col, ZOTO_FAIL, bannerInside * step(0.5, disruptions) * 0.82);
     float inside = step(board.y, p.y) * step(p.y, board.y + bh) * step(abs(p.x), 0.92);
     col = mix(col, mix(vec3(0.08, 0.1, 0.14), vec3(0.12, 0.14, 0.2), night), inside * 0.92);
     float scroll = reduced > 0.5 ? 0.0 : tickPhase;
@@ -196,9 +197,6 @@ void main() {
     }
   }
 
-  vec2 badge = vec2(-0.78, 0.42);
-  float badgeInk = stationDisk(p, badge, 0.04) * step(0.5, disruptions);
-  col = mix(col, ZOTO_FAIL, badgeInk * 0.85);
   float demoInk = stationDisk(p, vec2(0.72, 0.44), 0.035) * demo;
   col = mix(col, vec3(0.2, 0.55, 0.95), demoInk * 0.7);
 

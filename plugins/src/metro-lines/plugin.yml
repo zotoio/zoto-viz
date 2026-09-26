@@ -1,15 +1,17 @@
 id: metro-lines
 name: Metro Lines
 version: 1
-hint: Living schematic transit map — hosts are stations, flows are coloured lines and train dots; disruptions hit the ticker first.
+hint: Living schematic transit map — talkers are stations, schematic spokes to the gateway, packet trains coloured by proto.
 description: |
-  Classic 45/90° schematic map with round interchange stations, bold line colours, and train dots whose speed tracks latency and length tracks bytes.
-  Data mapping (live → effect, defaults in visualisation.yml):
-    talkers[].id → station identity and label; talkers[].rate → line weight and interchange pulse; talkers[].role → palette lane (gateway/intercom/lan).
-    packets[].host (or id) → station slot for that flow; packets[].peer → other end of the line; packets[].proto → line colour; packets[].size → train length; packets[].field → train speed; packets[].failed → explicit segment failure (never inferred from field).
-    talkers[].failed → station failure badge (never from list index or rate/field thresholds).
-    sys.failed → Zoto Fail disruption badge + ticker priority; headlines[].text → disruption ticker copy when present.
-  Caps: 16 stations, 16 edges, 48 trains (particles), 8 buffer slots × 64 floats. Idle uses a busy fictional network labelled demo.
+  Classic 45/90° schematic map (legend tile "schematic"). Uses only the shipped VizDataFrame contract.
+  Data mapping:
+    talkers[].id → station identity and label (keyed by id, not list rank); talkers[].rate → station size and spoke weight; talkers[].role → gateway hub selection.
+    packets[].proto → train colour; packets[].size → train length and speed (field is not used for routing).
+    Trains are spread across schematic spokes in proportion to station rate, one per packet up to maxTrains.
+    sys.failed ≥ banner threshold → network-wide Zoto Fail strip on the departure board (no per-station badges).
+    headlines[].text → plain ticker scroll only (never parsed as disruptions).
+  Future host contract (not required today): optional links[] with src/dst host ids; optional talkers[].failed for per-station badges.
+  Caps: 16 stations, 16 schematic edges, 48 trains, 8×64 buffers. Idle fictional demo when viz.idle fixture is active.
 capabilities:
   - viz.read
   - viz.write

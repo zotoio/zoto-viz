@@ -1,8 +1,8 @@
 /** Metro Lines — schematic transit map (sandbox entry). */
 
+import type { VizDataFrame } from "../../../../web/src/plugins/viz-host";
 import {
   acquireMetroSim,
-  buildMetroNetwork,
   isMetroDemoFrame,
   metroAccent,
   metroBg,
@@ -15,13 +15,10 @@ import {
   parseMetroOptions,
   releaseMetroSim,
   type MetroOptions,
-  type VizSliceFrame,
 } from "./metro";
 
-type VizFrame = VizSliceFrame;
-
 declare const zoto: {
-  onFrame: ((frame: VizFrame) => void) | null;
+  onFrame: ((frame: VizDataFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   onTeardown?: (() => void) | null;
   getConfig?: () => Record<string, string>;
@@ -35,6 +32,7 @@ const sim = acquireMetroSim();
 
 zoto.onConfig = (cfg) => {
   opts = parseMetroOptions(cfg);
+  sim.runtime.structureKey = "";
 };
 
 zoto.onTeardown = () => {
@@ -42,8 +40,7 @@ zoto.onTeardown = () => {
 };
 
 zoto.onFrame = (frame) => {
-  const net = buildMetroNetwork(frame, opts);
-  sim.step(frame, net, opts);
+  const net = sim.step(frame, opts);
   const slots = packMetroSlots(frame, net, opts, sim, metroCanvasSize());
   const demo = isMetroDemoFrame(frame);
   const metric = demo ? "demo" : `${net.stations.length} st · ${net.edges.length} ln`;
