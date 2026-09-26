@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-scope-note-guards.test.ts",
   "testName": "^duplicate slot shared config > drawer rebind guards > applyMode keeps drawer DOM when drawer key unchanged$",
   "description": "applyMode must not rebuild the view drawer when drawerKey is unchanged.",
-  "redOutput": ""
+  "redOutput": "AssertionError: expected \"bindThisView\" to not be called at all, but actually been called 1 times"
 }

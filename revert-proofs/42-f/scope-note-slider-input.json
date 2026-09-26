@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-scope-note-slider.test.ts",
   "testName": "^duplicate slot shared config > plugin field persist > range input previews without storage write; change persists once$",
   "description": "Range input must not call writePluginConfig; change event persists once.",
-  "redOutput": ""
+  "redOutput": "AssertionError: expected \"writePluginConfig\" to not be called at all, but actually been called 1 times"
 }

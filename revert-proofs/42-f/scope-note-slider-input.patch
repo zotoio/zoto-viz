@@ -1,9 +1,9 @@
 diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
-index 809ab88..4bb83fd 100644
+index bc0eb6e..c7dfad3 100644
 --- a/web/src/plugins/plugin-ui.ts
 +++ b/web/src/plugins/plugin-ui.ts
-@@ -88,7 +88,7 @@ export function fillPluginFields(
-             opts?.onFieldInput?.();
+@@ -93,7 +93,7 @@ export function fillPluginFields(
+             opts?.onFieldInput?.(f.key, String(v));
            },
          });
 -        sl.el.querySelector("input")?.addEventListener("change", () => persist());
