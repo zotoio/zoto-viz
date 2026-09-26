@@ -188,6 +188,30 @@ def test_overwrite_and_same_sha(
     assert forced["version"] == 2
 
 
+def test_install_rejects_invalid_merged_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    raw = _zip({
+        "plugin.yml": "id: bad-install\nname: Bad\nversion: 1\n",
+        "visualisation.yml": (
+            "engine: graph\n"
+            "settings:\n"
+            "  presets:\n"
+            "    - id: a\n"
+            "      label: A\n"
+            "      values: {gain: 1}\n"
+            "config:\n"
+            "  - key: gain\n"
+            "    type: number\n"
+            "    min: 0\n"
+            "    max: 10\n"
+        ),
+    })
+    with pytest.raises(ValueError, match="presetField"):
+        plugin_local.install_local_zip(raw)
+
+
 def test_code_zip_installs_without_activate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PluginView } from "./plugin";
 import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import { fillPluginFields } from "./plugin-ui";
 
@@ -22,5 +23,21 @@ describe("plugin settings dirty markers", () => {
     expect(gainWrap?.classList.contains("field-dirty")).toBe(true);
     expect(gainWrap?.querySelector("label.slider")).toBe(slider);
     host.remove();
+  });
+
+  it("marks text fields dirty on input", () => {
+    const spec: PluginView = {
+      id: "text-dirty",
+      name: "Text",
+      version: 1,
+      config: [{ key: "gateway", label: "gw", type: "text", default: "ours" }],
+    };
+    const host = document.createElement("div");
+    fillPluginFields(host, spec, spec.config!, () => {});
+    const wrap = host.querySelector<HTMLElement>('[data-field-key="gateway"]');
+    const input = wrap?.querySelector<HTMLInputElement>("input");
+    input!.value = "192.168.1.2";
+    input!.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(wrap?.classList.contains("field-dirty")).toBe(true);
   });
 });

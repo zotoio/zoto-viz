@@ -601,7 +601,7 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
 .settings-pop .field-dirty .field-btn,
 .settings-pop .field-dirty label.slider,
 .settings-pop .field-dirty label.toggle,
-.settings-pop .field-dirty.field.text {
+.settings-pop .field-dirty .field.text {
   outline: 1px solid var(--warn);
   outline-offset: 1px;
 }
@@ -630,6 +630,21 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
 .plugin-settings-toolbar-row .btn {
   height: 30px;
   padding: 0 10px;
+}
+.plugin-preset-select {
+  height: 30px;
+  min-width: 8rem;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--chip);
+  color: var(--fg);
+  font: inherit;
+}
+.plugin-preset-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
 }
 .field .val { display: flex; align-items: center; gap: 7px; font-weight: 600; white-space: nowrap; }
 .field .val .txt { overflow: hidden; text-overflow: ellipsis; max-width: 220px; }

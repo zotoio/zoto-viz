@@ -213,6 +213,46 @@ describe("reset and labels", () => {
     expect(values.mode).toBe("x");
   });
 
+  it("reset skips text fields even when presets[0] maps them", () => {
+    const spec: PluginView = {
+      id: "pond",
+      name: "Pond",
+      version: 1,
+      settings: {
+        presetField: "preset",
+        presets: [
+          { id: "a", label: "Pond A", values: { preset: "a", label: "Pond A", gain: 3 } },
+        ],
+      },
+      config: [
+        { key: "preset", label: "preset", type: "select", values: [["a", "A"]], default: "a" },
+        { key: "label", label: "label", type: "text", default: "Pond" },
+        { key: "gain", label: "gain", type: "number", min: 0, max: 10, default: 1 },
+      ],
+    };
+    const fields = spec.config!;
+    const values: Record<string, string> = { preset: "a", label: "My custom label", gain: "5" };
+    resetDeclaredConfig(spec, fields, values);
+    expect(values.label).toBe("My custom label");
+    expect(values.gain).toBe("3");
+  });
+
+  it("reset uses instance default preset when declared on the tile row", () => {
+    const base: PluginView = {
+      ...fixtureSpec(),
+      instances: [{ id: "tile-b", defaults: { preset: "b" } }],
+    };
+    const spec = expandPluginInstances(base).find((s) => s.instanceId === "tile-b")!;
+    const fields = fixtureFields(spec);
+    const values: Record<string, string> = { preset: "a", gain: "3", mode: "x", locked: "0.5" };
+    applyPresetToValues(spec, fields, values, "a");
+    values.gain = "9";
+    resetDeclaredConfig(spec, fields, values);
+    expect(values.preset).toBe("b");
+    expect(values.gain).toBe("6");
+    expect(values.mode).toBe("y");
+  });
+
   it("label transitions preset → custom → preset", () => {
     const spec = fixtureSpec();
     const fields = fixtureFields(spec);
@@ -373,6 +413,16 @@ describe("boolean randomise", () => {
 });
 
 describe("profile import", () => {
+  it("cached plugin rows omit __presetBase when packed like collectSettings", () => {
+    localStorage.clear();
+    const spec = fixtureSpec();
+    const fields = fixtureFields(spec);
+    writePluginConfig(configStoreId(spec), { preset: "custom", gain: "3", [PRESET_BASE_META_KEY]: "a" });
+    const packed = packConfigValues(loadPluginConfigCached(spec, fields));
+    expect(packed[PRESET_BASE_META_KEY]).toBeUndefined();
+    expect(packed.gain).toBe("3");
+  });
+
   it("drops __presetBase from applied configs", () => {
     localStorage.clear();
     applyPluginConfigs({ "settings-fixture": { gain: "3", [PRESET_BASE_META_KEY]: "a" } });
@@ -403,7 +453,20 @@ describe("catalog revision cache", () => {
     bumpPluginCatalogRevision();
     expect(pluginCatalogCacheRevision()).toBe(rev + 1);
     const bumpedFields = fixtureFields(bumped);
-    expect(loadPluginConfig(bumped, bumpedFields).gain).toBe("9");
+    expect(loadPluginConfigCached(bumped, bumpedFields).gain).toBe("9");
+  });
+
+  it("cached reads after bumpPluginCatalogRevision pick up new defaults", () => {
+    localStorage.clear();
+    const spec = fixtureSpec();
+    const fields = fixtureFields(spec);
+    loadPluginConfigCached(spec, fields);
+    const bumped = {
+      ...spec,
+      config: (spec.config ?? []).map((f) => (f.key === "gain" ? { ...f, default: 7 } : f)),
+    };
+    bumpPluginCatalogRevision();
+    expect(loadPluginConfigCached(bumped, fixtureFields(bumped)).gain).toBe("7");
   });
 });
 

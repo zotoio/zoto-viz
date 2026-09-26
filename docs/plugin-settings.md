@@ -23,7 +23,15 @@ Legacy top-level **`presets` / `presetField` / `hud` / `sections`** on `plugin.y
 
 ## Reset behaviour
 
-**Reset** restores preset-controlled fields and non-text config fields to instance defaults / field defaults / active preset values. **Text fields** (gateway, watch SSIDs, sources, etc.) are left unchanged so operator-entered strings are not wiped.
+**Reset to defaults** restores non-text config fields to the pack default preset:
+
+1. If the tile/catalog row has an instance **default** for `presetField` that matches a declared preset, that preset is used.
+2. Otherwise **`settings.presets[0]`** (the first declared preset) is used.
+3. Fields not in the preset fall back to instance defaults, then field defaults.
+
+**Text and textarea fields** (gateway, pond labels, watch SSIDs, view prompt, etc.) are never changed by Reset, even when a preset maps those keys.
+
+Without declared presets, Reset restores non-text fields to instance/field defaults only.
 
 ## Mosaic HUD
 

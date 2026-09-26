@@ -215,18 +215,17 @@ export function fieldBaselineForDirty(
   key: string,
 ): string | undefined {
   const decl = spec.settings;
-  if (!decl?.presets?.length) return undefined;
+  const field = fields.find((f) => f.key === key);
+  if (!field || isMetaConfigKey(key)) return undefined;
+  if (!decl?.presets?.length) return fieldDefaultForSpec(spec, field);
   const pf = decl.presetField;
   if (pf && key === pf) return undefined;
-  if (isMetaConfigKey(key)) return undefined;
   const baseId = derivedPresetId(spec, values);
   if (!baseId) return undefined;
   const preset = presetById(decl, baseId);
   if (!preset) return undefined;
   const mapped = presetValuesToStrings(preset.values, fields);
   if (key in mapped) return mapped[key];
-  const field = fields.find((f) => f.key === key);
-  if (!field) return undefined;
   const inst = instanceDefaultValue(spec, key);
   if (inst !== undefined) return inst;
   return fieldDefault(field);
@@ -366,6 +365,26 @@ function resetFieldToDefault(
   values[field.key] = fieldDefaultForSpec(spec, field);
 }
 
+function skipFieldOnReset(f: PluginField, pf?: string): boolean {
+  if (isMetaConfigKey(f.key)) return true;
+  if (pf && f.key === pf) return true;
+  if (f.type === "text") return true;
+  if (f.type === "textarea") return true;
+  return false;
+}
+
+/** Pack default preset: instance default preset id when valid, else settings.presets[0]. */
+export function defaultPresetForReset(spec: PluginView): PluginPreset | null {
+  const decl = spec.settings;
+  if (!decl?.presets?.length) return null;
+  const pf = decl.presetField ?? "preset";
+  const inst = instanceDefaultValue(spec, pf);
+  if (inst && decl.presets.some((p) => p.id === inst)) {
+    return presetById(decl, inst) ?? null;
+  }
+  return decl.presets[0] ?? null;
+}
+
 export function resetDeclaredConfig(
   spec: PluginView,
   fields: PluginField[],
@@ -374,17 +393,16 @@ export function resetDeclaredConfig(
   const decl = spec.settings;
   const pf = decl?.presetField;
   const prompt = values[VIEW_PROMPT_KEY];
-  if (decl?.presets?.length) {
-    const first = decl.presets[0]!;
-    Object.assign(values, presetValuesToStrings(first.values, fields));
-    if (pf) values[pf] = first.id;
+  const preset = defaultPresetForReset(spec);
+  if (preset) {
+    if (pf) values[pf] = preset.id;
     for (const f of fields) {
-      if (isMetaConfigKey(f.key)) continue;
-      if (pf && f.key === pf) continue;
-      if (f.type === "textarea" && f.key === VIEW_PROMPT_KEY) continue;
-      if (f.type === "text") continue;
-      if (f.key in first.values) continue;
-      resetFieldToDefault(spec, f, values);
+      if (skipFieldOnReset(f, pf)) continue;
+      if (Object.prototype.hasOwnProperty.call(preset.values, f.key)) {
+        values[f.key] = presetValueForField(f, preset.values[f.key]!);
+      } else {
+        resetFieldToDefault(spec, f, values);
+      }
     }
   } else {
     for (const f of fields) {

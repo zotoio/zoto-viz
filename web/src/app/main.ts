@@ -630,10 +630,12 @@ function optsFor(m: ViewMode): Record<string, string> {
   const o = defaultOpts(m);
   if (m.pluginId) {
     const spec = pluginSpecForMode(m.id);
-    if (spec) Object.assign(o, loadPluginConfigCached(
-      spec,
-      pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config),
-    ));
+    if (spec) {
+      Object.assign(o, packConfigValues(loadPluginConfigCached(
+        spec,
+        pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config),
+      )));
+    }
   } else {
     for (const opt of m.options ?? []) {
       const saved = localStorage.getItem(`zoto-viz.mode.${m.id}.${opt.key}`);
@@ -720,6 +722,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     return;
   }
   try {
+    sandboxConfigBatcher.reset();
     await attachPluginFrontend(sandbox, spec, sandboxPluginConfig(spec));
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;

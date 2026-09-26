@@ -685,6 +685,13 @@ def _check_semantics(doc: dict[str, Any], *, include_settings: bool = False) -> 
             raise ValueError("viz.ubo must match the fixed ZotoVizData std140 layout")
 
 
+def _schema_error_line(err: Any, prefix: str = "") -> str:
+    loc = ".".join(str(p) for p in err.path) or "(root)"
+    msg = str(err.message).split("\n", 1)[0].strip()
+    head = f"{prefix} {loc}" if prefix else loc
+    return f"{head}: {msg}"
+
+
 def validate_doc(doc: Any) -> dict[str, Any]:
     if not isinstance(doc, dict):
         raise ValueError("plugin must be a mapping")
@@ -692,8 +699,7 @@ def validate_doc(doc: Any) -> dict[str, Any]:
     if errors:
         bits = []
         for err in errors:
-            loc = ".".join(str(p) for p in err.path) or "(root)"
-            bits.append(f"{loc}: {err.message}")
+            bits.append(_schema_error_line(err))
         raise ValueError("; ".join(bits))
     _check_semantics(doc, include_settings=False)
     return doc
@@ -717,14 +723,11 @@ def _validate_visualisation_yaml(viz: dict[str, Any]) -> None:
     """JSON Schema for visualisation.yml (legacy list ``options`` checked in semantics)."""
     payload = dict(viz)
     opts = payload.get("options")
-    if isinstance(opts, list):
-        payload.pop("options", None)
     errors = sorted(_visualisation_validator().iter_errors(payload), key=lambda e: list(e.path))
     if errors:
         bits = []
         for err in errors:
-            loc = ".".join(str(p) for p in err.path) or "(root)"
-            bits.append(f"visualisation.yml {loc}: {err.message}")
+            bits.append(_schema_error_line(err, "visualisation.yml"))
         raise ValueError("; ".join(bits))
     if isinstance(opts, list):
         keys: set[str] = set()
@@ -748,6 +751,22 @@ def load_file(path: Path) -> dict[str, Any]:
     except (OSError, yaml.YAMLError) as e:
         raise ValueError(f"could not read {path}: {e}") from e
     return validate_doc(raw)
+
+
+def validate_plugin_home(home: Path) -> dict[str, Any]:
+    """Validate plugin.yml + visualisation.yml the same way catalog scan does."""
+    errors: list[dict[str, str]] = []
+    yml = home / "plugin.yml"
+    doc = load_file(yml)
+    rel = str(yml)
+    merged = _attach_visualisation({**doc}, home, errors, rel)
+    if errors:
+        raise ValueError(errors[0]["error"])
+    if merged is None:
+        raise ValueError(f"{doc.get('id', '?')}: invalid plugin")
+    if not isinstance(merged.get("visualisation"), dict):
+        _validate_merged_catalog_row(merged)
+    return merged
 
 
 def _visualisation_doc(home: Path) -> dict[str, Any] | None:

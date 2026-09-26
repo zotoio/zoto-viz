@@ -20,12 +20,14 @@ describe("preset select keyboard", () => {
     expect(document.activeElement).toBe(sel);
 
     const start = sel!.selectedIndex;
-    sel!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    if (sel!.selectedIndex === start) {
-      sel!.selectedIndex = Math.min(start + 1, sel!.options.length - 1);
+    sel!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, code: "ArrowDown" }));
+    sel!.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", bubbles: true, code: "ArrowDown" }));
+    if (sel!.selectedIndex === start && start < sel!.options.length - 1) {
+      sel!.selectedIndex = start + 1;
     }
-    const picked = sel!.value;
+    sel!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, code: "Enter" }));
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
+    const picked = sel!.value;
     expect(host.querySelector<HTMLSelectElement>('[data-toolbar-action="preset"]')?.value).toBe(picked);
 
     sel!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));

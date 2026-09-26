@@ -53,7 +53,7 @@ function refreshPluginHudCaption(
 function placeSettingsAnnouncer(host: HTMLElement, announcer: HTMLElement): void {
   const parent = host.parentElement;
   if (!parent) {
-    if (!host.contains(announcer)) host.prepend(announcer);
+    if (host.contains(announcer)) announcer.remove();
     return;
   }
   if (announcer.parentElement !== parent) parent.insertBefore(announcer, host);
@@ -208,7 +208,11 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
       title: f.hint,
       placeholder: f.default !== undefined ? String(f.default) : undefined,
       value: current,
-      onInput: (v) => { values[f.key] = v; persistValues(ctx); },
+      onInput: (v) => {
+        values[f.key] = v;
+        persistValues(ctx);
+        updateDirtyMarkers(ctx);
+      },
     });
     wrap.append(tf.el);
   }
@@ -276,7 +280,6 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
       persistValues(ctx);
       remountPanel(ctx, { toolbar: "preset" });
       ctx.announce(`Preset ${label}`);
-      presetSel.focus();
     });
     wrap.append(cap, presetSel);
     ctx.presetSel = presetSel;
@@ -320,7 +323,7 @@ function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
       ctx.announce("Randomised");
     }),
     undoBtn,
-    mkBtn("reset", "Reset to defaults", "Reset to pack defaults (first preset or field defaults)", () => {
+    mkBtn("reset", "Reset to defaults", "Reset to pack defaults (instance preset or first preset; text fields unchanged)", () => {
       pushUndoSnapshot(ctx.storeId, { ...ctx.values });
       resetDeclaredConfig(ctx.spec, ctx.fields, ctx.values);
       delete ctx.values[PRESET_BASE_META_KEY];

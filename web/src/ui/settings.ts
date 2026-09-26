@@ -19,7 +19,7 @@ import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { fillPluginFields } from "../plugins/plugin-ui";
-import type { PackWallScope } from "../plugins/instances";
+import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import type { PluginLook, PluginView } from "../plugins/plugin";
 import type { SdmDevice } from "../plugins/nest-cams-look";
 import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
@@ -184,6 +184,7 @@ export class Settings {
     look?: PluginLook | null;
     extras?: HTMLElement[];
   } | null = null;
+  private pluginSettingsAnnouncer: HTMLDivElement | null = null;
   private deviceUi: { cam: Toggle; mic: Toggle; sound: Toggle } | null = null;
   private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
   private pulseNow: () => { level: number; bass: number; listening?: boolean; awaitingClick?: boolean } = () => ({
@@ -481,10 +482,17 @@ export class Settings {
           ? `Instance ${spec.instanceId} of ${spec.id}. Corner cog on a mosaic tile opens that tile's view.`
           : "This catalog row. Corner cog on a mosaic tile opens that tile's view.",
       );
-      fillPluginFields(view, spec, pluginViewKnobs(spec, fields), (id, values) => {
-        this.onPluginChange?.(id, values);
-        this.cfg.onPersist?.();
-      }, { skipEmpty: extra.length > 0, devices: this.nestDevices, wallScope: this.packWallScope() });
+      fillPluginFields(
+        view,
+        spec,
+        pluginViewKnobs(spec, fields),
+        (id, values) => {
+          this.onPluginChange?.(id, values);
+          this.cfg.onPersist?.();
+        },
+        { skipEmpty: extra.length > 0, devices: this.nestDevices, wallScope: packWallScopeFromAnim(this.anim) },
+        this.ensurePluginSettingsAnnouncer(),
+      );
       if (extra.length) {
         const sec = document.createElement("div");
         sec.className = "sec";
@@ -1746,17 +1754,19 @@ export class Settings {
 
   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
 
-  private packWallScope(): PackWallScope {
-    const mosaicOn = this.anim.mosaic !== "off";
-    if (!mosaicOn) return { mosaicOn: false, tileModeIds: [] };
-    const n = this.anim.mosaicTiles.length
-      || (this.anim.mosaicTree ? leafIds(this.anim.mosaicTree).length : Number(this.anim.mosaic) || 0);
-    const tileModeIds = this.anim.mosaicTiles.length
-      ? [...this.anim.mosaicTiles]
-      : this.anim.mosaicTree
-        ? leafIds(this.anim.mosaicTree)
-        : Array.from({ length: n }, (_, i) => viewSelectOptions()[i]?.value ?? "");
-    return { mosaicOn: true, tileModeIds };
+  private ensurePluginSettingsAnnouncer(): HTMLDivElement {
+    if (!this.pluginSettingsAnnouncer) {
+      const el = document.createElement("div");
+      el.className = "sr-only plugin-settings-announcer";
+      el.setAttribute("aria-live", "polite");
+      el.setAttribute("aria-atomic", "true");
+      this.pluginSettingsAnnouncer = el;
+    }
+    const pane = this.viewHost?.parentElement;
+    if (pane && this.pluginSettingsAnnouncer.parentElement !== pane) {
+      pane.insertBefore(this.pluginSettingsAnnouncer, this.viewHost);
+    }
+    return this.pluginSettingsAnnouncer;
   }
 
   private fillMosaicSlots(host: HTMLElement): void {

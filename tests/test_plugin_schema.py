@@ -133,12 +133,55 @@ def test_minimal_plugin_yml_validates() -> None:
     _validator().validate(MINIMAL)
 
 
+def test_visualisation_schema_only_rejects_bad_config_shape() -> None:
+    with pytest.raises(ValidationError):
+        _def_validator("visualisation").validate({"engine": "graph", "config": "not-a-list"})
+
+
+def test_merged_semantics_reject_valid_visualisation_with_bad_settings(tmp_path: Path) -> None:
+    home = tmp_path / "bad-merged"
+    home.mkdir()
+    (home / "plugin.yml").write_text(
+        "id: bad-merged\nname: Bad\nversion: 1\n",
+        encoding="utf-8",
+    )
+    (home / "visualisation.yml").write_text(
+        "engine: graph\n"
+        "settings:\n"
+        "  presets:\n"
+        "    - id: a\n"
+        "      label: A\n"
+        "      values: {gain: 1}\n"
+        "config:\n"
+        "  - key: gain\n"
+        "    type: number\n"
+        "    min: 0\n"
+        "    max: 10\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="presetField"):
+        plugins.validate_plugin_home(home)
+
+
+def test_legacy_options_list_in_plugin_yml_validates() -> None:
+    doc = {
+        **MINIMAL,
+        "engine": "graph",
+        "options": [
+            {
+                "key": "group",
+                "label": "group",
+                "default": "each",
+                "values": [["each", "each"]],
+            },
+        ],
+    }
+    plugins.validate_doc(doc)
+
+
 def test_maximal_plugin_and_parts_validate() -> None:
     _validator().validate(MAX_PLUGIN)
-    viz_payload = dict(MAX_VISUALISATION)
-    if isinstance(viz_payload.get("options"), list):
-        viz_payload.pop("options", None)
-    _def_validator("visualisation").validate(viz_payload)
+    _def_validator("visualisation").validate(MAX_VISUALISATION)
     _def_validator("sky").validate(MAX_SKY)
     _def_validator("streams").validate(MAX_STREAMS)
     _def_validator("zipListing").validate(MAX_ZIP)

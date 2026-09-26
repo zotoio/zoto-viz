@@ -291,6 +291,7 @@ def install_local_zip(
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
             unpacked = pz.unpack_zip(dest, runtime)
+            plugins.validate_plugin_home(runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
                 info["remintedFrom"] = reminted_from
@@ -303,6 +304,7 @@ def install_local_zip(
         shutil.copy2(tmp_path, staged)
         os.replace(staged, dest)
         unpacked = pz.unpack_zip(dest, runtime)
+        plugins.validate_plugin_home(runtime)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -336,6 +338,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
             shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
     unpacked = pz.unpack_zip(dest, runtime)
+    plugins.validate_plugin_home(runtime)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from

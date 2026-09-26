@@ -112,7 +112,12 @@
     "look": { "$ref": "#/$defs/look" },
     "style": { "$ref": "#/$defs/style" },
     "layout": { "$ref": "#/$defs/layout" },
-    "options": { "$ref": "#/$defs/freeMap" },
+    "options": {
+      "oneOf": [
+        { "$ref": "#/$defs/freeMap" },
+        { "$ref": "#/$defs/pluginConfigList" }
+      ]
+    },
     "config": {
       "oneOf": [
         { "$ref": "#/$defs/freeMap" },
@@ -299,7 +304,12 @@
         "look": { "$ref": "#/$defs/look" },
         "style": { "$ref": "#/$defs/style" },
         "layout": { "$ref": "#/$defs/layout" },
-        "options": { "$ref": "#/$defs/freeMap" },
+        "options": {
+          "oneOf": [
+            { "$ref": "#/$defs/freeMap" },
+            { "$ref": "#/$defs/pluginConfigList" }
+          ]
+        },
         "config": {
           "oneOf": [
             { "$ref": "#/$defs/freeMap" },
