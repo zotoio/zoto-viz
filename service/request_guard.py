@@ -5,7 +5,6 @@ import ipaddress
 import json
 import logging
 import re
-import socket
 import subprocess
 import time
 from typing import Callable, Iterable
@@ -31,21 +30,6 @@ _HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")
 _ENCODED_TRAVERSAL = re.compile(r"%2[eEfF]", re.IGNORECASE)
 
 _monotonic: Callable[[], float] = time.monotonic
-_interface_lookup_calls = 0
-
-
-def set_request_guard_clock(clock: Callable[[], float]) -> None:
-    global _monotonic
-    _monotonic = clock
-
-
-def reset_interface_lookup_counter() -> None:
-    global _interface_lookup_calls
-    _interface_lookup_calls = 0
-
-
-def interface_lookup_count() -> int:
-    return _interface_lookup_calls
 
 
 def escape_log_host(raw: str) -> str:
@@ -179,8 +163,6 @@ def query_os_interface_addresses() -> list[str]:
 
 
 def local_interface_hosts(port: int) -> set[str]:
-    global _interface_lookup_calls
-    _interface_lookup_calls += 1
     out: set[str] = set()
     out.add(_canonical_key("localhost", port))
     out.add(_canonical_key("127.0.0.1", port))
@@ -294,7 +276,8 @@ def configure_request_guard(
     app["request_guard_extra_hosts"] = extra
     clk = clock or app.get("request_guard_clock", _monotonic)
     app["request_guard_clock"] = clk
-    app["request_guard_last_if_lookup"] = 0.0
+    now = clk()
+    app["request_guard_last_if_lookup"] = now
     _refresh_allowed_hosts(app)
 
 

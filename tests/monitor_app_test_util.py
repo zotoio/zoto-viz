@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from unittest.mock import MagicMock
@@ -19,6 +20,7 @@ async def make_app_server(
     web_dist=None,
     bind: str = "127.0.0.1",
     insecure_lan: bool = False,
+    clock: Callable[[], float] | None = None,
 ) -> AsyncIterator[tuple[str, int, web.AppRunner]]:
     state = MagicMock()
     orig_dist = monitor.WEB_DIST
@@ -38,8 +40,7 @@ async def make_app_server(
     app.on_startup.clear()
     app.on_shutdown.clear()
     app.on_cleanup.clear()
-    request_guard.reset_interface_lookup_counter()
-    runner = web.AppRunner(app, access_log=monitor.run_app_kwargs()["access_log"])
+    runner = web.AppRunner(app, access_log=monitor.run_app_kwargs().get("access_log"))
     await runner.setup()
     site = web.TCPSite(runner, bind if bind not in {"0.0.0.0", "::"} else "127.0.0.1", 0)
     await site.start()
@@ -49,6 +50,7 @@ async def make_app_server(
         bind=bind,
         port=port,
         allowed_hosts=allowed_hosts or [],
+        clock=clock,
     )
     try:
         yield "127.0.0.1", port, runner

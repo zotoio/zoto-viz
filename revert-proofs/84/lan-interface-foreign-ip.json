@@ -2,6 +2,6 @@
   "runner": "pytest",
   "testId": "tests/test_request_guard_lan_host_table.py::test_lan_non_interface_address_returns_400",
   "red": "AssertionError: assert 200 == 400",
-  "description": "LAN: IP not on any interface must be rejected.",
+  "description": "LAN: non-interface IP must be rejected.",
   "timeoutSec": 120
 }

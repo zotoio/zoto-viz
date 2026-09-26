@@ -1,17 +1,15 @@
 --- a/service/access.py
 +++ b/service/access.py
-@@ -218,9 +218,11 @@
+@@ -218,9 +218,9 @@
  
  def pack_asset_csp_origin(request: web.Request) -> str:
      """Origin for sandbox CSP script-src (never raw untrusted Host fragments)."""
 -    from .request_guard import validated_http_origin
 -
 -    return validated_http_origin(request)
-+    raw = host_header_raw(request)
-+    if not raw or _HOST_INJECTION.search(raw):
-+        return "http://127.0.0.1"
-+    scheme = request.scheme or "http"
-+    return f"{scheme}://{raw}".rstrip("/")
++    bind = str(request.app.get("request_guard_bind") or "127.0.0.1")
++    port = int(request.app.get("request_guard_port") or 7020)
++    return f"http://{bind}:{port}".rstrip("/")
  
  
  def origin_ok(request: web.Request) -> bool:

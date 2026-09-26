@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_thousand_accepted_requests_one_os_lookup_at_startup",
+  "red": "AssertionError: assert 1001 == 1",
+  "description": "LAN: 1000 requests to box interface IP must not re-query interfaces (exactly 1 lookup).",
+  "timeoutSec": 180
+}

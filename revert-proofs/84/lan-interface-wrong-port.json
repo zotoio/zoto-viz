@@ -2,6 +2,6 @@
   "runner": "pytest",
   "testId": "tests/test_request_guard_lan_host_table.py::test_lan_box_interface_address_wrong_port_returns_400",
   "red": "AssertionError: assert 200 == 400",
-  "description": "LAN: interface IP with wrong port must be rejected.",
+  "description": "LAN: box interface IP with wrong port must be rejected.",
   "timeoutSec": 120
 }

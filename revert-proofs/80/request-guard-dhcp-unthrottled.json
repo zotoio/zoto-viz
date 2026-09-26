@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_cost.py::test_dhcp_miss_refreshes_interfaces_at_most_once_per_30s",
-  "red": "AssertionError: assert 101 == 2",
-  "description": "LAN: 100 unknown Host rejects within 30s on fake clock allow at most one refresh lookup.",
-  "timeoutSec": 180
-}

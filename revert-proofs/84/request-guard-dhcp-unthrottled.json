@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_miss_after_30s_refreshes_os_interfaces_once",
+  "red": "AssertionError: assert 2 == 1",
+  "description": "LAN: DHCP miss may refresh OS interfaces at most once per 30s.",
+  "timeoutSec": 120
+}

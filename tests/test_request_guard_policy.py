@@ -126,10 +126,25 @@ async def _lan_host_csp() -> None:
                 },
             ) as resp:
                 assert resp.status == 200
-                csp = resp.headers.get("Content-Security-Policy") or ""
-                want = f"http://{lan}:{port}/pack-assets/{tok}/"
-                assert f"script-src {want}" in csp
-                assert "*" not in csp
+                from urllib.parse import quote
+
+                tok_q = quote(tok, safe="")
+                origin = f"http://{lan}:{port}"
+                want_csp = (
+                    f"default-src 'none'; "
+                    f"script-src {origin}/pack-assets/{tok_q}/; "
+                    f"img-src {origin}/pack-assets/{tok_q}/; "
+                    f"style-src {origin}/pack-assets/{tok_q}/; "
+                    f"font-src {origin}/pack-assets/{tok_q}/; "
+                    f"object-src 'none'; "
+                    f"frame-src 'none'; "
+                    f"worker-src 'none'; "
+                    f"form-action 'none'; "
+                    f"base-uri 'none'; "
+                    f"connect-src 'none'; "
+                    f"frame-ancestors 'self'"
+                )
+                assert resp.headers.get("Content-Security-Policy") == want_csp
 
 
 def test_lan_host_csp_uses_validated_origin_not_wildcard() -> None:

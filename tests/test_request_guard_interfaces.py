@@ -17,7 +17,6 @@ def test_os_interface_query_stub_allows_non_loopback_host(monkeypatch: pytest.Mo
         "query_os_interface_addresses",
         lambda: ["172.30.0.2", "10.0.0.5", "127.0.0.1"],
     )
-    request_guard.reset_interface_lookup_counter()
 
     async def run() -> None:
         async with make_app_server(bind="0.0.0.0") as (ip, port, _runner):
