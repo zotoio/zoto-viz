@@ -8,6 +8,8 @@
 import type { Viewport } from "../graph/render-host";
 
 export const TILE_CHECK_MS = 2000;
+/** After load, view change, or source change — empty checks reset and do not count. */
+export const TILE_LOAD_GRACE_MS = 5000;
 export const TILE_EMPTY_STREAK = 3;
 export const TILE_HEAL_OK_STREAK = 3;
 export const TILE_PATCH = 16;
@@ -189,6 +191,23 @@ export function freshTileHealthState(): PerTileHealthState {
     lastCheckPictureSerial: -1,
     emptySince: 0,
     lastReason: null,
+    lastMessage: "",
+  };
+}
+
+/**
+ * Clear empty-detection progress and cancel a pending heal (backoff / streak).
+ * Keeps pin, ladder index, and heal history from completed heals.
+ */
+export function resetTileHealthProgress(state: PerTileHealthState): PerTileHealthState {
+  return {
+    ...state,
+    emptyStreak: 0,
+    healthyStreak: 0,
+    emptySince: 0,
+    lastReason: null,
+    backoffUntil: 0,
+    lastCheckPictureSerial: -1,
     lastMessage: "",
   };
 }

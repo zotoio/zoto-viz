@@ -206,6 +206,8 @@ export class Mosaic {
     onLayout: (patch: MosaicLayoutPatch) => void;
     onCloseLast: () => void;
     paneCog?: (id: string) => HTMLButtonElement;
+    /** Mosaic pane bound or its view id changed (dropdown / swap). */
+    onTileViewChange?: (viewId: string) => void;
     sync: () => MosaicSync;
   }) {}
 
@@ -446,7 +448,12 @@ export class Mosaic {
     if (!this.tree) return;
     const want = parseMosaicTiles(tiles);
     if (want.join("\0") === this.tileIds.join("\0")) return;
+    const prev = this.tileIds;
     this.tree = assignTiles(this.tree, want);
+    const next = this.tileIds;
+    for (let i = 0; i < next.length; i++) {
+      if (prev[i] !== next[i] && next[i]) this.cfg.onTileViewChange?.(next[i]);
+    }
     this.rematchTried.clear();
     this.rematchQueued.clear();
     this.syncPanes(this.tileIds);
@@ -537,6 +544,7 @@ export class Mosaic {
     }
     if (this.paneBound(id)) {
       this.auditPane(id, "bind");
+      this.cfg.onTileViewChange?.(id);
       return;
     }
     if (isGraph(id)) {
@@ -557,6 +565,7 @@ export class Mosaic {
         this.extras.push({ id, scene: s });
       }
       this.auditPane(id, "bind");
+      this.cfg.onTileViewChange?.(id);
       return;
     }
     const slot = this.ensureArcade(id);

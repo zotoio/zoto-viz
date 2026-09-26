@@ -5,16 +5,18 @@ import type { PluginView } from "./plugin";
 import {
   HEAL_LADDER,
   TILE_CHECK_MS,
-  TILE_HEAL_FALLBACK_MODE,
+  TILE_LOAD_GRACE_MS,
   TILE_PATCH,
   TilePatchSampler,
   freshTileHealthState,
   patchOrigin,
+  resetTileHealthProgress,
   stepTileHealth,
   type HealStep,
   type PerTileHealthState,
   type TileHealLogEntry,
 } from "./tile-health";
+import { applyTileExemptReset, graceUntilFrom } from "./tile-health-exempt";
 
 export const TILE_HEAL_ERRORS_KEY = "zoto-viz.tileHealErrors";
 
@@ -34,23 +36,61 @@ export interface TileHealthDeps {
   sceneFor: (tileId: string) => NetScene | null;
   packFor: (tileId: string) => PluginView | null;
   mayBeStatic: (spec: PluginView | null) => boolean;
+  /** Layout-visible (not zero-size / hidden chrome). */
   isVisible: (tileId: string) => boolean;
+  /** Consent / auth reason card — tile must not count as empty. */
+  awaitingApproval: (tileId: string) => boolean;
   showErrors: () => boolean;
   onHeal: (tileId: string, step: HealStep, state: PerTileHealthState) => void | Promise<void>;
+  /** Optional: override tab visibility (tests). */
+  tabVisible?: () => boolean;
+  /** Optional: override on-screen (tests). */
+  onScreen?: (tileId: string) => boolean;
 }
 
 export class TileHealthMonitor {
   private readonly sampler = new TilePatchSampler();
   private readonly states = new Map<string, PerTileHealthState>();
   private readonly labels = new Map<string, HTMLSpanElement>();
+  private readonly graceUntil = new Map<string, number>();
+  private readonly onScreen = new Map<string, boolean>();
+  private readonly observers = new Map<string, IntersectionObserver>();
   private stagger = 0;
   private lastTick = 0;
   private vizDeliverGen = 0;
   private vizWriteGen = 0;
   private lastVizWriteGen = 0;
   private packDrawingNothing = false;
+  private tabVisible = typeof document !== "undefined" ? document.visibilityState !== "hidden" : true;
 
-  constructor(private readonly deps: TileHealthDeps) {}
+  constructor(private readonly deps: TileHealthDeps) {
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.onTabVisibility);
+    }
+  }
+
+  dispose(): void {
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onTabVisibility);
+    }
+    for (const o of this.observers.values()) o.disconnect();
+    this.observers.clear();
+  }
+
+  private readonly onTabVisibility = (): void => {
+    const visible = this.deps.tabVisible?.() ?? document.visibilityState !== "hidden";
+    if (visible !== this.tabVisible) {
+      this.tabVisible = visible;
+      this.resetAllProgress();
+    }
+  };
+
+  /** Start / extend load grace after view bind, dropdown change, or source change. */
+  noteGrace(tileId: string, now = performance.now()): void {
+    this.graceUntil.set(tileId, graceUntilFrom(now));
+    this.resetProgress(tileId);
+    this.ensureObserver(tileId);
+  }
 
   noteVizFrameDelivered(): void {
     this.vizDeliverGen++;
@@ -74,9 +114,14 @@ export class TileHealthMonitor {
     return this.states.get(tileId)?.pinnedFallback ?? false;
   }
 
+  state(tileId: string): PerTileHealthState {
+    return this.stateFor(tileId);
+  }
+
   /** Call from rAF or present listener (~every frame); runs at most one tile check per interval. */
   tick(now = performance.now()): void {
-    const tiles = this.visibleTiles();
+    if (!(this.deps.tabVisible?.() ?? this.tabVisible)) return;
+    const tiles = this.eligibleTiles();
     if (!tiles.length) return;
     const interval = TILE_CHECK_MS / tiles.length;
     if (now - this.lastTick < interval) return;
@@ -86,10 +131,39 @@ export class TileHealthMonitor {
     this.checkTile(tileId, now);
   }
 
+  private eligibleTiles(): string[] {
+    const all = this.visibleTiles();
+    for (const id of all) {
+      if (!this.isOnScreen(id)) this.resetProgress(id);
+    }
+    return all.filter((id) => this.isOnScreen(id));
+  }
+
   private visibleTiles(): string[] {
     const m = this.deps.mosaic;
     if (m?.on) return m.tileIds.filter((id) => this.deps.isVisible(id));
     return ["main"];
+  }
+
+  private isOnScreen(tileId: string): boolean {
+    if (this.deps.onScreen) return this.deps.onScreen(tileId);
+    return this.onScreen.get(tileId) ?? true;
+  }
+
+  private ensureObserver(tileId: string): void {
+    if (this.deps.onScreen || typeof IntersectionObserver === "undefined") return;
+    if (this.observers.has(tileId)) return;
+    const root = this.deps.paneEl(tileId) ?? this.deps.sceneFor(tileId)?.viewEl;
+    if (!root) return;
+    const obs = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const on = e.isIntersecting && e.intersectionRatio > 0;
+        this.onScreen.set(tileId, on);
+        if (!on) this.resetProgress(tileId);
+      }
+    }, { threshold: [0, 0.01] });
+    obs.observe(root);
+    this.observers.set(tileId, obs);
   }
 
   private stateFor(tileId: string): PerTileHealthState {
@@ -101,7 +175,40 @@ export class TileHealthMonitor {
     return s;
   }
 
+  private resetProgress(tileId: string): void {
+    const s = this.stateFor(tileId);
+    this.states.set(tileId, resetTileHealthProgress(s));
+  }
+
+  private resetAllProgress(): void {
+    for (const id of new Set([...this.states.keys(), ...this.visibleTiles()])) {
+      this.resetProgress(id);
+    }
+  }
+
+  private exemptInput(tileId: string, now: number) {
+    return {
+      tabVisible: this.deps.tabVisible?.() ?? this.tabVisible,
+      onScreen: this.isOnScreen(tileId),
+      awaitingApproval: this.deps.awaitingApproval(tileId),
+      graceUntil: this.graceUntil.get(tileId) ?? 0,
+      now,
+    };
+  }
+
   private checkTile(tileId: string, now: number): void {
+    this.ensureObserver(tileId);
+    const exemptIn = this.exemptInput(tileId, now);
+    let prev = this.stateFor(tileId);
+    prev = applyTileExemptReset(prev, exemptIn);
+    this.states.set(tileId, prev);
+    if (exemptIn.tabVisible === false
+      || !exemptIn.onScreen
+      || exemptIn.awaitingApproval
+      || now < exemptIn.graceUntil) {
+      return;
+    }
+
     const sc = this.deps.sceneFor(tileId);
     if (!sc) return;
     const patch = this.sampleScene(sc);
@@ -111,7 +218,6 @@ export class TileHealthMonitor {
     const dataArriving = this.vizDeliverGen > 0;
     const drawingNothing = this.packDrawingNothing
       || (dataArriving && this.vizWriteGen === this.lastVizWriteGen && !!spec?.capabilities?.includes("viz.read"));
-    const prev = this.stateFor(tileId);
     const outcome = stepTileHealth(
       prev,
       now,
@@ -179,16 +285,22 @@ export class TileHealthMonitor {
     console.info(line);
   }
 
-  /** Test hook: run N checks without waiting for real time. */
+  /** Test hook: run checks with explicit time steps. */
   runChecks(count: number, now = performance.now()): void {
-    for (let i = 0; i < count; i++) this.tick(now + i * (TILE_CHECK_MS / Math.max(1, this.visibleTiles().length)));
+    for (let i = 0; i < count; i++) {
+      this.tick(now + i * (TILE_CHECK_MS / Math.max(1, this.eligibleTiles().length)));
+    }
   }
 
   resetTile(tileId: string): void {
     this.states.delete(tileId);
+    this.graceUntil.delete(tileId);
+    this.observers.get(tileId)?.disconnect();
+    this.observers.delete(tileId);
+    this.onScreen.delete(tileId);
     this.labels.get(tileId)?.remove();
     this.labels.delete(tileId);
   }
 }
 
-export { HEAL_LADDER };
+export { HEAL_LADDER, TILE_LOAD_GRACE_MS };

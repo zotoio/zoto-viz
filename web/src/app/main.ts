@@ -508,6 +508,12 @@ function onPluginFields(): void {
   const opts = optsFor(m);
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
+  if (mosaic?.on) {
+    const focus = mosaic.focusedId || mosaic.mainMode;
+    if (focus) noteTileHealthGrace(focus);
+  } else {
+    noteTileHealthGrace("main");
+  }
   nestCams.setLook(opts);
   if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
   if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
@@ -590,6 +596,8 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
       spec.consent = kind;
       if (spec.hash) consentHash(spec.id, spec.hash);
       if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+      noteTileHealthGrace("main");
+      mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
       return true;
     } catch (e) {
       console.warn("zoto-viz plugin autoconsent:", e);
@@ -603,6 +611,8 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
     spec.consent = kind;
     if (spec.hash) consentHash(spec.id, spec.hash);
     if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+    noteTileHealthGrace("main");
+    mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
     return true;
   } catch (e) {
     console.warn("zoto-viz plugin consent:", e);
@@ -696,6 +706,26 @@ function applyPluginWall(modeId: string, flags: { keepLayout?: boolean; prevMode
   }
 }
 
+function tileHealthModeId(tileId: string): string {
+  return tileId === "main" ? modeSel.value : tileId;
+}
+
+function tileHealthAwaitingApproval(tileId: string): boolean {
+  const m = modeById(tileHealthModeId(tileId));
+  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
+  if (spec && pluginNeedsReview(spec) && !spec.consent) return true;
+  return !!viewAuthBlock({
+    id: m.id,
+    pluginId: m.pluginId,
+    source: bindSourceOf(spec, parseSourceBind(optsFor(m)).source),
+    capabilities: spec?.capabilities,
+  }, liveAuthCtx());
+}
+
+function noteTileHealthGrace(tileId: string): void {
+  tileHealth?.noteGrace(tileId);
+}
+
 function pluginSpecForMode(modeId: string): PluginView | null {
   const id = parsePluginId(modeId);
   if (!id) return null;
@@ -779,6 +809,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const m = modeById(id);
   const opts = optsFor(m);
   const prevMode = liveMode;
+  noteTileHealthGrace("main");
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   modeSel.value = m.id;
@@ -1146,6 +1177,7 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
+  onTileViewChange: (viewId) => noteTileHealthGrace(viewId),
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
@@ -1209,6 +1241,7 @@ tileHealth = new TileHealthMonitor({
   sceneFor: (id) => (id === "main" ? scene : mosaic?.graphScene(id) ?? null),
   packFor: (id) => pluginSpecForMode(id === "main" ? modeSel.value : id),
   mayBeStatic: (spec) => spec?.viz?.mayBeStatic === true,
+  awaitingApproval: (id) => tileHealthAwaitingApproval(id),
   isVisible: (id) => {
     const el = id === "main" ? scene.viewEl : mosaic?.paneElement(id);
     if (!el || el.hidden) return false;
