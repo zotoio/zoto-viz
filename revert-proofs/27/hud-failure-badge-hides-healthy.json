@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "web/src/ui/viz-hud.test.ts",
-  "testName": "viz hud helpers > hides failure badge on healthy idle frames",
+  "testName": "^viz\\ hud\\ helpers\\ >\\ hides\\ failure\\ badge\\ on\\ healthy\\ idle\\ frames$",
   "description": "One-line production revert: healthy peak returns fail 0% instead of null in vizFrameFailureBadge."
 }

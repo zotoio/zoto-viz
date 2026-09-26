@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "web/src/ui/viz-hud.test.ts",
-  "testName": "viz hud helpers > shows DEGRADED stage pill matching strip badge text",
+  "testName": "^viz\\ hud\\ helpers\\ >\\ shows\\ DEGRADED\\ stage\\ pill\\ matching\\ strip\\ badge\\ text$",
   "description": "One-line production revert: omit stageFailEl show/update in VizHud.tick when failBadge is set."
 }
