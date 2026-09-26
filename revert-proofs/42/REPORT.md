@@ -61,7 +61,7 @@ Each `*.json` has `testFile` (under `web/`), anchored `testName` (`^…$`), and 
 | `render-host-gpu-viewport-css-dpr2-cap-revert` | `expected [ 3, 40, 226, 136 ] to deeply equal [ 2, 87, 151, 91 ]` (window DPR 2, layout pr capped at 1.5) |
 | `scene-paint-clear-letterbox-reset` | `expected 300 to be 1 // Object.is equality` |
 
-Rows on **A1.5** only: `host-points-atten-*`, `host-line-resolution-css-only`, `host-shader-resolution-css-only`, `device-px-ratio-read-stray`, `pack-mirror-device-size-*`, `setSize-only-on-resize`, `teardown-dispose-counts`, `samples-gated-on-antialias`, `one-mirror-per-pack`, `material-needs-update`, `pack-mirror-letterbox-16x9`, `pack-mirror-letterbox-viewport-y`, `render-host-pack-mirror-no-alloc`, `present-pack-args-identity`.
+Rows on **A1.5** only: `host-points-atten-*`, `host-line-resolution-css-only`, `host-shader-resolution-css-only`, `device-px-ratio-read-stray`, `pack-mirror-device-size-*`, `setSize-only-on-resize`, `teardown-dispose-counts`, `samples-gated-on-antialias`, `one-mirror-per-pack`, `material-needs-update`, `pack-mirror-letterbox-16x9`, `pack-mirror-letterbox-viewport-y`, `render-host-pack-mirror-no-alloc`.
 
 Dropped on A (on A2 `#81` or non-shipped): `context-restore-antialias`, `mosaic-sandbox-frame`, `mirror-frame-scope-sync`, `pack-mirror-tile-edge-shared`, `render-host-fb-viewport-software`, `render-host-frame-alloc-objects`, `pack-mirror-texture-flip-y`.
 
