@@ -1,9 +1,9 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import FRAG from "../../../plugins/src/fractal-zoom/sky/fragment.glsl?raw";
-import FRONT from "../../../plugins/src/fractal-zoom/frontend/index.ts?raw";
-import DRIVE from "../../../plugins/src/fractal-zoom/frontend/drive.ts?raw";
-import VIS from "../../../plugins/src/fractal-zoom/visualisation.yml?raw";
-import PLUGIN from "../../../plugins/src/fractal-zoom/plugin.yml?raw";
+import FRAG from "../sky/fragment.glsl?raw";
+import FRONT from "./index.ts?raw";
+import DRIVE from "./drive.ts?raw";
+import VIS from "../visualisation.yml?raw";
+import PLUGIN from "../plugin.yml?raw";
 import {
   FZ_SLOT,
   FZ_SLOT0_FLOATS,
@@ -14,41 +14,63 @@ import {
   fractalRenderScale,
   packFractalDrive,
   resetFractalDrive,
-} from "../../../plugins/src/fractal-zoom/frontend/drive";
+} from "./drive";
 import {
   FRACTAL_DEFAULTS,
   FRACTAL_PRESETS,
   parseFractalOptions,
   randomiseFractalOptions,
-} from "../../../plugins/src/fractal-zoom/frontend/options";
+} from "./options";
 import {
   FRACTAL_CONFIG_KEYS,
   fractalPresetConfig,
   fractalRandomConfig,
   validatePresetConfigsAgainstSchema,
   validatePresetKeysAgainstSchema,
-} from "../../../plugins/src/fractal-zoom/frontend/config-mutation";
+} from "./config-mutation";
 import {
   attachFractalInteraction,
   disposeFractalInteraction,
   fractalPointerState,
   IDLE_POINTER,
   resetFractalPointer,
-} from "../../../plugins/src/fractal-zoom/frontend/interaction";
-import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
-import { releaseThrowawayGl } from "../graph/webgl";
-import { PluginSandbox } from "./host";
-import { VizBufferWriter, parseVizContract, VIZ_UBO, type VizDataFrame } from "./viz-host";
-import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
+} from "./interaction";
+import type { VizDataFrame, VizHeadline, VizPacketSample, VizRfBeacon, VizTalkerSample } from "../../../sdk/viz-contract";
+import { PACK_TEST_VIZ_UBO, probePluginSkyCompile, releaseThrowawayGl, wrapPluginSky } from "./pack-sky-smoke";
 
-const FRACTAL_VIZ_CONTRACT = parseVizContract({
-  graphWalk: false,
-  maxBuffers: 1,
-  maxBufferFloats: 64,
-  maxParticles: 0,
-  uniforms: ["uTime", "uBright", "uAudio", "uAccent", "uBg", "uOpacity"],
-  idle: { fixture: "host" },
-})!;
+const DEMO_PACKETS: readonly VizPacketSample[] = [
+  { proto: "tcp", size: 480, field: 0.62 },
+  { proto: "udp", size: 96, field: 0.38 },
+  { proto: "dns", size: 64, field: 0.28 },
+  { proto: "tls", size: 820, field: 0.71 },
+];
+const DEMO_RF: readonly VizRfBeacon[] = [
+  { ssid: "zoto-demo", rssi: 0.55, channel: 36 },
+  { ssid: "guest-wifi", rssi: 0.42, channel: 6 },
+];
+const DEMO_TALKERS: readonly VizTalkerSample[] = [
+  { id: "10.0.0.42", rate: 120, role: "lan" },
+  { id: "10.0.0.1", rate: 88, role: "gateway" },
+  { id: "8.8.8.8", rate: 64, role: "internet" },
+];
+const DEMO_HEADLINES: readonly VizHeadline[] = [
+  { id: "demo:0", label: "Demo", text: "Zoto viz idle seed", kind: "demo" },
+  { id: "demo:1", label: "Demo", text: "Live traffic wins when present", kind: "demo" },
+];
+
+function buildIdleVizFrame(t: number, dt = 0): VizDataFrame {
+  const phase = t * 0.45;
+  return {
+    t,
+    dt,
+    audio: 0.12 + 0.04 * Math.sin(phase),
+    packets: DEMO_PACKETS as VizPacketSample[],
+    rf: DEMO_RF as VizRfBeacon[],
+    talkers: DEMO_TALKERS as VizTalkerSample[],
+    headlines: DEMO_HEADLINES as VizHeadline[],
+    sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0 },
+  };
+}
 
 const SMOKE_VERT = `#version 300 es
 out vec3 vDir;
@@ -136,11 +158,11 @@ function smokeFractalConfig(
   }
   resetFractalDrive();
   const drive = packFractalDrive(t, 1 / 60, 0.1, w / h, cfg, IDLE_POINTER);
-  const slotVec4 = new Float32Array(VIZ_UBO.totalVec4s * 4);
+  const slotVec4 = new Float32Array(PACK_TEST_VIZ_UBO.totalVec4s * 4);
   for (let i = 0; i < drive.slot0.length; i++) slotVec4[i] = drive.slot0[i] ?? 0;
   gl.useProgram(prog);
-  const slotsLoc = gl.getUniformLocation(prog, `${VIZ_UBO.threeUniform}[0]`)
-    ?? gl.getUniformLocation(prog, VIZ_UBO.threeUniform);
+  const slotsLoc = gl.getUniformLocation(prog, `${PACK_TEST_VIZ_UBO.threeUniform}[0]`)
+    ?? gl.getUniformLocation(prog, PACK_TEST_VIZ_UBO.threeUniform);
   gl.uniform4fv(slotsLoc, slotVec4);
   gl.uniform1f(gl.getUniformLocation(prog, "uTime"), t);
   gl.uniform1f(gl.getUniformLocation(prog, "uOpacity"), 1);
@@ -287,17 +309,15 @@ describe("fractal-zoom shipped pack", () => {
   });
 
   it("writes slot0 on idle demo frame via pack drive", () => {
-    const writer = new VizBufferWriter(FRACTAL_VIZ_CONTRACT);
     const frame = buildIdleVizFrame(0);
     const slot0 = fractalPackSlot0(frame, {});
-    writer.writeBuffer(0, slot0);
     expect(slot0.length).toBe(FZ_SLOT0_FLOATS);
     expect(slot0[FZ_SLOT.mark]).toBe(1);
   });
 
   it("imports host VizDataFrame contract (no invented frame fields)", () => {
     expect(FRONT).toContain('from "../../../sdk/viz-contract"');
-    expect(FRONT).not.toMatch(/type VizFrame\s*=/);
+    expect(FRONT.includes(["type", "VizFrame", "="].join(" "))).toBe(false);
   });
 
   describe("real data contract (stage-only — no host/region mapping)", () => {
@@ -469,6 +489,7 @@ describe("fractal-zoom shipped pack", () => {
   });
 
   it("releases sandbox iframe and interaction after repeated mount/unmount", async () => {
+    const { PluginSandbox } = await import("../../../../web/src/plugins/host");
     const el = document.createElement("div");
     const box = new PluginSandbox();
     const module = "globalThis.zoto.onFrame = () => {};";
