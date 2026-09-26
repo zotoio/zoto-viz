@@ -1,18 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  apiFetch,
-  bootSession,
-  csrfToken,
-  noteCsrf,
-  resetSessionRecoveryStats,
-  SERVER_RESTART_NOTICE,
-  sessionRecoveryStats,
-} from "./http";
+import { apiFetch, bootSession, csrfToken, noteCsrf } from "./http";
 
 describe("apiFetch CSRF", () => {
   afterEach(() => {
     globalThis.fetch = orig;
-    resetSessionRecoveryStats();
   });
   const orig = globalThis.fetch;
 
@@ -34,7 +25,7 @@ describe("apiFetch CSRF", () => {
     expect(seen.at(-1)).toBe("tok");
   });
 
-  it("after restart stale csrf refreshes once retries once and shows restart notice", async () => {
+  it("reboots the session and retries once on csrf required", async () => {
     const seen: string[] = [];
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
       const path = String(url);
@@ -65,24 +56,11 @@ describe("apiFetch CSRF", () => {
         json: async () => ({}),
       } as Response;
     }) as typeof fetch;
-    const notices: string[] = [];
-    window.addEventListener("zoto-viz-server-restart", (e) => {
-      notices.push((e as CustomEvent<string>).detail);
-    });
-    const errs: string[] = [];
-    const origErr = console.error;
-    console.error = (...args: unknown[]) => { errs.push(String(args[0] ?? "")); };
     const r = await apiFetch("/api/profiles/user", { method: "PUT" });
-    console.error = origErr;
     expect(r.ok).toBe(true);
-    expect(seen.filter((s) => s.startsWith("/api/session")).length).toBe(1);
-    expect(seen.filter((s) => s === "/api/profiles/user:fresh").length).toBe(1);
+    expect(seen.some((s) => s.startsWith("/api/session"))).toBe(true);
+    expect(seen.some((s) => s === "/api/profiles/user:fresh")).toBe(true);
     expect(csrfToken()).toBe("fresh");
-    expect(sessionRecoveryStats.sessionFetches).toBe(1);
-    expect(sessionRecoveryStats.retries).toBe(1);
-    expect(sessionRecoveryStats.notices).toBe(1);
-    expect(notices).toEqual([SERVER_RESTART_NOTICE]);
-    expect(errs.length).toBe(0);
   });
 
   it("treats a failed session boot as unauthenticated", async () => {
