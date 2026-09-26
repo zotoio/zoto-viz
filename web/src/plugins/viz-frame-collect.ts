@@ -74,7 +74,7 @@ function talkersWithConnFailed(
       failGaugeScratch.set(d.ip, clamp01(d.conn_fail));
     }
   }
-  if (!any) return frameTalkers.map((t) => ({ ...t }));
+  if (!any) return [...frameTalkers];
   const out: VizTalkerSample[] = [];
   for (const t of frameTalkers) {
     const live = failGaugeScratch.get(t.id);

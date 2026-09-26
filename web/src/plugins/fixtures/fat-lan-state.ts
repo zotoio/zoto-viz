@@ -64,6 +64,7 @@ export function fatLanFixture(): StateMsg {
     },
     devices,
     flows,
+    host: { vizFrame: { links: false } },
     views: {
       wifi: {
         devices: devices.filter((d) => d.ssid),
