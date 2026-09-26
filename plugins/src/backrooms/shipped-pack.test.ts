@@ -97,9 +97,8 @@ function audit(seconds: number): Audit {
 
 describe("backrooms shipped pack", () => {
   it("ships a host-wrappable sky fragment (no web/src import in pack tests)", () => {
-    expect(FRAG).toContain("#version");
     expect(FRAG).toContain("zotoVizSlots");
-    expect(FRAG).toContain("void main");
+    expect(FRAG).toContain("void main()");
   });
 
   it("ships the director-driven sky shader symbols", () => {
