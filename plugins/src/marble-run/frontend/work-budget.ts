@@ -1,0 +1,47 @@
+/** Shape of visualisation.yml → workBudget (parsed for caps). */
+
+export type MarbleWorkBudget = {
+  maxDrawCalls: number;
+  maxTriangles: number;
+  maxInstances: number;
+  maxGpuBytes: number;
+  maxSimStepsPerFrame: number;
+  maxPacketsPerFrame: number;
+};
+
+const INT = /^\s*([a-zA-Z]+):\s*(\d+)\s*$/;
+
+/** Parse the workBudget block from visualisation.yml text. */
+export function parseMarbleWorkBudgetYaml(yaml: string): MarbleWorkBudget {
+  const start = yaml.indexOf("workBudget:");
+  if (start < 0) throw new Error("workBudget block missing");
+  const end = yaml.indexOf("\nconfig:", start);
+  const slice = end >= 0 ? yaml.slice(start, end) : yaml.slice(start);
+  const out: Record<string, number> = {};
+  for (const line of slice.split("\n")) {
+    const m = line.match(INT);
+    if (m) out[m[1]!] = Number(m[2]);
+  }
+  const req = ["maxDrawCalls", "maxTriangles", "maxInstances", "maxGpuBytes", "maxSimStepsPerFrame", "maxPacketsPerFrame"] as const;
+  for (const k of req) {
+    if (!Number.isFinite(out[k])) throw new Error(`workBudget.${k} missing`);
+  }
+  return out as MarbleWorkBudget;
+}
+
+/** Shipped workBudget block — must stay in sync with visualisation.yml (tests assert parity). */
+const SHIPPED_WORK_BUDGET_SNIPPET = `workBudget:
+  maxDrawCalls: 64
+  maxTriangles: 120000
+  maxInstances: 48
+  maxGpuBytes: 8388608
+  maxSimStepsPerFrame: 4
+  maxPacketsPerFrame: 8
+`;
+
+let cached: MarbleWorkBudget | null = null;
+
+export function marbleWorkBudget(): MarbleWorkBudget {
+  if (!cached) cached = parseMarbleWorkBudgetYaml(SHIPPED_WORK_BUDGET_SNIPPET);
+  return cached;
+}
