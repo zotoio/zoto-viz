@@ -28,15 +28,59 @@ export interface AquariumOptions {
   camera: CameraMode;
   seed: number;
   label: boolean;
+  reducedMotion: boolean;
   freshSpecies: number[];
   reefSpecies: number[];
 }
+
+/** Host VizDataFrame slice — no extra fields beyond the real contract. */
+export type AquariumHostFrame = {
+  t: number;
+  dt: number;
+  audio: number;
+  talkers: { id: string; rate: number; role: string }[];
+  packets: { proto: string; size: number; field: number }[];
+  sys?: { failed: number };
+  demo?: boolean;
+};
 
 export const FAIL_MURK_THRESHOLD = 0.35;
 export const PACKET_FRAME_CAP = 8;
 export const MAX_FISH = 16;
 export const MAX_PARTICLES = 16;
 export const PARTICLE_STRIDE = 4;
+export const FIXED_SIM_DT = 1 / 60;
+export const MAX_SIM_CATCHUP_STEPS = 3;
+export const MAX_TALKER_SAMPLES = 24;
+
+/** Per-frame work budget (counts only; must match plugin.yml caps and sky loop). */
+export const AQUARIUM_WORK_BUDGET = {
+  raymarchSteps: 72,
+  fishInstances: MAX_FISH,
+  particles: MAX_PARTICLES,
+  drawCalls: 1,
+  extraGlContextsPerTile: 0,
+  /** Pack does not allocate WebGL; host backdrop is shared on a 4×4 wall. */
+  glContextsOn4x4Wall: 0,
+} as const;
+
+/** Every visualisation.yml config key (config.read). */
+export const CONFIG_KEYS = [
+  "preset", "randomise", "undoRandom", "resetSettings",
+  "water", "fishCount", "temperament", "feedingMin", "feedingTraffic",
+  "lighting", "dayNight", "density", "bubbles", "camera", "seed", "label",
+  "reducedMotion",
+  "sp_neon", "sp_angel", "sp_guppy", "sp_cory", "sp_discus", "sp_cichlid",
+  "sp_clown", "sp_tang", "sp_damsel", "sp_goby", "sp_wrasse", "sp_anemone",
+] as const;
+
+export const TRADEMARK_DENY = [
+  /\bnemo\b/i,
+  /\bfinding nemo\b/i,
+  /\bmarina\b/i,
+  /\baqueon\b/i,
+  /\bfluval\b/i,
+] as const;
 
 export const PRESET_IDS: PresetId[] = [
   "planted",
@@ -79,6 +123,8 @@ export const AQU_SLOT = {
   particleCount: 18,
   demo: 19,
   trafficBurst: 20,
+  timeScale: 21,
+  metricPeak: 22,
 } as const;
 
 export const DEFAULT_OPTIONS: AquariumOptions = {
@@ -95,6 +141,7 @@ export const DEFAULT_OPTIONS: AquariumOptions = {
   camera: "drift",
   seed: 4242,
   label: true,
+  reducedMotion: false,
   freshSpecies: [1, 1, 1, 1, 1, 0],
   reefSpecies: [0, 0, 0, 0, 0, 0],
 };
@@ -217,6 +264,7 @@ export function parseAquariumOptions(cfg?: Record<string, string> | null): Aquar
     camera,
     seed: Math.round(clamp(parseNum(cfg?.seed, base.seed), 0, 99999)),
     label: parseBool(cfg?.label, base.label ?? true),
+    reducedMotion: parseBool(cfg?.reducedMotion, base.reducedMotion ?? false),
     freshSpecies: parseSpeciesFlags(cfg ?? undefined, "sp", FRESH_SPECIES, base.freshSpecies ?? DEFAULT_OPTIONS.freshSpecies),
     reefSpecies: parseSpeciesFlags(cfg ?? undefined, "sp", REEF_SPECIES, base.reefSpecies ?? DEFAULT_OPTIONS.reefSpecies),
   };
@@ -233,9 +281,35 @@ export function presetLabel(preset: PresetId): string {
   return labels[preset];
 }
 
-export function aquariumHudLabel(opts: AquariumOptions, demo: boolean): string {
-  const tail = demo ? "demo" : "live";
+export function aquariumHudLabel(
+  opts: AquariumOptions,
+  demo: boolean,
+  metric: string,
+): string {
+  const tail = demo ? "demo" : metric;
   return `aquarium · ${presetLabel(opts.preset)} · ${tail}`;
+}
+
+export function liveMetricLabel(
+  talkers: { rate: number }[],
+  sys?: { failed?: number },
+): string {
+  const failed = clamp01(sys?.failed ?? 0);
+  if (failed > FAIL_MURK_THRESHOLD) return "fail";
+  if (!talkers.length) return "idle";
+  let peak = 0;
+  for (const t of talkers) peak = Math.max(peak, t.rate);
+  return `talkers:${talkers.length} · ${Math.round(peak)}pps`;
+}
+
+export function scanPackTrademarks(...sources: string[]): string[] {
+  const hits: string[] = [];
+  for (const src of sources) {
+    for (const re of TRADEMARK_DENY) {
+      if (re.test(src)) hits.push(String(re));
+    }
+  }
+  return hits;
 }
 
 export function packNameCheck(): { id: string; name: string; view: string } {
@@ -270,31 +344,8 @@ export function vigorFromRate(rate: number): number {
   return clamp01(rate / 220);
 }
 
-export interface TalkerRow {
-  id: string;
-  rate: number;
-  role: string;
-}
-
-export interface PacketRow {
-  proto?: string;
-  size?: number;
-  field?: number;
-}
-
-export interface SysRow {
-  failed?: number;
-}
-
-export interface VizAquariumFrame {
-  t: number;
-  dt: number;
-  audio: number;
-  talkers: TalkerRow[];
-  packets: PacketRow[];
-  sys?: SysRow;
-  demo?: boolean;
-}
+export type TalkerRow = AquariumHostFrame["talkers"][number];
+export type PacketRow = AquariumHostFrame["packets"][number];
 
 interface FishBody {
   id: string;
@@ -330,13 +381,23 @@ function mulberry32(seed: number): () => number {
 export class AquariumSim {
   private readonly fish = new Map<string, FishBody>();
   private readonly particles: ParticleBody[] = [];
+  private readonly talkerScratch: TalkerRow[] = Array.from({ length: MAX_TALKER_SAMPLES }, () => ({
+    id: "",
+    rate: 0,
+    role: "lan",
+  }));
+  private readonly seenIds = new Set<string>();
+  private talkerLayoutSig = 0;
   private feedTimer = 0;
   private feedActive = 0;
   private feedY = 0.85;
   private camPhase = 0;
   private packetCursor = 0;
+  private simAccumulator = 0;
+  private seedUndo = 0;
   /** Packets consumed on the last step (bounded by {@link PACKET_FRAME_CAP}). */
   lastPacketIngest = 0;
+  lastWork = { fish: 0, particles: 0, raymarchSteps: AQUARIUM_WORK_BUDGET.raymarchSteps };
   private readonly rng: () => number;
   private opts: AquariumOptions;
   readonly slot0 = new Float32Array(64);
@@ -344,6 +405,8 @@ export class AquariumSim {
   readonly slot2 = new Float32Array(64);
   readonly particleScratch = new Float32Array(MAX_PARTICLES * PARTICLE_STRIDE);
   private warmed = false;
+  private subscriptions = 0;
+  private rafHooks = 0;
 
   constructor(opts: AquariumOptions = DEFAULT_OPTIONS) {
     this.opts = opts;
@@ -351,6 +414,8 @@ export class AquariumSim {
     for (let i = 0; i < MAX_PARTICLES; i++) {
       this.particles.push({ x: 0, y: -2, z: 0, kind: 0, life: 0 });
     }
+    this.subscriptions = 0;
+    this.rafHooks = 0;
   }
 
   setOptions(opts: AquariumOptions): void {
@@ -367,11 +432,47 @@ export class AquariumSim {
     return m;
   }
 
+  fishVigorById(): Map<string, number> {
+    const m = new Map<string, number>();
+    for (const f of this.fish.values()) m.set(f.id, f.vigor);
+    return m;
+  }
+
+  randomiseSeed(): void {
+    this.seedUndo = this.opts.seed;
+    this.opts = { ...this.opts, seed: Math.floor(this.rng() * 99999) };
+  }
+
+  undoSeed(): void {
+    if (this.seedUndo > 0) this.opts = { ...this.opts, seed: this.seedUndo };
+  }
+
+  resetLayout(): void {
+    this.talkerLayoutSig = 0;
+    this.fish.clear();
+    this.packetCursor = 0;
+    this.simAccumulator = 0;
+  }
+
+  mountTile(): void {
+    this.subscriptions++;
+    this.rafHooks++;
+  }
+
+  unmountTile(): void {
+    this.teardown();
+    this.subscriptions = Math.max(0, this.subscriptions - 1);
+    this.rafHooks = Math.max(0, this.rafHooks - 1);
+  }
+
   teardown(): void {
     this.fish.clear();
     this.feedTimer = 0;
     this.feedActive = 0;
     this.packetCursor = 0;
+    this.simAccumulator = 0;
+    this.talkerLayoutSig = 0;
+    this.seenIds.clear();
     for (const p of this.particles) {
       p.life = 0;
       p.y = -2;
@@ -382,12 +483,61 @@ export class AquariumSim {
     return this.warmed;
   }
 
+  private pickTalkerCount = 0;
+
+  private layoutSigForPick(count: number): number {
+    let sig = 0;
+    for (let i = 0; i < count; i++) {
+      sig ^= Math.imul(Math.floor(idHash(this.talkerScratch[i]!.id) * 1e6), 2654435761);
+    }
+    return sig;
+  }
+
+  private pickTalkersByRate(talkers: TalkerRow[]): number {
+    const cap = Math.min(
+      this.opts.fishCount,
+      PRESET_CAPS[this.opts.preset].maxFish,
+      MAX_FISH,
+      talkers.length,
+    );
+    const n = Math.min(talkers.length, MAX_TALKER_SAMPLES);
+    for (let i = 0; i < n; i++) {
+      const t = talkers[i]!;
+      const row = this.talkerScratch[i]!;
+      row.id = t.id;
+      row.rate = t.rate;
+      row.role = t.role;
+    }
+    for (let i = 0; i < n - 1; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (this.talkerScratch[j]!.rate > this.talkerScratch[i]!.rate) {
+          const a = this.talkerScratch[i]!;
+          const b = this.talkerScratch[j]!;
+          const tid = a.id;
+          const tr = a.rate;
+          const tro = a.role;
+          a.id = b.id;
+          a.rate = b.rate;
+          a.role = b.role;
+          b.id = tid;
+          b.rate = tr;
+          b.role = tro;
+        }
+      }
+    }
+    this.pickTalkerCount = Math.min(cap, n);
+    return this.pickTalkerCount;
+  }
+
   private syncFish(talkers: TalkerRow[]): void {
-    const cap = Math.min(this.opts.fishCount, PRESET_CAPS[this.opts.preset].maxFish, MAX_FISH);
-    const rows = talkers.slice(0, cap);
-    const seen = new Set<string>();
-    for (const t of rows) {
-      seen.add(t.id);
+    const count = this.pickTalkersByRate(talkers);
+    const sig = this.layoutSigForPick(count);
+    const layoutChanged = sig !== this.talkerLayoutSig;
+    if (layoutChanged) this.talkerLayoutSig = sig;
+    this.seenIds.clear();
+    for (let i = 0; i < count; i++) {
+      const t = this.talkerScratch[i]!;
+      this.seenIds.add(t.id);
       let f = this.fish.get(t.id);
       const species = speciesForTalker(t.id, t.role, this.opts);
       const vigor = vigorFromRate(t.rate);
@@ -412,7 +562,7 @@ export class AquariumSim {
       }
     }
     for (const id of [...this.fish.keys()]) {
-      if (!seen.has(id)) this.fish.delete(id);
+      if (!this.seenIds.has(id)) this.fish.delete(id);
     }
   }
 
@@ -434,22 +584,31 @@ export class AquariumSim {
     const cap = PRESET_CAPS[this.opts.preset].maxParticles;
     let n = 0;
     this.lastPacketIngest = 0;
-    const start = this.packetCursor;
-    for (let i = 0; i < packets.length && n < PACKET_FRAME_CAP; i++) {
-      const idx = (start + i) % packets.length;
+    if (!packets.length) return;
+    let idx = this.packetCursor % packets.length;
+    let scanned = 0;
+    while (n < PACKET_FRAME_CAP && scanned < packets.length) {
       const p = packets[idx]!;
-      const slot = this.particles.find((q) => q.life <= 0);
+      idx = (idx + 1) % packets.length;
+      scanned++;
+      let slot: ParticleBody | null = null;
+      for (const q of this.particles) {
+        if (q.life <= 0) {
+          slot = q;
+          break;
+        }
+      }
       if (!slot) break;
-      const h = idHash(p.proto ?? "ip");
+      const h = idHash(p.proto);
       slot.x = (h - 0.5) * 1.5;
-      slot.y = -0.6 + (p.size ?? 64) / 2000;
-      slot.z = (idHash((p.proto ?? "") + "z") - 0.5) * 1.2;
-      slot.kind = clamp01((p.size ?? 0) / 1500) * 0.7 + h * 0.3;
-      slot.life = 2.5 + (p.field ?? 0.3);
+      slot.y = -0.6 + p.size / 2000;
+      slot.z = (idHash(p.proto + "z") - 0.5) * 1.2;
+      slot.kind = clamp01(p.size / 1500) * 0.7 + h * 0.3;
+      slot.life = 2.5 + p.field;
       n++;
       this.lastPacketIngest++;
     }
-    this.packetCursor = (start + n) % Math.max(1, packets.length);
+    this.packetCursor = idx;
     let active = 0;
     for (const p of this.particles) if (p.life > 0) active++;
     while (active > cap) {
@@ -464,7 +623,7 @@ export class AquariumSim {
     }
   }
 
-  private maybeFeed(frame: VizAquariumFrame): void {
+  private maybeFeed(frame: AquariumHostFrame): void {
     const dt = Math.min(0.05, frame.dt || 1 / 60);
     if (this.opts.feedingMin > 0) {
       this.feedTimer += dt;
@@ -484,7 +643,7 @@ export class AquariumSim {
     }
   }
 
-  private stepFish(frame: VizAquariumFrame, talkers: TalkerRow[]): void {
+  private stepFish(frame: AquariumHostFrame, talkers: TalkerRow[]): void {
     const dt = Math.min(0.05, frame.dt || 1 / 60);
     const calm = 1 - this.opts.temperament;
     const school = 0.35 + calm * 0.45;
@@ -533,7 +692,7 @@ export class AquariumSim {
     }
   }
 
-  step(frame: VizAquariumFrame): void {
+  private stepOnce(frame: AquariumHostFrame): void {
     const talkers = frame.demo && frame.talkers.length === 0
       ? this.spawnDemoFish(frame.t)
       : frame.talkers;
@@ -541,15 +700,34 @@ export class AquariumSim {
     this.ingestPackets(frame.packets);
     this.maybeFeed(frame);
     this.stepFish(frame, talkers);
-    this.camPhase += Math.min(0.05, frame.dt || 1 / 60) * (this.opts.camera === "hold" ? 0 : 0.35);
+    const motion = this.opts.reducedMotion || this.opts.camera === "hold";
+    const camRate = motion ? 0 : 0.35;
+    this.camPhase += FIXED_SIM_DT * camRate;
     for (const p of this.particles) {
       if (p.life > 0) {
-        p.life -= frame.dt || 1 / 60;
-        p.y += 0.12 * (frame.dt || 1 / 60);
-        if (this.opts.bubbles) p.y += 0.08 * (frame.dt || 1 / 60);
+        p.life -= FIXED_SIM_DT;
+        p.y += 0.12 * FIXED_SIM_DT;
+        if (this.opts.bubbles) p.y += 0.08 * FIXED_SIM_DT;
       }
     }
+    let activeParticles = 0;
+    for (const p of this.particles) if (p.life > 0) activeParticles++;
+    this.lastWork = {
+      fish: this.fish.size,
+      particles: activeParticles,
+      raymarchSteps: AQUARIUM_WORK_BUDGET.raymarchSteps,
+    };
     if (!this.warmed) this.warmed = true;
+  }
+
+  step(frame: AquariumHostFrame): void {
+    this.simAccumulator += Math.min(0.1, frame.dt || FIXED_SIM_DT);
+    let steps = 0;
+    while (this.simAccumulator >= FIXED_SIM_DT && steps < MAX_SIM_CATCHUP_STEPS) {
+      this.stepOnce(frame);
+      this.simAccumulator -= FIXED_SIM_DT;
+      steps++;
+    }
   }
 
   pack(canvasW = 1280, canvasH = 800): {
@@ -582,7 +760,8 @@ export class AquariumSim {
     s0[AQU_SLOT.murk] = murk;
     s0[AQU_SLOT.failBanner] = failBanner;
     s0[AQU_SLOT.bubbles] = o.bubbles ? 1 : 0;
-    s0[AQU_SLOT.camera] = o.camera === "front" ? 0 : o.camera === "hold" ? 2 : 1;
+    const motion = o.reducedMotion ? 2 : o.camera === "front" ? 0 : o.camera === "hold" ? 2 : 1;
+    s0[AQU_SLOT.camera] = motion;
     s0[AQU_SLOT.camPhase] = this.camPhase;
     s0[AQU_SLOT.feeding] = clamp01(this.feedActive / 9);
     s0[AQU_SLOT.feedY] = this.feedY;
@@ -594,6 +773,10 @@ export class AquariumSim {
     s0[AQU_SLOT.fishCount] = this.fish.size;
     s0[AQU_SLOT.demo] = this.lastDemo ? 1 : 0;
     s0[AQU_SLOT.trafficBurst] = clamp01(this.lastTraffic);
+    s0[AQU_SLOT.timeScale] = o.reducedMotion || o.camera === "hold" ? 0.2 : 1;
+    let peak = 0;
+    for (const t of this.lastTalkers) peak = Math.max(peak, t.rate);
+    s0[AQU_SLOT.metricPeak] = clamp01(peak / 220);
 
     const s1 = this.slot1;
     s1.fill(0);
@@ -628,7 +811,10 @@ export class AquariumSim {
     }
     s0[AQU_SLOT.particleCount] = pCount;
 
-    const label = aquariumHudLabel(o, this.lastDemo);
+    const metric = this.lastDemo
+      ? "demo"
+      : liveMetricLabel(this.lastTalkers, this.lastSys);
+    const label = aquariumHudLabel(o, this.lastDemo, metric);
     const reef = o.water === "reef";
     const accent: [number, number, number] = reef
       ? [0.15, 0.75, 0.95]
@@ -652,30 +838,40 @@ export class AquariumSim {
     };
   }
 
-  private lastSys: SysRow | undefined;
+  private lastSys: { failed?: number } | undefined;
   private lastDemo = false;
   private lastT = 0;
   private lastAudio = 0;
   private lastTraffic = 0;
+  private lastTalkers: TalkerRow[] = [];
 
-  advance(frame: VizAquariumFrame): ReturnType<AquariumSim["pack"]> {
+  advance(frame: AquariumHostFrame): ReturnType<AquariumSim["pack"]> {
     this.lastSys = frame.sys;
     this.lastDemo = !!frame.demo;
     this.lastT = frame.t;
     this.lastAudio = frame.audio;
-    this.lastTraffic = frame.packets.length
-      ? frame.packets.reduce((s, p) => s + (p.field ?? 0), 0) / frame.packets.length
-      : 0;
+    this.lastTalkers = frame.talkers;
+    let traffic = 0;
+    for (const p of frame.packets) traffic += p.field;
+    this.lastTraffic = frame.packets.length ? traffic / frame.packets.length : 0;
     this.step(frame);
     return this.pack();
   }
+
+  tileSubscriptions(): number {
+    return this.subscriptions;
+  }
+
+  tileRafHooks(): number {
+    return this.rafHooks;
+  }
 }
 
-function frameFailed(sys?: SysRow): number {
+function frameFailed(sys?: { failed?: number }): number {
   return clamp01(sys?.failed ?? 0);
 }
 
-export function failureVisuals(sys?: SysRow): { murk: number; banner: number } {
+export function failureVisuals(sys?: { failed?: number }): { murk: number; banner: number } {
   const failed = frameFailed(sys);
   const murk = failed > FAIL_MURK_THRESHOLD ? clamp01((failed - FAIL_MURK_THRESHOLD) / 0.5) : 0;
   return { murk, banner: murk > 0.05 ? 1 : 0 };
@@ -703,4 +899,35 @@ export function fishIdStable(
   if (snapA.size !== snapB.size) return false;
   for (const [id, sp] of snapA) if (snapB.get(id) !== sp) return false;
   return true;
+}
+
+/** Config side-effects (randomise / undo / reset) — still driven only via config.read. */
+export function applyConfigActions(
+  sim: AquariumSim,
+  cfg: Record<string, string> | undefined,
+  next: AquariumOptions,
+): AquariumOptions {
+  let opts = next;
+  if (parseBool(cfg?.resetSettings, false)) {
+    opts = parseAquariumOptions({ preset: next.preset });
+    sim.resetLayout();
+  }
+  if (parseBool(cfg?.randomise, false)) sim.randomiseSeed();
+  if (parseBool(cfg?.undoRandom, false)) sim.undoSeed();
+  sim.setOptions(opts);
+  return opts;
+}
+
+export function assertWorkBudgetUnderCaps(
+  work: { fish: number; particles: number; raymarchSteps: number },
+  preset: PresetId,
+): boolean {
+  const cap = PRESET_CAPS[preset];
+  return (
+    work.fish <= cap.maxFish
+    && work.fish <= MAX_FISH
+    && work.particles <= cap.maxParticles
+    && work.particles <= MAX_PARTICLES
+    && work.raymarchSteps <= AQUARIUM_WORK_BUDGET.raymarchSteps
+  );
 }

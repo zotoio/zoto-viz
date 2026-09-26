@@ -2,14 +2,14 @@
 
 import {
   AquariumSim,
-  DEFAULT_OPTIONS,
+  applyConfigActions,
   parseAquariumOptions,
+  type AquariumHostFrame,
   type AquariumOptions,
-  type VizAquariumFrame,
 } from "./aquarium";
 
 declare const zoto: {
-  onFrame: ((frame: VizAquariumFrame) => void) | null;
+  onFrame: ((frame: AquariumHostFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[] | Float32Array) => void;
@@ -19,6 +19,7 @@ declare const zoto: {
 
 let options: AquariumOptions = parseAquariumOptions(zoto.getConfig?.());
 const sim = new AquariumSim(options);
+sim.mountTile();
 
 const buf0 = new Float32Array(64);
 const buf1 = new Float32Array(64);
@@ -38,8 +39,8 @@ function canvasSize(): { w: number; h: number } {
 }
 
 zoto.onConfig = (cfg) => {
-  options = parseAquariumOptions(cfg);
-  sim.setOptions(options);
+  const next = parseAquariumOptions(cfg);
+  options = applyConfigActions(sim, cfg, next);
 };
 
 zoto.onFrame = (frame) => {

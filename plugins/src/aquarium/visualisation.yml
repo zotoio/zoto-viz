@@ -24,6 +24,21 @@ config:
       - [night_reef, Night Reef]
     default: planted
     hint: Applies water type, species mix, temperament, and per-preset fish/particle caps.
+  - key: randomise
+    label: randomise seed
+    type: boolean
+    default: false
+    hint: "Pick a new decor seed (use undo to restore)."
+  - key: undoRandom
+    label: undo randomise
+    type: boolean
+    default: false
+    hint: Restore the previous seed after randomise.
+  - key: resetSettings
+    label: reset to preset defaults
+    type: boolean
+    default: false
+    hint: Reset all knobs to the selected preset defaults.
   - key: water
     label: water
     type: select
@@ -109,7 +124,12 @@ config:
     label: HUD label
     type: boolean
     default: true
-    hint: "aquarium · preset · demo/live under the tank."
+    hint: "On-tile label aquarium · preset · metric (demo or talkers/pps)."
+  - key: reducedMotion
+    label: reduced motion
+    type: boolean
+    default: false
+    hint: Wide hold shot, no camera drift, softer water motion.
   - key: sp_neon
     label: neon tetra
     type: boolean

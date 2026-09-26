@@ -169,6 +169,11 @@ void main() {
   float feedY = slotF(0, 11.0);
   float sw = max(slotF(0, 12.0), 640.0);
   float sh = max(slotF(0, 13.0), 360.0);
+  float labelOn = slotF(0, 14.0);
+  float presetNorm = slotF(0, 15.0);
+  float timeScale = max(slotF(0, 21.0), 0.05);
+  float metricPeak = slotF(0, 22.0);
+  float simTime = uTime * timeScale;
 
   vec3 ro = getCam(camMode, camPhase);
   vec3 dir = normalize(vDir);
@@ -200,7 +205,7 @@ void main() {
   }
 
   vec3 pFloor = ro + dir * 2.1;
-  float caust = fbm(pFloor * vec3(2.0, 0.2, 2.0) + sun.xy * uTime * 0.4);
+  float caust = fbm(pFloor * vec3(2.0, 0.2, 2.0) + sun.xy * simTime * 0.4);
   col += vec3(0.35, 0.75, 0.95) * caust * 0.12 * day * (1.0 - murk);
 
   float beam = pow(max(0.0, dot(dir, sun)), 6.0) * (0.25 + day * 0.35);
@@ -209,7 +214,7 @@ void main() {
   if (bubblesOn > 0.5) {
     for (int j = 0; j < 8; j++) {
       float fj = float(j);
-      vec3 bp = vec3(sin(fj * 2.4 + uTime * 0.5) * 0.7, -0.7 + fract(uTime * 0.15 + fj * 0.13), cos(fj * 1.9) * 0.6);
+      vec3 bp = vec3(sin(fj * 2.4 + simTime * 0.5) * 0.7, -0.7 + fract(simTime * 0.15 + fj * 0.13), cos(fj * 1.9) * 0.6);
       float db = length(ro + dir * dist * 0.5 - bp) - 0.02;
       col += vec3(0.85, 0.95, 1.0) * exp(-db * 90.0) * 0.35;
     }
@@ -241,5 +246,11 @@ void main() {
 
   col *= uBright * (0.65 + uAudio * 0.25 + day * 0.2);
   col = mix(col, uBg, 0.08);
+  if (labelOn > 0.5) {
+    float band = smoothstep(0.08, 0.0, abs(uv.y + 0.42));
+    vec3 ink = mix(vec3(0.1, 0.85, 0.75), vec3(0.95, 0.2, 0.25), fail);
+    col = mix(col, ink * (0.35 + presetNorm * 0.35 + metricPeak * 0.3), band * 0.85);
+  }
+  col = min(col, vec3(0.98));
   fragColor = vec4(col, uOpacity);
 }
