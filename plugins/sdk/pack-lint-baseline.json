@@ -103,11 +103,6 @@
     {
       "file": "web/src/app/main.ts",
       "rule": "host-imports-pack-src",
-      "target": "plugins/src/backrooms/frontend/director.ts"
-    },
-    {
-      "file": "web/src/app/main.ts",
-      "rule": "host-imports-pack-src",
       "target": "plugins/src/hn-rain/frontend/crawl.ts"
     },
     {

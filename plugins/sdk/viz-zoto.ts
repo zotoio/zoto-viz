@@ -2,11 +2,10 @@
  * Sandbox `globalThis.zoto` API for viz plugin packs (iframe after host SDK boots).
  * Import with `import type` only — never bundle as a runtime dependency.
  *
- * Later host contract additions (e.g. `setConfig` in #36, `onPresent` in #37) extend
- * this interface in place; do not add parallel type files.
+ * Host contract additions extend this interface in place; do not add parallel type files.
  */
 
-import type { VizDataFrame } from "./viz-contract";
+import type { VizDataFrame, VizPresentTick } from "./viz-contract";
 
 export type VizZotoUniformValue = number | [number, number, number];
 
@@ -14,6 +13,8 @@ export interface VizZoto {
   onTick: ((nodes: { id: string; rate: number; role: string }[]) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   onFrame: ((frame: VizDataFrame) => void) | null;
+  /** When `viz.presentTick` is true — one tick per sandbox per display frame. */
+  onPresent: ((tick: VizPresentTick) => void) | null;
   setStyle?: (s: Record<string, unknown>) => void;
   setNodeColor?: (id: string, hex: number) => void;
   writeBuffer: (slot: number, data: number[] | Float32Array) => void;

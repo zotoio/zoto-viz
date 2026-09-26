@@ -12,7 +12,6 @@ window.zoto = {
   onTick: null,
   onConfig: null,
   onFrame: null,
-  /** @type {((tick: { frameMs: number, tileId: string, pluginClock?: number }) => void)|null} tileId meaning undecided (sandbox-per-tile TBD). */
   onPresent: null,
   setStyle(s) { if (allowed.has("graph.style")) send("setStyle", s); },
   setNodeColor(id, hex) { if (allowed.has("graph.style")) send("setNodeColor", { id, hex }); },

@@ -4,7 +4,7 @@ Shared types and helpers for pack authors and CI guardrails.
 
 ## Sandbox `zoto` object
 
-Packs run in a CSP sandbox iframe. After the host boots the SDK, `globalThis.zoto` implements **`VizZoto`** (`viz-zoto.ts`): config callbacks, frame/tick handlers, buffer/uniform writes, and optional `getConfig()`.
+Packs run in a CSP sandbox iframe. After the host boots the SDK, `globalThis.zoto` implements **`VizZoto`** (`viz-zoto.ts`): config callbacks, frame/tick/present handlers, buffer/uniform writes, and optional `getConfig()`.
 
 ```ts
 import type { VizZoto } from "./viz-zoto";
