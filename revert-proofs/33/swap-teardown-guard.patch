@@ -1,0 +1,15 @@
+diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
+index 7f6a113..a05822f 100644
+--- a/web/src/app/switch-pane-view.ts
++++ b/web/src/app/switch-pane-view.ts
+@@ -125,9 +125,7 @@ export async function switchPaneView(
+       return { ok: false, reason: msg };
+     }
+     const tilesAfterSwap = nextPaneTiles(tilesBeforeSwap, slot.fromViewId, slot.toViewId);
+-    if (!tilesAfterSwap.includes(slot.fromViewId)) {
+-      opts.teardownView(slot.fromViewId);
+-    }
++    opts.teardownView(slot.fromViewId);
+   }
+ 
+   if (paneSwitchStale(slot.paneId, token)) {
