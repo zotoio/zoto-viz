@@ -4023,6 +4023,7 @@ export class NetScene implements HostedView {
     window.removeEventListener("pointercancel", this.onCamPtrLost);
     this.pulse.disable();
     this.layout.dispose();
+    this.fabric.dispose();
     this.arrows.geometry.dispose();
     (this.arrows.material as THREE.Material).dispose();
     this.lumaProbe.reset();

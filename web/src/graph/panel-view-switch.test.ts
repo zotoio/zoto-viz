@@ -16,6 +16,56 @@ describe("mosaic panel view switch teardown", () => {
     resetPanelViewLifecycle();
   });
 
+  it("emits no securitypolicyviolation during 20 back-and-forth pane view swaps", () => {
+    const violations: Event[] = [];
+    const onViolation = (e: Event) => violations.push(e);
+    document.addEventListener("securitypolicyviolation", onViolation);
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { value: 800, configurable: true });
+    Object.defineProperty(wall, "clientHeight", { value: 600, configurable: true });
+    const sceneEl = document.createElement("div");
+    Object.defineProperty(sceneEl, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(sceneEl, "clientHeight", { value: 300, configurable: true });
+    const host = new RenderHost(wall, { software: true });
+    const main = new NetScene(sceneEl, { host });
+    main.retargetPanel("plugin:topology");
+    const mosaic = new Mosaic({
+      wall,
+      sceneEl,
+      main,
+      host,
+      arcade: {},
+      optsFor: () => ({}),
+      onFocus: () => {},
+      onPromote: () => {},
+      onLayout: () => {},
+      onCloseLast: () => {},
+      sync: () => ({
+        theme: themeById("midnight"),
+        filters: {},
+        anim: DEFAULT_DREAM,
+        dreaming: false,
+        nodeFilter: () => true,
+        lastMsg: null,
+        aliasMap: new Map(),
+      }),
+    });
+    mosaic.setSize("2", "plugin:topology", "off", {
+      tiles: ["plugin:topology", "plugin:wifi"],
+    });
+    let active = "plugin:topology";
+    let other = "plugin:talkers";
+    for (let i = 0; i < 20; i++) {
+      mosaic.setPaneView(active, other);
+      [active, other] = [other, active];
+    }
+    document.removeEventListener("securitypolicyviolation", onViolation);
+    expect(violations).toHaveLength(0);
+    host.dispose();
+    main.dispose();
+    wall.remove();
+  });
+
   it("keeps one rAF lease on the active tile after 20 back-and-forth view swaps", () => {
     const wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { value: 800, configurable: true });
