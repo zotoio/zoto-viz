@@ -325,7 +325,6 @@ export class PluginSandbox {
     config: Record<string, string>,
     viz?: VizPluginContract,
   ): Promise<void> {
-    clearPackNavigationStopped(this.activeTileId);
     this.frameId = await openPackAssetFrame(this.activeTileId);
     activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
     const bootOut = { nonce: "" };

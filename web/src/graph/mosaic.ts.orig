@@ -269,9 +269,6 @@ export class Mosaic {
     hero: HeroPos = "off",
     stored?: { tree?: MosaicNode | null; maximized?: string | null; tiles?: string[] },
   ): void {
-    if (this.on) {
-      for (const id of this.tileIds) clearPackNavigationStopped(id);
-    }
     if (size === "off") {
       this.teardown();
       this.restoreSolo();
@@ -449,6 +446,9 @@ export class Mosaic {
   }
 
   assignViews(tiles: string[]): void {
+    for (const id of this.tileIds) {
+      clearPackNavigationStopped(id);
+    }
     if (!this.tree) return;
     const want = parseMosaicTiles(tiles);
     if (want.join("\0") === this.tileIds.join("\0")) return;

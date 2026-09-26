@@ -8,6 +8,8 @@ import {
   tileReconnectingNotice,
 } from "./pack-asset-frame";
 import {
+  forgetPackNavigationNoticeRetired,
+  packNavigationNoticeRetired,
   packNavigationStoppedForTile,
   packNavigationStoppedNotice,
 } from "./pack-asset-navigation";
@@ -191,6 +193,11 @@ export function applyPackFeedPaneNotice(
   packName: string | null | undefined,
 ): void {
   if (!mosaic) return;
+  if (!packNavigationStoppedForTile(tileId) && packNavigationNoticeRetired(tileId)) {
+    forgetPackNavigationNoticeRetired(tileId);
+    feedNoticeShown.delete(tileId);
+    mosaic.setPaneNotice(tileId, null);
+  }
   const label = packName ?? "";
   if (label && !isActivePackLoad(tileId, label)) {
     if (feedNoticeShown.delete(tileId)) mosaic.setPaneNotice(tileId, null);

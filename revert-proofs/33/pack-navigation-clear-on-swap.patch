@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/pack-asset-frame.ts b/web/src/plugins/pack-asset-frame.ts
+--- a/web/src/plugins/pack-asset-frame.ts
++++ b/web/src/plugins/pack-asset-frame.ts
+@@ -106,8 +106,7 @@ export function beginActivePackLoad(tileId: string, packName: string): void {
+ export function beginActivePackLoad(tileId: string, packName: string): void {
+   const prev = activePackByTile.get(tileId);
+   if (prev && prev !== packName) {
+-    clearPackNavigationStopped(tileId);
+     abortPackAssetRebuildForTile(tileId, prev);
+     tileRebuild.delete(rebuildAttemptKey(tileId, prev));
+   }
+   activePackByTile.set(tileId, packName);

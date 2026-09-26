@@ -625,6 +625,8 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   }
   const tileId = "main";
   const packLabel = spec.name ?? spec.id;
+  const { beginUserPackLoadSession } = await import("../plugins/pack-asset-navigation");
+  beginUserPackLoadSession(tileId);
   sandbox.setActivePackLabel(packLabel);
   setTileExpectsVizFeed(tileId, !!(spec.capabilities?.includes("viz.read") || spec.capabilities?.includes("viz.write")));
   clearTilePackFeed(tileId);
