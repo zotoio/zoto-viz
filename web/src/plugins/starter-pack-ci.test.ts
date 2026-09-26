@@ -101,7 +101,8 @@ from service import paths
 
 home = Path(${JSON.stringify(zotoHome)})
 import os
-os.environ["ZOTO_VIZ_HOME"] = str(home)
+plugin_local = home / "plugins" / "local"
+os.environ["ZOTO_VIZ_PLUGIN_LOCAL"] = str(plugin_local)
 plugins.reset_bundles()
 pack_id = ${JSON.stringify(SHIPPED_PACK_ID)}
 src = Path(${JSON.stringify(packSrc)})
@@ -125,7 +126,11 @@ print(runtime)
   const runtime = execFileSync("python3", ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
-    env: { ...process.env, ZOTO_VIZ_HOME: zotoHome, PYTHONPATH: repoRoot },
+    env: {
+      ...process.env,
+      ZOTO_VIZ_PLUGIN_LOCAL: path.join(zotoHome, "plugins", "local"),
+      PYTHONPATH: repoRoot,
+    },
   }).trim();
   const entry = resolveFrontendEntry(runtime);
   return execFileSync(
