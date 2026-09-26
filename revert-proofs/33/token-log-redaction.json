@@ -1,7 +1,6 @@
 {
   "runner": "pytest",
-  "testFile": "tests/test_access_sandbox_token.py",
-  "testName": "SandboxAssetTokenOriginTests::test_redacting_access_logger_hides_token",
-  "description": "Access log must redact the sandbox session token path segment (revert prints raw token).",
-  "timeoutSec": 60
+  "testId": "tests/test_monitor_access_log.py::test_make_app_session_returns_200_with_redacting_access_logger",
+  "description": "Access log must redact pack-asset token path segments when AppRunner uses RedactingAccessLogger.",
+  "timeoutSec": 120
 }

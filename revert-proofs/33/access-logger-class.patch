@@ -1,13 +1,14 @@
-diff --git a/service/monitor.py b/service/monitor.py
-index fc1f07d..fb568d8 100644
---- a/service/monitor.py
-+++ b/service/monitor.py
-@@ -2055,7 +2055,7 @@ def main() -> None:
-             host=listen["bind"],
-             port=listen["port"],
-             print=None,
--            access_log=None,
-+            access_log_class=access.RedactingAccessLogger,
-             shutdown_timeout=3,
-         )
-     finally:
+diff --git a/service/access.py b/service/access.py
+index d5496de..cb71b9b 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -300,9 +300,6 @@ class RedactingAccessLogger(AbstractAccessLogger):
+             self.logger.info("-")
+             return
+         path_qs = request.path_qs
+-        token = read_sandbox_asset_token(request)
+-        if token:
+-            path_qs = redact_sandbox_token(path_qs, token)
+         self.logger.info(
+             '%s "%s %s" %s %.6f',
+             request.remote or "-",

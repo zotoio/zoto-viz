@@ -2,15 +2,13 @@ diff --git a/service/access.py b/service/access.py
 index d5496de..cb71b9b 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -233,10 +233,7 @@ class RedactingAccessLogger(AccessLogger):
-     def _format_r(request, response, time):  # noqa: ANN001
-         if request is None:
-             return "-"
--        path_qs = request.path_qs
+@@ -300,9 +300,7 @@ class RedactingAccessLogger(AbstractAccessLogger):
+             self.logger.info("-")
+             return
+         path_qs = request.path_qs
 -        token = read_sandbox_asset_token(request)
 -        if token:
 -            path_qs = redact_sandbox_token(path_qs, token)
-+        path_qs = request.path_qs
-         return (
-             f"{request.method} {path_qs} HTTP/{request.version.major}.{request.version.minor}"
-         )
+         self.logger.info(
+             '%s "%s %s" %s %.6f',
+             request.remote or "-",
