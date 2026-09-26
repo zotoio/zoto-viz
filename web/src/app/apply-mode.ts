@@ -11,6 +11,7 @@ import {
 } from "./mode-switch-message";
 import { settleConsentAndDrainAuto } from "./mode-switch-coordinator";
 import { commitModeSwitchAttempt, throwIfAborted } from "./mode-switch-attempt";
+import { dropMediaAskGatedByPackConsent } from "../ui/media-ask";
 import {
   capturePresentDriveBeforeLiveModeCommit,
   restorePresentDriveAfterModeRollback,
@@ -100,6 +101,22 @@ function needsConsentBeforeShow(spec: PluginView | null): boolean {
   return !!spec && pluginNeedsReview(spec) && !spec.consent;
 }
 
+function commitTargetPublicSurfaces(
+  host: ApplyModeHost,
+  m: ViewMode,
+  prevHeldId: string,
+): void {
+  host.modeSel.value = m.id;
+  localStorage.setItem("zoto-viz.mode", m.id);
+  const opts = host.optsFor(m);
+  host.applySkyPrompt(m, opts);
+  host.bindThisView(m.id);
+  host.applyModeFeedExtras(m, opts);
+  host.feedSetGraphBase(m.graphBase ?? "topology");
+  host.syncWifiIfNeeded(m);
+  host.applyPluginWall(m.id, { keepLayout: true, prevMode: prevHeldId });
+}
+
 function rollbackSwitch(
   host: ApplyModeHost,
   keptModeId: string,
@@ -126,6 +143,7 @@ function rollbackSwitch(
   host.reapplyCommittedModeSurfaces(keptModeId);
   host.syncModeHud(kept, host.pluginSpecForMode(keptModeId));
   host.applyViewLook();
+  dropMediaAskGatedByPackConsent();
   host.onConsentDeclined();
   host.focusModePicker();
   return host.showRollbackMessage(kind, declined, keptModeId);
@@ -159,17 +177,20 @@ function scheduleConsentFinalize(
       result = await host.ensureReviewed(spec, signal);
     } catch (e) {
       if (signal.aborted || (e instanceof DOMException && e.name === "AbortError")) {
+        dropMediaAskGatedByPackConsent();
         settleConsentAndDrainAuto("aborted");
         return;
       }
       result = "failed";
     }
     if (result === "aborted" || signal.aborted) {
+      dropMediaAskGatedByPackConsent();
       settleConsentAndDrainAuto("aborted");
       return;
     }
-    if (host.modeSel.value !== targetId) return;
+    if (host.modeSel.value !== targetId && host.modeSel.value !== keptOnFailure) return;
     if (result === "ok") {
+      commitTargetPublicSurfaces(host, m, keptOnFailure);
       host.setLiveMode(targetId);
       host.refreshPluginDrive(spec, targetId);
       commitScene();
@@ -184,6 +205,7 @@ function scheduleConsentFinalize(
         }
       } catch (e) {
         if (signal.aborted || (e instanceof DOMException && e.name === "AbortError")) {
+          dropMediaAskGatedByPackConsent();
           settleConsentAndDrainAuto("aborted");
           return;
         }
@@ -219,30 +241,39 @@ export function applyModeImpl(
   const opts = host.optsFor(m);
   const prevLive = host.getLiveMode();
   const prevPresent = capturePresentDriveBeforeLiveModeCommit(prevLive);
-  host.applySkyPrompt(m, opts);
-  host.modeSel.value = m.id;
-  localStorage.setItem("zoto-viz.mode", m.id);
-  host.touch();
-  host.applyPluginWall(m.id, { ...flags, prevMode: prevLive });
-
   const spec = m.pluginId ? host.pluginSpecForMode(m.id) : null;
   const paneSpec = host.skySpecForMode(m.id, spec);
   const skyStage = host.computeSkyStage(m, spec, opts);
   const gateScene = needsConsentBeforeShow(spec);
+  const heldId = gateScene ? resolveKeptModeId(host, prevPresent) : m.id;
+  const heldMode = host.modeById(heldId);
+  const heldOpts = host.optsFor(heldMode);
+
+  if (gateScene) {
+    host.modeSel.value = heldId;
+  } else {
+    host.modeSel.value = m.id;
+    localStorage.setItem("zoto-viz.mode", m.id);
+  }
+  host.applySkyPrompt(gateScene ? heldMode : m, gateScene ? heldOpts : opts);
+  host.touch();
+  host.applyPluginWall(heldId, { ...flags, prevMode: prevLive });
   if (!gateScene) {
     host.setLiveMode(m.id);
     host.refreshPluginDrive(spec, m.id);
     host.applyStageOnly(skyStage);
+    host.applyModeFeedExtras(m, opts);
+    host.bindThisView(m.id);
+  } else {
+    host.bindThisView(heldId);
   }
-  host.applyModeFeedExtras(m, opts);
-  host.bindThisView(m.id);
   host.clearModeOpts();
 
   let mosaicSnap: MosaicAnimSnap | null = null;
   let paneRevert: MosaicPaneRevert | null = null;
 
-  host.feedSetGraphBase(m.graphBase ?? "topology");
-  host.syncWifiIfNeeded(m);
+  host.feedSetGraphBase((gateScene ? heldMode : m).graphBase ?? "topology");
+  host.syncWifiIfNeeded(gateScene ? heldMode : m);
 
   if (host.mosaic?.on && !(m.pluginId && m.standalone)) {
     if (host.mosaicShouldResize(m.id, !!flags.keepLayout)) {

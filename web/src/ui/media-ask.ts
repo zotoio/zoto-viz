@@ -8,6 +8,7 @@
 import { probeWebGL } from "../graph/webgl";
 import { micCaptureAllowed } from "../audio/want";
 import { currentCamPolicy } from "../camera/want";
+import { isPackConsentPending } from "../app/pack-consent";
 
 export type MediaAskKind = "mic" | "cam";
 
@@ -46,6 +47,7 @@ function accepted(kind: MediaAskKind): boolean {
 }
 
 let queue: Waiter[] = [];
+const gatedWhilePackConsent = new Set<Waiter>();
 let flushScheduled = false;
 let open: {
   waiters: Waiter[];
@@ -70,6 +72,7 @@ function waitMs(): number {
 export function resetMediaAsk(): void {
   for (const w of queue) w.resolve(null);
   queue = [];
+  gatedWhilePackConsent.clear();
   flushScheduled = false;
   if (open) {
     for (const w of open.waiters) w.resolve(null);
@@ -102,6 +105,15 @@ function waiterAllowed(w: Pick<Waiter, "audio" | "video">): boolean {
 }
 
 /** Drop queued / in-page asks when the header mic or cam toggle goes Off. */
+/** Drop mic/cam asks queued while a pack consent dialog was open (decline / abort). */
+export function dropMediaAskGatedByPackConsent(): void {
+  for (const w of gatedWhilePackConsent) {
+    w.resolve(null);
+    queue = queue.filter((x) => x !== w);
+  }
+  gatedWhilePackConsent.clear();
+}
+
 export function dropMediaAsk(kind?: MediaAskKind): void {
   const drop = (w: Waiter) => !kind || kindsOf(w).includes(kind);
   for (const w of queue) {
@@ -359,7 +371,14 @@ async function flush(): Promise<void> {
     }
     needAsk.push(w);
   }
-  if (needAsk.length) showModal(needAsk);
+  if (needAsk.length) {
+    if (isPackConsentPending()) {
+      for (const w of needAsk) gatedWhilePackConsent.add(w);
+      queue.push(...needAsk);
+      return;
+    }
+    showModal(needAsk);
+  }
 }
 
 /** Open the device after an in-page accept (or immediately when already granted). */
@@ -371,7 +390,9 @@ export function askUserMedia(constraints: MediaStreamConstraints, reason: string
     return Promise.resolve(null);
   }
   return new Promise((resolve) => {
-    queue.push({ audio, video, reason, resolve });
+    const waiter: Waiter = { audio, video, reason, resolve };
+    queue.push(waiter);
+    if (isPackConsentPending()) gatedWhilePackConsent.add(waiter);
     if (open) {
       mergeOpen(queue.splice(0, queue.length));
       return;

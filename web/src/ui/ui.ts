@@ -129,6 +129,16 @@ export class Select {
   focus(): void {
     this.btn.focus();
   }
+  /** Programmatic focus with a visible ring (commit / abort return to picker). */
+  focusWithRing(): void {
+    this.el.classList.add("focus-return");
+    this.btn.focus({ preventScroll: true });
+    const off = () => {
+      this.el.classList.remove("focus-return");
+      this.btn.removeEventListener("blur", off);
+    };
+    this.btn.addEventListener("blur", off);
+  }
   /** Set the value without firing onChange. */
   set value(v: string) {
     const opt = this.options.find((o) => o.value === v) ?? this.options[0];

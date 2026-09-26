@@ -582,6 +582,10 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
 }
 .field-btn .cap { padding-top: 1px; }
 .field-btn:hover { background: var(--chip-hover); border-color: var(--line-strong); }
+.field.select.focus-return .field-btn {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
+}
 .field-btn:focus-visible, .field.open .field-btn {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
 }
@@ -1234,7 +1238,7 @@ body.modal-open #bar, body.modal-open #foot { pointer-events: none; }
   left: 50%;
   bottom: 18px;
   transform: translateX(-50%);
-  z-index: 30;
+  z-index: 60;
   max-width: min(92vw, 520px);
   padding: 8px 14px;
   border-radius: 8px;

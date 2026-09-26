@@ -192,10 +192,14 @@ export function askPluginReview(
     back.addEventListener("click", () => finish(null));
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); finish(null); }
+      if (e.key === "Enter" && !e.repeat && document.activeElement === cancel) {
+        e.preventDefault();
+        finish(null);
+      }
     };
     document.addEventListener("keydown", onKey, true);
     document.body.classList.add("modal-open");
     document.body.appendChild(modal);
-    reviewed.focus();
+    cancel.focus();
   });
 }

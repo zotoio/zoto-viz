@@ -30,6 +30,7 @@ export function ensureModeSwitchStatusEl(): HTMLElement {
     statusEl.setAttribute("role", "status");
     statusEl.setAttribute("aria-live", "polite");
     statusEl.className = "mode-switch-status";
+    statusEl.style.zIndex = "60";
     document.body.appendChild(statusEl);
   }
   return statusEl;
@@ -101,4 +102,12 @@ export function isModeSwitchStatusVisible(): boolean {
   const op = cs.opacity;
   const opacityOk = op === "" || Number(op) > 0.01;
   return cs.display !== "none" && cs.visibility !== "hidden" && opacityOk;
+}
+
+/** Above `.modal` (z-index 50) so decline / failure text is not buried under consent. */
+export function modeSwitchStatusStacksAboveModals(): boolean {
+  const el = liveStatusEl();
+  if (!el) return false;
+  const z = Number.parseInt(getComputedStyle(el).zIndex, 10);
+  return Number.isFinite(z) && z > 50;
 }
