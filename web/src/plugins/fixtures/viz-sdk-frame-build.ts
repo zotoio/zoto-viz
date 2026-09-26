@@ -9,7 +9,22 @@ import vmLiveStateJson from "../../../../plugins/sdk/fixtures/vm-live-state.json
 export const VIZ_SDK_HOST_IDLE = { fixture: "host" as const };
 
 const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
+const IPV4_G = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 const MAC = /\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b/i;
+const MAC_G = /\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b/gi;
+const PLACEHOLDER_ID = /^host-(?:\d{2}|00|mac)$/;
+
+function isPlaceholderId(id: string): boolean {
+  return PLACEHOLDER_ID.test(id);
+}
+
+function isSyntheticViewId(id: string): boolean {
+  return id.includes(":") && !IPV4.test(id);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 const VIZ_VIEW_KEYS = [
   "wifi", "cpu", "memory", "disk", "gpu", "sockets", "units", "udev", "bridge",
@@ -34,63 +49,100 @@ export function emptyMonitorState(ts = 10): StateMsg {
   };
 }
 
-function collectIdentifiers(state: StateMsg): string[] {
+function addStructuralId(ids: Set<string>, id: string | undefined): void {
+  if (!id || isPlaceholderId(id) || isSyntheticViewId(id)) return;
+  ids.add(id);
+}
+
+function collectStructuralIds(state: StateMsg): Set<string> {
   const ids = new Set<string>();
-  if (state.local_ip) ids.add(state.local_ip);
-  if (state.gateway) ids.add(state.gateway);
+  addStructuralId(ids, state.local_ip);
+  addStructuralId(ids, state.gateway);
   for (const d of state.devices) {
-    ids.add(d.ip);
-    if (d.mac) ids.add(d.mac);
-    for (const h of d.hostnames ?? []) if (h) ids.add(h);
-    for (const n of d.names ?? []) if (n) ids.add(n);
+    addStructuralId(ids, d.ip);
+    addStructuralId(ids, d.mac);
   }
   for (const f of state.flows) {
-    ids.add(f.a);
-    ids.add(f.b);
+    addStructuralId(ids, f.a);
+    addStructuralId(ids, f.b);
   }
   for (const key of VIZ_VIEW_KEYS) {
     const view = state.views?.[key];
     if (!view) continue;
-    if (view.hub) ids.add(view.hub);
-    if (view.self) ids.add(view.self);
+    addStructuralId(ids, view.hub);
+    addStructuralId(ids, view.self);
     for (const d of view.devices ?? []) {
-      ids.add(d.ip);
-      if (d.mac) ids.add(d.mac);
-      for (const h of d.hostnames ?? []) if (h) ids.add(h);
-      for (const n of d.names ?? []) if (n) ids.add(n);
-      for (const a of d.aliases ?? []) if (a) ids.add(a);
+      addStructuralId(ids, d.ip);
+      addStructuralId(ids, d.mac);
     }
-    for (const w of view.watch?.ssids ?? []) if (w) ids.add(w);
+    for (const w of view.watch?.ssids ?? []) addStructuralId(ids, w);
   }
-  return [...ids];
+  return ids;
+}
+
+function collectHostnameTokens(state: StateMsg): Set<string> {
+  const tokens = new Set<string>();
+  const consider = (value: string | undefined) => {
+    if (!value || isPlaceholderId(value) || value.length < 4) return;
+    if (IPV4.test(value) || MAC.test(value) || value.includes(".")) tokens.add(value);
+  };
+  for (const d of state.devices) {
+    for (const h of d.hostnames ?? []) consider(h);
+    for (const n of d.names ?? []) consider(n);
+  }
+  for (const key of VIZ_VIEW_KEYS) {
+    const view = state.views?.[key];
+    if (!view) continue;
+    for (const d of view.devices ?? []) {
+      for (const h of d.hostnames ?? []) consider(h);
+      for (const n of d.names ?? []) consider(n);
+    }
+  }
+  return tokens;
 }
 
 export function scrubIdentifierMap(state: StateMsg): Map<string, string> {
-  const unique = [...new Set(collectIdentifiers(state))].sort((a, b) => a.localeCompare(b));
+  const unique = [...collectStructuralIds(state)].sort((a, b) => a.localeCompare(b));
   const map = new Map<string, string>();
   unique.forEach((id, i) => map.set(id, `host-${String(i + 1).padStart(2, "0")}`));
   return map;
 }
 
-function stringHasSensitive(value: string, map: Map<string, string>): boolean {
+function stringHasSensitive(value: string, hostnames: Set<string>): boolean {
   if (IPV4.test(value) || MAC.test(value)) return true;
-  for (const key of map.keys()) {
-    if (key.length >= 4 && value.includes(key)) return true;
+  for (const host of hostnames) {
+    const re = new RegExp(`\\b${escapeRegExp(host)}\\b`);
+    if (re.test(value)) return true;
   }
   return false;
 }
 
-function scrubString(value: string, map: Map<string, string>): string {
+function scrubFreeText(value: string, map: Map<string, string>, hostnames: Set<string>): string {
   let out = value;
   const keys = [...map.keys()].sort((a, b) => b.length - a.length);
-  for (const from of keys) out = out.split(from).join(map.get(from)!);
-  out = out.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, (m) => map.get(m) ?? "host-00");
-  out = out.replace(/\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b/gi, () => "host-mac");
+  for (const from of keys) {
+    if (IPV4.test(from) || MAC.test(from)) out = out.split(from).join(map.get(from)!);
+  }
+  out = out.replace(IPV4_G, (m) => map.get(m) ?? "host-00");
+  out = out.replace(MAC_G, () => "host-mac");
+  for (const host of [...hostnames].sort((a, b) => b.length - a.length)) {
+    const re = new RegExp(`\\b${escapeRegExp(host)}\\b`, "g");
+    out = out.replace(re, map.get(host) ?? "host-00");
+  }
   return out;
 }
 
-function scrubStringIfSensitive(value: string, map: Map<string, string>): string {
-  return stringHasSensitive(value, map) ? scrubString(value, map) : value;
+function scrubStringIfSensitive(
+  value: string,
+  map: Map<string, string>,
+  hostnames: Set<string>,
+): string {
+  return stringHasSensitive(value, hostnames) ? scrubFreeText(value, map, hostnames) : value;
+}
+
+function scrubStructuralId(id: string, map: Map<string, string>): string {
+  if (isPlaceholderId(id) || isSyntheticViewId(id)) return id;
+  return map.get(id) ?? (IPV4.test(id) || MAC.test(id) ? scrubFreeText(id, map, new Set()) : id);
 }
 
 function assignPlaceholder(map: Map<string, string>, id: string): void {
@@ -100,38 +152,46 @@ function assignPlaceholder(map: Map<string, string>, id: string): void {
 
 export function scrubMapForFrame(state: StateMsg, frame: VizDataFrame): Map<string, string> {
   const map = scrubIdentifierMap(state);
-  for (const t of frame.talkers) assignPlaceholder(map, t.id);
+  const hostnames = collectHostnameTokens(state);
+  for (const t of frame.talkers) {
+    if (!isPlaceholderId(t.id)) assignPlaceholder(map, t.id);
+  }
   for (const b of frame.rf) assignPlaceholder(map, b.ssid);
   for (const h of frame.headlines) {
-    if (stringHasSensitive(h.id, map)) assignPlaceholder(map, h.id);
+    if (stringHasSensitive(h.id, hostnames)) assignPlaceholder(map, h.id);
   }
   return map;
 }
 
-export function scrubVizDataFrame(frame: VizDataFrame, map: Map<string, string>): VizDataFrame {
+export function scrubVizDataFrame(
+  frame: VizDataFrame,
+  map: Map<string, string>,
+  state?: StateMsg,
+): VizDataFrame {
+  const hostnames = state ? collectHostnameTokens(state) : new Set<string>();
   return {
     ...frame,
     packets: frame.packets.map((p) => ({
       ...p,
-      proto: scrubStringIfSensitive(p.proto, map),
+      proto: scrubStringIfSensitive(p.proto, map, hostnames),
     })),
     rf: frame.rf.map((b) => ({
       ...b,
-      ssid: scrubString(b.ssid, map),
+      ssid: scrubStructuralId(b.ssid, map),
     })),
     talkers: frame.talkers.map((t) => ({
-      id: map.get(t.id) ?? scrubString(t.id, map),
+      id: scrubStructuralId(t.id, map),
       rate: t.rate,
       role: t.role,
     })),
     headlines: frame.headlines.map((h) => ({
       ...h,
-      id: scrubStringIfSensitive(h.id, map),
-      label: scrubStringIfSensitive(h.label, map),
-      text: scrubStringIfSensitive(h.text, map),
-      kind: h.kind ? scrubStringIfSensitive(h.kind, map) : h.kind,
-      summary: h.summary ? scrubStringIfSensitive(h.summary, map) : h.summary,
-      image: h.image ? scrubStringIfSensitive(h.image, map) : h.image,
+      id: scrubStringIfSensitive(h.id, map, hostnames),
+      label: scrubStringIfSensitive(h.label, map, hostnames),
+      text: scrubStringIfSensitive(h.text, map, hostnames),
+      kind: h.kind ? scrubStringIfSensitive(h.kind, map, hostnames) : h.kind,
+      summary: h.summary ? scrubStringIfSensitive(h.summary, map, hostnames) : h.summary,
+      image: h.image ? scrubStringIfSensitive(h.image, map, hostnames) : h.image,
     })),
     sys: frame.sys,
   };
@@ -222,48 +282,52 @@ export function trimVizCaptureState(raw: StateMsg): StateMsg {
   };
 }
 
-function scrubDevice(d: Device, map: Map<string, string>): Device {
+function scrubDevice(d: Device, map: Map<string, string>, hostnames: Set<string>): Device {
   return {
     ...d,
-    ip: map.get(d.ip) ?? scrubString(d.ip, map),
-    mac: d.mac ? scrubString(d.mac, map) : d.mac,
-    hostnames: (d.hostnames ?? []).map((h) => scrubStringIfSensitive(h, map)),
-    names: (d.names ?? []).map((n) => scrubStringIfSensitive(n, map)),
-    aliases: (d.aliases ?? []).map((a) => scrubStringIfSensitive(a, map)),
-    ssid: d.ssid ? scrubString(d.ssid, map) : d.ssid,
+    ip: scrubStructuralId(d.ip, map),
+    mac: d.mac ? scrubStructuralId(d.mac, map) : d.mac,
+    hostnames: (d.hostnames ?? []).map((h) => scrubStringIfSensitive(h, map, hostnames)),
+    names: (d.names ?? []).map((n) => scrubStringIfSensitive(n, map, hostnames)),
+    aliases: (d.aliases ?? []).map((a) => scrubStringIfSensitive(a, map, hostnames)),
+    ssid: d.ssid ? scrubStructuralId(d.ssid, map) : d.ssid,
   };
 }
 
 function scrubFlow(f: Flow, map: Map<string, string>): Flow {
   return {
     ...f,
-    a: map.get(f.a) ?? scrubString(f.a, map),
-    b: map.get(f.b) ?? scrubString(f.b, map),
+    a: scrubStructuralId(f.a, map),
+    b: scrubStructuralId(f.b, map),
   };
 }
 
-function scrubViews(views: StateMsg["views"], map: Map<string, string>): StateMsg["views"] {
+function scrubViews(
+  views: StateMsg["views"],
+  map: Map<string, string>,
+  hostnames: Set<string>,
+): StateMsg["views"] {
   if (!views) return undefined;
   const out: StateMsg["views"] = {};
   for (const key of VIZ_VIEW_KEYS) {
     const view = views[key];
     if (!view) continue;
     out[key] = {
-      devices: (view.devices ?? []).map((d) => scrubDevice(d, map)),
+      devices: (view.devices ?? []).map((d) => scrubDevice(d, map, hostnames)),
       flows: (view.flows ?? []).map((f) => scrubFlow(f, map)),
-      hub: map.get(view.hub) ?? scrubString(view.hub, map),
-      self: map.get(view.self) ?? scrubString(view.self, map),
+      hub: scrubStructuralId(view.hub, map),
+      self: scrubStructuralId(view.self, map),
       ...(view.watch ? {
         watch: {
           ...view.watch,
-          ssids: view.watch.ssids.map((s) => scrubString(s, map)),
-          slot: view.watch.slot.map((s) => scrubString(s, map)),
+          ssids: view.watch.ssids.map((s) => scrubStructuralId(s, map)),
+          slot: view.watch.slot.map((s) => scrubStructuralId(s, map)),
           plan: view.watch.plan.map((p) => ({
             ...p,
-            ssids: p.ssids.map((s) => scrubString(s, map)),
+            ssids: p.ssids.map((s) => scrubStructuralId(s, map)),
           })),
           next: view.watch.next
-            ? { chan: view.watch.next.chan, ssids: view.watch.next.ssids.map((s) => scrubString(s, map)) }
+            ? { chan: view.watch.next.chan, ssids: view.watch.next.ssids.map((s) => scrubStructuralId(s, map)) }
             : null,
         },
       } : {}),
@@ -276,19 +340,20 @@ function scrubViews(views: StateMsg["views"], map: Map<string, string>): StateMs
 function scrubSources(
   sources: StateMsg["sources"],
   map: Map<string, string>,
+  hostnames: Set<string>,
 ): StateMsg["sources"] {
   if (!sources) return undefined;
   const out: StateMsg["sources"] = {};
   for (const [id, src] of Object.entries(sources)) {
     out[id] = {
       ...src,
-      label: scrubStringIfSensitive(src.label, map),
+      label: scrubStringIfSensitive(src.label, map, hostnames),
       items: (src.items ?? []).map((item) => ({
         ...item,
-        title: item.title ? scrubStringIfSensitive(item.title, map) : item.title,
-        summary: item.summary ? scrubStringIfSensitive(item.summary, map) : item.summary,
-        image: item.image ? scrubStringIfSensitive(item.image, map) : item.image,
-        link: item.link ? scrubStringIfSensitive(item.link, map) : item.link,
+        title: item.title ? scrubStringIfSensitive(item.title, map, hostnames) : item.title,
+        summary: item.summary ? scrubStringIfSensitive(item.summary, map, hostnames) : item.summary,
+        image: item.image ? scrubStringIfSensitive(item.image, map, hostnames) : item.image,
+        link: item.link ? scrubStringIfSensitive(item.link, map, hostnames) : item.link,
       })),
     };
   }
@@ -297,15 +362,16 @@ function scrubSources(
 
 export function scrubVizCaptureState(state: StateMsg): StateMsg {
   const map = scrubIdentifierMap(state);
+  const hostnames = collectHostnameTokens(state);
   return {
     ...state,
-    network: scrubStringIfSensitive(state.network, map),
-    local_ip: map.get(state.local_ip) ?? scrubString(state.local_ip, map),
-    gateway: map.get(state.gateway) ?? scrubString(state.gateway, map),
-    devices: state.devices.map((d) => scrubDevice(d, map)),
+    network: scrubStringIfSensitive(state.network, map, hostnames),
+    local_ip: scrubStructuralId(state.local_ip, map),
+    gateway: scrubStructuralId(state.gateway, map),
+    devices: state.devices.map((d) => scrubDevice(d, map, hostnames)),
     flows: state.flows.map((f) => scrubFlow(f, map)),
-    views: scrubViews(state.views, map),
-    sources: scrubSources(state.sources, map),
+    views: scrubViews(state.views, map, hostnames),
+    sources: scrubSources(state.sources, map, hostnames),
   };
 }
 
@@ -321,7 +387,8 @@ export function vmLiveCaptureState(): StateMsg {
 export function buildVizSdkIdleFrame(): VizDataFrame {
   const state = emptyMonitorState(10);
   const raw = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE);
-  return scrubVizDataFrame(raw, scrubMapForFrame(state, raw));
+  const map = scrubMapForFrame(state, raw);
+  return scrubVizDataFrame(raw, map, state);
 }
 
 export function withFailedUnitsView(state: StateMsg, failedCount = 3): StateMsg {
@@ -358,14 +425,32 @@ export function withFailedUnitsView(state: StateMsg, failedCount = 3): StateMsg 
   };
 }
 
+function scrubIdleDemoSlices(frame: VizDataFrame): VizDataFrame {
+  const slices = frame.demoSlices;
+  if (!frame.demo || !slices) return frame;
+  const empty = emptyMonitorState(frame.t);
+  const seed = buildVizFrameForPlugin(empty, 0, 0, VIZ_SDK_HOST_IDLE);
+  const map = scrubMapForFrame(empty, seed);
+  const scrubbed = scrubVizDataFrame(seed, map, empty);
+  return {
+    ...frame,
+    audio: frame.audio > 0 ? frame.audio : scrubbed.audio,
+    packets: slices.packets ? scrubbed.packets : frame.packets,
+    rf: slices.rf ? scrubbed.rf : frame.rf,
+    talkers: slices.talkers ? scrubbed.talkers : frame.talkers,
+    headlines: slices.headlines ? scrubbed.headlines : frame.headlines,
+  };
+}
+
 function buildLiveFrame(state: StateMsg, prevTs = 0, audio = 0.12): VizDataFrame {
   const raw = buildVizFrame(state, prevTs, audio);
-  return scrubVizDataFrame(raw, scrubMapForFrame(state, raw));
+  const map = scrubMapForFrame(state, raw);
+  return scrubVizDataFrame(raw, map, state);
 }
 
 function buildPluginQuietFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFrame {
   const raw = buildVizFrameForPlugin(state, prevTs, audio, VIZ_SDK_HOST_IDLE);
-  return scrubVizDataFrame(raw, scrubMapForFrame(state, raw));
+  return scrubIdleDemoSlices(raw);
 }
 
 export function buildVizSdkGoldenLiveFrame(): VizDataFrame {

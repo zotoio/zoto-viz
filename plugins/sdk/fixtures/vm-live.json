@@ -26,29 +26,29 @@
   ],
   "rf": [
     {
-      "ssid": "host-1062",
+      "ssid": "host-04",
       "rssi": 0.55,
       "channel": 36
     },
     {
-      "ssid": "host-1063",
+      "ssid": "host-05",
       "rssi": 0.42,
       "channel": 6
     }
   ],
   "talkers": [
     {
-      "id": "host-189",
+      "id": "host-01",
       "rate": 120,
       "role": "lan"
     },
     {
-      "id": "host-190",
+      "id": "host-02",
       "rate": 88,
       "role": "gateway"
     },
     {
-      "id": "host-191",
+      "id": "host-03",
       "rate": 64,
       "role": "internet"
     }
@@ -407,7 +407,7 @@
       "label": "NASA image of the day",
       "text": "Ancient Milky Way Merger",
       "kind": "rss",
-      "summary": "About 12 billion years ago, a dwarf galaxy known as LKH collided with a young Milky Way and merged with it. This artist’s concept portrays that collision. NASA’s Hubble Space Telescope uncovered defhost-178ive evidence of this collision by studying ghost-99bular star clusters.",
+      "summary": "About 12 billion years ago, a dwarf galaxy known as LKH collided with a young Milky Way and merged with it. This artist’s concept portrays that collision. NASA’s Hubble Space Telescope uncovered definitive evidence of this collision by studying globular star clusters.",
       "image": "https://www.nasa.gov/wp-content/uploads/2026/08/stsci-01kz4n4d8g9ak26cf28hd5nt5n-d2d764.png"
     },
     {
@@ -554,10 +554,10 @@
     "gpu": 0,
     "temp": 0,
     "watts": 0,
-    "psi": 0,
+    "psi": 0.128,
     "sockets": 0.15625,
     "failed": 0,
-    "udev": 0
+    "udev": 0.25
   },
   "demo": true,
   "demoSlices": {

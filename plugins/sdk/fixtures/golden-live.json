@@ -36,12 +36,12 @@
   ],
   "rf": [
     {
-      "ssid": "host-38",
+      "ssid": "host-12",
       "rssi": 0.3,
       "channel": 36
     },
     {
-      "ssid": "host-27",
+      "ssid": "host-11",
       "rssi": 0.3,
       "channel": 0
     }
@@ -53,7 +53,7 @@
       "role": "gateway"
     },
     {
-      "id": "host-11",
+      "id": "host-10",
       "rate": 95,
       "role": "internet"
     },
