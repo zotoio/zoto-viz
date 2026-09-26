@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compileMatcher, Settings } from "./settings";
 import type { Device } from "../core/types";
+import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 
 const d = (over: Partial<Device> = {}): Device => ({
   ip: "192.168.86.4", mac: "", vendor: "Google", hostnames: ["Nest-Cam"], names: ["Nest-Cam"],
@@ -180,5 +181,45 @@ describe("Settings panes", () => {
     expect(s.el.querySelector('.mosaic-pane-row[data-pane="plugin:memory"]')?.classList.contains("focus")).toBe(true);
     s.openView("plugin:memory");
     expect(s.isOpen).toBe(false);
+  });
+
+  it("keeps plugin settings announcer on the view pane after randomise", () => {
+    const s = new Settings({ storePrefix: "zoto-plugin-ann-rand", onChange: () => {} });
+    const spec = loadSettingsDeclFixture();
+    s.bindView(spec, spec.config);
+    const pane = s.el.querySelector('[data-pane="view"]')!;
+    const announcer = pane.querySelector(":scope > .plugin-settings-announcer");
+    const viewHost = [...pane.children].find(
+      (el) => !el.classList.contains("plugin-settings-announcer"),
+    ) as HTMLElement;
+    expect(announcer).toBeTruthy();
+    viewHost.querySelector<HTMLButtonElement>('[data-toolbar-action="randomise"]')?.click();
+    expect(pane.querySelector(":scope > .plugin-settings-announcer")).toBe(announcer);
+    expect(viewHost.contains(announcer)).toBe(false);
+  });
+
+  it("mounts plugin settings announcer on the view pane outside the view layer", () => {
+    const s = new Settings({ storePrefix: "zoto-plugin-announcer", onChange: () => {} });
+    const spec = loadSettingsDeclFixture();
+    s.bindView(spec, spec.config);
+    const pane = s.el.querySelector('[data-pane="view"]');
+    const announcer = pane?.querySelector(":scope > .plugin-settings-announcer");
+    const viewLayer = pane?.querySelector('[data-layer="view"]');
+    expect(announcer).toBeTruthy();
+    expect(viewLayer?.contains(announcer)).toBe(false);
+    s.bindView(spec, spec.config);
+    expect(pane?.querySelector(":scope > .plugin-settings-announcer")).toBe(announcer);
+  });
+
+  it("hides pack scope note for production-shaped mosaic walls", () => {
+    const s = new Settings({ storePrefix: "zoto-pack-scope", onChange: () => {} });
+    s.addAnimation(() => {}, { el: document.createElement("div") });
+    s.applyAnim({
+      ...s.animSettings,
+      mosaic: "4",
+      mosaicTiles: ["plugin:settings-fixture", "plugin:topology", "plugin:memory", "plugin:disk"],
+    });
+    s.bindView(loadSettingsDeclFixture(), loadSettingsDeclFixture().config);
+    expect(s.el.querySelector('[data-pane="view"]')?.textContent).not.toMatch(/Applies to all/);
   });
 });

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/duplicate-slot-scope-note-live.test.ts",
+  "testName": "updates n when duplicate tiles are added or removed via mosaic layout",
+  "description": "Cache pack wall scope when the view drawer opens instead of live tile count",
+  "redOutput": "AssertionError: expected 'Changes apply to all 2 Settings fixture tiles on this wall' to be 'Changes apply to all 3 Settings fixture tiles on this wall'"
+}

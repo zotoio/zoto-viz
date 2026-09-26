@@ -12,7 +12,7 @@ import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
 import { surfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
-import { probeWebGL } from "./webgl";
+import { disposeOwnedWebGLRenderer, probeWebGL } from "./webgl";
 import type { MosaicNode } from "./mosaic-layout";
 import {
   L_BASE, L_DST, L_K, L_SRC, LINK_STRIDE, N_CHARGE, N_FIXED, N_FX, N_FY, N_FZ, N_KEY, N_RATE, N_RELAX, N_ROLE,
@@ -35,6 +35,7 @@ import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
+import { claimPanelRaf, releasePanelView } from "./panel-view-lifecycle";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import { observeResize } from "../core/resize";
@@ -1046,6 +1047,8 @@ export interface SceneOpts {
   satellite?: boolean;
   /** draw through a shared context (one canvas for the whole wall) instead of owning a canvas */
   host?: RenderHost;
+  /** mosaic tile id (`plugin:…`) for lifecycle / leak tests */
+  panelId?: string;
 }
 
 export class NetScene implements HostedView {
@@ -1207,6 +1210,8 @@ export class NetScene implements HostedView {
   private readonly dragVel = new THREE.Vector3();
   private readonly baseFov = 55;
   private readonly satellite: boolean;
+  private panelId: string | null;
+  private releasePanelRaf: (() => void) | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
   private compactLabels = false;
   private raf = 0;
@@ -1274,6 +1279,8 @@ export class NetScene implements HostedView {
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
     this.paneFps = new PaneFps(container);
     this.satellite = !!opts.satellite;
+    this.panelId = opts.panelId ?? null;
+    if (this.panelId) this.releasePanelRaf = claimPanelRaf(this.panelId);
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
     if (this.host) {
@@ -1856,8 +1863,13 @@ export class NetScene implements HostedView {
 
   get isDreaming(): boolean { return this.dreaming; }
   /** Latest audio / traffic pulse, for HUD bars and other overlays. */
-  get pulseNow(): { level: number; bass: number; listening: boolean } {
-    return { level: this.pulseLevel, bass: this.pulseBass, listening: this.pulse.listening };
+  get pulseNow(): { level: number; bass: number; listening: boolean; awaitingClick: boolean } {
+    return {
+      level: this.pulseLevel,
+      bass: this.pulseBass,
+      listening: this.pulse.listening,
+      awaitingClick: this.pulse.awaitingClick,
+    };
   }
 
   /**
@@ -1946,6 +1958,10 @@ export class NetScene implements HostedView {
       || (this.wantHeard && micCaptureAllowed());
     if (mic) void this.pulse.enable();
     else this.pulse.disable();
+  }
+
+  resumePulseMic(): Promise<void> {
+    return this.pulse.resumeFromUserClick();
   }
 
   /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */
@@ -2605,8 +2621,9 @@ export class NetScene implements HostedView {
    * Asynchronous: the probe is fenced and harvested a frame or two later, never stalling the GPU.
    */
   private captureBackdropLuma(): void {
-    const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
+    const gl = (this.host?.gl ?? this.renderer.getContext()) as WebGL2RenderingContext | null;
     if (!gl || typeof gl.fenceSync !== "function") return;
+    if (gl.isContextLost()) return;
     if (this.host) {
       const vp = this.lastVp;
       if (!vp) return;
@@ -4061,24 +4078,40 @@ export class NetScene implements HostedView {
     return base / Math.sqrt(Math.max(1, this.spreadX));
   }
 
+  /** Mosaic tile id moved onto the main scene element — retarget rAF lease. */
+  retargetPanel(panelId: string | null): void {
+    this.releasePanelRaf?.();
+    this.releasePanelRaf = null;
+    if (this.panelId) releasePanelView(this.panelId);
+    this.panelId = panelId;
+    if (panelId) this.releasePanelRaf = claimPanelRaf(panelId);
+  }
+
   dispose(): void {
     this.active = false;
     cancelAnimationFrame(this.raf);
+    this.releasePanelRaf?.();
+    this.releasePanelRaf = null;
+    if (this.panelId) releasePanelView(this.panelId);
     this.ro.disconnect();
     window.removeEventListener("resize", this.onWinResize);
     window.removeEventListener("pointerup", this.onCamPtrLost);
     window.removeEventListener("pointercancel", this.onCamPtrLost);
     this.pulse.disable();
     this.layout.dispose();
+    this.fabric.dispose();
     this.arrows.geometry.dispose();
     (this.arrows.material as THREE.Material).dispose();
     this.lumaProbe.reset();
+    this.backdrop.setPluginShader(null);
     this.controls.dispose();
     if (this.host) {
       this.host.remove(this);
       this.container.classList.remove("hosted");
+    } else if (this.renderer instanceof THREE.WebGLRenderer) {
+      disposeOwnedWebGLRenderer(this.renderer);
     } else {
-      this.renderer.forceContextLoss();
+      this.renderer.domElement.remove();
       this.renderer.dispose();
     }
     this.paneFps.dispose();
