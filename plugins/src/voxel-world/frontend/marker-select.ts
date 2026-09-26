@@ -74,14 +74,16 @@ function countOpenCandidates(): number {
   return n;
 }
 
-/** One challenger must not take a spare slot while another talker still holds a beacon. */
+/** Defer spare-slot fill when a lone challenger would replace a vanished incumbent. */
 function deferSingleChallengerToReplacement(): boolean {
   if (countOpenCandidates() !== 1) return false;
   const challenger = strongestOpenCandidate();
   if (!challenger) return false;
   for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
     const s = incumbents[i]!;
-    if (s.key && s.key !== challenger.key) return true;
+    if (!s.key || s.key === challenger.key) continue;
+    if (s.target > 0) continue;
+    return true;
   }
   return false;
 }

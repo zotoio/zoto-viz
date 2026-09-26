@@ -323,6 +323,40 @@ describe("voxel world pack", () => {
     expect(beaconScratch().find((b) => b.key === "10.0.0.9")!.strength).toBeGreaterThan(s0);
   });
 
+  it("gives a new talker its own slot while an active incumbent keeps theirs", () => {
+    resetLiveMarkers();
+    setVoxConfig({ preset: "classic", mobs: "0" });
+    const sys = { cpu: 0.1, failed: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, udev: 0 };
+    const dt = 1 / 60;
+    const talkerA = { id: "10.0.0.1", rate: 100, role: "lan" as const };
+    for (let i = 0; i < 60; i++) {
+      tickVoxelWorld(
+        liveSlice({ t: i * dt, packets: [], talkers: [talkerA], headlines: [], sys }),
+        1.6,
+        dt,
+      );
+    }
+    expect(screenMarkerMembershipFingerprint()).toBe("10.0.0.1");
+    const tJoin = 60 * dt;
+    tickVoxelWorld(
+      liveSlice({
+        t: tJoin,
+        packets: [],
+        talkers: [talkerA, { id: "10.0.0.2", rate: 90, role: "lan" }],
+        headlines: [],
+        sys,
+      }),
+      1.6,
+      dt,
+    );
+    expect(screenMarkerMembershipFingerprint()).toBe("10.0.0.1|10.0.0.2");
+    const beacons = beaconScratch().filter((b) => b.key && b.strength > 0);
+    expect(beacons.map((b) => b.key).sort()).toEqual(["10.0.0.1", "10.0.0.2"]);
+    const b2 = beacons.find((b) => b.key === "10.0.0.2")!;
+    expect(b2.strength).toBeGreaterThan(0);
+    expect(b2.strength).toBeLessThan(0.95);
+  });
+
   it("hysteresis limits beacon membership churn when two talkers alternate narrowly", () => {
     resetLiveMarkers();
     setVoxConfig({ preset: "classic", mobs: "0" });
