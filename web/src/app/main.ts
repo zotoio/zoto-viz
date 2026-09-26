@@ -998,7 +998,14 @@ function feed(m: StateMsg): void {
       ? illustratedSourceBind(optsFor(mode))
       : parseSourceBind(optsFor(mode));
     const buildFrame = idle
-      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
+      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
+        s,
+        pt,
+        a,
+        idle,
+        active?.viz?.contract ?? 1,
+        bind,
+      )
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
