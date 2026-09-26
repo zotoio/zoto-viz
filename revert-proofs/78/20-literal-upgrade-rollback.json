@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_zip_install_ux.py",
+  "testName": "test_zip_ux_literal_upgrade_rollback_message",
+  "description": "Literal upgrade rollback message template.",
+  "patchedFailure": "tests/test_pack_zip_install_ux.py:55: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_pack_zip_install_ux.py::test_zip_ux_literal_upgrade_rollback_message - assert '' == \"Couldn't update {name} to version {new_version}, so version {old_version} is still installed. Try again, and if it keeps failing, check the server log.\"\n  \n  - Couldn't update {name} to version {new_version}, so version {old_version} is still installed. Try again, and if it keeps failing, check the server log.\n============================== 1 failed in 0.02s ==============================="
+}

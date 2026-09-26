@@ -645,7 +645,8 @@ def test_pa_fresh_install_zero_staging_hash_bytes(tmp_path: Path, monkeypatch: p
     good = _zip_bytes({"plugin.yml": MINIMAL, "visualisation.yml": VIZ})
     zip_path = tmp_path / "in.zip"
     zip_path.write_bytes(good)
-    meter = _meter_pack_folder_reads(monkeypatch, paths.plugin_local_runtime_dir(create=True) / "sample")
+    local_rt = paths.plugin_local_runtime_dir(create=True)
+    meter = _meter_pack_folder_reads(monkeypatch, local_rt)
     staged = psz.read_pack_zip(zip_path)
     assert meter["bytes"] == 0
     live_bytes = _live_tree_file_bytes(staged.staging_dir)
@@ -658,11 +659,12 @@ def test_pa_remint_hashes_only_plugin_yml(tmp_path: Path, monkeypatch: pytest.Mo
     zip_path = tmp_path / "in.zip"
     zip_path.write_bytes(good)
     staged = psz.read_pack_zip(zip_path)
+    yml_read_len = (staged.staging_dir / "plugin.yml").stat().st_size
     meter = _meter_pack_folder_reads(monkeypatch, staged.staging_dir)
     reminted = psz.remint(staged, "sample-2")
     yml_path = reminted.staging_dir / "plugin.yml"
     yml_len = yml_path.stat().st_size
-    assert meter["bytes"] == yml_len
+    assert meter["bytes"] == yml_read_len
     sidecar_len = len((reminted.staging_dir / pz.SHA256_NAME).read_bytes())
     assert _live_tree_file_bytes(reminted.staging_dir) == yml_len + len(VIZ.encode()) + sidecar_len
 
@@ -696,9 +698,12 @@ def test_pa_tree_hash_sensitive_to_path_layout(tmp_path: Path, monkeypatch: pyte
     moved = hashlib.sha256((sub / "visualisation.yml").read_bytes()).hexdigest()
     digests = {k: v for k, v in staged.member_sha256.items() if k != "visualisation.yml"}
     digests["nested/visualisation.yml"] = moved
+    expected_before = psz.tree_hash_from_digests(
+        {**staged.member_sha256, pz.SHA256_NAME: sidecar_hex},
+    )
     expected_after = psz.tree_hash_from_digests({**digests, pz.SHA256_NAME: sidecar_hex})
+    assert before == expected_before
     assert after == expected_after
-    assert after != before
     assert moved == staged.member_sha256["visualisation.yml"]
 
 

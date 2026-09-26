@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_zip_install_ux.py",
+  "testName": "test_zip_ux_user_message_examples",
+  "description": "Zip unsafe user copy uses Couldn't install {stem}.zip.",
+  "patchedFailure": "tests/test_pack_zip_install_ux.py:69: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_pack_zip_install_ux.py::test_zip_ux_user_message_examples - assert \"Could not install unsafe.zip. The file isn't a valid pack or is damaged.\" == \"Couldn't install unsafe.zip. The file isn't a valid pack or is damaged.\"\n  \n  - Couldn't install unsafe.zip. The file isn't a valid pack or is damaged.\n  ?       ^\n  + Could not install unsafe.zip. The file isn't a valid pack or is damaged.\n  ?      + ^\n============================== 1 failed in 0.03s ==============================="
+}

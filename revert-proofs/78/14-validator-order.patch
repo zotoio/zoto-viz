@@ -1,0 +1,13 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+index 240d1c6..add7047 100644
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -100,7 +100,7 @@ class InstallCheckUnavailableError(Exception):
+ 
+ 
+ def register_install_check(check: InstallCheck) -> None:
+-    _INSTALL_CHECKS.append(check)
++    _INSTALL_CHECKS.insert(0, check)
+ 
+ 
+ def reset_install_locks_for_tests() -> None:

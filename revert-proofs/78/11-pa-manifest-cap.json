@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_pa_manifest_read_cap_65536_exact",
+  "description": "plugin.yml manifest read capped at 65536 bytes.",
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:282: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_pack_safe_zip_install.py::test_pa_manifest_read_cap_65536_exact - assert 1000000 == 65536\n +  where 1000000 = psz.MANIFEST_MEMBER_MAX_BYTES\n============================== 1 failed in 0.04s ==============================="
+}

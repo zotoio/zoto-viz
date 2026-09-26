@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_install_checks_run_in_registration_order",
+  "description": "Install validators run in ascending order value.",
+  "patchedFailure": "E       AssertionError: assert ['second'] == ['first', 'second']\nE         \nE         At index 0 diff: 'second' != 'first'\nE         Right contains one more item: 'second'\nE         \nE         Full diff:\nE           [\nE         -     'first',\nE               'second',\nE           ]\n\ntests/test_pack_safe_zip_install.py:640: AssertionError\n=========================== short test summary info ============================"
+}

@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_zip_install_ux.py",
+  "testName": "test_zip_ux_literal_encrypted_tail",
+  "description": "Literal encrypted zip tail copy.",
+  "patchedFailure": "tests/test_pack_zip_install_ux.py:37: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_pack_zip_install_ux.py::test_zip_ux_literal_encrypted_tail - assert '' == \"It's password-protected. Zip it again without a password.\"\n  \n  - It's password-protected. Zip it again without a password.\n============================== 1 failed in 0.02s ==============================="
+}

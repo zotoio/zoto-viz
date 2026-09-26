@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_zip_install_ux.py",
+  "testName": "test_zip_ux_literal_corrupt_prior_suffix",
+  "description": "Literal prior-version suffix copy.",
+  "patchedFailure": "E       AssertionError: assert '' == ', so version {version} is still installed.'\nE         \nE         - , so version {version} is still installed.\n\ntests/test_pack_zip_install_ux.py:33: AssertionError\n=========================== short test summary info ============================"
+}

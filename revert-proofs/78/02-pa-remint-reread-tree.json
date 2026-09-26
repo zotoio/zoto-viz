@@ -2,5 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_pack_safe_zip_install.py",
   "testName": "test_pa_remint_hashes_only_plugin_yml",
-  "description": "Remint must hash only plugin.yml bytes; revert re-reads the whole staged tree."
+  "description": "Remint must hash only plugin.yml bytes, not the whole staged tree.",
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:667: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_pack_safe_zip_install.py::test_pa_remint_hashes_only_plugin_yml - assert 166 == 35\n============================== 1 failed in 0.04s ==============================="
 }

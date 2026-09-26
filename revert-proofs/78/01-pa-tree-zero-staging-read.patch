@@ -1,13 +1,13 @@
 diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index b3d4435..9469d1a 100644
 --- a/service/pack_safe_zip.py
 +++ b/service/pack_safe_zip.py
-@@ -318,8 +318,9 @@ def validate_pack_zip(
-         sidecar = (zip_sha + "\n").encode("utf-8")
+@@ -309,7 +309,7 @@ def validate_pack_zip(
          (staging / pz.SHA256_NAME).write_text(zip_sha + "\n", encoding="utf-8")
          tree_digests = {**member_sha, pz.SHA256_NAME: hashlib.sha256(sidecar).hexdigest()}
          members_sorted = tuple(sorted(members))
 -        tree_sha = tree_hash_from_digests(tree_digests)
--        stats.staging_tree_hash_bytes_read = 0
-+        tree_sha, reread = runtime_tree_hash_from_disk_with_byte_count(staging)
-+        stats.staging_tree_hash_bytes_read = reread
++        tree_sha, _reread = runtime_tree_hash_from_disk_with_byte_count(staging)
          return _make_staged_pack(
+             staging_dir=staging,
+             zip_sha256=zip_sha,

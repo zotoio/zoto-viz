@@ -1,30 +1,13 @@
 diff --git a/service/plugin_install.py b/service/plugin_install.py
+index 240d1c6..9cd4ed9 100644
 --- a/service/plugin_install.py
 +++ b/service/plugin_install.py
-@@ -544,22 +544,7 @@ def _install_staged_to_runtime_locked(
-         _swap_in_progress.add(pid)
-         try:
--            try:
--                swapped = psz.go_live(staged, runtime, after_first_rename=_after_first_rename)
--            except OSError as e:
--                if upgrade and runtime.is_dir():
--                    old_version = installed_runtime_version(runtime)
+@@ -552,7 +552,7 @@ def _install_staged_to_runtime_locked(
+             except OSError as e:
+                 if upgrade and runtime.is_dir():
+                     old_version = installed_runtime_version(runtime)
 -                    msg = upgrade_rollback_user_message(name, version, old_version)
--                    _LOG.info("pack upgrade swap failed; rolled back to prior version: %s", e)
--                    record_blocked_zip(
--                        pack_id=pid,
--                        sha256=sha256,
--                        message=msg,
--                        zip_path=rel,
--                        reason=REASON_PACK_INSTALL_BLOCKED,
--                    )
--                    raise InstallUpgradeRollbackError(
--                        msg,
--                        pack_id=pid,
--                        sha256=sha256,
--                        zip_path=rel,
--                    ) from e
--                raise
-+            swapped = psz.go_live(staged, runtime, after_first_rename=_after_first_rename)
-         finally:
-             _swap_in_progress.discard(pid)
++                    msg = "Couldn't update pack."
+                     _LOG.info("pack upgrade swap failed; rolled back to prior version: %s", e)
+                     record_blocked_zip(
+                         pack_id=pid,

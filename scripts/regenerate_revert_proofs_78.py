@@ -74,7 +74,12 @@ def _extract_assertion_red(output: str) -> str:
     chunk: list[str] = []
     in_fail = False
     for line in lines:
-        if "AssertionError" in line or line.strip().startswith("E   assert"):
+        if (
+            "AssertionError" in line
+            or line.strip().startswith("E   assert")
+            or "DID NOT RAISE" in line
+            or line.startswith("E       Failed:")
+        ):
             in_fail = True
         if in_fail:
             chunk.append(line)
@@ -95,19 +100,20 @@ def generate_row(row: Row) -> None:
         patch = _git_diff(row.paths)
         if not patch.strip():
             raise RuntimeError(f"{row.slug}: empty diff")
-        check_path = OUT / f"{row.slug}.patch.check"
-        check_path.write_text(patch, encoding="utf-8")
-        subprocess.run(["git", "apply", "--check", str(check_path)], cwd=ROOT, check=True)
-        check_path.unlink(missing_ok=True)
-        (OUT / f"{row.slug}.patch").write_text(patch, encoding="utf-8")
     finally:
         for p, text in originals.items():
             _write(p, text)
 
+    check_path = OUT / f"{row.slug}.patch.check"
+    check_path.write_text(patch, encoding="utf-8")
+    subprocess.run(["git", "apply", "--check", str(check_path)], cwd=ROOT, check=True)
+    check_path.unlink(missing_ok=True)
+    (OUT / f"{row.slug}.patch").write_text(patch, encoding="utf-8")
+
     node = _pytest_node(row.test_file, row.test_name)
-    code, out = _run_pytest(node)
-    if code == 0:
-        raise RuntimeError(f"{row.slug}: test passed unpatched (expected pass)")
+    code, _out = _run_pytest(node)
+    if code != 0:
+        raise RuntimeError(f"{row.slug}: test failed unpatched (expected pass): {_out[-800:]}")
     # apply patch and fail
     patch_text = (OUT / f"{row.slug}.patch").read_text(encoding="utf-8")
     subprocess.run(["git", "apply", str(OUT / f"{row.slug}.patch")], cwd=ROOT, check=True)
@@ -116,7 +122,13 @@ def generate_row(row: Row) -> None:
         if code2 == 0:
             raise RuntimeError(f"{row.slug}: test stayed green after patch")
         red = _extract_assertion_red(out2)
-        if "AssertionError" not in out2 and "assert" not in red:
+        ok_fail = (
+            "AssertionError" in out2
+            or "assert" in red.lower()
+            or "DID NOT RAISE" in out2
+            or "Failed:" in out2
+        )
+        if not ok_fail:
             raise RuntimeError(f"{row.slug}: patched run did not fail on assertion: {out2[-500:]}")
     finally:
         subprocess.run(["git", "apply", "-R", str(OUT / f"{row.slug}.patch")], cwd=ROOT, check=True)
@@ -198,12 +210,17 @@ def build_rows() -> list[Row]:
     )
 
     def r04() -> None:
-        old = "    for rel in sorted(member_sha256, key=_tree_path_sort_key):\n        digest.update(_tree_entry_bytes(rel, member_sha256[rel]))\n"
+        old = (
+            "        tree_digests = {**member_sha, pz.SHA256_NAME: hashlib.sha256(sidecar).hexdigest()}\n"
+            "        members_sorted = tuple(sorted(members))\n"
+            "        tree_sha = tree_hash_from_digests(tree_digests)\n"
+        )
         new = (
-            "    for rel in sorted(member_sha256, key=_tree_path_sort_key):\n"
-            "        if rel != _REQUIRED:\n"
-            "            continue\n"
-            "        digest.update(_tree_entry_bytes(rel, member_sha256[rel]))\n"
+            "        tree_digests = {**member_sha, pz.SHA256_NAME: hashlib.sha256(sidecar).hexdigest()}\n"
+            "        members_sorted = tuple(sorted(members))\n"
+            "        tree_sha = tree_hash_from_digests(\n"
+            "            {_REQUIRED: member_sha[_REQUIRED], pz.SHA256_NAME: tree_digests[pz.SHA256_NAME]},\n"
+            "        )\n"
         )
         _replace("service/pack_safe_zip.py", old, new)
 
@@ -221,8 +238,8 @@ def build_rows() -> list[Row]:
     def r05() -> None:
         _replace(
             "service/plugin_install.py",
-            "            except OSError as e:\n                if upgrade and runtime.is_dir():\n",
-            "            except OSError:\n                if False and runtime.is_dir():\n",
+            "                    msg = upgrade_rollback_user_message(name, version, old_version)\n",
+            '                    msg = "Couldn\'t update pack."\n',
         )
 
     rows.append(
@@ -257,8 +274,8 @@ def build_rows() -> list[Row]:
     def r07() -> None:
         _replace(
             "service/plugin_install.py",
-            "    recover_orphan_staging_dirs(local_rt)\n",
-            "    # recover_orphan_staging_dirs(local_rt)\n",
+            "    for staging in dirs:\n        psz.cleanup_staging_dir(staging)\n",
+            "    for staging in dirs:\n        pass  # psz.cleanup_staging_dir(staging)\n",
         )
 
     rows.append(
@@ -299,7 +316,6 @@ def build_rows() -> list[Row]:
             "service/pack_safe_zip.py",
             "            member_sha[rel] = hashlib.sha256(data).hexdigest()\n",
             "            member_sha[rel] = hashlib.sha256(data + b\"\\n\").hexdigest()\n",
-            1,
         )
 
     rows.append(
@@ -316,8 +332,8 @@ def build_rows() -> list[Row]:
     def r10() -> None:
         _replace(
             "service/pack_safe_zip.py",
-            "        if total > max_uncompressed:\n",
-            "        if False and total > max_uncompressed:\n",
+            "        cap = max_uncompressed - total\n",
+            "        cap = max_uncompressed - total + 1\n",
         )
 
     rows.append(

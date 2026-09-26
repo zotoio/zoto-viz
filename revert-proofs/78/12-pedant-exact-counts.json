@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_pedant_single_cd_parse_web_adopt_mcp",
+  "description": "Exactly one central-directory parse per install path.",
+  "patchedFailure": "E       AssertionError: assert 0 == 1\nE        +  where 0 = ZipReadStats(archive_bytes_read=312, central_directory_parses=0).central_directory_parses\nE        +    where ZipReadStats(archive_bytes_read=312, central_directory_parses=0) = PackZipReadView(plugin={'id': 'sample', 'name': 'Sample', 'version': 1}, stats=ZipReadStats(archive_bytes_read=312, central_directory_parses=0), member_sha256={'plugin.yml': '75895fa2901a382dd6f4e8f7288f2f641b409123defe4594977e78d3cd9da95a', 'visualisation.yml': '5c943614dde99df2396ecd91f478023ae669b353c9f3c67662c7e1bfcf9c36bc'}, members_sorted=('plugin.yml', 'visualisation.yml')).stats\n\ntests/test_pack_safe_zip_install.py:335: AssertionError\n=========================== short test summary info ============================"
+}

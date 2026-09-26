@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_zip_install_ux.py",
+  "testName": "test_zip_ux_literal_corrupt_tail",
+  "description": "Literal corrupt zip tail copy.",
+  "patchedFailure": "tests/test_pack_zip_install_ux.py:29: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_pack_zip_install_ux.py::test_zip_ux_literal_corrupt_tail - assert '' == \"The file isn't a valid pack or is damaged.\"\n  \n  - The file isn't a valid pack or is damaged.\n============================== 1 failed in 0.02s ==============================="
+}

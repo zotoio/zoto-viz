@@ -1,0 +1,13 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index b3d4435..272000e 100644
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -299,7 +299,7 @@ def validate_pack_zip(
+         staging = new_staging_dir(runtime_parent, pack_id)
+         member_sha: dict[str, str] = {}
+         for rel, data in members.items():
+-            member_sha[rel] = hashlib.sha256(data).hexdigest()
++            member_sha[rel] = hashlib.sha256(data + b"\n").hexdigest()
+             out = (staging / rel).resolve()
+             if staging.resolve() not in out.parents and out != staging.resolve():
+                 raise ValueError(zip_entry_error(rel, "path escapes staging directory"))

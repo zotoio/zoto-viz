@@ -1,0 +1,13 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index b3d4435..60ebdc5 100644
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -489,7 +489,7 @@ def _read_all_members(zf: zipfile.ZipFile) -> dict[str, bytes]:
+             raise ValueError(
+                 zip_entry_error(_REQUIRED, f"exceeds {MANIFEST_MEMBER_MAX_BYTES} byte manifest read cap"),
+             )
+-        if actual != claimed:
++        if False and actual != claimed:
+             raise ValueError(zip_entry_error(rel, f"inflated {actual} bytes, declared {claimed}"))
+         compressed = int(info.compress_size) or 1
+         if actual > compressed * _MAX_COMPRESSION_RATIO:

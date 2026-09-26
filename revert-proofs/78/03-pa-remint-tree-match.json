@@ -2,5 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_pack_safe_zip_install.py",
   "testName": "test_pa_remint_tree_matches_from_scratch",
-  "description": "Remint combined tree hash must match a from-scratch hash of the same staged tree."
+  "description": "Remint combined tree hash must match from-scratch v1 hash.",
+  "patchedFailure": "E       AssertionError: assert 'cd2940b1c6b6fa055e6eefa754c92b809c315ace3d9ef91e9f7eb44d1d625d33' == '1bf52533b4961f13b0950e215bce1c4a2a8868baa621f09ffe0a4ba9b3f3b677'\nE         \nE         - 1bf52533b4961f13b0950e215bce1c4a2a8868baa621f09ffe0a4ba9b3f3b677\nE         + cd2940b1c6b6fa055e6eefa754c92b809c315ace3d9ef91e9f7eb44d1d625d33\n\ntests/test_pack_safe_zip_install.py:679: AssertionError\n=========================== short test summary info ============================"
 }
