@@ -23,6 +23,11 @@ amendments:
   - id: 7a
     title: "Scope: no host shader-failure fallback / Simple view in #52"
     status: done
+  - id: 7b
+    title: "Coordination: write-on-change cache inventory for #88 ContextGen (body only)"
+    status: done
+    artifacts:
+      - revert-proofs/52/amendment-7-pr-body.md
     artifacts:
       - revert-proofs/52/amendment-7-pr-body.md
       - revert-proofs/52/nixie-fc-glsl-revert.json
