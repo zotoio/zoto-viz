@@ -272,8 +272,8 @@ def test_scan_memo_hits_until_files_change(tmp_path: Path) -> None:
 
 
 def test_scan_memo_invalidates_on_asset_bytes(tmp_path: Path) -> None:
-    home = tmp_path / "demo-pack"
-    home.mkdir()
+    home = tmp_path / "src" / "demo-pack"
+    home.mkdir(parents=True)
     (home / "plugin.yml").write_text(
         _MIN_YML.format(pid="demo-pack", name="Demo", version=1), encoding="utf-8",
     )
