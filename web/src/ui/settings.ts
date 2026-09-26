@@ -1799,17 +1799,25 @@ export class Settings {
     this.persistDice();
   }
 
-  /** Show or hide the right-hand activity list. Syncs the cog toggle and persists. */
-  setFeedOn(on: boolean): void {
+  /** Show or hide the right-hand activity list. Syncs the cog toggle and persists unless `persist` is false. */
+  setFeedOn(on: boolean, opts?: { persist?: boolean }): void {
     this.feed.on = on;
     if (this.feedUi) this.feedUi.on.checked = on;
+    if (opts?.persist === false) {
+      this.onFeedChange(this.feed);
+      return;
+    }
     this.persistFeed();
   }
 
   /** Show or hide the agent chat panel. */
-  setChatOn(on: boolean): void {
+  setChatOn(on: boolean, opts?: { persist?: boolean }): void {
     this.chat.on = on;
     if (this.chatUi) this.chatUi.on.checked = on;
+    if (opts?.persist === false) {
+      this.onChatChange(this.chat);
+      return;
+    }
     this.persistChat();
   }
 

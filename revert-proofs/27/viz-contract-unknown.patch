@@ -1,0 +1,9 @@
+--- a/web/src/plugins/viz-host.ts
++++ b/web/src/plugins/viz-host.ts
+@@ -308,7 +308,7 @@ function parsePackContractVersion(raw: unknown): PackVizContractVersion | "missin
+     return { blocked: "viz.contract must be a whole number (1 or 2)." };
+   }
+   if (n === 1 || n === 2) return n as PackVizContractVersion;
+-  return { blocked: `viz.contract ${n} is not supported; use 1 or 2.` };
++  return n as PackVizContractVersion;
+ }

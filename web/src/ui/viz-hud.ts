@@ -74,17 +74,20 @@ export interface VizHudTick {
   now: number;
 }
 
-/** v2 contract exposes `sys.failed` and `talkers[].failed` but no separate HUD glyph — host maps peak ratio to a strip badge. */
+/** v2 contract exposes talker TCP failure ratios and systemd unit pressure — host maps them to a strip badge. */
 export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null {
   if (!frame) return null;
-  const sysFail = frame.sys?.failed ?? 0;
   let talkerPeak = 0;
   for (const t of frame.talkers) {
     if (typeof t.failed === "number") talkerPeak = Math.max(talkerPeak, t.failed);
   }
-  const peak = Math.max(sysFail, talkerPeak);
-  if (peak <= 0) return null;
-  return `⚠ DEGRADED ${Math.round(peak * 100)}%`;
+  const sysFail = frame.sys?.failed ?? 0;
+  const failedUnits = sysFail > 0 ? Math.max(1, Math.round(sysFail * 4)) : 0;
+  const parts: string[] = [];
+  if (talkerPeak > 0) parts.push(`${Math.round(talkerPeak * 100)}% TCP`);
+  if (failedUnits > 0) parts.push(`${failedUnits} unit${failedUnits === 1 ? "" : "s"}`);
+  if (!parts.length) return null;
+  return `⚠ DEGRADED ${parts.join(" · ")}`;
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -227,7 +230,7 @@ export class VizHud {
     this.degradedEl = document.createElement("span");
     this.degradedEl.className = "viz-hud-degraded";
     this.degradedEl.hidden = true;
-    this.degradedEl.title = "Elevated TCP failure ratio on sys or talkers (viz contract v2)";
+    this.degradedEl.title = "Elevated per-host TCP failure ratio and/or failed systemd units (viz contract v2)";
 
     this.stageFailEl = document.createElement("div");
     this.stageFailEl.className = "viz-stage-fail-label";
@@ -276,7 +279,11 @@ export class VizHud {
     const changed = next !== this.activeId;
     this.activeId = next;
     this.root.hidden = !this.activeId;
-    if (!this.activeId) return;
+    if (!this.activeId) {
+      this.stageFailEl.hidden = true;
+      this.stageFailEl.textContent = "⚠ DEGRADED";
+      return;
+    }
     if (changed) this.resetSkipBaseline();
     if (!this.packEl.textContent) this.packEl.textContent = packName;
     else morphCopy(this.packEl, packName);

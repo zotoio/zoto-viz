@@ -1,0 +1,12 @@
+--- a/web/src/ui/viz-hud.ts
++++ b/web/src/ui/viz-hud.ts
+@@ -281,10 +281,6 @@ export class VizHud {
+     this.activeId = next;
+     this.root.hidden = !this.activeId;
+-    if (!this.activeId) {
+-      this.stageFailEl.hidden = true;
+-      this.stageFailEl.textContent = "⚠ DEGRADED";
+-      return;
+-    }
++    if (!this.activeId) return;
+     if (changed) this.resetSkipBaseline();

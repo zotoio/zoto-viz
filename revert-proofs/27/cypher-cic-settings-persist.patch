@@ -1,0 +1,12 @@
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1803,10 +1803,6 @@ export class Settings {
+   setFeedOn(on: boolean, opts?: { persist?: boolean }): void {
+     this.feed.on = on;
+     if (this.feedUi) this.feedUi.on.checked = on;
+-    if (opts?.persist === false) {
+-      this.onFeedChange(this.feed);
+-      return;
+-    }
+     this.persistFeed();
+   }

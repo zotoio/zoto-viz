@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/viz-host.test.ts",
+  "testName": "delivers v1 talker lifetime counts for v1 packs even when flow rates exist",
+  "description": "One-line production revert: buildVizFrameForPlugin ignores pack contract version for talker rates."
+}

@@ -9,6 +9,7 @@ capabilities:
   - config.read
 viz:
   graphWalk: false
+  contract: 2
   idle:
     fixture: host
   maxBuffers: 4

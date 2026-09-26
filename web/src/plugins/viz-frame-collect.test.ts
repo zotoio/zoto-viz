@@ -3,7 +3,7 @@ import type { Flow, StateMsg } from "../core/types";
 import type { ParentMsg } from "./host";
 import type { VizDataFrame } from "./viz-host";
 import { buildVizFrame, buildVizFrameForPlugin, VIZ_CONTRACT_VERSION } from "./viz-host";
-import { buildIdleVizFrame, buildIdleVizFrameFailed, IDLE_VIZ_DEMO_SEED } from "./fixtures/idle-viz-frame";
+import { buildIdleVizFrame, buildIdleVizFrameFailed } from "./fixtures/idle-viz-frame";
 import {
   buildVizSdkVmLiveFrame,
   vmLiveCaptureState,
@@ -109,16 +109,17 @@ describe("idle demo v2", () => {
 
   it("nested quiet frames do not alias talker arrays", () => {
     const state = vmLiveCaptureState();
-    const first = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE);
-    const second = buildVizFrameForPlugin(state, first.t, 0, VIZ_SDK_HOST_IDLE);
+    const first = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE, 2);
+    const second = buildVizFrameForPlugin(state, first.t, 0, VIZ_SDK_HOST_IDLE, 2);
     expect(first.talkers).not.toBe(second.talkers);
     expect(first.talkers).toEqual(second.talkers);
   });
 
-  it("failure demo fixture is deterministic with a pinned seed", () => {
-    const a = buildIdleVizFrameFailed(85, 0.016, IDLE_VIZ_DEMO_SEED);
-    const b = buildIdleVizFrameFailed(85, 0.016, IDLE_VIZ_DEMO_SEED);
-    expect(a).toEqual(b);
+  it("failure demo fixture is deterministic across ticks", () => {
+    const a = buildIdleVizFrameFailed(85, 0.016);
+    const b = buildIdleVizFrameFailed(999, 0.5);
+    expect(a.talkers).toEqual(b.talkers);
+    expect(a.sys).toEqual(b.sys);
     expect(a.talkers.some((t) => t.failed !== undefined)).toBe(true);
   });
 });
@@ -128,7 +129,7 @@ describe("vm-live quiet capture", () => {
     const state = vmLiveCaptureState();
     expect(state.devices.length).toBeGreaterThan(0);
     expect(state.flows).toHaveLength(0);
-    const frame = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE);
+    const frame = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE, 2);
     expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(frame.links ?? []).toHaveLength(0);
     expect(frame.talkers.every((t) => t.failed === undefined)).toBe(true);

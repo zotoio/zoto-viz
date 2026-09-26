@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/viz-hud.test.ts",
+  "testName": "hides stage fail pill when demo pack is deactivated",
+  "description": "One-line production revert: skip hiding stageFailEl in setActive(null)."
+}

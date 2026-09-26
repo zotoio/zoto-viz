@@ -24,6 +24,7 @@ export type DogfoodHostHandlers = VizPackHandlers;
 export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   "packet-tunnel": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 2,
     maxBufferFloats: 16,
     maxParticles: 0,
@@ -32,6 +33,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "rf-constellation": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 32,
     maxParticles: 0,
@@ -40,6 +42,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "talker-storm": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 8,
     maxParticles: 512,
@@ -48,6 +51,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "kefrens-bars": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 32,
     maxParticles: 0,
@@ -56,6 +60,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "roto-proto": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 8,
     maxParticles: 0,
@@ -64,6 +69,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "blob-mesh": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 32,
     maxParticles: 0,
@@ -72,6 +78,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "star-sines": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 16,
     maxParticles: 0,
@@ -80,6 +87,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "hn-rain": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 64,
     maxParticles: 0,
@@ -88,6 +96,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "hn-term": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 64,
     maxParticles: 0,
@@ -96,6 +105,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "stereo-gram": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 8,
     maxBufferFloats: 64,
     maxParticles: 0,
@@ -104,6 +114,7 @@ export const DEMO_PACK_CONTRACTS: Record<VizDemoPackId, VizPluginContract> = {
   })!,
   "nixie-clock": parseVizContract({
     graphWalk: false,
+    contract: 2,
     maxBuffers: 1,
     maxBufferFloats: 16,
     maxParticles: 0,
@@ -162,7 +173,8 @@ export function dogfoodTick(
   build: typeof buildVizFrame = buildVizFrame,
 ): DogfoodTickResult {
   const contract = DEMO_PACK_CONTRACTS[packId];
-  const idleBuild = (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, contract.idle);
+  const idleBuild = (s: StateMsg, pt: number, a: number) =>
+    buildVizFrameForPlugin(s, pt, a, contract.idle, contract.contract);
   let buildCalls = 0;
   const wrappedBuild = (s: StateMsg, pt: number, a: number) => {
     buildCalls++;

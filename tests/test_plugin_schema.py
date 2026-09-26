@@ -255,6 +255,7 @@ def test_viz_plugin_yml_validates() -> None:
         doc = plugins.load_file(ROOT / "plugins" / "src" / pid / "plugin.yml")
         assert doc["viz"]["graphWalk"] is False
         assert doc["viz"]["idle"]["fixture"] == "host"
+        assert doc["viz"].get("contract", 1) in (1, 2)
         assert "viz.read" in doc["capabilities"]
 
 

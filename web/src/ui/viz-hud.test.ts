@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StateMsg } from "../core/types";
 import { protocols } from "../core/modes";
+import { buildIdleVizFrameFailed, idleVizFrameFailedBadgeText } from "../plugins/fixtures/idle-viz-frame";
 import { hudTickFromBudget } from "../plugins/dogfood-runner";
 import { VizFrameBudget } from "../plugins/viz-host";
 import {
@@ -272,7 +273,7 @@ describe("viz hud helpers", () => {
     }, state)).toEqual({ label: "talkers", value: "1" });
   });
 
-  it("hides the HUD separator after the failure badge when peak is zero", () => {
+  it("hides HUD separator after DEGRADED badge when failure gauges are zero", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
     hud.setActive("talker-storm", "Talker Storm");
@@ -307,7 +308,7 @@ describe("viz hud helpers", () => {
     expect(visibleSeps().length).toBe(4);
   });
 
-  it("shows failure badge in HUD strip when frame carries talkers[].failed or sys.failed", () => {
+  it("shows DEGRADED strip badge from talker TCP failure ratio", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
     hud.setActive("talker-storm", "Talker Storm");
@@ -328,10 +329,10 @@ describe("viz hud helpers", () => {
       state: minimalState(),
       now: 1000,
     });
-    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe("⚠ DEGRADED 60%");
+    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe("⚠ DEGRADED 55% TCP · 2 units");
   });
 
-  it("shows failure stage pill when frame carries talkers[].failed or sys.failed", () => {
+  it("shows DEGRADED stage pill matching strip badge text", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
     hud.setActive("talker-storm", "Talker Storm");
@@ -352,7 +353,59 @@ describe("viz hud helpers", () => {
       state: minimalState(),
       now: 1000,
     });
-    expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe("⚠ DEGRADED 60%");
+    expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe("⚠ DEGRADED 55% TCP · 2 units");
+  });
+
+  it("uses DEGRADED prefix on strip failure badge", () => {
+    const badge = vizFrameFailureBadge({
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
+      talkers: [{ id: "10.0.0.1", rate: 1, role: "lan", failed: 0.4 }],
+    });
+    expect(badge).toMatch(/^⚠ DEGRADED /);
+  });
+
+  it("keeps systemd unit count separate from TCP failure percentage", () => {
+    expect(vizFrameFailureBadge({
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
+      talkers: [{ id: "10.0.0.1", rate: 1, role: "lan", failed: 0.6 }],
+      sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.25, udev: 0 },
+    })).toBe("⚠ DEGRADED 60% TCP · 1 unit");
+  });
+
+  it("idle-failed fixture shows the same DEGRADED copy on strip and stage pill", () => {
+    const frame = buildIdleVizFrameFailed(12, 0);
+    const expected = idleVizFrameFailedBadgeText();
+    expect(vizFrameFailureBadge(frame)).toBe(expected);
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame,
+      state: minimalState(),
+      now: 1000,
+    });
+    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe(expected);
+    expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe(expected);
+  });
+
+  it("hides stage fail pill when demo pack is deactivated", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: buildIdleVizFrameFailed(0, 0),
+      state: minimalState(),
+      now: 1000,
+    });
+    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(false);
+    hud.setActive(null, "");
+    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(true);
   });
 
   it("hides failure badge on healthy idle frames", () => {

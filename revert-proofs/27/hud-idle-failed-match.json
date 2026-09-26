@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/viz-hud.test.ts",
+  "testName": "idle-failed fixture shows the same DEGRADED copy on strip and stage pill",
+  "description": "One-line production revert: stage pill uses static ⚠ DEGRADED instead of failBadge text."
+}

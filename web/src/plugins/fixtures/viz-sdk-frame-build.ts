@@ -446,7 +446,7 @@ export function vmLiveCaptureState(): StateMsg {
 /** Real host idle merge on an empty monitor (buildIdleVizFrame via `fixture: host`). */
 export function buildVizSdkIdleFrame(): VizDataFrame {
   const state = emptyMonitorState(10);
-  const raw = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE);
+  const raw = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE, 2);
   const map = scrubMapForFrame(state, raw);
   return scrubVizDataFrame(raw, map, state);
 }
@@ -500,7 +500,7 @@ function scrubIdleDemoSlices(frame: VizDataFrame): VizDataFrame {
   const slices = frame.demoSlices;
   if (!frame.demo || !slices) return frame;
   const empty = emptyMonitorState(frame.t);
-  const seed = buildVizFrameForPlugin(empty, 0, 0, VIZ_SDK_HOST_IDLE);
+  const seed = buildVizFrameForPlugin(empty, 0, 0, VIZ_SDK_HOST_IDLE, 2);
   const map = scrubMapForFrame(empty, seed);
   const scrubbed = scrubVizDataFrame(seed, map, empty);
   return {
@@ -520,7 +520,7 @@ function buildLiveFrame(state: StateMsg, prevTs = 0, audio = 0.12): VizDataFrame
 }
 
 function buildPluginQuietFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFrame {
-  const raw = buildVizFrameForPlugin(state, prevTs, audio, VIZ_SDK_HOST_IDLE);
+  const raw = buildVizFrameForPlugin(state, prevTs, audio, VIZ_SDK_HOST_IDLE, 2);
   return scrubIdleDemoSlices(raw);
 }
 

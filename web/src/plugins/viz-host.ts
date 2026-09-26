@@ -16,6 +16,14 @@ export const VIZ_MAX_RF_SAMPLES = 24;
 export const VIZ_MAX_TALKER_SAMPLES = 24;
 export const VIZ_MAX_HEADLINE_SAMPLES = 64;
 
+/** Pack-declared viz frame versions the host understands. */
+export const SUPPORTED_PACK_VIZ_CONTRACTS = [1, 2] as const;
+export type PackVizContractVersion = (typeof SUPPORTED_PACK_VIZ_CONTRACTS)[number];
+
+export type VizContractParseResult =
+  | { state: "ready"; contract: VizPluginContract }
+  | { state: "Blocked"; reason: string };
+
 /** Fixed std140 UBO layout — locked in schema `$defs/vizUboLayout`. */
 export const VIZ_UBO = {
   block: "ZotoVizData",
@@ -50,8 +58,8 @@ export type VizIdleConfig =
   | { inline: VizIdleInline };
 
 export interface VizPluginContract {
-  /** VizDataFrame slice version the host delivers when {@link VIZ_CONTRACT_VERSION} is stamped on frames. */
-  contract: number;
+  /** Pack-declared VizDataFrame slice version (1 or 2) negotiated from plugin.yml `viz.contract`. */
+  contract: PackVizContractVersion;
   maxBuffers: number;
   maxBufferFloats: number;
   maxParticles: number;
@@ -159,7 +167,7 @@ export function pluginNeedsVizContract(caps: string[] | undefined): boolean {
 
 export function defaultVizContract(overrides?: Partial<Omit<VizPluginContract, "ubo" | "graphWalk">>): VizPluginContract {
   return {
-    contract: VIZ_CONTRACT_VERSION,
+    contract: 2,
     maxBuffers: VIZ_DEFAULT_MAX_BUFFERS,
     maxBufferFloats: VIZ_DEFAULT_MAX_BUFFER_FLOATS,
     maxParticles: VIZ_DEFAULT_MAX_PARTICLES,
@@ -292,20 +300,53 @@ export function mergeVizIdleFrame(live: VizDataFrame, idle: VizIdleConfig): VizD
   };
 }
 
-/** Parse plugin.yml ``viz`` block into a normalized contract. */
-export function parseVizContract(raw: unknown): VizPluginContract | undefined {
+function parsePackContractVersion(raw: unknown): PackVizContractVersion | "missing" | { blocked: string } {
+  if (raw === undefined || raw === null) return "missing";
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+    return { blocked: "viz.contract must be a whole number (1 or 2)." };
+  }
+  if (n === 1 || n === 2) return n as PackVizContractVersion;
+  return { blocked: `viz.contract ${n} is not supported; use 1 or 2.` };
+}
+
+/** Parse plugin.yml ``viz`` block into a normalized contract or a blocked reason. */
+export function parseVizContractResult(raw: unknown): VizContractParseResult | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const doc = raw as Record<string, unknown>;
   if (doc.graphWalk !== false) return undefined;
   const idle = parseVizIdle(doc.idle);
   if (!idle) return undefined;
+  const versionParse = parsePackContractVersion(doc.contract);
+  if (typeof versionParse === "object" && "blocked" in versionParse) {
+    return { state: "Blocked", reason: versionParse.blocked };
+  }
+  const contractVersion: PackVizContractVersion = versionParse === "missing" ? 1 : versionParse;
   const uniforms = Array.isArray(doc.uniforms)
     ? doc.uniforms.filter((u): u is VizSkyUniform => typeof u === "string" && SKY_UNIFORM_SET.has(u))
     : [...PLUGIN_SKY_UNIFORMS];
   const maxBuffers = clampInt(doc.maxBuffers, 1, VIZ_UBO.slotCount, VIZ_DEFAULT_MAX_BUFFERS);
   const maxBufferFloats = clampInt(doc.maxBufferFloats, 4, VIZ_UBO.slotFloats, VIZ_DEFAULT_MAX_BUFFER_FLOATS);
   const maxParticles = clampInt(doc.maxParticles, 0, 8192, 0);
-  return { maxBuffers, maxBufferFloats, maxParticles, contract: VIZ_CONTRACT_VERSION, graphWalk: false, uniforms, ubo: VIZ_UBO, idle };
+  return {
+    state: "ready",
+    contract: {
+      maxBuffers,
+      maxBufferFloats,
+      maxParticles,
+      contract: contractVersion,
+      graphWalk: false,
+      uniforms,
+      ubo: VIZ_UBO,
+      idle,
+    },
+  };
+}
+
+/** Parse plugin.yml ``viz`` block into a normalized contract. */
+export function parseVizContract(raw: unknown): VizPluginContract | undefined {
+  const parsed = parseVizContractResult(raw);
+  return parsed?.state === "ready" ? parsed.contract : undefined;
 }
 
 function clampInt(raw: unknown, lo: number, hi: number, fallback: number): number {
@@ -385,9 +426,9 @@ function talkerScore(d: Device, rates: Map<string, number>, liveMode: boolean): 
   return d.packets;
 }
 
-function topTalkers(devices: Device[], flows: Flow[], limit: number): VizTalkerSample[] {
+function topTalkers(devices: Device[], flows: Flow[], limit: number, forceLifetimeRates = false): VizTalkerSample[] {
   const rates = devicePacketRateMap(flows);
-  const liveMode = hasLivePacketRates(rates);
+  const liveMode = !forceLifetimeRates && hasLivePacketRates(rates);
   return topKByScore(
     devices,
     limit,
@@ -471,6 +512,7 @@ function buildVizFrameCore(
   prevTs = 0,
   audio = 0,
   bind?: SourceBind | Record<string, string>,
+  forceLifetimeTalkerRates = false,
 ): VizDataFrame {
   const t = state.ts || Date.now() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
@@ -481,7 +523,7 @@ function buildVizFrameCore(
     audio: Math.min(1, Math.max(0, audio)),
     packets: packetSamples(state, VIZ_MAX_PACKET_SAMPLES),
     rf: rfBeacons(state, VIZ_MAX_RF_SAMPLES),
-    talkers: topTalkers(state.devices, state.flows, VIZ_MAX_TALKER_SAMPLES),
+    talkers: topTalkers(state.devices, state.flows, VIZ_MAX_TALKER_SAMPLES, forceLifetimeTalkerRates),
     headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed).map((h) => ({
       id: h.id,
       label: h.label,
@@ -500,9 +542,15 @@ export function buildVizFrameForPlugin(
   prevTs: number,
   audio: number,
   idle: VizIdleConfig,
+  packContract: PackVizContractVersion | number = 1,
   bind?: SourceBind | Record<string, string>,
 ): VizDataFrame {
-  const merged = mergeVizIdleFrame(buildVizFrameCore(state, prevTs, audio, bind), idle);
+  const version = packContract >= 2 ? 2 : 1;
+  const merged = mergeVizIdleFrame(
+    buildVizFrameCore(state, prevTs, audio, bind, version < 2),
+    idle,
+  );
+  if (version < 2) return { ...merged, contract: 1 };
   return applyVizFrameContractV2(merged, state, resolveVizFrameCollectOpts(state));
 }
 

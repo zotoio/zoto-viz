@@ -8,6 +8,7 @@ capabilities:
   - viz.write
 viz:
   graphWalk: false
+  contract: 2
   maxBuffers: 1
   maxBufferFloats: 64
   maxParticles: 0

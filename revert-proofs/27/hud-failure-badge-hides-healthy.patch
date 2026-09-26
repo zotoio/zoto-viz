@@ -1,10 +1,11 @@
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
-@@ -83,7 +83,7 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null
+@@ -77,6 +77,8 @@ export interface VizHudTick {
+ /** v2 contract exposes talker TCP failure ratios and systemd unit pressure — host maps them to a strip badge. */
+ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null {
+   if (!frame) return null;
++  if (frame.talkers.length && frame.talkers.every((t) => t.failed === undefined))
++    return "⚠ DEGRADED 0%";
+   let talkerPeak = 0;
+   for (const t of frame.talkers) {
      if (typeof t.failed === "number") talkerPeak = Math.max(talkerPeak, t.failed);
-   }
-   const peak = Math.max(sysFail, talkerPeak);
--  if (peak <= 0) return null;
-+  if (peak <= 0) return "fail 0%";
-   return `⚠ DEGRADED ${Math.round(peak * 100)}%`;
- }

@@ -11,6 +11,12 @@ import { EMPTY_SYS_TELEMETRY, VIZ_CONTRACT_VERSION } from "../viz-host";
 /** Pinned seed for CI / failure-demo determinism. */
 export const IDLE_VIZ_DEMO_SEED = 0x7a0707;
 
+/** Pinned sys.failed for idle-failed fixture (0.6 → 2 failed units in HUD copy). */
+export const IDLE_VIZ_FAILED_SYS = 0.6;
+
+/** Pinned peak talker TCP failure ratio for idle-failed fixture. */
+export const IDLE_VIZ_FAILED_TCP = 0.6;
+
 /** Pre-built demo slices — reused every tick (no per-frame allocation). */
 const DEMO_PACKETS: readonly VizPacketSample[] = [
   { proto: "tcp", size: 480, field: 0.62 },
@@ -44,36 +50,16 @@ const DEMO_HEADLINES: readonly VizHeadline[] = [
   { id: "demo:1", label: "Demo", text: "Live traffic wins when present", kind: "demo" },
 ];
 
-function mulberry32(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6d2b79f5) >>> 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const FAILED_DEMO_TALKERS_SCRATCH: VizTalkerSample[] = [];
+const PINNED_FAILED_TALKERS: readonly VizTalkerSample[] = [
+  { id: "10.0.0.42", rate: 120, role: "lan", failed: IDLE_VIZ_FAILED_TCP },
+  { id: "10.0.0.1", rate: 88, role: "gateway" },
+  { id: "8.8.8.8", rate: 64, role: "internet" },
+  { id: "10.0.0.17", rate: 40, role: "lan" },
+];
 
 /** Deterministic per-talker failed ratios for failure-demo fixtures/tests only. */
-export function demoTalkersWithFailed(t: number, seed = IDLE_VIZ_DEMO_SEED): VizTalkerSample[] {
-  const rnd = mulberry32(seed + Math.floor(t) * 997);
-  const sysFailed = 0.55 + rnd() * 0.25;
-  FAILED_DEMO_TALKERS_SCRATCH.length = 0;
-  for (let i = 0; i < DEMO_TALKERS.length; i++) {
-    const talker = DEMO_TALKERS[i]!;
-    if (talker.role === "gateway") {
-      FAILED_DEMO_TALKERS_SCRATCH.push(talker);
-      continue;
-    }
-    const aligned = i === 0;
-    const peer = i === 3 && rnd() > 0.4;
-    const failed = aligned || peer ? Math.min(1, sysFailed * (0.85 + rnd() * 0.2)) : undefined;
-    FAILED_DEMO_TALKERS_SCRATCH.push(failed !== undefined ? { ...talker, failed } : talker);
-  }
-  return [...FAILED_DEMO_TALKERS_SCRATCH];
+export function demoTalkersWithFailed(): VizTalkerSample[] {
+  return PINNED_FAILED_TALKERS.map((t) => ({ ...t }));
 }
 
 /**
@@ -98,11 +84,18 @@ export function buildIdleVizFrame(t: number, dt = 0): VizDataFrame {
 }
 
 /** Failure demo variant — use in tests/fixtures only, not the default idle feed. */
-export function buildIdleVizFrameFailed(t: number, dt = 0, seed = IDLE_VIZ_DEMO_SEED): VizDataFrame {
+export function buildIdleVizFrameFailed(t: number, dt = 0): VizDataFrame {
   const base = buildIdleVizFrame(t, dt);
   return {
     ...base,
-    talkers: demoTalkersWithFailed(t, seed),
-    sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.6 },
+    talkers: demoTalkersWithFailed(),
+    sys: { ...EMPTY_SYS_TELEMETRY, failed: IDLE_VIZ_FAILED_SYS },
   };
+}
+
+/** Expected HUD DEGRADED copy for {@link buildIdleVizFrameFailed} (strip + stage pill). */
+export function idleVizFrameFailedBadgeText(): string {
+  const tcpPct = Math.round(IDLE_VIZ_FAILED_TCP * 100);
+  const units = Math.max(1, Math.round(IDLE_VIZ_FAILED_SYS * 4));
+  return `⚠ DEGRADED ${tcpPct}% TCP · ${units} units`;
 }

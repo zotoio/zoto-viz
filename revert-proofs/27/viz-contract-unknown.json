@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/viz-host.test.ts",
+  "testName": "blocks unknown viz.contract with a plain-language reason",
+  "description": "One-line production revert: parseVizContractResult accepts any integer contract version."
+}

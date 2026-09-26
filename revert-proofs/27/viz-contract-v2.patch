@@ -1,0 +1,9 @@
+--- a/web/src/plugins/viz-host.ts
++++ b/web/src/plugins/viz-host.ts
+@@ -552,5 +552,5 @@ export function buildVizFrameForPlugin(
+     idle,
+   );
+   if (version < 2) return { ...merged, contract: 1 };
+-  return applyVizFrameContractV2(merged, state, resolveVizFrameCollectOpts(state));
++  return { ...merged, contract: 2 };
+ }

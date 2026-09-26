@@ -101,6 +101,11 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import {
+  beginCypherCicPanelSession,
+  endCypherCicPanelSession,
+  type CypherCicPanelSession,
+} from "./cypher-cic-panels";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
@@ -633,6 +638,13 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     tsWatchId = spec?.id ?? "";
     return;
   }
+  if (spec.viz_block) {
+    sandbox.unload();
+    bindVizWriter(null);
+    scene.clearPluginStyle();
+    tsWatchId = "";
+    return;
+  }
   if (pluginNeedsReview(spec) && !spec.consent) {
     sandbox.unload();
     bindVizWriter(null);
@@ -783,16 +795,32 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
   await loadPluginSkyOnto(scene, spec, true);
 }
 
-/** Cypher CIC mosaic is unreadable with fixed feed/chat overlays — collapse both on entry. */
-function collapseCypherCicPanels(m: ViewMode): void {
-  if (m.pluginId !== "cypher-cic") return;
-  if (settings.feedSettings.on) settings.setFeedOn(false);
-  if (settings.chatSettings.on) settings.setChatOn(false);
+/** Cypher CIC mosaic is unreadable with fixed feed/chat overlays — collapse both for this session only (#49). */
+let cypherCicPanelSession: CypherCicPanelSession | null = null;
+
+function applyCypherCicPanelSession(m: ViewMode): void {
+  if (m.pluginId !== "cypher-cic") {
+    const end = endCypherCicPanelSession(cypherCicPanelSession);
+    if (end) {
+      settings.setFeedOn(end.restoreFeed, { persist: false });
+      settings.setChatOn(end.restoreChat, { persist: false });
+      cypherCicPanelSession = null;
+    }
+    return;
+  }
+  const begin = beginCypherCicPanelSession(
+    cypherCicPanelSession,
+    settings.feedSettings.on,
+    settings.chatSettings.on,
+  );
+  cypherCicPanelSession = begin.session;
+  if (begin.hideFeed) settings.setFeedOn(false, { persist: false });
+  if (begin.hideChat) settings.setChatOn(false, { persist: false });
 }
 
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const m = modeById(id);
-  collapseCypherCicPanels(m);
+  applyCypherCicPanelSession(m);
   const opts = optsFor(m);
   const prevMode = liveMode;
   currentOpts = opts;
@@ -1033,7 +1061,14 @@ function feed(m: StateMsg): void {
       ? illustratedSourceBind(optsFor(mode))
       : parseSourceBind(optsFor(mode));
     const buildLiveFrame = idle
-      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
+      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
+        s,
+        pt,
+        a,
+        idle,
+        active?.viz?.contract ?? 1,
+        bind,
+      )
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
     void ensureVizDevFixtureLoaded();
     const useDevFixture = import.meta.env.DEV && !!vizFixtureQueryRaw();

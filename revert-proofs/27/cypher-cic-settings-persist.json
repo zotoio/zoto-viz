@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/cypher-cic-settings.test.ts",
+  "testName": "leaves persisted feed and chat toggles unchanged after session-only collapse",
+  "description": "One-line production revert: setFeedOn/setChatOn always persist to localStorage."
+}

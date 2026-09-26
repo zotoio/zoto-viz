@@ -1,0 +1,9 @@
+--- a/web/src/plugins/viz-host.ts
++++ b/web/src/plugins/viz-host.ts
+@@ -324,7 +324,7 @@ export function parseVizContractResult(raw: unknown): VizContractParseResult | u
+   if (typeof versionParse === "object" && "blocked" in versionParse) {
+     return { state: "Blocked", reason: versionParse.blocked };
+   }
+-  const contractVersion: PackVizContractVersion = versionParse === "missing" ? 1 : versionParse;
++  const contractVersion: PackVizContractVersion = versionParse === "missing" ? 2 : versionParse;
+ 
