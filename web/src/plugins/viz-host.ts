@@ -1,7 +1,31 @@
 import type { Device, StateMsg } from "../core/types";
-import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
+import { vizClockMs } from "../core/viz-clock";
+import {
+  countEligibleSourceHeadlines,
+  parseSourceBind,
+  sourceHeadlines,
+  type SourceBind,
+} from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
+import {
+  bumpFlowProtoVisit,
+  bumpFlowVisit,
+  bumpFrameObject,
+  bumpPacketObject,
+  bumpRateCall,
+  bumpTalkerObject,
+  resetVizBuildCounters,
+} from "./viz-build-counters";
+import {
+  recordHeadlineDecimation,
+  recordPacketDecimation,
+  recordRfDecimation,
+  recordTalkerDecimation,
+  resetVizDecimationDropStats,
+  takeVizDecimationDropStats,
+  type VizDecimationDropStats,
+} from "./viz-decimation-stats";
 
 /** Target frame budget for viz plugin work (60 fps). */
 export const VIZ_FRAME_BUDGET_MS = 16.7;
@@ -14,6 +38,9 @@ export const VIZ_MAX_PACKET_SAMPLES = 32;
 export const VIZ_MAX_RF_SAMPLES = 24;
 export const VIZ_MAX_TALKER_SAMPLES = 24;
 export const VIZ_MAX_HEADLINE_SAMPLES = 64;
+
+/** Seeded fat-LAN JSON frame ceiling — update only when contract output shape changes. */
+export const FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING = 28_500;
 
 /** Fixed std140 UBO layout — locked in schema `$defs/vizUboLayout`. */
 export const VIZ_UBO = {
@@ -324,6 +351,7 @@ export function topKByScore<T>(
   const buf: { score: number; item: T }[] = [];
   for (const item of items) {
     if (skip(item)) continue;
+    bumpRateCall();
     const s = score(item);
     if (s <= 0) continue;
     if (buf.length < limit) {
@@ -343,12 +371,21 @@ export function topKByScore<T>(
 }
 
 function topTalkers(devices: Device[], limit: number): VizTalkerSample[] {
-  return topKByScore(
+  let eligible = 0;
+  const talkers = topKByScore(
     devices,
     limit,
     (d) => d.packets,
-    (d) => d.packets <= 0,
-  ).map((d) => ({ id: d.ip, rate: d.packets, role: d.role }));
+    (d) => {
+      if (d.packets > 0) eligible++;
+      return d.packets <= 0;
+    },
+  ).map((d) => {
+    bumpTalkerObject();
+    return { id: d.ip, rate: d.packets, role: d.role };
+  });
+  recordTalkerDecimation(eligible, talkers.length);
+  return talkers;
 }
 
 function rssiFromAliases(aliases: string[] | undefined): number {
@@ -360,7 +397,11 @@ function rssiFromAliases(aliases: string[] | undefined): number {
 
 function rfBeacons(state: StateMsg, limit: number): VizRfBeacon[] {
   const wifi = state.views?.wifi;
-  if (!wifi?.watch?.ssids?.length) return [];
+  if (!wifi?.watch?.ssids?.length) {
+    recordRfDecimation(0, 0);
+    return [];
+  }
+  const eligible = wifi.watch.ssids.length;
   const out: VizRfBeacon[] = [];
   for (const ssid of wifi.watch.ssids.slice(0, limit)) {
     const dev = wifi.devices.find((d) => d.ssid === ssid || (d.names ?? []).includes(ssid));
@@ -370,6 +411,7 @@ function rfBeacons(state: StateMsg, limit: number): VizRfBeacon[] {
       channel: dev?.chan ?? 0,
     });
   }
+  recordRfDecimation(eligible, out.length);
   return out;
 }
 
@@ -396,27 +438,42 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
   const counts = new Map<string, number>();
   const top: ProtoTop[] = [];
   for (const flow of state.flows) {
+    bumpFlowVisit();
     for (const proto of flow.protos ?? []) {
+      bumpFlowProtoVisit();
       const count = (counts.get(proto) ?? 0) + flow.packets;
       counts.set(proto, count);
       upsertProtoTop(top, limit, proto, count);
     }
   }
-  if (top.length <= 1) {
-    return top.map(({ proto, count }) => ({ proto, size: count, field: packetField(count) }));
-  }
-  top.sort((a, b) => b.count - a.count);
-  return top.map(({ proto, count }) => ({ proto, size: count, field: packetField(count) }));
+  const eligible = counts.size;
+  if (top.length > 1) top.sort((a, b) => b.count - a.count);
+  const rows = top.map(({ proto, count }) => {
+    bumpPacketObject();
+    return { proto, size: count, field: packetField(count) };
+  });
+  recordPacketDecimation(eligible, rows.length);
+  return rows;
 }
 
 /**
  * Build a decimated data frame from monitor state. Selection cost scales with
  * the output cap (top-K), not the full device / flow lists.
  */
-export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: SourceBind | Record<string, string>): VizDataFrame {
-  const t = state.ts || Date.now() / 1000;
+function buildVizFrameCore(
+  state: StateMsg,
+  prevTs = 0,
+  audio = 0,
+  bind?: SourceBind | Record<string, string>,
+): VizDataFrame {
+  resetVizBuildCounters();
+  resetVizDecimationDropStats();
+  const t = state.ts || vizClockMs() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
+  const headlineEligible = countEligibleSourceHeadlines(state.sources, parsed);
+  const rawHeadlines = sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed);
+  recordHeadlineDecimation(headlineEligible, rawHeadlines.length);
   return {
     t,
     dt,
@@ -424,7 +481,7 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: Sou
     packets: packetSamples(state, VIZ_MAX_PACKET_SAMPLES),
     rf: rfBeacons(state, VIZ_MAX_RF_SAMPLES),
     talkers: topTalkers(state.devices, VIZ_MAX_TALKER_SAMPLES),
-    headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed).map((h) => ({
+    headlines: rawHeadlines.map((h) => ({
       id: h.id,
       label: h.label,
       text: h.text.slice(0, 240),
@@ -436,6 +493,17 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: Sou
   };
 }
 
+export function buildVizFrame(
+  state: StateMsg,
+  prevTs = 0,
+  audio = 0,
+  bind?: SourceBind | Record<string, string>,
+): VizDataFrame {
+  const frame = buildVizFrameCore(state, prevTs, audio, bind);
+  bumpFrameObject();
+  return frame;
+}
+
 /** Build a live frame and merge idle demo slices when monitor traffic is absent. */
 export function buildVizFrameForPlugin(
   state: StateMsg,
@@ -444,7 +512,9 @@ export function buildVizFrameForPlugin(
   idle: VizIdleConfig,
   bind?: SourceBind | Record<string, string>,
 ): VizDataFrame {
-  return mergeVizIdleFrame(buildVizFrame(state, prevTs, audio, bind), idle);
+  const frame = mergeVizIdleFrame(buildVizFrameCore(state, prevTs, audio, bind), idle);
+  bumpFrameObject();
+  return frame;
 }
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
