@@ -268,6 +268,30 @@ def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
     return info
 
 
+def _merged_settings_check_zip(zip_path: Path) -> None:
+    """Run ``settings_check`` on an unpacked zip tree before any install commit."""
+    with tempfile.TemporaryDirectory(prefix="zoto-plugin-check.") as tmp:
+        stage = Path(tmp)
+        pz.unpack_zip(zip_path, stage)
+        plugins.settings_check(stage)
+
+
+def _install_unpacked_tree(zip_path: Path, runtime: Path) -> pz.UnpackResult:
+    """Unpack into the local runtime directory (validation runs before commit only)."""
+    return pz.unpack_zip(zip_path, runtime)
+
+
+def _merged_settings_check_bytes(raw: bytes) -> None:
+    fd, tmp_name = tempfile.mkstemp(prefix="zoto-plugin-check.", suffix=".zip")
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        tmp_path.write_bytes(raw)
+        _merged_settings_check_zip(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 def install_local_zip(
     raw: bytes,
     *,
@@ -290,7 +314,8 @@ def install_local_zip(
         runtime = paths.plugin_local_runtime_dir(create=True) / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming:
-            unpacked = pz.unpack_zip(dest, runtime)
+            _merged_settings_check_zip(dest)
+            unpacked = _install_unpacked_tree(dest, runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
                 info["remintedFrom"] = reminted_from
@@ -299,10 +324,22 @@ def install_local_zip(
             raise ValueError(
                 f"plugin {pid!r} already exists in the local drop zone (pass overwrite: true)"
             )
+        _merged_settings_check_zip(tmp_path)
         staged = dest.with_name(dest.name + ".tmp")
-        shutil.copy2(tmp_path, staged)
-        os.replace(staged, dest)
-        unpacked = pz.unpack_zip(dest, runtime)
+        zip_backup = dest.with_name(dest.name + ".rollback") if dest.is_file() else None
+        if zip_backup:
+            shutil.copy2(dest, zip_backup)
+        try:
+            shutil.copy2(tmp_path, staged)
+            os.replace(staged, dest)
+            unpacked = _install_unpacked_tree(dest, runtime)
+        except Exception:
+            if zip_backup and zip_backup.is_file():
+                os.replace(zip_backup, dest)
+            raise
+        finally:
+            if zip_backup:
+                zip_backup.unlink(missing_ok=True)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -321,6 +358,13 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
     raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=False)
     pid = str(doc["id"])
+    try:
+        _merged_settings_check_bytes(raw)
+    except ValueError:
+        drop = paths.plugin_local_dir(create=True)
+        if path.resolve().parent == drop.resolve() and path.resolve() != dest.resolve():
+            path.unlink(missing_ok=True)
+        raise
     if reminted_from:
         dest.write_bytes(raw)
         if path.resolve() != dest.resolve() and path.resolve().parent == dest.resolve().parent:
@@ -335,7 +379,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
         else:
             shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
-    unpacked = pz.unpack_zip(dest, runtime)
+    unpacked = _install_unpacked_tree(dest, runtime)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from
