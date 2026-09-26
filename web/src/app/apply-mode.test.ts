@@ -675,9 +675,10 @@ describe("mode switch cleanup counts", () => {
     await flushMicrotasks();
     const bSignal = runApplyUser(host, "plugin:packet-tunnel");
     await vi.waitFor(() => {
+      expect(host.modeSel.value).toBe("plugin:packet-tunnel");
       expect(getActiveModeSwitchSignal()).toBeUndefined();
+      expect(modeSwitchAbortListenerCountForTests(bSignal)).toBe(0);
     });
-    expect(modeSwitchAbortListenerCountForTests(bSignal)).toBe(0);
     const unloadsAfterB = unloadSpy.mock.calls.length;
     expect(skyDisposals["packet-tunnel"] ?? 0).toBe(0);
     runApplyUser(host, "plugin:roto-proto");
