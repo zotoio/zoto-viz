@@ -25,7 +25,7 @@ Every regression test in a PR should prove it actually catches a production bug.
 | --- | --- | --- |
 | `runner` | yes | `vitest` or `pytest` |
 | `testFile` | yes | Path to the test file (repo-relative) |
-| `testName` | yes | Vitest `-t` / pytest `-k` filter (must match **exactly one** test) |
+| `testName` | yes | Exact test title (vitest `-t` is regex — the runner escapes metacharacters; pytest uses `testFile::testName` node id, not `-k`) |
 | `description` | yes | One-line revert summary for the PR table |
 | `timeoutSec` | no | Per-row test timeout (default 120); timeouts are never counted as red |
 | `allowTypeError` | no | When true, a patched `tsc --noEmit -p web` failure is allowed (reason shown in report) |

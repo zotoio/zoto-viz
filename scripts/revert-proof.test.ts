@@ -288,6 +288,26 @@ describe("revert-proof runner (fixture repo)", () => {
     assertCheckoutUnchanged(root, before);
   });
 
+  it("(j) testName with regex metacharacters selects exactly one test", () => {
+    const root = mkFixture(`
+  it("talkers[].failed", () => {
+    expect(value()).toBe(1);
+  });
+`);
+    writeRow(root, "99", "regex-title", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "talkers[].failed",
+      description: "Bracket title must not be treated as RegExp",
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "regex-title"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    assertCheckoutUnchanged(root, before);
+  });
+
   it("(i) workspace package imported by name goes red on revert", () => {
     const root = mkFixture();
     writeRow(root, "99", "workspace-pkg", goodPatch, {
@@ -317,6 +337,30 @@ describe("revert-proof runner (fixture repo)", () => {
     const r = runRevertProof(root, "99", ["--row", "stays-green"]);
     expect(r.status).toBe(1);
     expect(r.stderr + r.stdout).toMatch(/row stays-green/);
+    assertCheckoutUnchanged(root, before);
+  });
+
+  it("(c2) patch that does not apply cleanly fails the row", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "bad-patch", badContextPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "returns one",
+      description: "Hunk mismatch",
+    });
+    commitRevertProofs(root);
+    const before = snapshotCheckout(root);
+    const r = runRevertProof(root, "99", ["--row", "bad-patch"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).toMatch(/row bad-patch.*git apply --check failed/i);
+    expect(fs.existsSync(path.join(root, "packages", "rp-widget", "index.js.orig"))).toBe(
+      false,
+    );
+    expect(
+      fs
+        .readdirSync(path.join(root, "packages", "rp-widget"))
+        .some((f) => f.endsWith(".rej")),
+    ).toBe(false);
     assertCheckoutUnchanged(root, before);
   });
 
@@ -352,7 +396,7 @@ describe("revert-proof runner (fixture repo)", () => {
     assertCheckoutUnchanged(root, before);
   });
 
-  it("(e) filter matching zero tests is rejected", () => {
+  it("(e) filter matching zero tests is rejected on baseline", () => {
     const root = mkFixture();
     writeRow(root, "99", "no-match", goodPatch, {
       runner: "vitest",
@@ -364,7 +408,7 @@ describe("revert-proof runner (fixture repo)", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "no-match"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toMatch(/row no-match/);
+    expect(r.stderr + r.stdout).toMatch(/row no-match.*ran 0 tests/i);
     assertCheckoutUnchanged(root, before);
   });
 
@@ -456,6 +500,30 @@ describe("hang", () => {
     const wtList = runGit(root, ["worktree", "list"]);
     expect(wtList.includes("revert-proof-wt")).toBe(false);
     assertCheckoutUnchanged(root, before);
+  });
+});
+
+const badContextPatch = `--- a/packages/rp-widget/index.js
++++ b/packages/rp-widget/index.js
+@@ -1 +1 @@
+-export function value() { return 9; }
++export function value() { return 2; }
+`;
+
+describe("vitest testName escaping", () => {
+  it("escapes regex metacharacters for -t", async () => {
+    const mod = await import("./revert-proof.mjs");
+    expect(mod.escapeVitestTestNamePattern("talkers[].failed")).toBe(
+      "talkers\\[\\]\\.failed",
+    );
+    expect(mod.escapeVitestTestNamePattern("a(b)*+?")).toBe("a\\(b\\)\\*\\+\\?");
+  });
+
+  it("builds pytest node ids", async () => {
+    const mod = await import("./revert-proof.mjs");
+    expect(mod.pytestNodeId("service/tests/test_x.py", "talkers[].failed")).toBe(
+      "service/tests/test_x.py::talkers[].failed",
+    );
   });
 });
 

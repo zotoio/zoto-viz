@@ -130,6 +130,20 @@ export function patchTouchesTestFiles(patchText) {
   return pathsTouchedByPatch(patchText).some((p) => TEST_PATH_RE.test(p));
 }
 
+/** Escape a literal test title for vitest `-t` (treated as RegExp). */
+export function escapeVitestTestNamePattern(testName) {
+  return testName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
+/** Pytest node id: `file.py::test_name` (exact, not `-k` regex). */
+export function pytestNodeId(testFile, testName) {
+  const file = testFile.replace(/\\/g, "/");
+  if (testName.includes("::")) {
+    throw new Error("testName must not contain '::' (use testFile + testName)");
+  }
+  return `${file}::${testName}`;
+}
+
 function validateMeta(meta, slug) {
   for (const key of ["runner", "testFile", "testName", "description"]) {
     if (!meta[key] || typeof meta[key] !== "string") {
@@ -458,6 +472,15 @@ function countVitestExecuted(report) {
   let passed = 0;
   let failed = 0;
   const failedAssertions = [];
+  if (!report?.testResults?.length) {
+    return {
+      executed: 0,
+      passed: 0,
+      failed: 0,
+      suiteError: report ? "no tests executed" : "no JSON report",
+      failedAssertions: [],
+    };
+  }
   for (const file of report.testResults ?? []) {
     if (file.status === "failed" && (!file.assertionResults || file.assertionResults.length === 0)) {
       return {
@@ -522,13 +545,14 @@ function parsePytestJunit(xmlText) {
 async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   const { bin, cwd } = resolveVitest(wtRoot, meta.testFile);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
+  const testPattern = escapeVitestTestNamePattern(meta.testName);
   const args = [
     "run",
     "--config",
     path.join(wtRoot, "scripts", "vitest.config.mjs"),
     meta.testFile,
     "-t",
-    meta.testName,
+    testPattern,
     "--reporter=json",
     `--outputFile=${jsonOut}`,
   ];
@@ -567,14 +591,8 @@ async function runPytest(
 ) {
   const xmlOut = path.join(artifactsDir, `${slug}-${phase}-pytest.xml`);
   const python = venvPython(mainRoot);
-  const args = [
-    "-m",
-    "pytest",
-    meta.testFile,
-    "-k",
-    meta.testName,
-    `--junitxml=${xmlOut}`,
-  ];
+  const nodeId = pytestNodeId(meta.testFile, meta.testName);
+  const args = ["-m", "pytest", nodeId, `--junitxml=${xmlOut}`];
   const result = await runProcess(python, args, {
     cwd: wtRoot,
     env: { ...pythonEnvForWorktree(wtRoot), FORCE_COLOR: "0" },
@@ -585,7 +603,7 @@ async function runPytest(
     parsed = parsePytestJunit(fs.readFileSync(xmlOut, "utf8"));
   }
   return {
-    command: `python -m pytest ${meta.testFile} -k ${JSON.stringify(meta.testName)}`,
+    command: `python -m pytest ${nodeId}`,
     ...result,
     counts: parsed,
     reportPath: xmlOut,
@@ -621,16 +639,58 @@ function runTscCheck(wtRoot) {
   return { ok: r.status === 0, skipped: false, output };
 }
 
+const GIT_APPLY_OPTS = ["--whitespace=error", "-C1"];
+
+function findPatchArtifactFiles(wtRoot) {
+  const found = [];
+  const skip = new Set([".git", "node_modules", "web/node_modules", ".venv"]);
+  function walk(dir) {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (skip.has(ent.name)) {
+        continue;
+      }
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (ent.name.endsWith(".rej") || ent.name.endsWith(".orig")) {
+        found.push(full);
+      }
+    }
+  }
+  walk(wtRoot);
+  return found;
+}
+
+function removePatchArtifactFiles(wtRoot) {
+  for (const f of findPatchArtifactFiles(wtRoot)) {
+    try {
+      fs.unlinkSync(f);
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
 function applyPatch(wtRoot, patchPath) {
-  const check = gitAt(wtRoot, ["apply", "--check", patchPath]);
+  const check = gitAt(wtRoot, ["apply", "--check", ...GIT_APPLY_OPTS, patchPath]);
   if (check.status !== 0) {
     throw new Error(
       `git apply --check failed: ${check.stderr || check.stdout}`,
     );
   }
-  const apply = gitAt(wtRoot, ["apply", patchPath]);
+  const apply = gitAt(wtRoot, ["apply", ...GIT_APPLY_OPTS, patchPath]);
   if (apply.status !== 0) {
+    removePatchArtifactFiles(wtRoot);
     throw new Error(`git apply failed: ${apply.stderr || apply.stdout}`);
+  }
+  const artifacts = findPatchArtifactFiles(wtRoot);
+  if (artifacts.length > 0) {
+    removePatchArtifactFiles(wtRoot);
+    throw new Error(
+      `git apply left patch artifacts: ${artifacts.map((p) => path.relative(wtRoot, p)).join(", ")}`,
+    );
   }
 }
 
@@ -666,6 +726,11 @@ function assertExactlyOneTest(slug, phase, run) {
     throw new Error(`row ${slug}: ${phase} timed out`);
   }
   const executed = metaRunnerCount(run);
+  if (executed === 0) {
+    throw new Error(
+      `row ${slug}: ${phase} ran 0 tests (selection/filter error; never a pass)`,
+    );
+  }
   if (executed !== 1) {
     throw new Error(
       `row ${slug}: ${phase} must run exactly 1 test (got ${executed})`,
@@ -754,7 +819,12 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
     throw new Error(`row ${slug}: baseline test must PASS`);
   }
 
-  applyPatch(wtRoot, patchPath);
+  try {
+    applyPatch(wtRoot, patchPath);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`row ${slug}: ${msg}`);
+  }
 
   let tscNote = "";
   if (meta.runner === "vitest") {
