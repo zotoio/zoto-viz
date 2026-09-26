@@ -1,14 +1,14 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index d97c72c..1e841fb 100644
+index 0c6fb83..3206b43 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1735,6 +1735,9 @@ export class Settings {
+@@ -1781,6 +1781,9 @@ export class Settings {
      if (this.shouldSyncPackScopeNoteAfterLayout(prevTiles, this.anim.mosaicTiles)) {
        this.syncPackScopeNoteFromAnim();
      }
 +    if (this.viewBind?.spec) {
 +      this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
 +    }
-   }
- 
-   private shouldSyncPackScopeNoteAfterLayout(prevTiles: string[], nextTiles: string[]): boolean {
+     if (this.viewPluginDirty && this.isOpen && this.activePane === "view") {
+       const gain = this.viewHost?.querySelector<HTMLInputElement>(
+         '.plugin-layer[data-layer="view"] .slider input[type=range]',

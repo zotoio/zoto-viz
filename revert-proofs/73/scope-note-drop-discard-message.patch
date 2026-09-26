@@ -1,9 +1,10 @@
 diff --git a/web/src/plugins/pack-shared-copy.ts b/web/src/plugins/pack-shared-copy.ts
-index d3cc230..ac13638 100644
+index 248343d..ac13638 100644
 --- a/web/src/plugins/pack-shared-copy.ts
 +++ b/web/src/plugins/pack-shared-copy.ts
-@@ -1,4 +1,4 @@
- /** Shared user-facing copy for pack / mosaic drawer behaviour. */
+@@ -2,5 +2,5 @@
+ export const NEST_NO_CAMERAS = "No cameras found for this Nest account.";
+ 
  export function packLastTileDiscardMessage(packName: string): string {
 -  return `Your unsaved ${packName} changes were discarded because its last tile was removed.`;
 +  return "";

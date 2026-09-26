@@ -64,8 +64,8 @@ describe("duplicate slot shared config > live edit applies to every sharing tile
       setNestLook: () => {},
       viewPromptKey: "prompt",
     });
-    expect(sceneA.setMode).toHaveBeenCalled();
-    expect(sceneB.setMode).toHaveBeenCalled();
+    expect(sceneA.setMode).toHaveBeenCalledTimes(1);
+    expect(sceneB.setMode).toHaveBeenCalledTimes(1);
     expect(sceneA.setMode.mock.calls[0]![0].id).toBe("plugin:settings-fixture");
     expect(sceneB.setMode.mock.calls[0]![0].id).toBe("plugin:settings-fixture!1");
     expect(sceneA.setMode.mock.calls[0]![1]).toEqual(opts);

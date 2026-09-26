@@ -3,5 +3,5 @@
   "testFile": "src/app/host-mode.test.ts",
   "testName": "^hostModeById > duplicate mosaic slot ids > resolves plugin:x!1 to pack x's view and not Topology$",
   "description": "Treat mosaic tile slot suffix as part of plugin pack id.",
-  "redOutput": "AssertionError: expected 'plugin:settings-fixture' to be 'plugin:settings-fixture!1' // Object.is equality"
+  "redOutput": "MISSING"
 }
