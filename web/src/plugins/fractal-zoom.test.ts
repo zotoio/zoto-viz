@@ -36,6 +36,7 @@ import {
   resetFractalPointer,
 } from "../../../plugins/src/fractal-zoom/frontend/interaction";
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
+import { releaseThrowawayGl } from "../graph/webgl";
 import { PluginSandbox } from "./host";
 import { VizBufferWriter, parseVizContract, VIZ_UBO, type VizDataFrame } from "./viz-host";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
@@ -104,6 +105,7 @@ function smokeFractalConfig(
   if (!gl) {
     return { ok: false, skipped: true, compileError: null, rgba: null, side: null };
   }
+  try {
   const compile = (type: number, src: string): WebGLShader | string => {
     const sh = gl.createShader(type);
     if (!sh) return "no shader";
@@ -168,6 +170,9 @@ function smokeFractalConfig(
   const side: [number, number, number, number] = [sidePx[0]!, sidePx[1]!, sidePx[2]!, sidePx[3]!];
   const ok = !isNearBlack(rgba) && !isSolidFlat(rgba, side);
   return { ok, skipped: false, compileError: null, rgba, side };
+  } finally {
+    releaseThrowawayGl(gl);
+  }
 }
 
 function assertSmokeHealthy(smoke: ReturnType<typeof smokeFractalConfig>, label: string): void {
@@ -408,10 +413,7 @@ describe("fractal-zoom shipped pack", () => {
 
     it("reduced motion stops zoom drift and camera dolly", () => {
       resetFractalDrive();
-      const opts = parseFractalOptions(
-        { preset: "bulb-classic", paused: "true", zoomSpeed: "0.5" },
-        { reducedMotion: true },
-      );
+      const opts = parseFractalOptions({ preset: "bulb-classic" }, { reducedMotion: true });
       expect(opts.paused).toBe(true);
       const pointer = { ...IDLE_POINTER };
       const a = fractalDrive({ t: 0, dt: 1 / 60, audio: 0, aspect: 1.6, opts, pointer });
@@ -420,6 +422,19 @@ describe("fractal-zoom shipped pack", () => {
       expect(b.slot0[FZ_SLOT.camX]).toBe(a.slot0[FZ_SLOT.camX]);
       expect(b.slot0[FZ_SLOT.camY]).toBe(a.slot0[FZ_SLOT.camY]);
       expect(b.slot0[FZ_SLOT.camZ]).toBe(a.slot0[FZ_SLOT.camZ]);
+
+      resetFractalDrive();
+      const driftOpts = parseFractalOptions(
+        { preset: "bulb-classic", autoPilot: "true", paused: "false", zoomSpeed: "0.5" },
+        { reducedMotion: true },
+      );
+      expect(driftOpts.paused).toBe(false);
+      expect(driftOpts.autoPilot).toBe(true);
+      const driftPointer = { ...IDLE_POINTER };
+      const c = fractalDrive({ t: 0, dt: 1 / 60, audio: 0, aspect: 1.6, opts: driftOpts, pointer: driftPointer });
+      const d = fractalDrive({ t: 3, dt: 1 / 60, audio: 0, aspect: 1.6, opts: driftOpts, pointer: driftPointer });
+      expect(d.slot0[FZ_SLOT.zoomLog]).toBe(c.slot0[FZ_SLOT.zoomLog]);
+      expect(d.slot0[FZ_SLOT.camZ]).toBe(c.slot0[FZ_SLOT.camZ]);
     });
 
     it("exposes HUD caption for host corner label (type · preset)", () => {
