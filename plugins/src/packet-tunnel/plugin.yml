@@ -6,6 +6,10 @@ capabilities:
   - viz.read
   - viz.write
   - config.read
+render:
+  scale:
+    min: 0.35
+    steps: [1, 0.75, 0.5, 0.35]
 viz:
   graphWalk: false
   maxBuffers: 2

@@ -71,6 +71,14 @@
       "$ref": "#/$defs/vizContract",
       "description": "VizPlugin contract: caps, buffer slots, particle limit, no full-graph walk. Required when viz.read or viz.write is declared."
     },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scale": { "$ref": "#/$defs/renderScale" }
+      },
+      "description": "Optional host-owned render hints. When render.scale is set, the web host runs the adaptive render-scale governor (GPU-timed) and exposes the active scale in $defs/vizFrameUboLayout."
+    },
     "typesafe": {
       "$ref": "#/$defs/typesafeContract",
       "description": "Optional TypeSafe/Jev contract (or inline typesafe.yml merge). Dark by default — host lazy-loads SDK only when typesafe capability is declared and the user opts in."
@@ -322,9 +330,63 @@
         "bindings": { "type": "object", "additionalProperties": true }
       }
     },
+    "renderScale": {
+      "title": "Adaptive render-scale governor",
+      "description": "Host steps down when p95 frame time stays over the 16.7 ms budget for ~0.5 s and steps up after ~2 s under 80% of budget. Packs never implement their own governor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min"],
+      "properties": {
+        "min": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "Lowest allowed render scale (must be > 0 and at most 1)."
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1
+          },
+          "description": "Descending allowed scales clamped at or above min. Defaults to [1, 0.75, 0.5, 0.35]."
+        }
+      }
+    },
+    "vizFrameUboLayout": {
+      "title": "Viz host frame uniform block",
+      "description": "Host-written vec4 `zotoVizFrame` prepended beside $defs/vizUboLayout. Schema contract version 1.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "const": 1 },
+        "hostUniform": { "const": "zotoVizFrame" },
+        "renderScale": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "offset": { "const": 0 },
+            "type": { "const": "float" }
+          }
+        },
+        "layoutVersion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "offset": { "const": 1 },
+            "type": { "const": "float" }
+          }
+        },
+        "totalFloats": { "const": 4 }
+      }
+    },
     "vizUboLayout": {
       "title": "VizPlugin GLSL UBO binding",
-      "description": "Fixed std140 buffer→shader layout for all viz packs. Slot `s` float `f` maps to `zotoVizSlots[s * 16 + f / 4][f % 4]` in the host preamble. Per-pack vertex attributes are a later escape hatch, not the default transport.",
+      "description": "Fixed std140 buffer→shader layout for all viz packs (contract version 2 — adds $defs/vizFrameUboLayout). Slot `s` float `f` maps to `zotoVizSlots[s * 16 + f / 4][f % 4]` in the host preamble. Per-pack vertex attributes are a later escape hatch, not the default transport.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -332,6 +394,8 @@
         "binding": { "const": 0 },
         "layout": { "const": "std140" },
         "hostUniform": { "const": "zotoVizSlots" },
+        "contractVersion": { "const": 2 },
+        "frameUbo": { "$ref": "#/$defs/vizFrameUboLayout" },
         "slotCount": { "const": 8 },
         "slotFloats": { "const": 64 },
         "slotVec4s": { "const": 16 },

@@ -182,11 +182,36 @@ export interface VizParticleWriteResult extends VizBufferWriteResult {
   written: number;
 }
 
+export type VizBudgetTimingSource = "gpu" | "cpu";
+
 export interface VizFrameBudgetStats {
   lastMs: number;
+  p95Ms: number;
   overBudget: number;
   skipped: number;
   total: number;
+  timingSource: VizBudgetTimingSource;
+  hasSamples: boolean;
+}
+
+const BUDGET_SAMPLE_CAP = 120;
+
+function percentileSorted(sorted: ArrayLike<number>, len: number, p: number): number {
+  if (len <= 0) return 0;
+  const idx = Math.min(len - 1, Math.max(0, Math.ceil(p * len) - 1));
+  return sorted[idx] as number;
+}
+
+function insertionSortInPlace(buf: Float32Array, len: number): void {
+  for (let i = 1; i < len; i++) {
+    const v = buf[i]!;
+    let j = i - 1;
+    while (j >= 0 && buf[j]! > v) {
+      buf[j + 1] = buf[j]!;
+      j--;
+    }
+    buf[j + 1] = v;
+  }
 }
 
 const SKY_UNIFORM_SET = new Set<string>(PLUGIN_SKY_UNIFORMS);
@@ -496,24 +521,52 @@ export function buildVizFrameForPlugin(
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
 export class VizFrameBudget {
   private _lastMs = 0;
+  private _p95Ms = 0;
   private _overBudget = 0;
   private _skipped = 0;
   private _total = 0;
   private _lastBuilt: VizDataFrame | null = null;
   private _lastPresent = -1;
   private readonly now: () => number;
+  private readonly cpuSamples = new Float32Array(BUDGET_SAMPLE_CAP);
+  private cpuSampleLen = 0;
+  private cpuSampleStart = 0;
+  private readonly gpuSamples = new Float32Array(BUDGET_SAMPLE_CAP);
+  private gpuSampleLen = 0;
+  private gpuSampleStart = 0;
+  private _gpuAvailable = false;
+  private _timingSource: VizBudgetTimingSource = "cpu";
+  private readonly scratch = new Float32Array(BUDGET_SAMPLE_CAP);
 
   constructor(now: () => number = () => performance.now()) {
     this.now = now;
   }
 
   get stats(): VizFrameBudgetStats {
+    const active = this.activeSamples();
     return {
       lastMs: this._lastMs,
+      p95Ms: this._p95Ms,
       overBudget: this._overBudget,
       skipped: this._skipped,
       total: this._total,
+      timingSource: this._timingSource,
+      hasSamples: active.len > 0,
     };
+  }
+
+  /** Mark whether GPU timer queries are supported on the active GL context. */
+  setGpuTimerAvailable(ok: boolean): void {
+    this._gpuAvailable = ok;
+    if (!ok && this._timingSource === "gpu") this._timingSource = "cpu";
+  }
+
+  /** Record a GPU draw duration (ms) once the timer query resolves. */
+  noteGpuMs(ms: number): void {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    this.pushRing(this.gpuSamples, ms, "gpu");
+    this._lastMs = ms;
+    this.refreshP95();
   }
 
   /** Last frame built by deliver(), including over-budget skips (for CPU HUD metrics). */
@@ -525,11 +578,63 @@ export class VizFrameBudget {
   record(ms: number): boolean {
     this._total++;
     this._lastMs = ms;
+    this.pushRing(this.cpuSamples, ms, "cpu");
+    this.refreshP95();
     if (ms > VIZ_FRAME_BUDGET_MS) {
       this._overBudget++;
       return true;
     }
     return false;
+  }
+
+  /** p95 of the active timing source (GPU when available and sampled, else CPU). */
+  p95ForGovernor(): number {
+    const active = this.activeSamples();
+    if (!active.len) return 0;
+    return this._p95Ms;
+  }
+
+  private activeSamples(): { buf: Float32Array; len: number; source: VizBudgetTimingSource } {
+    if (this._gpuAvailable && this.gpuSampleLen > 0) {
+      return { buf: this.gpuSamples, len: this.gpuSampleLen, source: "gpu" };
+    }
+    return { buf: this.cpuSamples, len: this.cpuSampleLen, source: "cpu" };
+  }
+
+  private pushRing(buf: Float32Array, ms: number, source: "cpu" | "gpu"): void {
+    const cap = buf.length;
+    const isGpu = source === "gpu";
+    let len = isGpu ? this.gpuSampleLen : this.cpuSampleLen;
+    let start = isGpu ? this.gpuSampleStart : this.cpuSampleStart;
+    if (len < cap) {
+      buf[(start + len) % cap] = ms;
+      len++;
+    } else {
+      buf[start] = ms;
+      start = (start + 1) % cap;
+    }
+    if (isGpu) {
+      this.gpuSampleLen = len;
+      this.gpuSampleStart = start;
+    } else {
+      this.cpuSampleLen = len;
+      this.cpuSampleStart = start;
+    }
+  }
+
+  private refreshP95(): void {
+    const active = this.activeSamples();
+    this._timingSource = active.source;
+    if (!active.len) {
+      this._p95Ms = 0;
+      return;
+    }
+    const n = active.len;
+    const cap = active.buf.length;
+    const start = active.buf === this.gpuSamples ? this.gpuSampleStart : this.cpuSampleStart;
+    for (let i = 0; i < n; i++) this.scratch[i] = active.buf[(start + i) % cap]!;
+    insertionSortInPlace(this.scratch, n);
+    this._p95Ms = percentileSorted(this.scratch, n, 0.95);
   }
 
   /**
@@ -571,11 +676,17 @@ export class VizFrameBudget {
 
   reset(): void {
     this._lastMs = 0;
+    this._p95Ms = 0;
     this._overBudget = 0;
     this._skipped = 0;
     this._total = 0;
     this._lastBuilt = null;
     this._lastPresent = -1;
+    this.cpuSampleLen = 0;
+    this.cpuSampleStart = 0;
+    this.gpuSampleLen = 0;
+    this.gpuSampleStart = 0;
+    this._timingSource = "cpu";
   }
 }
 

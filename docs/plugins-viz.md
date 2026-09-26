@@ -84,6 +84,38 @@ Uniform writes reach the active plugin `sky/fragment.glsl` via
 `scene.setPluginUniform`. Buffer writes land in the UBO mirror and are
 uploaded via `scene.setPluginUboBuffer`.
 
+## Adaptive render scale (`render.scale`)
+
+Optional in `plugin.yml` (schema `$defs/renderScale`). The **host** owns the
+governor — packs never implement their own DPR logic or branch on pack ids.
+
+```yaml
+render:
+  scale:
+    min: 0.35                              # > 0 and ≤ 1
+    steps: [1, 0.75, 0.5, 0.35]           # optional; clamped ≥ min, descending
+```
+
+When `render.scale` is absent the host keeps today’s behaviour at scale **1.0**.
+When present, `VizFrameBudget` drives hysteresis from GPU timer queries when
+`EXT_disjoint_timer_query_webgl2` is available (otherwise honest **CPU**
+present-to-present timing). Step **down** one notch after p95 stays over the
+16.7 ms budget for ~0.5 s; step **up** after ~2 s with p95 below 80% of budget.
+
+The active scale is written to the host frame UBO (`$defs/vizFrameUboLayout`):
+
+| Field | `zotoVizFrame` offset | Meaning |
+| --- | --- | --- |
+| `renderScale` | float **0** | Current governor scale (1.0 when inactive) |
+| `layoutVersion` | float **1** | Frame UBO contract version (`1`) |
+
+Packs read `zotoVizFrame.x` in `sky/fragment.glsl` if needed; the host also
+applies the scale to the shared canvas pixel ratio for the active view.
+
+The demoscene HUD shows a budget line when `render.scale` is declared:
+`GPU` or `CPU`, unclamped last frame ms, rolling **p95**, and current scale.
+Dashes appear when no timing samples exist yet.
+
 ## Frame budget
 
 `VizFrameBudget` times `buildVizFrame` each tick. Frames over

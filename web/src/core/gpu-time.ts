@@ -15,7 +15,9 @@ interface Pending {
   done: (ms: number) => void;
 }
 
+const POOL_SIZE = 8;
 const pending: Pending[] = [];
+const free: WebGLQuery[] = [];
 
 function timerExt(gl: WebGL2RenderingContext): TimerExt | null {
   return gl.getExtension("EXT_disjoint_timer_query_webgl2") as TimerExt | null;
@@ -43,6 +45,7 @@ export function harvestGpu(): void {
     p.gl.deleteQuery(p.query);
     pending.splice(i, 1);
     if (ns > 0) p.done(ns / 1e6);
+    if (free.length < POOL_SIZE) free.push(p.query);
   }
 }
 
@@ -50,8 +53,13 @@ export function harvestGpu(): void {
 export function timeGpu(gl: WebGL2RenderingContext, draw: () => void, done: (ms: number) => void): void {
   harvestGpu();
   const ext = timerExt(gl);
-  const query = ext && gl.createQuery();
-  if (!ext || !query) {
+  if (!ext) {
+    draw();
+    return;
+  }
+  let query = free.pop();
+  if (!query) query = gl.createQuery();
+  if (!query) {
     draw();
     return;
   }

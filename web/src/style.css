@@ -1526,6 +1526,12 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
   transition: color 120ms linear;
 }
 .viz-hud-skip.pulse { color: var(--warn); }
+.viz-hud-budget {
+  font-variant-numeric: tabular-nums;
+  color: var(--label-muted, var(--muted));
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .viz-hud-swap {
   display: flex;
   gap: 4px;

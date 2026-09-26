@@ -41,6 +41,7 @@ import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
 import { PluginSandbox, pluginModuleUrl } from "./host";
 import type { PluginIdleConfig } from "./fixtures/golden-state";
+import type { RenderScaleConfig } from "./render-scale-governor";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
@@ -199,6 +200,8 @@ export interface PluginView {
   /** visualisation.yml idle golden mock — graph / arcade when capture is quiet. */
   idle?: PluginIdleConfig;
   viz?: VizPluginContract;
+  /** Host adaptive render-scale governor steps (from plugin.yml render.scale). */
+  renderScale?: RenderScaleConfig;
   typesafe?: TypeSafeContract;
   hash?: string;
   service?: string;

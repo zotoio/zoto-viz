@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
+import { VIZ_FRAME_UBO, VIZ_FRAME_UBO_GLSL, writeVizFrameUbo } from "../plugins/viz-frame-ubo";
 import { VIZ_UBO, VIZ_UBO_GLSL } from "../plugins/viz-host";
 import { liveCam } from "../camera/livecam";
 import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
@@ -708,6 +709,7 @@ export function wrapPluginSky(raw: string): { frag: string } | { error: string }
     .replace(/\bout\s+vec4\s+fragColor\s*;/g, "")
     .trim();
   const preamble = /* glsl */ `${VIZ_UBO_GLSL}
+${VIZ_FRAME_UBO_GLSL}
 uniform float uTime;
 uniform float uOpacity;
 uniform float uBright;
@@ -738,6 +740,8 @@ export class Backdrop {
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
   private readonly pluginUbo = new Float32Array(VIZ_UBO.totalFloats);
+  private readonly pluginFrameUbo = new Float32Array(VIZ_FRAME_UBO.totalFloats);
+  private pluginRenderScale = 1;
   private kind: BackdropKind = "none";
   private customFrag: string | null = null;
   /** the sky's animation clock, in shader seconds: integrates dt × current speed */
@@ -1141,7 +1145,20 @@ export class Backdrop {
       uAccent: { value: (u.uAccent.value as THREE.Color).clone() },
       uBg: { value: (u.uBg.value as THREE.Color).clone() },
       [VIZ_UBO.threeUniform]: { value: this.pluginUbo },
+      [VIZ_FRAME_UBO.threeUniform]: { value: this.pluginFrameUbo },
     };
+  }
+
+  /** Host adaptive render scale (1 when governor inactive). */
+  setPluginRenderScale(scale: number): void {
+    const s = Number.isFinite(scale) && scale > 0 ? Math.min(1, scale) : 1;
+    if (Math.abs(s - this.pluginRenderScale) < 0.0005) return;
+    this.pluginRenderScale = s;
+    writeVizFrameUbo(this.pluginFrameUbo, s);
+    const mat = this.pluginMat;
+    if (!mat || this.mesh.material !== mat) return;
+    const u = mat.uniforms[VIZ_FRAME_UBO.threeUniform];
+    if (u) u.value = this.pluginFrameUbo;
   }
 
   private ensurePluginMat(id: string, frag: string): void {

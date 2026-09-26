@@ -1528,7 +1528,24 @@ export class NetScene implements HostedView {
 
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: number): void { this.animate(ts); }
-  noteFrameCost(ms: number): void { this.paneFps.noteGpu(ms); }
+  private gpuBudgetSink: ((ms: number) => void) | null = null;
+  private pluginRenderScale = 1;
+
+  setGpuBudgetSink(fn: ((ms: number) => void) | null): void {
+    this.gpuBudgetSink = fn;
+  }
+
+  setPluginRenderScale(scale: number): void {
+    const s = Number.isFinite(scale) && scale > 0 ? Math.min(1, scale) : 1;
+    this.pluginRenderScale = s;
+    this.backdrop.setPluginRenderScale(s);
+    this.syncTuneDpr();
+  }
+
+  noteFrameCost(ms: number): void {
+    this.paneFps.noteGpu(ms);
+    this.gpuBudgetSink?.(ms);
+  }
   hostContextLost(): void {
     this.lumaProbe.reset();
     this.changeProbe.reset();
@@ -1976,7 +1993,7 @@ export class NetScene implements HostedView {
 
   private syncTuneDpr(): void {
     const k = this.tune?.dprK ?? 0;
-    const want = this.baseDpr + (1 - this.baseDpr) * k;
+    const want = (this.baseDpr + (1 - this.baseDpr) * k) * this.pluginRenderScale;
     if (Math.abs(want - this.lastTuneDpr) < 0.04) return;
     this.lastTuneDpr = want;
     if (this.host) {

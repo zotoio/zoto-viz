@@ -313,6 +313,32 @@ def test_typesafe_capability_in_schema() -> None:
     })
 
 
+def test_render_scale_in_schema() -> None:
+    text = SCHEMA_PATH.read_text(encoding="utf-8")
+    assert "renderScale" in text
+    assert "vizFrameUboLayout" in text
+    _validator().validate({
+        "id": "scale-pack",
+        "name": "Scale",
+        "version": 1,
+        "render": {"scale": {"min": 0.35, "steps": [1, 0.75, 0.5, 0.35]}},
+    })
+    with pytest.raises(ValidationError):
+        _validator().validate({
+            "id": "bad-scale",
+            "name": "Bad",
+            "version": 1,
+            "render": {"scale": {"min": 0}},
+        })
+    with pytest.raises(ValueError, match="render.scale.min"):
+        plugins.validate_doc({
+            "id": "bad-scale",
+            "name": "Bad",
+            "version": 1,
+            "render": {"scale": {"min": 1.5}},
+        })
+
+
 def test_viz_graph_walk_true_fails_schema() -> None:
     with pytest.raises(ValidationError):
         _validator().validate({

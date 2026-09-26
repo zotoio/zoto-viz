@@ -70,6 +70,7 @@ import {
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
+import { RenderScaleGovernor } from "../plugins/render-scale-governor";
 import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
   buildVizFrameForPlugin, defaultVizContract,
@@ -141,6 +142,13 @@ applyThemeChrome(theme);
 const renderHost = new RenderHost($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
+const vizBudget = new VizFrameBudget();
+scene.setGpuBudgetSink((ms) => vizBudget.noteGpuMs(ms));
+{
+  const gl = renderHost.gl;
+  vizBudget.setGpuTimerAvailable(!!gl?.getExtension("EXT_disjoint_timer_query_webgl2"));
+}
+let renderGovernor: RenderScaleGovernor | null = null;
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
 scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
@@ -341,10 +349,33 @@ const sandbox = new PluginSandbox();
 const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
-const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
+
+function syncRenderGovernor(spec: PluginView | null): void {
+  const cfg = spec?.renderScale;
+  vizHud.setBudgetOverlayVisible(!!cfg);
+  if (!cfg) {
+    renderGovernor = null;
+    scene.setPluginRenderScale(1);
+    return;
+  }
+  renderGovernor = new RenderScaleGovernor(cfg);
+  scene.setPluginRenderScale(renderGovernor.scale);
+}
+
+function tickRenderGovernor(now: number): number | null {
+  if (!renderGovernor) return null;
+  const scale = renderGovernor.tick({
+    now,
+    p95Ms: vizBudget.p95ForGovernor(),
+    budgetMs: VIZ_FRAME_BUDGET_MS,
+  });
+  scene.setPluginRenderScale(scale);
+  return scale;
+}
+
 addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
@@ -421,6 +452,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
     vizHud.resetSkipBaseline();
   }
   if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
+  syncRenderGovernor(spec);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
@@ -1010,13 +1042,16 @@ function feed(m: StateMsg): void {
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
     }
+    const now = performance.now();
+    const renderScale = active?.renderScale ? tickRenderGovernor(now) : null;
     vizHud.tick({
       packId,
       packName: active?.name ?? packId ?? "",
       stats: vizBudget.stats,
       frame: vizBudget.lastBuilt,
       state: shown,
-      now: performance.now(),
+      now,
+      renderScale,
     });
   }
 
