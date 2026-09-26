@@ -1,11 +1,12 @@
-diff --git a/web/src/app/main.ts b/web/src/app/main.ts
---- a/web/src/app/main.ts
-+++ b/web/src/app/main.ts
-@@ -1052,7 +1052,6 @@ function feed(shown: StateMsg): void {
-       for (const id of scopeTileIds) {
-         const t = vizTileBudgetRegistry.getTile(id);
-         t.shedding = primaryTile.shedding;
--        if (frame) t.lastDeliveredFrame = frame;
-       }
-     }
-     if (frame) {
+diff --git a/web/src/plugins/viz-tile-budget.ts b/web/src/plugins/viz-tile-budget.ts
+index e7b2d3c..bdb302c 100644
+--- a/web/src/plugins/viz-tile-budget.ts
++++ b/web/src/plugins/viz-tile-budget.ts
+@@ -355,7 +355,6 @@ export function mirrorMosaicTileCadenceFromPrimary(
+     t.delivered = primary.delivered;
+     t.shareLimitedSkips = primary.shareLimitedSkips;
+     t.shedding = primary.shedding;
+-    t.lastDeliveredFrame = primary.lastDeliveredFrame;
+     t.lastBuildCostTicks = primary.lastBuildCostTicks;
+     copyHudRingFromPrimary(primary, t);
+   }

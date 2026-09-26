@@ -1,7 +1,8 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index d5f5a34..6877dae 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -2119,9 +2119,7 @@ export class Settings {
+@@ -2117,9 +2117,7 @@ export class Settings {
      if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
      else localStorage.removeItem(`${p}.anim.mosaicTree`);
      localStorage.setItem(`${p}.anim.mosaicMaxId`, a.mosaicMaxId || "");
@@ -11,3 +12,4 @@ diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
 +    if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
      else localStorage.removeItem(`${p}.anim.mosaicTiles`);
      localStorage.setItem(`${p}.anim.mosaicSharedTheme`, a.mosaicSharedTheme ? "1" : "0");
+     if (a.mosaicUniqueSkies === true) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "1");
