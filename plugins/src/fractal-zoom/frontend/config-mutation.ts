@@ -105,27 +105,16 @@ export function validatePresetKeysAgainstSchema(keys: readonly string[]): string
   return keys.filter((k) => !allowed.has(k));
 }
 
-/** Worst-case slider combo per type (host clamps to plugin.yml max). */
-export function worstCaseFractalConfig(type: (typeof FRACTAL_TYPES)[number]): Record<string, string> {
-  return {
-    fractalType: type,
-    preset: "custom",
-    maxIter: "8",
-    maxSteps: "10",
-    shadow: "1",
-    detail: "0.0003",
-    shadow: "1",
-    ao: "1",
-    glow: "0.65",
-    fog: "0.45",
-    orbitTrap: "1",
-    morph: "1",
-    morphAmount: "0.85",
-    audioReactive: "1",
-    zoomSpeed: "0.75",
-    power: "12",
-    scale: "2.6",
-    fold: "0.75",
-    kaleidoSym: "8",
-  };
+export function validatePresetConfigsAgainstSchema(): string[] {
+  const bad: string[] = [];
+  for (const row of FRACTAL_PRESETS) {
+    const cfg = fractalPresetConfig(row.id);
+    for (const key of Object.keys(cfg)) {
+      if (key === "preset") continue;
+      if (!FRACTAL_CONFIG_KEYS.includes(key as (typeof FRACTAL_CONFIG_KEYS)[number])) {
+        bad.push(`${row.id}:${key}`);
+      }
+    }
+  }
+  return bad;
 }

@@ -28,7 +28,7 @@ float mandelbulb(vec3 p, float power) {
   vec3 z = p;
   float dr = 1.0;
   float r = 0.0;
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 32; i++) {
     r = length(z);
     if (r > 4.0) return 0.5 * log(r) * r / dr;
     float theta = acos(clamp(z.z / r, -1.0, 1.0));
@@ -47,7 +47,7 @@ float mandelbox(vec3 p, float s, float f) {
   vec3 z = p;
   float scale = s;
   float fold = f;
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 32; i++) {
     z = clamp(z, -1.0, 1.0) * 2.0 - z;
     float r2 = dot(z, z);
     if (r2 < 0.25) z *= 4.0;
@@ -93,7 +93,7 @@ float julia4d(vec3 p, vec4 c) {
   vec4 z = vec4(p, 0.2);
   float dr = 1.0;
   float r = 0.0;
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 32; i++) {
     r = length(z);
     if (r > 4.0) break;
     dr = 2.0 * r * dr + 1.0;
@@ -131,7 +131,7 @@ vec3 mapCol(vec3 p, float typ, float trapOn, float tpal, float pcyc, float hue, 
 vec2 mandel2d(vec2 uv, vec2 c, int maxIter) {
   vec2 z = vec2(0.0);
   float m = 0.0;
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 48; i++) {
     if (i >= maxIter) break;
     z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
     float d = dot(z, z);
@@ -144,11 +144,11 @@ vec3 color2d(vec2 uv, float typ, vec2 center, float scale, float maxIterN, float
   vec2 c = center + uv * scale;
   vec2 m;
   if (typ < 6.5) {
-    m = mandel2d(uv * scale + center, center, int(maxIterN * 10.0));
+    m = mandel2d(uv * scale + center, center, int(maxIterN * 48.0));
   } else {
-    m = mandel2d(uv * scale, vec2(jc.x, jc.y), int(maxIterN * 10.0));
+    m = mandel2d(uv * scale, vec2(jc.x, jc.y), int(maxIterN * 48.0));
   }
-  float esc = m.x / max(1.0, maxIterN * 10.0);
+  float esc = m.x / max(1.0, maxIterN * 48.0);
   return palette(tpal + pcyc * uTime * 0.05 + esc * 2.5, fz0(20.0), hue, sat) * (0.35 + esc * 1.4);
 }
 
@@ -204,11 +204,11 @@ void main() {
     return;
   }
 
-  int steps = int(min(10.0, max(4.0, maxStepsN * 10.0)));
+  int steps = int(min(48.0, max(12.0, maxStepsN * 48.0)));
   float t = 0.0;
   vec3 col = bg;
   float hit = 0.0;
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 48; i++) {
     if (i >= steps) break;
     vec3 p = ro + rd * t;
     float d = mapDE(p, typ, powr, sc, fold, jc, sym);

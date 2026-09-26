@@ -16,11 +16,12 @@ export function fractalRenderScale(): number {
 }
 
 /**
- * Hard GPU ceilings at render scale 1.0 (locked until VizFrameBudget).
- * TODO(VizFrameBudget): raise FRACTAL_*_CEIL and plugin.yml max; move worst-case GPU test to min render scale.
+ * Hard GPU ceilings (shader + drive min()). Conservative starting point — tune on a real GPU locally;
+ * do not gate CI on cloud VM frame times.
+ * TODO(VizFrameBudget): tie ceilings to host render-scale governor once it ships.
  */
-export const FRACTAL_ITER_CEIL = 8;
-export const FRACTAL_STEPS_CEIL = 10;
+export const FRACTAL_ITER_CEIL = 32;
+export const FRACTAL_STEPS_CEIL = 48;
 export const FRACTAL_ZOOM_LOG_LIMIT = 13.8;
 
 /** Slot 0 layout — must match `sky/fragment.glsl`. */
