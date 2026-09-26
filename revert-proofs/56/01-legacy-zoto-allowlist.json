@@ -1,6 +1,6 @@
 {
   "runner": "vitest",
   "testFile": "src/plugins/pack-lint.test.ts",
-  "testName": "pack-lint-legacy-probe is not on the allowlist and fails baseline guard",
-  "description": "18th pack with declare const zoto must not be added to the pinned allowlist."
+  "testName": "pack lint guardrails > off-allowlist inline zoto declare fails disallowedLegacyZoto guard",
+  "description": "disallowedLegacyZoto must block declare const zoto on packs not on LEGACY_DECLARE_ZOTO_PACK_IDS."
 }

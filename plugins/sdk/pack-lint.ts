@@ -373,15 +373,22 @@ export type PackInstallLintResult = {
   warnings: PackLintViolation[];
 };
 
-/** Install-time lint for an unpacked pack home (blocks sandbox/host-transport only). */
+/** Install-time lint for an unpacked pack home. */
 export function scanPackInstallLint(packDirAbs: string, repoRoot: string): PackInstallLintResult {
   const packId = path.basename(packDirAbs);
   const violations = scanPackDirectory(packDirAbs, repoRoot, {
     packId,
     repoPathPrefix: `plugins/src/${packId}`,
   });
-  const blocks = violations.filter((v) => INSTALL_BLOCK_RULES.has(v.rule));
-  const warnings = violations.filter((v) => INSTALL_WARN_RULES.has(v.rule));
+  const legacyBlocks = legacyZotoViolationsOnDisallowedPacks(violations);
+  const legacyBlockKeys = new Set(legacyBlocks.map(violationKey));
+  const blocks = [
+    ...violations.filter((v) => INSTALL_BLOCK_RULES.has(v.rule)),
+    ...legacyBlocks,
+  ];
+  const warnings = violations.filter(
+    (v) => INSTALL_WARN_RULES.has(v.rule) && !legacyBlockKeys.has(violationKey(v)),
+  );
   return { blocks, warnings };
 }
 
