@@ -32,8 +32,19 @@ ZIP_NAME_SAMPLE = "sample"
 DUPLICATE_TECHNICAL = (
     "zip entry './plugin.yml': duplicate name (same as 'plugin.yml' after normalization)"
 )
-DUPLICATE_USER_MSG = zip_unsafe_user_message(ZIP_NAME_SAMPLE, DUPLICATE_TECHNICAL, prior_version=1)
-DUPLICATE_LOG = zip_rejection_log_message(DUPLICATE_TECHNICAL)
+DUPLICATE_USER_MSG = (
+    "Couldn't install sample.zip. The file isn't a valid pack or is damaged., so version 1 is still installed."
+)
+DUPLICATE_LOG = (
+    "pack zip install rejected: zip entry './plugin.yml': duplicate name "
+    "(same as 'plugin.yml' after normalization)"
+)
+CORRUPT_UNSAFE_USER_MSG = (
+    "Couldn't install unsafe.zip. The file isn't a valid pack or is damaged."
+)
+ENCRYPTED_UNSAFE_USER_MSG = (
+    "Couldn't install unsafe.zip. It's password-protected. Zip it again without a password."
+)
 
 
 def _zip_bytes(files: dict[str, bytes | str]) -> bytes:
@@ -197,10 +208,8 @@ def test_qe_staged_bytes_match_and_outside_staging_untouched(
         sha256=pz.plugin_sha256(bad_path),
     )
     assert blocked["ok"] is False
-    assert blocked["message"] == zip_unsafe_user_message(
-        dest.stem,
-        psz.zip_entry_error("../escape.yml", "illegal zip path '../escape.yml'"),
-        prior_version=1,
+    assert blocked["message"] == (
+        "Couldn't install sample.zip. The file isn't a valid pack or is damaged., so version 1 is still installed."
     )
 
 
@@ -476,7 +485,7 @@ def test_zip_crc_mismatch_all_entry_points(
         monkeypatch,
         caplog,
         _zip_crc_mismatch(),
-        user_message=zip_unsafe_user_message("unsafe", technical),
+        user_message=CORRUPT_UNSAFE_USER_MSG,
         log_technical=technical,
     )
 
@@ -492,7 +501,7 @@ def test_zip_encrypted_all_entry_points(
         monkeypatch,
         caplog,
         _zip_encrypted_member(),
-        user_message=zip_unsafe_user_message("unsafe", technical),
+        user_message=ENCRYPTED_UNSAFE_USER_MSG,
         log_technical=technical,
     )
 
@@ -508,7 +517,7 @@ def test_zip_unsupported_compression_all_entry_points(
         monkeypatch,
         caplog,
         _zip_unsupported_compression(),
-        user_message=zip_unsafe_user_message("unsafe", technical),
+        user_message=CORRUPT_UNSAFE_USER_MSG,
         log_technical=technical,
     )
 
@@ -527,7 +536,7 @@ def test_zip_name_mismatch_all_entry_points(
         monkeypatch,
         caplog,
         _zip_name_mismatch(),
-        user_message=zip_unsafe_user_message("unsafe", technical),
+        user_message=CORRUPT_UNSAFE_USER_MSG,
         log_technical=technical,
     )
 
