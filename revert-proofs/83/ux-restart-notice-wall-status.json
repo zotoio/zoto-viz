@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testId": "src/core/http-notice.test.ts > server restart wall notice > status copy > shows exactly one status notice with the pinned literal",
-  "red": "AssertionError: expected [] to have a length of 1 but got +0",
-  "description": "Restart recovery must paint one wall status notice with the pinned literal.",
-  "timeoutSec": 120
-}

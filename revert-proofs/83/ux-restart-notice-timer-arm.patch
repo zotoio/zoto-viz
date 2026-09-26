@@ -1,12 +1,12 @@
 diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
-index d03d00f..bca0b36 100644
+index d03d00f..83faf50 100644
 --- a/web/src/core/http-notice.ts
 +++ b/web/src/core/http-notice.ts
-@@ -21,7 +21,6 @@ export function bindServerRestartWallNotice(): () => void {
+@@ -20,7 +20,6 @@ export function bindServerRestartWallNotice(): () => void {
+   };
  
    const armAutoClear = (el: HTMLElement) => {
-     clearTimeout(clearTimer);
--    clearTimer = setTimeout(() => clearNotice(), AUTO_CLEAR_MS);
+-    clearTimeout(clearTimer);
+     clearTimer = setTimeout(() => clearNotice(), AUTO_CLEAR_MS);
      el.addEventListener("click", (e) => {
        if ((e.target as HTMLElement).closest("button")) return;
-       clearNotice();

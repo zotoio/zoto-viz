@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http-notice.test.ts",
+  "testName": "server restart wall notice > restart cleared > shows the restart notice again after a cleared burst and a new stale mutation",
+  "red": "AssertionError: expected [] to have a length of 1 but got +0",
+  "description": "http-restart-cleared-listener",
+  "timeoutSec": 120
+}

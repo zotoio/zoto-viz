@@ -1,0 +1,13 @@
+diff --git a/web/src/core/http.ts b/web/src/core/http.ts
+index c763fe1..17b5d02 100644
+--- a/web/src/core/http.ts
++++ b/web/src/core/http.ts
+@@ -63,7 +63,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
+           new CustomEvent("zoto-viz-mutate-retry-failed", {
+             detail: {
+               message: SESSION_RETRY_FAILED_NOTICE,
+-              retry: () => apiFetch(path, init),
++              retry: () => {},
+             },
+           }),
+         );

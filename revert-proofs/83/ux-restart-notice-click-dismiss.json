@@ -1,8 +1,8 @@
 {
   "runner": "vitest",
   "testFile": "src/core/http-notice.test.ts",
-  "testName": "server restart wall notice > auto clear > clears the restart notice after eight seconds",
+  "testName": "server restart wall notice > click dismiss > clears the restart strip when the notice body is clicked",
   "red": "AssertionError: expected [ <div \u2026(2)></div> ] to have a length of +0 but got 1",
-  "description": "ux-restart-notice-autoclear",
+  "description": "ux-restart-notice-click-dismiss",
   "timeoutSec": 120
 }

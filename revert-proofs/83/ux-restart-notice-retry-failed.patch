@@ -1,9 +1,11 @@
+diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
+index d03d00f..e0401b4 100644
 --- a/web/src/core/http-notice.ts
 +++ b/web/src/core/http-notice.ts
-@@ -44,7 +44,6 @@ export function bindServerRestartWallNotice(): () => void {
+@@ -41,7 +41,6 @@ export function bindServerRestartWallNotice(): () => void {
+     if (!detail?.message) return;
      clearTimeout(clearTimer);
      clearTimer = undefined;
-     restartNoticeLive = false;
 -    showWallRetryNotice(detail.message, detail.retry);
    };
  

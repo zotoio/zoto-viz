@@ -1,0 +1,13 @@
+diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
+index d03d00f..b35e605 100644
+--- a/web/src/core/http-notice.ts
++++ b/web/src/core/http-notice.ts
+@@ -39,8 +39,6 @@ export function bindServerRestartWallNotice(): () => void {
+   const onRetryFailed = (e: Event) => {
+     const detail = (e as CustomEvent<RetryFailedDetail>).detail;
+     if (!detail?.message) return;
+-    clearTimeout(clearTimer);
+-    clearTimer = undefined;
+     showWallRetryNotice(detail.message, detail.retry);
+   };
+ 

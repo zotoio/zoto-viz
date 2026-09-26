@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/main.wiring.test.ts",
+  "testName": "main entry wiring > binds server restart wall notice from the production entry module",
+  "red": "AssertionError: expected 'import { AUDIO_DRIVES, NetScene, esca\u2026' to contain 'bindServerRestartWallNotice();'",
+  "description": "ux-restart-notice-main-wiring",
+  "timeoutSec": 120
+}

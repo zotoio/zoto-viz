@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice.ts b/web/src/core/wall-notice.ts
+index 76c3bb0..a235845 100644
+--- a/web/src/core/wall-notice.ts
++++ b/web/src/core/wall-notice.ts
+@@ -42,7 +42,6 @@ export function showWallRetryNotice(message: string, onRetry: () => void | Promi
+   btn.className = "mosaic-wall-notice-retry";
+   btn.textContent = "Retry";
+   btn.addEventListener("click", (e) => {
+-    e.stopPropagation();
+     void onRetry();
+   });
+   el.append(span, " ", btn);

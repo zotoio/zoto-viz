@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http-notice.test.ts",
+  "testName": "server restart wall notice > failed retry > keeps the retry failure strip after the restart auto-clear timer fires",
+  "red": "AssertionError: expected [] to have a length of 1 but got +0",
+  "description": "ux-restart-notice-retry-timer-clear",
+  "timeoutSec": 120
+}

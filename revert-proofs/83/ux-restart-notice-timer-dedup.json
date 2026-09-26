@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testId": "src/core/http-notice.test.ts > server restart wall notice > burst auto-clear timer > arms exactly one eight-second auto-clear for three stale-token hits",
-  "red": "AssertionError: expected [ [ [Function], 8000 ], \u2026(2) ] to have a length of 1 but got 3",
-  "description": "A three-hit stale-token burst must arm exactly one 8s auto-clear timer, not one per hit.",
-  "timeoutSec": 120
-}

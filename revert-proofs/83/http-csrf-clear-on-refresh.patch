@@ -1,0 +1,12 @@
+diff --git a/web/src/core/http.ts b/web/src/core/http.ts
+index c763fe1..c4a050f 100644
+--- a/web/src/core/http.ts
++++ b/web/src/core/http.ts
+@@ -35,7 +35,6 @@ async function send(path: string, init: RequestInit): Promise<Response> {
+ async function refreshSessionAfterStaleToken(): Promise<void> {
+   if (!sessionRefreshInFlight) {
+     sessionRefreshInFlight = (async () => {
+-      csrf = "";
+       await bootSession();
+       if (typeof window !== "undefined" && !restartNoticeEmitted) {
+         restartNoticeEmitted = true;
