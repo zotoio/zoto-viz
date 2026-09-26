@@ -354,7 +354,7 @@ function venvPython(mainRoot) {
       return c;
     }
   }
-  return "python";
+  return process.env.PYTHON || "python3";
 }
 
 function pythonEnvForWorktree(wtRoot) {

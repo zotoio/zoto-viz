@@ -1,8 +1,8 @@
 diff --git a/service/pack_zip_blocks.py b/service/pack_zip_blocks.py
-index 0000000..0000000 100644
+index c266848..6f4ecf1 100644
 --- a/service/pack_zip_blocks.py
 +++ b/service/pack_zip_blocks.py
-@@ -133,12 +133,8 @@ def _read_pack_block_file(pack_id: str) -> dict[str, str] | None:
+@@ -138,15 +138,9 @@ def _read_pack_block_file(pack_id: str) -> dict[str, str] | None:
      try:
          raw = json.loads(path.read_text(encoding="utf-8"))
      except (OSError, json.JSONDecodeError):
@@ -18,3 +18,5 @@ index 0000000..0000000 100644
 -        return row
 +        return None
      row = {k: str(v) for k, v in raw.items()}
+     row.setdefault("id", pack_id)
+     digest = str(row.get("sha256") or "").strip().lower()

@@ -1,12 +1,11 @@
 diff --git a/service/pack_zip_blocks.py b/service/pack_zip_blocks.py
-index 0000000..0000000 100644
+index c266848..e8bfb9e 100644
 --- a/service/pack_zip_blocks.py
 +++ b/service/pack_zip_blocks.py
-@@ -74,28 +74,7 @@ def _invalidate_cache() -> None:
- 
+@@ -76,27 +76,7 @@ def _invalidate_cache() -> None:
  
  def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
--    path.parent.mkdir(parents=True, exist_ok=True)
+     path.parent.mkdir(parents=True, exist_ok=True)
 -    fd, tmp_name = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=path.parent)
 -    tmp = Path(tmp_name)
 -    try:
@@ -28,6 +27,7 @@ index 0000000..0000000 100644
 -        except OSError:
 -            pass
 -        raise
-+    path.parent.mkdir(parents=True, exist_ok=True)
 +    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
  
+ 
+ def _migrate_legacy_store() -> None:
