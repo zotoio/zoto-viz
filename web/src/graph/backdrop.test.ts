@@ -7,6 +7,8 @@ import {
 } from "./backdrop";
 import { liveCam } from "../camera/livecam";
 import { resetReducedMotionSubscriptionForTests } from "../core/motion";
+import { SKY_PLATE_LOAD_ERROR } from "../core/sky-plate-copy";
+import * as loadImage from "../core/load-image";
 
 const OK_FRAG = `
 void main() {
@@ -396,6 +398,38 @@ describe("photo sky cache", () => {
     expect(photoMat.uniforms.uAnimate.value).toBe(1);
     sky.dispose();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("photo plate load", () => {
+  it("shows the shared error copy when every plate candidate fails", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(loadImage, "loadHtmlImage").mockRejectedValue(new Error("404"));
+    const sky = new Backdrop();
+    sky.setKind("meadow");
+    sky.loadPhoto("/skies/__missing-plate__.jpg");
+    await vi.waitFor(() => expect(sky.photoPlateError()).toBe(SKY_PLATE_LOAD_ERROR), { timeout: 2000 });
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("binds meadow demo art with nonzero dimensions after load", async () => {
+    vi.spyOn(loadImage, "loadHtmlImage").mockImplementation(async (img: HTMLImageElement, src: string) => {
+      Object.defineProperty(img, "naturalWidth", { value: 1920 });
+      Object.defineProperty(img, "naturalHeight", { value: 1080 });
+      img.src = src;
+      return img;
+    });
+    const sky = new Backdrop();
+    sky.setKind("meadow");
+    sky.loadPhoto(PHOTO_SKIES.meadow);
+    await vi.waitFor(() => expect(sky.isPhotoPlateBound()).toBe(true));
+    const dim = sky.photoPlateDimensions();
+    expect(dim.width).toBeGreaterThan(0);
+    expect(dim.height).toBeGreaterThan(0);
+    expect(sky.photoPlateError()).toBeNull();
+    vi.restoreAllMocks();
   });
 });
 

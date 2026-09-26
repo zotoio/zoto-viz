@@ -1,0 +1,6 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/graph/backdrop.test.ts",
+  "testFile": "src/graph/backdrop.test.ts",
+  "testName": "binds meadow demo art with nonzero dimensions after load",
+  "description": "Skip updating photoPlateW/H in bindPhoto so bound plate dimensions stay zero."
+}

@@ -1694,6 +1694,14 @@ export class NetScene implements HostedView {
   get nodeCount(): number { return this.nodes.size; }
   get pluginSkyId(): string | null { return this.backdrop.pluginSkyId(); }
 
+  skyPlateError(): string | null { return this.backdrop.photoPlateError(); }
+
+  isPhotoPlateBound(): boolean { return this.backdrop.isPhotoPlateBound(); }
+
+  photoPlateDimensions(): { width: number; height: number } {
+    return this.backdrop.photoPlateDimensions();
+  }
+
   /** Pause / resume rendering and layout ticks (the data model keeps updating either way). */
   setActive(on: boolean): void {
     if (on && !this.active) this.lastFrameTs = 0; // drop the idle time so the first frame back is not a jump

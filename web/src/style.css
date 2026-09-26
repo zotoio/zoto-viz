@@ -75,6 +75,21 @@ body[data-softgl] .brand::after {
   letter-spacing: 0.06em;
 }
 #scene.hosted, .mosaic-scene.hosted, .mosaic-pane.glass { background: transparent; }
+.sky-plate-status {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 1rem 2rem;
+  text-align: center;
+  font: 500 15px/1.45 ui-sans-serif, system-ui, sans-serif;
+  color: color-mix(in srgb, var(--fg) 88%, var(--accent));
+  pointer-events: none;
+}
+.sky-plate-status[hidden] { display: none !important; }
 /* NetPong owns the screen while its mode is active; the 3D scene is hidden and its frame loop idles */
 /* the arcade views (NetPong, Invaders, Command, Frogger): one full-screen canvas each, only the active one shown */
 .arcade { position: absolute; inset: 0; }
