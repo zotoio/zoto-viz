@@ -42,9 +42,12 @@ function greedyFaces(seed: number, ox: number, oz: number): Face[] {
     if (!b) return false;
     return !blockAt(seed, x + dx, y + dy, z + dz);
   };
+  const topUsed = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
   for (let y = 0; y < MAX_Y; y++) {
+    topUsed.fill(0);
     for (let z = 0; z < CHUNK_SIZE; z++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
+        if (topUsed[x + z * CHUNK_SIZE]) continue;
         const wx = ox + x;
         const wz = oz + z;
         if (exposed(wx, y, wz, 0, 1, 0)) {
@@ -64,25 +67,34 @@ function greedyFaces(seed: number, ox: number, oz: number): Face[] {
             if (!done) h++;
           }
           faces.push({ x: wx, y, z: wz, w, h, d: 1, nx: 0, ny: 1, nz: 0, mat: blockAt(seed, wx, y, wz) });
-          for (let dz = 0; dz < h; dz++) for (let dx = 0; dx < w; dx++) {
-            /* mark consumed top faces */
+          for (let dz = 0; dz < h; dz++) {
+            for (let dx = 0; dx < w; dx++) {
+              topUsed[x + dx + (z + dz) * CHUNK_SIZE] = 1;
+            }
           }
           x += w - 1;
         }
       }
     }
   }
-  for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-    for (let ly = 0; ly < MAX_Y; ly++) {
-      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        const wx = ox + lx;
-        const wz = oz + lz;
-        if (!exposed(wx, ly, wz, 1, 0, 0)) continue;
-        const mat = blockAt(seed, wx, ly, wz);
-        faces.push({ x: wx, y: ly, z: wz, w: 1, h: 1, d: 1, nx: 1, ny: 0, nz: 0, mat });
+  const emitSides = (dx: number, dy: number, dz: number, nx: number, ny: number, nz: number) => {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      for (let ly = 0; ly < MAX_Y; ly++) {
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+          const wx = ox + lx;
+          const wz = oz + lz;
+          if (!exposed(wx, ly, wz, dx, dy, dz)) continue;
+          const mat = blockAt(seed, wx, ly, wz);
+          faces.push({ x: wx, y: ly, z: wz, w: 1, h: 1, d: 1, nx, ny, nz, mat });
+        }
       }
     }
-  }
+  };
+  emitSides(1, 0, 0, 1, 0, 0);
+  emitSides(-1, 0, 0, -1, 0, 0);
+  emitSides(0, 0, 1, 0, 0, 1);
+  emitSides(0, 0, -1, 0, 0, -1);
+  emitSides(0, -1, 0, 0, -1, 0);
   return faces;
 }
 
@@ -102,16 +114,31 @@ function pushQuad(
     push(f.x + f.w, f.y + 1, f.z);
     push(f.x + f.w, f.y + 1, f.z + f.h);
     push(f.x, f.y + 1, f.z + f.h);
-  } else if (f.nx !== 0) {
+  } else if (f.ny < 0) {
+    push(f.x, f.y, f.z + 1);
+    push(f.x + 1, f.y, f.z + 1);
+    push(f.x + 1, f.y, f.z);
+    push(f.x, f.y, f.z);
+  } else if (f.nx > 0) {
     push(f.x + 1, f.y, f.z);
     push(f.x + 1, f.y + 1, f.z);
     push(f.x + 1, f.y + 1, f.z + 1);
     push(f.x + 1, f.y, f.z + 1);
-  } else {
+  } else if (f.nx < 0) {
+    push(f.x, f.y, f.z);
+    push(f.x, f.y, f.z + 1);
+    push(f.x, f.y + 1, f.z + 1);
+    push(f.x, f.y + 1, f.z);
+  } else if (f.nz > 0) {
     push(f.x, f.y, f.z + 1);
     push(f.x + 1, f.y, f.z + 1);
     push(f.x + 1, f.y + 1, f.z + 1);
     push(f.x, f.y + 1, f.z + 1);
+  } else {
+    push(f.x + 1, f.y, f.z);
+    push(f.x, f.y, f.z);
+    push(f.x, f.y + 1, f.z);
+    push(f.x + 1, f.y + 1, f.z);
   }
   inds.push(base, base + 1, base + 2, base, base + 2, base + 3);
 }
@@ -164,17 +191,25 @@ export class MeshEngine {
   }
 
   tick(cameraX: number, cameraZ: number, caps: VoxCaps): MeshEngineStats {
-    const need = new Set<string>();
     const ccx = Math.floor(cameraX / CHUNK_SIZE);
     const ccz = Math.floor(cameraZ / CHUNK_SIZE);
     const rad = Math.ceil(caps.maxViewDist / CHUNK_SIZE);
+    const ranked: { cx: number; cz: number; d: number }[] = [];
     for (let dz = -rad; dz <= rad; dz++) {
       for (let dx = -rad; dx <= rad; dx++) {
-        if (this.chunks.size + need.size >= caps.maxChunks) break;
-        need.add(`${ccx + dx},${ccz + dz}`);
+        ranked.push({ cx: ccx + dx, cz: ccz + dz, d: dx * dx + dz * dz });
       }
     }
-    for (const k of need) {
+    ranked.sort((a, b) => a.d - b.d);
+    const want = new Set<string>();
+    for (const c of ranked) {
+      if (want.size >= caps.maxChunks) break;
+      want.add(`${c.cx},${c.cz}`);
+    }
+    for (const k of this.chunks.keys()) {
+      if (!want.has(k)) this.chunks.delete(k);
+    }
+    for (const k of want) {
       if (!this.chunks.has(k) && !this.queue.some((q) => `${q.cx},${q.cz}` === k)) {
         const [cx, cz] = k.split(",").map(Number);
         this.queue.push({ cx, cz });
@@ -184,10 +219,7 @@ export class MeshEngine {
     while (rebuilt < caps.chunksPerFrame && this.queue.length) {
       const { cx, cz } = this.queue.shift()!;
       const key = `${cx},${cz}`;
-      if (this.chunks.size >= caps.maxChunks && !this.chunks.has(key)) {
-        const first = this.chunks.keys().next().value;
-        if (first) this.chunks.delete(first);
-      }
+      if (!want.has(key)) continue;
       this.chunks.set(key, buildChunkMesh(this.seed, cx, cz));
       rebuilt++;
     }

@@ -76,6 +76,19 @@ export function initGpuRenderer(): void {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 16, 16, 0, gl.RGBA, gl.UNSIGNED_BYTE, pix);
 }
 
+export function evictChunkMeshesExcept(active: ReadonlySet<string>): void {
+  if (!gl) return;
+  for (const key of [...chunkBuffers.keys()]) {
+    if (active.has(key)) continue;
+    const rec = chunkBuffers.get(key)!;
+    gl.deleteBuffer(rec.vbo);
+    gl.deleteBuffer(rec.ibo);
+    counts.buffers -= 2;
+    counts.bytesAllocated -= rec.bytes;
+    chunkBuffers.delete(key);
+  }
+}
+
 export function uploadChunkMesh(key: string, mesh: ChunkMesh): void {
   if (!gl) return;
   let rec = chunkBuffers.get(key);

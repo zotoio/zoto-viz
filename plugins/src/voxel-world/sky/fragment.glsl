@@ -55,6 +55,8 @@ float terrainH(vec2 xz) {
   return h;
 }
 
+float biomeSnow() { return slot(9) > 0.5 ? 2.0 : 8.0; }
+
 int blockAt(ivec3 c, float seed) {
   float h = terrainH(vec2(c.x, c.z));
   if (float(c.y) > h + 0.5) {
@@ -74,8 +76,6 @@ int blockAt(ivec3 c, float seed) {
   if (hf(ivec3(c + ivec3(int(seed), 0, 0))) > 0.96) return 9;
   return 3;
 }
-
-float biomeSnow() { return slot(9) > 0.5 ? 2.0 : 8.0; }
 
 bool treeAt(ivec2 xz, float seed) {
   float h = terrainH(vec2(xz));
@@ -217,7 +217,7 @@ bool traceVoxel(vec3 ro, vec3 rd, out float dist, out vec3 n, out vec3 wp, out i
 vec3 beaconCol(vec3 ro, vec3 rd) {
   vec3 col = vec3(0.0);
   for (int i = 0; i < 6; i++) {
-    int base = 32 + i * 4;
+    int base = 64 + i * 4;
     float kindF = slot(base + 3);
     if (kindF < 0.5) continue;
     int kind = int(floor(kindF));
@@ -240,7 +240,7 @@ vec3 beaconCol(vec3 ro, vec3 rd) {
 vec3 mobCol(vec3 ro, vec3 rd) {
   vec3 col = vec3(0.0);
   for (int i = 0; i < 6; i++) {
-    int base = 32 + i * 4;
+    int base = 64 + i * 4;
     vec3 mp = vec3(slot(base), slot(base + 1), slot(base + 2));
     float sz = slot(base + 3);
     if (sz < 0.1 || sz >= 0.95) continue;

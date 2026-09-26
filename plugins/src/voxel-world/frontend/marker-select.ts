@@ -1,4 +1,4 @@
-import type { FlowMarker } from "./talker-cache";
+import { PACKETS_PER_FRAME_CAP, type FlowMarker } from "./talker-cache";
 
 export const SCREEN_MARKER_SLOTS = 6;
 
@@ -30,7 +30,8 @@ const incumbents: IncumbentSlot[] = Array.from({ length: SCREEN_MARKER_SLOTS }, 
   display: 0,
 }));
 
-const candRefs: (FlowMarker | null)[] = new Array(24).fill(null);
+/** Host caps talkers at 24; proto markers are offered after talkers (see bindings). */
+const candRefs: (FlowMarker | null)[] = new Array(24 + PACKETS_PER_FRAME_CAP).fill(null);
 let candCount = 0;
 
 function keyInSlots(key: string): boolean {
@@ -179,7 +180,8 @@ export function commitScreenMarkers(t: number, dt: number): void {
     }
   }
 
-  if (!deferSingleChallengerToReplacement()) {
+  const deferLoneChallenger = deferSingleChallengerToReplacement();
+  if (!deferLoneChallenger) {
     for (let i = 0; i < SCREEN_MARKER_SLOTS; i++) {
       if (incumbents[i]!.key) continue;
       const m = strongestOpenCandidate();
@@ -198,6 +200,8 @@ export function commitScreenMarkers(t: number, dt: number): void {
       return;
     }
   }
+
+  if (deferLoneChallenger) return;
 
   const weakI = weakestHeldSlot(t);
   if (weakI < 0) return;

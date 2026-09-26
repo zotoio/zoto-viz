@@ -1,6 +1,13 @@
 import { applyLiveBindings, resetLiveMarkers, type VoxLiveFrame } from "./bindings";
 import { parseVoxConfig, voxOptionsToConfig, type VoxOptions } from "./config";
-import { disposeGpuRenderer, drawChunks, gpuCounts, initGpuRenderer, uploadChunkMesh } from "./gl-renderer";
+import {
+  disposeGpuRenderer,
+  drawChunks,
+  evictChunkMeshesExcept,
+  gpuCounts,
+  initGpuRenderer,
+  uploadChunkMesh,
+} from "./gl-renderer";
 import { MeshEngine } from "./mesh";
 import { packSlot0, packSlot1Mobs, voxelSmokeCenterLuma } from "./slots";
 import { voxelCamera } from "./world";
@@ -15,6 +22,7 @@ const FIXED_DT = 1 / 60;
 export function setVoxConfig(cfg: Record<string, string>): void {
   opts = parseVoxConfig(cfg);
   mesh.reset(opts.seed);
+  resetLiveMarkers();
 }
 
 export function voxOptions(): VoxOptions {
@@ -40,6 +48,7 @@ export function randomiseVoxConfig(rng = Math.random): { opts: VoxOptions; cfg: 
   };
   opts = parseVoxConfig(cfg);
   mesh.reset(opts.seed);
+  resetLiveMarkers();
   return { opts, cfg: voxOptionsToConfig(opts) };
 }
 
@@ -48,6 +57,7 @@ export function undoVoxConfig(): { opts: VoxOptions; cfg: Record<string, string>
   if (!prev) return null;
   opts = prev;
   mesh.reset(opts.seed);
+  resetLiveMarkers();
   return { opts, cfg: voxOptionsToConfig(opts) };
 }
 
@@ -55,6 +65,7 @@ export function resetVoxConfig(): { opts: VoxOptions; cfg: Record<string, string
   undoStack = [];
   opts = parseVoxConfig({ preset: "classic" });
   mesh.reset(opts.seed);
+  resetLiveMarkers();
   return { opts, cfg: voxOptionsToConfig(opts) };
 }
 
@@ -89,7 +100,12 @@ export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = F
   if (meshStats.verticesUsed > opts.caps.vertexBudget) {
     skips++;
   }
-  mesh.forEachChunk((key, ch) => uploadChunkMesh(key, ch));
+  const chunkKeys = new Set<string>();
+  mesh.forEachChunk((key, ch) => {
+    chunkKeys.add(key);
+    uploadChunkMesh(key, ch);
+  });
+  evictChunkMeshesExcept(chunkKeys);
   drawChunks();
   const gpu = gpuCounts();
   const slot0 = packSlot0(frame.t, aspect, opts, live, meshStats, gpu.bytesAllocated, skips);

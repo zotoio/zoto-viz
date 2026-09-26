@@ -112,15 +112,18 @@ export function syncTalkerLayout(
     eventRate += t.rate;
     updateTalkerMarker(t.id, next, worldSeed, yBase);
   }
+  let write = 0;
   for (let i = 0; i < storedIdCount; i++) {
     const id = storedIds[i]!;
     const m = talkerMarkers.get(id);
-    if (!m || m.talkerTag === talkerFrameTag) continue;
-    m.kind = 0;
-    m.strength = 0;
-    m.y = yBase;
-    m.talkerTag = talkerFrameTag;
+    if (m && m.talkerTag === talkerFrameTag) {
+      storedIds[write++] = id;
+      continue;
+    }
+    talkerMarkers.delete(id);
+    rateById.delete(id);
   }
+  storedIdCount = write;
   return { rateById, markers: talkerMarkers, eventRate };
 }
 
