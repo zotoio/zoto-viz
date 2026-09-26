@@ -1,8 +1,8 @@
 diff --git a/schema/plugin.schema.json b/schema/plugin.schema.json
-index 81055fb..77688f3 100644
+index 8164bef..77688f3 100644
 --- a/schema/plugin.schema.json
 +++ b/schema/plugin.schema.json
-@@ -334,29 +334,7 @@
+@@ -334,16 +334,7 @@
            "maxItems": 24,
            "items": { "$ref": "#/$defs/pluginSection" }
          },
@@ -15,67 +15,19 @@ index 81055fb..77688f3 100644
 -            "type": "object",
 -            "additionalProperties": true
 -          }
--        },
--        "workBudget": {
--          "type": "object",
--          "additionalProperties": true,
--          "description": "Per-frame work caps (#45 count budgets v2; marble-run frontend/work-budget.ts).",
--          "properties": {
--            "maxDrawCalls": { "type": "integer", "minimum": 1 },
--            "maxTriangles": { "type": "integer", "minimum": 1 },
--            "maxInstances": { "type": "integer", "minimum": 1 },
--            "maxGpuBytes": { "type": "integer", "minimum": 1 },
--            "maxSimStepsPerFrame": { "type": "integer", "minimum": 1 },
--            "maxPacketsPerFrame": { "type": "integer", "minimum": 1 }
--          }
 -        }
 +        "idle": { "$ref": "#/$defs/vizIdle" }
        }
      },
      "pluginConfigField": {
 diff --git a/service/plugin_schema.py b/service/plugin_schema.py
-index 5623693..68377e3 100644
+index fce3883..68377e3 100644
 --- a/service/plugin_schema.py
 +++ b/service/plugin_schema.py
-@@ -32,8 +32,40 @@ def deref_schema(raw: dict[str, Any], origin: Path) -> dict[str, Any]:
-     return loaded
- 
- 
-+def _work_budget_json_schema() -> dict[str, Any]:
-+    """JSON Schema for visualisation.yml workBudget (#45 count budgets v2).
-+
-+    TODO(#45 count-budgets-v2): import ``manifest_work_budget_json_schema`` from
-+    ``service.work_budget`` after rebase onto #45 — host-owned ceilings and int≥0
-+    bounds live only in that module (runtime clamp uses the same source).
-+    """
-+    try:
-+        from service.work_budget import manifest_work_budget_json_schema
-+    except ImportError:
-+        return {
-+            "type": "object",
-+            "description": (
-+                "Pending #45: strict workBudget typing is injected from "
-+                "service.work_budget.manifest_work_budget_json_schema()."
-+            ),
-+        }
-+    return manifest_work_budget_json_schema()
-+
-+
-+def _inject_visualisation_manifest_keys(schema: dict[str, Any]) -> None:
-+    viz = schema.get("$defs", {}).get("visualisation")
-+    if not isinstance(viz, dict):
-+        return
-+    props = viz.get("properties")
-+    if not isinstance(props, dict):
-+        return
-+    props["workBudget"] = _work_budget_json_schema()
-+
-+
- def load_plugin_schema() -> dict[str, Any]:
-     raw = yaml.safe_load(PLUGIN_SCHEMA_PATH.read_text(encoding="utf-8"))
+@@ -67,5 +67,5 @@ def load_plugin_schema() -> dict[str, Any]:
      if not isinstance(raw, dict):
          raise ValueError(f"{PLUGIN_SCHEMA_PATH} is not a mapping")
--    return deref_schema(raw, PLUGIN_SCHEMA_PATH)
-+    schema = deref_schema(raw, PLUGIN_SCHEMA_PATH)
+     schema = deref_schema(raw, PLUGIN_SCHEMA_PATH)
+-    _inject_visualisation_manifest_keys(schema)
 +    # reverted: _inject_visualisation_manifest_keys(schema)
-+    return schema
+     return schema

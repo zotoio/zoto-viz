@@ -32,8 +32,40 @@ def deref_schema(raw: dict[str, Any], origin: Path) -> dict[str, Any]:
     return loaded
 
 
+def _work_budget_json_schema() -> dict[str, Any]:
+    """JSON Schema for visualisation.yml workBudget (#45 count budgets v2).
+
+    TODO(#45 count-budgets-v2): import ``manifest_work_budget_json_schema`` from
+    ``service.work_budget`` after rebase onto #45 — host-owned ceilings and int≥0
+    bounds live only in that module (runtime clamp uses the same source).
+    """
+    try:
+        from service.work_budget import manifest_work_budget_json_schema
+    except ImportError:
+        return {
+            "type": "object",
+            "description": (
+                "Pending #45: strict workBudget typing is injected from "
+                "service.work_budget.manifest_work_budget_json_schema()."
+            ),
+        }
+    return manifest_work_budget_json_schema()
+
+
+def _inject_visualisation_manifest_keys(schema: dict[str, Any]) -> None:
+    viz = schema.get("$defs", {}).get("visualisation")
+    if not isinstance(viz, dict):
+        return
+    props = viz.get("properties")
+    if not isinstance(props, dict):
+        return
+    props["workBudget"] = _work_budget_json_schema()
+
+
 def load_plugin_schema() -> dict[str, Any]:
     raw = yaml.safe_load(PLUGIN_SCHEMA_PATH.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError(f"{PLUGIN_SCHEMA_PATH} is not a mapping")
-    return deref_schema(raw, PLUGIN_SCHEMA_PATH)
+    schema = deref_schema(raw, PLUGIN_SCHEMA_PATH)
+    _inject_visualisation_manifest_keys(schema)
+    return schema
