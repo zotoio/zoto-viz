@@ -2,8 +2,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ROW="${1:?row basename without extension}"
-JSON="$ROOT/revert-proofs/42-f/$ROW.json"
-PATCH="$ROOT/revert-proofs/42-f/$ROW.patch"
+JSON="$ROOT/revert-proofs/73/$ROW.json"
+PATCH="$ROOT/revert-proofs/73/$ROW.patch"
 cd "$ROOT/web"
 KIND=$(node -pe "JSON.parse(require('fs').readFileSync('$JSON','utf8')).kind || 'vitest'")
 git checkout -- . >/dev/null 2>&1 || true

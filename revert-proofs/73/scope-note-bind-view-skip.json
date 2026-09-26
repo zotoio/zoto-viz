@@ -3,5 +3,5 @@
   "testFile": "src/app/duplicate-slot-scope-note-guards.test.ts",
   "testName": "^duplicate slot shared config > drawer rebind guards > bindView skips rebuild when drawer key is unchanged$",
   "description": "bindView must skip rebuildViewDrawerContent when drawerKey is unchanged.",
-  "redOutput": ""
+  "redOutput": "AssertionError: expected \"rebuildViewDrawerContent\" to not be called at all, but actually been called 1 times"
 }
