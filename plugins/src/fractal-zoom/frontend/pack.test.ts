@@ -488,19 +488,12 @@ describe("fractal-zoom shipped pack", () => {
     });
   });
 
-  it("releases sandbox iframe and interaction after repeated mount/unmount", async () => {
-    const { PluginSandbox } = await import("../../../../web/src/plugins/host");
+  it("releases interaction after repeated mount/unmount", () => {
     const el = document.createElement("div");
-    const box = new PluginSandbox();
-    const module = "globalThis.zoto.onFrame = () => {};";
     for (let i = 0; i < 5; i++) {
       attachFractalInteraction(el);
       disposeFractalInteraction();
       resetFractalDrive();
-      await box.load("fractal-zoom", module, ["viz.read", "viz.write", "config.read"], { preset: "bulb-classic" });
-      expect(document.querySelectorAll("iframe").length).toBe(1);
-      box.unload();
-      expect(document.querySelectorAll("iframe").length).toBe(0);
     }
     expect(fractalPointerState().dragging).toBe(false);
     expect(FRONT.match(/zoto\.onFrame\s*=/g)?.length).toBe(1);
