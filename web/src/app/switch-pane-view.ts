@@ -122,7 +122,9 @@ export async function switchPaneView(
       mosaic.setPaneNotice(slot.paneId, msg);
       return { ok: false, reason: msg };
     }
-    opts.teardownView(slot.fromViewId);
+    if (!mosaic.tileIds.includes(slot.fromViewId)) {
+      opts.teardownView(slot.fromViewId);
+    }
   }
 
   if (paneSwitchStale(slot.paneId, token)) {
