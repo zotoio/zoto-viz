@@ -218,12 +218,12 @@ describe("server restart wall notice", () => {
       off();
     });
 
-    it("arms exactly one eight-second auto-clear for three stale-token hits", async () => {
-      await Promise.all([
-        apiFetch("/api/a", { method: "PUT" }),
-        apiFetch("/api/b", { method: "PUT" }),
-        apiFetch("/api/c", { method: "PUT" }),
-      ]);
+    it("arms exactly one eight-second auto-clear for three restart events", () => {
+      for (let i = 0; i < 3; i += 1) {
+        window.dispatchEvent(
+          new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
+        );
+      }
       const autoClearArms = setTimeoutSpy.mock.calls.filter((call) => call[1] === 8000);
       expect(autoClearArms).toHaveLength(1);
       expect(vi.getTimerCount()).toBe(1);
