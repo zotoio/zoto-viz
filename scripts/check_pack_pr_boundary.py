@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import base64
 import json
 import os
 import re
@@ -13,8 +14,20 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.pack_boundary_safe_io import (
+    PACK_BOUNDARY_MAX_FILE_BYTES,
+    WorkflowSafePrinter,
+    read_regular_file_under_root,
+    scan_pr_head_tree,
+    validate_changed_paths,
+)
 
 PACK_SRC_RE = re.compile(r"^plugins/src/([^/]+)/")
 ALLOWED_SCHEMA_PATH = "tests/test_plugin_schema.py"
@@ -24,12 +37,17 @@ VIZ_VALIDATE_FUNC = "test_viz_plugin_yml_validates"
 HOST_CHANGE_LABEL = "host-change"
 HOST_REVIEWED_LABEL = "host-reviewed"
 HOST_REVIEW_FAIL_MESSAGE = "host change: needs human review before merge"
+# GitHub truncates pulls/{n}/files listings at this count (fail closed above it).
+GITHUB_PULL_FILES_API_MAX = 3000
 CSP_SANDBOX_CONFIG_PATHS = frozenset(
     {
         "web/index.html",
         "web/src/plugins/host.ts",
     }
 )
+HOST_INFRA_PREFIXES = (".github/", "scripts/")
+# Pack-boundary workflow lint baseline (see pack-boundary.yml).
+LINT_BASELINE_PATHS = frozenset({"scripts/lint-baseline.json"})
 
 
 @dataclass(frozen=True)
@@ -69,8 +87,21 @@ def is_allowed_multipack_web_src(path: str, packs: set[str]) -> bool:
     return any(is_pack_test_file(path, pack) for pack in packs)
 
 
+def is_pack_pr_host_infra_path(path: str) -> bool:
+    """CI/scripts/lint baseline — host review required on any pack PR."""
+    if path in LINT_BASELINE_PATHS:
+        return True
+    return any(path.startswith(prefix) for prefix in HOST_INFRA_PREFIXES)
+
+
+def host_infra_paths_in(changed_files: list[str]) -> list[str]:
+    return sorted(p for p in changed_files if is_pack_pr_host_infra_path(p))
+
+
 def is_multipack_forbidden_host_path(path: str, packs: set[str]) -> bool:
     """Host/sensitive paths that must not ride along with a multi-pack PR."""
+    if is_pack_pr_host_infra_path(path):
+        return True
     if path.startswith("service/"):
         return True
     if path.startswith("plugins/sdk/"):
@@ -82,9 +113,16 @@ def is_multipack_forbidden_host_path(path: str, packs: set[str]) -> bool:
     return False
 
 
-def evaluate_multipack_pr(changed_files: list[str], packs: set[str]) -> list[Violation]:
+def evaluate_multipack_pr(
+    changed_files: list[str],
+    packs: set[str],
+    *,
+    allow_host_infra: bool = False,
+) -> list[Violation]:
     violations: list[Violation] = []
     for path in sorted(changed_files):
+        if allow_host_infra and is_pack_pr_host_infra_path(path):
+            continue
         if not is_multipack_forbidden_host_path(path, packs):
             continue
         violations.append(
@@ -369,12 +407,16 @@ def evaluate_pack_pr(
     changed_files: list[str],
     pack: str,
     file_contents: dict[str, tuple[str | None, str | None]],
+    *,
+    allow_host_infra: bool = False,
 ) -> list[Violation]:
     """Validate a single-pack PR. file_contents maps path -> (base, head) text."""
     violations: list[Violation] = []
     pack_prefix = f"plugins/src/{pack}/"
 
     for path in sorted(changed_files):
+        if allow_host_infra and is_pack_pr_host_infra_path(path):
+            continue
         if path.startswith(pack_prefix):
             continue
         if is_pack_test_file(path, pack):
@@ -414,6 +456,9 @@ def evaluate_pack_pr(
                 validate_catalog_py_change(base_text or "", head_text, pack)
             )
             continue
+        if is_pack_pr_host_infra_path(path):
+            violations.append(Violation(path, PACK_PR_HOST_INFRA_FAIL))
+            continue
         violations.append(
             Violation(
                 path,
@@ -423,13 +468,28 @@ def evaluate_pack_pr(
     return violations
 
 
+PACK_PR_HOST_INFRA_FAIL = (
+    "pack PR touches .github/, scripts/, or the lint baseline; "
+    f"requires {HOST_CHANGE_LABEL!r} and {HOST_REVIEWED_LABEL!r} labels"
+)
+
+
 def run_check(
     changed_files: list[str],
     file_contents: dict[str, tuple[str | None, str | None]],
+    *,
+    allow_host_infra: bool = False,
 ) -> tuple[int, list[str]]:
     """Return (exit_code, lines to print)."""
     lines: list[str] = []
     packs = detect_packs(changed_files)
+    infra_paths = host_infra_paths_in(changed_files)
+
+    if packs and infra_paths and not allow_host_infra:
+        lines.append(f"pack-boundary: {PACK_PR_HOST_INFRA_FAIL}; FAILED")
+        for path in infra_paths:
+            lines.append(f"  {path}: host infra path on pack PR")
+        return 1, lines
 
     if not packs:
         lines.append(
@@ -439,7 +499,9 @@ def run_check(
 
     if len(packs) > 1:
         pack_list = ", ".join(sorted(packs))
-        violations = evaluate_multipack_pr(changed_files, packs)
+        violations = evaluate_multipack_pr(
+            changed_files, packs, allow_host_infra=allow_host_infra
+        )
         if violations:
             lines.append(
                 "pack-boundary: multi-pack PR "
@@ -456,7 +518,9 @@ def run_check(
 
     pack = next(iter(packs))
     lines.append(f"pack-boundary: validating pack PR for {pack!r}.")
-    violations = evaluate_pack_pr(changed_files, pack, file_contents)
+    violations = evaluate_pack_pr(
+        changed_files, pack, file_contents, allow_host_infra=allow_host_infra
+    )
     if violations:
         lines.append("pack-boundary: FAILED")
         for v in violations:
@@ -534,6 +598,14 @@ def _github_request(url: str, token: str) -> tuple[Any, str | None]:
         return json.loads(body), next_url
 
 
+def fetch_pull_labels(repo: str, pull_number: int, token: str) -> set[str]:
+    """Current PR labels via pulls API (pull-requests: read)."""
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}"
+    doc, _ = _github_request(url, token)
+    return {label["name"] for label in doc.get("labels", [])}
+
+
 def fetch_issue_labels(repo: str, issue_number: int, token: str) -> set[str]:
     owner, name = repo.split("/", 1)
     url = (
@@ -541,6 +613,230 @@ def fetch_issue_labels(repo: str, issue_number: int, token: str) -> set[str]:
     )
     doc, _ = _github_request(url, token)
     return {label["name"] for label in doc.get("labels", [])}
+
+
+def paths_from_pull_files_pages(pages: list[list[dict]]) -> list[str]:
+    """Collect current paths from pulls/{n}/files pages (one row per changed file)."""
+    paths: list[str] = []
+    for page in pages:
+        for row in page:
+            filename = row.get("filename")
+            if filename:
+                paths.append(str(filename))
+    return sorted(set(paths))
+
+
+def paths_from_pull_files_pages_with_renames(pages: list[list[dict]]) -> list[str]:
+    """All path strings on a page, including rename predecessors (for boundary scans)."""
+    paths: set[str] = set()
+    for page in pages:
+        for row in page:
+            filename = row.get("filename")
+            if filename:
+                paths.add(str(filename))
+            previous = row.get("previous_filename")
+            if previous:
+                paths.add(str(previous))
+    return sorted(paths)
+
+
+def fetch_pull_changed_files_count(repo: str, pull_number: int, token: str) -> int:
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}"
+    doc, _ = _github_request(url, token)
+    if not isinstance(doc, dict):
+        return 0
+    return int(doc.get("changed_files") or 0)
+
+
+def validate_pull_changed_files_complete(
+    listed_paths: list[str], reported_count: int
+) -> str | None:
+    if reported_count >= GITHUB_PULL_FILES_API_MAX:
+        return (
+            f"PR changes {reported_count} files (>={GITHUB_PULL_FILES_API_MAX}); "
+            "cannot verify the full change set via the pulls/files API"
+        )
+    if reported_count != len(listed_paths):
+        return (
+            f"incomplete pulls/files listing ({len(listed_paths)} paths, "
+            f"pull.changed_files={reported_count})"
+        )
+    return None
+
+
+def fetch_pull_head_repo(repo: str, pull_number: int, token: str) -> str:
+    """Owner/repo for the PR head (fork source when the PR is from a fork)."""
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}"
+    doc, _ = _github_request(url, token)
+    if isinstance(doc, dict):
+        head_repo = (doc.get("head") or {}).get("repo") or {}
+        full_name = head_repo.get("full_name")
+        if full_name:
+            return str(full_name)
+    return repo
+
+
+def _fetch_pull_files_pages(repo: str, pull_number: int, token: str) -> list[list[dict]]:
+    owner, name = repo.split("/", 1)
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}/files"
+        "?per_page=100"
+    )
+    pages: list[list[dict]] = []
+    while url:
+        page, url = _github_request(url, token)
+        if not isinstance(page, list):
+            raise ValueError("pulls/files API returned a non-array page")
+        pages.append(page)
+    return pages
+
+
+def fetch_pull_changed_files(repo: str, pull_number: int, token: str) -> list[str]:
+    """Current paths from pulls/{n}/files (one row per changed file, for counts)."""
+    return paths_from_pull_files_pages(_fetch_pull_files_pages(repo, pull_number, token))
+
+
+def fetch_pull_boundary_paths(repo: str, pull_number: int, token: str) -> list[str]:
+    """Paths to scan on the PR head tree, including rename predecessors (#72)."""
+    return paths_from_pull_files_pages_with_renames(
+        _fetch_pull_files_pages(repo, pull_number, token)
+    )
+
+
+def fetch_repo_file_at_ref(
+    repo: str, path: str, ref: str, token: str
+) -> str | None:
+    """File text at ref via contents API; None if missing."""
+    owner, name = repo.split("/", 1)
+    from urllib.parse import quote
+
+    encoded = quote(path, safe="/")
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/contents/{encoded}?ref={ref}"
+    )
+    try:
+        doc, _ = _github_request(url, token)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+    if not isinstance(doc, dict):
+        return None
+    raw = doc.get("content")
+    if not raw:
+        return None
+    return base64.b64decode(raw).decode("utf-8", errors="replace")
+
+
+def load_file_pair_from_api(
+    repo: str,
+    path: str,
+    base_ref: str,
+    head_ref: str,
+    token: str,
+    *,
+    head_repo: str | None = None,
+) -> tuple[str | None, str | None]:
+    head_owner_repo = head_repo or repo
+    return (
+        fetch_repo_file_at_ref(repo, path, base_ref, token),
+        fetch_repo_file_at_ref(head_owner_repo, path, head_ref, token),
+    )
+
+
+def load_file_pair_from_trees(
+    base_root: Path,
+    pr_head_root: Path,
+    path: str,
+    *,
+    max_bytes: int = PACK_BOUNDARY_MAX_FILE_BYTES,
+) -> tuple[str | None, str | None]:
+    """Read allowlisted paths from base checkout + PR head folder (no API head fetch)."""
+    base_text = read_regular_file_under_root(base_root, path, max_bytes=max_bytes)
+    head_text = read_regular_file_under_root(pr_head_root, path, max_bytes=max_bytes)
+    return base_text, head_text
+
+
+def emit_pack_boundary_lines(
+    lines: list[str], *, printer: WorkflowSafePrinter | None = None
+) -> None:
+    if printer is not None:
+        printer.write_lines(lines)
+        if os.environ.get("GITHUB_ENV"):
+            summary = next((ln for ln in lines if ln.startswith("pack-boundary:")), lines[0] if lines else "pack-boundary: ok")
+            printer.append_github_env("PACK_BOUNDARY_SUMMARY", summary)
+        return
+    for line in lines:
+        print(line)
+
+
+def run_secure_ci_check(
+    repo: str,
+    pr_number: int,
+    token: str,
+    base_root: Path,
+    pr_head_root: Path,
+    *,
+    printer: WorkflowSafePrinter | None = None,
+) -> int:
+    """Required CI path: API file list + labels; file bytes only from base/PR trees."""
+    try:
+        labels, timeline, push_at = load_pr_review_context(repo, pr_number, token)
+    except urllib.error.HTTPError as exc:
+        print(
+            f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
+            file=sys.stderr,
+        )
+        return 1
+    host_review_ok = False
+    if HOST_CHANGE_LABEL in labels:
+        code, lines = run_host_change_gate(labels, timeline, last_push_at=push_at)
+        emit_pack_boundary_lines(lines, printer=printer)
+        if code != 0:
+            return code
+        host_review_ok = True
+    try:
+        listed = fetch_pull_changed_files(repo, pr_number, token)
+        changed = fetch_pull_boundary_paths(repo, pr_number, token)
+        reported_count = fetch_pull_changed_files_count(repo, pr_number, token)
+        incomplete = validate_pull_changed_files_complete(listed, reported_count)
+        if incomplete:
+            print(f"pack-boundary: FAILED — {incomplete}", file=sys.stderr)
+            return 1
+        unsafe = validate_changed_paths(changed)
+        if unsafe:
+            print(f"pack-boundary: FAILED — {unsafe}", file=sys.stderr)
+            return 1
+        tree_err = scan_pr_head_tree(pr_head_root, changed)
+        if tree_err:
+            print(f"pack-boundary: FAILED — {tree_err}", file=sys.stderr)
+            return 1
+    except urllib.error.HTTPError as exc:
+        print(
+            f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
+            file=sys.stderr,
+        )
+        return 1
+    except ValueError as exc:
+        print(f"pack-boundary: FAILED — {exc}", file=sys.stderr)
+        return 1
+
+    contents: dict[str, tuple[str | None, str | None]] = {}
+    try:
+        for path in changed:
+            if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):
+                contents[path] = load_file_pair_from_trees(
+                    base_root, pr_head_root, path
+                )
+    except ValueError as exc:
+        print(f"pack-boundary: FAILED — {exc}", file=sys.stderr)
+        return 1
+
+    code, lines = run_check(changed, contents, allow_host_infra=host_review_ok)
+    emit_pack_boundary_lines(lines, printer=printer)
+    return code
 
 
 def fetch_pull_head_commit_date(
@@ -584,9 +880,6 @@ def fetch_labeled_events(repo: str, issue_number: int, token: str) -> list[dict]
     return items
 
 
-    return items
-
-
 def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]:
     owner, name = repo.split("/", 1)
     url = (
@@ -602,18 +895,38 @@ def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]
     return items
 
 
+def merge_workflow_label_event(timeline: list[dict]) -> list[dict]:
+    """Append labeled/unlabeled from Actions env when this run was label-driven."""
+    action = os.environ.get("PACK_BOUNDARY_EVENT_ACTION", "")
+    if action not in ("labeled", "unlabeled"):
+        return timeline
+    name = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_NAME", "")
+    if not name:
+        return timeline
+    created = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", "")
+    if not created:
+        return timeline
+    row = {
+        "event": action,
+        "label": {"name": name},
+        "created_at": created,
+    }
+    return [*timeline, row]
+
+
 def load_pr_review_context(
     repo: str, issue_number: int, token: str
 ) -> tuple[set[str], list[dict], datetime | None]:
-    labels = fetch_issue_labels(repo, issue_number, token)
+    try:
+        labels = fetch_pull_labels(repo, issue_number, token)
+    except urllib.error.HTTPError:
+        labels = fetch_issue_labels(repo, issue_number, token)
     try:
         timeline = fetch_issue_timeline(repo, issue_number, token)
     except urllib.error.HTTPError:
         timeline = fetch_labeled_events(repo, issue_number, token)
+    timeline = merge_workflow_label_event(timeline)
     push_at = last_push_at_from_timeline(timeline)
-    head_commit_at = fetch_pull_head_commit_date(repo, issue_number, token)
-    if head_commit_at is not None and (push_at is None or head_commit_at > push_at):
-        push_at = head_commit_at
     return labels, timeline, push_at
 
 
@@ -638,18 +951,10 @@ def last_push_at_from_timeline(timeline: list[dict]) -> datetime | None:
 
 
 def _committed_event_timestamp(item: dict) -> datetime | None:
+    """Use timeline event time only — commit author/committer dates are attacker-controlled."""
     created = item.get("created_at")
     if created:
         return parse_github_timestamp(created)
-    for role in ("committer", "author"):
-        date = (item.get(role) or {}).get("date")
-        if date:
-            return parse_github_timestamp(date)
-    commit = item.get("commit") or {}
-    for role in ("committer", "author"):
-        date = (commit.get(role) or {}).get("date")
-        if date:
-            return parse_github_timestamp(date)
     return None
 
 
@@ -729,7 +1034,132 @@ def main(argv: list[str] | None = None) -> int:
         help="JSON object with labels, timeline, optional last_push_at (ISO); "
         "skips git diff and pack rules",
     )
+    parser.add_argument(
+        "--from-github-api",
+        action="store_true",
+        help="Legacy: API for changed files and allowlist contents at HEAD_SHA "
+        "(prefer --secure-ci in CI)",
+    )
+    parser.add_argument(
+        "--secure-ci",
+        action="store_true",
+        help="Required CI path: API file list + labels; read PR bytes from "
+        "PACK_BOUNDARY_PR_HEAD_DIR only (env: GITHUB_REPOSITORY, PR_NUMBER, "
+        "GITHUB_TOKEN, PACK_BOUNDARY_PR_HEAD_DIR, optional PACK_BOUNDARY_BASE_ROOT)",
+    )
     args = parser.parse_args(argv)
+
+    if args.secure_ci:
+        repo = os.environ.get("GITHUB_REPOSITORY", "")
+        pr_raw = os.environ.get("PR_NUMBER", "")
+        token = os.environ.get("GITHUB_TOKEN", "")
+        pr_head_raw = os.environ.get("PACK_BOUNDARY_PR_HEAD_DIR", "")
+        base_root = Path(os.environ.get("PACK_BOUNDARY_BASE_ROOT", ".")).resolve()
+        if not repo or not pr_raw or not pr_head_raw:
+            print(
+                "pack-boundary: FAILED — --secure-ci requires GITHUB_REPOSITORY, "
+                "PR_NUMBER, PACK_BOUNDARY_PR_HEAD_DIR",
+                file=sys.stderr,
+            )
+            return 1
+        if not token:
+            print(
+                "pack-boundary: FAILED — GITHUB_TOKEN is required for --secure-ci",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            pr_number = int(pr_raw)
+        except ValueError:
+            print("pack-boundary: FAILED — PR_NUMBER must be an integer", file=sys.stderr)
+            return 1
+        pr_head_root = Path(pr_head_raw).resolve()
+        if not pr_head_root.is_dir():
+            print(
+                f"pack-boundary: FAILED — PR head dir missing: {pr_head_root}",
+                file=sys.stderr,
+            )
+            return 1
+        printer = WorkflowSafePrinter()
+        return run_secure_ci_check(
+            repo,
+            pr_number,
+            token,
+            base_root,
+            pr_head_root,
+            printer=printer,
+        )
+
+    if args.from_github_api:
+        repo = os.environ.get("GITHUB_REPOSITORY", "")
+        pr_raw = os.environ.get("PR_NUMBER", "")
+        base_ref = os.environ.get("BASE_SHA", "")
+        head_ref = os.environ.get("HEAD_SHA", "")
+        token = os.environ.get("GITHUB_TOKEN", "")
+        if not repo or not pr_raw or not base_ref or not head_ref:
+            print(
+                "pack-boundary: FAILED — --from-github-api requires "
+                "GITHUB_REPOSITORY, PR_NUMBER, BASE_SHA, HEAD_SHA",
+                file=sys.stderr,
+            )
+            return 1
+        if not token:
+            print(
+                "pack-boundary: FAILED — GITHUB_TOKEN is required for --from-github-api",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            pr_number = int(pr_raw)
+        except ValueError:
+            print("pack-boundary: FAILED — PR_NUMBER must be an integer", file=sys.stderr)
+            return 1
+        try:
+            labels, timeline, push_at = load_pr_review_context(repo, pr_number, token)
+        except urllib.error.HTTPError as exc:
+            print(
+                f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
+                file=sys.stderr,
+            )
+            return 1
+        host_review_ok = False
+        if HOST_CHANGE_LABEL in labels:
+            code, lines = run_host_change_gate(
+                labels, timeline, last_push_at=push_at
+            )
+            for line in lines:
+                print(line)
+            if code != 0:
+                return code
+            host_review_ok = True
+        try:
+            listed = fetch_pull_changed_files(repo, pr_number, token)
+            changed = fetch_pull_boundary_paths(repo, pr_number, token)
+            reported_count = fetch_pull_changed_files_count(repo, pr_number, token)
+            incomplete = validate_pull_changed_files_complete(listed, reported_count)
+            if incomplete:
+                print(f"pack-boundary: FAILED — {incomplete}", file=sys.stderr)
+                return 1
+            head_repo = fetch_pull_head_repo(repo, pr_number, token)
+        except urllib.error.HTTPError as exc:
+            print(
+                f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
+                file=sys.stderr,
+            )
+            return 1
+        except ValueError as exc:
+            print(f"pack-boundary: FAILED — {exc}", file=sys.stderr)
+            return 1
+        contents: dict[str, tuple[str | None, str | None]] = {}
+        for path in changed:
+            if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):
+                contents[path] = load_file_pair_from_api(
+                    repo, path, base_ref, head_ref, token, head_repo=head_repo
+                )
+        code, lines = run_check(changed, contents, allow_host_infra=host_review_ok)
+        for line in lines:
+            print(line)
+        return code
 
     if args.dry_run_host_review:
         payload = json.loads(args.dry_run_host_review)
@@ -745,6 +1175,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.base or not args.head:
         parser.error("base and head refs are required unless --dry-run-host-review is set")
 
+    labels: set[str] = set()
+    host_review_ok = False
     token = os.environ.get("GITHUB_TOKEN", "")
     if args.repo and args.pr_number:
         if not token:
@@ -760,15 +1192,15 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        code, lines = run_host_change_gate(
-            labels, timeline, last_push_at=push_at
-        )
-        for line in lines:
-            print(line)
-        if code != 0:
-            return code
         if HOST_CHANGE_LABEL in labels:
-            return 0
+            code, lines = run_host_change_gate(
+                labels, timeline, last_push_at=push_at
+            )
+            for line in lines:
+                print(line)
+            if code != 0:
+                return code
+            host_review_ok = True
 
     changed = git_diff_changed_paths(args.base, args.head)
     contents: dict[str, tuple[str | None, str | None]] = {}
@@ -776,7 +1208,7 @@ def main(argv: list[str] | None = None) -> int:
         if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):
             contents[path] = load_file_pair(args.base, args.head, path)
 
-    code, lines = run_check(changed, contents)
+    code, lines = run_check(changed, contents, allow_host_infra=host_review_ok)
     for line in lines:
         print(line)
     return code

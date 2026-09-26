@@ -1,0 +1,21 @@
+name: ci-fixture-missing
+on: [push]
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  test:
+    needs: [python, web]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo gate
