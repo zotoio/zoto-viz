@@ -213,7 +213,6 @@ function hexNorm(raw: string | undefined, def: string): string {
 const RCS_VIZ_FORM_DEFAULTS: Record<string, string> = {
   preset: "broadcast",
   seed: "42",
-  dice: "none",
   teamSize: "3",
   teamOrange: "#ff8c32",
   teamBlue: "#3aa7ff",
@@ -309,30 +308,6 @@ export function presetConfigValues(id: RcsPresetId): Record<string, string> {
   };
 }
 
-export function randomizeRcsOptions(seed: number, cur: RcsOptions): RcsOptions {
-  let s = seed >>> 0;
-  const rnd = (): number => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-  const themes: RcsTheme[] = ["day", "night", "neon"];
-  const cams: RcsCamera[] = ["broadcast", "ballcam", "director", "orbit"];
-  return {
-    ...cur,
-    teamSize: 2 + Math.floor(rnd() * 2),
-    theme: themes[Math.floor(rnd() * themes.length)]!,
-    camera: cams[Math.floor(rnd() * cams.length)]!,
-    aggress: Math.round(20 + rnd() * 80),
-    gameSpeed: Math.round(50 + rnd() * 120),
-    minCutSec: Math.round((3 + rnd() * 6) * 10) / 10,
-    particles: Math.round(30 + rnd() * 70),
-    ballSize: Math.round(80 + rnd() * 50),
-    trail: (["soft", "sharp", "spark"] as const)[Math.floor(rnd() * 3)]!,
-    explode: (["confetti", "shockwave", "embers"] as const)[Math.floor(rnd() * 3)]!,
-    replay: rnd() > 0.35,
-  };
-}
-
 export function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
   const n = parseInt(h, 16);
@@ -366,48 +341,3 @@ export function rcsRenderScale(): number {
   return 1.0;
 }
 
-let undoStack: RcsOptions[] = [];
-
-export function pushRcsUndo(opt: RcsOptions): void {
-  undoStack.push({ ...opt });
-  if (undoStack.length > 12) undoStack.shift();
-}
-
-export function popRcsUndo(): RcsOptions | null {
-  return undoStack.pop() ?? null;
-}
-
-export function clearRcsUndo(): void {
-  undoStack = [];
-}
-
-export function rcsOptionsToConfigRecord(o: RcsOptions): Record<string, string> {
-  return {
-    preset: o.preset,
-    seed: String(o.seed),
-    dice: "none",
-    teamSize: String(o.teamSize),
-    teamOrange: o.teamOrange,
-    teamBlue: o.teamBlue,
-    theme: o.theme,
-    aggress: String(o.aggress),
-    gameSpeed: String(o.gameSpeed),
-    trail: o.trail,
-    camera: o.camera,
-    minCutSec: String(o.minCutSec),
-    explode: o.explode,
-    replay: o.replay ? "true" : "false",
-    matchSec: String(o.matchSec),
-    ballSize: String(o.ballSize),
-    particles: String(o.particles),
-    reducedMotion: o.reducedMotion ? "true" : "false",
-  };
-}
-
-export function rcsUndoStackDepthForTest(): number {
-  return undoStack.length;
-}
-
-export function clearRcsUndoForTest(): void {
-  undoStack = [];
-}

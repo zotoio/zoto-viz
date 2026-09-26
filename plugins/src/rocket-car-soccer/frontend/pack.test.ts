@@ -89,7 +89,6 @@ const EMPTY_SYS: VizSysTelemetry = {
 const FORM_DEFAULTS: Record<string, string> = {
   preset: "broadcast",
   seed: "42",
-  dice: "none",
   teamSize: "3",
   teamOrange: "#ff8c32",
   teamBlue: "#3aa7ff",
@@ -185,7 +184,7 @@ describe("rocket-car-soccer pack", () => {
     expect(keys).not.toContain("cutHz");
     const base = JSON.stringify(parseRcsOptions({ preset: "neon_night" }));
     for (const key of keys) {
-      if (key === "dice" || key === "preset" || key === "teamOrange" || key === "teamBlue") continue;
+      if (key === "preset" || key === "teamOrange" || key === "teamBlue") continue;
       const chunk = VIS.split(`key: ${key}`)[1]!.split("- key:")[0]!;
       const def = chunk.match(/default: (\S+)/)?.[1] ?? "";
       const min = Number(chunk.match(/min: (\S+)/)?.[1]);
@@ -640,7 +639,6 @@ describe("rocket-car-soccer pack", () => {
   const hostFormDefaults = (): Record<string, string> => ({
     preset: "broadcast",
     seed: "42",
-    dice: "none",
     teamSize: "3",
     theme: "day",
     camera: "director",
@@ -698,7 +696,7 @@ describe("rocket-car-soccer pack", () => {
     stringifySpy.mockRestore();
   });
 
-  it("randomise does not mutate the host config object", async () => {
+  it("does not mutate the host config object when applying options", async () => {
     vi.resetModules();
     const hostCfg = hostFormDefaults();
     const g = globalThis as unknown as {
@@ -721,15 +719,12 @@ describe("rocket-car-soccer pack", () => {
     };
     const mod = await import("./index");
     mod.rcsTestResetDriverStateForTest();
-    const snap = { ...hostCfg, teamSize: "3", camera: "director" };
-    hostCfg.dice = "randomise";
-    g.zoto.onConfig!(hostCfg);
-    expect(hostCfg.teamSize).toBe(snap.teamSize);
-    expect(hostCfg.camera).toBe(snap.camera);
-    expect(hostCfg.trail).toBe(snap.trail);
+    const snap = { ...hostCfg };
+    g.zoto.onConfig!({ ...hostCfg, theme: "neon" });
+    expect(hostCfg).toEqual(snap);
   });
 
-  it("randomise pushes one undo and undo restores prior options", async () => {
+  it("keeps other options when host later changes one slider field", async () => {
     vi.resetModules();
     const hostCfg = hostFormDefaults();
     const g = globalThis as unknown as {
@@ -752,87 +747,16 @@ describe("rocket-car-soccer pack", () => {
     };
     const mod = await import("./index");
     mod.rcsTestResetDriverStateForTest();
+    hostCfg.theme = "neon";
+    hostCfg.camera = "orbit";
     mod.rcsTestApplyHostConfigForTest({ ...hostCfg });
-    const before = { ...mod.rcsFrontendOptionsForTest() };
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
-    expect(mod.rcsFrontendUndoDepthForTest()).toBe(1);
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
-    expect(mod.rcsFrontendUndoDepthForTest()).toBe(0);
-    expect(mod.rcsFrontendOptionsForTest()).toEqual(before);
-  });
-
-  it("records three undo steps for three randomise clicks and walks back two undos", async () => {
-    vi.resetModules();
-    const hostCfg = hostFormDefaults();
-    const g = globalThis as unknown as {
-      zoto: {
-        onFrame: ((frame: VizDataFrame) => void) | null;
-        onConfig: ((cfg: Record<string, string>) => void) | null;
-        getConfig?: () => Record<string, string>;
-        writeBuffer: (slot: number, data: number[]) => void;
-        writeUniform: (name: string, value: number | [number, number, number]) => void;
-        writeParticles: (data: number[], stride?: number) => void;
-      };
-    };
-    g.zoto = {
-      onFrame: null,
-      onConfig: null,
-      getConfig: () => hostCfg,
-      writeBuffer: () => {},
-      writeUniform: () => {},
-      writeParticles: () => {},
-    };
-    const mod = await import("./index");
-    mod.rcsTestResetDriverStateForTest();
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg });
-    const snap0 = { ...mod.rcsFrontendOptionsForTest() };
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
-    const snap1 = { ...mod.rcsFrontendOptionsForTest() };
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
-    const snap2 = { ...mod.rcsFrontendOptionsForTest() };
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
-    expect(mod.rcsFrontendUndoDepthForTest()).toBe(3);
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
-    expect(mod.rcsFrontendOptionsForTest()).toEqual(snap2);
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
-    expect(mod.rcsFrontendOptionsForTest()).toEqual(snap1);
-    expect(mod.rcsFrontendUndoDepthForTest()).toBe(1);
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "undo" });
-    expect(mod.rcsFrontendOptionsForTest()).toEqual(snap0);
-  });
-
-  it("keeps randomised look when host later changes an unrelated slider field", async () => {
-    vi.resetModules();
-    const hostCfg = hostFormDefaults();
-    const g = globalThis as unknown as {
-      zoto: {
-        onFrame: ((frame: VizDataFrame) => void) | null;
-        onConfig: ((cfg: Record<string, string>) => void) | null;
-        getConfig?: () => Record<string, string>;
-        writeBuffer: (slot: number, data: number[]) => void;
-        writeUniform: (name: string, value: number | [number, number, number]) => void;
-        writeParticles: (data: number[], stride?: number) => void;
-      };
-    };
-    g.zoto = {
-      onFrame: null,
-      onConfig: null,
-      getConfig: () => hostCfg,
-      writeBuffer: () => {},
-      writeUniform: () => {},
-      writeParticles: () => {},
-    };
-    const mod = await import("./index");
-    mod.rcsTestResetDriverStateForTest();
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg });
-    mod.rcsTestApplyHostConfigForTest({ ...hostCfg, dice: "randomise" });
-    const afterRand = { ...mod.rcsFrontendOptionsForTest() };
+    const afterTheme = { ...mod.rcsFrontendOptionsForTest() };
     hostCfg.aggress = "22";
     g.zoto.onFrame!(vizFrame());
     expect(mod.rcsFrontendOptionsForTest().aggress).toBe(22);
-    expect(mod.rcsFrontendOptionsForTest().theme).toBe(afterRand.theme);
-    expect(mod.rcsFrontendOptionsForTest().camera).toBe(afterRand.camera);
-    expect(mod.rcsFrontendOptionsForTest().trail).toBe(afterRand.trail);
-    expect(mod.rcsFrontendOptionsForTest().gameSpeed).toBe(afterRand.gameSpeed);
+    expect(mod.rcsFrontendOptionsForTest().theme).toBe(afterTheme.theme);
+    expect(mod.rcsFrontendOptionsForTest().camera).toBe(afterTheme.camera);
+    expect(mod.rcsFrontendOptionsForTest().trail).toBe(afterTheme.trail);
+    expect(mod.rcsFrontendOptionsForTest().gameSpeed).toBe(afterTheme.gameSpeed);
   });
 });

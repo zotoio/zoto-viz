@@ -33,16 +33,6 @@ config:
     max: 999999
     step: 1
     hint: Pinned RNG for AI and crowd motion (deterministic replays).
-  - key: dice
-    label: dice
-    type: select
-    default: none
-    values:
-      - [none, —]
-      - [randomise, Randomise]
-      - [undo, Undo]
-      - [reset, Reset]
-    hint: Randomise picks new options (undo restores the previous). Reset returns Broadcast defaults and restarts the match.
   - key: teamSize
     label: team size
     type: number

@@ -1,18 +1,6 @@
 /** Rocket Car Soccer — sandbox driver (pack clock via viz frame time). */
 
-import {
-  clearRcsUndo,
-  hexToRgb,
-  parseRcsOptions,
-  popRcsUndo,
-  pushRcsUndo,
-  randomizeRcsOptions,
-  RCS_DEFAULTS,
-  rcsOptionsToConfigRecord,
-  rcsUndoStackDepthForTest as packUndoDepth,
-  themeBgAccent,
-  type RcsOptions,
-} from "./pack";
+import { hexToRgb, parseRcsOptions, themeBgAccent, type RcsOptions } from "./pack";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { rcsMount, rcsTick, rcsUnmount, setRcsOptions } from "./match";
 
@@ -34,7 +22,7 @@ let mounted = false;
 function mergeHostDelta(cfg: Record<string, string>): void {
   for (const key of Object.keys(cfg)) {
     const v = cfg[key] ?? "";
-    if (key === "dice" || lastHostSnapshot[key] !== v) {
+    if (lastHostSnapshot[key] !== v) {
       mergedCfg[key] = v;
     }
   }
@@ -50,23 +38,6 @@ function ensureMounted(): void {
 
 function applyConfig(cfg: Record<string, string>): void {
   mergeHostDelta(cfg);
-  const actionDice = mergedCfg.dice ?? "none";
-  if (actionDice === "randomise") {
-    pushRcsUndo(opts);
-    const rnd = randomizeRcsOptions((opts.seed ^ 0x5a5a) >>> 0, opts);
-    Object.assign(mergedCfg, rcsOptionsToConfigRecord(rnd));
-    mergedCfg.dice = "none";
-  } else if (actionDice === "undo") {
-    const prev = popRcsUndo();
-    if (prev) {
-      Object.assign(mergedCfg, rcsOptionsToConfigRecord(prev));
-      mergedCfg.dice = "none";
-    }
-  } else if (actionDice === "reset") {
-    clearRcsUndo();
-    Object.assign(mergedCfg, rcsOptionsToConfigRecord({ ...RCS_DEFAULTS, preset: "broadcast" }));
-    mergedCfg.dice = "none";
-  }
   opts = setRcsOptions(mergedCfg);
   const theme = themeBgAccent(opts.theme);
   const orange = hexToRgb(opts.teamOrange);
@@ -134,13 +105,8 @@ export function rcsTestResetDriverStateForTest(): void {
   mergedCfg = {};
   lastHostSnapshot = {};
   lastCfgRef = undefined;
-  clearRcsUndo();
 }
 
 export function rcsTestApplyHostConfigForTest(cfg: Record<string, string>): void {
   applyConfig({ ...cfg });
-}
-
-export function rcsFrontendUndoDepthForTest(): number {
-  return packUndoDepth();
 }

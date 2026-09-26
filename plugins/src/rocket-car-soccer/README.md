@@ -9,7 +9,7 @@ Self-playing boost-car arena visual for zoto-viz. Original procedural stadium, t
 - `frontend/match.ts` — fixed-timestep sim (accumulator + max 4 substeps @ 120 Hz), replay ring (no re-sim)
 - `frontend/live.ts` — monitor fields → boost / goal pulse / Zoto Fail alerts
 - `frontend/pools.ts` — pre-allocated particle and trail pools
-- `frontend/pack.ts` — options, presets, caps, undo/randomise helpers
+- `frontend/pack.ts` — options, presets, caps
 - `frontend/index.ts` — sandbox driver (`config.read`, `viz.write`, `writeBuffer`, `writeParticles`)
 - `sky/fragment.glsl` — raymarched arena + tile-legible scoreboard / fail strip / demo label
 
@@ -37,7 +37,7 @@ Failures are **stadium-wide** from `sys.failed` only (scoreboard / HUD strip), n
 | `chaos_3v3` | 3v3, high speed and aggression |
 | `chill_orbit` | 2v2, slow orbit, softer particles |
 
-Use the **preset** select in This view, or **dice → Randomise / Undo / Reset** for live tweaks.
+Use the **preset** select in This view, then tune individual sliders. Randomise, Undo, and Reset live in the host settings panel (not in this pack’s config).
 
 ## Tests
 
