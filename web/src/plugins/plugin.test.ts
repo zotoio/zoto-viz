@@ -1,6 +1,6 @@
 import { describe, expect, it, afterEach } from "vitest";
 import {
-  applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
+  applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins, takePackInstallBlockedNotice,
   loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
   viewSelectOptions, fillViewSelect, writePluginConfig, type PluginView,
 } from "./plugin";
@@ -242,6 +242,25 @@ describe("compilePlugin", () => {
     await expect(fetchPlugins()).rejects.toThrow(/plugins/);
     globalThis.fetch = (async () => { throw new Error("offline"); }) as never;
     expect(await installPlugins()).toEqual([]);
+    globalThis.fetch = orig;
+  });
+
+  it("queues operator notice when catalog scan reports pack_boundary", async () => {
+    const orig = globalThis.fetch;
+    const blocked =
+      "Probe was blocked: it imports a file outside its own folder (`frontend/index.ts`) (`./evil`). "
+      + "Nothing was installed and the current wall is unchanged.";
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        dir: "",
+        schema: "",
+        plugins: [],
+        errors: [{ file: "bad.zip", error: "pack_boundary", message: blocked }],
+      }),
+    })) as never;
+    await installPlugins();
+    expect(takePackInstallBlockedNotice()).toBe(blocked);
     globalThis.fetch = orig;
   });
 

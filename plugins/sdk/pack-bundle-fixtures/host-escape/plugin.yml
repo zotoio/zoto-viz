@@ -1,0 +1,5 @@
+id: pack-boundary-host-escape
+name: Host escape probe
+version: 1
+frontend:
+  entry: frontend/index.ts

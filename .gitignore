@@ -27,3 +27,7 @@ sys-config.yml
 plugins/.runtime/
 plugins/*.zip
 dist/
+plugins/src/.pack-sdk/
+**/.zip-install-blocks.json
+**/.install-catalog-records.json
+revert-proofs/**/red/*.txt

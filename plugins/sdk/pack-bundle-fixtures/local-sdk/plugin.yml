@@ -1,0 +1,5 @@
+id: pack-boundary-local-sdk
+name: Local sdk folder
+version: 1
+frontend:
+  entry: frontend/index.ts

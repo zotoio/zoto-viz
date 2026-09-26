@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from service import plugins
@@ -147,6 +148,46 @@ def test_cli_zip_deprecated_missing(tmp_path: Path, monkeypatch) -> None:
     (repo / "plugins").mkdir(parents=True)
     monkeypatch.setenv("ZOTO_VIZ_REPO_ROOT", str(repo))
     assert plugins.cli_zip_deprecated(str(tmp_path / "missing.zip"), False) == 1
+
+
+def test_compile_starter_template_bundles_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Starter value-imports from plugins/sdk; compile must inline runtime into module.js."""
+    starter = ROOT / "plugins" / "sdk" / "starter"
+    if not starter.is_dir():
+        return
+    import shutil
+    import tempfile
+
+    from service import paths
+    from service import plugin_zip as pz
+
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp) / "home"
+        home.mkdir()
+        pack = Path(tmp) / "pack"
+        shutil.copytree(starter, pack)
+        yml = (pack / "plugin.yml").read_text(encoding="utf-8").replace(
+            "pack-starter-template", "pack-starter-sdk-bundle-test"
+        )
+        (pack / "plugin.yml").write_text(yml, encoding="utf-8")
+        monkeypatch.setenv("ZOTO_VIZ_HOME", str(home))
+        plugins.reset_bundles()
+        pid = "pack-starter-sdk-bundle-test"
+        zip_path = paths.plugin_local_dir(create=True) / f"{pid}.zip"
+        pz.pack_tree(pack, zip_path)
+        runtime = paths.plugin_local_runtime_dir(create=True) / pid
+        if runtime.exists():
+            shutil.rmtree(runtime)
+        pz.unpack_zip(zip_path, runtime)
+        doc = plugins.load_file(runtime / "plugin.yml")
+        out = plugins.compile_typescript(doc, runtime / "plugin.yml")
+        assert out.get("hash")
+        got = plugins.bundle_for(pid)
+        assert got
+        js = got[1].decode("utf-8")
+        assert "assignTalkerSlots" in js
+        assert 'from "../../../sdk"' not in js
+        assert 'from "../../sdk"' not in js
 
 
 def test_compile_typescript_pulse() -> None:

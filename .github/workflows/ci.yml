@@ -49,6 +49,9 @@ jobs:
         run: |
           pnpm install
           pnpm approve-builds esbuild
+      - name: Playwright Chromium (starter pack smoke render)
+        working-directory: web
+        run: pnpm exec playwright install chromium --with-deps
       - name: Web tests and coverage
         working-directory: web
         run: pnpm test:coverage

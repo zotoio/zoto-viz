@@ -102,7 +102,7 @@ export class PluginSandbox {
     iframe.srcdoc = `<!doctype html><meta charset="utf-8">
 <script>window.__zotoConfig = ${JSON.stringify(config)};</script>
 <script data-caps='${JSON.stringify(this.caps)}'>${PLUGIN_SDK}</script>
-<script type="module">const zoto = globalThis.zoto; ${plugin}</script>`;
+<script type="module">${plugin}</script>`;
     document.body.appendChild(iframe);
     this.iframe = iframe;
     this.iframe.contentWindow?.postMessage(

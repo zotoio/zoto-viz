@@ -1,5 +1,9 @@
 # VizPlugin host API
 
+**New pack authors:** start from `plugins/sdk/starter/` — copy to
+`plugins/src/<id>/`, run `cd web && pnpm pack-lint ../plugins/src/<id>`, then pick
+view `plugin:<id>` on the monitor. See `plugins/sdk/starter/README.md`.
+
 VizPlugins are demoscene-style shader packs that stay off the hot path. The
 **host** owns ingest, decimation, and the **16.7 ms** frame budget; plugins
 only consume pre-built data frames and write to **reserved buffer / uniform
@@ -62,7 +66,7 @@ Plugins must **not** request or traverse the full device graph. Use
 
 ## Writes (plugin → host)
 
-Sandbox SDK (`globalThis.zoto`):
+Sandbox SDK (`getVizZoto()` from `plugins/sdk/viz-zoto`; runtime object is `globalThis.zoto`):
 
 ```ts
 zoto.onFrame = (frame) => {

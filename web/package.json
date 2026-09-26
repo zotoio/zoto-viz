@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
-    "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs"
+    "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",
+    "pack-lint": "pnpm exec tsx scripts/pack-lint-cli.ts"
   },
   "dependencies": {
     "d3-force-3d": "^3.0.6",
@@ -21,11 +22,14 @@
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.3",
     "@types/three": "^0.185.4",
     "@vitest/coverage-v8": "^5.0.0",
     "assemblyscript": "^0.28.20",
     "esbuild": "^0.28.2",
     "happy-dom": "^20.14.5",
+    "playwright": "^1.58.2",
+    "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"

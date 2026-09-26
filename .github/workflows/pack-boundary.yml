@@ -16,6 +16,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Pack lint and host boundary baseline
+        working-directory: web
+        run: |
+          pnpm install
+          pnpm approve-builds esbuild
+          pnpm exec vitest run src/plugins/pack-lint.test.ts
       - name: Enforce pack PR boundary
         env:
           GITHUB_TOKEN: ${{ github.token }}
