@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -258,5 +258,8 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+         resp = await handler(request)
+     except web.HTTPException as exc:
+         resp = exc
+-    attach_frame_embed_policy(resp)
++    ctype = (resp.headers.get("Content-Type") or "").lower()
++    if "text/html" in ctype:
++        attach_frame_embed_policy(resp)
+     return resp
+ 

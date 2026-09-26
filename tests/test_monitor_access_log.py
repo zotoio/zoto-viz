@@ -7,13 +7,13 @@ from unittest.mock import MagicMock
 
 from aiohttp import ClientSession, web
 
-from service import access, monitor, pack_asset_frames, pack_asset_tokens
+from service import access, monitor, pack_asset_frames, pack_asset_tokens, request_guard
 from tests.pack_asset_test_util import SESSION, SECRET, mint, new_frame_id
 
 
 async def _session_smoke() -> None:
     state = MagicMock()
-    app = monitor.make_app(state, "")
+    app = monitor.make_app(state, "", bind="127.0.0.1", port=7020)
     app.on_startup.clear()
     app.on_shutdown.clear()
     app.on_cleanup.clear()
@@ -23,6 +23,7 @@ async def _session_smoke() -> None:
     await site.start()
     try:
         port = site._server.sockets[0].getsockname()[1]
+        request_guard.configure_request_guard(app, bind="127.0.0.1", port=port)
         url = f"http://127.0.0.1:{port}/api/session"
         async with ClientSession() as session:
             async with session.get(url, headers={"Host": f"127.0.0.1:{port}"}) as resp:
@@ -36,14 +37,15 @@ async def _session_smoke() -> None:
 
 async def _redacting_logger_smoke() -> None:
     state = MagicMock()
-    app = monitor.make_app(state, "")
+    app = monitor.make_app(state, "", bind="127.0.0.1", port=7020)
+    app["pack_asset_secret"] = SECRET
     app.on_startup.clear()
     app.on_shutdown.clear()
     app.on_cleanup.clear()
     frame = new_frame_id()
     reg = pack_asset_frames.registry_for_app(app)
     reg.register(SESSION, frame)
-    tok = mint("demo-pack", session_id=SESSION, frame_id=frame)
+    tok = mint("demo-pack", session_id=SESSION, frame_id=frame, app=app)
     runner = web.AppRunner(app, access_log_class=access.RedactingAccessLogger)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -56,6 +58,7 @@ async def _redacting_logger_smoke() -> None:
     log.setLevel(logging.INFO)
     try:
         port = site._server.sockets[0].getsockname()[1]
+        request_guard.configure_request_guard(app, bind="127.0.0.1", port=port)
         host = f"127.0.0.1:{port}"
         path = access.pack_asset_url(tok, "demo-pack", "module.js")
         async with ClientSession() as session:

@@ -33,7 +33,7 @@ from typing import Iterable
 
 from aiohttp import WSCloseCode, web
 
-from . import access
+from . import access, request_guard
 from . import pack_assets
 from . import static_paths
 from . import agent
@@ -1894,7 +1894,10 @@ async def static_path_guard(request: web.Request, handler):  # noqa: ANN001
         canon = static_paths.canonical_static_path(raw_path)
         if canon is None:
             return web.Response(status=404, text="not found")
-        if static_paths.is_legacy_sandbox_request(raw_path) or canon.rsplit("/", 1)[-1] == "plugin-sandbox.html":
+        if not canon.startswith("/pack-assets/") and (
+            static_paths.is_legacy_sandbox_request(raw_path)
+            or canon.rsplit("/", 1)[-1] == "plugin-sandbox.html"
+        ):
             return web.Response(status=404, text="not found")
         if not _static_route_exempt(canon) and not static_paths.static_path_allowed(raw_path):
             return web.Response(status=404, text="not found")
@@ -1906,14 +1909,20 @@ def make_app(
     bpf: str,
     wifi_keys: Path = WIFI_KEYS_FILE,
     *,
+    bind: str = "127.0.0.1",
+    port: int = 7020,
+    allowed_hosts: list[str] | None = None,
     insecure_lan: bool = False,
     http_public_origin: str | None = None,
 ) -> web.Application:
     from . import pack_asset_frames
 
     app = web.Application(
-        middlewares=[access.frame_embed_policy_middleware, static_path_guard, access.middleware],
+        middlewares=[request_guard.middleware, static_path_guard, access.middleware],
         client_max_size=agent.MAX_BODY,
+    )
+    request_guard.configure_request_guard(
+        app, bind=bind, port=port, allowed_hosts=allowed_hosts or [],
     )
     app["state"], app["bpf"], app["clients"], app["wifi_keys"] = state, bpf, set(), wifi_keys
     app["csrf"] = access.new_token()
@@ -2070,10 +2079,15 @@ def main() -> None:
         origin = None
         if listen["insecure_lan"]:
             origin = f"http://{listen['bind']}:{listen['port']}"
+        cfg_hosts = cfg.get("allowed_hosts") if isinstance(cfg, dict) else None
+        extra_hosts = cfg_hosts if isinstance(cfg_hosts, list) else []
         app = make_app(
             state,
             args.filter,
             args.wifi_keys,
+            bind=str(listen["bind"]),
+            port=int(listen["port"]),
+            allowed_hosts=[str(h) for h in extra_hosts],
             insecure_lan=listen["insecure_lan"],
             http_public_origin=origin,
         )

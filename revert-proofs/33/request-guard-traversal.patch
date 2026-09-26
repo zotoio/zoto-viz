@@ -1,0 +1,17 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -252,11 +252,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+             host_hdr = f"{host}:{p}"
+         request["validated_http_origin"] = f"{scheme}://{host_hdr}".rstrip("/")
+ 
+-    raw_path = getattr(request, "raw_path", None) or request.path or "/"
+-    _norm_path, path_err = decode_request_path(raw_path)
+-    if path_err:
+-        resp = web.Response(status=400, text="bad request", content_type="text/plain")
+-        attach_frame_embed_policy(resp)
+-        return resp
+-
+     try:
+         resp = await handler(request)
+     except web.HTTPException as exc:

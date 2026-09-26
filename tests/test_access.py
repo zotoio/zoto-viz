@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from service import access
+from service import access, request_guard
 from service.forensics import location_allowed
 from service import pack_asset_frames
 from tests.pack_asset_test_util import DEFAULT_FRAME, SECRET, SESSION, mint
@@ -139,7 +139,8 @@ class AccessMiddlewareTests(AioHTTPTestCase):
         async def poke(_: web.Request) -> web.Response:
             return web.json_response({"wrote": True})
 
-        app = web.Application(middlewares=[access.middleware])
+        app = web.Application(middlewares=[request_guard.middleware, access.middleware])
+        request_guard.configure_request_guard(app, bind="127.0.0.1", port=7020)
         app["csrf"] = "token-aaa"
         app["pack_asset_secret"] = SECRET
         app["insecure_lan"] = False
@@ -148,45 +149,54 @@ class AccessMiddlewareTests(AioHTTPTestCase):
         app.router.add_post("/mcp", poke)
         return app
 
+    async def setUpAsync(self) -> None:
+        await super().setUpAsync()
+        request_guard.configure_request_guard(
+            self.client.app, bind="127.0.0.1", port=self.client.port,
+        )
+
+    def _host(self) -> dict[str, str]:
+        return {"Host": f"127.0.0.1:{self.client.port}"}
+
     async def test_loopback_get_and_csrf_post(self) -> None:
-        resp = await self.client.get("/ok", headers={"Host": "127.0.0.1:7020"})
+        resp = await self.client.get("/ok", headers=self._host())
         assert resp.status == 200
         token = resp.headers.get(access.HEADER)
         assert token == "token-aaa"
 
-        denied = await self.client.post("/poke", headers={"Host": "127.0.0.1:7020"})
+        denied = await self.client.post("/poke", headers=self._host())
         assert denied.status == 403
 
         ok = await self.client.post(
             "/poke",
-            headers={"Host": "127.0.0.1:7020", access.HEADER: token or ""},
+            headers={**self._host(), access.HEADER: token or ""},
         )
         assert ok.status == 200
 
         stale = await self.client.post(
             "/poke",
-            headers={"Host": "127.0.0.1:7020", access.HEADER: "token-aaa", "Cookie": f"{access.COOKIE}=stale"},
+            headers={**self._host(), access.HEADER: "token-aaa", "Cookie": f"{access.COOKIE}=stale"},
         )
         assert stale.status == 200
 
     async def test_rebinding_host_rejected(self) -> None:
-        resp = await self.client.get("/ok", headers={"Host": "evil.example:7020"})
-        assert resp.status == 403
+        resp = await self.client.get("/ok", headers={"Host": f"evil.example:{self.client.port}"})
+        assert resp.status == 400
 
     async def test_foreign_origin_rejected(self) -> None:
         resp = await self.client.get(
             "/ok",
-            headers={"Host": "127.0.0.1:7020", "Origin": "http://evil.example"},
+            headers={**self._host(), "Origin": "http://evil.example"},
         )
         assert resp.status == 403
 
     async def test_null_origin_denied_on_profiles(self) -> None:
         resp = await self.client.get(
             "/ok",
-            headers={"Host": "127.0.0.1:7020", "Origin": "null"},
+            headers={**self._host(), "Origin": "null"},
         )
         assert resp.status == 403
 
     async def test_mcp_skips_csrf(self) -> None:
-        resp = await self.client.post("/mcp", headers={"Host": "127.0.0.1:7020"})
+        resp = await self.client.post("/mcp", headers=self._host())
         assert resp.status == 200

@@ -12,8 +12,6 @@ import logging
 import re
 from urllib.parse import quote, unquote, urlparse
 
-import logging
-
 from aiohttp import web
 from aiohttp.abc import AbstractAccessLogger
 
@@ -225,11 +223,9 @@ def pack_asset_csp_origin(request: web.Request) -> str:
     configured = request.app.get("http_public_origin")
     if configured:
         return str(configured).rstrip("/")
-    raw = host_header_raw(request)
-    if not raw or _HOST_INJECTION.search(raw) or not host_ok(request):
-        return "http://127.0.0.1"
-    scheme = request.scheme or "http"
-    return f"{scheme}://{raw}".rstrip("/")
+    from .request_guard import validated_http_origin
+
+    return validated_http_origin(request)
 
 
 def origin_ok(request: web.Request) -> bool:
@@ -272,19 +268,7 @@ def _deny(msg: str, status: int = 403) -> web.Response:
 
 
 @web.middleware
-async def frame_embed_policy_middleware(request: web.Request, handler):  # noqa: ANN001
-    try:
-        resp = await handler(request)
-    except web.HTTPException as exc:
-        resp = exc
-    attach_frame_embed_policy(resp)
-    return resp
-
-
-@web.middleware
 async def middleware(request: web.Request, handler):  # noqa: ANN001
-    if not host_ok(request):
-        return _deny("forbidden host")
     if not origin_ok(request):
         return _deny("forbidden origin")
     if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):

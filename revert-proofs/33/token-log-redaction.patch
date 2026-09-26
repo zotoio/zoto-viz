@@ -1,8 +1,7 @@
 diff --git a/service/access.py b/service/access.py
-index d5496de..cb71b9b 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -300,9 +300,7 @@ class RedactingAccessLogger(AbstractAccessLogger):
+@@ -296,9 +296,7 @@ class RedactingAccessLogger(AbstractAccessLogger):
              self.logger.info("-")
              return
          path_qs = request.path_qs

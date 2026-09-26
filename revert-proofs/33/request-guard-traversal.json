@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_policy.py::test_dot_segments_return_400_without_sandbox_leak[/ws/../plugin-sandbox.html]",
+  "description": "Dot-segment traversal must 400 before routing; revert relies on static guard only (200/404 leak).",
+  "timeoutSec": 120
+}

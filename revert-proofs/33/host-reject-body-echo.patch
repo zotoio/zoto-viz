@@ -1,0 +1,12 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -228,7 +228,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+ 
+     if not host_allowed(raw_host, allowed, port):
+         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
+-        resp = web.Response(status=400, text=HOST_REJECT_BODY, content_type="text/plain")
++        resp = web.Response(status=400, text=f"{HOST_REJECT_BODY} ({raw_host})", content_type="text/plain")
+         attach_frame_embed_policy(resp)
+         return resp
+ 
