@@ -92,6 +92,7 @@ function collectEquivalenceVizFrame(state: ReturnType<typeof buildCollectEquival
 
 describe("viz collector rewrite allocation", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     vi.resetModules();
   });
 
@@ -166,6 +167,7 @@ describe("viz collector rewrite allocation", () => {
 
 describe("viz collector link pool growth", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     vi.resetModules();
   });
 
