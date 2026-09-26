@@ -44,6 +44,12 @@ import {
 } from "./pack-mirror-rect";
 import { renderHostMirrorTelemetry } from "./render-host-telemetry";
 import { applyDeviceRectToGlRenderer } from "./render-host-gl-adapter";
+import {
+  type DevicePxRatio,
+  devicePxRatioFromNumber,
+  devicePxRatioFromWindow,
+  devicePxRatioNumber,
+} from "./render-host-device-px-ratio";
 
 type PackMirrorViewMeta = HostedView & {
   packCoalesceGroupKey?: string;
@@ -114,6 +120,7 @@ export class RenderHost {
   private readonly frame: (ts: number) => void;
   private disposed = false;
   private pr: number;
+  private layoutDevicePxRatio: DevicePxRatio;
   readonly packMirrors = new PackMirrorRegistry();
   private readonly letterboxScratch = {
     box: { x: 0, y: 0, w: 0, h: 0 },
@@ -159,13 +166,14 @@ export class RenderHost {
   private gpuTimedBox: SoftRect | null = null;
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean; antialias?: boolean } = {}) {
-    const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
-    this.pr = dpr;
+    this.layoutDevicePxRatio =
+      opts.dpr !== undefined ? devicePxRatioFromNumber(opts.dpr) : devicePxRatioFromWindow();
+    this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
     const forceSoft = opts.software === true || (opts.software !== false && !probeWebGL());
     if (!forceSoft) {
       try {
         this.renderer = new THREE.WebGLRenderer({
-          antialias: opts.antialias ?? dpr < 1.3,
+          antialias: opts.antialias ?? this.pr < 1.3,
           alpha: true,
           premultipliedAlpha: true,
           preserveDrawingBuffer: true,
@@ -180,13 +188,13 @@ export class RenderHost {
       } catch {
         this.software = true;
         this.canvas = document.createElement("canvas");
-        this.renderer = new SoftwareGpu(this.canvas, dpr);
+        this.renderer = new SoftwareGpu(this.canvas, this.pr);
         this.ctx2d = this.canvas.getContext("2d");
       }
     } else {
       this.software = true;
       this.canvas = document.createElement("canvas");
-      this.renderer = new SoftwareGpu(this.canvas, dpr);
+      this.renderer = new SoftwareGpu(this.canvas, this.pr);
       this.ctx2d = this.canvas.getContext("2d");
     }
     this.canvas.className = "render-host";
@@ -233,6 +241,14 @@ export class RenderHost {
 
   /** Layout DPR (capped); WebGLRenderer `getPixelRatio()` stays 1. */
   get pixelRatio(): number { return this.pr; }
+
+  /** Capped device pixel ratio used for canvas backing store and pixel-sized materials. */
+  get devicePxRatio(): DevicePxRatio {
+    return this.layoutDevicePxRatio;
+  }
+
+  get layoutCssWidth(): number { return this.w; }
+  get layoutCssHeight(): number { return this.h; }
   get viewCount(): number { return this.views.length; }
 
   /** WebGL2 context, or null when lost / unavailable. */
@@ -348,7 +364,8 @@ export class RenderHost {
   /** Whole-wall layout DPR (auto-tune). Backing store scales here; renderer pixel ratio stays 1. */
   setPixelRatio(pr: number): void {
     if (Math.abs(pr - this.pixelRatio) < 0.01) return;
-    this.pr = pr;
+    this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
+    this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
     if (!this.software) {
       this.renderer.setPixelRatio(1);
       this.resizeGpuCanvas();

@@ -1,0 +1,11 @@
+diff --git a/web/src/graph/host-three-pixel-materials.ts b/web/src/graph/host-three-pixel-materials.ts
+index 0000000..0000000 100644
+--- a/web/src/graph/host-three-pixel-materials.ts
++++ b/web/src/graph/host-three-pixel-materials.ts
+@@ -12,7 +12,7 @@ export function hostPointsMaterialSize(
+   sizeAttenuation: boolean,
+ ): number {
+   if (sizeAttenuation) return cssSize;
+-  return cssSize * devicePxRatioNumber(devicePxRatio);
++  return cssSize;
+ }

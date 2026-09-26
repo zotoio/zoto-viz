@@ -8,6 +8,7 @@ const brands = [
   "DeviceRect",
   "GlRect",
   "CanvasDeviceHeight",
+  "DevicePxRatio",
   "FrameTs",
   "MonoMs",
   "WallMs",
@@ -17,17 +18,30 @@ const brands = [
 const mintFiles = new Set([
   "src/graph/pack-mirror-rect.ts",
   "src/core/time-brands.ts",
+  "src/graph/render-host-device-px-ratio.ts",
 ]);
 
-const pattern = new RegExp(`\\sas\\s+(${brands.join("|")})\\b`, "g");
+const devicePxRatioMint = "src/graph/render-host-device-px-ratio.ts";
+
+const castPattern = new RegExp(`\\sas\\s+(${brands.join("|")})\\b`, "g");
+const devicePxRatioReadPattern = /\bdevicePixelRatio\b/g;
 
 let failed = false;
 for (const file of globSync("src/**/*.ts", { cwd: root })) {
   if (file.endsWith(".test.ts") || mintFiles.has(file)) continue;
   const text = readFileSync(`${root}/${file}`, "utf8");
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(castPattern)) {
     console.error(`${file}: brand cast \`as ${match[1]}\` (only mint modules and *.test.ts)`);
     failed = true;
+  }
+  if (file.startsWith("src/graph/") && file !== devicePxRatioMint) {
+    for (const match of text.matchAll(devicePxRatioReadPattern)) {
+      console.error(
+        `${file}: raw \`devicePixelRatio\` read (only ${devicePxRatioMint}; use RenderHost.devicePxRatio or devicePxRatioFromWindow)`,
+      );
+      failed = true;
+      break;
+    }
   }
 }
 

@@ -46,6 +46,15 @@ import {
   isDeviceRect,
   toGlRectInto,
 } from "./pack-mirror-rect";
+import {
+  applyHostPointsMaterialSize,
+  hostShaderResolutionUniform,
+} from "./host-three-pixel-materials";
+import {
+  devicePxRatioFromNumber,
+  devicePxRatioFromWindow,
+  devicePxRatioNumber,
+} from "./render-host-device-px-ratio";
 import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
@@ -600,6 +609,7 @@ function glowMaterial(): THREE.ShaderMaterial {
       uAmt: { value: 1 },
       uMode: { value: 0 },
       uAdditive: { value: 1 },
+      uResolution: { value: new THREE.Vector2(1, 1) },
     },
     vertexShader: GLOW_VERT,
     fragmentShader: GLOW_FRAG,
@@ -1295,12 +1305,14 @@ export class NetScene implements HostedView {
       container.classList.add("hosted");
       this.host.add(this);
     } else {
-      const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
-      this.baseDpr = dpr;
-      this.lastTuneDpr = dpr;
+      const capped = devicePxRatioFromWindow();
+      this.baseDpr = this.satellite
+        ? Math.min(1, devicePxRatioNumber(capped))
+        : devicePxRatioNumber(capped);
+      this.lastTuneDpr = this.baseDpr;
       this.renderer = ownRenderer(container, {
         satellite: this.satellite,
-        dpr,
+        dpr: this.baseDpr,
         clearHex: this.clearHex,
         onLost: () => this.hostContextLost(),
         onRestored: () => this.hostContextRestored(),
@@ -2072,7 +2084,16 @@ export class NetScene implements HostedView {
     const host = this.satellite ? this.container : document.documentElement;
     host.style.setProperty("--label-scale", String(a.labelWeight));
     host.style.setProperty("--label-fw", String(Math.round(400 + 350 * Math.max(0, Math.min(1, a.labelWeight)))));
-    (this.particles.material as THREE.PointsMaterial).size = 3.2 * a.edgeWeight * (t?.partSize ?? a.partSize);
+    const partCssSize = 3.2 * a.edgeWeight * (t?.partSize ?? a.partSize);
+    if (this.host) {
+      applyHostPointsMaterialSize(
+        this.particles.material as THREE.PointsMaterial,
+        partCssSize,
+        this.host.devicePxRatio,
+      );
+    } else {
+      (this.particles.material as THREE.PointsMaterial).size = partCssSize;
+    }
     (this.lines.material as THREE.LineBasicMaterial).opacity = Math.min(1, 0.5 + 0.5 * a.edgeWeight);
     this.syncGlow();
   }
@@ -2086,6 +2107,14 @@ export class NetScene implements HostedView {
     u.uSpeed.value = a.edgeGlowSpeed;
     u.uMode.value = a.edgeGlow === "pulse" ? 1 : 0;
     u.uAdditive.value = this.additiveMarks() ? 1 : 0;
+    if (this.host) {
+      hostShaderResolutionUniform(
+        this.host.layoutCssWidth,
+        this.host.layoutCssHeight,
+        this.host.devicePxRatio,
+        u.uResolution.value,
+      );
+    }
   }
 
   private audioLive(): boolean {
@@ -3596,7 +3625,16 @@ export class NetScene implements HostedView {
       this.rebuildParticles();
     }
     if (this.tune.k > 0.001 || this.lastTuneK > 0.001) {
-      (this.particles.material as THREE.PointsMaterial).size = 3.2 * this.anim.edgeWeight * this.tune.partSize;
+      const partCssSize = 3.2 * this.anim.edgeWeight * this.tune.partSize;
+      if (this.host) {
+        applyHostPointsMaterialSize(
+          this.particles.material as THREE.PointsMaterial,
+          partCssSize,
+          this.host.devicePxRatio,
+        );
+      } else {
+        (this.particles.material as THREE.PointsMaterial).size = partCssSize;
+      }
       this.syncGlow();
     }
     this.lastTuneK = this.tune.k;
