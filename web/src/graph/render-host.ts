@@ -346,7 +346,7 @@ export class RenderHost {
       const pr = rd.getPixelRatio();
       const tex = gpu.uploadFrame(bitmap);
       if (!tex) return null;
-      gpu.present(rd, tex, fill, dst, aspect);
+      gpu.present(rd, tex, fill, asCssRect(dst), aspect);
       return this.writeFbViewport(dst, pr);
     } finally {
       if (releaseBitmap) bitmap.close();
@@ -382,7 +382,7 @@ export class RenderHost {
       return this.writeFbViewport(dst, pr);
     }
     const rd = this.renderer as THREE.WebGLRenderer;
-    paintLetterboxBarsThree(rd, fill, dst, innerAbs, this.letterboxScratch.bars);
+    paintLetterboxBarsThree(rd, fill, asCssRect(dst), asCssRect(innerAbs), this.letterboxScratch.bars);
     return this.writeFbViewport(dst, rd.getPixelRatio());
   }
 
