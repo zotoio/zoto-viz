@@ -1,4 +1,5 @@
 import type { HeroPos, MosaicSize } from "./scene";
+import { allocateMosaicTileSlot, mosaicTileViewId } from "./mosaic-tile-id";
 
 /** Horizontal = left/right. Vertical = top/bottom. */
 export type MosaicDir = "h" | "v";
@@ -66,7 +67,7 @@ export function parseMosaicTiles(raw: unknown): string[] {
   const seen = new Set<string>();
   for (const row of raw.slice(0, 8)) {
     if (typeof row !== "string" || !row.trim()) continue;
-    const id = row.trim().slice(0, 80);
+    const id = row.trim().slice(0, 96);
     if (seen.has(id)) continue;
     seen.add(id);
     out.push(id);
@@ -189,38 +190,39 @@ export function mapLeaves(n: MosaicNode, ids: string[]): MosaicNode {
   return walk(cloneNode(n));
 }
 
-/** Replace one pane's view. Picking a view already on the wall swaps those two panes. */
-export function nextPaneTiles(ids: string[], fromId: string, toId: string): string[] {
-  const i = ids.indexOf(fromId);
-  if (i < 0 || !toId || fromId === toId) return ids;
+/** Swap two tile slots (leaf ids). */
+export function movePaneTileView(ids: string[], fromSlot: string, otherSlot: string): string[] {
+  const i = ids.indexOf(fromSlot);
+  const j = ids.indexOf(otherSlot);
+  if (i < 0 || j < 0 || i === j) return ids;
   const next = ids.slice();
-  const j = next.indexOf(toId);
-  if (j >= 0) {
-    next[i] = toId;
-    next[j] = fromId;
-    return next;
-  }
-  next[i] = toId;
+  next[i] = otherSlot;
+  next[j] = fromSlot;
   return next;
+}
+
+/** Set one pane to a view id, allocating a new tile slot when needed. */
+export function placePaneTileView(ids: string[], fromSlot: string, viewId: string): string[] {
+  const i = ids.indexOf(fromSlot);
+  if (i < 0 || !viewId) return ids;
+  const next = ids.slice();
+  next[i] = allocateMosaicTileSlot(viewId, next.filter((_, j) => j !== i));
+  return next;
+}
+
+/** @deprecated Use placePaneTileView / movePaneTileView via mosaic view pick helpers. */
+export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
+  if (!viewId || fromSlot === viewId) return ids;
+  const j = ids.findIndex((id, k) => k !== ids.indexOf(fromSlot) && mosaicTileViewId(id) === viewId);
+  if (j >= 0) return movePaneTileView(ids, fromSlot, ids[j]!);
+  return placePaneTileView(ids, fromSlot, viewId);
 }
 
 /** Put `want` onto existing cells in order. Extra / missing ids keep the leftover leaves. */
 export function assignTiles(n: MosaicNode, want: string[]): MosaicNode {
   const cur = leafIds(n);
   const clean = parseMosaicTiles(want);
-  const used = new Set<string>();
-  const next: string[] = [];
-  for (let i = 0; i < cur.length; i++) {
-    const cand = clean[i];
-    if (cand && !used.has(cand)) {
-      next.push(cand);
-      used.add(cand);
-      continue;
-    }
-    const keep = cur.find((id) => !used.has(id) && !clean.includes(id)) ?? cur.find((id) => !used.has(id));
-    next.push(keep ?? cur[i]!);
-    used.add(next[next.length - 1]!);
-  }
+  const next = cur.map((id, i) => clean[i] ?? id);
   return mapLeaves(n, next);
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { zotoSurfacePanelClearHex } from "../core/themes";
 import { getSurfaceLetterboxFill, letterboxFillHex } from "./letterbox-fill";
@@ -12,6 +12,10 @@ import {
 } from "./pack-mirror-letterbox-16x9.fixture";
 
 describe("pack mirror 16:9 letterbox (production presenter)", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   const surfaceClear = zotoSurfacePanelClearHex();
   const fill = getSurfaceLetterboxFill(surfaceClear, 0.25);
   const barClearHex = letterboxFillHex(fill);
@@ -56,7 +60,7 @@ describe("pack mirror 16:9 letterbox (production presenter)", () => {
       const contentVp = viewports.at(-1);
       expect(contentVp).toEqual(expectedVp);
       expect(contentVp!.y + contentVp!.h).toBe(expectedFirstRow);
-      expect(clearColors.length).toBeGreaterThan(0);
+      expect(viewports.length).toBe(3);
       expect(clearColors.every((c) => c === barClearHex)).toBe(true);
       presenter.dispose();
     },

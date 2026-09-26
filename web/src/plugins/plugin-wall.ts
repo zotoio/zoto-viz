@@ -1,4 +1,5 @@
 import type { DreamAnim } from "../graph/scene";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { pluginWall, type PluginLook, type PluginWall } from "./plugin";
 
 export type WallSnap = Pick<DreamAnim, "mosaic" | "hero" | "mosaicTree" | "mosaicMaxId" | "mosaicSharedTheme"> & {
@@ -46,16 +47,24 @@ export function wallMatches(a: Pick<WallSnap, "mosaic" | "hero" | "mosaicTiles">
 }
 
 /** Current tiles are a 2+ subset of a catalog wall (Syscon after closes still counts). */
+function wallCoversTiles(wallTiles: string[], slots: string[]): boolean {
+  if (slots.length < 2 || wallTiles.length < 2) return false;
+  const slotViews = slots.map(mosaicTileViewId);
+  if (new Set(slotViews).size !== slotViews.length) return false;
+  const want = new Set(wallTiles.map(mosaicTileViewId));
+  return slotViews.every((v) => want.has(v));
+}
+
 export function isWallRemnant(tiles: string[] | undefined, walls: CatalogWall[]): boolean {
   const ids = tiles ?? [];
   if (ids.length < 2) return false;
-  return walls.some(({ wall }) => ids.every((id) => wall.mosaicTiles.includes(id)));
+  return walls.some(({ wall }) => wallCoversTiles(wall.mosaicTiles, ids));
 }
 
 export function inferWallOwner(tiles: string[] | undefined, walls: CatalogWall[]): string | null {
   const ids = tiles ?? [];
   if (ids.length < 2) return null;
-  return walls.find(({ wall }) => ids.every((id) => wall.mosaicTiles.includes(id)))?.modeId ?? null;
+  return walls.find(({ wall }) => wallCoversTiles(wall.mosaicTiles, ids))?.modeId ?? null;
 }
 
 export function catalogWalls(looks: Iterable<[string, PluginLook | undefined]>): CatalogWall[] {

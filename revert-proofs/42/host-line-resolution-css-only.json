@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/host-three-pixel-materials.test.ts",
-  "testName": "^host pixel-sized materials \\(counting GL\\) > LineMaterial linewidth and resolution stay in device px; linewidth/resolution\\.x invariant across pr$",
-  "expectedRed": "expected 200 to be 300 // Object.is equality",
-  "description": "LineMaterial linewidth and resolution must share units (both device px); changing only one breaks linewidth/resolution.x at higher DPR."
-}

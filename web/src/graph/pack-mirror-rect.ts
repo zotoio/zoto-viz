@@ -1,3 +1,5 @@
+import { packMirrorSizeStats } from "./pack-mirror-size-stats";
+
 /**
  * CSS vs device pixel rects for the shared render host.
  * `DeviceRect` is top-left device pixels (Canvas2D / `getImageData`).
@@ -128,6 +130,14 @@ export function deviceRectFromHostViewBoxInto(
     pixelRatio,
     out,
   );
+  if (canvasDevicePx !== undefined) {
+    const cap = canvasDevicePx;
+    const y1 = out.y + out.h;
+    if (y1 > cap) {
+      out.y = Math.floor(topY * pixelRatio);
+      out.h = Math.max(0, cap - out.y);
+    }
+  }
   return out as DeviceRect;
 }
 
@@ -172,3 +182,20 @@ export function deviceSizeFromCssBoxInto(
   return out;
 }
 
+/** Allocating helper (harness / deprecated callers). Prefer `deviceSizeFromCssBoxInto` on the hot path. */
+export function deviceSizeFromCssBox(
+  box: CssRectLoose,
+  pixelRatio: number,
+): DeviceSizeMut {
+  packMirrorSizeStats.deviceSizeAllocated += 1;
+  return deviceSizeFromCssBoxInto(box, pixelRatio, { pw: 0, ph: 0 });
+}
+
+/** @deprecated Use `deviceSizeFromCssBoxInto`. */
+export function deviceSizeFromCss(
+  w: number,
+  h: number,
+  pixelRatio: number,
+): DeviceSizeMut {
+  return deviceSizeFromCssBox({ x: 0, y: 0, w, h }, pixelRatio);
+}

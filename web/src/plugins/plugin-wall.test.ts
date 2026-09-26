@@ -42,6 +42,7 @@ describe("plugin wall remnants", () => {
     expect(inferWallOwner(remnant.mosaicTiles, walls)).toBe("plugin:syscon");
     expect(isWallRemnant(["plugin:talkers", "plugin:topology"], walls)).toBe(false);
     expect(isWallRemnant(["plugin:cores"], walls)).toBe(false);
+    expect(isWallRemnant(["plugin:air-bt!1", "plugin:air-bt!2"], walls)).toBe(false);
   });
 
   it("lists catalog walls from looks", () => {

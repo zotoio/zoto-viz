@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/host-three-pixel-materials.test.ts",
-  "testName": "^host pixel-sized materials \\(counting GL\\) > PointsMaterial sizeAttenuation false at pr 1\\.5 css size 4: uploaded size 6$",
-  "expectedRed": "expected 4 to be 6 // Object.is equality",
-  "description": "Screen-pixel points must multiply css size by capped layout device px ratio before Three uploads at renderer pr 1."
-}
