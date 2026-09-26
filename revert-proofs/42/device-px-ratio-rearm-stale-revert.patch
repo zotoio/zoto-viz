@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host-device-px-ratio.ts b/web/src/graph/render-host-device-px-ratio.ts
+index a3c3286..903a148 100644
+--- a/web/src/graph/render-host-device-px-ratio.ts
++++ b/web/src/graph/render-host-device-px-ratio.ts
+@@ -67,7 +67,6 @@ function rearmResolutionMediaQuery(rawDppx: number): void {
+     const prev = cachedLayoutRatio;
+     const next = capRawDevicePxRatio(raw);
+     cachedLayoutRatio = next;
+-    rearmResolutionMediaQuery(raw);
+     if (next !== prev) notifyLayoutListeners(next);
+   };
+   currentMq.addEventListener("change", onDpiChange);

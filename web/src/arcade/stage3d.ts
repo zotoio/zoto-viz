@@ -5,7 +5,12 @@ import { rIp, rName } from "../core/redact";
 import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
 import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame, PaneFps } from "../core/fps";
-import { devicePxRatioNumber, layoutBackingDevicePx, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
+import {
+  devicePxRatioNumber,
+  layoutBackingDevicePx,
+  layoutDevicePxRatio,
+  onLayoutDevicePxRatioChange,
+} from "../graph/render-host-device-px-ratio";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
 import {
@@ -30,6 +35,7 @@ export abstract class Stage3D {
   protected running = false;
   protected W = 0;
   protected H = 0;
+  private layoutDpr = 0;
   protected pps = 0;
   protected lastT = 0;
   protected readonly world = new THREE.Scene();
@@ -80,6 +86,7 @@ export abstract class Stage3D {
     this.container.addEventListener("pointerleave", this.onPtrUp);
     this.container.addEventListener("wheel", this.onWheel, { passive: false });
     observeResize(this.container, () => this.fit());
+    onLayoutDevicePxRatioChange(() => this.fit());
   }
 
   start(preferIp?: string | null): void {
@@ -158,8 +165,9 @@ export abstract class Stage3D {
   protected fit(): void {
     const W = this.container.clientWidth, H = this.container.clientHeight;
     if (!W || !H) return;
-    this.W = W; this.H = H;
     const dpr = devicePxRatioNumber(layoutDevicePxRatio());
+    if (W === this.W && H === this.H && dpr === this.layoutDpr) return;
+    this.W = W; this.H = H; this.layoutDpr = dpr;
     if (this.renderer) {
       this.renderer.setPixelRatio(dpr);
       this.renderer.setSize(W, H, false);
@@ -168,8 +176,8 @@ export abstract class Stage3D {
       this.canvas.style.width = `${W}px`;
       this.canvas.style.height = `${H}px`;
       if (this.fallback) {
-        this.canvas.width = layoutBackingDevicePx(W);
-        this.canvas.height = layoutBackingDevicePx(H);
+        this.canvas.width = Math.round(W * dpr);
+        this.canvas.height = Math.round(H * dpr);
         this.fallback.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
     }
