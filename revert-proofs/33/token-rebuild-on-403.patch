@@ -1,21 +1,36 @@
-diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index 4ee88c2..a0c8b99 100644
---- a/web/src/app/main.ts
-+++ b/web/src/app/main.ts
-@@ -667,15 +667,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
-   setTileExpectsVizFeed(tileId, expectsViz);
-   try {
-     sandbox.setActiveTile(tileId);
--    const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
--    await runPackAssetProtectedLoad(
--      tileId,
--      spec.name ?? spec.id,
--      mosaic,
--      async () => {
--        await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
--      },
--    );
-+    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
-     markSandboxStartupOk(tileId);
-     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
-     preserveVizUbo = false;
+diff --git a/web/src/plugins/pack-asset-rebuild.ts b/web/src/plugins/pack-asset-rebuild.ts
+index 1111111..2222222 100644
+--- a/web/src/plugins/pack-asset-rebuild.ts
++++ b/web/src/plugins/pack-asset-rebuild.ts
+@@ -22,32 +22,5 @@ export async function runPackAssetProtectedLoad(
+   load: () => Promise<void>,
+   opts?: { serverRestart?: boolean },
+ ): Promise<void> {
+-  const attempt = async (): Promise<void> => {
+-    await load();
+-    markTileRebuildIdle(tileId);
+-    applyPackFeedPaneNotice(mosaic, tileId, packName);
+-  };
+-  try {
+-    await attempt();
+-    return;
+-  } catch (err) {
+-    if (!isPackAsset403(err) || shouldCapRebuild(tileId)) {
+-      markTileRebuildFailed(tileId);
+-      throw err;
+-    }
+-    if (opts?.serverRestart) scheduleServerRestartWallNotice();
+-    markTileReconnecting(tileId);
+-    applyPackFeedPaneNotice(mosaic, tileId, packName);
+-    const wall = consumeServerRestartWallNotice();
+-    if (wall && mosaic) mosaic.setWallNotice(wall);
+-    try {
+-      await attempt();
+-    } catch (retryErr) {
+-      markTileRebuildFailed(tileId);
+-      applyPackFeedPaneNotice(mosaic, tileId, packName);
+-      throw retryErr;
+-    }
+-  }
++  await load();
+ }
