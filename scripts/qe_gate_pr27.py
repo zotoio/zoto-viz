@@ -52,6 +52,7 @@ def row_mapping(sc: Path) -> dict:
     minus_preview = (minus[0][:60] + "…") if minus and len(minus[0]) > 60 else (minus[0] if minus else "")
     return {
         "row": sc.stem,
+        "lintRow": bool(d.get("lintRow")),
         "file": rel,
         "hunk_fp": fp,
         "minus_n": len(minus),
@@ -110,14 +111,15 @@ def check_uniqueness(rows: list[dict]) -> list[str]:
 
 def md_table(rows: list[dict]) -> str:
     lines = [
-        "| Hunk (reverted `-` lines) | Row | Vitest target | Row gate assertion (bytes) |",
-        "|---|---|---|---|",
+        "| Hunk (reverted `-` lines) | Row | lint row | Vitest target | Row gate assertion (bytes) |",
+        "|---|---|---|---|---|",
     ]
     for r in rows:
         hunk = f"`{r['file']}` ×{r['minus_n']} `{r['hunk_fp']}` — `{r['minus_preview']}`"
         test = f"`{r['testFile']}` + `{r['row']}.json` → `testName`"
         assert_short = r["patchedAssertion"][:56] + "…" if len(r["patchedAssertion"]) > 56 else r["patchedAssertion"]
-        lines.append(f"| {hunk} | `{r['row']}` | {test} | `{assert_short}` |")
+        lint = "yes" if r["lintRow"] else "no"
+        lines.append(f"| {hunk} | `{r['row']}` | {lint} | {test} | `{assert_short}` |")
     return "\n".join(lines)
 
 
