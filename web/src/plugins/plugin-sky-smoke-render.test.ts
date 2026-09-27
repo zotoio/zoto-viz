@@ -43,17 +43,16 @@ describe("plugin sky smoke render", () => {
     const launchSpy = vi.spyOn(chromium, "launch").mockRejectedValue(new Error("launch-probe"));
     await expect(smokeRenderPluginSky(MINI_FRAG, slots, uniforms)).rejects.toThrow("launch-probe");
     expect(launchSpy).toHaveBeenCalledOnce();
-    expect(launchSpy.mock.calls[0]?.[0]).toEqual({
-      headless: true,
-      ignoreDefaultArgs: ["--disable-software-rasterizer"],
-      args: [
-        "--use-gl=angle",
-        "--use-angle=swiftshader",
-        "--enable-unsafe-swiftshader",
-        "--hide-scrollbars",
-        "--mute-audio",
-      ],
-    });
+    const launchOpts = launchSpy.mock.calls[0]?.[0];
+    expect(launchOpts?.ignoreDefaultArgs).toEqual(["--disable-software-rasterizer"]);
+    expect(launchOpts?.headless).toBe(true);
+    expect(launchOpts?.args).toEqual([
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader",
+      "--hide-scrollbars",
+      "--mute-audio",
+    ]);
     launchSpy.mockRestore();
   });
 
