@@ -1,4 +1,6 @@
-import { describe, expect, it, afterEach } from "vitest";
+import { beforeEach, describe, expect, it, afterEach } from "vitest";
+import { applyInstance } from "./instances";
+import { HEADLINES_PACK } from "../../test/fixtures/headlines-alt-feed";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
   loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
@@ -95,6 +97,20 @@ describe("plugin config", () => {
     expect(loadPluginConfig(s, [{ key: "rank", label: "rank by", type: "select", values: [["rate", "rate"], ["bytes", "bytes"]], default: "bytes" }]).rank).toBe("bytes");
     localStorage.removeItem("zoto-viz.mode.plugin:talkers.rank");
     localStorage.removeItem("zoto-viz.plugin.talkers.rank");
+  });
+});
+
+describe("compilePlugin > instance label on compiled modes", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
+  it("uses the instance label Alt feed for graph and arcade compiles", () => {
+    const instanced = applyInstance(HEADLINES_PACK, { id: "alt", name: "Alt feed" });
+    const graph = compilePlugin({ ...instanced, engine: "graph", base: "topology" });
+    expect(graph.label).toBe("Alt feed");
+    const arcade = compilePlugin({ ...instanced, engine: "netpong" });
+    expect(arcade.label).toBe("Alt feed");
   });
 });
 

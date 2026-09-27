@@ -4,7 +4,7 @@ import { themeById } from "../../core/themes";
 import type { Settings } from "../../ui/settings";
 import { applyWallLayoutPatch } from "../mosaic-wall-layout";
 import { bindThisView, type BindThisViewDeps } from "../host-view-bind";
-import { rebindViewDrawerOnApplyMode } from "../host-apply-mode-rebind";
+import { runMainApplyModeDrawerRebind } from "../main-apply-mode-drawer";
 import { createMosaicPanePickHandler } from "../host-mosaic-pane-pick";
 import { syncSettingsAnimToMosaic } from "../settings-mosaic-anim-sync";
 import { settingsViewDrawerRoot } from "./duplicate-slot-scope-note-test-dom";
@@ -51,7 +51,7 @@ export function mountDuplicateSlotMosaicHarness(
     bindThisView({ settings, ...bindDeps }, modeId);
   };
   const applyMode = (modeId: string, flags: { keepLayout?: boolean } = {}) => {
-    rebindViewDrawerOnApplyMode(bindThisViewForMode, {
+    runMainApplyModeDrawerRebind(bindThisViewForMode, {
       settings,
       modeId,
       flags,
