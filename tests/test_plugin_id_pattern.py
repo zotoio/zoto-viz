@@ -37,16 +37,6 @@ def test_shipped_pack_ids_match_schema_pattern() -> None:
     assert not bad, f"pack ids outside {PACK_ID_RE.pattern!r}: {bad!r}"
 
 
-def test_schema_accepts_my_pack_underscore_id() -> None:
-    doc = {"id": "my_pack", "name": "Probe", "version": 1}
-    err: ValueError | None = None
-    try:
-        plugins.validate_doc(doc)
-    except ValueError as exc:
-        err = exc
-    assert (err is None) is True, "my_pack"
-
-
 def test_schema_rejects_uppercase_plugin_id() -> None:
     doc = {"id": "Koi", "name": "Probe", "version": 1}
     with pytest.raises(ValueError, match="id"):
@@ -55,7 +45,7 @@ def test_schema_rejects_uppercase_plugin_id() -> None:
 
 @pytest.mark.parametrize(
     "doc_id",
-    ["../x", "a/b", "x.json", "9leading-digit"],
+    ["../x", "a/b", "x.json", "bad_underscore"],
 )
 def test_schema_rejects_nonconforming_plugin_ids(doc_id: str) -> None:
     doc = {"id": doc_id, "name": "Probe", "version": 1}
