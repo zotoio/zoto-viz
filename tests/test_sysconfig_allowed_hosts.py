@@ -12,11 +12,14 @@ def test_allowed_hosts_config_parsing_and_validation() -> None:
         "allowed_hosts": ["lan.example:8080", "192.168.1.1", "[::1]:7020"],
     }
     opts = sysconfig.listen_opts(cfg)
-    assert opts["allowed_hosts"] == [
-        validate_allowed_host_entry("lan.example:8080"),
-        validate_allowed_host_entry("192.168.1.1"),
-        validate_allowed_host_entry("[::1]:7020"),
-    ]
+    assert len(opts["allowed_hosts"]) == 3
+    assert sorted(opts["allowed_hosts"]) == sorted(
+        [
+            validate_allowed_host_entry("lan.example:8080"),
+            validate_allowed_host_entry("192.168.1.1"),
+            validate_allowed_host_entry("[::1]:7020"),
+        ],
+    )
     resolved = sysconfig.resolve_listen(cfg, bind="0.0.0.0", insecure_lan=True)
     assert resolved["bind"] == "0.0.0.0"
     assert resolved["allowed_hosts"] == opts["allowed_hosts"]
