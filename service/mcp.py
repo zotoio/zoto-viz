@@ -695,7 +695,7 @@ def install_catalog_zip(
             tmp_path.write_bytes(plugin_local.zip_bytes_from_staged(pack_read))
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+        if dest.is_file() and pz.plugin_sha256(dest) == incoming and not force:
             unpacked = pz.unpack_zip(dest, runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
@@ -1050,10 +1050,11 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             raw = decode_zip_b64(str(args.get("zip_b64") or ""))
             zip_name = args.get("zip_name") or args.get("filename")
             display = str(zip_name).strip() if isinstance(zip_name, str) and zip_name.strip() else None
+            force = bool(args.get("force"))
             info = install_catalog_zip(
                 raw,
-                overwrite=bool(args.get("overwrite")),
-                force=bool(args.get("force")),
+                overwrite=bool(args.get("overwrite")) or force,
+                force=force,
                 zip_display_name=display,
             )
             return _tool_text(info, is_error=bool(info.get("consentRequired")))

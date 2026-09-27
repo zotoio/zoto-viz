@@ -380,27 +380,13 @@ def go_live(
         return False
     runtime.rename(bak)
     if after_first_rename is not None:
-        try:
-            after_first_rename()
-        except Exception:
-            if bak.is_dir() and not runtime.is_dir():
-                bak.rename(runtime)
-            raise
+        after_first_rename()
     try:
         staging.rename(runtime)
     except Exception:
         if bak.is_dir() and not runtime.is_dir():
             bak.rename(runtime)
         raise
-    if bak.is_dir():
-        try:
-            shutil.rmtree(bak)
-        except OSError as exc:
-            _LOG.warning(
-                "pack upgrade left .bak directory after successful swap: %s",
-                bak,
-                exc_info=exc,
-            )
     return True
 
 

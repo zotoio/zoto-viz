@@ -550,6 +550,8 @@ def _install_staged_to_runtime_locked(
             try:
                 swapped = psz.go_live(staged, runtime, after_first_rename=_after_first_rename)
             except OSError as e:
+                if upgrade:
+                    _recover_bak_if_present(runtime)
                 if upgrade and runtime.is_dir():
                     old_version = installed_runtime_version(runtime)
                     msg = upgrade_rollback_user_message(name, version, old_version)
@@ -591,12 +593,24 @@ def _install_staged_to_runtime_locked(
             if runtime.is_dir():
                 shutil.rmtree(runtime, ignore_errors=True)
             raise
+        if swapped:
+            leftover = bak_path(runtime)
+            if leftover.is_dir():
+                try:
+                    shutil.rmtree(leftover)
+                except OSError as exc:
+                    _LOG.warning(
+                        "pack upgrade left .bak directory after successful swap: %s",
+                        leftover,
+                        exc_info=exc,
+                    )
         _commit_zip_after_success(zip_path, dest_zip)
         write_install_state(parent, pid, sha256)
         _last_install_staged = staged
         return _unpack_result_from_runtime(dest_zip, runtime, sha256)
     finally:
-        cleanup_staging_for_pack(parent, pid)
+        if staging.is_dir() and ".staging" in staging.parts:
+            psz.cleanup_staging_dir(staging)
 
 
 def recover_interrupted_swaps(runtime_parent: Path) -> list[str]:

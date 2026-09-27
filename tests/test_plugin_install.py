@@ -178,8 +178,19 @@ def test_invalid_zip_leaves_no_staging_or_runtime(
     _repo(tmp_path, monkeypatch)
     plugins.reset_bundles()
     runtime_parent = _runtime_parent()
-    with pytest.raises(ValueError):
-        plugin_local.install_local_zip(b"not-a-zip", overwrite=True)
+    out = plugin_local.install_local_zip(b"not-a-zip", overwrite=True)
+    assert out == {
+        "ok": False,
+        "error": "pack_zip_unsafe",
+        "reason": "pack_zip_unsafe",
+        "message": out["message"],
+        "id": "",
+        "sha256": "",
+        "zip": out["zip"],
+        "installNotices": out["installNotices"],
+        "activated": False,
+    }
+    assert "isn't a valid pack" in out["message"]
     assert_runtime_parent_clean(runtime_parent)
 
 
@@ -461,6 +472,7 @@ def test_retry_and_scan_race_single_install(
         return real_locked(*args, **kwargs)
 
     monkeypatch.setattr(pi, "_install_staged_to_runtime_locked", wrapped)
+    monkeypatch.setattr(plugin_local, "_install_staged_to_runtime_locked", wrapped)
 
     go = threading.Event()
 
@@ -694,8 +706,10 @@ def test_symlink_zip_rejected_via_install_pipeline(
     plugins.reset_bundles()
     yml = "id: sym-test\nname: Sym\nversion: 1\nengine: graph\nbase: topology\n"
     raw = _zip_with_symlink(yml, "link.ts", "../escape.ts")
-    with pytest.raises(ValueError, match="symlink"):
-        plugin_local.install_local_zip(raw, overwrite=True)
+    out = plugin_local.install_local_zip(raw, overwrite=True)
+    assert out.get("ok") is False
+    err_text = str(out.get("error") or "") + str(out.get("message") or "")
+    assert "symlink" in err_text or out.get("error") == "pack_zip_unsafe"
     assert not (_runtime_parent() / "sym-test").exists()
     assert_runtime_parent_clean(_runtime_parent())
 
@@ -748,8 +762,9 @@ def test_host_escape_still_blocked_via_bundle_lint(
     raw = _zip_tree(_pack_fixture("host-escape"))
     from service.pack_boundary import PackBundleBoundaryError
 
-    with pytest.raises((PackBundleBoundaryError, InstallV2BlockedError, ValueError)):
-        plugin_local.install_local_zip(raw, overwrite=True)
+    out = plugin_local.install_local_zip(raw, overwrite=True)
+    assert out.get("ok") is False
+    assert out.get("error") == "pack_boundary"
 
 
 def test_sdk_contract_still_checked_on_install(
@@ -767,8 +782,10 @@ def test_sdk_contract_still_checked_on_install(
         lambda *_a, **_k: err,
     )
     raw = _zip_tree(_pack_fixture("upgrade-probe"))
-    with pytest.raises(ValueError, match="zoto-viz"):
-        plugin_local.install_local_zip(raw, overwrite=True)
+    out = plugin_local.install_local_zip(raw, overwrite=True)
+    assert out.get("ok") is False
+    assert out.get("error") == "pack_boundary"
+    assert "zoto-viz" in str(out.get("message") or "")
 
 
 def test_install_local_unchanged_zip_routes_through_pipeline(

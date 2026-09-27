@@ -144,8 +144,9 @@ def test_blocked_pack_module_route_404(
     plugins.reset_bundles()
     pack_id = "pack-boundary-host-escape"
     raw = _zip_tree(_pack_fixture("host-escape"))
-    with pytest.raises(Exception):
-        plugin_local.install_local_zip(raw)
+    out = plugin_local.install_local_zip(raw)
+    assert out.get("ok") is False
+    assert out.get("error") == "pack_boundary"
     assert plugins.bundle_for(pack_id) is None
 
     class Req:

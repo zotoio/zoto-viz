@@ -51,6 +51,7 @@ def test_concurrent_retry_blocked_zip_serializes_with_barrier(
         "service.plugin_install._install_staged_to_runtime_locked",
         gated_install,
     )
+    monkeypatch.setattr(plugin_local, "_install_staged_to_runtime_locked", gated_install)
     results: list[dict] = []
     errors: list[BaseException] = []
 
