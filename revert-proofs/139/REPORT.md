@@ -1,32 +1,65 @@
-## Revert proof (PR #139)
+## Revert proof
 
-Recorded at HEAD `53a701b8` (run `git rev-parse HEAD` on branch tip for exact SHA after later commits).
+Recorded at HEAD `6fc1a91635b18317d90a31a4c5b7aeedb8008b04`.
 
-| row | test | revert description | baseline (green) | patched (red) |
+`node scripts/revert-proof.mjs 139 --prove` at that commit: **baseline GREEN** (each targeted test passes on HEAD), **patched RED** (each `.patch` reverted, test fails as below).
+
+| row | test | revert description | baseline | patched |
 | --- | --- | --- | --- | --- |
-| data-source-no-executable-layers | `tests/test_data_source_plugin.py::test_data_source_rejects_frontend` | Drop frontend guard in `check_data_source_semantics` | pass (`node scripts/revert-proof.mjs 139 --row data-source-no-executable-layers` baseline) | fail `assert blocked is True` |
-| partition-skips-data-source | `src/remix/remix-partition.test.ts` | Remove `pluginKind === data-source` skip in `partitionCatalog` | pass | fail `expected true to be false` |
-| remix-snapshot-demo-flag | `src/remix/remix-snapshot.test.ts` | Remove `demo: true` from remix frame merge | pass | fail `expected undefined to be true` |
+| data-source-no-executable-layers | `tests/test_data_source_plugin.py::test_data_source_rejects_frontend` | Drop frontend guard in `check_data_source_semantics` | pass | fail `assert blocked is True` |
+| partition-skips-data-source | `remix-partition.test.ts` | Remove data-source skip in `partitionCatalog` | pass | fail `expected true to be false` |
+| remix-snapshot-demo-flag | `remix-snapshot.test.ts` | Remove `demo: true` from remix frame merge | pass | fail `expected undefined to be true` |
 
-Vitest rows are verified in-repo via `git apply` + `pnpm exec vitest run <file>` (worktree overlay cannot load `vite.config.ts` in this VM).
+Command table (from `--prove`):
 
-### data-source-no-executable-layers (RED excerpt)
 
 ```
+tests/test_data_source_plugin.py F                                       [100%]
+
+=================================== FAILURES ===================================
+______________________ test_data_source_rejects_frontend _______________________
+
+                },
+            })
+        except ValueError as e:
+            blocked = "frontend" in str(e)
 >       assert blocked is True
 E       assert False is True
+
+tests/test_data_source_plugin.py:86: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_data_source_plugin.py::test_data_source_rejects_frontend - ...
+============================== 1 failed in 0.10s ===============================
 ```
 
-### partition-skips-data-source (RED excerpt)
+### partition-skips-data-source
 
 ```
-expect(rows.some((r) => r.id === "public-hn-top")).toBe(false);
-AssertionError: expected true to be false
+AssertionError: expected true to be false // Object.is equality
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
 ```
 
-### remix-snapshot-demo-flag (RED excerpt)
+### remix-snapshot-demo-flag
 
 ```
-expect(frame.demo).toBe(true);
-AssertionError: expected undefined to be true
+AssertionError: expected undefined to be true // Object.is equality
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
 ```
