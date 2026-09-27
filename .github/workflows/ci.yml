@@ -57,6 +57,11 @@ jobs:
       - name: Playwright Chromium (media-ask focus, starter pack smoke)
         working-directory: web
         run: pnpm exec playwright install chromium --with-deps
+      - name: Revert-proof self-test (head runner, head tests)
+        run: bash scripts/revert-proof-ci-selftest.sh head
+      - name: Revert-proof self-test (head runner, base tests)
+        if: github.event_name == 'pull_request'
+        run: bash scripts/revert-proof-ci-selftest.sh base "${{ github.event.pull_request.base.sha }}"
       - uses: browser-actions/setup-chrome@v1
         id: chrome
         with:
