@@ -81,7 +81,7 @@ export interface VizHudTick {
   /** Active mosaic / viz tiles (for LIMITED label mate count). */
   activeTiles?: number;
   /** Per-tile budget lines when mosaic shares the wall budget. */
-  tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats }[];
+  tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats | null }[];
   /** When set, show the frame-budget overlay (GPU/CPU ms, p95, scale). */
   renderScale?: number | null;
 }
@@ -470,7 +470,9 @@ export class VizHud {
     const rate = skipRatePerSec(this.skipSamples, now);
     if (tileBudget) {
       const nowTick = Math.round(now * 300);
-      const wallTiles = (tileBudgetLines ?? []).map((l) => l.tile);
+      const wallTiles = (tileBudgetLines ?? [])
+        .map((l) => l.tile)
+        .filter((t): t is VizTileBudgetStats => t !== null);
       const chrome = wallTiles.length
         ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
         : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
@@ -514,6 +516,7 @@ export class VizHud {
 
     const lines = tileBudgetLines ?? [];
     for (const { tileId, tile } of lines) {
+      if (!tile) continue;
       const row = this.mosaicTileLines.get(tileId);
       if (!row) continue;
       const nowTick = Math.round(now * 300);

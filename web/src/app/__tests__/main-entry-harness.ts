@@ -37,24 +37,14 @@ function mountIndexDom(): void {
   document.body.replaceChildren(...Array.from(doc.body.children).map((n) => n.cloneNode(true)));
 }
 
-function stub2dContext(): CanvasRenderingContext2D {
-  const pattern = { setTransform: () => {} } as CanvasPattern;
-  const ctx = {
-    setTransform: () => {},
-    clearRect: () => {},
-    fillRect: () => {},
-    createPattern: () => pattern,
-    fillStyle: "",
-  };
-  return ctx as CanvasRenderingContext2D;
-}
-
-function stubGl(): void {
+function installCanvasContextStub(): void {
   const GL_VERSION = 0x1f00;
   const GL_MAX_VERTEX_ATTRIBS = 0x8869;
   const GL_MAX_TEXTURE_IMAGE_UNITS = 0x8872;
-  const gl = {
+  const webgl = {
     canvas: { width: 300, height: 150 },
+    drawingBufferWidth: 300,
+    drawingBufferHeight: 150,
     getExtension: () => null,
     getShaderPrecisionFormat: () => ({ precision: 23, rangeMin: 127, rangeMax: 127 }),
     getContextAttributes: () => ({ antialias: false }),
@@ -92,11 +82,32 @@ function stubGl(): void {
     deleteProgram: () => {},
     deleteShader: () => {},
     deleteBuffer: () => {},
+    isContextLost: () => false,
   };
-  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, id: string) {
-    if (id === "2d") return stub2dContext();
-    return gl as WebGL2RenderingContext;
+  const pattern = { setTransform: () => {} };
+  const ctx2d = {
+    setTransform: () => {},
+    clearRect: () => {},
+    fillRect: () => {},
+    createPattern: () => pattern,
+    fillStyle: "",
   };
+  const nativeGetContext = HTMLCanvasElement.prototype.getContext;
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    (function (
+      this: HTMLCanvasElement,
+      contextId: string,
+      ...rest: unknown[]
+    ) {
+      if (contextId === "2d") {
+        return ctx2d;
+      }
+      if (contextId === "webgl" || contextId === "webgl2") {
+        return webgl;
+      }
+      return nativeGetContext.call(this, contextId, ...(rest as []));
+    } as typeof HTMLCanvasElement.prototype.getContext),
+  );
 }
 
 const PROFILE_LIST = {
@@ -224,10 +235,12 @@ export function installMainEntryMocks(): void {
   vi.stubGlobal("cancelAnimationFrame", () => {});
   const realSetTimeout = globalThis.setTimeout.bind(globalThis);
   vi.stubGlobal("setTimeout", ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
-    if (typeof ms === "number" && ms >= 2000) return 0 as ReturnType<typeof setTimeout>;
+    if (typeof ms === "number" && ms >= 2000) {
+      return realSetTimeout(() => {}, 0);
+    }
     return realSetTimeout(fn, ms, ...args);
   }) as typeof setTimeout);
-  stubGl();
+  installCanvasContextStub();
 }
 
 export type MainEntryHarness = {
@@ -239,7 +252,7 @@ export async function importMainEntryModule(): Promise<void> {
   vi.resetModules();
   installMainEntryMocks();
   mountIndexDom();
-  await import("../main.ts");
+  await import("../main");
 }
 
 export async function bootMainEntry(): Promise<MainEntryHarness> {

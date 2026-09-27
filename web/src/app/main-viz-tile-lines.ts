@@ -2,7 +2,7 @@ import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
 
 export interface VizHudTileBudgetLine {
   tileId: string;
-  tile: VizTileBudgetStats;
+  tile: VizTileBudgetStats | null;
 }
 
 const scratch: VizHudTileBudgetLine[] = [];
@@ -24,7 +24,7 @@ export function resetVizHudTileBudgetLineAllocCounter(): void {
 export function mosaicTileBudgetLines(tileIds: readonly string[]): VizHudTileBudgetLine[] | undefined {
   if (!tileIds.length) return undefined;
   while (scratch.length < tileIds.length) {
-    scratch.push({ tileId: "", tile: null as unknown as VizTileBudgetStats });
+    scratch.push({ tileId: "", tile: null });
     pairObjectsCreated++;
   }
   for (let i = 0; i < tileIds.length; i++) {
