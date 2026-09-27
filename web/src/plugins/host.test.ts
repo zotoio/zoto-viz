@@ -46,7 +46,9 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("setStyle", ["graph.read"])).toBe(false);
     expect(hostAllows("setStyle", ["graph.style"])).toBe(true);
     expect(hostAllows("setNodeColor", ["graph.style"])).toBe(true);
-    expect(hostAllows("log", ["graph.style"])).toBe(false);
+    expect(hostAllows("log", ["graph.style"])).toBe(true);
+    expect(hostAllows("writeBatch", ["viz.write"])).toBe(true);
+    expect(hostAllows("writeBatch", ["viz.read"])).toBe(false);
   });
 
   it("enforces viz.write on buffer and uniform writes", () => {
@@ -193,7 +195,7 @@ describe("PluginSandbox module load", () => {
       {},
       defaultVizContract({ presentTick: true }),
     );
-    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const port = box.sandboxHostPort()!;
     const spy = vi.spyOn(port, "postMessage");
     box.deliverPresentTick(1, "plugin:demo");
     expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(true);
@@ -207,7 +209,7 @@ describe("PluginSandbox module load", () => {
   it("does not post present when presentTick is off", async () => {
     const box = new PluginSandbox();
     await box.load("demo", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
-    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const port = box.sandboxHostPort()!;
     const spy = vi.spyOn(port, "postMessage");
     box.deliverPresentTick(1, "x");
     expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(false);

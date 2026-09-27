@@ -609,10 +609,14 @@ sandbox.handlers = {
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
   writeBatch: (batch) => {
     if (!vizWriter) return;
+    const asset = activePluginSpec?.assets?.[0];
     applyVizWriteBatch(vizWriter, batch, {
       onBuffer: () => broadcastPluginUbo(scene, vizWriter!.ubo, mosaic?.on ? mosaic : null),
       onUniform: (name, value) => scene.setPluginUniform(name, value),
     });
+    for (const b of batch.buffers) {
+      if (asset && b.slot === 2) hostMeshBridge.applySlot(b.slot, b.data, asset.id);
+    }
   },
 };
 const agent = new AgentPanel();

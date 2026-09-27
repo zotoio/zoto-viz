@@ -1,28 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
+import { HOST_SOURCE } from "./sandbox-channel";
 import {
-  handleSandboxBootMessage,
+  handleSandboxBootChannelMessage,
   redactSandboxAssetPath,
+  resetSandboxFrameRuntimeForTests,
+  sandboxFrameRuntimeForTests,
+  setSandboxFrameLocationHref,
   type SandboxZoto,
 } from "./sandbox-frame";
 
 describe("sandbox-frame boot security", () => {
-  it("ignores boot postMessage from a foreign frame", () => {
+  it("ignores boot-channel postMessage from a foreign frame", () => {
+    resetSandboxFrameRuntimeForTests();
+    setSandboxFrameLocationHref("http://127.0.0.1/#zoto-boot=nonce-1");
     const foreign = {} as MessageEventSource;
+    const ch = new MessageChannel();
     const ev = {
       data: {
-        source: "zoto-viz-host",
-        type: "boot",
+        source: HOST_SOURCE,
+        type: "boot-channel",
         bootNonce: "nonce-1",
         parentOrigin: "http://127.0.0.1:7020",
-        moduleSrc: "blob:http://127.0.0.1/abc",
-        caps: [],
-        config: {},
       },
       source: foreign,
+      ports: [ch.port2],
     } as MessageEvent;
-    const out = handleSandboxBootMessage(ev, { bootDone: false, bootNonce: "nonce-1" });
-    expect(out.bootDone).toBe(false);
-    expect(out.postTargetOrigin).toBe("");
+    handleSandboxBootChannelMessage(ev);
+    expect(sandboxFrameRuntimeForTests().pluginPort).toBeNull();
   });
 
   it("does not leak pack asset token in log postMessage payloads", () => {

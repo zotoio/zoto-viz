@@ -9,10 +9,15 @@ import type { VizDataFrame, VizPluginContract, VizPresentTick, VizUniformValue }
 import {
   HOST_SOURCE,
   PLUGIN_SOURCE,
+  hostAllows,
   type HostBootChannelMsg,
   type HostPortMsg,
+  type PluginHostMsg,
   type PluginPortMsg,
+  type PluginWindowMsg,
 } from "./sandbox-channel";
+
+export { hostAllows } from "./sandbox-channel";
 import {
   applyPackNavigationStoppedNotice,
   clearPackNavigationStopped,
@@ -115,58 +120,6 @@ export async function pluginSandboxFrameUrl(
   const path = packAssetUrlWithToken(token, SANDBOX_PACK, "plugin-sandbox.html");
   return `${location.origin}${path}#zoto-boot=${encodeURIComponent(bootNonce)}`;
 }
-
-export function hostAllows(type: string, caps: string[]): boolean {
-  if (type === "drawState" || type === "loseHostContext") return true;
-  if (type === "setStyle" || type === "setNodeColor") return caps.includes("graph.style");
-  if (
-    type === "writeBuffer"
-    || type === "writeUniform"
-    || type === "writeParticles"
-    || type === "publishBitmap"
-    || type === "publishBitmapFailed"
-  ) {
-    return caps.includes("viz.write");
-  }
-  return false;
-}
-
-export type HostMsg =
-  | { source: "zoto-viz-plugin"; type: "frame-ready" }
-  | { source: "zoto-viz-plugin"; type: "ready"; bootNonce?: string }
-  | { source: "zoto-viz-plugin"; type: "setStyle"; payload: Record<string, unknown> }
-  | { source: "zoto-viz-plugin"; type: "setNodeColor"; payload: { id: string; hex: number } }
-  | { source: "zoto-viz-plugin"; type: "writeBuffer"; payload: { slot: number; data: number[] } }
-  | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
-  | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
-  | {
-    source: "zoto-viz-plugin";
-    type: "writeBatch";
-    payload: {
-      buffers: { slot: number; data: number[] }[];
-      uniforms: { name: string; value: VizUniformValue }[];
-      particles?: { data: number[]; stride?: number };
-    };
-  }
-  | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap } }
-  | { source: "zoto-viz-plugin"; type: "publishBitmapFailed"; payload: Record<string, never> }
-  | { source: "zoto-viz-plugin"; type: "log"; payload: string };
-
-export type ParentPortMsg =
-  | {
-    source: typeof HOST_SOURCE;
-    type: "boot";
-    caps: string[];
-    config: Record<string, string>;
-    viz?: VizPluginContract;
-    contractVersion?: number;
-    moduleSrc: string;
-    bootNonce: string;
-    parentOrigin: string;
-  }
-  | { source: typeof HOST_SOURCE; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
-  | { source: typeof HOST_SOURCE; type: "frame"; frame: VizDataFrame }
-  | { source: typeof HOST_SOURCE; type: "config"; config: Record<string, string> };
 
 export interface PluginHostHandlers {
   setStyle?: (s: Record<string, unknown>) => void;
@@ -295,13 +248,6 @@ export class PluginSandbox {
     syncVizTileScope(["main"]);
   }
 
-  setDuplicateTileCount(count: number): void {
-    this.iframe?.contentWindow?.postMessage(
-      { source: HOST_SOURCE, type: "dupTiles", count },
-      "*",
-    );
-  }
-
   private teardownPort(): void {
     if (this.hostPort) {
       try { this.hostPort.close(); } catch { /* ignore */ }
@@ -322,6 +268,11 @@ export class PluginSandbox {
 
   get liveFrame(): HTMLIFrameElement | null {
     return this.iframe;
+  }
+
+  /** Test hook: host side of the sandbox MessageChannel (null after unload). */
+  sandboxHostPort(): MessagePort | null {
+    return this.hostPort;
   }
 
   async load(
@@ -399,7 +350,7 @@ export class PluginSandbox {
     if (iframe.srcdoc) {
       throw new Error("plugin sandbox must not use srcdoc under page CSP");
     }
-    if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
+    if (!sandboxBootWaitInTests) {
       await Promise.resolve();
     } else {
       await waitPluginMsg(iframe, "frame-ready", this.bootNonce, (fail) => { this.bootReject = fail; });
@@ -425,7 +376,7 @@ export class PluginSandbox {
       bootNonce: this.bootNonce,
       parentOrigin: location.origin,
     });
-    if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
+    if (!sandboxBootWaitInTests) {
       await Promise.resolve();
     } else {
       await waitPluginPortMsg(this.hostPort, "ready", this.bootNonce, (fail) => { this.bootReject = fail; });
@@ -508,7 +459,7 @@ export class PluginSandbox {
   };
 
   private onWindowMessage = (ev: MessageEvent): void => {
-    const d = ev.data as HostMsg | undefined;
+    const d = ev.data as PluginHostMsg | undefined;
     if (this.iframe && ev.source !== this.iframe.contentWindow) {
       if (d?.source === PLUGIN_SOURCE && d.type === "publishBitmap") {
         try { d.payload.bitmap.close(); } catch { /* already closed */ }
@@ -520,53 +471,72 @@ export class PluginSandbox {
       recordSandboxBoot(d.type);
       return;
     }
-    this.dispatchPluginMsg(d, ev.source);
-  };
-
-  private dispatchPluginMsg(d: HostMsg | PluginPortMsg, evSource: MessageEventSource | null = null): void {
-    if (!hostAllows(d.type, this.caps)) return;
-    if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);
-    if (d.type === "setNodeColor") this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
-    if (d.type === "writeBuffer") {
-      noteSandboxWrite(this.activeTileId);
-      this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
-    }
-    if (d.type === "writeUniform") {
-      noteSandboxWrite(this.activeTileId);
-      this.handlers.writeUniform?.(d.payload.name, d.payload.value as VizUniformValue);
-    }
-    if (d.type === "writeParticles") {
-      noteSandboxWrite(this.activeTileId);
-      this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
-    }
-    if (d.type === "writeBatch") {
-      noteSandboxWrite(this.activeTileId);
-      const err = validateVizWriteBatch(d.payload as VizWriteBatchPayload);
-      if (err) {
-        console.warn("zoto-viz viz.write batch:", err);
-        return;
-      }
-      notePackWriteBatch(
-        d.payload.buffers.length + d.payload.uniforms.length + (d.payload.particles ? 1 : 0),
-        vizWriteBatchByteSize(d.payload as VizWriteBatchPayload),
-      );
-      this.handlers.writeBatch?.(d.payload as VizWriteBatchPayload);
-    }
-    if (d.type === "publishBitmap") {
-      const bmp = d.payload.bitmap;
-      if (this.iframe && evSource !== this.iframe.contentWindow) {
-        bmp.close();
-        return;
-      }
-      try {
-        this.handlers.publishBitmap?.(this.activePackId, bmp);
-      } catch {
-        bmp.close();
-      }
+    if (d.type === "publishBitmap" || d.type === "publishBitmapFailed") {
+      this.dispatchPluginMsg(d, ev.source);
       return;
     }
-    if (d.type === "publishBitmapFailed") {
-      this.handlers.publishBitmapFailed?.(this.activePackId);
+  };
+
+  private dispatchPluginMsg(d: PluginPortMsg, evSource: MessageEventSource | null = null): void {
+    if (!hostAllows(d.type, this.caps)) return;
+    switch (d.type) {
+      case "ready":
+      case "drawState":
+      case "loseHostContext":
+      case "log":
+        break;
+      case "setStyle":
+        this.handlers.setStyle?.(d.payload);
+        break;
+      case "setNodeColor":
+        this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
+        break;
+      case "writeBuffer":
+        noteSandboxWrite(this.activeTileId);
+        this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
+        break;
+      case "writeUniform":
+        noteSandboxWrite(this.activeTileId);
+        this.handlers.writeUniform?.(d.payload.name, d.payload.value as VizUniformValue);
+        break;
+      case "writeParticles":
+        noteSandboxWrite(this.activeTileId);
+        this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+        break;
+      case "writeBatch": {
+        noteSandboxWrite(this.activeTileId);
+        const err = validateVizWriteBatch(d.payload as VizWriteBatchPayload);
+        if (err) {
+          console.warn("zoto-viz viz.write batch:", err);
+          break;
+        }
+        notePackWriteBatch(
+          d.payload.buffers.length + d.payload.uniforms.length + (d.payload.particles ? 1 : 0),
+          vizWriteBatchByteSize(d.payload as VizWriteBatchPayload),
+        );
+        this.handlers.writeBatch?.(d.payload as VizWriteBatchPayload);
+        break;
+      }
+      case "publishBitmap": {
+        const bmp = d.payload.bitmap;
+        if (this.iframe && evSource !== this.iframe.contentWindow) {
+          bmp.close();
+          break;
+        }
+        try {
+          this.handlers.publishBitmap?.(this.activePackId, bmp);
+        } catch {
+          bmp.close();
+        }
+        break;
+      }
+      case "publishBitmapFailed":
+        this.handlers.publishBitmapFailed?.(this.activePackId);
+        break;
+      default: {
+        const _exhaustive: never = d;
+        void _exhaustive;
+      }
     }
   }
 
@@ -589,14 +559,14 @@ export class PluginSandbox {
   }
 }
 
-function recordSandboxBoot(type: HostMsg["type"]): void {
-  const w = window as unknown as { __zotoSandboxBoot?: HostMsg["type"][] };
+function recordSandboxBoot(type: PluginWindowMsg["type"] | PluginPortMsg["type"]): void {
+  const w = window as unknown as { __zotoSandboxBoot?: (PluginWindowMsg["type"] | PluginPortMsg["type"])[] };
   w.__zotoSandboxBoot = [...(w.__zotoSandboxBoot ?? []), type];
 }
 
 function waitPluginMsg(
   iframe: HTMLIFrameElement,
-  type: HostMsg["type"],
+  type: PluginWindowMsg["type"],
   expectedBootNonce: string,
   onReject?: (fail: (err: Error) => void) => void,
 ): Promise<void> {
@@ -613,16 +583,9 @@ function waitPluginMsg(
     }, sandboxMsgTimeoutMs);
     const onMsg = (ev: MessageEvent) => {
       if (ev.source !== iframe.contentWindow) return;
-      const d = ev.data as HostMsg | undefined;
-      if (d?.source !== "zoto-viz-plugin") return;
-      if (d.type === "log" && type === "ready") {
-        window.clearTimeout(timer);
-        window.removeEventListener("message", onMsg);
-        fail(new Error(String(d.payload ?? "sandbox module load failed")));
-        return;
-      }
+      const d = ev.data as PluginWindowMsg | undefined;
+      if (d?.source !== PLUGIN_SOURCE) return;
       if (d.type === type) {
-        if (type === "ready" && d.type === "ready" && d.bootNonce !== expectedBootNonce) return;
         window.clearTimeout(timer);
         window.removeEventListener("message", onMsg);
         resolve();

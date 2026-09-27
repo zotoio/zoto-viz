@@ -3,26 +3,19 @@
  * External module only — no inline script, so the app CSP never needs 'unsafe-inline'.
  */
 
-/** Matches contract v2 `VizPresentTick` (plugins/sdk/viz-contract.ts on host-change). */
-export type VizPresentTick = {
-  frameMs: number;
-  tileId: string;
-  pluginClock?: number;
-};
-
-type HostBoot = {
-  source: "zoto-viz-host";
-  type: "boot";
-  caps: string[];
-  config: Record<string, string>;
-  viz?: unknown;
-  moduleSrc: string;
-  bootNonce: string;
-  parentOrigin: string;
-};
+import {
+  HOST_SOURCE,
+  PLUGIN_SOURCE,
+  type HostBootPayload,
+  type HostSandboxPortMsg,
+  type VizPresentTick,
+  isHostBootChannel,
+} from "./sandbox-channel";
 
 const PACK_ASSETS = "/pack-assets/";
 const TOKEN_REDACT = "<sandbox-token>";
+
+export type { VizPresentTick };
 
 export function packAssetTokenFromLocation(href = location.href): string {
   try {
@@ -78,13 +71,6 @@ export function redactSandboxAssetPath(text: string, token?: string): string {
     .join(`/pack-assets/${TOKEN_REDACT}/`);
 }
 
-type HostMsg =
-  | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: unknown }
-  | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
-  | { source: "zoto-viz-host"; type: "frame"; frame: unknown }
-  | { source: "zoto-viz-host"; type: "present"; tick: VizPresentTick }
-  | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
-
 export type SandboxZoto = {
   onTick: ((nodes: { id: string; rate: number; role: string }[]) => void) | null;
   onConfig: ((config: Record<string, string>) => void) | null;
@@ -98,29 +84,94 @@ export type SandboxZoto = {
   getConfig(): Record<string, string>;
 };
 
-let allowed = new Set<string>();
-let bootDone = false;
-let postTargetOrigin = "";
+export type SandboxFrameRuntime = {
+  allowed: Set<string>;
+  bootDone: boolean;
+  pluginPort: MessagePort | null;
+  postTargetOrigin: string;
+  /** Sandbox document URL (iframe `src`); used for `#zoto-boot` when not on `location`. */
+  locationHref: string;
+};
 
-function send(type: string, payload?: unknown): void {
-  const origin = postTargetOrigin || location.origin;
-  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, origin);
+export function createSandboxFrameRuntime(): SandboxFrameRuntime {
+  return {
+    allowed: new Set(),
+    bootDone: false,
+    pluginPort: null,
+    postTargetOrigin: "",
+    locationHref: typeof location !== "undefined" ? location.href : "",
+  };
 }
 
-const zoto: SandboxZoto = {
+function postPluginPort(
+  runtime: SandboxFrameRuntime,
+  msg: { source: typeof PLUGIN_SOURCE; type: string; bootNonce?: string; payload?: unknown },
+): void {
+  if (!runtime.pluginPort) return;
+  runtime.pluginPort.postMessage(msg);
+}
+
+function postPluginWindow(
+  runtime: SandboxFrameRuntime,
+  msg: { source: typeof PLUGIN_SOURCE; type: string; payload?: unknown },
+  transfer?: Transferable[],
+): void {
+  const origin = runtime.postTargetOrigin || "*";
+  parent.postMessage(msg, origin, transfer);
+}
+
+function send(runtime: SandboxFrameRuntime, type: string, payload?: unknown): void {
+  if (runtime.pluginPort) {
+    postPluginPort(runtime, { source: PLUGIN_SOURCE, type, payload });
+    return;
+  }
+  postPluginWindow(runtime, { source: PLUGIN_SOURCE, type, payload });
+}
+
+/** Opaque-origin sandbox iframes report `location.origin` as the string "null"; never use that as targetOrigin. */
+export function postFrameReadyToParent(): void {
+  parent.postMessage({ source: PLUGIN_SOURCE, type: "frame-ready" }, "*");
+}
+
+let runtime = createSandboxFrameRuntime();
+let allowed = runtime.allowed;
+
+/** @internal test hook — same zoto object assigned to the sandbox iframe global. */
+export const sandboxZotoApi: SandboxZoto = {
   onTick: null,
   onConfig: null,
   onFrame: null,
   onPresent: null,
-  setStyle(s) { if (allowed.has("graph.style")) send("setStyle", s); },
-  setNodeColor(id, hex) { if (allowed.has("graph.style")) send("setNodeColor", { id, hex }); },
+  setStyle(s) { if (allowed.has("graph.style")) send(runtime, "setStyle", s); },
+  setNodeColor(id, hex) { if (allowed.has("graph.style")) send(runtime, "setNodeColor", { id, hex }); },
   writeBuffer(_slot, _data) { /* viz.write patched after boot */ },
   writeUniform(_name, _value) { /* viz.write patched after boot */ },
   writeParticles(_data, _stride) { /* viz.write patched after boot */ },
   getConfig() { return (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig || {}; },
 };
 
+const zoto = sandboxZotoApi;
 (globalThis as unknown as { zoto: SandboxZoto }).zoto = zoto;
+
+export function setSandboxFrameLocationHref(href: string): void {
+  runtime.locationHref = href;
+}
+
+/** @internal e2e tests — shared runtime used by the sandbox-frame bundle. */
+export function sandboxFrameRuntimeForTests(): SandboxFrameRuntime {
+  return runtime;
+}
+
+export function resetSandboxFrameRuntimeForTests(): void {
+  runtime = createSandboxFrameRuntime();
+  allowed = runtime.allowed;
+  vizBatch = null;
+  vizBatchDepth = 0;
+  zoto.onTick = null;
+  zoto.onConfig = null;
+  zoto.onFrame = null;
+  zoto.onPresent = null;
+}
 
 function vizAllowed(cap: string): boolean {
   return allowed.has(cap);
@@ -143,15 +194,15 @@ function flushVizBatch(): void {
   if (messages === 0) return;
   if (messages === 1 && batch.buffers.length === 1 && !batch.uniforms.length && !batch.particles) {
     const b = batch.buffers[0]!;
-    send("writeBuffer", { slot: b.slot, data: b.data });
+    send(runtime, "writeBuffer", { slot: b.slot, data: b.data });
     return;
   }
   if (messages === 1 && batch.uniforms.length === 1 && !batch.buffers.length && !batch.particles) {
     const u = batch.uniforms[0]!;
-    send("writeUniform", { name: u.name, value: u.value });
+    send(runtime, "writeUniform", { name: u.name, value: u.value });
     return;
   }
-  send("writeBatch", batch);
+  send(runtime, "writeBatch", batch);
 }
 
 function beginVizBatch(): void {
@@ -175,7 +226,7 @@ function patchVizWriters(): void {
       vizBatch.buffers.push({ slot, data: arr });
       return;
     }
-    send("writeBuffer", { slot, data: arr });
+    send(runtime, "writeBuffer", { slot, data: arr });
   };
   zoto.writeUniform = (name, value) => {
     if (!vizAllowed("viz.write")) return;
@@ -183,7 +234,7 @@ function patchVizWriters(): void {
       vizBatch.uniforms.push({ name, value });
       return;
     }
-    send("writeUniform", { name, value });
+    send(runtime, "writeUniform", { name, value });
   };
   zoto.writeParticles = (data, stride) => {
     if (!vizAllowed("viz.write")) return;
@@ -192,12 +243,13 @@ function patchVizWriters(): void {
       vizBatch.particles = { data: arr, stride: stride || 4 };
       return;
     }
-    send("writeParticles", { data: arr, stride: stride || 4 });
+    send(runtime, "writeParticles", { data: arr, stride: stride || 4 });
   };
 }
 
 function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: unknown; contractVersion?: number }): void {
   allowed = new Set(d.caps ?? []);
+  runtime.allowed = allowed;
   (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
   (window as unknown as { __zotoViz?: unknown }).__zotoViz = d.viz || null;
   const viz = d.viz as { contract?: number } | null | undefined;
@@ -212,16 +264,13 @@ function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: 
   patchVizWriters();
 }
 
-/** Host → sandbox dispatch (unit-tested; hot path passes message tick by reference). */
+/** Host → sandbox dispatch on the MessageChannel (unit-tested; hot path passes tick by reference). */
 export function handleSandboxHostMessage(
-  d: HostMsg | HostBoot | undefined,
+  d: HostSandboxPortMsg | undefined,
   caps: Set<string>,
   api: SandboxZoto,
-  opts?: { source?: MessageEventSource | null; bootNonce?: string; bootDone?: boolean },
 ): void {
-  if (!d || d.source !== "zoto-viz-host") return;
-  if (d.type === "boot") return;
-  if (opts?.source && opts.source !== window.parent) return;
+  if (!d || d.source !== HOST_SOURCE) return;
   if (d.type === "config") {
     (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
     api.onConfig?.(d.config || {});
@@ -248,48 +297,76 @@ export function handleSandboxHostMessage(
   }
 }
 
-export function handleSandboxBootMessage(
-  ev: MessageEvent,
-  opts: { bootDone: boolean; bootNonce: string },
-): { bootDone: boolean; postTargetOrigin: string } {
-  const d = ev.data as HostBoot | undefined;
-  if (opts.bootDone) return { bootDone: true, postTargetOrigin: postTargetOrigin };
-  if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") {
-    return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
-  }
-  if (ev.source !== window.parent) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
-  if (!d.bootNonce || d.bootNonce !== opts.bootNonce) {
-    return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
-  }
-  if (!d.parentOrigin) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+async function handleBootOnPort(d: HostBootPayload, rt: SandboxFrameRuntime): Promise<void> {
   applyInit(d);
-  return { bootDone: true, postTargetOrigin: d.parentOrigin };
-}
-
-window.addEventListener("message", (ev) => {
-  handleSandboxHostMessage(ev.data as HostMsg | HostBoot | undefined, allowed, zoto, {
-    source: ev.source,
-    bootDone,
-    bootNonce: bootNonceFromLocation(),
-  });
-});
-
-window.addEventListener("message", async (ev) => {
-  const nonce = bootNonceFromLocation();
-  const out = handleSandboxBootMessage(ev, { bootDone, bootNonce: nonce });
-  bootDone = out.bootDone;
-  postTargetOrigin = out.postTargetOrigin;
-  if (!bootDone) return;
-  const d = ev.data as HostBoot;
-  if (d.type !== "boot") return;
+  rt.postTargetOrigin = d.parentOrigin;
   const token = packAssetTokenFromLocation();
   try {
     await import(/* @vite-ignore */ moduleSrcForSandbox(d.moduleSrc, token));
-    send("ready");
+    postPluginPort(rt, { source: PLUGIN_SOURCE, type: "ready", bootNonce: d.bootNonce });
   } catch (e) {
     const raw = String(e);
-    send("log", redactSandboxAssetPath(raw, token));
+    send(rt, "log", redactSandboxAssetPath(raw, token));
   }
-});
+}
 
-send("frame-ready");
+export function attachSandboxHostPort(port: MessagePort, rt: SandboxFrameRuntime, api: SandboxZoto = zoto): void {
+  rt.pluginPort = port;
+  port.start();
+  port.onmessage = (ev) => {
+    const d = ev.data as HostBootPayload | HostSandboxPortMsg | undefined;
+    if (!d || d.source !== HOST_SOURCE) return;
+    if (d.type === "boot") {
+      if (rt.bootDone) return;
+      if (!d.bootNonce || d.bootNonce !== bootNonceFromLocation(rt.locationHref)) return;
+      rt.bootDone = true;
+      void handleBootOnPort(d, rt);
+      return;
+    }
+    handleSandboxHostMessage(d as HostSandboxPortMsg, rt.allowed, api);
+  };
+}
+
+export function handleSandboxBootChannelMessage(
+  ev: MessageEvent,
+  rt: SandboxFrameRuntime,
+  api: SandboxZoto = zoto,
+): void {
+  if (!isHostBootChannel(ev.data)) return;
+  if (ev.source != null && ev.source !== window.parent) return;
+  const nonce = bootNonceFromLocation(rt.locationHref);
+  if (!nonce || ev.data.bootNonce !== nonce) return;
+  const port = ev.ports[0];
+  if (!port) return;
+  attachSandboxHostPort(port, rt, api);
+}
+
+/** Listen for `boot-channel` on a jsdom iframe `contentWindow` (e2e tests). */
+export function installSandboxBootChannelListener(win: Window, parentWin: Window): void {
+  win.addEventListener("message", (ev) => {
+    if (ev.source != null && ev.source !== parentWin) return;
+    handleSandboxBootChannelMessage(ev, runtime, zoto);
+  });
+}
+
+function isSandboxBootstrapDocument(): boolean {
+  try {
+    const path = new URL(location.href).pathname;
+    return path.endsWith("/plugin-sandbox.html") || path.endsWith("plugin-sandbox.html")
+      || location.hash.includes("zoto-boot=");
+  } catch {
+    return false;
+  }
+}
+
+/** Entry when this module is the sole script in plugin-sandbox.html. */
+export function activateSandboxFrameBundle(): void {
+  window.addEventListener("message", (ev) => {
+    handleSandboxBootChannelMessage(ev, runtime, zoto);
+  });
+  postFrameReadyToParent();
+}
+
+if (typeof window !== "undefined" && isSandboxBootstrapDocument()) {
+  activateSandboxFrameBundle();
+}
