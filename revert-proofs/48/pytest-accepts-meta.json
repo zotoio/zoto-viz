@@ -4,7 +4,7 @@
   "testName": "strict pytest red from plugin JSON only > accepts revertProofAssertion from plugin JSON",
   "description": "Never classify a pytest failure as an assertion",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "build break",
+    "expected": "assertion"
   }
 }

@@ -4,7 +4,7 @@
   "testName": "sidecar red value > (5-red-required) sidecar without structured red is rejected",
   "description": "Stop validating the red sidecar field",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": "row r: sidecar JSON missing object field \"red\""
   }
 }

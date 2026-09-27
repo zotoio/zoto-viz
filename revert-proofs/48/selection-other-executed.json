@@ -4,7 +4,7 @@
   "testName": "vitest JSON selection by full name > rejects when another test executed",
   "description": "Drop the other-tests-skipped rejection",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": true,
+    "expected": false
   }
 }

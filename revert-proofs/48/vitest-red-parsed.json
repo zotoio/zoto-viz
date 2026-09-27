@@ -4,7 +4,10 @@
   "testName": "vitest JSON report parsing > reads structured revertProofRed from task meta",
   "description": "Drop revertProofRed when parsing the vitest JSON report",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": {
+      "actual": 2,
+      "expected": 1
+    }
   }
 }

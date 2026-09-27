@@ -4,7 +4,7 @@
   "testName": "revert-proof vitest runner through the overlay > (2) expect.soft pass then TypeError is not branded",
   "description": "Runner accepts a TypeError thrown after a passing expect.soft()",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": true,
+    "expected": false
   }
 }

@@ -4,7 +4,7 @@
   "testName": "strict Vitest red from task.meta only > accepts revertProofAssertion meta",
   "description": "Never classify a vitest failure as an assertion",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "build break",
+    "expected": "assertion"
   }
 }

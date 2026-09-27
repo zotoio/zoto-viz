@@ -4,7 +4,7 @@
   "testName": "strict pytest red from plugin JSON only > (a) rejects ProbeError even when traceback mentions AssertionError",
   "description": "Classify every pytest failure as an assertion",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "assertion",
+    "expected": "build break"
   }
 }

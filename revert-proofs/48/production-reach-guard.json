@@ -4,7 +4,7 @@
   "testName": "revert-proof dogfood guards > production reach guard rejects unreachable revert targets",
   "description": "Disable production reach guard so test-only revert targets are accepted",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": "row dogfood: revert target unreachable from production: web/src/test-only-helper.ts"
   }
 }

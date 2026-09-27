@@ -4,7 +4,7 @@
   "testName": "revert-proof dogfood guards > production-only guard rejects patches touching test files",
   "description": "Disable production-only patch validation",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": "row dogfood: patch touches test files (only production reverts allowed)"
   }
 }

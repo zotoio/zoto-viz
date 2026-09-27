@@ -4,7 +4,7 @@
   "testName": "sidecar red value > (5-red-mismatch) structured actual/expected mismatch is rejected",
   "description": "Compare only red.expected, ignoring actual",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": "row r: red value mismatch (expected {\"actual\":2,\"expected\":1}, got {\"actual\":3,\"expected\":1})"
   }
 }

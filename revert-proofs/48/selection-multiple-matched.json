@@ -4,7 +4,7 @@
   "testName": "vitest JSON selection by full name > rejects when filter matches multiple executed tests",
   "description": "Drop the multiple-match rejection",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": true,
+    "expected": false
   }
 }

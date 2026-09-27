@@ -4,7 +4,7 @@
   "testName": "strict Vitest red from task.meta only > reports a passing patched test as green",
   "description": "Drop the green classification",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "build break",
+    "expected": "green"
   }
 }

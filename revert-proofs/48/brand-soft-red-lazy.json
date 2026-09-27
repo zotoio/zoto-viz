@@ -2,9 +2,9 @@
   "runner": "vitest",
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "revert-proof vitest runner through the overlay > (2) expect.soft failure is branded",
-  "description": "Runner ignores the recorded expect.soft() failure",
+  "description": "Read red from the error when the runner judges it (after vitest stringified soft values)",
   "red": {
-    "actual": false,
-    "expected": true
+    "actual": "?",
+    "expected": "?"
   }
 }

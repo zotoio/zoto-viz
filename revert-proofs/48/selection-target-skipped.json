@@ -4,7 +4,7 @@
   "testName": "vitest JSON selection by full name > rejects when target is skipped (it.skipIf / ctx.skip)",
   "description": "Treat a skipped target as executed",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": true,
+    "expected": false
   }
 }

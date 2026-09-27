@@ -2,7 +2,7 @@
   "runner": "vitest",
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "revert-proof vitest runner through the overlay > (2) real expect(1).toBe(0) is branded",
-  "description": "Setup file no longer installs chai Assertion branding",
+  "description": "Brand capture swaps actual and expected",
   "red": {
     "actual": "?",
     "expected": "?"

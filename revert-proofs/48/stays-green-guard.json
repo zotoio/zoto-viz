@@ -4,7 +4,7 @@
   "testName": "revert-proof dogfood guards > stays-green guard rejects patched green vitest runs",
   "description": "Remove stays-green failure guard so noop reverts are accepted",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": "row dogfood: test stayed GREEN after revert patch (expected failure)"
   }
 }

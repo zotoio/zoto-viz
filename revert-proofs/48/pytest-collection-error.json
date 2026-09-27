@@ -4,7 +4,7 @@
   "testName": "pytest plugin JSON parsing > treats missing JSON on nonzero exit as collection error",
   "description": "Treat missing plugin JSON as a clean run",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": false,
+    "expected": true
   }
 }

@@ -4,7 +4,7 @@
   "testName": "pytest plugin JSON parsing > parses tests array from plugin output",
   "description": "Drop the skipped-target rejection for pytest",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "other tests not skipped",
+    "expected": "target skipped"
   }
 }

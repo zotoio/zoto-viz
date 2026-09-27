@@ -4,7 +4,7 @@
   "testName": "revert-proof vitest runner through the overlay > (1) only the runner writes the flag after hooks (meta spoof rejected)",
   "description": "Let test-written task.meta override the runner verdict and red",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": true,
+    "expected": false
   }
 }

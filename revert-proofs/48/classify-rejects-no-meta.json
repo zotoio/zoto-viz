@@ -4,7 +4,7 @@
   "testName": "strict Vitest red from task.meta only > (b) rejects assertion-looking failure without meta flag",
   "description": "Classify every vitest failure as an assertion",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "assertion",
+    "expected": "build break"
   }
 }
