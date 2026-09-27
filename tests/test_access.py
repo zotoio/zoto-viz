@@ -3,9 +3,9 @@ from __future__ import annotations
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from service import access, request_guard
+from service import access, pack_asset_frames, request_guard
 from service.forensics import location_allowed
-from service import pack_asset_frames
+from service.request_guard import HOST_REJECT_BODY
 from tests.pack_asset_test_util import DEFAULT_FRAME, SECRET, SESSION, mint
 
 
@@ -137,10 +137,10 @@ class AccessMiddlewareTests(AioHTTPTestCase):
             return web.json_response({"wrote": True})
 
         app = web.Application(middlewares=[request_guard.middleware, access.middleware])
-        request_guard.configure_request_guard(app, bind="127.0.0.1", port=7020)
         app["csrf"] = "token-aaa"
         app["pack_asset_secret"] = SECRET
         app["insecure_lan"] = False
+        request_guard.register_response_prepare_hook(app)
         app.router.add_get("/ok", ok)
         app.router.add_post("/poke", poke)
         app.router.add_post("/mcp", poke)
@@ -152,8 +152,8 @@ class AccessMiddlewareTests(AioHTTPTestCase):
             self.client.app, bind="127.0.0.1", port=self.client.port,
         )
 
-    def _host(self) -> dict[str, str]:
-        return {"Host": f"127.0.0.1:{self.client.port}"}
+    def _host(self, host: str = "127.0.0.1") -> dict[str, str]:
+        return {"Host": f"{host}:{self.client.port}"}
 
     async def test_loopback_get_and_csrf_post(self) -> None:
         resp = await self.client.get("/ok", headers=self._host())
@@ -172,13 +172,18 @@ class AccessMiddlewareTests(AioHTTPTestCase):
 
         stale = await self.client.post(
             "/poke",
-            headers={**self._host(), access.HEADER: "token-aaa", "Cookie": f"{access.COOKIE}=stale"},
+            headers={
+                **self._host(),
+                access.HEADER: "token-aaa",
+                "Cookie": f"{access.COOKIE}=stale",
+            },
         )
         assert stale.status == 200
 
     async def test_rebinding_host_rejected(self) -> None:
         resp = await self.client.get("/ok", headers={"Host": f"evil.example:{self.client.port}"})
         assert resp.status == 400
+        assert await resp.text() == HOST_REJECT_BODY
 
     async def test_foreign_origin_rejected(self) -> None:
         resp = await self.client.get(

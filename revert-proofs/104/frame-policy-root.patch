@@ -1,0 +1,20 @@
+diff --git a/service/access.py b/service/access.py
+index bb5aec4..f363d2e 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -142,14 +142,7 @@ def attach_pack_asset_json_headers(resp: web.StreamResponse) -> None:
+ 
+ def attach_frame_embed_policy(resp: web.StreamResponse) -> None:
+     """Every response must not be embeddable off-origin (including errors and static files)."""
+-    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+-    prior = resp.headers.get("Content-Security-Policy", "")
+-    frame = "frame-ancestors 'self'"
+-    if prior:
+-        if "frame-ancestors" not in prior:
+-            resp.headers["Content-Security-Policy"] = f"{prior}; {frame}"
+-    else:
+-        resp.headers["Content-Security-Policy"] = frame
++    return
+ 
+ 
+ def bind_is_loopback(bind: str) -> bool:

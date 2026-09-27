@@ -1,0 +1,14 @@
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -16,10 +16,7 @@
+ 
+ _log = logging.getLogger("zoto-viz.monitor")
+ 
+-HOST_REJECT_BODY = (
+-    "This zoto-viz server doesn't accept the address it was opened with. "
+-    "Open it by its IP address, or add this name to `allowed_hosts` in the server config."
+-)
++HOST_REJECT_BODY = ""
+ 
+ HANDLER_ERROR_BODY = (
+     "zoto-viz ran into a problem with this request. "

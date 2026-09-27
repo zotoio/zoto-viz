@@ -1,0 +1,10 @@
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -363,6 +363,6 @@
+         resp = exc
+     except Exception:
+         _log.exception("unhandled error in request handler")
+-        resp = web.Response(status=500, text=HANDLER_ERROR_BODY, content_type="text/plain")
++        resp = web.Response(status=500, text="internal server error", content_type="text/plain")
+     attach_frame_embed_policy(resp)
+     return resp

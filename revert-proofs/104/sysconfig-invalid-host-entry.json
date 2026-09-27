@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_invalid_allowed_hosts_entry_raises",
+  "description": "allowed_hosts entries validated.",
+  "timeoutSec": 60,
+  "red": "AssertionError: expected ValueError"
+}

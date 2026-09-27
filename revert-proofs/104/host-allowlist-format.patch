@@ -1,0 +1,11 @@
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -341,7 +341,7 @@
+     key = normalize_host_header_key(raw_host, port, tls=tls)
+     if key is None:
+         _log.warning("rejected Host header (format): %s", escape_log_host(raw_host))
+-        return _host_reject_response()
++        return web.Response(status=400, text="bad request", content_type="text/plain")
+ 
+     if not _lookup_allowed(request.app, key):
+         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
