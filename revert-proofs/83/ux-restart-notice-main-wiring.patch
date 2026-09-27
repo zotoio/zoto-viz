@@ -1,8 +1,8 @@
 diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index 7a538ca..4047791 100644
+index f7c3d56..39166e1 100644
 --- a/web/src/app/main.ts
 +++ b/web/src/app/main.ts
-@@ -1989,7 +1989,6 @@ function connect(): void {
+@@ -1991,7 +1991,6 @@ function connect(): void {
    ws.onerror = () => ws.close();
  }
  

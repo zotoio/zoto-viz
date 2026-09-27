@@ -1,13 +1,22 @@
 diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
-index d03d00f..b35e605 100644
+index 33f7f43..0e78788 100644
 --- a/web/src/core/http-notice.ts
 +++ b/web/src/core/http-notice.ts
-@@ -39,8 +39,6 @@ export function bindServerRestartWallNotice(): () => void {
+@@ -50,8 +50,6 @@ export function bindServerRestartWallNotice(): () => void {
    const onRetryFailed = (e: Event) => {
      const detail = (e as CustomEvent<RetryFailedDetail>).detail;
      if (!detail?.message) return;
 -    clearTimeout(clearTimer);
 -    clearTimer = undefined;
-     showWallRetryNotice(detail.message, detail.retry);
+     if (restartHandle?.live) restartHandle.dismiss();
+     restartHandle = undefined;
+     postWallNotice({
+@@ -68,8 +66,6 @@ export function bindServerRestartWallNotice(): () => void {
+     wall.removeEventListener("click", onWallClick);
+     window.removeEventListener("zoto-viz-server-restart", onRestart);
+     window.removeEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);
+-    clearTimeout(clearTimer);
+-    clearTimer = undefined;
+     if (restartHandle?.live) restartHandle.dismiss();
+     restartHandle = undefined;
    };
- 

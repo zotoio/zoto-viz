@@ -1,12 +1,13 @@
-diff --git a/web/src/core/wall-notice.ts b/web/src/core/wall-notice.ts
-index 76c3bb0..09f34c2 100644
---- a/web/src/core/wall-notice.ts
-+++ b/web/src/core/wall-notice.ts
-@@ -22,7 +22,6 @@ export function showWallStatusNotice(text: string): HTMLElement | null {
-   clearWallNotices();
-   const el = document.createElement("div");
-   el.className = WALL_NOTICE_CLASS;
--  el.setAttribute("role", "status");
-   el.textContent = text;
-   host.prepend(el);
-   return el;
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 109ffb5..d5bd5e2 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -12,7 +12,7 @@ export type NoticeKey =
+ const NOTICE_ROUTE = {
+   "install-failed": "alert",
+   "context-not-restored": "alert",
+-  "retry-failed": "status",
++  "retry-failed": "alert",
+   "update-rolled-back": "alert",
+   "server-restarted": "status",
+   "context-lost": "status",

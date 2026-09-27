@@ -1,12 +1,16 @@
-diff --git a/web/src/core/wall-notice.ts b/web/src/core/wall-notice.ts
-index 76c3bb0..c89c214 100644
---- a/web/src/core/wall-notice.ts
-+++ b/web/src/core/wall-notice.ts
-@@ -19,7 +19,6 @@ export function clearWallNotices(): void {
- export function showWallStatusNotice(text: string): HTMLElement | null {
-   const host = wallNoticeHost();
-   if (!host) return null;
--  clearWallNotices();
-   const el = document.createElement("div");
-   el.className = WALL_NOTICE_CLASS;
-   el.setAttribute("role", "status");
+diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
+index 33f7f43..d2df1c2 100644
+--- a/web/src/core/http-notice.ts
++++ b/web/src/core/http-notice.ts
+@@ -40,11 +40,6 @@ export function bindServerRestartWallNotice(): () => void {
+   const onRestart = (e: Event) => {
+     const msg = (e as CustomEvent<string>).detail;
+     if (msg !== SERVER_RESTART_NOTICE) return;
+-    restartHandle = postWallNotice({
+-      key: "server-restarted",
+-      text: msg,
+-    });
+-    armAutoClear();
+   };
+ 
+   const onRetryFailed = (e: Event) => {

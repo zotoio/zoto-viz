@@ -1,15 +1,30 @@
 diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
-index d03d00f..e6b750d 100644
+index 33f7f43..01ed05c 100644
 --- a/web/src/core/http-notice.ts
 +++ b/web/src/core/http-notice.ts
-@@ -22,10 +22,6 @@ export function bindServerRestartWallNotice(): () => void {
-   const armAutoClear = (el: HTMLElement) => {
-     clearTimeout(clearTimer);
-     clearTimer = setTimeout(() => clearNotice(), AUTO_CLEAR_MS);
--    el.addEventListener("click", (e) => {
--      if ((e.target as HTMLElement).closest("button")) return;
--      clearNotice();
--    });
+@@ -30,13 +30,6 @@ export function bindServerRestartWallNotice(): () => void {
+     clearTimer = setTimeout(() => clearRestartNotice(), AUTO_CLEAR_MS);
    };
  
+-  const onWallClick = (e: MouseEvent) => {
+-    const row = (e.target as HTMLElement).closest('[data-notice-key="server-restarted"]');
+-    if (!row) return;
+-    if ((e.target as HTMLElement).closest("button")) return;
+-    clearRestartNotice();
+-  };
+-
    const onRestart = (e: Event) => {
+     const msg = (e as CustomEvent<string>).detail;
+     if (msg !== SERVER_RESTART_NOTICE) return;
+@@ -61,11 +54,9 @@ export function bindServerRestartWallNotice(): () => void {
+     });
+   };
+ 
+-  wall.addEventListener("click", onWallClick);
+   window.addEventListener("zoto-viz-server-restart", onRestart);
+   window.addEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);
+   return () => {
+-    wall.removeEventListener("click", onWallClick);
+     window.removeEventListener("zoto-viz-server-restart", onRestart);
+     window.removeEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);
+     clearTimeout(clearTimer);
