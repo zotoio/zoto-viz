@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 1e33abf..eb93130 100644
+index 04ba3ef..d794a92 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -123,7 +123,9 @@ def normalize_host_header_key(
+@@ -125,7 +125,9 @@ def normalize_host_header_key(
      if host.lower() == "localhost":
          return _canonical_key("localhost", port)
      try:
