@@ -4,7 +4,7 @@
   "testName": "revert-proof runner wiring guards > (f) revert-proof.mjs calls assertVitestNodeAssertFailClosed on unbranded failures",
   "description": "Stop calling assertVitestNodeAssertFailClosed in runRow",
   "red": {
-    "actual": true,
-    "expected": false
+    "actual": false,
+    "expected": true
   }
 }

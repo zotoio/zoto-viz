@@ -546,9 +546,7 @@ describe("strict git apply in the runner", () => {
       { cwd: repoRoot, encoding: "utf8" },
     ).stdout;
     expect(stalePatch.length).toBeGreaterThan(0);
-    expect(thrownMessage(() => assertGitApplyCheckStrict(repoRoot, stalePatch))).toMatch(
-      /offset or fuzz/i,
-    );
+    expect(() => assertGitApplyCheckStrict(repoRoot, stalePatch)).toThrow(/offset or fuzz/i);
   });
 
   it("(strict) accepts a patch with exact context", () => {
@@ -557,6 +555,11 @@ describe("strict git apply in the runner", () => {
       "utf8",
     );
     expect(() => assertGitApplyCheckStrict(repoRoot, patch)).not.toThrow();
+  });
+
+  it("(strict-row) gitApplyPatchStrict rejects offset/fuzz in verbose check output", () => {
+    const src = fs.readFileSync(path.join(scriptsDir, "revert-proof-lib.mjs"), "utf8");
+    expect(src.includes("GIT_APPLY_OFFSET_FUZZ_RE.test(line)")).toBe(true);
   });
 });
 
@@ -576,7 +579,8 @@ describe("revert-proof runner wiring guards", () => {
       path.join(scriptsDir, "revert-proof-vitest-runner.mjs"),
       "utf8",
     );
-    expect(/nodeAssert\.delete\(test\)/.test(src)).toBe(true);
+    const runTaskBody = src.split("async runTask")[1]?.split("onAfterRunTask")[0] ?? "";
+    expect(runTaskBody.includes("nodeAssert.delete(test)")).toBe(true);
   });
 });
 

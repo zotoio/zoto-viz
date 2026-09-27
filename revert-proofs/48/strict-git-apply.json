@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "scripts/revert-proof.lib.test.ts",
-  "testName": "strict git apply in the runner > (strict) rejects patches that only apply at an offset",
+  "testName": "strict git apply in the runner > (strict-row) gitApplyPatchStrict rejects offset/fuzz in verbose check output",
   "description": "Allow git apply --check at fuzz/offset (drop strict enforcement)",
   "red": {
     "actual": false,
