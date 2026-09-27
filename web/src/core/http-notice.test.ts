@@ -375,13 +375,13 @@ describe("server restart wall notice", () => {
     });
 
     it("does not dismiss the retry strip when Retry is clicked", async () => {
+      const stopSpy = vi.spyOn(Event.prototype, "stopPropagation");
       await apiFetch("/api/profiles/user", { method: "PUT" });
       const btn = document.querySelector(".wall-notice-action") as HTMLButtonElement;
       btn.click();
-      await vi.waitFor(() => {
-        expect(profileHits).toBeGreaterThan(1);
-      });
+      expect(stopSpy).toHaveBeenCalled();
       expect(retryRows()).toHaveLength(1);
+      stopSpy.mockRestore();
     });
 
     it("replays the failed mutation when Retry is focused and click retries", async () => {
