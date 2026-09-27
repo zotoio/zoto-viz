@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { assignTiles, defaultTree, leafIds, nextPaneTiles, placePaneTileView } from "./mosaic-layout";
+import {
+  assignTiles,
+  defaultTree,
+  leafIds,
+  nextPaneTiles,
+  nextPaneTilesForPicker,
+  placePaneTileView,
+} from "./mosaic-layout";
 
 describe("mosaic pane view assignment", () => {
   it("apply assignViews tile list replaces one leaf id", () => {
@@ -10,12 +17,18 @@ describe("mosaic pane view assignment", () => {
     expect(leafIds(assigned)).toEqual(next);
   });
 
-  it("duplicate-on-wall allocates a second slot for the same pack view", () => {
+  it("settings picker duplicate-on-wall allocates a second slot for the same pack view", () => {
     const tree = defaultTree(["plugin:topology", "plugin:wifi"], "off");
-    const next = nextPaneTiles(leafIds(tree!), "plugin:wifi", "plugin:topology");
+    const next = nextPaneTilesForPicker(leafIds(tree!), "plugin:wifi", "plugin:topology");
     expect(next).toEqual(["plugin:topology", "plugin:topology!1"]);
     const assigned = assignTiles(tree!, next);
     expect(leafIds(assigned)).toEqual(["plugin:topology", "plugin:topology!1"]);
+  });
+
+  it("wall pick swaps tiles when the target view is already on the wall", () => {
+    const prev = ["plugin:topology", "plugin:wifi"];
+    const next = nextPaneTiles(prev, "plugin:wifi", "plugin:topology");
+    expect(next).toEqual(["plugin:wifi", "plugin:topology"]);
   });
 
   it("a pane pick of a view not on the wall is a load, not only a swap", () => {

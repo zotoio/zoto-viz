@@ -229,7 +229,7 @@ export function placePaneTileView(ids: string[], fromSlot: string, viewId: strin
 
 /** @deprecated Use placePaneTileView / movePaneTileView via mosaic view pick helpers. */
 export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
-  if (!viewId || fromSlot === viewId) return ids;
+  if (!viewId || fromSlot === viewId || mosaicTileViewId(fromSlot) === viewId) return ids;
   const fromIdx = ids.indexOf(fromSlot);
   const j = ids.findIndex((id, k) => k !== fromIdx && mosaicTileViewId(id) === viewId);
   if (j >= 0) return movePaneTileView(ids, fromSlot, ids[j]!);
