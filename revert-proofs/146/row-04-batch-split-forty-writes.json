@@ -4,5 +4,6 @@
   "testFile": "src/plugins/sandbox-write-path.counts.test.ts",
   "testName": "sandbox write path counts (#129) > 4 batch cap message counts > 40 small writes → 2 port posts (32 + 8 buffers)",
   "red": "AssertionError: expected 1 to be 2 // Object.is equality",
+  "redLine": "AssertionError: expected 1 to be 2 // Object.is equality",
   "project": "web"
 }

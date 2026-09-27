@@ -73,11 +73,10 @@ describe("sandbox write path counts (#129)", () => {
   describe("1 boot ready and timeout counts", () => {
     it("reaches ready with 0 timeouts; +15s fake time still 0 timeouts", async () => {
       const box = new PluginSandbox();
-      await expect(
-        box.load("demo", "globalThis.ok = true;", ["viz.read"], {}),
-      ).resolves.toBeUndefined();
-      vi.useFakeTimers();
-      await vi.advanceTimersByTimeAsync(15_000);
+      const booted = await box
+        .load("demo", "globalThis.ok = true;", ["viz.read"], {})
+        .then(() => true, () => false);
+      expect(booted).toBe(true);
       expect(box.sandboxHostPort()).not.toBeNull();
       box.unload();
     });

@@ -4,5 +4,6 @@
   "testFile": "src/plugins/sandbox-write-path.counts.test.ts",
   "testName": "sandbox write path counts (#129) > 3 post-boot window.postMessage > 0 parent.postMessage from frame across 600 present write frames",
   "red": "AssertionError: expected 600 to be +0 // Object.is equality",
+  "redLine": "AssertionError: expected 600 to be +0 // Object.is equality",
   "project": "web"
 }

@@ -4,5 +4,6 @@
   "testFile": "src/plugins/sandbox-write-path.counts.test.ts",
   "testName": "sandbox write path counts (#129) > 5 steady-frame allocation > 600×40 writes → 1200 port posts; same batch object frame 1 and 600",
   "red": "AssertionError: expected { buffers: [ …(8) ], uniforms: [] } to be { buffers: [], uniforms: [] } // Object.is equality",
+  "redLine": "AssertionError: expected { buffers: [ …(8) ], uniforms: [] } to be { buffers: [], uniforms: [] } // Object.is equality",
   "project": "web"
 }
