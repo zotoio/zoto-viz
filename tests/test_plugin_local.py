@@ -343,16 +343,18 @@ def test_unpack_failure_preserves_runtime_on_overwrite(
         "plugin.yml": "id: keep-pack\nname: Keep\nversion: 2\n",
         "visualisation.yml": GOOD_INSTALL_VIZ,
     })
-    real_unpack = plugin_local.pz.unpack_zip
+    from service import plugin_install as pi
 
-    def flaky_unpack(path: Path, dest: Path):
-        if path == zip_path and dest == runtime:
-            raise OSError("simulated extract failure")
-        return real_unpack(path, dest)
+    def boom() -> None:
+        raise OSError("simulated extract failure")
 
-    monkeypatch.setattr(plugin_local.pz, "unpack_zip", flaky_unpack)
-    with pytest.raises(OSError, match="simulated extract failure"):
-        plugin_local.install_local_zip(v2, overwrite=True)
+    pi.set_after_first_rename(boom)
+    try:
+        out = plugin_local.install_local_zip(v2, overwrite=True)
+    finally:
+        pi.set_after_first_rename(None)
+    assert out.get("ok") is False
+    assert out.get("error") == "pack_install_blocked"
     assert _hash_tree(runtime) == tree_before
     assert _hash_file(zip_path) == zip_before
 
