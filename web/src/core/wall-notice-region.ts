@@ -12,7 +12,7 @@ export type NoticeKey =
 const NOTICE_ROUTE = {
   "install-failed": "alert",
   "context-not-restored": "alert",
-  "retry-failed": "status",
+  "retry-failed": "alert",
   "update-rolled-back": "alert",
   "server-restarted": "status",
   "context-lost": "status",
