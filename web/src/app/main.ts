@@ -117,9 +117,8 @@ import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
 import { mosaicReloadLayoutTiles } from "./mosaic-reload-layout";
-import { mosaicTilePanePickHandler } from "./mosaic-tile-pane-pick";
 import { bootMosaicPackStartLayout } from "./mosaic-boot-pack-start";
-import { pickMosaicPaneWith } from "./mosaic-pane-pick";
+import { mosaicOnPanePickHandler } from "./mosaic-pane-pick";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
 import { onMosaicSwitchConsentDenied } from "./mosaic-switch-consent";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
@@ -1219,6 +1218,10 @@ settings.addSection(
   [sysCpuIdle, sysLabels],
   "CPU graphs: idle processes fade, or hide at once. Labels apply to every graph.",
 );
+const pickMosaicPane = mosaicOnPanePickHandler({
+  runSwitch: runMosaicPaneSwitch,
+  refreshMosaicSlots: () => settings.refreshMosaicSlots(),
+});
 mosaic = new Mosaic({
   wall: $("wall"),
   sceneEl: $("scene"),
@@ -1237,7 +1240,7 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
-  onPanePick: mosaicTilePanePickHandler(pickMosaicPane),
+  onPanePick: pickMosaicPane,
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
@@ -1259,16 +1262,6 @@ mosaic = new Mosaic({
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
 });
-async function pickMosaicPane(from: string, to: string): Promise<boolean> {
-  return pickMosaicPaneWith(
-    {
-      runSwitch: runMosaicPaneSwitch,
-      refreshMosaicSlots: () => settings.refreshMosaicSlots(),
-    },
-    from,
-    to,
-  );
-}
 wireSettingsMosaicPanePick(settings, pickMosaicPane);
 
 settings.addAnimation((a) => {

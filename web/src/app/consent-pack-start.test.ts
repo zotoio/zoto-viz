@@ -11,7 +11,7 @@ import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
 import { pickMosaicPaneWith } from "./mosaic-pane-pick";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
 import { mosaicReloadLayoutTiles } from "./mosaic-reload-layout";
-import { mosaicTilePanePickHandler } from "./mosaic-tile-pane-pick";
+import { mosaicOnPanePickHandler } from "./mosaic-pane-pick";
 import {
   resetPaneSwitchTokens,
   switchPaneView,
@@ -128,21 +128,17 @@ describe("consent blocks pack start paths", () => {
     const mountView = vi.fn();
     let switchCalls = 0;
     const notices: string[] = [];
-    const { mosaic, wall } = makeMosaic(
-      mosaicTilePanePickHandler((from, to) =>
-        pickMosaicPaneWith(
-          {
-            runSwitch: async (toViewId, fromViewId) => {
-              switchCalls += 1;
-              return runSwitch(mosaic, mountView)(toViewId, fromViewId);
-            },
-            refreshMosaicSlots: () => {},
-          },
-          from,
-          to,
-        ),
-      ),
-    );
+    let mosaic!: Mosaic;
+    const panePickDeps = {
+      runSwitch: async (toViewId: string, fromViewId?: string) => {
+        switchCalls += 1;
+        return runSwitch(mosaic, mountView)(toViewId, fromViewId);
+      },
+      refreshMosaicSlots: () => {},
+    };
+    const built = makeMosaic(mosaicOnPanePickHandler(panePickDeps));
+    mosaic = built.mosaic;
+    const wall = built.wall;
     const origNotice = mosaic.setPaneNotice.bind(mosaic);
     mosaic.setPaneNotice = (id, text, recipe) => {
       if (text) notices.push(text);

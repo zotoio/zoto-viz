@@ -17,3 +17,15 @@ export async function pickMosaicPaneWith(
   }
   return true;
 }
+
+export type MosaicOnPanePick = (
+  fromId: string,
+  toId: string,
+) => boolean | Promise<boolean>;
+
+/** Mosaic chrome pick → `switchPaneView` (consent). Used by `main.ts` and pack-start tests. */
+export function mosaicOnPanePickHandler(
+  deps: MosaicPanePickDeps,
+): MosaicOnPanePick {
+  return (fromId, toId) => pickMosaicPaneWith(deps, fromId, toId);
+}
