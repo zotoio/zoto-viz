@@ -20,13 +20,23 @@ function brandIfAssertion(err, isAssertion) {
     if (!branded.has(err)) {
       branded.add(err);
       redAtBrand.set(err, {
-        actual: "actual" in err ? err.actual : undefined,
-        expected: "expected" in err ? err.expected : undefined,
+        actual: toJsonValue("actual" in err ? err.actual : undefined),
+        expected: toJsonValue("expected" in err ? err.expected : undefined),
       });
     }
     lastBranded = err;
   }
   return err;
+}
+
+/** The JSON reporter drops `undefined`, so red values are JSON-normalized (undefined → null). */
+function toJsonValue(value) {
+  if (value === undefined) return null;
+  try {
+    return JSON.parse(JSON.stringify(value)) ?? null;
+  } catch {
+    return String(value);
+  }
 }
 
 function softErrorCount(test) {
