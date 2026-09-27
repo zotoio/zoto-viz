@@ -8,7 +8,7 @@
 |---|--------|
 | **Merge `main` @ `361364e0`** | `f2c833ba7140e90be6a639347727baa0b8efffa1` |
 | **Proven (code)** | `e63a9b4358ebb3bd90e7d4246ded937e05144de6` |
-| **Final tip (branch `HEAD`)** | `cfea47a34f8dd10f536d31f059bb90da710f3110` |
+| **Final tip (branch `HEAD`)** | `95032a0c4e11fd9041c3a870ad3fadc0e49179db` |
 
 **`provenTree` (proven commit, excluding `revert-proofs/`):**
 
@@ -22,7 +22,7 @@ GIT_INDEX_FILE=$(mktemp -u) sh -c 'git read-tree e63a9b4358ebb3bd90e7d4246ded937
 
 (Filtered key was `b3e347a6…` for earlier proven `5add37eb`; it changes when the proven commit moves.)
 
-**HEAD.json at tip:** `finalCommit` must equal branch `HEAD` (`89690adc…`). If `git rev-parse HEAD` ≠ `jq -r .finalCommit revert-proofs/42/HEAD.json`, run once:
+**HEAD.json at tip:** `finalCommit` must equal `git rev-parse HEAD` (currently `95032a0c…`). If it differs (sync commits store the parent hash), run once:
 
 ```bash
 TIP=$(git rev-parse HEAD)
