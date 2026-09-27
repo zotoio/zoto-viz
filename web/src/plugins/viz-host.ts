@@ -3,13 +3,29 @@ import { vizBuildCostMs, vizBuildCostTicksForTile, vizClockMs, vizFrameEpochSec 
 import { type MonoMs, monoMs, monoMsDeltaSec } from "../core/viz-time";
 import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
 import { VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";
-import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
+import { countEligibleSourceHeadlines, parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
+import {
+  bumpFlowProtoVisit,
+  bumpFlowVisit,
+  bumpFrameObject,
+  bumpPacketObject,
+  bumpTalkerObject,
+  resetVizBuildCounters,
+} from "./viz-build-counters";
+import {
+  recordHeadlineDecimation,
+  recordPacketDecimation,
+  recordRfDecimation,
+  recordTalkerDecimation,
+  resetVizDecimationDropStats,
+} from "./viz-decimation-stats";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { applyVizFrameContractV2, resolveVizFrameCollectOpts } from "./viz-frame-collect";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
 
 /** Target frame budget for viz plugin work (60 fps). */
 export const VIZ_FRAME_BUDGET_MS = 16.7;
+export const FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING = 28_500;
 
 export const VIZ_DEFAULT_MAX_BUFFERS = 4;
 export const VIZ_DEFAULT_MAX_BUFFER_FLOATS = 64;
@@ -457,13 +473,23 @@ function talkerScore(d: Device, rates: Map<string, number>, liveMode: boolean): 
 function topTalkers(devices: Device[], flows: Flow[], limit: number, forceLifetimeRates = false): VizTalkerSample[] {
   const rates = devicePacketRateMap(flows);
   const liveMode = !forceLifetimeRates && hasLivePacketRates(rates);
-  return topKByScore(
+  let eligible = 0;
+  for (const d of devices) {
+    if (talkerScore(d, rates, liveMode) > 0) eligible++;
+  }
+  const picked = topKByScore(
     devices,
     limit,
     (d) => talkerScore(d, rates, liveMode),
     (d) => talkerScore(d, rates, liveMode) <= 0,
     (a, b) => (a.ip < b.ip ? -1 : a.ip > b.ip ? 1 : 0),
-  ).map((d) => ({ id: d.ip, rate: talkerScore(d, rates, liveMode), role: d.role }));
+  );
+  const talkers = picked.map((d) => {
+    bumpTalkerObject();
+    return { id: d.ip, rate: talkerScore(d, rates, liveMode), role: d.role };
+  });
+  recordTalkerDecimation(eligible, talkers.length);
+  return talkers;
 }
 
 function rssiFromAliases(aliases: string[] | undefined): number {
@@ -475,7 +501,11 @@ function rssiFromAliases(aliases: string[] | undefined): number {
 
 function rfBeacons(state: StateMsg, limit: number): VizRfBeacon[] {
   const wifi = state.views?.wifi;
-  if (!wifi?.watch?.ssids?.length) return [];
+  if (!wifi?.watch?.ssids?.length) {
+    recordRfDecimation(0, 0);
+    return [];
+  }
+  const eligible = wifi.watch.ssids.length;
   const out: VizRfBeacon[] = [];
   for (const ssid of wifi.watch.ssids.slice(0, limit)) {
     const dev = wifi.devices.find((d) => d.ssid === ssid || (d.names ?? []).includes(ssid));
@@ -485,6 +515,7 @@ function rfBeacons(state: StateMsg, limit: number): VizRfBeacon[] {
       channel: dev?.chan ?? 0,
     });
   }
+  recordRfDecimation(eligible, out.length);
   return out;
 }
 
@@ -511,17 +542,30 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
   const counts = new Map<string, number>();
   const top: ProtoTop[] = [];
   for (const flow of state.flows) {
+    bumpFlowVisit();
     for (const proto of flow.protos ?? []) {
+      bumpFlowProtoVisit();
       const count = (counts.get(proto) ?? 0) + flow.packets;
       counts.set(proto, count);
       upsertProtoTop(top, limit, proto, count);
     }
   }
+  const eligible = counts.size;
   if (top.length <= 1) {
-    return top.map(({ proto, count }) => ({ proto, size: count, field: packetField(count) }));
+    const rows = top.map(({ proto, count }) => {
+      bumpPacketObject();
+      return { proto, size: count, field: packetField(count) };
+    });
+    recordPacketDecimation(eligible, rows.length);
+    return rows;
   }
   top.sort((a, b) => b.count - a.count);
-  return top.map(({ proto, count }) => ({ proto, size: count, field: packetField(count) }));
+  const rows = top.map(({ proto, count }) => {
+    bumpPacketObject();
+    return { proto, size: count, field: packetField(count) };
+  });
+  recordPacketDecimation(eligible, rows.length);
+  return rows;
 }
 
 /**
@@ -535,10 +579,15 @@ function buildVizFrameCore(
   bind?: SourceBind | Record<string, string>,
   forceLifetimeTalkerRates = false,
 ): VizDataFrame {
+  resetVizBuildCounters();
+  resetVizDecimationDropStats();
   const t = vizFrameEpochSec(state.ts);
   const nowClock = vizClockMs();
   const dt = prevVizClockMs > monoMs(0) ? monoMsDeltaSec(prevVizClockMs, nowClock) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
+  const headlineEligible = countEligibleSourceHeadlines(state.sources, parsed);
+  const rawHeadlines = sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed);
+  recordHeadlineDecimation(headlineEligible, rawHeadlines.length);
   return {
     t,
     dt,
@@ -546,7 +595,7 @@ function buildVizFrameCore(
     packets: packetSamples(state, VIZ_MAX_PACKET_SAMPLES),
     rf: rfBeacons(state, VIZ_MAX_RF_SAMPLES),
     talkers: topTalkers(state.devices, state.flows, VIZ_MAX_TALKER_SAMPLES, forceLifetimeTalkerRates),
-    headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed).map((h) => ({
+    headlines: rawHeadlines.map((h) => ({
       id: h.id,
       label: h.label,
       text: h.text.slice(0, 240),
@@ -567,11 +616,13 @@ export function buildVizFrame(
   audio = 0,
   bind?: SourceBind | Record<string, string>,
 ): VizDataFrame {
-  return applyVizFrameContractV2(
+  const frame = applyVizFrameContractV2(
     buildVizFrameCore(state, prevVizClockMs, audio, bind),
     state,
     resolveVizFrameCollectOpts(state),
   );
+  bumpFrameObject();
+  return frame;
 }
 
 /** Host build when v1 packs are registered: lifetime talker rates, contract 1 input to the v1 adapter. */
@@ -612,12 +663,17 @@ export function buildVizFrameForPlugin(
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
 export class VizFrameBudget {
   private _lastMs = 0;
+  private _p95Ms = 0;
   private _overBudget = 0;
   private _skipped = 0;
   private _total = 0;
   private _lastBuilt: VizDataFrame | null = null;
   private _lastPresent = -1;
   private _lastTileSkipped = 0;
+  private _gpuAvailable = false;
+  private readonly _gpuSamples = new Float32Array(32);
+  private _gpuSampleLen = 0;
+  private _gpuSampleStart = 0;
   private readonly now: () => number;
   private tileId: string;
 
@@ -637,8 +693,8 @@ export class VizFrameBudget {
       overBudget: this._overBudget,
       skipped: this._skipped,
       total: this._total,
-      timingSource: "cpu",
-      hasSamples: this._total > 0,
+      timingSource: this._gpuAvailable && this._gpuSampleLen > 0 ? "gpu" : "cpu",
+      hasSamples: this._total > 0 || this._gpuSampleLen > 0,
       p95Ms: this.p95ForGovernor(),
     };
   }
@@ -732,13 +788,38 @@ export class VizFrameBudget {
     tile.lastBuildCostTicks = null;
     tile.hudRingCount = 0;
     tile.hudRingNext = 0;
+    this._gpuSampleLen = 0;
+    this._gpuSampleStart = 0;
+    this._p95Ms = 0;
+    this._gpuAvailable = false;
   }
 
-  setGpuTimerAvailable(_ok: boolean): void {}
+  setGpuTimerAvailable(ok: boolean): void {
+    this._gpuAvailable = ok;
+    if (!ok) {
+      this._gpuSampleLen = 0;
+      this._gpuSampleStart = 0;
+    }
+  }
 
-  noteGpuMs(_ms: number): void {}
+  noteGpuMs(ms: number): void {
+    if (!this._gpuAvailable || !Number.isFinite(ms) || ms <= 0) return;
+    this._lastMs = ms;
+    const cap = this._gpuSamples.length;
+    if (this._gpuSampleLen < cap) {
+      this._gpuSamples[(this._gpuSampleStart + this._gpuSampleLen) % cap] = ms;
+      this._gpuSampleLen++;
+    } else {
+      this._gpuSamples[this._gpuSampleStart] = ms;
+      this._gpuSampleStart = (this._gpuSampleStart + 1) % cap;
+    }
+    const sorted = Array.from(this._gpuSamples.subarray(0, this._gpuSampleLen)).sort((a, b) => a - b);
+    const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * 0.95) - 1));
+    this._p95Ms = sorted[idx] ?? ms;
+  }
 
   p95ForGovernor(): number {
+    if (this._gpuAvailable && this._gpuSampleLen > 0) return this._p95Ms;
     return this._lastMs;
   }
 }

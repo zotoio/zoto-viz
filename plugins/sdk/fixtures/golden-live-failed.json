@@ -49,53 +49,55 @@
   "talkers": [
     {
       "id": "host-02",
-      "rate": 120,
+      "rate": 10.75,
       "role": "gateway"
     },
     {
-      "id": "host-10",
-      "rate": 95,
-      "role": "internet"
-    },
-    {
       "id": "host-06",
-      "rate": 88,
+      "rate": 6,
       "role": "self"
     },
     {
-      "id": "host-01",
-      "rate": 72,
-      "role": "internet"
+      "id": "host-05",
+      "rate": 5,
+      "role": "lan"
     },
     {
       "id": "host-03",
-      "rate": 64,
+      "rate": 4,
+      "role": "lan",
+      "failed": 0.5
+    },
+    {
+      "id": "host-07",
+      "rate": 4,
       "role": "lan"
     },
     {
       "id": "host-04",
-      "rate": 52,
+      "rate": 3,
+      "role": "lan",
+      "failed": 0.35
+    },
+    {
+      "id": "host-08",
+      "rate": 2,
       "role": "lan"
     },
     {
       "id": "host-09",
-      "rate": 48,
+      "rate": 1.75,
       "role": "internet"
     },
     {
-      "id": "host-05",
-      "rate": 41,
-      "role": "lan"
+      "id": "host-10",
+      "rate": 1.25,
+      "role": "internet"
     },
     {
-      "id": "host-07",
-      "rate": 36,
-      "role": "lan"
-    },
-    {
-      "id": "host-08",
-      "rate": 28,
-      "role": "lan"
+      "id": "host-01",
+      "rate": 1,
+      "role": "internet"
     }
   ],
   "headlines": [
@@ -134,5 +136,78 @@
     "sockets": 0,
     "failed": 0.75,
     "udev": 0
-  }
+  },
+  "contract": 2,
+  "links": [
+    {
+      "src": "10.0.0.1",
+      "dst": "104.16.0.1",
+      "rate": 7
+    },
+    {
+      "src": "10.0.0.42",
+      "dst": "10.0.0.1",
+      "rate": 6
+    },
+    {
+      "src": "10.0.0.33",
+      "dst": "8.8.8.8",
+      "rate": 5
+    },
+    {
+      "src": "10.0.0.15",
+      "dst": "10.0.0.1",
+      "rate": 4
+    },
+    {
+      "src": "10.0.0.51",
+      "dst": "1.1.1.1",
+      "rate": 4
+    },
+    {
+      "src": "10.0.0.22",
+      "dst": "10.0.0.1",
+      "rate": 3
+    },
+    {
+      "src": "10.0.0.77",
+      "dst": "10.0.0.1",
+      "rate": 2
+    },
+    {
+      "src": "104.16.0.1",
+      "dst": "10.0.0.1",
+      "rate": 1.75
+    },
+    {
+      "src": "10.0.0.1",
+      "dst": "10.0.0.42",
+      "rate": 1.5
+    },
+    {
+      "src": "8.8.8.8",
+      "dst": "10.0.0.33",
+      "rate": 1.25
+    },
+    {
+      "src": "1.1.1.1",
+      "dst": "10.0.0.51",
+      "rate": 1
+    },
+    {
+      "src": "10.0.0.1",
+      "dst": "10.0.0.15",
+      "rate": 1
+    },
+    {
+      "src": "10.0.0.1",
+      "dst": "10.0.0.22",
+      "rate": 0.75
+    },
+    {
+      "src": "10.0.0.1",
+      "dst": "10.0.0.77",
+      "rate": 0.5
+    }
+  ]
 }

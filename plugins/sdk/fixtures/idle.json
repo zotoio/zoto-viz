@@ -26,12 +26,12 @@
   ],
   "rf": [
     {
-      "ssid": "host-04",
+      "ssid": "host-05",
       "rssi": 0.55,
       "channel": 36
     },
     {
-      "ssid": "host-05",
+      "ssid": "host-06",
       "rssi": 0.42,
       "channel": 6
     }
@@ -51,6 +51,11 @@
       "id": "host-03",
       "rate": 64,
       "role": "internet"
+    },
+    {
+      "id": "host-04",
+      "rate": 40,
+      "role": "lan"
     }
   ],
   "headlines": [
@@ -85,5 +90,6 @@
     "rf": true,
     "talkers": true,
     "headlines": true
-  }
+  },
+  "contract": 1
 }

@@ -36,14 +36,34 @@ function mountIndexDom(): void {
   document.body.replaceChildren(...Array.from(doc.body.children).map((n) => n.cloneNode(true)));
 }
 
+function stub2dContext(): CanvasRenderingContext2D {
+  const pattern = { setTransform: () => {} } as CanvasPattern;
+  const ctx = {
+    setTransform: () => {},
+    clearRect: () => {},
+    fillRect: () => {},
+    createPattern: () => pattern,
+    fillStyle: "",
+  };
+  return ctx as CanvasRenderingContext2D;
+}
+
 function stubGl(): void {
+  const GL_VERSION = 0x1f00;
+  const GL_MAX_VERTEX_ATTRIBS = 0x8869;
+  const GL_MAX_TEXTURE_IMAGE_UNITS = 0x8872;
   const gl = {
     canvas: { width: 300, height: 150 },
     getExtension: () => null,
     getShaderPrecisionFormat: () => ({ precision: 23, rangeMin: 127, rangeMax: 127 }),
     getContextAttributes: () => ({ antialias: false }),
     fenceSync: () => ({}),
-    getParameter: () => 0,
+    getParameter: (p: number) => {
+      if (p === GL_VERSION) return "WebGL 2.0";
+      if (p === GL_MAX_VERTEX_ATTRIBS) return 16;
+      if (p === GL_MAX_TEXTURE_IMAGE_UNITS) return 16;
+      return 0;
+    },
     viewport: () => {},
     scissor: () => {},
     clearColor: () => {},
@@ -73,7 +93,7 @@ function stubGl(): void {
     deleteBuffer: () => {},
   };
   HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, id: string) {
-    if (id === "2d") return { setTransform: () => {}, clearRect: () => {}, fillRect: () => {} } as CanvasRenderingContext2D;
+    if (id === "2d") return stub2dContext();
     return gl as WebGL2RenderingContext;
   };
 }

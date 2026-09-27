@@ -3,6 +3,7 @@ import {
   PACK_MSAA_SAMPLES,
   PackMirrorRegistry,
   SandboxBitmapGl,
+  type PackMirrorHostGl,
 } from "./pack-mirror-gl";
 import {
   createPackMirrorArrowCanvas,
@@ -13,6 +14,8 @@ import {
 } from "./pack-mirror-quadrant-fixture";
 import { letterboxInnerRectInto, surfaceLetterboxFill } from "./letterbox-fill";
 import {
+  asCanvasDeviceHeight,
+  asCssRect,
   cssRect,
   cssRectTopFromBottomLeft,
   deviceSizeFromCssBox,
@@ -184,8 +187,8 @@ export async function runPackMirrorReadbackInPage(
     alpha: false,
     preserveDrawingBuffer: true,
   });
-  rd.setPixelRatio(rendererDpr);
-  rd.setSize(200, 120, false);
+  rd.setPixelRatio(1);
+  rd.setSize(Math.round(200 * rendererDpr), Math.round(120 * rendererDpr), false);
   wall.appendChild(rd.domElement);
   rd.setScissorTest(false);
   rd.setViewport(0, 0, 200, 120);
@@ -200,36 +203,46 @@ export async function runPackMirrorReadbackInPage(
   if (!dbg) throw new Error("WEBGL_debug_renderer_info unavailable");
   const glRenderer = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
   if (!glRenderer) throw new Error("GL renderer string empty");
-  const pr = rd.getPixelRatio();
+  const pr = rendererDpr;
   const canvasDeviceHeight = rd.domElement.height;
   const { pw, ph } = deviceSizeFromCssBox(primaryBox, pr);
   const sceneFactory = mode === "quadrant" ? quadrantScene : arrowScene;
 
   if (input.path === "host") {
+    const hostGl: PackMirrorHostGl = {
+      layoutPixelRatio: pr,
+      canvasCssHeight: HARNESS_CSS_HEIGHT,
+      canvasDeviceHeight: asCanvasDeviceHeight(canvasDeviceHeight),
+    };
     const reg = new PackMirrorRegistry();
     reg.syncScopes(new Map([["plugin:arrow", { tileCount: 2, antialias: input.antialias }]]));
     const { scene, camera } = sceneFactory(pw, ph);
-    reg.renderPrimary("plugin:arrow", rd, scene, camera, primaryBox, 0x0a1020, input.antialias);
+    reg.renderPrimary("plugin:arrow", rd, scene, camera, primaryBox, 0x0a1020, input.antialias, hostGl);
     reg.presentPack("plugin:arrow", rd, primaryBox, {
       letterbox: false,
       fill: null,
       aspect: primaryBox.w / primaryBox.h,
-    });
+    }, hostGl);
     reg.presentPack("plugin:arrow", rd, mirrorBox, {
       letterbox: true,
       fill,
       aspect: primaryBox.w / primaryBox.h,
-    });
+    }, hostGl);
     reg.dispose();
   } else {
+    const hostGl: PackMirrorHostGl = {
+      layoutPixelRatio: pr,
+      canvasCssHeight: HARNESS_CSS_HEIGHT,
+      canvasDeviceHeight: asCanvasDeviceHeight(canvasDeviceHeight),
+    };
     const gpu = new SandboxBitmapGl();
     const canvas = mode === "quadrant" ? createPackMirrorQuadrantCanvas() : createPackMirrorArrowCanvas();
     const bmp = await createImageBitmap(canvas);
     const tex = gpu.uploadFrame(bmp);
     if (!tex) throw new Error("sandbox texture upload failed");
-    gpu.present(rd, tex, fill, mirrorBox, primaryBox.w / primaryBox.h);
+    gpu.present(rd, tex, fill, asCssRect(mirrorBox), primaryBox.w / primaryBox.h, hostGl);
     bmp.close();
-    regPresentPrimaryForSandbox(rd, primaryBox, pw, ph, input.antialias, sceneFactory);
+    regPresentPrimaryForSandbox(rd, primaryBox, input.antialias, sceneFactory, hostGl);
     gpu.dispose();
   }
 
@@ -381,19 +394,19 @@ export async function runPackMirrorReadbackInPage(
 function regPresentPrimaryForSandbox(
   rd: THREE.WebGLRenderer,
   primaryBox: ReturnType<typeof cssRect>,
-  pw: number,
-  ph: number,
   antialias: boolean,
   sceneFactory: (pw: number, ph: number) => { scene: THREE.Scene; camera: THREE.Camera },
+  hostGl: PackMirrorHostGl,
 ): void {
   const reg = new PackMirrorRegistry();
   reg.syncScopes(new Map([["plugin:arrow", { tileCount: 2, antialias }]]));
+  const { pw, ph } = deviceSizeFromCssBox(primaryBox, hostGl.layoutPixelRatio);
   const { scene, camera } = sceneFactory(pw, ph);
-  reg.renderPrimary("plugin:arrow", rd, scene, camera, primaryBox, 0x0a1020, antialias);
-  reg.presentPack("plugin:arrow", rd, primaryBox, {
+  reg.renderPrimary("plugin:arrow", rd, scene, camera, primaryBox, 0x0a1020, antialias, hostGl);
+  reg.presentPack("plugin:arrow", rd, asCssRect(primaryBox), {
     letterbox: false,
     fill: null,
     aspect: primaryBox.w / primaryBox.h,
-  });
+  }, hostGl);
   reg.dispose();
 }

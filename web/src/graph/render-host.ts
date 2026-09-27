@@ -37,10 +37,12 @@ import {
   type CssRectLoose,
   type DeviceRect,
   type DeviceRectMut,
+  type GlRectMut,
   asCssRect,
   cssRectTopFromBottomLeft,
   toDeviceRectInto,
 } from "./pack-mirror-rect";
+import { applyHostViewBoxToGlRenderer } from "./render-host-gl-adapter";
 import { renderHostMirrorTelemetry } from "./render-host-telemetry";
 import {
   configureLayoutMaxDevicePxRatio,
@@ -87,7 +89,7 @@ export type Viewport = DeviceRect;
 
 /**
  * Canvas backing-store pixels (`canvas.width` / `canvas.height`), not CSS layout.
- * Sized from the wall viewport × devicePixelRatio, capped at 1.5× for stability.
+ * Sized from the wall viewport × DPR, capped at 1.5× for stability.
  */
 export interface DevicePixelSize {
   w: number;
@@ -150,6 +152,8 @@ export class RenderHost {
     ] as LetterboxBarScratch,
   };
   private readonly fbViewport: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly glViewportScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly deviceViewportScratch: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
   private readonly packScopeScratch = new Map<string, { tileCount: number; antialias: boolean }>();
   private readonly sandboxScopeScratch = new Map<string, number>();
   private mirrorScopeDirty = true;
@@ -269,7 +273,9 @@ export class RenderHost {
       this.packMirrors.beginFrame();
       this.syncMirrorScopesIfNeeded();
       const frameTs = frameTsFromRaf(ts);
-      for (const v of this.views) v.hostFrame(frameTs);
+      if (!this.glContextLost) {
+        for (const v of this.views) v.hostFrame(frameTs);
+      }
       finishSandboxBitmapHostFrame();
     };
     this.raf = requestAnimationFrame(this.frame);
@@ -418,7 +424,7 @@ export class RenderHost {
     if (!key) return null;
     const rect = this.packMirrors.presentPack(key, rd, asCssRect(dst), { letterbox: true, fill, aspect });
     if (!rect) return null;
-    return this.writeFbViewport(dst, rd.getPixelRatio());
+    return this.writeFbViewport(dst, this.pr);
   }
 
   /**
@@ -456,7 +462,7 @@ export class RenderHost {
       }
       const rd = this.renderer as THREE.WebGLRenderer;
       const gpu = sandboxBitmapGl(pluginId);
-      const pr = rd.getPixelRatio();
+      const pr = this.pr;
       const tex = gpu.uploadFrame(bitmap);
       if (!tex) return null;
       gpu.present(rd, tex, fill, asCssRect(dst), aspect);
@@ -496,7 +502,7 @@ export class RenderHost {
     }
     const rd = this.renderer as THREE.WebGLRenderer;
     paintLetterboxBarsThree(rd, fill, asCssRect(dst), asCssRect(innerAbs), this.letterboxScratch.bars);
-    return this.writeFbViewport(dst, rd.getPixelRatio());
+    return this.writeFbViewport(dst, this.pr);
   }
 
   presentSandboxMirrorPlaceholder(
@@ -531,7 +537,7 @@ export class RenderHost {
       rd.setClearColor(letterboxFillHex(fill), 1);
       rd.clear(true, false, false);
     }
-    const pr = this.software ? this.pr : (this.renderer as THREE.WebGLRenderer).getPixelRatio();
+    const pr = this.software ? this.pr : this.pr;
     return this.writeFbViewport(dst, pr);
   }
 
@@ -557,6 +563,9 @@ export class RenderHost {
     if (!this.viewBoxInto(view, this.viewBoxScratch)) return null;
     const box = this.viewBoxScratch;
     const { x, y, w, h } = box;
+    if (!this.software && this.glContextLost) {
+      return this.writeFbViewport(box, this.pr);
+    }
     if (this.software) {
       const ctx = this.ctx2d;
       if (ctx) {
@@ -575,7 +584,7 @@ export class RenderHost {
     }
     const rd = this.renderer as THREE.WebGLRenderer;
     const gl = this.gl;
-    const pr = rd.getPixelRatio();
+    const pr = this.pr;
     const meta = packMirrorMeta(view);
     const tileCount = meta.packCoalesceTileCount ?? 0;
     const packKey = meta.packCoalesceGroupKey;
@@ -646,11 +655,17 @@ export class RenderHost {
     const box = this.gpuTimedBox;
     const scene = this.gpuTimedScene;
     const camera = this.gpuTimedCamera;
-    if (!box || !scene || !camera) return;
+    if (!box || !scene || !camera || this.glContextLost) return;
     const rd = this.renderer as THREE.WebGLRenderer;
-    rd.setViewport(box.x, box.y, box.w, box.h);
-    rd.setScissor(box.x, box.y, box.w, box.h);
-    rd.setScissorTest(true);
+    applyHostViewBoxToGlRenderer(
+      rd,
+      box,
+      this.h,
+      this.pr,
+      this._canvasDeviceHeight,
+      this.deviceViewportScratch,
+      this.glViewportScratch,
+    );
     rd.setClearColor(this.gpuTimedClearHex, 1);
     rd.render(scene, camera);
   };
@@ -747,7 +762,8 @@ export class RenderHost {
   private refreshContextAntialias(): void {
     renderHostMirrorTelemetry.getContextAttributesCalls += 1;
     const gl = this.gl;
-    this.contextAntialias = gl?.getContextAttributes()?.antialias === true;
+    this.contextAntialias = typeof gl?.getContextAttributes === "function"
+      && gl.getContextAttributes()?.antialias === true;
   }
 
   refreshCanvasDeviceHeight(): void {

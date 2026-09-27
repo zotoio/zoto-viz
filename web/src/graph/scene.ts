@@ -1068,6 +1068,8 @@ export interface SceneOpts {
   satellite?: boolean;
   /** draw through a shared context (one canvas for the whole wall) instead of owning a canvas */
   host?: RenderHost;
+  /** mosaic pane id (`main` solo, or tile id) — keys tile shader fallback on the host */
+  tileId?: string;
   /** mosaic tile id (`plugin:…`) for lifecycle / leak tests */
   panelId?: string;
 }
@@ -1236,6 +1238,7 @@ export class NetScene implements HostedView {
   private readonly dragVel = new THREE.Vector3();
   private readonly baseFov = 55;
   private readonly satellite: boolean;
+  readonly tileId: string;
   private panelId: string | null;
   private releasePanelRaf: (() => void) | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
@@ -1305,7 +1308,8 @@ export class NetScene implements HostedView {
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
     this.paneFps = new PaneFps(container);
     this.satellite = !!opts.satellite;
-    this.panelId = opts.panelId ?? null;
+    this.tileId = opts.tileId ?? opts.panelId ?? "main";
+    this.panelId = opts.panelId ?? opts.tileId ?? null;
     if (this.panelId) this.releasePanelRaf = claimPanelRaf(this.panelId);
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
@@ -2041,8 +2045,39 @@ export class NetScene implements HostedView {
   }
 
   /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */
-  setPluginShader(opts: { id: string; source: string } | null): string | null {
-    return this.backdrop.setPluginShader(opts);
+  setPluginShader(
+    opts: { id: string; source: string } | null,
+    meta?: {
+      packId: string;
+      packName: string;
+      look?: Record<string, string>;
+      packKey?: string;
+      isShaderPack?: boolean;
+    },
+  ): string | null {
+    if (opts && meta && this.host) {
+      this.host.beginTilePack(
+        this.tileId,
+        meta.packKey ?? meta.packId,
+        meta.packId,
+        this.container,
+        meta.packName,
+        meta.isShaderPack ?? true,
+      );
+    }
+    const gpuProbe = this.host && opts && meta
+      ? () => this.host!.probeTileSky(
+        this.tileId,
+        this.scene,
+        this.camera,
+        (m) => console.warn("zoto-viz tile shader:", m),
+      )
+      : undefined;
+    if (!opts) {
+      this.host?.clearShaderFallback(this.tileId);
+      return this.backdrop.setPluginShader(null, gpuProbe);
+    }
+    return this.backdrop.setPluginShader(opts, gpuProbe);
   }
 
   setPluginUniform(name: string, value: number | [number, number, number]): boolean {

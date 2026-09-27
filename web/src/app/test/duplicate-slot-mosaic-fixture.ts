@@ -18,6 +18,7 @@ export function stubNetSceneForMosaic(): NetScene {
     setCompactLabels: () => {},
     relayout: () => {},
     setMode: () => {},
+    retargetPanel: () => {},
     setPackCoalesce: () => {},
     dreamAnim: DEFAULT_DREAM,
     pluginSkyId: null,

@@ -1,7 +1,8 @@
 /** IN-18 Nixie clock — local time packed into sky slots. */
 
 import { packNixieBuffer, parseNixieLook, type NixieLook } from "./tubes";
-import type { VizDataFrame } from "../../../sdk/viz-contract";
+import type { VizDataFrame, VizZotoPluginHooks } from "../../../sdk/viz-contract";
+void (null as VizZotoPluginHooks | null);
 import { getVizZoto } from "plugins/sdk/viz-zoto";
 
 const host = getVizZoto();

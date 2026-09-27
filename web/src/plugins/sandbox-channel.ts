@@ -17,7 +17,7 @@ export type HostBootPayload = {
   caps: string[];
   config: Record<string, string>;
   viz?: unknown;
-  contractVersion?: unknown;
+  contractVersion?: number;
   moduleSrc: string;
   bootNonce: string;
   parentOrigin: string;
@@ -46,6 +46,8 @@ export type PluginPortMsg =
       particles?: { data: number[]; stride?: number };
     };
   }
+  | { source: typeof PLUGIN_SOURCE; type: "publishBitmap"; payload: { bitmap: ImageBitmap } }
+  | { source: typeof PLUGIN_SOURCE; type: "publishBitmapFailed"; payload: Record<string, never> }
   | { source: typeof PLUGIN_SOURCE; type: "log"; payload: string };
 
 export function isHostBootChannel(data: unknown): data is HostBootChannelMsg {

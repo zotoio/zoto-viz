@@ -10,6 +10,7 @@ import {
   sandboxBitmapGpuCount,
   syncSandboxBitmapGpuScopes,
 } from "./pack-mirror-gl";
+import { deviceSizeFromCssBox } from "./pack-mirror-rect";
 import { surfaceLetterboxFill } from "./letterbox-fill";
 
 function stubRenderer(antialias: boolean, pr = 1): THREE.WebGLRenderer {
@@ -110,9 +111,16 @@ describe("PackMirrorSession resource lifecycle", () => {
     const session = new PackMirrorSession();
     const rd = stubRenderer(false);
     const { scene, camera } = emptyScene();
-    for (let i = 0; i < 300; i++) session.renderPack(rd, scene, camera, 64, 48, 0x0a1020, false);
+    const box64 = { x: 0, y: 0, w: 64, h: 48 };
+    const pr = rd.getPixelRatio();
+    for (let i = 0; i < 300; i++) {
+      const { pw, ph } = deviceSizeFromCssBox(box64, pr);
+      session.renderPack(rd, scene, camera, box64, pw, ph, 0x0a1020, false);
+    }
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
-    session.renderPack(rd, scene, camera, 96, 72, 0x0a1020, false);
+    const box96 = { x: 0, y: 0, w: 96, h: 72 };
+    const resized = deviceSizeFromCssBox(box96, pr);
+    session.renderPack(rd, scene, camera, box96, resized.pw, resized.ph, 0x0a1020, false);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(1);
     session.dispose();
   });

@@ -112,7 +112,7 @@ describe("pack scope note", () => {
     };
     const host = document.createElement("div");
     fillPluginFields(host, spec, spec.config ?? [], () => {}, { wallScope: scope });
-    expect(host.querySelector(".plugin-pack-scope-note")?.textContent).toContain("Applies to all");
+    expect(host.querySelector(".plugin-pack-scope-note")?.textContent).toContain("Changes apply to all");
     expect(countTilesSharingConfigStore(spec, scope.tileModeIds)).toBe(2);
   });
 

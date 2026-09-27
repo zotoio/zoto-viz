@@ -12,6 +12,49 @@ import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
 import type { SdmDevice } from "./nest-cams-look";
+/** Visible label beside the field caption when the value differs from default. */
+export const FIELD_EDITED_LABEL = "Edited";
+
+/** Screen-reader hint when a control differs from its schema default (not colour-only). */
+export const FIELD_EDITED_ARIA = "Unsaved change";
+
+function syncSectionSummaryEdited(details: HTMLDetailsElement): void {
+  const sum = details.querySelector("summary");
+  if (!sum) return;
+  const dirtyInside = !!details.querySelector(".field-dirty");
+  const show = dirtyInside && !details.open;
+  if (show) {
+    if (!sum.querySelector(".field-edited-cue")) {
+      const cue = document.createElement("span");
+      cue.className = "field-edited-cue";
+      cue.textContent = FIELD_EDITED_LABEL;
+      cue.setAttribute("aria-hidden", "true");
+      sum.append(cue);
+    }
+  } else {
+    sum.querySelector(".field-edited-cue")?.remove();
+  }
+}
+
+function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
+  el.classList.toggle("field-dirty", dirty);
+  if (dirty) {
+    el.setAttribute("aria-description", FIELD_EDITED_ARIA);
+    if (!el.querySelector(".field-edited-cue")) {
+      const cue = document.createElement("span");
+      cue.className = "field-edited-cue";
+      cue.textContent = FIELD_EDITED_LABEL;
+      cue.setAttribute("aria-hidden", "true");
+      const cap = el.querySelector(".cap");
+      if (cap?.parentElement === el) cap.before(cue);
+      else el.prepend(cue);
+    }
+  } else {
+    el.removeAttribute("aria-description");
+    el.querySelector(".field-edited-cue")?.remove();
+  }
+}
+
 import {
   applyPresetToValues,
   buildPluginHudCaption,
@@ -33,6 +76,15 @@ import {
   undoRingDepth,
   isMetaConfigKey,
 } from "./plugin-settings";
+
+/** Pack info `.sec-hint` line (id / version / engine + optional workBudget note). */
+export function pluginPackMetaLine(spec: PluginView): string {
+  const base = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
+  if (spec.workBudgetLimited) {
+    return `${base}. ${spec.workBudgetLimited}`;
+  }
+  return base;
+}
 
 export type PluginHudCaptionSink = (spec: PluginView, caption: string | null) => void;
 
@@ -120,6 +172,11 @@ function updateDirtyMarkers(ctx: PanelCtx): void {
     const baseline = fieldBaselineForDirty(ctx.spec, ctx.fields, ctx.values, f.key);
     const dirty = baseline !== undefined && String(current) !== String(baseline);
     wrap.classList.toggle("field-dirty", dirty);
+    const control = wrap.querySelector<HTMLElement>("label.slider, label.toggle");
+    syncFieldEditedMarkers(control ?? wrap, dirty);
+  }
+  for (const details of ctx.host.querySelectorAll<HTMLDetailsElement>("details.sec-collapsible")) {
+    syncSectionSummaryEdited(details);
   }
 }
 
@@ -170,6 +227,7 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
   wrap.setAttribute("data-field-key", f.key);
   if (dirty) wrap.classList.add("field-dirty");
   ctx.fieldHosts.set(f.key, wrap);
+  const markControl = (el: HTMLElement) => syncFieldEditedMarkers(el, dirty);
   if (f.type === "boolean") {
     const t = new Toggle({
       label: f.label,
@@ -182,6 +240,7 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
       },
     });
     wrap.append(t.el);
+    markControl(t.el);
   } else if (f.type === "select" && f.values?.length) {
     const s = new Select({
       caption: f.label,
@@ -198,6 +257,7 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
   } else if (f.type === "number") {
     const min = f.min ?? 0;
     const max = f.max ?? Math.max(min + 1, 100);
+    const preview = panelMounts.get(ctx.host)?.opts?.onFieldInput;
     const sl = new Slider({
       label: f.label,
       title: f.hint,
@@ -207,11 +267,23 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
       value: Number(current),
       onInput: (v) => {
         values[f.key] = String(v);
-        persistValues(ctx);
-        updateDirtyMarkers(ctx);
+        if (preview) {
+          preview(f.key, String(v));
+          updateDirtyMarkers(ctx);
+        } else {
+          persistValues(ctx);
+          updateDirtyMarkers(ctx);
+        }
       },
     });
+    if (preview) {
+      sl.el.querySelector("input")?.addEventListener("change", () => {
+        persistValues(ctx);
+        updateDirtyMarkers(ctx);
+      });
+    }
     wrap.append(sl.el);
+    markControl(sl.el);
   } else {
     const tf = new TextField({
       caption: f.label,
@@ -229,13 +301,38 @@ function appendFieldControl(ctx: PanelCtx, row: HTMLElement, f: PluginField): vo
   row.append(wrap);
 }
 
+function viewLayerForScopeNote(root: HTMLElement): HTMLElement {
+  return root.querySelector<HTMLElement>('.plugin-layer[data-layer="view"]') ?? root;
+}
+
 function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWallScope): void {
   const text = packScopeNoteText(spec, wall);
   if (!text) return;
   const note = document.createElement("div");
   note.className = "sec-hint plugin-pack-scope-note";
   note.textContent = text;
-  host.append(note);
+  const layer = viewLayerForScopeNote(host);
+  const anchor = layer.querySelector(".sec-title");
+  if (anchor?.parentElement === layer && anchor.nextSibling) {
+    layer.insertBefore(note, anchor.nextSibling);
+  } else {
+    layer.append(note);
+  }
+}
+
+/** Keep pack scope copy in sync with the live mosaic tile list (drawer may stay open). */
+export function syncPackScopeNote(root: HTMLElement, spec: PluginView, wall?: PackWallScope): void {
+  const text = packScopeNoteText(spec, wall);
+  const existing = root.querySelector(".plugin-pack-scope-note");
+  if (!text) {
+    existing?.remove();
+    return;
+  }
+  if (existing instanceof HTMLElement) {
+    if (existing.textContent !== text) existing.textContent = text;
+    return;
+  }
+  mountPackScopeNote(viewLayerForScopeNote(root), spec, wall);
 }
 
 function mountSettingsToolbar(ctx: PanelCtx, host: HTMLElement): void {
@@ -378,7 +475,8 @@ function mountSectionedFields(ctx: PanelCtx, host: HTMLElement, compact: PluginF
       sum.textContent = title;
       container.append(sum);
       container.addEventListener("toggle", () => {
-        rememberSectionOpen(ctx.storeId, title, container.open);
+        if (sectionDecl.length) rememberSectionOpen(ctx.storeId, title, container.open);
+        syncSectionSummaryEdited(container);
       });
     } else {
       container.className = "sec";
@@ -396,7 +494,13 @@ type PanelMount = {
   spec: PluginView;
   fields: PluginField[];
   onPersist: (id: string, values: Record<string, string>) => void;
-  opts?: { skipEmpty?: boolean; devices?: SdmDevice[] };
+  opts?: {
+    skipEmpty?: boolean;
+    devices?: SdmDevice[];
+    wallScope?: PackWallScope;
+    draftValues?: Record<string, string>;
+    onFieldInput?: (key: string, value: string) => void;
+  };
   announcer: HTMLElement;
   values?: Record<string, string>;
 };
@@ -424,7 +528,13 @@ export function fillPluginFields(
   spec: PluginView,
   fields: PluginField[],
   onPersist: (id: string, values: Record<string, string>) => void,
-  opts?: { skipEmpty?: boolean; devices?: SdmDevice[]; wallScope?: PackWallScope },
+  opts?: {
+    skipEmpty?: boolean;
+    devices?: SdmDevice[];
+    wallScope?: PackWallScope;
+    draftValues?: Record<string, string>;
+    onFieldInput?: (key: string, value: string) => void;
+  },
   existingAnnouncer?: HTMLElement,
   seedValues?: Record<string, string>,
 ): void {
@@ -436,7 +546,11 @@ export function fillPluginFields(
   }
   placeSettingsAnnouncer(host, announcer);
   panelMounts.set(host, { host, spec, fields, onPersist, opts, announcer });
-  const values = seedValues ? { ...seedValues } : loadPluginConfig(spec, fields);
+  const values = {
+    ...loadPluginConfig(spec, fields),
+    ...opts?.draftValues,
+    ...(seedValues ?? {}),
+  };
   if (hasDeclaredSettings(spec)) markPresetConsistency(spec, fields, values);
   const head = document.createElement("div");
   head.className = "sec";
@@ -445,7 +559,7 @@ export function fillPluginFields(
   title.textContent = specCaption(spec);
   const meta = document.createElement("div");
   meta.className = "sec-hint";
-  meta.textContent = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
+  meta.textContent = pluginPackMetaLine(spec);
   head.append(title, meta);
   let knobs = fields;
   if (spec.id === "nest-cams") {
@@ -487,7 +601,7 @@ export function fillPluginFields(
   if (showSettingsToolbar(spec, fields)) {
     mountSettingsToolbar(ctx, host);
     mountSectionedFields(ctx, host, compact);
-  } else if (hasDeclaredSettings(spec)) {
+  } else if (hasDeclaredSettings(spec) || compact.some((f) => f.section)) {
     mountSectionedFields(ctx, host, compact);
   } else if (compact.length) {
     const sec = document.createElement("div");

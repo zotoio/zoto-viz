@@ -219,6 +219,10 @@ export interface PluginView {
   /** visualisation.yml idle golden mock — graph / arcade when capture is quiet. */
   idle?: PluginIdleConfig;
   viz?: VizPluginContract;
+  /** Host-clamped visualisation.yml workBudget (#45). */
+  workBudget?: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget;
+  /** Set when the host clamped workBudget below what the pack asked for. */
+  workBudgetLimited?: string;
   typesafe?: TypeSafeContract;
   hash?: string;
   sha256?: string;
@@ -548,7 +552,7 @@ function compileGraph(spec: PluginView): ViewMode {
   const mode: ViewMode = {
     ...base,
     id: pluginViewId(spec.id, spec.instanceId),
-    label: spec.name,
+    label: tileDisplayName(spec),
     hint: spec.hint || base.hint,
     pluginId: spec.id,
     kind: catalogKindOf(spec),
@@ -693,7 +697,7 @@ export function specCaption(spec: PluginView): string {
   const dispatch = engineDispatch(spec);
   return viewCaption({
     id: spec.id,
-    label: spec.name,
+    label: tileDisplayName(spec),
     graphBase: dispatch.graphBase,
     arcadeId: dispatch.arcadeId,
   });

@@ -1393,8 +1393,18 @@ def _scan_payload(
     }
 
 
-def _file_token(path: Path) -> tuple[str, int, int]:
+def _is_pack_asset_watch_file(path: Path) -> bool:
+    """True for files under a plugin ``assets/`` tree (memo must see byte changes)."""
+    parts = path.parts
+    if len(parts) < 2 or _ASSET_DIR not in parts:
+        return False
+    return parts.index(_ASSET_DIR) < len(parts) - 1
+
+
+def _file_token(path: Path) -> tuple[Any, ...]:
     try:
+        if _is_pack_asset_watch_file(path) and path.is_file() and not path.is_symlink():
+            return (str(path), pz.plugin_sha256(path))
         st = path.stat()
         return (str(path), int(st.st_mtime_ns), int(st.st_size))
     except OSError:

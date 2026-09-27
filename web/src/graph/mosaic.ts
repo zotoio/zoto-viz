@@ -1,5 +1,9 @@
-import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize } from "./scene";
+import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize, type SceneOpts } from "./scene";
 import type { RenderHost } from "./render-host";
+
+export function mosaicSceneOpts(id: string, host: RenderHost): SceneOpts {
+  return { satellite: true, host, tileId: id };
+}
 import { allModes, arcadeSlotFor, hostEngine, modeById, viewCaption, type ViewMode } from "../core/modes";
 import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
@@ -8,7 +12,7 @@ import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
 import {
-  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, parseMosaicNode,
+  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, nextPaneTilesForPicker, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
@@ -20,9 +24,16 @@ import {
   paintPackAssetPaneNotice,
   type PackAssetPaneNoticeOpts,
 } from "../plugins/pack-asset-pane-notice";
+import { mosaicTileViewId } from "./mosaic-tile-id";
+import { applyPackCoalesceLayout } from "./mosaic-pack-coalesce";
+import type { PluginView } from "../plugins/plugin";
 
 export { centerSplit } from "./mosaic-layout";
 export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
+
+function lookForTile(tileSlotId: string) {
+  return lookForMode(mosaicTileViewId(tileSlotId));
+}
 
 /** Wall palette for every tile, or the next unused theme (plugin look wins when free). */
 export function mosaicTileTheme(shared: boolean, wall: Theme, used: Set<string>, prefer?: string | null): Theme {
@@ -76,13 +87,32 @@ export function assignMosaicSkies(
   return out;
 }
 
+/** A plugin-sky look stays `plugin` even if a saved unique-sky plan named a host sky. */
+export function pinPluginTileSkies(
+  skies: Partial<Record<string, BackdropKind>>,
+  ids: string[],
+  existing: Record<string, BackdropKind> = {},
+): Record<string, BackdropKind> {
+  const out: Record<string, BackdropKind> = {};
+  for (const id of ids) {
+    const sky = skies[id] !== undefined ? skies[id]! : existing[id];
+    if (sky !== undefined) out[id] = sky;
+  }
+  for (const id of ids) {
+    if (lookForTile(id)?.backdrop === "plugin") out[id] = "plugin";
+  }
+  return out;
+}
+
 export function mosaicAnimForTile(
   wall: DreamAnim,
   id: string,
   tileSky?: BackdropKind,
 ): DreamAnim {
-  const merged = mergeLook(wall, lookForMode(id));
-  if (tileSky === "plugin") return { ...merged, backdrop: "plugin" };
+  const merged = mergeLook(wall, lookForTile(id));
+  if (lookForTile(id)?.backdrop === "plugin" || tileSky === "plugin") {
+    return { ...merged, backdrop: "plugin" };
+  }
   if (tileSky) return { ...merged, backdrop: tileSky };
   return merged;
 }
@@ -100,6 +130,36 @@ export function mosaicIds(size: MosaicSize, prefer?: string, hero: HeroPos = "of
   }
   const heroId = prefer && pool.includes(prefer) ? prefer : pool[0]!;
   return [heroId, ...pool.filter((id) => id !== heroId).slice(0, n)];
+}
+
+/**
+ * Boot / profile may persist mosaicTree without mosaicTiles. Refresh leaf ids from
+ * `mosaicIds` when counts match so tile 0 shows the primary (prefer) pack view.
+ */
+export function mosaicBootLeafIds(
+  size: MosaicSize,
+  prefer: string | undefined,
+  hero: HeroPos,
+  explicitTiles: readonly string[],
+  parsedLeafIds: readonly string[],
+): string[] | null {
+  if (explicitTiles.length) return null;
+  const fresh = mosaicIds(size, prefer, hero);
+  if (!fresh.length || !parsedLeafIds.length || fresh.length !== parsedLeafIds.length) return null;
+  return fresh;
+}
+
+export function assignParsedMosaicTree(
+  parsed: MosaicNode,
+  size: MosaicSize,
+  prefer?: string,
+  hero: HeroPos = "off",
+  explicitTiles: readonly string[] = [],
+): MosaicNode {
+  const cur = leafIds(parsed);
+  const tiles = parseMosaicTiles(explicitTiles);
+  const bootIds = mosaicBootLeafIds(size, prefer, hero, tiles, cur);
+  return assignTiles(parsed, tiles.length ? tiles : bootIds ?? cur);
 }
 
 /** Graphs first so a dice / new wall is not mostly empty stills or arcade stages. */
@@ -120,11 +180,12 @@ function panePool(): string[] {
  * has not loaded yet, fall back to the host engine (`plugin:memory` → `memory`)
  * so a SYS wall still mounts NetScenes instead of chrome-only panes.
  */
-export function mosaicPaneMode(id: string): ViewMode {
-  const catalog = allModes().find((row) => row.id === id);
+export function mosaicPaneMode(tileSlotId: string): ViewMode {
+  const viewId = mosaicTileViewId(tileSlotId);
+  const catalog = allModes().find((row) => row.id === viewId);
   if (catalog) return catalog;
-  const raw = id.startsWith("plugin:") ? id.slice("plugin:".length) : id;
-  return hostEngine(raw) ?? hostEngine(id) ?? modeById(id);
+  const raw = viewId.startsWith("plugin:") ? viewId.slice("plugin:".length) : viewId;
+  return hostEngine(raw) ?? hostEngine(viewId) ?? modeById(viewId);
 }
 
 export function mosaicIsGraph(id: string): boolean {
@@ -224,7 +285,12 @@ export class Mosaic {
       onPaneAuditBind?: (id: string) => void;
       onPaneRebind?: (id: string) => void;
     };
+    pluginSpecForMode?: (modeId: string) => PluginView | null;
   }) {}
+
+  private syncPackCoalesce(): void {
+    applyPackCoalesceLayout(this, mosaicPaneMode, this.cfg.pluginSpecForMode);
+  }
 
   get on(): boolean { return this.size !== "off"; }
   get current(): MosaicSize { return this.size; }
@@ -302,7 +368,7 @@ export class Mosaic {
     }
     let tree: MosaicNode | null = null;
     if (parsed && leafIds(parsed).some(Boolean)) {
-      tree = tiles.length ? assignTiles(parsed, tiles) : parsed;
+      tree = assignParsedMosaicTree(parsed, size, prefer, hero, tiles);
     } else {
       const ids = tiles.length ? tiles : mosaicIds(size, prefer, hero);
       tree = defaultTree(ids, hero);
@@ -477,8 +543,16 @@ export class Mosaic {
 
   /** Change one pane. Picking a view already on the wall swaps those two tiles. */
   setPaneView(fromId: string, toId: string): boolean {
+    return this.applyPaneTileList(fromId, toId, nextPaneTiles(this.tileIds, fromId, toId));
+  }
+
+  /** Settings mosaic slot picker: duplicate pack tiles when the view is already on the wall. */
+  setPaneViewFromPicker(fromId: string, toId: string): boolean {
+    return this.applyPaneTileList(fromId, toId, nextPaneTilesForPicker(this.tileIds, fromId, toId));
+  }
+
+  private applyPaneTileList(fromId: string, toId: string, next: string[]): boolean {
     if (!this.tree || !toId || fromId === toId) return false;
-    const next = nextPaneTiles(this.tileIds, fromId, toId);
     if (next.join("\0") === this.tileIds.join("\0")) return false;
     if (!next.includes(fromId)) releasePanelView(fromId);
     this.assignViews(next);
@@ -633,7 +707,7 @@ export class Mosaic {
         const host = pane.querySelector<HTMLElement>(":scope > .mosaic-scene")
           ?? Object.assign(document.createElement("div"), { className: "mosaic-scene" });
         if (!host.parentElement) pane.appendChild(host);
-        const s = new NetScene(host, { satellite: true, host: this.cfg.host, panelId: id });
+        const s = new NetScene(host, mosaicSceneOpts(id, this.cfg.host!));
         this.applySync(s, id, this.cfg.sync());
         const m = mosaicPaneMode(id);
         s.setMode(m, this.cfg.optsFor(m));

@@ -23,6 +23,7 @@ function gitShortRev(): string {
 export default defineConfig({
   define: {
     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
+    __VIZ_BUILD_COUNTERS__: JSON.stringify(Boolean(process.env.VITEST)),
   },
   server: {
     port: 5173,

@@ -13,6 +13,12 @@ describe("mosaic setPaneView noop guard", () => {
       tree: defaultTree(["plugin:topology", "plugin:topology!1"], "off"),
       tileIds: ["plugin:topology", "plugin:topology!1"],
       assignViews,
+      applyPaneTileList(fromId: string, toId: string, next: string[]): boolean {
+        if (!this.tree || !toId || fromId === toId) return false;
+        if (next.join("\0") === this.tileIds.join("\0")) return false;
+        this.assignViews(next);
+        return true;
+      },
     };
     const setPaneView = Reflect.get(Mosaic.prototype, "setPaneView") as (
       this: typeof stub,
