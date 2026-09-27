@@ -1,12 +1,16 @@
-diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
-index 5586cd9c..ff642018 100644
---- a/web/src/graph/mosaic.ts
-+++ b/web/src/graph/mosaic.ts
-@@ -469,7 +469,6 @@ export class Mosaic {
-     if (!this.tree || !toId || fromId === toId) return false;
-     const next = nextPaneTiles(this.tileIds, fromId, toId);
-     if (next.join("\0") === this.tileIds.join("\0")) return false;
--    if (!next.includes(fromId)) releasePanelView(fromId);
-     this.assignViews(next);
-     return true;
+diff --git a/web/src/graph/scene.ts b/web/src/graph/scene.ts
+index a6e0c9ac..77e8b8f7 100644
+--- a/web/src/graph/scene.ts
++++ b/web/src/graph/scene.ts
+@@ -4001,11 +4001,7 @@ export class NetScene implements HostedView {
+ 
+   /** Mosaic tile id moved onto the main scene element — retarget rAF lease. */
+   retargetPanel(panelId: string | null): void {
+-    this.releasePanelRaf?.();
+-    this.releasePanelRaf = null;
+-    if (this.mosaicPanelId) releasePanelView(this.mosaicPanelId);
+     this.mosaicPanelId = panelId;
+-    if (panelId) this.releasePanelRaf = claimPanelRaf(panelId);
    }
+ 
+   dispose(): void {

@@ -4,8 +4,8 @@
   "testName": "mosaic consent resume > shows Settings \u2192 Plugins approval copy on the tile",
   "description": "Revert inline tile notice on consent deny",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": null,
+    "expected": null
   },
   "project": "web"
 }

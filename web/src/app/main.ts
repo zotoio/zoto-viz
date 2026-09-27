@@ -109,8 +109,11 @@ import { deliverMosaicDemoPacks, dropMosaicTileWriter } from "../graph/mosaic-vi
 import { bindVizDriveElement, noteHostDirect } from "../plugins/viz-drive";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { revertModeSelection } from "./apply-mode-mosaic";
+import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { initPluginConsentSync } from "./plugin-consent-sync";
 import { modeForDigitKey } from "./header-digit-mode";
+import { mergePluginConsentLivePatch } from "./plugin-consent-live";
+import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
 
@@ -574,6 +577,8 @@ let tsWatchHash = "";
 async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   if (!spec || !pluginNeedsReview(spec)) return true;
   if (spec.consent) return true;
+  const catalogReady = pluginSpecs.length > 0;
+  if (!shouldPromptPluginReview(spec, catalogReady)) return false;
   if (autoconsentEnabled() && autoconsentEligible(spec)) {
     const kind = autoconsentKind(spec);
     try {
@@ -961,7 +966,12 @@ function renderLegend(m: ViewMode, opts: Record<string, string>): void {
   }
 }
 
-applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
+applyMode(
+  resolveRestoredViewMode({
+    localMode: localStorage.getItem("zoto-viz.mode"),
+    fallback: defaultCatalogMode()?.id ?? "topology",
+  }),
+);
 
 // ---------------------------------------------------------------- visibility filters
 
@@ -1263,7 +1273,11 @@ settings.addAnimation((a) => {
     mosaic!.setSize(a.mosaic, modeSel.value, a.hero, {
       tree: a.mosaicTree,
       maximized: a.mosaicMaxId || null,
-      tiles: a.mosaicTiles,
+      tiles: reconcileMosaicTilesWithMode(
+        a.mosaicTiles ?? [],
+        modeSel.value,
+        mosaic!.focusedId,
+      ),
     });
     applyMode(modeSel.value, { keepLayout: true });
     syncFeedShift();
@@ -1699,6 +1713,9 @@ function decoAt(raw: unknown): DecoAt {
 }
 
 async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
+  if (mergePluginConsentLivePatch(pluginSpecs, patch)) {
+    await resumeMosaicConsentPending();
+  }
   if (patch.reloadClient === true) {
     location.reload();
     return;

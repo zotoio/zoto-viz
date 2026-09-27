@@ -4,8 +4,8 @@
   "testName": "header keyboard view shortcuts > maps number keys to catalog modes like the live keydown handler",
   "description": "Revert digit key \u2192 mode mapping for header shortcuts",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": "plugin:topology",
+    "expected": "plugin:talkers"
   },
   "project": "web"
 }

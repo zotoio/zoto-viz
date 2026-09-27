@@ -4,8 +4,8 @@
   "testName": "plugin consent sync (one page subscription) > stops the shared poll when no tiles are waiting",
   "description": "Revert disarming consent poll when pending clears",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": true,
+    "expected": false
   },
   "project": "web"
 }

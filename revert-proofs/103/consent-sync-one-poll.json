@@ -4,8 +4,8 @@
   "testName": "plugin consent sync (one page subscription) > arms one shared fallback poll for many waiting tiles",
   "description": "Revert single shared consent fallback poll",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": 0,
+    "expected": 1
   },
   "project": "web"
 }

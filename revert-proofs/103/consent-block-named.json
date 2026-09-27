@@ -4,8 +4,8 @@
   "testName": "consentBlockMessage > names the plugin when available",
   "description": "Revert consentBlockMessage naming the plugin pack",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": "Not approved yet. Approve it in Settings \u2192 Plugins.",
+    "expected": "Not approved yet. Heat map: Approve it in Settings \u2192 Plugins."
   },
   "project": "web"
 }

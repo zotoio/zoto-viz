@@ -4,8 +4,8 @@
   "testName": "revertModeSelection > restores header mode and liveMode",
   "description": "Revert revertModeSelection restoring liveMode on deny",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": "broken",
+    "expected": "plugin:topology"
   },
   "project": "web"
 }

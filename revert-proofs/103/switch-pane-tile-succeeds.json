@@ -4,8 +4,8 @@
   "testName": "switchPaneView > entry tile > succeeds through teardown, swap, and mount",
   "description": "Revert switchPaneView mount after tile pick",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": null,
+    "expected": null
   },
   "project": "web"
 }

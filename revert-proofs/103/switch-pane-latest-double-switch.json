@@ -4,8 +4,8 @@
   "testName": "switchPaneView > applies only the latest rapid double-switch on the same pane",
   "description": "Revert pane switch generation tokens coalescing rapid picks",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": true,
+    "expected": false
   },
   "project": "web"
 }
