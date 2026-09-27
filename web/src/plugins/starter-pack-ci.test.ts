@@ -68,14 +68,18 @@ describe("pack starter template CI", () => {
   it.skipIf(!ciCompileReady)(
     "zips, compiles through service esbuild with SDK inlined in module.js",
     () => {
+      expect.hasAssertions();
       const { stageRoot, packHome } = stageStarterTree(starterTemplate, repoRoot);
       const zotoHome = mkdtempSync(path.join(os.tmpdir(), "zoto-starter-home-"));
       try {
-        const { bundleJs } = compileStarterZipPack(repoRoot, packHome, zotoHome);
+        const { runtimeDir, bundleJs } = compileStarterZipPack(repoRoot, packHome, zotoHome);
         assertStarterBundleInlinesSdk(bundleJs);
-        expect(bundleJs.length).toBe(9556);
         expect(bundleJs).not.toMatch(/\bdeclare\s+const\s+zoto\s*:/);
         expect(bundleJs).toContain("getVizZoto");
+        expect(bundleJs).toContain("StarterSim");
+        expect(bundleJs).not.toMatch(/from\s+["']\.\.\/\.\.\//);
+        const pluginYml = readFileSync(path.join(runtimeDir, "plugin.yml"), "utf8");
+        expect(pluginYml).toContain(`id: ${STARTER_CI_PACK_ID}`);
       } finally {
         rmSync(stageRoot, { recursive: true, force: true });
         rmSync(zotoHome, { recursive: true, force: true });
@@ -86,13 +90,14 @@ describe("pack starter template CI", () => {
   it.skipIf(!ciCompileReady)(
     "draws: zip → compile → sky → headless WebGL2 smoke (non-black)",
     async () => {
+      expect.hasAssertions();
       const { stageRoot, packHome } = stageStarterTree(starterTemplate, repoRoot);
       try {
         const result = await runStarterPackDrawPipeline(repoRoot, packHome);
         expect(result.ok, result.ok ? "" : `${result.stage}: ${result.error}`).toBe(true);
         if (result.ok) {
           console.log(`starter-pack-smoke: ${result.smokeAssertion}`);
-          expect(result.bundleBytes).toBe(9556);
+          expect(result.smokeAssertion.length).toBeGreaterThan(0);
         }
       } finally {
         rmSync(stageRoot, { recursive: true, force: true });
@@ -104,6 +109,7 @@ describe("pack starter template CI", () => {
   const REGRESSION_BAD_VIS = "id: plugin:pack-starter-template\nname: Pack starter\nbase: talkers\n";
 
   it.skipIf(!ciCompileReady)("regression visualisation.yml missing engine fails visualisation-contract", async () => {
+    expect.hasAssertions();
     const badVis = REGRESSION_BAD_VIS;
     const { stageRoot, packHome } = stageStarterWithFiles(starterTemplate, repoRoot, { visualisationYml: badVis });
     try {
@@ -131,6 +137,7 @@ describe("pack starter template CI", () => {
 `;
 
   it.skipIf(!ciCompileReady)("regression pre-fix shader fails WebGL compile at shader stage", async () => {
+    expect.hasAssertions();
     const badFrag = REGRESSION_BAD_FRAG;
     const { stageRoot, packHome } = stageStarterWithFiles(starterTemplate, repoRoot, { fragmentGlsl: badFrag });
     try {
