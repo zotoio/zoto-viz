@@ -1,12 +1,12 @@
-diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
-index 3893021c1ded7cbb707c14252b5691650eeab247..6e5da610b7c2af74438814eddeb0c4d4dca7e2fa 100644
---- a/web/src/core/http-notice.ts
-+++ b/web/src/core/http-notice.ts
-@@ -69,7 +69,6 @@
-   };
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index f7c3d56320b51276375844aaf928860eae526f60..39166e119dd684182b919f749d5a6abb3eade9e5 100644
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -1991,7 +1991,6 @@
+   ws.onerror = () => ws.close();
+ }
  
-   wall.addEventListener("click", onWallClick);
--  window.addEventListener("zoto-viz-server-restart", onRestart);
-   window.addEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);
-   return () => {
-     wall.removeEventListener("click", onWallClick);
+-bindServerRestartWallNotice();
+ connect();
+ 
+ window.addEventListener("keydown", (e) => {

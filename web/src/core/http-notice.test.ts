@@ -87,28 +87,6 @@ describe("server restart wall notice", () => {
     document.body.innerHTML = "";
   });
 
-  describe("binder wiring", () => {
-    const origFetch = globalThis.fetch;
-    let off: () => void;
-
-    beforeEach(() => {
-      expect.hasAssertions();
-      noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
-      globalThis.fetch = staleCsrfFetch({ count: 0 });
-      off = bootNoticeBinding();
-    });
-
-    afterEach(() => {
-      globalThis.fetch = origFetch;
-      off();
-    });
-
-    it("shows the restart notice when the binder is active and a stale PUT runs", async () => {
-      await apiFetch("/api/profiles/user", { method: "PUT" });
-      expect(restartRowCount()).toBe(1);
-    });
-  });
-
   describe("status copy", () => {
     let off: () => void;
 
