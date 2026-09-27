@@ -1,8 +1,8 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index 34141e2..f2def40 100644
+index 5bfed164..deb5a1a7 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
-@@ -167,7 +167,7 @@ def sandbox_csp_for_token(request: web.Request, token: str) -> str:
+@@ -175,7 +175,7 @@ def sandbox_csp_for_token(request: web.Request, token: str) -> str:
      src = _sandbox_token_asset_src(request, token)
      return (
          f"default-src 'none'; "

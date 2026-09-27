@@ -1,5 +1,5 @@
 diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
-index 29c3ce7..ea29ee4 100644
+index 29c3ce77..ea29ee40 100644
 --- a/service/pack_asset_tokens.py
 +++ b/service/pack_asset_tokens.py
 @@ -96,7 +96,5 @@ def session_id_from_request(request) -> str:

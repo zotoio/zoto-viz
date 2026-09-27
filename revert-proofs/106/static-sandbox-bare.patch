@@ -1,8 +1,8 @@
 diff --git a/service/static_paths.py b/service/static_paths.py
-index f2531f3..1e7df4a 100644
+index 2919b292..255d7b3a 100644
 --- a/service/static_paths.py
 +++ b/service/static_paths.py
-@@ -48,10 +48,6 @@ def static_path_allowed(request_path: str) -> bool:
+@@ -47,10 +47,6 @@ def static_path_allowed(request_path: str) -> bool:
          return False
      raw = request_path.split("?", 1)[0]
      decoded = _decode_path(raw)

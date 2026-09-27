@@ -1,8 +1,8 @@
 diff --git a/service/static_paths.py b/service/static_paths.py
-index f2531f3..096d0c1 100644
+index 2919b292..f26fd730 100644
 --- a/service/static_paths.py
 +++ b/service/static_paths.py
-@@ -27,8 +27,6 @@ def canonical_static_path(path: str) -> str | None:
+@@ -26,8 +26,6 @@ def canonical_static_path(path: str) -> str | None:
      decoded = _decode_path(raw)
      if decoded.startswith("//"):
          return None

@@ -1,5 +1,5 @@
 diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
-index 29c3ce7..8da7b14 100644
+index 29c3ce77..8da7b14b 100644
 --- a/service/pack_asset_tokens.py
 +++ b/service/pack_asset_tokens.py
 @@ -51,8 +51,7 @@ def parse_pack_asset_token(token: str) -> tuple[str, bytes] | None:

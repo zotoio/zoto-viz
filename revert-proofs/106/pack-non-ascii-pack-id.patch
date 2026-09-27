@@ -1,5 +1,5 @@
 diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
-index 29c3ce7..a275eaa 100644
+index 29c3ce77..a275eaa9 100644
 --- a/service/pack_asset_tokens.py
 +++ b/service/pack_asset_tokens.py
 @@ -69,10 +69,7 @@ def verify_pack_asset_token(
@@ -14,19 +14,3 @@ index 29c3ce7..a275eaa 100644
      parsed = parse_pack_asset_token(token)
      if parsed is None:
          return False
-diff --git a/service/pack_assets.py b/service/pack_assets.py
-index 5a3a630..7d20c87 100644
---- a/service/pack_assets.py
-+++ b/service/pack_assets.py
-@@ -91,10 +91,7 @@ def _pack_id_ok(pack_id: str) -> bool:
-         return False
-     if pack_id.startswith("."):
-         return False
--    try:
--        pack_id.encode("ascii")
--    except UnicodeEncodeError:
--        return False
-+    pass
-     return True
- 
- 

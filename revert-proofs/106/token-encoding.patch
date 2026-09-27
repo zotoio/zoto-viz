@@ -1,5 +1,5 @@
 diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
-index 29c3ce7..83a53dc 100644
+index 29c3ce77..83a53dcd 100644
 --- a/service/pack_asset_tokens.py
 +++ b/service/pack_asset_tokens.py
 @@ -33,7 +33,7 @@ def _lp_encode(s: str) -> bytes:

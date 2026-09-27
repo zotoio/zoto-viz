@@ -1,8 +1,8 @@
 diff --git a/service/static_paths.py b/service/static_paths.py
-index f2531f3..e851ea4 100644
+index 2919b292..f3cc30ab 100644
 --- a/service/static_paths.py
 +++ b/service/static_paths.py
-@@ -8,13 +8,7 @@ _BLOCKED_STATIC = frozenset({_LEGACY_SANDBOX})
+@@ -7,13 +7,7 @@ _LEGACY_SANDBOX = "plugin-sandbox.html"
  
  
  def _decode_path(path: str) -> str:

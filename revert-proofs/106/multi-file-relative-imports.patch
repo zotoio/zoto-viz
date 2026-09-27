@@ -1,5 +1,5 @@
 diff --git a/service/plugins.py b/service/plugins.py
-index a0ba289..368e4f6 100644
+index 4a3d506f..e13c4329 100644
 --- a/service/plugins.py
 +++ b/service/plugins.py
 @@ -216,15 +216,6 @@ def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = Non

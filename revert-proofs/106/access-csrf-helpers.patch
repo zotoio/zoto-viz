@@ -1,5 +1,5 @@
 diff --git a/service/access.py b/service/access.py
-index bb5aec4..2ccd8fb 100644
+index f26adc6a..71415bef 100644
 --- a/service/access.py
 +++ b/service/access.py
 @@ -201,9 +201,7 @@ def origin_ok(request: web.Request) -> bool:
