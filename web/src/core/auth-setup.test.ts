@@ -25,11 +25,11 @@ describe("auth-setup", () => {
     expect(sourceAuthReady("guardian", url, { ok: true, items: [{ title: "Storm" }] })).toBe(true);
   });
 
-  it("keeps APOD on DEMO_KEY in dice unless NASA rejected the key", () => {
-    const url = "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY";
+  it("keeps APOD in dice on DEMO_KEY unless NASA rejects; host key clears 429 gate", () => {
+    const url = "https://api.nasa.gov/planetary/apod";
     expect(sourceAuthReady("apod", url)).toBe(true);
     expect(sourceAuthReady("apod", url, { ok: false, error: "http 429" })).toBe(false);
-    expect(sourceAuthReady("apod", url.replace("DEMO_KEY", "mine"), { ok: false, error: "http 429" })).toBe(true);
+    expect(sourceAuthReady("apod", url, { ok: false, error: "http 429" }, { nasaApiKeyConfigured: true })).toBe(true);
   });
 
   it("blocks Nest and Guardian views from dice until they are ready", () => {

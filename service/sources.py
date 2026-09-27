@@ -25,6 +25,7 @@ from aiohttp import ClientError, ClientSession, ClientTimeout, web
 from yarl import URL
 
 from . import agent_assets
+from . import nasa_api
 from . import paths
 from . import source_fields
 
@@ -70,7 +71,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "id": "apod",
         "type": "http",
         "label": "Astronomy Picture of the Day",
-        "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY",
+        "url": "https://api.nasa.gov/planetary/apod",
         "interval": 3600,
         "enabled": True,
         "feed": True,
@@ -286,7 +287,7 @@ def normalize(raw: Any, *, taken: set[str] | None = None) -> dict[str, Any]:
         pass
     else:
         url = agent_assets.check_url(str(raw.get("url") or ""))
-        row["url"] = url
+        row["url"] = nasa_api.public_url(url)
     fields = source_fields.normalize_fields(raw.get("fields"))
     if fields:
         expand = str(fields.get("expand") or "")
@@ -398,8 +399,10 @@ def _refresh_shipped(rows: list[dict[str, Any]]) -> bool:
     for row in rows:
         sid = str(row.get("id") or "")
         url = str(row.get("url") or "")
-        if sid == "apod" and "api.nasa.gov/planetary/apod" in url and "count=" in url:
-            row["url"] = "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY"
+        if sid == "apod" and "api.nasa.gov/planetary/apod" in url and (
+            "count=" in url or "api_key=" in url.lower()
+        ):
+            row["url"] = "https://api.nasa.gov/planetary/apod"
             changed = True
         if (
             sid == "guardian"
@@ -426,7 +429,7 @@ def resolve_fetch_url(url: str) -> str:
     if q.get("start_date") or q.get("date"):
         q.pop("count", None)
         return urlunparse(parsed._replace(query=urlencode(q)))
-    key = q.get("api_key") or "DEMO_KEY"
+    key = nasa_api.fetch_key()
     end = date.today()
     start = end - timedelta(days=7)
     return urlunparse(parsed._replace(query=urlencode({
@@ -917,11 +920,13 @@ def _record(row: dict[str, Any], *, ok: bool, payload: dict[str, Any] | None = N
         if row.get("unit"):
             live["unit"] = row["unit"]
     elif row["type"] != "kmsg":
-        live["url"] = row.get("url")
+        live["url"] = nasa_api.public_url(str(row.get("url") or ""))
     if payload:
         live.update(payload)
     if error:
-        live["error"] = error[:160]
+        live["error"] = nasa_api.redact_string(error)[:160]
+    if row.get("id") == "apod" and nasa_api.using_demo_key():
+        live["note"] = nasa_api.DEMO_NOTE
     _live[row["id"]] = live
 
 
@@ -996,7 +1001,7 @@ async def poll(now: float | None = None) -> dict[str, dict[str, Any]]:
 
 def snapshot() -> dict[str, dict[str, Any]]:
     ensure()
-    return {r["id"]: _live.get(r["id"], {
+    raw = {r["id"]: _live.get(r["id"], {
         "id": r["id"],
         "kind": r["type"],
         "label": r["label"],
@@ -1005,10 +1010,12 @@ def snapshot() -> dict[str, dict[str, Any]]:
         "pending": True,
         "feed": bool(r.get("feed", True)),
     }) for r in _rows}
+    return nasa_api.public_snapshot(raw)
 
 
 def apply(msg: dict[str, Any]) -> dict[str, Any]:
     msg["sources"] = snapshot()
+    msg["nasaApiKeyConfigured"] = nasa_api.configured()
     return msg
 
 
@@ -1076,7 +1083,12 @@ def headlines(limit: int = HEADLINE_LIMIT) -> list[dict[str, str]]:
 
 
 def config_payload() -> dict[str, Any]:
-    return {"sources": ensure(), "live": snapshot(), "kinds": list(KINDS)}
+    return {
+        "sources": nasa_api.public_sources(ensure()),
+        "live": snapshot(),
+        "kinds": list(KINDS),
+        "nasaApiKeyConfigured": nasa_api.configured(),
+    }
 
 
 async def api_image(request: web.Request) -> web.Response:
@@ -1088,7 +1100,8 @@ async def api_image(request: web.Request) -> web.Response:
         row = await agent_assets.ensure_photo(raw)
     except (ValueError, ClientError, TimeoutError) as e:
         status = agent_assets.image_http_status(e)
-        return web.json_response({"error": str(e) if isinstance(e, ValueError) else f"fetch failed: {e}"}, status=status)
+        err = str(e) if isinstance(e, ValueError) else f"fetch failed: {e}"
+        return web.json_response({"error": nasa_api.redact_string(err)}, status=status)
     return agent_assets.file_response(row)
 
 
@@ -1106,7 +1119,7 @@ async def api_sources(request: web.Request) -> web.Response:
         try:
             save(rows)
         except ValueError as e:
-            return web.json_response({"error": str(e)}, status=400)
+            return web.json_response({"error": nasa_api.redact_string(str(e))}, status=400)
         return web.json_response(config_payload())
     try:
         body = await request.json()
@@ -1117,8 +1130,8 @@ async def api_sources(request: web.Request) -> web.Response:
     try:
         row = upsert(body)
     except ValueError as e:
-        return web.json_response({"error": str(e)}, status=400)
-    return web.json_response({"ok": True, "source": row, **config_payload()})
+        return web.json_response({"error": nasa_api.redact_string(str(e))}, status=400)
+    return web.json_response({"ok": True, "source": nasa_api.public_source_row(row), **config_payload()})
 
 
 async def api_source(request: web.Request) -> web.Response:
@@ -1138,5 +1151,5 @@ async def api_source(request: web.Request) -> web.Response:
     try:
         row = upsert({**body, "id": sid})
     except ValueError as e:
-        return web.json_response({"error": str(e)}, status=400)
-    return web.json_response({"ok": True, "source": row, **config_payload()})
+        return web.json_response({"error": nasa_api.redact_string(str(e))}, status=400)
+    return web.json_response({"ok": True, "source": nasa_api.public_source_row(row), **config_payload()})

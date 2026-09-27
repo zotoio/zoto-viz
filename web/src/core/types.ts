@@ -234,6 +234,8 @@ export interface StateMsg {
   /** Backend and host shadow extensions (e.g. typesafe Sense results). */
   plugin_state?: Record<string, unknown>;
   sources?: Record<string, SourceLive>;
+  /** Host-only NASA api.nasa.gov key (boolean flag only). */
+  nasaApiKeyConfigured?: boolean;
   /** Monitor host options (from ~/.zoto-viz/sys-config.yml). */
   host?: {
     vizFrame?: {
