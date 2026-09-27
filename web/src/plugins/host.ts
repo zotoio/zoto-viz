@@ -95,6 +95,10 @@ export function sandboxBootNonceForTests(): string {
   return lastSandboxBootNonce;
 }
 
+export function countPluginSandboxIframes(): number {
+  return document.querySelectorAll("iframe[sandbox]").length;
+}
+
 /** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
 export async function pluginSandboxFrameUrl(
   frameId: string,
