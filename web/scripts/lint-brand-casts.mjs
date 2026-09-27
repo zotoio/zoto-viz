@@ -1,47 +1,11 @@
-import { readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { lintProductionTree, formatViolation } from "./lint-brand-casts-core.mjs";
 
-const root = fileURLToPath(new URL("..", import.meta.url));
-
-const brands = [
-  "CssRect",
-  "DeviceRect",
-  "GlRect",
-  "CanvasDeviceHeight",
-  "DevicePxRatio",
-  "FrameTs",
-  "MonoMs",
-  "WallMs",
-  "EpochSec",
-];
-
-const mintFiles = new Set([
-  "src/graph/pack-mirror-rect.ts",
-  "src/graph/render-host-device-px-ratio.ts",
-]);
-
-const devicePxRatioMint = "src/graph/render-host-device-px-ratio.ts";
-
-const castPattern = new RegExp(`\\sas\\s+(${brands.join("|")})\\b`, "g");
-const devicePxRatioReadPattern = /\bdevicePixelRatio\b/g;
-
-let failed = false;
-for (const file of globSync("src/**/*.ts", { cwd: root })) {
-  if (file.endsWith(".test.ts") || mintFiles.has(file)) continue;
-  const text = readFileSync(`${root}/${file}`, "utf8");
-  for (const match of text.matchAll(castPattern)) {
-    console.error(`${file}: brand cast \`as ${match[1]}\` (only mint modules and *.test.ts)`);
-    failed = true;
+const webRoot = fileURLToPath(new URL("..", import.meta.url));
+const violations = lintProductionTree(webRoot);
+if (violations.length > 0) {
+  for (const v of violations) {
+    console.error(formatViolation(v));
   }
-  if (file !== devicePxRatioMint) {
-    for (const match of text.matchAll(devicePxRatioReadPattern)) {
-      console.error(
-        `${file}: raw \`devicePixelRatio\` read (only ${devicePxRatioMint}; use layoutDevicePxRatio or devicePxRatioFromWindow)`,
-      );
-      failed = true;
-      break;
-    }
-  }
+  process.exit(1);
 }
-
-if (failed) process.exit(1);
