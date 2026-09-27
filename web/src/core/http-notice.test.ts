@@ -344,6 +344,9 @@ describe("server restart wall notice", () => {
         }
         if (path === "/api/profiles/user") {
           profileHits += 1;
+          if (profileHits >= 3) {
+            return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
+          }
           return {
             ok: false,
             status: 403,
