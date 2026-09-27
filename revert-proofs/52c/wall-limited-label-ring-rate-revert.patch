@@ -1,0 +1,39 @@
+diff --git a/web/src/plugins/viz-tile-hud.ts b/web/src/plugins/viz-tile-hud.ts
+index 0ae8834..cd5d1dc 100644
+--- a/web/src/plugins/viz-tile-hud.ts
++++ b/web/src/plugins/viz-tile-hud.ts
+@@ -91,7 +91,7 @@ export function tileHudChrome(
+   const state = computeTileHudViewerState(samples, nowTick, tile.lastBuildCostTicks);
+   const limitedLabel =
+     state === "limited" && tileLimitedSharingLabelVisible(activeTiles, tile.cadenceK)
+-      ? tileLimitedSharingLabel(activeTiles, tile.cadenceK)
++      ? tileLimitedSharingLabel(activeTiles, skipRate)
+       : null;
+   return {
+     state,
+@@ -130,7 +130,7 @@ export function wallHudChrome(
+   );
+   const limitedLabel =
+     state === "limited" && tileLimitedSharingLabelVisible(activeTiles, budgetTile.cadenceK)
+-      ? tileLimitedSharingLabel(activeTiles, budgetTile.cadenceK)
++      ? tileLimitedSharingLabel(activeTiles, skipRate)
+       : null;
+   return {
+     state,
+diff --git a/web/src/ui/viz-copy.ts b/web/src/ui/viz-copy.ts
+index 35df708..9629951 100644
+--- a/web/src/ui/viz-copy.ts
++++ b/web/src/ui/viz-copy.ts
+@@ -38,10 +38,9 @@ export function tileLimitedSharingLabelVisible(activeTiles: number, cadenceK: nu
+ }
+ 
+ /** Copy for the wall LIMITED strip (N ≥ 2 and k ≥ 2; ordinal from {@link vizCadenceOrdinal}). */
+-export function tileLimitedSharingLabel(activeTiles: number, cadenceK: number): string {
++export function tileLimitedSharingLabel(activeTiles: number, skipsPerSec: number): string {
+   const n = Math.max(2, activeTiles);
+-  const ord = vizCadenceOrdinal(cadenceK);
+-  return `LIMITED · sharing the frame with ${n} tiles · updating every ${ord} frame`;
++  return `LIMITED · sharing the frame with ${n} tiles · ${formatHudSkipsPerSec(skipsPerSec)}`;
+ }
+ 
+ export const TILE_LIMITED_SHARING_TOOLTIP =

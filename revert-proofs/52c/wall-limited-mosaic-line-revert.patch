@@ -1,16 +1,14 @@
 diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
+index 05fe981..978d8f8 100644
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
-@@ -371,7 +371,11 @@ export class VizHud {
+@@ -391,7 +391,9 @@ export class VizHud {
        if (!row) continue;
        const nowTick = Math.round(now * 300);
        const chrome = tileHudChrome(tile, nowTick, activeTiles);
 -      const text = `${tileId}: ${formatHudSkipsPerSec(chrome.skipRatePerSec)}`;
-+      const limited = chrome.state === "limited"
-+        ? row.label.limitedLabel(activeTiles, chrome.skipRatePerSec)
-+        : null;
-+      const text = limited
-+        ? `${tileId}: ${limited}`
++      const text = chrome.limitedLabel
++        ? `${tileId}: ${chrome.limitedLabel}`
 +        : `${tileId}: ${formatHudSkipsPerSec(chrome.skipRatePerSec)}`;
        const prev = this.lastMosaicLineText.get(tileId);
        if (prev !== text) {

@@ -1,12 +1,12 @@
 diff --git a/web/src/plugins/viz-tile-budget.ts b/web/src/plugins/viz-tile-budget.ts
+index e7b2d3c..32e93c8 100644
 --- a/web/src/plugins/viz-tile-budget.ts
 +++ b/web/src/plugins/viz-tile-budget.ts
-@@ -283,6 +283,8 @@ export class VizTileBudgetRegistry {
+@@ -289,7 +289,6 @@ export class VizTileBudgetRegistry {
+     const cadenceSkip = tile.deliverAttempt % k !== 0;
+     tile.deliverAttempt++;
+     if (cadenceSkip) {
+-      tile.skipped++;
        tile.shareLimitedSkips++;
        tile.shedding = true;
        tile.debt = 0;
-+      tile.debt += tile.share;
-+      tile.debt = Math.min(tile.debt, VIZ_DEBT_CAP_TICKS);
-       recordHudSample(tile, { tick, kind: "skip" });
-       return {
-         delivered: false,
