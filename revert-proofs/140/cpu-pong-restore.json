@@ -1,5 +1,6 @@
 {
   "row": "restore duplicate plugins/src/cpu-pong/ shipped tree",
+  "description": "Revert row: restore plugins/src/cpu-pong/ duplicate tree",
   "runner": "pytest",
   "testFile": "tests/test_shipped_pack_slug_collision.py",
   "testName": "^test_no_shipped_pack_slug_collisions_on_disk$",
