@@ -1,9 +1,14 @@
 ## Revert proof (PR #60)
 
 **Proven code commit:** `b136ca12e9c5719509b563a0bd81274464b469a7`  
-**Proven tree:** `$(git rev-parse b136ca12^{tree})`
+**Proven tree (excludes `revert-proofs/`):** `72fe32cd3744f953276b954719e18a21a725f241`
 
-(SHAs from `git rev-parse <commit>` and `git rev-parse <commit>^{tree}`.)
+Proven tree from:
+
+```sh
+GIT_INDEX_FILE=$(mktemp -u) sh -c 'git read-tree b136ca12e9c5719509b563a0bd81274464b469a7 && git rm -r -q --cached --ignore-unmatch revert-proofs && git write-tree'
+# → 72fe32cd3744f953276b954719e18a21a725f241
+```
 
 Patches apply at zero offset; unpatched node passes; patched node fails with the sidecar `patchedFailure` line.
 
