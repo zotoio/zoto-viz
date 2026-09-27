@@ -2,11 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_data_source_plugin.py",
   "testName": "test_data_source_rejects_frontend",
-  "description": "Revert blocking executable layers on data-source plugin manifests",
-  "project": "web",
-  "red": {
-    "actual": "passed",
-    "expected": "failed"
-  },
-  "redLine": "Failed: DID NOT RAISE ValueError"
+  "description": "Revert blocking executable layers on data-source plugin manifests"
+  "red": "Failed: DID NOT RAISE <class 'ValueError'>"
 }
