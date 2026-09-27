@@ -2211,7 +2211,7 @@ async function bootCatalogFromSession(): Promise<void> {
   modeSel.value = bootMode;
   localStorage.setItem("zoto-viz.mode", bootMode);
   liveMode = bootMode;
-  if (settings.animSettings.mosaic !== "off") {
+  if (settings.animSettings.mosaic !== "off" && mosaic) {
     const bootTiles = reconcileMosaicTilesWithMode(
       settings.animSettings.mosaicTiles,
       bootMode,
@@ -2227,7 +2227,7 @@ async function bootCatalogFromSession(): Promise<void> {
     });
     mosaic.hydrate();
   }
-  const restored = await profiles.boot(live);
+  const restored = profiles ? await profiles.boot(live) : false;
   await agent.syncStatus();
   if (!agent.savedBackend() && agent.cursorReady()) {
     agent.useBackend("cursor");
