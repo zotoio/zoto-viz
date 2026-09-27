@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, afterEach } from "vitest";
 import { applyInstance } from "./instances";
 import { HEADLINES_PACK } from "./test/load-settings-fixture";
@@ -259,9 +262,14 @@ describe("compilePlugin", () => {
     setPackAssetTokenForTests("_sandbox", "");
     globalThis.fetch = (async () => ({ ok: false, status: 500, json: async () => ({}) })) as never;
     await expect(fetchPlugins()).rejects.toThrow(/plugins/);
-    globalThis.fetch = (async () => { throw new Error("offline"); }) as never;
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).includes("/api/pack-assets")) {
+        return { ok: true, json: async () => ({ ok: true }) } as Response;
+      }
+      throw new Error("offline");
+    }) as never;
     expect(await installPlugins()).toEqual([]);
-    globalThis.fetch = orig;
+    globalThis.fetch = origFetch;
   });
 
   it("records source-review consent", async () => {

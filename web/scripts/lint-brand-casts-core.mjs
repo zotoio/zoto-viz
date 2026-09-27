@@ -15,8 +15,11 @@ const brands = [
 ];
 
 const mintFiles = new Set([
+  "src/core/time-ms.ts",
+  "src/core/viz-time.ts",
   "src/graph/pack-mirror-rect.ts",
   "src/graph/render-host-device-px-ratio.ts",
+  "src/plugins/nixie-wall-parts.ts",
 ]);
 
 const devicePxRatioMint = "src/graph/render-host-device-px-ratio.ts";
