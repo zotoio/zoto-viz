@@ -317,6 +317,7 @@ describe("server restart wall notice", () => {
       vi.useFakeTimers();
       await apiFetch("/api/profiles/user", { method: "PUT" });
       expect(retryRows()).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(0);
       vi.advanceTimersByTime(8000);
       expect(retryRows()).toHaveLength(1);
       expect(retryRows()[0]!.querySelector(".wall-notice-text")!.textContent).toBe(SESSION_RETRY_FAILED_NOTICE);
