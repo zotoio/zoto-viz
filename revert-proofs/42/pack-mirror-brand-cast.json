@@ -1,8 +1,7 @@
 {
-  "kind": "lint",
   "runner": "pnpm",
   "testFile": "src/graph/lint-brand-casts.test.ts",
   "testName": "^lint brand casts > lint gate: brand casts only in mint modules$",
-  "expectedRed": "expected +0 to be 1 // Object.is equality",
-  "description": "Reverts the brand `as` cast rule in `web/scripts/lint-brand-casts-core.mjs` (added by #42)."
+  "expectedRed": "AssertionError: expected [] to deeply equal [ Array(1) ]",
+  "kind": "lint"
 }

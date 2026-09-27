@@ -132,6 +132,7 @@ describe("RenderHost GPU viewport (device rect, renderer pr 1)", () => {
     ({ wall, host, view } = mountGpuViewportFixture(1.5));
     const rd = host.renderer as THREE.WebGLRenderer;
     expect(rd.getPixelRatio()).toBe(1);
+    expect(rd.setPixelRatio).toHaveBeenNthCalledWith(1, 1);
     expect(host.pixelRatio).toBe(1.5);
   });
 
