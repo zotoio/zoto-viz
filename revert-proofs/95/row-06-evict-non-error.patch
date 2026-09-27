@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 8ee2a46..6a002a4 100644
+index 3fccbf1..015570b 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -189,6 +189,6 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+@@ -187,6 +187,6 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
    }
    const e = { key, text, action, autoClearMs, node: null, timer: null, isError: isErrorKey(key), cleared: false } as Entry;
    e.handle = { dismiss: () => dismissEntry(e), get live() { return !e.cleared; } };

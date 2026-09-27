@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 8ee2a46..148634d 100644
+index 3fccbf1..49a5357 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -172,16 +172,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+@@ -170,16 +170,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
  export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
    if (!regionNode) throw new Error("wall notice region not mounted");
    const { key, text, action, autoClearMs } = args;

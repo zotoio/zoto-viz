@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 8ee2a46..a825fdd 100644
+index 3fccbf1..31aaee6 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -170,7 +170,7 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+@@ -168,7 +168,7 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
    root.appendChild(regionNode);
  }
  export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {

@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 8ee2a46..d460887 100644
+index 3fccbf1..758a453 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -179,7 +179,7 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+@@ -177,7 +177,7 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
      live.action = action;
      live.autoClearMs = autoClearMs;
      writeRowContent(live);

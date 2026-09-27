@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 8ee2a46..83bbe27 100644
+index 3fccbf1..ade1fb1 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -184,7 +184,7 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+@@ -182,7 +182,7 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
    }
    const queued = queue.get(key);
    if (queued) {
