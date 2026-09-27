@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| `proven_at` | `5f6ffaf58b6bce33200b16060f00032ac92f2f3e` |
-| `tree` | `a8de0f9db400bc2c3c6ffca274a76157f5b6b9ae` |
+| `proven_at` | `1c12185db4e9dabde81a30c2e1437bcfd038b4cb` |
+| `tree` | `15423e0ee2589f62289d86d6be76ebe437f61f41` |
 
-Thirty patch+json rows; each patch applies with zero offset and zero fuzz at `proven_at`.
+Thirty-one patch+json rows; each patch applies with zero offset and zero fuzz at `proven_at`.
