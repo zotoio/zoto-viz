@@ -1,5 +1,5 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index b913228..0000000 100644
+index b913228..c2a2a2a 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
 @@ -364,7 +364,6 @@ export function classifyPatchedVitest(run) {
