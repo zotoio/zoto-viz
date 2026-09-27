@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/feed.ts b/web/src/ui/feed.ts
+index f5351d5..18b1f6f 100644
+--- a/web/src/ui/feed.ts
++++ b/web/src/ui/feed.ts
+@@ -428,7 +428,7 @@ export class LiveFeed {
+     const wrap = this.bars.parentElement!;
+     const w = Math.max(80, wrap.clientWidth);
+     const h = Math.max(80, wrap.clientHeight || 160);
+-    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
++    const dpr = Math.min(2, devicePixelRatio || 1);
+     const devW = Math.round(w * dpr);
+     const devH = Math.round(h * dpr);
+     if (this.bars.width !== devW || this.bars.height !== devH) {
