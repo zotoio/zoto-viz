@@ -19,7 +19,7 @@ function stubApiResponse(url: string): Response | null {
   if (path === "/api/sdm") return json({ linked: false });
   if (path === "/api/typesafe/status") return json({ configured: false });
   if (path.startsWith("/api/profiles")) return json({ settings: {}, default: "user", profiles: [] });
-  if (path.startsWith("/api/plugins")) return json({ dir: "", schema: "", plugins: [], errors: [] });
+  if (path.startsWith("/api/plugins")) return json({ dir: "", schema: "", plugins: [], errors: [], blocked: [] });
   return json({});
 }
 

@@ -1,0 +1,23 @@
+diff --git a/service/plugins.py b/service/plugins.py
+index 967f541..67c89cd 100644
+--- a/service/plugins.py
++++ b/service/plugins.py
+@@ -801,17 +801,7 @@ def _attach_visualisation(
+         _validate_visualisation_yaml(viz)
+     except VisualisationManifestError as e:
+         pid = str(row.get("id") or home.name)
+-        if blocked is not None and e.unknown_keys:
+-            blocked.append(pmb.blocked_catalog_row(
+-                plugin_id=pid,
+-                name=str(row.get("name") or pid),
+-                file=rel,
+-                reason_code=pmb.REASON_MANIFEST_UNKNOWN_KEYS,
+-                message=pmb.message_unknown_manifest_keys(pid, e.unknown_keys),
+-                keys=e.unknown_keys,
+-            ))
+-        else:
+-            errors.append({"file": rel, "error": str(e)})
++        errors.append({"file": rel, "error": str(e)})
+         return None
+     except ValueError as e:
+         errors.append({"file": rel, "error": str(e)})

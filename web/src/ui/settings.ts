@@ -19,9 +19,11 @@ import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { fillPluginFields } from "../plugins/plugin-ui";
+import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
 import type { PluginLook, PluginView } from "../plugins/plugin";
 import type { SdmDevice } from "../plugins/nest-cams-look";
 import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
+import { renderManifestBlockedPanel } from "../plugins/plugin-manifest-blocked";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
@@ -183,9 +185,13 @@ export class Settings {
     look?: PluginLook | null;
     extras?: HTMLElement[];
   } | null = null;
+  private pluginSettingsAnnouncer: HTMLDivElement | null = null;
   private deviceUi: { cam: Toggle; mic: Toggle; sound: Toggle } | null = null;
   private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
-  private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
+  private pulseNow: () => { level: number; bass: number; listening?: boolean; awaitingClick?: boolean } = () => ({
+    level: 0,
+    bass: 0,
+  });
   private meterRaf = 0;
   private dice: DiceConfig;
   private diceUi: {
@@ -206,6 +212,7 @@ export class Settings {
   onPluginChange?: (id: string, values: Record<string, string>) => void;
   /** Live wall: swap one tile's view (returns false when the pick could not be applied). */
   onMosaicPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
+  onMicResume?: () => void;
   onInstancesChange?: () => void;
   onClose?: () => void;
   onDice?: () => void;
@@ -434,8 +441,21 @@ export class Settings {
   }
 
   /** Live pulse for the Audio tab meter. Call once the scene exists. */
-  bindPulse(fn: () => { level: number; bass: number; listening?: boolean }): void {
+  bindPulse(fn: () => { level: number; bass: number; listening?: boolean; awaitingClick?: boolean }): void {
     this.pulseNow = fn;
+  }
+
+  /** Blocked catalog packs (unknown manifest keys / newer SDK). */
+  bindManifestBlockedCatalog(onRetry: () => void | Promise<void>): void {
+    this.viewBind = { spec: null, fields: undefined, look: null, extras: undefined };
+    const host = this.viewHost;
+    if (!host) return;
+    host.replaceChildren();
+    renderManifestBlockedPanel(host);
+    for (const btn of host.querySelectorAll<HTMLButtonElement>("[data-action=retry-catalog]")) {
+      btn.addEventListener("click", () => { void onRetry(); });
+    }
+    this.attachViewMosaic();
   }
 
   bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null, extras?: HTMLElement[]): void {
@@ -480,10 +500,17 @@ export class Settings {
           ? `Instance ${spec.instanceId} of ${spec.id}. Corner cog on a mosaic tile opens that tile's view.`
           : "This catalog row. Corner cog on a mosaic tile opens that tile's view.",
       );
-      fillPluginFields(view, spec, pluginViewKnobs(spec, fields), (id, values) => {
-        this.onPluginChange?.(id, values);
-        this.cfg.onPersist?.();
-      }, { skipEmpty: extra.length > 0, devices: this.nestDevices });
+      fillPluginFields(
+        view,
+        spec,
+        pluginViewKnobs(spec, fields),
+        (id, values) => {
+          this.onPluginChange?.(id, values);
+          this.cfg.onPersist?.();
+        },
+        { skipEmpty: extra.length > 0, devices: this.nestDevices, wallScope: packWallScopeFromAnim(this.anim) },
+        this.ensurePluginSettingsAnnouncer(),
+      );
       if (extra.length) {
         const sec = document.createElement("div");
         sec.className = "sec";
@@ -1058,6 +1085,9 @@ export class Settings {
       level: meter.querySelector('[data-k="level"]')!,
       bass: meter.querySelector('[data-k="bass"]')!,
     };
+    this.audioUi.src.addEventListener("click", () => {
+      if (this.audioUi?.src.dataset.micResume === "1") this.onMicResume?.();
+    });
     const camAudio = new Slider({
       label: "audio", title: "how hard the audio / traffic pulse drives field of view, orbit speed, nod and zoom (0 = ignore the pulse)",
       min: 0, max: 200, step: 5, value: Math.round(this.anim.camAudio * 100),
@@ -1742,6 +1772,21 @@ export class Settings {
 
   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
 
+  private ensurePluginSettingsAnnouncer(): HTMLDivElement {
+    if (!this.pluginSettingsAnnouncer) {
+      const el = document.createElement("div");
+      el.className = "sr-only plugin-settings-announcer";
+      el.setAttribute("aria-live", "polite");
+      el.setAttribute("aria-atomic", "true");
+      this.pluginSettingsAnnouncer = el;
+    }
+    const pane = this.viewHost?.parentElement;
+    if (pane && this.pluginSettingsAnnouncer.parentElement !== pane) {
+      pane.insertBefore(this.pluginSettingsAnnouncer, this.viewHost);
+    }
+    return this.pluginSettingsAnnouncer;
+  }
+
   private fillMosaicSlots(host: HTMLElement): void {
     host.replaceChildren();
     if (this.anim.mosaic === "off") {
@@ -2172,7 +2217,15 @@ export class Settings {
     const p = this.pulseNow();
     ui.level.style.width = `${Math.round(Math.max(0, Math.min(1, p.level)) * 100)}%`;
     ui.bass.style.width = `${Math.round(Math.max(0, Math.min(1, p.bass)) * 100)}%`;
-    ui.src.textContent = p.listening ? "mic live" : liveMic.micPolicy === "off" ? "mic off · traffic fallback" : "traffic fallback";
+    if (p.awaitingClick && liveMic.micPolicy !== "off") {
+      ui.src.textContent = "mic paused · click to resume";
+      ui.src.dataset.micResume = "1";
+    } else {
+      delete ui.src.dataset.micResume;
+      ui.src.textContent = p.listening ? "mic live" : liveMic.micPolicy === "off"
+        ? "mic off · traffic fallback"
+        : "traffic fallback";
+    }
   };
 
   private onDocDown = (e: PointerEvent) => {
