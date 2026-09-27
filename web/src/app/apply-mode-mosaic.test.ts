@@ -51,12 +51,12 @@ describe("consentBlockMessage", () => {
   });
 
   it("names the plugin when available", () => {
-    expect(consentBlockMessage({ name: "Heat map" })).toBe(
-      "Not approved yet. Heat map: Approve it in Settings → Plugins.",
-    );
+    const msg = consentBlockMessage({ name: "Heat map" });
+    expect(msg === "Not approved yet. Heat map: Approve it in Settings → Plugins.").toBe(true);
   });
 
   it("uses generic copy when the plugin name is unknown", () => {
-    expect(consentBlockMessage(null)).toBe("Not approved yet. Approve it in Settings → Plugins.");
+    const msg = consentBlockMessage(null);
+    expect(msg === "Not approved yet. Approve it in Settings → Plugins.").toBe(true);
   });
 });

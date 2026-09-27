@@ -23,10 +23,7 @@ describe("switchPaneView", () => {
 
   afterEach(() => resetPaneSwitchTokens());
 
-  describe.each([
-    ["header", undefined] as const,
-    ["tile", "plugin:topology"] as const,
-  ])("entry %s", (entry, fromViewId) => {
+  describe("switchPaneViewHeader", () => {
     it("succeeds through teardown, swap, and mount", async () => {
       const m = host({
         tileIds: ["plugin:topology", "plugin:wifi"],
@@ -35,9 +32,7 @@ describe("switchPaneView", () => {
       const teardownView = vi.fn();
       const mountView = vi.fn();
       const persistLayout = vi.fn();
-      const to = entry === "header" ? "plugin:talkers" : "plugin:talkers";
-      const result = await switchPaneView(m, to, {
-        fromViewId,
+      const result = await switchPaneView(m, "plugin:talkers", {
         ensureReviewed: async () => true,
         spec: { name: "Talkers" },
         teardownView,
@@ -46,7 +41,6 @@ describe("switchPaneView", () => {
       });
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.viewId).toBe("plugin:talkers");
-      if (entry === "tile") expect(teardownView).toHaveBeenCalled();
       expect(m.setPaneView).toHaveBeenCalled();
       expect(mountView).toHaveBeenCalledWith("plugin:talkers");
       expect(persistLayout).toHaveBeenCalled();
@@ -59,7 +53,6 @@ describe("switchPaneView", () => {
       });
       const mountView = vi.fn();
       const result = await switchPaneView(m, "plugin:talkers", {
-        fromViewId,
         ensureReviewed: async () => false,
         spec: { name: "Talkers" },
         teardownView: vi.fn(),
@@ -69,10 +62,10 @@ describe("switchPaneView", () => {
       expect(result.ok).toBe(false);
       expect(m.setPaneView).not.toHaveBeenCalled();
       expect(mountView).not.toHaveBeenCalled();
-      expect(m.setPaneNotice).toHaveBeenCalledWith(
-        "plugin:topology",
-        "Not approved yet. Talkers: Approve it in Settings → Plugins.",
-      );
+      expect(m.setPaneNotice.mock.calls.length).toBe(1);
+      const call = m.setPaneNotice.mock.calls[0]!;
+      expect(call[0]).toBe("plugin:topology");
+      expect(call[1] === "Not approved yet. Talkers: Approve it in Settings → Plugins.").toBe(true);
     });
 
     it("uses focus fallback when the requested tile id is stale", () => {
@@ -80,12 +73,65 @@ describe("switchPaneView", () => {
         tileIds: ["plugin:topology", "plugin:wifi"],
         focusedId: "plugin:wifi",
       });
-      if (entry === "header") {
-        const resolved = resolvePaneSwitchSlot(m, "plugin:talkers", undefined);
-        expect(resolved.ok).toBe(true);
-        if (resolved.ok) expect(resolved.paneId).toBe("plugin:wifi");
-        return;
-      }
+      const resolved = resolvePaneSwitchSlot(m, "plugin:talkers", undefined);
+      expect(resolved.ok).toBe(true);
+      if (resolved.ok) expect(resolved.paneId).toBe("plugin:wifi");
+    });
+  });
+
+  describe("switchPaneViewTile", () => {
+    it("succeeds through teardown, swap, and mount", async () => {
+      const m = host({
+        tileIds: ["plugin:topology", "plugin:wifi"],
+        focusedId: "plugin:topology",
+      });
+      const teardownView = vi.fn();
+      const mountView = vi.fn();
+      const persistLayout = vi.fn();
+      const result = await switchPaneView(m, "plugin:talkers", {
+        fromViewId: "plugin:topology",
+        ensureReviewed: async () => true,
+        spec: { name: "Talkers" },
+        teardownView,
+        mountView,
+        persistLayout,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.viewId).toBe("plugin:talkers");
+      expect(teardownView).toHaveBeenCalled();
+      expect(m.setPaneView).toHaveBeenCalled();
+      expect(mountView).toHaveBeenCalledWith("plugin:talkers");
+      expect(persistLayout).toHaveBeenCalled();
+    });
+
+    it("denies consent without swapping or mounting", async () => {
+      const m = host({
+        tileIds: ["plugin:topology", "plugin:wifi"],
+        focusedId: "plugin:topology",
+      });
+      const mountView = vi.fn();
+      const result = await switchPaneView(m, "plugin:talkers", {
+        fromViewId: "plugin:topology",
+        ensureReviewed: async () => false,
+        spec: { name: "Talkers" },
+        teardownView: vi.fn(),
+        mountView,
+        persistLayout: vi.fn(),
+      });
+      expect(result.ok).toBe(false);
+      expect(m.setPaneView).not.toHaveBeenCalled();
+      expect(mountView).not.toHaveBeenCalled();
+      expect(m.setPaneNotice.mock.calls.length).toBe(1);
+      const call = m.setPaneNotice.mock.calls[0]!;
+      expect(call[0]).toBe("plugin:topology");
+      expect(call[1] === "Not approved yet. Talkers: Approve it in Settings → Plugins.").toBe(true);
+    });
+
+    it("uses focus fallback when the requested tile id is stale", () => {
+      const m = host({
+        tileIds: ["plugin:topology", "plugin:wifi"],
+        focusedId: "plugin:wifi",
+      });
       const resolved = resolvePaneSwitchSlot(m, "plugin:talkers", "plugin:gone");
       expect(resolved.ok).toBe(true);
       if (resolved.ok) expect(resolved.paneId).toBe("plugin:wifi");

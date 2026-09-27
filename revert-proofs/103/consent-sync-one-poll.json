@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/plugin-consent-sync.test.ts",
-  "testName": "plugin consent sync (one page subscription) > arms one shared fallback poll for many waiting tiles",
+  "testName": "pluginConsentSync > arms one shared fallback poll for many waiting tiles",
   "description": "Revert single shared consent fallback poll",
   "red": {
     "actual": 0,

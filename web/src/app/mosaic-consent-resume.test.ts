@@ -21,7 +21,7 @@ function host(over: Partial<SwitchPaneViewHost> & Pick<SwitchPaneViewHost, "tile
   };
 }
 
-describe("mosaic consent resume", () => {
+describe("mosaicConsentResume", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });
@@ -56,7 +56,7 @@ describe("mosaic consent resume", () => {
     ]);
   });
 
-  it("retries through switchPaneView when consent appears (external approve)", async () => {
+  it("retries switchPaneView when consent appears externally", async () => {
     const m = host({
       tileIds: ["plugin:topology", "plugin:wifi"],
       focusedId: "plugin:topology",
@@ -94,7 +94,7 @@ describe("mosaic consent resume", () => {
     expect(hasConsentPending()).toBe(false);
   });
 
-  it("shows Settings → Plugins approval copy on the tile", async () => {
+  it("shows Settings Plugins approval copy on the tile", async () => {
     const m = host({ tileIds: ["plugin:a"], focusedId: "plugin:a" });
     await switchPaneView(m, "plugin:b", {
       fromViewId: "plugin:a",
@@ -105,14 +105,14 @@ describe("mosaic consent resume", () => {
       mountView: vi.fn(),
       persistLayout: vi.fn(),
     });
-    expect(m.setPaneNotice).toHaveBeenCalledWith(
-      "plugin:a",
-      "Not approved yet. Demo: Approve it in Settings → Plugins.",
-    );
+    expect(m.setPaneNotice.mock.calls.length).toBe(1);
+    const call = m.setPaneNotice.mock.calls[0]!;
+    expect(call[0]).toBe("plugin:a");
+    expect(call[1] === "Not approved yet. Demo: Approve it in Settings → Plugins.").toBe(true);
   });
 });
 
-describe("grantPluginConsent then catalog refresh", () => {
+describe("grantPluginConsentCatalogRefresh", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });

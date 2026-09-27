@@ -65,7 +65,7 @@ describe("mosaic onPanePick wiring", () => {
     ]);
     const { Mosaic } = await import("./mosaic");
     const { RenderHost } = await import("./render-host");
-    const { NetScene, DEFAULT_DREAM } = await import("./scene");
+    const { NetScene } = await import("./scene");
     const wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { value: 800, configurable: true });
     Object.defineProperty(wall, "clientHeight", { value: 600, configurable: true });

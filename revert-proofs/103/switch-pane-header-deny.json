@@ -1,12 +1,12 @@
 {
   "runner": "vitest",
   "testFile": "src/app/switch-pane-view.test.ts",
-  "testName": "switchPaneView > entry header > denies consent without swapping or mounting",
+  "testName": "switchPaneView > switchPaneViewHeader > denies consent without swapping or mounting",
   "description": "Revert consent deny blocking header swap",
   "red": {
     "actual": null,
     "expected": null
   },
   "project": "web",
-  "redLine": "AssertionError: expected \"vi.fn()\" to be called with arguments: [ 'plugin:topology', \u2026(1) ]"
+  "redLine": "AssertionError: expected +0 to be 1 // Object.is equality"
 }

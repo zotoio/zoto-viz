@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/mosaic-view-reload.test.ts",
-  "testName": "mosaic view reload regressions (B/C/D/E) > C: header pick swaps the focused tile (not header-only)",
+  "testName": "mosaicViewReload > reload header pick swaps the focused tile",
   "description": "Revert switchPaneView swapping focused mosaic tile on header pick",
   "red": {
     "actual": false,
