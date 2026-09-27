@@ -13,14 +13,7 @@ export function stubNetSceneForMosaic(): NetScene {
   return {
     currentMode: { id: "plugin:topology" },
     currentTheme: themeById("midnight"),
-    currentFilters: {
-      lan: true,
-      internet: true,
-      multicast: true,
-      offline: true,
-      labels: true,
-      cpuIdle: true,
-    } satisfies Filters,
+    currentFilters: { lan: true, internet: true, multicast: true, offline: true, labels: true, cpuIdle: true } satisfies Filters,
     setAnim: () => {},
     setCompactLabels: () => {},
     relayout: () => {},
@@ -118,7 +111,6 @@ export function applyMosaicTiles(settings: Settings, mosaic: Mosaic, tiles: stri
   if (mosaic.on) mosaic.assignViews(tiles);
 }
 
-/** Drive layout like the drawer's `.mosaic-slot` picker (main `onMosaicPanePick`). */
 export function pickMosaicSlot(settings: Settings, paneIndex: number, toViewId: string): void {
   const sel = settingsViewDrawerRoot(settings).querySelectorAll<HTMLSelectElement>(".mosaic-slot")[paneIndex];
   if (!sel) throw new Error(`missing mosaic-slot pane ${paneIndex}`);

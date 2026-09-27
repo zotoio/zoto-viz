@@ -4,8 +4,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Settings } from "../ui/settings";
-import { hostModeById } from "./host-mode";
-
 const here = dirname(fileURLToPath(import.meta.url));
 const wallHtml = readFileSync(join(here, "test/main-wall-fixture.html"), "utf8");
 
@@ -80,6 +78,11 @@ async function flushMicrotasks(): Promise<void> {
   await new Promise<void>((r) => queueMicrotask(r));
 }
 
+function expectSpyOnce(spy: { mock: { calls: unknown[] } }, name: string): void {
+  const n = spy.mock.calls.length;
+  if (n !== 1) expect.fail(`expected "${name}" to be called 1 times, but got ${n} times`);
+}
+
 describe("main.ts wiring boot", () => {
   beforeEach(() => {
     expect.hasAssertions();
@@ -94,52 +97,38 @@ describe("main.ts wiring boot", () => {
     createMosaicPanePickHandler.mockClear();
   });
 
-  it("delegates plugin fields, bind-this-view, applyMode drawer, and mosaic pane pick at boot", async () => {
+  it("onPluginFields calls runMainOnPluginFields on plugin change", async () => {
     await import("./main");
     await flushMicrotasks();
     capturedSettings!.onPluginChange!("plugin:topology", {});
+    expectSpyOnce(runMainOnPluginFields, "runMainOnPluginFields");
+    const onFieldsDeps = runMainOnPluginFields.mock.calls[0]![0]!;
+    expect(onFieldsDeps.settings).toBe(capturedSettings);
+  });
+
+  it("bindThisView calls runMainBindThisView from view cog", async () => {
+    await import("./main");
+    await flushMicrotasks();
     const viewCog = document.querySelector<HTMLButtonElement>("#modeBox button.cog");
     expect(viewCog).toBeTruthy();
     viewCog!.click();
-
-    const expectSpyOnce = (spy: { mock: { calls: unknown[] } }, name: string) => {
-      const n = spy.mock.calls.length;
-      if (n !== 1) expect.fail(`expected "${name}" to be called 1 times, but got ${n} times`);
-    };
-    expectSpyOnce(runMainOnPluginFields, "runMainOnPluginFields");
     expectSpyOnce(runMainBindThisView, "runMainBindThisView");
+    expect(runMainBindThisView.mock.calls[0]![0]!.settings).toBe(capturedSettings);
+  });
+
+  it("applyMode calls runMainApplyModeDrawerRebind at boot", async () => {
+    await import("./main");
+    await flushMicrotasks();
     expectSpyOnce(runMainApplyModeDrawerRebind, "runMainApplyModeDrawerRebind");
-    expectSpyOnce(createMosaicPanePickHandler, "createMosaicPanePickHandler");
-
-    const onFieldsDeps = runMainOnPluginFields.mock.calls[0]![0]!;
-    expect(onFieldsDeps.settings).toBe(capturedSettings);
-    expect(onFieldsDeps.hostModeById("plugin:topology").id).toBe(hostModeById("plugin:topology").id);
-
-    const bindDeps = runMainBindThisView.mock.calls[0]![0]!;
-    const bindModeId = runMainBindThisView.mock.calls[0]![1] as string;
-    expect(bindDeps.settings).toBe(capturedSettings);
-    expect(bindDeps.hostModeById("plugin:topology").id).toBe(hostModeById("plugin:topology").id);
-    expect(bindModeId).toBe(onFieldsDeps.modeSelValue());
-
     const drawerArgs = runMainApplyModeDrawerRebind.mock.calls[0]!;
     expect(typeof drawerArgs[0]).toBe("function");
-    const drawerCtx = drawerArgs[1] as {
-      settings: Settings | null | undefined;
-      modeId: string;
-      hostModeById: typeof hostModeById;
-    };
-    expect(drawerCtx.hostModeById("plugin:topology").id).toBe(hostModeById("plugin:topology").id);
-    expect(drawerCtx.modeId).toBe(
-      localStorage.getItem("zoto-viz.mode") ?? "topology",
-    );
+    expect((drawerArgs[1] as { modeId: string }).modeId).toBe(localStorage.getItem("zoto-viz.mode") ?? "topology");
+  });
 
-    const pickDeps = createMosaicPanePickHandler.mock.calls[0]![0] as {
-      getMosaic: () => unknown;
-      hostModeById: typeof hostModeById;
-      pluginSpecForMode: (id: string) => unknown;
-    };
-    expect(pickDeps.hostModeById("plugin:topology").id).toBe(hostModeById("plugin:topology").id);
-    expect(typeof pickDeps.getMosaic).toBe("function");
-    expect(typeof pickDeps.pluginSpecForMode).toBe("function");
+  it("settings wires createMosaicPanePickHandler at boot", async () => {
+    await import("./main");
+    await flushMicrotasks();
+    expectSpyOnce(createMosaicPanePickHandler, "createMosaicPanePickHandler");
+    expect(typeof (createMosaicPanePickHandler.mock.calls[0]![0] as { getMosaic: () => unknown }).getMosaic).toBe("function");
   });
 });

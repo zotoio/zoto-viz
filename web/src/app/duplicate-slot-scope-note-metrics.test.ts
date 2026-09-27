@@ -94,9 +94,7 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
     expect(syncSpy).toHaveBeenCalledTimes(1);
 
     syncSpy.mockClear();
-    for (let i = 0; i < 600; i++) {
-      await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    }
+    for (let i = 0; i < 600; i++) await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(syncSpy).toHaveBeenCalledTimes(0);
 
     settings.close();

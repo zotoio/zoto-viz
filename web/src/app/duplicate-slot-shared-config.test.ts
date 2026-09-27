@@ -8,13 +8,11 @@ import { compilePlugin } from "../plugins/plugin";
 import { Settings } from "../ui/settings";
 import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
 
-import { HEADLINES_PACK } from "../../test/fixtures/headlines-alt-feed";
+import { HEADLINES_PACK } from "../plugins/test/load-settings-fixture";
 
 const PACK = "plugin:settings-fixture";
 
-function headlinesTileModeIds(count: number): string[] {
-  return Array.from({ length: count }, (_, i) => (i === 0 ? "plugin:headlines" : `plugin:headlines!${i}`));
-}
+const headlinesTiles = (n: number) => Array.from({ length: n }, (_, i) => (i ? `plugin:headlines!${i}` : "plugin:headlines"));
 
 describe("duplicate slot shared config > scope note when two tiles share one store", () => {
   beforeEach(() => {
@@ -51,7 +49,7 @@ describe("duplicate slot shared config > scope note when two tiles share one sto
     { n: 2, tail: "all 2 Headlines tiles on this wall.", noteCount: 1, full: "Changes apply to all 2 Headlines tiles on this wall." },
     { n: 4, tail: "all 4 Headlines tiles on this wall.", noteCount: 1, full: "Changes apply to all 4 Headlines tiles on this wall." },
   ])("shared pack scope note when $n Headlines tiles are on the wall", ({ n, tail, noteCount, full }) => {
-    const scope = { mosaicOn: true, tileModeIds: headlinesTileModeIds(n) };
+    const scope = { mosaicOn: true, tileModeIds: headlinesTiles(n) };
     const noteText = packScopeNoteText(HEADLINES_PACK, scope);
     if (noteText) {
       expect(noteText.replace(/^Changes apply to /, "")).toBe(tail);

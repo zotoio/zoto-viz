@@ -35,7 +35,7 @@ describe("settings mosaic pane pick wiring > syncTiles after slot change", () =>
     });
     applyMosaicTiles(settings, mosaic, [PACK, "plugin:topology", "plugin:memory", "plugin:topology"]);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    await new Promise<void>((r) => requestAnimationFrame(r));
     const animUi = (settings as unknown as { animUi: { syncTiles: () => void } | null }).animUi;
     expect(animUi).toBeTruthy();
     let syncCount = 0;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, afterEach } from "vitest";
 import { applyInstance } from "./instances";
-import { HEADLINES_PACK } from "../../test/fixtures/headlines-alt-feed";
+import { HEADLINES_PACK } from "./test/load-settings-fixture";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
   loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,

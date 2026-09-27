@@ -57,7 +57,7 @@ describe("duplicate slot shared config > drawer rebind guards", () => {
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:memory"]);
     bindThisView(PACK);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    await new Promise<void>((r) => requestAnimationFrame(r));
     return { settings, spec, applyMode };
   }
 

@@ -10,7 +10,7 @@ import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 import { tileDisplayName } from "./plugin";
 import { engineDispatch } from "./plugin-visualisation";
 import { viewCaption } from "../core/modes";
-import { HEADLINES_PACK, ALT_FEED_INSTANCE } from "../../test/fixtures/headlines-alt-feed";
+import { ALT_FEED_INSTANCE, HEADLINES_PACK } from "./test/load-settings-fixture";
 
 describe("pack shared copy literals", () => {
   beforeEach(() => {
@@ -33,9 +33,6 @@ describe("pack shared copy literals", () => {
       mosaicOn: true,
       tileModeIds: ["plugin:settings-fixture", "plugin:settings-fixture!1"],
     };
-    expect(packScopeNoteText(spec, scope)!.replace(/^Changes apply to /, "")).toBe(
-      "all 2 Settings fixture tiles on this wall.",
-    );
     expect(packScopeNoteText(spec, scope)).toBe(
       "Changes apply to all 2 Settings fixture tiles on this wall.",
     );

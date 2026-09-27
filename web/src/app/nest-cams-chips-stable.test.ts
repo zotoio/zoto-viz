@@ -66,7 +66,7 @@ describe("nest cams drawer chips", () => {
     settings.bindView(nestSpec, nestSpec.config);
     settings.setNestDevices(devices);
     settings.openView(NEST);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    await new Promise<void>((r) => requestAnimationFrame(r));
 
     const viewRoot = settingsViewDrawerRoot(settings);
     const labelsBefore = cameraChipButtons(viewRoot).map((b) => b.textContent);
@@ -77,7 +77,7 @@ describe("nest cams drawer chips", () => {
     const rebuildSpy = vi.spyOn(viewDrawer, "rebuildViewDrawerContent");
     rebuildSpy.mockClear();
     pickMosaicSlot(settings, 2, NEST);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    await new Promise<void>((r) => requestAnimationFrame(r));
     expect(rebuildSpy).not.toHaveBeenCalled();
     rebuildSpy.mockRestore();
 

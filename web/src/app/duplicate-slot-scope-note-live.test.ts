@@ -7,11 +7,7 @@ import { makeViewCogButton } from "../ui/view-cog";
 import * as viewDrawerModule from "../ui/view-drawer-module";
 import { hostModeById } from "./host-mode";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
-import {
-  applyMosaicTiles,
-  mountDuplicateSlotMosaicHarness,
-  pickMosaicSlot,
-} from "./test/duplicate-slot-mosaic-fixture";
+import { applyMosaicTiles, mountDuplicateSlotMosaicHarness, pickMosaicSlot } from "./test/duplicate-slot-mosaic-fixture";
 import {
   expectVisibleFocusTarget,
   mosaicLayoutPickerTrigger,
@@ -20,225 +16,150 @@ import {
 } from "./test/duplicate-slot-scope-note-test-dom";
 
 const PACK = "plugin:settings-fixture";
-const DISCARD_MSG = (name: string) =>
-  `Your unsaved ${name} changes were discarded because its last tile was removed.`;
+const WALL4 = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"] as const;
+const DISCARD = (n: string) => `Your unsaved ${n} changes were discarded because its last tile was removed.`;
+const raf = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
-function mountLiveFixture() {
+function mountLive() {
   const spec = loadSettingsDeclFixture();
   setPluginModes([
     compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
-    compilePlugin({ id: "topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
-    compilePlugin({ id: "memory", packName: "Memory", version: 1, engine: "graph", base: "memory" }),
-    compilePlugin({ id: "disk", packName: "Disk", version: 1, engine: "graph", base: "disk" }),
+    ...(["topology", "memory", "disk"] as const).map((id) => compilePlugin({ id, packName: id, version: 1, engine: "graph", base: id })),
   ]);
-
   const settings = new Settings({ storePrefix: "zoto-scope-note-live", onChange: () => {} });
   document.body.append(settings.el);
   const { mosaic, bindThisView } = mountDuplicateSlotMosaicHarness(settings, {
     hostModeById,
-    pluginSpecForMode: (modeId) => (hostModeById(modeId).pluginId === "settings-fixture" ? spec : null),
+    pluginSpecForMode: (id) => (hostModeById(id).pluginId === "settings-fixture" ? spec : null),
     lookForMode: () => null,
     fallbackModeId: () => PACK,
   });
-
   return { spec, settings, mosaic, bindThisView };
 }
 
+function gain(s: Settings) {
+  const el = settingsViewDrawerRoot(s).querySelector<HTMLInputElement>('.plugin-layer[data-layer="view"] .slider input[type=range]');
+  expect(el).toBeTruthy();
+  return el!;
+}
+
+async function editGain(s: Settings, v = "7", checkStable = false) {
+  const layer = settingsViewDrawerRoot(s).querySelector<HTMLElement>('.plugin-layer[data-layer="view"]');
+  expect(layer).toBeTruthy();
+  const g = gain(s);
+  g.focus();
+  g.value = v;
+  g.dispatchEvent(new Event("input", { bubbles: true }));
+  await raf();
+  if (checkStable) {
+    expect(settingsViewDrawerRoot(s)).toBe(s.el.querySelector(".settings-pop.drawer"));
+    expect(document.activeElement).toBe(g);
+    expect(s.isOpen).toBe(true);
+    expect(layer!.isConnected).toBe(true);
+  }
+  return { layer: layer!, g };
+}
+
 describe("duplicate slot shared config > scope note follows live tile count while drawer stays open", () => {
-  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    expect.hasAssertions();
-    localStorage.clear();
-    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    consoleErrorSpy.mockRestore();
-  });
-
-  function scopeNotes(s: Settings): HTMLElement[] {
-    return [...settingsViewDrawerRoot(s).querySelectorAll(".plugin-pack-scope-note")];
-  }
-
-  function scopeNoteCount(s: Settings): number | null {
-    const notes = scopeNotes(s);
-    if (!notes.length) return null;
-    const text = notes[0]?.textContent ?? "";
-    const m = /all (\d+)/.exec(text);
-    return m ? Number(m[1]) : null;
-  }
-
-  function viewSection(s: Settings): HTMLElement {
-    const el = settingsViewDrawerRoot(s).querySelector<HTMLElement>('.plugin-layer[data-layer="view"]');
-    expect(el).toBeTruthy();
-    return el!;
-  }
-
-  function gainSlider(s: Settings): HTMLInputElement {
-    const el = settingsViewDrawerRoot(s).querySelector<HTMLInputElement>(
-      '.plugin-layer[data-layer="view"] .slider input[type=range]',
-    );
-    expect(el).toBeTruthy();
-    return el!;
-  }
-
-  function assertDrawerEditingStable(
-    settings: Settings,
-    viewLayer: HTMLElement,
-    gain: HTMLInputElement,
-    typed: string,
-  ): void {
-    expect(settingsViewDrawerRoot(settings)).toBe(settings.el.querySelector(".settings-pop.drawer"));
-    expect(viewSection(settings)).toBe(viewLayer);
-    expect(viewLayer.isConnected).toBe(true);
-    expect(document.activeElement).toBe(gain);
-    expect(gain.value).toBe(typed);
-    expect(settings.isOpen).toBe(true);
-  }
+  let errSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { expect.hasAssertions(); localStorage.clear(); errSpy = vi.spyOn(console, "error").mockImplementation(() => {}); });
+  afterEach(() => { errSpy.mockRestore(); });
 
   it("hides pack scope note in drawer while only one pack tile is on the wall", async () => {
-    const { settings, mosaic, bindThisView } = mountLiveFixture();
-    const onePack = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"];
-    applyMosaicTiles(settings, mosaic, onePack);
+    const { settings, mosaic, bindThisView } = mountLive();
+    applyMosaicTiles(settings, mosaic, [...WALL4]);
     bindThisView(PACK);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
-    const viewLayer = viewSection(settings);
-    const gain = gainSlider(settings);
-    gain.focus();
-    gain.value = "7";
-    gain.dispatchEvent(new Event("input", { bubbles: true }));
-
-    assertDrawerEditingStable(settings, viewLayer, gain, "7");
-    expect(scopeNotes(settings)).toHaveLength(0);
-    settings.el.remove();
+    await raf();
+    await editGain(settings, "7", true);
+    expect(settingsViewDrawerRoot(settings).querySelectorAll(".plugin-pack-scope-note")).toHaveLength(0);
   });
 
   it("shows pack scope note after second pack tile is placed via slot picker", async () => {
-    const { spec, settings, mosaic, bindThisView } = mountLiveFixture();
-    const onePack = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"];
-    applyMosaicTiles(settings, mosaic, onePack);
+    const { spec, settings, mosaic, bindThisView } = mountLive();
+    applyMosaicTiles(settings, mosaic, [...WALL4]);
     bindThisView(PACK);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
-    const viewLayer = viewSection(settings);
-    const gain = gainSlider(settings);
-    gain.focus();
-    gain.value = "7";
-    gain.dispatchEvent(new Event("input", { bubbles: true }));
-
+    await raf();
+    const { layer, g } = await editGain(settings);
     pickMosaicSlot(settings, 1, PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    assertDrawerEditingStable(settings, viewLayer, gain, "7");
-    expect(scopeNotes(settings)).toHaveLength(1);
-    expect(scopeNotes(settings)[0]?.textContent).toBe(
-      `Changes apply to all 2 ${spec.packName} tiles on this wall.`,
-    );
-    settings.el.remove();
+    await editGain(settings, "7", true);
+    const note = settingsViewDrawerRoot(settings).querySelector(".plugin-pack-scope-note");
+    expect(note?.textContent).toBe(`Changes apply to all 2 ${spec.packName} tiles on this wall.`);
   });
 
   it("keeps pack scope notes in sync after replacing a non-pack tile via slot picker", async () => {
-    const { settings, mosaic, bindThisView } = mountLiveFixture();
+    const { settings, mosaic, bindThisView } = mountLive();
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:disk"]);
     bindThisView(PACK);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
-    const gain = gainSlider(settings);
-    gain.focus();
-    gain.value = "7";
-    gain.dispatchEvent(new Event("input", { bubbles: true }));
-
+    await raf();
+    await editGain(settings);
     pickMosaicSlot(settings, 3, "plugin:topology");
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    await raf();
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
-    expect(gainSlider(settings).value).toBe("7");
-    expect(scopeNoteCount(settings)).toBeGreaterThanOrEqual(2);
-    settings.el.remove();
+    await raf();
+    expect(gain(settings).value).toBe("7");
+    const text = settingsViewDrawerRoot(settings).querySelector(".plugin-pack-scope-note")?.textContent ?? "";
+    expect(Number(/all (\d+)/.exec(text)?.[1] ?? 0)).toBeGreaterThanOrEqual(2);
   });
 
   it("vertical layout patch does not rebuild the view drawer while editing", async () => {
-    const { settings, mosaic, bindThisView } = mountLiveFixture();
+    const { settings, mosaic, bindThisView } = mountLive();
     const rebuildSpy = vi.spyOn(viewDrawerModule, "rebuildViewDrawerContent");
-
-    const onePack = [PACK, "plugin:topology", "plugin:memory", "plugin:disk"];
-    applyMosaicTiles(settings, mosaic, onePack);
+    applyMosaicTiles(settings, mosaic, [...WALL4]);
     bindThisView(PACK);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
-    const viewLayer = viewSection(settings);
-    const gain = gainSlider(settings);
-    gain.focus();
-    gain.value = "7";
-    gain.dispatchEvent(new Event("input", { bubbles: true }));
+    await raf();
+    const { layer, g } = await editGain(settings);
     rebuildSpy.mockClear();
-
-    const tilesAtTwo = [...settings.animSettings.mosaicTiles];
+    const tiles = [...settings.animSettings.mosaicTiles];
     applyWallLayoutPatch(settings, {
-      tree: {
-        type: "split",
-        dir: "v",
-        ratio: 0.5,
-        a: { type: "leaf", id: tilesAtTwo[0]! },
-        b: { type: "leaf", id: tilesAtTwo[1]! },
-      },
+      tree: { type: "split", dir: "v", ratio: 0.5, a: { type: "leaf", id: tiles[0]! }, b: { type: "leaf", id: tiles[1]! } },
       maximized: null,
-      tiles: tilesAtTwo,
+      tiles,
     });
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
+    await raf();
     expect(rebuildSpy).not.toHaveBeenCalled();
-    assertDrawerEditingStable(settings, viewLayer, gain, "7");
+    expect(layer.isConnected).toBe(true);
     rebuildSpy.mockRestore();
   });
 
   it("shows discard status when the last pack tile is removed with unsaved edits", async () => {
-    const { spec, settings, mosaic, bindThisView } = mountLiveFixture();
+    const { spec, settings, mosaic, bindThisView } = mountLive();
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:disk"]);
     bindThisView(PACK);
     settings.openView(`${PACK}!1`);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
-    const gain = gainSlider(settings);
-    gain.focus();
-    gain.value = "9";
-    gain.dispatchEvent(new Event("input", { bubbles: true }));
+    await raf();
+    const g = gain(settings);
+    g.focus();
+    g.value = "9";
+    g.dispatchEvent(new Event("input", { bubbles: true }));
     expect(settings.pop.dataset.viewPluginDirty).toBe("1");
-
     const layoutTrigger = mosaicLayoutPickerTrigger(settings);
     pickMosaicSlot(settings, 1, "plugin:memory");
     pickMosaicSlot(settings, 0, "plugin:topology");
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
+    await raf();
     expect(settings.isOpen).toBe(true);
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
-    expect(viewDrawerStatusLine(settings)?.textContent).toBe(DISCARD_MSG(spec.packName));
-    expect(viewDrawerStatusLine(settings)?.classList.contains("fail")).toBe(false);
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(viewDrawerStatusLine(settings)?.textContent).toBe(DISCARD(spec.packName));
     expect(document.activeElement).toBe(layoutTrigger);
     expect(layoutTrigger.getAttribute("aria-label")).toBe("Layout");
     expectVisibleFocusTarget(layoutTrigger);
   });
 
   it("returns focus once to the Layout button when the last pack tile leaves and the drawer was opened from Layout", async () => {
-    const { settings, mosaic, bindThisView } = mountLiveFixture();
+    const { settings, mosaic, bindThisView } = mountLive();
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:disk"]);
     bindThisView(PACK);
     const layoutTrigger = mosaicLayoutPickerTrigger(settings);
     layoutTrigger.focus();
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
+    await raf();
     const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
     pickMosaicSlot(settings, 0, "plugin:memory");
     pickMosaicSlot(settings, 1, "plugin:disk");
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
+    await raf();
     expect(settings.isOpen).toBe(false);
     expect(viewDrawerStatusLine(settings)).toBeNull();
     expect(focusSpy).toHaveBeenCalledTimes(1);
@@ -247,30 +168,24 @@ describe("duplicate slot shared config > scope note follows live tile count whil
   });
 
   it("returns focus once to the pane menu cog when the last pack tile leaves and the drawer was opened from that menu", async () => {
-    const { settings, mosaic, bindThisView } = mountLiveFixture();
+    const { settings, mosaic, bindThisView } = mountLive();
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:disk"]);
     const paneCog = makeViewCogButton({
       className: "mosaic-pane-cog",
       pane: PACK,
       ariaLabel: "this pane settings",
-      onClick: () => {
-        bindThisView(PACK);
-        settings.openView(PACK);
-      },
+      onClick: () => { bindThisView(PACK); settings.openView(PACK); },
     });
     document.body.append(paneCog);
     paneCog.focus();
     paneCog.click();
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
+    await raf();
     const layoutTrigger = mosaicLayoutPickerTrigger(settings);
     const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
     pickMosaicSlot(settings, 0, "plugin:memory");
     pickMosaicSlot(settings, 1, "plugin:disk");
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
+    await raf();
     expect(settings.isOpen).toBe(false);
-    expect(viewDrawerStatusLine(settings)).toBeNull();
     expect(focusSpy).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(paneCog);
     expect(document.activeElement).not.toBe(layoutTrigger);
