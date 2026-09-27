@@ -63,7 +63,7 @@ describe("plugin sandbox config push guards", () => {
     tap.rehook();
 
     tryOnPluginChangePush(box, PACK_B, PACK_A, { a: "1" }, true);
-    expect(tap.posted).toHaveLength(0);
+    expect(tap.posted.length).toBe(0);
 
     box.unload();
     await box.load(PACK_A, "globalThis.ok = true;", ["config.read"], { a: "0" });
@@ -82,7 +82,7 @@ describe("plugin sandbox config push guards", () => {
     tap.rehook();
 
     tryOnPluginFieldsPush(box, PACK_B, PACK_A, { a: "1" }, true);
-    expect(tap.posted).toHaveLength(0);
+    expect(tap.posted.length).toBe(0);
 
     box.unload();
     await box.load(PACK_A, "globalThis.ok = true;", ["config.read"], { a: "0" });

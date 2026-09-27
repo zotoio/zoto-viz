@@ -7,6 +7,6 @@ index 517bb2bd..b85ccc18 100644
    hasConfigRead: boolean,
  ): boolean {
 -  if (!hasConfigRead || !loadedConfigStoreId) return false;
-+  if (false && (!hasConfigRead || !loadedConfigStoreId)) return false;
++  if (!loadedConfigStoreId) return false;
    return loadedConfigStoreId === iframeConfigStoreId;
  }

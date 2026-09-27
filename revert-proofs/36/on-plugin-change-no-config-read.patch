@@ -7,7 +7,6 @@ index 517bb2bd..08cb5fa6 100644
    hasConfigRead: boolean,
  ): boolean {
 -  if (!hasConfigRead) return false;
-+  if (false && !hasConfigRead) return false;
    return sandboxConfigPushAllowed(loadedConfigStoreId, editStoreId);
  }
  
