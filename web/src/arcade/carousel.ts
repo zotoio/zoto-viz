@@ -9,6 +9,7 @@ import {
   headlinesFromSources,
   type CarouselSlide,
 } from "./carousel-slides";
+import { prefersReducedMotion } from "../core/motion";
 
 const MAX_SLIDES = FEED_SLIDE_LIMIT;
 
@@ -59,7 +60,7 @@ export class CarouselView extends Stage3D {
     this.front = this.imgA;
 
     this.container.append(this.stillEl);
-    this.reduceMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.reduceMotion = prefersReducedMotion();
     this.paintCaption(undefined);
   }
 

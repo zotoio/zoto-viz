@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import * as THREE from "three";
 import {
   BACKDROP_OPTIONS, CYCLE_SKIES, cycleSkyPool, Backdrop, RECIPE_EASE_MAX_S,
-  PLUGIN_SKY_FALLBACK, PHOTO_LOOP_S, PHOTO_LOOP_FADE_S, PHOTO_SKIES, isPhotoSky, isPhotoVideoUrl, photoSkyCandidates, photoLoopPhase, photoLoopMix, photoStillLoopSample, pluginShaderError, probePluginSkyCompile, wrapPluginSky, skyGroup,
+  PLUGIN_SKY_FALLBACK, PHOTO_LOOP_S, PHOTO_LOOP_FADE_S, PHOTO_SKY_CROSSFADE_S, PHOTO_SKIES, configurePhotoStillTexture, isPhotoSky, isPhotoVideoUrl, photoCacheRetainUrls, photoSkyCandidates, photoLoopPhase, photoLoopMix, photoStillLoopSample, photoVideoSeamFadeSec, pluginShaderError, prunePhotoTextureCache, prunePhotoVideoCache, probePluginSkyCompile, wrapPluginSky, skyGroup,
+  type PhotoVideoLoop,
 } from "./backdrop";
 import { liveCam } from "../camera/livecam";
+import { resetReducedMotionSubscriptionForTests } from "../core/motion";
 
 const OK_FRAG = `
 void main() {
@@ -40,14 +43,15 @@ describe("BACKDROP_OPTIONS", () => {
     expect(isPhotoSky("fungi")).toBe(true);
     expect(PHOTO_LOOP_S).toBe(5);
     expect(photoLoopPhase(0)).toBe(0);
-    expect(photoLoopPhase(5)).toBe(0);
-    expect(photoLoopPhase(2.5)).toBeCloseTo(0.5);
-    expect(photoLoopPhase(-1)).toBeCloseTo(0.8);
+    expect(photoLoopPhase(PHOTO_LOOP_S)).toBe(0);
+    expect(photoLoopPhase(PHOTO_LOOP_S / 2)).toBeCloseTo(0.5);
+    expect(photoLoopPhase(-1, 10)).toBeCloseTo(0.9);
     expect(isPhotoVideoUrl("/skies/reef.webm")).toBe(true);
     expect(isPhotoVideoUrl("/skies/reef.mp4")).toBe(true);
     expect(isPhotoVideoUrl("/skies/reef.jpg")).toBe(false);
     expect(photoSkyCandidates("reef")).toEqual(["/skies/reef.webm", "/skies/reef.mp4", "/skies/reef.jpg"]);
     expect(PHOTO_LOOP_FADE_S).toBeCloseTo(0.35);
+    expect(PHOTO_SKY_CROSSFADE_S).toBe(3);
     expect(skyGroup("aurora")).toBe("nature");
     expect(skyGroup("matrix")).toBe("digital");
     expect(skyGroup("dynamic")).toBe("live");
@@ -194,15 +198,272 @@ describe("plugin sky contract", () => {
   });
 });
 
+describe("photo sky cache", () => {
+  it("retains only current and outgoing urls", () => {
+    const retain = photoCacheRetainUrls("/skies/reef.jpg", "/skies/meadow.jpg");
+    expect(retain.size).toBe(2);
+    expect(retain.has("/skies/reef.jpg")).toBe(true);
+    expect(retain.has("/skies/meadow.jpg")).toBe(true);
+    expect(photoCacheRetainUrls("/a", null)).toEqual(new Set(["/a"]));
+  });
+
+  it("prunes extra still textures and disposes them", () => {
+    const cache = new Map<string, THREE.Texture>();
+    const a = new THREE.Texture();
+    const b = new THREE.Texture();
+    const c = new THREE.Texture();
+    const disposeA = vi.spyOn(a, "dispose");
+    const disposeC = vi.spyOn(c, "dispose");
+    cache.set("/a", a);
+    cache.set("/b", b);
+    cache.set("/c", c);
+    const removed = prunePhotoTextureCache(cache, photoCacheRetainUrls("/b", "/a"));
+    expect(removed).toEqual(["/c"]);
+    expect(cache.size).toBe(2);
+    expect(disposeC).toHaveBeenCalledOnce();
+    expect(disposeA).not.toHaveBeenCalled();
+  });
+
+  it("releases video decoders when pruning video cache entries", () => {
+    const makeSlot = (url: string) => {
+      const el = document.createElement("video");
+      el.src = url;
+      return { el, tex: new THREE.Texture() };
+    };
+    const oldPack: PhotoVideoLoop = {
+      url: "/skies/old.webm",
+      active: 0,
+      incoming: false,
+      slots: [makeSlot("/skies/old.webm"), makeSlot("/skies/old.webm")],
+    };
+    const newPack: PhotoVideoLoop = {
+      url: "/skies/new.webm",
+      active: 0,
+      incoming: false,
+      slots: [makeSlot("/skies/new.webm"), makeSlot("/skies/new.webm")],
+    };
+    const cache = new Map([["/skies/old.webm", oldPack], ["/skies/new.webm", newPack]]);
+    const removed = prunePhotoVideoCache(cache, photoCacheRetainUrls("/skies/new.webm", null));
+    expect(removed).toEqual(["/skies/old.webm"]);
+    expect(cache.size).toBe(1);
+    expect(oldPack.slots[0].el.getAttribute("src")).toBeNull();
+    expect(oldPack.slots[1].el.getAttribute("src")).toBeNull();
+  });
+
+  it("configures mipmaps on still photo textures", () => {
+    const tex = new THREE.Texture();
+    configurePhotoStillTexture(tex);
+    expect(tex.generateMipmaps).toBe(true);
+    expect(tex.minFilter).toBe(THREE.LinearMipmapLinearFilter);
+  });
+
+  it("keeps outgoing still bound through the crossfade before cache prune", () => {
+    const sky = new Backdrop();
+    sky.setKind("reef");
+    const cache = (sky as unknown as { photoCache: Map<string, THREE.Texture> }).photoCache;
+    const outgoing = new THREE.Texture();
+    outgoing.image = { width: 16, height: 9 };
+    const incoming = new THREE.Texture();
+    incoming.image = { width: 16, height: 9 };
+    cache.set("/out.jpg", outgoing);
+    cache.set("/in.jpg", incoming);
+    const bindPhoto = (sky as unknown as { bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void }).bindPhoto.bind(sky);
+    const state = sky as unknown as { photoWant: string | null; photoOutgoingUrl: string | null };
+    state.photoWant = "/out.jpg";
+    bindPhoto(incoming, true, "/in.jpg");
+    expect(cache.has("/out.jpg")).toBe(true);
+    expect(cache.has("/in.jpg")).toBe(true);
+    expect(state.photoOutgoingUrl).toBe("/out.jpg");
+    expect(state.photoWant).toBe("/in.jpg");
+  });
+
+  it("crossfades outgoing (uVideo) into incoming (uVideoB) over PHOTO_SKY_CROSSFADE_S", () => {
+    const sky = new Backdrop();
+    (sky as unknown as { kind: string }).kind = "reef";
+    const photoMat = (sky as unknown as { photoMat: THREE.ShaderMaterial }).photoMat;
+    const internal = sky as unknown as { photoPlateMorphT: number; photoOutgoingUrl: string | null };
+    const outgoing = new THREE.Texture();
+    outgoing.image = { width: 16, height: 9 };
+    const incoming = new THREE.Texture();
+    incoming.image = { width: 16, height: 9 };
+    const cache = (sky as unknown as { photoCache: Map<string, THREE.Texture> }).photoCache;
+    cache.set("/out.jpg", outgoing);
+    cache.set("/in.jpg", incoming);
+    const bindPhoto = (sky as unknown as { bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void }).bindPhoto.bind(sky);
+    const state = sky as unknown as { photoWant: string | null };
+    state.photoWant = "/out.jpg";
+    bindPhoto(incoming, true, "/in.jpg");
+    expect(photoMat.uniforms.uVideo.value).toBe(outgoing);
+    expect(photoMat.uniforms.uVideoB.value).toBe(incoming);
+    expect(photoMat.uniforms.uLoopMix.value).toBe(0);
+    let t = 0;
+    const step = 0.05;
+    while (photoMat.uniforms.uLoopMix.value <= 0 && internal.photoPlateMorphT < 0.5) {
+      t += step;
+      sky.tick(t);
+    }
+    expect(photoMat.uniforms.uLoopMix.value).toBeGreaterThan(0);
+    expect(photoMat.uniforms.uVideo.value).toBe(outgoing);
+    expect(photoMat.uniforms.uVideoB.value).toBe(incoming);
+    while (internal.photoPlateMorphT < 1) {
+      t += step;
+      sky.tick(t);
+    }
+    expect(internal.photoPlateMorphT).toBeCloseTo(1, 5);
+    expect(t).toBeGreaterThanOrEqual(PHOTO_SKY_CROSSFADE_S - 0.11);
+    expect(t).toBeLessThanOrEqual(PHOTO_SKY_CROSSFADE_S + 0.11);
+    expect(photoMat.uniforms.uLoopMix.value).toBe(0);
+    expect((sky as unknown as { photoWant: string | null }).photoWant).toBe("/in.jpg");
+  });
+
+  it("evicts outgoing photo after the crossfade window on tick", () => {
+    const sky = new Backdrop();
+    sky.setKind("reef");
+    const cache = (sky as unknown as { photoCache: Map<string, THREE.Texture> }).photoCache;
+    const outgoing = new THREE.Texture();
+    const current = new THREE.Texture();
+    const dispose = vi.spyOn(outgoing, "dispose");
+    cache.set("/out.jpg", outgoing);
+    cache.set("/in.jpg", current);
+    const state = sky as unknown as {
+      photoWant: string | null;
+      photoOutgoingUrl: string | null;
+      photoEvictAt: number;
+      clock: number;
+    };
+    state.photoWant = "/in.jpg";
+    state.photoOutgoingUrl = "/out.jpg";
+    state.photoEvictAt = 0;
+    state.clock = PHOTO_SKY_CROSSFADE_S;
+    sky.tick(PHOTO_SKY_CROSSFADE_S);
+    expect(cache.has("/out.jpg")).toBe(false);
+    expect(cache.has("/in.jpg")).toBe(true);
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("prunes unreferenced stills when bindPhoto runs", () => {
+    const sky = new Backdrop();
+    const cache = (sky as unknown as { photoCache: Map<string, THREE.Texture> }).photoCache;
+    const stale = new THREE.Texture();
+    const keep = new THREE.Texture();
+    const incoming = new THREE.Texture();
+    stale.image = keep.image = incoming.image = { width: 8, height: 8 };
+    cache.set("/stale.jpg", stale);
+    cache.set("/keep.jpg", keep);
+    const bindPhoto = (sky as unknown as { bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void }).bindPhoto.bind(sky);
+    const state = sky as unknown as { photoWant: string | null };
+    state.photoWant = "/keep.jpg";
+    bindPhoto(incoming, true, "/new.jpg");
+    expect(cache.has("/stale.jpg")).toBe(false);
+    expect(cache.has("/keep.jpg")).toBe(true);
+  });
+
+  it("dispose removes the reduced-motion subscription", () => {
+    resetReducedMotionSubscriptionForTests();
+    const mqListeners: Array<() => void> = [];
+    const mq = {
+      matches: false,
+      addEventListener: (_: string, cb: () => void) => { mqListeners.push(cb); },
+      removeEventListener: (_: string, cb: () => void) => {
+        const i = mqListeners.indexOf(cb);
+        if (i >= 0) mqListeners.splice(i, 1);
+      },
+    };
+    vi.stubGlobal("matchMedia", () => mq);
+    const sky = new Backdrop();
+    sky.dispose();
+    expect(mqListeners.length).toBe(0);
+    vi.unstubAllGlobals();
+  });
+
+  it("pauses and resumes photo video when prefers-reduced-motion toggles", () => {
+    resetReducedMotionSubscriptionForTests();
+    const mqListeners: Array<() => void> = [];
+    const mq = {
+      matches: false,
+      addEventListener: (_: string, cb: () => void) => { mqListeners.push(cb); },
+      removeEventListener: (_: string, cb: () => void) => {
+        const i = mqListeners.indexOf(cb);
+        if (i >= 0) mqListeners.splice(i, 1);
+      },
+    };
+    vi.stubGlobal("matchMedia", () => mq);
+    const sky = new Backdrop();
+    const url = "/skies/loop.webm";
+    const el = document.createElement("video");
+    Object.defineProperty(el, "readyState", { configurable: true, value: 2 });
+    const pauseSpy = vi.spyOn(el, "pause");
+    const playSpy = vi.spyOn(el, "play").mockReturnValue(Promise.resolve());
+    const pack = {
+      url,
+      active: 0,
+      incoming: false,
+      slots: [{ el, tex: new THREE.Texture() }, { el: document.createElement("video"), tex: new THREE.Texture() }],
+    };
+    const state = sky as unknown as {
+      photoVideoCache: Map<string, typeof pack>;
+      photoVideoUrl: string | null;
+    };
+    state.photoVideoCache.set(url, pack);
+    state.photoVideoUrl = url;
+    mq.matches = true;
+    mqListeners.forEach((cb) => cb());
+    expect(pauseSpy).toHaveBeenCalled();
+    mq.matches = false;
+    mqListeners.forEach((cb) => cb());
+    expect(playSpy).toHaveBeenCalled();
+    sky.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  it("Backdrop toggles Ken Burns with prefers-reduced-motion on, off, on", () => {
+    resetReducedMotionSubscriptionForTests();
+    const mqListeners: Array<() => void> = [];
+    const mq = {
+      matches: false,
+      addEventListener: (_: string, cb: () => void) => { mqListeners.push(cb); },
+      removeEventListener: (_: string, cb: () => void) => {
+        const i = mqListeners.indexOf(cb);
+        if (i >= 0) mqListeners.splice(i, 1);
+      },
+    };
+    vi.stubGlobal("matchMedia", () => mq);
+    const sky = new Backdrop();
+    sky.setKind("reef");
+    const photoMat = (sky as unknown as { photoMat: THREE.ShaderMaterial }).photoMat;
+    const tex = new THREE.Texture();
+    tex.image = { width: 16, height: 9 };
+    const bindPhoto = (sky as unknown as { bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void }).bindPhoto.bind(sky);
+    bindPhoto(tex, true, "/skies/reef.jpg");
+    expect(photoMat.uniforms.uAnimate.value).toBe(1);
+    mq.matches = true;
+    mqListeners.forEach((cb) => cb());
+    expect(photoMat.uniforms.uAnimate.value).toBe(0);
+    mq.matches = false;
+    mqListeners.forEach((cb) => cb());
+    expect(photoMat.uniforms.uAnimate.value).toBe(1);
+    sky.dispose();
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("photo sky loop seam", () => {
+  it("caps seam fade for short sky clips so loops still wrap", () => {
+    expect(photoVideoSeamFadeSec(5)).toBeCloseTo(0.35);
+    expect(photoLoopMix(4.9, 5)).toBeGreaterThan(0);
+    expect(photoLoopMix(0.2, 0.5, 0.1)).toBe(0);
+  });
+
   it("crossfades the last window onto the start and is 0 again at wrap", () => {
-    expect(photoLoopMix(0, 5)).toBe(0);
-    expect(photoLoopMix(2.5, 5)).toBe(0);
-    expect(photoLoopMix(5 - PHOTO_LOOP_FADE_S, 5)).toBe(0);
-    expect(photoLoopMix(5 - PHOTO_LOOP_FADE_S / 2, 5)).toBeCloseTo(0.5);
-    expect(photoLoopMix(5 - 1e-6, 5)).toBeCloseTo(1, 3);
-    expect(photoLoopMix(5, 5)).toBe(0);
-    expect(photoLoopMix(10, 5)).toBe(0);
+    const dur = 12;
+    expect(photoLoopMix(0, dur)).toBe(0);
+    expect(photoLoopMix(dur / 2, dur)).toBe(0);
+    const fade = photoVideoSeamFadeSec(dur);
+    expect(photoLoopMix(dur - fade, dur, fade)).toBe(0);
+    expect(photoLoopMix(dur - fade / 2, dur, fade)).toBeCloseTo(0.5);
+    expect(photoLoopMix(dur - 1e-6, dur)).toBeCloseTo(1, 3);
+    expect(photoLoopMix(dur, dur)).toBe(0);
+    expect(photoLoopMix(dur * 2, dur)).toBe(0);
     expect(photoLoopMix(1, 0.4)).toBe(0);
   });
 
