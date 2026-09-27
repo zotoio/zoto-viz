@@ -348,7 +348,15 @@ export class PluginSandbox {
     hash?: string,
     viz?: VizPluginContract,
   ): Promise<void> {
-    await this.loadModuleUrl(await pluginModuleSandboxUrl(id, hash), caps, config, viz);
+    this.unload();
+    this.activePackId = "";
+    this.caps = caps.filter((c) => ALLOWED.has(c));
+    this.vizContract = viz;
+    // Production has no test fallback frame: module.js mint needs a live frame id.
+    this.frameId = await openPackAssetFrame(this.activeTileId);
+    activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+    const moduleSrc = await pluginModuleSandboxUrl(id, hash);
+    await this.bootFrame(moduleSrc, config, viz);
   }
 
   async loadModuleUrl(
@@ -369,8 +377,10 @@ export class PluginSandbox {
     config: Record<string, string>,
     viz?: VizPluginContract,
   ): Promise<void> {
-    this.frameId = await openPackAssetFrame(this.activeTileId);
-    activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+    if (!this.frameId) {
+      this.frameId = await openPackAssetFrame(this.activeTileId);
+      activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+    }
     const bootOut = { nonce: "" };
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");

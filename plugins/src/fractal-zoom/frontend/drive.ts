@@ -74,7 +74,7 @@ export const FZ_SLOT = {
 
 export const FZ_SLOT0_FLOATS = 44;
 
-export let fractalHudCaption = "Mandelbulb · Classic Dive";
+export let fractalHudCaption = "Mandelbrot 2D · Seahorse Valley";
 
 export interface FractalDriveInput {
   t: number;
@@ -109,9 +109,9 @@ export function fractalOptionsNow(): FractalOptions {
   return optsCache;
 }
 
-let camX = 0.05;
-let camY = 0.02;
-let camZ = -0.85;
+let camX = 0.12;
+let camY = 0.22;
+let camZ = 2.42;
 let zoomLog = -0.35;
 let yaw = 0.55;
 let pitch = -0.08;
@@ -122,18 +122,10 @@ let pilotSeed = 0.37;
 let lastFrameMs = 0;
 let resetCamLatched = false;
 
-const PILOT_TARGETS = [
-  [-0.745, 0.186],
-  [-0.16, 1.0405],
-  [-0.235, 0.827],
-  [-0.8, 0.156],
-  [-1.25, 0.045],
-];
-
 export function resetFractalCamera(): void {
-  camX = 0.05;
-  camY = 0.02;
-  camZ = -0.85;
+  camX = 0.12;
+  camY = 0.22;
+  camZ = 2.42;
   zoomLog = -0.35;
   yaw = 0.55;
   pitch = -0.08;
@@ -149,7 +141,7 @@ export function resetFractalDrive(): void {
   optsCache = parseFractalOptions();
   lastFrameMs = 0;
   resetCamLatched = false;
-  fractalHudCaption = "Mandelbulb · Classic Dive";
+  fractalHudCaption = "Mandelbrot 2D · Seahorse Valley";
 }
 
 export function getFractalFrameMs(): number {
@@ -202,12 +194,9 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
     if (!driftOnly) zoomLog += dt * zspd * ping * (0.65 + audioDrv * 0.5);
     morphT += dt * (opts.morph ? 0.35 + audioDrv * 0.2 : 0);
     if (!opts.reducedMotion) roll += dt * opts.rollSpeed * (0.5 + audioDrv);
-    if (opts.autoPilot) {
-      const drift = opts.reducedMotion ? 0.08 : 0.35;
+    if (opts.autoPilot && !driftOnly) {
+      const drift = opts.reducedMotion ? 0.08 : 0.22;
       yaw += dt * opts.rotateSpeed * drift;
-      const target = PILOT_TARGETS[Math.floor((t * 0.07 + pilotSeed) % PILOT_TARGETS.length)]!;
-      camX += (target[0] * 0.35 - camX) * dt * 0.15;
-      camY += (target[1] * 0.2 - camY) * dt * 0.12;
     }
   }
 
@@ -221,13 +210,22 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   pointer.zoomWheel = 0;
 
   const [dirX, dirY, dirZ] = dirFromAngles(yaw, pitch, roll);
-  const step = Math.exp(-zoomLog * 0.35);
-  const fly = !holdStill && !driftOnly && opts.zoomSpeed > 0;
-  if (fly) {
-    const dolly = dt * 0.4 * ping * (opts.reducedMotion ? Math.min(opts.zoomSpeed, 0.12) : opts.zoomSpeed);
-    camX += dirX * step * dolly;
-    camY += dirY * step * dolly;
-    camZ += dirZ * step * dolly;
+  const dive = Math.max(0, zoomLog + 0.35);
+  const is2d = opts.type === "mandel2d" || opts.type === "julia2d";
+  if (!holdStill && !driftOnly && opts.autoPilot && !is2d) {
+    const ang = t * 0.05 + pilotSeed;
+    camX = 0.12 + Math.sin(ang) * 0.35;
+    camY = 0.22 + Math.sin(ang * 0.7) * 0.08;
+    camZ = 2.42 + Math.cos(ang) * 0.25;
+  }
+
+  let cx = opts.mandelCx;
+  let cy = opts.mandelCy;
+  if (is2d && opts.autoPilot && !holdStill) {
+    const keep = Math.exp(-dive);
+    const ang = t * 0.018 + pilotSeed;
+    cx += Math.cos(ang) * 0.00004 * keep;
+    cy += Math.sin(ang) * 0.00004 * keep;
   }
 
   const power = opts.morph
@@ -276,9 +274,9 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   slot0[FZ_SLOT.audioDrv] = audioDrv;
   slot0[FZ_SLOT.pingPhase] = pingPhase;
   slot0[FZ_SLOT.kaleidoSym] = opts.kaleidoSym;
-  slot0[FZ_SLOT.mandelCx] = opts.mandelCx;
-  slot0[FZ_SLOT.mandelCy] = opts.mandelCy;
-  slot0[FZ_SLOT.mandelScale] = Math.exp(-zoomLog * 0.08) * aspect;
+  slot0[FZ_SLOT.mandelCx] = cx;
+  slot0[FZ_SLOT.mandelCy] = cy;
+  slot0[FZ_SLOT.mandelScale] = 2.2 * Math.exp(-dive * 1.25) * Math.max(0.25, Math.min(aspect, 2.4) / 1.6);
   slot0[FZ_SLOT.frameMs] = lastFrameMs;
   slot0[FZ_SLOT.precisionClamp] = precisionClamp;
   slot0[FZ_SLOT.mark] = 1;

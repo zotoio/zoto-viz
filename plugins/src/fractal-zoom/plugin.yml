@@ -31,7 +31,7 @@ config:
 - key: preset
   label: preset
   type: select
-  default: bulb-classic
+  default: mandel-deep
   values:
   - - bulb-classic
     - Classic Dive
@@ -89,7 +89,7 @@ config:
 - key: fractalType
   label: fractal type
   type: select
-  default: mandelbulb
+  default: mandel2d
   values:
   - - mandelbulb
     - Mandelbulb
@@ -111,7 +111,7 @@ config:
 - key: zoomSpeed
   label: zoom speed
   type: number
-  default: 0.35
+  default: 0.55
   min: 0
   max: 1.0
   step: 0.05
@@ -211,7 +211,7 @@ config:
 - key: palette
   label: palette
   type: select
-  default: cosmic
+  default: deep
   values:
   - - cosmic
     - cosmic
