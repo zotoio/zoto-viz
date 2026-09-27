@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "vitest JSON selection by full name > rejects when target is skipped (it.skipIf / ctx.skip)",
   "description": "Treat a skipped target as executed",
-  "red": "AssertionError: expected true to be false // Object.is equality"
+  "red": {
+    "actual": true,
+    "expected": false
+  }
 }

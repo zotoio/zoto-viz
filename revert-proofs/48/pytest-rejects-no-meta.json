@@ -2,6 +2,9 @@
   "runner": "vitest",
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "strict pytest red from plugin JSON only > (a) rejects ProbeError even when traceback mentions AssertionError",
-  "description": "Classify every pytest failure as assertion red",
-  "red": "AssertionError: expected 'assertion' to be 'build break' // Object.is equality"
+  "description": "Classify every pytest failure as an assertion",
+  "red": {
+    "actual": "assertion",
+    "expected": "build break"
+  }
 }

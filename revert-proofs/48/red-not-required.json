@@ -1,7 +1,10 @@
 {
   "runner": "vitest",
   "testFile": "scripts/revert-proof.lib.test.ts",
-  "testName": "sidecar red value > (red-required) sidecar without a string red field is rejected",
-  "description": "Stop requiring the red sidecar field",
-  "red": "AssertionError: expected undefined to be 'row r: sidecar JSON missing string fi…' // Object.is equality"
+  "testName": "sidecar red value > (5-red-required) sidecar without structured red is rejected",
+  "description": "Stop validating the red sidecar field",
+  "red": {
+    "actual": null,
+    "expected": "row r: sidecar JSON missing object field \"red\""
+  }
 }

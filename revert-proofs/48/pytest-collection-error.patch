@@ -1,9 +1,9 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..3f541d2 100644
+index a3ae968..c9b1594 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -329,7 +329,7 @@ export function classifyPatchedVitest(run) {
- /** @returns {{ tests: { nodeid: string, outcome: string, revertProofAssertion: boolean }[], collectionError: boolean }} */
+@@ -384,7 +384,7 @@ function normalizePytestPluginTest(t) {
+ /** @returns {{ tests: PytestPluginTest[], collectionError: boolean }} */
  export function parsePytestPluginJson(text, pytestExitCode) {
    if (!text?.trim()) {
 -    return { tests: [], collectionError: pytestExitCode !== 0 };

@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "sidecar red value > (5-red-shape) vitest red given as a message string is rejected",
+  "description": "Accept a non-object red (message string)",
+  "red": {
+    "actual": "row r: vitest red must be { actual, expected } (structured assertion values)",
+    "expected": "row r: sidecar JSON missing object field \"red\""
+  }
+}

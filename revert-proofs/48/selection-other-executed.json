@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "vitest JSON selection by full name > rejects when another test executed",
   "description": "Drop the other-tests-skipped rejection",
-  "red": "AssertionError: expected true to be false // Object.is equality"
+  "red": {
+    "actual": true,
+    "expected": false
+  }
 }

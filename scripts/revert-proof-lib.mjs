@@ -51,7 +51,7 @@ export function parseTimeoutSec(raw, slug) {
 }
 
 export function validateRowMeta(meta, slug) {
-  for (const key of ["runner", "testFile", "testName", "description", "red"]) {
+  for (const key of ["runner", "testFile", "testName", "description"]) {
     if (!meta[key] || typeof meta[key] !== "string") {
       throw new Error(`row ${slug}: sidecar JSON missing string field "${key}"`);
     }
@@ -59,19 +59,48 @@ export function validateRowMeta(meta, slug) {
   if (meta.runner !== "vitest" && meta.runner !== "pytest") {
     throw new Error(`row ${slug}: runner must be vitest or pytest`);
   }
+  validateRedSidecar(meta, slug);
+}
+
+/** Vitest: `{ actual, expected }`. Pytest: `{ assert: "assert …" }`. */
+export function validateRedSidecar(meta, slug) {
+  const red = meta.red;
+  if (!red || typeof red !== "object" || Array.isArray(red)) {
+    throw new Error(`row ${slug}: sidecar JSON missing object field "red"`);
+  }
+  if (meta.runner === "vitest") {
+    if (
+      !Object.prototype.hasOwnProperty.call(red, "actual") ||
+      !Object.prototype.hasOwnProperty.call(red, "expected")
+    ) {
+      throw new Error(
+        `row ${slug}: vitest red must be { actual, expected } (structured assertion values)`,
+      );
+    }
+    return;
+  }
+  if (typeof red.assert !== "string" || !red.assert.trim().startsWith("assert ")) {
+    throw new Error(
+      `row ${slug}: pytest red must be { assert: "assert …" } (rewritten assert source)`,
+    );
+  }
+}
+
+export function redValuesEqual(expected, actual) {
+  return JSON.stringify(expected) === JSON.stringify(actual);
+}
+
+/** Compare structured red from the first branded assertion (vitest) or assert line (pytest). */
+export function assertRedValue(slug, expected, actual) {
+  if (!redValuesEqual(expected, actual)) {
+    throw new Error(
+      `row ${slug}: red value mismatch (expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual ?? null)})`,
+    );
+  }
 }
 
 export function firstLine(text) {
   return String(text ?? "").split("\n")[0];
-}
-
-/** `red` is the exact first line of the patched target's failure message. */
-export function assertRedValue(slug, expected, actual) {
-  if (actual !== expected) {
-    throw new Error(
-      `row ${slug}: red value mismatch (expected ${expected}, got ${actual ?? "<none>"})`,
-    );
-  }
 }
 
 export function allowTypeErrorEnabled(meta) {
@@ -261,9 +290,9 @@ export function vitestAssertionFullName(assertion) {
   return assertion.fullName || assertion.title;
 }
 
-/** @returns {{ tests: { fullName: string, status: string, revertProofAssertion: boolean, failureMessage: string | null }[], suiteError: string | null }} */
+/** @returns {{ tests: { fullName: string, status: string, revertProofAssertion: boolean, revertProofRed: { actual: unknown, expected: unknown } | null, failureMessage: string | null }[], suiteError: string | null }} */
 export function parseVitestJsonReport(report) {
-  /** @type {{ fullName: string, status: string, revertProofAssertion: boolean, failureMessage: string | null }[]} */
+  /** @type {{ fullName: string, status: string, revertProofAssertion: boolean, revertProofRed: { actual: unknown, expected: unknown } | null, failureMessage: string | null }[]} */
   const tests = [];
   if (!report?.testResults?.length) {
     return {
@@ -276,10 +305,18 @@ export function parseVitestJsonReport(report) {
       return { tests, suiteError: file.message || "suite failed" };
     }
     for (const t of file.assertionResults ?? []) {
+      const revertProofRed = t.meta?.revertProofRed ?? null;
       tests.push({
         fullName: vitestAssertionFullName(t),
         status: t.status,
         revertProofAssertion: t.meta?.revertProofAssertion === true,
+        revertProofRed:
+          revertProofRed &&
+          typeof revertProofRed === "object" &&
+          "actual" in revertProofRed &&
+          "expected" in revertProofRed
+            ? { actual: revertProofRed.actual, expected: revertProofRed.expected }
+            : null,
         failureMessage: t.failureMessages?.length ? firstLine(t.failureMessages[0]) : null,
       });
     }
@@ -326,14 +363,32 @@ export function classifyPatchedVitest(run) {
   return sel.target.revertProofAssertion ? "assertion" : "build break";
 }
 
-/** @returns {{ tests: { nodeid: string, outcome: string, revertProofAssertion: boolean }[], collectionError: boolean }} */
+/**
+ * @typedef {{ nodeid: string, outcome: string, revertProofAssertion: boolean, revertProofRed: { assert: string } | null }} PytestPluginTest
+ */
+
+/** @returns {PytestPluginTest} */
+function normalizePytestPluginTest(t) {
+  const red = t?.revertProofRed;
+  return {
+    nodeid: t?.nodeid,
+    outcome: t?.outcome,
+    revertProofAssertion: t?.revertProofAssertion === true,
+    revertProofRed:
+      red && typeof red === "object" && typeof red.assert === "string"
+        ? { assert: red.assert }
+        : null,
+  };
+}
+
+/** @returns {{ tests: PytestPluginTest[], collectionError: boolean }} */
 export function parsePytestPluginJson(text, pytestExitCode) {
   if (!text?.trim()) {
     return { tests: [], collectionError: pytestExitCode !== 0 };
   }
   try {
     const data = JSON.parse(text);
-    const tests = Array.isArray(data.tests) ? data.tests : [];
+    const tests = Array.isArray(data.tests) ? data.tests.map(normalizePytestPluginTest) : [];
     return { tests, collectionError: false };
   } catch {
     return { tests: [], collectionError: true };
@@ -341,11 +396,13 @@ export function parsePytestPluginJson(text, pytestExitCode) {
 }
 
 /**
- * @param {{ nodeid: string, outcome: string, revertProofAssertion: boolean }[]} tests
+ * @param {{ nodeid: string, outcome: string, revertProofAssertion?: boolean, revertProofRed?: unknown }[]} tests
  * @param {string} nodeId
+ * @returns {{ ok: boolean, reason: string | null, target: PytestPluginTest | null }}
  */
 export function assessPytestSelection(tests, nodeId) {
-  const target = tests.find((t) => t.nodeid === nodeId);
+  const found = tests.find((t) => t.nodeid === nodeId);
+  const target = found ? normalizePytestPluginTest(found) : null;
   if (!target) {
     return { ok: false, reason: "target not found", target: null };
   }

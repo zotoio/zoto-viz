@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "pytest plugin JSON parsing > selection target carries structured revertProofRed from plugin JSON",
+  "description": "Drop revertProofRed when normalizing pytest plugin rows",
+  "red": {
+    "actual": null,
+    "expected": {
+      "assert": "assert answer == 2"
+    }
+  }
+}
