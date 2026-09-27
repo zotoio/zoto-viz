@@ -6,7 +6,7 @@ import os
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from . import paths
 from .pack_id import pack_block_path, pack_id_valid, require_pack_id
@@ -18,8 +18,6 @@ _UNREADABLE_PACKS: set[str] = set()
 _DIR_UNREADABLE = False
 _CACHE_LOADED = False
 _MIGRATED = False
-
-_after_block_write_before_replace: Callable[[], None] | None = None
 
 REASON_COULDNT_START = "couldnt_start"
 REASON_BLOCK_RECORD_UNREADABLE = "block_record_unreadable"
@@ -72,8 +70,6 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
             handle.write(json.dumps(payload, indent=2) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
-        if _after_block_write_before_replace is not None:
-            _after_block_write_before_replace()
         os.replace(tmp, path)
         dir_fd = os.open(path.parent, os.O_RDONLY)
         try:
@@ -188,35 +184,6 @@ def unreadable_block_record_pack_ids() -> list[str]:
     with _LOCK:
         _load_store()
         return sorted(_UNREADABLE_PACKS)
-
-
-def _load() -> dict[str, dict[str, str]]:
-    """Test helper: all blocks keyed by zip sha256."""
-    with _LOCK:
-        _load_store()
-        return {k: dict(v) for k, v in _BY_SHA.items()}
-
-
-def reset_zip_blocks_for_tests() -> None:
-    global _MIGRATED
-    with _LOCK:
-        _invalidate_cache()
-        _MIGRATED = False
-        local = _plugin_local_dir(create=False)
-        legacy = local / LEGACY_STORE_NAME
-        if legacy.is_file():
-            legacy.unlink(missing_ok=True)
-        blocks = local / "blocks"
-        if blocks.is_dir():
-            for child in blocks.iterdir():
-                if child.is_file():
-                    child.unlink(missing_ok=True)
-            try:
-                blocks.rmdir()
-            except OSError:
-                pass
-        global _after_block_write_before_replace
-        _after_block_write_before_replace = None
 
 
 def record_zip_block(sha256: str, row: dict[str, str]) -> None:

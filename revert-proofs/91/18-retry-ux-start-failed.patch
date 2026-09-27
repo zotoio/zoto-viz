@@ -1,13 +1,17 @@
 diff --git a/web/src/plugins/pack-install-retry.ts b/web/src/plugins/pack-install-retry.ts
-index 206e41d..48eabdc 100644
 --- a/web/src/plugins/pack-install-retry.ts
 +++ b/web/src/plugins/pack-install-retry.ts
-@@ -89,7 +89,7 @@ export function applyPackInstallRetryResponse(
+@@ -89,13 +89,6 @@
      installHistory.push(packRetrySuccessHistoryMessage(name, ver));
      return "success";
    }
 -  if (result === "start_failed") {
-+  if (false && result === "start_failed") {
+-    const name = body.name || body.id;
+-    const ver = body.version ?? 2;
+-    const message = body.message || packRetryStartFailedMessage(name, ver);
+-    updateBlockedCatalogEntryBySha(sha, { message, retryable: "true" });
+-    return "start_failed";
+-  }
+   if (result === "zip_changed") {
      const name = body.name || body.id;
-     const ver = body.version ?? 2;
-     const message = body.message || packRetryStartFailedMessage(name, ver);
+     const message = body.message || packRetryZipChangedMessage(name, body.id);

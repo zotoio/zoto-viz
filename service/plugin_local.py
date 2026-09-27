@@ -564,6 +564,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
         if dest.is_file() and pz.plugin_sha256(dest).lower() != digest:
             return _retry_zip_changed_response(digest, row, pid, zip_error="zip_hash_mismatch")
 
+        clear_zip_block(digest)
         forget_zip_block_cache_for_path(zip_path)
         plugins.reset_scan_memo()
 
