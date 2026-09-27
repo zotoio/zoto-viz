@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/main-wiring-boot.test.ts",
-  "testName": "^main.ts wiring boot > settings wires createMosaicPanePickHandler at boot$",
-  "description": "main.ts must wire settings.onMosaicPanePick through createMosaicPanePickHandler.",
-  "redOutput": "AssertionError: expected \"createMosaicPanePickHandler\" to be called 1 times, but got 0 times"
-}

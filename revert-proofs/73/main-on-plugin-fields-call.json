@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/main-wiring-boot.test.ts",
-  "testName": "^main.ts wiring boot > onPluginFields calls runMainOnPluginFields on plugin change$",
-  "description": "main.ts onPluginFields must delegate to runMainOnPluginFields.",
-  "redOutput": "AssertionError: expected \"runMainOnPluginFields\" to be called 1 times, but got 0 times"
-}

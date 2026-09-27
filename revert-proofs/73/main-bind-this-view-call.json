@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/main-wiring-boot.test.ts",
-  "testName": "^main.ts wiring boot > bindThisView calls runMainBindThisView from view cog$",
-  "description": "main.ts bindThisView must delegate to runMainBindThisView.",
-  "redOutput": "AssertionError: expected \"runMainBindThisView\" to be called 1 times, but got 0 times"
-}

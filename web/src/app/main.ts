@@ -108,9 +108,9 @@ import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state
 import { mosaicTileViewId, mosaicWallUsesView, parseMosaicSlotId } from "../graph/mosaic-tile-id";
 import { hostModeById } from "./host-mode";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
-import { runMainOnPluginFields } from "./main-on-plugin-fields";
-import { runMainBindThisView } from "./main-bind-this-view";
-import { runMainApplyModeDrawerRebind } from "./main-apply-mode-drawer";
+import { bindThisView as bindThisViewHost } from "./host-view-bind";
+import { rebindViewDrawerOnApplyMode } from "./host-apply-mode-rebind";
+import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
 import { createMosaicPanePickHandler } from "./host-mosaic-pane-pick";
 import { syncSettingsAnimToMosaic } from "./settings-mosaic-anim-sync";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
@@ -494,9 +494,9 @@ nestCams.onChange = (patch) => {
 };
 
 function onPluginFields(): void {
-  runMainOnPluginFields({
+  syncPluginFieldsFromSettingsEdit({
     settings,
-    modeSelValue: () => modeSel.value,
+    fallbackModeId: () => modeSel.value,
     hostModeById,
     optsFor,
     mosaic,
@@ -564,7 +564,8 @@ function arcadeControls(m: ViewMode): HTMLElement[] {
 }
 
 function bindThisView(modeId: string): void {
-  runMainBindThisView({
+  if (!settings) return;
+  bindThisViewHost({
     settings,
     hostModeById,
     pluginSpecForMode,
@@ -794,7 +795,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   feedTitleCube.setActive(rainPics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
-  runMainApplyModeDrawerRebind(bindThisView, { settings, modeId: m.id, flags, hostModeById });
+  rebindViewDrawerOnApplyMode(bindThisView, { settings, modeId: m.id, flags, hostModeById });
   $("modeOpts").replaceChildren();
   void (async () => {
     if (!(await ensureReviewed(spec))) {
