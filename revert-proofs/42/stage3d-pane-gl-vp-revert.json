@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/arcade/stage3d-pane-gl-vp.test.ts",
+  "testName": "WebGL frame path builds GlRect via toGlRectInto for picture probe",
+  "expectedRed": "AssertionError: expected \"toGlRectInto\" to be called at least once"
+}

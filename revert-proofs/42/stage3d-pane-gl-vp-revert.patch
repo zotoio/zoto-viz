@@ -1,0 +1,18 @@
+diff --git a/web/src/arcade/stage3d.ts b/web/src/arcade/stage3d.ts
+index e0abb0df..9acadadc 100644
+--- a/web/src/arcade/stage3d.ts
++++ b/web/src/arcade/stage3d.ts
+@@ -263,12 +263,7 @@ export abstract class Stage3D {
+       const draw = () => this.renderer?.render(this.world, this.camera);
+       if (gl) {
+         timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
+-        const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+-        const vp = toGlRectInto(
+-          dev,
+-          asCanvasDeviceHeight(gl.drawingBufferHeight),
+-          this.paneGlVpScratch,
+-        );
++        const vp = { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+         this.picture.tick(gl, vp, ts, (at) => this.paneFps.mark(at));
+       } else draw();
+     } else if (this.fallback && this.canvas) {
