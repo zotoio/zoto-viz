@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.dogfood.test.ts",
   "testName": "revert-proof dogfood guards > production-only guard rejects patches touching test files",
   "description": "Disable production-only patch validation",
-  "red": {
-    "actual": null,
-    "expected": "row dogfood: patch touches test files (only production reverts allowed)"
-  }
+  "red": "AssertionError: expected undefined to be 'row dogfood: patch touches test files\u2026' // Object.is equality"
 }

@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "sidecar red value > (5-red-required) sidecar without structured red is rejected",
   "description": "Stop validating the red sidecar field",
-  "red": {
-    "actual": null,
-    "expected": "row r: sidecar JSON missing object field \"red\""
-  }
+  "red": "row r: sidecar JSON missing string field \"red\""
 }

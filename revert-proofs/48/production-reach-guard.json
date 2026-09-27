@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.dogfood.test.ts",
   "testName": "revert-proof dogfood guards > production reach guard rejects unreachable revert targets",
   "description": "Disable production reach guard so test-only revert targets are accepted",
-  "red": {
-    "actual": null,
-    "expected": "row dogfood: revert target unreachable from production: web/src/test-only-helper.ts"
-  }
+  "red": "AssertionError: expected undefined to be 'row dogfood: revert target unreachabl\u2026' // Object.is equality"
 }

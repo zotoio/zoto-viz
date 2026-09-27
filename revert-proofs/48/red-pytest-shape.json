@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "sidecar red value > (5-red-shape) pytest red must be the rewritten assert source",
   "description": "Drop the pytest { assert } shape check",
-  "red": {
-    "actual": null,
-    "expected": "row r: pytest red must be { assert: \"assert …\" } (rewritten assert source)"
-  }
+  "red": "row r: red must be a single-line string, not an object (got structured sidecar)"
 }

@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "strict Vitest red from task.meta only > (b) rejects assertion-looking failure without meta flag",
   "description": "Classify every vitest failure as an assertion",
-  "red": {
-    "actual": "assertion",
-    "expected": "build break"
-  }
+  "red": "AssertionError: expected 'assertion' to be 'build break' // Object.is equality"
 }

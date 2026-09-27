@@ -1,16 +1,14 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 4b69613..cce0a6f 100644
+index 69ced51..69ced51 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -79,11 +79,6 @@ export function validateRedSidecar(meta, slug) {
-     }
-     return;
+@@ -76,9 +76,6 @@ export function validateRedSidecar(meta, slug) {
+   if (red.includes("\n") || red.includes("\r")) {
+     throw new Error(`row ${slug}: red must be a single line with no line breaks`);
    }
--  if (typeof red.assert !== "string" || !red.assert.trim().startsWith("assert ")) {
--    throw new Error(
--      `row ${slug}: pytest red must be { assert: "assert …" } (rewritten assert source)`,
--    );
+-  if (meta.runner === "pytest" && !red.trim().startsWith("assert ")) {
+-    throw new Error(`row ${slug}: pytest red must start with "assert " (rewritten assert source)`);
 -  }
  }
  
- export function redValuesEqual(expected, actual) {
+ /** Patched failure line compared to the sidecar (byte-exact). */

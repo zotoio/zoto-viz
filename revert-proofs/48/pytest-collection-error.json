@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "pytest plugin JSON parsing > treats missing JSON on nonzero exit as collection error",
   "description": "Treat missing plugin JSON as a clean run",
-  "red": {
-    "actual": false,
-    "expected": true
-  }
+  "red": "AssertionError: expected false to be true // Object.is equality"
 }

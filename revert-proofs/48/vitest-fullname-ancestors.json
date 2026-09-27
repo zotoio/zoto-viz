@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "vitest JSON report parsing > rebuilds fullName from ancestorTitles and reads meta",
   "description": "Stop rebuilding fullName from ancestorTitles",
-  "red": {
-    "actual": "returns one",
-    "expected": "widget > alpha > returns one"
-  }
+  "red": "AssertionError: expected 'returns one' to be 'widget > alpha > returns one' // Object.is equality"
 }

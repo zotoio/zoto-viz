@@ -3,14 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "revert-proof vitest runner through the overlay > (2) real expect(1).toBe(0) is branded",
   "description": "Brand capture swaps actual and expected",
-  "red": {
-    "actual": {
-      "actual": 1,
-      "expected": 0
-    },
-    "expected": {
-      "actual": 0,
-      "expected": 1
-    }
-  }
+  "red": "AssertionError: expected { actual: +0, expected: 1 } to deeply equal { actual: 1, expected: +0 }"
 }

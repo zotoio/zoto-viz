@@ -62,39 +62,44 @@ export function validateRowMeta(meta, slug) {
   validateRedSidecar(meta, slug);
 }
 
-/** Vitest: `{ actual, expected }`. Pytest: `{ assert: "assert …" }`. */
+/** Sidecar `red` is one line (vitest failure message or pytest assert source). */
 export function validateRedSidecar(meta, slug) {
   const red = meta.red;
-  if (!red || typeof red !== "object" || Array.isArray(red)) {
-    throw new Error(`row ${slug}: sidecar JSON missing object field "red"`);
-  }
-  if (meta.runner === "vitest") {
-    if (
-      !Object.prototype.hasOwnProperty.call(red, "actual") ||
-      !Object.prototype.hasOwnProperty.call(red, "expected")
-    ) {
-      throw new Error(
-        `row ${slug}: vitest red must be { actual, expected } (structured assertion values)`,
-      );
-    }
-    return;
-  }
-  if (typeof red.assert !== "string" || !red.assert.trim().startsWith("assert ")) {
+  if (typeof red === "object" && red !== null) {
     throw new Error(
-      `row ${slug}: pytest red must be { assert: "assert …" } (rewritten assert source)`,
+      `row ${slug}: red must be a single-line string, not an object (got structured sidecar)`,
     );
   }
+  if (typeof red !== "string" || red.length === 0) {
+    throw new Error(`row ${slug}: sidecar JSON missing string field "red"`);
+  }
+  if (red.includes("\n") || red.includes("\r")) {
+    throw new Error(`row ${slug}: red must be a single line with no line breaks`);
+  }
+  if (meta.runner === "pytest" && !red.trim().startsWith("assert ")) {
+    throw new Error(`row ${slug}: pytest red must start with "assert " (rewritten assert source)`);
+  }
 }
 
-export function redValuesEqual(expected, actual) {
-  return JSON.stringify(expected) === JSON.stringify(actual);
+/** Patched failure line compared to the sidecar (byte-exact). */
+export function patchedFailureRedLine(target, runner) {
+  if (!target) {
+    return null;
+  }
+  if (runner === "pytest") {
+    const assertLine = target.revertProofRed?.assert;
+    return typeof assertLine === "string" ? assertLine : null;
+  }
+  const msg = target.failureMessage;
+  return typeof msg === "string" && msg.length > 0 ? msg : null;
 }
 
-/** Compare structured red from the first branded assertion (vitest) or assert line (pytest). */
-export function assertRedValue(slug, expected, actual) {
-  if (!redValuesEqual(expected, actual)) {
+/** Compare the patched failure line to the sidecar red string (byte-exact). */
+export function assertRedLine(slug, expectedLine, target, runner) {
+  const actualLine = patchedFailureRedLine(target, runner);
+  if (actualLine !== expectedLine) {
     throw new Error(
-      `row ${slug}: red value mismatch (expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual ?? null)})`,
+      `row ${slug}: red line mismatch (expected ${JSON.stringify(expectedLine)}, got ${JSON.stringify(actualLine)})`,
     );
   }
 }
@@ -440,6 +445,110 @@ export function validatePatchTouchesOnlyProduction(patchText, slug) {
   if (patchTouchesTestFiles(patchText)) {
     throw new Error(
       `row ${slug}: patch touches test files (only production reverts allowed)`,
+    );
+  }
+}
+
+/** Repo-relative paths appearing in a unified diff (---/+++). */
+export function patchTouchedPaths(patchText) {
+  /** @type {string[]} */
+  const paths = [];
+  for (const line of patchText.split("\n")) {
+    if (line.startsWith("--- ") || line.startsWith("+++ ")) {
+      const raw = line.slice(4).trim();
+      if (raw === "/dev/null" || raw.startsWith("/dev/null")) {
+        continue;
+      }
+      const p = raw.replace(/^[ab]\//, "");
+      if (p && !paths.includes(p)) {
+        paths.push(p);
+      }
+    }
+  }
+  return paths;
+}
+
+/**
+ * Stacked child PR: git changes must not edit the parent's revert-proofs tree; only
+ * revert-proofs/<child>/ may change under revert-proofs/.
+ */
+export function validateStackedChildProofScope(childPr, parentPr, changedPaths) {
+  const childPrefix = `revert-proofs/${childPr}/`;
+  const parentPrefix = `revert-proofs/${parentPr}/`;
+  for (const raw of changedPaths) {
+    const p = normRel(raw);
+    if (!p.startsWith("revert-proofs/")) {
+      continue;
+    }
+    if (p.startsWith(parentPrefix)) {
+      throw new Error(
+        `stacked PR ${childPr}: must not edit parent revert-proofs/${parentPr}/ (${p})`,
+      );
+    }
+    if (!p.startsWith(childPrefix)) {
+      throw new Error(
+        `stacked PR ${childPr}: revert-proofs change outside ${childPrefix} (${p})`,
+      );
+    }
+  }
+}
+
+/** Row slug must be a single path segment under revert-proofs/<prNumber>/. */
+export function validateRowListedUnderPr(prNumber, slug) {
+  if (!slug || slug.includes("/") || slug.includes("\\") || slug.includes("..")) {
+    throw new Error(
+      `row ${slug}: invalid slug (must live under revert-proofs/${prNumber}/)`,
+    );
+  }
+}
+
+/** Reject sidecars whose proofPr does not match the runner PR number. */
+export function validateRowProofPr(meta, slug, prNumber) {
+  if (meta.proofPr === undefined || meta.proofPr === null) {
+    return;
+  }
+  if (String(meta.proofPr) !== String(prNumber)) {
+    throw new Error(
+      `row ${slug}: sidecar proofPr ${meta.proofPr} does not match runner PR ${prNumber}`,
+    );
+  }
+}
+
+/** Revert-proof data paths in a patch must stay under revert-proofs/<prNumber>/. */
+export function validatePatchRevertProofsScope(patchText, slug, prNumber) {
+  const allowed = `revert-proofs/${prNumber}/`;
+  for (const p of patchTouchedPaths(patchText)) {
+    if (p.startsWith("revert-proofs/") && !p.startsWith(allowed)) {
+      throw new Error(
+        `row ${slug}: patch touches revert-proofs outside PR ${prNumber} (${p})`,
+      );
+    }
+  }
+}
+
+/**
+ * After the parent PR squash-merges to main, the child branch must merge main so
+ * revert-proofs/<parent>/ on main is present at HEAD.
+ */
+export function validateChildBranchIncludesParentProofsOnMain(
+  gitRoot,
+  childPr,
+  parentPr,
+  opts = {},
+) {
+  const runGit = opts.runGit;
+  if (!runGit) {
+    throw new Error("validateChildBranchIncludesParentProofsOnMain requires runGit");
+  }
+  const parentDir = `revert-proofs/${parentPr}`;
+  const onMain = runGit(gitRoot, ["show", `main:${parentDir}/README.md`]);
+  if (onMain.status !== 0) {
+    return;
+  }
+  const onHead = runGit(gitRoot, ["show", `HEAD:${parentDir}/README.md`]);
+  if (onHead.status !== 0) {
+    throw new Error(
+      `stacked PR ${childPr}: parent revert-proofs/${parentPr}/ is on main but missing at HEAD — merge main into this branch`,
     );
   }
 }
@@ -955,7 +1064,7 @@ const GIT_APPLY_OFFSET_FUZZ_RE = /\b(?:offset|fuzz)\b/i;
  * @param {string} wtRoot
  * @param {string} patchText
  */
-export function assertGitApplyCheckStrict(wtRoot, patchText) {
+function assertGitApplyCheckStrict(wtRoot, patchText) {
   const tmpPatch = path.join(wtRoot, ".revert-proof-apply.patch");
   fs.writeFileSync(tmpPatch, patchText, "utf8");
   try {

@@ -1,19 +1,14 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 4b69613..419a26a 100644
+index 69ced51..69ced51 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -69,14 +69,6 @@ export function validateRedSidecar(meta, slug) {
-     throw new Error(`row ${slug}: sidecar JSON missing object field "red"`);
+@@ -70,9 +70,6 @@ export function validateRedSidecar(meta, slug) {
+       `row ${slug}: red must be a single-line string, not an object (got structured sidecar)`,
+     );
    }
-   if (meta.runner === "vitest") {
--    if (
--      !Object.prototype.hasOwnProperty.call(red, "actual") ||
--      !Object.prototype.hasOwnProperty.call(red, "expected")
--    ) {
--      throw new Error(
--        `row ${slug}: vitest red must be { actual, expected } (structured assertion values)`,
--      );
--    }
-     return;
+-  if (typeof red !== "string" || red.length === 0) {
+-    throw new Error(`row ${slug}: sidecar JSON missing string field "red"`);
+-  }
+   if (red.includes("\n") || red.includes("\r")) {
+     throw new Error(`row ${slug}: red must be a single line with no line breaks`);
    }
-   if (typeof red.assert !== "string" || !red.assert.trim().startsWith("assert ")) {

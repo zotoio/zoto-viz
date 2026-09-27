@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "sidecar red value > (5-red-shape) vitest red without actual/expected is rejected",
   "description": "Drop the vitest { actual, expected } shape check",
-  "red": {
-    "actual": null,
-    "expected": "row r: vitest red must be { actual, expected } (structured assertion values)"
-  }
+  "red": "row r: red must be a single-line string, not an object (got structured sidecar)"
 }

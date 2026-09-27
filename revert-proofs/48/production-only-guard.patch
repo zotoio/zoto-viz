@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 4b69613..7bf9ecf 100644
+index 69ced51..69ced51 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -437,11 +437,8 @@ export function sanitizeReportText(text) {
+@@ -444,11 +444,8 @@ export function validatePatchTouchesOnlyProduction(patchText, slug) {
  }
  
  export function validatePatchTouchesOnlyProduction(patchText, slug) {
@@ -15,4 +15,4 @@ index 4b69613..7bf9ecf 100644
 +  void slug;
  }
  
- const PRODUCTION_CONFIG_NAME = "revert-proof-production.json";
+ /** Repo-relative paths appearing in a unified diff (---/+++). */

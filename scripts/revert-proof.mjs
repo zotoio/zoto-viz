@@ -14,7 +14,7 @@ import {
   assertWorkspaceLinksInWorktree,
   assessPytestSelection,
   assessVitestSelection,
-  assertRedValue,
+  assertRedLine,
   assertVitestNodeAssertFailClosed,
   gitApplyPatchStrict,
   buildPytestArgv,
@@ -29,10 +29,15 @@ import {
   rejectPatchedVitestGreen,
   resolveVitestProject,
   sanitizeReportText,
+  validateChildBranchIncludesParentProofsOnMain,
   validatePatchProductionReachable,
+  validatePatchRevertProofsScope,
   validatePatchStructure,
   validatePatchTouchesOnlyProduction,
   validatePrNumber,
+  validateRowListedUnderPr,
+  validateRowProofPr,
+  validateStackedChildProofScope,
   validatePythonModule,
   validateRowMeta,
   validateTestFileRel,
@@ -163,12 +168,14 @@ function listRows(mainRoot, prNumber, onlySlug) {
     throw new Error(`row slug not found: ${onlySlug}`);
   }
   return slugs.map((slug) => {
+    validateRowListedUnderPr(prNumber, slug);
     const relPatch = `${prefix}/${slug}.patch`;
     const relMeta = `${prefix}/${slug}.json`;
     const patchText = readGitHeadFile(mainRoot, relPatch);
     const meta = JSON.parse(readGitHeadFile(mainRoot, relMeta));
     return {
       slug,
+      prNumber,
       patchPath: path.join(mainRoot, relPatch),
       patchText,
       metaPath: path.join(mainRoot, relMeta),
@@ -694,8 +701,10 @@ function metaRunnerCount(run) {
 async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   const { slug, patchPath, patchText, meta } = row;
   validateRowMeta(meta, slug);
+  validateRowProofPr(meta, slug, row.prNumber);
   validateTestFileRel(meta.testFile, wtRoot);
   validatePatchStructure(patchText, slug);
+  validatePatchRevertProofsScope(patchText, slug, row.prNumber);
   validatePatchTouchesOnlyProduction(patchText, slug);
   validatePatchProductionReachable(patchText, slug, wtRoot);
 
@@ -826,7 +835,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       );
     }
   }
-  assertRedValue(slug, meta.red, patched.counts.selection.target.revertProofRed);
+  assertRedLine(slug, meta.red, patched.counts.selection.target, meta.runner);
 
   const failureText = vitestFailureSnippet(patched.reportPath, patched.output);
 
@@ -913,13 +922,33 @@ function parseArgs(argv) {
   return { prNumber: pr, row };
 }
 
-async function mainAsync() {
+function gitRunForValidation(root, args) {
+  return gitAt(root, args);
+}
+
+function applyStackedPrGuards(mainRoot, prNumber) {
+  const parentPr = process.env.REVERT_PROOF_STACK_PARENT?.trim();
+  if (parentPr) {
+    validatePrNumber(parentPr);
+    const changedRaw = process.env.REVERT_PROOF_CHANGED_FILES?.trim();
+    if (changedRaw) {
+      const changedPaths = changedRaw.split("\n").map((l) => l.trim()).filter(Boolean);
+      validateStackedChildProofScope(prNumber, parentPr, changedPaths);
+    }
+    validateChildBranchIncludesParentProofsOnMain(mainRoot, prNumber, parentPr, {
+      runGit: gitRunForValidation,
+    });
+  }
+}
+
+export async function mainAsync(argv = process.argv) {
   worktreeJsDepsReady = false;
   pythonIsolationChecked = false;
 
-  const { prNumber, row: onlySlug } = parseArgs(process.argv);
+  const { prNumber, row: onlySlug } = parseArgs(argv);
   validatePrNumber(prNumber);
   const mainRoot = mainCheckoutRoot();
+  applyStackedPrGuards(mainRoot, prNumber);
   const before = checkoutSnapshot(mainRoot);
 
   if (before.porcelain.trim()) {
@@ -1009,5 +1038,3 @@ if (isMain) {
     process.exit(1);
   });
 }
-
-export { runRow };

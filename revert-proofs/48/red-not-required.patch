@@ -1,5 +1,5 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 4b69613..b173f8b 100644
+index 69ced51..69ced51 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
 @@ -59,7 +59,6 @@ export function validateRowMeta(meta, slug) {
@@ -9,4 +9,4 @@ index 4b69613..b173f8b 100644
 -  validateRedSidecar(meta, slug);
  }
  
- /** Vitest: `{ actual, expected }`. Pytest: `{ assert: "assert …" }`. */
+ /** Sidecar `red` is one line (vitest failure message or pytest assert source). */

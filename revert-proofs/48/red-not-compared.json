@@ -3,8 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "sidecar red value > (5-red-mismatch) structured actual/expected mismatch is rejected",
   "description": "Compare only red.expected, ignoring actual",
-  "red": {
-    "actual": null,
-    "expected": "row r: red value mismatch (expected {\"actual\":2,\"expected\":1}, got {\"actual\":3,\"expected\":1})"
-  }
+  "red": "row r: red line mismatch (expected \"AssertionError: expected 2 to be 1 // Object.is equality\", got \"AssertionError: expected 3 to be 1 // Object.is equality\")"
 }

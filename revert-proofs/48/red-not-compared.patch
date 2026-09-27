@@ -1,13 +1,13 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 4b69613..f923164 100644
+index 69ced51..69ced51 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -92,7 +92,7 @@ export function redValuesEqual(expected, actual) {
- 
- /** Compare structured red from the first branded assertion (vitest) or assert line (pytest). */
- export function assertRedValue(slug, expected, actual) {
--  if (!redValuesEqual(expected, actual)) {
-+  if (!redValuesEqual(expected?.expected, actual?.expected)) {
+@@ -97,7 +97,7 @@ export function patchedFailureRedLine(target, runner) {
+ /** Compare the patched failure line to the sidecar red string (byte-exact). */
+ export function assertRedLine(slug, expectedLine, target, runner) {
+   const actualLine = patchedFailureRedLine(target, runner);
+-  if (actualLine !== expectedLine) {
++  if (actualLine?.slice(1) !== expectedLine?.slice(1)) {
      throw new Error(
-       `row ${slug}: red value mismatch (expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual ?? null)})`,
+       `row ${slug}: red line mismatch (expected ${JSON.stringify(expectedLine)}, got ${JSON.stringify(actualLine)})`,
      );

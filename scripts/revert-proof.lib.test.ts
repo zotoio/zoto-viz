@@ -5,13 +5,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  assertGitApplyCheckStrict,
-  assertRedValue,
+  assertRedLine,
   assertVitestNodeAssertFailClosed,
   assessPytestSelection,
   assessVitestSelection,
   classifyPatchedPytest,
   classifyPatchedVitest,
+  gitApplyPatchStrict,
   parsePytestPluginJson,
   parseVitestJsonReport,
   validateRowMeta,
@@ -538,49 +538,74 @@ function thrownMessage(fn: () => unknown): string | undefined {
   return undefined;
 }
 
-describe("strict git apply in the runner", () => {
-  it("(strict) rejects patches that only apply at an offset", () => {
-    const stalePatch = spawnSync(
-      "git",
-      ["show", "61b83e0:revert-proofs/48/classify-rejects-plain-meta.patch"],
-      { cwd: repoRoot, encoding: "utf8" },
-    ).stdout;
-    expect(stalePatch.length).toBeGreaterThan(0);
-    expect(() => assertGitApplyCheckStrict(repoRoot, stalePatch)).toThrow(/offset or fuzz/i);
-  });
-
+describe("strict git apply", () => {
   it("(strict) accepts a patch with exact context", () => {
     const patch = fs.readFileSync(
       path.join(repoRoot, "revert-proofs/48/classify-rejects-plain-meta.patch"),
       "utf8",
     );
-    expect(() => assertGitApplyCheckStrict(repoRoot, patch)).not.toThrow();
+    expect(() => gitApplyPatchStrict(repoRoot, patch)).not.toThrow();
   });
 
-  it("(strict-row) gitApplyPatchStrict rejects offset/fuzz in verbose check output", () => {
-    const src = fs.readFileSync(path.join(scriptsDir, "revert-proof-lib.mjs"), "utf8");
-    expect(src.includes("GIT_APPLY_OFFSET_FUZZ_RE.test(line)")).toBe(true);
+  it("(strict) rejects patches that only apply at an offset", () => {
+    const good = fs.readFileSync(
+      path.join(repoRoot, "revert-proofs/48/classify-rejects-plain-meta.patch"),
+      "utf8",
+    );
+    const stalePatch = good.replace(
+      "@@ -271,7 +271,7 @@",
+      "@@ -281,7 +281,7 @@",
+    );
+    expect(() => gitApplyPatchStrict(repoRoot, stalePatch)).toThrow(/offset or fuzz/i);
   });
 });
 
-describe("revert-proof runner wiring guards", () => {
-  it("(f) revert-proof.mjs calls assertVitestNodeAssertFailClosed on unbranded failures", () => {
-    const src = fs.readFileSync(path.join(scriptsDir, "revert-proof.mjs"), "utf8");
-    expect(src.includes("assertVitestNodeAssertFailClosed(slug, target)")).toBe(true);
-  });
-
-  it("(f) revert-proof.mjs imports assertVitestNodeAssertFailClosed", () => {
-    const src = fs.readFileSync(path.join(scriptsDir, "revert-proof.mjs"), "utf8");
-    expect(/assertVitestNodeAssertFailClosed,/.test(src)).toBe(true);
-  });
-
-  it("(g) vitest runner clears nodeAssert at runTask start", () => {
-    const src = fs.readFileSync(
-      path.join(scriptsDir, "revert-proof-vitest-runner.mjs"),
-      "utf8",
+describe("revert-proofs directory guards", () => {
+  it("(dir-child-scope) child must not edit parent revert-proofs tree", async () => {
+    const lib = await import("./revert-proof-lib.mjs");
+    expect(
+      thrownMessage(() =>
+        lib.validateStackedChildProofScope("85", "48", [
+          "revert-proofs/48/wrong.json",
+        ]),
+      ),
+    ).toBe(
+      "stacked PR 85: must not edit parent revert-proofs/48/ (revert-proofs/48/wrong.json)",
     );
-    const runTaskBody = src.split("async runTask")[1]?.split("onAfterRunTask")[0] ?? "";
-    expect(runTaskBody.includes("nodeAssert.delete(test)")).toBe(true);
+    expect(() =>
+      lib.validateStackedChildProofScope("85", "48", [
+        "revert-proofs/85/ok.json",
+      ]),
+    ).not.toThrow();
+  });
+
+  it("(dir-wrong-pr) sidecar proofPr must match runner PR", async () => {
+    const lib = await import("./revert-proof-lib.mjs");
+    expect(
+      thrownMessage(() => lib.validateRowProofPr({ proofPr: 49 }, "r", "48")),
+    ).toBe("row r: sidecar proofPr 49 does not match runner PR 48");
+  });
+
+  it("(dir-merge-main) child must merge main after parent squash", async () => {
+    const lib = await import("./revert-proof-lib.mjs");
+    const runGit = (_root: string, args: string[]) => {
+      if (args[0] === "show" && args[1] === "main:revert-proofs/48/README.md") {
+        return { status: 0, stdout: "# ok\n", stderr: "" };
+      }
+      if (args[0] === "show" && args[1] === "HEAD:revert-proofs/48/README.md") {
+        return { status: 1, stdout: "", stderr: "missing" };
+      }
+      return { status: 1, stdout: "", stderr: "" };
+    };
+    expect(
+      thrownMessage(() =>
+        lib.validateChildBranchIncludesParentProofsOnMain("/r", "85", "48", {
+          runGit,
+        }),
+      ),
+    ).toBe(
+      "stacked PR 85: parent revert-proofs/48/ is on main but missing at HEAD — merge main into this branch",
+    );
   });
 });
 
@@ -590,46 +615,46 @@ describe("sidecar red value", () => {
     testFile: "scripts/x.test.ts",
     testName: "x > y",
     description: "d",
+    red: "AssertionError: expected 2 to be 1 // Object.is equality",
   };
 
-  it("(5-red-required) sidecar without structured red is rejected", () => {
-    expect(thrownMessage(() => validateRowMeta(meta, "r"))).toBe(
-      'row r: sidecar JSON missing object field "red"',
+  it("(5-red-required) sidecar without red string is rejected", () => {
+    const { red: _, ...noRed } = meta;
+    expect(thrownMessage(() => validateRowMeta(noRed, "r"))).toBe(
+      'row r: sidecar JSON missing string field "red"',
     );
   });
 
-  it("(5-red-shape) vitest red given as a message string is rejected", () => {
+  it("(5-red-shape) structured object sidecar is rejected", () => {
     expect(
       thrownMessage(() =>
-        validateRowMeta({ ...meta, red: "AssertionError: expected 2 to be 1" }, "r"),
+        validateRowMeta({ ...meta, red: { actual: 2, expected: 1 } }, "r"),
       ),
-    ).toBe('row r: sidecar JSON missing object field "red"');
+    ).toBe("row r: red must be a single-line string, not an object (got structured sidecar)");
   });
 
-  it("(5-red-shape) vitest red without actual/expected is rejected", () => {
-    expect(thrownMessage(() => validateRowMeta({ ...meta, red: { actual: 2 } }, "r"))).toBe(
-      "row r: vitest red must be { actual, expected } (structured assertion values)",
-    );
-  });
-
-  it("(5-red-shape) pytest red must be the rewritten assert source", () => {
+  it("(5-red-shape) pytest red must be assert source", () => {
     expect(
       thrownMessage(() =>
-        validateRowMeta(
-          { ...meta, runner: "pytest", red: { actual: 2, expected: 1 } },
+        validateRowMeta({ ...meta, runner: "pytest", red: "AssertionError: boom" }, "r"),
+      ),
+    ).toBe('row r: pytest red must start with "assert " (rewritten assert source)');
+  });
+
+  it("(5-red-mismatch) one-character red line mismatch is rejected", () => {
+    expect(
+      thrownMessage(() =>
+        assertRedLine(
           "r",
+          "AssertionError: expected 2 to be 1 // Object.is equality",
+          {
+            failureMessage: "AssertionError: expected 3 to be 1 // Object.is equality",
+          },
+          "vitest",
         ),
       ),
-    ).toBe('row r: pytest red must be { assert: "assert …" } (rewritten assert source)');
-  });
-
-  it("(5-red-mismatch) structured actual/expected mismatch is rejected", () => {
-    expect(
-      thrownMessage(() =>
-        assertRedValue("r", { actual: 2, expected: 1 }, { actual: 3, expected: 1 }),
-      ),
     ).toBe(
-      'row r: red value mismatch (expected {"actual":2,"expected":1}, got {"actual":3,"expected":1})',
+      'row r: red line mismatch (expected "AssertionError: expected 2 to be 1 // Object.is equality", got "AssertionError: expected 3 to be 1 // Object.is equality")',
     );
   });
 });
