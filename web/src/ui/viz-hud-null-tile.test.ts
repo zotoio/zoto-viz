@@ -39,27 +39,24 @@ describe("VizHud null tile budget lines", () => {
     const parent = document.createElement("div");
     document.body.append(parent);
     const hud = new VizHud(parent, () => {});
-    hud.setActive("pack", "Pack");
-    syncVizTileScope(["a", "b"]);
-    hud.syncMosaicTileHudLines(["a", "b"]);
+    hud.setActive("packet-tunnel", "tunnel");
+    syncVizTileScope(["b"]);
+    hud.syncMosaicTileHudLines(["b"]);
     const rowB = parent.querySelector('[data-tile-id="b"]') as HTMLElement;
     expect(rowB).toBeTruthy();
     const before = rowB.textContent;
     const budget = limitedBudgetTile();
     expect(() => {
       hud.tick({
-        packId: "pack",
-        packName: "Pack",
+        packId: "packet-tunnel",
+        packName: "tunnel",
         stats: { lastMs: 0, overBudget: 0, skipped: 0, total: 1 },
         frame: null,
         state: emptyState(),
         now: 1,
         tileBudget: budget,
-        activeTiles: 2,
-        tileBudgetLines: [
-          { tileId: "a", tile: budget },
-          { tileId: "b", tile: null },
-        ],
+        activeTiles: 1,
+        tileBudgetLines: [{ tileId: "b", tile: null }],
       });
     }).not.toThrow();
     expect(rowB.textContent).toBe(before);

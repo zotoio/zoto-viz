@@ -183,6 +183,7 @@ import {
 import { registerPackAssetRetry } from "../plugins/pack-asset-frame";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
+import { bindTileHealthPresentTick } from "./tile-health-present";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
 import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
@@ -1960,7 +1961,7 @@ tileHealth = new TileHealthMonitor({
   showErrors: () => tileHealErrorsOn,
   onHeal: (tileId, step) => healTile(tileId, step),
 });
-addPresentListener((ts) => tileHealth?.tick(ts));
+bindTileHealthPresentTick(tileHealth, addPresentListener);
 
 settings.onMosaicPanePick = (from, to) => pickMosaicPane(from, to);
 
