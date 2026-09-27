@@ -50,10 +50,10 @@ describe("media ask UX (chromium)", () => {
     });
     await page.waitForSelector("[data-media-ask]", { state: "attached" });
     const behind = await page.evaluate(() => {
-      const reload = document.getElementById("reload-notice") as HTMLButtonElement;
-      reload.focus();
-      const focusedReload = document.activeElement?.id === "reload-notice";
-      reload.click();
+      const reload = document.querySelector(".wall-notice-action") as HTMLButtonElement | null;
+      reload?.focus();
+      const focusedReload = document.activeElement?.classList.contains("wall-notice-action") ?? false;
+      reload?.click();
       const dialogOpen = document.querySelector("[data-media-ask]") !== null;
       return { focusedReload, dialogOpen };
     });
