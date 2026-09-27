@@ -1,13 +1,13 @@
 diff --git a/plugins/src/marble-run/frontend/sim.ts b/plugins/src/marble-run/frontend/sim.ts
-index fe68ac6f..ff6b8a7b 100644
+index fe68ac6f..0a858085 100644
 --- a/plugins/src/marble-run/frontend/sim.ts
 +++ b/plugins/src/marble-run/frontend/sim.ts
-@@ -77,7 +77,7 @@ export function pieceKindAt(u: number, complexity: number, seed: number): number
- /** Stable jar slot for a route key (proto or proto hash) — never list position. */
- export function jarIndexForRouteKey(routeKey: string, jarCount: number): number {
-   if (!routeKey || jarCount <= 0) return 0;
--  return Math.min(jarCount - 1, Math.floor(hash01(routeKey) * jarCount * 0.999));
-+  return (jarCount - 1);
- }
- 
- export class MarbleSim {
+@@ -154,7 +154,7 @@ export class MarbleSim {
+     slot.v = 0;
+     slot.radius = radius;
+     slot.hue = hue;
+-    slot.jar = jarIndexForRouteKey(routeKey, this.opts.jarCount);
++    slot.jar = 0;
+     slot.failed = failed;
+     slot.flying = failed ? 1 : 0;
+     slot.flyVx = (hash01(`${this.nextId}:x`) - 0.5) * 1.2;

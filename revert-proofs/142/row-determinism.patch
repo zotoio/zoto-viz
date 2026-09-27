@@ -1,7 +1,8 @@
 diff --git a/plugins/src/marble-run/frontend/pack.ts b/plugins/src/marble-run/frontend/pack.ts
+index e3feca6f..e7a607aa 100644
 --- a/plugins/src/marble-run/frontend/pack.ts
 +++ b/plugins/src/marble-run/frontend/pack.ts
-@@ -293,6 +293,8 @@ export function trackPiecesForPreset(o: MarbleOptions): number {
+@@ -292,6 +292,8 @@ export function trackPiecesForPreset(o: MarbleOptions): number {
    return trackPieceCount(o.complexity, o.seed);
  }
  
@@ -10,7 +11,7 @@ diff --git a/plugins/src/marble-run/frontend/pack.ts b/plugins/src/marble-run/fr
  export function marbleDeterminismDigest(t: number, o: MarbleOptions): number {
    disposeMarblePack();
    setMarbleOptions(o);
-@@ -308,6 +310,7 @@ export function marbleDeterminismDigest(t: number, o: MarbleOptions): number {
+@@ -309,5 +311,6 @@ export function marbleDeterminismDigest(t: number, o: MarbleOptions): number {
    const { slot0, slot1 } = packMarbleSlots({ ...frame, t });
    let h = 0;
    for (const v of [...slot0, ...slot1]) h = (h * 31 + Math.round(v * 1e5)) | 0;
