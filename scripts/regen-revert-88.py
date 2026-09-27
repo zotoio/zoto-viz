@@ -17,7 +17,7 @@ def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[
 
 
 def git_reset() -> None:
-    run(["git", "checkout", "HEAD", "--", "web", "plugins"])
+    run(["git", "checkout", "HEAD", "--", "web/src/graph", "web/src/plugins", "plugins/src"])
 
 
 def save_patch(mutate: str) -> None:

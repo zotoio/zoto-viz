@@ -106,7 +106,7 @@ describe("shader fallback wall", () => {
   });
 
   it("mosaic-tile-keyed", () => {
-    const { wall, host, failTiles } = hostWall();
+    const { wall, host } = hostWall();
     const panes = new Map<string, HTMLElement>();
     for (const id of ["t1", "t2"]) {
       const p = document.createElement("div");
@@ -115,14 +115,12 @@ describe("shader fallback wall", () => {
     }
     for (const id of ["t1", "t2"]) {
       host.beginTilePack(id, `k:${id}`, "nixie-clock", panes.get(id)!, "N", true);
-      expect(host.compilePluginSky(id, {} as never, {} as never)).toBe(true);
+      host.onTileShaderCompileFailed(id);
     }
-    const compile = vi.mocked(host.compilePluginSky);
-    compile.mockClear();
-    failTiles.add("t1");
-    expect(host.compilePluginSky("t1", {} as never, {} as never)).toBe(false);
-    expect(host.compilePluginSky("t2", {} as never, {} as never)).toBe(true);
-    expect(compile).toHaveBeenCalledTimes(2);
+    host.receiveFallbackPush("t1", "LINE-A");
+    host.receiveFallbackPush("t2", "LINE-B");
+    expect(panes.get("t1")!.querySelector(".tile-shader-fallback__text")?.textContent).toBe("LINE-A");
+    expect(panes.get("t2")!.querySelector(".tile-shader-fallback__text")?.textContent).toBe("LINE-B");
     host.dispose();
     wall.remove();
   });
