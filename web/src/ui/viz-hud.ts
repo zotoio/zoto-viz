@@ -370,7 +370,6 @@ export class VizHud {
     this.root.hidden = !this.activeId;
     if (!this.activeId) {
       this.stageFailEl.hidden = true;
-      this.stageFailEl.textContent = "⚠ DEGRADED";
       return;
     }
     if (changed) this.resetSkipBaseline();
@@ -509,9 +508,8 @@ export class VizHud {
     } else {
       this.degradedEl.hidden = true;
       this.degradedSepAfter.hidden = true;
-      this.degradedEl.textContent = "";
+      if (this.degradedEl.textContent) this.degradedEl.textContent = "";
       this.stageFailEl.hidden = true;
-      this.stageFailEl.textContent = "⚠ DEGRADED";
     }
 
     const lines = tileBudgetLines ?? [];
