@@ -16,6 +16,10 @@ PATH="/workspace/.venv/bin:$PATH" pnpm exec vitest run
 cd .. && PATH="/workspace/.venv/bin:$PATH" .venv/bin/pytest -o addopts=
 ```
 
+## `revert-proofs/42` on #86 stack
+
+On `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4`, all 14 patches apply with `git apply --check -v` at zero offset (three regen’d for #86 line context: `pack-mirror-brand-cast`, `pack-mirror-capture-rounding`, `render-host-gpu-viewport-css-revert`).
+
 ## Revert rows (14 sidecars)
 
 | row | kind | test |
