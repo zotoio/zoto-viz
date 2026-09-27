@@ -3,5 +3,5 @@
   "testFile": "tests/test_nasa_api.py",
   "testName": "test_resolve_fetch_url_uses_host_key_when_set",
   "description": "Revert APOD fetch_key injection",
-  "red": "assert 'api_key=fake-nasa-key-for-tests-only' in url"
+  "red": "assert f\"api_key={FAKE_KEY}\" in url"
 }

@@ -3,5 +3,5 @@
   "testFile": "tests/test_nasa_api.py",
   "testName": "test_resolve_fetch_url_uses_demo_key_and_note_when_absent",
   "description": "Revert DEMO_KEY note on APOD live row",
-  "red": "assert live.get('note') == nasa_api.DEMO_NOTE"
+  "red": "assert live.get(\"note\") == nasa_api.DEMO_NOTE"
 }
