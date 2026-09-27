@@ -292,8 +292,18 @@ def test_retry_blocked_zip_runs_full_install_keeps_v1_on_repeat_failure(
     drain_install_notices()
 
     from service.pack_install_retry import RETRY_RESULT_START_FAILED, format_retry_start_failed_message
+    from service.pack_zip_blocks import clear_zip_block as real_clear_zip_block
+
+    clear_calls: list[str] = []
+
+    def _track_clear(sha: str) -> bool:
+        clear_calls.append(sha)
+        return real_clear_zip_block(sha)
+
+    monkeypatch.setattr("service.pack_zip_blocks.clear_zip_block", _track_clear)
 
     info = plugin_local.retry_blocked_zip_install(v2_sha, activate=False)
+    assert len(clear_calls) >= 1
     assert info.get("ok") is False
     assert info.get("error") == "pack_install_start_failed"
     assert info.get("retryResult") == RETRY_RESULT_START_FAILED
