@@ -3,5 +3,5 @@
   "patch": "revert-proofs/101/termNow-performance-now.patch",
   "testFile": "src/plugins/dogfood.test.ts",
   "testName": "^fat-LAN live soak: termNow must not read wall clock$",
-  "red": "AssertionError: expected \"now\" to be called 0 times, but got 120 times"
+  "red": "AssertionError: expected \"now\" to be called +0 times, but got 120 times"
 }
