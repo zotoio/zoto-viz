@@ -11,6 +11,10 @@
     "resolveJsonModule": true,
     "types": ["vite/client"]
   },
+<<<<<<< HEAD
   "include": ["src", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/drive.ts", "../plugins/src/backrooms/frontend/director.ts", "../plugins/src/stereo-gram/frontend/recipe.ts", "../plugins/src/syscon/frontend/telemetry.ts", "../plugins/src/nixie-clock/frontend/tubes.ts"],
+=======
+  "include": ["src", "typecheck", "../shared/nixie-tubes.ts", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/drive.ts", "../plugins/src/backrooms/frontend/director.ts", "../plugins/src/stereo-gram/frontend/recipe.ts", "../plugins/src/syscon/frontend/telemetry.ts", "../plugins/src/nixie-clock/frontend/tubes.ts"],
+>>>>>>> 54544d3 (TSE #95: production DOM for literal-text rows; typecheck/ for brands)
   "exclude": ["src/**/*.test.ts"]
 }
