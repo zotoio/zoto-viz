@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testFile": "tests/test_pack_zip_install_ux.py",
-  "testName": "test_zip_ux_literal_install_failed_template",
+  "testName": "test_zip_ux_api_unsafe_corrupt_message",
   "description": "Literal install-failed template constant.",
   "patchedFailure": "tests/test_pack_zip_install_ux.py:37: AssertionError: zip ux install failed template"
 }

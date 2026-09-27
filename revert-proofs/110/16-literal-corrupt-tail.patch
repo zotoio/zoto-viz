@@ -1,13 +1,13 @@
 diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
-index 171944c..bc5a77f 100644
+index 171944cd..45f3375a 100644
 --- a/service/pack_install_copy.py
 +++ b/service/pack_install_copy.py
-@@ -12,7 +12,7 @@ REASON_ZIP_UNSAFE = "pack_zip_unsafe"
- REASON_BOUNDARY_BLOCKED = "pack_boundary"
+@@ -126,7 +126,7 @@ def zip_unsafe_user_message(
+             version=prior_version,
+         )
+         return _couldnt_install_line(stem, tail)
+-    return _couldnt_install_line(stem, ZIP_UX_CORRUPT_TAIL)
++    return _couldnt_install_line(stem, (technical or ZIP_UX_CORRUPT_TAIL).strip())
  
- # UX Pro — zip install rejection copy (literal pins in tests; revert rows blank these).
--ZIP_UX_CORRUPT_TAIL = "The file isn't a valid pack or is damaged."
-+ZIP_UX_CORRUPT_TAIL = ""
- ZIP_UX_CORRUPT_PRIOR_SUFFIX = ", so version {version} is still installed."
- ZIP_UX_ENCRYPTED_TAIL = "It's password-protected. Zip it again without a password."
- ZIP_UX_OVERSIZE_TAIL = "It unpacks to more than packs are allowed."
+ def zip_rejection_log_message(technical: str) -> str:
+     return _LOG_ZIP_REJECTED.replace("%s", (technical or "").strip(), 1)

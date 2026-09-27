@@ -1,15 +1,13 @@
 diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
-index 171944c..a8e6759 100644
+index 171944cd..35e28dd8 100644
 --- a/service/pack_install_copy.py
 +++ b/service/pack_install_copy.py
-@@ -23,9 +23,7 @@ ZIP_UX_DROP_ALREADY_EXISTS_TAIL = "This pack is already in the drop zone."
- BLOCKED_MESSAGE = (
-     "{label} was blocked. {body} Nothing was installed and the current wall is unchanged."
- )
--FAULT_MESSAGE = (
--    "Packs can't be installed right now because the list of installed packs couldn't be read. {detail}"
--)
-+FAULT_MESSAGE = ""
+@@ -43,7 +43,7 @@ def blocked_message(plugin_name: str, detail: str) -> str:
+     return BLOCKED_MESSAGE.format(label=label, body=body)
  
- # UX Pro — upgrade swap rollback (literal pin; revert row blanks this template).
- UPGRADE_ROLLBACK_UX_MESSAGE = (
+ def fault_message(detail: str) -> str:
+-    return FAULT_MESSAGE.format(detail=detail.strip())
++    return detail.strip()
+ 
+ def _sanitize_display_label(raw: str, *, default: str) -> str:
+     base = "".join(ch for ch in raw if ch.isprintable() and ch not in "\t\n\r\f\v")

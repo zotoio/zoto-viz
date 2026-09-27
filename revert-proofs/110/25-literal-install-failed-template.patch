@@ -1,13 +1,13 @@
 diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
-index 171944c..1664457 100644
+index 171944cd..a54177da 100644
 --- a/service/pack_install_copy.py
 +++ b/service/pack_install_copy.py
-@@ -17,7 +17,7 @@ ZIP_UX_CORRUPT_PRIOR_SUFFIX = ", so version {version} is still installed."
- ZIP_UX_ENCRYPTED_TAIL = "It's password-protected. Zip it again without a password."
- ZIP_UX_OVERSIZE_TAIL = "It unpacks to more than packs are allowed."
+@@ -90,7 +90,7 @@ def zip_display_stem_from_path(path: str | Path | None) -> str:
+     return sanitize_zip_display_stem(Path(path).name)
  
--ZIP_UX_INSTALL_FAILED = "Couldn't install {stem}.zip. {tail}"
-+ZIP_UX_INSTALL_FAILED = ""
- ZIP_UX_DROP_SCHEMA_TAIL = "The plugin id in this pack isn't valid."
- ZIP_UX_DROP_ALREADY_EXISTS_TAIL = "This pack is already in the drop zone."
- BLOCKED_MESSAGE = (
+ def _couldnt_install_line(stem: str, tail: str) -> str:
+-    return ZIP_UX_INSTALL_FAILED.format(stem=sanitize_zip_display_stem(stem), tail=tail)
++    return tail
+ 
+ def drop_zone_schema_install_message(stem: str) -> str:
+     return _couldnt_install_line(stem, ZIP_UX_DROP_SCHEMA_TAIL)

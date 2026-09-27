@@ -8,6 +8,7 @@ import pytest
 from service import mcp as plugin_mcp
 from service import pack_install_copy as copy
 from service import plugin_local
+from service.pack_zip_install_ux import zip_unsafe_blocked_payload
 from service.pack_install_copy import (
     BLOCKED_MESSAGE,
     FAULT_MESSAGE,
@@ -129,6 +130,33 @@ def test_zip_ux_fault_message_example() -> None:
         "Packs can't be installed right now because the list of installed packs couldn't be read. "
         "The store file is missing."
     )
+
+def test_zip_ux_api_unsafe_corrupt_message() -> None:
+    payload = zip_unsafe_blocked_payload("not a zip", "not a zip", zip_display_name="pack")
+    assert payload["ok"] is False
+    assert payload["error"] == "pack_zip_unsafe"
+    assert payload["message"] == "Couldn't install pack.zip. The file isn't a valid pack or is damaged."
+
+
+def test_zip_ux_api_unsafe_encrypted_message() -> None:
+    payload = zip_unsafe_blocked_payload(
+        "encrypted entries are not allowed",
+        "encrypted entries are not allowed",
+        zip_display_name="unsafe",
+    )
+    assert payload["message"] == (
+        "Couldn't install unsafe.zip. It's password-protected. Zip it again without a password."
+    )
+
+
+def test_zip_ux_api_unsafe_oversize_message() -> None:
+    payload = zip_unsafe_blocked_payload(
+        "uncompressed size exceeds 50",
+        "uncompressed size exceeds 50",
+        zip_display_name="unsafe",
+    )
+    assert payload["message"] == "Couldn't install unsafe.zip. It unpacks to more than packs are allowed."
+
 
 def test_zip_ux_user_message_examples() -> None:
     assert zip_unsafe_user_message("unsafe", "not a zip") == (
