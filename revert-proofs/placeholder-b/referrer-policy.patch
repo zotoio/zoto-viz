@@ -1,0 +1,13 @@
+diff --git a/service/access.py b/service/access.py
+index bb5aec4..146c7cb 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -244,8 +244,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+     origin_raw = request.headers.get("Origin", "").strip()
+     if origin_raw == "null" and sandbox_null_origin_allowed(request):
+         attach_sandbox_cors(resp)
+-    if parse_pack_assets_path(request.path or ""):
+-        attach_sandbox_referrer_policy(resp)
+     attach_csrf(request, resp)
+     if request.method in MUTATE:
+         sat = read_sandbox_asset_token(request)

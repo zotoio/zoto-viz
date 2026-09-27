@@ -1,0 +1,16 @@
+diff --git a/service/static_paths.py b/service/static_paths.py
+index 5f6d5b8..38d4bf4 100644
+--- a/service/static_paths.py
++++ b/service/static_paths.py
+@@ -46,11 +46,7 @@ def static_path_allowed(request_path: str) -> bool:
+         return False
+     raw = request_path.split("?", 1)[0]
+     decoded = _decode_path(raw)
+-    if decoded != canon and raw != canon:
+-        return False
+     base = canon.rsplit("/", 1)[-1]
+-    if base in _BLOCKED_STATIC:
+-        return False
+     return True
+ 
+ 

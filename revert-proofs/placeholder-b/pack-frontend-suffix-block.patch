@@ -1,0 +1,13 @@
+diff --git a/service/pack_assets.py b/service/pack_assets.py
+index 34141e2..06d2fd0 100644
+--- a/service/pack_assets.py
++++ b/service/pack_assets.py
+@@ -127,8 +127,6 @@ def _allowed_plugin_file(home: Path, relpath: str) -> Path | None:
+     target = _resolve_under_root(fe_root, relpath)
+     if not target:
+         return None
+-    if target.suffix.lower() not in _FRONTEND_ONLY and target.suffix:
+-        return None
+     return target
+ 
+ 

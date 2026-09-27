@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "description": "Unregistering a frame id must revoke its pack-asset token immediately.",
+  "timeoutSec": 60,
+  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_revoked_frame_token_denied",
+  "red": "AssertionError: assert 404 == 401"
+}

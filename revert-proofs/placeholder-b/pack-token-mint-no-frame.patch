@@ -1,0 +1,12 @@
+diff --git a/service/pack_assets.py b/service/pack_assets.py
+index 34141e2..81c35bc 100644
+--- a/service/pack_assets.py
++++ b/service/pack_assets.py
+@@ -347,7 +347,5 @@ async def api_pack_asset_token(request: web.Request) -> web.Response:
+         return web.json_response({"error": "unavailable"}, status=503)
+     sid = pack_asset_tokens.session_id_from_request(request)
+     reg = pack_asset_frames.registry_for_app(request.app)
+-    if not reg.is_live(sid, frame_id):
+-        return access._deny("frame not registered")
+     token = pack_asset_tokens.mint_pack_asset_token(secret, sid, pack_id, frame_id)
+     return web.json_response({"packId": pack_id, "frameId": frame_id, "token": token})

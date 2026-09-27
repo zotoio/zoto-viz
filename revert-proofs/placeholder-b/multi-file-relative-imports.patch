@@ -1,0 +1,20 @@
+diff --git a/service/plugins.py b/service/plugins.py
+index a0ba289..368e4f6 100644
+--- a/service/plugins.py
++++ b/service/plugins.py
+@@ -216,15 +216,6 @@ def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = Non
+     if cached and cached[2] == key:
+         return {"hash": cached[0], "capabilities": caps, "bytes": len(cached[1]), "cached": True}
+     global _compile_runs
+-    fe = doc.get("frontend") if isinstance(doc.get("frontend"), dict) else {}
+-    if fe.get("bundle") is False:
+-        js = entry.read_bytes()
+-        if len(js) > MAX_BUNDLE:
+-            raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")
+-        digest = hashlib.sha256(js).hexdigest()
+-        _compile_runs += 1
+-        _bundles[pid] = (digest, js, key, entry, digest_src)
+-        return {"hash": digest, "capabilities": caps, "bytes": len(js), "cached": False}
+     if not _ESBUILD.is_file():
+         raise ValueError("esbuild is not installed (cd web && pnpm install)")
+     proc = subprocess.run(

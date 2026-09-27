@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "description": "Backend/service paths must not be exposed via pack-assets.",
+  "timeoutSec": 60,
+  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_backend_marker_path_is_404",
+  "red": "AssertionError: assert 200 == 404"
+}
