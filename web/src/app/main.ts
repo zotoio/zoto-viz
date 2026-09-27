@@ -106,7 +106,7 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { deliverMosaicDemoPacks, dropMosaicTileWriter } from "../graph/mosaic-viz-feed";
-import { bindVizDriveElement, noteHostDirect } from "../plugins/viz-drive";
+import { bindVizDriveElement, clearVizDrive, noteHostDirect } from "../plugins/viz-drive";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { revertModeSelection } from "./apply-mode-mosaic";
 import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
@@ -815,6 +815,9 @@ async function runMosaicPaneSwitch(toViewId: string, fromViewId?: string): Promi
     teardownView: teardownMosaicPanelView,
     mountView: mountMosaicPanelView,
     persistLayout: persistMosaicPickLayout,
+    onConsentDenied: () => {
+      preserveVizUbo = false;
+    },
   });
   return result;
 }
@@ -1108,6 +1111,8 @@ function feed(m: StateMsg): void {
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
         }, optsFor(mode));
+      } else {
+        clearVizDrive("main");
       }
     }, buildFrame);
     if (frame) {
@@ -1254,6 +1259,7 @@ async function pickMosaicPane(from: string, to: string): Promise<boolean> {
   }
   return true;
 }
+settings.onMosaicPanePick = pickMosaicPane;
 
 settings.addAnimation((a) => {
   const pin = pinViewLook();

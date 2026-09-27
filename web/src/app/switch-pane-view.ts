@@ -25,6 +25,8 @@ export type SwitchPaneViewOpts = {
   persistLayout: () => void;
   /** Catalog plugin id when `toViewId` is a plugin view (for consent-resume). */
   pluginId?: string | null;
+  /** Host hook when consent review fails (e.g. clear viz UBO preserve flags). */
+  onConsentDenied?: () => void;
 };
 
 const paneSwitchGen = new Map<string, number>();
@@ -100,6 +102,7 @@ export async function switchPaneView(
       return { ok: false, reason: "A newer view switch is already in progress." };
     }
     const msg = consentBlockMessage(opts.spec);
+    opts.onConsentDenied?.();
     mosaic.setPaneNotice(slot.paneId, msg);
     const pid = opts.pluginId?.trim();
     if (pid && slot.swap) {

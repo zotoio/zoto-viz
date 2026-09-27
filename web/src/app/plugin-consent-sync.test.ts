@@ -7,7 +7,7 @@ import {
   syncPluginConsentPendingState,
 } from "./plugin-consent-sync";
 
-describe("pluginConsentSync", () => {
+describe("plugin consent sync (one page subscription)", () => {
   beforeEach(() => {
     expect.hasAssertions();
     vi.useFakeTimers();

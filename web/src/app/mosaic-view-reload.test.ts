@@ -71,7 +71,7 @@ function makeLiveMosaic(tiles: string[], focus: string): Mosaic {
   return mosaic;
 }
 
-describe("mosaicViewReload", () => {
+describe("mosaic view reload regressions (B/C/D/E)", () => {
   beforeEach(() => {
     expect.hasAssertions();
     setPluginModes(MODES);
@@ -84,7 +84,7 @@ describe("mosaicViewReload", () => {
     localStorage.clear();
   });
 
-  it("reload keeps header and main mode aligned via persisted mode", () => {
+  it("B: 1× reload keeps header and main mode aligned via persisted zoto-viz.mode", () => {
     const storageKey = "zoto-viz.mode";
     const header = new Select({
       id: "mode",
@@ -106,7 +106,7 @@ describe("mosaicViewReload", () => {
     expect(header.value).toBe("plugin:backrooms");
   });
 
-  it("reload header pick swaps the focused tile", async () => {
+  it("C: header pick swaps the focused tile (not header-only)", async () => {
     const tiles = ["plugin:topology", "plugin:wifi", "plugin:kefrens", "plugin:talkers"];
     const mosaic = makeLiveMosaic(tiles, "plugin:kefrens");
     const realSetPaneView = mosaic.setPaneView.bind(mosaic);
@@ -131,7 +131,7 @@ describe("mosaicViewReload", () => {
     expect(persist).toHaveBeenCalled();
   });
 
-  it("reload neighbour pane pick does not teardown the focused tile view", async () => {
+  it("D: neighbour pane pick does not teardown the focused tile view", async () => {
     const tiles = ["plugin:topology", "plugin:wifi", "plugin:kefrens", "plugin:talkers"];
     const mosaic = makeLiveMosaic(tiles, "plugin:kefrens");
     const teardownView = vi.fn();
@@ -158,7 +158,7 @@ describe("mosaicViewReload", () => {
     expect(mountView).not.toHaveBeenCalledWith("plugin:kefrens");
   });
 
-  it("reload reconcile backrooms on the focused slot when mode and tiles diverged", () => {
+  it("E: reload restores Backrooms on the focused slot when mode and tiles diverged", () => {
     const tiles = ["plugin:topology", "plugin:wifi", "plugin:kefrens", "plugin:talkers"];
     localStorage.setItem("zoto-viz.mode", "plugin:backrooms");
     localStorage.setItem("zoto-viz.mosaicFocus", "plugin:kefrens");
@@ -179,7 +179,7 @@ describe("mosaicViewReload", () => {
     expect(mosaic.focusedId).toBe("plugin:backrooms");
   });
 
-  it("settings mosaic pick delegates through the live hook", async () => {
+  it("pane picker delegates through the live hook and persists layout", async () => {
     const pick = vi.fn(async () => true);
     const s = new Settings({ storePrefix: "zoto-viz-mosaic-reload", onChange: () => {} });
     s.onMosaicPanePick = pick;
@@ -194,8 +194,6 @@ describe("mosaicViewReload", () => {
     expect(sel).toBeTruthy();
     sel!.value = "plugin:backrooms";
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(pick.mock.calls.length).toBe(1);
-    expect(pick.mock.calls[0]?.[0]).toBe("plugin:topology");
-    expect(pick.mock.calls[0]?.[1]).toBe("plugin:backrooms");
+    expect(pick).toHaveBeenCalledWith("plugin:topology", "plugin:backrooms");
   });
 });

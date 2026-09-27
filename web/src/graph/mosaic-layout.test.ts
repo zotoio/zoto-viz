@@ -70,6 +70,7 @@ describe("close / swap / assign", () => {
     expect(mosaicPaneIdsWithViewChange(["a", "b", "c", "d"], ["b", "a", "c", "d"]).sort()).toEqual(["a", "b"]);
     expect(mosaicPaneIdsWithViewChange(["a", "b"], ["a", "b"]).sort()).toEqual([]);
   });
+
 });
 
 describe("ratios / parse", () => {

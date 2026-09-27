@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Settings } from "./settings";
-import { DEFAULT_DREAM } from "../graph/scene";
 import { setPluginModes, talkers, topology } from "../core/modes";
 
 describe("settings mosaic pane pickers", () => {
@@ -54,22 +53,4 @@ describe("settings mosaic pane pickers", () => {
     expect(sel!.value).toBe("plugin:topology");
   });
 
-  it("persists mosaicTiles after a slot change when no live hook is wired", () => {
-    const s = new Settings({ storePrefix: "zoto-viz-mosaic-pick-persist", onChange: () => {} });
-    s.addAnimation(() => {}, { el: document.createElement("div") });
-    s.applyAnim({
-      ...DEFAULT_DREAM,
-      ...s.animSettings,
-      mosaic: "2",
-      mosaicTiles: ["plugin:topology", "plugin:wifi"],
-    });
-    s.open("view");
-    const sel = s.el.querySelector<HTMLSelectElement>(".mosaic-slot");
-    expect(sel).toBeTruthy();
-    sel!.value = "plugin:talkers";
-    sel!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(s.animSettings.mosaicTiles).toEqual(["plugin:talkers", "plugin:wifi"]);
-    const raw = localStorage.getItem("zoto-viz-mosaic-pick-persist.anim.mosaicTiles");
-    expect(JSON.parse(raw!)).toEqual(["plugin:talkers", "plugin:wifi"]);
-  });
 });

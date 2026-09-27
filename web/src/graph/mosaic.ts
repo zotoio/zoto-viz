@@ -15,7 +15,6 @@ import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
 import { releasePanelView } from "./panel-view-lifecycle";
 
 export { centerSplit } from "./mosaic-layout";
-export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
 
 /** Wall palette for every tile, or the next unused theme (plugin look wins when free). */
 export function mosaicTileTheme(shared: boolean, wall: Theme, used: Set<string>, prefer?: string | null): Theme {

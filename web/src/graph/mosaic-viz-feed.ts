@@ -3,7 +3,7 @@ import type { Mosaic } from "./mosaic";
 import type { NetScene } from "./scene";
 import { vizContractFor, type PluginView } from "../plugins/plugin";
 import { runPackFrameHandler, type VizPackHandlers } from "../plugins/viz-pack-host";
-import { noteHostDirect, clearVizDrive } from "../plugins/viz-drive";
+import { noteHostDirect } from "../plugins/viz-drive";
 import { bindVizWriterCore, type VizBufferWriter, type VizDataFrame } from "../plugins/viz-host";
 import { normalizeVizDemoPackId } from "../ui/viz-hud";
 
@@ -11,7 +11,6 @@ const tileWriters = new Map<string, VizBufferWriter>();
 
 export function dropMosaicTileWriter(tileId: string): void {
   tileWriters.delete(tileId);
-  clearVizDrive(tileId);
 }
 
 function writerForTile(tileId: string, spec: PluginView | null): VizBufferWriter | null {
