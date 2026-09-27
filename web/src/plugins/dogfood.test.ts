@@ -135,6 +135,19 @@ function tickHnTermFrames(
 
 /** 60× `i/30`, 10× hold, 60× `i/30` rewind without `resetHnTermPack`. */
 const HN_TERM_DT_GUARD_TYPED_CHARS = 18;
+
+/** After one `t = 1/30` warm-up frame, one `dt = 5` frame capped at 1. */
+const HN_TERM_DT_CAP_STEP_TYPED_CHARS = 23;
+
+/** After one `t = 1/30` warm-up frame, one `frame.t = Infinity` frame uses `1/60` fallback. */
+const HN_TERM_DT_INFINITY_STEP_TYPED_CHARS = 1;
+
+function hnTermDtGuardWarmOneThirtiethFrame(
+  state: StateMsg,
+  handlers: ReturnType<typeof hnTermDtGuardHandlers>["handlers"],
+): void {
+  tickHnTermFrames(state, 1, () => HN_TERM_DT_GUARD_FRAME_STEP, handlers);
+}
 function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date(FAT_LAN_SOAK_CLOCK_START_MS));
@@ -220,6 +233,32 @@ it("hn-term frame.t backward step: dt guard uses 1/60 fallback", () => {
   expect(hnTermPackBufferNewTypedCharCount(frozenAtHold, lastBuffer())).toBe(0);
   segment();
   expect(hnTermPackBufferTypedCharCount(lastBuffer())).toBe(HN_TERM_DT_GUARD_TYPED_CHARS);
+});
+
+it("hn-term frame.t cap step: dt above one adds capped typed characters", () => {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const { handlers, lastBuffer } = hnTermDtGuardHandlers();
+  hnTermDtGuardWarmOneThirtiethFrame(state, handlers);
+  const frozen = Array.from(lastBuffer());
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+  frame.t = HN_TERM_DT_GUARD_FRAME_STEP + 5;
+  runPackFrameHandler("hn-term", frame, handlers);
+  expect(hnTermPackBufferNewTypedCharCount(frozen, lastBuffer())).toBe(HN_TERM_DT_CAP_STEP_TYPED_CHARS);
+});
+
+it("hn-term frame.t infinity step: non-finite dt uses 1/60 fallback", () => {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const { handlers, lastBuffer } = hnTermDtGuardHandlers();
+  hnTermDtGuardWarmOneThirtiethFrame(state, handlers);
+  const frozen = Array.from(lastBuffer());
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+  frame.t = Infinity;
+  runPackFrameHandler("hn-term", frame, handlers);
+  expect(hnTermPackBufferNewTypedCharCount(frozen, lastBuffer())).toBe(HN_TERM_DT_INFINITY_STEP_TYPED_CHARS);
 });
 
 it("hn-term frame.t hold step: zero dt adds no typed characters", () => {
