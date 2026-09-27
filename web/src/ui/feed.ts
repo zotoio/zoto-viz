@@ -101,9 +101,10 @@ type Bucket = Record<FeedKind, number>;
 const KINDS: FeedKind[] = ["tls", "quic", "dns", "mdns", "http", "media", "ssdp", "dhcp", "remote", "plain", "wifi", "bt", "other"];
 
 /**
- * Right-hand live overlay: decoded capture headlines and source titles.
- * Chat lives on `#livechat`. Every source appends at the bottom so older lines
- * scroll up; new rows queue below the viewport and the ticker scrolls until it catches up.
+ * Right-hand live overlay: decoded capture headlines plus journal / kernel / file
+ * lines. News and stills stay on plugin views. Chat lives on `#livechat`. Every
+ * source appends at the bottom so older lines scroll up; new rows queue below
+ * the viewport and the ticker scrolls until it catches up.
  */
 export class LiveFeed {
   readonly el: HTMLElement;

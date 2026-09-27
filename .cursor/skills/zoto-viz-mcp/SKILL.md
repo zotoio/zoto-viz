@@ -13,7 +13,7 @@ description: >-
 
 The live monitor is the source of truth for **what is on screen**. Edit checkout files for shipped code; use MCP to **apply**, **activate**, **consent**, and **inspect** the running UI.
 
-Monitor must be up: `http://127.0.0.1:7020/` (UI) and `POST http://127.0.0.1:7020/mcp`. CSRF is skipped on `/mcp`; Host must be loopback.
+Monitor must be up: UI `http://127.0.0.1:7020/` (or the Vite port) and `POST /mcp`. CSRF is skipped on `/mcp`. Host must be loopback unless the monitor is started with `insecure_lan` (`bind: 0.0.0.0` in `~/.zoto-viz/sys-config.yml` or `--bind 0.0.0.0 --insecure-lan`). Then MCP is `http://<lan-ip>:7020/mcp` with **no password**.
 
 ## Call the server
 
@@ -95,7 +95,7 @@ After any live view / sky / mosaic / chrome change:
 
 ## Hard rules
 
-- Loopback only. Do not point hosted MCP at this server.
+- Do not point hosted Cursor MCP at this server. Local clients use loopback; LAN clients need `insecure_lan` on the monitor (no password).
 - Do not overwrite `plugins/src/<id>/` via zip tools.
 - Do not commit from MCP. Return the written path; the operator promotes.
 - `roll_dice` is one shot. Header dice repeat is `set_settings` `{dice: {on, periodMin}}`.

@@ -344,7 +344,7 @@ describe("buildVizFrame", () => {
           ],
         },
       },
-    }), 99, 0);
+    }), 99, 0, { source: "hn" });
     expect(frame.headlines.map((h) => h.text)).toEqual(["Jemalloc", "Waymo"]);
     expect(frame.headlines[0]?.summary).toBe("alloc news");
     expect(frame.headlines[0]?.image).toBe("https://www.nasa.gov/iotd.jpg");

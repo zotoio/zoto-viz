@@ -525,6 +525,11 @@ body[data-chrome="right"] .sense-pair .toggle { flex: 1; min-width: 0; }
 #modeBox .plugin-cog { width: 30px; height: 30px; flex: none; }
 #modeBox .plugin-cog[hidden] { display: none; }
 #modeBox .plugin-cog[aria-expanded="true"] svg { transform: rotate(90deg); }
+/* Wall panes each have a view menu; the header picker is solo-only. */
+body.mosaic #modeBox,
+body.mosaic #modeOpts,
+#modeBox[hidden],
+#modeOpts[hidden] { display: none !important; }
 #diceBox.dice-split {
   display: inline-flex; align-items: stretch; height: 30px; box-sizing: border-box;
   background: var(--chip); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;

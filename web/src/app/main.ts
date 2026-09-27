@@ -7,6 +7,7 @@ import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
 import { mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
 import { Settings, makeViewCogButton } from "../ui/settings";
+import { setHeaderViewVisible } from "../ui/header-chrome";
 import { illustratedSourceBind, parseSourceBind, sourceHeadlines } from "../core/sources";
 import { bindSourceOf, viewAuthBlock, type AuthCtx } from "../core/auth-setup";
 import { LiveFeed, feedViewShift } from "../ui/feed";
@@ -562,6 +563,11 @@ function bindThisView(modeId: string): void {
   paintViewAuth(m, spec);
 }
 
+/** Header VIEW is solo-only; mosaic panes each have their own picker. */
+function syncHeaderView(): void {
+  setHeaderViewVisible(!mosaic?.on);
+}
+
 let tsWatch = 0;
 let tsWatchId = "";
 let tsWatchHash = "";
@@ -772,6 +778,40 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
   await loadPluginSkyOnto(scene, spec, true);
 }
 
+/** Consent, mode, sky, and frontend for every mosaic tile after a pane pick. */
+let mosaicViewsLoad = 0;
+async function loadMosaicViews(tiles: string[]): Promise<void> {
+  if (!mosaic?.on || !tiles.length) return;
+  const gen = ++mosaicViewsLoad;
+  for (const id of tiles) {
+    if (gen !== mosaicViewsLoad) return;
+    const mode = modeById(id);
+    const spec = mode.pluginId ? pluginSpecForMode(mode.id) : null;
+    if (!(await ensureReviewed(spec))) continue;
+    if (gen !== mosaicViewsLoad || !mosaic.on) return;
+    const target = mosaic.graphScene(id);
+    if (target) {
+      const look = lookForMode(mode.id) ?? spec?.look;
+      const skyStage = !mode.standalone && !!(mode.stageOnly || look?.stageOnly);
+      target.setMode(mode, optsFor(mode));
+      target.setStageOnly(skyStage);
+    }
+  }
+  if (gen !== mosaicViewsLoad || !mosaic.on) return;
+  const focus = (mosaic.focusedId && tiles.includes(mosaic.focusedId))
+    ? mosaic.focusedId
+    : (mosaic.mainId && tiles.includes(mosaic.mainId) ? mosaic.mainId : tiles[0]!);
+  const fm = modeById(focus);
+  const fspec = fm.pluginId ? pluginSpecForMode(fm.id) : null;
+  const paneSpec = skySpecForMode(fm.id, fspec);
+  if (fm.standalone || arcadeSlotFor(fm) !== "carousel") {
+    await loadTsPlugin(paneSpec);
+  }
+  if (gen !== mosaicViewsLoad || !mosaic.on) return;
+  await syncPluginSky(paneSpec);
+  nestCams.setActive(tiles.some((id) => modeById(id).pluginId === "nest-cams"));
+}
+
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const m = modeById(id);
   const opts = optsFor(m);
@@ -800,6 +840,11 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
       modeSel.value = prevMode || modeSel.value;
       liveMode = prevMode;
       localStorage.setItem("zoto-viz.mode", modeSel.value);
+      syncHeaderView();
+      return;
+    }
+    if (mosaic?.on && !(m.pluginId && m.standalone)) {
+      await loadMosaicViews(mosaic.tileIds);
       return;
     }
     if (m.standalone || arcadeSlotFor(m) !== "carousel") {
@@ -825,6 +870,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
         modeSel.value = prevMode || modeSel.value;
         liveMode = prevMode;
         localStorage.setItem("zoto-viz.mode", modeSel.value);
+        syncHeaderView();
         return;
       }
     }
@@ -840,6 +886,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
     if (target !== scene) scene.setStageOnly(false);
     morphViewChrome(m, opts, spec, skyStage);
     applyViewLook();
+    syncHeaderView();
     return;
   }
 
@@ -858,6 +905,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
 
   morphViewChrome(m, opts, spec, skyStage);
   applyViewLook();
+  syncHeaderView();
 }
 
 function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
@@ -1136,13 +1184,17 @@ mosaic = new Mosaic({
   arcade,
   spawnArcade: (engine) => spawnArcade(engine, scene),
   optsFor,
-  onFocus: (id) => mosaic?.focus(id),
+  onFocus: (id) => {
+    if (settings.isOpen && settings.openPane === "view") bindThisView(id);
+  },
   onPromote: (id, theme) => {
     applyMode(id, { keepLayout: true });
     if (theme) applyTheme(theme.id);
     applyViewLook();
   },
   onLayout: (patch) => settings.applyMosaicLayout(patch),
+  onWall: () => syncHeaderView(),
+  onPaneViews: (tiles) => { void loadMosaicViews(tiles); },
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
@@ -1170,16 +1222,7 @@ mosaic = new Mosaic({
 settings.onMosaicPanePick = (from, to) => {
   if (!mosaic?.on) return false;
   if (!mosaic.setPaneView(from, to)) return false;
-  mosaic.focus(to);
-  const pm = modeById(to);
-  const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(pm.id) : null);
-  void (async () => {
-    const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
-    if (!(await ensureReviewed(spec))) return;
-    if (pm.standalone || arcadeSlotFor(pm) !== "carousel") {
-      void syncPluginSky(paneSpec);
-    }
-  })();
+  bindThisView(to);
   return true;
 };
 settings.addAnimation((a) => {
@@ -1203,6 +1246,7 @@ settings.addAnimation((a) => {
       tiles: a.mosaicTiles,
     });
     applyMode(modeSel.value, { keepLayout: true });
+    syncHeaderView();
     syncFeedShift();
   }
 }, dreamCog);
@@ -1344,6 +1388,12 @@ const autoconsentToggle = new Toggle({
 const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle]);
 $("settingsBox").appendChild(settings.el);
 settings.attachViewCog($("modeBox"), () => bindThisView(modeSel.value));
+settings.onShowView = () => {
+  const id = mosaic?.on
+    ? (mosaic.focusedId || mosaic.tileIds[0] || modeSel.value)
+    : modeSel.value;
+  if (id) bindThisView(id);
+};
 agent.mountSettings(settings.agentHost());
 agent.onOpen = () => { settings.open("agent"); };
 agent.captureView = () => {

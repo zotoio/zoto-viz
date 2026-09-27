@@ -219,6 +219,10 @@ export class Mosaic {
     onPromote: (id: string, theme: Theme | null) => void;
     onLayout: (patch: MosaicLayoutPatch) => void;
     onCloseLast: () => void;
+    /** Fires when the wall turns on or off (header chrome is solo-only). */
+    onWall?: (on: boolean) => void;
+    /** After a pane's view id changes: load that catalog row onto the tile. */
+    onPaneViews?: (tiles: string[]) => void;
     paneCog?: (id: string) => HTMLButtonElement;
     sync: () => MosaicSync;
   }) {}
@@ -269,6 +273,7 @@ export class Mosaic {
     this.cfg.main.setCompactLabels(false);
     this.cfg.wall.append(this.cfg.sceneEl, ...Object.values(this.cfg.arcade).map((a) => a.el));
     this.cfg.host?.invalidate();
+    this.cfg.onWall?.(false);
   }
 
   setSize(
@@ -326,6 +331,7 @@ export class Mosaic {
     document.body.dataset.hero = this.hero;
     if (max) document.body.dataset.mosaicMax = max;
     else delete document.body.dataset.mosaicMax;
+    this.cfg.onWall?.(true);
     if (sameWall) {
       this.placeTree();
       this.relayoutAll();
@@ -379,6 +385,7 @@ export class Mosaic {
   focus(id: string): void {
     this.focused = id;
     for (const [mid, pane] of this.panes) pane.classList.toggle("focus", mid === id);
+    this.cfg.onFocus(id);
   }
 
   eachGraph(fn: (s: NetScene) => void): void {
@@ -476,6 +483,8 @@ export class Mosaic {
     const next = nextPaneTiles(this.tileIds, fromId, toId);
     if (next.join("\0") === this.tileIds.join("\0")) return false;
     this.assignViews(next);
+    if (this.tileIds.includes(toId)) this.focus(toId);
+    this.cfg.onPaneViews?.(this.tileIds);
     return true;
   }
 
@@ -671,6 +680,7 @@ export class Mosaic {
     this.flushSync();
     this.relayoutAll();
     this.emitLayout();
+    this.cfg.onPaneViews?.(this.tileIds);
   }
 
   private fallbackHostSky(id: string): void {
