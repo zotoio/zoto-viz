@@ -40,6 +40,7 @@ function mosaicWall(paneId: string): Mosaic {
       relayout: () => {},
       setMode: () => {},
       setAnim: () => {},
+      retargetPanel: () => {},
     } as never,
     arcade: {},
     optsFor: () => ({}),

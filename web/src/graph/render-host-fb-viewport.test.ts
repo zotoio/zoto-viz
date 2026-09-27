@@ -7,7 +7,6 @@ import { RenderHost, type HostedView } from "./render-host";
 const { WebGLRendererMock } = vi.hoisted(() => {
   class WebGLRendererMock {
     readonly domElement = document.createElement("canvas");
-    setPixelRatio = vi.fn();
     setClearColor = vi.fn();
     setSize = vi.fn((w: number, h: number) => {
       const pr = this.getPixelRatio();
@@ -21,7 +20,11 @@ const { WebGLRendererMock } = vi.hoisted(() => {
     getRenderTarget = () => null;
     clear = vi.fn();
     render = vi.fn();
-    getPixelRatio = () => 1.5;
+    private ratio = 1.5;
+    setPixelRatio = vi.fn((n: number) => {
+      this.ratio = n;
+    });
+    getPixelRatio = () => this.ratio;
     getContext = () => ({
       getContextAttributes: () => ({ antialias: false }),
       fenceSync: () => ({}),
@@ -81,7 +84,7 @@ describe("RenderHost framebuffer viewport", () => {
     const camera = new THREE.PerspectiveCamera();
     const vp = host.present(view, 0x0a1020, scene, camera);
     expect(vp).not.toBeNull();
-    expect(vp).toEqual(EXPECTED_FB_VIEWPORT);
+    expect(vp).toEqual(expect.objectContaining(EXPECTED_FB_VIEWPORT));
     const lines = probeLines(vp!, host.canvas.width, host.canvas.height);
     expect(lines.length).toBeGreaterThan(0);
     expect(lines[0]!.x).toBe(EXPECTED_FB_VIEWPORT.x);

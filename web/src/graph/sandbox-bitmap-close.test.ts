@@ -8,7 +8,7 @@ const renderHostPath = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 describe("sandbox bitmap close order", () => {
   it("closes bitmap only after presentBitmapMirror draws", () => {
     const src = readFileSync(renderHostPath, "utf8");
-    const present = src.indexOf("gpu.present(rd, tex, fill, dst, aspect)");
+    const present = src.indexOf("gpu.present(rd, tex, fill, asCssRect(dst), aspect)");
     const close = src.indexOf("bitmap.close()");
     expect(present).toBeGreaterThan(-1);
     expect(close).toBeGreaterThan(present);

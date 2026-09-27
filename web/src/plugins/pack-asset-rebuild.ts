@@ -27,6 +27,7 @@ import { applyPackFeedPaneNotice } from "./plugin-pack-feed";
 
 export function isPackAssetTokenInvalid(err: unknown): boolean {
   if (err instanceof PackAssetTokenInvalidError) return true;
+  if (err instanceof Error && err.name === "PackAssetTokenInvalidError") return true;
   const msg = err instanceof Error ? err.message : String(err);
   return /\b401\b/.test(msg) && msg.includes("token_invalid");
 }
