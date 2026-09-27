@@ -1,5 +1,5 @@
 diff --git a/service/sysconfig.py b/service/sysconfig.py
-index 9fd0428..f9ed6c8 100644
+index 9fd04288..9a59d98b 100644
 --- a/service/sysconfig.py
 +++ b/service/sysconfig.py
 @@ -30,6 +30,7 @@ from .request_guard import validate_allowed_host_entry
@@ -10,3 +10,11 @@ index 9fd0428..f9ed6c8 100644
  DEFAULT_BIND = "127.0.0.1"
  DEFAULT_PORT = 7020
  HEADER = (
+@@ -135,7 +136,6 @@ def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
+         "port": _port(raw.get("port")),
+         "insecure_lan": True if not loopback else _bool(raw.get("insecure_lan")),
+         "inhibit_screensaver": _inhibit_screensaver(raw),
+-        "allowed_hosts": _allowed_hosts(raw.get("allowed_hosts")),
+     }
+ 
+ 

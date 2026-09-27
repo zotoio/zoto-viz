@@ -98,15 +98,20 @@ def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
 def test_api_docs_describe_loopback_host_allowlist_not_lan_scan() -> None:
     text = (REPO / "docs" / "api.md").read_text(encoding="utf-8")
     assert "loopback names and addresses for the bound port" in text
-    assert "all local interface addresses" not in text
+    lan_scan_phrase = "all local interface addresses"
+    if lan_scan_phrase in text:
+        raise AssertionError(f"docs must not describe LAN scan as {lan_scan_phrase!r}")
 
 
 def test_sysconfig_header_documents_allowed_hosts_key() -> None:
-    assert "# allowed_hosts:" in sysconfig.HEADER
+    marker = "# allowed_hosts:"
+    if marker not in sysconfig.HEADER:
+        raise AssertionError(f"missing {marker!r} in sysconfig.HEADER")
 
 
-def test_sysconfig_does_not_define_unused_listen_keys_constant() -> None:
-    assert "LISTEN_KEYS" not in Path(sysconfig.__file__).read_text(encoding="utf-8")
+def test_sysconfig_listen_opts_includes_allowed_hosts_without_listen_keys() -> None:
+    opts = sysconfig.listen_opts({"allowed_hosts": ["lan.example:8080"], "bind": "127.0.0.1", "port": 7020})
+    assert opts["allowed_hosts"] == ["lan.example:8080"]
 
 
 def test_allowed_hosts_round_trips_through_dump_and_load(tmp_path) -> None:

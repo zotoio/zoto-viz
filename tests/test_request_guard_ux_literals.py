@@ -35,14 +35,15 @@ _SCRIPT_PROBE = "<script>"
 
 
 def _assert_host_header_invalid_body(body: str) -> None:
-    assert body == request_guard.HOST_HEADER_INVALID_BODY
-    assert body == _HOST_HEADER_INVALID_LITERAL
+    if body != _HOST_HEADER_INVALID_LITERAL:
+        raise AssertionError(f"invalid Host body mismatch: {body!r}")
     assert _SCRIPT_PROBE not in body
     assert _CRLF_INJECTION_MARKER not in body
 
 
 def test_ux_literal_host_reject_disallowed_body() -> None:
-    assert request_guard.HOST_REJECT_BODY == _HOST_REJECT_LITERAL
+    if request_guard.HOST_REJECT_BODY != _HOST_REJECT_LITERAL:
+        raise AssertionError(f"HOST_REJECT_BODY drift: {request_guard.HOST_REJECT_BODY!r}")
 
     async def run() -> None:
         async with make_app_server() as (ip, port, _runner):
@@ -54,15 +55,16 @@ def test_ux_literal_host_reject_disallowed_body() -> None:
                     assert rejected.status == 400
                     assert rejected.content_type == "text/plain"
                     body = await rejected.text()
-                    assert body == request_guard.HOST_REJECT_BODY
-                    assert body == _HOST_REJECT_LITERAL
+                    if body != _HOST_REJECT_LITERAL:
+                        raise AssertionError(f"reject body mismatch: {body!r}")
 
     asyncio.run(run())
 
 
 def test_ux_literal_host_header_invalid_malformed_and_duplicate(monkeypatch) -> None:
     """Single revert row: undoing the invalid-Host split must fail (AssertionError on body)."""
-    assert request_guard.HOST_HEADER_INVALID_BODY == _HOST_HEADER_INVALID_LITERAL
+    if request_guard.HOST_HEADER_INVALID_BODY != _HOST_HEADER_INVALID_LITERAL:
+        raise AssertionError(f"HOST_HEADER_INVALID_BODY drift: {request_guard.HOST_HEADER_INVALID_BODY!r}")
 
     async def run() -> None:
         async with make_app_server() as (ip, port, _runner):
@@ -126,7 +128,8 @@ def test_ux_host_header_crlf_injection_not_reflected_in_response_body() -> None:
 
 
 def test_ux_literal_handler_500_body() -> None:
-    assert request_guard.HANDLER_ERROR_BODY == _HANDLER_500_LITERAL
+    if request_guard.HANDLER_ERROR_BODY != _HANDLER_500_LITERAL:
+        raise AssertionError(f"HANDLER_ERROR_BODY drift: {request_guard.HANDLER_ERROR_BODY!r}")
 
     async def _boom(_req):  # noqa: ANN001
         raise RuntimeError("probe")
@@ -152,8 +155,8 @@ def test_ux_literal_handler_500_body() -> None:
                 ) as resp:
                     assert resp.status == 500
                     body = await resp.text()
-                    assert body == request_guard.HANDLER_ERROR_BODY
-                    assert body == _HANDLER_500_LITERAL
+                    if body != _HANDLER_500_LITERAL:
+                        raise AssertionError(f"500 body mismatch: {body!r}")
         finally:
             await runner.cleanup()
 
@@ -161,7 +164,8 @@ def test_ux_literal_handler_500_body() -> None:
 
 
 def test_ux_literal_path_reject_body() -> None:
-    assert request_guard.PATH_REJECT_BODY == _PATH_REJECT_LITERAL
+    if request_guard.PATH_REJECT_BODY != _PATH_REJECT_LITERAL:
+        raise AssertionError(f"PATH_REJECT_BODY drift: {request_guard.PATH_REJECT_BODY!r}")
 
     async def run() -> None:
         async with make_app_server() as (ip, port, _runner):
@@ -172,7 +176,7 @@ def test_ux_literal_path_reject_body() -> None:
                 ) as resp:
                     assert resp.status == 400
                     body = await resp.text()
-                    assert body == request_guard.PATH_REJECT_BODY
-                    assert body == _PATH_REJECT_LITERAL
+                    if body != _PATH_REJECT_LITERAL:
+                        raise AssertionError(f"path reject body mismatch: {body!r}")
 
     asyncio.run(run())

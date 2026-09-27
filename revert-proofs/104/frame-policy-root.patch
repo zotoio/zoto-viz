@@ -1,20 +1,12 @@
 diff --git a/service/access.py b/service/access.py
-index 2d4933b..715e969 100644
+index 2d4933b6..cf9245cf 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -100,14 +100,7 @@ def _deny(msg: str, status: int = 403) -> web.Response:
+@@ -100,7 +100,6 @@ def _deny(msg: str, status: int = 403) -> web.Response:
  
  def attach_frame_embed_policy(resp: web.StreamResponse) -> None:
      """Every response must not be embeddable off-origin (including errors and static files)."""
 -    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
--    prior = resp.headers.get("Content-Security-Policy", "")
--    frame = "frame-ancestors 'self'"
--    if prior:
--        if "frame-ancestors" not in prior:
--            resp.headers["Content-Security-Policy"] = f"{prior}; {frame}"
--    else:
--        resp.headers["Content-Security-Policy"] = frame
-+    return
- 
- 
- 
+     prior = resp.headers.get("Content-Security-Policy", "")
+     frame = "frame-ancestors 'self'"
+     if prior:
