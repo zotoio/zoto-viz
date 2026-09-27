@@ -25,9 +25,8 @@ export type AlertKey = { [K in NoticeKey]: (typeof NOTICE_ROUTE)[K] extends "ale
 export type StatusKey = Exclude<NoticeKey, AlertKey>;
 type NoticeAction = { label: string; onClick: () => void };
 export type WallNoticeArgs =
-  | { key: Exclude<StatusKey, "retry-failed">; text: string; action?: undefined; autoClearMs?: number }
-  | { key: "retry-failed"; text: string; action: NoticeAction; autoClearMs?: undefined }
-  | { key: AlertKey; text: string; action?: NoticeAction; autoClearMs?: undefined };
+  | { key: StatusKey; text: string; action?: undefined; autoClearMs?: number }
+  | { key: NoticeKey; text: string; action?: NoticeAction; autoClearMs?: undefined };
 export type WallNoticeHandle = { dismiss(): void; readonly live: boolean };
 const MAX_VISIBLE = 3;
 type Entry = {
