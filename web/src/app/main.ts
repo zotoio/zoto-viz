@@ -113,7 +113,6 @@ import { bindThisView as bindThisViewHost } from "./host-view-bind";
 import { rebindViewDrawerOnApplyMode } from "./host-apply-mode-rebind";
 import { createMosaicPanePickHandler } from "./host-mosaic-pane-pick";
 import { syncSettingsAnimToMosaic } from "./settings-mosaic-anim-sync";
-import { deliverVizPluginFrame } from "./viz-frame-tick";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
 ignoreResizeLoopError();
