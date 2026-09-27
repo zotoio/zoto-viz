@@ -1,0 +1,4 @@
+tile_4x4:
+  look:
+    mosaic: "16"
+    hero: center

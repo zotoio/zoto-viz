@@ -1196,6 +1196,11 @@ def validate_plugin_home(home: Path) -> dict[str, Any]:
     yml = home / "plugin.yml"
     doc = load_file(yml)
     rel = str(yml)
+    wall_layout = home / "wall-layout.yml"
+    if wall_layout.is_file():
+        from .pack_wall_layout import validate_wall_layout_file
+
+        validate_wall_layout_file(wall_layout)
     merged = _attach_visualisation({**doc}, home, errors, rel, blocked=None)
     if errors:
         raise ValueError(errors[0]["error"])
