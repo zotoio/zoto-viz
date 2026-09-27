@@ -240,8 +240,6 @@ export interface PluginView {
   sky_error?: string;
   /** Host drawer: presets, HUD label fields, section order (from plugin.yml / visualisation.yml). */
   settings?: import("./plugin-visualisation").PluginSettingsDecl;
-  workBudget?: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget;
-  workBudgetLimited?: string;
 }
 
 const LOOK_ANIM_KEYS = [
