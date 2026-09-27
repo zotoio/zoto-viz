@@ -190,7 +190,7 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { dropMosaicTileWriter } from "../graph/mosaic-viz-feed";
-import { deliverVizPluginFrame } from "./viz-frame-tick";
+import { tickVizPresentDeliver, type VizPresentDeliverHost } from "./viz-present-deliver";
 import {
   bindVizDriveElement,
   clearVizDrive,
@@ -618,6 +618,44 @@ const blockedInstallPanel = new BlockedInstallPanel({
 });
 $("modeBox").append(blockedInstallPanel.el);
 const feedTitleCube = new FeedTitleCube($("wall"));
+
+const vizPresentHost: VizPresentDeliverHost = {
+  modeById,
+  modeSelValue: () => modeSel.value,
+  pluginSpecs,
+  tsWatchId: () => tsWatchId,
+  mosaic,
+  scene,
+  renderHost,
+  sandbox,
+  vizBudget,
+  getVizWriter: () => vizWriter,
+  bindVizWriter: (spec) => bindVizWriter(spec),
+  vizHud,
+  optsFor,
+  mosaicTileViewId,
+  pluginSpecForMode,
+  syncPanelPackSub,
+  feedTitleCube,
+  getVizFrameClockMs: () => vizFrameClockMs,
+  setVizFrameClockMs: (ms) => { vizFrameClockMs = ms; },
+  syncVizBudgetTileScope,
+};
+
+function shownForVizDeliver(): StateMsg | null {
+  if (!lastRaw) return null;
+  const curMode = modeById(liveMode || modeSel.value);
+  const curSpec = curMode.pluginId ? pluginSpecForMode(curMode.id) : null;
+  let shown = withGoldenIfIdle(lastRaw, pluginIdleOf(curSpec));
+  if (mergeToggle.checked) shown = collapseByName(lastRaw).msg;
+  return shown;
+}
+
+addPresentListener(() => {
+  const shown = shownForVizDeliver();
+  if (shown) tickVizPresentDeliver(shown, vizPresentHost);
+});
+
 const nestCams = new NestCamsLive($("wall"));
 nestCams.onSettings = (camId) => {
   bindThisView("plugin:nest-cams");
@@ -1587,89 +1625,6 @@ function feed(m: StateMsg): void {
     rate: d.packets,
     role: d.role,
   })));
-  const mode = modeById(modeSel.value);
-  const active = (mode.pluginId && pluginSpecs.find((p) => p.id === mode.pluginId))
-    || pluginSpecs.find((p) => p.id === tsWatchId)
-    || null;
-  const packId = normalizeVizDemoPackId(active?.id ?? mode.pluginId);
-  const mosaicDemoPacks = mosaic?.on && mosaic.tileIds.some((id) => normalizeVizDemoPackId(modeById(id).pluginId));
-  const packPanelId = mosaic?.on
-    ? (mosaic.focusedId || mosaic.mainMode || mosaic.tileIds[0] || "main")
-    : "main";
-  syncPanelPackSub(packPanelId, !!(packId && (active?.capabilities?.includes("viz.read") || packId)));
-  if (active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks) {
-    if (!vizWriter && active) bindVizWriter(active);
-    const audio = scene.pulseNow.bass;
-    const idle = active?.viz?.idle;
-    const bind = packId === "hn-rain" || packId === "hn-term"
-      ? illustratedSourceBind(optsFor(mode))
-      : parseSourceBind(optsFor(mode));
-    syncVizBudgetTileScope();
-    const buildFrame = (s: StateMsg, pt: MonoMs, a: number) => mainVizBuildFrame(s, pt, a, idle, bind);
-    const scopeTileIds = mosaic?.on && mosaic.tileIds.length ? mosaic.tileIds : ["main"];
-    const primaryTileId = mosaic?.on ? (mosaic.mainMode || scopeTileIds[0] || "main") : "main";
-    vizBudget.setTileId(primaryTileId);
-    const delivered = mainVizDeliver({
-      budget: vizBudget,
-      prevClockMs: vizFrameClockMs,
-      state: shown,
-      audio,
-      buildFrame,
-      onFrame: (f) => {
-        if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-        const coalesceMosaic = !!(mosaic?.on && mosaicDemoPacks);
-        if (!coalesceMosaic && packId) {
-          noteHostDirect("main");
-          syncVizPackRenderCanvas(renderHost.bufferPixelSize());
-        }
-        deliverVizPluginFrame({
-          frame: f,
-          sandbox,
-          mosaic,
-          mosaicDemoPacks: coalesceMosaic,
-          packId,
-          activeMode: mode,
-          modeById,
-          mosaicTileViewId,
-          pluginSpecForMode,
-          optsFor,
-          budgetStats: vizBudget.stats,
-        });
-      },
-    });
-    vizFrameClockMs = delivered.nextClockMs;
-    const frame = delivered.frame;
-    if (mosaic?.on && scopeTileIds.length > 1) {
-      mirrorMosaicTileCadenceFromPrimary(primaryTileId, scopeTileIds);
-    }
-    if (frame) {
-      if (packId === "hn-rain" || packId === "hn-term") {
-        scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
-      }
-      if (packId === "hn-rain") {
-        const pics = parseHnRainLook(optsFor(mode)).pics && !mosaic?.on;
-        feedTitleCube.setActive(pics);
-        if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
-      }
-    }
-    const activeTiles = vizTileBudgetRegistry.activeTileCount();
-    const budgetTileId = mosaic?.on ? (mosaic.mainMode || mosaic.tileIds[0] || "main") : "main";
-    const tileLinesRaw = mosaic?.on ? mosaicTileBudgetLines(mosaic.tileIds) : undefined;
-    if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
-    const tileLines = tileLinesRaw;
-    vizHud.tick({
-      packId,
-      packName: active?.name ?? packId ?? "",
-      stats: vizBudget.stats,
-      frame: vizBudget.lastBuilt,
-      state: shown,
-      now: vizClockMs(),
-      tileBudget: vizTileBudgetRegistry.getTile(budgetTileId),
-      activeTiles,
-      tileBudgetLines: tileLines,
-    });
-  }
-
   const tsMode = modeById(modeSel.value);
   const tsActive = tsMode.pluginId ? pluginSpecs.find((p) => p.id === tsMode.pluginId) : undefined;
   typesafeHost.configure({
