@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PluginView } from "../plugins/plugin";
 import { buildRemixPickerModel } from "./remix-picker";
 import { listDataSourcePlugins, listRemixVisualPacks } from "./data-source-catalog";
+import { applyPluginCatalog } from "../plugins/plugin";
 
 const dataSource: PluginView = {
   id: "public-hn-top",
@@ -40,5 +41,11 @@ describe("remix catalog helpers", () => {
     const model = buildRemixPickerModel([dataSource, vizPack]);
     expect(model.dataPlugins[0]?.id).toBe("public-hn-top");
     expect(model.visualPacks[0]?.id).toBe("kefrens-bars");
+  });
+
+  it("applyPluginCatalog does not add data-source plugins to the view menu", () => {
+    const modes = applyPluginCatalog([dataSource, vizPack]);
+    expect(modes.some((m) => m.pluginId === "public-hn-top")).toBe(false);
+    expect(modes.some((m) => m.pluginId === "kefrens-bars")).toBe(true);
   });
 });

@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/remix/remix-snapshot.test.ts",
+  "testName": "mergeDemoSnapshotIntoFrame > marks frame demo and applies headline slice",
+  "description": "Revert demo:true on remix-delivered viz frames",
+  "project": "web",
+  "red": {
+    "actual": "undefined",
+    "expected": "true"
+  },
+  "redLine": "AssertionError: expected undefined to be true"
+}

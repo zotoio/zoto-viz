@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/plugin-visualisation.ts b/web/src/plugins/plugin-visualisation.ts
+--- a/web/src/plugins/plugin-visualisation.ts
++++ b/web/src/plugins/plugin-visualisation.ts
+@@ -516,7 +516,6 @@ export function partitionCatalog(specs: PluginView[]): {
+   const overlays = new Map<string, PluginView>();
+   const index = new Map<string, number>();
+   for (const spec of specs) {
+-    if (spec.pluginKind === "data-source") continue;
+     const i = index.get(spec.id);
+     if (i === undefined) {
+       index.set(spec.id, rows.length);
