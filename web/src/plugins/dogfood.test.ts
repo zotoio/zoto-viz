@@ -8,6 +8,8 @@ import {
   formatDogfoodReport,
   hostBindOnPackSwap,
   hudTickFromBudget,
+  formatDogfoodCountGateReport,
+  runDogfoodCountGate,
   runDogfoodSoak,
   runPackFrameHandler,
   runPackSwapPreserve,
@@ -302,9 +304,9 @@ describe("viz dogfood gates", () => {
     expect(formatSkipRate(skipRatePerSec(skipSamples, 1000))).toBe("skips 0/s");
   });
 
-  it("fat-LAN live soak: all three packs under budget or honest skips", () => {
-    const result = runDogfoodSoak({ state: fatLan, framesPerPack: 120 });
-    console.log("\n" + formatDogfoodReport(result));
+  it("fat-LAN count gate: deterministic delivery and build work budgets", () => {
+    const result = runDogfoodCountGate({ state: fatLan, framesPerPack: 120 });
+    console.log("\n" + formatDogfoodCountGateReport(result));
 
     expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
     expect(result.fixture.flows).toBeGreaterThanOrEqual(1000);
@@ -322,6 +324,23 @@ describe("viz dogfood gates", () => {
       "stereo-gram",
       "nixie-clock",
     ]));
+
+    for (const pack of result.packs) {
+      expect(pack.delivered).toBe(pack.frames);
+      expect(pack.skipped).toBe(0);
+    }
+    expect(result.ok).toBe(true);
+  });
+});
+
+const dogfoodPerf = process.env.ZOTO_VIZ_PERF === "1";
+
+describe.skipIf(!dogfoodPerf)("viz dogfood perf soak (local GPU, ZOTO_VIZ_PERF=1)", () => {
+  const fatLan = fatLanFixture();
+
+  it("fat-LAN live soak: wall-clock p95 build and honest skips", () => {
+    const result = runDogfoodSoak({ state: fatLan, framesPerPack: 120 });
+    console.log("\n" + formatDogfoodReport(result));
 
     for (const pack of result.packs) {
       expect(pack.buildMs.p95).toBeLessThan(VIZ_FRAME_BUDGET_MS + 0.01);

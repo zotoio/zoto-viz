@@ -141,6 +141,52 @@ export function isFeedNewsSource(live: Pick<SourceLive, "id" | "kind">): boolean
   if (kind === "journal" || kind === "kmsg" || kind === "file") return false;
   if (kind === "rss" || kind === "http") return true;
   return FEED_NEWS_IDS.has((live.id || "").toLowerCase());
+/** Count feed-eligible headlines without materializing the full list (viz decimation stats). */
+export function countEligibleSourceHeadlines(
+  sources: Record<string, SourceLive> | undefined,
+  bind?: SourceBind,
+): number {
+  if (!sources) return 0;
+  const want = (bind?.source ?? "").trim();
+  const titleKey = bind?.titleField || "title";
+  const captionKey = bind?.captionField || "summary";
+  const imageKey = bind?.imageField || "image";
+  const pictured =
+    (bind?.filter ?? "all") === "has-image" || bind?.filter === "image" || bind?.filter === "pictured";
+  let count = 0;
+  const scanCap = FEED_HEADLINE_LIMIT + 1;
+  const bump = (text: string, image?: string): boolean => {
+    if (count >= scanCap) return true;
+    const t = text.trim();
+    if (!t) return count >= scanCap;
+    const href = (image || "").trim();
+    if (pictured && !href.startsWith("https://")) return count >= scanCap;
+    count += 1;
+    return count >= scanCap;
+  };
+  for (const live of Object.values(sources)) {
+    if (!live || live.feed === false || live.paused || live.ok === false) continue;
+    if (want && live.id !== want) continue;
+    const kind = (live.kind || "").toLowerCase() || undefined;
+    if (kind === "http" && live.json !== undefined && !(live.items && live.items.length)) {
+      for (const text of jsonStrings(live.json, scanCap - count)) {
+        if (bump(text)) break;
+      }
+      continue;
+    }
+    for (const item of live.items ?? []) {
+      const title = itemField(item, titleKey) || item.title || stripMarkup(item.summary || "");
+      const summary = itemField(item, captionKey) || item.summary;
+      const image = itemField(item, imageKey) || item.image;
+      if (bump(title, image)) break;
+    }
+    if (count < scanCap && !live.items?.length && live.text) {
+      for (const line of String(live.text).split(/\r?\n/)) {
+        if (bump(line, undefined)) break;
+      }
+    }
+  }
+  return count;
 }
 
 export function sourceHeadlines(
