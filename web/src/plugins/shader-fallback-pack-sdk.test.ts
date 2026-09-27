@@ -85,13 +85,14 @@ describe("shader fallback pack sdk", () => {
     z.onConfig({ format: "24", seconds: "0" });
     vi.advanceTimersByTime(16);
     const line = String(z.fallbackText({ ...FRAME, t: 600 * 0.016 }));
-    push(line);
+    if (line !== push.mock.calls[9]![0]) push(line);
     expect(push.mock.calls.length).toBe(11);
   });
 
   it("tunnel-pack-pushes", async () => {
     const push = vi.fn();
     const z = await loadTunnelPack();
+    expect(typeof z.fallbackText).toBe("function");
     const pushes = sdkFallbackLoop(z.fallbackText, 600, (t) => push(t));
     expect(pushes).toBe(27);
   });

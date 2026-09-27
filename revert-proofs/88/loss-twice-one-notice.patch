@@ -1,4 +1,16 @@
-diff --git a/web/src/graph/gfx-wall-notice.ts b/web/src/graph/gfx-wall-notice.ts
+diff --git a/web/src/graph/render-host.ts b/tmp/rh2.ts
+index c7f4f94..b0095c2 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -358,7 +358,6 @@ export class RenderHost {
+   }
+ 
+   private onSharedContextLost(): void {
+-    if (this.glContextLost) return;
+     this.glContextLost = true;
+     this.gfxNotice.onContextLost();
+     for (const [tileId, slot] of this.tileShaders) {
+diff --git a/web/src/graph/gfx-wall-notice.ts b/tmp/gn2.ts
 index e37591e..658ab23 100644
 --- a/web/src/graph/gfx-wall-notice.ts
 +++ b/web/src/graph/gfx-wall-notice.ts

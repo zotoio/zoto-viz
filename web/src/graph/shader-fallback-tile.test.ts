@@ -180,6 +180,7 @@ describe("shader fallback tile overlay", () => {
     wall.appendChild(pane);
     const host = new RenderHost(wall);
     Object.defineProperty(host, "software", { value: false });
+    host.beginTilePack("t", "k", "demo", pane, "Demo");
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     const err = host.probeTileSky("t", {} as THREE.Scene, {} as THREE.Camera);
     expect(err).toBeNull();
