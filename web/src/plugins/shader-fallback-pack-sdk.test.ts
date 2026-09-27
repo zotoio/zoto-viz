@@ -65,6 +65,7 @@ describe("shader fallback pack sdk", () => {
   it("nixie-pack-pushes", async () => {
     const push = vi.fn();
     const z = await loadNixiePack();
+    expect(typeof z.fallbackText).toBe("function");
     const pushes = sdkFallbackLoop(z.fallbackText, 600, (t) => push(t));
     expect(pushes).toBe(10);
     expect(push.mock.calls.length).toBe(10);
