@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf1..0d578f7d 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -147,7 +147,6 @@ function dismissEntry(e: Entry): void {
+ export function mountWallNoticeRegion(root: HTMLElement): void {
+   if (regionNode?.isConnected) return;
+   mountRoot = root;
+-  if (!root.hasAttribute("tabindex")) root.tabIndex = -1;
+   if (regionNode && !regionNode.isConnected) {
+     for (const e of [...visible, ...queue.values()]) removeLiveNotice(e);
+     queue.clear();

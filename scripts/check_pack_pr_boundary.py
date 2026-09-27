@@ -24,6 +24,10 @@ VIZ_VALIDATE_FUNC = "test_viz_plugin_yml_validates"
 HOST_CHANGE_LABEL = "host-change"
 HOST_REVIEWED_LABEL = "host-reviewed"
 HOST_REVIEW_FAIL_MESSAGE = "host change: needs human review before merge"
+MISSING_PR_NUMBER_MESSAGE = (
+    "pack-boundary: FAILED — missing pull request number "
+    "(set --pr N or provide pull_request.number in GITHUB_EVENT_PATH)"
+)
 CSP_SANDBOX_CONFIG_PATHS = frozenset(
     {
         "web/index.html",
@@ -63,6 +67,30 @@ def pack_py_test_path(pack: str) -> str:
 
 def is_pack_py_test_file(path: str, pack: str) -> bool:
     return path == pack_py_test_path(pack)
+
+
+def revert_proofs_folder_segment(path: str) -> str | None:
+    """Second path segment under revert-proofs/, or None if not under that tree."""
+    if not path.startswith("revert-proofs/"):
+        return None
+    parts = path.split("/")
+    if len(parts) < 2 or not parts[1]:
+        return None
+    return parts[1]
+
+
+def revert_proofs_violation(path: str, pr_number: int) -> Violation | None:
+    """Reject revert-proofs/<other>/ on this PR; allow only revert-proofs/<pr_number>/."""
+    segment = revert_proofs_folder_segment(path)
+    if segment is None:
+        return None
+    if segment == str(pr_number):
+        return None
+    return Violation(
+        path,
+        f"revert-proofs/{segment}/ is not allowed for PR #{pr_number} "
+        f"(only revert-proofs/{pr_number}/)",
+    )
 
 
 def is_allowed_multipack_web_src(path: str, packs: set[str]) -> bool:
@@ -369,6 +397,7 @@ def evaluate_pack_pr(
     changed_files: list[str],
     pack: str,
     file_contents: dict[str, tuple[str | None, str | None]],
+    pr_number: int,
 ) -> list[Violation]:
     """Validate a single-pack PR. file_contents maps path -> (base, head) text."""
     violations: list[Violation] = []
@@ -376,6 +405,12 @@ def evaluate_pack_pr(
 
     for path in sorted(changed_files):
         if path.startswith(pack_prefix):
+            continue
+        rev_v = revert_proofs_violation(path, pr_number)
+        if rev_v is None and revert_proofs_folder_segment(path) is not None:
+            continue
+        if rev_v is not None:
+            violations.append(rev_v)
             continue
         if is_pack_test_file(path, pack):
             continue
@@ -426,6 +461,7 @@ def evaluate_pack_pr(
 def run_check(
     changed_files: list[str],
     file_contents: dict[str, tuple[str | None, str | None]],
+    pr_number: int,
 ) -> tuple[int, list[str]]:
     """Return (exit_code, lines to print)."""
     lines: list[str] = []
@@ -449,14 +485,14 @@ def run_check(
                 lines.append(f"  {v.path}: {v.reason}")
             return 1, lines
         lines.append(
-            "pack-boundary: not a pack PR "
-            f"(multiple pack folders: {pack_list}); check passed."
+            "pack-boundary: FAILED — pack PR must not touch multiple "
+            f"plugins/src/<pack>/ folders ({pack_list})"
         )
-        return 0, lines
+        return 1, lines
 
     pack = next(iter(packs))
     lines.append(f"pack-boundary: validating pack PR for {pack!r}.")
-    violations = evaluate_pack_pr(changed_files, pack, file_contents)
+    violations = evaluate_pack_pr(changed_files, pack, file_contents, pr_number)
     if violations:
         lines.append("pack-boundary: FAILED")
         for v in violations:
@@ -505,6 +541,32 @@ def git_show(ref: str, path: str) -> str | None:
 
 def load_file_pair(base: str, head: str, path: str) -> tuple[str | None, str | None]:
     return git_show(base, path), git_show(head, path)
+
+
+def pr_number_from_github_event() -> int | None:
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path:
+        return None
+    try:
+        with open(event_path, encoding="utf-8") as handle:
+            event = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    pull = event.get("pull_request")
+    if not isinstance(pull, dict):
+        return None
+    number = pull.get("number")
+    if isinstance(number, int):
+        return number
+    if isinstance(number, str) and number.isdigit():
+        return int(number)
+    return None
+
+
+def resolve_pr_number(cli_pr: int | None) -> int | None:
+    if cli_pr is not None:
+        return cli_pr
+    return pr_number_from_github_event()
 
 
 def parse_github_timestamp(value: str) -> datetime:
@@ -719,9 +781,11 @@ def main(argv: list[str] | None = None) -> int:
         help="GitHub owner/repo for label and timeline lookup (requires GITHUB_TOKEN)",
     )
     parser.add_argument(
+        "--pr",
         "--pr-number",
         type=int,
-        help="Pull request number for label and timeline lookup",
+        dest="pr_number",
+        help="Pull request number (required locally; CI may use GITHUB_EVENT_PATH)",
     )
     parser.add_argument(
         "--dry-run-host-review",
@@ -744,6 +808,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.base or not args.head:
         parser.error("base and head refs are required unless --dry-run-host-review is set")
+
+    pr_number = resolve_pr_number(args.pr_number)
+    if pr_number is None:
+        print(MISSING_PR_NUMBER_MESSAGE, file=sys.stderr)
+        return 1
 
     token = os.environ.get("GITHUB_TOKEN", "")
     if args.repo and args.pr_number:
@@ -776,7 +845,7 @@ def main(argv: list[str] | None = None) -> int:
         if path in (ALLOWED_TSCONFIG_PATH, ALLOWED_SCHEMA_PATH, ALLOWED_CATALOG_PATH):
             contents[path] = load_file_pair(args.base, args.head, path)
 
-    code, lines = run_check(changed, contents)
+    code, lines = run_check(changed, contents, pr_number)
     for line in lines:
         print(line)
     return code
