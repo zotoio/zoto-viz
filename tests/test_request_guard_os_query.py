@@ -101,10 +101,10 @@ def test_build_allowed_hosts_loopback_bind_skips_os_lan_addresses(
     monkeypatch.setattr(
         request_guard,
         "query_os_interface_addresses",
-        lambda: ["10.0.0.5", "203.0.113.1"],
+        lambda: ["192.168.1.5", "172.17.0.1"],
     )
     allowed = build_allowed_hosts("127.0.0.1", 7020)
-    assert len(allowed) == 3
+    assert sorted(allowed) == sorted(["localhost:7020", "127.0.0.1:7020", "[::1]:7020"])
 
 
 def test_build_allowed_hosts_wildcard_bind_includes_os_lan_addresses(
@@ -113,8 +113,8 @@ def test_build_allowed_hosts_wildcard_bind_includes_os_lan_addresses(
     monkeypatch.setattr(
         request_guard,
         "query_os_interface_addresses",
-        lambda: ["10.0.0.5", "203.0.113.1"],
+        lambda: ["192.168.1.5", "172.17.0.1"],
     )
     allowed = build_allowed_hosts("0.0.0.0", 7020)
-    lan_keys = [h for h in allowed if h.startswith("10.") or h.startswith("203.")]
-    assert len(lan_keys) == 2
+    assert "192.168.1.5:7020" in allowed
+    assert "172.17.0.1:7020" in allowed

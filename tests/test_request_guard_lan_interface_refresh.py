@@ -257,3 +257,15 @@ def test_dhcp_refresh_failure_keeps_last_good_set_and_retries(
             assert other_status == 200
 
     asyncio.run(run())
+
+
+def test_refresh_task_slot_cleared_after_shared_refresh() -> None:
+    async def run() -> None:
+        app = web.Application()
+        app["request_guard_clock"] = lambda: 1000.0
+        request_guard.configure_request_guard(app, bind="0.0.0.0", port=7020)
+        app["request_guard_last_if_lookup"] = 0.0
+        await request_guard._await_shared_refresh(app)
+        assert app.get("request_guard_refresh_task") is None
+
+    asyncio.run(run())

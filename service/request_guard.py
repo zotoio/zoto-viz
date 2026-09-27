@@ -184,15 +184,26 @@ def local_interface_hosts(port: int, *, include_os: bool = True) -> set[str]:
     return out
 
 
+def _loopback_allowlist_keys(port: int) -> set[str]:
+    return {
+        _canonical_key("localhost", port),
+        _canonical_key("127.0.0.1", port),
+        _canonical_key("::1", port),
+    }
+
+
 def build_allowed_hosts(
     bind: str,
     port: int,
     extra: Iterable[str] | None = None,
 ) -> frozenset[str]:
     bind = (bind or "127.0.0.1").strip()
-    include_os = not bind_is_loopback(bind)
-    allowed: set[str] = set(local_interface_hosts(port, include_os=include_os))
-    if bind and bind not in {"0.0.0.0", "::"}:
+    if bind_is_loopback(bind):
+        allowed = set(_loopback_allowlist_keys(port))
+    elif bind in {"0.0.0.0", "::"}:
+        allowed = set(local_interface_hosts(port, include_os=True))
+    else:
+        allowed = set(_loopback_allowlist_keys(port))
         allowed.add(_canonical_key(bind, port))
     for item in extra or ():
         norm = validate_allowed_host_entry(str(item))
