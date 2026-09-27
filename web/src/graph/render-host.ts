@@ -24,12 +24,6 @@ import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
 import { TileShaderLatch } from "./tile-shader-latch";
 import { GfxWallNotice } from "./gfx-wall-notice";
-import { mintContextGen, type ContextGen } from "./context-gen.mint";
-import {
-  LetterboxFillCache,
-  NixieUploadCache,
-  UniformUploadCache,
-} from "./host-gl-caches";
 import { TileShaderFallback } from "./tile-shader-fallback";
 import type { VizDataFrame } from "../plugins/viz-host";
 
@@ -69,20 +63,6 @@ export class SoftwareGpu {
 
 export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
-const GL_CONTEXT_LISTENERS_KEY = "__zotoGlContextListeners";
-
-function attachGlContextListeners(
-  canvas: HTMLCanvasElement,
-  onLost: (e: Event) => void,
-  onRestored: () => void,
-): void {
-  const marked = canvas as HTMLCanvasElement & { [GL_CONTEXT_LISTENERS_KEY]?: boolean };
-  if (marked[GL_CONTEXT_LISTENERS_KEY]) return;
-  marked[GL_CONTEXT_LISTENERS_KEY] = true;
-  canvas.addEventListener("webglcontextlost", onLost);
-  canvas.addEventListener("webglcontextrestored", onRestored);
-}
-
 class TileShaderSlot {
   readonly latch = new TileShaderLatch();
   fallback: TileShaderFallback | null = null;
@@ -90,19 +70,12 @@ class TileShaderSlot {
   packId = "";
   packName = "";
   mount: HTMLElement | null = null;
-  supportsPackFallback = false;
   compileFailed = false;
   mountedFallbackPackKey = "";
   stagedPush: string | null = null;
 
   /** New pack on this pane — clears fallback and compile latch. */
-  swapPack(
-    packKey: string,
-    packId: string,
-    packName: string,
-    mount: HTMLElement,
-    supportsPackFallback: boolean,
-  ): void {
+  swapPack(packKey: string, packId: string, packName: string, mount: HTMLElement): void {
     if (this.packKey !== packKey) {
       this.packKey = packKey;
       this.packId = packId;
@@ -115,7 +88,6 @@ class TileShaderSlot {
     }
     this.packName = packName;
     this.mount = mount;
-    this.supportsPackFallback = supportsPackFallback;
   }
 }
 
@@ -137,10 +109,6 @@ export class RenderHost {
   private readonly tileShaders = new Map<string, TileShaderSlot>();
   private readonly gfxNotice: GfxWallNotice;
   private glContextLost = false;
-  private contextGen: ContextGen = mintContextGen(0);
-  private readonly nixieUpload = new NixieUploadCache();
-  private readonly letterboxFill = new LetterboxFillCache();
-  private readonly uniformUpload = new UniformUploadCache();
   private readonly liveFallbacks: TileShaderFallback[] = [];
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
@@ -177,19 +145,16 @@ export class RenderHost {
     this.canvas.setAttribute("aria-hidden", "true");
     if (this.software) this.canvas.dataset.softgl = "";
     this.gfxNotice = new GfxWallNotice(wall, { onDismissLateReload: () => this.invalidate() });
-    attachGlContextListeners(
-      this.canvas,
-      (e) => {
-        e.preventDefault();
-        this.onSharedContextLost();
-        for (const v of this.views) v.hostContextLost();
-      },
-      () => {
-        this.onSharedContextRestored();
-        this.dirty = true;
-        for (const v of this.views) v.hostContextRestored();
-      },
-    );
+    this.canvas.addEventListener("webglcontextlost", (e) => {
+      e.preventDefault();
+      this.onSharedContextLost();
+      for (const v of this.views) v.hostContextLost();
+    });
+    this.canvas.addEventListener("webglcontextrestored", () => {
+      this.onSharedContextRestored();
+      this.dirty = true;
+      for (const v of this.views) v.hostContextRestored();
+    });
     this.attach();
     this.syncSize();
     this.ro = observeResize(wall, () => { this.dirty = true; });
@@ -218,7 +183,7 @@ export class RenderHost {
 
   get pixelRatio(): number { return this.software ? this.pr : this.renderer.getPixelRatio(); }
   get viewCount(): number { return this.views.length; }
-  get contextGeneration(): ContextGen { return this.contextGen; }
+  get contextLost(): boolean { return this.glContextLost; }
 
   /** WebGL2 context, or null when lost / unavailable. */
   get gl(): WebGL2RenderingContext | null {
@@ -240,7 +205,7 @@ export class RenderHost {
   /** Pane geometry changed (mosaic layout, hero swap): clear stale pixels outside the new viewports. */
   invalidate(): void { this.dirty = true; }
 
-  tileSlot(tileId: string): TileShaderSlot {
+  private tileSlot(tileId: string): TileShaderSlot {
     let slot = this.tileShaders.get(tileId);
     if (!slot) {
       slot = new TileShaderSlot();
@@ -255,9 +220,30 @@ export class RenderHost {
     packId: string,
     mount: HTMLElement,
     packName: string,
-    supportsPackFallback = false,
   ): void {
-    this.tileSlot(tileId).swapPack(packKey, packId, packName, mount, supportsPackFallback);
+    const slot = this.tileSlot(tileId);
+    if (slot.packKey !== packKey) this.untrackFallback(slot.fallback);
+    slot.swapPack(packKey, packId, packName, mount);
+  }
+
+  /**
+   * Probe plugin sky compile for one tile (used from NetScene / backdrop wiring).
+   * Returns a GPU error string, or null when compile succeeded or was skipped.
+   */
+  probeTileSky(
+    tileId: string,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    log: (msg: string) => void = () => {},
+  ): string | null {
+    if (this.contextLost) return null;
+    const ok = this.compilePluginSky(tileId, scene, camera, log);
+    if (!ok) {
+      this.onTileShaderCompileFailed(tileId);
+      return "shader failed";
+    }
+    this.onTileShaderCompileOk(tileId);
+    return null;
   }
 
   /**
@@ -279,9 +265,8 @@ export class RenderHost {
     if (typeof rd.compile !== "function") return true;
     const slot = this.tileSlot(tileId);
     const latch = slot.latch;
-    const gen = this.contextGen;
     if (latch.dead) return false;
-    if (latch.isFresh(gen)) return true;
+    if (latch.isFresh()) return true;
 
     if (!rd.debug) {
       rd.debug = { checkShaderErrors: true, onShaderError: null };
@@ -304,7 +289,7 @@ export class RenderHost {
       rd.debug.onShaderError = prevOn;
     }
     if (latch.dead) return false;
-    latch.markCompiled(gen);
+    latch.markCompiled();
     return true;
   }
 
@@ -316,40 +301,18 @@ export class RenderHost {
     this.clearShaderFallback(tileId);
   }
 
-  /** Write-on-change nixie clock UBO upload for the shared wall. */
-  syncNixieUpload(tSec: number, look?: Record<string, string>): boolean {
-    if (this.software || this.glContextLost) return false;
-    if (!this.gl) return false;
-    return this.nixieUpload.upload(this.contextGen, tSec, look ?? {}, () => {});
-  }
-
-  /** Letterbox viewport fill rebuild (shared across tiles with identical geometry). */
-  syncLetterboxFill(w: number, h: number, clearHex: number): boolean {
-    if (this.software || this.glContextLost) return false;
-    if (!this.gl) return false;
-    return this.letterboxFill.rebuild(this.contextGen, w, h, clearHex, () => {});
-  }
-
-  /** Change-only uniform upload on the host GL path. */
-  syncUniformUpload(name: string, value: number | readonly [number, number, number]): boolean {
-    if (this.software || this.glContextLost) return false;
-    if (!this.gl) return false;
-    return this.uniformUpload.upload(this.contextGen, name, value, () => {});
-  }
-
-  mountShaderFallback(tileId: string, contextLoss = false): void {
+  private mountShaderFallback(tileId: string, contextLoss = false): void {
     const slot = this.tileSlot(tileId);
     if (!contextLoss) slot.compileFailed = true;
-    if (!slot.mount) return;
     if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;
     this.untrackFallback(slot.fallback);
     slot.fallback?.dispose();
     const staged = slot.stagedPush?.trim() || "";
-    slot.fallback = new TileShaderFallback(slot.mount, {
+    slot.fallback = new TileShaderFallback(slot.mount!, {
       packName: slot.packName,
-      packPush: slot.supportsPackFallback && !contextLoss,
+      packPush: !contextLoss,
       contextLoss,
-      skipGrace: !!staged && slot.supportsPackFallback && !contextLoss,
+      skipGrace: !!staged && !contextLoss,
       initialText: staged || undefined,
     });
     slot.mountedFallbackPackKey = slot.packKey;
@@ -365,6 +328,12 @@ export class RenderHost {
     slot.fallback.pushPackText(trimmed);
   }
 
+  receiveFallbackPushForPack(packId: string, text: string): void {
+    for (const [tileId, slot] of this.tileShaders) {
+      if (slot.packId === packId) this.receiveFallbackPush(tileId, text);
+    }
+  }
+
   clearShaderFallback(tileId: string): void {
     const slot = this.tileShaders.get(tileId);
     if (!slot) return;
@@ -374,10 +343,6 @@ export class RenderHost {
     slot.mountedFallbackPackKey = "";
     slot.compileFailed = false;
     slot.stagedPush = null;
-  }
-
-  fallbackGraceFrames(tileId: string): number {
-    return this.tileSlot(tileId).fallback?.graceFramesLeft ?? 0;
   }
 
   driveShaderFallbacks(_frame: VizDataFrame): void {
@@ -392,39 +357,20 @@ export class RenderHost {
     if (i >= 0) this.liveFallbacks.splice(i, 1);
   }
 
-  get gfxWallNotice(): GfxWallNotice {
-    return this.gfxNotice;
-  }
-
-  /** Tests / diagnostics: dispatch a shared context loss on the host canvas. */
-  dispatchContextLost(): void {
-    const e = new Event("webglcontextlost", { cancelable: true });
-    this.canvas.dispatchEvent(e);
-  }
-
-  dispatchContextRestored(): void {
-    this.canvas.dispatchEvent(new Event("webglcontextrestored"));
-  }
-
   private onSharedContextLost(): void {
     if (this.glContextLost) return;
     this.glContextLost = true;
     this.gfxNotice.onContextLost();
     for (const [tileId, slot] of this.tileShaders) {
-      if (!slot.supportsPackFallback || slot.fallback || !slot.mount) continue;
+      if (slot.fallback || !slot.mount) continue;
       this.mountShaderFallback(tileId, true);
     }
   }
 
   private onSharedContextRestored(): void {
     this.glContextLost = false;
-    this.contextGen = mintContextGen((this.contextGen as number) + 1);
     this.gfxNotice.onContextRestored();
     for (const slot of this.tileShaders.values()) {
-      if (slot.fallback && slot.compileFailed) {
-        slot.latch.reset();
-        continue;
-      }
       slot.latch.reset();
       if (slot.fallback && !slot.compileFailed) {
         this.untrackFallback(slot.fallback);
@@ -472,7 +418,6 @@ export class RenderHost {
     if (this.glContextLost) return { x: x * this.pr, y: y * this.pr, w: w * this.pr, h: h * this.pr };
     const rd = this.renderer as THREE.WebGLRenderer;
     const gl = this.gl;
-    this.syncLetterboxFill(w, h, clearHex);
     const draw = () => {
       rd.setViewport(x, y, w, h);
       rd.setScissor(x, y, w, h);

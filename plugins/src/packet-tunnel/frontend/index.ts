@@ -9,17 +9,9 @@ declare const zoto: VizZotoPluginHooks & {
   writeUniform: (name: string, value: number | [number, number, number]) => void;
 };
 
-let lastPushed = "";
-
-function pushFallbackIfChanged(frame: Pick<VizDataFrame, "t" | "packets">): void {
-  const line = packetTunnelFallbackText(frame);
-  if (line === lastPushed) return;
-  lastPushed = line;
-  zoto.setFallbackText(line);
-}
+zoto.fallbackText = (frame) => packetTunnelFallbackText(frame);
 
 zoto.onFrame = (frame) => {
-  pushFallbackIfChanged(frame);
   const sample = packetTunnelSample(frame);
   zoto.writeBuffer(0, sample.buffer);
   zoto.writeUniform("uBright", sample.bright);

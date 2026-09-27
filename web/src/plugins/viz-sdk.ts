@@ -3,10 +3,8 @@
 export const VIZ_PLUGIN_SDK = `
 function vizAllowed(cap) { return allowed.has(cap); }
 zoto.onFrame = null;
-zoto.setFallbackText = function(text) {
-  if (!vizAllowed("viz.read")) return;
-  send("setFallbackText", { text: String(text) });
-};
+zoto.fallbackText = null;
+let lastFallback = "";
 zoto.writeBuffer = function(slot, data) {
   if (!vizAllowed("viz.write")) return;
   const arr = Array.isArray(data) ? data : Array.from(data);
@@ -26,6 +24,13 @@ window.addEventListener("message", (ev) => {
   if (!d || d.source !== "zoto-viz-host") return;
   if (d.type === "frame" && vizAllowed("viz.read")) {
     if (window.zoto.onFrame) window.zoto.onFrame(d.frame);
+    if (window.zoto.fallbackText) {
+      const s = String(window.zoto.fallbackText(d.frame));
+      if (s !== lastFallback) {
+        lastFallback = s;
+        send("fallbackText", { text: s });
+      }
+    }
   }
 });
 `;

@@ -1895,7 +1895,6 @@ export class NetScene implements HostedView {
     opts: { id: string; source: string } | null,
     meta?: { packId: string; packName: string; look?: Record<string, string>; packKey?: string },
   ): string | null {
-    const supportsPackFallback = meta?.packId === "nixie-clock" || meta?.packId === "packet-tunnel";
     if (opts && meta && this.host) {
       this.host.beginTilePack(
         this.tileId,
@@ -1903,24 +1902,15 @@ export class NetScene implements HostedView {
         meta.packId,
         this.container,
         meta.packName,
-        supportsPackFallback,
       );
     }
     const gpuProbe = this.host && opts && meta
-      ? () => {
-          const ok = this.host!.compilePluginSky(
-            this.tileId,
-            this.scene,
-            this.camera,
-            (m) => console.warn("zoto-viz tile shader:", m),
-          );
-          if (!ok) {
-            this.host!.onTileShaderCompileFailed(this.tileId);
-            return "shader failed";
-          }
-          this.host!.onTileShaderCompileOk(this.tileId);
-          return null;
-        }
+      ? () => this.host!.probeTileSky(
+        this.tileId,
+        this.scene,
+        this.camera,
+        (m) => console.warn("zoto-viz tile shader:", m),
+      )
       : undefined;
     if (!opts) {
       this.host?.clearShaderFallback(this.tileId);

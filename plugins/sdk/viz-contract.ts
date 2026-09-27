@@ -74,11 +74,11 @@ export interface VizSysTelemetry {
 
 /**
  * Optional pack hooks implemented on `window.zoto` in the plugin iframe.
- * `setFallbackText` pushes a plain-text “simple view” line when the displayed text changes.
+ * `fallbackText` supplies a plain-text “simple view” line each frame (host dedupes).
  */
 export interface VizZotoPluginHooks {
-  /** Push simple-view text when the displayed line changes (host dedupes). */
-  setFallbackText?: (text: string) => void;
+  /** Pull simple-view text for the current frame (host dedupes sends). */
+  fallbackText?: (frame: VizDataFrame) => string;
 }
 
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */

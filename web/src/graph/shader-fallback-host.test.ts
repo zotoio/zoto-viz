@@ -4,15 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
 import { sanitizePackDisplayName } from "./sanitize-pack-name";
 import { TileShaderFallback } from "./tile-shader-fallback";
-import type { VizDataFrame } from "../plugins/viz-host";
-
-const EMPTY_FRAME: VizDataFrame = {
-  t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [], headlines: [],
-};
 
 function injectStyles(): void {
   const css = readFileSync(resolve(import.meta.dirname, "../style.css"), "utf8");
   const style = document.createElement("style");
+  style.dataset.shaderFallbackTest = "";
   style.textContent = css;
   document.head.appendChild(style);
 }
@@ -40,7 +36,7 @@ describe("tile shader fallback host", () => {
     expect(el.isConnected).toBe(true);
     expect(el.textContent).toBe(genericShaderFallbackMessage(pack));
     const box = { width: 400, height: 300, top: 0, left: 0, right: 400, bottom: 300, x: 0, y: 0, toJSON() { return this; } };
-    el.getBoundingClientRect = () => box as DOMRect;
+    mount.getBoundingClientRect = () => box as DOMRect;
     const cs = getComputedStyle(el);
     expect(cs.display).toBe("flex");
     expect(cs.position).toBe("absolute");
@@ -48,10 +44,8 @@ describe("tile shader fallback host", () => {
     expect(cs.right).toBe("0px");
     expect(cs.bottom).toBe("0px");
     expect(cs.left).toBe("0px");
-    Object.defineProperty(el, "offsetParent", { configurable: true, get: () => mount });
-    expect(el.offsetParent).toBe(mount);
     fb.tickGrace();
-    expect(focus).not.toHaveBeenCalled();
+    expect(focus).toHaveBeenCalledTimes(0);
     expect(document.body.querySelectorAll("*").length - beforeNodes).toBe(2);
     focus.mockRestore();
     fb.dispose();

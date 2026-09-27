@@ -1,6 +1,6 @@
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
 
-export const FALLBACK_GRACE_FRAMES = 30;
+const FALLBACK_GRACE_FRAMES = 30;
 
 export interface TileShaderFallbackOpts {
   packName: string;
@@ -42,6 +42,7 @@ export class TileShaderFallback {
     if (this.contextLoss) {
       this.reveal();
       this.setShowChip(true);
+      if (opts.initialText?.trim()) this.writeText(opts.initialText);
     } else if (this.packPush) {
       if (opts.skipGrace || opts.initialText) {
         this.graceLeft = 0;
@@ -63,23 +64,7 @@ export class TileShaderFallback {
     }
   }
 
-  get chipVisible(): boolean {
-    return this.showChip;
-  }
-
-  get writes(): number {
-    return (this.text as HTMLSpanElement & { __writes?: number }).__writes ?? 0;
-  }
-
-  get graceFramesLeft(): number {
-    return this.graceLeft;
-  }
-
-  get chipElement(): HTMLSpanElement {
-    return this.chip;
-  }
-
-  setShowChip(on: boolean): void {
+  private setShowChip(on: boolean): void {
     this.showChip = on;
     if (on && !this.chip.parentElement) this.root.appendChild(this.chip);
     if (!on) this.chip.remove();
@@ -87,17 +72,13 @@ export class TileShaderFallback {
 
   /** Pack contract push — host dedupes; whitespace is not a push. */
   pushPackText(text: string): void {
-    if (this.packFnDead || this.contextLoss) return;
+    if (this.packFnDead) return;
     if (!text.trim()) return;
     this.gotValidPush = true;
     this.graceLeft = 0;
-    try {
-      this.reveal();
-      if (this.packPush) this.setShowChip(true);
-      this.writeText(text);
-    } catch {
-      this.latchGeneric();
-    }
+    this.reveal();
+    if (this.packPush) this.setShowChip(true);
+    this.writeText(text);
   }
 
   tickGrace(): void {
@@ -118,19 +99,13 @@ export class TileShaderFallback {
     this.graceLeft = 0;
     this.setShowChip(false);
     this.reveal();
-    try {
-      this.writeText(genericShaderFallbackMessage(this.packName));
-    } catch {
-      /* latched */
-    }
+    this.writeText(genericShaderFallbackMessage(this.packName));
   }
 
   private writeText(next: string): void {
     if (next === this.lastWritten) return;
     this.lastWritten = next;
     this.text.textContent = next;
-    const tagged = this.text as HTMLSpanElement & { __writes?: number };
-    tagged.__writes = (tagged.__writes ?? 0) + 1;
   }
 
   dispose(): void {

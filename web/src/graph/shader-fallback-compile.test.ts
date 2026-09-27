@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
 import { Backdrop } from "./backdrop";
+import { failCompileWith } from "./shader-fallback-test-helpers";
 
 const OK = `void main() { fragColor = vec4(1.0); }`;
 
@@ -39,43 +40,49 @@ describe("tile shader compile latch", () => {
 
   it("compile-failure-log-once", () => {
     const { host, wall } = wallHost();
-    const rd = host.renderer as THREE.WebGLRenderer;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const log = (m: string) => console.warn("zoto-viz tile shader:", m);
-    rd.compile = vi.fn(() => {
-      host.tileSlot("pane-a").latch.fail("compile error", log);
-    }) as typeof rd.compile;
-    for (let i = 0; i < 600; i++) host.compilePluginSky("pane-a", scene, camera, log);
+    failCompileWith(host, "pane-a", scene, camera, { shaderLog: "compile error", log });
+    for (let i = 0; i < 599; i++) host.compilePluginSky("pane-a", scene, camera, log);
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
     host.dispose();
     wall.remove();
   });
 
-  it("link-failure", () => {
+  it("compile-failure-detected", () => {
     const { host, wall } = wallHost();
-    const rd = host.renderer as THREE.WebGLRenderer;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
     const log = vi.fn();
-    const compile = vi.fn(() => {
-      host.tileSlot("pane-b").latch.fail("link error", log);
-    });
-    rd.compile = compile as typeof rd.compile;
-    host.compilePluginSky("pane-b", scene, camera, log);
+    const { log: errLog } = failCompileWith(host, "pane-a", scene, camera, { shaderLog: "compile error", log });
+    expect(errLog.mock.calls.length).toBe(1);
+    host.dispose();
+    wall.remove();
+  });
+
+  it("link-failure", () => {
+    const { host, wall } = wallHost();
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const log = vi.fn();
+    const { compile } = failCompileWith(host, "pane-b", scene, camera, { programLog: "link error", log });
     for (let i = 0; i < 599; i++) host.compilePluginSky("pane-b", scene, camera, log);
     expect(compile).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledTimes(1);
-    expect(log).toHaveBeenCalledWith("link error");
-    compile.mockRestore();
+    expect(log.mock.calls[0]![0]).toBe("link error");
     host.dispose();
     wall.remove();
   });
 });
 
 describe("plugin sky one compile", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("one-compile-per-shader", () => {
     const wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { value: 320 });

@@ -21,27 +21,19 @@ let look: NixieLook = parseNixieLook(zoto.getConfig?.());
 const NIXIE_NOW = new Date();
 const NIXIE_SCRATCH = { h: 0, m: 0, s: 0 };
 const NIXIE_CACHE = { key: -1, text: "" };
-let lastPushed = "";
 
 function nixieFallbackLine(): string {
   NIXIE_NOW.setTime(Date.now());
   return formatNixieFallbackLine(NIXIE_NOW, look, NIXIE_SCRATCH, NIXIE_CACHE);
 }
 
-function pushFallbackIfChanged(): void {
-  const line = nixieFallbackLine();
-  if (line === lastPushed) return;
-  lastPushed = line;
-  zoto.setFallbackText(line);
-}
+zoto.fallbackText = () => nixieFallbackLine();
 
 zoto.onConfig = (cfg) => {
   look = parseNixieLook(cfg);
-  pushFallbackIfChanged();
 };
 
 zoto.onFrame = (frame) => {
-  pushFallbackIfChanged();
   const peak = Math.min(1, (frame.talkers?.[0]?.rate ?? 0) / 180);
   zoto.writeBuffer(0, packNixieBuffer(new Date(), look, frame.audio, peak, nixieCanvasSize()));
   zoto.writeUniform("uAudio", frame.audio);

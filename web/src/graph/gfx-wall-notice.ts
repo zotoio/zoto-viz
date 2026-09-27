@@ -3,9 +3,6 @@ import {
   GFX_NO_RESTORE_NOTICE,
 } from "./shader-fallback-copy";
 
-export const GFX_WALL_NOTICE_CLASS = "gfx-wall-notice";
-export const GFX_WALL_RELOAD_CLASS = "gfx-wall-reload";
-
 export type GfxWallNoticeOpts = {
   /** After the no-restore reload offer was showing and the context came back. */
   onDismissLateReload?: () => void;
@@ -23,19 +20,11 @@ export class GfxWallNotice {
     private readonly opts: GfxWallNoticeOpts = {},
   ) {}
 
-  get element(): HTMLDivElement | null {
-    return this.el;
-  }
-
-  get hasPendingReloadTimer(): boolean {
-    return this.restoreTimer !== null;
-  }
-
   onContextLost(): void {
     if (this.shown) return;
     this.shown = true;
     const el = document.createElement("div");
-    el.className = GFX_WALL_NOTICE_CLASS;
+    el.className = "gfx-wall-notice";
     el.setAttribute("role", "status");
     el.tabIndex = -1;
     el.textContent = GFX_INTERRUPTED_NOTICE;
@@ -49,7 +38,7 @@ export class GfxWallNotice {
       clearTimeout(this.restoreTimer);
       this.restoreTimer = null;
     }
-    const btn = this.el?.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement | null;
+    const btn = this.el?.querySelector(".gfx-wall-reload") as HTMLButtonElement | null;
     const focusOnReload = btn !== null && document.activeElement === btn;
     const hadLateReload = this.reloadOffered;
     this.el?.remove();
@@ -71,7 +60,7 @@ export class GfxWallNotice {
     msg.textContent = GFX_NO_RESTORE_NOTICE;
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = GFX_WALL_RELOAD_CLASS;
+    btn.className = "gfx-wall-reload";
     btn.textContent = "Reload";
     btn.addEventListener("click", () => location.reload());
     this.el.appendChild(msg);

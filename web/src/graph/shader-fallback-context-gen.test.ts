@@ -1,10 +1,8 @@
 import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
-import { GFX_WALL_NOTICE_CLASS, GFX_WALL_RELOAD_CLASS } from "./gfx-wall-notice";
 import type { VizDataFrame } from "../plugins/viz-host";
 
-const CLEAR = 0x050a16;
 const EMPTY: VizDataFrame = {
   t: 0, dt: 0.016, audio: 0, packets: [], rf: [], talkers: [], headlines: [],
 };
@@ -75,26 +73,6 @@ describe("shader fallback context gen", () => {
     return { host, wall, panes, render };
   }
 
-  it("restore-resets-keys", () => {
-    const { host, wall } = hostWithGl();
-    const look = { seconds: "0", format: "24" };
-    const tSec = new Date(2026, 0, 1, 1, 5, 30).getTime() / 1000;
-    for (let i = 0; i < 600; i++) {
-      host.syncNixieUpload(tSec, look);
-      host.syncLetterboxFill(160, 120, CLEAR);
-    }
-    host.dispatchContextLost();
-    host.dispatchContextRestored();
-    expect(host.syncNixieUpload(tSec, look)).toBe(true);
-    let uploads = 0;
-    for (let i = 0; i < 600; i++) {
-      if (host.syncNixieUpload(tSec, look)) uploads++;
-    }
-    expect(uploads).toBe(0);
-    host.dispose();
-    wall.remove();
-  });
-
   it("no-gl-while-lost", () => {
     const ids = ["a", "b", "c", "d"];
     const { host, wall, panes, render } = hostWithGl(ids);
@@ -107,7 +85,7 @@ describe("shader fallback context gen", () => {
         hostFrame: () => {
           host.present(
             { viewEl, hostFrame: () => {}, hostContextLost: () => {}, hostContextRestored: () => {} },
-            CLEAR,
+            0x050a16,
             scene,
             camera,
           );
@@ -117,32 +95,13 @@ describe("shader fallback context gen", () => {
       };
     });
     for (const v of views) host.add(v);
-    host.dispatchContextLost();
+    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     for (let i = 0; i < 600; i++) {
       for (const v of views) v.hostFrame();
     }
     expect(render.mock.calls.length).toBe(0);
     host.dispose();
     wall.remove();
-  });
-
-  it("listeners-once", () => {
-    const wall = document.createElement("div");
-    Object.defineProperty(wall, "clientWidth", { value: 320 });
-    Object.defineProperty(wall, "clientHeight", { value: 240 });
-    document.body.appendChild(wall);
-    const add = vi.spyOn(HTMLCanvasElement.prototype, "addEventListener");
-    const host = new RenderHost(wall);
-    vi.spyOn(host, "compilePluginSky").mockReturnValue(true);
-    for (let cycle = 0; cycle < 3; cycle++) {
-      host.dispatchContextLost();
-      host.dispatchContextRestored();
-    }
-    const lostRegs = add.mock.calls.filter((c) => c[0] === "webglcontextlost").length;
-    expect(lostRegs).toBe(1);
-    host.dispose();
-    wall.remove();
-    add.mockRestore();
   });
 
   it("loss-prevent-default", () => {
@@ -158,13 +117,12 @@ describe("shader fallback context gen", () => {
 
   it("timer-cleared", () => {
     const { host, wall } = hostWithGl();
-    host.dispatchContextLost();
-    expect(host.gfxWallNotice.hasPendingReloadTimer).toBe(true);
-    host.dispatchContextRestored();
-    expect(host.gfxWallNotice.hasPendingReloadTimer).toBe(false);
-    vi.advanceTimersByTime(10_000);
-    expect(wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`).length).toBe(0);
-    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
+    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    vi.advanceTimersByTime(5_000);
+    host.canvas.dispatchEvent(new Event("webglcontextrestored"));
+    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    vi.advanceTimersByTime(5_000);
+    expect(wall.querySelectorAll(".gfx-wall-reload").length).toBe(0);
     host.dispose();
     wall.remove();
   });

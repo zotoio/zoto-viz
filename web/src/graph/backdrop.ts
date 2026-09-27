@@ -922,8 +922,10 @@ export class Backdrop {
       if (this.kind === "plugin") this.setKind("plugin");
       return wrapped.error;
     }
+    const prevMat = this.mesh.material;
     this.ensurePluginMat(opts.id, wrapped.frag);
     const gpuErr = gpuProbe ? gpuProbe() : probePluginSkyCompile(wrapped.frag);
+    if (this.kind !== "plugin") this.mesh.material = prevMat;
     if (gpuErr) {
       lastPlugin = null;
       this.pluginId = null;
