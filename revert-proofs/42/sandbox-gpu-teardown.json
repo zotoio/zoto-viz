@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "sandbox bitmap GPU scope sync > ten 2\u21941 tile toggles balance creates/disposes; one tile leaves no sandbox GPU",
-  "description": "Sandbox GPU mirrors teardown when tile count drops below two."
-}

@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-mirror-tile-1px-close.test.ts",
-  "testName": "RenderHost mirror tile shrink > closes bitmap once when mirror tile shrinks to 1px during advanceFrame",
-  "description": "presentBitmapMirror closes ImageBitmap in finally even when mirror viewport is under 2px."
-}

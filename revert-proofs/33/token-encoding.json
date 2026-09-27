@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_assets_security.py",
-  "testName": "PackAssetsSecurityTests::test_encoding_ab_c_not_verified_as_a_bc",
-  "description": "Length-prefixed token binding must not verify session a + pack bc for ab + c.",
-  "timeoutSec": 60
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/sandbox-frame.security.test.ts",
-  "testName": "sandbox-frame boot security > ignores boot postMessage from a foreign frame",
-  "description": "Sandbox must ignore boot messages not from the parent frame.",
-  "timeoutSec": 60
-}

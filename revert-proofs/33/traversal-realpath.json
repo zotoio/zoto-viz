@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_assets_security.py",
-  "testName": "PackAssetsSecurityTests::test_traversal_realpath_outside_frontend_root",
-  "description": "Symlink escape outside the pack frontend root must not be served.",
-  "timeoutSec": 60
-}

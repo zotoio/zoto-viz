@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/plugin-pack-feed.test.ts",
-  "testName": "plugin pack feed notices > redacts session token from boot failure console lines",
-  "description": "Host classify/log paths must redact session token before console.warn.",
-  "timeoutSec": 60
-}

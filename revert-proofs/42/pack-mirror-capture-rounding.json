@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-fb-viewport.test.ts",
-  "testName": "^RenderHost framebuffer viewport > present returns per-edge device rect at pr 1.5 \\(pane-change readPixels uses the same vp\\)$",
-  "description": "writeFbViewport → toDeviceRectInto (per-edge Math.round); pane-change probeLines/readPixels consume the same device rect."
-}
