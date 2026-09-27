@@ -18,11 +18,16 @@ window.zoto = {
   writeUniform() {},
   writeParticles() {},
   getConfig() { return window.__zotoConfig || {}; },
+  getWorkBudget() { return window.__zotoWorkBudget ?? null; },
 };
 window.addEventListener("message", (ev) => {
   const d = ev.data;
   if (!d || d.source !== "zoto-viz-host") return;
-  if (d.type === "init") { window.__zotoConfig = d.config || {}; window.__zotoViz = d.viz || null; }
+  if (d.type === "init") {
+    window.__zotoConfig = d.config || {};
+    window.__zotoViz = d.viz || null;
+    if (d.workBudget !== undefined) window.__zotoWorkBudget = d.workBudget;
+  }
   if (d.type === "config") { window.__zotoConfig = d.config || {}; window.zoto.onConfig && window.zoto.onConfig(d.config); }
   if (d.type === "tick" && allowed.has("graph.read") && window.zoto.onTick) window.zoto.onTick(d.nodes);
 });

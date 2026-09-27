@@ -312,8 +312,14 @@
         "layout": { "$ref": "#/$defs/layout" },
         "options": { "$ref": "#/$defs/freeMap" },
         "config": { "$ref": "#/$defs/freeMap" },
-        "idle": { "$ref": "#/$defs/vizIdle" }
+        "idle": { "$ref": "#/$defs/vizIdle" },
+        "workBudget": { "$ref": "#/$defs/manifestWorkBudget" }
       }
+    },
+    "manifestWorkBudget": {
+      "title": "workBudget",
+      "description": "Per-frame work caps (shape in plugins/sdk); host ceilings in service/policy/work-budget-ceilings.json (#45).",
+      "$ref": "../plugins/sdk/manifest-work-budget.schema.json"
     },
     "sky": {
       "title": "sky.yml",

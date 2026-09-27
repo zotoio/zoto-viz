@@ -1,3 +1,4 @@
+import type { ManifestWorkBudget } from "../../../plugins/sdk/manifest-work-budget";
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
 
@@ -23,7 +24,14 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "log"; payload: string };
 
 export type ParentMsg =
-  | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
+  | {
+      source: "zoto-viz-host";
+      type: "init";
+      caps: string[];
+      config: Record<string, string>;
+      viz?: VizPluginContract;
+      workBudget?: ManifestWorkBudget;
+    }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
   | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
@@ -89,6 +97,7 @@ export class PluginSandbox {
     caps: string[],
     config: Record<string, string>,
     viz?: VizPluginContract,
+    workBudget?: ManifestWorkBudget,
   ): Promise<void> {
     this.unload();
     this.caps = caps.filter((c) => ALLOWED.has(c));
@@ -99,14 +108,15 @@ export class PluginSandbox {
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     const plugin = js.replace(/<\/script/gi, "<\\/script");
+    const wbJson = workBudget !== undefined ? JSON.stringify(workBudget) : "null";
     iframe.srcdoc = `<!doctype html><meta charset="utf-8">
-<script>window.__zotoConfig = ${JSON.stringify(config)};</script>
+<script>window.__zotoConfig = ${JSON.stringify(config)}; window.__zotoWorkBudget = ${wbJson};</script>
 <script data-caps='${JSON.stringify(this.caps)}'>${PLUGIN_SDK}</script>
 <script type="module">const zoto = globalThis.zoto; ${plugin}</script>`;
     document.body.appendChild(iframe);
     this.iframe = iframe;
     this.iframe.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "init", caps: this.caps, config, viz } satisfies ParentMsg,
+      { source: "zoto-viz-host", type: "init", caps: this.caps, config, viz, workBudget } satisfies ParentMsg,
       "*",
     );
   }
@@ -117,11 +127,12 @@ export class PluginSandbox {
     config: Record<string, string>,
     hash?: string,
     viz?: VizPluginContract,
+    workBudget?: ManifestWorkBudget,
   ): Promise<void> {
     const r = await fetch(pluginModuleUrl(id, hash));
     if (!r.ok) throw new Error(`module ${r.status}`);
     const js = await r.text();
-    await this.load(id, js, caps, config, viz);
+    await this.load(id, js, caps, config, viz, workBudget);
   }
 
   tick(nodes: { id: string; rate: number; role: string }[]): void {
