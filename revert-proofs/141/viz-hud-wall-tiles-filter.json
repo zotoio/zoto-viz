@@ -1,9 +1,0 @@
-{
-  "description": "Revert non-null filter on wallTiles for LIMITED mate count",
-  "runner": "vitest",
-  "testFile": "src/ui/viz-hud-null-tile.test.ts",
-  "testName": "VizHud null tile budget lines > LIMITED mate count uses only non-null tile budget lines",
-  "red": "TypeError: Cannot read properties of null (reading 'hudRingCount')",
-  "project": "web",
-  "allowTypeError": true
-}
