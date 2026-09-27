@@ -1,0 +1,220 @@
+=====PR96 BODY START=====
+## #96 `cursor/dogfood-soak-52a-c58c` → `main` (draft)
+
+Dogfood soak **52a**: viz wall clock (`viz-clock` / `viz-time`), nixie wall + pack-host hardening, render-host buffer freshness, mosaic guard hooks, and **15** revert rows under `revert-proofs/52a/`. Tile budget, dev wall flags, HUD copy/labels, and main deliver wiring live on **52b**.
+
+### Production hunk → row
+
+1. `web/src/app/main.ts` — `@@ -80,7 +80,7 @@ import {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+2. `web/src/app/main.ts` — `@@ -89,12 +89,16 @@ import { stereoAiFrame } from "../plugins/stereo-ai";` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+3. `web/src/app/main.ts` — `@@ -340,7 +344,7 @@ let settings!: Settings;` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+4. `web/src/app/main.ts` — `@@ -381,7 +385,7 @@ scene.afterLook = () => {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+5. `web/src/app/main.ts` — `@@ -408,19 +412,19 @@ scene.afterLook = () => {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+6. `web/src/app/main.ts` — `@@ -431,7 +435,7 @@ sandbox.handlers = {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+7. `web/src/app/main.ts` — `@@ -998,12 +1002,13 @@ function feed(m: StateMsg): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+8. `web/src/app/main.ts` — `@@ -1011,8 +1016,8 @@ function feed(m: StateMsg): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+9. `web/src/app/main.ts` — `@@ -1028,7 +1033,7 @@ function feed(m: StateMsg): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+10. `web/src/app/main.ts` — `@@ -1069,6 +1074,9 @@ function setRedaction(on: boolean): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+11. `web/src/app/viz-plugin-ubo.ts` — `@@ -0,0 +1,15 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+12. `web/src/core/viz-clock.ts` — `@@ -0,0 +1,83 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+13. `web/src/core/viz-time.ts` — `@@ -0,0 +1,38 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+14. `web/src/graph/mosaic.ts` — `@@ -12,7 +12,6 @@ import {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+15. `web/src/graph/mosaic.ts` — `@@ -215,7 +214,16 @@ export class Mosaic {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+16. `web/src/graph/render-host.ts` — `@@ -39,6 +39,15 @@ export interface HostedView {` → `render-host-buffer-fresh`
+17. `web/src/graph/render-host.ts` — `@@ -74,6 +83,7 @@ export class RenderHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+18. `web/src/graph/render-host.ts` — `@@ -145,6 +155,13 @@ export class RenderHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+19. `web/src/graph/render-host.ts` — `@@ -257,5 +274,7 @@ export class RenderHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+20. `web/src/plugins/dogfood-runner.ts` — `@@ -1,4 +1,6 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+21. `web/src/plugins/dogfood-runner.ts` — `@@ -154,7 +156,7 @@ export function percentile(samples: number[], p: number): number {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+22. `web/src/plugins/dogfood-runner.ts` — `@@ -162,9 +164,9 @@ export function dogfoodTick(` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+23. `web/src/plugins/dogfood-runner.ts` — `@@ -176,7 +178,7 @@ export function dogfoodTick(` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+24. `web/src/plugins/dogfood-runner.ts` — `@@ -220,11 +222,56 @@ export function hudTickFromBudget(` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+25. `web/src/plugins/dogfood-runner.ts` — `@@ -240,86 +287,116 @@ export function dogfoodWithinBudget(` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+26. `web/src/plugins/dogfood-runner.ts` — `@@ -327,7 +404,7 @@ export function runPackSwapPreserve(` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+27. `web/src/plugins/dogfood-runner.ts` — `@@ -337,28 +414,27 @@ export function runPackSwapPreserve(` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+28. `web/src/plugins/fixtures/viz-sdk-frame-build.ts` — `@@ -1,3 +1,4 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+29. `web/src/plugins/fixtures/viz-sdk-frame-build.ts` — `@@ -427,7 +428,7 @@ export function vmLiveCaptureState(): StateMsg {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+30. `web/src/plugins/fixtures/viz-sdk-frame-build.ts` — `@@ -470,7 +471,7 @@ function scrubIdleDemoSlices(frame: VizDataFrame): VizDataFrame {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+31. `web/src/plugins/fixtures/viz-sdk-frame-build.ts` — `@@ -483,13 +484,13 @@ function scrubIdleDemoSlices(frame: VizDataFrame): VizDataFrame {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+32. `web/src/plugins/nixie-wall-broadcast.ts` — `@@ -0,0 +1,30 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+33. `web/src/plugins/nixie-wall-clock.ts` — `@@ -0,0 +1,150 @@` → `nixie-n1-linear-wall`
+34. `web/src/plugins/nixie-wall-flag-test-helper.ts` — `@@ -0,0 +1,11 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+35. `web/src/plugins/nixie-wall-parts.ts` — `@@ -0,0 +1,82 @@` → `nixie-wall-flag-no-midnight-wrap-revert`
+36. `web/src/plugins/nixie-wall-upload.ts` — `@@ -0,0 +1,39 @@` → `nixie-f1-off-revert`
+37. `web/src/plugins/typesafe-host.ts` — `@@ -1,4 +1,5 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+38. `web/src/plugins/typesafe-host.ts` — `@@ -272,8 +273,8 @@ export class TypeSafeHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+39. `web/src/plugins/typesafe-host.ts` — `@@ -281,7 +282,7 @@ export class TypeSafeHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+40. `web/src/plugins/typesafe-host.ts` — `@@ -294,7 +295,7 @@ export class TypeSafeHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+41. `web/src/plugins/typesafe-host.ts` — `@@ -308,7 +309,7 @@ export class TypeSafeHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+42. `web/src/plugins/typesafe-host.ts` — `@@ -327,7 +328,7 @@ export class TypeSafeHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+43. `web/src/plugins/typesafe-host.ts` — `@@ -337,7 +338,7 @@ export class TypeSafeHost {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+44. `web/src/plugins/viz-host.ts` — `@@ -1,4 +1,6 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+45. `web/src/plugins/viz-host.ts` — `@@ -413,9 +415,18 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+46. `web/src/plugins/viz-host.ts` — `@@ -439,12 +450,12 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: Sou` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+47. `web/src/plugins/viz-host.ts` — `@@ -457,7 +468,7 @@ export class VizFrameBudget {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+48. `web/src/plugins/viz-host.ts` — `@@ -506,13 +517,13 @@ export class VizFrameBudget {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+49. `web/src/plugins/viz-pack-host.ts` — `@@ -1,3 +1,8 @@` → `nixie-f1-on-revert`
+50. `web/src/plugins/viz-pack-host.ts` — `@@ -6,7 +11,76 @@ import {` → `nixie-n1-format-every-frame`
+51. `web/src/plugins/viz-pack-host.ts` — `@@ -199,14 +273,22 @@ export function runPackFrameHandler(` → `nixie-n1-pack-canvas-fresh`
+
+### Kept revert rows
+
+- `nixie-f1-off-revert`: F1 off revert upload on frameIndex % 60
+- `nixie-f1-on-revert`: F1 on revert upload every frame
+- `nixie-n1-format-every-frame`: N1 revert format every frame
+- `nixie-n1-linear-wall`: N1 revert linear wall ms
+- `nixie-n1-pack-canvas-fresh`: N1 revert fresh canvas object in pack-host
+- `nixie-n1-pack-parse-every-frame`: N1 revert per-frame parseNixieLook in pack-host
+- `nixie-n1-stable-key-stringify`: N1 revert nixieOptsStableKey per-frame stringify
+- `nixie-n12-hour12-on-boundary`: N12 revert hour12 blank tens digit
+- `nixie-n2-cache-offset`: N2 revert
+- `nixie-n3-uptime-clock`: N3 revert uptime clock
+- `nixie-n4-drop-flicker-slot`: N4 revert drop flicker from slot comparison
+- `nixie-wall-flag-no-midnight-wrap-revert`: B1 row 11 flag clock revert no midnight wrap
+- `nixie-wall-flag-second-per-frame-revert`: B1 row 10 flag clock revert one second per frame
+- `nixie-wall-real-date-every-frame-revert`: B1 row 9 real clock revert new Date every frame
+- `render-host-buffer-fresh`: RH1 revert fresh bufferPixelSize object
+
+### Deleted rows
+
+| row | reason |
+|-----|--------|
+| `over-budget-pattern` | #101 soak; not in stack |
+| `real-clock-hn-term` | #101 handoff; no stack fat-LAN/`termNow` row |
+| `nixie-wall-flag-epoch-revert` | orphan (no apply target) |
+| `hunk-sweep-results.json` | generated artifact |
+| `budget-too-strict` (was 52a) | moved with tile budget slice to 52b |
+| `viz-clock-import-vizWallMs` (was 52a) | moved with `viz-tile-budget.ts` to 52b |
+
+### Gates
+
+| ref | HEAD | TREE | ls-remote | porcelain | tsc | build | vitest | pytest |
+|-----|------|------|-----------|-----------|-----|-------|--------|--------|
+| main | `6520b014472c05f831ac5204429be2affb8473cb` | `75f428d6d893cce739a3f90a6fb3e1f8942e6c8f` | match | node_modules metadata only (M) | 0 | 0 | see gates run | see gates run |
+| 52a | `7c2c9a8f444af365f71ce1974913d903675efaa7` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+| 52b | `0106142c9707383c50992d3ad06864d82d2b9b2a` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+| 52c | `3d0904a58cf56a720ef4539d5b2d46f25578620f` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+
+### Size (excluding `revert-proofs/`)
+
+`37 files changed, 1683 insertions(+), 197 deletions(-)`
+
+=====PR96 BODY END=====
+=====PR107 BODY START=====
+## #107 `cursor/dogfood-soak-52b-c58c` → `cursor/dogfood-soak-52a-c58c` (draft; replaces #98)
+
+Dogfood soak **52b**: tile budget registry, dev `viz` wall flags, HUD LIMITED copy/lines, main deliver + present-opts wiring, and **30** revert rows under `revert-proofs/52b/` (includes `budget-too-strict` + `viz-clock-import-vizWallMs` moved from 52a).
+
+### Production hunk → row
+
+1. `web/src/app/main-present-opts-localstorage.ts` — `@@ -0,0 +1,51 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+2. `web/src/app/main-viz-tile-lines.ts` — `@@ -0,0 +1,44 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+3. `web/src/app/main.ts` — `@@ -71,8 +71,7 @@ import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+4. `web/src/app/main.ts` — `@@ -80,7 +79,9 @@ import {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+5. `web/src/app/main.ts` — `@@ -96,7 +97,12 @@ import { ignoreResizeLoopError, observeResize } from "../core/resize";` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+6. `web/src/app/main.ts` — `@@ -346,6 +352,21 @@ const pluginSfx = new PluginSfx();` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+7. `web/src/app/main.ts` — `@@ -1001,22 +1022,40 @@ function feed(m: StateMsg): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+8. `web/src/app/main.ts` — `@@ -1027,6 +1066,11 @@ function feed(m: StateMsg): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+9. `web/src/app/main.ts` — `@@ -1034,6 +1078,9 @@ function feed(m: StateMsg): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+10. `web/src/app/main.ts` — `@@ -1075,7 +1122,11 @@ function setRedaction(on: boolean): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+11. `web/src/app/viz-main-deliver.ts` — `@@ -0,0 +1,42 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+12. `web/src/core/viz-dev-wall-flags.ts` — `@@ -0,0 +1,97 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+13. `web/src/graph/mosaic-viz-tile-guard.ts` — `@@ -0,0 +1,68 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+14. `web/src/graph/mosaic.ts` — `@@ -12,6 +12,8 @@ import {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+15. `web/src/graph/mosaic.ts` — `@@ -499,6 +501,7 @@ export class Mosaic {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+16. `web/src/graph/mosaic.ts` — `@@ -1034,6 +1037,7 @@ export class Mosaic {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+17. `web/src/plugins/dogfood-runner.ts` — `@@ -1,6 +1,7 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+18. `web/src/plugins/dogfood-runner.ts` — `@@ -328,8 +329,10 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+19. `web/src/plugins/dogfood-runner.ts` — `@@ -413,7 +416,9 @@ export function runPackSwapPreserve(` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+20. `web/src/plugins/dogfood-tile-budget.ts` — `@@ -0,0 +1,127 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+21. `web/src/plugins/dogfood-tile-hud.ts` — `@@ -0,0 +1,89 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+22. `web/src/plugins/host.ts` — `@@ -1,3 +1,4 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+23. `web/src/plugins/host.ts` — `@@ -81,6 +82,7 @@ export class PluginSandbox {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+24. `web/src/plugins/viz-host.ts` — `@@ -1,6 +1,8 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+25. `web/src/plugins/viz-host.ts` — `@@ -466,10 +468,18 @@ export class VizFrameBudget {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+26. `web/src/plugins/viz-host.ts` — `@@ -488,7 +498,6 @@ export class VizFrameBudget {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+27. `web/src/plugins/viz-host.ts` — `@@ -512,8 +521,8 @@ export class VizFrameBudget {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+28. `web/src/plugins/viz-host.ts` — `@@ -522,16 +531,33 @@ export class VizFrameBudget {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+29. `web/src/plugins/viz-host.ts` — `@@ -541,6 +567,19 @@ export class VizFrameBudget {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+30. `web/src/plugins/viz-tile-budget.ts` — `@@ -0,0 +1,332 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+31. `web/src/plugins/viz-tile-constants.ts` — `@@ -0,0 +1,23 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+32. `web/src/plugins/viz-tile-hud.ts` — `@@ -0,0 +1,142 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+33. `web/src/ui/settings.ts` — `@@ -27,6 +27,9 @@ import {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+34. `web/src/ui/settings.ts` — `@@ -125,6 +128,14 @@ export class Settings {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+35. `web/src/ui/settings.ts` — `@@ -260,8 +271,21 @@ export class Settings {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+36. `web/src/ui/settings.ts` — `@@ -930,6 +954,7 @@ export class Settings {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+37. `web/src/ui/settings.ts` — `@@ -962,6 +987,7 @@ export class Settings {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+38. `web/src/ui/settings.ts` — `@@ -970,6 +996,7 @@ export class Settings {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+39. `web/src/ui/settings.ts` — `@@ -1702,7 +1729,7 @@ export class Settings {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+40. `web/src/ui/settings.ts` — `@@ -1712,12 +1739,67 @@ export class Settings {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+41. `web/src/ui/settings.ts` — `@@ -2035,7 +2117,9 @@ export class Settings {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+42. `web/src/ui/tile-hud-label.ts` — `@@ -0,0 +1,63 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+43. `web/src/ui/viz-copy.ts` — `@@ -0,0 +1,54 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+44. `web/src/ui/viz-hud.ts` — `@@ -1,5 +1,9 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+45. `web/src/ui/viz-hud.ts` — `@@ -72,6 +76,32 @@ export interface VizHudTick {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+46. `web/src/ui/viz-hud.ts` — `@@ -173,6 +203,7 @@ export class VizHud {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+47. `web/src/ui/viz-hud.ts` — `@@ -182,6 +213,16 @@ export class VizHud {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+48. `web/src/ui/viz-hud.ts` — `@@ -208,6 +249,10 @@ export class VizHud {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+49. `web/src/ui/viz-hud.ts` — `@@ -226,12 +271,24 @@ export class VizHud {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+50. `web/src/ui/viz-hud.ts` — `@@ -251,12 +308,41 @@ export class VizHud {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+51. `web/src/ui/viz-hud.ts` — `@@ -272,7 +358,44 @@ export class VizHud {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+
+### Kept revert rows
+
+
+
+### Deleted rows
+
+_None on this split (deletions listed on #96)._
+
+### Gates
+
+| ref | HEAD | TREE | ls-remote | porcelain | tsc | build | vitest | pytest |
+|-----|------|------|-----------|-----------|-----|-------|--------|--------|
+| main | `6520b014472c05f831ac5204429be2affb8473cb` | `75f428d6d893cce739a3f90a6fb3e1f8942e6c8f` | match | node_modules metadata only (M) | 0 | 0 | see gates run | see gates run |
+| 52a | `7c2c9a8f444af365f71ce1974913d903675efaa7` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+| 52b | `0106142c9707383c50992d3ad06864d82d2b9b2a` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+| 52c | `3d0904a58cf56a720ef4539d5b2d46f25578620f` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+
+### Size (excluding `revert-proofs/`)
+
+`49 files changed, 2837 insertions(+), 99 deletions(-)`
+
+=====PR107 BODY END=====
+=====PR108 BODY START=====
+## #108 `cursor/dogfood-soak-52c-c58c` → `cursor/dogfood-soak-52b-c58c` (draft; replaces #97)
+
+Dogfood soak **52c**: wall LIMITED harness, mosaic H6 status UX, backdrop/sky fragment tweak, cadence carry/gap proofs, and **12** revert rows under `revert-proofs/52c/`.
+
+### Production hunk → row
+
+1. `web/src/app/main.ts` — `@@ -81,7 +81,11 @@ import {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+2. `web/src/app/main.ts` — `@@ -1049,12 +1053,7 @@ function feed(m: StateMsg): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+3. `web/src/core/viz-wall-limited-harness.ts` — `@@ -0,0 +1,201 @@` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+4. `web/src/graph/backdrop.ts` — `@@ -169,7 +169,8 @@ export function cycleSkyPool(): BackdropKind[] {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+5. `web/src/graph/backdrop.ts` — `@@ -177,6 +178,8 @@ void main() {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+6. `web/src/graph/backdrop.ts` — `@@ -654,6 +657,26 @@ export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+7. `web/src/plugins/viz-tile-budget.ts` — `@@ -322,6 +322,45 @@ export function resetVizTileBudgetLifecycle(): void {` → `JUSTIFICATION:integration wiring for this split (no single-hunk revert row)`
+
+### Kept revert rows
+
+
+
+### Deleted rows
+
+_None on this split._
+
+### Gates
+
+| ref | HEAD | TREE | ls-remote | porcelain | tsc | build | vitest | pytest |
+|-----|------|------|-----------|-----------|-----|-------|--------|--------|
+| main | `6520b014472c05f831ac5204429be2affb8473cb` | `75f428d6d893cce739a3f90a6fb3e1f8942e6c8f` | match | node_modules metadata only (M) | 0 | 0 | see gates run | see gates run |
+| 52a | `7c2c9a8f444af365f71ce1974913d903675efaa7` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+| 52b | `0106142c9707383c50992d3ad06864d82d2b9b2a` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+| 52c | `3d0904a58cf56a720ef4539d5b2d46f25578620f` | *(see gates run)* | match | same | 0 | 0 | see gates run | see gates run |
+
+### Size (excluding `revert-proofs/`)
+
+`9 files changed, 793 insertions(+), 15 deletions(-)`
+
+=====PR108 BODY END=====

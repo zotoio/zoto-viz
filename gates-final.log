@@ -1,0 +1,133 @@
+===== main 6520b014472c05f831ac5204429be2affb8473cb =====
+HEAD=6520b014472c05f831ac5204429be2affb8473cb
+TREE=75f428d6d893cce739a3f90a6fb3e1f8942e6c8f
+LSREMOTE=6520b014472c05f831ac5204429be2affb8473cb
+PORCELAIN<<
+?? gates-final.log
+?? row-report.txt
+?? scripts/gen-pr-bodies.py
+?? scripts/run-gates.sh
+?? scripts/verify-revert-rows.py
+PORCELAIN>>
+--- tsc ---
+tsc_rc=0
+--- build ---
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 510ms
+build_rc=0
+--- vitest ---
+   Duration  15.64s (environment 71%, tests 12%, import 8%, transform 6%, setup 2%, worker 1%)
+
+Environment  happy-dom was created 106 times · 26.78s total, 71% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+vitest_rc=0
+--- pytest ---
+---------------------------------------------------------
+TOTAL                        5494   1028    81%
+Required test coverage of 80% reached. Total coverage: 81.29%
+433 passed, 8 warnings in 8.20s
+pytest_rc=0
+===== 52a d5f07263af18eec04fc1d3660ff94201c7c64bc9 =====
+HEAD=d5f07263af18eec04fc1d3660ff94201c7c64bc9
+TREE=1a13f4ea10e0e60f916ef160393b3b2ddba8c228
+LSREMOTE=d5f07263af18eec04fc1d3660ff94201c7c64bc9
+PORCELAIN<<
+?? gates-final.log
+?? row-report.txt
+?? scripts/gen-pr-bodies.py
+?? scripts/run-gates.sh
+?? scripts/verify-revert-rows.py
+PORCELAIN>>
+--- tsc ---
+tsc_rc=0
+--- build ---
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 510ms
+build_rc=0
+--- vitest ---
+   Duration  16.89s (environment 72%, tests 12%, import 7%, transform 6%, setup 2%, worker 1%)
+
+Environment  happy-dom was created 114 times · 29.15s total, 72% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+vitest_rc=0
+--- pytest ---
+---------------------------------------------------------
+TOTAL                        5494   1020    81%
+Required test coverage of 80% reached. Total coverage: 81.43%
+433 passed, 8 warnings in 7.80s
+pytest_rc=0
+===== 52b 562020ca40a82e9c2b96e476acf86e04640d43b2 =====
+HEAD=562020ca40a82e9c2b96e476acf86e04640d43b2
+TREE=7f5da8221f2b6b4692d2e930041a6f90566c7762
+LSREMOTE=562020ca40a82e9c2b96e476acf86e04640d43b2
+PORCELAIN<<
+?? gates-final.log
+?? row-report.txt
+?? scripts/gen-pr-bodies.py
+?? scripts/run-gates.sh
+?? scripts/verify-revert-rows.py
+PORCELAIN>>
+--- tsc ---
+tsc_rc=0
+--- build ---
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 502ms
+build_rc=0
+--- vitest ---
+
+ Test Files  133 passed | 2 skipped (135)
+      Tests  760 passed | 3 skipped (763)
+   Start at  02:21:31
+   Duration  19.36s (environment 73%, tests 11%, import 7%, transform 6%, setup 2%, worker 1%)
+
+vitest_rc=0
+--- pytest ---
+---------------------------------------------------------
+TOTAL                        5494   1020    81%
+Required test coverage of 80% reached. Total coverage: 81.43%
+433 passed, 8 warnings in 7.95s
+pytest_rc=0
+===== 52c df50a88f0ad7ee34b87ffa72fd9791e361b4b573 =====
+HEAD=df50a88f0ad7ee34b87ffa72fd9791e361b4b573
+TREE=9d15ce0508025ded52103a3bff78b9d802fd308c
+LSREMOTE=df50a88f0ad7ee34b87ffa72fd9791e361b4b573
+PORCELAIN<<
+?? gates-final.log
+?? row-report.txt
+?? scripts/gen-pr-bodies.py
+?? scripts/run-gates.sh
+?? scripts/verify-revert-rows.py
+PORCELAIN>>
+--- tsc ---
+tsc_rc=0
+--- build ---
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 479ms
+build_rc=0
+--- vitest ---
+
+ Test Files  137 passed | 2 skipped (139)
+      Tests  779 passed | 3 skipped (782)
+   Start at  02:22:03
+   Duration  20.29s (environment 69%, tests 16%, import 7%, transform 5%, setup 2%, worker 1%)
+
+vitest_rc=0
+--- pytest ---
+---------------------------------------------------------
+TOTAL                        5494   1028    81%
+Required test coverage of 80% reached. Total coverage: 81.29%
+433 passed, 8 warnings in 7.81s
+pytest_rc=0
+DONE
