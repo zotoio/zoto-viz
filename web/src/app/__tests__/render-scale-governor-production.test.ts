@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "../../graph/render-host";
 import { NetScene } from "../../graph/scene";
 import {
@@ -101,6 +101,7 @@ function runFrames(
   gpuMs: number,
   startNow = 0,
 ): void {
+  vi.useFakeTimers({ now: startNow });
   const unbind = bindRenderScaleGovernorPresentListener(host);
   let ts = startNow;
   try {
@@ -108,9 +109,11 @@ function runFrames(
       scene.noteFrameCost(gpuMs);
       markFrame(ts);
       ts += FRAME_MS;
+      vi.advanceTimersByTime(FRAME_MS);
     }
   } finally {
     unbind();
+    vi.useRealTimers();
   }
 }
 
@@ -135,7 +138,7 @@ describe("render-scale governor production wiring", () => {
     expect(pluginRenderScaleCommitCountForTests()).toBe(0);
   });
 
-  it("flag on with over-budget GPU samples: commits lower scale per step-down rule", { meta: { revertProofAssertion: true } }, () => {
+  it("flag on with over-budget GPU samples: commits lower scale per step-down rule", () => {
     const { scene, host } = mountScene();
     refreshHostRenderScaleGovernorEnabled("?vizGovernor=1");
     runFrames(host, scene, FRAMES, OVER_MS);
