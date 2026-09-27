@@ -1,8 +1,0 @@
-{
-  "runner": "pnpm --dir web exec node --require ./eslint-ts6-resolver.cjs ./node_modules/eslint/bin/eslint.js src/core/viz-clock.ts",
-  "testFile": "src/core/viz-clock.ts",
-  "testName": "lint no-restricted-syntax on MonoMs cast in vizClockMs",
-  "description": "Reintroduce raw as MonoMs in monotonic viz clock mint path.",
-  "passLine": "lint exit 0",
-  "excerpt": "/workspace/web/src/core/viz-clock.ts\n17:10  error  Do not cast to MonoMs; mint only via monoMs() in src/core/viz-time.ts  no-restricted-syntax"
-}

@@ -1,7 +1,0 @@
-{
-  "row": "D1 schedule revert compare-before-write",
-  "runner": "vitest",
-  "testFile": "web/src/ui/tile-hud-label.test.ts",
-  "testName": "^tile HUD LIMITED label \\(60 fps, per line\\) > D1 schedule: new skipped/s at seconds 2, 5 and 8 → 4 builds and 4 writes per line$",
-  "excerpt": "AssertionError: expected 600 to be 4 // Object.is equality"
-}

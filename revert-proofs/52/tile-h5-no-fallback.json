@@ -1,7 +1,0 @@
-{
-  "row": "H5 revert",
-  "test": "web/src/plugins/dogfood-tile-hud.test.ts H5",
-  "excerpt": "AssertionError: expected 'limited' to be 'over_budget'",
-  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
-  "testName": "^tile HUD rows \\(half-open window \\(now−300000, now\\] in ticks\\) > H5: direct scheduler — share 200, 15000 at i=0 → 74 skips then build at i=75; fallback over budget at i=74$"
-}

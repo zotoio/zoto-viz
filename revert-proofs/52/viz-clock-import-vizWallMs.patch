@@ -1,8 +1,0 @@
---- a/web/src/plugins/viz-tile-budget.ts
-+++ b/web/src/plugins/viz-tile-budget.ts
-@@ -1,4 +1,5 @@
- import type { VizDataFrame } from "./viz-host";
-+import { vizWallMs } from "../core/viz-clock";
- import {
-   VIZ_CLOCK_STEP_TICKS,
-   VIZ_COST_TICKS_4MS,

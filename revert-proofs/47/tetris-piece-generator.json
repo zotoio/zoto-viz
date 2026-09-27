@@ -1,9 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-piece-generator.test.ts -t \"^Tetris survival piece generator > seed 0 first 50 kind ids match fixture$\"",
-  "testFile": "src/arcade/tetris-piece-generator.test.ts",
-  "testName": "^Tetris survival piece generator > seed 0 first 50 kind ids match fixture$",
-  "description": "Shift survival generator salt so first-50 kind ids no longer match fixture.",
-  "passLine": "Tests  1 passed | 19 skipped (20)",
-  "passCheck": "\u2713 src/arcade/tetris-piece-generator.test.ts > Tetris survival piece generator > seed 0 first 50 kind ids match fixture 2ms",
-  "excerpt": "AssertionError: expected [ 'O', 'J', 'S', 'I', 'I', 'T', \u2026(44) ] to deeply equal [ 'T', 'I', 'Z', 'L', 'J', 'O', \u2026(44) ]"
-}

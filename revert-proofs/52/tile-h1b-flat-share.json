@@ -1,7 +1,0 @@
-{
-  "row": "H1 revert B flat tile share",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
-  "testName": "^tile HUD rows \\(half-open window \\(now−300000, now\\] in ticks\\) > layout shares: 1×1/2×2/2×3/2×4 → 5010/1252/835/626$",
-  "excerpt": "AssertionError: expected 5010 to be 1252 // Object.is equality"
-}

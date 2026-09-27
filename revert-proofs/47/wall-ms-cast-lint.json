@@ -1,8 +1,0 @@
-{
-  "runner": "pnpm --dir web exec node --require ./eslint-ts6-resolver.cjs ./node_modules/eslint/bin/eslint.js src/core/viz-clock.ts",
-  "testFile": "src/core/viz-clock.ts",
-  "testName": "lint no-restricted-syntax on WallMs cast in vizWallMs",
-  "description": "Reintroduce raw as WallMs in wall viz clock mint path.",
-  "passLine": "lint exit 0",
-  "excerpt": "/workspace/web/src/core/viz-clock.ts\n22:10  error  Do not cast to WallMs; mint only via wallMs() in src/core/viz-time.ts  no-restricted-syntax"
-}

@@ -1,9 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-idle-view.test.ts -t \"^TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count$\"",
-  "testFile": "src/arcade/tetris-idle-view.test.ts",
-  "testName": "^TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count$",
-  "description": "Leave graph scene active so standalone host idle tick never runs.",
-  "passLine": "Tests  1 passed | 9 skipped (10)",
-  "passCheck": "\u2713 src/arcade/tetris-idle-view.test.ts > TetrisView host idle feed > 600 frames: piece budget, no real clock reads, HUD skips match hand count 223ms",
-  "excerpt": "AssertionError: expected +0 to be 4032 // Object.is equality"
-}
