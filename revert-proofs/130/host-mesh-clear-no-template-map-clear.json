@@ -2,6 +2,6 @@
   "description": "Revert templates.clear() on HostMeshLane.clear",
   "runner": "vitest",
   "testFile": "src/graph/host-mesh-lane.test.ts",
-  "testName": "host mesh lane clear() exact teardown counts (Performance Pedant)",
+  "testName": "host mesh lane > clear() exact teardown counts (Performance Pedant)",
   "red": "AssertionError: expected 3 to be +0 // Object.is equality"
 }
