@@ -39,6 +39,9 @@ def vitest(file: str, test_name: str) -> tuple[int, str]:
 
 
 def extract_red(output: str) -> str | int | bool:
+    m = re.search(r'expected "(\w+)" to be called \+?(\d+) times?, but got (\d+)', output)
+    if m:
+        return int(m.group(3))
     m = re.search(r'expected "vi\.fn\(\)" to be called \d+ times?, but got (\d+)', output)
     if m:
         return int(m.group(1))

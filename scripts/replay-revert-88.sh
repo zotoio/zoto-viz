@@ -25,29 +25,20 @@ for json in "$DIR"/*.json; do
     echo "FAIL $row: patched still green"
     fail=1
   else
-    red_json="$(python3 -c "import json;print(json.load(open('$json'))['redValue'])")"
-    if ! python3 - "$red_json" "$out" <<'PY'
-import json, re, sys
-red = json.loads(sys.argv[1]) if sys.argv[1] not in ("true", "false", "null") else {"true": True, "false": False, "null": None}[sys.argv[1]]
-out = sys.argv[2]
-if isinstance(red, bool):
-    pat = r"expected (true|false) to be (true|false)"
-    m = re.search(pat, out)
-    got = m.group(1) == "true" if m else None
-    sys.exit(0 if got is red else 1)
-if isinstance(red, int):
-    m = re.search(r"expected (\d+) to be (\d+)", out) or re.search(r"to be called (\d+) times?, but got (\d+)", out)
-    if not m:
-        sys.exit(1)
-    got = int(m.group(1) if "called" in m.group(0) else m.group(1))
-    sys.exit(0 if got == red else 1)
-if red is None:
-    sys.exit(0 if "null" in out or "toBe(null)" in out else 1)
-if isinstance(red, str):
-    m = re.search(r'\+ Received:\s*\n\s*"([^"]*)"', out) or re.search(r'expected "([^"]*)"', out)
-    got = m.group(1) if m else ""
-    sys.exit(0 if got == red else 1)
-sys.exit(1)
+    if ! python3 - "$json" "$out" <<'PY'
+import importlib.util, json, sys
+from pathlib import Path
+root = Path(__file__).resolve().parents[1] if False else Path.cwd()
+spec = importlib.util.spec_from_file_location("regen", "scripts/regen-revert-88.py")
+regen = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(regen)
+side = json.load(open(sys.argv[1]))
+want = side["redValue"]
+try:
+    got = regen.extract_red(sys.argv[2])
+except ValueError:
+    sys.exit(1)
+sys.exit(0 if got == want else 1)
 PY
     then
       echo "FAIL $row: red mismatch"
