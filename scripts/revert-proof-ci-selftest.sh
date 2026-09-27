@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # CI helper: run revert-proof vitest self-tests (scripts/ via vitest.config.mjs).
+# Uses pull_request checkout + base.sha only (never pull_request_target).
 # Usage:
 #   revert-proof-ci-selftest.sh head
 #   revert-proof-ci-selftest.sh base <base-sha>
@@ -8,6 +9,8 @@ set -euo pipefail
 MODE="${1:?use head or base}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+GATE="$ROOT/scripts/revert-proof-ci-gate.mjs"
 
 VITEST_ARGS=(
   run
@@ -57,23 +60,26 @@ run_vitest() {
 ensure_python
 
 if [ "$MODE" = "head" ]; then
+  node "$GATE" head-present
   run_vitest "head runner, head tests"
   exit $?
 fi
 
 if [ "$MODE" = "base" ]; then
   BASE_SHA="${2:?base sha required for base mode}"
-  if ! git cat-file -e "${BASE_SHA}:scripts/revert-proof.test.ts" 2>/dev/null; then
-    echo "revert-proof self-test (head runner, base tests): SKIP — scripts/revert-proof.test.ts not present at base ${BASE_SHA} (first landing; expected for initial runner PR)"
+  gate_out="$(mktemp)"
+  if ! node "$GATE" base-decision "$BASE_SHA" | tee "$gate_out"; then
+    rm -f "$gate_out"
+    exit 1
+  fi
+  if grep -q 'action=skip' "$gate_out"; then
+    echo "revert-proof self-test (head runner, base tests): skipped per CI gate above"
+    rm -f "$gate_out"
     exit 0
   fi
+  rm -f "$gate_out"
   backup="$(mktemp -d)"
   for rel in "${SELFTEST_PATHS[@]}"; do
-    if ! git cat-file -e "${BASE_SHA}:${rel}" 2>/dev/null; then
-      echo "revert-proof self-test (head runner, base tests): FAIL — expected ${rel} at base ${BASE_SHA} but missing"
-      rm -rf "$backup"
-      exit 1
-    fi
     cp "$rel" "$backup/$(echo "$rel" | tr '/' '_')"
     git show "${BASE_SHA}:${rel}" >"$rel"
   done

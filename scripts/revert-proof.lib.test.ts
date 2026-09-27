@@ -610,6 +610,39 @@ describe("revert-proofs directory guards", () => {
   });
 });
 
+describe("revert-proof CI gate (item 9)", () => {
+  it("(ci-base) when base has the self-test marker, skip is refused (must run)", async () => {
+    const { decideBaseSelftestStep, SELFTEST_MARKER } = await import("./revert-proof-ci-gate.mjs");
+    const baseSha = "deadbeef";
+    const gitPath = `${baseSha}:${SELFTEST_MARKER}`;
+    const decision = decideBaseSelftestStep((p) => p === gitPath, baseSha);
+    expect(decision.action).toBe("run");
+    expect(decision.case).toBe("base_has_marker");
+    expect(decision.check).toBe(`git cat-file -e ${gitPath}`);
+    expect(decision.result).toBe("present");
+  });
+
+  it("(ci-base) when base lacks the self-test marker, skip is allowed", async () => {
+    const { decideBaseSelftestStep } = await import("./revert-proof-ci-gate.mjs");
+    const decision = decideBaseSelftestStep(() => false, "deadbeef");
+    expect(decision.action).toBe("skip");
+    expect(decision.case).toBe("base_missing_marker");
+    expect(decision.result).toBe("absent");
+  });
+
+  it("(ci-head) when HEAD lacks the self-test marker, the step fails", async () => {
+    const { assertHeadSelftestPresent } = await import("./revert-proof-ci-gate.mjs");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "rp-ci-gate-head-"));
+    try {
+      const result = assertHeadSelftestPresent(root);
+      expect(result.ok).toBe(false);
+      expect(result.case).toBe("head_missing_marker");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("sidecar red value", () => {
   const meta = {
     runner: "vitest",
