@@ -154,8 +154,18 @@ describe("sandbox write path counts (#129)", () => {
         defaultVizContract({ presentTick: true }),
       );
       resetSandboxWindowPostCountForTests();
+      resetSandboxPortPostCountForTests();
+      const caps = sandboxFrameRuntimeForTests().allowed;
       for (let i = 0; i < 600; i++) {
-        box.deliverPresentTick(i + 1, "tile-a");
+        handleSandboxHostMessage(
+          {
+            source: HOST_SOURCE,
+            type: "present",
+            tick: { frameMs: i + 1, tileId: "tile-a" },
+          },
+          caps,
+          sandboxZotoApi,
+        );
       }
       expect(sandboxWindowPostCountForTests()).toBe(0);
       box.unload();
