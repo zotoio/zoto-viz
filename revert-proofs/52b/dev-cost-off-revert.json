@@ -3,6 +3,6 @@
   "runner": "vitest",
   "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
   "testName": "^dev viz wall flags > F5 \\(iii\\) whole-wall 5011 \u2014 injector set \\(over-budget path, not bad input\\)$",
-  "excerpt": "AssertionError: expected 5011 to be undefined",
-  "patchedAssertion": "AssertionError: expected 5011 to be undefined"
+  "excerpt": "AssertionError: expected undefined to be 5011 // Object.is equality",
+  "patchedAssertion": "AssertionError: expected undefined to be 5011 // Object.is equality"
 }

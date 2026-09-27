@@ -3,6 +3,6 @@
   "runner": "vitest",
   "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
   "testName": "^dev viz wall flags > F5 \\(i\\): 600 frames \u2014 1 parse per flag; rebuild adds 1 each$",
-  "excerpt": "AssertionError: expected { vizTileCostTicks: 601, vizWallClock: 601 } to deeply equal { vizTileCostTicks: 1, vizWallClock: 1 }",
-  "patchedAssertion": "AssertionError: expected { vizTileCostTicks: 601, vizWallClock: 601 } to deeply equal { vizTileCostTicks: 1, vizWallClock: 1 }"
+  "excerpt": "AssertionError: expected 1 to be undefined",
+  "patchedAssertion": "AssertionError: expected 1 to be undefined"
 }

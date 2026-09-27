@@ -3,6 +3,6 @@
   "runner": "vitest",
   "testFile": "web/src/app/main-present-opts-localstorage.test.ts",
   "testName": "^present-loop optsFor localStorage \\(main @6520b01\\) > W4: steady frame getItem count matches main@6520b01 \\(packet-tunnel\\)$",
-  "excerpt": "AssertionError: expected 10 to be 20",
-  "patchedAssertion": "AssertionError: expected 10 to be 20"
+  "excerpt": "AssertionError: expected 30 to be 20 // Object.is equality",
+  "patchedAssertion": "AssertionError: expected 30 to be 20 // Object.is equality"
 }

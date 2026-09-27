@@ -3,6 +3,6 @@
   "runner": "vitest",
   "testFile": "web/src/plugins/nixie-wall-clock.test.ts",
   "testName": "^nixie wall clock rows > N12: reachable 12-hour tile \u2014 blank tens for hours 1\u20139$",
-  "excerpt": "AssertionError: expected [ 1, 1, 0, 5 ] to deeply equal [ -1, 1, 0, 5 ]",
-  "patchedAssertion": "AssertionError: expected [ 1, 1, 0, 5 ] to deeply equal [ -1, 1, 0, 5 ]"
+  "excerpt": "AssertionError: expected [ +0, 1, +0, 5 ] to deeply equal [ -1, 1, +0, 5 ]",
+  "patchedAssertion": "AssertionError: expected [ +0, 1, +0, 5 ] to deeply equal [ -1, 1, +0, 5 ]"
 }

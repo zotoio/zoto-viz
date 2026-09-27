@@ -3,6 +3,6 @@
   "runner": "vitest",
   "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
   "testName": "^dev viz wall flags > F5 \\(vi\\) prod: query inert when not DEV$",
-  "excerpt": "AssertionError: expected <number> to be <same number> // wall clock changed in prod",
-  "patchedAssertion": "AssertionError: expected <number> to be <same number> // wall clock changed in prod"
+  "excerpt": "AssertionError: expected 3900000 to be 1700000002000 // Object.is equality",
+  "patchedAssertion": "AssertionError: expected 3900000 to be 1700000002000 // Object.is equality"
 }
