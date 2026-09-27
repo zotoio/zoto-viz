@@ -1,12 +1,12 @@
 diff --git a/service/plugin_local.py b/service/plugin_local.py
-index a04e611..4438f3c 100644
 --- a/service/plugin_local.py
 +++ b/service/plugin_local.py
-@@ -543,6 +543,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
-     if dest.is_file() and pz.plugin_sha256(dest).lower() != digest:
-         return _retry_zip_changed_response(digest, row, pid, zip_error="zip_hash_mismatch")
+@@ -629,8 +629,6 @@
+                 return {"ok": False, "error": "pack_boundary", "message": text}
+             return {"ok": False, "error": text, "id": pid}
  
-+    clear_zip_block(digest)
-     lock = pack_install_lock(pid)
-     if not lock.acquire(blocking=False):
-         return {
+-        clear_zip_block(digest)
+-        forget_zip_block_cache_for_path(dest)
+         info = _install_result(doc, dest, unpacked, wrote=True)
+         finished = _finish(info, activate=activate)
+         finished["retryResult"] = RETRY_RESULT_SUCCESS

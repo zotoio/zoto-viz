@@ -19,21 +19,33 @@ from service import plugin_local
 from service import plugin_zip as pz
 from service import plugins
 from service.pack_install_lint import run_install_pack_lint
+from service import plugin_install as plugin_install_mod
 from service.plugin_install import (
     InstallStartFailedError,
     InstallV2BlockedError,
-    assert_runtime_parent_clean,
     drain_install_notices,
     install_zip_to_runtime,
+    list_bak_dirs,
+    list_staging_dirs,
     pack_install_lock,
     read_install_state,
     recover_all_runtime_roots,
     recover_interrupted_swaps,
-    reset_install_locks_for_tests,
     runtime_tree_hash,
     should_skip_unchanged_zip,
     staging_root,
 )
+
+
+def _assert_runtime_parent_clean(runtime_parent: Path) -> None:
+    staging = list_staging_dirs(runtime_parent)
+    assert not staging, f"staging left: {staging}"
+    baks = list_bak_dirs(runtime_parent)
+    assert not baks, f".bak left: {baks}"
+
+
+def _reset_install_locks_for_tests() -> None:
+    plugin_install_mod._pack_install_locks.clear()
 
 
 def _pack_fixture(name: str) -> Path:
@@ -97,7 +109,7 @@ def _reset_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plugin_install_mod, "_start_runtime_hook", None, raising=False)
     plugin_install_mod._pending_notices.clear()
     plugin_install_mod._swap_in_progress.clear()
-    reset_install_locks_for_tests()
+    _reset_install_locks_for_tests()
     drain_install_notices()
     reset_zip_blocks_for_tests()
     reset_install_catalog_records_for_tests()
@@ -170,7 +182,7 @@ def test_interrupted_swap_uses_after_first_rename_hook(
     assert any(r.get("error") == "pack_install_interrupted" for r in records)
     assert runtime.is_dir()
     assert (runtime / "frontend/sdk/marker.ts").read_text(encoding="utf-8") == marker_v1
-    assert_runtime_parent_clean(runtime.parent)
+    _assert_runtime_parent_clean(runtime.parent)
 
 
 
@@ -317,7 +329,7 @@ def _blocked_v2_setup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[str, str, str, bytes]:
-    reset_install_locks_for_tests()
+    _reset_install_locks_for_tests()
     _repo(tmp_path, monkeypatch)
     plugins.reset_bundles()
     pid = "upgrade-probe"
@@ -399,7 +411,7 @@ def test_retry_and_scan_race_single_install_20_of_20(
     from service.pack_zip_blocks import reset_zip_blocks_for_tests
 
     for n in range(20):
-        reset_install_locks_for_tests()
+        _reset_install_locks_for_tests()
         drain_install_notices()
         reset_zip_blocks_for_tests()
         reset_install_catalog_records_for_tests()
@@ -426,7 +438,7 @@ def test_concurrent_install_passes_20_of_20(
     _isolate_plugin_local: Path,
 ) -> None:
     for attempt in range(20):
-        reset_install_locks_for_tests()
+        _reset_install_locks_for_tests()
         drain_install_notices()
         plugin_local.reset_watch_for_tests()
         plugins.reset_bundles()
@@ -458,7 +470,7 @@ def test_concurrent_install_passes_20_of_20(
         t2.join(timeout=10)
         if errors:
             raise errors[0]
-        assert_runtime_parent_clean(_runtime_parent())
+        _assert_runtime_parent_clean(_runtime_parent())
 
 
 
@@ -486,7 +498,7 @@ def test_symlink_zip_rejected_via_install_pipeline(
     with pytest.raises(ValueError, match="symlink"):
         plugin_local.install_local_zip(raw, overwrite=True)
     assert not (_runtime_parent() / "sym-test").exists()
-    assert_runtime_parent_clean(_runtime_parent())
+    _assert_runtime_parent_clean(_runtime_parent())
 
 
 def test_unchanged_zip_skips_reinstall_on_three_scans(

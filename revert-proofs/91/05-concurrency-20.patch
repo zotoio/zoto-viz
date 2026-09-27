@@ -1,13 +1,12 @@
 diff --git a/service/plugin_install.py b/service/plugin_install.py
-index f8c85eb..6220573 100644
 --- a/service/plugin_install.py
 +++ b/service/plugin_install.py
-@@ -334,7 +334,7 @@ def _atomic_swap(staging: Path, runtime: Path) -> bool:
+@@ -334,8 +334,6 @@
      _swap_in_progress.add(pid)
      try:
          runtime.rename(bak)
 -        if _after_first_rename is not None:
-+        if False and _after_first_rename is not None:
-             _after_first_rename()
+-            _after_first_rename()
          staging.rename(runtime)
          return True
+     finally:

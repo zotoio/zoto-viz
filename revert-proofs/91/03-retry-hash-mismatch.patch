@@ -1,8 +1,7 @@
 diff --git a/service/plugin_local.py b/service/plugin_local.py
-index a04e611..6b1c3b3 100644
 --- a/service/plugin_local.py
 +++ b/service/plugin_local.py
-@@ -540,9 +540,6 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+@@ -540,9 +540,6 @@
      pid = str(row.get("id") or "")
      folder = paths.plugin_local_dir(create=True)
      dest = folder / f"{pid}.zip"

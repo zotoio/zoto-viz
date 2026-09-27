@@ -1,0 +1,13 @@
+diff a/service/plugin_local.py b/service/plugin_local.py	(rejected hunks)
+@@ -528,10 +528,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+     """Re-run the blocked zip through the full install pipeline (sync, pack lock held)."""
+     from .pack_zip_blocks import forget_zip_block_cache_for_path
+     from .pack_zip_blocks import clear_zip_block, zip_block_for_sha
+-    from .plugin_install import (
+-        _install_zip_to_runtime_locked,
+-        pack_install_lock,
+-    )
++    from .plugin_install import install_zip_to_runtime
+ 
+     digest = sha256.strip().lower()
+     row = zip_block_for_sha(digest)

@@ -1,13 +1,11 @@
-diff --git a/service/access.py b/service/access.py
-index 45db64b..76da3f9 100644
---- a/service/access.py
-+++ b/service/access.py
-@@ -104,7 +104,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
-         return _deny("forbidden host")
-     if not origin_ok(request):
-         return _deny("forbidden origin")
--    if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):
-+    if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and "/blocked/retry" not in request.path and not csrf_ok(request):
-         return _deny("csrf required")
-     resp = await handler(request)
-     attach_csrf(request, resp)
+diff --git a/service/monitor.py b/service/monitor.py
+--- a/service/monitor.py
++++ b/service/monitor.py
+@@ -1921,7 +1921,6 @@
+     app.router.add_delete("/api/ai/memories", agent.api_memories)
+     app.router.add_post("/api/ai/plugin", agent.api_draft_plugin)
+     app.router.add_post("/api/ai/plugin/local", plugin_local.api_publish_local)
+-    app.router.add_post("/api/ai/plugin/local/blocked/retry", plugin_local.api_retry_blocked_zip)
+     app.router.add_post("/api/ai/sky", agent.api_sky)
+     app.router.add_post("/api/ai/stereo", agent.api_stereo)
+     app.router.add_post("/api/ai/speak", agent.api_speak)
