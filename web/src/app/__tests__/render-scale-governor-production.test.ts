@@ -135,7 +135,7 @@ describe("render-scale governor production wiring", () => {
     expect(pluginRenderScaleCommitCountForTests()).toBe(0);
   });
 
-  it("flag on with over-budget GPU samples: commits lower scale per step-down rule", () => {
+  it("flag on with over-budget GPU samples: commits lower scale per step-down rule", { meta: { revertProofAssertion: true } }, () => {
     const { scene, host } = mountScene();
     refreshHostRenderScaleGovernorEnabled("?vizGovernor=1");
     runFrames(host, scene, FRAMES, OVER_MS);
