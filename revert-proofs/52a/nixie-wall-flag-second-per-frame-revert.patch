@@ -1,10 +1,12 @@
 diff --git a/web/src/plugins/nixie-wall-parts.ts b/web/src/plugins/nixie-wall-parts.ts
+index 44a7772..304b147 100644
 --- a/web/src/plugins/nixie-wall-parts.ts
 +++ b/web/src/plugins/nixie-wall-parts.ts
-@@ -73,6 +73,7 @@ export function fillDevWallFlagPartsScratch(mono: MonoMs): typeof nixieWallParts
+@@ -74,6 +74,7 @@ export function fillDevWallFlagPartsScratch(mono: MonoMs): typeof nixieWallParts
    nixieWallPartsScratch.h = Math.floor(total / 3600);
    nixieWallPartsScratch.m = Math.floor((total % 3600) / 60);
    nixieWallPartsScratch.s = total % 60;
 +  nixieWallPartsScratch.s = 1;
    return nixieWallPartsScratch;
  }
+ 
