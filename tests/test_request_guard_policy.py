@@ -77,6 +77,20 @@ def test_host_injection_returns_400_with_frame_headers() -> None:
     asyncio.run(_host_injection())
 
 
+def test_disallowed_host_rejected_with_frame_headers() -> None:
+    async def run() -> None:
+        async with make_app_server() as (ip, port, _runner):
+            async with ClientSession() as session:
+                async with session.get(
+                    f"http://{ip}:{port}/api/session",
+                    headers={"Host": f"not-in-allowlist.example:{port}"},
+                ) as resp:
+                    assert resp.status == 400
+                    _assert_frame_headers(resp)
+
+    asyncio.run(run())
+
+
 async def _rebinding() -> None:
     async with make_app_server() as (ip, port, _runner):
         async with ClientSession() as session:

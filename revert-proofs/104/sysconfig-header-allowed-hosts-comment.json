@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testId": "tests/test_sysconfig_allowed_hosts.py::test_sysconfig_header_documents_allowed_hosts_key",
-  "red": "AssertionError: assert '# allowed_hosts:' in '# Machine-local zoto-viz layout. Do not commit this file.\\n# Written on zoto-viz install / first monitor start; exist...opback (no password)\\n# inhibit_screensaver: true       # hold idle/sleep so the display does not blank (default on)\\n'",
+  "red": "AssertionError: missing '# allowed_hosts:' in sysconfig.HEADER",
   "description": "sys-config HEADER documents allowed_hosts.",
   "timeoutSec": 120
 }
