@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/app/mosaic-layout-settings-wiring.test.ts",
-  "testName": "removing the focused tile with unsaved edits prompts discard then closes",
-  "description": "Close drawer when tile removed without discard prompt",
-  "redOutput": "AssertionError: expected \"vi.fn()\" to be called at least once"
-}
