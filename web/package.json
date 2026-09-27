@@ -9,7 +9,6 @@
   "scripts": {
     "dev": "vite",
     "asbuild": "asc --config asconfig.json --target release",
-    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "build": "pnpm asbuild && tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

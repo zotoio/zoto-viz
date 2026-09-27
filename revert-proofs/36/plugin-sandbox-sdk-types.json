@@ -1,5 +1,5 @@
 {
-  "description": "plugins/sdk/plugin-sandbox.ts stays referenced for pack #24 type imports",
+  "description": "Revert production guard (plugin-sandbox-sdk-types)",
   "runner": "command",
   "command": "pnpm typecheck",
   "cwd": "web",
