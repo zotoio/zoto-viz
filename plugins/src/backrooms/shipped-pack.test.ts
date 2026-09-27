@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import FRAG from "../../../plugins/src/backrooms/sky/fragment.glsl?raw";
-import FRONT from "../../../plugins/src/backrooms/frontend/index.ts?raw";
-import VIS from "../../../plugins/src/backrooms/visualisation.yml?raw";
+import FRAG from "./sky/fragment.glsl?raw";
+import FRONT from "./frontend/index.ts?raw";
+import VIS from "./visualisation.yml?raw";
 import {
   BR_GRID,
   BR_MAZE_FLOATS,
@@ -19,8 +19,7 @@ import {
   setBackroomsOptions,
   brEpisodeAt,
   brMazeWindow,
-} from "../../../plugins/src/backrooms/frontend/director";
-import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
+} from "./frontend/director";
 
 function sdBox(px: number, pz: number, bx: number, bz: number): number {
   const dx = Math.abs(px) - bx;
@@ -97,19 +96,17 @@ function audit(seconds: number): Audit {
 }
 
 describe("backrooms shipped pack", () => {
-  it("wraps and compiles the director-driven sky", () => {
-    const wrapped = wrapPluginSky(FRAG);
-    expect("error" in wrapped).toBe(false);
-    if ("error" in wrapped) return;
-    expect(wrapped.frag).toContain("zotoVizSlots");
+  it("ships the director-driven sky shader symbols", () => {
+    expect(FRAG).toContain("zotoVizSlots");
     for (const fn of ["bool walled(", "float wire(", "float howler(", "float hound(", "float smiler(", "float graffiti(", "float objAt(", "vec4 osd(", "float bodyShadow("]) {
       expect(FRAG).toContain(fn);
     }
-    expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
-  it("leaves the drive buffer to the host", () => {
+  it("leaves slot buffers to the host director (no iframe writeBuffer)", () => {
     expect(FRONT).not.toMatch(/writeBuffer\s*\(/);
+    expect(FRONT).not.toMatch(/onPresent/);
+    expect(FRONT).toMatch(/writeUniform\s*\(\s*"uAccent"/);
   });
 
   it("fits the plugin buffer contract", () => {

@@ -1,0 +1,1 @@
+{"runner":"vitest","testFile":"src/app/mode-switch-message.test.ts","testName":"stacks above modal backdrop and stays visible after decline message","description":"Status strip z-index 30 under modal 50"}

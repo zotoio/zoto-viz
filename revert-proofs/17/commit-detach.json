@@ -1,0 +1,1 @@
+{"runner": "vitest", "testFile": "src/app/apply-mode.test.ts", "testName": "committed attempt detaches abort listeners so switching to C disposes B once", "description": "COMMIT-DETACH: noop commit leaves abort dispose listeners so C switch double-disposes B"}

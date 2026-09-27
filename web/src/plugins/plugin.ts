@@ -58,7 +58,7 @@ import type { PluginIdleConfig } from "./fixtures/golden-state";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
-import { addModeSwitchAbortListener, detachModeSwitchAbortListeners } from "../app/mode-switch-attempt";
+import { addModeSwitchAbortListener, removeModeSwitchAbortListener } from "../app/mode-switch-attempt";
 
 function dimHex(hex: number, amount: number): number {
   const r = Math.round(((hex >> 16) & 255) * amount);
@@ -334,12 +334,12 @@ export async function attachPluginFrontend(
     await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
     if (signal?.aborted) {
       sandbox.unload();
-      if (signal) detachModeSwitchAbortListeners(signal);
+      if (signal) removeModeSwitchAbortListener(signal, dispose);
       return false;
     }
     return true;
   } catch (e) {
-    if (signal) detachModeSwitchAbortListeners(signal);
+    if (signal) removeModeSwitchAbortListener(signal, dispose);
     throw e;
   }
 }

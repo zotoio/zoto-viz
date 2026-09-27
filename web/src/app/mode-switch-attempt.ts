@@ -30,6 +30,18 @@ export function detachModeSwitchAbortListeners(signal: AbortSignal): void {
   abortListenersBySignal.delete(signal);
 }
 
+/** Remove one abort hook registered via {@link addModeSwitchAbortListener} (e.g. after a local load error). */
+export function removeModeSwitchAbortListener(signal: AbortSignal, listener: () => void): void {
+  const list = abortListenersBySignal.get(signal);
+  if (!list) return;
+  const idx = list.findIndex((e) => e.listener === listener);
+  if (idx === -1) return;
+  const { options } = list[idx]!;
+  signal.removeEventListener("abort", listener, options);
+  list.splice(idx, 1);
+  if (list.length === 0) abortListenersBySignal.delete(signal);
+}
+
 export function modeSwitchAbortListenerCountForTests(signal: AbortSignal): number {
   return abortListenersBySignal.get(signal)?.length ?? 0;
 }
