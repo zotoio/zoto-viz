@@ -152,8 +152,13 @@ function scrubPaths(text: string | undefined, replacements: Record<string, strin
   return out;
 }
 
-function runRevertProof(cwd: string, prNumber: string, extraArgs: string[] = []) {
-  return spawnSync(process.execPath, [scriptPath, prNumber, ...extraArgs], {
+function runRevertProof(
+  cwd: string,
+  prNumber: string,
+  extraArgs: string[] = [],
+  runnerScript: string = scriptPath,
+) {
+  return spawnSync(process.execPath, [runnerScript, prNumber, ...extraArgs], {
     cwd,
     encoding: "utf8",
     env: {
@@ -689,6 +694,61 @@ describe("revert-proof runner (fixture repo)", () => {
     expect(r.status).toBe(1);
     expect(rowMessage(r, "strict-offset")).toMatch(/offset or fuzz/i);
     assertNoRevertProofWorktrees(root);
+  });
+
+  it("(ii-prove) base strict-offset case catches runner with strict apply removed", () => {
+    const root = mkFixture();
+    const offsetPatch = goodPatch.replace(
+      "@@ -1,2 +1,2 @@",
+      "@@ -11,2 +11,2 @@",
+    );
+    writeRow(root, "99", "strict-offset", offsetPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "widget > returns one",
+      description: "Offset patch must not apply",
+      red: WIDGET_RED,
+    });
+    commitRevertProofs(root);
+
+    const runnerDir = fs.mkdtempSync(path.join(os.tmpdir(), "rp-weakened-runner-"));
+    const bundleFiles = [
+      "revert-proof.mjs",
+      "revert-proof-lib.mjs",
+      "revert-proof-vitest-overlay.mjs",
+      "revert-proof-vitest-runner.mjs",
+      "revert-proof-vitest-setup.ts",
+      "revert-proof-vitest-brand.mjs",
+      "revert_proof_pytest_plugin.py",
+    ];
+    for (const name of bundleFiles) {
+      fs.copyFileSync(path.join(scriptsDir, name), path.join(runnerDir, name));
+    }
+    const weakLibPath = path.join(runnerDir, "revert-proof-lib.mjs");
+    const libText = fs.readFileSync(weakLibPath, "utf8");
+    const weakened = libText.replace(
+      "assertGitApplyCheckStrict(wtRoot, patchText);\n",
+      "",
+    );
+    expect(weakened).not.toBe(libText);
+    fs.writeFileSync(weakLibPath, weakened, "utf8");
+
+    const fixtureScripts = path.join(root, "scripts");
+    for (const name of bundleFiles) {
+      fs.copyFileSync(path.join(runnerDir, name), path.join(fixtureScripts, name));
+    }
+
+    const r = runRevertProof(
+      root,
+      "99",
+      ["--row", "strict-offset"],
+      path.join(fixtureScripts, "revert-proof.mjs"),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("RED (expected)");
+    expect(rowMessage(r, "strict-offset")).toBeNull();
+    assertNoRevertProofWorktrees(root);
+    fs.rmSync(runnerDir, { recursive: true, force: true });
   });
 
   it("(a) correct revert row produces red output and exit 0", () => {
