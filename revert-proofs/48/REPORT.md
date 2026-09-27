@@ -12,6 +12,7 @@
 | classify-green | scripts/revert-proof.lib.test.ts :: strict Vitest red from task.meta only > reports a passing patched test as green | Drop the green classification | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^strict Vitest red from task\\.meta only > reports a passing patched test as green$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | classify-rejects-no-meta | scripts/revert-proof.lib.test.ts :: strict Vitest red from task.meta only > (b) rejects assertion-looking failure without meta flag | Classify every vitest failure as an assertion | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^strict Vitest red from task\\.meta only > \\(b\\) rejects assertion-looking failure without meta flag$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | classify-rejects-plain-meta | scripts/revert-proof.lib.test.ts :: strict Vitest red from task.meta only > (c-meta) rejects plain-object style failures without meta flag | Accept any present revertProofAssertion value, not just true | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^strict Vitest red from task\\.meta only > \\(c-meta\\) rejects plain-object style failures without meta flag$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
+| node-assert-not-branded | scripts/revert-proof.lib.test.ts :: revert-proof vitest runner through the overlay > (3) real node:assert strictEqual is not branded | Runner accepts any thrown object without the brand check (node:assert must stay rejected) | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof vitest runner through the overlay > \\(3\\) real node:assert strictEqual is not branded$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | production-only-guard | scripts/revert-proof.dogfood.test.ts :: revert-proof dogfood guards > production-only guard rejects patches touching test files | Disable production-only patch validation | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof dogfood guards > production-only guard rejects patches touching test files$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.dogfood.test.ts | RED (expected) |
 | production-reach-guard | scripts/revert-proof.dogfood.test.ts :: revert-proof dogfood guards > production reach guard rejects unreachable revert targets | Disable production reach guard so test-only revert targets are accepted | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof dogfood guards > production reach guard rejects unreachable revert targets$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.dogfood.test.ts | RED (expected) |
 | pytest-accepts-meta | scripts/revert-proof.lib.test.ts :: strict pytest red from plugin JSON only > accepts revertProofAssertion from plugin JSON | Never classify a pytest failure as an assertion | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^strict pytest red from plugin JSON only > accepts revertProofAssertion from plugin JSON$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
@@ -185,6 +186,22 @@ AssertionError: expected 'assertion' to be 'build break' // Object.is equality
 
 ```
 AssertionError: expected 'assertion' to be 'build break' // Object.is equality
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
+### node-assert-not-branded
+
+```
+AssertionError: expected true to be false // Object.is equality
     at Proxy.revertProofBrandedMethod (file://<tmp>
     at <tmp>
     at file://<tmp>
