@@ -2,8 +2,8 @@ diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vites
 index 4bef3f0..f0517d9 100644
 --- a/scripts/revert-proof-vitest-runner.mjs
 +++ b/scripts/revert-proof-vitest-runner.mjs
-@@ -18,7 +18,7 @@ function noteFailure(test, err) {
-   if (verdict.has(test)) {
+@@ -33,7 +33,7 @@ function noteFailure(test, err) {
+     verdict.set(test, false);
      return;
    }
 -  if (!isObject(err) || !branded.has(err)) {

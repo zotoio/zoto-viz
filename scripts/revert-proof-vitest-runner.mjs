@@ -11,11 +11,26 @@ import { branded, serializeVitestRed, takeSoftFailure } from "./revert-proof-vit
 const verdict = new WeakMap();
 /** @type {WeakMap<import("vitest").Task, { actual: unknown, expected: unknown } | null>} */
 const firstRed = new WeakMap();
+const nodeAssert = new WeakMap();
 
 const isObject = (v) => (typeof v === "object" && v !== null) || typeof v === "function";
 
+function isNodeAssertError(err) {
+  return (
+    isObject(err) &&
+    !branded.has(err) &&
+    err.code === "ERR_ASSERTION" &&
+    err.name === "AssertionError"
+  );
+}
+
 function noteFailure(test, err) {
   if (verdict.has(test)) {
+    return;
+  }
+  if (isNodeAssertError(err)) {
+    nodeAssert.set(test, true);
+    verdict.set(test, false);
     return;
   }
   if (!isObject(err) || !branded.has(err)) {
@@ -30,6 +45,7 @@ export default class RevertProofVitestRunner extends TestRunner {
   async runTask(test) {
     verdict.delete(test);
     firstRed.delete(test);
+    nodeAssert.delete(test);
     takeSoftFailure(test);
     const fn = TestRunner.getTestFn(test);
     let threw = false;
@@ -53,12 +69,15 @@ export default class RevertProofVitestRunner extends TestRunner {
   onAfterRunTask(test) {
     const revertProofAssertion = verdict.get(test) === true;
     const revertProofRed = firstRed.get(test) ?? null;
+    const revertProofNodeAssert = nodeAssert.get(test) === true;
     verdict.delete(test);
     firstRed.delete(test);
+    nodeAssert.delete(test);
     test.meta = Object.freeze({
       ...test.meta,
       revertProofAssertion,
       revertProofRed,
+      revertProofNodeAssert,
     });
     return super.onAfterRunTask(test);
   }

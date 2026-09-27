@@ -60,6 +60,7 @@ The plugin accepts only failures whose **last traceback frame in the test file**
 The runner guards against **accidents** in normal `expect` / `assert` usage, not a dishonest test author. There is **no** code and **no** revert row for:
 
 - A `TypeError` with a swapped `AssertionError` prototype
+- `node:assert` (for example `assert.strictEqual`) — the runner fail-closes with `red is not from expect; node:assert is not supported`
 - A hand-built `chai.AssertionError` or `new AssertionError()` without going through `expect` / `assert`
 - Subclasses of `AssertionError` thrown without the branding path
 - A test that deliberately calls real `expect(1).toBe(0)` to force red

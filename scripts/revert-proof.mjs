@@ -15,6 +15,7 @@ import {
   assessPytestSelection,
   assessVitestSelection,
   assertRedValue,
+  assertVitestNodeAssertFailClosed,
   buildPytestArgv,
   classifyPatchedPytest,
   classifyPatchedVitest,
@@ -810,6 +811,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       const failedWithoutMeta =
         target?.status === "failed" && target.revertProofAssertion !== true;
       if (failedWithoutMeta) {
+        assertVitestNodeAssertFailClosed(slug, target);
         const hint = /^AssertionError\b/.test(target.failureMessage ?? "")
           ? "for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from \"vitest\", not a separate chai package"
           : "non-assertion error";

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   assertRedValue,
+  assertVitestNodeAssertFailClosed,
   assessPytestSelection,
   assessVitestSelection,
   classifyPatchedPytest,
@@ -79,10 +80,16 @@ describe("vitest JSON selection by full name", () => {
   });
 });
 
-function runSingleOverlayCase(describeTitle, innerTestSource, leafTitle) {
+function runSingleOverlayCase(
+  describeTitle,
+  innerTestSource,
+  leafTitle,
+  topImports = "",
+) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rp-overlay-one-"));
   try {
     const content = `import { describe, expect, it } from "vitest";
+${topImports}
 describe(${JSON.stringify(describeTitle)}, () => {
 ${innerTestSource}
 });
@@ -180,6 +187,22 @@ describe("revert-proof vitest runner through the overlay", () => {
       "plain TypeError",
     );
     expect(row.revertProofAssertion).toBe(false);
+  });
+
+  it("(3) real node:assert strictEqual is not branded", () => {
+    const row = runSingleOverlayCase(
+      "node assert",
+      `  it("node assert strictEqual", () => {
+    assert.strictEqual(1, 0);
+  });`,
+      "node assert strictEqual",
+      `import assert from "node:assert";\n`,
+    );
+    expect(row.revertProofAssertion).toBe(false);
+    expect(row.revertProofNodeAssert).toBe(true);
+    expect(() => assertVitestNodeAssertFailClosed("slug", row)).toThrow(
+      "row slug: red is not from expect; node:assert is not supported",
+    );
   });
 
   it("(2) expect.soft failure is branded", () => {

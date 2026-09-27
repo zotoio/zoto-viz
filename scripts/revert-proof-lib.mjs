@@ -290,9 +290,9 @@ export function vitestAssertionFullName(assertion) {
   return assertion.fullName || assertion.title;
 }
 
-/** @returns {{ tests: { fullName: string, status: string, revertProofAssertion: boolean, revertProofRed: { actual: unknown, expected: unknown } | null, failureMessage: string | null }[], suiteError: string | null }} */
+/** @returns {{ tests: { fullName: string, status: string, revertProofAssertion: boolean, revertProofNodeAssert: boolean, revertProofRed: { actual: unknown, expected: unknown } | null, failureMessage: string | null }[], suiteError: string | null }} */
 export function parseVitestJsonReport(report) {
-  /** @type {{ fullName: string, status: string, revertProofAssertion: boolean, revertProofRed: { actual: unknown, expected: unknown } | null, failureMessage: string | null }[]} */
+  /** @type {{ fullName: string, status: string, revertProofAssertion: boolean, revertProofNodeAssert: boolean, revertProofRed: { actual: unknown, expected: unknown } | null, failureMessage: string | null }[]} */
   const tests = [];
   if (!report?.testResults?.length) {
     return {
@@ -310,6 +310,7 @@ export function parseVitestJsonReport(report) {
         fullName: vitestAssertionFullName(t),
         status: t.status,
         revertProofAssertion: t.meta?.revertProofAssertion === true,
+        revertProofNodeAssert: t.meta?.revertProofNodeAssert === true,
         revertProofRed:
           revertProofRed &&
           typeof revertProofRed === "object" &&
@@ -929,5 +930,20 @@ export function rejectPatchedVitestGreen(kind, slug) {
     throw new Error(
       `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
     );
+  }
+}
+
+/**
+ * Fail closed when a patched vitest target failed via node:assert (not branded expect).
+ * @param {string} slug
+ * @param {{ status?: string, revertProofAssertion?: boolean, revertProofNodeAssert?: boolean } | null | undefined} target
+ */
+export function assertVitestNodeAssertFailClosed(slug, target) {
+  if (
+    target?.status === "failed" &&
+    target.revertProofAssertion !== true &&
+    target.revertProofNodeAssert === true
+  ) {
+    throw new Error(`row ${slug}: red is not from expect; node:assert is not supported`);
   }
 }

@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof vitest runner through the overlay > (3) real node:assert strictEqual is not branded",
+  "description": "Runner accepts any thrown object without the brand check (node:assert must stay rejected)",
+  "red": {
+    "actual": true,
+    "expected": false
+  }
+}
