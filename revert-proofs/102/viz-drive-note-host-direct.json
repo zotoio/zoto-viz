@@ -7,5 +7,6 @@
     "actual": "none",
     "expected": "host-direct"
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected 'none' to be 'host-direct' // Object.is equality"
 }

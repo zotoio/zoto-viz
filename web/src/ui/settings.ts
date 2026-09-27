@@ -205,7 +205,7 @@ export class Settings {
   onSoundPolicy?: (on: boolean) => void;
   onPluginChange?: (id: string, values: Record<string, string>) => void;
   /** Live wall: swap one tile's view (returns false when the pick could not be applied). */
-  onMosaicPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
+  onMosaicPanePick?: (fromId: string, toId: string) => boolean;
   onInstancesChange?: () => void;
   onClose?: () => void;
   onDice?: () => void;
@@ -1772,10 +1772,7 @@ export class Settings {
         const to = sel.value;
         if (!from || from === to) return;
         if (this.onMosaicPanePick) {
-          const ret = this.onMosaicPanePick(from, to);
-          const fail = () => fillViewSelect(sel, from);
-          if (ret instanceof Promise) void ret.then((ok) => { if (ok === false) fail(); });
-          else if (ret === false) fail();
+          if (!this.onMosaicPanePick(from, to)) fillViewSelect(sel, from);
         } else {
           const next = nextPaneTiles(ids, from, to);
           this.anim.mosaicTiles = parseMosaicTiles(next);

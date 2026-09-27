@@ -1132,10 +1132,6 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
-  onPanePick: (from, to) => {
-    if (!settings.onMosaicPanePick) return mosaic!.setPaneView(from, to);
-    return settings.onMosaicPanePick(from, to);
-  },
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
