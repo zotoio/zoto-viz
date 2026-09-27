@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > stacks status notices above error notices",
+  "description": "Revert production guard (row-18-status-above-alert)",
+  "red": "AssertionError: expected +0 to be 4 // Object.is equality"
+}
