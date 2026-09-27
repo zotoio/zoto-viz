@@ -13,8 +13,12 @@ from aiohttp import web
 from . import access, plugins
 
 PACK_ID_SANDBOX = "_sandbox"
-_REPO = Path(__file__).resolve().parents[1]
-WEB_DIST = _REPO / "web" / "dist"
+
+
+def _web_dist() -> Path:
+    from . import monitor
+
+    return monitor.WEB_DIST
 _FRONTEND_ONLY = frozenset({".js", ".mjs", ".json", ".css", ".wasm", ".map", ".txt", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2"})
 _BLOCKED_BASENAMES = frozenset({"plugin.yml", "plugin.yaml", "service.py"})
 _BACKEND_MARKERS = frozenset({"backend", "service", "collector", "datasource"})
@@ -235,7 +239,7 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
             return _pack_not_found()
         if tail == "plugin-sandbox.html":
             return await _sandbox_html(request, _token)
-        asset = WEB_DIST / "assets" / tail
+        asset = _web_dist() / "assets" / tail
         if not asset.is_file():
             return _pack_not_found()
         body = asset.read_bytes()
@@ -285,7 +289,7 @@ def _rewrite_sandbox_html(body: str, token: str) -> str:
 
 
 async def _sandbox_html(request: web.Request, token: str) -> web.Response:
-    path = WEB_DIST / "plugin-sandbox.html"
+    path = _web_dist() / "plugin-sandbox.html"
     if not path.is_file():
         return web.Response(status=404, text="plugin-sandbox.html missing (run pnpm build)")
     body = _rewrite_sandbox_html(path.read_text(encoding="utf-8"), token)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from aiohttp.test_utils import AioHTTPTestCase
 
-from service import pack_assets
+from service import monitor
 from tests.pack_asset_test_util import HOST, NULL, SESSION, mint, pack_url, make_test_app
 
 _DIST = Path(tempfile.mkdtemp())
@@ -24,12 +24,12 @@ class PackAssetsSandboxCspTests(AioHTTPTestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls._orig = pack_assets.WEB_DIST
-        pack_assets.WEB_DIST = _DIST
+        cls._orig = monitor.WEB_DIST
+        monitor.WEB_DIST = _DIST
 
     @classmethod
     def tearDownClass(cls) -> None:
-        pack_assets.WEB_DIST = cls._orig
+        monitor.WEB_DIST = cls._orig
         super().tearDownClass()
 
     async def get_application(self):

@@ -73,12 +73,12 @@ def test_absolute_ttl_cap() -> None:
         "demo-pack",
         tok,
         session_id=SESSION,
-        frame_live=reg.is_live(SESSION, frame, now=t0 + pack_asset_frames.FRAME_ABSOLUTE_TTL_S - 1),
+        frame_live=reg.is_live(SESSION, frame, now=t0 + 86_400 - 1),
     )
     assert not pack_asset_tokens.verify_pack_asset_token(
         SECRET,
         "demo-pack",
         tok,
         session_id=SESSION,
-        frame_live=reg.is_live(SESSION, frame, now=t0 + pack_asset_frames.FRAME_ABSOLUTE_TTL_S + 1),
+        frame_live=reg.is_live(SESSION, frame, now=t0 + 86_400 + 1),
     )

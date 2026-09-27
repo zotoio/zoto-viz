@@ -7,7 +7,7 @@ from unittest.mock import patch
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from service import access, pack_assets, plugins
+from service import access, monitor, plugins
 from tests.pack_asset_test_util import SESSION, mint, pack_url
 from tests.pack_asset_test_util import make_test_app as make_pack_test_app
 
@@ -123,7 +123,7 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
             assets.mkdir()
             (assets / js_name).write_text(f'import "./{helper}";\nexport {{}};\n', encoding="utf-8")
             (assets / helper).write_text("// preload", encoding="utf-8")
-            with patch.object(pack_assets, "WEB_DIST", dist):
+            with patch.object(monitor, "WEB_DIST", dist):
                 html = await self.client.get(pack_url("_sandbox", "plugin-sandbox.html"), headers=NULL)
                 chunk = await self.client.get(pack_url("_sandbox", js_name), headers=NULL)
         assert html.status == 200
@@ -143,7 +143,7 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
             assets = dist / "assets"
             assets.mkdir()
             (assets / js_name).write_text("// smoke", encoding="utf-8")
-            with patch.object(pack_assets, "WEB_DIST", dist):
+            with patch.object(monitor, "WEB_DIST", dist):
                 resp = await self.client.get(
                     pack_url("_sandbox", js_name),
                     headers=NULL,

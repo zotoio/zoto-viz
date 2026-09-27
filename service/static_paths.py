@@ -4,7 +4,6 @@ from __future__ import annotations
 from urllib.parse import unquote
 
 _LEGACY_SANDBOX = "plugin-sandbox.html"
-_BLOCKED_STATIC = frozenset({_LEGACY_SANDBOX})
 
 
 def _decode_path(path: str) -> str:

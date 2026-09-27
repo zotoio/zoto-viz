@@ -18,7 +18,7 @@ def test_make_app_mints_pack_asset_urls_without_manual_secret() -> None:
     dist.joinpath("plugin-sandbox.html").write_text("<html></html>", encoding="utf-8")
 
     async def run() -> None:
-        async with make_app_server(web_dist=dist, listen_port=18431) as (ip, port, runner):
+        async with make_app_server(web_dist=dist, listen_port=0) as (ip, port, runner):
             secret = runner.app.get("pack_asset_secret")
             assert len(secret or b"") == 32
             async with ClientSession() as session:

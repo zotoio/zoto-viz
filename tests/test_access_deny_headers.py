@@ -9,7 +9,7 @@ from tests.monitor_app_test_util import host_header, make_app_server
 
 
 async def _csrf_denied_has_frame_headers() -> None:
-    async with make_app_server(listen_port=18430) as (ip, port, _runner):
+    async with make_app_server(listen_port=0) as (ip, port, _runner):
         async with ClientSession() as session:
             async with session.post(
                 f"http://{ip}:{port}/api/profiles",
