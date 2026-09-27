@@ -1,8 +1,8 @@
 {
   "runner": "vitest",
   "testFile": "src/core/http-notice.test.ts",
-  "testName": "server restart wall notice > status copy > shows exactly one status notice with the pinned literal",
-  "red": "AssertionError: expected [] to have a length of 1 but got +0",
+  "testName": "server restart wall notice > failed retry > replaces the restart notice with a Retry failure strip",
+  "red": "AssertionError: expected 'alert' to be 'status' // Object.is equality",
   "description": "ux-restart-notice-wall-status",
   "timeoutSec": 120
 }
