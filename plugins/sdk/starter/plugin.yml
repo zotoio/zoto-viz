@@ -22,7 +22,7 @@ viz:
 config:
   - key: displayName
     label: Display name
-    type: string
+    type: text
     default: Starter
 frontend:
   entry: frontend/index.ts

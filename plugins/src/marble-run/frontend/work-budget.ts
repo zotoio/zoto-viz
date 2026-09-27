@@ -1,4 +1,5 @@
 import type { ManifestWorkBudget } from "../../../sdk/manifest-work-budget";
+import { CONSERVATIVE_WORK_BUDGET } from "../../../sdk/host-init-context";
 
 /** Shape of visualisation.yml → workBudget (parsed for caps). */
 export type MarbleWorkBudget = ManifestWorkBudget;
@@ -41,17 +42,21 @@ const SHIPPED_WORK_BUDGET_SNIPPET = `workBudget:
 `;
 
 let hostBudget: MarbleWorkBudget | null = null;
+let conservativeUntilHostInit = false;
 
 export function applyPackWorkBudget(budget: MarbleWorkBudget): void {
   hostBudget = budget;
+  conservativeUntilHostInit = false;
 }
 
 export function resetPackWorkBudget(): void {
   hostBudget = null;
+  conservativeUntilHostInit = true;
 }
 
 export function marbleWorkBudget(): MarbleWorkBudget {
   if (hostBudget) return hostBudget;
+  if (conservativeUntilHostInit) return CONSERVATIVE_WORK_BUDGET;
   return parseMarbleWorkBudgetYaml(SHIPPED_WORK_BUDGET_SNIPPET);
 }
 

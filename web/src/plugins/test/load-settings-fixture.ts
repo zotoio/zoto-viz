@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import yaml from "yaml";
 import { toPluginView } from "../plugin-visualisation";
-import type { PluginView } from "../plugin";
 import type { PluginInstance } from "../instances";
+import type { PluginView } from "../plugin";
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -25,5 +25,4 @@ export const HEADLINES_PACK: PluginView = {
   config: [{ key: "gain", label: "gain", type: "number", min: 0, max: 10, default: 5 }],
   instances: [{ id: "alt", name: "Alt feed" }],
 };
-
 export const ALT_FEED_INSTANCE: PluginInstance = { id: "alt", name: "Alt feed" };
