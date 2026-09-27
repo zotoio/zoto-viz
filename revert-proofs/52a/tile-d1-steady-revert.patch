@@ -1,12 +1,14 @@
+diff --git a/web/src/ui/tile-hud-label.ts b/web/src/ui/tile-hud-label.ts
+index 851a9e5..3c92698 100644
 --- a/web/src/ui/tile-hud-label.ts
 +++ b/web/src/ui/tile-hud-label.ts
-@@ -45,9 +45,6 @@ export function createTileHudLabelLine(): TileHudLabelLine {
+@@ -38,9 +38,6 @@ export function createTileHudLabelLine(): TileHudLabelLine {
+         lastCadenceK = -1;
+         return null;
        }
-       const mates = activeTiles - 1;
-       const key = rateKey(skipsPerSec);
--      if (mates === lastMates && key === lastRateKey && cachedLabel !== null) {
+-      if (activeTiles === lastTileCount && cadenceK === lastCadenceK && cachedLabel !== null) {
 -        return cachedLabel;
 -      }
-       lastMates = mates;
-       lastRateKey = key;
+       lastTileCount = activeTiles;
+       lastCadenceK = cadenceK;
        stats.builds++;

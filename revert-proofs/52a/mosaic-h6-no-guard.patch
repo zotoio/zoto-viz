@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 95f8f4c..1c60f3e 100644
+index d5f5a34..f3624e2 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1720,23 +1720,9 @@ export class Settings {
+@@ -1739,33 +1739,8 @@ export class Settings {
        mosaicUniqueSkies: a.mosaicUniqueSkies,
        mosaicSkies: a.mosaicSkies,
      });
@@ -20,9 +20,20 @@ index 95f8f4c..1c60f3e 100644
 -      this.renderMosaicWallStatus();
 -      return;
 -    }
-     this.lastMosaicTileLimitMessage = "";
-     this.renderMosaicWallStatus();
+-    if (!this.mosaicBootRefusedTilesRaw) {
+-      this.lastMosaicTileLimitMessage = "";
+-    } else {
+-      try {
+-        const raw = JSON.parse(this.mosaicBootRefusedTilesRaw) as unknown;
+-        const n = Array.isArray(raw) ? raw.filter((t) => typeof t === "string" && t.trim()).length : 0;
+-        this.lastMosaicTileLimitMessage = mosaicWallLayoutBootRefusedMessage(n, VIZ_MAX_ACTIVE_TILES);
+-      } catch {
+-        this.lastMosaicTileLimitMessage = mosaicWallLayoutBootRefusedMessage(0, VIZ_MAX_ACTIVE_TILES);
+-      }
+-    }
+-    this.renderMosaicWallStatus();
 -    this.anim = anim;
++    this.lastMosaicTileLimitMessage = "";
 +    this.anim = candidate;
      this.syncAnimUi();
      this.syncTheme();
