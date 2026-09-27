@@ -1,7 +1,0 @@
-{
-  "description": "Revert memory golden slice (remove-memory-slice)",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/fixtures/host-idle-merge.test.ts",
-  "testName": "host idle fixture merge > pack memory fills empty live slice",
-  "red": "AssertionError: expected false to be true // Object.is equality"
-}
