@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/main-entry-wiring.test.ts",
-  "testName": "settings plugin edits route through plugin-fields-from-settings",
-  "description": "Settings plugin change handler must delegate to plugin-fields-from-settings.",
-  "redOutput": "AssertionError: expected \"syncPluginFieldsFromSettingsEdit\" to be called 1 times, but got 0 times"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/main-entry-wiring.test.ts",
-  "testName": "main wires mosaic pane pick through host-mosaic-pane-pick factory",
-  "description": "Main must assign onMosaicPanePick via createMosaicPanePickHandler.",
-  "redOutput": "AssertionError: expected \"createMosaicPanePickHandler\" to be called 1 times, but got 0 times"
-}

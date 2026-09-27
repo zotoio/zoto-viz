@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/main-entry-wiring.test.ts",
-  "testName": "bindThisView routes mode cog through host-view-bind",
-  "description": "Mode cog must route bindView through host-view-bind helper.",
-  "redOutput": "AssertionError: expected \"bindThisView\" to be called 1 times, but got 0 times"
-}
