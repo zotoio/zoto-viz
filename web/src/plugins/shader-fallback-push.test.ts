@@ -211,6 +211,40 @@ describe("shader fallback push contract", () => {
     pane.remove();
   });
 
+  it("pack-push-same-id", () => {
+    const mountA = document.createElement("div");
+    const mountB = document.createElement("div");
+    document.body.append(mountA, mountB);
+    const host = new RenderHost(mountA);
+    host.beginTilePack("a", "ka", "nixie-clock", mountA, "A");
+    host.beginTilePack("b", "kb", "nixie-clock", mountB, "B");
+    host.onTileShaderCompileFailed("a");
+    host.onTileShaderCompileFailed("b");
+    host.receiveFallbackPushForPack("nixie-clock", "01 05 00");
+    expect(mountA.querySelector(".tile-shader-fallback__text")?.textContent).toBe("01 05 00");
+    expect(mountB.querySelector(".tile-shader-fallback__text")?.textContent).toBe("01 05 00");
+    host.dispose();
+    mountA.remove();
+    mountB.remove();
+  });
+
+  it("failed-tile-survives-restore", () => {
+    const wall = document.createElement("div");
+    document.body.appendChild(wall);
+    const pane = document.createElement("div");
+    wall.appendChild(pane);
+    const host = new RenderHost(wall);
+    Object.defineProperty(host, "software", { value: false });
+    host.beginTilePack("t", "k", "nixie-clock", pane, "N");
+    host.onTileShaderCompileFailed("t");
+    const chip = pane.querySelector(".tile-shader-fallback-chip");
+    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    host.canvas.dispatchEvent(new Event("webglcontextrestored"));
+    expect(pane.querySelector(".tile-shader-fallback-chip")).toBe(chip);
+    host.dispose();
+    wall.remove();
+  });
+
   it("tunnel-write-on-change", () => {
     let pushes = 0;
     let last = "";

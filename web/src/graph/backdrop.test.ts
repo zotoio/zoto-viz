@@ -123,6 +123,13 @@ describe("plugin sky contract", () => {
     }
   });
 
+  it("plugin-sky-not-bound-outside-plugin-kind", () => {
+    const sky = new Backdrop();
+    sky.setKind("aurora");
+    expect(sky.setPluginShader({ id: "demo", source: OK_FRAG }, () => null)).toBeNull();
+    expect(sky.pluginSkyId()).toBeNull();
+  });
+
   it("swaps in a plugin program and falls back on compile failure", () => {
     const sky = new Backdrop();
     sky.setKind("space");

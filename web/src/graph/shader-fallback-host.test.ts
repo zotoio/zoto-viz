@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
 import { sanitizePackDisplayName } from "./sanitize-pack-name";
 import { TileShaderFallback } from "./tile-shader-fallback";
+import { RenderHost } from "./render-host";
 
 function injectStyles(): void {
   const css = readFileSync(resolve(import.meta.dirname, "../style.css"), "utf8");
@@ -74,5 +75,30 @@ describe("tile shader fallback host", () => {
     expect(genericShaderFallbackMessage(raw)).toBe(
       `‹${clean}› can't run its graphics on this device. Other tiles aren't affected.`,
     );
+  });
+
+  it("sanitize-segments", () => {
+    expect(sanitizePackDisplayName("../evil/Nixie Clock")).toBe("Nixie Clock");
+  });
+
+  it("notice-css", () => {
+    const wall = document.createElement("div");
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    const notice = wall.querySelector(".gfx-wall-notice") as HTMLElement;
+    expect(getComputedStyle(notice).position).toBe("absolute");
+    host.dispose();
+    wall.remove();
+  });
+
+  it("fallback-text-css", () => {
+    const mount = document.createElement("div");
+    document.body.appendChild(mount);
+    const fb = new TileShaderFallback(mount, { packName: "P", packPush: false });
+    const text = mount.querySelector(".tile-shader-fallback__text") as HTMLElement;
+    expect(getComputedStyle(text).maxWidth).toBe("364px");
+    fb.dispose();
+    mount.remove();
   });
 });

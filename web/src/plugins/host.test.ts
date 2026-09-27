@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
 
 describe("hash consent and TypeScript allow", () => {
@@ -36,9 +36,36 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("writeUniform", ["viz.write"])).toBe(true);
     expect(hostAllows("writeParticles", ["viz.write"])).toBe(true);
   });
+
+  it("host capability", () => {
+    expect(hostAllows("fallbackText", ["viz.read"])).toBe(true);
+    expect(hostAllows("fallbackText", ["graph.read"])).toBe(false);
+  });
 });
 
 describe("PluginSandbox", () => {
+  afterEach(() => {
+    document.querySelectorAll("iframe").forEach((f) => f.remove());
+  });
+
+  it("sandbox-routes-fallback", async () => {
+    const box = new PluginSandbox();
+    const fallbackText = vi.fn();
+    box.handlers = { fallbackText };
+    await box.load("t", "globalThis.ok = true;", ["viz.read"], {});
+    const iframe = document.querySelector("iframe")!;
+    const win = iframe.contentWindow!;
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { source: "zoto-viz-plugin", type: "fallbackText", payload: { text: "x" } },
+        source: win,
+      }),
+    );
+    expect(fallbackText).toHaveBeenCalledTimes(1);
+    expect(fallbackText).toHaveBeenCalledWith("x");
+    box.unload();
+  });
+
   it("loads srcdoc, ticks, and unloads", async () => {
     const box = new PluginSandbox();
     const styles: Record<string, unknown>[] = [];
