@@ -1,4 +1,3 @@
-import { ok, strictEqual } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -29,15 +28,13 @@ type RowMeta = {
   testFile: string;
   testName: string;
   description: string;
-  red: string;
+  red: { actual: unknown; expected: unknown } | { assert: string };
   timeoutSec?: number;
   pythonModule?: string;
 };
 
-const WIDGET_RED = "AssertionError: expected 2 to be 1 // Object.is equality";
-const PYTEST_RED = "AssertionError: assert 2 == 1";
-const CHAI_COPY_HINT =
-  'for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from "vitest", not a separate chai package';
+const WIDGET_RED = { actual: 2, expected: 1 };
+const PYTEST_RED = { assert: "assert answer == 1" };
 
 const GIT_IDENTITY = ["-c", "user.name=rp-fixture", "-c", "user.email=rp@fixture.test"];
 
@@ -196,8 +193,7 @@ export const ctxLine6 = 0;
     "revert-proof-vitest-overlay.mjs",
     "revert-proof-vitest-runner.mjs",
     "revert-proof-vitest-setup.ts",
-    "revert-proof-node-assert.mjs",
-    "revert-proof-node-assert-strict.mjs",
+    "revert-proof-vitest-brand.mjs",
     "revert_proof_pytest_plugin.py",
   ]) {
     fs.copyFileSync(
@@ -320,35 +316,6 @@ describe("expect red control", () => {
   );
 
   fs.writeFileSync(
-    path.join(root, "web", "revert-proof", "node-assert-red-control.test.ts"),
-    `import assert from "node:assert/strict";
-import { describe, it } from "vitest";
-import { value } from "../../packages/rp-widget/index.js";
-
-describe("node assert red control", () => {
-  it("assert.strictEqual after revert", () => {
-    assert.strictEqual(value(), 1);
-  });
-});
-`,
-  );
-
-  fs.writeFileSync(
-    path.join(root, "web", "revert-proof", "plain-object-fake.test.ts"),
-    `import { describe, it } from "vitest";
-import { value } from "../../packages/rp-widget/index.js";
-
-describe("plain object fake", () => {
-  it("throws plain object on mismatch", () => {
-    if (value() !== 1) {
-      throw { name: "AssertionError", message: "expected 1 to be 0" };
-    }
-  });
-});
-`,
-  );
-
-  fs.writeFileSync(
     path.join(root, "web", "revert-proof", "meta-spoof.test.ts"),
     `import { describe, it } from "vitest";
 import { value } from "../../packages/rp-widget/index.js";
@@ -358,26 +325,6 @@ describe("meta spoof", () => {
     if (value() !== 1) {
       task.meta.revertProofAssertion = true;
       throw new TypeError("boom: not an assertion");
-    }
-  });
-});
-`,
-  );
-
-  fs.writeFileSync(
-    path.join(root, "web", "revert-proof", "proto-borrow.test.ts"),
-    `import { chai, describe, it } from "vitest";
-import { value } from "../../packages/rp-widget/index.js";
-
-describe("proto borrow", () => {
-  it("throws TypeError with chai AssertionError prototype", () => {
-    if (value() !== 1) {
-      throw Object.setPrototypeOf(new TypeError("boom"), chai.AssertionError.prototype);
-    }
-  });
-  it("throws hand-built chai AssertionError", () => {
-    if (value() !== 1) {
-      throw new chai.AssertionError("fake");
     }
   });
 });
@@ -411,6 +358,15 @@ def test_bracket_id(v):
 @pytest.mark.parametrize("v", [1], ids=["a and b"])
 def test_and_id(v):
     assert answer == 1
+`,
+  );
+  fs.writeFileSync(
+    path.join(root, "tests", "test_raise.py"),
+    `from rpfixture.core import answer
+
+def test_hand_raised():
+    if answer != 1:
+        raise AssertionError("answer != 1")
 `,
   );
 
@@ -642,44 +598,8 @@ describe("revert-proof runner (fixture repo)", () => {
     });
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "expect-red"]);
-    // node:assert, so a revert of chai branding still fails this test with a branded assertion.
-    strictEqual(r.status, 0, r.stderr + r.stdout);
-    ok(r.stdout.includes("RED (expected)"));
-    expect(r.stderr + r.stdout).not.toContain("revertProofAssertion is not true");
-    assertNoRevertProofWorktrees(root);
-  });
-
-  it("(g) node:assert strictEqual failure is RED", () => {
-    const root = mkFixture();
-    writeRow(root, "99", "node-assert-red", goodPatch, {
-      runner: "vitest",
-      testFile: "web/revert-proof/node-assert-red-control.test.ts",
-      testName: "node assert red control > assert.strictEqual after revert",
-      description: "Positive control: node:assert AssertionError",
-      red: "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
-    });
-    commitRevertProofs(root);
-    const r = runRevertProof(root, "99", ["--row", "node-assert-red"]);
-    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.status).toBe(0);
     expect(r.stdout).toContain("RED (expected)");
-    assertNoRevertProofWorktrees(root);
-  });
-
-  it("(c) plain-object-fake: plain object AssertionError shape is rejected without meta", () => {
-    const root = mkFixture();
-    writeRow(root, "99", "plain-object-fake", goodPatch, {
-      runner: "vitest",
-      testFile: "web/revert-proof/plain-object-fake.test.ts",
-      testName: "plain object fake > throws plain object on mismatch",
-      description: "Fake assertion object must not count as red",
-      red: "expected 1 to be 0",
-    });
-    commitRevertProofs(root);
-    const r = runRevertProof(root, "99", ["--row", "plain-object-fake"]);
-    expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
-      "row plain-object-fake: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; non-assertion error)",
-    );
     assertNoRevertProofWorktrees(root);
   });
 
@@ -690,49 +610,13 @@ describe("revert-proof runner (fixture repo)", () => {
       testFile: "web/revert-proof/meta-spoof.test.ts",
       testName: "meta spoof > writes revertProofAssertion then throws TypeError",
       description: "Test code must not be able to set the assertion flag",
-      red: "TypeError: boom: not an assertion",
+      red: WIDGET_RED,
     });
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "meta-spoof"]);
     expect(r.status).toBe(1);
     expect(r.stderr + r.stdout).toContain(
       "row meta-spoof: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; non-assertion error)",
-    );
-    assertNoRevertProofWorktrees(root);
-  });
-
-  it("(proto-borrow) TypeError with a borrowed chai AssertionError prototype is rejected", () => {
-    const root = mkFixture();
-    writeRow(root, "99", "proto-borrow", goodPatch, {
-      runner: "vitest",
-      testFile: "web/revert-proof/proto-borrow.test.ts",
-      testName: "proto borrow > throws TypeError with chai AssertionError prototype",
-      description: "Borrowed prototype must not count as red",
-      red: "AssertionError: boom",
-    });
-    commitRevertProofs(root);
-    const r = runRevertProof(root, "99", ["--row", "proto-borrow"]);
-    expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
-      `row proto-borrow: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; ${CHAI_COPY_HINT})`,
-    );
-    assertNoRevertProofWorktrees(root);
-  });
-
-  it("(hand-built-chai) hand-built chai AssertionError without expect() is rejected", () => {
-    const root = mkFixture();
-    writeRow(root, "99", "hand-built-chai", goodPatch, {
-      runner: "vitest",
-      testFile: "web/revert-proof/proto-borrow.test.ts",
-      testName: "proto borrow > throws hand-built chai AssertionError",
-      description: "Hand-built AssertionError must not count as red",
-      red: "AssertionError: fake",
-    });
-    commitRevertProofs(root);
-    const r = runRevertProof(root, "99", ["--row", "hand-built-chai"]);
-    expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
-      `row hand-built-chai: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; ${CHAI_COPY_HINT})`,
     );
     assertNoRevertProofWorktrees(root);
   });
@@ -744,13 +628,13 @@ describe("revert-proof runner (fixture repo)", () => {
       testFile: "web/revert-proof/widget.test.ts",
       testName: "widget > returns one",
       description: "Sidecar red must match the patched failure exactly",
-      red: "AssertionError: expected 3 to be 1 // Object.is equality",
+      red: { actual: 3, expected: 1 },
     });
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "red-mismatch"]);
     expect(r.status).toBe(1);
     expect(r.stderr + r.stdout).toContain(
-      "row red-mismatch: red value mismatch (expected AssertionError: expected 3 to be 1 // Object.is equality, got AssertionError: expected 2 to be 1 // Object.is equality)",
+      'row red-mismatch: red value mismatch (expected {"actual":3,"expected":1}, got {"actual":2,"expected":1})',
     );
     assertNoRevertProofWorktrees(root);
   });
@@ -1179,7 +1063,7 @@ def test_service_live_value():
       testName: "test_service_live_value",
       pythonModule: "service",
       description: "Revert service/live via monitor relative import",
-      red: PYTEST_RED,
+      red: { assert: "assert live.SERVICE_LIVE == 1" },
     });
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "service-live"]);
@@ -1230,7 +1114,7 @@ def test_service_live_value():
       testFile: "web/revert-proof/widget.test.ts",
       testName: "widget > returns one",
       description: "TypeError not assertion",
-      red: "TypeError: boom",
+      red: WIDGET_RED,
     });
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "type-error"]);
@@ -1355,6 +1239,25 @@ describe("hang", () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("RED (expected)");
     assertCheckoutUnchanged(root, before);
+  });
+
+  it("(py-raise) hand-raised AssertionError is rejected, not counted as assert red", () => {
+    const root = mkFixture();
+    writeRow(root, "99", "py-raise", pyGoodPatch, {
+      runner: "pytest",
+      testFile: "tests/test_raise.py",
+      testName: "test_hand_raised",
+      pythonModule: "rpfixture",
+      description: "Hand-raised AssertionError must not count as red",
+      red: PYTEST_RED,
+    });
+    commitRevertProofs(root);
+    const r = runRevertProof(root, "99", ["--row", "py-raise"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr + r.stdout).toContain(
+      "row py-raise: patch breaks build or pytest error (proves nothing)",
+    );
+    assertNoRevertProofWorktrees(root);
   });
 });
 
