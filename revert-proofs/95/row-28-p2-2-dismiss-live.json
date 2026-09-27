@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-28-p2-2-dismiss-live)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "red": "AssertionError: expected true to be false // Object.is equality",
+  "testName": "wall notice region > live turns false immediately on dismiss"
+}

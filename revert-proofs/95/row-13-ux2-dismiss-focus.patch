@@ -1,12 +1,12 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 5d57880..e5da033 100644
+index 8ee2a46..ec985f3 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -89,7 +89,6 @@ function writeRowContent(e: Entry): void {
- function removeLiveNotice(e: Entry): void {
-   clearNoticeTimer(e);
-   if (e.node) {
--    if (mountRoot && e.node.contains(document.activeElement)) mountRoot.focus();
-     e.node.remove();
-     e.node = null;
-   }
+@@ -72,7 +72,6 @@ function syncNoticeTimer(e: Entry, restart: boolean): void {
+   e.timer = setTimeout(() => dismissEntry(e), ms);
+ }
+ function detachRow(node: Element): void {
+-  if (mountRoot && node.contains(document.activeElement)) mountRoot.focus();
+   node.remove();
+ }
+ function writeRowContent(e: Entry): void {

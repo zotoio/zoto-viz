@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 8ee2a46..83bbe27 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -184,7 +184,7 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+   }
+   const queued = queue.get(key);
+   if (queued) {
+-    Object.assign(queued, { text, action, autoClearMs });
++    Object.assign(queued, { action, autoClearMs });
+     return queued.handle;
+   }
+   const e = { key, text, action, autoClearMs, node: null, timer: null, isError: isErrorKey(key), cleared: false } as Entry;

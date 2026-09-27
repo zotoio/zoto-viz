@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 5d57880..9bb8bbd 100644
+index 8ee2a46..6fcc9c8 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -117,8 +117,9 @@ function evictOldestNonError(): boolean {
+@@ -127,8 +127,9 @@ function evictOldestNonError(): boolean {
    return false;
  }
  function dismissEntry(e: Entry): void {

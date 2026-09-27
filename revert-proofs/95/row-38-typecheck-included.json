@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-38-typecheck-included)",
+  "runner": "command",
+  "command": "sh -c 'pnpm exec tsc --noEmit --listFilesOnly | grep -Fq typecheck/wall-notice-region.typecheck.ts'",
+  "cwd": "web",
+  "red": "COMMAND_EXIT_1"
+}

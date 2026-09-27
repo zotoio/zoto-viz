@@ -1,12 +1,13 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 8ee2a46..5228779 100644
+index 8ee2a46..672f339 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -90,6 +90,7 @@ function writeRowContent(e: Entry): void {
-       const btn = document.createElement("button");
-       btn.type = "button";
-       btn.className = "wall-notice-action btn small";
-+      btn.tabIndex = -1;
+@@ -93,7 +93,7 @@ function writeRowContent(e: Entry): void {
        btn.textContent = e.action.label;
        btn.addEventListener("click", (ev) => { ev.stopPropagation(); e.action?.onClick(); });
        node.append(btn);
+-    } else if (existingBtn.textContent !== e.action.label) existingBtn.textContent = e.action.label;
++    }
+   } else if (existingBtn) detachRow(existingBtn);
+ }
+ function removeLiveNotice(e: Entry): void {

@@ -1,13 +1,12 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 5d57880..a156319 100644
+index 8ee2a46..6a002a4 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -182,7 +182,7 @@ export function postWallNotice(args: WallNoticeArgs): { dismiss: () => void } {
-     return { dismiss: () => dismissEntry(queued) };
+@@ -189,6 +189,6 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
    }
-   const e: Entry = { key, text, action, autoClearMs, node: null, timer: null, isError: isErrorKey(key) };
--  if (visible.length >= MAX_VISIBLE && !evictOldestNonError()) {
-+  if (visible.length >= MAX_VISIBLE && true) {
-     queue.set(key, e);
-     syncQueueCount();
-   } else insertVisible(e);
+   const e = { key, text, action, autoClearMs, node: null, timer: null, isError: isErrorKey(key), cleared: false } as Entry;
+   e.handle = { dismiss: () => dismissEntry(e), get live() { return !e.cleared; } };
+-  if (visible.length >= MAX_VISIBLE && !evictOldestNonError()) { queue.set(key, e); syncQueueCount(); } else insertVisible(e);
++  if (visible.length >= MAX_VISIBLE) { queue.set(key, e); syncQueueCount(); } else insertVisible(e);
+   return e.handle;
+ }

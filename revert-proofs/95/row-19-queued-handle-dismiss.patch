@@ -1,15 +1,13 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 5d57880..ac49a8c 100644
+index 8ee2a46..da4103a 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -127,10 +127,6 @@ function dismissEntry(e: Entry): void {
-     }
-     return;
+@@ -139,7 +139,7 @@ function dismissEntry(e: Entry): void {
    }
--  if (queue.get(e.key) === e) {
+   if (queue.get(e.key) === e) {
+     e.cleared = true;
 -    queue.delete(e.key);
--    syncQueueCount();
--  }
++    queue.clear();
+     syncQueueCount();
+   }
  }
- /** Status notices stack above error notices. Within each group, the newest is at the bottom. */
- export function mountWallNoticeRegion(root: HTMLElement): void {

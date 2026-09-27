@@ -27,6 +27,7 @@ type NoticeAction = { label: string; onClick: () => void };
 export type WallNoticeArgs =
   | { key: StatusKey; text: string; action?: undefined; autoClearMs?: number }
   | { key: NoticeKey; text: string; action?: NoticeAction; autoClearMs?: undefined };
+export type WallNoticeHandle = { dismiss(): void; readonly live: boolean };
 const MAX_VISIBLE = 3;
 type Entry = {
   key: NoticeKey;
@@ -35,9 +36,11 @@ type Entry = {
   autoClearMs?: number;
   node: HTMLElement | null;
   timer: ReturnType<typeof setTimeout> | null;
+  armedMs?: number;
   isError: boolean;
+  cleared: boolean;
+  handle: WallNoticeHandle;
 };
-let deferRegionUntilPost = false;
 let regionNode: HTMLElement | null = null;
 let mountRoot: HTMLElement | null = null;
 let statusContainer: HTMLElement | null = null;
@@ -60,10 +63,17 @@ function clearNoticeTimer(e: Entry): void {
     e.timer = null;
   }
 }
-function armNoticeTimer(e: Entry): void {
+function syncNoticeTimer(e: Entry, restart: boolean): void {
+  const ms = e.autoClearMs && e.autoClearMs > 0 && !e.isError && !e.action ? e.autoClearMs : undefined;
+  if (ms != null && e.timer != null && ms === e.armedMs && !restart) return;
   clearNoticeTimer(e);
-  if (e.autoClearMs == null || e.autoClearMs <= 0 || e.isError || e.action) return;
-  e.timer = setTimeout(() => dismissEntry(e), e.autoClearMs);
+  if (ms == null) return;
+  e.armedMs = ms;
+  e.timer = setTimeout(() => dismissEntry(e), ms);
+}
+function detachRow(node: Element): void {
+  if (mountRoot && node.contains(document.activeElement)) mountRoot.focus();
+  node.remove();
 }
 function writeRowContent(e: Entry): void {
   const node = e.node!;
@@ -84,13 +94,13 @@ function writeRowContent(e: Entry): void {
       btn.addEventListener("click", (ev) => { ev.stopPropagation(); e.action?.onClick(); });
       node.append(btn);
     } else if (existingBtn.textContent !== e.action.label) existingBtn.textContent = e.action.label;
-  } else existingBtn?.remove();
+  } else if (existingBtn) detachRow(existingBtn);
 }
 function removeLiveNotice(e: Entry): void {
+  e.cleared = true;
   clearNoticeTimer(e);
   if (e.node) {
-    if (mountRoot && e.node.contains(document.activeElement)) mountRoot.focus();
-    e.node.remove();
+    detachRow(e.node);
     e.node = null;
   }
   const idx = visible.indexOf(e);
@@ -105,7 +115,7 @@ function insertVisible(e: Entry): void {
   pickContainer(e.key).appendChild(e.node);
   visible.push(e);
   keyToLive.set(e.key, e);
-  armNoticeTimer(e);
+  syncNoticeTimer(e, true);
 }
 function evictOldestNonError(): boolean {
   for (const e of visible) {
@@ -128,18 +138,18 @@ function dismissEntry(e: Entry): void {
     return;
   }
   if (queue.get(e.key) === e) {
+    e.cleared = true;
     queue.delete(e.key);
     syncQueueCount();
   }
 }
 /** Status notices stack above error notices. Within each group, the newest is at the bottom. */
 export function mountWallNoticeRegion(root: HTMLElement): void {
-  if (deferRegionUntilPost) return;
   if (regionNode?.isConnected) return;
   mountRoot = root;
   if (!root.hasAttribute("tabindex")) root.tabIndex = -1;
   if (regionNode && !regionNode.isConnected) {
-    for (const e of [...visible]) removeLiveNotice(e);
+    for (const e of [...visible, ...queue.values()]) removeLiveNotice(e);
     queue.clear();
     syncQueueCount();
     statusContainer!.replaceChildren();
@@ -159,12 +169,8 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
   regionNode.append(statusContainer, alertContainer);
   root.appendChild(regionNode);
 }
-export function postWallNotice(args: WallNoticeArgs): { dismiss: () => void } {
-  deferRegionUntilPost = false;
-  if (!regionNode) {
-    const root = mountRoot ?? document.getElementById("wall") ?? document.body;
-    mountWallNoticeRegion(root);
-  }
+export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+  if (!regionNode) throw new Error("wall notice region not mounted");
   const { key, text, action, autoClearMs } = args;
   const live = keyToLive.get(key);
   if (live) {
@@ -173,18 +179,16 @@ export function postWallNotice(args: WallNoticeArgs): { dismiss: () => void } {
     live.action = action;
     live.autoClearMs = autoClearMs;
     writeRowContent(live);
-    if (textChanged) armNoticeTimer(live);
-    return { dismiss: () => dismissEntry(live) };
+    syncNoticeTimer(live, textChanged);
+    return live.handle;
   }
   const queued = queue.get(key);
   if (queued) {
     Object.assign(queued, { text, action, autoClearMs });
-    return { dismiss: () => dismissEntry(queued) };
+    return queued.handle;
   }
-  const e: Entry = { key, text, action, autoClearMs, node: null, timer: null, isError: isErrorKey(key) };
-  if (visible.length >= MAX_VISIBLE && !evictOldestNonError()) {
-    queue.set(key, e);
-    syncQueueCount();
-  } else insertVisible(e);
-  return { dismiss: () => dismissEntry(e) };
+  const e = { key, text, action, autoClearMs, node: null, timer: null, isError: isErrorKey(key), cleared: false } as Entry;
+  e.handle = { dismiss: () => dismissEntry(e), get live() { return !e.cleared; } };
+  if (visible.length >= MAX_VISIBLE && !evictOldestNonError()) { queue.set(key, e); syncQueueCount(); } else insertVisible(e);
+  return e.handle;
 }

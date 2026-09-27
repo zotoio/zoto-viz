@@ -1,15 +1,13 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 8ee2a46..8ce8d0e 100644
+index 8ee2a46..610bbfe 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -180,6 +180,10 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+@@ -180,7 +180,7 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
      live.autoClearMs = autoClearMs;
      writeRowContent(live);
      syncNoticeTimer(live, textChanged);
-+    if (visible.length >= MAX_VISIBLE && visible.every((x) => x.isError) && isErrorKey(key)) {
-+      queue.set(key, live);
-+      syncQueueCount();
-+    }
-     return live.handle;
+-    return live.handle;
++    return { dismiss: () => dismissEntry(live), get live() { return !live.cleared; } };
    }
    const queued = queue.get(key);
+   if (queued) {

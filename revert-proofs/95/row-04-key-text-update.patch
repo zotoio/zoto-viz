@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 5d57880..a4c7e1f 100644
+index 8ee2a46..a4e258a 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -73,7 +73,7 @@ function writeRowContent(e: Entry): void {
+@@ -83,7 +83,7 @@ function writeRowContent(e: Entry): void {
      span.className = "wall-notice-text";
      node.prepend(span);
    }

@@ -1,10 +1,10 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 5d57880..4a11151 100644
+index 8ee2a46..148634d 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -166,16 +166,6 @@ export function postWallNotice(args: WallNoticeArgs): { dismiss: () => void } {
-     mountWallNoticeRegion(root);
-   }
+@@ -172,16 +172,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+   if (!regionNode) throw new Error("wall notice region not mounted");
    const { key, text, action, autoClearMs } = args;
 -  const live = keyToLive.get(key);
 -  if (live) {
@@ -13,8 +13,8 @@ index 5d57880..4a11151 100644
 -    live.action = action;
 -    live.autoClearMs = autoClearMs;
 -    writeRowContent(live);
--    if (textChanged) armNoticeTimer(live);
--    return { dismiss: () => dismissEntry(live) };
+-    syncNoticeTimer(live, textChanged);
+-    return live.handle;
 -  }
    const queued = queue.get(key);
    if (queued) {

@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 5d57880..5e45e1f 100644
+index 8ee2a46..c451850 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -119,6 +119,14 @@ function evictOldestNonError(): boolean {
+@@ -129,6 +129,14 @@ function evictOldestNonError(): boolean {
  function dismissEntry(e: Entry): void {
    if (keyToLive.get(e.key) === e) {
      removeLiveNotice(e);

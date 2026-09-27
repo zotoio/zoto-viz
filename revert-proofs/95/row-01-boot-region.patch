@@ -1,13 +1,29 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 5d57880..63694a3 100644
+index 8ee2a46..55dbbb0 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -37,7 +37,7 @@ type Entry = {
-   timer: ReturnType<typeof setTimeout> | null;
-   isError: boolean;
+@@ -41,6 +41,7 @@ type Entry = {
+   cleared: boolean;
+   handle: WallNoticeHandle;
  };
--let deferRegionUntilPost = false;
-+let deferRegionUntilPost = true;
++let lazyArmed = false;
  let regionNode: HTMLElement | null = null;
  let mountRoot: HTMLElement | null = null;
  let statusContainer: HTMLElement | null = null;
+@@ -145,6 +146,7 @@ function dismissEntry(e: Entry): void {
+ }
+ /** Status notices stack above error notices. Within each group, the newest is at the bottom. */
+ export function mountWallNoticeRegion(root: HTMLElement): void {
++  if (!lazyArmed) { lazyArmed = true; mountRoot = root; return; }
+   if (regionNode?.isConnected) return;
+   mountRoot = root;
+   if (!root.hasAttribute("tabindex")) root.tabIndex = -1;
+@@ -170,7 +172,7 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+   root.appendChild(regionNode);
+ }
+ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+-  if (!regionNode) throw new Error("wall notice region not mounted");
++  if (!regionNode) mountWallNoticeRegion(mountRoot!);
+   const { key, text, action, autoClearMs } = args;
+   const live = keyToLive.get(key);
+   if (live) {

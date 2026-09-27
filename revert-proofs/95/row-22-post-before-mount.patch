@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 8ee2a46..a825fdd 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -170,7 +170,7 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+   root.appendChild(regionNode);
+ }
+ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+-  if (!regionNode) throw new Error("wall notice region not mounted");
++  if (!regionNode) mountWallNoticeRegion(mountRoot ?? document.getElementById("wall") ?? document.body);
+   const { key, text, action, autoClearMs } = args;
+   const live = keyToLive.get(key);
+   if (live) {
