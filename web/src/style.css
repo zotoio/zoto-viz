@@ -392,6 +392,35 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
   font: 600 11px/20px inherit; letter-spacing: 0.02em; cursor: pointer;
 }
 .mosaic-pane.focus .mosaic-cap, .mosaic-pane.focus .mosaic-pick { border-color: var(--accent); color: var(--accent); }
+.mosaic-pane-notice {
+  position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; padding: 16px;
+  text-align: center; font-size: 13px; line-height: 1.35; color: var(--fg);
+  background: color-mix(in srgb, var(--scene-bg, var(--bg)) 88%, transparent);
+  pointer-events: none;
+}
+.mosaic-pane-notice-fail {
+  color: #ef5350;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--scene-bg, var(--bg)) 82%, #ef5350 18%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ef5350 55%, transparent);
+}
+.mosaic-pane-notice-reconnecting {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--scene-bg, var(--bg)) 72%, transparent);
+}
+.mosaic-pane-reconnecting .mosaic-scene {
+  opacity: 0.55;
+  filter: saturate(0.85);
+}
+.mosaic-wall-notice {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 18%, var(--overlay));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+}
 .mosaic-tools { margin-left: auto; display: flex; gap: 4px; cursor: default; }
 .mosaic-tool {
   height: 22px; padding: 0 7px; margin: 0;
@@ -1526,6 +1555,12 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
   transition: color 120ms linear;
 }
 .viz-hud-skip.pulse { color: var(--warn); }
+.viz-hud-frame {
+  color: var(--label-muted, var(--muted));
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .viz-hud-swap {
   display: flex;
   gap: 4px;
@@ -1540,7 +1575,7 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
 }
 .viz-hud-swap .field-btn .cap { display: none; }
 .viz-hud-swap .field-btn .val { font-size: 10px; }
-body.mosaic .viz-hud { display: none; }
+body.mosaic .viz-hud-swap { display: none; }
 body.arcade .viz-hud { display: none; }
 
 /* ------------------------------------------------------------------ debug panel (header toggle / key B) */
