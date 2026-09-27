@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import * as hostMeshLane from "./host-mesh-lane";
-import { disposeHostMeshObject3D, HostMeshLane } from "./host-mesh-lane";
+import { disposeHostMeshObject3D, HostMeshLane, normalizeSwimClipStart } from "./host-mesh-lane";
 
 const N_LOADED_MESHES = 3;
 const M_LIVE_MIXERS = 2;
@@ -66,6 +66,17 @@ describe("host mesh lane", () => {
     const frame = parseHostMeshInstances("cube", data);
     expect(frame?.assetId).toBe("cube");
     expect(frame?.matrices.length).toBe(16);
+  });
+
+  it("normalizeSwimClipStart shifts swim tracks to t=0 without changing duration", () => {
+    const leadIn = 1 / 24;
+    const track = new THREE.NumberKeyframeTrack(".bones[0].position[x]", [leadIn, leadIn + 1.2], [0, 0.5]);
+    const clip = new THREE.AnimationClip("swim", leadIn + 1.2, [track]);
+    const beforeDuration = clip.duration;
+    const norm = normalizeSwimClipStart(clip)!;
+    expect(norm.duration).toBe(beforeDuration);
+    expect(norm.tracks[0]!.times[0]).toBe(0);
+    expect(norm.tracks[0]!.times[1]).toBeCloseTo(1.2, 6);
   });
 
   it("disposeHostMeshObject3D disposes mesh geometry and material", () => {

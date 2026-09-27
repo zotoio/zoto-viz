@@ -1,0 +1,8 @@
+{
+  "description": "Revert swim clip time shift in normalizeSwimClipStart",
+  "runner": "vitest",
+  "testFile": "web/src/graph/host-mesh-lane.test.ts",
+  "testName": "host mesh lane > normalizeSwimClipStart shifts swim tracks to t=0 without changing duration",
+  "red": "AssertionError: expected 0.0416666679084301 to be +0 // Object.is equality",
+  "project": "web"
+}

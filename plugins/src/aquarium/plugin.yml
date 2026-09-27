@@ -54,6 +54,16 @@ assets:
     sha256: 58723a4172f5791b28eb4a9c104edd081472fb87f3a59af52cd1f76aa3c63c22
     bytes: 85140
     triangles: 3740
+  - id: fish-cory
+    path: assets/fish-cory.glb
+    sha256: 0216b95bf57c62e72e57678c3fd135f7db6b7e632c34cfbae9f0404f8bcf3502
+    bytes: 135748
+    triangles: 4432
+  - id: fish-cichlid
+    path: assets/fish-cichlid.glb
+    sha256: 39e06328def10361df8dae6994277fa357ff11a3c4abf5872ed353031d32d5d2
+    bytes: 106856
+    triangles: 4264
 viz:
   graphWalk: false
   idle:

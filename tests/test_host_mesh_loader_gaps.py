@@ -99,6 +99,15 @@ def test_host_mesh_lane_multi_node_rigid_clone() -> None:
     assert "wheel_front_left" in text or "getObjectByName" in text
 
 
+def test_host_mesh_lane_swim_clip_start_normalization() -> None:
+    text = LANE.read_text(encoding="utf-8")
+    assert "normalizeSwimClipStart" in text
+    test_ts = ROOT / "web" / "src" / "graph" / "host-mesh-lane.test.ts"
+    assert "normalizeSwimClipStart shifts swim tracks to t=0 without changing duration" in test_ts.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_host_mesh_lane_skinned_swim_mixer() -> None:
     text = LANE.read_text(encoding="utf-8")
     assert "AnimationMixer" in text
@@ -112,3 +121,9 @@ def test_realism_packs_ship_glb_assets() -> None:
         assert "assets:" in yml
         assert "path: assets/" in yml
         assert (ROOT / "plugins" / "src" / pid / "assets").is_dir()
+    if pid == "aquarium":
+        aqu_yml = yml
+        assert "fish-cory" in aqu_yml
+        assert "fish-cichlid" in aqu_yml
+        assert (ROOT / "plugins" / "src" / "aquarium" / "assets" / "fish-cory.glb").is_file()
+        assert (ROOT / "plugins" / "src" / "aquarium" / "assets" / "fish-cichlid.glb").is_file()

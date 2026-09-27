@@ -1,0 +1,15 @@
+# Delta: append to the END of plugins/src/aquarium/plugin.yml `assets:` (after the 8 entries wired in PR #130)
+# so existing asset indices stay stable: fish-cory = 8, fish-cichlid = 9.
+# Then in frontend/host-mesh-drive.ts append the ids to AQU_HOST_MESH_ASSETS and use SPECIES_TO_ASSET = [7, 2, 6, 8, 5, 9]
+# (species neon, angel, guppy, cory, discus, cichlid).
+assets:
+  - id: fish-cory
+    path: assets/fish-cory.glb
+    sha256: 0216b95bf57c62e72e57678c3fd135f7db6b7e632c34cfbae9f0404f8bcf3502
+    bytes: 135748
+    triangles: 4432
+  - id: fish-cichlid
+    path: assets/fish-cichlid.glb
+    sha256: 39e06328def10361df8dae6994277fa357ff11a3c4abf5872ed353031d32d5d2
+    bytes: 106856
+    triangles: 4264

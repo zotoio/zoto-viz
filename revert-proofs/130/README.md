@@ -10,7 +10,8 @@ Realism three packs + host mesh lane teardown, pack-asset stale cookie, GLB URL 
 | `host-mesh-clear-no-template-map-clear` | Second `clear()` is idempotent (`templates.clear()`) |
 | `pack-asset-stale-cookie-fallback` | `pack_asset_session_ids` accepts live process CSRF without header |
 | `host-mesh-strip-assets-prefix` | `assetUrl` strips `assets/` for monitor API paths |
+| `host-mesh-swim-clip-normalize` | `normalizeSwimClipStart` shifts swim track keys to t=0 (koi + fish GLBs) |
 
-Performance Pedant counts: `N_LOADED_MESHES=3`, `M_LIVE_MIXERS=2` in `host-mesh-lane.test.ts`.
+Performance Pedant counts: `N_LOADED_MESHES=3`, `M_LIVE_MIXERS=2` in `host-mesh-lane.test.ts`. Aquarium append: `fish-cory` (8), `fish-cichlid` (9), `AQU_SPECIES_TO_ASSET = [7, 2, 6, 8, 5, 9]`, cory +9 mm Y.
 
 Run all rows: `node scripts/revert-proof.mjs 130`

@@ -15,13 +15,19 @@ export const AQU_HOST_MESH_ASSETS = [
   "fish-discus",
   "fish-guppy",
   "fish-neon-tetra",
+  "fish-cory",
+  "fish-cichlid",
 ] as const;
 
 export const AQU_HOST_MESH_SLOT_COUNT = 6;
 const perSlot = maxHostMeshInstancesPerSlot();
 
 /** Species index (aquarium.ts) → plugin.yml asset index. */
-const SPECIES_TO_ASSET: number[] = [7, 2, 6, 4, 5, 3];
+export const AQU_SPECIES_TO_ASSET: number[] = [7, 2, 6, 8, 5, 9];
+
+/** Cory belly sits ~9 mm below rig origin — lift above gravel. */
+const CORY_SPECIES_INDEX = 3;
+const CORY_BELLY_LIFT_M = 0.009;
 
 function chunkInstances<T>(items: T[]): T[][] {
   const out: T[][] = [];
@@ -53,9 +59,10 @@ export function writeAquariumHostMeshSlots(
     const yaw = Number(slot1[fi + 3]) || 0;
     const species = Math.round(Number(slot0[AQU_SLOT.fishSpecies0 + n]) || 0);
     const vigor = Number(slot0[AQU_SLOT.fishVigor0 + n]) || 0.5;
-    const assetIndex = SPECIES_TO_ASSET[species] ?? 7;
+    const assetIndex = AQU_SPECIES_TO_ASSET[species] ?? 7;
+    const fishY = species === CORY_SPECIES_INDEX ? y + CORY_BELLY_LIFT_M : y;
     const phase = clock * (0.9 + vigor * 0.4) + n * 0.29;
-    push(assetIndex, hostMeshMatrixYawPos(x, y, z, yaw), phase);
+    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw), phase);
   }
 
   const packets: number[][] = [];

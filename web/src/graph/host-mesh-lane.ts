@@ -83,6 +83,23 @@ function stopSkinnedMixer(row: LiveSkinned): void {
 
 let meshoptReady: Promise<void> | null = null;
 
+/** Shift each swim track so its first key is at t=0; preserve clip duration (ZotoDesigner 1/24 s lead-in). */
+export function normalizeSwimClipStart(clip: THREE.AnimationClip | null): THREE.AnimationClip | null {
+  if (!clip || clip.tracks.length === 0) return clip;
+  const duration = clip.duration;
+  const out = clip.clone();
+  for (const track of out.tracks) {
+    if (track.times.length === 0) continue;
+    const t0 = track.times[0]!;
+    if (t0 === 0) continue;
+    for (let i = 0; i < track.times.length; i++) {
+      track.times[i] = track.times[i]! - t0;
+    }
+  }
+  out.duration = duration;
+  return out;
+}
+
 export function ensureHostMeshoptDecoder(loader: GLTFLoader): Promise<void> {
   if (!meshoptReady) {
     meshoptReady = MeshoptDecoder.ready.then(() => {
@@ -338,7 +355,8 @@ export class HostMeshLane {
         return this.storeTemplate(decl.id, { id: decl.id, kind: "rigid", template, swimClip: null, loadOk: false });
       }
       const skinned = hasSkinnedMesh(template);
-      const swimClip = gltf.animations.find((a) => a.name === "swim") ?? gltf.animations[0] ?? null;
+      const rawSwim = gltf.animations.find((a) => a.name === "swim") ?? gltf.animations[0] ?? null;
+      const swimClip = normalizeSwimClipStart(rawSwim);
       const kind = skinned && swimClip ? "skinned" : "rigid";
       return this.storeTemplate(decl.id, {
         id: decl.id,
