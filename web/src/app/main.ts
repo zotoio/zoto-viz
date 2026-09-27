@@ -73,6 +73,7 @@ import {
   formatBlockedCatalogNotice,
   blockedCatalogEntries,
 } from "../plugins/pack-install-surface";
+import { BlockedInstallPanel } from "../plugins/pack-install-blocked-ui";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
@@ -476,6 +477,10 @@ const modeSel = new Select({
   onChange: (id) => applyMode(id),
 });
 $("modeBox").append(modeSel.el);
+const blockedInstallPanel = new BlockedInstallPanel({
+  onCatalogRefresh: () => syncPluginCatalog(),
+});
+$("modeBox").append(blockedInstallPanel.el);
 const feedTitleCube = new FeedTitleCube($("wall"));
 const nestCams = new NestCamsLive($("wall"));
 nestCams.onSettings = (camId) => {
@@ -1213,6 +1218,7 @@ modeSel.onChange = (id) => {
 
 async function syncPluginCatalog(): Promise<void> {
   pluginSpecs = await installPlugins();
+  blockedInstallPanel.refresh();
   const blocked = takePackInstallBlockedNotice();
   if (blocked) liveFeed.showOperatorNotice(blocked);
 }

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { scanPackInstallLint } from "../../plugins/sdk/pack-lint";
 import { formatViolationMessage } from "../../plugins/sdk/pack-lint-hints";
 
@@ -15,11 +14,20 @@ const repoRoot = path.resolve(repoRootArg);
 const packDirAbs = path.resolve(packHome);
 const { blocks, warnings } = scanPackInstallLint(packDirAbs, repoRoot);
 
-for (const v of blocks) {
-  const loc = v.line != null ? `${v.file}:${v.line}` : v.file;
-  console.error(`${loc} ${v.rule} — ${formatViolationMessage(v)}`);
-}
 if (blocks.length > 0) {
+  const lines: string[] = [];
+  for (const v of blocks) {
+    const loc = v.line != null ? `${v.file}:${v.line}` : v.file;
+    const line = `${loc} ${v.rule} — ${formatViolationMessage(v)}`;
+    lines.push(line);
+    console.error(line);
+  }
+  console.error(
+    JSON.stringify({
+      type: "pack-install-lint-block",
+      message: lines.join(" "),
+    }),
+  );
   process.exit(1);
 }
 for (const v of warnings) {
