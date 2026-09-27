@@ -161,6 +161,8 @@ import { applyInstance } from "../plugins/instances";
 import { VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
+import { bindServerRestartWallNotice } from "../core/http-notice";
+import { mountWallNoticeRegion } from "../core/wall-notice-region";
 import {
   applyPackFeedPaneNotice,
   clearTilePackFeed,
@@ -240,6 +242,7 @@ applyThemeChrome(theme);
 
 // one WebGL context for the whole wall: the main graph and every mosaic tile draw through it
 const renderHost = new RenderHost($("wall"));
+mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 scene.retargetPanel("main");
@@ -1682,6 +1685,7 @@ settings = new Settings({
   },
   onPersist: () => touch(),
 });
+bindServerRestartWallNotice();
 let pendingSandboxPush: { packId: string; config: Record<string, string> } | null = null;
 
 function pluginSpecForStoreId(storeId: string): PluginView | null {
@@ -2188,12 +2192,23 @@ async function bootCatalogFromSession(): Promise<void> {
     if (bootTiles.join("\0") !== settings.animSettings.mosaicTiles.join("\0")) {
       settings.applyAnim({ ...settings.animSettings, mosaicTiles: bootTiles });
     }
+<<<<<<< HEAD
     mosaic?.setSize(settings.animSettings.mosaic, bootMode, settings.animSettings.hero, {
       tree: settings.animSettings.mosaicTree,
       maximized: settings.animSettings.mosaicMaxId || null,
       tiles: settings.animSettings.mosaicTiles,
     });
     mosaic?.hydrate();
+=======
+    if (mosaic) {
+      mosaic.setSize(settings.animSettings.mosaic, bootMode, settings.animSettings.hero, {
+        tree: settings.animSettings.mosaicTree,
+        maximized: settings.animSettings.mosaicMaxId || null,
+        tiles: settings.animSettings.mosaicTiles,
+      });
+      mosaic.hydrate();
+    }
+>>>>>>> origin/cursor/catchup-consolidation
   }
   const restored = profiles ? await profiles.boot(live) : false;
   await agent.syncStatus();

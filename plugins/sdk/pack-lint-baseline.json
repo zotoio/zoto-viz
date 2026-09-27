@@ -134,6 +134,31 @@
       "file": "plugins/src/voxel-world/frontend/world.test.ts",
       "rule": "host-import",
       "target": "vitest"
+    },
+    {
+      "file": "plugins/src/backrooms/shipped-pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/backrooms/vitest.config.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/backrooms/vitest.config.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/backrooms/vitest.config.ts",
+      "rule": "host-import",
+      "target": "vitest/config"
+    },
+    {
+      "file": "plugins/src/fractal-zoom/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
     }
   ]
 }
