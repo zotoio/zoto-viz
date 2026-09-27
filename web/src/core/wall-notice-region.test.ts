@@ -68,7 +68,9 @@ describe("wall notice region", () => {
 
   it("notice row rule in style.css declares pointer-events auto", () => {
     const css = fs.readFileSync(path.join(webRoot, "src/style.css"), "utf8");
-    expect(css).toMatch(/\.wall-notice-row\s*\{[^}]*pointer-events:\s*auto/);
+    const block = css.match(/\.wall-notice-row\s*\{([^}]*)\}/)?.[1] ?? "";
+    const pointerEvents = block.match(/pointer-events:\s*([a-z-]+)/)?.[1] ?? "";
+    expect(pointerEvents).toBe("auto");
   });
 
   it("routes all ten NoticeKey values via NOTICE_ROUTE", () => {
@@ -391,7 +393,9 @@ describe("wall notice region", () => {
   });
 
   it("tsconfig include lists the typecheck proofs", () => {
-    expect(JSON.parse(fs.readFileSync(path.join(webRoot, "tsconfig.json"), "utf8")).include[1]).toBe("typecheck/**/*.ts");
+    const include = JSON.parse(fs.readFileSync(path.join(webRoot, "tsconfig.json"), "utf8")).include as string[];
+    const typecheckIndex = include.indexOf("typecheck/**/*.ts");
+    expect(typecheckIndex).toBe(1);
   });
   it("the mount root is made programmatically focusable", () => {
     const { wall } = boot();

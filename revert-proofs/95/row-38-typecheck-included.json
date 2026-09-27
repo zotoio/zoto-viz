@@ -3,5 +3,5 @@
   "runner": "vitest",
   "testFile": "src/core/wall-notice-region.test.ts",
   "testName": "wall notice region > tsconfig include lists the typecheck proofs",
-  "red": "AssertionError: expected '../plugins/src/hn-term/frontend/teletype.ts' to be 'typecheck/**/*.ts' // Object.is equality"
+  "red": "AssertionError: expected -1 to be 1 // Object.is equality"
 }
