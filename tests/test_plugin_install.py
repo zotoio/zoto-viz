@@ -48,6 +48,35 @@ def _reset_install_locks_for_tests() -> None:
     plugin_install_mod._pack_install_locks.clear()
 
 
+def _clear_zip_block_store() -> None:
+    from service.pack_zip_blocks import LEGACY_STORE_NAME, _invalidate_cache
+
+    _invalidate_cache()
+    local = paths.plugin_local_dir(create=False)
+    if not local.is_dir():
+        return
+    legacy = local / LEGACY_STORE_NAME
+    legacy.unlink(missing_ok=True)
+    blocks = local / "blocks"
+    if blocks.is_dir():
+        for child in blocks.iterdir():
+            if child.is_file():
+                child.unlink(missing_ok=True)
+        try:
+            blocks.rmdir()
+        except OSError:
+            pass
+
+
+def _clear_install_catalog_records() -> None:
+    import service.pack_install_catalog as catalog_mod
+
+    with catalog_mod._LOCK:
+        catalog_mod._CACHE = None
+    path = paths.plugin_local_dir(create=False) / ".install-catalog-records.json"
+    path.unlink(missing_ok=True)
+
+
 def _pack_fixture(name: str) -> Path:
     root = Path(__file__).resolve().parents[1]
     return root / "plugins/sdk/pack-bundle-fixtures" / name
@@ -102,17 +131,14 @@ def _zip_with_symlink(plugin_yml: str, link_name: str, target: str) -> bytes:
 @pytest.fixture(autouse=True)
 def _reset_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
     import service.plugin_install as plugin_install_mod
-    from service.pack_install_catalog import reset_install_catalog_records_for_tests
-    from service.pack_zip_blocks import reset_zip_blocks_for_tests
-
     monkeypatch.setattr(plugin_install_mod, "_after_first_rename", None, raising=False)
     monkeypatch.setattr(plugin_install_mod, "_start_runtime_hook", None, raising=False)
     plugin_install_mod._pending_notices.clear()
     plugin_install_mod._swap_in_progress.clear()
     _reset_install_locks_for_tests()
     drain_install_notices()
-    reset_zip_blocks_for_tests()
-    reset_install_catalog_records_for_tests()
+    _clear_zip_block_store()
+    _clear_install_catalog_records()
     plugin_local.reset_watch_for_tests()
 
 
@@ -397,9 +423,8 @@ def test_retry_and_scan_race_single_install(
     t_retry.join(timeout=15)
     assert install_calls == 1
     assert (_runtime_parent() / pid / "frontend/sdk/marker.ts").read_text(encoding="utf-8") == marker_v1
-    from service.pack_zip_blocks import _load
-
-    assert len(_load()) == 1
+    blocks_dir = paths.plugin_local_dir(create=False) / "blocks"
+    assert len(list(blocks_dir.glob("*.json"))) == 1
 
 
 def test_retry_and_scan_race_single_install_20_of_20(
@@ -407,14 +432,11 @@ def test_retry_and_scan_race_single_install_20_of_20(
     monkeypatch: pytest.MonkeyPatch,
     _isolate_plugin_local: Path,
 ) -> None:
-    from service.pack_install_catalog import reset_install_catalog_records_for_tests
-    from service.pack_zip_blocks import reset_zip_blocks_for_tests
-
     for n in range(20):
         _reset_install_locks_for_tests()
         drain_install_notices()
-        reset_zip_blocks_for_tests()
-        reset_install_catalog_records_for_tests()
+        _clear_zip_block_store()
+        _clear_install_catalog_records()
         plugin_local.reset_watch_for_tests()
         plugins.reset_bundles()
         sub = tmp_path / f"race{n}"
