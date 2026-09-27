@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-tile.test.ts",
+  "testName": "shader fallback tile overlay > loss-twice-one-notice",
+  "redValue": "AssertionError: expected \"onContextLost\" to be called 1 times, but got 2 times"
+}

@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 8e6b2bf..18c96bb 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -328,7 +328,7 @@ export class RenderHost {
+     }
+     this.stopFallbackTile(tileId, slot);
+     slot.fallback?.dispose();
+-    const initialText = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
++    const initialText = "";
+     const showChip = typeof slot.shaderPack.fallbackText === "function"
+       && initialText !== genericShaderFallbackMessage(slot.packName);
+     slot.fallback = new TileShaderFallback(slot.mount!, {

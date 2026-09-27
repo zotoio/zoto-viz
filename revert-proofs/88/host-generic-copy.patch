@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
+index 2d5ab78..dc82dcd 100644
+--- a/web/src/graph/tile-shader-fallback.ts
++++ b/web/src/graph/tile-shader-fallback.ts
+@@ -22,7 +22,7 @@ export class TileShaderFallback {
+     this.chip.textContent = "Simple view";
+     mount.appendChild(this.root);
+     if (opts.showChip) this.root.appendChild(this.chip);
+-    this.applyText(opts.initialText);
++    this.applyText("");
+   }
+ 
+   applyText(next: string): void {

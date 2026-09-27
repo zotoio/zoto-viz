@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
 
 describe("hash consent and TypeScript allow", () => {
@@ -97,6 +97,11 @@ describe("PluginSandbox", () => {
     } finally {
       box.unload();
     }
+});
+
+describe("PluginSandbox", () => {
+  afterEach(() => {
+    document.querySelectorAll("iframe").forEach((f) => f.remove());
   });
 
   it("loads srcdoc, ticks, and unloads", async () => {

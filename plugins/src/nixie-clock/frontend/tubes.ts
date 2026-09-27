@@ -62,7 +62,45 @@ export function nixieCanvasSize(doc?: Document | null): { w: number; h: number }
   };
 }
 
-/** Slot 0: six digits + colon blink + look + canvas + LAN pulse. */
+function nixiePair(n: number): string {
+  const v = Math.max(0, Math.min(99, n));
+  return `${Math.floor(v / 10)}${v % 10}`.padStart(2, "0");
+}
+
+export function nixieClockParts(
+  date: Date,
+  hour12: boolean,
+  scratch: { h: number; m: number; s: number },
+): void {
+  let h = date.getHours();
+  scratch.m = date.getMinutes();
+  scratch.s = date.getSeconds();
+  if (hour12) {
+    h = h % 12;
+    if (h === 0) h = 12;
+  }
+  scratch.h = h;
+}
+
+/** Build a fallback line; caller owns scratch + cache (one closure per tile). */
+export function formatNixieFallbackLine(
+  date: Date,
+  look: NixieLook,
+  scratch: { h: number; m: number; s: number },
+  cache: { key: number; text: string },
+): string {
+  nixieClockParts(date, look.hour12, scratch);
+  const key = ((scratch.h * 3600 + scratch.m * 60 + (look.seconds ? scratch.s : 0)) << 2)
+    | (look.hour12 ? 2 : 0)
+    | (look.seconds ? 1 : 0);
+  if (key === cache.key) return cache.text;
+  cache.key = key;
+  const parts = [nixiePair(scratch.h), nixiePair(scratch.m)];
+  if (look.seconds) parts.push(nixiePair(scratch.s));
+  cache.text = parts.join(" ");
+  return cache.text;
+}
+
 export function packNixieBuffer(
   date: Date,
   look: NixieLook,

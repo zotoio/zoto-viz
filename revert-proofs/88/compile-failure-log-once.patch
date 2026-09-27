@@ -1,0 +1,11 @@
+diff --git a/web/src/graph/tile-shader-latch.ts b/web/src/graph/tile-shader-latch.ts
+index fb04f58..3f6e688 100644
+--- a/web/src/graph/tile-shader-latch.ts
++++ b/web/src/graph/tile-shader-latch.ts
+@@ -26,6 +26,5 @@ export class TileShaderLatch {
+   fail(msg: string, log: (m: string) => void): void {
+     if (this.failed) return;
+     this.failed = true;
+-    log(msg);
+   }
+ }

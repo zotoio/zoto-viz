@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/gfx-wall-notice.ts b/web/src/graph/gfx-wall-notice.ts
+index e37591e..cd3eca8 100644
+--- a/web/src/graph/gfx-wall-notice.ts
++++ b/web/src/graph/gfx-wall-notice.ts
+@@ -62,7 +62,6 @@ export class GfxWallNotice {
+     btn.type = "button";
+     btn.className = "gfx-wall-reload";
+     btn.textContent = "Reload";
+-    btn.addEventListener("click", () => location.reload());
+     this.el.appendChild(msg);
+     this.el.appendChild(btn);
+   }

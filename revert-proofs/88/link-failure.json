@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-compile.test.ts",
+  "testName": "tile shader compile latch > link-failure",
+  "redValue": "AssertionError: expected 'shader failed' to be 'link error' // Object.is equality"
+}

@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 8e6b2bf..182ca2b 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -344,7 +344,6 @@ export class RenderHost {
+     const slot = this.tileShaders.get(tileId);
+     if (!slot) return;
+     this.stopFallbackTile(tileId, slot);
+-    slot.fallback?.dispose();
+     slot.fallback = null;
+     slot.mountedFallbackPackKey = "";
+     slot.compileFailed = false;

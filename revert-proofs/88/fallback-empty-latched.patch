@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/shader-pack-fallback.ts b/web/src/graph/shader-pack-fallback.ts
+index deec56b..3de2957 100644
+--- a/web/src/graph/shader-pack-fallback.ts
++++ b/web/src/graph/shader-pack-fallback.ts
+@@ -44,7 +44,6 @@ export function resolveShaderFallbackLine(pack: ShaderPack | null, packName: str
+     const raw = pack.fallbackText();
+     if (raw === undefined || raw === "") return genericShaderFallbackMessage(packName);
+     const text = String(raw);
+-    if (text.trim() === "") return genericShaderFallbackMessage(packName);
+     return text;
+   } catch {
+     return genericShaderFallbackMessage(packName);

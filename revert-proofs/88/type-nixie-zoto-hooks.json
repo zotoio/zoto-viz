@@ -1,0 +1,5 @@
+{
+  "testFile": "src/plugins/shader-fallback-contracts.test.ts",
+  "testName": "shader fallback contract typecheck > type-nixie-zoto-hooks",
+  "redValue": "AssertionError: expected -1 to be greater than -1"
+}

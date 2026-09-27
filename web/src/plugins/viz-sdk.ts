@@ -26,6 +26,8 @@ zoto.loseHostContext = function() {
 window.addEventListener("message", (ev) => {
   const d = ev.data;
   if (!d || d.source !== "zoto-viz-host") return;
-  if (d.type === "frame" && vizAllowed("viz.read") && window.zoto.onFrame) window.zoto.onFrame(d.frame);
+  if (d.type === "frame" && vizAllowed("viz.read")) {
+    if (window.zoto.onFrame) window.zoto.onFrame(d.frame);
+  }
 });
 `;

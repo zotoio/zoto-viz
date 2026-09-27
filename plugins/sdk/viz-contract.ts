@@ -83,6 +83,9 @@ export interface VizSysTelemetry {
   udev: number;
 }
 
+/** Optional pack hooks implemented on `window.zoto` in the plugin iframe. */
+export interface VizZotoPluginHooks {}
+
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */
 export interface VizDataFrame {
   /** Present on v2 frames from the host; v1 plugin deliveries omit this key. Matches {@link VIZ_CONTRACT_VERSION} on v2 host-built frames. */

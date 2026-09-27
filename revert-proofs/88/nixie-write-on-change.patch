@@ -1,0 +1,12 @@
+diff --git a/plugins/src/nixie-clock/frontend/tubes.ts b/plugins/src/nixie-clock/frontend/tubes.ts
+index 08f81d5..523e068 100644
+--- a/plugins/src/nixie-clock/frontend/tubes.ts
++++ b/plugins/src/nixie-clock/frontend/tubes.ts
+@@ -93,7 +93,6 @@ export function formatNixieFallbackLine(
+   const key = ((scratch.h * 3600 + scratch.m * 60 + (look.seconds ? scratch.s : 0)) << 2)
+     | (look.hour12 ? 2 : 0)
+     | (look.seconds ? 1 : 0);
+-  if (key === cache.key) return cache.text;
+   cache.key = key;
+   const parts = [nixiePair(scratch.h), nixiePair(scratch.m)];
+   if (look.seconds) parts.push(nixiePair(scratch.s));

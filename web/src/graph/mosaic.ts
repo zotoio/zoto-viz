@@ -1,5 +1,9 @@
-import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize } from "./scene";
+import { NetScene, type DreamAnim, type Filters, type HeroPos, type MosaicSize, type SceneOpts } from "./scene";
 import type { RenderHost } from "./render-host";
+
+export function mosaicSceneOpts(id: string, host: RenderHost): SceneOpts {
+  return { satellite: true, host, tileId: id };
+}
 import { allModes, arcadeSlotFor, hostEngine, modeById, viewCaption, type ViewMode } from "../core/modes";
 import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
@@ -683,7 +687,7 @@ export class Mosaic {
         const host = pane.querySelector<HTMLElement>(":scope > .mosaic-scene")
           ?? Object.assign(document.createElement("div"), { className: "mosaic-scene" });
         if (!host.parentElement) pane.appendChild(host);
-        const s = new NetScene(host, { satellite: true, host: this.cfg.host });
+        const s = new NetScene(host, mosaicSceneOpts(id, this.cfg.host!));
         this.applySync(s, id, this.cfg.sync());
         const m = mosaicPaneMode(id);
         s.setMode(m, this.cfg.optsFor(m));
@@ -1131,6 +1135,9 @@ export class Mosaic {
         ids,
       );
       const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
+      const baseSkies = (planned
+        ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop)) as Record<string, BackdropKind>;
+      const next = pinPluginTileSkies(baseSkies, ids);
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;

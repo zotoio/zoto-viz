@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/gfx-wall-notice.ts b/web/src/graph/gfx-wall-notice.ts
+index e37591e..3e53cce 100644
+--- a/web/src/graph/gfx-wall-notice.ts
++++ b/web/src/graph/gfx-wall-notice.ts
+@@ -25,7 +25,6 @@ export class GfxWallNotice {
+     this.shown = true;
+     const el = document.createElement("div");
+     el.className = "gfx-wall-notice";
+-    el.setAttribute("role", "status");
+     el.tabIndex = -1;
+     el.textContent = GFX_INTERRUPTED_NOTICE;
+     this.wall.appendChild(el);

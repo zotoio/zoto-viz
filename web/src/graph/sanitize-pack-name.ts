@@ -1,0 +1,13 @@
+/** Display-safe pack title — same rules as zip member basenames, capped for overlay copy. */
+
+const PACK_NAME_MAX = 80;
+
+export function sanitizePackDisplayName(raw: string): string {
+  let s = raw.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\\/g, "/").trim();
+  if (!s) return "";
+  const parts = s.split("/").filter((p) => p && p !== "." && p !== "..");
+  const base = parts.reduce((best, p) => (p.length > best.length ? p : best), parts[0] ?? s);
+  s = base.replace(/[<>:"|?*]/g, "").replace(/\s+/g, " ").trim();
+  if (s.length > PACK_NAME_MAX) s = s.slice(0, PACK_NAME_MAX);
+  return s;
+}

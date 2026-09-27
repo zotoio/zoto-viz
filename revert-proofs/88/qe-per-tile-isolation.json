@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-qe-hook.test.ts",
+  "testName": "shader fallback QE hook > qe-per-tile-isolation",
+  "redValue": "AssertionError: expected \"vi.fn()\" to be called +0 times, but got 3 times"
+}

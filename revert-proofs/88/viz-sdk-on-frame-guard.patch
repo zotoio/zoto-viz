@@ -1,0 +1,14 @@
+diff --git a/web/src/plugins/viz-sdk.ts b/web/src/plugins/viz-sdk.ts
+index 1bd65ef2..5860e13e 100644
+--- a/web/src/plugins/viz-sdk.ts
++++ b/web/src/plugins/viz-sdk.ts
+@@ -20,8 +20,6 @@ zoto.writeParticles = function(data, stride) {
+ window.addEventListener("message", (ev) => {
+   const d = ev.data;
+   if (!d || d.source !== "zoto-viz-host") return;
+-  if (d.type === "frame" && vizAllowed("viz.read")) {
+-    if (window.zoto.onFrame) window.zoto.onFrame(d.frame);
+-  }
++  if (d.type === "frame" && vizAllowed("viz.read") && window.zoto.onFrame) window.zoto.onFrame(d.frame);
+ });
+ `;

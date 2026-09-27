@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index d13fd72..304d089 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -365,7 +365,6 @@ export class RenderHost {
+ 
+   private startFallbackTile(tileId: string): void {
+     this.fallbackTileIds.add(tileId);
+-    if (this.fallbackTick !== null) return;
+     this.fallbackTick = setInterval(() => this.runFallbackTick(), SHADER_FALLBACK_TICK_MS);
+   }
+ 
