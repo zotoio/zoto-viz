@@ -37,8 +37,6 @@ import {
 import { applyDeviceRectToGlRenderer } from "./render-host-gl-adapter";
 import {
   type DevicePxRatio,
-  DEFAULT_MAX_DEVICE_PX_RATIO,
-  configureLayoutMaxDevicePxRatio,
   devicePxRatioFromNumber,
   devicePxRatioNumber,
   layoutDevicePxRatio,
@@ -113,7 +111,6 @@ export class RenderHost {
     readonly wall: HTMLElement,
     opts: { dpr?: number; software?: boolean } = {},
   ) {
-    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
     if (opts.dpr !== undefined) {
       this.layoutDevicePxRatio = devicePxRatioFromNumber(opts.dpr);
       pinLayoutDevicePxRatio(this.layoutDevicePxRatio);
