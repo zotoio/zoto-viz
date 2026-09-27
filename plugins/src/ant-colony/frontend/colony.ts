@@ -1,6 +1,6 @@
 import type { AntColonyLook } from "./config";
 import { ANT_WORK_BUDGET } from "./config";
-import type { AntColonyFrame } from "./frame";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 export const PG_W = 32;
 export const PG_H = 8;
@@ -94,7 +94,7 @@ function hashHostId(id: string): number {
   return Math.abs(h);
 }
 
-function talkerIdSetKey(talkers: AntColonyFrame["talkers"]): string {
+function talkerIdSetKey(talkers: VizDataFrame["talkers"]): string {
   if (talkers.length === 0) return "";
   const ids = talkers.map((t) => t.id);
   ids.sort();
@@ -183,7 +183,7 @@ export class AntColonySim {
     return this.allocAfterWarm;
   }
 
-  private effectiveTalkers(talkers: AntColonyFrame["talkers"]): AntColonyFrame["talkers"] {
+  private effectiveTalkers(talkers: VizDataFrame["talkers"]): VizDataFrame["talkers"] {
     if (talkers.length > 0) {
       return talkers.slice(0, MAX_CHAMBERS);
     }
@@ -204,7 +204,7 @@ export class AntColonySim {
     };
   }
 
-  private applyTalkerToChamber(ch: Chamber, talker: AntColonyFrame["talkers"][number]): void {
+  private applyTalkerToChamber(ch: Chamber, talker: VizDataFrame["talkers"][number]): void {
     ch.heat = Math.min(1, talker.rate / 220);
     ch.r = 0.045 + Math.min(0.05, talker.rate / 4000);
     if (talker.role === "gateway") {
@@ -220,7 +220,7 @@ export class AntColonySim {
   }
 
   /** Sync chambers when the set of host ids changes; positions are pinned per id. */
-  private syncChambers(talkers: AntColonyFrame["talkers"], seed: number): void {
+  private syncChambers(talkers: VizDataFrame["talkers"], seed: number): void {
     const live = this.effectiveTalkers(talkers);
     const key = talkerIdSetKey(live);
     const incoming = new Set(live.map((t) => t.id));
@@ -243,7 +243,7 @@ export class AntColonySim {
     this.rebuildChamberList();
   }
 
-  private updateChamberRates(talkers: AntColonyFrame["talkers"]): void {
+  private updateChamberRates(talkers: VizDataFrame["talkers"]): void {
     const live = this.effectiveTalkers(talkers);
     for (const t of live) {
       const ch = this.chamberById.get(t.id);
@@ -251,7 +251,7 @@ export class AntColonySim {
     }
   }
 
-  private layoutTunnels(packets: AntColonyFrame["packets"], seed: number): void {
+  private layoutTunnels(packets: VizDataFrame["packets"], seed: number): void {
     this.tunnels.length = 0;
     const c = this.chambers.length;
     if (c < 2) return;
@@ -268,7 +268,7 @@ export class AntColonySim {
     }
   }
 
-  private spawnAnts(frame: AntColonyFrame, reinit: boolean): void {
+  private spawnAnts(frame: VizDataFrame, reinit: boolean): void {
     const cap = Math.min(this.look.antCap, MAX_ANT_INSTANCES);
     for (let i = cap; i < MAX_ANT_INSTANCES; i++) this.ants[i]!.alive = 0;
     let avgRate = 60;
@@ -396,7 +396,7 @@ export class AntColonySim {
     }
   }
 
-  tick(frame: AntColonyFrame): void {
+  tick(frame: VizDataFrame): void {
     if (this.disposed) return;
     const dt = Math.min(0.05, Math.max(0.001, frame.dt || 1 / 60));
     this.acc += dt;
@@ -444,7 +444,7 @@ export class AntColonySim {
     return out;
   }
 
-  packLabelText(frame: AntColonyFrame): string {
+  packLabelText(frame: VizDataFrame): string {
     const fail = frame.sys?.failed ?? 0;
     const preset = this.look.preset.replace("-", " ");
     const extra = this.look.label ? ` · ${this.look.label}` : "";
@@ -464,7 +464,7 @@ export class AntColonySim {
     return `ant colony · ${preset} · ${metric}${extra}${schematic}`;
   }
 
-  packSlots(frame: AntColonyFrame): number[][] {
+  packSlots(frame: VizDataFrame): number[][] {
     const meta = this.slotMeta;
     meta.fill(0);
     const camMode = this.look.reducedMotion ? "cutaway" : this.look.camera;

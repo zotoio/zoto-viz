@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { AntColonyFrame, VizSysTelemetry } from "./frame";
+import {
+  EMPTY_SYS_TELEMETRY,
+  type VizDataFrame,
+  type VizSysTelemetry,
+} from "../../../sdk/viz-contract";
 import {
   ANT_DATA_MAPPING,
   ANT_WORK_BUDGET,
@@ -11,11 +15,9 @@ import {
   createColony,
 } from "./index";
 
-const EMPTY_SYS: VizSysTelemetry = {
-  cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0,
-};
+const EMPTY_SYS: VizSysTelemetry = EMPTY_SYS_TELEMETRY;
 
-function frame(slice: AntColonyFrame): AntColonyFrame {
+function frame(slice: VizDataFrame): VizDataFrame {
   return slice;
 }
 

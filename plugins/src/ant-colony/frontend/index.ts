@@ -13,10 +13,10 @@ import {
   SLOT_TUNNELS,
   createColony,
 } from "./colony";
-import type { AntColonyFrame } from "./frame";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 declare const zoto: {
-  onFrame: ((frame: AntColonyFrame) => void) | null;
+  onFrame: ((frame: VizDataFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
   onTeardown?: (() => void) | null;
   getConfig?: () => Record<string, string>;
@@ -120,4 +120,3 @@ export function cycleColonyTeardown(times = 20): void {
 
 export { parseAntColonyLook, ANT_DATA_MAPPING, ANT_WORK_BUDGET } from "./config";
 export { AntColonySim, createColony, PG_CELLS, NEST_ENTRANCE, type ChamberSnapshot } from "./colony";
-export type { AntColonyFrame } from "./frame";
