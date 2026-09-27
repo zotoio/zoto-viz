@@ -353,16 +353,20 @@ export class RenderHost {
   private refreshShaderFallbackText(tileId: string): void {
     const slot = this.tileShaders.get(tileId);
     if (!slot?.fallback) return;
+    if (slot.latch.dead) return;
     const line = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
     slot.fallback.applyText(line);
+  }
+
+  private runFallbackTick(): void {
+    if (this.glContextLost) return;
+    for (const id of this.fallbackTileIds) this.refreshShaderFallbackText(id);
   }
 
   private startFallbackTile(tileId: string): void {
     this.fallbackTileIds.add(tileId);
     if (this.fallbackTick !== null) return;
-    this.fallbackTick = setInterval(() => {
-      for (const id of this.fallbackTileIds) this.refreshShaderFallbackText(id);
-    }, SHADER_FALLBACK_TICK_MS);
+    this.fallbackTick = setInterval(() => this.runFallbackTick(), SHADER_FALLBACK_TICK_MS);
   }
 
   private stopFallbackTile(tileId: string, _slot: TileShaderSlot): void {
@@ -391,6 +395,7 @@ export class RenderHost {
     if (this.glContextLost) return;
     this.glContextLost = true;
     this.gfxNotice.onContextLost();
+    this.pauseShaderFallbackTicks();
   }
 
   private onSharedContextRestored(): void {
@@ -399,6 +404,18 @@ export class RenderHost {
     for (const slot of this.tileShaders.values()) {
       slot.latch.reset();
     }
+    this.resumeShaderFallbackTicks();
+  }
+
+  private pauseShaderFallbackTicks(): void {
+    if (this.fallbackTick === null) return;
+    clearInterval(this.fallbackTick);
+    this.fallbackTick = null;
+  }
+
+  private resumeShaderFallbackTicks(): void {
+    if (this.fallbackTick !== null || this.fallbackTileIds.size === 0) return;
+    this.fallbackTick = setInterval(() => this.runFallbackTick(), SHADER_FALLBACK_TICK_MS);
   }
 
   /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
