@@ -151,9 +151,14 @@ describe("fillPluginFields", () => {
 
   it("field edited visible label string", () => {
     expect.hasAssertions();
-    const { row, range } = dirtySliderRow(gainSpec);
+    const { row } = dirtySliderRow(gainSpec);
     expect(row.querySelector(".field-edited-cue")?.textContent).toBe(FIELD_EDITED_LABEL);
     expect(FIELD_EDITED_LABEL).toBe("Edited");
+  });
+
+  it("field edited cue clears when value returns to default", () => {
+    expect.hasAssertions();
+    const { row, range } = dirtySliderRow(gainSpec);
     range.value = "3";
     range.dispatchEvent(new Event("input", { bubbles: true }));
     expect(row.querySelector(".field-edited-cue")).toBeNull();

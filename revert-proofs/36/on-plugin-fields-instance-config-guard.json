@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-sandbox-config-push.test.ts",
-  "testName": "plugin sandbox config push guards > onPluginFields path: refresh instance A1 yields 0 posts to A2 or B and 1 to A1",
-  "description": "onPluginFields must not cross-post between instance store ids",
-  "red": "AssertionError: expected [ { type: 'config', config: … } ] to have a length of +0 but got 1"
-}
