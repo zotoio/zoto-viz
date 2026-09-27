@@ -16,10 +16,6 @@ PATH="/workspace/.venv/bin:$PATH" pnpm exec vitest run
 cd .. && PATH="/workspace/.venv/bin:$PATH" .venv/bin/pytest -o addopts=
 ```
 
-## `revert-proofs/42` on #86 stack
-
-On `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4`, all 14 patches apply with `git apply --check -v` at zero offset (three regen’d for #86 line context: `pack-mirror-brand-cast`, `pack-mirror-capture-rounding`, `render-host-gpu-viewport-css-revert`).
-
 ## Revert rows (14 sidecars)
 
 | row | kind | test |
@@ -28,8 +24,8 @@ On `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4`, all 14 patches apply wit
 | device-px-ratio-change-resize-without-cap-revert | vitest | render-host-layout-dpr-getter (c) |
 | device-px-ratio-getter-window-prop-read-revert | vitest | render-host-layout-dpr-getter (a) |
 | device-px-ratio-rearm-stale-revert | vitest | render-host-layout-dpr-getter (e) |
-| device-px-ratio-read-stray | lint | lint-brand-casts > passes on the production tree |
-| pack-mirror-brand-cast | lint | lint-brand-casts > passes on the production tree |
+| device-px-ratio-read-stray | lint | lint-brand-casts > lint gate: no stray devicePixelRatio reads in production |
+| pack-mirror-brand-cast | lint | lint-brand-casts > lint gate: brand casts only in mint modules |
 | pack-mirror-capture-rounding | vitest | render-host-fb-viewport |
 | render-host-dispose-layout-dpr-unsub-revert | vitest | render-host-dispose-layout-dpr |
 | render-host-gpu-viewport-css-dpr2-cap-revert | vitest | render-host-gpu-viewport-css |
@@ -39,7 +35,7 @@ On `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4`, all 14 patches apply wit
 | render-host-set-pixel-ratio-auto-tune-revert | vitest | render-host-set-pixel-ratio |
 | render-host-software-present-brand-revert | vitest | render-host-software-present |
 
-Lint rows: patched red is the exact lint stderr line (see sidecar `expectedRed`).
+Lint rows: patch reverts a rule in `lint-brand-casts-core.mjs`; patched red is `expected +0 to be 1 // Object.is equality` on the in-test sample gate (see sidecar `expectedRed`). Production tree uses `expect(violations).toEqual([])` with `file:rule` lines.
 
 ## Scope
 

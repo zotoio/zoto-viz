@@ -1,13 +1,16 @@
-diff --git a/web/src/graph/render-host-gl-adapter.ts b/web/src/graph/render-host-gl-adapter.ts
-index f730eb5..fdc6762 100644
---- a/web/src/graph/render-host-gl-adapter.ts
-+++ b/web/src/graph/render-host-gl-adapter.ts
-@@ -27,6 +27,8 @@ export function applyDeviceRectToGlRenderer(
-   renderer.setScissor(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
- }
+diff --git a/web/scripts/lint-brand-casts-core.mjs b/web/scripts/lint-brand-casts-core.mjs
+index 530fe2b..6ba77fb 100644
+--- a/web/scripts/lint-brand-casts-core.mjs
++++ b/web/scripts/lint-brand-casts-core.mjs
+@@ -39,11 +39,6 @@ export function lintSourceText(file, text, options = {}) {
+     return violations;
+   }
  
-+void (null as DeviceRect);
-+
- /** Host GPU pane box (bottom-left CSS) → per-edge device rect → GL viewport/scissor. */
- export function applyHostViewBoxToGlRenderer(
-   renderer: GlViewportRenderer,
+-  if (brandCasts) {
+-    for (const match of text.matchAll(castPattern)) {
+-      violations.push({ file, rule: "brand-cast" });
+-    }
+-  }
+ 
+   if (devicePxRatioReads && file !== devicePxRatioMint) {
+     for (const _ of text.matchAll(devicePxRatioReadPattern)) {
