@@ -1,4 +1,4 @@
-"""Revert-proof pytest plugin: JSON report with AssertionError typing from excinfo."""
+"""Revert-proof pytest plugin: JSON report with rewritten-assert detection."""
 
 from __future__ import annotations
 
@@ -11,6 +11,25 @@ import pytest
 _reports: list[dict] = []
 
 
+def _rewritten_assert_in_test(excinfo, item) -> tuple[bool, str | None]:
+    if excinfo is None:
+        return False, None
+    test_path = Path(item.path).resolve()
+    for entry in reversed(excinfo.traceback):
+        try:
+            frame_path = Path(entry.path).resolve()
+        except (TypeError, ValueError):
+            continue
+        if frame_path != test_path:
+            continue
+        statement = getattr(entry, "statement", None)
+        stmt = str(statement).strip() if statement is not None else ""
+        if stmt.startswith("assert "):
+            return True, stmt
+        return False, stmt or None
+    return False, None
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
@@ -18,18 +37,19 @@ def pytest_runtest_makereport(item, call):
     if report.when != "call":
         return
     revert_proof_assertion = False
-    failure_message = None
+    revert_proof_red = None
     if report.failed:
         excinfo = call.excinfo
-        if excinfo is not None:
-            revert_proof_assertion = excinfo.errisinstance(AssertionError)
-            failure_message = excinfo.exconly().split("\n")[0]
+        ok, stmt = _rewritten_assert_in_test(excinfo, item)
+        revert_proof_assertion = ok
+        if ok and stmt:
+            revert_proof_red = {"assert": stmt}
     _reports.append(
         {
             "nodeid": report.nodeid,
             "outcome": report.outcome,
             "revertProofAssertion": bool(revert_proof_assertion),
-            "failureMessage": failure_message,
+            "revertProofRed": revert_proof_red,
         }
     )
 

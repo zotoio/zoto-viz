@@ -419,13 +419,15 @@ function summarizePytestCounts(parsed, nodeId) {
           {
             name: selection.target.nodeid,
             outcome: selection.target.outcome,
+            revertProofAssertion: selection.target.revertProofAssertion,
+            revertProofRed: selection.target.revertProofRed,
           },
         ]
       : [],
   };
 }
 
-async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
+async function runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   const { bin, cwd, config } = resolveVitestProject(wtRoot, meta);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
   const testPattern = vitestTestNamePattern(meta.testName);
@@ -460,6 +462,7 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
       FORCE_COLOR: "0",
       REVERT_PROOF_ROOT: wtRoot,
       REVERT_PROOF_VITEST_BASE_CONFIG: baseConfigAbs,
+      REVERT_PROOF_PYTHON: venvPython(mainRoot),
     },
     timeoutMs,
   });
@@ -564,7 +567,7 @@ async function runTestPhase(
   artifactsDir,
 ) {
   if (meta.runner === "vitest") {
-    return runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
+    return runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
   }
   return runPytest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
 }
@@ -831,7 +834,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       );
     }
   }
-  assertRedValue(slug, meta.red, patched.counts.selection.target.failureMessage);
+  assertRedValue(slug, meta.red, patched.counts.selection.target.revertProofRed);
 
   const failureText = vitestFailureSnippet(patched.reportPath, patched.output);
 

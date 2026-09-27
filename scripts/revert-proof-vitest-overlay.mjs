@@ -1,8 +1,6 @@
 /**
  * Runner-owned vitest config overlay: merges project config with revert-proof
  * setupFiles + custom runner. Vitest 5.0.0 has no CLI --setupFiles flag.
- * `node:assert` is aliased to a callable facade so `assert(false)` reaches the
- * runner-branded `ok` export.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -37,23 +35,13 @@ const { mergeConfig } = await import(
 const base = (await import(pathToFileURL(baseConfigPath).href)).default;
 
 export default mergeConfig(base, {
-  resolve: {
-    alias: [
-      {
-        find: /^(?:node:)?assert\/strict$/,
-        replacement: path.join(overlayDir, "revert-proof-node-assert-strict.mjs"),
-      },
-      {
-        find: /^(?:node:)?assert$/,
-        replacement: path.join(overlayDir, "revert-proof-node-assert.mjs"),
-      },
-    ],
-  },
   test: {
     setupFiles: [
       path.join(overlayDir, "revert-proof-vitest-setup.ts"),
       ...(base.test?.setupFiles ?? []),
     ],
     runner: path.join(overlayDir, "revert-proof-vitest-runner.mjs"),
+    // The setup file and the natively loaded runner must share one brand module instance.
+    server: { deps: { external: [/revert-proof-vitest-brand\.mjs$/] } },
   },
 });

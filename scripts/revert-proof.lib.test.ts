@@ -1,10 +1,9 @@
-import { strictEqual } from "node:assert";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   assertRedValue,
   assessPytestSelection,
@@ -80,108 +79,15 @@ describe("vitest JSON selection by full name", () => {
   });
 });
 
-const OVERLAY_CASES = `import { afterEach, chai, describe, expect, it, onTestFailed, vi } from "vitest";
-import assert from "node:assert";
-import strict from "node:assert/strict";
-import { AssertionError as NodeAssertionError, strictEqual } from "node:assert";
-
-it("expect toBe", () => {
-  expect(1).toBe(0);
-});
-it("expect toMatchObject", () => {
-  expect({ a: 1 }).toMatchObject({ a: 2 });
-});
-it("expect toHaveBeenCalledWith", () => {
-  const spy = vi.fn();
-  spy(1);
-  expect(spy).toHaveBeenCalledWith(2);
-});
-it("expect toThrow class", () => {
-  expect(() => {}).toThrow(TypeError);
-});
-it("node strictEqual", () => {
-  strictEqual(1, 0);
-});
-it("node throws class", () => {
-  assert.throws(() => {
-    throw new RangeError("boom");
-  }, TypeError);
-});
-it("node callable assert", () => {
-  assert(false);
-});
-it("node strict callable", () => {
-  strict(false);
-});
-it("node strict deepStrictEqual", () => {
-  strict.deepStrictEqual({ a: 1 }, { a: 2 });
-});
-it("plain object", () => {
-  throw { name: "AssertionError", message: "expected 1 to be 0" };
-});
-it("meta body spoof", ({ task }) => {
-  task.meta.revertProofAssertion = true;
-  throw new TypeError("boom: not an assertion");
-});
-it("meta onTestFailed spoof", ({ task }) => {
-  onTestFailed(() => {
-    task.meta.revertProofAssertion = true;
-  });
-  throw new TypeError("boom: not an assertion");
-});
-it("meta timer spoof", ({ task }) => {
-  setTimeout(() => {
-    try {
-      task.meta.revertProofAssertion = true;
-    } catch {}
-  }, 0);
-  throw new TypeError("boom: not an assertion");
-});
-describe("after", () => {
-  afterEach(({ task }) => {
-    task.meta.revertProofAssertion = true;
-  });
-  it("meta afterEach spoof", () => {
-    throw new TypeError("boom: not an assertion");
-  });
-});
-it("proto borrow", () => {
-  throw Object.setPrototypeOf(new TypeError("boom"), chai.AssertionError.prototype);
-});
-it("hand-built chai", () => {
-  throw new chai.AssertionError("fake");
-});
-it("hand-built node", () => {
-  throw new NodeAssertionError({ message: "fake" });
-});
-it("chai subclass", () => {
-  class Fake extends chai.AssertionError {}
-  throw new Fake("fake");
-});
-it("node fail passthrough", () => {
-  assert.fail(new NodeAssertionError({ message: "fake" }) as unknown as string);
-});
-it("node rejects passthrough", async () => {
-  const fake = Object.setPrototypeOf(new TypeError("boom"), NodeAssertionError.prototype);
-  await assert.rejects(Promise.reject(fake), (e) => {
-    throw e;
-  });
+function runSingleOverlayCase(describeTitle, innerTestSource, leafTitle) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rp-overlay-one-"));
+  try {
+    const content = `import { describe, expect, it } from "vitest";
+describe(${JSON.stringify(describeTitle)}, () => {
+${innerTestSource}
 });
 `;
-
-function vitestBin() {
-  for (const rel of ["web/node_modules/.bin/vitest", "node_modules/.bin/vitest"]) {
-    const bin = path.join(repoRoot, rel);
-    if (fs.existsSync(bin)) return bin;
-  }
-  throw new Error(`vitest binary not found under ${repoRoot}`);
-}
-
-/** Runs OVERLAY_CASES through the real revert-proof overlay; returns task.meta flag per test title. */
-function runOverlayCases(): Record<string, boolean> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rp-overlay-"));
-  try {
-    fs.writeFileSync(path.join(dir, "cases.test.ts"), OVERLAY_CASES);
+    fs.writeFileSync(path.join(dir, "case.test.ts"), content);
     fs.writeFileSync(
       path.join(dir, "base.config.mjs"),
       `export default ${JSON.stringify({
@@ -191,6 +97,7 @@ function runOverlayCases(): Record<string, boolean> {
       })};\n`,
     );
     const out = path.join(dir, "report.json");
+    const fullName = `${describeTitle} > ${leafTitle}`;
     const r = spawnSync(
       vitestBin(),
       [
@@ -199,6 +106,8 @@ function runOverlayCases(): Record<string, boolean> {
         dir,
         "--config",
         path.join(scriptsDir, "revert-proof-vitest-overlay.mjs"),
+        "-t",
+        `^${fullName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}$`,
         "--reporter=json",
         `--outputFile.json=${out}`,
       ],
@@ -214,81 +123,101 @@ function runOverlayCases(): Record<string, boolean> {
       },
     );
     if (!fs.existsSync(out)) {
-      throw new Error(`overlay vitest wrote no JSON report: ${r.stderr || r.stdout}`);
+      throw new Error(`overlay case wrote no JSON: ${r.stderr || r.stdout}`);
     }
-    const flags: Record<string, boolean> = {};
-    for (const t of parseVitestJsonReport(JSON.parse(fs.readFileSync(out, "utf8"))).tests) {
-      if (t.status !== "failed") {
-        throw new Error(`overlay case ${t.fullName} did not fail (${t.status})`);
-      }
-      flags[t.fullName] = t.revertProofAssertion;
+    const parsed = parseVitestJsonReport(JSON.parse(fs.readFileSync(out, "utf8")));
+    const row = parsed.tests.find((t) => t.fullName === fullName);
+    if (!row || row.status !== "failed") {
+      throw new Error(`overlay case ${fullName} did not fail (${row?.status})`);
     }
-    return flags;
+    return row;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
+function vitestBin() {
+  for (const rel of ["web/node_modules/.bin/vitest", "node_modules/.bin/vitest"]) {
+    const bin = path.join(repoRoot, rel);
+    if (fs.existsSync(bin)) return bin;
+  }
+  throw new Error(`vitest binary not found under ${repoRoot}`);
+}
+
 describe("revert-proof vitest runner through the overlay", () => {
-  let flags: Record<string, boolean> = {};
-
-  beforeAll(() => {
-    flags = runOverlayCases();
-  }, 120_000);
-
-  it("(f) real expect() failures set revertProofAssertion", () => {
-    expect(Object.keys(flags)).toContain("expect toBe");
-    for (const name of [
-      "expect toBe",
-      "expect toMatchObject",
-      "expect toHaveBeenCalledWith",
-      "expect toThrow class",
-    ]) {
-      strictEqual(flags[name], true, name);
-    }
-  });
-
-  it("(g) node:assert strictEqual failure sets revertProofAssertion", () => {
-    for (const name of ["node strictEqual", "node throws class"]) {
-      expect(flags[name], name).toBe(true);
-    }
-  });
-
-  it("(g-callable) callable node:assert and node:assert/strict failures set revertProofAssertion", () => {
-    for (const name of [
-      "node callable assert",
-      "node strict callable",
-      "node strict deepStrictEqual",
-    ]) {
-      expect(flags[name], name).toBe(true);
-    }
-  });
-
-  it("(c) plain-object fake AssertionError is rejected", () => {
-    expect(flags["plain object"]).toBe(false);
-  });
-
-  it("(meta-spoof) test-written task.meta.revertProofAssertion is overwritten", () => {
-    for (const name of [
+  it("(1) only the runner writes the flag after hooks (meta spoof rejected)", () => {
+    const row = runSingleOverlayCase(
+      "runner meta",
+      `  it("meta body spoof", ({ task }) => {
+    task.meta.revertProofAssertion = true;
+    task.meta.revertProofRed = { actual: 1, expected: 0 };
+    throw new TypeError("boom");
+  });`,
       "meta body spoof",
-      "meta onTestFailed spoof",
-      "meta timer spoof",
-      "after > meta afterEach spoof",
-    ]) {
-      expect(flags[name], name).toBe(false);
-    }
+    );
+    expect(row.revertProofAssertion).toBe(false);
+    expect(row.revertProofRed).toBeNull();
   });
 
-  it("(proto-borrow) borrowed prototypes, hand-built and subclassed AssertionErrors are rejected", () => {
-    for (const name of ["proto borrow", "hand-built chai", "hand-built node", "chai subclass"]) {
-      expect(flags[name], name).toBe(false);
-    }
+  it("(2) real expect(1).toBe(0) is branded", () => {
+    const row = runSingleOverlayCase(
+      "expect red",
+      `  it("expect toBe", () => {
+    expect(1).toBe(0);
+  });`,
+      "expect toBe",
+    );
+    expect(row.revertProofAssertion).toBe(true);
+    expect(row.revertProofRed).toEqual({ actual: 1, expected: 0 });
   });
 
-  it("(passthrough) errors handed to an assertion and rethrown are not branded", () => {
-    for (const name of ["node fail passthrough", "node rejects passthrough"]) {
-      expect(flags[name], name).toBe(false);
-    }
+  it("(2) plain TypeError is not branded", () => {
+    const row = runSingleOverlayCase(
+      "type error",
+      `  it("plain TypeError", () => {
+    throw new TypeError("boom");
+  });`,
+      "plain TypeError",
+    );
+    expect(row.revertProofAssertion).toBe(false);
+  });
+
+  it("(2) expect.soft failure is branded", () => {
+    const row = runSingleOverlayCase(
+      "expect soft",
+      `  it("soft fail", () => {
+    expect.soft(1).toBe(0);
+    expect(1).toBe(1);
+  });`,
+      "soft fail",
+    );
+    expect(row.revertProofAssertion).toBe(true);
+    expect(row.revertProofRed).toEqual({ actual: 1, expected: 0 });
+  });
+
+  it("(2) expect.soft failure then TypeError keeps the first (soft) red", () => {
+    const row = runSingleOverlayCase(
+      "soft fail then throw",
+      `  it("soft fail then TypeError", () => {
+    expect.soft(2).toBe(3);
+    throw new TypeError("after soft");
+  });`,
+      "soft fail then TypeError",
+    );
+    expect(row.revertProofAssertion).toBe(true);
+    expect(row.revertProofRed).toEqual({ actual: 2, expected: 3 });
+  });
+
+  it("(2) expect.soft pass then TypeError is not branded", () => {
+    const row = runSingleOverlayCase(
+      "soft then throw",
+      `  it("soft pass then TypeError", () => {
+    expect.soft(1).toBe(1);
+    throw new TypeError("after soft");
+  });`,
+      "soft pass then TypeError",
+    );
+    expect(row.revertProofAssertion).toBe(false);
   });
 });
 
@@ -339,6 +268,35 @@ describe("strict Vitest red from task.meta only", () => {
 });
 
 describe("strict pytest red from plugin JSON only", () => {
+  it("(4) accepts rewritten assert, rejects hand-raised AssertionError", () => {
+    const assertRow = assessPytestSelection(
+      [
+        {
+          nodeid: "tests/t.py::test_ok",
+          outcome: "failed",
+          revertProofAssertion: true,
+          revertProofRed: { assert: "assert answer == 2" },
+        },
+      ],
+      "tests/t.py::test_ok",
+    );
+    expect(assertRow.ok).toBe(true);
+    const raiseRow = assessPytestSelection(
+      [
+        {
+          nodeid: "tests/t.py::test_bad",
+          outcome: "failed",
+          revertProofAssertion: false,
+          revertProofRed: null,
+        },
+      ],
+      "tests/t.py::test_bad",
+    );
+    expect(classifyPatchedPytest({ counts: { collectionError: false, selection: raiseRow } })).toBe(
+      "build break",
+    );
+  });
+
   it("(a) rejects ProbeError even when traceback mentions AssertionError", () => {
     const nodeId = "tests/test_x.py::test_y";
     const tests = [
@@ -379,7 +337,89 @@ describe("strict pytest red from plugin JSON only", () => {
   });
 });
 
+function pythonBin() {
+  return process.env.REVERT_PROOF_PYTHON ?? path.join(repoRoot, ".venv", "bin", "python");
+}
+
+function runPytestPluginCase(body: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rp-pytest-one-"));
+  try {
+    fs.writeFileSync(path.join(dir, "test_case.py"), `def test_case():\n${body}\n`);
+    const out = path.join(dir, "report.json");
+    const r = spawnSync(
+      pythonBin(),
+      [
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "revert_proof_pytest_plugin",
+        "--rootdir",
+        dir,
+        "test_case.py::test_case",
+      ],
+      {
+        cwd: dir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PYTHONPATH: scriptsDir,
+          PYTHONDONTWRITEBYTECODE: "1",
+          REVERT_PROOF_PYTEST_JSON: out,
+        },
+      },
+    );
+    if (!fs.existsSync(out)) {
+      throw new Error(`pytest plugin case wrote no JSON: ${r.stderr || r.stdout}`);
+    }
+    const parsed = parsePytestPluginJson(fs.readFileSync(out, "utf8"), r.status ?? 1);
+    return assessPytestSelection(parsed.tests, "test_case.py::test_case").target;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe("revert-proof pytest plugin", () => {
+  it("(4-plugin) a failing rewritten assert records its source line as red", () => {
+    expect(runPytestPluginCase("    answer = 1\n    assert answer == 2")).toEqual({
+      nodeid: "test_case.py::test_case",
+      outcome: "failed",
+      revertProofAssertion: true,
+      revertProofRed: { assert: "assert answer == 2" },
+    });
+  });
+
+  it("(4-plugin) a hand-raised AssertionError is not an assertion", () => {
+    expect(runPytestPluginCase('    raise AssertionError("answer == 2")')).toEqual({
+      nodeid: "test_case.py::test_case",
+      outcome: "failed",
+      revertProofAssertion: false,
+      revertProofRed: null,
+    });
+  });
+});
+
 describe("pytest plugin JSON parsing", () => {
+  it("selection target carries structured revertProofRed from plugin JSON", () => {
+    const parsed = parsePytestPluginJson(
+      JSON.stringify({
+        tests: [
+          {
+            nodeid: "t.py::test_a",
+            outcome: "failed",
+            revertProofAssertion: true,
+            revertProofRed: { assert: "assert answer == 2" },
+          },
+        ],
+      }),
+      1,
+    );
+    expect(assessPytestSelection(parsed.tests, "t.py::test_a").target?.revertProofRed).toEqual({
+      assert: "assert answer == 2",
+    });
+  });
+
   it("parses tests array from plugin output", () => {
     const parsed = parsePytestPluginJson(
       JSON.stringify({
@@ -424,6 +464,24 @@ describe("vitest JSON report parsing", () => {
     expect(parsed.tests[0]?.revertProofAssertion).toBe(true);
   });
 
+  it("reads structured revertProofRed from task meta", () => {
+    const parsed = parseVitestJsonReport({
+      testResults: [
+        {
+          assertionResults: [
+            {
+              ancestorTitles: ["widget"],
+              title: "returns one",
+              status: "failed",
+              meta: { revertProofAssertion: true, revertProofRed: { actual: 2, expected: 1 } },
+            },
+          ],
+        },
+      ],
+    });
+    expect(parsed.tests[0]?.revertProofRed).toEqual({ actual: 2, expected: 1 });
+  });
+
   it("(red-line) keeps the first line of the first failure message", () => {
     const parsed = parseVitestJsonReport({
       testResults: [
@@ -464,23 +522,44 @@ describe("sidecar red value", () => {
     description: "d",
   };
 
-  it("(red-required) sidecar without a string red field is rejected", () => {
+  it("(5-red-required) sidecar without structured red is rejected", () => {
     expect(thrownMessage(() => validateRowMeta(meta, "r"))).toBe(
-      'row r: sidecar JSON missing string field "red"',
+      'row r: sidecar JSON missing object field "red"',
     );
   });
 
-  it("(red-mismatch) a different patched failure line is rejected", () => {
+  it("(5-red-shape) vitest red given as a message string is rejected", () => {
     expect(
       thrownMessage(() =>
-        assertRedValue(
+        validateRowMeta({ ...meta, red: "AssertionError: expected 2 to be 1" }, "r"),
+      ),
+    ).toBe('row r: sidecar JSON missing object field "red"');
+  });
+
+  it("(5-red-shape) vitest red without actual/expected is rejected", () => {
+    expect(thrownMessage(() => validateRowMeta({ ...meta, red: { actual: 2 } }, "r"))).toBe(
+      "row r: vitest red must be { actual, expected } (structured assertion values)",
+    );
+  });
+
+  it("(5-red-shape) pytest red must be the rewritten assert source", () => {
+    expect(
+      thrownMessage(() =>
+        validateRowMeta(
+          { ...meta, runner: "pytest", red: { actual: 2, expected: 1 } },
           "r",
-          "AssertionError: expected 2 to be 1 // Object.is equality",
-          "AssertionError: expected 3 to be 1 // Object.is equality",
         ),
       ),
+    ).toBe('row r: pytest red must be { assert: "assert …" } (rewritten assert source)');
+  });
+
+  it("(5-red-mismatch) structured actual/expected mismatch is rejected", () => {
+    expect(
+      thrownMessage(() =>
+        assertRedValue("r", { actual: 2, expected: 1 }, { actual: 3, expected: 1 }),
+      ),
     ).toBe(
-      "row r: red value mismatch (expected AssertionError: expected 2 to be 1 // Object.is equality, got AssertionError: expected 3 to be 1 // Object.is equality)",
+      'row r: red value mismatch (expected {"actual":2,"expected":1}, got {"actual":3,"expected":1})',
     );
   });
 });
