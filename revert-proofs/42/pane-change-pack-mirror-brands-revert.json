@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pane-change.test.ts",
+  "testName": "wires pack-mirror brands in probe API",
+  "expectedRed": "AssertionError: expected false to be true // Object.is equality"
+}

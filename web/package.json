@@ -15,7 +15,7 @@
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
     "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",
-    "lint": "node scripts/lint-brand-casts.mjs"
+    "lint": "node scripts/lint-brand-casts-core.mjs"
   },
   "dependencies": {
     "d3-force-3d": "^3.0.6",

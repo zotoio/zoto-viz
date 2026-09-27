@@ -1,4 +1,6 @@
 import { readFileSync, globSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const brands = [
   "CssRect",
@@ -81,4 +83,18 @@ export function lintProductionTree(webRoot, options = {}) {
 
 export function formatViolation({ file, rule, line, col }) {
   return `${file}:${line}:${col}: ${rule}`;
+}
+
+const invokedAsCli =
+  !!process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (invokedAsCli) {
+  const webRoot = fileURLToPath(new URL("..", import.meta.url));
+  const violations = lintProductionTree(webRoot);
+  if (violations.length > 0) {
+    for (const v of violations) {
+      console.error(formatViolation(v));
+    }
+    process.exit(1);
+  }
 }
