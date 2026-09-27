@@ -140,6 +140,15 @@ export class PluginSandbox {
     );
   }
 
+  /** Push persisted tile config so plugins with config.read see live slider changes. */
+  setConfig(config: Record<string, string>): void {
+    if (!this.caps.includes("config.read")) return;
+    this.iframe?.contentWindow?.postMessage(
+      { source: "zoto-viz-host", type: "config", config } satisfies ParentMsg,
+      "*",
+    );
+  }
+
   contract(): VizPluginContract | undefined {
     return this.vizContract;
   }

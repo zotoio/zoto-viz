@@ -313,6 +313,53 @@ def test_typesafe_capability_in_schema() -> None:
     })
 
 
+def test_plugin_config_field_section_validates() -> None:
+    _validator().validate({
+        "id": "sections-demo",
+        "name": "Sections",
+        "version": 1,
+        "config": [
+            {
+                "key": "gain",
+                "label": "gain",
+                "type": "number",
+                "default": 1,
+                "section": "Motion",
+            },
+        ],
+    })
+
+
+def test_plugin_config_field_section_rejects_non_string() -> None:
+    bad_sections = (
+        123,
+        None,
+        ["Motion"],
+        {"title": "Motion"},
+    )
+    validator = _validator()
+    for section in bad_sections:
+        err: ValidationError | None = None
+        try:
+            validator.validate({
+                "id": "sections-bad",
+                "name": "Sections",
+                "version": 1,
+                "config": [
+                    {
+                        "key": "gain",
+                        "label": "gain",
+                        "type": "number",
+                        "default": 1,
+                        "section": section,
+                    },
+                ],
+            })
+        except ValidationError as exc:
+            err = exc
+        assert err is not None, f"section {section!r} must be rejected"
+
+
 def test_viz_graph_walk_true_fails_schema() -> None:
     with pytest.raises(ValidationError):
         _validator().validate({

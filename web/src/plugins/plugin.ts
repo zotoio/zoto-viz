@@ -251,7 +251,13 @@ export interface PluginList {
   pythonService?: boolean;
 }
 
-export { configStoreId, parsePluginId, parsePluginInstance, pluginViewId } from "./instances";
+export {
+  configStoreId,
+  parsePluginId,
+  parsePluginInstance,
+  pluginSpecForStoreId,
+  pluginViewId,
+} from "./instances";
 
 /** Executable plugins (TypeScript, Python, and/or a custom sky shader) need a source-review consent. YAML-only views skip it. */
 export function pluginNeedsReview(spec: PluginView): boolean {

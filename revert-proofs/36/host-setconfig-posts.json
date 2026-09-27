@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/host.test.ts",
+  "testName": "PluginSandbox > posts config updates to the iframe when config.read is allowed",
+  "description": "PluginSandbox.setConfig must post when config.read is granted",
+  "red": "AssertionError: expected false to be true // Object.is equality"
+}

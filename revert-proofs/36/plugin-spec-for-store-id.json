@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/instances.test.ts",
+  "testName": "plugin instances > resolves instance store ids against the catalog tree",
+  "description": "Instance iframe config push must resolve id:instance store ids",
+  "red": "AssertionError: expected undefined to be 'apod' // Object.is equality"
+}

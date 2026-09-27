@@ -4,6 +4,125 @@ import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
 import type { SdmDevice } from "./nest-cams-look";
 
+/** Visible label beside the field caption when the value differs from default. */
+export const FIELD_EDITED_LABEL = "Edited";
+
+/** Screen-reader hint when a control differs from its schema default (not colour-only). */
+export const FIELD_EDITED_ARIA = "Unsaved change";
+
+function syncSectionSummaryEdited(details: HTMLDetailsElement): void {
+  const sum = details.querySelector("summary");
+  if (!sum) return;
+  const dirtyInside = !!details.querySelector(".field-dirty");
+  const show = dirtyInside && !details.open;
+  if (show) {
+    if (!sum.querySelector(".field-edited-cue")) {
+      const cue = document.createElement("span");
+      cue.className = "field-edited-cue";
+      cue.textContent = FIELD_EDITED_LABEL;
+      cue.setAttribute("aria-hidden", "true");
+      sum.append(cue);
+    }
+  } else {
+    sum.querySelector(".field-edited-cue")?.remove();
+  }
+}
+
+function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
+  el.classList.toggle("field-dirty", dirty);
+  if (dirty) {
+    el.setAttribute("aria-description", FIELD_EDITED_ARIA);
+    if (!el.querySelector(".field-edited-cue")) {
+      const cue = document.createElement("span");
+      cue.className = "field-edited-cue";
+      cue.textContent = FIELD_EDITED_LABEL;
+      cue.setAttribute("aria-hidden", "true");
+      const cap = el.querySelector(".cap");
+      if (cap?.parentElement === el) cap.before(cue);
+      else el.prepend(cue);
+    }
+  } else {
+    el.removeAttribute("aria-description");
+    el.querySelector(".field-edited-cue")?.remove();
+  }
+}
+
+function appendFieldControl(
+  row: HTMLElement,
+  f: PluginField,
+  values: Record<string, string>,
+  persist: () => void,
+  onDirtyChange?: () => void,
+): void {
+  const current = values[f.key] ?? fieldDefault(f);
+  const syncDirty = (el: HTMLElement) => {
+    const cur = values[f.key] ?? fieldDefault(f);
+    syncFieldEditedMarkers(el, String(cur) !== String(fieldDefault(f)));
+    onDirtyChange?.();
+  };
+  const wrap = (el: HTMLElement) => {
+    syncDirty(el);
+    el.setAttribute("data-field-key", f.key);
+    row.append(el);
+  };
+  if (f.type === "boolean") {
+    const t = new Toggle({
+      label: f.label,
+      title: f.hint,
+      checked: current === "1" || current === "true",
+      onChange: (on) => {
+        values[f.key] = on ? "1" : "0";
+        syncDirty(t.el);
+        persist();
+      },
+    });
+    wrap(t.el);
+  } else if (f.type === "select" && f.values?.length) {
+    const s = new Select({
+      caption: f.label,
+      title: f.hint,
+      options: f.values.map(([value, label]) => ({ value, label })),
+      value: current,
+      onChange: (v) => {
+        values[f.key] = v;
+        syncDirty(s.el);
+        persist();
+      },
+    });
+    wrap(s.el);
+  } else if (f.type === "number") {
+    const min = f.min ?? 0;
+    const max = f.max ?? Math.max(min + 1, 100);
+    const sl = new Slider({
+      label: f.label,
+      title: f.hint,
+      min,
+      max,
+      step: f.step ?? 1,
+      value: Number(current),
+      onInput: (v) => {
+        values[f.key] = String(v);
+        syncDirty(sl.el);
+        persist();
+      },
+    });
+    wrap(sl.el);
+  } else {
+    const tf = new TextField({
+      caption: f.label,
+      title: f.hint,
+      placeholder: f.default !== undefined ? String(f.default) : undefined,
+      value: current,
+      onInput: (v) => {
+        values[f.key] = v;
+        syncDirty(tf.el);
+        persist();
+      },
+    });
+    wrap(tf.el);
+  }
+}
+
 export function fillPluginFields(
   host: HTMLElement,
   spec: PluginView,
@@ -46,54 +165,46 @@ export function fillPluginFields(
     if (f.type === "textarea") notes.push(f);
     else compact.push(f);
   }
-  if (compact.length) {
+  const hasSections = compact.some((f) => f.section);
+  if (compact.length && hasSections) {
+    const groups = new Map<string, PluginField[]>();
+    for (const f of compact) {
+      const s = f.section ?? "";
+      if (!groups.has(s)) groups.set(s, []);
+      groups.get(s)!.push(f);
+    }
+    for (const [section, sectionFields] of groups) {
+      const container = section
+        ? document.createElement("details")
+        : document.createElement("div");
+      if (container instanceof HTMLDetailsElement) {
+        container.className = "sec sec-collapsible";
+        container.open = true;
+        const sum = document.createElement("summary");
+        sum.className = "sec-title";
+        sum.textContent = section;
+        container.append(sum);
+        container.addEventListener("toggle", () => syncSectionSummaryEdited(container));
+      } else {
+        container.className = "sec";
+      }
+      const row = document.createElement("div");
+      row.className = "sec-controls";
+      const sectionDetails = container instanceof HTMLDetailsElement ? container : undefined;
+      const onSectionDirty = sectionDetails
+        ? () => syncSectionSummaryEdited(sectionDetails)
+        : undefined;
+      for (const f of sectionFields) appendFieldControl(row, f, values, persist, onSectionDirty);
+      container.append(row);
+      if (sectionDetails) syncSectionSummaryEdited(sectionDetails);
+      host.append(container);
+    }
+  } else if (compact.length) {
     const sec = document.createElement("div");
     sec.className = "sec";
     const row = document.createElement("div");
     row.className = "sec-controls";
-    for (const f of compact) {
-      const current = values[f.key] ?? fieldDefault(f);
-      if (f.type === "boolean") {
-        const t = new Toggle({
-          label: f.label,
-          title: f.hint,
-          checked: current === "1" || current === "true",
-          onChange: (on) => { values[f.key] = on ? "1" : "0"; persist(); },
-        });
-        row.append(t.el);
-      } else if (f.type === "select" && f.values?.length) {
-        const s = new Select({
-          caption: f.label,
-          title: f.hint,
-          options: f.values.map(([value, label]) => ({ value, label })),
-          value: current,
-          onChange: (v) => { values[f.key] = v; persist(); },
-        });
-        row.append(s.el);
-      } else if (f.type === "number") {
-        const min = f.min ?? 0;
-        const max = f.max ?? Math.max(min + 1, 100);
-        const sl = new Slider({
-          label: f.label,
-          title: f.hint,
-          min,
-          max,
-          step: f.step ?? 1,
-          value: Number(current),
-          onInput: (v) => { values[f.key] = String(v); persist(); },
-        });
-        row.append(sl.el);
-      } else {
-        const tf = new TextField({
-          caption: f.label,
-          title: f.hint,
-          placeholder: f.default !== undefined ? String(f.default) : undefined,
-          value: current,
-          onInput: (v) => { values[f.key] = v; persist(); },
-        });
-        row.append(tf.el);
-      }
-    }
+    for (const f of compact) appendFieldControl(row, f, values, persist);
     sec.append(row);
     host.append(sec);
   }

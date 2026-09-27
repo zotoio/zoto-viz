@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+index 116265e3..28b4c1c9 100644
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -31,7 +31,7 @@ function syncSectionSummaryEdited(details: HTMLDetailsElement): void {
+ function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
+   el.classList.toggle("field-dirty", dirty);
+   if (dirty) {
+-    el.setAttribute("aria-description", FIELD_EDITED_ARIA);
++    el.setAttribute("aria-description", "Edited from default");
+     if (!el.querySelector(".field-edited-cue")) {
+       const cue = document.createElement("span");
+       cue.className = "field-edited-cue";

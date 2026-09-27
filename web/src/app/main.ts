@@ -66,6 +66,7 @@ import {
   viewSelectOptions,
   writePluginConfig,
   configStoreId,
+  pluginSpecForStoreId,
   type PluginView,
 } from "../plugins/plugin";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
@@ -103,6 +104,10 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import {
+  allowOnPluginChangeConfigPush,
+  allowOnPluginFieldsConfigPush,
+} from "../plugins/plugin-config-sync";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
@@ -501,6 +506,18 @@ function onPluginFields(): void {
   else scene.setMode(m, opts);
   renderLegend(m, opts);
   void syncWifiWatch();
+  const loadedStore = sandboxLoadedConfigStoreId();
+  if (loadedStore) {
+    const spec = pluginSpecForStoreId(pluginSpecs, loadedStore);
+    const storeId = spec ? configStoreId(spec) : "";
+    if (
+      spec
+      && allowOnPluginFieldsConfigPush(loadedStore, storeId, spec.capabilities?.includes("config.read") ?? false)
+    ) {
+      const fields = pluginViewKnobs(spec, spec.config);
+      sandbox.setConfig(loadPluginConfig(spec, fields));
+    }
+  }
 }
 
 /**
@@ -570,7 +587,15 @@ function syncHeaderView(): void {
 
 let tsWatch = 0;
 let tsWatchId = "";
+let tsWatchStoreId = "";
 let tsWatchHash = "";
+
+function sandboxLoadedConfigStoreId(): string | null {
+  if (!tsWatchStoreId) return null;
+  const spec = pluginSpecForStoreId(pluginSpecs, tsWatchStoreId);
+  if (!spec?.capabilities?.includes("config.read")) return null;
+  return tsWatchStoreId;
+}
 
 async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   if (!spec || !pluginNeedsReview(spec)) return true;
@@ -608,6 +633,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
+    tsWatchStoreId = spec ? configStoreId(spec) : "";
     return;
   }
   if (!tsPluginsAllowed()) {
@@ -615,6 +641,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
+    tsWatchStoreId = spec ? configStoreId(spec) : "";
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
@@ -622,6 +649,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
+    tsWatchStoreId = "";
     return;
   }
   try {
@@ -630,6 +658,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
     tsWatchId = spec.id;
+    tsWatchStoreId = configStoreId(spec);
     tsWatchHash = spec.hash;
     const m = modeById(modeSel.value);
     if (m.pluginId === spec.id) {
@@ -1150,7 +1179,17 @@ settings = new Settings({
   },
   onPersist: () => touch(),
 });
-settings.onPluginChange = () => {
+settings.onPluginChange = (storeId, values) => {
+  const spec = pluginSpecForStoreId(pluginSpecs, storeId);
+  if (
+    allowOnPluginChangeConfigPush(
+      sandboxLoadedConfigStoreId(),
+      storeId,
+      spec?.capabilities?.includes("config.read") ?? false,
+    )
+  ) {
+    sandbox.setConfig(values);
+  }
   onPluginFields();
   if (!mosaic?.on) return;
   const focus = mosaic.focusedId;
