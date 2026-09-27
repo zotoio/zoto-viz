@@ -2216,59 +2216,63 @@ settings.prependSection(
 uiReady = true;
 applyViewLook();
 async function bootCatalogFromSession(): Promise<void> {
-  const session = await bootSession();
-  typeSafeKeyOn = session.typesafeConfigured;
-  setTypeSafeProxyConfigured(() => typeSafeKeyOn);
-  agent.setControlFromServer(session.aiControl);
-  pluginSpecs = await installPlugins();
-  catalogReady = true;
-  modeSel.setOptions(viewSelectOptions());
-  settings.refreshMosaicSlots();
-  const live = readSessionLive();
-  const bootMode = resolveRestoredViewMode({
-    sessionMode: live?.settings?.mode,
-    localMode: localStorage.getItem("zoto-viz.mode"),
-    fallback: defaultCatalogMode()?.id ?? "topology",
-  });
-  modeSel.value = bootMode;
-  localStorage.setItem("zoto-viz.mode", bootMode);
-  liveMode = bootMode;
-  if (settings.animSettings.mosaic !== "off" && mosaic) {
-    const bootTiles = reconcileMosaicTilesWithMode(
-      settings.animSettings.mosaicTiles,
-      bootMode,
-      localStorage.getItem(MOSAIC_FOCUS_KEY),
-    );
-    if (bootTiles.join("\0") !== settings.animSettings.mosaicTiles.join("\0")) {
-      settings.applyAnim({ ...settings.animSettings, mosaicTiles: bootTiles });
+  try {
+    const session = await bootSession();
+    typeSafeKeyOn = session.typesafeConfigured;
+    setTypeSafeProxyConfigured(() => typeSafeKeyOn);
+    agent.setControlFromServer(session.aiControl);
+    pluginSpecs = await installPlugins();
+    catalogReady = true;
+    modeSel.setOptions(viewSelectOptions());
+    settings.refreshMosaicSlots();
+    const live = readSessionLive();
+    const bootMode = resolveRestoredViewMode({
+      sessionMode: live?.settings?.mode,
+      localMode: localStorage.getItem("zoto-viz.mode"),
+      fallback: defaultCatalogMode()?.id ?? "topology",
+    });
+    modeSel.value = bootMode;
+    localStorage.setItem("zoto-viz.mode", bootMode);
+    liveMode = bootMode;
+    if (settings.animSettings.mosaic !== "off" && mosaic) {
+      const bootTiles = reconcileMosaicTilesWithMode(
+        settings.animSettings.mosaicTiles,
+        bootMode,
+        localStorage.getItem(MOSAIC_FOCUS_KEY),
+      );
+      if (bootTiles.join("\0") !== settings.animSettings.mosaicTiles.join("\0")) {
+        settings.applyAnim({ ...settings.animSettings, mosaicTiles: bootTiles });
+      }
+      if (mosaic) {
+        mosaic.setSize(settings.animSettings.mosaic, bootMode, settings.animSettings.hero, {
+          tree: settings.animSettings.mosaicTree,
+          maximized: settings.animSettings.mosaicMaxId || null,
+          tiles: settings.animSettings.mosaicTiles,
+        });
+        mosaic.hydrate();
+      }
     }
-    if (mosaic) {
-      mosaic.setSize(settings.animSettings.mosaic, bootMode, settings.animSettings.hero, {
-        tree: settings.animSettings.mosaicTree,
-        maximized: settings.animSettings.mosaicMaxId || null,
-        tiles: settings.animSettings.mosaicTiles,
-      });
-      mosaic.hydrate();
+    const restored = profiles ? await profiles.boot(live) : false;
+    await agent.syncStatus();
+    if (!agent.savedBackend() && agent.cursorReady()) {
+      agent.useBackend("cursor");
+      touch();
     }
+    quiet(() => {
+      applyMode(modeSel.value, {}, { channel: "automatic", auto: "profile-restore" });
+      applyViewLook();
+      if (restored && live) applyTheme(live.settings.theme, false, false);
+    });
+    if (restored && live?.selected) scene.selectIp(live.selected);
+    if (restored) agent.setCycleChecked(!!live?.aiCycle);
+    else if (agent.cycleOn) await setAiCycle(true);
+    liveReady = true;
+    persistLive(true);
+    void syncWifiWatch();
+    agent.armWake();
+  } finally {
+    document.body.classList.remove("view-booting");
   }
-  const restored = profiles ? await profiles.boot(live) : false;
-  await agent.syncStatus();
-  if (!agent.savedBackend() && agent.cursorReady()) {
-    agent.useBackend("cursor");
-    touch();
-  }
-  quiet(() => {
-    applyMode(modeSel.value, {}, { channel: "automatic", auto: "profile-restore" });
-    applyViewLook();
-    if (restored && live) applyTheme(live.settings.theme, false, false);
-  });
-  if (restored && live?.selected) scene.selectIp(live.selected);
-  if (restored) agent.setCycleChecked(!!live?.aiCycle);
-  else if (agent.cycleOn) await setAiCycle(true);
-  liveReady = true;
-  persistLive(true);
-  void syncWifiWatch();
-  agent.armWake();
 }
 
 if (!import.meta.env.VITEST) void bootCatalogFromSession();

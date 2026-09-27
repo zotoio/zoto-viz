@@ -33,6 +33,7 @@ function mountIndexDom(): void {
   const doc = new DOMParser().parseFromString(raw, "text/html");
   for (const el of doc.querySelectorAll("script, link[rel=stylesheet]")) el.remove();
   document.head.replaceChildren(...Array.from(doc.head.children).map((n) => n.cloneNode(true)));
+  document.body.className = doc.body.className;
   document.body.replaceChildren(...Array.from(doc.body.children).map((n) => n.cloneNode(true)));
 }
 

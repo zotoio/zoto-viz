@@ -8,5 +8,6 @@ describe("main.ts production entry async boot", () => {
     await bootMainEntry();
     await waitEntryBootComplete();
     expect(document.querySelector("#wall canvas.render-host")).toBeTruthy();
+    expect(document.body.classList.contains("view-booting")).toBe(false);
   });
 });
