@@ -728,6 +728,41 @@ def _retry_row_version(row: dict[str, str]) -> str | int | None:
         return raw
 
 
+def _pack_id_for_local_zip_digest(digest: str) -> str | None:
+    """Resolve pack id from a staged local zip when the block row was cleared mid-retry."""
+    folder = paths.plugin_local_dir(create=False)
+    if not folder or not folder.is_dir():
+        return None
+    want = digest.strip().lower()
+    for zp in folder.glob("*.zip"):
+        if not zp.is_file():
+            continue
+        try:
+            if pz.plugin_sha256(zp).lower() == want:
+                return zp.stem
+        except OSError:
+            continue
+    return None
+
+
+def _retry_in_progress_response(
+    digest: str,
+    pid: str,
+    row: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    name = str((row or {}).get("name") or pid)
+    version = _retry_row_version(row or {"version": "2"})
+    return {
+        "ok": False,
+        "error": "retry_in_progress",
+        "retryResult": RETRY_RESULT_IN_PROGRESS,
+        "id": pid,
+        "name": name,
+        "version": version,
+        "zipSha256": digest,
+    }
+
+
 def _retry_zip_changed_response(
     digest: str,
     row: dict[str, str],
@@ -774,6 +809,11 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
     digest = sha256.strip().lower()
     row = zip_block_for_sha(digest)
     if row is None:
+        pid_hint = _pack_id_for_local_zip_digest(digest)
+        if pid_hint:
+            lock = pack_install_lock(pid_hint)
+            if not lock.acquire(blocking=False):
+                return _retry_in_progress_response(digest, pid_hint)
         return {"ok": False, "error": "not_blocked", "retryResult": RETRY_RESULT_NOT_BLOCKED}
     pid = str(row.get("id") or "")
     folder = paths.plugin_local_dir(create=True)
@@ -783,15 +823,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
 
     lock = pack_install_lock(pid)
     if not lock.acquire(blocking=False):
-        return {
-            "ok": False,
-            "error": "retry_in_progress",
-            "retryResult": RETRY_RESULT_IN_PROGRESS,
-            "id": pid,
-            "name": str(row.get("name") or pid),
-            "version": _retry_row_version(row),
-            "zipSha256": digest,
-        }
+        return _retry_in_progress_response(digest, pid, row)
     try:
         row = zip_block_for_sha(digest)
         if row is None:
