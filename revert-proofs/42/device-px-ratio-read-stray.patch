@@ -1,17 +1,12 @@
-diff --git a/web/scripts/lint-brand-casts-core.mjs b/web/scripts/lint-brand-casts-core.mjs
-index 530fe2b..f5395a7 100644
---- a/web/scripts/lint-brand-casts-core.mjs
-+++ b/web/scripts/lint-brand-casts-core.mjs
-@@ -45,12 +45,6 @@ export function lintSourceText(file, text, options = {}) {
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index e4787b6..e5a5006 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -123,6 +123,7 @@ export class RenderHost {
+       startLayoutDevicePxRatioWatch();
+       this.layoutDevicePxRatio = layoutDevicePxRatio();
      }
-   }
- 
--  if (devicePxRatioReads && file !== devicePxRatioMint) {
--    for (const _ of text.matchAll(devicePxRatioReadPattern)) {
--      violations.push({ file, rule: "device-px-ratio-read" });
--      break;
--    }
--  }
- 
-   return violations;
- }
++    void window.devicePixelRatio;
+     this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
+     this.unsubLayoutDpi =
+       opts.dpr === undefined

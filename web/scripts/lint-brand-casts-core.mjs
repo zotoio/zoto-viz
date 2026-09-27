@@ -22,7 +22,15 @@ const devicePxRatioMint = "src/graph/render-host-device-px-ratio.ts";
 const castPattern = new RegExp(`\\sas\\s+(${brands.join("|")})\\b`, "g");
 const devicePxRatioReadPattern = /\bdevicePixelRatio\b/g;
 
-/** @typedef {{ file: string, rule: string }} LintViolation */
+/** @typedef {{ file: string, rule: string, line: number, col: number }} LintViolation */
+
+function indexToLineCol(text, index) {
+  const before = text.slice(0, index);
+  const line = before.split("\n").length;
+  const lastNl = before.lastIndexOf("\n");
+  const col = index - (lastNl < 0 ? -1 : lastNl);
+  return { line, col };
+}
 
 /**
  * @param {string} file relative path under web/
@@ -41,13 +49,15 @@ export function lintSourceText(file, text, options = {}) {
 
   if (brandCasts) {
     for (const match of text.matchAll(castPattern)) {
-      violations.push({ file, rule: "brand-cast" });
+      const { line, col } = indexToLineCol(text, match.index ?? 0);
+      violations.push({ file, rule: "brand-cast", line, col });
     }
   }
 
   if (devicePxRatioReads && file !== devicePxRatioMint) {
-    for (const _ of text.matchAll(devicePxRatioReadPattern)) {
-      violations.push({ file, rule: "device-px-ratio-read" });
+    for (const match of text.matchAll(devicePxRatioReadPattern)) {
+      const { line, col } = indexToLineCol(text, match.index ?? 0);
+      violations.push({ file, rule: "device-px-ratio-read", line, col });
       break;
     }
   }
@@ -69,6 +79,6 @@ export function lintProductionTree(webRoot, options = {}) {
   return violations;
 }
 
-export function formatViolation({ file, rule }) {
-  return `${file}:${rule}`;
+export function formatViolation({ file, rule, line, col }) {
+  return `${file}:${line}:${col}: ${rule}`;
 }

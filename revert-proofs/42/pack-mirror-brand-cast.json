@@ -1,7 +1,5 @@
 {
-  "runner": "pnpm",
-  "testFile": "src/graph/lint-brand-casts.test.ts",
-  "testName": "^lint brand casts > lint gate: brand casts only in mint modules$",
-  "expectedRed": "AssertionError: expected undefined to be 'brand-cast' // Object.is equality",
-  "kind": "lint"
+  "runner": "lint",
+  "kind": "lint",
+  "expectedRed": "src/graph/render-host.ts:307:17: brand-cast"
 }

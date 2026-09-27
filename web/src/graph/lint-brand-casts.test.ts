@@ -47,7 +47,7 @@ describe("lint brand casts", () => {
     const sampleFile = "src/_lint-sample/stray-dpr.ts";
     const sample = "export const strayRead = devicePixelRatio;\n";
     const violations = lintSourceText(sampleFile, sample).map(formatViolation);
-    expect(violations[0]?.split(":")[1]).toBe("device-px-ratio-read");
+    expect(violations[0]?.split(": ").pop()).toBe("device-px-ratio-read");
     expect(violations).toHaveLength(1);
   });
 
@@ -55,7 +55,7 @@ describe("lint brand casts", () => {
     const sampleFile = "src/_lint-sample/brand-cast.ts";
     const sample = "export const r = null as DeviceRect;\n";
     const violations = lintSourceText(sampleFile, sample).map(formatViolation);
-    expect(violations[0]?.split(":")[1]).toBe("brand-cast");
+    expect(violations[0]?.split(": ").pop()).toBe("brand-cast");
     expect(violations).toHaveLength(1);
   });
 });

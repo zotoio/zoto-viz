@@ -1,16 +1,12 @@
-diff --git a/web/scripts/lint-brand-casts-core.mjs b/web/scripts/lint-brand-casts-core.mjs
-index 530fe2b..6ba77fb 100644
---- a/web/scripts/lint-brand-casts-core.mjs
-+++ b/web/scripts/lint-brand-casts-core.mjs
-@@ -39,11 +39,6 @@ export function lintSourceText(file, text, options = {}) {
-     return violations;
-   }
- 
--  if (brandCasts) {
--    for (const match of text.matchAll(castPattern)) {
--      violations.push({ file, rule: "brand-cast" });
--    }
--  }
- 
-   if (devicePxRatioReads && file !== devicePxRatioMint) {
-     for (const _ of text.matchAll(devicePxRatioReadPattern)) {
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index e4787b6..a1b2c3d 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -304,6 +304,7 @@ export class RenderHost {
+       this.software ? undefined : this.canvasDeviceHeight,
+     );
+     if (this.software) {
++      void (null as DeviceRect);
+       return viewMutAsDeviceRect(this.fbDeviceViewport);
+     }
+     toGlRectInto(
