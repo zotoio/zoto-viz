@@ -1,16 +1,13 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 04ba3ef..eeec7aa 100644
+index 9c257b9f..e957a47b 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -12,10 +12,7 @@ from .access import attach_frame_embed_policy
+@@ -14,7 +14,7 @@ _log = logging.getLogger("zoto-viz.monitor")
  
- _log = logging.getLogger("zoto-viz.monitor")
+ HOST_REJECT_BODY = (
+     "This zoto-viz server doesn't accept the address it was opened with. "
+-    "Open it by its IP address instead, or add this host name to allowed_hosts in the server config."
++    "Open it by its IP address, or add this name to `allowed_hosts` in the server config."
+ )
  
--HOST_REJECT_BODY = (
--    "This zoto-viz server doesn't accept the address it was opened with. "
--    "Open it by its IP address, or add this name to `allowed_hosts` in the server config."
--)
-+HOST_REJECT_BODY = ""
- 
- HANDLER_ERROR_BODY = (
-     "zoto-viz ran into a problem with this request. "
+ HOST_HEADER_INVALID_BODY = (

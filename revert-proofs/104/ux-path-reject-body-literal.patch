@@ -1,0 +1,27 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 9c257b9f..9b0e6655 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -224,11 +224,6 @@ def _host_invalid_response() -> web.Response:
+     return resp
+ 
+ 
+-def _path_reject_response() -> web.Response:
+-    resp = web.Response(status=400, text=PATH_REJECT_BODY, content_type="text/plain")
+-    attach_frame_embed_policy(resp)
+-    return resp
+-
+ 
+ def register_response_prepare_hook(app: web.Application) -> None:
+     if app.get("request_guard_prepare_hook"):
+@@ -301,7 +296,9 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+     raw_path = getattr(request, "raw_path", None) or request.path or "/"
+     _norm_path, path_err = decode_request_path(raw_path)
+     if path_err:
+-        return _path_reject_response()
++        resp = web.Response(status=400, text="bad request", content_type="text/plain")
++        attach_frame_embed_policy(resp)
++        return resp
+ 
+     try:
+         resp = await handler(request)

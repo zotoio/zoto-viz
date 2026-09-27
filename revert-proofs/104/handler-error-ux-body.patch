@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 04ba3ef..e29ec91 100644
+index 9c257b9f..318299eb 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -290,6 +290,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+@@ -309,6 +309,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
          resp = exc
      except Exception:
          _log.exception("unhandled error in request handler")
