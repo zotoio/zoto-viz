@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testName": "pack navigation stop clear UX > swap pack on a stopped tile clears stopped UI on that tile",
+  "testId": "^pack navigation stop clear UX > swap pack on a stopped tile clears stopped UI on that tile$",
+  "testFile": "web/src/plugins/pack-asset-navigation-stop-clear.test.ts",
+  "description": "Swapping pack on a stopped tile must clear navigation-stopped state and pane copy (revert: never clear on swap).",
+  "timeoutSec": 120
+}

@@ -2,6 +2,45 @@ import type { ManifestWorkBudget } from "../../../plugins/sdk/manifest-work-budg
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
 import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
+import { mintPackAssetToken } from "../core/http";
+import {
+  closePackAssetFrameForTile,
+  openPackAssetFrame,
+  packAssetFrameForTile,
+} from "./pack-asset-frame";
+  HOST_SOURCE,
+  PLUGIN_SOURCE,
+  type HostBootChannelMsg,
+  type HostPortMsg,
+  type PluginPortMsg,
+} from "./sandbox-channel";
+  applyPackNavigationStoppedNotice,
+  clearPackNavigationStopped,
+  markPackNavigationStopped,
+  registerPackNavigationRemove,
+} from "./pack-asset-navigation";
+
+/** Test hook: shorten sandbox handshake waits. */
+let sandboxMsgTimeoutMs = 15_000;
+let sandboxBootWaitInTests = false;
+
+export function setSandboxMsgTimeoutMs(ms: number): void {
+  sandboxMsgTimeoutMs = Math.max(1, ms | 0);
+}
+
+export function setSandboxBootWaitInTests(on: boolean): void {
+  sandboxBootWaitInTests = on;
+
+export function sandboxMsgTimeoutForTests(): number {
+  return sandboxMsgTimeoutMs;
+
+let sandboxFramePostMessageCount = 0;
+
+export function sandboxFramePostMessageCountForTests(): number {
+  return sandboxFramePostMessageCount;
+
+export function resetSandboxFramePostMessageCountForTests(): void {
+  sandboxFramePostMessageCount = 0;
 
 const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
@@ -12,6 +51,62 @@ export function pluginSandboxFrameUrl(): string {
   const base = import.meta.env.BASE_URL || "/";
   const root = base.endsWith("/") ? base : `${base}/`;
   return new URL("plugin-sandbox.html", `${location.origin}${root}`).href;
+const PACK_ASSETS_PREFIX = "/pack-assets/";
+const SANDBOX_PACK = "_sandbox";
+const TEST_FALLBACK_FRAME_ID = "11111111-1111-4111-8111-111111111111";
+
+/** Pack asset path with an already-minted token (never omit the token). */
+export function packAssetUrlWithToken(token: string, packId: string, ...parts: string[]): string {
+  if (!token) throw new Error("pack asset token required");
+  const segs = [
+    encodeURIComponent(token),
+    encodeURIComponent(packId),
+    ...parts.map((p) => encodeURIComponent(p)),
+  ];
+  return `${PACK_ASSETS_PREFIX}${segs.join("/")}`;
+}
+
+const activePackAssetFrameByTile = new Map<string, string>();
+const sandboxAssetTokenByFrame = new Map<string, string>();
+let lastSandboxBootNonce = "";
+
+export function packAssetFrameIdForTests(tileId = "main"): string {
+  return activePackAssetFrameByTile.get(tileId) ?? "";
+}
+
+function resolvePackAssetFrameId(tileId = "main"): string {
+  return (
+    activePackAssetFrameByTile.get(tileId)
+    || packAssetFrameForTile(tileId)
+    || (import.meta.env.MODE === "test" ? TEST_FALLBACK_FRAME_ID : "")
+  );
+}
+
+export async function packAssetUrl(packId: string, ...parts: string[]): Promise<string> {
+  const frameId = resolvePackAssetFrameId();
+  if (!frameId) throw new Error("pack asset frame required");
+  const sandboxTok = sandboxAssetTokenByFrame.get(frameId);
+  const token = sandboxTok ?? await mintPackAssetToken(packId, frameId);
+  return packAssetUrlWithToken(token, packId, ...parts);
+}
+
+export function sandboxBootNonceForTests(): string {
+  return lastSandboxBootNonce;
+}
+
+/** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
+export async function pluginSandboxFrameUrl(
+  frameId: string,
+  bootNonceOut?: { nonce: string },
+): Promise<string> {
+  if (!frameId) throw new Error("pack asset frame required");
+  const token = await mintPackAssetToken(SANDBOX_PACK, frameId);
+  sandboxAssetTokenByFrame.set(frameId, token);
+  const bootNonce = crypto.randomUUID();
+  lastSandboxBootNonce = bootNonce;
+  if (bootNonceOut) bootNonceOut.nonce = bootNonce;
+  const path = packAssetUrlWithToken(token, SANDBOX_PACK, "plugin-sandbox.html");
+  return `${location.origin}${path}#zoto-boot=${encodeURIComponent(bootNonce)}`;
 }
 
 export function hostAllows(type: string, caps: string[]): boolean {
@@ -26,6 +121,7 @@ export function hostAllows(type: string, caps: string[]): boolean {
 export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "frame-ready" }
   | { source: "zoto-viz-plugin"; type: "ready" }
+  | { source: "zoto-viz-plugin"; type: "ready"; bootNonce?: string }
   | { source: "zoto-viz-plugin"; type: "setStyle"; payload: Record<string, unknown> }
   | { source: "zoto-viz-plugin"; type: "setNodeColor"; payload: { id: string; hex: number } }
   | { source: "zoto-viz-plugin"; type: "writeBuffer"; payload: { slot: number; data: number[] } }
@@ -45,6 +141,9 @@ export type ParentMsg =
       workBudget?: ManifestWorkBudget;
     }
     source: "zoto-viz-host";
+export type ParentPortMsg =
+  | {
+    source: typeof HOST_SOURCE;
     type: "boot";
     caps: string[];
     config: Record<string, string>;
@@ -55,6 +154,12 @@ export type ParentMsg =
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
   | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
+    bootNonce: string;
+    parentOrigin: string;
+  }
+  | { source: typeof HOST_SOURCE; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
+  | { source: typeof HOST_SOURCE; type: "frame"; frame: VizDataFrame }
+  | { source: typeof HOST_SOURCE; type: "config"; config: Record<string, string> };
 
 export interface PluginHostHandlers {
   setStyle?: (s: Record<string, unknown>) => void;
@@ -95,17 +200,40 @@ export function consentHash(id: string, hash: string): void {
 
 export function pluginModuleUrl(id: string, hash?: string): string {
   const path = `/api/plugins/${encodeURIComponent(id)}/module.js`;
-  return hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
+  const base = hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
+  return base;
 }
 
 /** @deprecated Legacy inline bootstrap kept for tests that assert SDK shape. */
 export const LEGACY_SRCDOC_SDK = PLUGIN_SDK;
+
+/** Pack module URL for opaque-origin sandbox import (token in path). */
+export async function pluginModuleSandboxUrl(id: string, hash?: string): Promise<string> {
+  const path = await packAssetUrl(id, "module.js");
+  let url = `${location.origin}${path}`;
+  if (hash) url += `?h=${encodeURIComponent(hash)}`;
+  return url;
+}
+
+
+export type NavigationStopHost = {
+  setPaneNotice?: import("./plugin-pack-feed").MosaicNoticeHost["setPaneNotice"];
+  closeTile?: (tileId: string) => void;
+};
 
 export class PluginSandbox {
   private iframe: HTMLIFrameElement | null = null;
   private caps: string[] = [];
   private vizContract: VizPluginContract | undefined;
   private moduleBlobUrl: string | null = null;
+  private bootReject: ((err: Error) => void) | null = null;
+  private frameId = "";
+  private bootNonce = "";
+  private hostPort: MessagePort | null = null;
+  private iframeLoadCount = 0;
+  private onIframeLoad: (() => void) | null = null;
+  private activePackLabel = "";
+  private navigationHost: NavigationStopHost | null = null;
   handlers: PluginHostHandlers = {};
   /** Mosaic tile or `main` receiving sandbox plugin writes. */
   activeTileId = "main";
@@ -115,21 +243,65 @@ export class PluginSandbox {
     this.activeTileId = id || "main";
   }
 
+  setActivePackLabel(label: string): void {
+    this.activePackLabel = label.trim();
+  }
+
+  setNavigationStopHost(host: NavigationStopHost | null): void {
+    this.navigationHost = host;
+  }
+
   constructor() {
-    window.addEventListener("message", this.onMessage);
+    window.addEventListener("message", this.onWindowMessage);
   }
 
   unload(): void {
     setSandboxReady(false);
+    this.bootReject = null;
+    this.teardownPort();
+    const tile = this.activeTileId;
+    const fid = this.frameId;
+    this.frameId = "";
+    this.bootNonce = "";
+    if (fid) sandboxAssetTokenByFrame.delete(fid);
+    if (activePackAssetFrameByTile.get(tile) === fid) activePackAssetFrameByTile.delete(tile);
+    void closePackAssetFrameForTile(tile);
     if (this.moduleBlobUrl) {
       URL.revokeObjectURL(this.moduleBlobUrl);
       this.moduleBlobUrl = null;
+    }
+    if (this.onIframeLoad && this.iframe) {
+      this.iframe.removeEventListener("load", this.onIframeLoad);
+      this.onIframeLoad = null;
     }
     if (this.iframe) {
       this.iframe.src = "about:blank";
       this.iframe.remove();
     }
     this.iframe = null;
+    this.iframeLoadCount = 0;
+  }
+
+  private teardownPort(): void {
+    if (this.hostPort) {
+      try { this.hostPort.close(); } catch { /* ignore */ }
+      this.hostPort.onmessage = null;
+      this.hostPort = null;
+    }
+  }
+
+  private postToFrameWindow(msg: HostBootChannelMsg, transfer: Transferable[]): void {
+    sandboxFramePostMessageCount += 1;
+    this.iframe?.contentWindow?.postMessage(msg, "*", transfer);
+  }
+
+  private postToFramePort(msg: HostPortMsg): void {
+    if (!this.hostPort) return;
+    this.hostPort.postMessage(msg);
+  }
+
+  get liveFrame(): HTMLIFrameElement | null {
+    return this.iframe;
   }
 
   get liveFrame(): HTMLIFrameElement | null {
@@ -177,6 +349,7 @@ export class PluginSandbox {
     if (!r.ok) throw new Error(`module ${r.status}`);
     const js = await r.text();
     await this.load(id, js, caps, config, viz, workBudget);
+    await this.loadModuleUrl(await pluginModuleSandboxUrl(id, hash), caps, config, viz);
   }
 
   async loadModuleUrl(
@@ -196,6 +369,9 @@ export class PluginSandbox {
     config: Record<string, string>,
     viz?: VizPluginContract,
   ): Promise<void> {
+    this.frameId = await openPackAssetFrame(this.activeTileId);
+    activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+    const bootOut = { nonce: "" };
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");
     iframe.hidden = true;
@@ -213,6 +389,36 @@ export class PluginSandbox {
     }
     iframe.contentWindow?.postMessage({
       source: "zoto-viz-host",
+    iframe.src = await pluginSandboxFrameUrl(this.frameId, bootOut);
+    this.bootNonce = bootOut.nonce;
+    document.body.appendChild(iframe);
+    this.iframe = iframe;
+    this.iframeLoadCount = 0;
+    this.onIframeLoad = () => {
+      this.iframeLoadCount += 1;
+      if (this.iframeLoadCount >= 2) void this.handleSandboxNavigation();
+    };
+    iframe.addEventListener("load", this.onIframeLoad);
+    if (iframe.srcdoc) {
+      throw new Error("plugin sandbox must not use srcdoc under page CSP");
+    }
+    if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
+      await Promise.resolve();
+    } else {
+      await waitPluginMsg(iframe, "frame-ready", this.bootNonce, (fail) => { this.bootReject = fail; });
+    }
+    const channel = new MessageChannel();
+    this.hostPort = channel.port1;
+    this.hostPort.start();
+    this.hostPort.onmessage = (ev) => this.onPortMessage(ev);
+    this.postToFrameWindow({
+      source: HOST_SOURCE,
+      type: "boot-channel",
+      bootNonce: this.bootNonce,
+      parentOrigin: location.origin,
+    }, [channel.port2]);
+    this.postToFramePort({
+      source: HOST_SOURCE,
       type: "boot",
       caps: this.caps,
       config,
@@ -223,23 +429,58 @@ export class PluginSandbox {
       await Promise.resolve();
     } else {
       await waitPluginMsg(iframe, "ready");
+      bootNonce: this.bootNonce,
+      parentOrigin: location.origin,
+    });
+    if (import.meta.env.MODE === "test" && !sandboxBootWaitInTests) {
+      await Promise.resolve();
+    } else {
+      await waitPluginPortMsg(this.hostPort, "ready", this.bootNonce, (fail) => { this.bootReject = fail; });
+    }
+    this.bootReject = null;
+  }
+
+  private async handleSandboxNavigation(): Promise<void> {
+    const tile = this.activeTileId;
+    const pack = this.activePackLabel || "Pack";
+    if (!markPackNavigationStopped(tile)) return;
+    this.teardownPort();
+    const fid = this.frameId;
+    this.frameId = "";
+    this.bootNonce = "";
+    if (fid) sandboxAssetTokenByFrame.delete(fid);
+    if (activePackAssetFrameByTile.get(tile) === fid) activePackAssetFrameByTile.delete(tile);
+    if (this.onIframeLoad && this.iframe) {
+      this.iframe.removeEventListener("load", this.onIframeLoad);
+      this.onIframeLoad = null;
+    }
+    if (this.iframe) {
+      this.iframe.remove();
+      this.iframe = null;
+    }
+    await closePackAssetFrameForTile(tile);
+    setSandboxReady(false);
+    registerPackNavigationRemove(tile, () => {
+      this.navigationHost?.closeTile?.(tile);
+    });
+    const host = this.navigationHost;
+    if (host?.setPaneNotice) {
+      applyPackNavigationStoppedNotice(
+        { setPaneNotice: host.setPaneNotice },
+        tile,
+        pack,
+      );
     }
   }
 
   tick(nodes: { id: string; rate: number; role: string }[]): void {
-    if (!this.caps.includes("graph.read")) return;
-    this.iframe?.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "tick", nodes } satisfies ParentMsg,
-      "*",
-    );
+    if (!this.caps.includes("graph.read") || !this.hostPort) return;
+    this.postToFramePort({ source: HOST_SOURCE, type: "tick", nodes });
   }
 
   frame(data: VizDataFrame): void {
-    if (!this.caps.includes("viz.read")) return;
-    this.iframe?.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "frame", frame: data } satisfies ParentMsg,
-      "*",
-    );
+    if (!this.caps.includes("viz.read") || !this.hostPort) return;
+    this.postToFramePort({ source: HOST_SOURCE, type: "frame", frame: data });
   }
 
   /** Push persisted tile config so plugins with config.read see live slider changes. */
@@ -256,13 +497,33 @@ export class PluginSandbox {
     return this.vizContract;
   }
 
-  private onMessage = (ev: MessageEvent): void => {
+  private onWindowMessage = (ev: MessageEvent): void => {
     if (this.iframe && ev.source !== this.iframe.contentWindow) return;
     const d = ev.data as HostMsg | undefined;
     if (!d || d.source !== "zoto-viz-plugin") return;
     if (d.type === "frame-ready" || d.type === "ready") {
       recordSandboxBoot(d.type);
       if (d.type === "ready") setSandboxReady(true);
+    if (!d || d.source !== PLUGIN_SOURCE) return;
+    if (d.type === "frame-ready") {
+      recordSandboxBoot(d.type);
+      return;
+    }
+  };
+
+  private onPortMessage(ev: MessageEvent): void {
+    const d = ev.data as PluginPortMsg | undefined;
+    if (!d || d.source !== PLUGIN_SOURCE) return;
+    if (d.type === "ready") {
+      if (d.bootNonce !== this.bootNonce) return;
+      recordSandboxBoot("ready");
+      setSandboxReady(true);
+      return;
+    }
+    if (d.type === "log" && this.bootReject) {
+      const fail = this.bootReject;
+      this.bootReject = null;
+      fail(new Error(String(d.payload ?? "sandbox module load failed")));
       return;
     }
     if (!hostAllows(d.type, this.caps)) return;
@@ -280,6 +541,7 @@ export class PluginSandbox {
     if (d.type === "writeUniform") {
       noteSandboxWrite(this.activeTileId);
       this.handlers.writeUniform?.(d.payload.name, d.payload.value);
+      this.handlers.writeUniform?.(d.payload.name, d.payload.value as VizUniformValue);
     }
     if (d.type === "writeParticles") {
       noteSandboxWrite(this.activeTileId);

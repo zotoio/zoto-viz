@@ -1,3 +1,5 @@
+import { noteSandboxPackWrite } from "./plugin-pack-feed";
+
 /** Which path applies viz pack writes for a tile (QE / visible runs). */
 export type VizDrive = "sandbox" | "host-direct" | "none";
 
@@ -66,6 +68,7 @@ export function setSandboxReady(ready: boolean): void {
 export function noteSandboxWrite(tileId: string): void {
   const row = tiles.get(tileId);
   if (!row) return;
+  noteSandboxPackWrite(tileId);
   if (!row.sandboxWrote) {
     row.sandboxWrote = true;
     recomputeSandbox(tileId);

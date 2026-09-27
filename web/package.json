@@ -20,6 +20,9 @@
     "lint": "node scripts/lint-brand-casts-core.mjs"
     "test:backrooms-smoke": "node scripts/backrooms-smoke.test.mjs",
     "test:sandbox-plugin-smoke": "node scripts/sandbox-plugin-smoke.test.mjs"
+    "test:backrooms-smoke": "node scripts/backrooms-smoke.test.mjs",
+    "test:sandbox-plugin-smoke": "node scripts/sandbox-plugin-smoke.test.mjs",
+    "test:sandbox-draws-smoke": "node scripts/sandbox-draws-smoke.test.mjs"
   },
   "dependencies": {
     "d3-force-3d": "^3.0.6",

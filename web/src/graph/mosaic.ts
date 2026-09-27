@@ -20,6 +20,12 @@ import { applyPackCoalesceLayout, resetMosaicPackCoalesceWriters } from "./mosai
 import type { PluginView } from "../plugins/plugin";
 import { mosaicTileViewId } from "./mosaic-tile-id";
 import { releasePanelView } from "./panel-view-lifecycle";
+import {
+  focusPackAssetTile,
+  paintPackAssetPaneNotice,
+  type PackAssetPaneNoticeOpts,
+} from "../plugins/pack-asset-pane-notice";
+import { clearPackNavigationStopped } from "../plugins/pack-asset-navigation";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -288,6 +294,8 @@ export class Mosaic {
   get heroMode(): string { return this.heroId; }
   get focusedId(): string { return this.focused; }
   get mainMode(): string { return this.mainId; }
+  /** Id of the tile currently hosting the main graph scene (empty when solo). */
+  get mainTileId(): string { return this.mainId; }
   get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
 
   paneElement(slotId: string): HTMLElement | undefined {
@@ -501,6 +509,7 @@ export class Mosaic {
   }
 
   closeTile(id: string): void {
+    clearPackNavigationStopped(id);
     if (!this.tree || !this.on) return;
     const next = closeLeaf(this.tree, id);
     if (!next) {
@@ -595,6 +604,23 @@ export class Mosaic {
     recipe: "default" | "fail" | "reconnecting" = "default",
   ): void {
     const existing = pane.querySelector(".mosaic-pane-notice");
+    opts?: PackAssetPaneNoticeOpts,
+  ): void {
+    const pane = this.panes.get(id);
+    if (!pane) return;
+    paintPackAssetPaneNotice(pane, text, recipe, opts);
+  }
+
+  focusPaneTile(id: string): void {
+    const pane = this.panes.get(id);
+    if (!pane) return;
+    focusPackAssetTile(pane);
+  }
+
+  setWallNotice(text: string | null | undefined): void {
+    const host = this.cfg.wall;
+    if (!host) return;
+    const existing = host.querySelector(".mosaic-wall-notice");
     if (!text) {
       existing?.remove();
       return;
@@ -611,6 +637,10 @@ export class Mosaic {
     el.textContent = text;
   private syncPackCoalesce(): void {
     applyPackCoalesceLayout(this, mosaicPaneMode, this.cfg.pluginSpecForMode);
+      el.className = "mosaic-wall-notice";
+      host.prepend(el);
+    }
+    el.textContent = text;
   }
 
   private emitLayout(): void {

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-asset-retry-ux.test.ts",
+  "testName": "pack asset retry UX > (b) Retry resets backoff to 1s, shows Reconnecting, and focuses the tile",
+  "description": "Retry must reset backoff, show Reconnecting, schedule 1s, and focus the tile container.",
+  "timeoutSec": 120
+}
