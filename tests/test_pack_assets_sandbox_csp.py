@@ -7,7 +7,7 @@ from pathlib import Path
 
 from aiohttp.test_utils import AioHTTPTestCase
 
-from service import monitor
+from service import monitor, pack_assets
 from tests.pack_asset_test_util import HOST, NULL, SESSION, mint, pack_url, make_test_app
 
 _DIST = Path(tempfile.mkdtemp())
