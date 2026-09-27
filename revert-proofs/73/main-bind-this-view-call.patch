@@ -1,0 +1,19 @@
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index 3017632..cc50c09 100644
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -564,14 +564,6 @@ function arcadeControls(m: ViewMode): HTMLElement[] {
+ }
+ 
+ function bindThisView(modeId: string): void {
+-  runMainBindThisView({
+-    settings,
+-    hostModeById,
+-    pluginSpecForMode,
+-    lookForMode,
+-    arcadeControls,
+-    paintViewAuth,
+-  }, modeId);
+ }
+ 
+ let tsWatch = 0;

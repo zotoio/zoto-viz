@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/main-wiring-boot.test.ts",
+  "testName": "^main.ts wiring boot > delegates plugin fields, bind-this-view, applyMode drawer, and mosaic pane pick at boot$",
+  "description": "main.ts applyMode must call runMainApplyModeDrawerRebind.",
+  "redOutput": "AssertionError: expected \"runMainApplyModeDrawerRebind\" to be called 1 times, but got 0 times"
+}

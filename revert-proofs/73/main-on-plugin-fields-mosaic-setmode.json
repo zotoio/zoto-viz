@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/main-on-plugin-fields.wiring.test.ts",
-  "testName": "^main onPluginFields wiring > mosaic shared config sync > calls setMode on every duplicate tile when plugin fields change$",
-  "description": "runMainOnPluginFields must call setMode on every duplicate mosaic tile when plugin fields sync.",
-  "redOutput": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
-}
