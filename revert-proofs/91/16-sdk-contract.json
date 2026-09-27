@@ -3,5 +3,5 @@
   "testFile": "tests/test_plugin_install.py",
   "testName": "test_sdk_contract_still_checked_on_install",
   "description": "SDK contract is not enforced on install.",
-  "patchedFailure": "r, match=\"zoto-viz\"):\nE   Failed: DID NOT RAISE ValueError\n=========================== short test summary info ============================\nFAILED tests/test_plugin_install.py::test_sdk_contract_still_checked_on_install\n============================== 1 failed in 0.43s ==============================="
+  "patchedFailure": "E       Failed: DID NOT RAISE ValueError"
 }
