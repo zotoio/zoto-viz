@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/apply-mode-mosaic.test.ts",
+  "testName": "mosaicFocusSlot > falls back when focus is stale after a tile close",
+  "description": "Revert mosaicFocusSlot ignoring stale focusedId off the wall",
+  "red": {
+    "actual": "plugin:topology",
+    "expected": "plugin:talkers"
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected 'plugin:topology' to be 'plugin:talkers' // Object.is equality"
+}

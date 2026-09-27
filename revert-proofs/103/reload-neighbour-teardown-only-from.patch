@@ -1,0 +1,12 @@
+diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
+index 897db3a..526c6b5 100644
+--- a/web/src/app/switch-pane-view.ts
++++ b/web/src/app/switch-pane-view.ts
+@@ -130,6 +130,7 @@ export async function switchPaneView(
+     const tilesAfterSwap = nextPaneTiles(tilesBeforeSwap, slot.fromViewId, slot.toViewId);
+     if (!tilesAfterSwap.includes(slot.fromViewId)) {
+       opts.teardownView(slot.fromViewId);
++      opts.teardownView(mosaic.focusedId ?? "");
+     }
+   }
+ 

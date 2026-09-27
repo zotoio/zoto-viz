@@ -1,0 +1,12 @@
+diff --git a/web/src/app/mosaic-boot-pack-start.ts b/web/src/app/mosaic-boot-pack-start.ts
+index 7b54bc7..36179c5 100644
+--- a/web/src/app/mosaic-boot-pack-start.ts
++++ b/web/src/app/mosaic-boot-pack-start.ts
+@@ -10,6 +10,6 @@ export function bootMosaicPackStartLayout(
+   const mode = resolveRestoredViewMode({ localMode, fallback });
+   return {
+     mode,
+-    tiles: reconcileMosaicTilesWithMode(tiles, mode, focusHint),
++    tiles,
+   };
+ }

@@ -1,0 +1,13 @@
+diff --git a/web/src/app/mosaic-consent-resume.ts b/web/src/app/mosaic-consent-resume.ts
+index 47edd0a9..27d3e787 100644
+--- a/web/src/app/mosaic-consent-resume.ts
++++ b/web/src/app/mosaic-consent-resume.ts
+@@ -12,7 +12,7 @@ export async function resumePendingConsentPaneSwitches(
+   isConsented: (pluginId: string) => boolean,
+   runSwitch: ConsentResumeRunner,
+ ): Promise<void> {
+-  for (const pending of listConsentPending()) {
++  for (const pending of [] as ReturnType<typeof listConsentPending>) {
+     if (!isConsented(pending.pluginId)) continue;
+     const result = await runSwitch(pending);
+     if (result.ok) clearConsentPendingForPane(pending.paneId);

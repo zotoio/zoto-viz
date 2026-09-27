@@ -1,8 +1,7 @@
 diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
-index 5586cd9c..b403dda9 100644
 --- a/web/src/graph/mosaic.ts
 +++ b/web/src/graph/mosaic.ts
-@@ -482,7 +482,7 @@ export class Mosaic {
+@@ -477,7 +477,7 @@ export class Mosaic {
    ): void {
      const pane = this.panes.get(id);
      if (!pane) return;

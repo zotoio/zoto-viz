@@ -19,9 +19,9 @@ import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
 import { applyPackCoalesceLayout, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
 import type { PluginView } from "../plugins/plugin";
 import { mosaicTileViewId } from "./mosaic-tile-id";
+import { releasePanelView } from "./panel-view-lifecycle";
 
 export { centerSplit } from "./mosaic-layout";
-export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
 
 function lookForTile(tileSlotId: string) {
   return lookForMode(mosaicTileViewId(tileSlotId));
@@ -562,6 +562,7 @@ export class Mosaic {
     if (!this.tree || !viewId || mosaicTileViewId(fromSlot) === viewId) return false;
     const next = nextPaneTiles(this.tileIds, fromSlot, viewId);
     if (next.join("\0") === this.tileIds.join("\0")) return false;
+    if (!next.includes(fromId)) releasePanelView(fromId);
     this.assignViews(next);
     if (this.tileIds.includes(toId)) this.focus(toId);
     this.cfg.onPaneViews?.(this.tileIds);
@@ -838,6 +839,7 @@ export class Mosaic {
   }
 
   private dropPane(id: string): void {
+    releasePanelView(id);
     if (id === this.mainId) {
       const next = this.extras.find((e) => isGraph(e.id));
       if (next) {

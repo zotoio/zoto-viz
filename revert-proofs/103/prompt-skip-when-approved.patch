@@ -1,0 +1,12 @@
+diff --git a/web/src/app/plugin-consent-mount.ts b/web/src/app/plugin-consent-mount.ts
+index 803358b1..23d444ca 100644
+--- a/web/src/app/plugin-consent-mount.ts
++++ b/web/src/app/plugin-consent-mount.ts
+@@ -8,6 +8,6 @@ export function shouldPromptPluginReview(
+ ): boolean {
+   if (!spec || !pluginNeedsReview(spec)) return false;
+   if (!catalogReady) return false;
+-  if (spec.consent) return false;
++  if (spec.consent) return true;
+   return true;
+ }

@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/switch-pane-view.test.ts",
+  "testName": "switchPaneView > entry header > uses focus fallback when the requested tile id is stale",
+  "description": "Revert header swap-from focused slot when view not on wall",
+  "red": {
+    "actual": "plugin:topology",
+    "expected": "plugin:wifi"
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected 'plugin:topology' to be 'plugin:wifi' // Object.is equality"
+}

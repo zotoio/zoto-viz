@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/apply-mode-mosaic.test.ts",
+  "testName": "consentBlockMessage > uses generic copy when the plugin name is unknown",
+  "description": "Revert generic Settings \u2192 Plugins consent copy",
+  "red": {
+    "actual": "Not approved yet.",
+    "expected": "Not approved yet. Approve it in Settings \u2192 Plugins."
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected false to be true // Object.is equality"
+}

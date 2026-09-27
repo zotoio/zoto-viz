@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Settings } from "./settings";
-import { DEFAULT_DREAM } from "../graph/scene";
 import { setPluginModes, talkers, topology } from "../core/modes";
 
 describe("settings mosaic pane pickers", () => {

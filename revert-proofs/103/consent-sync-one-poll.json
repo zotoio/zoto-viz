@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/plugin-consent-sync.test.ts",
+  "testName": "plugin consent sync (one page subscription) > arms one shared fallback poll for many waiting tiles",
+  "description": "Revert single shared consent fallback poll",
+  "red": {
+    "actual": 0,
+    "expected": 1
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected \"setInterval\" to be called 1 times, but got 0 times"
+}
