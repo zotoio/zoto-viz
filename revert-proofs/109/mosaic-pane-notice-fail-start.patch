@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+index 5586cd9c..538e126a 100644
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -500,7 +500,6 @@ export class Mosaic {
+       el.className = "mosaic-pane-notice";
+       pane.appendChild(el);
+     }
+-    el.classList.toggle("mosaic-pane-notice-fail", recipe === "fail");
+     el.classList.toggle("mosaic-pane-notice-reconnecting", recipe === "reconnecting");
+     pane.classList.toggle("mosaic-pane-reconnecting", recipe === "reconnecting");
+     if (recipe !== "reconnecting") pane.classList.remove("mosaic-pane-reconnecting");

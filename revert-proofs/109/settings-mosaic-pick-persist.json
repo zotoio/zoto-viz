@@ -1,0 +1,18 @@
+{
+  "runner": "vitest",
+  "testFile": "src/ui/settings-mosaic-pick.test.ts",
+  "testName": "settings mosaic pane pickers > persists mosaicTiles after a slot change when no live hook is wired",
+  "description": "Revert local mosaicTiles persistence when no live hook is wired",
+  "red": {
+    "actual": [
+      "plugin:topology",
+      "plugin:wifi"
+    ],
+    "expected": [
+      "plugin:talkers",
+      "plugin:wifi"
+    ]
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected [ 'plugin:topology', 'plugin:wifi' ] to deeply equal [ 'plugin:talkers', 'plugin:wifi' ]"
+}

@@ -5,6 +5,7 @@ import { setPluginModes, talkers, topology } from "../core/modes";
 
 describe("settings mosaic pane pickers", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     setPluginModes([
       { ...topology, id: "plugin:topology", pluginId: "topology", label: "Topology" },
       { ...talkers, id: "plugin:talkers", pluginId: "talkers", label: "Talkers" },
@@ -14,8 +15,8 @@ describe("settings mosaic pane pickers", () => {
 
   afterEach(() => setPluginModes([]));
 
-  it("delegates slot changes to the live wall hook and reverts on failure", () => {
-    const pick = vi.fn((_from: string, _to: string) => true);
+  it("delegates slot changes to the live wall hook and reverts on failure", async () => {
+    const pick = vi.fn(async () => true);
     const s = new Settings({ storePrefix: "zoto-viz-mosaic-pick", onChange: () => {} });
     s.onMosaicPanePick = pick;
     s.addAnimation(() => {}, { el: document.createElement("div") });
@@ -29,7 +30,28 @@ describe("settings mosaic pane pickers", () => {
     expect(sel).toBeTruthy();
     sel!.value = "plugin:talkers";
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(pick).toHaveBeenCalledWith("plugin:topology", "plugin:talkers");
+    expect(pick.mock.calls.length).toBe(1);
+    expect(pick.mock.calls[0]).toEqual(["plugin:topology", "plugin:talkers"]);
+  });
+
+  it("reverts the dropdown when the live hook denies consent", async () => {
+    const pick = vi.fn(async () => false);
+    const s = new Settings({ storePrefix: "zoto-viz-mosaic-pick-deny", onChange: () => {} });
+    s.onMosaicPanePick = pick;
+    s.addAnimation(() => {}, { el: document.createElement("div") });
+    s.applyAnim({
+      ...s.animSettings,
+      mosaic: "2",
+      mosaicTiles: ["plugin:topology", "plugin:wifi"],
+    });
+    s.open("view");
+    const sel = s.el.querySelector<HTMLSelectElement>(".mosaic-slot");
+    expect(sel).toBeTruthy();
+    sel!.value = "plugin:talkers";
+    sel!.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    expect(pick.mock.calls.length).toBe(1);
+    expect(sel!.value).toBe("plugin:topology");
   });
 
   it("persists mosaicTiles after a slot change when no live hook is wired", () => {
