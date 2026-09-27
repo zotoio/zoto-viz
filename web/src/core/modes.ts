@@ -179,7 +179,7 @@ export function arcadeSlotFor(m: Pick<ViewMode, "id" | "standalone" | "arcadeId"
 /** Menu / mosaic caption: `NET Topology`, `AIR SSIDs`, `CPU cores`, `SYS Memory`, `SRC Source web`. */
 export function viewCaption(m: Pick<ViewMode, "id" | "label" | "graphBase" | "arcadeId">): string {
   const tag = viewSource(m);
-  let name = m.label.trim().replace(/^(NET|AIR|BT|CPU|SYS|SRC)\s+/i, "");
+  let name = (m.label ?? "").trim().replace(/^(NET|AIR|BT|CPU|SYS|SRC)\s+/i, "");
   if (tag === "AIR") name = name.replace(/^Air\s+/i, "");
   return `${tag} ${name}`;
 }
