@@ -47,6 +47,7 @@ import {
   type PendingAutoSwitch,
 } from "./mode-switch-coordinator";
 import { registerApplyModeTestBindings } from "./apply-mode-test-host";
+import { registerMainEntryTestHooks } from "./main-entry-test-host";
 import {
   flashModeKeptPrevious,
   flashModeLoadFailed,
@@ -2160,7 +2161,7 @@ settings.prependSection(
 );
 uiReady = true;
 applyViewLook();
-if (!import.meta.env.VITEST) void (async () => {
+async function bootCatalogFromSession(): Promise<void> {
   const session = await bootSession();
   typeSafeKeyOn = session.typesafeConfigured;
   setTypeSafeProxyConfigured(() => typeSafeKeyOn);
@@ -2212,7 +2213,11 @@ if (!import.meta.env.VITEST) void (async () => {
   persistLive(true);
   void syncWifiWatch();
   agent.armWake();
-})();
+}
+
+if (!import.meta.env.VITEST) void bootCatalogFromSession();
+
+registerMainEntryTestHooks({ connect, bootCatalog: bootCatalogFromSession });
 
 let liveAgentLook: AgentLook = { decos: [] };
 let nasaAssetOrigins: Map<string, string> | null = null;

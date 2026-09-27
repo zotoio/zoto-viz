@@ -19,7 +19,7 @@ class MockWebSocket {
   onerror: (() => void) | null = null;
   constructor(_url: string | URL) {
     MockWebSocket.open.push(this);
-    queueMicrotask(() => this.onopen?.());
+    queueMicrotask(() => queueMicrotask(() => this.onopen?.()));
   }
   send(): void {}
   close(): void { this.onclose?.(); }
@@ -31,7 +31,7 @@ class MockWebSocket {
 function mountIndexDom(): void {
   const raw = readFileSync(path.join(webRoot, "index.html"), "utf8");
   const doc = new DOMParser().parseFromString(raw, "text/html");
-  for (const el of doc.querySelectorAll("script")) el.remove();
+  for (const el of doc.querySelectorAll("script, link[rel=stylesheet]")) el.remove();
   document.head.replaceChildren(...Array.from(doc.head.children).map((n) => n.cloneNode(true)));
   document.body.replaceChildren(...Array.from(doc.body.children).map((n) => n.cloneNode(true)));
 }
@@ -40,6 +40,8 @@ function stubGl(): void {
   const gl = {
     canvas: { width: 300, height: 150 },
     getExtension: () => null,
+    getShaderPrecisionFormat: () => ({ precision: 23, rangeMin: 127, rangeMax: 127 }),
+    getContextAttributes: () => ({ antialias: false }),
     fenceSync: () => ({}),
     getParameter: () => 0,
     viewport: () => {},
@@ -168,10 +170,16 @@ function harnessFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Res
     });
     return Promise.resolve(new Response(body, { status: 200, headers: { "Content-Type": "application/json" } }));
   }
+  if (pathOnly === "/api/typesafe/status") {
+    return Promise.resolve(new Response(JSON.stringify({ configured: false }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+  }
   if (pathOnly.startsWith("/api/")) {
     return Promise.resolve(new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }));
   }
-  return Promise.reject(new Error(`unexpected fetch ${url}`));
+  return Promise.reject(new Error(`unexpected fetch ${pathOnly}`));
 }
 
 export function installMainEntryMocks(): void {
@@ -215,8 +223,11 @@ export async function importMainEntryModule(): Promise<void> {
 
 export async function bootMainEntry(): Promise<MainEntryHarness> {
   await importMainEntryModule();
+  const { mainEntryTestConnect, mainEntryTestBootCatalog } = await import("../main-entry-test-host");
+  mainEntryTestConnect();
   const ws = await vi.waitUntil(() => MockWebSocket.open.at(-1), { timeout: 8000 });
   await vi.waitUntil(() => document.getElementById("conn")?.classList.contains("ok"), { timeout: 8000 });
+  await mainEntryTestBootCatalog();
   return {
     ws,
     pushState: (msg) => ws.pushState(msg),
