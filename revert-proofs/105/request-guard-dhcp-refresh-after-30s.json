@@ -1,6 +1,6 @@
 {
   "runner": "pytest",
   "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_miss_after_30s_refreshes_os_interfaces_once",
-  "red": "util import make_app_server\ntests/monitor_app_test_util.py:13: in <module>\n    from service import monitor, pack_assets, request_guard\nservice/monitor.py:37: in <module>\n    from . import pack_assets\nE   ImportError: cannot import name 'pack_assets' from 'service' (/workspace/service/__init__.py)\n=========================== short test summary info ============================\nERROR tests/test_request_guard_lan_interface_refresh.py\n1 error in 0.06s\nERROR: found no collectors for /workspace/tests/test_request_guard_lan_interface_refresh.py::test_dhcp_miss_after_30s_refreshes_os_interfaces_once\n\n",
+  "red": "AssertionError: assert 1 == (1 + 1)",
   "timeoutSec": 120
 }

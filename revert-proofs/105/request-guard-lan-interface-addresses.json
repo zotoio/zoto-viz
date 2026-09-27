@@ -1,6 +1,6 @@
 {
   "runner": "pytest",
   "testId": "tests/test_request_guard_interfaces.py::test_os_interface_query_stub_allows_non_loopback_host",
-  "red": "app_test_util import host_header, make_app_server\ntests/monitor_app_test_util.py:13: in <module>\n    from service import monitor, pack_assets, request_guard\nservice/monitor.py:37: in <module>\n    from . import pack_assets\nE   ImportError: cannot import name 'pack_assets' from 'service' (/workspace/service/__init__.py)\n=========================== short test summary info ============================\nERROR tests/test_request_guard_interfaces.py\n1 error in 0.06s\nERROR: found no collectors for /workspace/tests/test_request_guard_interfaces.py::test_os_interface_query_stub_allows_non_loopback_host\n\n",
+  "red": "AssertionError: assert 400 == 200",
   "timeoutSec": 120
 }
