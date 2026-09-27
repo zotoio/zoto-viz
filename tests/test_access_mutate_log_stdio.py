@@ -37,5 +37,5 @@ def test_mutate_stdout_redacts_pack_asset_token() -> None:
 
     asyncio.run(run())
     out = buf.getvalue()
-    assert tok not in out
+    assert out.count(tok) == 0
     assert "%3Csandbox-token%3E" in out

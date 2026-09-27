@@ -32,7 +32,7 @@ def test_sandbox_bootstrap_token_authorizes_pack_asset_paths() -> None:
     tok = mint("_sandbox")
     path = access.pack_asset_url(tok, "demo-pack", "module.js")
     req = FakeReq(path=path, header=SESSION, csrf=SESSION)
-    assert access.pack_asset_token_ok(req)
+    assert access.pack_asset_token_ok(req) is True
     assert not access.pack_asset_token_ok(FakeReq(path=path, header="other-session", csrf="other-session"))
 
 

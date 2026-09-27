@@ -3,5 +3,5 @@
   "testId": "tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_mutate_log_path_redacts_pack_asset_token",
   "description": "Mutate log path redacts pack-asset token.",
   "timeoutSec": 120,
-  "red": "AssertionError: assert '11111111-11...28pCtWCdo-n4' not in '/pack-asset...ck/module.js'"
+  "red": "AssertionError: assert 1 == 0"
 }

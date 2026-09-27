@@ -130,7 +130,8 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
         assert chunk.status == 200
         body_html = await html.text()
         body_js = await chunk.text()
-        assert "?sat=" not in body_html and "&sat=" not in body_html
+        assert "?sat=" not in body_html
+        assert "&sat=" not in body_html
         assert f"/pack-assets/{tok}/_sandbox/" in body_html
         assert "?sat=" not in body_js and "&sat=" not in body_js
         assert f"./{helper}" in body_js
@@ -155,5 +156,5 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
         tok = mint("demo-pack")
         path = pack_url("demo-pack", "module.js", token=tok)
         safe = access.redact_request_path(path, tok)
-        assert tok not in safe
+        assert safe.count(tok) == 0
         assert "%3Csandbox-token%3E" in safe
