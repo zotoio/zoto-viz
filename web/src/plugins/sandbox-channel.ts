@@ -17,6 +17,7 @@ export type HostBootPayload = {
   caps: string[];
   config: Record<string, string>;
   viz?: unknown;
+  contractVersion?: number;
   moduleSrc: string;
   bootNonce: string;
   parentOrigin: string;

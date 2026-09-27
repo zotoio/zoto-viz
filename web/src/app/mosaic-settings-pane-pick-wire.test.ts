@@ -5,8 +5,9 @@ import { Settings } from "../ui/settings";
 import { pickMosaicPaneWith } from "./mosaic-pane-pick";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
 import { switchPaneView } from "./switch-pane-view";
+import { consentBlockMessage } from "./apply-mode-mosaic";
 
-const HEAT_NOTICE = "Heat map isn't approved yet. Approve it in Settings → Plugins.";
+const HEAT_NOTICE = consentBlockMessage({ name: "Heat map" });
 
 describe("settings mosaic pane pick wire", () => {
   beforeEach(() => {

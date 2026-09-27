@@ -161,6 +161,8 @@ import { applyInstance } from "../plugins/instances";
 import { VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
+import { bindServerRestartWallNotice } from "../core/http-notice";
+import { mountWallNoticeRegion } from "../core/wall-notice-region";
 import {
   applyPackFeedPaneNotice,
   clearTilePackFeed,
@@ -240,6 +242,7 @@ applyThemeChrome(theme);
 
 // one WebGL context for the whole wall: the main graph and every mosaic tile draw through it
 const renderHost = new RenderHost($("wall"));
+mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 scene.retargetPanel("main");
@@ -1682,6 +1685,7 @@ settings = new Settings({
   },
   onPersist: () => touch(),
 });
+bindServerRestartWallNotice();
 let pendingSandboxPush: { packId: string; config: Record<string, string> } | null = null;
 
 function pluginSpecForStoreId(storeId: string): PluginView | null {
