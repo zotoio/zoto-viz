@@ -4,18 +4,13 @@ import * as packAssetFrame from "./pack-asset-frame";
 import {
   PluginSandbox,
   sandboxBootNonceForTests,
-  setSandboxBootWaitInTests,
   setSandboxMsgTimeoutMs,
 } from "./host";
-import { HOST_SOURCE, PLUGIN_SOURCE } from "./sandbox-channel";
 import {
-  attachSandboxHostPort,
-  installSandboxBootChannelListener,
   resetSandboxFrameRuntimeForTests,
-  sandboxFrameRuntimeForTests,
   sandboxZotoApi,
-  setSandboxFrameLocationHref,
 } from "./sandbox-frame";
+import { installSandboxTestHandshake } from "./sandbox-test-harness";
 import { defaultVizContract } from "./viz-host";
 import type { VizWriteBatchPayload } from "./viz-write-batch";
 import { validateVizWriteBatch } from "./viz-write-batch";
@@ -27,45 +22,13 @@ function pluginDataUrl(body: string): string {
   return `data:text/javascript,${encodeURIComponent(src)}`;
 }
 
-function armSandboxHandshake(): () => void {
-  const OrigChannel = globalThis.MessageChannel;
-  const appendOrig = document.body.appendChild.bind(document.body);
-  const appendSpy = vi.spyOn(document.body, "appendChild").mockImplementation((node: Node) => {
-    const inserted = appendOrig(node);
-    if (node instanceof HTMLIFrameElement) {
-      setSandboxFrameLocationHref(node.src);
-      const win = node.contentWindow;
-      if (win) {
-        installSandboxBootChannelListener(win, window);
-        (win as unknown as { zoto: typeof sandboxZotoApi }).zoto = sandboxZotoApi;
-      }
-      queueMicrotask(() => {
-        window.dispatchEvent(new MessageEvent("message", {
-          source: node.contentWindow,
-          data: { source: PLUGIN_SOURCE, type: "frame-ready" },
-        }));
-      });
-    }
-    return inserted;
-  });
-  const channelSpy = vi.spyOn(globalThis, "MessageChannel").mockImplementation(function messageChannelMock() {
-    const ch = new OrigChannel();
-    attachSandboxHostPort(ch.port2, sandboxFrameRuntimeForTests(), sandboxZotoApi);
-    return ch;
-  });
-  return () => {
-    channelSpy.mockRestore();
-    appendSpy.mockRestore();
-  };
-}
-
 describe("sandbox write path (PluginSandbox + sandbox-frame port)", () => {
   beforeEach(() => {
+    installSandboxTestHandshake();
     vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue(FRAME_ID);
     vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
     setPackAssetTokenForTests("_sandbox", "tok-sandbox-e2e");
     resetSandboxFrameRuntimeForTests();
-    setSandboxBootWaitInTests(true);
     setSandboxMsgTimeoutMs(2_000);
     (globalThis as unknown as { zoto: typeof sandboxZotoApi }).zoto = sandboxZotoApi;
   });
@@ -74,7 +37,6 @@ describe("sandbox write path (PluginSandbox + sandbox-frame port)", () => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
     vi.restoreAllMocks();
     setPackAssetTokenForTests("_sandbox", "");
-    setSandboxBootWaitInTests(false);
     setSandboxMsgTimeoutMs(15_000);
     resetSandboxFrameRuntimeForTests();
   });
@@ -97,15 +59,12 @@ describe("sandbox write path (PluginSandbox + sandbox-frame port)", () => {
       };
     `;
 
-    const disarm = armSandboxHandshake();
     await box.loadModuleUrl(
       pluginDataUrl(plugin),
       ["viz.write"],
       {},
       defaultVizContract({ presentTick: true }),
     );
-    disarm();
-
     expect(sandboxBootNonceForTests()).not.toBe("");
     expect(box.sandboxHostPort()).not.toBeNull();
 
@@ -138,15 +97,12 @@ describe("sandbox write path (PluginSandbox + sandbox-frame port)", () => {
       };
     `;
 
-    const disarm = armSandboxHandshake();
     await box.loadModuleUrl(
       pluginDataUrl(plugin),
       ["viz.write", "viz.read"],
       {},
       defaultVizContract(),
     );
-    disarm();
-
     box.frame({ packets: [], talkers: [], links: [], headlines: [] } as never);
     await expect.poll(
       () => writeBatch.mock.calls[0]?.[0],
@@ -172,15 +128,12 @@ describe("sandbox write path (PluginSandbox + sandbox-frame port)", () => {
       };
     `;
 
-    const disarm = armSandboxHandshake();
     await box.loadModuleUrl(
       pluginDataUrl(plugin),
       ["viz.write", "viz.read"],
       {},
       defaultVizContract(),
     );
-    disarm();
-
     box.frame({ packets: [], talkers: [], links: [], headlines: [] } as never);
 
     let applied = 0;

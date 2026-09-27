@@ -13,9 +13,14 @@ import {
   packAssetUrlWithToken,
   pluginModuleSandboxUrl,
   pluginModuleUrl,
+  seedPackAssetFrameForTests,
+  setPluginModuleSandboxUrlForTests,
   setTsPluginsAllowed,
   tsPluginsAllowed,
 } from "./host";
+
+const pluginModuleDataUrl = (body = "globalThis.ok = true;") =>
+  `data:text/javascript,${encodeURIComponent(body)}`;
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 import { VIZ_CONTRACT_VERSION, defaultVizContract } from "./viz-host";
@@ -133,6 +138,7 @@ describe("pack asset URLs", () => {
   });
 
   it("puts the session token in the path segment", async () => {
+    seedPackAssetFrameForTests();
     setPackAssetTokenForTests("pulse-ts", "sess-tok-abc");
     setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
     const url = packAssetUrlWithToken("sess-tok-abc", "pulse-ts", "module.js");
@@ -148,11 +154,13 @@ describe("PluginSandbox module load", () => {
   beforeEach(() => {
     vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
     vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
+    setPluginModuleSandboxUrlForTests(async () => pluginModuleDataUrl());
   });
 
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
     vi.restoreAllMocks();
+    setPluginModuleSandboxUrlForTests(null);
     setPackAssetTokenForTests("_sandbox", "");
   });
 

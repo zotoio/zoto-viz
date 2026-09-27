@@ -31,14 +31,14 @@ import { notePackWriteBatch } from "../core/pack-host-perf";
 
 /** Test hook: shorten sandbox handshake waits. */
 let sandboxMsgTimeoutMs = 15_000;
-let sandboxBootWaitInTests = false;
 
 export function setSandboxMsgTimeoutMs(ms: number): void {
   sandboxMsgTimeoutMs = Math.max(1, ms | 0);
 }
 
-export function setSandboxBootWaitInTests(on: boolean): void {
-  sandboxBootWaitInTests = on;
+/** @internal unit tests — seed pack-asset frame id without opening a frame. */
+export function seedPackAssetFrameForTests(tileId = "main", frameId = TEST_FALLBACK_FRAME_ID): void {
+  activePackAssetFrameByTile.set(tileId, frameId);
 }
 
 export function sandboxMsgTimeoutForTests(): number {
@@ -83,11 +83,7 @@ export function packAssetFrameIdForTests(tileId = "main"): string {
 }
 
 function resolvePackAssetFrameId(tileId = "main"): string {
-  return (
-    activePackAssetFrameByTile.get(tileId)
-    || packAssetFrameForTile(tileId)
-    || (import.meta.env.MODE === "test" ? TEST_FALLBACK_FRAME_ID : "")
-  );
+  return activePackAssetFrameByTile.get(tileId) || packAssetFrameForTile(tileId) || "";
 }
 
 export async function packAssetUrl(packId: string, ...parts: string[]): Promise<string> {
@@ -166,7 +162,17 @@ export function pluginModuleUrl(id: string, hash?: string): string {
 }
 
 /** Pack module URL for opaque-origin sandbox import (token in path). */
+let pluginModuleSandboxUrlOverride: ((id: string, hash?: string) => Promise<string>) | null = null;
+
+/** @internal unit tests — avoid http module imports under the Node ESM loader. */
+export function setPluginModuleSandboxUrlForTests(
+  fn: ((id: string, hash?: string) => Promise<string>) | null,
+): void {
+  pluginModuleSandboxUrlOverride = fn;
+}
+
 export async function pluginModuleSandboxUrl(id: string, hash?: string): Promise<string> {
+  if (pluginModuleSandboxUrlOverride) return pluginModuleSandboxUrlOverride(id, hash);
   const path = await packAssetUrl(id, "module.js");
   let url = `${location.origin}${path}`;
   if (hash) url += `?h=${encodeURIComponent(hash)}`;
@@ -218,8 +224,16 @@ export class PluginSandbox {
     window.addEventListener("message", this.onWindowMessage);
   }
 
+  /** Re-register the host window listener after {@link unload}. */
+  private ensureWindowMessageListener(): void {
+    window.removeEventListener("message", this.onWindowMessage);
+    window.addEventListener("message", this.onWindowMessage);
+  }
+
   unload(): void {
+    window.removeEventListener("message", this.onWindowMessage);
     setSandboxReady(false);
+    this.cancelBootWait();
     this.bootReject = null;
     this.activePackId = "";
     this.teardownPort();
@@ -230,10 +244,7 @@ export class PluginSandbox {
     if (fid) sandboxAssetTokenByFrame.delete(fid);
     if (activePackAssetFrameByTile.get(tile) === fid) activePackAssetFrameByTile.delete(tile);
     void closePackAssetFrameForTile(tile);
-    if (this.moduleBlobUrl) {
-      URL.revokeObjectURL(this.moduleBlobUrl);
-      this.moduleBlobUrl = null;
-    }
+    this.moduleBlobUrl = null;
     if (this.onIframeLoad && this.iframe) {
       this.iframe.removeEventListener("load", this.onIframeLoad);
       this.onIframeLoad = null;
@@ -256,6 +267,10 @@ export class PluginSandbox {
     }
   }
 
+  /**
+   * Opaque sandbox iframes have no origin to name; only the frame's contentWindow receives the port.
+   * targetOrigin "*" is required so the transferred MessagePort reaches the sandbox document.
+   */
   private postToFrameWindow(msg: HostBootChannelMsg, transfer: Transferable[]): void {
     sandboxFramePostMessageCount += 1;
     this.iframe?.contentWindow?.postMessage(msg, "*", transfer);
@@ -287,8 +302,8 @@ export class PluginSandbox {
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
     const plugin = js.replace(/<\/script/gi, "<\\/script");
-    const blob = new Blob([`const zoto = globalThis.zoto;\n${plugin}\n`], { type: "text/javascript" });
-    this.moduleBlobUrl = URL.createObjectURL(blob);
+    const src = `const zoto = globalThis.zoto;\n${plugin}\n`;
+    this.moduleBlobUrl = `data:text/javascript,${encodeURIComponent(src)}`;
     await this.bootFrame(this.moduleBlobUrl, config, viz);
   }
 
@@ -328,6 +343,7 @@ export class PluginSandbox {
     config: Record<string, string>,
     viz?: VizPluginContract,
   ): Promise<void> {
+    this.ensureWindowMessageListener();
     if (!this.frameId) {
       this.frameId = await openPackAssetFrame(this.activeTileId);
       activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
@@ -350,11 +366,8 @@ export class PluginSandbox {
     if (iframe.srcdoc) {
       throw new Error("plugin sandbox must not use srcdoc under page CSP");
     }
-    if (!sandboxBootWaitInTests) {
-      await Promise.resolve();
-    } else {
-      await waitPluginMsg(iframe, "frame-ready", this.bootNonce, (fail) => { this.bootReject = fail; });
-    }
+    await waitPluginMsg(this, iframe, "frame-ready", this.bootNonce, (fail) => { this.bootReject = fail; });
+    if (!this.iframe) return;
     const channel = new MessageChannel();
     this.hostPort = channel.port1;
     this.hostPort.start();
@@ -376,12 +389,19 @@ export class PluginSandbox {
       bootNonce: this.bootNonce,
       parentOrigin: location.origin,
     });
-    if (!sandboxBootWaitInTests) {
-      await Promise.resolve();
-    } else {
-      await waitPluginPortMsg(this.hostPort, "ready", this.bootNonce, (fail) => { this.bootReject = fail; });
-    }
+    await waitPluginPortMsg(this, this.hostPort, "ready", this.bootNonce, (fail) => { this.bootReject = fail; });
     this.bootReject = null;
+    if (!this.iframe) {
+      this.teardownPort();
+    }
+  }
+
+  private cancelBootWait(): void {
+    const cancel = bootWaitCancelBySandbox.get(this);
+    if (cancel) {
+      bootWaitCancelBySandbox.delete(this);
+      cancel();
+    }
   }
 
   private async handleSandboxNavigation(): Promise<void> {
@@ -459,8 +479,9 @@ export class PluginSandbox {
   };
 
   private onWindowMessage = (ev: MessageEvent): void => {
+    if (!this.iframe) return;
     const d = ev.data as PluginHostMsg | undefined;
-    if (this.iframe && ev.source !== this.iframe.contentWindow) {
+    if (ev.source !== this.iframe.contentWindow) {
       if (d?.source === PLUGIN_SOURCE && d.type === "publishBitmap") {
         try { d.payload.bitmap.close(); } catch { /* already closed */ }
       }
@@ -559,65 +580,72 @@ export class PluginSandbox {
   }
 }
 
+const bootWaitCancelBySandbox = new WeakMap<PluginSandbox, () => void>();
+
+function setBootWaitCancel(sandbox: PluginSandbox, cancel: (() => void) | null): void {
+  if (cancel) bootWaitCancelBySandbox.set(sandbox, cancel);
+  else bootWaitCancelBySandbox.delete(sandbox);
+}
+
 function recordSandboxBoot(type: PluginWindowMsg["type"] | PluginPortMsg["type"]): void {
   const w = window as unknown as { __zotoSandboxBoot?: (PluginWindowMsg["type"] | PluginPortMsg["type"])[] };
   w.__zotoSandboxBoot = [...(w.__zotoSandboxBoot ?? []), type];
 }
 
 function waitPluginMsg(
+  sandbox: PluginSandbox,
   iframe: HTMLIFrameElement,
   type: PluginWindowMsg["type"],
-  expectedBootNonce: string,
+  _expectedBootNonce: string,
   onReject?: (fail: (err: Error) => void) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const fail = (err: Error) => {
+    const finish = (fn: () => void) => {
       window.clearTimeout(timer);
       window.removeEventListener("message", onMsg);
-      reject(err);
+      setBootWaitCancel(sandbox, null);
+      fn();
     };
+    const fail = (err: Error) => finish(() => reject(err));
     onReject?.(fail);
+    setBootWaitCancel(sandbox, () => finish(() => resolve()));
     const timer = window.setTimeout(() => {
-      window.removeEventListener("message", onMsg);
-      reject(new Error(`sandbox ${type} timeout`));
+      finish(() => reject(new Error(`sandbox ${type} timeout`)));
     }, sandboxMsgTimeoutMs);
     const onMsg = (ev: MessageEvent) => {
       if (ev.source !== iframe.contentWindow) return;
       const d = ev.data as PluginWindowMsg | undefined;
       if (d?.source !== PLUGIN_SOURCE) return;
-      if (d.type === type) {
-        window.clearTimeout(timer);
-        window.removeEventListener("message", onMsg);
-        resolve();
-      }
+      if (d.type === type) finish(() => resolve());
     };
     window.addEventListener("message", onMsg);
   });
 }
 
 function waitPluginPortMsg(
+  sandbox: PluginSandbox,
   port: MessagePort,
   type: PluginPortMsg["type"],
   expectedBootNonce: string,
   onReject?: (fail: (err: Error) => void) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const fail = (err: Error) => {
+    const finish = (fn: () => void) => {
       window.clearTimeout(timer);
       port.removeEventListener("message", onMsg);
-      reject(err);
+      setBootWaitCancel(sandbox, null);
+      fn();
     };
+    const fail = (err: Error) => finish(() => reject(err));
     onReject?.(fail);
+    setBootWaitCancel(sandbox, () => finish(() => resolve()));
     const timer = window.setTimeout(() => {
-      port.removeEventListener("message", onMsg);
-      reject(new Error(`sandbox ${type} timeout`));
+      finish(() => reject(new Error(`sandbox ${type} timeout`)));
     }, sandboxMsgTimeoutMs);
     const onMsg = (ev: MessageEvent) => {
       const d = ev.data as PluginPortMsg | undefined;
       if (d?.source !== PLUGIN_SOURCE) return;
       if (d.type === "log" && type === "ready") {
-        window.clearTimeout(timer);
-        port.removeEventListener("message", onMsg);
         fail(new Error(String(d.payload ?? "sandbox module load failed")));
         return;
       }
@@ -625,9 +653,7 @@ function waitPluginPortMsg(
         if (type === "ready") {
           if (d.type !== "ready" || d.bootNonce !== expectedBootNonce) return;
         }
-        window.clearTimeout(timer);
-        port.removeEventListener("message", onMsg);
-        resolve();
+        finish(() => resolve());
       }
     };
     port.addEventListener("message", onMsg);

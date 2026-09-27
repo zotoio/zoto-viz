@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setPackAssetTokenForTests } from "../core/http";
+import * as packAssetFrame from "./pack-asset-frame";
 import {
   allowOnPluginChangeConfigPush,
   allowOnPluginFieldsConfigPush,
@@ -15,7 +17,7 @@ type ConfigPost = { type: string; config: Record<string, string> };
 function createConfigPostTap(box: PluginSandbox): { posted: ConfigPost[]; rehook: () => void } {
   const posted: ConfigPost[] = [];
   const rehook = () => {
-    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const port = box.sandboxHostPort();
     if (!port) return;
     const orig = port.postMessage.bind(port);
     port.postMessage = (data, transfer) => {
@@ -50,8 +52,16 @@ function tryOnPluginFieldsPush(
 }
 
 describe("plugin sandbox config push guards", () => {
+  beforeEach(() => {
+    vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
+    vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
+    setPackAssetTokenForTests("_sandbox", "tok-config-push");
+  });
+
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
+    vi.restoreAllMocks();
+    setPackAssetTokenForTests("_sandbox", "");
   });
 
   it("onPluginChange path: edit pack A yields 0 posts to B and 1 to A", async () => {

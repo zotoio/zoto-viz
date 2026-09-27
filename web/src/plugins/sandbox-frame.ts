@@ -11,6 +11,7 @@ import {
   type VizPresentTick,
   isHostBootChannel,
 } from "./sandbox-channel";
+import type { VizUniformValue } from "./viz-host";
 import {
   emptyVizWriteBatch,
   splitVizWriteBatch,
@@ -47,7 +48,7 @@ export function bootNonceFromLocation(href = location.href): string {
 }
 
 function moduleSrcForSandbox(src: string, token: string): string {
-  if (src.startsWith("blob:")) return src;
+  if (src.startsWith("blob:") || src.startsWith("data:")) return src;
   try {
     const u = new URL(src, location.href);
     if (u.protocol !== "http:" && u.protocol !== "https:") return src;
@@ -109,11 +110,29 @@ export function createSandboxFrameRuntime(): SandboxFrameRuntime {
   };
 }
 
+let sandboxPortPostCount = 0;
+const sandboxPortPostsLog: unknown[] = [];
+
+export function sandboxPortPostCountForTests(): number {
+  return sandboxPortPostCount;
+}
+
+export function sandboxPortPostsLogForTests(): readonly unknown[] {
+  return sandboxPortPostsLog;
+}
+
+export function resetSandboxPortPostCountForTests(): void {
+  sandboxPortPostCount = 0;
+  sandboxPortPostsLog.length = 0;
+}
+
 function postPluginPort(
   runtime: SandboxFrameRuntime,
   msg: { source: typeof PLUGIN_SOURCE; type: string; bootNonce?: string; payload?: unknown },
 ): void {
   if (!runtime.pluginPort) return;
+  sandboxPortPostCount += 1;
+  sandboxPortPostsLog.push(msg);
   runtime.pluginPort.postMessage(msg);
 }
 
@@ -173,6 +192,10 @@ export function resetSandboxFrameRuntimeForTests(): void {
   allowed = runtime.allowed;
   vizBatch = null;
   vizBatchDepth = 0;
+  vizBatchAllocateFreshForTests = false;
+  vizBatchBeginIdentity = null;
+  resetSandboxPortPostCountForTests();
+  clearVizBatchInPlace(vizBatchShell);
   zoto.onTick = null;
   zoto.onConfig = null;
   zoto.onFrame = null;
@@ -183,8 +206,33 @@ function vizAllowed(cap: string): boolean {
   return allowed.has(cap);
 }
 
+const vizBatchShell: VizWriteBatchPayload = { buffers: [], uniforms: [] };
 let vizBatch: VizWriteBatchPayload | null = null;
 let vizBatchDepth = 0;
+
+function clearVizBatchInPlace(batch: VizWriteBatchPayload): void {
+  batch.buffers.length = 0;
+  batch.uniforms.length = 0;
+  delete batch.particles;
+}
+
+/** @internal count tests — backing object reused across display frames. */
+export function vizWriteBatchBackingForTests(): VizWriteBatchPayload {
+  return vizBatchShell;
+}
+
+let vizBatchAllocateFreshForTests = false;
+let vizBatchBeginIdentity: VizWriteBatchPayload | null = null;
+
+/** @internal revert-proof — allocate a new batch object each display frame. */
+export function setVizBatchAllocateFreshForTests(on: boolean): void {
+  vizBatchAllocateFreshForTests = on;
+}
+
+/** @internal count tests — batch object at the start of each display frame. */
+export function vizBatchBeginIdentityForTests(): VizWriteBatchPayload | null {
+  return vizBatchBeginIdentity;
+}
 
 function emitVizWriteChunk(batch: VizWriteBatchPayload): void {
   const messages = batch.buffers.length + batch.uniforms.length + (batch.particles ? 1 : 0);
@@ -210,7 +258,7 @@ function emitVizWriteChunk(batch: VizWriteBatchPayload): void {
 function flushVizBatchContents(): void {
   if (!vizBatch) return;
   const chunks = splitVizWriteBatch(vizBatch);
-  if (vizBatchDepth > 0) vizBatch = emptyVizWriteBatch();
+  if (vizBatchDepth > 0) clearVizBatchInPlace(vizBatch);
   else vizBatch = null;
   for (const chunk of chunks) emitVizWriteChunk(chunk);
 }
@@ -219,14 +267,13 @@ function flushVizBatch(): void {
   flushVizBatchContents();
 }
 
-function ensureVizBatchCapacity(trial: VizWriteBatchPayload): void {
-  if (!vizBatch || validateVizWriteBatch(trial) === null) return;
-  flushVizBatchContents();
-}
-
 function beginVizBatch(): void {
   vizBatchDepth++;
-  if (vizBatchDepth === 1) vizBatch = emptyVizWriteBatch();
+  if (vizBatchDepth === 1) {
+    vizBatch = vizBatchAllocateFreshForTests ? emptyVizWriteBatch() : vizBatchShell;
+    clearVizBatchInPlace(vizBatch);
+    vizBatchBeginIdentity = vizBatch;
+  }
 }
 
 function endVizBatch(): void {
@@ -243,8 +290,12 @@ function patchVizWriters(): void {
     const arr = Array.isArray(data) ? data : Array.from(data);
     if (vizBatchDepth > 0 && vizBatch) {
       const entry = { slot, data: arr };
-      ensureVizBatchCapacity({ ...vizBatch, buffers: [...vizBatch.buffers, entry] });
-      vizBatch!.buffers.push(entry);
+      vizBatch.buffers.push(entry);
+      if (validateVizWriteBatch(vizBatch) !== null) {
+        vizBatch.buffers.pop();
+        flushVizBatchContents();
+        vizBatch.buffers.push(entry);
+      }
       return;
     }
     send(runtime, "writeBuffer", { slot, data: arr });
@@ -252,9 +303,13 @@ function patchVizWriters(): void {
   zoto.writeUniform = (name, value) => {
     if (!vizAllowed("viz.write")) return;
     if (vizBatchDepth > 0 && vizBatch) {
-      const entry = { name, value };
-      ensureVizBatchCapacity({ ...vizBatch, uniforms: [...vizBatch.uniforms, entry] });
-      vizBatch!.uniforms.push(entry);
+      const entry = { name, value: value as VizUniformValue };
+      vizBatch.uniforms.push(entry);
+      if (validateVizWriteBatch(vizBatch) !== null) {
+        vizBatch.uniforms.pop();
+        flushVizBatchContents();
+        vizBatch.uniforms.push(entry);
+      }
       return;
     }
     send(runtime, "writeUniform", { name, value });
@@ -264,15 +319,21 @@ function patchVizWriters(): void {
     const arr = Array.isArray(data) ? data : Array.from(data);
     if (vizBatchDepth > 0 && vizBatch) {
       const entry = { data: arr, stride: stride || 4 };
-      ensureVizBatchCapacity({
-        ...vizBatch,
-        particles: entry,
-      });
-      vizBatch!.particles = entry;
+      vizBatch.particles = entry;
+      if (validateVizWriteBatch(vizBatch) !== null) {
+        delete vizBatch.particles;
+        flushVizBatchContents();
+        vizBatch.particles = entry;
+      }
       return;
     }
     send(runtime, "writeParticles", { data: arr, stride: stride || 4 });
   };
+}
+
+/** @internal tests — wire viz.write batching without a full port boot. */
+export function applySandboxCapsForTests(caps: string[]): void {
+  applyInit({ caps });
 }
 
 function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: unknown; contractVersion?: number }): void {
@@ -334,7 +395,11 @@ async function handleBootOnPort(d: HostBootPayload, rt: SandboxFrameRuntime): Pr
     postPluginPort(rt, { source: PLUGIN_SOURCE, type: "ready", bootNonce: d.bootNonce });
   } catch (e) {
     const raw = String(e);
-    send(rt, "log", redactSandboxAssetPath(raw, token));
+    postPluginPort(rt, {
+      source: PLUGIN_SOURCE,
+      type: "log",
+      payload: redactSandboxAssetPath(raw, token),
+    });
   }
 }
 
@@ -361,7 +426,7 @@ export function handleSandboxBootChannelMessage(
   api: SandboxZoto = zoto,
 ): void {
   if (!isHostBootChannel(ev.data)) return;
-  if (ev.source != null && ev.source !== window.parent) return;
+  if (ev.source !== window.parent) return;
   const nonce = bootNonceFromLocation(rt.locationHref);
   if (!nonce || ev.data.bootNonce !== nonce) return;
   const port = ev.ports[0];
@@ -372,7 +437,7 @@ export function handleSandboxBootChannelMessage(
 /** Listen for `boot-channel` on a jsdom iframe `contentWindow` (e2e tests). */
 export function installSandboxBootChannelListener(win: Window, parentWin: Window): void {
   win.addEventListener("message", (ev) => {
-    if (ev.source != null && ev.source !== parentWin) return;
+    if (ev.source !== parentWin) return;
     handleSandboxBootChannelMessage(ev, runtime, zoto);
   });
 }

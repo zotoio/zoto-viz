@@ -10,7 +10,7 @@ import {
 } from "./sandbox-frame";
 
 describe("sandbox-frame boot security", () => {
-  it("ignores boot-channel postMessage from a foreign frame", () => {
+  it("ignores boot-channel when event.source is not window.parent", () => {
     resetSandboxFrameRuntimeForTests();
     setSandboxFrameLocationHref("http://127.0.0.1/#zoto-boot=nonce-1");
     const foreign = {} as MessageEventSource;
