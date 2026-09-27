@@ -137,6 +137,8 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeBuffer"; payload: { slot: number; data: number[] } }
   | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
+  | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap } }
+  | { source: "zoto-viz-plugin"; type: "publishBitmapFailed"; payload: Record<string, never> }
   | { source: "zoto-viz-plugin"; type: "log"; payload: string };
 
 export type ParentPortMsg =
@@ -161,6 +163,8 @@ export interface PluginHostHandlers {
   writeBuffer?: (slot: number, data: number[]) => void;
   writeUniform?: (name: string, value: VizUniformValue) => void;
   writeParticles?: (data: number[], stride?: number) => void;
+  publishBitmap?: (packId: string, bitmap: ImageBitmap) => void;
+  publishBitmapFailed?: (packId: string) => void;
 }
 
 const TS_STORE = "zoto-viz.tsPlugins";
@@ -224,6 +228,7 @@ export class PluginSandbox {
   private iframeLoadCount = 0;
   private onIframeLoad: (() => void) | null = null;
   private activePackLabel = "";
+  private activePackId = "";
   private navigationHost: NavigationStopHost | null = null;
   private readonly presentTickPayload: VizPresentTick = { frameMs: 0, tileId: "" };
   private lastPresentFrameMs = -1;
@@ -251,6 +256,7 @@ export class PluginSandbox {
   unload(): void {
     setSandboxReady(false);
     this.bootReject = null;
+    this.activePackId = "";
     this.teardownPort();
     const tile = this.activeTileId;
     const fid = this.frameId;
@@ -314,6 +320,7 @@ export class PluginSandbox {
     viz?: VizPluginContract,
   ): Promise<void> {
     this.unload();
+    this.activePackId = id;
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
     const plugin = js.replace(/<\/script/gi, "<\\/script");
@@ -339,6 +346,7 @@ export class PluginSandbox {
     viz?: VizPluginContract,
   ): Promise<void> {
     this.unload();
+    this.activePackId = "";
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
     await this.bootFrame(moduleSrc, config, viz);
@@ -472,15 +480,60 @@ export class PluginSandbox {
     return this.vizContract;
   }
 
+  /** Test hook: simulate iframe `postMessage` (publishBitmap still uses the window path). */
+  onMessage = (ev: MessageEvent): void => {
+    this.onWindowMessage(ev);
+  };
+
   private onWindowMessage = (ev: MessageEvent): void => {
-    if (this.iframe && ev.source !== this.iframe.contentWindow) return;
     const d = ev.data as HostMsg | undefined;
+    if (this.iframe && ev.source !== this.iframe.contentWindow) {
+      if (d?.source === PLUGIN_SOURCE && d.type === "publishBitmap") {
+        try { d.payload.bitmap.close(); } catch { /* already closed */ }
+      }
+      return;
+    }
     if (!d || d.source !== PLUGIN_SOURCE) return;
     if (d.type === "frame-ready") {
       recordSandboxBoot(d.type);
       return;
     }
+    this.dispatchPluginMsg(d, ev.source);
   };
+
+  private dispatchPluginMsg(d: HostMsg | PluginPortMsg, evSource: MessageEventSource | null = null): void {
+    if (!hostAllows(d.type, this.caps)) return;
+    if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);
+    if (d.type === "setNodeColor") this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
+    if (d.type === "writeBuffer") {
+      noteSandboxWrite(this.activeTileId);
+      this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
+    }
+    if (d.type === "writeUniform") {
+      noteSandboxWrite(this.activeTileId);
+      this.handlers.writeUniform?.(d.payload.name, d.payload.value as VizUniformValue);
+    }
+    if (d.type === "writeParticles") {
+      noteSandboxWrite(this.activeTileId);
+      this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+    }
+    if (d.type === "publishBitmap") {
+      const bmp = d.payload.bitmap;
+      if (this.iframe && evSource !== this.iframe.contentWindow) {
+        bmp.close();
+        return;
+      }
+      try {
+        this.handlers.publishBitmap?.(this.activePackId, bmp);
+      } catch {
+        bmp.close();
+      }
+      return;
+    }
+    if (d.type === "publishBitmapFailed") {
+      this.handlers.publishBitmapFailed?.(this.activePackId);
+    }
+  }
 
   private onPortMessage(ev: MessageEvent): void {
     const d = ev.data as PluginPortMsg | undefined;
@@ -497,21 +550,7 @@ export class PluginSandbox {
       fail(new Error(String(d.payload ?? "sandbox module load failed")));
       return;
     }
-    if (!hostAllows(d.type, this.caps)) return;
-    if (d.type === "setStyle") this.handlers.setStyle?.(d.payload);
-    if (d.type === "setNodeColor") this.handlers.setNodeColor?.(d.payload.id, d.payload.hex);
-    if (d.type === "writeBuffer") {
-      noteSandboxWrite(this.activeTileId);
-      this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
-    }
-    if (d.type === "writeUniform") {
-      noteSandboxWrite(this.activeTileId);
-      this.handlers.writeUniform?.(d.payload.name, d.payload.value as VizUniformValue);
-    }
-    if (d.type === "writeParticles") {
-      noteSandboxWrite(this.activeTileId);
-      this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
-    }
+    this.dispatchPluginMsg(d, this.iframe?.contentWindow ?? null);
   }
 }
 

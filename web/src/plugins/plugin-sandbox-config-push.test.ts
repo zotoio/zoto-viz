@@ -12,17 +12,16 @@ const PACK_A_TILE2 = "pack-a:tile-a2";
 
 type ConfigPost = { type: string; config: Record<string, string> };
 
-function createConfigPostTap(): { posted: ConfigPost[]; rehook: () => void } {
+function createConfigPostTap(box: PluginSandbox): { posted: ConfigPost[]; rehook: () => void } {
   const posted: ConfigPost[] = [];
   const rehook = () => {
-    const iframe = document.querySelector("iframe");
-    const win = iframe?.contentWindow as Window & { postMessage: (data: unknown) => void };
-    if (!win) return;
-    const orig = win.postMessage.bind(win);
-    win.postMessage = (data) => {
+    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    if (!port) return;
+    const orig = port.postMessage.bind(port);
+    port.postMessage = (data, transfer) => {
       const msg = data as { type?: string; config?: Record<string, string> };
       if (msg?.type === "config" && msg.config) posted.push({ type: msg.type, config: msg.config });
-      orig(data);
+      orig(data, transfer);
     };
   };
   return { posted, rehook };
@@ -58,7 +57,7 @@ describe("plugin sandbox config push guards", () => {
   it("onPluginChange path: edit pack A yields 0 posts to B and 1 to A", async () => {
     expect.hasAssertions();
     const box = new PluginSandbox();
-    const tap = createConfigPostTap();
+    const tap = createConfigPostTap(box);
     await box.load(PACK_B, "globalThis.ok = true;", ["config.read"], { b: "0" });
     tap.rehook();
 
@@ -77,7 +76,7 @@ describe("plugin sandbox config push guards", () => {
   it("onPluginFields path: refresh pack A yields 0 posts to B and 1 to A", async () => {
     expect.hasAssertions();
     const box = new PluginSandbox();
-    const tap = createConfigPostTap();
+    const tap = createConfigPostTap(box);
     await box.load(PACK_B, "globalThis.ok = true;", ["config.read"], { b: "0" });
     tap.rehook();
 
@@ -96,7 +95,7 @@ describe("plugin sandbox config push guards", () => {
   it("onPluginChange path: edit instance A1 yields 0 posts to A2 or B and 1 to A1", async () => {
     expect.hasAssertions();
     const box = new PluginSandbox();
-    const tap = createConfigPostTap();
+    const tap = createConfigPostTap(box);
     await box.load(PACK_A_TILE1, "globalThis.ok = true;", ["config.read"], { a: "0" });
     tap.rehook();
 
@@ -113,7 +112,7 @@ describe("plugin sandbox config push guards", () => {
   it("onPluginFields path: refresh instance A1 yields 0 posts to A2 or B and 1 to A1", async () => {
     expect.hasAssertions();
     const box = new PluginSandbox();
-    const tap = createConfigPostTap();
+    const tap = createConfigPostTap(box);
     await box.load(PACK_A_TILE1, "globalThis.ok = true;", ["config.read"], { a: "0" });
     tap.rehook();
 
@@ -130,7 +129,7 @@ describe("plugin sandbox config push guards", () => {
   it("onPluginChange path: no config.read yields 0 posts", async () => {
     expect.hasAssertions();
     const box = new PluginSandbox();
-    const tap = createConfigPostTap();
+    const tap = createConfigPostTap(box);
     await box.load(PACK_A, "globalThis.ok = true;", ["graph.read"], { a: "0" });
     tap.rehook();
     tryOnPluginChangePush(box, PACK_A, PACK_A, { a: "2" }, false);
@@ -141,7 +140,7 @@ describe("plugin sandbox config push guards", () => {
   it("onPluginFields path: no config.read yields 0 posts", async () => {
     expect.hasAssertions();
     const box = new PluginSandbox();
-    const tap = createConfigPostTap();
+    const tap = createConfigPostTap(box);
     await box.load(PACK_A, "globalThis.ok = true;", ["graph.read"], { a: "0" });
     tap.rehook();
     tryOnPluginFieldsPush(box, PACK_A, PACK_A, { a: "2" }, false);
