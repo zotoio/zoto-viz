@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/render-host-pack-mirror.test.ts",
+  "testName": "^RenderHost pack mirror scope > one coalesce group key shares one PackMirror session across mirror tiles$",
+  "description": "Revert per-view pack mirror scope keys; one session per packCoalesceGroupKey.",
+  "expectedRed": "AssertionError: expected 2 to be 1 // Object.is equality"
+}

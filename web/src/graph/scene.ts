@@ -9,6 +9,7 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
+import { getSurfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -39,9 +40,10 @@ import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import {
   asCanvasDeviceHeight,
   deviceRect,
-  isDeviceRect,
+  type DeviceRect,
   type GlRect,
   type GlRectMut,
+  isDeviceRect,
   toGlRectInto,
 } from "./pack-mirror-rect";
 import {
@@ -602,6 +604,7 @@ function glowMaterial(): THREE.ShaderMaterial {
       uAmt: { value: 1 },
       uMode: { value: 0 },
       uAdditive: { value: 1 },
+      uResolution: { value: new THREE.Vector2(1, 1) },
     },
     vertexShader: GLOW_VERT,
     fragmentShader: GLOW_FRAG,
@@ -1123,6 +1126,17 @@ export class NetScene implements HostedView {
   private active = true;
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
+  /** Duplicate mosaic tiles of the same pack: one tick/draw on primary, letterboxed mirrors. */
+  private packCoalesce: {
+    role: "primary" | "mirror";
+    primary: NetScene | null;
+    mirrorKind?: "hostCanvas";
+    groupKey?: string;
+    pluginId?: string;
+    packLabel?: string;
+    mirrorsTile?: number;
+    tileCount?: number;
+  } | null = null;
   private vizHeadlineText = "";
   private now = Date.now() / 1000;
   /** Host-engine stub so an empty catalog still constructs; catalog default is applied via setMode. */
@@ -1561,10 +1575,60 @@ export class NetScene implements HostedView {
     this.present();
   }
 
+  setPackCoalesce(role: {
+    role: "primary" | "mirror";
+    primary: NetScene | null;
+    mirrorKind?: "hostCanvas";
+    groupKey?: string;
+    pluginId?: string;
+    packLabel?: string;
+    mirrorsTile?: number;
+    tileCount?: number;
+  } | null): void {
+    this.packCoalesce = role;
+    this.host?.markMirrorScopeDirty();
+  }
+
+  get packCoalesceGroupKey(): string | undefined {
+    return this.packCoalesce?.groupKey;
+  }
+
+  get packMirrorPrimary(): NetScene | null {
+    return this.packCoalesce?.role === "mirror" ? this.packCoalesce.primary : null;
+  }
+
+  get isPackMirrorPrimary(): boolean {
+    return this.packCoalesce?.role === "primary";
+  }
+
+  get packCoalesceTileCount(): number {
+    return this.packCoalesce?.tileCount ?? 0;
+  }
+
+  get usesPackMirrorRt(): boolean {
+    return this.isPackMirrorPrimary && this.packCoalesceTileCount >= 2;
+  }
+
+  surfaceLetterboxFill(): SurfaceLetterboxFill {
+    return getSurfaceLetterboxFill(this.clearHex, 0.25);
+  }
+
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
   private present(): void {
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
     this.backdrop.syncCamera(this.camera);
+    if (this.host && this.packCoalesce?.role === "mirror") {
+      const fill = this.surfaceLetterboxFill();
+      if (this.packCoalesce.primary) {
+        this.lastVp = this.host.presentPackMirror(
+          this.packCoalesce.primary,
+          this,
+          fill,
+        );
+        this.notePaneChange();
+        return;
+      }
+    }
     if (this.host) {
       this.lastVp = this.host.present(this, this.clearHex, this.scene, this.camera);
     } else if (this.renderer instanceof SoftwareGpu) {
@@ -2017,7 +2081,8 @@ export class NetScene implements HostedView {
     const host = this.satellite ? this.container : document.documentElement;
     host.style.setProperty("--label-scale", String(a.labelWeight));
     host.style.setProperty("--label-fw", String(Math.round(400 + 350 * Math.max(0, Math.min(1, a.labelWeight)))));
-    (this.particles.material as THREE.PointsMaterial).size = 3.2 * a.edgeWeight * (t?.partSize ?? a.partSize);
+    const partCssSize = 3.2 * a.edgeWeight * (t?.partSize ?? a.partSize);
+    (this.particles.material as THREE.PointsMaterial).size = partCssSize;
     (this.lines.material as THREE.LineBasicMaterial).opacity = Math.min(1, 0.5 + 0.5 * a.edgeWeight);
     this.syncGlow();
   }
@@ -2486,6 +2551,7 @@ export class NetScene implements HostedView {
       if (fog) fog.color.setHex(baseFog);
       this.backdrop.setColors(rim, baseClear);
     }
+    void getSurfaceLetterboxFill(this.clearHex, 0.25);
     this.syncSceneChrome(painted);
   }
 
@@ -3511,6 +3577,10 @@ export class NetScene implements HostedView {
     }
     const dt = this.lastFrameTs ? Math.min(0.05, (ts - this.lastFrameTs) / 1000) : 0;
     this.lastFrameTs = ts;
+    if (this.packCoalesce?.role === "mirror" && this.packCoalesce.primary && this.host) {
+      this.present();
+      return;
+    }
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();
@@ -3537,7 +3607,8 @@ export class NetScene implements HostedView {
       this.rebuildParticles();
     }
     if (this.tune.k > 0.001 || this.lastTuneK > 0.001) {
-      (this.particles.material as THREE.PointsMaterial).size = 3.2 * this.anim.edgeWeight * this.tune.partSize;
+      const partCssSize = 3.2 * this.anim.edgeWeight * this.tune.partSize;
+      (this.particles.material as THREE.PointsMaterial).size = partCssSize;
       this.syncGlow();
     }
     this.lastTuneK = this.tune.k;

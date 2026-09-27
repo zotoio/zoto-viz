@@ -111,6 +111,7 @@ import {
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
+import { deliverVizPluginFrame } from "./viz-frame-tick";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import { bindVizDriveElement, noteHostDirect } from "../plugins/viz-drive";
@@ -1097,17 +1098,14 @@ function feed(m: StateMsg): void {
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-      sandbox.frame(f);
-      if (mosaic?.on) {
-        deliverMosaicDemoPacks(mosaic, f, modeById, pluginSpecForMode, optsFor);
-      } else if (packId) {
-        noteHostDirect("main");
-        runPackFrameHandler(packId, f, {
-          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, optsFor(mode));
-      }
+      deliverVizPluginFrame({
+        frame: f,
+        sandbox,
+        packId,
+        activeMode: mode,
+        optsFor,
+        budgetStats: vizBudget.stats,
+      });
     }, buildFrame);
     if (frame) {
       vizFrameTs = frame.t;

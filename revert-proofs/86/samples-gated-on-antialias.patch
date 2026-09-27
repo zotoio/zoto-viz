@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
+index dcd4781..9c4fb5e 100644
+--- a/web/src/graph/pack-mirror-gl.ts
++++ b/web/src/graph/pack-mirror-gl.ts
+@@ -231,7 +231,7 @@ export class PackMirrorSession {
+ 
+   ensure(pw: number, ph: number, antialias: boolean): THREE.WebGLRenderTarget | null {
+     if (pw < 2 || ph < 2) return null;
+-    const samples = antialias ? PACK_MSAA_SAMPLES : 0;
++    const samples = 0;
+     if (!this.rt) {
+       this.pw = pw;
+       this.ph = ph;
