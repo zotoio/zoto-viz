@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 6dd9a32..c283fbf 100644
+index e158a70..fc6ad4b 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -144,8 +144,6 @@ def query_os_interface_addresses() -> list[str]:
+@@ -144,8 +144,6 @@
              timeout=5,
              check=False,
          )

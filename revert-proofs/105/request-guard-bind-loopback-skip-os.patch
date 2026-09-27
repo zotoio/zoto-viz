@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index e158a70..d74eae2 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -188,7 +188,7 @@
+     extra: Iterable[str] | None = None,
+ ) -> frozenset[str]:
+     bind = (bind or "127.0.0.1").strip()
+-    include_os = not bind_is_loopback(bind)
++    include_os = True
+     allowed: set[str] = set(local_interface_hosts(port, include_os=include_os))
+     if bind and bind not in {"0.0.0.0", "::"}:
+         allowed.add(_canonical_key(bind, port))

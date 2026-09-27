@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 6dd9a32..4829958 100644
+index e158a70..6eca5b1 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -153,8 +153,7 @@ def query_os_interface_addresses() -> list[str]:
+@@ -153,8 +153,7 @@
                  if info.get("family") not in ("inet", "inet6"):
                      continue
                  local = info.get("local")

@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_os_query.py::test_build_allowed_hosts_wildcard_bind_includes_os_lan_addresses",
+  "red": "AssertionError: assert 0 == 2",
+  "timeoutSec": 120
+}

@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 6dd9a32..12b4f15 100644
+index e158a70..1356e85 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -172,8 +172,6 @@ def local_interface_hosts(port: int) -> set[str]:
+@@ -174,8 +174,6 @@
          seen.add(addr)
          try:
              ip = ipaddress.ip_address(addr)

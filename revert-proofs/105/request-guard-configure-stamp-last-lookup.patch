@@ -1,12 +1,14 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index e158a70..df26dec 100644
+index e158a70..72e43a0 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -276,7 +276,6 @@
+@@ -276,9 +276,6 @@
      app["request_guard_extra_hosts"] = extra
      clk = app.get("request_guard_clock", time.monotonic)
      now = clk()
 -    app["request_guard_last_if_lookup"] = now
-     if app.get("request_guard_refresh_lock") is None:
-         app["request_guard_refresh_lock"] = asyncio.Lock()
+-    if app.get("request_guard_refresh_lock") is None:
+-        app["request_guard_refresh_lock"] = asyncio.Lock()
      _refresh_allowed_hosts(app)
+ 
+ 
