@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index d5f5a34..f3624e2 100644
+index 85e169d..3821de4 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1739,33 +1739,8 @@ export class Settings {
+@@ -1734,31 +1734,8 @@ export class Settings {
        mosaicUniqueSkies: a.mosaicUniqueSkies,
        mosaicSkies: a.mosaicSkies,
      });
@@ -17,7 +17,6 @@ index d5f5a34..f3624e2 100644
 -          countMosaicTiles(candidate),
 -          VIZ_MAX_ACTIVE_TILES,
 -        );
--      this.renderMosaicWallStatus();
 -      return;
 -    }
 -    if (!this.mosaicBootRefusedTilesRaw) {
@@ -31,7 +30,6 @@ index d5f5a34..f3624e2 100644
 -        this.lastMosaicTileLimitMessage = mosaicWallLayoutBootRefusedMessage(0, VIZ_MAX_ACTIVE_TILES);
 -      }
 -    }
--    this.renderMosaicWallStatus();
 -    this.anim = anim;
 +    this.lastMosaicTileLimitMessage = "";
 +    this.anim = candidate;
