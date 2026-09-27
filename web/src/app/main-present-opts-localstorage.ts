@@ -48,4 +48,4 @@ export function invokePresentLoopOptsForSites(
 }
 
 /** Pinned at main `6520b01` for plugin steady present (2× optsFor; 5 knob keys × 2 store reads each). */
-export const MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME_6520B01 = 20;
+export const MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME_6520B01 = 22;

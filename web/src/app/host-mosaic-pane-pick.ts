@@ -16,7 +16,7 @@ export function createMosaicPanePickHandler(deps: MosaicPanePickDeps): (from: st
   return (from, to) => {
     const mosaic = deps.getMosaic();
     if (!mosaic?.on) return false;
-    if (!mosaic.setPaneView(from, to)) return false;
+    if (!mosaic.setPaneViewFromPicker(from, to)) return false;
     const slot = mosaic.tileIds.find((id) => mosaicTileViewId(id) === to) ?? from;
     const pm = deps.hostModeById(to);
     mosaic.focus(slot);

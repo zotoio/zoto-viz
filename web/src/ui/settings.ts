@@ -37,7 +37,7 @@ import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
 import { guardReadableAnim } from "../graph/readable";
-import { dreamAnimBootFromStorage } from "../graph/mosaic-viz-tile-guard";
+import { applyDreamAnimWithTileLimit, dreamAnimBootFromStorage } from "../graph/mosaic-viz-tile-guard";
 import { renderManifestBlockedPanel } from "../plugins/plugin-manifest-blocked";
 import {
   AUTH_SETUPS,
@@ -191,6 +191,9 @@ export class Settings {
   private viewPluginDirty = false;
   private viewPluginDraft: Record<string, string> = {};
   private readonly viewDrawerStatusEl: HTMLDivElement;
+  private readonly mosaicWallStatusEl: HTMLDivElement;
+  private bootRefusedMosaicTilesRawValue: string | null = null;
+  lastMosaicTileLimitMessage = "";
   private mosaicLayoutPickerTrigger: HTMLButtonElement | null = null;
   /** Focus target when the view drawer closes (Layout picker or the menu/cog that opened it). */
   private viewDrawerReturnFocus: HTMLElement | null = null;
@@ -284,10 +287,30 @@ export class Settings {
     this.viewDrawerStatusEl.className = "view-drawer-status sec-hint";
     this.viewDrawerStatusEl.setAttribute("role", "status");
     this.viewDrawerStatusEl.hidden = true;
-    this.el.append(this.viewDrawerStatusEl, this.btn, this.pop);
+    this.mosaicWallStatusEl = document.createElement("div");
+    this.mosaicWallStatusEl.className = "mosaic-wall-status sec-hint";
+    this.mosaicWallStatusEl.setAttribute("role", "status");
+    this.mosaicWallStatusEl.hidden = true;
+    this.el.append(this.viewDrawerStatusEl, this.mosaicWallStatusEl, this.btn, this.pop);
     bindFloatPanel(this.pop, handle, "settings", { pin: () => this.pinFloat(), min: { w: 360, h: 280 } });
 
-    this.anim = loadAnim(cfg.storePrefix);
+    const prefix = cfg.storePrefix;
+    const rawMosaicTiles = localStorage.getItem(`${prefix}.anim.mosaicTiles`);
+    const loadedAnim = loadAnim(prefix);
+    let parsedRaw: unknown = loadedAnim.mosaicTiles;
+    if (rawMosaicTiles) {
+      try {
+        parsedRaw = JSON.parse(rawMosaicTiles) as unknown;
+      } catch {
+        parsedRaw = loadedAnim.mosaicTiles;
+      }
+    }
+    const boot = dreamAnimBootFromStorage(loadedAnim, parsedRaw);
+    this.anim = boot.anim;
+    if (boot.bootRefused) {
+      this.bootRefusedMosaicTilesRawValue = rawMosaicTiles;
+      if (boot.message) this.setMosaicTileLimitMessage(boot.message);
+    }
     this.feed = loadFeed(cfg.storePrefix);
     this.chat = loadChat(cfg.storePrefix);
     const split = migrateFeedChatSplit(cfg.storePrefix);
@@ -354,6 +377,24 @@ export class Settings {
   }
 
   get viewFocus(): string { return this.viewFocusId; }
+
+  /** Raw `.anim.mosaicTiles` localStorage bytes when boot refused an oversized wall (H6). */
+  bootRefusedMosaicTilesRaw(): string | null {
+    return this.bootRefusedMosaicTilesRawValue;
+  }
+
+  private setMosaicTileLimitMessage(message: string): void {
+    this.lastMosaicTileLimitMessage = message;
+    this.mosaicWallStatusEl.textContent = message;
+    this.mosaicWallStatusEl.hidden = false;
+  }
+
+  private clearMosaicTileLimitMessage(): void {
+    if (!this.lastMosaicTileLimitMessage) return;
+    this.lastMosaicTileLimitMessage = "";
+    this.mosaicWallStatusEl.textContent = "";
+    this.mosaicWallStatusEl.hidden = true;
+  }
 
   /** Used by host applyMode to skip drawer rebuild when pack + view are unchanged. */
   viewDrawerOpenWithSpec(): boolean {
@@ -1842,16 +1883,27 @@ export class Settings {
   }
 
   applyAnim(a: DreamAnim): void {
-    this.anim = guardReadableAnim({
+    const rawTileList = Array.isArray(a.mosaicTiles)
+      ? a.mosaicTiles.filter((row): row is string => typeof row === "string" && row.trim().length > 0)
+      : [];
+    const incoming = guardReadableAnim({
       ...DEFAULT_DREAM,
       ...a,
       mosaicTree: parseMosaicNode(a.mosaicTree) ?? a.mosaicTree ?? null,
       mosaicMaxId: typeof a.mosaicMaxId === "string" ? a.mosaicMaxId : "",
-      mosaicTiles: parseMosaicTiles(a.mosaicTiles),
+      mosaicTiles: parseMosaicTiles(rawTileList.length ? rawTileList : a.mosaicTiles),
       mosaicSharedTheme: !!a.mosaicSharedTheme,
       mosaicUniqueSkies: a.mosaicUniqueSkies,
       mosaicSkies: a.mosaicSkies,
     });
+    const forLimit = rawTileList.length ? { ...incoming, mosaicTiles: rawTileList } : incoming;
+    const limited = applyDreamAnimWithTileLimit(forLimit, this.anim);
+    if (limited.refused && limited.message) {
+      this.setMosaicTileLimitMessage(limited.message);
+    } else if (!this.bootRefusedMosaicTilesRawValue) {
+      this.clearMosaicTileLimitMessage();
+    }
+    this.anim = limited.anim;
     this.syncAnimUi();
     this.syncTheme();
     this.persistAnim();
@@ -1878,21 +1930,6 @@ export class Settings {
     this.onMosaicLayoutDrawerChange(prevTiles, this.anim.mosaicTiles);
     if (this.shouldSyncPackScopeNoteAfterLayout(prevTiles, this.anim.mosaicTiles)) {
       this.syncPackScopeNoteFromAnim();
-    }
-    if (this.viewBind?.spec?.id && this.isOpen && this.activePane === "view") {
-      const packId = this.viewBind.spec.id;
-      const prevCount = countPackTiles(prevTiles, packId);
-      const nextCount = countPackTiles(this.anim.mosaicTiles, packId);
-      if (prevCount !== nextCount && !this.viewPluginDirty) {
-        this.viewDrawerKey = null;
-        this.bindView(
-          this.viewBind.spec,
-          this.viewBind.fields,
-          this.viewBind.look,
-          this.viewBind.extras,
-          this.viewFocusId.trim() || this.viewBind.spec.id,
-        );
-      }
     }
     if (
       this.viewPluginDirty
@@ -2341,8 +2378,10 @@ export class Settings {
     if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
     else localStorage.removeItem(`${p}.anim.mosaicTree`);
     localStorage.setItem(`${p}.anim.mosaicMaxId`, a.mosaicMaxId || "");
-    if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
-    else localStorage.removeItem(`${p}.anim.mosaicTiles`);
+    if (this.bootRefusedMosaicTilesRawValue === null) {
+      if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
+      else localStorage.removeItem(`${p}.anim.mosaicTiles`);
+    }
     localStorage.setItem(`${p}.anim.mosaicSharedTheme`, a.mosaicSharedTheme ? "1" : "0");
     if (a.mosaicUniqueSkies === true) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "1");
     else if (a.mosaicUniqueSkies === false) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "0");
