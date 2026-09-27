@@ -1,0 +1,33 @@
+id: koi-pond
+name: Koi Pond
+version: 1
+hint: Tranquil pond — talkers are koi, destinations are lily pads and lotus blooms.
+description: >-
+  Top-down koi pond (procedural GLSL). Data mapping is declared in
+  data-mapping.yml (talkers→koi, packets→ripples, sys.failed→murk).
+  Talkers map to koi by id with #22 slot hysteresis; roles pick colour patterns;
+  packet events spawn ripples. Endpoints
+  appear as lily pads and lotus flowers that open with activity. SYS failures
+  tint the water murky with a steady corner fail chip (no flashing).
+  Work budget: raymarch steps ≤64, koi ≤16, pads ≤12, particles ≤24, 1 draw call.
+  Demo schools when the host idle fixture is active — label shows demo.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 3
+  maxBufferFloats: 64
+  maxParticles: 24
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+    - uBright
+    - uOpacity
+frontend:
+  entry: frontend/index.ts

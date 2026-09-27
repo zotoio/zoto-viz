@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > routes all ten NoticeKey values via NOTICE_ROUTE",
+  "description": "Revert production guard (row-02-alert-routing)",
+  "red": "AssertionError: expected 'status' to be 'alert' // Object.is equality"
+}

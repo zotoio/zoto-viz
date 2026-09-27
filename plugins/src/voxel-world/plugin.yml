@@ -1,0 +1,217 @@
+id: voxel-world
+name: Voxel World
+version: 2
+hint: Blocky procedural voxel terrain on the plugin sky. Greedy-meshed chunks drive stats; live host gauges tint weather, place torches, and flash Zoto fail red ahead of the spectacle.
+description: Stage-only blocky voxel landscape. All textures are procedural. Config, presets, caps, and live-data bindings are declared below and read only through config.read.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 2
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+    - uBright
+    - uOpacity
+frontend:
+  entry: frontend/index.ts
+config:
+  - key: preset
+    label: preset
+    type: select
+    default: classic
+    values:
+      - [classic, Classic]
+      - [snowy, Snowy Peaks]
+      - [desert, Desert]
+      - [night, Night Torches]
+      - [archipelago, Archipelago]
+      - [custom, Custom]
+    hint: Bundled looks. Custom keeps sliders; other presets apply bundled defaults when selected.
+  - key: seed
+    label: world seed
+    type: number
+    default: 4242
+    min: 1
+    max: 999999
+    step: 1
+    hint: Pinned terrain seed. Camera and scene phase use frame time only.
+  - key: biome
+    label: biome mix
+    type: select
+    default: temperate
+    values:
+      - [temperate, temperate]
+      - [boreal, boreal]
+      - [arid, arid]
+      - [islands, islands]
+  - key: viewDist
+    label: view distance
+    type: number
+    default: 40
+    min: 16
+    max: 48
+    step: 2
+    hint: Hard cap 48 blocks (see viz cap_maxViewDist).
+  - key: timeOfDay
+    label: time of day
+    type: number
+    default: 14
+    min: 0
+    max: 24
+    step: 0.25
+  - key: cycleSpeed
+    label: day cycle speed
+    type: number
+    default: 0
+    min: 0
+    max: 4
+    step: 0.05
+    hint: Hours per real minute; 0 freezes sun unless preset animates.
+  - key: weather
+    label: weather
+    type: select
+    default: clear
+    values:
+      - [clear, clear]
+      - [rain, rain]
+      - [snow, snow]
+  - key: camera
+    label: camera mode
+    type: select
+    default: fly
+    values:
+      - [fly, cinematic fly]
+      - [walk, first-person walk]
+      - [orbit, orbit village]
+  - key: cameraSpeed
+    label: camera speed
+    type: number
+    default: 1
+    min: 0.2
+    max: 2.5
+    step: 0.05
+  - key: fog
+    label: fog density
+    type: number
+    default: 0.55
+    min: 0
+    max: 1
+    step: 0.02
+  - key: textureStyle
+    label: texture style
+    type: select
+    default: crisp
+    values:
+      - [crisp, crisp pixels]
+      - [smooth, soft pixels]
+      - [painterly, painterly]
+  - key: mobs
+    label: mob count
+    type: number
+    default: 3
+    min: 0
+    max: 6
+    step: 1
+  - key: clouds
+    label: block clouds
+    type: boolean
+    default: true
+  - key: palette
+    label: colour palette
+    type: select
+    default: verdant
+    values:
+      - [verdant, verdant]
+      - [sunset, sunset]
+      - [alpine, alpine]
+      - [candy, candy]
+  - key: reducedMotion
+    label: reduced motion
+    type: boolean
+    default: false
+    hint: Wide slow shots, no shake (also respect OS reduced-motion when host exposes it later).
+  - key: cap_maxChunks
+    label: max chunks (fixed)
+    type: number
+    default: 8
+    min: 8
+    max: 8
+    step: 1
+    hint: Pack cap — greedy mesh slots.
+  - key: cap_maxViewDist
+    label: max view distance (fixed)
+    type: number
+    default: 48
+    min: 48
+    max: 48
+    step: 1
+  - key: cap_vertexBudget
+    label: vertex budget (fixed)
+    type: number
+    default: 65536
+    min: 65536
+    max: 65536
+    step: 1
+  - key: cap_maxMobs
+    label: max mobs (fixed)
+    type: number
+    default: 6
+    min: 6
+    max: 6
+    step: 1
+  - key: cap_chunksPerFrame
+    label: chunk rebuilds per frame (fixed)
+    type: number
+    default: 2
+    min: 1
+    max: 2
+    step: 1
+  - key: bind_sysLoad_weather
+    label: live sys.load → weather mix
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.01
+    hint: VizDataFrame sys.cpu (0–1) scales rain/snow intensity.
+  - key: bind_eventRate_cloudCover
+    label: live event rate → cloud cover
+    type: number
+    default: 0.4
+    min: 0
+    max: 1
+    step: 0.01
+    hint: Talker/packet event rate (normalised) drives block-cloud density.
+  - key: bind_packetField_torch
+    label: live packet field → torch spawn
+    type: number
+    default: 0.85
+    min: 0
+    max: 1
+    step: 0.01
+    hint: Each packet row in the frame (up to host cap) can place a torch keyed by proto when field exceeds threshold.
+  - key: bind_packetField_block
+    label: live packet field → block spawn
+    type: number
+    default: 0.7
+    min: 0
+    max: 1
+    step: 0.01
+    hint: Packet rows keyed by proto place a block marker at the lower field threshold.
+  - key: bind_sysFailed_failBeacon
+    label: live sys.failed → fail beacon
+    type: number
+    default: 1
+    min: 0
+    max: 1
+    step: 0.01
+    hint: Machine-wide sys.failed tints the sky and weather (no per-structure fail pins).
