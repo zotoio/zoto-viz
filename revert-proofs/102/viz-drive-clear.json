@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-drive.test.ts",
+  "testName": "viz-drive per tile > returns to none when the pack is cleared",
+  "description": "Revert clearVizDrive resetting tile dataset vizDrive to none",
+  "red": {
+    "actual": "host-direct",
+    "expected": "none"
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected 'host-direct' to be 'none' // Object.is equality"
+}

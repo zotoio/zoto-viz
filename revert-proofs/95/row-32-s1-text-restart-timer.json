@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-32-s1-text-restart-timer)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > a text change restarts the full auto-clear duration",
+  "red": "AssertionError: expected 2 to be 1 // Object.is equality"
+}
