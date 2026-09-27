@@ -1,0 +1,7 @@
+{
+  "pr": 101,
+  "patch": "revert-proofs/101/termNow-dt-guard-nan-only.patch",
+  "testFile": "src/plugins/dogfood.test.ts",
+  "testName": "^hn-term frame.t backward step: dt guard uses 1/60 fallback$",
+  "red": "AssertionError: expected 27 to be 18 // Object.is equality"
+}

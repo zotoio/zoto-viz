@@ -50,7 +50,15 @@ export function resetHnTermPack(): void {
 }
 
 function termNow(frame: VizDataFrame): number {
-  return typeof performance !== "undefined" ? performance.now() / 1000 : frame.t;
+  return frame.t;
+}
+
+function hnTermDt(now: number): number {
+  if (termLastT <= 0) return 1 / 60;
+  const raw = now - termLastT;
+  if (!Number.isFinite(raw) || raw < 0) return 1 / 60;
+  if (raw === 0) return 0;
+  return Math.min(1, raw);
 }
 
 function hnTermFrameBuffer(frame: VizDataFrame): number[] {
@@ -60,7 +68,7 @@ function hnTermFrameBuffer(frame: VizDataFrame): number[] {
     termTyped = Math.min(termTyped, termScript.length);
   }
   const now = termNow(frame);
-  const dt = termLastT > 0 ? Math.min(1, Math.max(0, now - termLastT)) : 1 / 60;
+  const dt = hnTermDt(now);
   termLastT = now;
   termTyped += dt * (28 + frame.audio * 18);
   if (termScript.length > 0 && termTyped > termScript.length + 40) termTyped = 0;

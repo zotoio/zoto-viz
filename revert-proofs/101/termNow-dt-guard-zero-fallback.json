@@ -1,0 +1,7 @@
+{
+  "pr": 101,
+  "patch": "revert-proofs/101/termNow-dt-guard-zero-fallback.patch",
+  "testFile": "src/plugins/dogfood.test.ts",
+  "testName": "^hn-term frame.t hold step: zero dt adds no typed characters$",
+  "red": "AssertionError: expected 22 to be 18 // Object.is equality"
+}
