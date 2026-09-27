@@ -74,23 +74,6 @@ describe("media ask focus dialog", () => {
     expect(paragraphs[1]).toBe("This embedded browser cannot show the usual listening / camera prompt. Allow here is the accept. If nothing happens, open the monitor in Chromium on localhost.");
   });
 
-  it("records dismiss when the dialog closes without a close event", async () => {
-    expect.hasAssertions();
-    mockCapture(vi.fn(async () => ({ getTracks: () => [] })));
-    void askUserMedia({ audio: true, video: false }, "watchword listening");
-    await shown();
-    const dialog = document.querySelector<HTMLDialogElement>("[data-media-ask]")!;
-    dialog.open = false;
-    const toggle = new Event("beforetoggle") as Event & { newState: string; oldState: string };
-    toggle.newState = "closed";
-    toggle.oldState = "open";
-    dialog.dispatchEvent(toggle);
-    await vi.waitFor(() => {
-      expect(sessionStorage.getItem("zoto-viz.mediaDismiss")).toBe('{"mic":true}');
-    });
-    expect(document.querySelector("dialog") === null).toBe(true);
-  });
-
   it("closes on Escape without calling getUserMedia and dismisses like Not now", async () => {
     expect.hasAssertions();
     const getUserMedia = vi.fn(async () => ({ getTracks: () => [] }));

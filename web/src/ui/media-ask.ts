@@ -283,17 +283,6 @@ function finalizeMediaAskClose(host: MediaAskHost): void {
   host.waiters.forEach((w) => w.resolve(null));
 }
 
-function watchDialogClosedWithoutCloseEvent(host: MediaAskHost): void {
-  host.modal.addEventListener("beforetoggle", (e: Event) => {
-    const toggle = e as ToggleEvent;
-    if (toggle.newState !== "closed" || host.settled) return;
-    queueMicrotask(() => {
-      if (host.settled || host.modal.open) return;
-      finalizeMediaAskClose(host);
-    });
-  });
-}
-
 function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
   const wants = [
     host.audio ? "the microphone (watchword listening and the pulse)" : "",
@@ -378,7 +367,6 @@ function openMediaAsk(waiters: Waiter[]): void {
   paintCopy(host);
 
   modal.addEventListener("close", () => finalizeMediaAskClose(host));
-  watchDialogClosedWithoutCloseEvent(host);
   modal.addEventListener("click", (e) => {
     if (e.target === modal) modal.close("not-now");
   });

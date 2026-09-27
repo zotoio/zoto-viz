@@ -108,7 +108,9 @@ describe("media ask dismiss sessionStorage", () => {
       { audio: false, video: { facingMode: "user" } },
       "live camera",
     );
-    await waitForDialog();
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-media-ask]") !== null).toBe(true);
+    });
     expect(document.querySelector("[data-media-ask] strong")?.textContent).toBe("Allow the camera");
     clickNotNow();
     await expect(camPending).resolves.toBeNull();
