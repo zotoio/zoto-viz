@@ -1,13 +1,14 @@
 diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
-index 33f7f43..7631ce6 100644
+index 3893021c1ded7cbb707c14252b5691650eeab247..981dd3db8dd33de1a0d75898610f6fcd5ab5e243 100644
 --- a/web/src/core/http-notice.ts
 +++ b/web/src/core/http-notice.ts
-@@ -57,7 +57,7 @@ export function bindServerRestartWallNotice(): () => void {
-     postWallNotice({
-       key: "retry-failed",
-       text: detail.message,
--      action: { label: "Retry", onClick: () => { void detail.retry(); } },
-+      action: { label: "Retry", onClick: () => {} },
-     });
+@@ -63,9 +63,6 @@
+       '[data-notice-key="retry-failed"] .wall-notice-action',
+     );
+     if (retryBtn) retryBtn.tabIndex = -1;
+-    queueMicrotask(() => {
+-      if (retryBtn) retryBtn.tabIndex = 0;
+-    });
    };
  
+   wall.addEventListener("click", onWallClick);

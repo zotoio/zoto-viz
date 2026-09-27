@@ -2,7 +2,7 @@
   "runner": "vitest",
   "testFile": "src/core/http.ux-literals.test.ts",
   "testName": "UX copy literals > pins retry-failed notice as exact literal",
-  "red": "AssertionError: expected 'Retry failed.' to be 'That request still failed after the s\u2026' // Object.is equality",
+  "red": "AssertionError: expected 13 to be 53 // Object.is equality",
   "description": "ux-restart-notice-retry-literal",
   "timeoutSec": 120
 }

@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_policy.py::test_rebinding_host_400_exact_body_no_echo",
-  "description": "Reject body must not echo Host; revert appends raw Host to the body.",
-  "timeoutSec": 120,
-  "red": "AssertionError: assert 'This zoto-vi...xample:45423)' == 'This zoto-vi...erver config.'"
-}

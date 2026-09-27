@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "description": "Pack asset responses must send Referrer-Policy: no-referrer.",
-  "timeoutSec": 60,
-  "testId": "tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_null_origin_module_js_with_valid_token_when_consented",
-  "red": "AssertionError: assert None == 'no-referrer'"
-}

@@ -1,8 +1,8 @@
 {
   "runner": "vitest",
-  "testFile": "src/app/main.wiring.test.ts",
-  "testName": "main entry wiring > binds server restart wall notice from the production entry module",
-  "red": "AssertionError: expected 'import { AUDIO_DRIVES, NetScene, esca\u2026' to contain 'bindServerRestartWallNotice();'",
+  "testFile": "src/core/http-notice.test.ts",
+  "testName": "server restart wall notice > binder wiring > shows the restart notice when the binder is active and a stale PUT runs",
+  "red": "AssertionError: expected +0 to be 1 // Object.is equality",
   "description": "ux-restart-notice-main-wiring",
   "timeoutSec": 120
 }

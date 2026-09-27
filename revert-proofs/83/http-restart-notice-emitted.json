@@ -2,7 +2,7 @@
   "runner": "vitest",
   "testFile": "src/core/http-notice.test.ts",
   "testName": "server restart wall notice > burst de-duplication > emits one restart event for two sequential stale bursts without restart-cleared",
-  "red": "AssertionError: expected [ \u2026(2) ] to deeply equal [ Array(1) ]",
+  "red": "AssertionError: expected 2 to be 1 // Object.is equality",
   "description": "http-restart-notice-emitted",
   "timeoutSec": 120
 }

@@ -1,8 +1,8 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 109ffb5..ef4701e 100644
+index 3fccbf12631816dd230faf445486bd24d9ccd311..68b76c94655a70fcf60ba88f4499f8696458c3a5 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
-@@ -92,7 +92,7 @@ function writeRowContent(e: Entry): void {
+@@ -91,7 +91,7 @@
        btn.type = "button";
        btn.className = "wall-notice-action btn small";
        btn.textContent = e.action.label;

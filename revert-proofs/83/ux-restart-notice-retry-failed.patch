@@ -1,8 +1,8 @@
 diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
-index 33f7f43..fffc872 100644
+index 3893021c1ded7cbb707c14252b5691650eeab247..590ddca625e0ad1b7761f43b9663b4bd1e6c6e43 100644
 --- a/web/src/core/http-notice.ts
 +++ b/web/src/core/http-notice.ts
-@@ -54,11 +54,6 @@ export function bindServerRestartWallNotice(): () => void {
+@@ -54,11 +54,6 @@
      clearTimer = undefined;
      if (restartHandle?.live) restartHandle.dismiss();
      restartHandle = undefined;
@@ -11,6 +11,6 @@ index 33f7f43..fffc872 100644
 -      text: detail.message,
 -      action: { label: "Retry", onClick: () => { void detail.retry(); } },
 -    });
-   };
- 
-   wall.addEventListener("click", onWallClick);
+     const retryBtn = wall.querySelector<HTMLButtonElement>(
+       '[data-notice-key="retry-failed"] .wall-notice-action',
+     );

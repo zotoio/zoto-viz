@@ -1,13 +1,13 @@
 diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
-index 33f7f43..bb4cccf 100644
+index 3893021c1ded7cbb707c14252b5691650eeab247..02095def7987cd69daa4eeb556b5893d10e2c21e 100644
 --- a/web/src/core/http-notice.ts
 +++ b/web/src/core/http-notice.ts
-@@ -57,7 +57,7 @@ export function bindServerRestartWallNotice(): () => void {
+@@ -57,7 +57,7 @@
      postWallNotice({
        key: "retry-failed",
        text: detail.message,
 -      action: { label: "Retry", onClick: () => { void detail.retry(); } },
 +      action: { label: "Try again", onClick: () => { void detail.retry(); } },
      });
-   };
- 
+     const retryBtn = wall.querySelector<HTMLButtonElement>(
+       '[data-notice-key="retry-failed"] .wall-notice-action',

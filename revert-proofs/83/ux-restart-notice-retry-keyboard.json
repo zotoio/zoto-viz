@@ -1,8 +1,8 @@
 {
   "runner": "vitest",
   "testFile": "src/core/http-notice.test.ts",
-  "testName": "server restart wall notice > retry button > replays the failed mutation when Retry is focused and click retries",
-  "red": "AssertionError: expected 2 to be 3 // Object.is equality",
+  "testName": "server restart wall notice > retry button > replays the failed mutation when Tab focuses Retry and Enter is pressed",
+  "red": "AssertionError: expected false to be true // Object.is equality",
   "description": "ux-restart-notice-retry-keyboard",
   "timeoutSec": 120
 }

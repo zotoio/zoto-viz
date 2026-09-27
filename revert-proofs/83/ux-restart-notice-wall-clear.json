@@ -2,7 +2,7 @@
   "runner": "vitest",
   "testFile": "src/core/http-notice.test.ts",
   "testName": "server restart wall notice > status copy > replaces the prior restart strip when a second restart event arrives",
-  "red": "AssertionError: expected [ <div \u2026(2)></div>, <div \u2026(2)></div> ] to have a length of 1 but got 2",
+  "red": "AssertionError: expected +0 to be 1 // Object.is equality",
   "description": "ux-restart-notice-wall-clear",
   "timeoutSec": 120
 }

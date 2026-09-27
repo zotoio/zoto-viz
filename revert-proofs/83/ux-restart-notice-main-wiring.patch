@@ -1,12 +1,12 @@
-diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index f7c3d56..39166e1 100644
---- a/web/src/app/main.ts
-+++ b/web/src/app/main.ts
-@@ -1991,7 +1991,6 @@ function connect(): void {
-   ws.onerror = () => ws.close();
- }
+diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
+index 3893021c1ded7cbb707c14252b5691650eeab247..6e5da610b7c2af74438814eddeb0c4d4dca7e2fa 100644
+--- a/web/src/core/http-notice.ts
++++ b/web/src/core/http-notice.ts
+@@ -69,7 +69,6 @@
+   };
  
--bindServerRestartWallNotice();
- connect();
- 
- window.addEventListener("keydown", (e) => {
+   wall.addEventListener("click", onWallClick);
+-  window.addEventListener("zoto-viz-server-restart", onRestart);
+   window.addEventListener("zoto-viz-mutate-retry-failed", onRetryFailed);
+   return () => {
+     wall.removeEventListener("click", onWallClick);

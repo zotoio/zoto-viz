@@ -1,8 +1,8 @@
 {
   "runner": "vitest",
   "testFile": "src/core/http-notice.test.ts",
-  "testName": "server restart wall notice > failed retry > replaces the restart notice with a Retry failure strip",
-  "red": "AssertionError: expected 'The server restarted, so packs were r\u2026' not to contain 'The server restarted, so packs were r\u2026'",
+  "testName": "server restart wall notice > failed retry > replaces the restart notice with a retry-failed strip",
+  "red": "AssertionError: expected +0 to be 1 // Object.is equality",
   "description": "ux-restart-notice-retry-failed",
   "timeoutSec": 120
 }

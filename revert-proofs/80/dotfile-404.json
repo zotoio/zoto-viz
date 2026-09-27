@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "description": "Dotfile paths under a pack must return 403 once the asset token is valid.",
-  "timeoutSec": 60,
-  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_dotfile_under_pack_is_403",
-  "red": "AssertionError: .env"
-}
