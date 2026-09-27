@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { isBlackFillHex, paintLetterboxBars, surfaceLetterboxFill } from "./letterbox-fill";
 
 describe("letterbox fill", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("uses surface canvas colour, not black", () => {
     const fill = surfaceLetterboxFill(0x3a5f7c, 0.2);
     expect(isBlackFillHex(fill.hex)).toBe(false);

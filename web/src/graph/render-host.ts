@@ -45,8 +45,6 @@ import {
 import { applyDeviceRectToGlRenderer } from "./render-host-gl-adapter";
 import {
   type DevicePxRatio,
-  DEFAULT_MAX_DEVICE_PX_RATIO,
-  configureLayoutMaxDevicePxRatio,
   devicePxRatioFromNumber,
   devicePxRatioNumber,
   layoutDevicePxRatio,
@@ -172,9 +170,8 @@ export class RenderHost {
 
   constructor(
     readonly wall: HTMLElement,
-    opts: { dpr?: number; software?: boolean; antialias?: boolean; maxDevicePxRatio?: number } = {},
+    opts: { dpr?: number; software?: boolean } = {},
   ) {
-    configureLayoutMaxDevicePxRatio(opts.maxDevicePxRatio ?? DEFAULT_MAX_DEVICE_PX_RATIO);
     if (opts.dpr !== undefined) {
       this.layoutDevicePxRatio = devicePxRatioFromNumber(opts.dpr);
       pinLayoutDevicePxRatio(this.layoutDevicePxRatio);
@@ -191,7 +188,7 @@ export class RenderHost {
     if (!forceSoft) {
       try {
         this.renderer = new THREE.WebGLRenderer({
-          antialias: opts.antialias ?? this.pr < 1.3,
+          antialias: this.pr < 1.3,
           alpha: true,
           premultipliedAlpha: true,
           preserveDrawingBuffer: true,
@@ -260,13 +257,6 @@ export class RenderHost {
   /** Layout DPR (capped); WebGLRenderer `getPixelRatio()` stays 1. */
   get pixelRatio(): number { return this.pr; }
 
-  /** Capped device pixel ratio used for canvas backing store and pixel-sized materials. */
-  get devicePxRatio(): DevicePxRatio {
-    return this.layoutDevicePxRatio;
-  }
-
-  get layoutCssWidth(): number { return this.w; }
-  get layoutCssHeight(): number { return this.h; }
   get viewCount(): number { return this.views.length; }
 
   /** WebGL2 context, or null when lost / unavailable. */
@@ -297,11 +287,6 @@ export class RenderHost {
   /** Pack-mirror tile metadata changed without add/remove (mosaic coalesce). */
   markMirrorScopeDirty(): void {
     this.mirrorScopeDirty = true;
-  }
-
-  /** Run one animation frame (tests / dogfood). */
-  advanceFrame(ts: number): void {
-    if (!this.disposed) this.frame(ts);
   }
 
   /**
@@ -584,7 +569,7 @@ export class RenderHost {
     if (this.wall.firstElementChild !== this.canvas) this.wall.prepend(this.canvas);
   }
 
-  viewBox(view: HostedView): SoftRect | null {
+  private viewBox(view: HostedView): SoftRect | null {
     if (!this.viewBoxInto(view, this.viewBoxScratch)) return null;
     return this.viewBoxScratch;
   }

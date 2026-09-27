@@ -95,6 +95,7 @@ function simulateThreeTileFrame(
 
 describe("PackMirrorSession resource lifecycle", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     letterboxFillStats.reset();
     packMirrorResourceStats.reset();
     packMirrorSizeStats.reset();
@@ -230,7 +231,10 @@ describe("PackMirrorSession resource lifecycle", () => {
 });
 
 describe("PackTexturePresenter", () => {
-  beforeEach(() => packMirrorResourceStats.reset());
+  beforeEach(() => {
+    expect.hasAssertions();
+    packMirrorResourceStats.reset();
+  });
   it("constructs quad resources once", () => {
     const p = new PackTexturePresenter();
     expect(packMirrorResourceStats.presenterCreated).toBe(1);

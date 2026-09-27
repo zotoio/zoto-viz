@@ -424,11 +424,6 @@ export function themePickerGroup(t: Pick<Theme, "id" | "dark">): "dark" | "light
 
 export const DEFAULT_THEME = THEMES[0];
 
-/** Surface panel / scene backdrop for the default (midnight) theme — letterbox bars use this via `surfaceLetterboxFill`. */
-export function zotoSurfacePanelClearHex(): number {
-  return DEFAULT_THEME.scene.clear;
-}
-
 export function themeById(id: string | null | undefined): Theme {
   return THEMES.find((t) => t.id === id) ?? DEFAULT_THEME;
 }

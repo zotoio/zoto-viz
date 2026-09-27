@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
+import * as dprMod from "./render-host-device-px-ratio";
 import { Stage3D } from "../arcade/stage3d";
 import type { NetScene } from "./scene";
 import { RenderHost, type HostedView } from "./render-host";
@@ -9,9 +10,8 @@ import {
   configureLayoutMaxDevicePxRatio,
   layoutBackingDevicePx,
   layoutDevicePxRatio,
-  layoutDevicePxRatioStats,
   resetLayoutDevicePxRatioWatch,
-} from "./render-host-device-px-ratio";
+} from "../../test-support/layout-device-px-ratio";
 import { LiveFeed } from "../ui/feed";
 import { probeWebGL } from "./webgl";
 
@@ -50,6 +50,8 @@ const hostRaf = vi.hoisted(() => {
     },
   };
 });
+
+const dprGet = vi.hoisted(() => vi.fn(() => dprMedia.dpr));
 
 const dprMedia = vi.hoisted(() => {
   let dpr = 1;
@@ -162,11 +164,14 @@ type Fixture = {
   hostSetSizeCalls: () => number;
   stageResizeCalls: () => number;
   feedResizeCalls: () => number;
+  matchMediaCalls: () => number;
 };
 
 function mountThreeSurfaceFixture(initialDpr: number): Fixture {
   dprMedia.dpr = initialDpr;
   dprMedia.resetHandlers();
+  dprGet.mockClear();
+  dprMedia.matchMedia.mockClear();
   hostSetSizeLog.calls = 0;
   let stageResizeCalls = 0;
   let feedResizeCalls = 0;
@@ -263,7 +268,8 @@ function mountThreeSurfaceFixture(initialDpr: number): Fixture {
   stageFit();
   feedDraw();
   dprMedia.matchMedia("(resolution: 1dppx)");
-  layoutDevicePxRatioStats.reset();
+  const matchMediaBaseline = dprMedia.matchMedia.mock.calls.length;
+  dprGet.mockClear();
   hostSetSizeLog.calls = 0;
   stageResizeCalls = 0;
   feedResizeCalls = 0;
@@ -284,31 +290,35 @@ function mountThreeSurfaceFixture(initialDpr: number): Fixture {
     hostSetSizeCalls: () => hostSetSizeLog.calls,
     stageResizeCalls: () => stageResizeCalls,
     feedResizeCalls: () => feedResizeCalls,
+    matchMediaCalls: () => dprMedia.matchMedia.mock.calls.length - matchMediaBaseline,
   };
 }
 
 describe("layout DevicePxRatio getter (cached, matchMedia re-arm)", () => {
   let activeDispose: (() => void) | null = null;
+  let getterSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     expect.hasAssertions();
     hostRaf.clear();
     resetLayoutDevicePxRatioWatch();
     configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
-    layoutDevicePxRatioStats.reset();
     dprMedia.resetHandlers();
+    dprGet.mockClear();
+    getterSpy = vi.spyOn(dprMod, "layoutDevicePxRatio");
     vi.stubGlobal("requestAnimationFrame", hostRaf.requestAnimationFrame);
     vi.stubGlobal("cancelAnimationFrame", hostRaf.cancelAnimationFrame);
     vi.stubGlobal("matchMedia", dprMedia.matchMedia);
     Object.defineProperty(window, "devicePixelRatio", {
       configurable: true,
-      get: () => dprMedia.dpr,
+      get: dprGet,
     });
   });
 
   afterEach(() => {
     activeDispose?.();
     activeDispose = null;
+    getterSpy.mockRestore();
     document.body.innerHTML = "";
     vi.unstubAllGlobals();
     resetLayoutDevicePxRatioWatch();
@@ -318,23 +328,27 @@ describe("layout DevicePxRatio getter (cached, matchMedia re-arm)", () => {
   it("(a) steady frames: 0 window reads and 0 setSize; 2 getter calls per frame", () => {
     const fx = mountThreeSurfaceFixture(2);
     activeDispose = fx.dispose;
-    const { tickFrame, hostSetSizeCalls, stageResizeCalls, feedResizeCalls } = fx;
+    getterSpy.mockClear();
+    dprGet.mockClear();
+    const { tickFrame, hostSetSizeCalls, stageResizeCalls, feedResizeCalls, matchMediaCalls } = fx;
     for (let f = 0; f < 600; f++) tickFrame(f);
-    expect(layoutDevicePxRatioStats.windowDevicePixelRatioReads).toBe(0);
+    expect(dprGet.mock.calls.length).toBe(0);
+    expect(matchMediaCalls()).toBe(0);
     expect(hostSetSizeCalls()).toBe(0);
     expect(stageResizeCalls()).toBe(0);
     expect(feedResizeCalls()).toBe(0);
-    expect(layoutDevicePxRatioStats.getterCalls).toBe(600 * 2);
+    expect(getterSpy.mock.calls.length).toBe(600 * 2);
     expect(layoutBackingDevicePx(100)).toBe(150);
   });
 
   it("(b) window DPR 1 → 2: 1 read, 1 re-arm, 1 resize per surface at ×1.5", () => {
     const fx = mountThreeSurfaceFixture(1);
     activeDispose = fx.dispose;
+    dprGet.mockClear();
     dprMedia.dpr = 2;
     dprMedia.fireChange();
-    expect(layoutDevicePxRatioStats.windowDevicePixelRatioReads).toBe(1);
-    expect(layoutDevicePxRatioStats.matchMediaRearmCount).toBe(1);
+    expect(dprGet.mock.calls.length).toBe(1);
+    expect(fx.matchMediaCalls()).toBe(1);
     expect(fx.hostSetSizeCalls()).toBe(1);
     expect(fx.stageResizeCalls()).toBe(1);
     expect(fx.feedResizeCalls()).toBe(1);
@@ -346,10 +360,11 @@ describe("layout DevicePxRatio getter (cached, matchMedia re-arm)", () => {
   it("(c) window DPR 2 → 1.5: 1 read, 1 re-arm, 0 resizes (cap still 1.5)", () => {
     const fx = mountThreeSurfaceFixture(2);
     activeDispose = fx.dispose;
+    dprGet.mockClear();
     dprMedia.dpr = 1.5;
     dprMedia.fireChange();
-    expect(layoutDevicePxRatioStats.windowDevicePixelRatioReads).toBe(1);
-    expect(layoutDevicePxRatioStats.matchMediaRearmCount).toBe(1);
+    expect(dprGet.mock.calls.length).toBe(1);
+    expect(fx.matchMediaCalls()).toBe(1);
     expect(fx.hostSetSizeCalls()).toBe(0);
     expect(fx.stageResizeCalls()).toBe(0);
     expect(fx.feedResizeCalls()).toBe(0);
@@ -361,12 +376,11 @@ describe("layout DevicePxRatio getter (cached, matchMedia re-arm)", () => {
     const fx = mountThreeSurfaceFixture(1.5);
     activeDispose = fx.dispose;
     hostSetSizeLog.calls = 0;
-    layoutDevicePxRatioStats.windowDevicePixelRatioReads = 0;
-    layoutDevicePxRatioStats.matchMediaRearmCount = 0;
+    dprGet.mockClear();
     dprMedia.dpr = 1;
     dprMedia.fireChange();
-    expect(layoutDevicePxRatioStats.windowDevicePixelRatioReads).toBe(1);
-    expect(layoutDevicePxRatioStats.matchMediaRearmCount).toBe(1);
+    expect(dprGet.mock.calls.length).toBe(1);
+    expect(fx.matchMediaCalls()).toBe(1);
     expect(fx.hostSetSizeCalls()).toBe(1);
     expect(fx.stageResizeCalls()).toBe(1);
     expect(fx.feedResizeCalls()).toBe(1);
@@ -380,10 +394,10 @@ describe("layout DevicePxRatio getter (cached, matchMedia re-arm)", () => {
     activeDispose = fx.dispose;
     dprMedia.dpr = 2;
     dprMedia.fireChange();
-    expect(layoutDevicePxRatioStats.windowDevicePixelRatioReads).toBe(1);
-    layoutDevicePxRatioStats.windowDevicePixelRatioReads = 0;
+    expect(dprGet.mock.calls.length).toBe(1);
+    dprGet.mockClear();
     dprMedia.dpr = 1;
     dprMedia.fireChange();
-    expect(layoutDevicePxRatioStats.windowDevicePixelRatioReads).toBe(1);
+    expect(dprGet.mock.calls.length).toBe(1);
   });
 });

@@ -1,9 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { PackMirrorRegistry } from "./pack-mirror-gl";
 import { asCanvasDeviceHeight } from "./pack-mirror-rect";
 
 describe("PackMirrorSession renderPack DPR", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("uses device-pixel viewport on the render target at layout dpr=2", () => {
     const reg = new PackMirrorRegistry();
     reg.syncScopes(new Map([["plugin:dpr", { tileCount: 2, antialias: false }]]));

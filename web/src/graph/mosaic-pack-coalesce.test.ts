@@ -1,10 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as packHost from "../plugins/viz-pack-host";
 import { deliverCoalescedMosaicPacks, mosaicPackGroups, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
 import { setPluginModes, topology } from "../core/modes";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 describe("mosaic pack coalesce", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     setPluginModes([]);
     resetMosaicPackCoalesceWriters();

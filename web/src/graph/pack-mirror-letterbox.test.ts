@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { PackTexturePresenter, type PackMirrorHostGl } from "./pack-mirror-gl";
 import { letterboxInnerRectInto, surfaceLetterboxFill } from "./letterbox-fill";
 import { asCanvasDeviceHeight, deviceRectFromHostViewBoxInto, toGlRectInto } from "./pack-mirror-rect";
 
 describe("pack mirror letterbox", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("places letterbox inner viewport with bottom-left origin", () => {
     const presenter = new PackTexturePresenter();
     const dst = { x: 10, y: 20, w: 100, h: 80 };

@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as packHost from "../plugins/viz-pack-host";
 import * as coalesce from "../graph/mosaic-pack-coalesce";
 import { deliverVizPluginFrame } from "./viz-frame-tick";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 describe("deliverVizPluginFrame", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("mosaic with demo + TS plugin: exactly one sandbox.frame per frame over 10 frames", () => {
     const sandbox = { frame: vi.fn(), handlers: {} };
     const deliverSpy = vi.spyOn(coalesce, "deliverCoalescedMosaicPacks").mockImplementation(() => {});

@@ -19,13 +19,17 @@ export const letterboxFillStats = {
     this.regexMatchCalls = 0;
     this.randomCalls = 0;
     this.stringAllocations = 0;
-    cachedClearHex = -1;
-    cachedFill = null;
   },
 };
 
 let cachedClearHex = -1;
 let cachedFill: SurfaceLetterboxFill | null = null;
+
+/** Test harness: drop cached fill (import via `web/test-support/letterbox-fill-cache.ts`). */
+export function clearSurfaceLetterboxFillCache(): void {
+  cachedClearHex = -1;
+  cachedFill = null;
+}
 
 /** Fixed-seed PRNG for repeatable grain tiles (Mulberry32). */
 function mulberry32(seed: number): () => number {

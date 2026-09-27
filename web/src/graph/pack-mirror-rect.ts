@@ -53,18 +53,6 @@ export function isDeviceRect(vp: { __unit?: string }): vp is DeviceRect {
   return vp.__unit === "device";
 }
 
-export function isGlRect(vp: { __unit?: string }): vp is GlRect {
-  return vp.__unit === "gl";
-}
-
-/** Host viewBox is bottom-left CSS; converters expect top-left CSS (y down). */
-export function cssRectTopFromBottomLeft(
-  box: CssRectLoose,
-  canvasCssHeight: number,
-): CssRect {
-  return cssRect(box.x, canvasCssHeight - box.y - box.h, box.w, box.h);
-}
-
 export function deviceRect(x: number, y: number, w: number, h: number): DeviceRect {
   return { x, y, w, h, __unit: "device" };
 }

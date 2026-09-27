@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { RenderHost } from "./render-host";
 
 describe("RenderHost pack mirror scope", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("does not allocate pack RT when duplicate tile count stays below 2", () => {
     const wall = document.createElement("div");
     wall.style.width = "200px";

@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PackMirrorRegistry } from "./pack-mirror-gl";
 
 describe("PackMirrorRegistry", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

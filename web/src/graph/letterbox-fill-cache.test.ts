@@ -4,9 +4,17 @@ import {
   getSurfaceLetterboxFill,
   letterboxFillStats,
 } from "./letterbox-fill";
+import { clearSurfaceLetterboxFillCache } from "../../test-support/letterbox-fill-cache";
 
 describe("surface letterbox fill cache", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+    clearSurfaceLetterboxFillCache();
+    letterboxFillStats.reset();
+  });
+
   afterEach(() => {
+    clearSurfaceLetterboxFillCache();
     letterboxFillStats.reset();
   });
 
@@ -14,7 +22,8 @@ describe("surface letterbox fill cache", () => {
     const matchSpy = vi.spyOn(String.prototype, "match");
     const a = getSurfaceLetterboxFill(0x0b0e14, 0.25);
     for (let i = 0; i < 300; i++) {
-      expect(getSurfaceLetterboxFill(0x0b0e14, 0.25)).toBe(a);
+      const fill = getSurfaceLetterboxFill(0x0b0e14, 0.25);
+      expect(fill).toBe(a);
     }
     expect(letterboxFillStats.rebuilds).toBe(1);
     expect(matchSpy.mock.calls.length).toBe(0);
