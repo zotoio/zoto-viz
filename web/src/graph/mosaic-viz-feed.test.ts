@@ -1,14 +1,8 @@
-<<<<<<< HEAD
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deliverMosaicDemoPacks, dropMosaicTileWriter } from "./mosaic-viz-feed";
 import { modeById, setPluginModes, talkers, topology } from "../core/modes";
 import { themeById } from "../core/themes";
 import { DEFAULT_DREAM } from "./scene";
-=======
-import { beforeEach, describe, expect, it } from "vitest";
-import { deliverMosaicDemoPacks, dropMosaicTileWriter } from "./mosaic-viz-feed";
-import { modeById, setPluginModes, talkers, topology } from "../core/modes";
->>>>>>> 361364e0b275e3ddb3ca5e2ab75cf7a206bfd40a
 import type { VizDataFrame } from "../plugins/viz-host";
 
 describe("deliverMosaicDemoPacks", () => {
@@ -58,7 +52,6 @@ describe("deliverMosaicDemoPacks", () => {
     dropMosaicTileWriter("plugin:star-sines");
   });
 });
-<<<<<<< HEAD
 
 describe("mosaic onPanePick wiring", () => {
   beforeEach(() => {
@@ -120,5 +113,3 @@ describe("mosaic onPanePick wiring", () => {
     main.dispose();
   });
 });
-=======
->>>>>>> 361364e0b275e3ddb3ca5e2ab75cf7a206bfd40a
