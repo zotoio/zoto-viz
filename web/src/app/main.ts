@@ -107,7 +107,6 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { mosaicTileViewId, mosaicWallUsesView, parseMosaicSlotId } from "../graph/mosaic-tile-id";
 import { hostModeById } from "./host-mode";
-import { applyWallLayoutPatch } from "./mosaic-wall-layout";
 import { bindThisView as bindThisViewHost } from "./host-view-bind";
 import { rebindViewDrawerOnApplyMode } from "./host-apply-mode-rebind";
 import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
@@ -1143,7 +1142,7 @@ mosaic = new Mosaic({
     applyViewLook();
   },
   onLayout: (patch) => {
-    applyWallLayoutPatch(settings, patch);
+    settings.applyMosaicLayout(patch);
   },
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });

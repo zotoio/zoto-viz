@@ -1,0 +1,12 @@
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -795,7 +776,7 @@
+   feedTitleCube.setActive(rainPics);
+   nestCams.setActive(m.pluginId === "nest-cams");
+   nestCams.setLook(opts);
++  bindThisView(m.id);
+-  rebindViewDrawerOnApplyMode(bindThisView, { settings, modeId: m.id, flags, hostModeById });
+   $("modeOpts").replaceChildren();
+   void (async () => {
+     if (!(await ensureReviewed(spec))) {

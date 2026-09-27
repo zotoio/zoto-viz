@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/main-entry-wiring.test.ts",
+  "testName": "applyMode at boot wires drawer rebind before bindThisView",
+  "description": "Boot applyMode must wire drawer rebind via host-apply-mode-rebind.",
+  "redOutput": "AssertionError: expected \"rebindViewDrawerOnApplyMode\" to be called 1 times, but got 0 times"
+}
