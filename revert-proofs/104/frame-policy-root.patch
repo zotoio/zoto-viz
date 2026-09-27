@@ -1,8 +1,8 @@
 diff --git a/service/access.py b/service/access.py
-index bb5aec4..f363d2e 100644
+index 2d4933b6..715e9694 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -142,14 +142,7 @@ def attach_pack_asset_json_headers(resp: web.StreamResponse) -> None:
+@@ -100,14 +100,7 @@ def _deny(msg: str, status: int = 403) -> web.Response:
  
  def attach_frame_embed_policy(resp: web.StreamResponse) -> None:
      """Every response must not be embeddable off-origin (including errors and static files)."""
@@ -17,4 +17,4 @@ index bb5aec4..f363d2e 100644
 +    return
  
  
- def bind_is_loopback(bind: str) -> bool:
+ 

@@ -1,8 +1,8 @@
 diff --git a/service/access.py b/service/access.py
-index bb5aec4..e3b91de 100644
+index 2d4933b6..ffff681c 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -145,11 +145,6 @@ def attach_frame_embed_policy(resp: web.StreamResponse) -> None:
+@@ -103,11 +103,6 @@ def attach_frame_embed_policy(resp: web.StreamResponse) -> None:
      resp.headers["X-Frame-Options"] = "SAMEORIGIN"
      prior = resp.headers.get("Content-Security-Policy", "")
      frame = "frame-ancestors 'self'"
@@ -13,4 +13,4 @@ index bb5aec4..e3b91de 100644
 -        resp.headers["Content-Security-Policy"] = frame
  
  
- def bind_is_loopback(bind: str) -> bool:
+ 
