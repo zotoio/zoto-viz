@@ -1,0 +1,13 @@
+diff --git a/service/sources.py b/service/sources.py
+index a6e4f787..0e9fb3f8 100644
+--- a/service/sources.py
++++ b/service/sources.py
+@@ -429,7 +429,7 @@ def resolve_fetch_url(url: str) -> str:
+     if q.get("start_date") or q.get("date"):
+         q.pop("count", None)
+         return urlunparse(parsed._replace(query=urlencode(q)))
+-    key = nasa_api.fetch_key()
++    key = q.get("api_key") or "DEMO_KEY"
+     end = date.today()
+     start = end - timedelta(days=7)
+     return urlunparse(parsed._replace(query=urlencode({
