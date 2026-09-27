@@ -20,6 +20,36 @@ export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLet
   return { css, grain: Math.min(1, Math.max(0, grain)) };
 }
 
+export const letterboxFillStats = {
+  rebuilds: 0,
+  regexMatchCalls: 0,
+  randomCalls: 0,
+  stringAllocations: 0,
+  reset(): void {
+    this.rebuilds = 0;
+    this.regexMatchCalls = 0;
+    this.randomCalls = 0;
+    this.stringAllocations = 0;
+  },
+};
+
+let cachedClearHex = -1;
+let cachedFill: SurfaceLetterboxFill | null = null;
+
+/** Hot-path fill: one instance per `clearHex`, rebuilt only when the scene clear changes. */
+export function getSurfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLetterboxFill {
+  if (cachedClearHex === clearHex && cachedFill) return cachedFill;
+  letterboxFillStats.rebuilds += 1;
+  cachedClearHex = clearHex;
+  cachedFill = surfaceLetterboxFill(clearHex, grain);
+  return cachedFill;
+}
+
+export function clearSurfaceLetterboxFillCache(): void {
+  cachedClearHex = -1;
+  cachedFill = null;
+}
+
 export function letterboxFillHex(fill: SurfaceLetterboxFill): number {
   const m = fill.css.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   if (!m) return 0x010101;
