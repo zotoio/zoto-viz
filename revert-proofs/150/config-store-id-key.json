@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/plugin-sandbox-config-push.test.ts",
-  "testName": "plugin sandbox config push (production route) > two instances: editing A posts once to A and never to B",
+  "testName": "plugin sandbox config push (production route) two instances: editing A posts once to A and never to B",
   "description": "Revert config store id keying (restore pack-id sandbox push routing)",
   "red": "AssertionError: expected [ { type: 'config', …(1) }, …(1) ] to have a length of 1 but got 2"
 }
