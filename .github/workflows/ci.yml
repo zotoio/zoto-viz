@@ -186,26 +186,12 @@ jobs:
     if: always()
     steps:
       - name: Require all CI jobs to succeed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          declare -A results=(
-            [python]="${{ needs.python.result }}"
-            [web]="${{ needs.web.result }}"
-            [build]="${{ needs.build.result }}"
-            [dogfood]="${{ needs.dogfood.result }}"
-            [backrooms-smoke]="${{ needs.backrooms-smoke.result }}"
-            [sandbox-smoke]="${{ needs.sandbox-smoke.result }}"
-            [docs]="${{ needs.docs.result }}"
-          )
-          failed=0
-          for job in python web build dogfood backrooms-smoke sandbox-smoke docs; do
-            status="${results[$job]}"
-            echo "$job: $status"
-            if [ "$status" != "success" ]; then
-              failed=1
-            fi
-          done
-          if [ "$failed" -ne 0 ]; then
-            echo "One or more CI jobs did not succeed."
+          echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if ! echo "$NEEDS_JSON" | jq -e 'to_entries | all(.value.result == "success")' >/dev/null; then
+            echo "One or more CI jobs did not succeed (expected every needs.*.result == success)."
             exit 1
           fi
