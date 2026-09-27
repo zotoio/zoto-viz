@@ -1,16 +1,8 @@
 diff --git a/web/src/style.css b/web/src/style.css
-index 0f13c94..50daab7 100644
+index 0f13c94..1111111 100644
 --- a/web/src/style.css
 +++ b/web/src/style.css
-@@ -240,7 +240,6 @@ body.stage-only .overlay { display: none !important; }
-   grid-template-rows: auto minmax(0, 1fr) auto auto;
-   gap: 10px;
-   padding: 10px 14px 12px;
--  pointer-events: auto;
-   color: #fff8f0;
-   font: 600 14px/1.3 ui-sans-serif, system-ui, sans-serif;
- }
-@@ -393,14 +392,7 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0;
+@@ -393,14 +393,7 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0;
  }
  .mosaic-pane.focus .mosaic-cap, .mosaic-pane.focus .mosaic-pick { border-color: var(--accent); color: var(--accent); }
  .mosaic-wall-notice {
@@ -22,7 +14,6 @@ index 0f13c94..50daab7 100644
 -  max-width: min(90vw, 720px);
 -  flex: none;
 -  margin: 0;
-+  margin: 0 0 8px;
    padding: 8px 12px;
    border-radius: 8px;
    font-size: 13px;

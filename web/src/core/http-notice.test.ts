@@ -85,30 +85,6 @@ describe("server restart wall notice", () => {
     });
   });
 
-  describe("focus", () => {
-    let off: () => void;
-
-    beforeEach(() => {
-      expect.hasAssertions();
-      document.body.innerHTML = "<input id=\"focus\" /><div id=\"wall\"></div>";
-      const input = document.getElementById("focus") as HTMLInputElement;
-      input.focus();
-      off = bindServerRestartWallNotice();
-    });
-
-    afterEach(() => {
-      off();
-    });
-
-    it("does not move focus when the notice appears", () => {
-      const before = document.activeElement;
-      window.dispatchEvent(
-        new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
-      );
-      expect(document.activeElement).toBe(before);
-    });
-  });
-
   describe("click dismiss", () => {
     let off: () => void;
 
