@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatSkipRate, skipRatePerSec, VIZ_DEMO_PACKS, vizHudMetric } from "../ui/viz-hud";
+import { formatSkipRate, skipRatePerSec, VIZ_DEMO_PACKS, vizHudMetric, type VizDemoPackId } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
   DEMO_PACK_CONTRACTS,
@@ -13,7 +13,7 @@ import {
 } from "./dogfood-runner";
 import { VIZ_FIXTURE_IDLE, VIZ_FIXTURE_GOLDEN_LIVE } from "../../../plugins/sdk/viz-fixtures";
 import { packetTunnelFields } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { hnTermPackTyped, packHnRainBuffer, packHnTermBuffer, packStereoDrive } from "./viz-pack-host";
+import { hnTermPackTyped, packHnRainBuffer, packHnTermBuffer, packStereoDrive, resetHnTermPack } from "./viz-pack-host";
 import {
   easeStereoBins, parseStereoTiming, STEREO_BANDS, STEREO_BINS, STEREO_GAP, STEREO_RACKS,
   STEREO_RISE_MS, STEREO_SOLIDS, STEREO_HOLD, STEREO_MORPH, STEREO_MOTION_BANDS, STEREO_MOVE,
@@ -36,8 +36,16 @@ const FAT_LAN_SOAK_FAKE_STEP_MS = 0.05;
 const FAT_LAN_SOAK_RANDOM_SEED = 0.25;
 const FAT_LAN_SOAK_AUDIO = 0.15;
 const FAT_LAN_SOAK_REAL_TIME_FORBIDDEN = "fat-LAN soak must not read real time";
-/** One hn-term frame uses dt=1/60 when termLastT is 0; fixture `ts` is fixed so later frames add dt=0. */
-const FAT_LAN_SOAK_HN_TERM_TYPED = (28 + FAT_LAN_SOAK_AUDIO * 18) / 60;
+/** Spy row only: `frame.t` steps by 1/30 (not 1/60) so `termNow` mutants cannot match real dt. */
+const FAT_LAN_SOAK_VIZ_FRAME_T0 = 200;
+const FAT_LAN_SOAK_VIZ_FRAME_STEP = 1 / 30;
+function fatLanSoakSpyVizFrameT(packId: VizDemoPackId, frameIndex: number): number {
+  if (packId !== "hn-term") return FAT_LAN_SOAK_VIZ_FRAME_T0;
+  return FAT_LAN_SOAK_VIZ_FRAME_T0 + frameIndex * FAT_LAN_SOAK_VIZ_FRAME_STEP;
+}
+
+/** 120 hn-term frames, `t` step **1/30**, first-frame **1/60** dt fallback, teletype wrap resets. */
+const FAT_LAN_SOAK_HN_TERM_TYPED = 26.606666666666907;
 
 function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -113,11 +121,13 @@ it("fat-LAN live soak: exact delivered counts on fake time", () => {
 
 it("fat-LAN live soak: termNow must not read wall clock", () => {
   withFatLanSoakWallClockSpies((now, { performanceNow, dateNow }) => {
+    resetHnTermPack();
     runDogfoodSoak({
-      state: fatLanSoakState,
+      state: fatLanFixture(),
       framesPerPack: FAT_LAN_SOAK_FRAMES,
       audio: FAT_LAN_SOAK_AUDIO,
       now,
+      vizFrameT: fatLanSoakSpyVizFrameT,
     });
     expect(performanceNow).toHaveBeenCalledTimes(0);
     expect(dateNow).toHaveBeenCalledTimes(0);

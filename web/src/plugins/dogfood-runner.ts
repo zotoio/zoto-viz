@@ -227,6 +227,11 @@ export interface DogfoodSoakOptions {
   now?: () => number;
   /** Synthetic vsync step for soft-FPS honesty tests (present-to-present skips). */
   presentStepMs?: number;
+  /**
+   * When set, return value is written to `state.ts` before each frame tick so
+   * `buildVizFrame` sees a test-controlled `frame.t` (default: fixture `state.ts`).
+   */
+  vizFrameT?: (packId: VizDemoPackId, frameIndex: number) => number;
 }
 
 /** Gate helper: never pass on fast CPU build alone when present time is over budget. */
@@ -251,6 +256,7 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
   const audio = opts.audio ?? 0.15;
   const now = opts.now ?? (() => performance.now());
   const presentStepMs = opts.presentStepMs;
+  const vizFrameT = opts.vizFrameT;
 
   const packs: DogfoodPackStats[] = [];
 
@@ -268,6 +274,7 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
     let presentT = 0;
 
     for (let i = 0; i < framesPerPack; i++) {
+      if (vizFrameT) state.ts = vizFrameT(packId, i);
       const tickT0 = now();
       const tick = dogfoodTick(packId, state, prevTs, audio, budget, writer);
       buildTimes.push(now() - tickT0);
