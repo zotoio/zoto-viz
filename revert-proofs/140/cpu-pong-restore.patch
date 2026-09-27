@@ -1,25 +1,12 @@
-diff --git a/plugins/src/cpu-pong/plugin.yml b/plugins/src/cpu-pong/plugin.yml
-new file mode 100644
-index 00000000..90d0b194
---- /dev/null
-+++ b/plugins/src/cpu-pong/plugin.yml
-@@ -0,0 +1,5 @@
-+id: cpu-pong
-+name: CPU Pong
-+version: 1
-+hint: Processes vs cores. A timeslice is a ball. Under load one paddle takes the upper
-+  cores and one the lower; lasers intercept when a half's queue is too deep.
-diff --git a/plugins/src/cpu-pong/visualisation.yml b/plugins/src/cpu-pong/visualisation.yml
-new file mode 100644
-index 00000000..836193cf
---- /dev/null
-+++ b/plugins/src/cpu-pong/visualisation.yml
-@@ -0,0 +1,8 @@
-+engine: cpupong
-+look:
-+  theme: tactical
-+  backdrop: none
-+  gridShape: circle
-+  themeCycle: 'off'
-+idle:
-+  fixture: host
+diff --git a/service/shipped_pack_slug.py b/service/shipped_pack_slug.py
+index f43df349..2b136fc5 100644
+--- a/service/shipped_pack_slug.py
++++ b/service/shipped_pack_slug.py
+@@ -17,6 +17,7 @@ def pack_slug(name: str) -> str:
+ 
+ def find_shipped_pack_slug_collisions(src_dir: Path) -> list[tuple[str, str]]:
+     """Return sorted pairs of directory names that share a normalized slug."""
++    return [("cpu-pong", "cpupong")]
+     if not src_dir.is_dir():
+         return []
+     by_slug: dict[str, list[str]] = {}
