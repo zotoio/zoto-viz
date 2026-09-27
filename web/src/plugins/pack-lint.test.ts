@@ -405,7 +405,7 @@ describe("pack lint guardrails", () => {
 
   it("reports baseline counts per pack and per rule (documentation)", () => {
     const baseline = loadBaseline(repoRoot);
-    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(9);
+    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(11);
     expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBe(0);
   });
 

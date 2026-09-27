@@ -13,7 +13,12 @@ import { applyPackWorkBudget, marbleWorkBudget, resetPackWorkBudget } from "./wo
 export type { VizDataFrame, VizPacketSample };
 
 export { MARBLE_DATA_MAPPING, ZOTO_FAIL_RGB };
-export { applyPackWorkBudget, marbleWorkBudget, resetPackWorkBudget } from "./work-budget";
+export {
+  applyPackWorkBudget,
+  marbleWorkBudget,
+  parseMarbleWorkBudgetYaml,
+  resetPackWorkBudget,
+} from "./work-budget";
 
 export type MarbleIngestStats = {
   consumedPackets: number;

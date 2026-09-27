@@ -1,22 +1,20 @@
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "plugins/sdk/viz-zoto";
 
 let frames = 0;
 
-declare const zoto: {
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-  reportDrawState: (drawing: boolean) => void;
-};
+type StallHost = ReturnType<typeof getVizZoto> & { reportDrawState: (drawing: boolean) => void };
+const host = getVizZoto() as StallHost;
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame: VizDataFrame) => {
   frames += 1;
   if (frames > 40) {
-    zoto.reportDrawState(false);
+    host.reportDrawState(false);
     return;
   }
-  zoto.reportDrawState(true);
-  zoto.writeUniform("uTime", frame.t);
-  zoto.writeUniform("uBright", 0.9);
-  zoto.writeUniform("uAccent", [0.2, 0.7, 0.95]);
-  zoto.writeUniform("uOpacity", 0.85);
+  host.reportDrawState(true);
+  host.writeUniform("uTime", frame.t);
+  host.writeUniform("uBright", 0.9);
+  host.writeUniform("uAccent", [0.2, 0.7, 0.95]);
+  host.writeUniform("uOpacity", 0.85);
 };
