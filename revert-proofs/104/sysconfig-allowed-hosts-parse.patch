@@ -1,8 +1,8 @@
 diff --git a/service/sysconfig.py b/service/sysconfig.py
-index 67813b2..93ff442 100644
+index 9fd0428..c07749b 100644
 --- a/service/sysconfig.py
 +++ b/service/sysconfig.py
-@@ -136,7 +136,7 @@ def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
+@@ -135,7 +135,7 @@ def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
          "port": _port(raw.get("port")),
          "insecure_lan": True if not loopback else _bool(raw.get("insecure_lan")),
          "inhibit_screensaver": _inhibit_screensaver(raw),

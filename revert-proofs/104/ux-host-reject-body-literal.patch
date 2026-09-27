@@ -1,6 +1,8 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 1e33abf..7cc6b75 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -16,10 +16,7 @@
+@@ -12,10 +12,7 @@ from .access import attach_frame_embed_policy
  
  _log = logging.getLogger("zoto-viz.monitor")
  

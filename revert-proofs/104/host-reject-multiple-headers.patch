@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 1e33abf..81e6a35 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -258,7 +258,7 @@ def _lookup_allowed(app: web.Application, key: str) -> bool:
+ async def middleware(request: web.Request, handler):  # noqa: ANN001
+     port = int(request.app.get("request_guard_port") or 7020)
+     hosts = _host_header_values(request)
+-    if not hosts or len(hosts) != 1:
++    if not hosts:
+         return _host_reject_response()
+ 
+     raw_host = hosts[0].strip()

@@ -1,8 +1,8 @@
 diff --git a/service/monitor.py b/service/monitor.py
-index 774509d..959babb 100644
+index 5a7fc2f..e223e0d 100644
 --- a/service/monitor.py
 +++ b/service/monitor.py
-@@ -2082,14 +2082,12 @@ def main() -> None:
+@@ -2033,14 +2033,12 @@ def main() -> None:
              + f", {w['dwell']} s each" + ("" if w["rotate"] else ", rotation off"))
      # shutdown_timeout bounds the wait for in-flight requests; the unit gives us 10 s in total
      try:
