@@ -16,6 +16,8 @@ import { violationKey } from "./pack-lint-types";
 import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowlist";
 import { INLINE_ZOTO_DECLARE_HINT, PACK_ZOTO_BINDING_HINT } from "./viz-zoto";
 
+export { StarterSim } from "./starter/frontend/sim";
+
 export {
   LEGACY_DECLARE_ZOTO_PACK_IDS,
   LEGACY_ZOTO_ALLOWLIST_RULES,

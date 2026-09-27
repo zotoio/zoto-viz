@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import yaml from "yaml";
 import { describe, expect, it } from "vitest";
-import { toPluginView } from "./plugin-visualisation";
+import { HOST_MESH_DEMO_VISUALISATION_ENGINE, toPluginView } from "./plugin-visualisation";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -28,6 +28,9 @@ describe("shipped pack visualisation engines", () => {
         unknown
       >;
       const visualisation = yaml.parse(readFileSync(vizPath, "utf8")) as Record<string, unknown>;
+      if (packId === "host-mesh-demo") {
+        expect(visualisation.engine).toBe(HOST_MESH_DEMO_VISUALISATION_ENGINE);
+      }
       try {
         toPluginView({ ...pluginYml, visualisation });
       } catch (e) {

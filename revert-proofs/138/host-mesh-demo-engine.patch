@@ -1,10 +1,14 @@
-diff --git a/plugins/src/host-mesh-demo/visualisation.yml b/plugins/src/host-mesh-demo/visualisation.yml
-index 09529e61..6b236631 100644
---- a/plugins/src/host-mesh-demo/visualisation.yml
-+++ b/plugins/src/host-mesh-demo/visualisation.yml
-@@ -1,4 +1,4 @@
--engine: graph
-+engine: topology
- base: topology
- look:
-   backdrop: plugin
+diff --git a/web/src/plugins/plugin-visualisation.ts b/web/src/plugins/plugin-visualisation.ts
+index 1e2b5e4e..d53f52cc 100644
+--- a/web/src/plugins/plugin-visualisation.ts
++++ b/web/src/plugins/plugin-visualisation.ts
+@@ -22,6 +22,9 @@ export const PLUGIN_ENGINES = [
+   "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
+ ] as const satisfies readonly PluginEngine[];
+ 
++/** Shipped host-mesh-demo menu engine (graph over topology base). */
++export const HOST_MESH_DEMO_VISUALISATION_ENGINE: PluginEngine = "topology";
++
+ const ENGINE_SET = new Set<string>(PLUGIN_ENGINES);
+ const BACKDROP_SET = new Set<string>(BACKDROP_OPTIONS.map((o) => o.value));
+ const NODE_COLORS = new Set(["role", "kind", "heat", "proto", "hash"]);
