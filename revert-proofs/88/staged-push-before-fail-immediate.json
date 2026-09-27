@@ -1,5 +1,0 @@
-{
-  "testFile": "src/plugins/shader-fallback-push.test.ts",
-  "testName": "shader fallback push contract > staged-push-before-fail-immediate",
-  "redValue": "AssertionError: expected '' to be '01 05 00' // Object.is equality"
-}

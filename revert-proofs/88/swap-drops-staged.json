@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-tile.test.ts",
-  "testName": "shader fallback tile overlay > swap-drops-staged",
-  "redValue": "AssertionError: expected '' to be 'hidden' // Object.is equality"
-}

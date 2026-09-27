@@ -1,5 +1,0 @@
-{
-  "testFile": "src/plugins/shader-fallback-push.test.ts",
-  "testName": "shader fallback push contract > identical-pushes-one-write",
-  "redValue": "AssertionError: expected 601 to be 1 // Object.is equality"
-}

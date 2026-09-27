@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-gl.test.ts",
-  "testName": "shader fallback gl context > context-loss-notice-no-generic",
-  "redValue": "AssertionError: expected 1 to be +0 // Object.is equality"
-}

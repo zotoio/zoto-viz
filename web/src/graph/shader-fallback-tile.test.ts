@@ -25,7 +25,13 @@ describe("shader fallback tile overlay", () => {
 
   it("copy-default-name", () => {
     expect(genericShaderFallbackMessage("")).toBe(
-      "‹This view› can't run its graphics on this device. Other tiles aren't affected.",
+      "This view can't run its graphics on this device. Other tiles aren't affected.",
+    );
+  });
+
+  it("copy-named-tile", () => {
+    expect(genericShaderFallbackMessage("Nixie Clock")).toBe(
+      "Nixie Clock can't run its graphics on this device. Other tiles aren't affected.",
     );
   });
 

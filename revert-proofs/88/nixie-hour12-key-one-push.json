@@ -1,5 +1,0 @@
-{
-  "testFile": "src/plugins/shader-fallback-push.test.ts",
-  "testName": "shader fallback push contract > nixie-hour12-key-one-push",
-  "redValue": "AssertionError: expected '13 05' to be '01 05' // Object.is equality"
-}

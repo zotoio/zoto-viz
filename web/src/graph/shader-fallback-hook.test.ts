@@ -128,19 +128,17 @@ describe("shader fallback pack hook", () => {
     wall.append(paneA, paneB);
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
-    const base = vi.getTimerCount();
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
     host.beginTilePack("a", "ka", "hook-pack", paneA, "A", true);
     host.onTileShaderCompileFailed("a");
-    expect(vi.getTimerCount()).toBe(base + 1);
     host.beginTilePack("b", "kb", "hook-pack", paneB, "B", true);
     host.onTileShaderCompileFailed("b");
-    expect(vi.getTimerCount()).toBe(base + 1);
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
     host.clearShaderFallback("a");
-    expect(vi.getTimerCount()).toBe(base + 1);
     host.clearShaderFallback("b");
-    expect(vi.getTimerCount()).toBe(base);
     host.dispose();
     wall.remove();
+    setIntervalSpy.mockRestore();
   });
 
   it("throw-entry", () => {

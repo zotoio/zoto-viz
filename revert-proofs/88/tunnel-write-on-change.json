@@ -1,5 +1,0 @@
-{
-  "testFile": "src/plugins/shader-fallback-push.test.ts",
-  "testName": "shader fallback push contract > tunnel-write-on-change",
-  "redValue": "AssertionError: expected 124 to be 27 // Object.is equality"
-}

@@ -6,5 +6,5 @@ export const GFX_NO_RESTORE_NOTICE = "Graphics didn't come back. Reload to resto
 /** Host copy when a shader pack has no {@link ShaderPack.fallbackText} hook or it fails. */
 export function genericShaderFallbackMessage(packName: string): string {
   const name = sanitizePackDisplayName(packName) || "This view";
-  return `‹${name}› can't run its graphics on this device. Other tiles aren't affected.`;
+  return `${name} can't run its graphics on this device. Other tiles aren't affected.`;
 }

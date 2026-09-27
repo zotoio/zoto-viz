@@ -1,5 +1,0 @@
-{
-  "testFile": "src/plugins/shader-fallback-pack-sdk.test.ts",
-  "testName": "shader fallback pack sdk > nixie-pack-pushes",
-  "redValue": "AssertionError: expected 'object' to be 'function' // Object.is equality"
-}

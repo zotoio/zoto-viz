@@ -68,7 +68,7 @@ describe("tile shader fallback host", () => {
     const clean = sanitizePackDisplayName(raw);
     expect(clean.length).toBe(80);
     expect(genericShaderFallbackMessage(raw)).toBe(
-      `‹${clean}› can't run its graphics on this device. Other tiles aren't affected.`,
+      `${clean} can't run its graphics on this device. Other tiles aren't affected.`,
     );
   });
 
