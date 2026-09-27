@@ -196,10 +196,19 @@ function patchVizWriters(): void {
   };
 }
 
-function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: unknown }): void {
+function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: unknown; contractVersion?: number }): void {
   allowed = new Set(d.caps ?? []);
   (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
   (window as unknown as { __zotoViz?: unknown }).__zotoViz = d.viz || null;
+  const viz = d.viz as { contract?: number } | null | undefined;
+  const version = typeof d.contractVersion === "number"
+    ? d.contractVersion
+    : typeof viz?.contract === "number"
+      ? viz.contract
+      : undefined;
+  if (typeof version === "number") {
+    (window as unknown as { __zotoContractVersion?: number }).__zotoContractVersion = version;
+  }
   patchVizWriters();
 }
 

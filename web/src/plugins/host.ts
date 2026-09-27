@@ -97,6 +97,10 @@ export function sandboxBootNonceForTests(): string {
   return lastSandboxBootNonce;
 }
 
+export function countPluginSandboxIframes(): number {
+  return document.querySelectorAll("iframe[sandbox]").length;
+}
+
 /** Same-origin bootstrap page for the sandboxed iframe (no srcdoc / inline script). */
 export async function pluginSandboxFrameUrl(
   frameId: string,
@@ -113,8 +117,15 @@ export async function pluginSandboxFrameUrl(
 }
 
 export function hostAllows(type: string, caps: string[]): boolean {
+  if (type === "drawState" || type === "loseHostContext") return true;
   if (type === "setStyle" || type === "setNodeColor") return caps.includes("graph.style");
-  if (type === "writeBuffer" || type === "writeUniform" || type === "writeParticles") {
+  if (
+    type === "writeBuffer"
+    || type === "writeUniform"
+    || type === "writeParticles"
+    || type === "publishBitmap"
+    || type === "publishBitmapFailed"
+  ) {
     return caps.includes("viz.write");
   }
   return false;
@@ -146,6 +157,7 @@ export type ParentPortMsg =
     caps: string[];
     config: Record<string, string>;
     viz?: VizPluginContract;
+    contractVersion?: number;
     moduleSrc: string;
     bootNonce: string;
     parentOrigin: string;
@@ -390,6 +402,7 @@ export class PluginSandbox {
       caps: this.caps,
       config,
       viz,
+      contractVersion: viz?.contract,
       moduleSrc,
       bootNonce: this.bootNonce,
       parentOrigin: location.origin,

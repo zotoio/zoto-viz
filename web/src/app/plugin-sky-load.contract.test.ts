@@ -11,30 +11,45 @@ function loadPluginSkyOntoBlock(): string {
   return mainSrc.slice(start, end);
 }
 
+function loadTsPluginBlock(): string {
+  const start = mainSrc.indexOf("async function loadTsPlugin");
+  const end = mainSrc.indexOf("async function refreshTsPlugin", start);
+  if (start < 0 || end < 0) throw new Error("loadTsPlugin block missing");
+  return mainSrc.slice(start, end);
+}
+
 describe("plugin sky load wiring", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });
 
   it("plugin-sky-mosaic-look", () => {
-    expect(mainSrc.indexOf("import { Mosaic, mosaicPaneMode }")).toBeGreaterThan(-1);
+    expect(mainSrc.indexOf('import { Mosaic } from "../graph/mosaic"')).toBeGreaterThan(-1);
+    const syncStart = mainSrc.indexOf("async function syncPluginSky");
+    const syncEnd = mainSrc.indexOf("function teardownMosaicPanelView", syncStart);
+    const sync = mainSrc.slice(syncStart, syncEnd);
+    expect(sync).toContain("loadPluginSkyOnto(target, pane, wantPlugin, signal, id)");
+  });
+
+  it("plugin-sky-needs-review", () => {
     const block = loadPluginSkyOntoBlock();
-    expect(block.indexOf("mosaicPaneMode(target.tileId)")).toBeGreaterThan(-1);
-    expect(block.indexOf("optsFor(mosaicPaneMode(target.tileId))")).toBeGreaterThan(-1);
+    expect(block).toContain("markPluginNeedsReview(spec)");
+    expect(block).toContain("console.warn");
+    expect(block).toContain("paintPluginNeedsReviewNotice");
+  });
+
+  it("plugin-frontend-needs-review", () => {
+    const block = loadTsPluginBlock();
+    expect(block).toContain("markPluginNeedsReview(spec)");
+    expect(block).toContain("console.warn");
+    expect(block).toContain("paintPluginNeedsReviewNotice");
   });
 
   it("plugin-sky-load-wiring", () => {
     const block = loadPluginSkyOntoBlock();
-    expect(block.indexOf("packId: spec.id")).toBeGreaterThan(-1);
-    expect(block.indexOf("packKey:")).toBeGreaterThan(-1);
-    expect(block.indexOf("isShaderPack: true")).toBeGreaterThan(-1);
-    expect(block.indexOf("look: lookOpts")).toBeGreaterThan(-1);
-    const errIdx = block.indexOf("if (err)");
-    expect(errIdx).toBeGreaterThan(-1);
-    const errBranch = block.slice(errIdx, block.indexOf("if (target === scene) skyLoaded = key", errIdx));
-    expect(errBranch).not.toContain("setPluginShader(null)");
-    const catchIdx = block.indexOf("} catch (e)");
-    const catchBranch = block.slice(catchIdx, block.length);
-    expect(catchBranch).not.toContain("setPluginShader(null)");
+    expect(block).toContain("fetchPluginSky(spec.id");
+    expect(block).toContain("setPluginShader({ id: spec.id, source })");
+    expect(block).toContain("spec.sky_error = err");
+    expect(block).toContain("spec.sky_available = false");
   });
 });

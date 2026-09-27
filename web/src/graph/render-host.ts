@@ -42,6 +42,19 @@ import {
   toDeviceRectInto,
 } from "./pack-mirror-rect";
 import { renderHostMirrorTelemetry } from "./render-host-telemetry";
+import {
+  configureLayoutMaxDevicePxRatio,
+  devicePxRatioFromNumber,
+  devicePxRatioNumber,
+  layoutDevicePxRatio,
+  onLayoutDevicePxRatioChange,
+  pinLayoutDevicePxRatio,
+  startLayoutDevicePxRatioWatch,
+  type DevicePxRatio,
+} from "./render-host-device-px-ratio";
+import { asCanvasDeviceHeight, type CanvasDeviceHeight } from "./pack-mirror-rect";
+import { RenderHostTileShader } from "./render-host-tile-shader";
+import type { GfxWallNotice } from "./gfx-wall-notice";
 
 type PackMirrorViewMeta = HostedView & {
   packCoalesceGroupKey?: string;
@@ -156,10 +169,38 @@ export class RenderHost {
   private gpuTimedClearHex = 0;
   private gpuTimedBox: SoftRect | null = null;
   private readonly bufferPixels: DevicePixelSize = { w: 0, h: 0 };
+  private layoutDevicePxRatio: DevicePxRatio;
+  private readonly unsubLayoutDpi: (() => void) | null;
+  private _canvasDeviceHeight: CanvasDeviceHeight = asCanvasDeviceHeight(1);
+  glContextLost = false;
+  readonly tileShader: RenderHostTileShader;
 
-  constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean; antialias?: boolean } = {}) {
-    const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
+  constructor(
+    readonly wall: HTMLElement,
+    opts: {
+      dpr?: number;
+      software?: boolean;
+      antialias?: boolean;
+      maxLayoutDevicePxRatio?: number;
+    } = {},
+  ) {
+    if (opts.maxLayoutDevicePxRatio !== undefined) {
+      configureLayoutMaxDevicePxRatio(opts.maxLayoutDevicePxRatio);
+    }
+    if (opts.dpr !== undefined) {
+      this.layoutDevicePxRatio = devicePxRatioFromNumber(opts.dpr);
+      pinLayoutDevicePxRatio(this.layoutDevicePxRatio);
+    } else {
+      startLayoutDevicePxRatioWatch();
+      this.layoutDevicePxRatio = layoutDevicePxRatio();
+    }
+    const dpr = devicePxRatioNumber(this.layoutDevicePxRatio);
     this.pr = dpr;
+    this.unsubLayoutDpi =
+      opts.dpr === undefined
+        ? onLayoutDevicePxRatioChange(() => this.applyWindowLayoutDevicePxRatio())
+        : null;
+    this.tileShader = new RenderHostTileShader(wall, this);
     const forceSoft = opts.software === true || (opts.software !== false && !probeWebGL());
     if (!forceSoft) {
       try {
@@ -172,7 +213,7 @@ export class RenderHost {
           failIfMajorPerformanceCaveat: false,
         });
         this.software = false;
-        this.renderer.setPixelRatio(dpr);
+        this.renderer.setPixelRatio(1);
         this.renderer.setClearColor(0x000000, 0);
         this.canvas = this.renderer.domElement;
         this.refreshContextAntialias();
@@ -193,9 +234,11 @@ export class RenderHost {
     if (this.software) this.canvas.dataset.softgl = "";
     this.canvas.addEventListener("webglcontextlost", (e) => {
       e.preventDefault();
+      this.tileShader.onSharedContextLost();
       for (const v of this.views) v.hostContextLost();
     });
     this.canvas.addEventListener("webglcontextrestored", () => {
+      this.tileShader.onSharedContextRestored();
       this.dirty = true;
       this.refreshContextAntialias();
       this.markMirrorScopeDirty();
@@ -203,6 +246,7 @@ export class RenderHost {
     });
     this.attach();
     this.syncSize();
+    this.refreshCanvasDeviceHeight();
     this.ro = observeResize(wall, () => { this.dirty = true; });
     this.frame = (ts: number) => {
       if (this.disposed) return;
@@ -231,8 +275,56 @@ export class RenderHost {
     this.raf = requestAnimationFrame(this.frame);
   }
 
-  get pixelRatio(): number { return this.software ? this.pr : this.renderer.getPixelRatio(); }
+  get pixelRatio(): number { return this.pr; }
   get viewCount(): number { return this.views.length; }
+  get contextLost(): boolean { return this.tileShader.contextLost; }
+  get canvasDeviceHeight(): CanvasDeviceHeight { return this._canvasDeviceHeight; }
+  get gfxWallNotice(): GfxWallNotice { return this.tileShader.gfxNotice; }
+
+  beginTilePack(
+    tileId: string,
+    packKey: string,
+    packId: string,
+    mount: HTMLElement,
+    packName: string,
+    isShaderPack = false,
+  ): void {
+    this.tileShader.beginTilePack(tileId, packKey, packId, mount, packName, isShaderPack);
+  }
+
+  probeTileSky(
+    tileId: string,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    log?: (msg: string) => void,
+  ): string | null {
+    return this.tileShader.probeTileSky(tileId, scene, camera, log);
+  }
+
+  compilePluginSky(
+    tileId: string,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    log?: (msg: string) => void,
+  ): boolean {
+    return this.tileShader.compilePluginSky(tileId, scene, camera, log);
+  }
+
+  onTileShaderCompileFailed(tileId: string): void {
+    this.tileShader.onTileShaderCompileFailed(tileId);
+  }
+
+  onTileShaderCompileOk(tileId: string): void {
+    this.tileShader.onTileShaderCompileOk(tileId);
+  }
+
+  clearShaderFallback(tileId: string): void {
+    this.tileShader.clearShaderFallback(tileId);
+  }
+
+  tileShaderDead(tileId: string): boolean {
+    return this.tileShader.tileShaderDead(tileId);
+  }
 
   /** Same object every call; dimensions refreshed from the canvas backing store. */
   bufferPixelSize(): Readonly<DevicePixelSize> {
@@ -443,13 +535,17 @@ export class RenderHost {
     return this.writeFbViewport(dst, pr);
   }
 
-  /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
+  /** Whole-wall layout DPR (auto-tune). Backing store scales here; renderer pixel ratio stays 1. */
   setPixelRatio(pr: number): void {
     if (Math.abs(pr - this.pixelRatio) < 0.01) return;
-    this.pr = pr;
-    this.renderer.setPixelRatio(pr);
-    if (!this.software) this.renderer.setSize(this.w, this.h, false);
-    else this.resizeSoftware();
+    this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
+    this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
+    if (!this.software) {
+      this.renderer.setPixelRatio(1);
+      this.resizeGpuCanvas();
+    } else {
+      this.resizeSoftware();
+    }
     this.dirty = true;
   }
 
@@ -559,10 +655,6 @@ export class RenderHost {
     rd.render(scene, camera);
   };
 
-  private canvasDeviceHeight(): number {
-    return Math.max(1, this.canvas.height);
-  }
-
   private writeFbViewport(box: SoftRect, pr: number): Viewport {
     const cssTop = this.software
       ? asCssRect(box)
@@ -570,7 +662,7 @@ export class RenderHost {
     return toDeviceRectInto(
       cssTop,
       pr,
-      this.canvasDeviceHeight(),
+      this._canvasDeviceHeight as number,
       this.fbViewport,
     );
   }
@@ -614,6 +706,8 @@ export class RenderHost {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
+    this.unsubLayoutDpi?.();
+    this.tileShader.dispose();
     this.views = [];
     if (!this.software) {
       this.packMirrors.dispose();
@@ -656,12 +750,44 @@ export class RenderHost {
     this.contextAntialias = gl?.getContextAttributes()?.antialias === true;
   }
 
+  refreshCanvasDeviceHeight(): void {
+    this._canvasDeviceHeight = asCanvasDeviceHeight(Math.max(1, this.canvas.height));
+  }
+
+  private resizeGpuCanvas(): void {
+    const pr = this.pr;
+    const devW = Math.max(1, Math.round(this.w * pr));
+    const devH = Math.max(1, Math.round(this.h * pr));
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(devW, devH, false);
+    this.canvas.style.width = "100%";
+    this.canvas.style.height = "100%";
+    this.refreshCanvasDeviceHeight();
+    this.bufferPixels.w = this.canvas.width;
+    this.bufferPixels.h = this.canvas.height;
+  }
+
+  private applyWindowLayoutDevicePxRatio(): void {
+    const capped = layoutDevicePxRatio();
+    const pr = devicePxRatioNumber(capped);
+    if (Math.abs(pr - this.pr) < 0.01) return;
+    this.layoutDevicePxRatio = capped;
+    this.pr = pr;
+    if (!this.software) {
+      this.renderer.setPixelRatio(1);
+      this.resizeGpuCanvas();
+    } else {
+      this.resizeSoftware();
+    }
+    this.dirty = true;
+  }
+
   private syncSize(): void {
     const w = this.wall.clientWidth, h = this.wall.clientHeight;
     if (w < 2 || h < 2 || (w === this.w && h === this.h)) return;
     this.w = w;
     this.h = h;
-    if (!this.software) this.renderer.setSize(w, h, false);
+    if (!this.software) this.resizeGpuCanvas();
     else this.resizeSoftware();
     this.dirty = true;
   }
@@ -672,6 +798,7 @@ export class RenderHost {
     this.canvas.height = Math.max(1, Math.round(this.h * pr));
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
+    this.refreshCanvasDeviceHeight();
     this.bufferPixels.w = this.canvas.width;
     this.bufferPixels.h = this.canvas.height;
   }
