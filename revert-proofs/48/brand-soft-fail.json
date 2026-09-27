@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof vitest runner through the overlay > (2) expect.soft failure is branded",
+  "description": "Runner ignores the recorded expect.soft() failure",
+  "red": "AssertionError: expected false to be true // Object.is equality"
+}

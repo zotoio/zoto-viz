@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof vitest runner through the overlay > (3) real node:assert strictEqual is not branded",
+  "description": "Remove only the node:assert rejection in noteFailure",
+  "red": "AssertionError: expected false to be true // Object.is equality"
+}

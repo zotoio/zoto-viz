@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "strict pytest red from plugin JSON only > accepts revertProofAssertion from plugin JSON",
+  "description": "Never classify a pytest failure as an assertion",
+  "red": "AssertionError: expected 'build break' to be 'assertion' // Object.is equality"
+}

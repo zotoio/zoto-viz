@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index f4a9d83..0000000 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -390,7 +390,7 @@ function normalizePytestPluginTest(t) {
+ /** @returns {{ tests: PytestPluginTest[], collectionError: boolean }} */
+ export function parsePytestPluginJson(text, pytestExitCode) {
+   if (!text?.trim()) {
+-    return { tests: [], collectionError: pytestExitCode !== 0 };
++    return { tests: [], collectionError: false };
+   }
+   try {
+     const data = JSON.parse(text);

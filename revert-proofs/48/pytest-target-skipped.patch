@@ -1,0 +1,14 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index f4a9d83..0000000 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -412,9 +412,6 @@ export function assessPytestSelection(tests, nodeId) {
+   if (!target) {
+     return { ok: false, reason: "target not found", target: null };
+   }
+-  if (target.outcome === "skipped") {
+-    return { ok: false, reason: "target skipped", target };
+-  }
+   const others = tests.filter((t) => t.nodeid !== nodeId);
+   if (!others.every((t) => t.outcome === "skipped")) {
+     return { ok: false, reason: "other tests not skipped", target };

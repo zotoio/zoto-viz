@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof pytest plugin > (4-plugin) a hand-raised AssertionError is not an assertion",
+  "description": "Plugin accepts any failing statement in the test file, not only rewritten asserts",
+  "red": "AssertionError: expected { \u2026(4) } to deeply equal { \u2026(4) }"
+}

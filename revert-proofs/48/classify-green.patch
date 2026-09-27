@@ -1,0 +1,12 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index b913228..c2a2a2a 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -364,7 +364,6 @@ export function classifyPatchedVitest(run) {
+   if (run.counts.suiteError) return "build break";
+   const sel = run.counts.selection;
+   if (!sel?.ok || !sel.target) return "not single assertion failure";
+-  if (sel.target.status === "passed") return "green";
+   if (sel.target.status !== "failed") return "build break";
+   return sel.target.revertProofAssertion ? "assertion" : "build break";
+ }

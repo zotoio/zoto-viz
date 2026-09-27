@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "strict Vitest red from task.meta only > (c-meta) rejects plain-object style failures without meta flag",
+  "description": "Accept any present revertProofAssertion value, not just true",
+  "red": "AssertionError: expected 'assertion' to be 'build break' // Object.is equality"
+}

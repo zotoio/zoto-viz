@@ -8,25 +8,83 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  allowTypeErrorEnabled,
+  assertEditablePythonResolvesInWorktree,
+  assertWorkspaceLinksInWorktree,
+  assessPytestSelection,
+  assessVitestSelection,
+  assertRedLine,
+  assertVitestNodeAssertFailClosed,
+  gitApplyPatchStrict,
+  buildPytestArgv,
+  classifyPatchedPytest,
+  classifyPatchedVitest,
+  parsePytestPluginJson,
+  parseTimeoutSec,
+  parseVitestJsonReport,
+  pytestArgvUsesNodeIdNotK,
+  pytestNodeId,
+  pythonEnvForWorktree,
+  rejectPatchedVitestGreen,
+  resolveVitestProject,
+  sanitizeReportText,
+  validateChildBranchIncludesParentProofsOnMain,
+  validatePatchProductionReachable,
+  validatePatchRevertProofsScope,
+  validatePatchStructure,
+  validatePatchTouchesOnlyProduction,
+  validatePrNumber,
+  validateRowListedUnderPr,
+  validateRowProofPr,
+  validateStackedChildProofScope,
+  validatePythonModule,
+  validateRowMeta,
+  validateTestFileRel,
+  vitestTestNamePattern,
+  assertReplayPullHeadTreeKey,
+  computeRevertProofTreeKey,
+  resolvePullRequestHead,
+  writeRevertProofHeadRecordFile,
+} from "./revert-proof-lib.mjs";
+
+const REVERT_PROOF_PYTEST_PLUGIN_MODULE = "revert_proof_pytest_plugin";
+
+function revertProofScriptsDir(wtRoot) {
+  return path.join(wtRoot, "scripts");
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_TIMEOUT_SEC = 120;
-
-const TEST_PATH_RE =
-  /(?:^|\/)(?:tests\/|.*\.test\.ts$|.*\.spec\.ts$|test_[^/]*\.py$)/;
 
 const DEP_EXCLUDE = ["node_modules", "web/node_modules", ".venv"];
 
 /** @type {null | (() => void)} */
 let globalCleanup = null;
+/** @type {import("node:child_process").ChildProcess | null} */
+let activeTestChild = null;
+/** @type {string | null} */
+let activeArtifactsDir = null;
 
 function onSignal() {
+  if (activeTestChild?.pid) {
+    killProcessGroup(activeTestChild);
+    activeTestChild = null;
+  }
   if (globalCleanup) {
     try {
       globalCleanup();
     } catch {
       /* best effort */
     }
+  }
+  if (activeArtifactsDir && fs.existsSync(activeArtifactsDir)) {
+    try {
+      fs.rmSync(activeArtifactsDir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+    activeArtifactsDir = null;
   }
   process.exit(130);
 }
@@ -66,11 +124,18 @@ function checkoutSnapshot(root) {
 }
 
 function porcelainDiffAllowed(before, after, prNumber) {
-  const reportSuffix = `revert-proofs/${prNumber}/REPORT.md`;
+  const allowed = [
+    `revert-proofs/${prNumber}/REPORT.md`,
+    `revert-proofs/${prNumber}/head.json`,
+  ];
   const filter = (text) =>
     text
       .split("\n")
-      .filter((line) => line.trim() && !line.includes(reportSuffix))
+      .filter((line) => {
+        const t = line.trim();
+        if (!t) return false;
+        return !allowed.some((suffix) => line.includes(suffix));
+      })
       .join("\n");
   return filter(before) === filter(after);
 }
@@ -84,112 +149,51 @@ function assertCheckoutUnchanged(root, before, prNumber) {
   }
   if (!porcelainDiffAllowed(before.porcelain, after.porcelain, prNumber)) {
     throw new Error(
-      "checkout worktree changed during revert-proof (only REPORT.md may differ)",
+      "checkout worktree changed during revert-proof (only REPORT.md and head.json may differ)",
     );
   }
 }
 
-function listRows(mainRoot, prNumber, onlySlug) {
-  const dir = path.join(mainRoot, "revert-proofs", String(prNumber));
-  if (!fs.existsSync(dir)) {
-    throw new Error(`revert-proofs directory not found: ${dir}`);
+function readGitRefFile(mainRoot, ref, relPath) {
+  const r = gitAt(mainRoot, ["show", `${ref}:${relPath}`]);
+  if (r.status !== 0) {
+    throw new Error(`missing at ${ref}: ${relPath} (${r.stderr || r.stdout})`);
   }
-  const patches = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith(".patch"))
-    .map((f) => f.replace(/\.patch$/, ""))
+  return r.stdout;
+}
+
+function listRows(mainRoot, prNumber, onlySlug, sourceRef = "HEAD") {
+  const prefix = `revert-proofs/${prNumber}`;
+  const ls = gitAt(mainRoot, ["ls-tree", "--name-only", sourceRef, `${prefix}/`]);
+  if (ls.status !== 0 || !ls.stdout.trim()) {
+    throw new Error(`revert-proofs directory not found at ${sourceRef}: ${prefix}`);
+  }
+  const patches = ls.stdout
+    .split("\n")
+    .map((p) => p.trim())
+    .filter((p) => p.endsWith(".patch"))
+    .map((p) => path.basename(p).replace(/\.patch$/, ""))
     .sort();
   const slugs = onlySlug ? patches.filter((s) => s === onlySlug) : patches;
   if (onlySlug && slugs.length === 0) {
     throw new Error(`row slug not found: ${onlySlug}`);
   }
   return slugs.map((slug) => {
-    const patchPath = path.join(dir, `${slug}.patch`);
-    const metaPath = path.join(dir, `${slug}.json`);
-    if (!fs.existsSync(metaPath)) {
-      throw new Error(`missing sidecar JSON for row ${slug}: ${metaPath}`);
-    }
-    const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-    return { slug, patchPath, metaPath, meta, dir };
+    validateRowListedUnderPr(prNumber, slug);
+    const relPatch = `${prefix}/${slug}.patch`;
+    const relMeta = `${prefix}/${slug}.json`;
+    const patchText = readGitRefFile(mainRoot, sourceRef, relPatch);
+    const meta = JSON.parse(readGitRefFile(mainRoot, sourceRef, relMeta));
+    return {
+      slug,
+      prNumber,
+      patchPath: path.join(mainRoot, relPatch),
+      patchText,
+      metaPath: path.join(mainRoot, relMeta),
+      meta,
+      dir: path.join(mainRoot, prefix),
+    };
   });
-}
-
-function pathsTouchedByPatch(patchText) {
-  const paths = new Set();
-  for (const line of patchText.split("\n")) {
-    if (line.startsWith("+++ ") || line.startsWith("--- ")) {
-      const p = line.slice(4).replace(/^\w+\//, "").trim();
-      if (p === "/dev/null") continue;
-      paths.add(p);
-    }
-  }
-  return [...paths];
-}
-
-export function patchTouchesTestFiles(patchText) {
-  return pathsTouchedByPatch(patchText).some((p) => TEST_PATH_RE.test(p));
-}
-
-/** Escape a literal for vitest `-t` (RegExp); does not add anchors. */
-export function escapeVitestTestNamePattern(testName) {
-  return testName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-}
-
-/**
- * Vitest `-t` matches `fullTestName` (`describe > … > test`), not the short title alone.
- * Anchor so a prefix cannot select multiple tests.
- */
-export function vitestTestNamePattern(fullTestName) {
-  return `^${escapeVitestTestNamePattern(fullTestName)}$`;
-}
-
-/** Pytest node id: `file.py::Class::test` or `file.py::test[param]` (never `-k`). */
-export function pytestNodeId(testFile, testName) {
-  const file = testFile.replace(/\\/g, "/");
-  if (testName.includes("/")) {
-    throw new Error("testName must be the pytest node suffix, not a file path");
-  }
-  if (testName.startsWith(`${file}::`)) {
-    return testName;
-  }
-  return `${file}::${testName}`;
-}
-
-function validateMeta(meta, slug) {
-  for (const key of ["runner", "testFile", "testName", "description"]) {
-    if (!meta[key] || typeof meta[key] !== "string") {
-      throw new Error(`row ${slug}: sidecar JSON missing string field "${key}"`);
-    }
-  }
-  if (meta.runner !== "vitest" && meta.runner !== "pytest") {
-    throw new Error(`row ${slug}: runner must be vitest or pytest`);
-  }
-}
-
-function validatePatchTouchesOnlyProduction(patchText, slug) {
-  if (patchTouchesTestFiles(patchText)) {
-    throw new Error(
-      `row ${slug}: patch touches test files (only production reverts allowed)`,
-    );
-  }
-}
-
-function resolveVitest(wtRoot, testFile) {
-  const rel = testFile.replace(/\\/g, "/");
-  const rootBin = path.join(wtRoot, "node_modules", ".bin", "vitest");
-  const webBin = path.join(wtRoot, "web", "node_modules", ".bin", "vitest");
-  if (!rel.startsWith("web/") && fs.existsSync(rootBin)) {
-    return { bin: rootBin, cwd: wtRoot };
-  }
-  if (fs.existsSync(webBin)) {
-    return { bin: webBin, cwd: path.join(wtRoot, "web") };
-  }
-  if (fs.existsSync(rootBin)) {
-    return { bin: rootBin, cwd: wtRoot };
-  }
-  throw new Error(
-    `vitest not found under ${wtRoot} (run pnpm install --offline in the worktree first)`,
-  );
 }
 
 function tscBin(wtRoot) {
@@ -198,28 +202,6 @@ function tscBin(wtRoot) {
     return null;
   }
   return bin;
-}
-
-const SKIP_WALK = new Set([".git", "node_modules", ".venv", "revert-proofs"]);
-
-function findPnpmLockRoots(wtRoot) {
-  const roots = [];
-  function walk(dir) {
-    const base = path.basename(dir);
-    if (SKIP_WALK.has(base)) {
-      return;
-    }
-    if (fs.existsSync(path.join(dir, "pnpm-lock.yaml"))) {
-      roots.push(dir);
-    }
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (ent.isDirectory()) {
-        walk(path.join(dir, ent.name));
-      }
-    }
-  }
-  walk(wtRoot);
-  return roots;
 }
 
 function pnpmInstallOffline(cwd) {
@@ -236,74 +218,6 @@ function pnpmInstallOffline(cwd) {
     throw new Error(
       `pnpm install --offline --frozen-lockfile failed in ${cwd} (no fallback to linking node_modules): ${r.stderr || r.stdout}`,
     );
-  }
-}
-
-function findNodeModulesRoots(wtRoot) {
-  const roots = [];
-  function walk(dir, depth) {
-    if (depth > 6) {
-      return;
-    }
-    const nm = path.join(dir, "node_modules");
-    if (fs.existsSync(nm)) {
-      roots.push(nm);
-    }
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (!ent.isDirectory() || ent.name === "node_modules" || SKIP_WALK.has(ent.name)) {
-        continue;
-      }
-      walk(path.join(dir, ent.name), depth + 1);
-    }
-  }
-  walk(wtRoot, 0);
-  return roots;
-}
-
-function checkSymlinkInsideWorktree(linkPath, wtReal) {
-  let st;
-  try {
-    st = fs.lstatSync(linkPath);
-  } catch {
-    return;
-  }
-  if (!st.isSymbolicLink()) {
-    return;
-  }
-  const real = fs.realpathSync(linkPath);
-  if (real !== wtReal && !real.startsWith(`${wtReal}${path.sep}`)) {
-    throw new Error(
-      `workspace link ${linkPath} resolves outside worktree: ${real}`,
-    );
-  }
-}
-
-export function assertWorkspaceLinksInWorktree(wtRoot) {
-  const wtReal = fs.realpathSync(wtRoot);
-  for (const nmRoot of findNodeModulesRoots(wtRoot)) {
-    for (const name of fs.readdirSync(nmRoot)) {
-      if (name === ".pnpm" || name === ".bin" || name === ".cache") {
-        continue;
-      }
-      const full = path.join(nmRoot, name);
-      if (name.startsWith("@")) {
-        let scopeStat;
-        try {
-          scopeStat = fs.statSync(full);
-        } catch {
-          continue;
-        }
-        if (!scopeStat.isDirectory()) {
-          checkSymlinkInsideWorktree(full, wtReal);
-          continue;
-        }
-        for (const pkg of fs.readdirSync(full)) {
-          checkSymlinkInsideWorktree(path.join(full, pkg), wtReal);
-        }
-        continue;
-      }
-      checkSymlinkInsideWorktree(full, wtReal);
-    }
   }
 }
 
@@ -331,21 +245,39 @@ function findPnpmInstallRoots(wtRoot, rows) {
   return roots;
 }
 
-function ensureJsDepsInWorktree(wtRoot, rows) {
+function vitestBinsPresent(wtRoot) {
+  const rootBin = path.join(wtRoot, "node_modules", ".bin", "vitest");
+  const webBin = path.join(wtRoot, "web", "node_modules", ".bin", "vitest");
+  return fs.existsSync(rootBin) || fs.existsSync(webBin);
+}
+
+function ensureJsDepsInWorktree(_mainRoot, wtRoot, rows) {
   if (worktreeJsDepsReady) {
     return;
   }
-  for (const dir of findPnpmInstallRoots(wtRoot, rows)) {
-    pnpmInstallOffline(dir);
+  const needsVitest = rows.some((r) => r.meta.runner === "vitest");
+  const installRoots = needsVitest ? findPnpmInstallRoots(wtRoot, rows) : [];
+  if (installRoots.length > 0) {
+    for (const dir of installRoots) {
+      pnpmInstallOffline(dir);
+    }
+  } else if (needsVitest && !vitestBinsPresent(wtRoot)) {
+    throw new Error(
+      "vitest rows require pnpm-lock.yaml and offline install in the worktree",
+    );
   }
-  if (rows.some((r) => r.meta.runner === "vitest")) {
+  if (needsVitest) {
     assertWorkspaceLinksInWorktree(wtRoot);
   }
   worktreeJsDepsReady = true;
 }
 
 function venvPython(mainRoot) {
+  if (process.env.REVERT_PROOF_PYTHON) {
+    return process.env.REVERT_PROOF_PYTHON;
+  }
   const candidates = [
+    path.join(mainRoot, ".venv", "bin", "python3"),
     path.join(mainRoot, ".venv", "bin", "python"),
     path.join(mainRoot, ".venv", "Scripts", "python.exe"),
   ];
@@ -354,15 +286,7 @@ function venvPython(mainRoot) {
       return c;
     }
   }
-  return process.env.PYTHON ?? "python3";
-}
-
-function pythonEnvForWorktree(wtRoot) {
-  return {
-    ...process.env,
-    PYTHONPATH: wtRoot,
-    PYTHONDONTWRITEBYTECODE: "1",
-  };
+  return "python3";
 }
 
 function clearPythonBytecodeCaches(wtRoot) {
@@ -382,37 +306,6 @@ function clearPythonBytecodeCaches(wtRoot) {
     }
   }
   walk(wtRoot);
-}
-
-export function assertEditablePythonResolvesInWorktree(
-  wtRoot,
-  python,
-  moduleName = "service",
-) {
-  const r = spawnSync(
-    python,
-    [
-      "-c",
-      `import ${moduleName},os;print(os.path.realpath(${moduleName}.__file__))`,
-    ],
-    {
-      cwd: wtRoot,
-      env: pythonEnvForWorktree(wtRoot),
-      encoding: "utf8",
-    },
-  );
-  if (r.status !== 0) {
-    throw new Error(
-      `python import check for ${moduleName} failed: ${r.stderr || r.stdout}`,
-    );
-  }
-  const resolved = r.stdout.trim();
-  const wtReal = fs.realpathSync(wtRoot);
-  if (resolved !== wtReal && !resolved.startsWith(`${wtReal}${path.sep}`)) {
-    throw new Error(
-      `editable Python package ${moduleName} resolves outside worktree (${resolved})`,
-    );
-  }
 }
 
 let pythonIsolationChecked = false;
@@ -460,12 +353,27 @@ function removeWorktree(mainRoot, wtPath) {
   }
 }
 
+function killProcessGroup(child) {
+  if (!child?.pid) return;
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
 function runProcess(cmd, args, options) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
       ...options,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
     });
+    activeTestChild = child;
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (c) => {
@@ -480,11 +388,14 @@ function runProcess(cmd, args, options) {
     if (timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGKILL");
+        killProcessGroup(child);
       }, timeoutMs);
     }
     child.on("close", (code, signal) => {
       if (timer) clearTimeout(timer);
+      if (activeTestChild === child) {
+        activeTestChild = null;
+      }
       resolve({
         exitCode: code,
         signal,
@@ -497,95 +408,72 @@ function runProcess(cmd, args, options) {
   });
 }
 
-function countVitestExecuted(report) {
-  let executed = 0;
-  let passed = 0;
-  let failed = 0;
-  const failedAssertions = [];
-  if (!report?.testResults?.length) {
-    return {
-      executed: 0,
-      passed: 0,
-      failed: 0,
-      suiteError: report ? "no tests executed" : "no JSON report",
-      failedAssertions: [],
-    };
-  }
-  for (const file of report.testResults ?? []) {
-    if (file.status === "failed" && (!file.assertionResults || file.assertionResults.length === 0)) {
-      return {
-        executed: 0,
-        passed: 0,
-        failed: 0,
-        suiteError: file.message || "suite failed",
-        failedAssertions: [],
-      };
-    }
-    for (const t of file.assertionResults ?? []) {
-      if (t.status === "skipped" || t.status === "pending" || t.status === "todo") {
-        continue;
-      }
-      executed += 1;
-      if (t.status === "passed") passed += 1;
-      if (t.status === "failed") {
-        failed += 1;
-        failedAssertions.push({
-          name: t.fullName || t.title,
-          messages: t.failureMessages ?? [],
-        });
-      }
-    }
-  }
-  return { executed, passed, failed, suiteError: null, failedAssertions };
+function summarizeVitestCounts(parsed, testName) {
+  const selection = assessVitestSelection(parsed.tests, testName);
+  const executed = parsed.tests.filter(
+    (t) => !["skipped", "pending", "todo"].includes(t.status),
+  ).length;
+  const target = selection.target;
+  const passed = target?.status === "passed" ? 1 : 0;
+  const failed = target?.status === "failed" ? 1 : 0;
+  return {
+    executed,
+    passed,
+    failed,
+    suiteError: parsed.suiteError,
+    selection,
+    tests: parsed.tests,
+  };
 }
 
-function isVitestAssertionFailure(failedAssertions) {
-  if (!failedAssertions.length) return false;
-  const text = failedAssertions
-    .flatMap((f) => f.messages)
-    .join("\n");
-  return (
-    /AssertionError|expect\(|Expected|Received|toBe|toEqual/i.test(text) ||
-    failedAssertions.some((f) => f.messages.length > 0)
-  );
+function summarizePytestCounts(parsed, nodeId) {
+  const selection = assessPytestSelection(parsed.tests, nodeId);
+  const executed = parsed.tests.filter((t) => t.outcome !== "skipped").length;
+  return {
+    executed,
+    collectionError: parsed.collectionError,
+    selection,
+    tests: parsed.tests,
+    cases: selection.target
+      ? [
+          {
+            name: selection.target.nodeid,
+            outcome: selection.target.outcome,
+            revertProofAssertion: selection.target.revertProofAssertion,
+            revertProofRed: selection.target.revertProofRed,
+          },
+        ]
+      : [],
+  };
 }
 
-function parsePytestJunit(xmlText) {
-  const cases = [];
-  const caseRe = /<testcase\b([^>]*)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
-  let m;
-  while ((m = caseRe.exec(xmlText))) {
-    const attrs = m[1];
-    const body = m[2] ?? "";
-    const nameM = attrs.match(/\bname="([^"]*)"/);
-    const name = nameM ? nameM[1] : "";
-    if (/<skipped\b/.test(body)) continue;
-    let outcome = "passed";
-    if (/<failure\b/.test(body)) outcome = "failed";
-    else if (/<error\b/.test(body)) outcome = "error";
-    cases.push({ name, outcome, body });
-  }
-  const collectionErrors = /<collection errors="(\d+)"/.exec(xmlText);
-  if (collectionErrors && Number(collectionErrors[1]) > 0) {
-    return { executed: 0, cases, collectionError: true };
-  }
-  return { executed: cases.length, cases, collectionError: false };
-}
-
-async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
-  const { bin, cwd } = resolveVitest(wtRoot, meta.testFile);
-  const testRel = meta.testFile.replace(/^web\//, "");
+async function runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
+  const { bin, cwd, config } = resolveVitestProject(wtRoot, meta);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
   const testPattern = vitestTestNamePattern(meta.testName);
+  const testFileAbs = path.join(wtRoot, meta.testFile);
+  const testFileArg = path.relative(cwd, testFileAbs).replace(/\\/g, "/");
+  const baseConfigAbs =
+    config && path.isAbsolute(config)
+      ? config
+      : config
+        ? path.join(cwd, config)
+        : path.join(revertProofScriptsDir(wtRoot), "vitest.config.mjs");
+  const overlayAbs = path.join(
+    revertProofScriptsDir(wtRoot),
+    "revert-proof-vitest-overlay.mjs",
+  );
+  const overlayRel = path.relative(cwd, overlayAbs).split(path.sep).join("/");
   const args = [
     "run",
     "--config",
-    path.join(wtRoot, "scripts", "vitest.config.mjs"),
-    testRel,
+    overlayRel,
     "-t",
     testPattern,
     "--reporter=json",
-    `--outputFile=${jsonOut}`,
+    `--outputFile.json=${jsonOut}`,
+    "--",
+    testFileArg,
   ];
   const result = await runProcess(bin, args, {
     cwd,
@@ -593,6 +481,8 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
       ...process.env,
       FORCE_COLOR: "0",
       REVERT_PROOF_ROOT: wtRoot,
+      REVERT_PROOF_VITEST_BASE_CONFIG: baseConfigAbs,
+      REVERT_PROOF_PYTHON: venvPython(mainRoot),
     },
     timeoutMs,
   });
@@ -600,15 +490,23 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
   if (fs.existsSync(jsonOut)) {
     report = JSON.parse(fs.readFileSync(jsonOut, "utf8"));
   }
-  const counts = report
-    ? countVitestExecuted(report)
-    : { executed: 0, passed: 0, failed: 0, suiteError: "no JSON report", failedAssertions: [] };
+  const parsed = report
+    ? parseVitestJsonReport(report)
+    : { tests: [], suiteError: "no JSON report" };
+  const counts = summarizeVitestCounts(parsed, meta.testName);
   return {
-    command: `${path.relative(wtRoot, bin)} run ${meta.testFile} -t ${JSON.stringify(meta.testName)}`,
+    command: formatCommandForReport(wtRoot, bin, args),
     ...result,
     counts,
     reportPath: jsonOut,
   };
+}
+
+function pytestSupportsNoCov(python) {
+  const help = spawnSync(python, ["-m", "pytest", "--help"], {
+    encoding: "utf8",
+  });
+  return help.status === 0 && help.stdout.includes("--no-cov");
 }
 
 async function runPytest(
@@ -620,32 +518,63 @@ async function runPytest(
   timeoutMs,
   artifactsDir,
 ) {
-  const xmlOut = path.join(artifactsDir, `${slug}-${phase}-pytest.xml`);
+  const jsonOut = path.join(artifactsDir, `${slug}-${phase}-pytest.json`);
   const python = venvPython(mainRoot);
   const nodeId = pytestNodeId(meta.testFile, meta.testName);
-  const args = [
-    "-m",
-    "pytest",
-    nodeId,
-    `--junitxml=${xmlOut}`,
-    "-o",
-    "addopts=",
-  ];
+  const args = buildPytestArgv(nodeId, REVERT_PROOF_PYTEST_PLUGIN_MODULE, {
+    includeNoCov: pytestSupportsNoCov(python),
+  });
+  if (!pytestArgvUsesNodeIdNotK(args)) {
+    throw new Error(`row ${slug}: pytest argv must select by node id, never -k`);
+  }
+  const scriptsDir = revertProofScriptsDir(wtRoot);
+  const baseEnv = pythonEnvForWorktree(wtRoot);
+  const pythonPath = [scriptsDir, baseEnv.PYTHONPATH].filter(Boolean).join(path.delimiter);
   const result = await runProcess(python, args, {
     cwd: wtRoot,
-    env: { ...pythonEnvForWorktree(wtRoot), FORCE_COLOR: "0" },
+    env: {
+      ...baseEnv,
+      FORCE_COLOR: "0",
+      PYTHONPATH: pythonPath,
+      REVERT_PROOF_PYTEST_JSON: jsonOut,
+    },
     timeoutMs,
   });
-  let parsed = { executed: 0, cases: [], collectionError: false };
-  if (fs.existsSync(xmlOut)) {
-    parsed = parsePytestJunit(fs.readFileSync(xmlOut, "utf8"));
+  const exitCode = result.exitCode ?? 1;
+  let pluginParsed = { tests: [], collectionError: exitCode !== 0 };
+  if (fs.existsSync(jsonOut)) {
+    pluginParsed = parsePytestPluginJson(fs.readFileSync(jsonOut, "utf8"), exitCode);
+  } else if (exitCode !== 0) {
+    pluginParsed = { tests: [], collectionError: true };
   }
+  const counts = summarizePytestCounts(pluginParsed, nodeId);
   return {
-    command: `python -m pytest ${nodeId}`,
+    command: formatCommandForReport(wtRoot, python, args),
     ...result,
-    counts: parsed,
-    reportPath: xmlOut,
+    counts,
+    reportPath: jsonOut,
   };
+}
+
+function formatCommandForReport(wtRoot, executable, args) {
+  let binLabel = executable;
+  try {
+    const wtReal = path.resolve(wtRoot);
+    const exeReal = path.resolve(executable);
+    if (exeReal.startsWith(`${wtReal}${path.sep}`)) {
+      binLabel = path.relative(wtReal, exeReal).split(path.sep).join("/");
+    } else {
+      binLabel = path.basename(executable);
+    }
+  } catch {
+    binLabel = path.basename(executable);
+  }
+  const parts = [binLabel, ...args].map((p) => {
+    const s = String(p);
+    const sanitized = sanitizeReportText(s);
+    return /\s/.test(sanitized) ? JSON.stringify(sanitized) : sanitized;
+  });
+  return parts.join(" ");
 }
 
 async function runTestPhase(
@@ -658,7 +587,7 @@ async function runTestPhase(
   artifactsDir,
 ) {
   if (meta.runner === "vitest") {
-    return runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
+    return runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
   }
   return runPytest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
 }
@@ -676,8 +605,6 @@ function runTscCheck(wtRoot) {
   const output = `${r.stdout ?? ""}${r.stderr ?? ""}`;
   return { ok: r.status === 0, skipped: false, output };
 }
-
-const GIT_APPLY_OPTS = ["--whitespace=error", "-C1"];
 
 function findPatchArtifactFiles(wtRoot) {
   const found = [];
@@ -711,17 +638,13 @@ function removePatchArtifactFiles(wtRoot) {
   }
 }
 
-function applyPatch(wtRoot, patchPath) {
-  const check = gitAt(wtRoot, ["apply", "--check", ...GIT_APPLY_OPTS, patchPath]);
-  if (check.status !== 0) {
-    throw new Error(
-      `git apply --check failed: ${check.stderr || check.stdout}`,
-    );
-  }
-  const apply = gitAt(wtRoot, ["apply", ...GIT_APPLY_OPTS, patchPath]);
-  if (apply.status !== 0) {
+function applyPatch(wtRoot, patchPath, patchText) {
+  const applyInput = patchText ?? fs.readFileSync(patchPath, "utf8");
+  try {
+    gitApplyPatchStrict(wtRoot, applyInput);
+  } catch (err) {
     removePatchArtifactFiles(wtRoot);
-    throw new Error(`git apply failed: ${apply.stderr || apply.stdout}`);
+    throw err;
   }
   const artifacts = findPatchArtifactFiles(wtRoot);
   if (artifacts.length > 0) {
@@ -759,19 +682,20 @@ function trimFailureOutput(output, maxLines = 40) {
   return picked.join("\n").trim();
 }
 
-function assertExactlyOneTest(slug, phase, run) {
+function assertExactlyOneTest(slug, phase, run, meta) {
   if (run.timedOut) {
     throw new Error(`row ${slug}: ${phase} timed out`);
   }
-  const executed = metaRunnerCount(run);
-  if (executed === 0) {
+  const sel = run.counts.selection;
+  if (!sel?.ok) {
+    const reason = sel?.reason ?? "unknown";
     throw new Error(
-      `row ${slug}: ${phase} ran 0 tests (selection/filter error; never a pass)`,
+      `row ${slug}: ${phase} test selection failed (${reason}; never a pass)`,
     );
   }
-  if (executed !== 1) {
+  if (metaRunnerCount(run) === 0) {
     throw new Error(
-      `row ${slug}: ${phase} must run exactly 1 test (got ${executed})`,
+      `row ${slug}: ${phase} ran 0 tests (selection/filter error; never a pass)`,
     );
   }
 }
@@ -785,55 +709,26 @@ function metaRunnerCount(run) {
   return run.counts.executed;
 }
 
-export function rejectPatchedVitestGreen(kind, slug) {
-  if (kind === "green") {
-    throw new Error(
-      `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
-    );
-  }
-}
-
-function classifyPatchedVitest(run) {
-  if (run.counts.suiteError) {
-    return "build break";
-  }
-  if (run.counts.failed !== 1) {
-    return "not single assertion failure";
-  }
-  if (!isVitestAssertionFailure(run.counts.failedAssertions)) {
-    return "build break";
-  }
-  return "assertion";
-}
-
-function classifyPatchedPytest(run) {
-  if (run.counts.collectionError) return "build break";
-  const cases = run.counts.cases ?? [];
-  if (cases.length !== 1) return "not single test";
-  const c = cases[0];
-  if (c.outcome === "error") return "build break";
-  if (c.outcome === "failed") return "assertion";
-  if (c.outcome === "passed") return "green";
-  return "unknown";
-}
-
 async function runRow(mainRoot, wtRoot, row, artifactsDir) {
-  const { slug, patchPath, meta } = row;
-  validateMeta(meta, slug);
-  const patchText = fs.readFileSync(patchPath, "utf8");
+  const { slug, patchPath, patchText, meta } = row;
+  validateRowMeta(meta, slug);
+  validateRowProofPr(meta, slug, row.prNumber);
+  validateTestFileRel(meta.testFile, wtRoot);
+  validatePatchStructure(patchText, slug);
+  validatePatchRevertProofsScope(patchText, slug, row.prNumber);
   validatePatchTouchesOnlyProduction(patchText, slug);
+  validatePatchProductionReachable(patchText, slug, wtRoot);
 
-  const timeoutMs = (meta.timeoutSec ?? DEFAULT_TIMEOUT_SEC) * 1000;
+  const timeoutSec = parseTimeoutSec(meta.timeoutSec, slug);
+  const timeoutMs = timeoutSec * 1000;
   const testLabel = `${meta.testFile} :: ${meta.testName}`;
 
   resetWorktree(wtRoot);
 
   if (meta.runner === "pytest") {
-    ensurePythonIsolation(
-      mainRoot,
-      wtRoot,
-      meta.pythonModule ?? "service",
-    );
+    const mod = meta.pythonModule ?? "service";
+    validatePythonModule(mod);
+    ensurePythonIsolation(mainRoot, wtRoot, mod);
   }
 
   const baseline = await runTestPhase(
@@ -848,17 +743,31 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   if (baseline.timedOut) {
     throw new Error(`row ${slug}: baseline timed out`);
   }
-  assertExactlyOneTest(slug, "baseline", baseline);
+  try {
+    assertExactlyOneTest(slug, "baseline", baseline, meta);
+  } catch (err) {
+    const snippet = trimFailureOutput(baseline.output || "");
+    const base = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      snippet ? `${base}\n--- baseline output ---\n${snippet}` : base,
+    );
+  }
   if (meta.runner === "vitest") {
     if (baseline.counts.failed > 0 || baseline.counts.passed !== 1) {
-      throw new Error(`row ${slug}: baseline test must PASS`);
+      const snippet = trimFailureOutput(baseline.output || "");
+      throw new Error(
+        `row ${slug}: baseline test must PASS${snippet ? `\n--- baseline output ---\n${snippet}` : ""}`,
+      );
     }
   } else if (baseline.counts.cases?.[0]?.outcome !== "passed") {
-    throw new Error(`row ${slug}: baseline test must PASS`);
+    const snippet = trimFailureOutput(baseline.output || "");
+    throw new Error(
+      `row ${slug}: baseline test must PASS${snippet ? `\n--- baseline output ---\n${snippet}` : ""}`,
+    );
   }
 
   try {
-    applyPatch(wtRoot, patchPath);
+    applyPatch(wtRoot, patchPath, patchText);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`row ${slug}: ${msg}`);
@@ -871,8 +780,8 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   if (meta.runner === "vitest") {
     const tsc = runTscCheck(wtRoot);
     if (!tsc.ok && !tsc.skipped) {
-      if (meta.allowTypeError) {
-        tscNote = `allowTypeError: ${meta.allowTypeErrorReason ?? meta.allowTypeError ?? "yes"}`;
+      if (allowTypeErrorEnabled(meta)) {
+        tscNote = `allowTypeError: ${meta.allowTypeErrorReason ?? "yes"}`;
       } else {
         throw new Error(
           `row ${slug}: patch breaks build (tsc --noEmit -p web failed; proves nothing)`,
@@ -900,18 +809,32 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       `row ${slug}: patch breaks build (proves nothing)`,
     );
   }
-  assertExactlyOneTest(slug, "patched", patched);
+  assertExactlyOneTest(slug, "patched", patched, meta);
 
   if (meta.runner === "vitest") {
-    const kind = classifyPatchedVitest(patched);
+    const kind = classifyPatchedVitest({
+      counts: patched.counts,
+    });
     rejectPatchedVitestGreen(kind, slug);
     if (kind === "build break" || kind === "not single assertion failure") {
+      const target = patched.counts.selection?.target;
+      const failedWithoutMeta =
+        target?.status === "failed" && target.revertProofAssertion !== true;
+      if (failedWithoutMeta) {
+        assertVitestNodeAssertFailClosed(slug, target);
+        const hint = /^AssertionError\b/.test(target.failureMessage ?? "")
+          ? "for a real expect() failure, suspect a mismatched chai copy — AssertionError must come from import { chai } from \"vitest\", not a separate chai package"
+          : "non-assertion error";
+        throw new Error(
+          `row ${slug}: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; ${hint})`,
+        );
+      }
       throw new Error(
         `row ${slug}: patch breaks build or fails without assertion (proves nothing)`,
       );
     }
   } else {
-    const kind = classifyPatchedPytest(patched);
+    const kind = classifyPatchedPytest({ counts: patched.counts });
     if (kind === "green") {
       throw new Error(
         `row ${slug}: test stayed GREEN after revert patch (expected failure)`,
@@ -923,6 +846,7 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       );
     }
   }
+  assertRedLine(slug, meta.red, patched.counts.selection.target, meta.runner);
 
   const failureText = vitestFailureSnippet(patched.reportPath, patched.output);
 
@@ -979,7 +903,7 @@ function buildReport(results, errors) {
   }
   for (const e of errors) {
     lines.push(
-      `| ${escapeCell(e.slug)} | | | | **ERROR: ${escapeCell(e.message)}** |`,
+      `| ${escapeCell(e.slug)} | | | | **ERROR: ${escapeCell(sanitizeReportText(e.message))}** |`,
     );
   }
   lines.push("");
@@ -987,7 +911,7 @@ function buildReport(results, errors) {
     lines.push(`### ${r.slug}`);
     lines.push("");
     lines.push("```");
-    lines.push(r.failureOutput || "(no output captured)");
+    lines.push(sanitizeReportText(r.failureOutput || "(no output captured)"));
     lines.push("```");
     lines.push("");
   }
@@ -997,24 +921,57 @@ function buildReport(results, errors) {
 function parseArgs(argv) {
   const pr = argv[2];
   if (!pr || pr.startsWith("-")) {
-    console.error("Usage: node scripts/revert-proof.mjs <pr-number> [--row <slug>]");
+    console.error(
+      "Usage: node scripts/revert-proof.mjs <pr-number> [--prove] [--replay] [--row <slug>]",
+    );
     process.exit(2);
   }
   let row = null;
+  let prove = false;
+  let replay = false;
   for (let i = 3; i < argv.length; i++) {
     if (argv[i] === "--row" && argv[i + 1]) {
       row = argv[++i];
+    } else if (argv[i] === "--prove") {
+      prove = true;
+    } else if (argv[i] === "--replay") {
+      replay = true;
     }
   }
-  return { prNumber: pr, row };
+  if (prove && replay) {
+    console.error("revert-proof: --prove and --replay are mutually exclusive");
+    process.exit(2);
+  }
+  return { prNumber: pr, row, prove, replay };
 }
 
-async function mainAsync() {
+function gitRunForValidation(root, args) {
+  return gitAt(root, args);
+}
+
+function applyStackedPrGuards(mainRoot, prNumber) {
+  const parentPr = process.env.REVERT_PROOF_STACK_PARENT?.trim();
+  if (parentPr) {
+    validatePrNumber(parentPr);
+    const changedRaw = process.env.REVERT_PROOF_CHANGED_FILES?.trim();
+    if (changedRaw) {
+      const changedPaths = changedRaw.split("\n").map((l) => l.trim()).filter(Boolean);
+      validateStackedChildProofScope(prNumber, parentPr, changedPaths);
+    }
+    validateChildBranchIncludesParentProofsOnMain(mainRoot, prNumber, parentPr, {
+      runGit: gitRunForValidation,
+    });
+  }
+}
+
+export async function mainAsync(argv = process.argv) {
   worktreeJsDepsReady = false;
   pythonIsolationChecked = false;
 
-  const { prNumber, row: onlySlug } = parseArgs(process.argv);
+  const { prNumber, row: onlySlug, prove, replay } = parseArgs(argv);
+  validatePrNumber(prNumber);
   const mainRoot = mainCheckoutRoot();
+  applyStackedPrGuards(mainRoot, prNumber);
   const before = checkoutSnapshot(mainRoot);
 
   if (before.porcelain.trim()) {
@@ -1023,25 +980,45 @@ async function mainAsync() {
     );
   }
 
-  const head = before.head;
-  const rows = listRows(mainRoot, prNumber, onlySlug);
+  let worktreeRef = before.head;
+  let rowSourceRef = "HEAD";
+  if (replay) {
+    const pullHead = resolvePullRequestHead(mainRoot, prNumber, {
+      runGit: gitAt,
+      fetchRemote: process.env.REVERT_PROOF_SKIP_FETCH ? null : "origin",
+    });
+    assertReplayPullHeadTreeKey(mainRoot, prNumber, pullHead, { runGit: gitAt });
+    worktreeRef = pullHead;
+    rowSourceRef = pullHead;
+  }
+
+  const rows = listRows(mainRoot, prNumber, onlySlug, rowSourceRef);
   const wtPath = path.join(
     os.tmpdir(),
     `revert-proof-wt-${path.basename(mainRoot)}-${process.pid}`,
   );
   const artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), "revert-proof-artifacts-"));
+  activeArtifactsDir = artifactsDir;
 
   const results = [];
   const errors = [];
 
   globalCleanup = () => {
+    if (activeTestChild?.pid) {
+      killProcessGroup(activeTestChild);
+      activeTestChild = null;
+    }
     removeWorktree(mainRoot, wtPath);
     gitAt(mainRoot, ["worktree", "prune"]);
+    if (activeArtifactsDir && fs.existsSync(activeArtifactsDir)) {
+      fs.rmSync(activeArtifactsDir, { recursive: true, force: true });
+      activeArtifactsDir = null;
+    }
   };
 
   try {
-    addDetachedWorktree(mainRoot, wtPath, head);
-    ensureJsDepsInWorktree(wtPath, rows);
+    addDetachedWorktree(mainRoot, wtPath, worktreeRef);
+    ensureJsDepsInWorktree(mainRoot, wtPath, rows);
 
     for (const row of rows) {
       try {
@@ -1060,7 +1037,6 @@ async function mainAsync() {
   } finally {
     globalCleanup();
     globalCleanup = null;
-    fs.rmSync(artifactsDir, { recursive: true, force: true });
     try {
       assertCheckoutUnchanged(mainRoot, before, prNumber);
     } catch (err) {
@@ -1083,6 +1059,14 @@ async function mainAsync() {
 
   if (errors.length > 0) {
     process.exit(1);
+  }
+
+  if (prove) {
+    const treeKey = computeRevertProofTreeKey(mainRoot, before.head, {}, gitAt);
+    writeRevertProofHeadRecordFile(mainRoot, prNumber, before.head, treeKey);
+    console.log(
+      `revert-proof: wrote head record treeKey=${treeKey} commit=${before.head} (informational)`,
+    );
   }
 }
 

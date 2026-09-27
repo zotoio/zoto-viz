@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "vitest JSON report parsing > (red-line) keeps the first line of the first failure message",
+  "description": "Drop the failure message first line",
+  "red": "AssertionError: expected null to be 'AssertionError: expected 2 to be 1 //\u2026' // Object.is equality"
+}

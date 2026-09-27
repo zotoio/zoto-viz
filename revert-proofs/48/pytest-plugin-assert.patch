@@ -1,0 +1,14 @@
+diff --git a/scripts/revert_proof_pytest_plugin.py b/scripts/revert_proof_pytest_plugin.py
+index 466ff50..0000000 100644
+--- a/scripts/revert_proof_pytest_plugin.py
++++ b/scripts/revert_proof_pytest_plugin.py
+@@ -22,8 +22,7 @@ def _rewritten_assert_in_test(excinfo, item) -> tuple[bool, str | None]:
+             continue
+         if frame_path != test_path:
+             continue
+-        statement = getattr(entry, "statement", None)
+-        stmt = str(statement).strip() if statement is not None else ""
++        stmt = (getattr(entry, "statement", None) or "").strip()
+         if stmt.startswith("assert "):
+             return True, stmt
+         return False, stmt or None

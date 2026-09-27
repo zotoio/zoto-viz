@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-vitest-brand.mjs b/scripts/revert-proof-vitest-brand.mjs
+index 78f5370..0000000 100644
+--- a/scripts/revert-proof-vitest-brand.mjs
++++ b/scripts/revert-proof-vitest-brand.mjs
+@@ -94,5 +94,7 @@ export function takeSoftFailure(test) {
+ 
+ /** @param {unknown} err */
+ export function serializeVitestRed(err) {
+-  return (isObject(err) && redAtBrand.get(err)) || null;
++  return isObject(err) && branded.has(err)
++    ? { actual: toJsonValue(err.actual), expected: toJsonValue(err.expected) }
++    : null;
+ }
