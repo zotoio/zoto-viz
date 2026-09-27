@@ -107,7 +107,7 @@ describe("media ask focus (chromium)", () => {
     gumCalls = await page.evaluate(() => (window as Window & { __gumCalls?: number }).__gumCalls ?? 0);
     expect(gumCalls).toBe(0);
     await openMicAsk(page);
-    await expect.poll(async () => await page.locator("[data-media-ask]").count(), { timeout: 500 }).toBe(0);
+    expect(await page.locator("[data-media-ask]").count()).toBe(0);
     await page.close();
   });
 
