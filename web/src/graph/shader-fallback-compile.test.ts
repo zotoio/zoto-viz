@@ -52,6 +52,19 @@ describe("tile shader compile latch", () => {
     wall.remove();
   });
 
+  it("debug-hook-restored", () => {
+    const { host, wall } = wallHost();
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const rd = host.renderer as THREE.WebGLRenderer;
+    rd.debug = { checkShaderErrors: false, onShaderError: null };
+    failCompileWith(host, "pane-a", scene, camera, { shaderLog: "err" });
+    expect(rd.debug.checkShaderErrors).toBe(false);
+    expect(rd.debug.onShaderError).toBeNull();
+    host.dispose();
+    wall.remove();
+  });
+
   it("compile-failure-detected", () => {
     const { host, wall } = wallHost();
     const scene = new THREE.Scene();

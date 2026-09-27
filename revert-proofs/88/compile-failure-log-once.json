@@ -1,1 +1,5 @@
-{"testFile":"src/graph/shader-fallback-compile.test.ts","testName":"tile shader compile latch > compile-failure-log-once","redValue":600}
+{
+  "testFile": "src/graph/shader-fallback-compile.test.ts",
+  "testName": "tile shader compile latch > compile-failure-log-once",
+  "redValue": "AssertionError: expected \"warn\" to be called 1 times, but got 0 times"
+}
