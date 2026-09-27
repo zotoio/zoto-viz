@@ -4,7 +4,7 @@
   "testName": "revert-proof-lib guards > (pythonModule) rejects injection in pythonModule",
   "description": "Drop pythonModule validation",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": "invalid pythonModule: os;print(\"x\")#"
   }
 }

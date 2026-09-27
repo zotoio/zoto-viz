@@ -4,7 +4,7 @@
   "testName": "revert-proof-lib guards > (pr-number) rejects path traversal PR numbers",
   "description": "Drop PR number validation",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": "invalid PR number: ../.."
   }
 }
