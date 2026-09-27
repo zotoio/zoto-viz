@@ -10,7 +10,7 @@ import pytest
 from aiohttp import ClientSession
 
 from service import access, monitor, request_guard
-from service.request_guard import HANDLER_ERROR_BODY, HOST_REJECT_BODY
+from service.request_guard import HANDLER_ERROR_BODY, HOST_HEADER_INVALID_BODY, HOST_REJECT_BODY
 from tests.monitor_app_test_util import host_header, make_app_server, raw_http_url
 
 SANDBOX_SNIPPET = "zoto-viz-plugin-sandbox-leak"
@@ -65,7 +65,7 @@ async def _host_injection() -> None:
                 assert resp.status == 400
                 assert resp.content_type == "text/plain"
                 body = await resp.text()
-                assert "doesn't accept the address" in body
+                assert body == HOST_HEADER_INVALID_BODY
                 assert "evil" not in body
                 assert "connect-src" not in body
                 _assert_frame_headers(resp)
@@ -133,7 +133,7 @@ async def _frame_case(case: str) -> None:
                     headers={"Host": f"localhost.:{port}"},
                 ) as resp:
                     assert resp.status == 400
-                    assert await resp.text() == HOST_REJECT_BODY
+                    assert await resp.text() == HOST_HEADER_INVALID_BODY
                     _assert_frame_headers(resp)
                 return
             if case == "__host_format_missing_port__":
@@ -142,7 +142,7 @@ async def _frame_case(case: str) -> None:
                     headers={"Host": "127.0.0.1"},
                 ) as resp:
                     assert resp.status == 400
-                    assert await resp.text() == HOST_REJECT_BODY
+                    assert await resp.text() == HOST_HEADER_INVALID_BODY
                     _assert_frame_headers(resp)
                 return
             if case == "__host_format_zone_id__":
@@ -151,7 +151,7 @@ async def _frame_case(case: str) -> None:
                     headers={"Host": f"[fe80::1%eth0]:{port}"},
                 ) as resp:
                     assert resp.status == 400
-                    assert await resp.text() == HOST_REJECT_BODY
+                    assert await resp.text() == HOST_HEADER_INVALID_BODY
                     _assert_frame_headers(resp)
                 return
             if case == "__host_format_injection__":

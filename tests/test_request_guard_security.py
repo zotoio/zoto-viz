@@ -6,7 +6,7 @@ import asyncio
 from aiohttp import ClientSession
 
 from service import request_guard
-from service.request_guard import HOST_REJECT_BODY, normalize_host_header_key, validate_allowed_host_entry
+from service.request_guard import HOST_HEADER_INVALID_BODY, normalize_host_header_key, validate_allowed_host_entry
 from tests.monitor_app_test_util import host_header, make_app_server
 
 
@@ -58,6 +58,6 @@ def test_multiple_host_headers_rejected(monkeypatch) -> None:
                     headers=host_header(port),
                 ) as resp:
                     assert resp.status == 400
-                    assert await resp.text() == HOST_REJECT_BODY
+                    assert await resp.text() == HOST_HEADER_INVALID_BODY
 
     asyncio.run(run())

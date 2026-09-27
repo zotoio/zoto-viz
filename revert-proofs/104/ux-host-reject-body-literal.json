@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
-  "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_host_reject_400_body_malformed_and_disallowed",
-  "red": "AssertionError: assert '' == 'This zoto-vi...erver config.'",
-  "description": "Host reject 400 UX copy must match the agreed literal exactly (full equality).",
+  "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_host_reject_disallowed_body",
+  "red": "",
+  "description": "Disallowed Host 400 must match HOST_REJECT_BODY exactly (full equality).",
   "timeoutSec": 120
 }

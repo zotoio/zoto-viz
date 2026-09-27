@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_path_reject_body",
+  "red": "",
+  "description": "Rejected path 400 must match PATH_REJECT_BODY exactly (full equality).",
+  "timeoutSec": 120
+}
