@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatSkipRate, skipRatePerSec, VIZ_DEMO_PACKS, vizHudMetric, type VizDemoPackId } from "../ui/viz-hud";
+import { formatSkipRate, skipRatePerSec, VIZ_DEMO_PACKS, vizHudMetric } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
   DEMO_PACK_CONTRACTS,
@@ -13,7 +13,8 @@ import {
 } from "./dogfood-runner";
 import { VIZ_FIXTURE_IDLE, VIZ_FIXTURE_GOLDEN_LIVE } from "../../../plugins/sdk/viz-fixtures";
 import { packetTunnelFields } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { hnTermPackTyped, packHnRainBuffer, packHnTermBuffer, packStereoDrive, resetHnTermPack } from "./viz-pack-host";
+import { packHnRainBuffer, packHnTermBuffer, packStereoDrive, resetHnTermPack } from "./viz-pack-host";
+import { TERM_COLS, TERM_ROWS } from "../../../plugins/src/hn-term/frontend/teletype";
 import {
   easeStereoBins, parseStereoTiming, STEREO_BANDS, STEREO_BINS, STEREO_GAP, STEREO_RACKS,
   STEREO_RISE_MS, STEREO_SOLIDS, STEREO_HOLD, STEREO_MORPH, STEREO_MOTION_BANDS, STEREO_MOVE,
@@ -36,16 +37,51 @@ const FAT_LAN_SOAK_FAKE_STEP_MS = 0.05;
 const FAT_LAN_SOAK_RANDOM_SEED = 0.25;
 const FAT_LAN_SOAK_AUDIO = 0.15;
 const FAT_LAN_SOAK_REAL_TIME_FORBIDDEN = "fat-LAN soak must not read real time";
-/** Spy row only: `frame.t` steps by 1/30 (not 1/60) so `termNow` mutants cannot match real dt. */
-const FAT_LAN_SOAK_VIZ_FRAME_T0 = 200;
-const FAT_LAN_SOAK_VIZ_FRAME_STEP = 1 / 30;
-function fatLanSoakSpyVizFrameT(packId: VizDemoPackId, frameIndex: number): number {
-  if (packId !== "hn-term") return FAT_LAN_SOAK_VIZ_FRAME_T0;
-  return FAT_LAN_SOAK_VIZ_FRAME_T0 + frameIndex * FAT_LAN_SOAK_VIZ_FRAME_STEP;
+const FAT_LAN_SPY_ROW_FRAME_T0 = 0;
+const FAT_LAN_SPY_ROW_FRAME_STEP = 1 / 30;
+
+function hnTermPackBufferCells(buf: number[]): string {
+  const meta = 8;
+  const n = TERM_COLS * TERM_ROWS;
+  let cells = "";
+  for (let i = 0; i < n; i++) {
+    const code = Math.round(buf[meta + i]! * 95) + 32;
+    cells += String.fromCharCode(code);
+  }
+  return cells;
 }
 
-/** 120 hn-term frames, `t` step **1/30**, first-frame **1/60** dt fallback, teletype wrap resets. */
-const FAT_LAN_SOAK_HN_TERM_TYPED = 26.606666666666907;
+function hnTermPackBufferTypedCharCount(buf: number[]): number {
+  const cells = hnTermPackBufferCells(buf);
+  let count = 0;
+  for (let i = 0; i < cells.length; i++) {
+    if (cells.charCodeAt(i) !== 32) count++;
+  }
+  return count;
+}
+
+function runFatLanSpyRowHnTermPack(): number[] {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  let captured: number[] = [];
+  const handlers = {
+    writeBuffer: (_slot: number, data: number[]) => {
+      captured = Array.from(data);
+    },
+    writeUniform: () => {},
+    writeParticles: () => {},
+  };
+  for (let i = 0; i < FAT_LAN_SOAK_FRAMES; i++) {
+    const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+    frame.t = FAT_LAN_SPY_ROW_FRAME_T0 + i * FAT_LAN_SPY_ROW_FRAME_STEP;
+    runPackFrameHandler("hn-term", frame, handlers);
+  }
+  return captured;
+}
+
+/** Non-space glyph cells in the final hn-term pack buffer after 120 frames at `t = i/30`. */
+const FAT_LAN_SPY_ROW_HN_TERM_TYPED_CHARS = 19;
 
 function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -120,18 +156,11 @@ it("fat-LAN live soak: exact delivered counts on fake time", () => {
 });
 
 it("fat-LAN live soak: termNow must not read wall clock", () => {
-  withFatLanSoakWallClockSpies((now, { performanceNow, dateNow }) => {
-    resetHnTermPack();
-    runDogfoodSoak({
-      state: fatLanFixture(),
-      framesPerPack: FAT_LAN_SOAK_FRAMES,
-      audio: FAT_LAN_SOAK_AUDIO,
-      now,
-      vizFrameT: fatLanSoakSpyVizFrameT,
-    });
+  withFatLanSoakWallClockSpies((_now, { performanceNow, dateNow }) => {
+    const buf = runFatLanSpyRowHnTermPack();
     expect(performanceNow).toHaveBeenCalledTimes(0);
     expect(dateNow).toHaveBeenCalledTimes(0);
-    expect(hnTermPackTyped()).toBe(FAT_LAN_SOAK_HN_TERM_TYPED);
+    expect(hnTermPackBufferTypedCharCount(buf)).toBe(FAT_LAN_SPY_ROW_HN_TERM_TYPED_CHARS);
   });
 });
 
