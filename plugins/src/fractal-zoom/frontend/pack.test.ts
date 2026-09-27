@@ -243,14 +243,14 @@ describe("fractal-zoom shipped pack", () => {
     expect(FRONT).toContain("writeBuffer");
     expect(FRONT).toContain("onFrame");
     expect(FRONT).toContain("onConfig");
-    expect(FRONT.match(/zoto\.onFrame\s*=/g)?.length).toBe(1);
-    expect(FRONT).toContain('from "../../../sdk/plugin-sandbox"');
+    expect(FRONT).toContain("vizHost().onFrame");
+    expect(FRONT).toContain('import type { ZotoVizPluginHost } from "../../../sdk/plugin-sandbox"');
     expect(FRONT).not.toMatch(/declare const zoto/);
-    expect(FRONT).toContain("globalThis.zoto");
+    expect(FRONT).not.toMatch(/\bconst zoto\s*=/);
   });
 
   it("caches config from onConfig (no getConfig per frame)", () => {
-    const onFrameStart = FRONT.indexOf("zoto.onFrame");
+    const onFrameStart = FRONT.indexOf("vizHost().onFrame");
     const onFrameSlice = FRONT.slice(onFrameStart, onFrameStart + 600);
     expect(onFrameSlice).not.toContain("getConfig");
     expect(FRONT).toMatch(/let cfg:\s*Record<string,\s*string>/);
@@ -498,7 +498,7 @@ describe("fractal-zoom shipped pack", () => {
       resetFractalDrive();
     }
     expect(fractalPointerState().dragging).toBe(false);
-    expect(FRONT.match(/zoto\.onFrame\s*=/g)?.length).toBe(1);
+    expect(FRONT.match(/vizHost\(\)\.onFrame\s*=/g)?.length).toBe(1);
   });
 
   it("detaches pointer listeners on dispose", () => {
