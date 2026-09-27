@@ -1,0 +1,11 @@
+{
+  "pr": 101,
+  "revertRows": [
+    {
+      "patch": "revert-proofs/101/termNow-performance-now.patch",
+      "testFile": "src/plugins/dogfood.test.ts",
+      "testName": "^fat-LAN live soak: all three packs under budget or honest skips$",
+      "red": " FAIL  src/plugins/dogfood.test.ts > viz dogfood gates > fat-LAN live soak: all three packs under budget or honest skips\nError: fat-LAN soak must not read real time\n ❯ Object.forbidRealTime src/plugins/dogfood.test.ts:44:11\n     42|   vi.spyOn(Math, \"random\").mockReturnValue(FAT_LAN_SOAK_RANDOM_SEED);\n     43|   const forbidRealTime = () => {\n     44|     throw new Error(FAT_LAN_SOAK_REAL_TIME_FORBIDDEN);\n       |           ^\n     45|   };\n     46|   vi.spyOn(performance, \"now\").mockImplementation(forbidRealTime);\n ❯ termNow src/plugins/viz-pack-host.ts:53:59\n ❯ hnTermFrameBuffer src/plugins/viz-pack-host.ts:62:15\n ❯ runPackFrameHandler src/plugins/viz-pack-host.ts:186:31\n ❯ src/plugins/dogfood-runner.ts:179:61\n ❯ VizFrameBudget.deliver src/plugins/viz-host.ts:522:5\n ❯ dogfoodTick src/plugins/dogfood-runner.ts:179:24\n ❯ runDogfoodSoak src/plugins/dogfood-runner.ts:272:20\n ❯ src/plugins/dogfood.test.ts:336:7\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯"
+    }
+  ]
+}
