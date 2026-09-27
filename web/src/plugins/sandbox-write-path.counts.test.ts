@@ -71,7 +71,7 @@ describe("sandbox write path counts (#129)", () => {
   });
 
   describe("1 boot ready and timeout counts", () => {
-    it("reaches ready with 0 timeouts; +15s fake time still 0 timeouts", async () => {
+    it("reaches ready with 0 timeouts; 15s fake time still 0 timeouts", async () => {
       setSandboxMsgTimeoutMs(2_000);
       const box = new PluginSandbox();
       const booted = await box
