@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_non_ascii_pack_id_in_path_rejected",
+  "red": "AssertionError: assert 200 == 404",
+  "description": "Non-ASCII pack_id in the pack-assets path must be rejected before serving.",
+  "timeoutSec": 120
+}

@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_pack_asset_accepts_csrf_cookie_without_header",
+  "red": "AssertionError: assert 401 == 200",
+  "description": "Pack-assets session binding must accept the CSRF cookie when the header is absent.",
+  "timeoutSec": 120
+}
