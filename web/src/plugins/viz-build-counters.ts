@@ -1,6 +1,6 @@
 /**
  * Optional per-build work tallies for dogfood gates. Stripped from production
- * bundles when `__VIZ_BUILD_COUNTERS__` is false (see vite.config.ts).
+ * bundles when `__VIZ_BUILD_COUNTERS__` is false (see vite.config.mjs).
  */
 
 declare const __VIZ_BUILD_COUNTERS__: boolean | undefined;
