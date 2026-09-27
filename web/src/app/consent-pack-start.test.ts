@@ -10,7 +10,8 @@ import { bootMosaicPackStartLayout } from "./mosaic-boot-pack-start";
 import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
 import { pickMosaicPaneWith } from "./mosaic-pane-pick";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
-import { reconcileMosaicTilesWithMode } from "./boot-view-restore";
+import { mosaicReloadLayoutTiles } from "./mosaic-reload-layout";
+import { mosaicTilePanePickHandler } from "./mosaic-tile-pane-pick";
 import {
   resetPaneSwitchTokens,
   switchPaneView,
@@ -127,17 +128,19 @@ describe("consent blocks pack start paths", () => {
     const mountView = vi.fn();
     let switchCalls = 0;
     const notices: string[] = [];
-    const { mosaic, wall } = makeMosaic((from, to) =>
-      pickMosaicPaneWith(
-        {
-          runSwitch: async (toViewId, fromViewId) => {
-            switchCalls += 1;
-            return runSwitch(mosaic, mountView)(toViewId, fromViewId);
+    const { mosaic, wall } = makeMosaic(
+      mosaicTilePanePickHandler((from, to) =>
+        pickMosaicPaneWith(
+          {
+            runSwitch: async (toViewId, fromViewId) => {
+              switchCalls += 1;
+              return runSwitch(mosaic, mountView)(toViewId, fromViewId);
+            },
+            refreshMosaicSlots: () => {},
           },
-          refreshMosaicSlots: () => {},
-        },
-        from,
-        to,
+          from,
+          to,
+        ),
       ),
     );
     const origNotice = mosaic.setPaneNotice.bind(mosaic);
@@ -153,6 +156,8 @@ describe("consent blocks pack start paths", () => {
     expect(mountView).toHaveBeenCalledTimes(0);
     expect(notices.length).toBe(1);
     expect(notices[0] === HEAT_NOTICE).toBe(true);
+    expect(mosaic.tileIds).toContain("plugin:topology");
+    expect(mosaic.tileIds).not.toContain("plugin:heat");
   });
 
   it("settings wall slot pick calls switchPaneView once and shows consent notice", async () => {
@@ -189,9 +194,12 @@ describe("consent blocks pack start paths", () => {
     await Promise.resolve();
     expect(switchCalls).toBe(1);
     expect(mountView).toHaveBeenCalledTimes(0);
+    expect(m.setPaneView).not.toHaveBeenCalled();
     expect(m.setPaneNotice).toHaveBeenCalledTimes(1);
-    const call = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(call[1] === HEAT_NOTICE).toBe(true);
+    const notice = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]![1];
+    expect(notice === HEAT_NOTICE).toBe(true);
+    expect(notice.includes("isn't approved yet")).toBe(true);
+    expect(notice.includes("\u2019")).toBe(false);
   });
 
   it("boot reconcile then switch shows consent notice and does not mount", async () => {
@@ -217,7 +225,7 @@ describe("consent blocks pack start paths", () => {
   });
 
   it("reload header pick shows consent notice and does not mount", async () => {
-    const tiles = reconcileMosaicTilesWithMode(
+    const tiles = mosaicReloadLayoutTiles(
       ["plugin:topology", "plugin:wifi", "plugin:kefrens", "plugin:talkers"],
       "plugin:heat",
       "plugin:kefrens",

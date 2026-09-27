@@ -1,0 +1,11 @@
+diff --git a/web/src/app/mosaic-reload-layout.ts b/web/src/app/mosaic-reload-layout.ts
+index 6cb97c2..775f8a7 100644
+--- a/web/src/app/mosaic-reload-layout.ts
++++ b/web/src/app/mosaic-reload-layout.ts
+@@ -6,5 +6,5 @@ export function mosaicReloadLayoutTiles(
+   mode: string,
+   focusHint?: string | null,
+ ): string[] {
+-  return reconcileMosaicTilesWithMode(tiles, mode, focusHint);
++  return tiles;
+ }

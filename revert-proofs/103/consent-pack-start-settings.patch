@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index 4dd5430..b4b3b7d 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1771,7 +1771,7 @@ export class Settings {
+         const from = ids[i] ?? "";
+         const to = sel.value;
+         if (!from || from === to) return;
+-        if (this.onMosaicPanePick) {
++        if (false && this.onMosaicPanePick) {
+           const ret = this.onMosaicPanePick(from, to);
+           const fail = () => fillViewSelect(sel, from);
+           if (ret instanceof Promise) void ret.then((ok) => { if (ok === false) fail(); });

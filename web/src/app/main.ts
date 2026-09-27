@@ -116,6 +116,8 @@ import { mergePluginConsentLivePatch } from "./plugin-consent-live";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
+import { mosaicReloadLayoutTiles } from "./mosaic-reload-layout";
+import { mosaicTilePanePickHandler } from "./mosaic-tile-pane-pick";
 import { bootMosaicPackStartLayout } from "./mosaic-boot-pack-start";
 import { pickMosaicPaneWith } from "./mosaic-pane-pick";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
@@ -1235,7 +1237,7 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
-  onPanePick: (from, to) => pickMosaicPane(from, to),
+  onPanePick: mosaicTilePanePickHandler(pickMosaicPane),
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
@@ -1287,7 +1289,7 @@ settings.addAnimation((a) => {
     mosaic!.setSize(a.mosaic, modeSel.value, a.hero, {
       tree: a.mosaicTree,
       maximized: a.mosaicMaxId || null,
-      tiles: reconcileMosaicTilesWithMode(
+      tiles: mosaicReloadLayoutTiles(
         a.mosaicTiles ?? [],
         modeSel.value,
         mosaic!.focusedId,
