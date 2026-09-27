@@ -1,0 +1,12 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 43b38d8e..b03d3451 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -147,7 +147,6 @@ export function resetMediaAsk(): void {
+ export function clearMediaDismiss(kind?: MediaAskKind): void {
+   if (!kind || kind === "mic") dismissed.mic = false;
+   if (!kind || kind === "cam") dismissed.cam = false;
+-  persistDismissed();
+ }
+ 
+ export function mediaAskGranted(kind: MediaAskKind): boolean {

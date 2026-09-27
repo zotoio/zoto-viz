@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/ui/media-ask-focus.chromium.test.ts",
-  "testName": "media ask focus (chromium) > closes on Escape with no microphone request",
+  "testFile": "web/src/ui/media-ask-focus.test.ts",
+  "testName": "media ask focus dialog > records dismiss when the dialog closes without a close event",
   "description": "Revert production guard (row-05-escape-no-mic-chromium)",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
+  "red": "AssertionError: expected null to be '{\"mic\":true}' // Object.is equality"
 }

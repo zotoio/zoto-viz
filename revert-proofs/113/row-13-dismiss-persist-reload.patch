@@ -1,0 +1,12 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 43b38d8e..bec22e33 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -235,7 +235,6 @@ function recordDismiss(host: Pick<MediaAskHost, "audio" | "video">, kind: "dismi
+     if (kind === "dismiss") dismissed.cam = true;
+     granted.cam = false;
+   }
+-  if (kind === "dismiss") persistDismissed();
+ }
+ 
+ async function runAllowCapture(host: MediaAskHost): Promise<void> {
