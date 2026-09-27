@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RECORD.json helpers: full tree, proven commit tree, and QE key (tree excluding revert-proofs/)."""
+"""RECORD.json: proven commit, QE tree (proven index minus revert-proofs/), and key."""
 from __future__ import annotations
 
 import json
@@ -11,6 +11,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+QE_TREE_CMD_TEMPLATE = (
+    "GIT_INDEX_FILE=$(mktemp -u) sh -c "
+    "'git read-tree {commit} && git rm -r -q --cached --ignore-unmatch revert-proofs && git write-tree'"
+)
+
 
 def _run(cmd: list[str], *, cwd: Path = ROOT, env: dict | None = None) -> str:
     p = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True, env=env)
@@ -19,33 +24,52 @@ def _run(cmd: list[str], *, cwd: Path = ROOT, env: dict | None = None) -> str:
     return p.stdout.strip()
 
 
-def filtered_tree(commit: str = "HEAD") -> str:
-    lines = _run(["git", "ls-tree", "-r", commit]).splitlines()
-    with tempfile.TemporaryDirectory() as td:
-        index = Path(td) / "index"
-        env = {**os.environ, "GIT_INDEX_FILE": str(index)}
-        _run(["git", "read-tree", "--empty"], env=env)
-        for line in lines:
-            meta, path = line.split("\t", 1)
-            if path.startswith("revert-proofs/"):
-                continue
-            mode, typ, sha = meta.split()
-            _run(
-                ["git", "update-index", "--add", "--cacheinfo", f"{mode},{sha},{path}"],
+def qe_tree(commit: str) -> str:
+    """Tree of ``commit`` with ``revert-proofs/`` removed (QE index recipe)."""
+    commit = _run(["git", "rev-parse", commit])
+    idx = tempfile.mktemp(prefix="record-index-")
+    env = {**os.environ, "GIT_INDEX_FILE": idx}
+    try:
+        _run(["git", "read-tree", commit], env=env)
+        rm = subprocess.run(
+            ["git", "rm", "-r", "-q", "--cached", "--ignore-unmatch", "revert-proofs"],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        if rm.returncode != 0:
+            subprocess.run(
+                ["git", "rm", "-r", "-qf", "--cached", "--ignore-unmatch", "revert-proofs"],
+                cwd=ROOT,
                 env=env,
+                check=True,
+                text=True,
+                capture_output=True,
             )
         return _run(["git", "write-tree"], env=env)
+    finally:
+        for suffix in ("", ".lock"):
+            try:
+                os.unlink(idx + suffix)
+            except OSError:
+                pass
 
 
-def write_record(pr: str, commit: str) -> None:
-    tree = _run(["git", "rev-parse", f"{commit}^{{tree}}"])
-    key = filtered_tree(commit)
+def write_record(pr: str, commit: str) -> tuple[str, str, str]:
+    commit = _run(["git", "rev-parse", commit])
+    tree = qe_tree(commit)
     path = ROOT / "revert-proofs" / pr / "RECORD.json"
     path.write_text(
-        json.dumps({"commit": commit, "tree": tree, "key": key}, indent=2) + "\n",
+        json.dumps({"commit": commit, "tree": tree, "key": tree}, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"Wrote {path}: commit={commit[:8]} tree={tree[:7]} key={key[:7]}")
+    cmd = QE_TREE_CMD_TEMPLATE.format(commit=commit)
+    print(f"Wrote {path}")
+    print(f"  commit={commit}")
+    print(f"  tree={tree}")
+    print(f"  key={tree}")
+    return commit, tree, cmd
 
 
 def main() -> None:
