@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/remix/data-source-catalog.test.ts",
-  "testName": "remix catalog helpers applyPluginCatalog does not add data-source plugins to the view menu",
+  "testName": "remix catalog helpers > applyPluginCatalog does not add data-source plugins to the view menu",
   "description": "Revert skipping data-source plugins in partitionCatalog",
   "red": "AssertionError: expected true to be false // Object.is equality"
 }
