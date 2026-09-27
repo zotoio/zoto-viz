@@ -187,8 +187,7 @@ describe("dev viz wall flags", () => {
     expect(vizWallMs()).toBe(real);
   });
 
-  it.skipIf(
-    !existsSync(distAssetsDir) && process.env.VIZ_REQUIRE_DIST !== "1",
+  it.skipIf(!existsSync(distAssetsDir) && process.env.VIZ_REQUIRE_DIST !== "1")(
     "F5 (vi) prod bundle: dist has no vizWallClock string",
     () => {
       expect(existsSync(distAssetsDir)).toBe(true);
@@ -199,6 +198,12 @@ describe("dev viz wall flags", () => {
       expect(js.includes("vizWallClock")).toBe(false);
     },
   );
+
+  it("F5 (meta) prod bundle case uses skipIf curried form", () => {
+    const src = readFileSync(join(import.meta.dirname, "viz-dev-wall-flags.test.ts"), "utf8");
+    const threeArgSkipIf = /it\.skipIf\(\s*\n?\s*!existsSync\(distAssetsDir\)/.test(src);
+    expect(threeArgSkipIf).toBe(false);
+  });
 
   it("Q4 flag clock: 01:05 +30s rebuild +1s → {h:1,m:5,s:31}", () => {
     vi.stubEnv("DEV", true);
