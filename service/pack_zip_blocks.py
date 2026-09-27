@@ -292,12 +292,37 @@ def zip_block_for_sha(sha256: str) -> dict[str, str] | None:
         return None
 
 
-def catalog_row_for_block(row: dict[str, str], *, rel: str) -> dict[str, str]:
+def catalog_row_for_block(
+    row: dict[str, str],
+    *,
+    rel: str,
+    upgrade: bool = False,
+    version: str | int | None = None,
+) -> dict[str, str]:
+    from .pack_boundary import PackBundleBoundary
+    from .pack_runtime import catalog_boundary_error
+
     out = dict(row)
     out.setdefault("file", rel)
     out.setdefault("zip", rel)
     out.setdefault("zipSha256", row.get("sha256", ""))
     out.setdefault("retryable", "true")
+    if upgrade and out.get("error") in ("pack_boundary", "pack_install_blocked"):
+        block = PackBundleBoundary(
+            pack_id=str(row.get("id") or ""),
+            pack_name=str(row.get("name") or row.get("id") or ""),
+            file=str(row.get("file") or ""),
+            import_spec=str(row.get("import") or ""),
+            detail=str(row.get("detail") or ""),
+        )
+        ver = version
+        if ver is None and str(row.get("version") or "").strip():
+            raw_ver = str(row.get("version") or "").strip()
+            try:
+                ver = int(raw_ver)
+            except ValueError:
+                ver = raw_ver
+        return catalog_boundary_error(rel, block, upgrade=True, version=ver)
     return out
 
 

@@ -1478,7 +1478,18 @@ def _attach_runtime(
             **psky.artefacts(path),
         }
     except PackBundleBoundaryError as e:
-        errors.append(catalog_boundary_error(rel, e.block))
+        from .plugin_install import installed_zip_sha
+
+        installed = installed_zip_sha(path.parent, path.parent.name) if sha256 else None
+        upgrade = bool(installed and sha256 and installed != sha256)
+        errors.append(
+            catalog_boundary_error(
+                rel,
+                e.block,
+                upgrade=upgrade,
+                version=doc.get("version"),
+            ),
+        )
         return None
     except ValueError as e:
         errors.append({"file": rel, "error": str(e)})
@@ -1502,14 +1513,38 @@ def _materialize_zip_plugin(
     if persisted is None and pack_id:
         persisted = zip_block_for_pack(pack_id)
     cache_key = zip_block_cache_key(zip_path)
+    if pack_id:
+        from .plugin_install import pack_install_lock
+
+        if pack_install_lock(pack_id).locked():
+            errors.append(
+                {
+                    "file": rel,
+                    "error": "pack_install_retry_in_progress",
+                    "message": "blocked zip retry is in progress",
+                    "zip": rel,
+                },
+            )
+            return None
     if persisted is not None:
-        row = catalog_row_for_block(persisted, rel=rel)
+        row = catalog_row_for_block(
+            persisted,
+            rel=rel,
+            upgrade=runtime.is_dir(),
+            version=zip_version,
+        )
         remember_zip_block(cache_key, row)
         errors.append(row)
         return None
     cached = cached_zip_block(cache_key)
     if cached is not None:
-        errors.append(cached)
+        row = catalog_row_for_block(
+            cached,
+            rel=rel,
+            upgrade=runtime.is_dir(),
+            version=zip_version,
+        )
+        errors.append(row)
         return None
     try:
         return materialize_zip_runtime(
@@ -1525,7 +1560,7 @@ def _materialize_zip_plugin(
             "error": "pack_install_blocked",
             "message": str(e),
             "zip": rel,
-            **e.payload,
+            **{k: v for k, v in e.payload.items() if k != "message"},
         }
         if "was blocked" in str(e):
             row["error"] = "pack_boundary"
