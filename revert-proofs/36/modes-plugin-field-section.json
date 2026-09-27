@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/core/modes-plugin-field.test.ts",
+  "testName": "PluginField typing > allows config field section for settings grouping",
+  "description": "PluginField must declare optional section for settings drawer groups",
+  "red": "AssertionError: expected 'export type ModeId = string;\\nexport …' to contain 'section?: string'"
+}

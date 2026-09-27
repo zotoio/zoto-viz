@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/plugin-barrel.test.ts",
+  "testName": "plugin barrel exports > re-exports pluginSpecForStoreId for main.ts config sync",
+  "description": "plugin.ts barrel must re-export pluginSpecForStoreId for main.ts",
+  "red": "AssertionError: expected 'undefined' to be 'function' // Object.is equality"
+}
