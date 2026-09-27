@@ -1,7 +1,6 @@
-diff --git a/web/src/plugins/plugin-config-sync.ts b/web/src/plugins/plugin-config-sync.ts
 --- a/web/src/plugins/plugin-config-sync.ts
 +++ b/web/src/plugins/plugin-config-sync.ts
-@@ -10,7 +10,6 @@ export function allowOnPluginChangeConfigPush(
+@@ -10,7 +10,6 @@
    editStoreId: string,
    hasConfigRead: boolean,
  ): boolean {

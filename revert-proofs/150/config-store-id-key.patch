@@ -1,12 +1,34 @@
-diff --git a/web/src/app/main.ts b/web/src/app/main.ts
---- a/web/src/app/main.ts
-+++ b/web/src/app/main.ts
-@@ -717,7 +717,7 @@ function sandboxPluginConfig(spec: PluginView): Record<string, string> {
+--- a/web/src/plugins/plugin-config-sync.ts
++++ b/web/src/plugins/plugin-config-sync.ts
+@@ -1,7 +1,8 @@
+ /** Whether live iframe config.push is allowed for a settings store id. */
+ export function sandboxConfigPushAllowed(loadedConfigStoreId: string | null, editStoreId: string): boolean {
+   if (!loadedConfigStoreId) return false;
+-  return loadedConfigStoreId === editStoreId;
++  const pack = (id: string) => (id.includes(":") ? id.slice(0, id.indexOf(":")) : id);
++  return pack(loadedConfigStoreId) === pack(editStoreId);
+ }
  
- const sandboxConfigBatcher = new SandboxConfigBatcher(
-   (storeId, config) => {
--    if (storeId === tsWatchStoreId) sandbox.setConfig(config);
-+    if (storeId === tsWatchId || storeId.startsWith(`${tsWatchId}:`)) sandbox.setConfig(config);
-   },
-   (cb) => requestAnimationFrame(cb),
-   (id) => cancelAnimationFrame(id),
+ /** main.ts settings.onPluginChange → sandbox.setConfig */
+--- a/web/src/app/plugin-sandbox-config-push-route.ts
++++ b/web/src/app/plugin-sandbox-config-push-route.ts
+@@ -44,7 +44,7 @@
+   scheduledStoreId: string,
+   tsWatchStoreId: string,
+ ): boolean {
+-  return scheduledStoreId === tsWatchStoreId;
++  return scheduledStoreId === tsWatchStoreId.split(":")[0];
+ }
+ 
+ /** main.ts maybePushSandboxForStore — schedule or defer until the matching store loads. */
+@@ -58,8 +58,8 @@
+   if (!editSpec || !mayPushSandboxOnPluginChange(loadedStoreId, editStoreId, editSpec)) {
+     return null;
+   }
+-  if (loadedStoreId === editStoreId) {
+-    schedule(editStoreId, config);
++  if (editSpec.id === (loadedStoreId?.split(":")[0] ?? loadedStoreId)) {
++    schedule(editSpec.id, config);
+     return null;
+   }
+   return { storeId: editStoreId, config };
