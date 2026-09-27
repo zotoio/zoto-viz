@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { workBudgetFromHostInit } from "../../../plugins/sdk/host-init-context";
+import { CONSERVATIVE_WORK_BUDGET, workBudgetFromHostInit } from "../../../plugins/sdk/host-init-context";
 import {
   hostWorkBudgetCeilings,
   resetHostWorkBudgetCeilingsCache,
@@ -15,8 +15,6 @@ import {
   marbleSim,
   resetPackWorkBudget,
 } from "../../../plugins/src/marble-run/frontend/pack";
-import { CONSERVATIVE_MARBLE_WORK_BUDGET } from "../../../plugins/src/marble-run/frontend/work-budget";
-
 function fullBudget(over: Partial<ManifestWorkBudget> = {}): ManifestWorkBudget {
   return { ...hostWorkBudgetCeilings(), ...over };
 }
@@ -62,10 +60,10 @@ describe("workBudget marble pack consumer (#45d)", () => {
   it("600-frame row: host clamps maxSimStepsPerFrame and integrate runs at most 4 times per frame", () => {
     disposeMarblePack();
     resetPackWorkBudget();
-    expect(marbleWorkBudget()).toEqual(CONSERVATIVE_MARBLE_WORK_BUDGET);
+    expect(marbleWorkBudget()).toEqual(CONSERVATIVE_WORK_BUDGET);
     ingestFrame(frame0);
-    expect(marbleWorkBudget()).toEqual(CONSERVATIVE_MARBLE_WORK_BUDGET);
-    expect(marbleSim().integrateStepsLastFrame()).toBe(CONSERVATIVE_MARBLE_WORK_BUDGET.maxSimStepsPerFrame);
+    expect(marbleWorkBudget()).toEqual(CONSERVATIVE_WORK_BUDGET);
+    expect(marbleSim().integrateStepsLastFrame()).toBe(CONSERVATIVE_WORK_BUDGET.maxSimStepsPerFrame);
 
     const view = toPluginView(marbleCatalogRow(fullBudget({ maxSimStepsPerFrame: 99 })));
     expect(view.workBudget?.maxSimStepsPerFrame).toBe(4);
