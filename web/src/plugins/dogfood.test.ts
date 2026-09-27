@@ -62,6 +62,24 @@ function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
   }
 }
 
+const fatLanSoakState = fatLanFixture();
+
+it("fat-LAN live soak: exact delivered counts on fake time", () => {
+  const result = withFatLanSoakFakeTime((now) =>
+    runDogfoodSoak({ state: fatLanSoakState, framesPerPack: FAT_LAN_SOAK_FRAMES, now }),
+  );
+
+  expect(result.framesPerPack).toBe(FAT_LAN_SOAK_FRAMES);
+  expect(result.fixture.devices).toBe(FAT_LAN_SOAK_DEVICES);
+  expect(result.fixture.flows).toBe(FAT_LAN_SOAK_FLOWS);
+  expect(result.packs.map((p) => p.packId)).toEqual([...VIZ_DEMO_PACKS]);
+  for (const pack of result.packs) {
+    expect(pack.frames).toBe(FAT_LAN_SOAK_FRAMES);
+    expect(pack.delivered).toBe(FAT_LAN_SOAK_FRAMES);
+    expect(pack.skipped).toBe(0);
+  }
+});
+
 describe("hn rain pack", () => {
   it("packs uppercase headline bytes the sky can decode", () => {
     const buf = packHnRainBuffer(
@@ -329,22 +347,6 @@ describe("viz dogfood gates", () => {
     // Simulate HUD skip display from cumulative counter only
     const skipSamples = budget.stats.skipped > 0 ? [{ t: 1000, n: budget.stats.skipped }] : [];
     expect(formatSkipRate(skipRatePerSec(skipSamples, 1000))).toBe("skips 0/s");
-  });
-
-  it("fat-LAN live soak: exact delivered counts on fake time", () => {
-    const result = withFatLanSoakFakeTime((now) =>
-      runDogfoodSoak({ state: fatLan, framesPerPack: FAT_LAN_SOAK_FRAMES, now }),
-    );
-
-    expect(result.framesPerPack).toBe(FAT_LAN_SOAK_FRAMES);
-    expect(result.fixture.devices).toBe(FAT_LAN_SOAK_DEVICES);
-    expect(result.fixture.flows).toBe(FAT_LAN_SOAK_FLOWS);
-    expect(result.packs.map((p) => p.packId)).toEqual([...VIZ_DEMO_PACKS]);
-    for (const pack of result.packs) {
-      expect(pack.frames).toBe(FAT_LAN_SOAK_FRAMES);
-      expect(pack.delivered).toBe(FAT_LAN_SOAK_FRAMES);
-      expect(pack.skipped).toBe(0);
-    }
   });
 
   it("revert: fat-LAN soak cannot read performance.now / Date.now", () => {
