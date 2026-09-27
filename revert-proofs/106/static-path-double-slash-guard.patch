@@ -1,0 +1,13 @@
+diff --git a/service/static_paths.py b/service/static_paths.py
+index f2531f3..6616cf9 100644
+--- a/service/static_paths.py
++++ b/service/static_paths.py
+@@ -25,8 +25,6 @@ def canonical_static_path(path: str) -> str | None:
+     if not raw.startswith("/"):
+         return None
+     decoded = _decode_path(raw)
+-    if decoded.startswith("//"):
+-        return None
+     if "\\" in decoded:
+         return None
+     segments: list[str] = []

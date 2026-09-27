@@ -14,8 +14,7 @@ def test_canonical_static_path_rejects_backslash_segments() -> None:
 
 def test_decode_path_rejects_double_encoded_dot_segments() -> None:
     """Multi-pass decode must collapse %252e%252e before canonicalization."""
-    raw = "/%252e%252e/plugin-sandbox.html"
-    assert static_paths.static_path_allowed(raw) is False
+    assert static_paths.canonical_static_path("/%252e%252e/plugin-sandbox.html") is None
 
 
 def test_is_legacy_sandbox_request_matches_blocked_basename() -> None:

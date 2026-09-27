@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_static_paths_security.py::test_canonical_static_path_rejects_backslash_segments",
+  "description": "Reject backslash in canonical static paths.",
+  "timeoutSec": 120,
+  "red": "AssertionError: assert '/assets\\\\..\\\\secret' is None"
+}
