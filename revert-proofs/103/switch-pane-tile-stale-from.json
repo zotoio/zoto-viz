@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/switch-pane-view.test.ts",
-  "testName": "switchPaneView > switchPaneViewTile > uses focus fallback when the requested tile id is stale",
+  "testName": "switchPaneView > entry tile > uses focus fallback when the requested tile id is stale",
   "description": "Revert stale fromViewId falling back to focused tile",
   "red": {
     "actual": false,

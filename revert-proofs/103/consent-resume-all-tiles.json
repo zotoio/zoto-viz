@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/mosaic-consent-resume.test.ts",
-  "testName": "grantPluginConsentCatalogRefresh > resumes every waiting tile for the same pack after one approval",
+  "testName": "grantPluginConsent then catalog refresh > resumes every waiting tile for the same pack after one approval",
   "description": "Revert multi-tile consent resume after one approval",
   "red": {
     "actual": 0,

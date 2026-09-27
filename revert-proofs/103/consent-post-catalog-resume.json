@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/mosaic-consent-resume.test.ts",
-  "testName": "grantPluginConsentCatalogRefresh > simulates POST /consent updating catalog before resume",
+  "testName": "grantPluginConsent then catalog refresh > simulates POST /consent updating catalog before resume",
   "description": "Revert clearing pending after catalog consent resume",
   "red": {
     "actual": null,

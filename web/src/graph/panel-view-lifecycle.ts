@@ -7,14 +7,6 @@
 const rafLeases = new Map<string, symbol>();
 const packLeases = new Map<string, symbol>();
 
-export function panelRafCount(panelId: string): number {
-  return rafLeases.has(panelId) ? 1 : 0;
-}
-
-export function panelPackCount(panelId: string): number {
-  return packLeases.has(panelId) ? 1 : 0;
-}
-
 /** Claim the single rAF slot for this tile (replaces any stale claim). */
 export function claimPanelRaf(panelId: string): () => void {
   const prev = rafLeases.get(panelId);

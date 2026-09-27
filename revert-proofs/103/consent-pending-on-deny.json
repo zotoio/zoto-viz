@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/mosaic-consent-resume.test.ts",
-  "testName": "mosaicConsentResume > registers a pending tile pick when consent is denied",
+  "testName": "mosaic consent resume > registers a pending tile pick when consent is denied",
   "description": "Revert registerConsentPending on consent deny",
   "red": {
     "actual": false,

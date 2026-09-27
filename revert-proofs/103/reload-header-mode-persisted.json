@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/mosaic-view-reload.test.ts",
-  "testName": "mosaicViewReload > reload keeps header and main mode aligned via persisted mode",
+  "testName": "mosaic view reload regressions (B/C/D/E) > B: 1\u00d7 reload keeps header and main mode aligned via persisted zoto-viz.mode",
   "description": "Revert resolveRestoredViewMode preferring persisted mode on reload",
   "red": {
     "actual": "plugin:topology",

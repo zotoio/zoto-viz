@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/app/mosaic-view-reload.test.ts",
-  "testName": "mosaicViewReload > reload reconcile backrooms on the focused slot when mode and tiles diverged",
+  "testName": "mosaic view reload regressions (B/C/D/E) > E: reload restores Backrooms on the focused slot when mode and tiles diverged",
   "description": "Revert reconcileMosaicTilesWithMode on reload tile restore",
   "red": {
     "actual": "plugin:kefrens",

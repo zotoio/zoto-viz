@@ -1,27 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearAllConsentPending, registerConsentPending } from "./consent-pending-panes";
-import {
-  initPluginConsentSync,
-  pluginConsentFallbackPollActive,
-  resetPluginConsentSyncForTests,
-  syncPluginConsentPendingState,
-} from "./plugin-consent-sync";
 
 describe("plugin consent sync (one page subscription)", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     expect.hasAssertions();
+    vi.resetModules();
     vi.useFakeTimers();
-    resetPluginConsentSyncForTests();
+    const { clearAllConsentPending } = await import("./consent-pending-panes");
     clearAllConsentPending();
   });
 
   afterEach(() => {
-    resetPluginConsentSyncForTests();
-    clearAllConsentPending();
     vi.useRealTimers();
   });
 
-  it("arms one shared fallback poll for many waiting tiles", () => {
+  it("arms one shared fallback poll for many waiting tiles", async () => {
+    const { initPluginConsentSync, pluginConsentFallbackPollActive, syncPluginConsentPendingState } =
+      await import("./plugin-consent-sync");
+    const { registerConsentPending } = await import("./consent-pending-panes");
     const refresh = vi.fn(async () => {});
     initPluginConsentSync({ refreshCatalogAndResume: refresh, pollIntervalMs: 10_000 });
     const intervalSpy = vi.spyOn(window, "setInterval");
@@ -52,6 +47,8 @@ describe("plugin consent sync (one page subscription)", () => {
   });
 
   it("after 10s idle issues one catalog refresh, not one per tile", async () => {
+    const { initPluginConsentSync } = await import("./plugin-consent-sync");
+    const { registerConsentPending } = await import("./consent-pending-panes");
     let catalogFetches = 0;
     const refresh = vi.fn(async () => {
       catalogFetches += 1;
@@ -76,7 +73,9 @@ describe("plugin consent sync (one page subscription)", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
-  it("stops the shared poll when no tiles are waiting", () => {
+  it("stops the shared poll when no tiles are waiting", async () => {
+    const { initPluginConsentSync, pluginConsentFallbackPollActive } = await import("./plugin-consent-sync");
+    const { registerConsentPending, clearAllConsentPending } = await import("./consent-pending-panes");
     const refresh = vi.fn(async () => {});
     initPluginConsentSync({ refreshCatalogAndResume: refresh, pollIntervalMs: 10_000 });
     registerConsentPending({

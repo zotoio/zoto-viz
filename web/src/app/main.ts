@@ -109,7 +109,7 @@ import { deliverMosaicDemoPacks, dropMosaicTileWriter } from "../graph/mosaic-vi
 import { bindVizDriveElement, clearVizDrive, noteHostDirect } from "../plugins/viz-drive";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { revertModeSelection } from "./apply-mode-mosaic";
-import { resolveRestoredViewMode } from "./boot-view-restore";
+import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { initPluginConsentSync } from "./plugin-consent-sync";
 import { modeForDigitKey } from "./header-digit-mode";
 import { mergePluginConsentLivePatch } from "./plugin-consent-live";
@@ -118,8 +118,6 @@ import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
 import { bootMosaicPackStartLayout } from "./mosaic-boot-pack-start";
 import { pickMosaicPaneWith } from "./mosaic-pane-pick";
-import { wireMosaicTilePanePick } from "./mosaic-tile-pane-pick-wire";
-import { reloadMosaicTilesForMode } from "./mosaic-reload-pack-start";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
 import { onMosaicSwitchConsentDenied } from "./mosaic-switch-consent";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
@@ -1237,7 +1235,7 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
-  onPanePick: wireMosaicTilePanePick((from, to) => pickMosaicPane(from, to)),
+  onPanePick: (from, to) => pickMosaicPane(from, to),
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
@@ -1289,7 +1287,7 @@ settings.addAnimation((a) => {
     mosaic!.setSize(a.mosaic, modeSel.value, a.hero, {
       tree: a.mosaicTree,
       maximized: a.mosaicMaxId || null,
-      tiles: reloadMosaicTilesForMode(
+      tiles: reconcileMosaicTilesWithMode(
         a.mosaicTiles ?? [],
         modeSel.value,
         mosaic!.focusedId,

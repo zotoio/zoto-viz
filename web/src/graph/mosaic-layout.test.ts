@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds, mosaicPaneIdsWithViewChange,
   nextPaneTiles, parseMosaicNode, parseMosaicTiles, setRatio, structureKey, swapLeaves,
 } from "./mosaic-layout";
 
 describe("grid / default trees", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("builds a 2×2 then a 2×3", () => {
     const four = gridTree(["a", "b", "c", "d"], 2);
     expect(leafIds(four)).toEqual(["a", "b", "c", "d"]);
@@ -33,6 +37,10 @@ describe("grid / default trees", () => {
 });
 
 describe("close / swap / assign", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("expands the neighbour when a leaf closes", () => {
     const t = gridTree(["a", "b", "c", "d"], 2);
     const next = closeLeaf(t, "b");
@@ -74,6 +82,10 @@ describe("close / swap / assign", () => {
 });
 
 describe("ratios / parse", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("clamps a split ratio and equalizes the tree", () => {
     const t = gridTree(["a", "b"], 2);
     const wide = setRatio(t, "", 0.95);

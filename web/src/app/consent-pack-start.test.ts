@@ -10,8 +10,7 @@ import { bootMosaicPackStartLayout } from "./mosaic-boot-pack-start";
 import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
 import { pickMosaicPaneWith } from "./mosaic-pane-pick";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
-import { reloadMosaicTilesForMode } from "./mosaic-reload-pack-start";
-import { wireMosaicTilePanePick } from "./mosaic-tile-pane-pick-wire";
+import { reconcileMosaicTilesWithMode } from "./boot-view-restore";
 import {
   resetPaneSwitchTokens,
   switchPaneView,
@@ -128,19 +127,17 @@ describe("consent blocks pack start paths", () => {
     const mountView = vi.fn();
     let switchCalls = 0;
     const notices: string[] = [];
-    const { mosaic, wall } = makeMosaic(
-      wireMosaicTilePanePick((from, to) =>
-        pickMosaicPaneWith(
-          {
-            runSwitch: async (toViewId, fromViewId) => {
-              switchCalls += 1;
-              return runSwitch(mosaic, mountView)(toViewId, fromViewId);
-            },
-            refreshMosaicSlots: () => {},
+    const { mosaic, wall } = makeMosaic((from, to) =>
+      pickMosaicPaneWith(
+        {
+          runSwitch: async (toViewId, fromViewId) => {
+            switchCalls += 1;
+            return runSwitch(mosaic, mountView)(toViewId, fromViewId);
           },
-          from,
-          to,
-        ),
+          refreshMosaicSlots: () => {},
+        },
+        from,
+        to,
       ),
     );
     const origNotice = mosaic.setPaneNotice.bind(mosaic);
@@ -220,7 +217,7 @@ describe("consent blocks pack start paths", () => {
   });
 
   it("reload header pick shows consent notice and does not mount", async () => {
-    const tiles = reloadMosaicTilesForMode(
+    const tiles = reconcileMosaicTilesWithMode(
       ["plugin:topology", "plugin:wifi", "plugin:kefrens", "plugin:talkers"],
       "plugin:heat",
       "plugin:kefrens",
