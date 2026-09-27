@@ -1,0 +1,34 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 9c257b9f..4809b254 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -218,12 +218,6 @@ def _host_reject_response() -> web.Response:
+     return resp
+ 
+ 
+-def _host_invalid_response() -> web.Response:
+-    resp = web.Response(status=400, text=HOST_HEADER_INVALID_BODY, content_type="text/plain")
+-    attach_frame_embed_policy(resp)
+-    return resp
+-
+-
+ def _path_reject_response() -> web.Response:
+     resp = web.Response(status=400, text=PATH_REJECT_BODY, content_type="text/plain")
+     attach_frame_embed_policy(resp)
+@@ -282,14 +276,14 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+     port = int(request.app.get("request_guard_port") or 7020)
+     hosts = _host_header_values(request)
+     if not hosts or len(hosts) != 1:
+-        return _host_invalid_response()
++        return _host_reject_response()
+ 
+     raw_host = hosts[0].strip()
+     tls = bool(request.secure)
+     key = normalize_host_header_key(raw_host, port, tls=tls)
+     if key is None:
+         _log.warning("rejected Host header (format): %s", escape_log_host(raw_host))
+-        return _host_invalid_response()
++        return _host_reject_response()
+ 
+     if not _lookup_allowed(request.app, key):
+         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
