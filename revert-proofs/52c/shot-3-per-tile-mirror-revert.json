@@ -1,0 +1,8 @@
+{
+  "row": "A7 Shot 3 revert: non-primary tiles keep delivered=0",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-wall-limited-harness.test.ts",
+  "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > Amendment 7 A5: 2\u00d72 @3000 \u2014 each tile delivered=200 over 600 frames \\(mirrored cadence\\)$",
+  "patchedAssertion": "AssertionError: expected +0 to be 200 // Object.is equality",
+  "excerpt": "AssertionError: expected +0 to be 200 // Object.is equality"
+}
