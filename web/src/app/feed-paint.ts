@@ -55,14 +55,16 @@ export type ApplyFeedSlotPaintsInput = {
   mosaicTileIds: readonly string[];
   graphScene: (tileSlot: string) => FeedPaintScene | null | undefined;
   arcadeViews: ReadonlyArray<{ update(msg: StateMsg): void }>;
+  /** Optional per-slot remap (e.g. tile-health demo snapshot). */
+  remapSlotMsg?: (slot: string, msg: StateMsg) => StateMsg;
 };
 
 /** Paint path shared with `main.ts` feed() — per-slot state, no cross-tile golden leak. */
 export function applyFeedSlotPaints(input: ApplyFeedSlotPaintsInput): StateMsg {
   const paintSlot = (slot: string): StateMsg => {
     const raw = input.result.slotPaints.get(slot) ?? input.result.slotPaints.get("hero")!;
-    if (!input.mergeNames) return raw;
-    return input.collapseByName(raw).msg;
+    const painted = !input.mergeNames ? raw : input.collapseByName(raw).msg;
+    return input.remapSlotMsg ? input.remapSlotMsg(slot, painted) : painted;
   };
   const aliasFor = (slot: string): Map<string, string> => {
     const raw = input.result.slotPaints.get(slot) ?? input.result.slotPaints.get("hero")!;

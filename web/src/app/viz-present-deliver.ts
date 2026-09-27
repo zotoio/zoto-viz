@@ -6,7 +6,7 @@ import type { NetScene } from "../graph/scene";
 import { noteHostDirect } from "../plugins/viz-drive";
 import type { PluginView } from "../plugins/plugin";
 import { illustratedSourceBind, parseSourceBind } from "../core/sources";
-import type { VizFrameBudget, VizBufferWriter } from "../plugins/viz-host";
+import type { VizDataFrame, VizFrameBudget, VizBufferWriter } from "../plugins/viz-host";
 import { syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
 import {
   mirrorMosaicTileCadenceFromPrimary,
@@ -48,6 +48,10 @@ export interface VizPresentDeliverHost {
   getVizFrameClockMs: () => MonoMs;
   setVizFrameClockMs: (ms: MonoMs) => void;
   syncVizBudgetTileScope: () => void;
+  /** Production tile-health: viz pack wrote into the sandbox this frame. */
+  noteVizWrite?: () => void;
+  /** Production tile-health: a viz frame was delivered to the sandbox. */
+  onVizFrameDelivered?: (frame: VizDataFrame) => void;
 }
 
 /** One viz budget deliver + sandbox frame (display cadence, not websocket cadence). */
@@ -88,6 +92,7 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
     audio,
     buildFrame: (s, pt, a) => mainVizBuildFrame(s, pt, a, idle, bind, active?.viz?.contract ?? 2),
     onFrame: (f) => {
+      host.onVizFrameDelivered?.(f);
       if (packId === "stereo-gram") f.spectrum = host.scene.heardSpectrum(STEREO_BINS).spectrum;
       const coalesceMosaic = !!(host.mosaic?.on && mosaicDemoPacks);
       if (!coalesceMosaic && packId) {

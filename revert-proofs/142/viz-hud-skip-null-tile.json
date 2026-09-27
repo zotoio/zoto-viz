@@ -1,0 +1,8 @@
+{
+  "description": "Revert VizHud null-tile guard in mosaic tile budget line loop",
+  "runner": "vitest",
+  "testFile": "src/ui/viz-hud-null-tile.test.ts",
+  "testName": "VizHud null tile budget lines > tick ignores null mosaic tile lines without throwing and leaves their text unchanged",
+  "red": "AssertionError: expected [Function] to not throw an error but 'TypeError: Cannot read properties of …' was thrown",
+  "project": "web"
+}
