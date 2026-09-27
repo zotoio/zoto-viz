@@ -10,7 +10,8 @@ function runLint(): { ok: true } | { ok: false; stderr: string } {
     execFileSync("pnpm", ["lint"], { cwd: webRoot, stdio: "pipe" });
     return { ok: true };
   } catch (e: unknown) {
-    const stderr = (e as { stderr?: Buffer }).stderr?.toString() ?? "";
+    const err = e as { stderr?: Buffer; stdout?: Buffer };
+    const stderr = `${err.stderr?.toString() ?? ""}${err.stdout?.toString() ?? ""}`;
     return { ok: false, stderr };
   }
 }
@@ -22,6 +23,14 @@ describe("lint brand casts", () => {
 
   it("passes on the production tree", () => {
     const result = runLint();
+    const stderr = result.ok ? "" : result.stderr;
+    const violations = stderr
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith(">"));
+    if (violations.length > 0) {
+      expect(violations[0]).toBe("");
+    }
     expect(result.ok).toBe(true);
   });
 
