@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_host_escape_still_blocked_via_bundle_lint",
+  "description": "Host escape pack installs without bundle lint block.",
+  "patchedFailure": "tests/test_plugin_install.py:751: Failed: DID NOT RAISE any of (PackBundleBoundaryError, InstallV2BlockedError, ValueError)"
+}
