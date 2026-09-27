@@ -7,6 +7,7 @@ import { parsePluginIdle } from "./fixtures/golden-state";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
+import { ingestCatalogWorkBudget } from "./work-budget-policy";
 import type {
   PluginEngine,
   PluginLayout,
@@ -69,6 +70,7 @@ export type CatalogRow = {
   presetField?: unknown;
   hud?: unknown;
   sections?: unknown;
+  workBudget?: unknown;
   has_frontend?: unknown;
   has_sky?: unknown;
   has_sky_shader?: unknown;
@@ -419,6 +421,7 @@ export function toPluginView(raw: unknown): PluginView {
   const spec: PluginView = {
     id,
     name,
+    packName: name,
     version,
     hint: asString(viz.hint) ?? asString(row.hint),
     engine,
@@ -432,6 +435,12 @@ export function toPluginView(raw: unknown): PluginView {
   };
   if (settings) spec.settings = settings;
   if (idle) spec.idle = idle;
+  const workBudgetRaw = (viz as { workBudget?: unknown }).workBudget ?? row.workBudget;
+  if (workBudgetRaw !== undefined) {
+    const { budget, limitedNote } = ingestCatalogWorkBudget(workBudgetRaw);
+    spec.workBudget = budget;
+    if (limitedNote) spec.workBudgetLimited = limitedNote;
+  }
   if (asString(row.file)) spec.file = asString(row.file);
   if (row.runtime === "yaml" || row.runtime === "typescript") spec.runtime = row.runtime;
   if (asString(row.entry)) spec.entry = asString(row.entry);

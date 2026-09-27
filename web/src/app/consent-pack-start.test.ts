@@ -19,7 +19,7 @@ import {
   type SwitchPaneViewResult,
 } from "./switch-pane-view";
 
-const HEAT_NOTICE = "Heat map isn't approved yet. Approve it in Settings → Plugins.";
+const HEAT_NOTICE = consentBlockMessage({ name: "Heat map" });
 
 function expectPackStartConsentBlocked(opts: {
   mountView: ReturnType<typeof vi.fn>;
@@ -30,7 +30,7 @@ function expectPackStartConsentBlocked(opts: {
   if (opts.setPaneView) expect(opts.setPaneView).not.toHaveBeenCalled();
   expect(opts.noticeText).toBe(HEAT_NOTICE);
   expect(opts.noticeText).toBe(consentBlockMessage({ name: "Heat map" }));
-  expect(opts.noticeText?.includes("isn't approved yet")).toBe(true);
+  expect(opts.noticeText?.includes("Not approved yet")).toBe(true);
   expect(opts.noticeText?.includes("\u2019")).toBe(false);
 }
 
