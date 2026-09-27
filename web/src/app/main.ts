@@ -93,6 +93,7 @@ import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
+import { mountWallNoticeRegion } from "../core/wall-notice-region";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
@@ -149,6 +150,7 @@ applyThemeChrome(theme);
 
 // one WebGL context for the whole wall: the main graph and every mosaic tile draw through it
 const renderHost = new RenderHost($("wall"));
+mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 const panel = new Panel($("panel"), scene);
