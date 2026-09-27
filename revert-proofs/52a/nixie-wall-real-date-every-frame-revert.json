@@ -1,7 +1,7 @@
 {
   "row": "B1 row 9 real clock revert new Date every frame",
   "runner": "vitest",
-  "testFile": "src/plugins/nixie-wall-clock-source-rows.test.ts",
+  "testFile": "web/src/plugins/nixie-wall-clock-source-rows.test.ts",
   "testName": "^nixie wall clock source rows \\(B1 option b\\) > row 9 real clock: 600\u00d716 ms frames, 0 new Date after boot, getters 10\u00d7$",
   "patchedAssertion": "AssertionError: expected \"Date\" to not be called at all, but actually been called 600 times",
   "excerpt": "AssertionError: expected \"Date\" to not be called at all, but actually been called 600 times"
