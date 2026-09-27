@@ -1,0 +1,8 @@
+{
+  "row": "restore duplicate plugins/src/cpu-pong/ shipped tree",
+  "runner": "pytest",
+  "testFile": "tests/test_shipped_pack_slug_collision.py",
+  "testName": "^test_no_shipped_pack_slug_collisions_on_disk$",
+  "patchedAssertion": "ValueError: shipped catalog collision: pack directories 'cpu-pong' and 'cpupong' normalize to the same slug",
+  "excerpt": "shipped catalog collision: pack directories 'cpu-pong' and 'cpupong' normalize to the same slug"
+}
