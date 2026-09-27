@@ -1,7 +1,7 @@
 {
   "description": "Revert bluetooth golden slice (remove-air-bt-slice)",
   "runner": "vitest",
-  "testFile": "src/plugins/fixtures/host-idle-merge.test.ts",
+  "testFile": "web/src/plugins/fixtures/host-idle-merge.test.ts",
   "testName": "host idle fixture merge > pack air-bt fills empty live slice",
   "red": "AssertionError: expected false to be true // Object.is equality"
 }

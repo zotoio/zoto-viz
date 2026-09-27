@@ -1,7 +1,7 @@
 {
   "description": "Revert live-wins guard in mergeHostIdleForSlot (live-wins-guard)",
   "runner": "vitest",
-  "testFile": "src/plugins/fixtures/host-idle-merge.test.ts",
+  "testFile": "web/src/plugins/fixtures/host-idle-merge.test.ts",
   "testName": "host idle fixture merge > live slice wins over golden host fixture",
   "red": "AssertionError: expected true to be false // Object.is equality"
 }
