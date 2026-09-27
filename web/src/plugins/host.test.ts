@@ -165,6 +165,25 @@ describe("PluginSandbox module load", () => {
     box.unload();
   });
 
+  it("opens the pack-asset frame before resolving module.js", async () => {
+    const order: string[] = [];
+    vi.mocked(packAssetFrame.openPackAssetFrame).mockImplementation(async () => {
+      order.push("open");
+      return "11111111-1111-4111-8111-111111111111";
+    });
+    vi.spyOn(packAssetFrame, "packAssetFrameForTile").mockImplementation(() => {
+      order.push("resolve");
+      return undefined;
+    });
+    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
+    setPackAssetTokenForTests("pulse", "sess-tok-abc");
+    const box = new PluginSandbox();
+    await box.loadModule("pulse", ["graph.read"], { a: "1" }, "deadbeef");
+    expect(order[0]).toBe("open");
+    expect(packAssetFrame.openPackAssetFrame).toHaveBeenCalledTimes(1);
+    box.unload();
+  });
+
   it("does not post present ticks after unload", async () => {
     const box = new PluginSandbox();
     await box.load(
