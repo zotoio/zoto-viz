@@ -71,7 +71,7 @@ describe("switchPaneView", () => {
       expect(mountView).not.toHaveBeenCalled();
       expect(m.setPaneNotice).toHaveBeenCalledWith(
         "plugin:topology",
-        "Not approved yet. Talkers: Approve it in Settings → Plugins.",
+        "Talkers isn't approved yet. Approve it in Settings → Plugins.",
       );
     });
 

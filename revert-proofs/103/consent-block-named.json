@@ -5,7 +5,7 @@
   "description": "Revert consentBlockMessage naming the plugin pack",
   "red": {
     "actual": "Not approved yet. Approve it in Settings \u2192 Plugins.",
-    "expected": "Not approved yet. Heat map: Approve it in Settings \u2192 Plugins."
+    "expected": "Heat map isn't approved yet. Approve it in Settings \u2192 Plugins."
   },
   "project": "web",
   "redLine": "AssertionError: expected false to be true // Object.is equality"

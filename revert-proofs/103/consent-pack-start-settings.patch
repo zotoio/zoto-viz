@@ -1,0 +1,10 @@
+diff --git a/web/src/app/mosaic-pane-pick-wire.ts b/web/src/app/mosaic-pane-pick-wire.ts
+--- a/web/src/app/mosaic-pane-pick-wire.ts
++++ b/web/src/app/mosaic-pane-pick-wire.ts
+@@ -9,5 +9,5 @@ export function wireSettingsMosaicPanePick(
+   settings: Settings,
+   handler: MosaicPanePickHandler,
+ ): void {
+-  settings.onMosaicPanePick = handler;
++  void handler;
+ }

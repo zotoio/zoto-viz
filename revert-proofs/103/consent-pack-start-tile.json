@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/consent-pack-start.test.ts",
+  "testName": "consent blocks pack start paths > tile chrome pick shows consent notice and does not mount",
+  "description": "Revert consent deny blocking tile chrome pack start",
+  "red": {
+    "actual": true,
+    "expected": false
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected true to be false // Object.is equality"
+}

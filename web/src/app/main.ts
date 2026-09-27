@@ -115,6 +115,9 @@ import { modeForDigitKey } from "./header-digit-mode";
 import { mergePluginConsentLivePatch } from "./plugin-consent-live";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
+import { pickMosaicPaneWith } from "./mosaic-pane-pick";
+import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
+import { onMosaicSwitchConsentDenied } from "./mosaic-switch-consent";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
 
 ignoreResizeLoopError();
@@ -815,9 +818,7 @@ async function runMosaicPaneSwitch(toViewId: string, fromViewId?: string): Promi
     teardownView: teardownMosaicPanelView,
     mountView: mountMosaicPanelView,
     persistLayout: persistMosaicPickLayout,
-    onConsentDenied: () => {
-      preserveVizUbo = false;
-    },
+    onConsentDenied: onMosaicSwitchConsentDenied,
   });
   return result;
 }
@@ -1252,14 +1253,16 @@ mosaic = new Mosaic({
   }),
 });
 async function pickMosaicPane(from: string, to: string): Promise<boolean> {
-  const sw = await runMosaicPaneSwitch(to, from);
-  if (!sw.ok) {
-    settings.refreshMosaicSlots();
-    return false;
-  }
-  return true;
+  return pickMosaicPaneWith(
+    {
+      runSwitch: runMosaicPaneSwitch,
+      refreshMosaicSlots: () => settings.refreshMosaicSlots(),
+    },
+    from,
+    to,
+  );
 }
-settings.onMosaicPanePick = pickMosaicPane;
+wireSettingsMosaicPanePick(settings, pickMosaicPane);
 
 settings.addAnimation((a) => {
   const pin = pinViewLook();

@@ -107,7 +107,7 @@ describe("mosaic consent resume", () => {
     });
     expect(m.setPaneNotice).toHaveBeenCalledWith(
       "plugin:a",
-      "Not approved yet. Demo: Approve it in Settings → Plugins.",
+      "Demo isn't approved yet. Approve it in Settings → Plugins.",
     );
   });
 });

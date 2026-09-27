@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/consent-pack-start.test.ts",
+  "testName": "consent blocks pack start paths > header mode pick shows consent notice and does not mount",
+  "description": "Revert inline consent notice on header pack start",
+  "red": {
+    "actual": 0,
+    "expected": 1
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
+}
