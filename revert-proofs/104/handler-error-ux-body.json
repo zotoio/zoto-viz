@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
-  "testId": "tests/test_request_guard_policy.py::test_unhandled_handler_error_500_ux_body_and_frame_headers",
+  "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_handler_500_body",
   "red": "AssertionError: assert 'Reload to try again' in 'internal server error'",
-  "description": "Unhandled handler 500 must return HANDLER_ERROR_BODY with frame headers; revert restores generic internal text.",
+  "description": "Handler 500 UX copy must match the agreed literal exactly (full equality).",
   "timeoutSec": 120
 }

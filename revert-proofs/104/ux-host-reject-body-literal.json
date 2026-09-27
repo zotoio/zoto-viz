@@ -2,6 +2,6 @@
   "runner": "pytest",
   "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_host_reject_400_body_malformed_and_disallowed",
   "red": "AssertionError: assert \"doesn't accept the address\" in ''",
-  "description": "Host reject/malformed 400 UX copy must match the agreed literal exactly.",
+  "description": "Host reject 400 UX copy must match the agreed literal exactly (full equality).",
   "timeoutSec": 120
 }
