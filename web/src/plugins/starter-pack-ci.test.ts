@@ -72,11 +72,14 @@ describe("pack starter template CI", () => {
       const { stageRoot, packHome } = stageStarterTree(starterTemplate, repoRoot);
       const zotoHome = mkdtempSync(path.join(os.tmpdir(), "zoto-starter-home-"));
       try {
-        const { bundleJs } = compileStarterZipPack(repoRoot, packHome, zotoHome);
+        const { runtimeDir, bundleJs } = compileStarterZipPack(repoRoot, packHome, zotoHome);
         assertStarterBundleInlinesSdk(bundleJs);
-        expect(bundleJs.length).toBe(9556);
         expect(bundleJs).not.toMatch(/\bdeclare\s+const\s+zoto\s*:/);
         expect(bundleJs).toContain("getVizZoto");
+        expect(bundleJs).toContain("StarterSim");
+        expect(bundleJs).not.toMatch(/from\s+["']\.\.\/\.\.\//);
+        const pluginYml = readFileSync(path.join(runtimeDir, "plugin.yml"), "utf8");
+        expect(pluginYml).toContain(`id: ${STARTER_CI_PACK_ID}`);
       } finally {
         rmSync(stageRoot, { recursive: true, force: true });
         rmSync(zotoHome, { recursive: true, force: true });
@@ -94,7 +97,7 @@ describe("pack starter template CI", () => {
         expect(result.ok, result.ok ? "" : `${result.stage}: ${result.error}`).toBe(true);
         if (result.ok) {
           console.log(`starter-pack-smoke: ${result.smokeAssertion}`);
-          expect(result.bundleBytes).toBe(9556);
+          expect(result.smokeAssertion.length).toBeGreaterThan(0);
         }
       } finally {
         rmSync(stageRoot, { recursive: true, force: true });

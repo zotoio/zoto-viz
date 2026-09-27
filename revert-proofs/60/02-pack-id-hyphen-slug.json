@@ -2,6 +2,6 @@
   "runner": "pytest",
   "testFile": "tests/test_plugin_id_pattern.py",
   "testName": "test_schema_rejects_nonconforming_plugin_ids[bad_underscore]",
-  "description": "Pack id schema must reject underscore slugs (hyphen-only pattern).",
-  "patchedFailure": "AssertionError: DID NOT RAISE ValueError"
+  "description": "Top-level plugin id pattern must reject underscore slugs.",
+  "patchedFailure": "FAILED tests/test_plugin_id_pattern.py::test_schema_rejects_nonconforming_plugin_ids[bad_underscore] - Failed: DID NOT RAISE ValueError"
 }
