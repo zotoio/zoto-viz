@@ -1,0 +1,30 @@
+id: rocket-car-soccer
+name: Rocket Car Soccer
+version: 2
+hint: Self-playing boost-car arena on the plugin sky. Live talker rates boost cars; packet spikes and unit failures drive goals and Zoto Fail alerts. Caps 6 cars / 48 particles / 24 trail segments / 4 physics substeps (see pack RCS_CAPS).
+description: Procedural stadium, AI 2v2–3v3, fixed-timestep physics, pooled particles/trails, replay from recorded state (no re-sim). Idle host fixture keeps a lively demo match labelled demo on the HUD. Live mapping documented in frontend/live.ts (RCS_LIVE_MAPPING).
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+datasource:
+  consumes:
+    - talkers
+    - packets
+    - sys
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 3
+  maxBufferFloats: 64
+  maxParticles: 192
+  uniforms:
+    - uTime
+    - uAudio
+    - uAccent
+    - uBg
+    - uBright
+    - uOpacity
+frontend:
+  entry: frontend/index.ts
