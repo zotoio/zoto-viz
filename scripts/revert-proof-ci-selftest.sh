@@ -48,7 +48,7 @@ run_vitest() {
   echo "$out"
   local passed failed
   passed="$(echo "$out" | grep -Eo '[0-9]+ passed' | tail -1 | awk '{print $1}')"
-  failed="$(echo "$out" | grep -Eo '[0-9]+ failed' | tail -1 | awk '{print $1}')"
+  failed="$(echo "$out" | grep -Eo '[0-9]+ failed' | tail -1 | awk '{print $1}' || true)"
   if [ -z "$passed" ]; then
     echo "revert-proof self-test (${label}): could not parse vitest pass count"
     return 1

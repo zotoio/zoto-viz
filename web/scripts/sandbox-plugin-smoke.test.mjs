@@ -41,7 +41,7 @@ async function main() {
     boot: [],
   };
 
-  const bootstrapUrl = packAssetUrl(sat, "_sandbox", jsName);
+  const bootstrapUrl = packAssetUrl(monitor, sat, "_sandbox", jsName);
   const mod = await fetch(bootstrapUrl, {
     headers: { Origin: "null", Host: "127.0.0.1:7020" },
   });
@@ -66,7 +66,7 @@ async function main() {
     });
   });
 
-  const sandboxHtml = packAssetUrl(sat, "_sandbox", "plugin-sandbox.html");
+  const sandboxHtml = packAssetUrl(monitor, sat, "_sandbox", "plugin-sandbox.html");
   await page.setContent(`<!doctype html><meta charset="utf-8"><iframe id="sb" sandbox="allow-scripts"></iframe>
 <script>
   window.__sandboxBoot = [];
