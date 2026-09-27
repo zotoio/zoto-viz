@@ -13,5 +13,6 @@
       "plugin:wifi"
     ]
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected [ 'plugin:topology', 'plugin:wifi' ] to deeply equal [ 'plugin:talkers', 'plugin:wifi' ]"
 }

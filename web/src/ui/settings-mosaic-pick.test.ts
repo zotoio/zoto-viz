@@ -16,11 +16,7 @@ describe("settings mosaic pane pickers", () => {
   afterEach(() => setPluginModes([]));
 
   it("delegates slot changes to the live wall hook and reverts on failure", async () => {
-    const pickCalls: [string, string][] = [];
-    const pick = vi.fn(async (from: string, to: string) => {
-      pickCalls.push([from, to]);
-      return true;
-    });
+    const pick = vi.fn(async () => true);
     const s = new Settings({ storePrefix: "zoto-viz-mosaic-pick", onChange: () => {} });
     s.onMosaicPanePick = pick;
     s.addAnimation(() => {}, { el: document.createElement("div") });
@@ -34,7 +30,7 @@ describe("settings mosaic pane pickers", () => {
     expect(sel).toBeTruthy();
     sel!.value = "plugin:talkers";
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(pickCalls).toEqual([["plugin:topology", "plugin:talkers"]]);
+    expect(pick).toHaveBeenCalledWith("plugin:topology", "plugin:talkers");
   });
 
   it("reverts the dropdown when the live hook denies consent", async () => {

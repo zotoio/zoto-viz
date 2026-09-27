@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
-index 271ba28b..cf74f79f 100644
+index 5586cd9c..538e126a 100644
 --- a/web/src/graph/mosaic.ts
 +++ b/web/src/graph/mosaic.ts
-@@ -498,7 +498,6 @@ export class Mosaic {
+@@ -500,7 +500,6 @@ export class Mosaic {
        el.className = "mosaic-pane-notice";
        pane.appendChild(el);
      }

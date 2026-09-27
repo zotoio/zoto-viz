@@ -7,5 +7,6 @@
     "actual": 5,
     "expected": 2
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected 5 to be 2 // Object.is equality"
 }
