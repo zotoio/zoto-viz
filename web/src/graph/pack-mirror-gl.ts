@@ -295,6 +295,7 @@ export class PackMirrorSession {
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
     renderer.setRenderTarget(prev);
+    rt.texture.flipY = true;
     this.rendered = true;
     return rt.texture;
   }
@@ -420,8 +421,9 @@ export class SandboxBitmapGl {
     fill: SurfaceLetterboxFill,
     dst: CssRect,
     aspect: number,
+    hostGl?: PackMirrorHostGl,
   ): CssRect {
-    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true });
+    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true }, hostGl);
   }
 }
 

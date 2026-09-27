@@ -38,13 +38,13 @@ describe.skipIf(!existsSync(bundleScript))("pack module host wrapper", () => {
     for (const box of boxes) boxes.pop()?.unload();
   });
 
-  it("host srcdoc no longer injects const zoto ahead of the pack module", async () => {
+  it("host boots packs via same-origin sandbox page (no srcdoc inline module)", async () => {
     const box = new PluginSandbox();
     boxes.push(box);
     await box.load("probe", "globalThis.__probe = 1;", ["viz.write"], {});
-    const srcdoc = document.querySelector("iframe")?.srcdoc ?? "";
-    expect(srcdoc).not.toMatch(/const zoto = globalThis\.zoto/);
-    expect(srcdoc).toMatch(/<script type="module">/);
+    const iframe = document.querySelector("iframe");
+    expect(iframe?.srcdoc ?? "").toBe("");
+    expect(iframe?.src ?? "").toMatch(/plugin-sandbox\.html/);
   });
 
   it("runs esbuild output that uses getVizZoto without Identifier clash", async () => {
