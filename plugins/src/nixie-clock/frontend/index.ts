@@ -17,9 +17,20 @@ zoto.onConfig = (cfg) => {
   look = parseNixieLook(cfg);
 };
 
+function hostPackWritesBuffer(): boolean {
+  try {
+    return typeof parent !== "undefined" && parent !== window;
+  } catch {
+    return false;
+  }
+}
+
 zoto.onFrame = (frame) => {
   const peak = Math.min(1, (frame.talkers?.[0]?.rate ?? 0) / 180);
-  zoto.writeBuffer(0, packNixieBuffer(new Date(), look, frame.audio, peak, nixieCanvasSize()));
+  if (!hostPackWritesBuffer()) {
+    const wallMs = typeof frame.t === "number" && frame.t > 1e8 ? frame.t * 1000 : 0;
+    zoto.writeBuffer(0, packNixieBuffer(new Date(wallMs), look, frame.audio, peak, nixieCanvasSize()));
+  }
   zoto.writeUniform("uAudio", frame.audio);
   zoto.writeUniform("uAccent", [1.0, 0.38, 0.06]);
   zoto.writeUniform("uBg", [0.06, 0.03, 0.02]);
