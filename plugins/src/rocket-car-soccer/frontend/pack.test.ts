@@ -141,7 +141,7 @@ describe("rocket-car-soccer pack", () => {
 
   it("declares viz contract in plugin.yml and caps/mapping in pack source", () => {
     expect(PLUGIN).toMatch(/config\.read/);
-    expect(PLUGIN).toMatch(/maxBuffers:\s*4/);
+    expect(PLUGIN).toMatch(/maxBuffers:\s*8/);
     expect(PLUGIN).toMatch(/hostMeshSlot:\s*3/);
     expect(PLUGIN).toMatch(/maxBufferFloats:\s*64/);
     expect(PLUGIN).not.toMatch(/liveMapping:/);

@@ -183,5 +183,5 @@ config:
   - key: modelGlb
     label: designer model (GLB)
     type: text
-    default: ""
-    hint: Optional glTF/GLB under pack assets/ (ZotoDesigner). Empty keeps procedural tank art.
+    default: "host"
+    hint: host = ZotoDesigner GLB lane; procedural = shader-only; or assets/foo.glb path.

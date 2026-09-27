@@ -91,6 +91,8 @@ export interface VizPluginContract {
   presentTick?: boolean;
   /** Sandbox buffer slot carrying column-major 4×4 host mesh matrices (default 2). */
   hostMeshSlot?: number;
+  /** Consecutive buffer slots after hostMeshSlot (default 1). */
+  hostMeshSlotCount?: number;
 }
 
 export type {
@@ -365,6 +367,7 @@ export function parseVizContractResult(raw: unknown): VizContractParseResult | u
     hostMeshSlotRaw === undefined || hostMeshSlotRaw === null
       ? undefined
       : clampInt(hostMeshSlotRaw, 0, VIZ_UBO.slotCount - 1, 2);
+  const hostMeshSlotCount = clampInt(doc.hostMeshSlotCount, 1, 6, 1);
   return {
     state: "ready",
     contract: {
@@ -378,6 +381,7 @@ export function parseVizContractResult(raw: unknown): VizContractParseResult | u
       idle,
       presentTick,
       hostMeshSlot,
+      hostMeshSlotCount,
     },
   };
 }

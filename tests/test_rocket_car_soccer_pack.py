@@ -26,7 +26,7 @@ def test_rocket_car_soccer_catalog_and_sky(tmp_path, monkeypatch) -> None:
     assert row["has_sky_shader"] is True
     assert (SRC / "sky" / "fragment.glsl").is_file()
     assert row.get("viz", {}).get("idle") == {"fixture": "host"}
-    assert row.get("viz", {}).get("maxBuffers") == 4
+    assert row.get("viz", {}).get("maxBuffers") == 8
     assert row.get("viz", {}).get("hostMeshSlot") == 3
 
 

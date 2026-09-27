@@ -3757,6 +3757,7 @@ export class NetScene implements HostedView {
         this.frameCamera(dt);
         this.controls.update();
         this.followUserCameraCoast();
+        this.hostMeshLane.tick(dt);
         // Hold a level horizon for FPS plugin skies; skip dream pitch nod.
         if (!this.userOwnsCamera()) {
           const t = this.controls.target;

@@ -37,3 +37,4 @@ plugins/src/.pack-sdk/
 **/.zip-install-blocks.json
 **/.install-catalog-records.json
 revert-proofs/**/red/*.txt
+tmp/glb-bundle/

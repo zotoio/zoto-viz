@@ -47,13 +47,19 @@ export function shouldWriteHostMeshMatrix(state: PackModelSlotState): boolean {
   return !useProceduralArt(state) && state.path.length > 0;
 }
 
-export function syncPackModelHostMesh(
-  modelSlot: { setHostMeshReady(): void; snapshot(): PackModelSlotState },
+export function hostMeshModelsEnabled(cfg: Record<string, string | undefined> | null | undefined): boolean {
+  const path = parsePackModelPath(cfg);
+  if (!path || path === "off" || path === "none" || path === "procedural") return false;
+  if (path === "host" || path === "auto") return true;
+  return path.endsWith(".glb");
+}
+
+export function syncPackModelHostMeshAssets(
+  modelSlot: { setHostMeshReady(): void; setConfig(cfg: Record<string, string | undefined> | null | undefined): void },
   cfg: Record<string, string | undefined> | null | undefined,
-  asset: HostMeshAssetRef | undefined,
 ): void {
-  if (!hostMeshAssetMatchesConfig(cfg, asset)) return;
-  modelSlot.setHostMeshReady();
+  modelSlot.setConfig(cfg);
+  if (hostMeshModelsEnabled(cfg)) modelSlot.setHostMeshReady();
 }
 
 /** Column-major 4×4 for HostMeshLane (demo-style spin + scale). */

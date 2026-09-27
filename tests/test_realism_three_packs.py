@@ -48,7 +48,7 @@ def test_realism_packs_use_host_mesh_slot_three() -> None:
     for pid in PACKS:
         yml = (PACKS[pid] / "plugin.yml").read_text(encoding="utf-8")
         assert "hostMeshSlot: 3" in yml, pid
-        assert "maxBuffers: 4" in yml, pid
+        assert "maxBuffers: 8" in yml, pid
 
 
 # Revert row: remove damped ball camera (restore fixed broadcast angles only).

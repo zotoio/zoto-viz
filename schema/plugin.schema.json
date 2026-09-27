@@ -1132,6 +1132,13 @@
           "default": 2,
           "description": "Sandbox buffer slot carrying column-major 4×4 matrices for host-owned GLTF instancing (see HostMeshLane). Sim data may use other slots when this is not 2."
         },
+        "hostMeshSlotCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "default": 1,
+          "description": "Number of consecutive buffer slots starting at hostMeshSlot used for host mesh draw batches."
+        },
         "uniforms": {
           "type": "array",
           "maxItems": 6,

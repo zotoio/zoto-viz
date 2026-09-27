@@ -116,6 +116,7 @@ const trailPool = new InstancedPool(RCS_CAPS.maxTrailSegments);
 const tickSlot0 = new Array<number>(RCS_SLOT0_FLOATS).fill(0);
 const tickSlot1 = new Array<number>(RCS_SLOT1_FLOATS).fill(0);
 const tickSlot2 = new Array<number>(RCS_SLOT2_FLOATS).fill(0);
+const carWheelSpinRad: number[] = [];
 const tickParticles = new Array<number>(RCS_CAPS.maxParticles * 4).fill(0);
 const tickTrails = new Array<number>(RCS_CAPS.maxTrailSegments * 4).fill(0);
 let lastParticlePackW = 0;
@@ -835,6 +836,8 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
     slot1[o + 6] = c.hostLabelHash;
     slot1[o + 7] = c.team;
     slot1[o + 8] = c.onGround ? 1 : 0;
+    carWheelSpinRad[i] =
+      (carWheelSpinRad[i] ?? 0) + Math.hypot(c.vel.x, c.vel.z) * Math.max(0, dt) * 0.55;
   }
 
   const particleW = particlePool.packInto(tickParticles, 4);
@@ -1034,6 +1037,10 @@ export function rcsLastCelebrationAt(): number {
 
 export function rcsCarAssignedAt(carIdx: number): number {
   return state?.carAssignedAt.get(carIdx) ?? -1;
+}
+
+export function rcsCarWheelSpinRad(carIndex: number): number {
+  return carWheelSpinRad[carIndex] ?? 0;
 }
 
 export function rcsTickSlotBuffersForTest(): {

@@ -15,13 +15,40 @@ capabilities:
   - viz.read
   - viz.write
   - config.read
+assets:
+  - id: koi-kohaku
+    path: assets/koi-kohaku.glb
+    sha256: d9fc3a5cca789f3c6e1ad5ee0e694a5f1dfcfa9f5044960a923f2383f9b9d021
+    bytes: 246748
+    triangles: 5876
+  - id: koi-showa
+    path: assets/koi-showa.glb
+    sha256: d50dec18997c534bd3f07d12be335461f4d70200413403604942563986b7956b
+    bytes: 263372
+    triangles: 5876
+  - id: koi-ogon
+    path: assets/koi-ogon.glb
+    sha256: f894847f8af82893c7a11eb3548796fd322ca151d808b86799b8baabb274a282
+    bytes: 305100
+    triangles: 5876
+  - id: lily-pads
+    path: assets/lily-pads.glb
+    sha256: 4b225d4e982cc2df2b64bc9fafbfbb5384c2961847b8401f3a0e2b02ba87927b
+    bytes: 165936
+    triangles: 12744
+  - id: pond-rocks
+    path: assets/pond-rocks.glb
+    sha256: 3b910d506fab10a46e434350afcafb1659de53e517dbb4a150c9b01ce0ace5a2
+    bytes: 604576
+    triangles: 9216
 viz:
   graphWalk: false
   idle:
     fixture: host
-  maxBuffers: 4
+  maxBuffers: 8
   maxBufferFloats: 64
   hostMeshSlot: 3
+  hostMeshSlotCount: 6
   maxParticles: 36
   uniforms:
     - uTime
