@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 73e129b..a48834f 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -5,7 +5,7 @@ import os from "node:os";
+ import path from "node:path";
+ 
+ /** When true, head-record tree keys omit the entire `revert-proofs/` tree (room decision). */
+-export const REVERT_PROOF_TREE_KEY_EXCLUDE_REVERT_PROOFS = true;
++export const REVERT_PROOF_TREE_KEY_EXCLUDE_REVERT_PROOFS = false;
+ 
+ export const REVERT_PROOF_HEAD_RECORD_FILE = "head.json";
+ 

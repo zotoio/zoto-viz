@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof head record tree key > (tree-key) head record treeKey ignores revert-proofs-only delta",
+  "description": "Hash the full tree (include revert-proofs/) so replay wrongly rejects revert-proofs-only commits",
+  "red": "AssertionError: expected 'b19eafaff56a526f7b383b103986f72ff02d42e0' to be 'e8d49b709c5b518e73c31e089d5db80e59ccd3bc' // Object.is equality"
+}
