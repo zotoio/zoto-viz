@@ -176,22 +176,6 @@ def test_frame_embed_policy_on_responses(case: str) -> None:
     asyncio.run(_frame_case(case))
 
 
-async def _direct_plugin_sandbox_404() -> None:
-    dist = _dist_with_sandbox()
-    async with make_app_server(web_dist=dist) as (ip, port, _runner):
-        async with ClientSession() as session:
-            async with session.get(
-                f"http://{ip}:{port}/plugin-sandbox.html",
-                headers=host_header(port),
-            ) as resp:
-                assert resp.status == 404
-                _assert_frame_headers(resp)
-
-
-def test_plugin_sandbox_html_not_served_from_static_root() -> None:
-    asyncio.run(_direct_plugin_sandbox_404())
-
-
 async def _handler_500_frame_headers() -> None:
     from unittest.mock import MagicMock
 

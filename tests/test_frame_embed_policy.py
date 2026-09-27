@@ -57,15 +57,13 @@ class FrameEmbedPolicyTests(AioHTTPTestCase):
         assert "frame-ancestors 'self'" in csp
 
     async def test_api_plugin_module_js_merges_frame_ancestors(self) -> None:
-        row = {"id": "csp-pack", "has_frontend": True}
-        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "csp-pack" else None):
-            with patch.object(plugins, "consented", lambda _doc: True):
-                with patch.object(
-                    plugins,
-                    "module_response",
-                    lambda _pid: web.Response(text="export {};", content_type="text/javascript"),
-                ):
-                    resp = await self.client.get("/api/plugins/csp-pack/module.js", headers=self._host())
+        def _fake_module(_req: web.Request) -> web.Response:
+            resp = web.Response(text="export {};", content_type="text/javascript")
+            resp.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'none'"
+            return resp
+
+        with patch.object(plugins, "api_module", _fake_module):
+            resp = await self.client.get("/api/plugins/csp-pack/module.js", headers=self._host())
         assert resp.status == 200
         assert resp.headers.get("Content-Security-Policy") == (
             "default-src 'none'; script-src 'none'; frame-ancestors 'self'"
