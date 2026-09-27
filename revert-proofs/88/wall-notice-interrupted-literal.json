@@ -1,5 +1,5 @@
 {
   "testFile": "src/graph/shader-fallback-ux.test.ts",
   "testName": "shader fallback UX overlays > wall-notice-interrupted-literal",
-  "redValue": "AssertionError: expected '' to be 'Graphics were interrupted. Restoring \u2026' // Object.is equality"
+  "redValue": "AssertionError: expected '.' to be '\u2026' // Object.is equality"
 }

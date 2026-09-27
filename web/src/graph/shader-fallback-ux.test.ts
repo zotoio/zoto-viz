@@ -23,8 +23,10 @@ describe("shader fallback UX overlays", () => {
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
-    expect(wall.querySelector(".gfx-wall-notice")!.textContent).toBe(GFX_INTERRUPTED_NOTICE);
-    expect(GFX_INTERRUPTED_NOTICE).toBe("Graphics were interrupted. Restoring the wall…");
+    const pin = "Graphics were interrupted. Restoring the wall\u2026";
+    expect(GFX_INTERRUPTED_NOTICE.at(-1)).toBe("\u2026");
+    expect(GFX_INTERRUPTED_NOTICE).toBe(pin);
+    expect(wall.querySelector(".gfx-wall-notice")!.textContent).toBe(pin);
     host.dispose();
     wall.remove();
   });
