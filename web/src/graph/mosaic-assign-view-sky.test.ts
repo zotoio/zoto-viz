@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { topology, setPluginModes } from "../core/modes";
 import { themeById } from "../core/themes";
 import { DEFAULT_DREAM } from "./scene";
@@ -103,6 +103,49 @@ describe("assignViews selective sky hold", () => {
     const next = nextPaneTiles(prev, "plugin:a", "plugin:b");
     expect(mosaicPaneIdsWithViewChange(prev, next).sort()).toEqual(["plugin:a", "plugin:b"]);
     expect(mosaic.setPaneView("plugin:a", "plugin:b")).toBe(true);
+    host.dispose();
+    main.dispose();
+  });
+
+  it("setPaneView on one tile refreshes only touched pane modes", () => {
+    const ids = ["plugin:a", "plugin:b", "plugin:c", "plugin:d"];
+    setPluginModes([
+      ...ids.map((id) => ({ ...topology, id, pluginId: id.slice(7), label: id })),
+      { ...topology, id: "plugin:x", pluginId: "x", label: "x" },
+    ]);
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { value: 800, configurable: true });
+    Object.defineProperty(wall, "clientHeight", { value: 600, configurable: true });
+    const sceneEl = document.createElement("div");
+    const host = new RenderHost(wall, { software: true });
+    const main = new NetScene(sceneEl, { host });
+    const mosaic = new Mosaic({
+      wall,
+      sceneEl,
+      main,
+      host,
+      arcade: {},
+      optsFor: () => ({}),
+      onFocus: () => {},
+      onPromote: () => {},
+      onLayout: () => {},
+      onCloseLast: () => {},
+      sync: () => ({
+        theme: themeById("midnight"),
+        filters: {},
+        anim: DEFAULT_DREAM,
+        dreaming: false,
+        nodeFilter: () => true,
+        lastMsg: null,
+        aliasMap: new Map(),
+      }),
+    });
+    mosaic.setSize("4", ids[0], "off", { tiles: ids });
+    const setModeSpy = vi.spyOn(NetScene.prototype, "setMode");
+    setModeSpy.mockClear();
+    expect(mosaic.setPaneView("plugin:c", "plugin:x")).toBe(true);
+    expect(setModeSpy.mock.calls.length).toBe(2);
+    setModeSpy.mockRestore();
     host.dispose();
     main.dispose();
   });

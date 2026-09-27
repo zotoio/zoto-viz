@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-drive.test.ts",
+  "testName": "viz-drive per tile > starts none until host-direct is noted",
+  "description": "Revert noteHostDirect setting dataset vizDrive to host-direct",
+  "red": {
+    "actual": "none",
+    "expected": "host-direct"
+  },
+  "project": "web"
+}

@@ -1,0 +1,19 @@
+{
+  "scanRoots": ["web/src", "plugins", "service", "packages"],
+  "entryPoints": [
+    "web/index.html",
+    "web/src/app/main.ts",
+    "web/src/camera/cam.worker.ts",
+    "service/monitor.py"
+  ],
+  "packEntryGlob": "plugins/src/*/frontend/index.ts",
+  "reachExempt": [
+    "scripts/revert-proof.mjs",
+    "scripts/revert-proof-lib.mjs",
+    "scripts/revert-proof-vitest-runner.mjs",
+    "scripts/revert-proof-vitest-overlay.mjs",
+    "scripts/revert-proof-vitest-brand.mjs",
+    "scripts/revert-proof-vitest-setup.ts",
+    "scripts/revert_proof_pytest_plugin.py"
+  ]
+}

@@ -15,10 +15,6 @@ export function bytesDiffer(prev: Uint8Array, next: ArrayLike<number>): boolean 
 
 const PATCH = 16;
 
-export function bindDefaultFramebufferForRead(gl: WebGL2RenderingContext): void {
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-}
-
 export class CanvasChangeProbe {
   private prev: Uint8Array | null = null;
 
@@ -128,7 +124,6 @@ export class PaneChangeProbe {
       slot.cap = bytes;
     }
     try {
-      bindDefaultFramebufferForRead(gl);
       let off = 0;
       for (const l of lines) {
         gl.readPixels(l.x, l.y, l.w, l.h, gl.RGBA, gl.UNSIGNED_BYTE, off);

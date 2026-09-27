@@ -30,9 +30,11 @@ describe("mosaic pane notice", () => {
     (mosaic as unknown as { panes: Map<string, HTMLElement> }).panes.set("plugin:topology", pane);
     mosaic.setPaneNotice("plugin:topology", "needs review");
     const notice = pane.querySelector(".mosaic-pane-notice");
-    expect(notice?.textContent).toMatch(/needs review/);
+    expect(notice?.textContent).toBe("needs review");
     mosaic.setPaneNotice("plugin:topology", "Blob Mesh couldn't start, its sandbox didn't respond", "fail");
-    expect(pane.querySelector(".mosaic-pane-notice-fail")?.textContent).toMatch(/couldn't start/);
+    expect(pane.querySelector(".mosaic-pane-notice-fail")?.textContent).toBe(
+      "Blob Mesh couldn't start, its sandbox didn't respond",
+    );
     mosaic.setPaneNotice("plugin:topology", null);
     expect(pane.querySelector(".mosaic-pane-notice")).toBeNull();
   });
