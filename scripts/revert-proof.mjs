@@ -42,6 +42,10 @@ import {
   validateRowMeta,
   validateTestFileRel,
   vitestTestNamePattern,
+  assertReplayPullHeadTreeKey,
+  computeRevertProofTreeKey,
+  resolvePullRequestHead,
+  writeRevertProofHeadRecordFile,
 } from "./revert-proof-lib.mjs";
 
 const REVERT_PROOF_PYTEST_PLUGIN_MODULE = "revert_proof_pytest_plugin";
@@ -120,11 +124,18 @@ function checkoutSnapshot(root) {
 }
 
 function porcelainDiffAllowed(before, after, prNumber) {
-  const reportSuffix = `revert-proofs/${prNumber}/REPORT.md`;
+  const allowed = [
+    `revert-proofs/${prNumber}/REPORT.md`,
+    `revert-proofs/${prNumber}/head.json`,
+  ];
   const filter = (text) =>
     text
       .split("\n")
-      .filter((line) => line.trim() && !line.includes(reportSuffix))
+      .filter((line) => {
+        const t = line.trim();
+        if (!t) return false;
+        return !allowed.some((suffix) => line.includes(suffix));
+      })
       .join("\n");
   return filter(before) === filter(after);
 }
@@ -138,24 +149,24 @@ function assertCheckoutUnchanged(root, before, prNumber) {
   }
   if (!porcelainDiffAllowed(before.porcelain, after.porcelain, prNumber)) {
     throw new Error(
-      "checkout worktree changed during revert-proof (only REPORT.md may differ)",
+      "checkout worktree changed during revert-proof (only REPORT.md and head.json may differ)",
     );
   }
 }
 
-function readGitHeadFile(mainRoot, relPath) {
-  const r = gitAt(mainRoot, ["show", `HEAD:${relPath}`]);
+function readGitRefFile(mainRoot, ref, relPath) {
+  const r = gitAt(mainRoot, ["show", `${ref}:${relPath}`]);
   if (r.status !== 0) {
-    throw new Error(`missing at HEAD: ${relPath} (${r.stderr || r.stdout})`);
+    throw new Error(`missing at ${ref}: ${relPath} (${r.stderr || r.stdout})`);
   }
   return r.stdout;
 }
 
-function listRows(mainRoot, prNumber, onlySlug) {
+function listRows(mainRoot, prNumber, onlySlug, sourceRef = "HEAD") {
   const prefix = `revert-proofs/${prNumber}`;
-  const ls = gitAt(mainRoot, ["ls-tree", "--name-only", "HEAD", `${prefix}/`]);
+  const ls = gitAt(mainRoot, ["ls-tree", "--name-only", sourceRef, `${prefix}/`]);
   if (ls.status !== 0 || !ls.stdout.trim()) {
-    throw new Error(`revert-proofs directory not found at HEAD: ${prefix}`);
+    throw new Error(`revert-proofs directory not found at ${sourceRef}: ${prefix}`);
   }
   const patches = ls.stdout
     .split("\n")
@@ -171,8 +182,8 @@ function listRows(mainRoot, prNumber, onlySlug) {
     validateRowListedUnderPr(prNumber, slug);
     const relPatch = `${prefix}/${slug}.patch`;
     const relMeta = `${prefix}/${slug}.json`;
-    const patchText = readGitHeadFile(mainRoot, relPatch);
-    const meta = JSON.parse(readGitHeadFile(mainRoot, relMeta));
+    const patchText = readGitRefFile(mainRoot, sourceRef, relPatch);
+    const meta = JSON.parse(readGitRefFile(mainRoot, sourceRef, relMeta));
     return {
       slug,
       prNumber,
@@ -910,16 +921,28 @@ function buildReport(results, errors) {
 function parseArgs(argv) {
   const pr = argv[2];
   if (!pr || pr.startsWith("-")) {
-    console.error("Usage: node scripts/revert-proof.mjs <pr-number> [--row <slug>]");
+    console.error(
+      "Usage: node scripts/revert-proof.mjs <pr-number> [--prove] [--replay] [--row <slug>]",
+    );
     process.exit(2);
   }
   let row = null;
+  let prove = false;
+  let replay = false;
   for (let i = 3; i < argv.length; i++) {
     if (argv[i] === "--row" && argv[i + 1]) {
       row = argv[++i];
+    } else if (argv[i] === "--prove") {
+      prove = true;
+    } else if (argv[i] === "--replay") {
+      replay = true;
     }
   }
-  return { prNumber: pr, row };
+  if (prove && replay) {
+    console.error("revert-proof: --prove and --replay are mutually exclusive");
+    process.exit(2);
+  }
+  return { prNumber: pr, row, prove, replay };
 }
 
 function gitRunForValidation(root, args) {
@@ -945,7 +968,7 @@ export async function mainAsync(argv = process.argv) {
   worktreeJsDepsReady = false;
   pythonIsolationChecked = false;
 
-  const { prNumber, row: onlySlug } = parseArgs(argv);
+  const { prNumber, row: onlySlug, prove, replay } = parseArgs(argv);
   validatePrNumber(prNumber);
   const mainRoot = mainCheckoutRoot();
   applyStackedPrGuards(mainRoot, prNumber);
@@ -957,8 +980,19 @@ export async function mainAsync(argv = process.argv) {
     );
   }
 
-  const head = before.head;
-  const rows = listRows(mainRoot, prNumber, onlySlug);
+  let worktreeRef = before.head;
+  let rowSourceRef = "HEAD";
+  if (replay) {
+    const pullHead = resolvePullRequestHead(mainRoot, prNumber, {
+      runGit: gitAt,
+      fetchRemote: process.env.REVERT_PROOF_SKIP_FETCH ? null : "origin",
+    });
+    assertReplayPullHeadTreeKey(mainRoot, prNumber, pullHead, { runGit: gitAt });
+    worktreeRef = pullHead;
+    rowSourceRef = pullHead;
+  }
+
+  const rows = listRows(mainRoot, prNumber, onlySlug, rowSourceRef);
   const wtPath = path.join(
     os.tmpdir(),
     `revert-proof-wt-${path.basename(mainRoot)}-${process.pid}`,
@@ -983,7 +1017,7 @@ export async function mainAsync(argv = process.argv) {
   };
 
   try {
-    addDetachedWorktree(mainRoot, wtPath, head);
+    addDetachedWorktree(mainRoot, wtPath, worktreeRef);
     ensureJsDepsInWorktree(mainRoot, wtPath, rows);
 
     for (const row of rows) {
@@ -1025,6 +1059,14 @@ export async function mainAsync(argv = process.argv) {
 
   if (errors.length > 0) {
     process.exit(1);
+  }
+
+  if (prove) {
+    const treeKey = computeRevertProofTreeKey(mainRoot, before.head, {}, gitAt);
+    writeRevertProofHeadRecordFile(mainRoot, prNumber, before.head, treeKey);
+    console.log(
+      `revert-proof: wrote head record treeKey=${treeKey} commit=${before.head} (informational)`,
+    );
   }
 }
 

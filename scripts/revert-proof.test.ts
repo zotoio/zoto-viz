@@ -157,6 +157,7 @@ function runRevertProof(
   prNumber: string,
   extraArgs: string[] = [],
   runnerScript: string = scriptPath,
+  envExtra: Record<string, string> = {},
 ) {
   return spawnSync(process.execPath, [runnerScript, prNumber, ...extraArgs], {
     cwd,
@@ -165,8 +166,18 @@ function runRevertProof(
       ...process.env,
       FORCE_COLOR: "0",
       REVERT_PROOF_PYTHON: fixturePython(cwd),
+      ...envExtra,
     },
   });
+}
+
+function setPullHeadRef(root: string, pr: string) {
+  const sha = runGit(root, ["rev-parse", "HEAD"]).trim();
+  runGit(root, ["update-ref", `refs/pull/${pr}/head`, sha]);
+}
+
+function fixtureReplayEnv(): Record<string, string> {
+  return { REVERT_PROOF_SKIP_FETCH: "1" };
 }
 
 function writeFixtureRepo(root: string) {
@@ -553,6 +564,79 @@ describe("revert-proof runner (fixture repo)", () => {
     }
     return root;
   }
+
+  function seedTreeReplayFixture(root: string) {
+    writeRow(root, "99", "widget-one", goodPatch, {
+      runner: "vitest",
+      testFile: "web/revert-proof/widget.test.ts",
+      testName: "widget > returns one",
+      description: "Revert widget value",
+      red: WIDGET_RED,
+    });
+    commitRevertProofs(root);
+    const prove = runRevertProof(root, "99", ["--prove"], scriptPath, fixtureReplayEnv());
+    expect(prove.status).toBe(0);
+    runGit(root, ["add", "revert-proofs/99/head.json"]);
+    runGit(root, ["commit", "-m", "record head tree key"]);
+    setPullHeadRef(root, "99");
+  }
+
+  it("(tree-replay-1) replay passes after git am recreates head with new sha", () => {
+    const root = mkFixture();
+    seedTreeReplayFixture(root);
+    const headBefore = runGit(root, ["rev-parse", "HEAD"]).trim();
+    const mbox = runGit(root, ["format-patch", "-1", "HEAD", "--stdout"]);
+    const parent = runGit(root, ["rev-parse", "HEAD^"]).trim();
+    runGit(root, ["reset", "--hard", parent]);
+    const am = spawnSync("git", [...GIT_IDENTITY, "am"], {
+      cwd: root,
+      input: mbox,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_COMMITTER_DATE: "2099-06-15 12:00:00 +0000",
+      },
+    });
+    expect(am.status).toBe(0);
+    const headAfter = runGit(root, ["rev-parse", "HEAD"]).trim();
+    expect(headAfter).not.toBe(headBefore);
+    setPullHeadRef(root, "99");
+    const replay = runRevertProof(root, "99", ["--replay"], scriptPath, fixtureReplayEnv());
+    expect(replay.status).toBe(0);
+    assertNoRevertProofWorktrees(root);
+  });
+
+  it("(tree-replay-2) replay fails on one-byte production change with tree-mismatch", () => {
+    const root = mkFixture();
+    seedTreeReplayFixture(root);
+    const widgetPath = path.join(root, "packages", "rp-widget", "index.js");
+    const text = fs.readFileSync(widgetPath, "utf8");
+    fs.writeFileSync(widgetPath, text.replace("return 1", "return 1 "), "utf8");
+    runGit(root, ["add", widgetPath]);
+    runGit(root, ["commit", "-m", "one byte prod"]);
+    setPullHeadRef(root, "99");
+    const replay = runRevertProof(root, "99", ["--replay"], scriptPath, fixtureReplayEnv());
+    expect(replay.status).not.toBe(0);
+    const out = `${replay.stderr}${replay.stdout}`;
+    expect(out).toContain("revert-proof tree-mismatch:");
+    assertNoRevertProofWorktrees(root);
+  });
+
+  it("(tree-replay-3) replay passes when only revert-proofs/ changes", () => {
+    const root = mkFixture();
+    seedTreeReplayFixture(root);
+    fs.writeFileSync(
+      path.join(root, "revert-proofs", "99", "extra-proof-note.txt"),
+      "noop\n",
+      "utf8",
+    );
+    runGit(root, ["add", "revert-proofs/99/extra-proof-note.txt"]);
+    runGit(root, ["commit", "-m", "proofs only delta"]);
+    setPullHeadRef(root, "99");
+    const replay = runRevertProof(root, "99", ["--replay"], scriptPath, fixtureReplayEnv());
+    expect(replay.status).toBe(0);
+    assertNoRevertProofWorktrees(root);
+  });
 
   it("(m) revert patch on test-only helper is rejected as unreachable", () => {
     const root = mkFixture();

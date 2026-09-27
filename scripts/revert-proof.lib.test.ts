@@ -610,6 +610,73 @@ describe("revert-proofs directory guards", () => {
   });
 });
 
+const TREE_KEY_GIT = ["-c", "user.name=rp-tree", "-c", "user.email=rp-tree@test"];
+
+function treeKeyGit(cwd: string, args: string[]) {
+  const r = spawnSync("git", [...TREE_KEY_GIT, ...args], { cwd, encoding: "utf8" });
+  if (r.status !== 0) {
+    throw new Error(`git ${args.join(" ")}: ${r.stderr || r.stdout}`);
+  }
+  return r.stdout;
+}
+
+describe("revert-proof head record tree key", () => {
+  it("(tree-key) head record treeKey ignores revert-proofs-only delta", async () => {
+    const { computeRevertProofTreeKey } = await import("./revert-proof-lib.mjs");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "rp-tree-key-"));
+    try {
+      fs.mkdirSync(path.join(root, "prod"), { recursive: true });
+      fs.writeFileSync(path.join(root, "prod", "app.txt"), "v1\n");
+      fs.mkdirSync(path.join(root, "revert-proofs", "99"), { recursive: true });
+      fs.writeFileSync(path.join(root, "revert-proofs", "99", "note.txt"), "a\n");
+      treeKeyGit(root, ["init", "-b", "main"]);
+      treeKeyGit(root, ["add", "."]);
+      treeKeyGit(root, ["commit", "-m", "base"]);
+      fs.writeFileSync(path.join(root, "revert-proofs", "99", "note.txt"), "b\n");
+      treeKeyGit(root, ["add", "revert-proofs/99/note.txt"]);
+      treeKeyGit(root, ["commit", "-m", "proofs only"]);
+      const kParent = computeRevertProofTreeKey(root, "HEAD~1");
+      const kHead = computeRevertProofTreeKey(root, "HEAD");
+      expect(kParent).toBe(kHead);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("(tree-key) stacked parent revert-proofs on child head does not change key", async () => {
+    const { computeRevertProofTreeKey } = await import("./revert-proof-lib.mjs");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "rp-tree-stack-"));
+    try {
+      fs.mkdirSync(path.join(root, "web", "src"), { recursive: true });
+      fs.writeFileSync(path.join(root, "web", "src", "app.ts"), "export const v = 1;\n");
+      treeKeyGit(root, ["init", "-b", "main"]);
+      treeKeyGit(root, ["add", "."]);
+      treeKeyGit(root, ["commit", "-m", "prod"]);
+      fs.mkdirSync(path.join(root, "revert-proofs", "48"), { recursive: true });
+      fs.mkdirSync(path.join(root, "revert-proofs", "85"), { recursive: true });
+      fs.writeFileSync(path.join(root, "revert-proofs", "48", "parent.txt"), "p1\n");
+      fs.writeFileSync(path.join(root, "revert-proofs", "85", "child.txt"), "c1\n");
+      treeKeyGit(root, ["add", "revert-proofs"]);
+      treeKeyGit(root, ["commit", "-m", "child proofs"]);
+      const kBefore = computeRevertProofTreeKey(root, "HEAD");
+      fs.writeFileSync(path.join(root, "revert-proofs", "48", "parent.txt"), "p2\n");
+      treeKeyGit(root, ["add", "revert-proofs/48/parent.txt"]);
+      treeKeyGit(root, ["commit", "-m", "touch parent proofs only"]);
+      const kAfter = computeRevertProofTreeKey(root, "HEAD");
+      expect(kBefore).toBe(kAfter);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("(tree-key) tree-mismatch message is exact", async () => {
+    const { formatRevertProofTreeMismatch } = await import("./revert-proof-lib.mjs");
+    expect(formatRevertProofTreeMismatch("a".repeat(40), "b".repeat(40))).toBe(
+      `revert-proof tree-mismatch: recorded ${"a".repeat(40)} != live ${"b".repeat(40)}`,
+    );
+  });
+});
+
 describe("revert-proof CI gate (item 9)", () => {
   it("(ci-base) when base has the self-test marker, skip is refused (must run)", async () => {
     const { decideBaseSelftestStep, SELFTEST_MARKER } = await import("./revert-proof-ci-gate.mjs");

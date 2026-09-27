@@ -1,7 +1,171 @@
 /** Shared helpers and guards for revert-proof (imported by the runner script and tests). */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+
+/** When true, head-record tree keys omit the entire `revert-proofs/` tree (room decision). */
+export const REVERT_PROOF_TREE_KEY_EXCLUDE_REVERT_PROOFS = true;
+
+export const REVERT_PROOF_HEAD_RECORD_FILE = "head.json";
+
+export function revertProofHeadRecordRel(prNumber) {
+  return `revert-proofs/${prNumber}/${REVERT_PROOF_HEAD_RECORD_FILE}`;
+}
+
+function defaultRunGit(gitRoot, args, opts = {}) {
+  return spawnSync("git", args, {
+    cwd: gitRoot,
+    encoding: "utf8",
+    ...opts,
+  });
+}
+
+/**
+ * Tree object id for `ref`, optionally excluding `revert-proofs/` via a temp index (never touches the worktree).
+ * @param {string} gitRoot
+ * @param {string} ref commit or tree-ish
+ * @param {{ excludeRevertProofs?: boolean }} [options]
+ * @param {(root: string, args: string[], opts?: object) => import("node:child_process").SpawnSyncReturns<string>} [runGit]
+ */
+export function computeRevertProofTreeKey(gitRoot, ref, options = {}, runGit = defaultRunGit) {
+  const excludeRevertProofs =
+    options.excludeRevertProofs ?? REVERT_PROOF_TREE_KEY_EXCLUDE_REVERT_PROOFS;
+  const tmpIndex = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rp-git-index-")), "index");
+  const env = { ...process.env, GIT_INDEX_FILE: tmpIndex };
+  try {
+    let r = runGit(gitRoot, ["read-tree", ref], { env });
+    if (r.status !== 0) {
+      throw new Error(`computeRevertProofTreeKey: git read-tree ${ref} failed: ${r.stderr || r.stdout}`);
+    }
+    if (excludeRevertProofs) {
+      r = runGit(
+        gitRoot,
+        ["rm", "-r", "--cached", "-f", "--ignore-unmatch", "revert-proofs"],
+        { env },
+      );
+      if (r.status !== 0) {
+        throw new Error(
+          `computeRevertProofTreeKey: git rm revert-proofs failed: ${r.stderr || r.stdout}`,
+        );
+      }
+    }
+    r = runGit(gitRoot, ["write-tree"], { env });
+    if (r.status !== 0) {
+      throw new Error(`computeRevertProofTreeKey: git write-tree failed: ${r.stderr || r.stdout}`);
+    }
+    const treeKey = r.stdout.trim();
+    if (!/^[0-9a-f]{40}$/.test(treeKey)) {
+      throw new Error(`computeRevertProofTreeKey: invalid tree hash: ${treeKey}`);
+    }
+    return treeKey;
+  } finally {
+    try {
+      fs.unlinkSync(tmpIndex);
+    } catch {
+      /* best effort */
+    }
+    try {
+      fs.rmSync(path.dirname(tmpIndex), { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
+/**
+ * @param {string} gitRoot
+ * @param {string} prNumber
+ * @param {string} ref
+ * @param {(root: string, args: string[], opts?: object) => import("node:child_process").SpawnSyncReturns<string>} [runGit]
+ */
+export function readRevertProofHeadRecord(gitRoot, prNumber, ref, runGit = defaultRunGit) {
+  const rel = revertProofHeadRecordRel(prNumber);
+  const r = runGit(gitRoot, ["show", `${ref}:${rel}`]);
+  if (r.status !== 0) {
+    throw new Error(`revert-proof head record missing at ${ref}:${rel}`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(r.stdout);
+  } catch {
+    throw new Error(`revert-proof head record at ${ref}:${rel} is not valid JSON`);
+  }
+  if (typeof parsed.treeKey !== "string" || !/^[0-9a-f]{40}$/.test(parsed.treeKey)) {
+    throw new Error(`revert-proof head record at ${ref}:${rel} missing valid treeKey`);
+  }
+  return parsed;
+}
+
+/**
+ * @param {string} recordedTreeKey
+ * @param {string} liveTreeKey
+ */
+export function formatRevertProofTreeMismatch(recordedTreeKey, liveTreeKey) {
+  return `revert-proof tree-mismatch: recorded ${recordedTreeKey} != live ${liveTreeKey}`;
+}
+
+export function assertRevertProofTreeKeyMatches(recordedTreeKey, liveTreeKey) {
+  if (recordedTreeKey !== liveTreeKey) {
+    throw new Error(formatRevertProofTreeMismatch(recordedTreeKey, liveTreeKey));
+  }
+}
+
+/**
+ * Resolve `refs/pull/<pr>/head` to a commit sha (fetch from origin when missing locally).
+ * @param {string} gitRoot
+ * @param {string} prNumber
+ * @param {{ runGit?: typeof defaultRunGit, fetchRemote?: string | null }} [opts]
+ */
+export function resolvePullRequestHead(gitRoot, prNumber, opts = {}) {
+  const runGit = opts.runGit ?? defaultRunGit;
+  const fetchRemote = opts.fetchRemote === undefined ? "origin" : opts.fetchRemote;
+  validatePrNumber(prNumber);
+  const ref = `refs/pull/${prNumber}/head`;
+  let r = runGit(gitRoot, ["rev-parse", "--verify", ref]);
+  if (r.status === 0) {
+    return r.stdout.trim();
+  }
+  if (fetchRemote) {
+    const fr = runGit(gitRoot, [
+      "fetch",
+      fetchRemote,
+      `+refs/pull/${prNumber}/head:${ref}`,
+    ]);
+    if (fr.status !== 0) {
+      throw new Error(
+        `failed to fetch ${ref} from ${fetchRemote}: ${fr.stderr || fr.stdout}`,
+      );
+    }
+    r = runGit(gitRoot, ["rev-parse", "--verify", ref]);
+    if (r.status === 0) {
+      return r.stdout.trim();
+    }
+  }
+  throw new Error(`missing ${ref}`);
+}
+
+/**
+ * Replay gate: live pull-head tree key must match the recorded head.json treeKey.
+ */
+export function assertReplayPullHeadTreeKey(gitRoot, prNumber, pullHeadRef, opts = {}) {
+  const runGit = opts.runGit ?? defaultRunGit;
+  const record = readRevertProofHeadRecord(gitRoot, prNumber, pullHeadRef, runGit);
+  const liveKey = computeRevertProofTreeKey(gitRoot, pullHeadRef, {}, runGit);
+  assertRevertProofTreeKeyMatches(record.treeKey, liveKey);
+  return { record, liveKey, pullHeadRef };
+}
+
+export function writeRevertProofHeadRecordFile(mainRoot, prNumber, commitSha, treeKey) {
+  const rel = revertProofHeadRecordRel(prNumber);
+  const abs = path.join(mainRoot, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  const body = {
+    treeKey,
+    commit: commitSha,
+  };
+  fs.writeFileSync(abs, `${JSON.stringify(body, null, 2)}\n`, "utf8");
+}
 
 export const MAX_TIMER_MS = 2_147_483_647;
 
