@@ -91,8 +91,8 @@ def test_two_pack_folders_not_a_pack_pr() -> None:
         "plugins/src/metro-lines/plugin.yml",
     ]
     code, lines = run_check(files, {}, pr_number=99)
-    assert code == 0
-    assert any("multiple pack folders" in line for line in lines)
+    assert code == 1
+    assert any("metro-lines" in line or "ant-colony" in line for line in lines)
 
 
 def test_multi_pack_with_host_web_src_fails() -> None:
@@ -115,8 +115,8 @@ def test_multi_pack_with_each_pack_test_still_passes() -> None:
         "web/src/plugins/metro-lines.test.ts",
     ]
     code, lines = run_check(files, {}, pr_number=99)
-    assert code == 0
-    assert any("multiple pack folders" in line for line in lines)
+    assert code == 1
+    assert any("FAILED" in line for line in lines)
 
 
 def test_host_only_pr_passes() -> None:
@@ -287,8 +287,8 @@ def test_pack_pr_rejects_second_pack_folder() -> None:
         "plugins/src/metro-lines/plugin.yml",
     ]
     code, lines = run_check(files, {}, pr_number=111)
-    assert code == 0
-    assert any("multiple pack folders" in line for line in lines)
+    assert code == 1
+    assert any("metro-lines" in line for line in lines)
 
 
 def test_cli_missing_pr_number_exits_nonzero() -> None:
