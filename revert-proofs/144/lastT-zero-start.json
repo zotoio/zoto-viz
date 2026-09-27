@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/dogfood.test.ts",
+  "testName": "hn-term frame.t backward step: dt guard uses 1/60 fallback",
+  "description": "Restoring lastT=0 start loses real 1/30 dt on the second frame (typed count drops by 1)",
+  "red": "AssertionError: expected 18 to be 19 // Object.is equality"
+}
