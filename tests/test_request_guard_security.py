@@ -6,8 +6,8 @@ import asyncio
 from aiohttp import ClientSession
 
 from service import request_guard
-from service.request_guard import HOST_REJECT_BODY, validate_allowed_host_entry
-from tests.monitor_app_test_util import host_header, make_app_server
+from service.request_guard import HOST_REJECT_BODY, normalize_host_header_key, validate_allowed_host_entry
+from tests.monitor_app_test_util import make_app_server
 
 
 def test_escape_log_host_sanitizes_control_characters() -> None:
@@ -26,13 +26,8 @@ def test_validate_allowed_host_rejects_out_of_range_port() -> None:
         raise AssertionError("expected ValueError")
 
 
-def test_validate_allowed_host_rejects_forbidden_characters() -> None:
-    try:
-        validate_allowed_host_entry("bad;host")
-    except ValueError as exc:
-        assert "invalid allowed_hosts" in str(exc)
-    else:
-        raise AssertionError("expected ValueError")
+def test_normalize_host_rejects_forbidden_characters() -> None:
+    assert normalize_host_header_key("evil;connect-src", 7020) is None
 
 
 def test_validate_allowed_host_rejects_invalid_hostname_syntax() -> None:
