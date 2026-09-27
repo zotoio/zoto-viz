@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf1..10ba91a2 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -98,7 +98,6 @@ function writeRowContent(e: Entry): void {
+ }
+ function removeLiveNotice(e: Entry): void {
+   e.cleared = true;
+-  clearNoticeTimer(e);
+   if (e.node) {
+     detachRow(e.node);
+     e.node = null;

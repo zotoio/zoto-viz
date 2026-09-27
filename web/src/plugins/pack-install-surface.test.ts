@@ -1,22 +1,16 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import {
-  blockedViewSelectRow,
-  consumePackInstallNotices,
-  formatBlockedCatalogNotice,
-  queuePackInstallBlockedNotice,
-  resetPackInstallSurfaceForTests,
-  syncBlockedCatalogFromErrors,
-  takePackInstallBlockedNotice,
-} from "./pack-install-surface";
-import { installPlugins, viewSelectOptions } from "./plugin";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("pack install blocked surface", () => {
   beforeEach(() => {
     expect.hasAssertions();
+    vi.resetModules();
   });
 
   it("toast once per unchanged zip; Blocked row on every catalog sync", async () => {
-    resetPackInstallSurfaceForTests();
+    const {
+      takePackInstallBlockedNotice,
+    } = await import("./pack-install-surface");
+    const { installPlugins, viewSelectOptions } = await import("./plugin");
     const orig = globalThis.fetch;
     const blocked =
       "Probe was blocked: it imports a file outside its own folder (`frontend/index.ts`) (`./evil`). "
@@ -52,8 +46,12 @@ describe("pack install blocked surface", () => {
     globalThis.fetch = orig;
   });
 
-  it("blocked menu notice includes zip folder path", () => {
-    resetPackInstallSurfaceForTests();
+  it("blocked menu notice includes zip folder path", async () => {
+    const {
+      blockedViewSelectRow,
+      formatBlockedCatalogNotice,
+      syncBlockedCatalogFromErrors,
+    } = await import("./pack-install-surface");
     syncBlockedCatalogFromErrors([{
       error: "pack_boundary",
       zip: "/data/plugins/local/evil.zip",
@@ -77,7 +75,8 @@ describe("pack install blocked surface", () => {
   });
 
   it("surfaces pack_sdk_contract like pack_boundary (older SDK label)", async () => {
-    resetPackInstallSurfaceForTests();
+    const { takePackInstallBlockedNotice } = await import("./pack-install-surface");
+    const { installPlugins, viewSelectOptions } = await import("./plugin");
     const orig = globalThis.fetch;
     const blocked =
       "Stale was blocked: Built for an older zoto-viz SDK — needs an update from its author. Nothing else changed.";
@@ -103,7 +102,11 @@ describe("pack install blocked surface", () => {
   });
 
   it("consumes installNotices from catalog payload exactly once", async () => {
-    resetPackInstallSurfaceForTests();
+    const {
+      consumePackInstallNotices,
+      takePackInstallBlockedNotice,
+    } = await import("./pack-install-surface");
+    const { installPlugins } = await import("./plugin");
     const orig = globalThis.fetch;
     const human = "An update to Probe was interrupted, so v1 was restored";
     globalThis.fetch = (async () => ({
@@ -128,8 +131,11 @@ describe("pack install blocked surface", () => {
     globalThis.fetch = orig;
   });
 
-  it("toasts again when the blocked zip message changes", () => {
-    resetPackInstallSurfaceForTests();
+  it("toasts again when the blocked zip message changes", async () => {
+    const {
+      queuePackInstallBlockedNotice,
+      takePackInstallBlockedNotice,
+    } = await import("./pack-install-surface");
     const base = { error: "pack_boundary" as const, zip: "/tmp/same.zip" };
     queuePackInstallBlockedNotice({ ...base, message: "first block" });
     expect(takePackInstallBlockedNotice()).toBe("first block");

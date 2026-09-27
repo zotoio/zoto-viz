@@ -49,12 +49,6 @@ function toBlockedEntry(payload: PackInstallBlockedPayload): BlockedCatalogEntry
   return { ...payload, zipPath, zipDir };
 }
 
-export function resetPackInstallSurfaceForTests(): void {
-  pendingNotice = null;
-  toastedKeys.clear();
-  blockedCatalog = [];
-}
-
 export function blockedCatalogEntries(): readonly BlockedCatalogEntry[] {
   return blockedCatalog;
 }

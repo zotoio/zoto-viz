@@ -103,11 +103,6 @@ def register_install_check(check: InstallCheck) -> None:
     _INSTALL_CHECKS.append(check)
 
 
-def reset_install_locks_for_tests() -> None:
-    with _pack_lock_meta:
-        _pack_install_locks.clear()
-
-
 def _lock_for_pack(pack_id: str) -> threading.Lock:
     with _pack_lock_meta:
         lock = _pack_install_locks.get(pack_id)
@@ -415,12 +410,6 @@ def install_staged_to_runtime(
     doc = staged.manifest
     pid = str(doc["id"])
     incoming = staged.zip_sha256
-    if not force:
-        blocked = zip_block_for_sha(incoming)
-        if blocked is not None:
-            msg = str(blocked.get("message") or "This zip install is blocked.")
-            reason = str(blocked.get("blockReason") or blocked.get("error") or "blocked")
-            raise InstallStartFailedError(msg, reason=reason)
     if not force and should_skip_unchanged_zip(dest_zip, runtime, incoming):
         psz.cleanup_staging_for_pack(runtime.parent, pid)
         return _unpack_result_from_runtime(dest_zip, runtime, incoming)
@@ -429,6 +418,12 @@ def install_staged_to_runtime(
     lock = _lock_for_pack(pid)
     lock.acquire()
     try:
+        if not force:
+            blocked = zip_block_for_sha(incoming)
+            if blocked is not None:
+                msg = str(blocked.get("message") or "This zip install is blocked.")
+                reason = str(blocked.get("blockReason") or blocked.get("error") or "blocked")
+                raise InstallStartFailedError(msg, reason=reason)
         return _install_staged_to_runtime_locked(
             staged,
             zip_path,

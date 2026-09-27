@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-38-typecheck-included)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > tsconfig include lists the typecheck proofs",
+  "red": "AssertionError: expected -1 to be 1 // Object.is equality"
+}

@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_block_install_guards.py",
+  "testName": "test_malicious_plugin_ids_refuse_install_without_touching_block_store",
+  "description": "Block-store paths must validate pack ids and stay inside blocks/ (no raw path join).",
+  "patchedFailure": "Failed: DID NOT RAISE ValueError"
+}

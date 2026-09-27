@@ -3,5 +3,5 @@
   "testFile": "tests/test_plugin_install.py",
   "testName": "test_retry_zip_hash_mismatch_returns_409_without_installing",
   "description": "Retry does not compare drop-folder zip sha to blocked digest.",
-  "patchedFailure": "E   AssertionError: assert 'zip_not_found' == 'zip_hash_mismatch'"
+  "patchedFailure": "E       AssertionError: assert 'zip_not_found' == 'zip_hash_mismatch'"
 }

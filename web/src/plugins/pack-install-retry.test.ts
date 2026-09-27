@@ -6,24 +6,12 @@ import {
   packRetrySuccessHistoryMessage,
   packRetryZipChangedMessage,
 } from "./pack-install-retry-copy";
-import {
-  applyPackInstallRetryResponse,
-  blockedRecordDisplayMessage,
-  isPackRetryInFlight,
-  packInstallHistory,
-  packRetryButtonState,
-  resetPackInstallRetryForTests,
-  submitPackInstallRetry,
-} from "./pack-install-retry";
-import {
-  resetPackInstallSurfaceForTests,
-  syncBlockedCatalogFromErrors,
-  blockedCatalogEntries,
-} from "./pack-install-surface";
 
 const SHA = "a".repeat(64);
 
-function seedCouldntStartRecord(): void {
+function seedCouldntStartRecord(
+  syncBlockedCatalogFromErrors: (errors: readonly Record<string, unknown>[]) => void,
+): void {
   syncBlockedCatalogFromErrors([{
     error: "pack_install_start_failed",
     blockReason: "couldnt_start",
@@ -40,15 +28,18 @@ function seedCouldntStartRecord(): void {
 describe("pack install retry UX", () => {
   beforeEach(() => {
     expect.hasAssertions();
-  });
-  beforeEach(() => {
-    resetPackInstallSurfaceForTests();
-    resetPackInstallRetryForTests();
+    vi.resetModules();
     vi.restoreAllMocks();
   });
 
   it("in flight: disables button and shows Retrying…; second submit is a no-op", async () => {
-    seedCouldntStartRecord();
+    const {
+      isPackRetryInFlight,
+      packRetryButtonState,
+      submitPackInstallRetry,
+    } = await import("./pack-install-retry");
+    const { syncBlockedCatalogFromErrors } = await import("./pack-install-surface");
+    seedCouldntStartRecord(syncBlockedCatalogFromErrors);
     let resolveFetch!: (v: Response) => void;
     const fetchPromise = new Promise<Response>((res) => {
       resolveFetch = res;
@@ -66,8 +57,15 @@ describe("pack install retry UX", () => {
     expect(packRetryButtonState(SHA)).toEqual({ disabled: false, label: PACK_RETRY_BUTTON_IDLE });
   });
 
-  it("start_failed: updates blocked record in place with still-couldn't-start copy", () => {
-    seedCouldntStartRecord();
+  it("start_failed: updates blocked record in place with still-couldn't-start copy", async () => {
+    const {
+      applyPackInstallRetryResponse,
+      blockedRecordDisplayMessage,
+      packInstallHistory,
+      packRetryButtonState,
+    } = await import("./pack-install-retry");
+    const { blockedCatalogEntries, syncBlockedCatalogFromErrors } = await import("./pack-install-surface");
+    seedCouldntStartRecord(syncBlockedCatalogFromErrors);
     const body = {
       retryResult: "start_failed",
       name: "Upgrade probe",
@@ -83,8 +81,10 @@ describe("pack install retry UX", () => {
     expect(packRetryButtonState(SHA).label).toBe(PACK_RETRY_BUTTON_IDLE);
   });
 
-  it("zip_changed: keeps blocked row with zip-changed copy", () => {
-    seedCouldntStartRecord();
+  it("zip_changed: keeps blocked row with zip-changed copy", async () => {
+    const { applyPackInstallRetryResponse, blockedRecordDisplayMessage } = await import("./pack-install-retry");
+    const { blockedCatalogEntries, syncBlockedCatalogFromErrors } = await import("./pack-install-surface");
+    seedCouldntStartRecord(syncBlockedCatalogFromErrors);
     applyPackInstallRetryResponse(SHA, 409, {
       retryResult: "zip_changed",
       name: "Upgrade probe",
@@ -96,8 +96,10 @@ describe("pack install retry UX", () => {
     );
   });
 
-  it("success: removes blocked row and appends history line", () => {
-    seedCouldntStartRecord();
+  it("success: removes blocked row and appends history line", async () => {
+    const { applyPackInstallRetryResponse, packInstallHistory } = await import("./pack-install-retry");
+    const { blockedCatalogEntries, syncBlockedCatalogFromErrors } = await import("./pack-install-surface");
+    seedCouldntStartRecord(syncBlockedCatalogFromErrors);
     applyPackInstallRetryResponse(SHA, 200, {
       ok: true,
       retryResult: "success",

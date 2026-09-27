@@ -43,7 +43,7 @@ from .pack_runtime import (
     cleanup_staging,
     materialize_zip_runtime,
     remember_zip_block,
-    reset_zip_block_cache,
+    _clear_zip_block_cache,
     zip_block_cache_key,
 )
 from .plugin_install import InstallV2BlockedError
@@ -199,7 +199,7 @@ def reset_bundles() -> None:
     _bundles.clear()
     _compile_runs = 0
     _bundle_invocations = 0
-    reset_zip_block_cache()
+    _clear_zip_block_cache()
     reset_scan_memo()
 
 

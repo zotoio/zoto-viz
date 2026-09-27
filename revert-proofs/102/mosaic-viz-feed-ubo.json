@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic-viz-feed.test.ts",
+  "testName": "deliverMosaicDemoPacks > writes UBO to each tile's scene",
+  "description": "Revert per-tile host pack frame delivery writing UBO buffers",
+  "red": {
+    "actual": false,
+    "expected": true
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected false to be true // Object.is equality"
+}
