@@ -1,7 +1,7 @@
 {
+  "description": "Revert production guard (row-40-s-b-queued-dismiss-cleared)",
   "runner": "vitest",
   "testFile": "src/core/wall-notice-region.test.ts",
   "testName": "wall notice region > drops exactly one queued entry when its handle is dismissed",
-  "description": "Revert production guard (row-19-queued-handle-dismiss)",
-  "red": "AssertionError: expected '0' to be '1' // Object.is equality"
+  "red": "AssertionError: expected true to be false // Object.is equality"
 }

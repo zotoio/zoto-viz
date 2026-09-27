@@ -3,5 +3,5 @@
   "testFile": "src/core/wall-notice-region.test.ts",
   "testName": "wall notice region > clears timers and children without rebuilding the region node",
   "description": "Revert production guard (row-09-region-lifetime)",
-  "red": "AssertionError: expected <div \u2026(2)>\u2026(2)</div> to be <div \u2026(2)>\u2026(2)</div> // Object.is equality"
+  "red": "AssertionError: expected 10 to be +0 // Object.is equality"
 }

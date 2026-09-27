@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-43-s-e-row-pointer-events)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > uses fixed bottom-centre placement with a 480px max width",
+  "red": "AssertionError: expected '' to be 'auto' // Object.is equality"
+}

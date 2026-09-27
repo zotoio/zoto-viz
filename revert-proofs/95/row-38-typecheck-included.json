@@ -1,7 +1,7 @@
 {
   "description": "Revert production guard (row-38-typecheck-included)",
-  "runner": "command",
-  "command": "sh -c 'pnpm exec tsc --noEmit --listFilesOnly | grep -Fq typecheck/wall-notice-region.typecheck.ts'",
-  "cwd": "web",
-  "red": "COMMAND_EXIT_1"
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > tsconfig include lists the typecheck proofs",
+  "red": "AssertionError: expected '../plugins/src/hn-term/frontend/teletype.ts' to be 'typecheck/**/*.ts' // Object.is equality"
 }
