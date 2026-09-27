@@ -1141,9 +1141,7 @@ mosaic = new Mosaic({
     if (theme) applyTheme(theme.id);
     applyViewLook();
   },
-  onLayout: (patch) => {
-    settings.applyMosaicLayout(patch);
-  },
+  onLayout: (patch) => settings.applyMosaicLayout(patch),
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },

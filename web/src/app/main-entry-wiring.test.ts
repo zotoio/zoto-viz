@@ -12,6 +12,12 @@ let capturedSettings: Settings | null = null;
 
 const bindHostView = vi.hoisted(() => vi.fn(function bindThisView() {}));
 const rebindViewDrawerOnApplyMode = vi.hoisted(() => vi.fn(function rebindViewDrawerOnApplyMode() {}));
+const syncPluginFieldsFromSettingsEdit = vi.hoisted(() => vi.fn(function syncPluginFieldsFromSettingsEdit() {}));
+const createMosaicPanePickHandler = vi.hoisted(() =>
+  vi.fn(function createMosaicPanePickHandler() {
+    return () => false;
+  }),
+);
 
 vi.mock("three", async (importOriginal) => {
   const t = await importOriginal<typeof import("three")>();
@@ -33,6 +39,14 @@ vi.mock("./host-view-bind", () => ({ bindThisView: bindHostView }));
 vi.mock("./host-apply-mode-rebind", async (importOriginal) => {
   const o = await importOriginal<typeof import("./host-apply-mode-rebind")>();
   return { ...o, rebindViewDrawerOnApplyMode };
+});
+vi.mock("./plugin-fields-from-settings", async (importOriginal) => {
+  const o = await importOriginal<typeof import("./plugin-fields-from-settings")>();
+  return { ...o, syncPluginFieldsFromSettingsEdit };
+});
+vi.mock("./host-mosaic-pane-pick", async (importOriginal) => {
+  const o = await importOriginal<typeof import("./host-mosaic-pane-pick")>();
+  return { ...o, createMosaicPanePickHandler };
 });
 
 vi.mock("../ui/settings", async (importOriginal) => {
@@ -83,6 +97,8 @@ describe("main.ts entry wiring", () => {
     vi.resetModules();
     bindHostView.mockClear();
     rebindViewDrawerOnApplyMode.mockClear();
+    syncPluginFieldsFromSettingsEdit.mockClear();
+    createMosaicPanePickHandler.mockClear();
   });
 
   it("bindThisView routes mode cog through host-view-bind", async () => {
@@ -101,5 +117,21 @@ describe("main.ts entry wiring", () => {
     await flushMicrotasks();
     expectSpyOnce(rebindViewDrawerOnApplyMode, "rebindViewDrawerOnApplyMode");
     expect(typeof rebindViewDrawerOnApplyMode.mock.calls[0]![0]).toBe("function");
+  });
+
+  it("settings plugin edits route through plugin-fields-from-settings", async () => {
+    await import("./main");
+    await flushMicrotasks();
+    expect(capturedSettings?.onPluginChange).toBeTypeOf("function");
+    syncPluginFieldsFromSettingsEdit.mockClear();
+    capturedSettings!.onPluginChange();
+    expectSpyOnce(syncPluginFieldsFromSettingsEdit, "syncPluginFieldsFromSettingsEdit");
+  });
+
+  it("main wires mosaic pane pick through host-mosaic-pane-pick factory", async () => {
+    await import("./main");
+    await flushMicrotasks();
+    expectSpyOnce(createMosaicPanePickHandler, "createMosaicPanePickHandler");
+    expect(typeof createMosaicPanePickHandler.mock.calls[0]![0]?.getMosaic).toBe("function");
   });
 });
