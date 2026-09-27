@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index a3ae968..cdf864e 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -494,7 +494,7 @@ function loadProductionConfig(wtRoot) {
+   return {
+     scanRoots: (raw.scanRoots ?? []).map((r) => normRel(r)),
+     entryPoints,
+-    reachExempt: new Set((raw.reachExempt ?? []).map((p) => normRel(p))),
++    reachExempt: new Set(),
+   };
+ }
+ 

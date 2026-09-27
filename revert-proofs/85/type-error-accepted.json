@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (vitest-typeerror) TypeError patched run is rejected as build break",
+  "description": "Classify every vitest failure as assertion red",
+  "red": {
+    "actual": "row type-error: red value mismatch (expected {\"actual\":2,\"expected\":1}, got null)",
+    "expected": "row type-error: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; non-assertion error)"
+  }
+}

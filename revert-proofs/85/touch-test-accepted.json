@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (test-touch) patch touching test files is rejected",
+  "description": "Disable production-only patch validation",
+  "red": {
+    "actual": "row touch-test: red value mismatch (expected {\"actual\":2,\"expected\":1}, got {\"actual\":1,\"expected\":9})",
+    "expected": "row touch-test: patch touches test files (only production reverts allowed)"
+  }
+}

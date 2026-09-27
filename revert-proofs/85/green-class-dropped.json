@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (vitest-green-class) classifyPatchedVitest reports green when patched passes",
+  "description": "Drop the green classification",
+  "red": {
+    "actual": "build break",
+    "expected": "green"
+  }
+}

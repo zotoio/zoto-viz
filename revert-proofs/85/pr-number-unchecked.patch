@@ -1,0 +1,14 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index a3ae968..392b3d2 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -11,9 +11,6 @@ export const TEST_PATH_RE =
+ const PYTHON_MODULE_RE = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/;
+ 
+ export function validatePrNumber(pr) {
+-  if (!/^\d+$/.test(String(pr))) {
+-    throw new Error(`invalid PR number: ${pr}`);
+-  }
+ }
+ 
+ export function validatePythonModule(name) {

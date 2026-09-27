@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (f) real expect() failure is RED with revertProofAssertion meta",
+  "description": "Brand capture swaps actual and expected",
+  "red": {
+    "actual": 0,
+    "expected": 1
+  }
+}

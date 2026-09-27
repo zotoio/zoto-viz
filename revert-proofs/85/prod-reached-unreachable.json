@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (n) revert patch on production-reached module is accepted",
+  "description": "Treat every revert target as unreachable",
+  "red": {
+    "actual": 1,
+    "expected": 0
+  }
+}

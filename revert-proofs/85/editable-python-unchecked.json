@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "isolation guards > rejects editable python resolving outside the worktree",
+  "description": "Drop the editable-install realpath check",
+  "red": {
+    "actual": null,
+    "expected": "editable Python package rpfixture resolves outside worktree (<outside>/rpfixture/__init__.py)"
+  }
+}

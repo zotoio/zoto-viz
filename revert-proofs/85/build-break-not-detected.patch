@@ -1,0 +1,16 @@
+diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
+index d58a94f..164cf89 100755
+--- a/scripts/revert-proof.mjs
++++ b/scripts/revert-proof.mjs
+@@ -793,11 +793,6 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
+   }
+ 
+   const patchedCount = metaRunnerCount(patched);
+-  if (patchedCount === 0 && (patched.counts.suiteError || patched.counts.collectionError)) {
+-    throw new Error(
+-      `row ${slug}: patch breaks build (proves nothing)`,
+-    );
+-  }
+   assertExactlyOneTest(slug, "patched", patched, meta);
+ 
+   if (meta.runner === "vitest") {

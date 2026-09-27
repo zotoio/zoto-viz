@@ -1,0 +1,12 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index a3ae968..8625c6f 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -420,7 +420,6 @@ export function classifyPatchedPytest(run) {
+   if (run.counts.collectionError) return "build break";
+   const sel = run.counts.selection;
+   if (!sel?.ok || !sel.target) return "not single test";
+-  if (sel.target.outcome === "error") return "build break";
+   if (sel.target.outcome === "passed") return "green";
+   if (sel.target.outcome === "failed") {
+     return sel.target.revertProofAssertion ? "assertion" : "build break";

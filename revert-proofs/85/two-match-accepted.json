@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (filter-two) filter matching two tests is rejected",
+  "description": "Drop the multiple-match rejection",
+  "red": {
+    "actual": 0,
+    "expected": 1
+  }
+}

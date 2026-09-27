@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (a) correct revert row produces red output and exit 0",
+  "description": "Skip applying the revert patch",
+  "red": {
+    "actual": 1,
+    "expected": 0
+  }
+}

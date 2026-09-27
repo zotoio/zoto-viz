@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "isolation guards > rejects workspace symlinks that escape the worktree",
+  "description": "Skip scoped packages in the workspace link check",
+  "red": {
+    "actual": null,
+    "expected": "workspace link <root>/node_modules/@scope/pkg resolves outside worktree: /tmp"
+  }
+}

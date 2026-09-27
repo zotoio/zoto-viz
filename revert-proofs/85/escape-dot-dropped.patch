@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index a3ae968..ccc69f3 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -161,7 +161,7 @@ export function validatePatchStructure(patchText, slug) {
+ }
+ 
+ export function escapeVitestTestNamePattern(testName) {
+-  return testName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
++  return testName.replace(/[\\^$*+?()[\]{}|]/g, "\\$&");
+ }
+ 
+ /** Vitest `-t` is a RegExp; anchor the sidecar full name verbatim (` > ` segments included). */
