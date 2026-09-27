@@ -1,8 +1,8 @@
 {
   "runner": "vitest",
   "testFile": "src/core/http-notice.test.ts",
-  "testName": "server restart wall notice > burst de-duplication > emits a restart event for each stale-token burst",
-  "red": "AssertionError: expected [ Array(1) ] to deeply equal [ \u2026(2) ]",
+  "testName": "server restart wall notice > burst de-duplication > emits one restart event for two sequential stale bursts without restart-cleared",
+  "red": "AssertionError: expected [ 'The server restarted, so packs were reloaded.', 'The server restarted, so packs were reloaded.' ] to deeply equal [ 'The server restarted, so packs were reloaded.' ]",
   "description": "http-restart-notice-emitted",
   "timeoutSec": 120
 }

@@ -186,14 +186,25 @@ describe("server restart wall notice", () => {
       expect(restartStatusNotices()).toHaveLength(1);
     });
 
-    it("emits a restart event for each stale-token burst", async () => {
+    it("emits one restart event for two sequential stale bursts without restart-cleared", async () => {
       const events: string[] = [];
       const onRestart = (e: Event) => { events.push((e as CustomEvent<string>).detail); };
       window.addEventListener("zoto-viz-server-restart", onRestart);
-      await Promise.all([apiFetch("/api/a", { method: "PUT" })]);
+      await apiFetch("/api/a", { method: "PUT" });
+      noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
+      await apiFetch("/api/b", { method: "PUT" });
+      window.removeEventListener("zoto-viz-server-restart", onRestart);
+      expect(events).toEqual([SERVER_RESTART_NOTICE]);
+    });
+
+    it("emits a restart event for each stale-token burst separated by restart-cleared", async () => {
+      const events: string[] = [];
+      const onRestart = (e: Event) => { events.push((e as CustomEvent<string>).detail); };
+      window.addEventListener("zoto-viz-server-restart", onRestart);
+      await apiFetch("/api/a", { method: "PUT" });
       window.dispatchEvent(new Event("zoto-viz-server-restart-cleared"));
       noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
-      await Promise.all([apiFetch("/api/b", { method: "PUT" })]);
+      await apiFetch("/api/b", { method: "PUT" });
       window.removeEventListener("zoto-viz-server-restart", onRestart);
       expect(events).toEqual([SERVER_RESTART_NOTICE, SERVER_RESTART_NOTICE]);
     });
@@ -321,8 +332,7 @@ describe("server restart wall notice", () => {
       const notices = wallNotices();
       expect(notices).toHaveLength(1);
       const el = notices[0]!;
-      expect(el.textContent).not.toContain(SERVER_RESTART_NOTICE);
-      expect(el.querySelector("button.mosaic-wall-notice-retry")?.textContent).toBe("Retry");
+      expect(el.textContent).toBe("That request still failed after the server restarted. Retry");
       expect(el.getAttribute("role")).toBe("status");
     });
 
@@ -333,7 +343,7 @@ describe("server restart wall notice", () => {
       vi.advanceTimersByTime(8000);
       const notices = wallNotices();
       expect(notices).toHaveLength(1);
-      expect(notices[0]!.textContent).toContain(SESSION_RETRY_FAILED_NOTICE);
+      expect(notices[0]!.textContent).toBe("That request still failed after the server restarted. Retry");
     });
   });
 

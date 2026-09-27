@@ -2,7 +2,7 @@
   "runner": "vitest",
   "testFile": "src/core/http-notice.test.ts",
   "testName": "server restart wall notice > burst auto-clear timer > arms exactly one eight-second auto-clear for three restart events",
-  "red": "AssertionError: expected [ [ [Function], 8000 ], \u2026(2) ] to have a length of 1 but got 3",
+  "red": "AssertionError: expected 3 to be 1 // Object.is equality",
   "description": "ux-restart-notice-timer-arm",
   "timeoutSec": 120
 }

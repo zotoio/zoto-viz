@@ -77,4 +77,32 @@ describe("UX copy literals", () => {
     off();
     document.body.innerHTML = "";
   });
+
+  it("pins Retry button label as exact literal", async () => {
+    document.body.innerHTML = "<div id=\"wall\"></div>";
+    const off = bindServerRestartWallNotice();
+    globalThis.fetch = (async (url: string) => {
+      const path = String(url);
+      if (path.includes("/api/session")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
+          json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
+        } as Response;
+      }
+      return {
+        ok: false,
+        status: 403,
+        headers: new Headers(),
+        clone() { return this; },
+        json: async () => ({ error: "csrf required" }),
+      } as Response;
+    }) as typeof fetch;
+    await apiFetch("/api/profiles/user", { method: "PUT" });
+    const btn = document.querySelector("#wall .mosaic-wall-notice-retry");
+    expect(btn?.textContent).toBe("Retry");
+    off();
+    document.body.innerHTML = "";
+  });
 });
