@@ -46,6 +46,7 @@ import {
 } from "./plugin-manifest-blocked";
 import { PluginSandbox, pluginModuleUrl } from "./host";
 import type { PluginIdleConfig } from "./fixtures/golden-state";
+import type { RenderScaleConfig } from "./render-scale-governor";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
@@ -210,6 +211,8 @@ export interface PluginView {
   workBudget?: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget;
   /** Set when the host clamped workBudget below what the pack asked for. */
   workBudgetLimited?: string;
+  /** Host adaptive render-scale governor steps (from plugin.yml render.scale). */
+  renderScale?: RenderScaleConfig;
   typesafe?: TypeSafeContract;
   hash?: string;
   service?: string;

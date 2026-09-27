@@ -86,6 +86,13 @@ import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
+import { tickRenderScalePanes, type RenderScalePane } from "../plugins/render-scale-host";
+import {
+  hostRenderScaleGovernorEnabled,
+  loadVizGovernorSetting,
+  refreshHostRenderScaleGovernorEnabled,
+  setVizGovernorSetting,
+} from "../plugins/render-scale-governor-enable";
 import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
   buildVizFrameForPlugin, defaultVizContract,
@@ -185,6 +192,13 @@ if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 scene.retargetPanel("main");
 bindVizDriveElement("main", $("scene"));
+const vizBudget = new VizFrameBudget();
+{
+  const gl = renderHost.gl;
+  const gpuOk = !!gl?.getExtension("EXT_disjoint_timer_query_webgl2");
+  vizBudget.setGpuTimerAvailable(gpuOk);
+  scene.renderScaleState.setGpuTimerAvailable(gpuOk);
+}
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
 scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
@@ -386,7 +400,6 @@ const sandbox = new PluginSandbox();
 const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
-const vizBudget = new VizFrameBudget();
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
@@ -409,7 +422,50 @@ const syncMosaicPluginHudCaptions = bootPluginSettingsHost({
 });
 
 bindVizDriveElement("main", $("scene"));
+refreshHostRenderScaleGovernorEnabled();
+
+function applyHostRenderScaleGovernor(on: boolean): void {
+  setVizGovernorSetting(on);
+  refreshHostRenderScaleGovernorEnabled();
+  const panes = renderScalePanes();
+  tickRenderScalePanes(panes, performance.now(), on);
+}
+
+function syncPaneRenderScale(target: NetScene, spec: PluginView | null): void {
+  target.configureRenderScale(spec?.renderScale ?? null);
+  const uniforms = spec?.viz?.uniforms;
+  target.setPluginSkyContract(uniforms);
+}
+
+function renderScalePanes(): RenderScalePane[] {
+  if (mosaic?.on) return mosaic.graphs.filter((s) => s.renderScaleActive);
+  return scene.renderScaleActive ? [scene] : [];
+}
+
+function focusedRenderScene(): NetScene {
+  if (!mosaic?.on) return scene;
+  return mosaic.graphScene(mosaic.focusedId)
+    ?? mosaic.graphScene(mosaic.heroMode)
+    ?? mosaic.graphs[0]
+    ?? scene;
+}
+
+function syncRenderGovernor(spec: PluginView | null): void {
+  const cfg = spec?.renderScale;
+  vizHud.setBudgetOverlayVisible(!!cfg);
+  syncPaneRenderScale(scene, spec);
+  if (mosaic?.on) {
+    for (const s of mosaic.graphs) {
+      const m = s.currentMode;
+      syncPaneRenderScale(s, m.pluginId ? pluginSpecForMode(m.id) : null);
+    }
+  }
+}
+
 addPresentListener((ts) => {
+  const panes = renderScalePanes();
+  for (const p of panes) p.renderScaleState.onPaneFrame(ts);
+  tickRenderScalePanes(panes, performance.now(), hostRenderScaleGovernorEnabled());
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
@@ -488,6 +544,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
     vizHud.resetSkipBaseline();
   }
   if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
+  syncRenderGovernor(spec);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
@@ -891,6 +948,8 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
       if (target === scene) skyLoaded = "";
       return;
     }
+    target.setPluginSkyContract(spec.viz?.uniforms);
+    syncPaneRenderScale(target, spec);
     if (target === scene) skyLoaded = key;
   } catch (e) {
     console.warn("zoto-viz plugin sky:", e);
@@ -1372,14 +1431,26 @@ function feed(m: StateMsg): void {
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
     }
+    const now = performance.now();
+    const govOn = hostRenderScaleGovernorEnabled();
+    const focusRs = focusedRenderScene().renderScaleState;
+    const packGov = focusRs.hasGovernor;
+    const renderScale = packGov ? (govOn ? focusRs.renderScale : 1) : null;
+    const hostStats = vizBudget.stats;
+    const budgetStats = packGov
+      ? { ...focusRs.stats(), skipped: hostStats.skipped }
+      : hostStats;
     vizHud.tick({
       packId,
       packName: active?.name ?? packId ?? "",
-      stats: vizBudget.stats,
+      stats: budgetStats,
       frame: vizBudget.lastBuilt,
       state: shown,
       now: performance.now(),
       present: presentFrameStats(),
+      now,
+      renderScale,
+      governorEnabled: govOn,
     });
   }
 
@@ -1520,6 +1591,7 @@ mosaic = new Mosaic({
     lastMsg: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).msg : lastRaw,
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
+  configureGraphPane: (s, modeId) => syncPaneRenderScale(s, pluginSpecForMode(modeId)),
 });
 settings.onMosaicPanePick = (from, to) => {
   if (!mosaic?.on) return false;
@@ -1686,6 +1758,13 @@ liveChat.onSend = (text) => agent.offerSend(text);
 liveChat.onMicDown = () => agent.beginTalk();
 liveChat.onMicUp = () => agent.endTalk();
 liveChat.seedTranscript(agent.transcript());
+const vizGovernorToggle = new Toggle({
+  id: "viz-governor",
+  label: "render governor",
+  title: "Adaptive render.scale governor (off by default). Also ?vizGovernor=1 on the URL for a one-off local GPU run.",
+  checked: loadVizGovernorSetting(),
+  onChange: (on) => applyHostRenderScaleGovernor(on),
+});
 const autoconsentToggle = new Toggle({
   id: "autoconsent",
   label: "auto-consent plugins",
@@ -1697,7 +1776,7 @@ const autoconsentToggle = new Toggle({
     touch();
   },
 });
-const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle]);
+const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle, vizGovernorToggle]);
 $("settingsBox").appendChild(settings.el);
 settings.attachViewCog($("modeBox"), () => bindThisView(modeSel.value));
 settings.onShowView = () => {
@@ -2147,6 +2226,7 @@ function collectSettings(): ProfileSettings {
     merge: mergeToggle.checked,
     redact: redactToggle.checked,
     autoconsent: autoconsentEnabled(),
+    vizGovernor: loadVizGovernorSetting(),
     filters: settings.filterText(),
     anim: { ...settings.animSettings },
     feed: { ...settings.feedSettings },
@@ -2196,6 +2276,8 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   setRedaction(s.redact);
   setAutoconsent(s.autoconsent);
   autoconsentToggle.checked = s.autoconsent;
+  applyHostRenderScaleGovernor(s.vizGovernor === true);
+  vizGovernorToggle.checked = s.vizGovernor === true;
   settings.setFilterText(s.filters);
   paintAgentLook(s.agent ?? { decos: [] });
   // Pin the menu to the restored view before anim runs. Otherwise a mosaic

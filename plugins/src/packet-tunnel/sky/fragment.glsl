@@ -2,6 +2,7 @@ void main() {
   vec3 dir = normalize(vDir);
   float tunnel = 0.5 + 0.5 * sin(8.0 * dir.x + uTime * 0.6);
   float depth = 0.5 + 0.5 * dir.z;
-  vec3 col = mix(uBg, uAccent, tunnel * depth);
+  float acc = tunnel * depth;
+  vec3 col = mix(uBg, uAccent, clamp(acc, 0.0, 1.0));
   fragColor = vec4(col * uBright, uOpacity);
 }

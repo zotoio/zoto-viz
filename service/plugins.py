@@ -667,6 +667,28 @@ def _check_semantics(doc: dict[str, Any], *, include_settings: bool = False) -> 
             raise ValueError("viz.idle must be { fixture: host } or an inline demo seed")
     elif isinstance(viz, dict) and viz.get("graphWalk") is not False:
         raise ValueError("viz.graphWalk must be false when viz block is present")
+    render = doc.get("render")
+    if isinstance(render, dict):
+        scale = render.get("scale")
+        if scale is not None:
+            if not isinstance(scale, dict):
+                raise ValueError("render.scale must be a mapping")
+            mn = scale.get("min")
+            if not isinstance(mn, (int, float)) or mn <= 0 or mn > 1:
+                raise ValueError("render.scale.min must be a number greater than 0 and at most 1")
+            steps = scale.get("steps")
+            if steps is not None:
+                if not isinstance(steps, list) or not steps:
+                    raise ValueError("render.scale.steps must be a non-empty list of numbers")
+                prev = 2.0
+                for i, raw in enumerate(steps):
+                    if not isinstance(raw, (int, float)) or raw <= 0 or raw > 1:
+                        raise ValueError(f"render.scale.steps[{i}] must be a number greater than 0 and at most 1")
+                    if raw < mn:
+                        raise ValueError(f"render.scale.steps[{i}] must be at or above render.scale.min")
+                    if raw > prev:
+                        raise ValueError("render.scale.steps must be in descending order")
+                    prev = float(raw)
     if isinstance(viz, dict) and needs_viz and viz.get("ubo") is not None:
         ubo = viz.get("ubo")
         if ubo != {

@@ -43,6 +43,8 @@ export interface ProfileSettings {
   redact: boolean;
   /** Auto-grant plugin consent for shipped src and local zips (not contrib zips). */
   autoconsent: boolean;
+  /** Host adaptive render.scale governor (off by default; also `?vizGovernor=1`). */
+  vizGovernor: boolean;
   filters: { allowNames: string; blockNames: string; allowNets: string; blockNets: string };
   anim: DreamAnim;
   feed: FeedConfig;
@@ -124,6 +126,7 @@ export function shippedSettings(): ProfileSettings {
     merge: false,
     redact: false,
     autoconsent: false,
+    vizGovernor: false,
     filters: { allowNames: "", blockNames: "", allowNets: "", blockNets: "" },
     anim: { ...DEFAULT_DREAM },
     feed: { ...DEFAULT_FEED },
@@ -186,6 +189,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     merge: bool(s.merge, d.merge),
     redact: bool(s.redact, d.redact),
     autoconsent: bool(s.autoconsent, d.autoconsent),
+    vizGovernor: bool(s.vizGovernor, d.vizGovernor),
     filters: {
       allowNames: str(filters.allowNames),
       blockNames: str(filters.blockNames),

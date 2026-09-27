@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
+import { PLUGIN_SKY_HOST_UNIFORMS } from "../plugins/plugin-sky-uniforms";
 import { VIZ_UBO, VIZ_UBO_GLSL } from "../plugins/viz-host";
 import { liveCam } from "../camera/livecam";
 import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
@@ -676,7 +677,7 @@ export function probePluginSkyCompile(frag: string): string | null {
 
 const PLUGIN_UNIFORM_RE =
   /\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234]|int|uint|bool|mat[234]|sampler(?:2D|3D|Cube))\s+(\w+)\s*;/g;
-const PLUGIN_ALLOWED = new Set<string>(PLUGIN_SKY_UNIFORMS);
+const PLUGIN_ALLOWED = new Set<string>([...PLUGIN_SKY_UNIFORMS, ...PLUGIN_SKY_HOST_UNIFORMS]);
 
 /** Reject includes and any uniform outside the frozen plugin sky contract. */
 export function pluginShaderError(src: string): string | null {
@@ -703,17 +704,20 @@ export function wrapPluginSky(raw: string): { frag: string } | { error: string }
   if (err) return { error: err };
   const body = raw.replace(/#version[^\n]*\n?/g, "").replace(/\bprecision\s+\w+\s+float\s*;/g, "").trim();
   const stripped = body
-    .replace(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234])\s+(?:uTime|uOpacity|uBright|uAudio|uAccent|uBg)\s*;/g, "")
+    .replace(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234])\s+(?:uTime|uOpacity|uBright|uAudio|uAccent|uBg|uRenderScale)\s*;/g, "")
+    .replace(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?vec2\s+uResolution\s*;/g, "")
     .replace(/\bin\s+vec3\s+vDir\s*;/g, "")
     .replace(/\bout\s+vec4\s+fragColor\s*;/g, "")
     .trim();
   const preamble = /* glsl */ `${VIZ_UBO_GLSL}
+uniform vec2 uResolution;
 uniform float uTime;
 uniform float uOpacity;
 uniform float uBright;
 uniform float uAudio;
 uniform vec3 uAccent;
 uniform vec3 uBg;
+uniform float uRenderScale;
 in vec3 vDir;
 out vec4 fragColor;
 
@@ -738,6 +742,11 @@ export class Backdrop {
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
   private readonly pluginUbo = new Float32Array(VIZ_UBO.totalFloats);
+  private pluginRenderScale = 1;
+  private pluginExposeRenderScale = false;
+  private viewportW = 16;
+  private viewportH = 9;
+  private viewportDpr = 1;
   private kind: BackdropKind = "none";
   private customFrag: string | null = null;
   /** the sky's animation clock, in shader seconds: integrates dt × current speed */
@@ -1131,17 +1140,46 @@ export class Backdrop {
     this.mat.needsUpdate = true;
   }
 
+  /** Which pack-declared sky uniforms are active (e.g. uRenderScale). */
+  setPluginSkyContract(uniforms: readonly string[] | undefined): void {
+    this.pluginExposeRenderScale = !!uniforms?.includes("uRenderScale");
+    this.syncPluginHostUniforms();
+  }
+
   private pluginUniforms(): THREE.ShaderMaterial["uniforms"] {
     const u = this.mat.uniforms;
     return {
+      uResolution: { value: new THREE.Vector2(16, 9) },
       uTime: { value: u.uTime.value },
       uOpacity: { value: u.uOpacity.value },
       uBright: { value: u.uBright.value },
       uAudio: { value: u.uAudio.value },
       uAccent: { value: (u.uAccent.value as THREE.Color).clone() },
       uBg: { value: (u.uBg.value as THREE.Color).clone() },
+      uRenderScale: { value: 1 },
       [VIZ_UBO.threeUniform]: { value: this.pluginUbo },
     };
+  }
+
+  /** Host adaptive render scale (1 when governor inactive). */
+  setPluginRenderScale(scale: number): void {
+    const s = Number.isFinite(scale) && scale > 0 ? Math.min(1, scale) : 1;
+    if (Math.abs(s - this.pluginRenderScale) < 0.0005) return;
+    this.pluginRenderScale = s;
+    this.syncPluginHostUniforms();
+  }
+
+  private syncPluginHostUniforms(): void {
+    const mat = this.pluginMat;
+    if (!mat || this.mesh.material !== mat) return;
+    const rw = Math.max(1, Math.floor(this.viewportW * this.viewportDpr * this.pluginRenderScale));
+    const rh = Math.max(1, Math.floor(this.viewportH * this.viewportDpr * this.pluginRenderScale));
+    const res = mat.uniforms.uResolution?.value as THREE.Vector2 | undefined;
+    if (res) res.set(rw, rh);
+    if (this.pluginExposeRenderScale) {
+      const u = mat.uniforms.uRenderScale;
+      if (u) u.value = this.pluginRenderScale;
+    }
   }
 
   private ensurePluginMat(id: string, frag: string): void {
@@ -1261,9 +1299,13 @@ export class Backdrop {
     this.applyRecipe(this.paintedRecipe);
   }
 
-  setViewport(w: number, h: number): void {
+  setViewport(w: number, h: number, dpr = 1): void {
+    this.viewportW = Math.max(1, w);
+    this.viewportH = Math.max(1, h);
+    this.viewportDpr = Math.max(0.25, dpr);
     (this.liveMat.uniforms.uCanvas.value as THREE.Vector2).set(w, h);
     (this.photoMat.uniforms.uCanvas.value as THREE.Vector2).set(w, h);
+    this.syncPluginHostUniforms();
   }
 
   setColors(accent: number, bg: number): void {

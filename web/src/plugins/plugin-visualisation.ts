@@ -5,6 +5,8 @@ import { parseFabric, parseGraphSpace } from "../graph/fabric";
 import { parseGraphLayout, parseGraphLinks } from "../graph/graph-layouts";
 import { parsePluginIdle } from "./fixtures/golden-state";
 import { parseVizContract, parseVizContractResult } from "./viz-host";
+import { parseRenderScaleConfig } from "./render-scale-governor";
+import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
 import { ingestCatalogWorkBudget } from "./work-budget-policy";
@@ -56,6 +58,7 @@ export type CatalogRow = {
   entry?: unknown;
   capabilities?: unknown;
   viz?: unknown;
+  render?: unknown;
   typesafe?: unknown;
   hash?: unknown;
   service?: unknown;
@@ -342,6 +345,11 @@ export function toPluginView(raw: unknown): PluginView {
   } else if (vizParsed?.state === "ready") {
     spec.viz = vizParsed.contract;
   }
+  const vizContract = parseVizContract(row.viz);
+  if (vizContract) spec.viz = vizContract;
+  const render = asRecord(row.render);
+  const renderScale = parseRenderScaleConfig(render?.scale);
+  if (renderScale) spec.renderScale = renderScale;
   const typesafeContract = parseTypeSafeContract(row.typesafe);
   if (typesafeContract) spec.typesafe = typesafeContract;
   if (asString(row.hash)) spec.hash = asString(row.hash);

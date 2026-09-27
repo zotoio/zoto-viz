@@ -13,6 +13,7 @@ import {
   skipRatePerSec,
   vizHudMetric,
 } from "./viz-hud";
+import { formatVizBudgetOverlay } from "../plugins/viz-budget-overlay";
 
 type Box = Pick<DOMRect, "top" | "bottom" | "left" | "right">;
 
@@ -172,6 +173,34 @@ describe("viz hud helpers", () => {
     expect(legend.childElementCount).toBeGreaterThanOrEqual(10);
   });
 
+  it("shows budget overlay with CPU label and dashes when there are no samples", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setBudgetOverlayVisible(true);
+    hud.setActive("packet-tunnel", "Packet Tunnel");
+    hud.tick({
+      packId: "packet-tunnel",
+      packName: "Packet Tunnel",
+      stats: {
+        skipped: 0, overBudget: 0, lastMs: 0, p95Ms: 0, total: 0, timingSource: "cpu", hasSamples: false,
+      },
+      frame: null,
+      state: minimalState(),
+      now: 1000,
+      renderScale: 1,
+    });
+    const text = hud.root.querySelector(".viz-hud-budget")?.textContent ?? "";
+    expect(text).toBe(formatVizBudgetOverlay({
+      timingSource: "cpu",
+      lastMs: null,
+      p95Ms: null,
+      renderScale: 1,
+      governorEnabled: false,
+    }));
+    expect(text.startsWith("gov off · CPU")).toBe(true);
+    expect(text).toContain("—");
+  });
+
   it("lays out pack, metric, skip, and swap on one nowrap row", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
@@ -179,7 +208,9 @@ describe("viz hud helpers", () => {
     hud.tick({
       packId: "packet-tunnel",
       packName: "Packet Tunnel",
-      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      stats: {
+        skipped: 0, overBudget: 0, lastMs: 0, p95Ms: 0, total: 0, timingSource: "cpu", hasSamples: false,
+      },
       frame: null,
       state: minimalState(),
       now: 1000,

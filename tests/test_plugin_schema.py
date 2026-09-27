@@ -13,7 +13,16 @@ from service import plugins
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schema" / "plugin.schema.json"
 
-ALLOWED_UNIFORMS = ("uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg")
+ALLOWED_UNIFORMS = (
+    "uTime",
+    "uOpacity",
+    "uBright",
+    "uAudio",
+    "uAccent",
+    "uBg",
+    "uResolution",
+    "uRenderScale",
+)
 EXCLUDED_UNIFORMS = ("uMode", "uMotif", "uA", "uB", "uWarp", "uGrain", "uBands")
 
 MINIMAL = {"id": "pulse", "name": "Pulse", "version": 1}
@@ -358,6 +367,32 @@ def test_plugin_config_field_section_rejects_non_string() -> None:
         except ValidationError as exc:
             err = exc
         assert err is not None, f"section {section!r} must be rejected"
+def test_render_scale_in_schema() -> None:
+    text = SCHEMA_PATH.read_text(encoding="utf-8")
+    assert "renderScale" in text
+    assert "uRenderScale" in text
+    assert "uResolution" in text
+    assert "vizFrameUboLayout" not in text
+    _validator().validate({
+        "id": "scale-pack",
+        "name": "Scale",
+        "version": 1,
+        "render": {"scale": {"min": 0.35, "steps": [1, 0.75, 0.5, 0.35]}},
+    })
+    with pytest.raises(ValidationError):
+        _validator().validate({
+            "id": "bad-scale",
+            "name": "Bad",
+            "version": 1,
+            "render": {"scale": {"min": 0}},
+        })
+    with pytest.raises(ValueError, match="render.scale.min"):
+        plugins.validate_doc({
+            "id": "bad-scale",
+            "name": "Bad",
+            "version": 1,
+            "render": {"scale": {"min": 1.5}},
+        })
 
 
 def test_viz_graph_walk_true_fails_schema() -> None:

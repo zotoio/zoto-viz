@@ -1,4 +1,5 @@
 import type { StateMsg } from "../core/types";
+import { formatVizBudgetOverlay, vizBudgetOverlayFromStats } from "../plugins/viz-budget-overlay";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
 import { morphCopy, Select } from "./ui";
 
@@ -72,6 +73,9 @@ export interface VizHudTick {
   frame: VizDataFrame | null;
   state: StateMsg;
   now: number;
+  /** When set, show the frame-budget overlay (GPU/CPU ms, p95, scale). */
+  renderScale?: number | null;
+  governorEnabled?: boolean;
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -173,11 +177,13 @@ export class VizHud {
   private readonly metricLabelEl: HTMLElement;
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly budgetEl: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
 
   private activeId: VizDemoPackId | null = null;
+  private budgetVisible = false;
   private lastSkipped = 0;
   private skipNeedsSync = true;
   private readonly skipSamples: { t: number; n: number }[] = [];
@@ -208,6 +214,11 @@ export class VizHud {
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
+    this.budgetEl = document.createElement("span");
+    this.budgetEl.className = "viz-hud-budget";
+    this.budgetEl.hidden = true;
+    this.budgetEl.title = "Present or GPU frame time (unclamped) and p95 over a rolling window";
+
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
     this.packSel = new Select({
@@ -225,11 +236,16 @@ export class VizHud {
       el.textContent = "·";
       return el;
     };
-    line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
+    line.append(this.packEl, sep(), metric, sep(), this.skipEl, sep(), this.budgetEl, this.swapRow);
     root.append(line);
 
     parent.append(root);
     this.root = root;
+  }
+
+  setBudgetOverlayVisible(on: boolean): void {
+    this.budgetVisible = on;
+    this.budgetEl.hidden = !on;
   }
 
   setActive(packId: string | null, packName: string): void {
@@ -274,5 +290,14 @@ export class VizHud {
 
     this.skipEl.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, now));
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
+
+    if (this.budgetVisible) {
+      const model = vizBudgetOverlayFromStats(
+        stats,
+        input.renderScale ?? null,
+        input.governorEnabled ?? false,
+      );
+      this.budgetEl.textContent = formatVizBudgetOverlay(model);
+    }
   }
 }

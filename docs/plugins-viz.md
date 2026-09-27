@@ -84,6 +84,62 @@ Uniform writes reach the active plugin `sky/fragment.glsl` via
 `scene.setPluginUniform`. Buffer writes land in the UBO mirror and are
 uploaded via `scene.setPluginUboBuffer`.
 
+## Adaptive render scale (`render.scale`)
+
+Optional in `plugin.yml` (schema `$defs/renderScale`). The **host** owns the
+governor — packs never implement their own DPR logic or branch on pack ids.
+
+```yaml
+render:
+  scale:
+    min: 0.35                              # > 0 and ≤ 1
+    steps: [1, 0.75, 0.5, 0.35]           # optional; clamped ≥ min, descending
+```
+
+When `render.scale` is absent the host keeps today’s behaviour at scale **1.0**.
+
+The adaptive governor is **off by default** until it is tuned on real GPU hardware.
+With it off, every pack renders at scale **1.0** and `uRenderScale` reads **1.0**
+even when `render.scale` is declared in YAML. Opt in without rebuilding:
+
+- Settings → Privacy → **render governor**, or
+- URL query `?vizGovernor=1` (use `?vizGovernor=0` to force off for one load).
+
+Hysteresis thresholds live in one place in the web host:
+`RENDER_SCALE_GOVERNOR_TUNING` in `web/src/plugins/render-scale-governor.ts`
+(`stepDownSustainMs`, `stepUpSustainMs`, `stepUpHeadroomRatio`).
+
+When present and the host governor is **on**, **each rendered view or mosaic tile** gets its own
+`RenderScaleGovernor` (timing samples + pane budget share in, suggested scale
+out). A **page arbiter** sits above them: at most one pane may step **down**
+per tick among panes at the **peak measured cost** (furthest over budget share
+among those — the heaviest view on the wall), and at most one may step **up**
+(cheapest first, after its own up-hysteresis). With a single governed view the
+arbiter is a no-op and matches the plain governor.
+
+Tiles today each measure frame time on a **shared GPU with separate contexts**,
+so cheap panes can inherit queue wait from an expensive neighbour and look
+over budget. The arbiter prevents the whole wall stepping down together until
+the host moves to a **single shared WebGL context** (the arbiter is written to
+drop in unchanged there). GPU timer queries drive hysteresis when
+`EXT_disjoint_timer_query_webgl2` is available (otherwise honest **CPU**
+present-to-present timing). Step **down** one notch after p95 stays over the
+pane budget for ~0.5 s; step **up** after ~2 s with p95 below 80% of budget.
+
+The pack UBO (`ZotoVizData` / `zotoVizSlots`) is unchanged. The host exposes:
+
+| Uniform | Type | Meaning |
+| --- | --- | --- |
+| `uResolution` | `vec2` | Scaled render size in pixels (DPR × governor scale). Most packs should size work from this alone. |
+| `uRenderScale` | `float` | Current scale (1 when inactive). Opt in by listing `uRenderScale` under `viz.uniforms`, same as `uTime`. |
+
+The demoscene HUD shows a budget line when `render.scale` is declared on the
+active pack (single view): **`gov on` / `gov off`**, then `GPU` or `CPU`,
+unclamped last frame ms, rolling **p95**, and current scale (always **1** when
+the host governor is off). In mosaic mode the header / focused pane shows the
+full line on its pane badge; other governed tiles show a compact scale suffix
+when the governor is on. Dashes appear when no timing samples exist yet.
+
 ## Frame budget
 
 `VizFrameBudget` times `buildVizFrame` each tick. Frames over
