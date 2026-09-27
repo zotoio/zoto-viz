@@ -72,6 +72,23 @@ describe("RenderHost canvas backing store", () => {
     host.dispose();
   });
 
+  it("resizeSoftware sets canvas backing width from CSS wall × layout DPR", () => {
+    vi.stubGlobal("devicePixelRatio", 2);
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(wall, "clientHeight", { configurable: true, value: 120 });
+    document.body.appendChild(wall);
+    const capHost = new RenderHost(wall, { software: true, maxLayoutDevicePxRatio: 1.25 });
+    cancelAnimationFrame((capHost as unknown as { raf: number }).raf);
+    const host = new RenderHost(wall, { software: true });
+    cancelAnimationFrame((host as unknown as { raf: number }).raf);
+    expect(host.canvas.width).toBe(250);
+    expect(host.canvas.height).toBe(150);
+    host.dispose();
+    capHost.dispose();
+    vi.unstubAllGlobals();
+  });
+
   it("refreshCanvasDeviceHeight uses Math.max(1, canvas.height)", () => {
     const wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { configurable: true, value: 200 });
