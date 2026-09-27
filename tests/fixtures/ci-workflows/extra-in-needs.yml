@@ -1,0 +1,17 @@
+name: ci-fixture-extra
+on: [push]
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  test:
+    needs: [python, web, phantom]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo gate

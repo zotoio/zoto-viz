@@ -1,0 +1,2 @@
+# Host CI and branch-protection workflows require maintainer review.
+/.github/ @zotoio/maintainers
