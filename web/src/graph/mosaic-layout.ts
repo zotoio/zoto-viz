@@ -231,7 +231,10 @@ export function placePaneTileView(ids: string[], fromSlot: string, viewId: strin
 export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
   if (!viewId || fromSlot === viewId) return ids;
   const j = ids.findIndex((id, k) => k !== ids.indexOf(fromSlot) && mosaicTileViewId(id) === viewId);
-  if (j >= 0) return movePaneTileView(ids, fromSlot, ids[j]!);
+  if (j >= 0) {
+    if (viewId.startsWith("plugin:")) return placePaneTileView(ids, fromSlot, viewId);
+    return movePaneTileView(ids, fromSlot, ids[j]!);
+  }
   return placePaneTileView(ids, fromSlot, viewId);
 }
 
