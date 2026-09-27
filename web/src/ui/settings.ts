@@ -365,6 +365,18 @@ export class Settings {
     return this.isOpen && this.activePane === "view" && !!this.viewBind?.spec;
   }
 
+  get activePaneId(): string { return this.activePane; }
+
+  /** Keep This view open across mosaic layout changes (gear / Esc still work). */
+  reopenViewPane(): void {
+    const focus = this.viewFocusId;
+    if (!this.isOpen) this.open();
+    this.showPane("view");
+    this.viewFocusId = focus;
+    this.syncViewCog();
+    this.animUi?.syncTiles();
+  }
+
   private syncViewCog(): void {
     const on = this.isOpen && this.activePane === "view";
     this.viewCog?.setAttribute("aria-expanded", on && !this.viewFocusId ? "true" : "false");
@@ -479,6 +491,18 @@ export class Settings {
   /** Blocked catalog packs (unknown manifest keys / newer SDK). */
   bindManifestBlockedCatalog(onRetry: () => void | Promise<void>): void {
     this.viewBind = { spec: null, fields: undefined, look: null, extras: undefined };
+    const host = this.viewHost;
+    if (!host) return;
+    host.replaceChildren();
+    renderManifestBlockedPanel(host);
+    for (const btn of host.querySelectorAll<HTMLButtonElement>("[data-action=retry-catalog]")) {
+      btn.addEventListener("click", () => { void onRetry(); });
+    }
+    this.attachViewMosaic();
+  }
+
+  bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null, extras?: HTMLElement[]): void {
+    this.viewBind = { spec, fields, look, extras };
     const host = this.viewHost;
     if (!host) return;
     host.replaceChildren();

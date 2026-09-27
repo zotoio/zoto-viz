@@ -92,6 +92,7 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null 
   if (failedUnits > 0) parts.push(`${failedUnits} unit${failedUnits === 1 ? "" : "s"}`);
   if (!parts.length) return null;
   return `⚠ DEGRADED ${parts.join(" · ")}`;
+  present?: { last: number; p95: number };
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -201,12 +202,17 @@ export class VizHud {
   private readonly degradedEl: HTMLElement;
   private readonly degradedSepAfter: HTMLElement;
   private readonly stageFailEl: HTMLElement;
+  private readonly frameEl: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
 
   private activeId: VizDemoPackId | null = null;
   private budgetVisible = false;
+  private settingsCaptionHud = false;
+  private packBaseName = "";
+  private packCaptionSuffix: string | null = null;
+  private readonly metricEl: HTMLElement;
   private lastSkipped = 0;
   private skipNeedsSync = true;
   private readonly skipSamples: { t: number; n: number }[] = [];
@@ -232,6 +238,7 @@ export class VizHud {
     this.metricValueEl = document.createElement("strong");
     this.metricValueEl.className = "viz-hud-metric-value";
     metric.append(this.metricLabelEl, " ", this.metricValueEl);
+    this.metricEl = metric;
 
     this.skipEl = document.createElement("span");
     this.skipEl.className = "viz-hud-skip";
@@ -251,6 +258,9 @@ export class VizHud {
     this.stageFailEl.hidden = true;
     this.stageFailEl.setAttribute("role", "status");
     this.stageFailEl.textContent = "⚠ DEGRADED";
+    this.frameEl = document.createElement("span");
+    this.frameEl.className = "viz-hud-frame";
+    this.frameEl.title = "Real present-to-present frame time (last and rolling p95)";
 
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
@@ -283,6 +293,7 @@ export class VizHud {
       this.degradedSepAfter,
       this.swapRow,
     );
+    line.append(this.packEl, sep(), metric, sep(), this.frameEl, sep(), this.skipEl, this.swapRow);
     root.append(line);
 
     parent.append(this.stageFailEl, root);
@@ -304,10 +315,52 @@ export class VizHud {
       this.stageFailEl.textContent = "⚠ DEGRADED";
       return;
     }
+    this.settingsCaptionHud = false;
+    this.swapRow.hidden = false;
+    this.metricEl.hidden = false;
+    this.skipEl.hidden = false;
+    this.frameEl.hidden = false;
+    if (!this.activeId) {
+      this.root.hidden = true;
+      return;
+    }
+    this.root.hidden = false;
     if (changed) this.resetSkipBaseline();
-    if (!this.packEl.textContent) this.packEl.textContent = packName;
-    else morphCopy(this.packEl, packName);
+    this.packBaseName = packName;
+    this.renderPackLine();
     this.packSel.value = this.activeId;
+  }
+
+  /** Show pack name + settings caption for non-demo packs declaring hud.labelFields. */
+  showSettingsCaptionHud(packName: string): void {
+    this.settingsCaptionHud = true;
+    this.activeId = null;
+    this.root.hidden = false;
+    this.packBaseName = packName;
+    this.swapRow.hidden = true;
+    this.metricEl.hidden = true;
+    this.skipEl.hidden = true;
+    this.frameEl.hidden = true;
+    this.renderPackLine();
+  }
+
+  hideSettingsCaptionHud(): void {
+    this.settingsCaptionHud = false;
+    if (!this.activeId) this.root.hidden = true;
+  }
+
+  setPackCaption(suffix: string | null): void {
+    this.packCaptionSuffix = suffix;
+    this.renderPackLine();
+  }
+
+  private renderPackLine(): void {
+    const text = this.packCaptionSuffix
+      ? `${this.packBaseName} · ${this.packCaptionSuffix}`
+      : this.packBaseName;
+    if (!text) return;
+    if (!this.packEl.textContent) this.packEl.textContent = text;
+    else morphCopy(this.packEl, text);
   }
 
   /** Re-sync skip delta baseline after host budget reset (avoids desync / false bursts). */
@@ -319,6 +372,7 @@ export class VizHud {
 
   tick(input: VizHudTick): void {
     if (!this.activeId) return;
+    if (this.settingsCaptionHud) return;
     const { stats, frame, state, now } = input;
     const metric = vizHudMetric(this.activeId, frame, state);
     setHudText(this.metricLabelEl, metric.label);
@@ -361,6 +415,11 @@ export class VizHud {
       setHudText(this.degradedEl, "");
       this.stageFailEl.hidden = true;
       setHudText(this.stageFailEl, "⚠ DEGRADED");
+    const pt = input.present;
+    if (pt) {
+      this.frameEl.textContent = `${pt.last.toFixed(1)} ms · p95 ${pt.p95.toFixed(1)} ms`;
+      this.frameEl.dataset.frameMs = pt.last.toFixed(2);
+      this.frameEl.dataset.frameP95 = pt.p95.toFixed(2);
     }
   }
 }

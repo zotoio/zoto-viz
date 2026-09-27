@@ -479,6 +479,18 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
   font: 600 11px/20px inherit; letter-spacing: 0.02em; cursor: pointer;
 }
 .mosaic-pane.focus .mosaic-cap, .mosaic-pane.focus .mosaic-pick { border-color: var(--accent); color: var(--accent); }
+.mosaic-pane-notice {
+  position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; padding: 16px;
+  text-align: center; font-size: 13px; line-height: 1.35; color: var(--fg);
+  background: color-mix(in srgb, var(--scene-bg, var(--bg)) 88%, transparent);
+  pointer-events: none;
+}
+.mosaic-pane-settings-caption {
+  position: absolute; left: 8px; bottom: 8px; z-index: 3; max-width: calc(100% - 16px);
+  padding: 2px 8px; pointer-events: none;
+  background: var(--overlay); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+  font: 600 11px/18px inherit; letter-spacing: 0.02em;
+}
 .mosaic-tools { margin-left: auto; display: flex; gap: 4px; cursor: default; }
 .mosaic-tool {
   height: 22px; padding: 0 7px; margin: 0;
@@ -695,6 +707,60 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
   padding: 0 0.25rem;
   border-radius: 3px;
   border: 1px solid var(--warn);
+.settings-pop .field-dirty .field-btn,
+.settings-pop .field-dirty label.slider,
+.settings-pop .field-dirty label.toggle,
+.settings-pop .field-dirty .field.text {
+  outline: 1px solid var(--warn);
+  outline-offset: 1px;
+}
+.settings-pop .field-wrap.field-dirty::after {
+  content: "●";
+  color: var(--warn);
+  font-size: 0.65rem;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.plugin-pack-scope-note {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.plugin-settings-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.plugin-settings-toolbar-row .btn {
+  height: 30px;
+  padding: 0 10px;
+}
+.plugin-preset-select {
+  height: 30px;
+  min-width: 8rem;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--chip);
+  color: var(--fg);
+  font: inherit;
+}
+.plugin-preset-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
 }
 .field .val { display: flex; align-items: center; gap: 7px; font-weight: 600; white-space: nowrap; }
 .field .val .txt { overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
@@ -1677,6 +1743,12 @@ body[data-chrome="right"] .viz-hud { max-width: calc(100vw - var(--bar-w) - 360p
 .viz-stage-fail-label[hidden] { display: none !important; }
 body.mosaic .viz-stage-fail-label,
 body.arcade .viz-stage-fail-label { display: none !important; }
+.viz-hud-frame {
+  color: var(--label-muted, var(--muted));
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .viz-hud-swap {
   display: flex;
   gap: 4px;
@@ -1691,7 +1763,7 @@ body.arcade .viz-stage-fail-label { display: none !important; }
 }
 .viz-hud-swap .field-btn .cap { display: none; }
 .viz-hud-swap .field-btn .val { font-size: 10px; }
-body.mosaic .viz-hud { display: none; }
+body.mosaic .viz-hud-swap { display: none; }
 body.arcade .viz-hud { display: none; }
 
 .tile-heal-msg {

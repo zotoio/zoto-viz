@@ -3,6 +3,7 @@ import type { DreamAnim } from "../graph/scene";
 import { viewSelectOptions } from "./plugin";
 import type { PackWallScope } from "./instances";
 
+/** Mosaic tile mode ids for scope notes (production-shaped; deduped like persisted anim). */
 function mosaicWallTileModeIds(
   anim: Pick<DreamAnim, "mosaic" | "mosaicTiles" | "mosaicTree">,
 ): string[] {

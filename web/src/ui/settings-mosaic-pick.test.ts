@@ -54,6 +54,10 @@ describe("settings mosaic pane pickers", () => {
   });
 
   it("persists mosaicTiles after a slot change when no live hook is wired", async () => {
+    expect(sel!.value).toBe("plugin:topology");
+  });
+
+  it("persists mosaicTiles after a slot change when no live hook is wired", () => {
     const s = new Settings({ storePrefix: "zoto-viz-mosaic-pick-persist", onChange: () => {} });
     s.addAnimation(() => {}, { el: document.createElement("div") });
     s.applyAnim({

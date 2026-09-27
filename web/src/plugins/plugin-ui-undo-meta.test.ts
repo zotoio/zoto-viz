@@ -6,6 +6,7 @@ import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
 
 describe("undo preserves meta keys", () => {
   it("restores settings from the snapshot and leaves __presetBase unchanged by the undo pass", () => {
+  it("restores settings and __presetBase from the undo snapshot", () => {
     localStorage.clear();
     const spec = loadSettingsDeclFixture();
     const fields = spec.config!;
@@ -40,5 +41,6 @@ describe("undo preserves meta keys", () => {
     const after = loadPluginConfig(spec, fields);
     expect(after.gain).toBe("3");
     expect(after[PRESET_BASE_META_KEY]).toBe("corrupt-meta");
+    expect(after[PRESET_BASE_META_KEY]).toBe("a");
   });
 });
