@@ -159,6 +159,11 @@ def test_seed_defaults_and_crud() -> None:
     assert sources.delete("notes") is False
     lines = sources.headlines()
     assert isinstance(lines, list)
+    for sid in ("hn", "nasa", "apod", "guardian"):
+        row = next(r for r in rows if r["id"] == sid)
+        assert row["feed"] is False
+    journal = next(r for r in rows if r["id"] == "journal")
+    assert journal["feed"] is True
 
 
 def test_parse_rss_keeps_a_deep_page() -> None:
@@ -216,6 +221,29 @@ def test_refresh_shipped_stale_defaults() -> None:
     assert "count=" not in rows["apod"]["url"]
     assert rows["guardian"]["type"] == "rss"
     assert rows["guardian"]["url"] == "https://www.theguardian.com/world/rss"
+
+
+def test_refresh_shipped_drops_news_from_ticker() -> None:
+    sources.save([
+        sources.normalize({
+            "id": "hn",
+            "type": "rss",
+            "url": "https://hnrss.org/frontpage",
+            "feed": True,
+        }),
+        sources.normalize({
+            "id": "nasa",
+            "type": "rss",
+            "url": "https://www.nasa.gov/feeds/iotd-feed",
+            "feed": True,
+        }),
+        sources.normalize({"id": "journal", "type": "journal", "feed": True}),
+    ])
+    sources.reset_for_tests()
+    rows = {r["id"]: r for r in sources.load()}
+    assert rows["hn"]["feed"] is False
+    assert rows["nasa"]["feed"] is False
+    assert rows["journal"]["feed"] is True
 
 
 def test_url_key_treats_encoded_comma_as_same() -> None:

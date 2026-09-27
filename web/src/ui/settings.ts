@@ -210,6 +210,8 @@ export class Settings {
   onClose?: () => void;
   onDice?: () => void;
   onDiceChange?: (c: DiceConfig) => void;
+  /** Bind This view to the focused pane (or the solo header view) when that tab opens. */
+  onShowView?: () => void;
 
   constructor(private cfg: SettingsConfig) {
     this.el = document.createElement("div");
@@ -290,6 +292,7 @@ export class Settings {
     this.activePane = id;
     for (const [k, el] of this.paneEls) el.hidden = k !== id;
     for (const [k, b] of this.navBtns) b.setAttribute("aria-current", k === id ? "page" : "false");
+    if (id === "view") this.onShowView?.();
     this.syncViewCog();
   }
 
@@ -322,6 +325,7 @@ export class Settings {
   }
 
   get viewFocus(): string { return this.viewFocusId; }
+  get openPane(): string { return this.activePane; }
 
   private syncViewCog(): void {
     const on = this.isOpen && this.activePane === "view";
@@ -495,7 +499,7 @@ export class Settings {
     } else if (!look && !extra.length && !this.viewMosaicSec) {
       const empty = document.createElement("div");
       empty.className = "sec";
-      empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu or on a mosaic tile opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
+      empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. On a single view, the cog next to the header view menu opens this tab. On a wall, use the corner cog on that pane — the header has no view menu. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
       host.append(empty);
     }
     this.attachViewMosaic();
@@ -964,7 +968,7 @@ export class Settings {
     });
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
-    mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
+    mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. The header view menu hides while a wall is up. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
     const mosaicBtns = document.createElement("div");
     mosaicBtns.className = "sec-links";
     mosaicBtns.append(resetBtn, equalBtn);
@@ -1340,7 +1344,7 @@ export class Settings {
       <div class="sec-hint">RSS, public HTTPS JSON/text, local files under $HOME / ~/.zoto-viz, the user journal, and the kernel ring (/dev/kmsg). HTTP JSON can map list / title / caption / image fields. Views (carousel, rain, term) are instances of one plugin pointed at a source — do not fork a tree per feed. Sources that need a key show the signup link here and stay out of dice until they work.</div>`;
     const include = new Toggle({
       label: "headlines on feed",
-      title: "show RSS / HTTP / file / journal / kmsg titles on the live feed ticker",
+      title: "show journal, kernel ring, and local-file titles on the live feed ticker. News and stills (HN, NASA, Guardian, …) stay on their plugin views.",
       checked: this.feed.includeSources !== false,
       onChange: (v) => { this.feed.includeSources = v; this.persistFeed(); },
     });
@@ -1615,7 +1619,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded packets beside the graph. Headlines from Sources can ride the ticker. Chat is a separate panel (header chat / C). Header feed / F shows or hides this overlay.</div>`;
+      <div class="sec-hint">Decoded packets beside the graph. Journal, kernel, and local-file lines can ride the ticker. News and stills stay on carousel / rain / term views. Chat is a separate panel (header chat / C). Header feed / F shows or hides this overlay.</div>`;
     const on = new Toggle({
       label: "show feed",
       title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",
