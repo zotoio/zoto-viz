@@ -1,0 +1,10 @@
+--- a/web/src/ui/tile-hud-label.ts
++++ b/web/src/ui/tile-hud-label.ts
+@@ -54,7 +54,6 @@ export function createTileHudLabelLine(): TileHudLabelLine {
+       return cachedLabel;
+     },
+     writeText(el: HTMLElement, text: string): void {
+-      if (el.textContent === text) return;
+       stats.writes++;
+       el.textContent = text;
+     },

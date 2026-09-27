@@ -78,8 +78,7 @@ import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
 import {
-  VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
-  buildVizFrameForPlugin, defaultVizContract,
+  VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract,
 } from "../plugins/viz-host";
 import {
   TypeSafeHost,
@@ -87,7 +86,9 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
-import { runPackFrameHandler } from "../plugins/viz-pack-host";
+import { mainVizDeliver, mainVizBuildFrame } from "./viz-main-deliver";
+import { runPackFrameHandler, syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
+import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -96,6 +97,7 @@ import { stereoAiFrame } from "../plugins/stereo-ai";
 import { FeedTitleCube } from "../plugins/feed-title-cube";
 import { NestCamsLive } from "../plugins/nest-cams-live";
 import { parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
+import { monoMs, type MonoMs } from "../core/viz-time";
 import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
@@ -107,11 +109,17 @@ import {
   markSandboxStartupOk,
   setTileExpectsVizFeed,
 } from "../plugins/plugin-pack-feed";
-import {
-  registerPackAssetRetry,
-} from "../plugins/pack-asset-frame";
+import { registerPackAssetRetry } from "../plugins/pack-asset-frame";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
+import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
+import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
+import {
+  bindMosaicTileBudgetLines,
+  mosaicTileBudgetLines,
+} from "./main-viz-tile-lines";
+import { vizClockMs } from "../core/viz-clock";
+import { broadcastPluginUbo } from "./viz-plugin-ubo";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -357,8 +365,23 @@ let settings!: Settings;
 const sandbox = new PluginSandbox();
 const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
-let vizFrameTs = 0;
+let vizFrameClockMs: MonoMs = monoMs(0);
 const vizBudget = new VizFrameBudget();
+let vizTileScopeKey = "";
+
+function syncVizBudgetTileScope(): void {
+  const ids = mosaic?.on ? mosaic.tileIds : ["main"];
+  const scopeIds = ids.length ? ids : ["main"];
+  const key = scopeIds.join("\0");
+  if (key === vizTileScopeKey) return;
+  vizTileScopeKey = key;
+  applyDevVizWallFlagsOnBuild(location.search, scopeIds);
+  vizHud.syncDevWallBadInputMessage(devVizWallTileCostBadInputMessage());
+  syncVizTileScope(scopeIds);
+  vizBudget.setTileId(mosaic?.on ? (mosaic.mainMode || scopeIds[0] || "main") : "main");
+  if (mosaic?.on) vizHud.syncMosaicTileHudLines(scopeIds);
+  else vizHud.syncMosaicTileHudLines([]);
+}
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
@@ -398,7 +421,7 @@ scene.afterLook = () => {
     const drive = backroomsSlots(scene.skyTime(), new Date(), innerWidth / Math.max(1, innerHeight));
     vizWriter.writeBuffer(0, drive.slot0);
     vizWriter.writeBuffer(1, drive.slot1);
-    scene.setPluginUboBuffer(vizWriter.ubo);
+    broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
     return;
   }
   if (mode.pluginId !== "stereo-gram" || !vizWriter) {
@@ -425,19 +448,19 @@ scene.afterLook = () => {
   // The sky only draws; the scene is built here once per frame.
   const frame = buildStereoFrame({ timing, clock, act: drive[0]!, level: heard.level, bins: stereoBins, ai });
   for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
-  scene.setPluginUboBuffer(vizWriter.ubo);
+  broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
 };
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
   const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
   vizWriter = writer;
-  if (resetFrameTs) vizFrameTs = 0;
+  if (resetFrameTs) vizFrameClockMs = monoMs(0);
   if (resetBudget) {
     vizBudget.reset();
     vizHud.resetSkipBaseline();
   }
-  if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
+  if (writer && preserveUbo && !resetFrameTs) broadcastPluginUbo(scene, writer.ubo, mosaic?.on ? mosaic : null);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
@@ -448,7 +471,7 @@ sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
   setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
   writeBuffer: (slot, data) => {
-    if (vizWriter?.writeBuffer(slot, data).ok) scene.setPluginUboBuffer(vizWriter.ubo);
+    if (vizWriter?.writeBuffer(slot, data).ok) broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
   },
   writeUniform: (name, value) => {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
@@ -816,40 +839,6 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
   await loadPluginSkyOnto(scene, spec, true);
 }
 
-/** Consent, mode, sky, and frontend for every mosaic tile after a pane pick. */
-let mosaicViewsLoad = 0;
-async function loadMosaicViews(tiles: string[]): Promise<void> {
-  if (!mosaic?.on || !tiles.length) return;
-  const gen = ++mosaicViewsLoad;
-  for (const id of tiles) {
-    if (gen !== mosaicViewsLoad) return;
-    const mode = modeById(id);
-    const spec = mode.pluginId ? pluginSpecForMode(mode.id) : null;
-    if (!(await ensureReviewed(spec))) continue;
-    if (gen !== mosaicViewsLoad || !mosaic.on) return;
-    const target = mosaic.graphScene(id);
-    if (target) {
-      const look = lookForMode(mode.id) ?? spec?.look;
-      const skyStage = !mode.standalone && !!(mode.stageOnly || look?.stageOnly);
-      target.setMode(mode, optsFor(mode));
-      target.setStageOnly(skyStage);
-    }
-  }
-  if (gen !== mosaicViewsLoad || !mosaic.on) return;
-  const focus = (mosaic.focusedId && tiles.includes(mosaic.focusedId))
-    ? mosaic.focusedId
-    : (mosaic.mainTileId && tiles.includes(mosaic.mainTileId) ? mosaic.mainTileId : tiles[0]!);
-  const fm = modeById(focus);
-  const fspec = fm.pluginId ? pluginSpecForMode(fm.id) : null;
-  const paneSpec = skySpecForMode(fm.id, fspec);
-  if (fm.standalone || arcadeSlotFor(fm) !== "carousel") {
-    await loadTsPlugin(paneSpec);
-  }
-  if (gen !== mosaicViewsLoad || !mosaic.on) return;
-  await syncPluginSky(paneSpec);
-  nestCams.setActive(tiles.some((id) => modeById(id).pluginId === "nest-cams"));
-}
-
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const m = modeById(id);
   const opts = optsFor(m);
@@ -880,12 +869,9 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
       localStorage.setItem("zoto-viz.mode", modeSel.value);
       return;
     }
-    if (mosaic?.on && !(m.pluginId && m.standalone)) {
-      await loadMosaicViews(mosaic.tileIds);
-      return;
-    }
     if (m.standalone || arcadeSlotFor(m) !== "carousel") {
-      await Promise.all([loadTsPlugin(paneSpec), syncPluginSky(paneSpec)]);
+      void loadTsPlugin(paneSpec);
+      void syncPluginSky(paneSpec);
     }
   })();
   feedCtl.feed?.setGraphBase(m.graphBase);
@@ -1094,22 +1080,41 @@ function feed(m: StateMsg): void {
     const bind = packId === "hn-rain" || packId === "hn-term"
       ? illustratedSourceBind(optsFor(mode))
       : parseSourceBind(optsFor(mode));
-    const buildFrame = idle
-      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, idle, active?.viz?.contract ?? 1, bind)
-      : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
-    const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
-      if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-      sandbox.frame(f);
-      if (packId) {
-        runPackFrameHandler(packId, f, {
-          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, optsFor(mode));
+    syncVizBudgetTileScope();
+    const buildFrame = (s: StateMsg, pt: MonoMs, a: number) => mainVizBuildFrame(s, pt, a, idle, bind);
+    const scopeTileIds = mosaic?.on && mosaic.tileIds.length ? mosaic.tileIds : ["main"];
+    const primaryTileId = mosaic?.on ? (mosaic.mainMode || scopeTileIds[0] || "main") : "main";
+    vizBudget.setTileId(primaryTileId);
+    const delivered = mainVizDeliver({
+      budget: vizBudget,
+      prevClockMs: vizFrameClockMs,
+      state: shown,
+      audio,
+      buildFrame,
+      onFrame: (f) => {
+        if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
+        sandbox.frame(f);
+        if (packId) {
+          syncVizPackRenderCanvas(renderHost.bufferPixelSize());
+          runPackFrameHandler(packId, f, {
+            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+          }, optsFor(mode));
+        }
+      },
+    });
+    vizFrameClockMs = delivered.nextClockMs;
+    const frame = delivered.frame;
+    if (mosaic?.on && scopeTileIds.length > 1) {
+      const primaryTile = vizTileBudgetRegistry.getTile(primaryTileId);
+      for (const id of scopeTileIds) {
+        const t = vizTileBudgetRegistry.getTile(id);
+        t.shedding = primaryTile.shedding;
+        if (frame) t.lastDeliveredFrame = frame;
       }
-    }, buildFrame);
+    }
     if (frame) {
-      vizFrameTs = frame.t;
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }
@@ -1119,13 +1124,21 @@ function feed(m: StateMsg): void {
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
     }
+    const activeTiles = vizTileBudgetRegistry.activeTileCount();
+    const budgetTileId = mosaic?.on ? (mosaic.mainMode || mosaic.tileIds[0] || "main") : "main";
+    const tileLinesRaw = mosaic?.on ? mosaicTileBudgetLines(mosaic.tileIds) : undefined;
+    if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
+    const tileLines = tileLinesRaw;
     vizHud.tick({
       packId,
       packName: active?.name ?? packId ?? "",
       stats: vizBudget.stats,
       frame: vizBudget.lastBuilt,
       state: shown,
-      now: performance.now(),
+      now: vizClockMs(),
+      tileBudget: vizTileBudgetRegistry.getTile(budgetTileId),
+      activeTiles,
+      tileBudgetLines: tileLines,
     });
   }
 
@@ -1166,6 +1179,13 @@ function setRedaction(on: boolean): void {
   mosaic?.eachGraph((s) => { if (s !== scene) s.refresh(); });
 }
 setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
+{
+  const bootScope: readonly string[] = ["main"];
+  vizTileScopeKey = bootScope.join("\0");
+  bootNixieRealWallClock();
+  applyDevVizWallFlagsOnBuild(location.search, bootScope);
+  vizHud.syncDevWallBadInputMessage(devVizWallTileCostBadInputMessage());
+}
 
 // ---------------------------------------------------------------- settings cog: allow/block filters + the moved show / privacy switches
 
@@ -1188,7 +1208,7 @@ settings.onPluginChange = () => {
 };
 settings.onInstancesChange = () => {
   void (async () => {
-    await syncPluginCatalog();
+    pluginSpecs = await installPlugins();
     modeSel.setOptions(viewSelectOptions());
     settings.refreshMosaicSlots();
     applyMode(modeSel.value);
@@ -1219,7 +1239,6 @@ mosaic = new Mosaic({
     applyViewLook();
   },
   onLayout: (patch) => settings.applyMosaicLayout(patch),
-  onPaneViews: (tiles) => { void loadMosaicViews(tiles); },
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
@@ -1244,10 +1263,6 @@ mosaic = new Mosaic({
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
 });
-sandbox.setNavigationStopHost({
-  setPaneNotice: (id, text, recipe) => mosaic?.setPaneNotice(id, text, recipe),
-  closeTile: (id) => mosaic?.closeTile(id),
-});
 settings.onMosaicPanePick = (from, to) => {
   if (!mosaic?.on) return false;
   if (!mosaic.setPaneView(from, to)) return false;
@@ -1269,10 +1284,8 @@ settings.addAnimation((a) => {
     mosaic!.applyLooks(a, pin);
     mosaic!.setTheme(scene.currentTheme);
   } else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
-  const tiles = a.mosaicTiles?.length ? a.mosaicTiles : [];
-  const key = `${a.mosaic}:${a.hero}:${tiles.join(",")}:${a.mosaicMaxId ?? ""}`;
-  const lostTiles = a.mosaic !== "off" && mosaic!.on && !tiles.length && mosaic!.tileIds.length > 0;
-  if (key !== mosaic!.layoutKey && !lostTiles) {
+  const key = `${a.mosaic}:${a.hero}:${(a.mosaicTiles?.length ? a.mosaicTiles : []).join(",")}:${a.mosaicMaxId ?? ""}`;
+  if (key !== mosaic!.layoutKey) {
     if (a.mosaic !== "off" && activeArcade) {
       arcade[activeArcade].view.stop();
       arcade[activeArcade].el.hidden = true;
@@ -1315,6 +1328,7 @@ async function syncPluginCatalog(): Promise<void> {
   const blocked = takePackInstallBlockedNotice();
   if (blocked) liveFeed.showOperatorNotice(blocked);
 }
+
 feedCtl.feed = liveFeed;
 liveFeed.setGraphBase(modeById(modeSel.value).graphBase);
 const feedToggle = new Toggle({
@@ -1645,7 +1659,7 @@ void (async () => {
   typeSafeKeyOn = session.typesafeConfigured;
   setTypeSafeProxyConfigured(() => typeSafeKeyOn);
   agent.setControlFromServer(session.aiControl);
-  await syncPluginCatalog();
+  pluginSpecs = await installPlugins();
   modeSel.setOptions(viewSelectOptions());
   settings.refreshMosaicSlots();
   if (settings.animSettings.mosaic !== "off") {
@@ -1741,7 +1755,7 @@ async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
     return;
   }
   if (patch.reloadPlugins === true) {
-    await syncPluginCatalog();
+    pluginSpecs = await installPlugins();
     modeSel.setOptions(viewSelectOptions());
     settings.refreshMosaicSlots();
   }
@@ -1842,7 +1856,6 @@ function collectSettings(): ProfileSettings {
     agent: sceneAgentLook(),
     dice: { ...settings.diceSettings, include: { ...settings.diceSettings.include } },
     autosave: true,
-    vizGovernor: false,
     ai: agent.aiPrefs(),
   };
 }

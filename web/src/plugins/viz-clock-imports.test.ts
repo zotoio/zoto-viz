@@ -7,7 +7,11 @@ const ROOT = join(import.meta.dirname, "..");
 const BLOCKED = [
   "plugins/viz-host.ts",
   "plugins/typesafe-host.ts",
+  "plugins/viz-tile-budget.ts",
+  "plugins/viz-tile-hud.ts",
   "plugins/dogfood-runner.ts",
+  "plugins/dogfood-tile-budget.ts",
+  "plugins/dogfood-tile-hud.ts",
 ];
 
 describe("viz wall clock import guard", () => {

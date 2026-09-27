@@ -1,3 +1,4 @@
+import { syncVizTileScope } from "./viz-tile-budget";
 import { PLUGIN_SDK } from "./sdk";
 import { SANDBOX_DUPLICATE_TILE_SHIM } from "./sandbox-shim";
 import { laneRegistry } from "./sandbox-bitmap";
@@ -91,6 +92,7 @@ export class PluginSandbox {
     this.iframe?.remove();
     this.iframe = null;
     this.loadedPluginId = null;
+    syncVizTileScope(["main"]);
   }
 
   setDuplicateTileCount(count: number): void {

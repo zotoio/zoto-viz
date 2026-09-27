@@ -1,0 +1,142 @@
+import { VIZ_HUD_WINDOW_TICKS, VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";
+import {
+  hudSamplesForTile,
+  tileSkipsInHudWindowRing,
+  type VizTileBudgetStats,
+  type VizTileHudSample,
+} from "./viz-tile-budget";
+import { tileLimitedSharingLabel, tileLimitedSharingLabelVisible } from "../ui/viz-copy";
+
+export type { VizTileHudSample, VizTileHudSampleKind } from "./viz-tile-budget";
+
+export type TileHudViewerState = "none" | "limited" | "over_budget";
+
+/** Half-open HUD window in ticks: (nowTick - {@link VIZ_HUD_WINDOW_TICKS}, nowTick]. */
+export function hudWindowContains(tick: number, nowTick: number, inclusiveLower = false): boolean {
+  const lo = nowTick - VIZ_HUD_WINDOW_TICKS;
+  if (inclusiveLower) return tick >= lo && tick <= nowTick;
+  return tick > lo && tick <= nowTick;
+}
+
+export function tileHudSamplesInWindow(
+  samples: readonly VizTileHudSample[],
+  nowTick: number,
+  inclusiveLower = false,
+): VizTileHudSample[] {
+  return samples.filter((s) => hudWindowContains(s.tick, nowTick, inclusiveLower));
+}
+
+export function tileSkipsInHudWindow(
+  samples: readonly VizTileHudSample[],
+  nowTick: number,
+  inclusiveLower = false,
+): number {
+  return tileHudSamplesInWindow(samples, nowTick, inclusiveLower).filter((s) => s.kind === "skip").length;
+}
+
+/** Skips in the half-open window scaled to a 1 s wall (window is 300000 ticks). */
+export function tileHudSkipRatePerSec(
+  samples: readonly VizTileHudSample[],
+  nowTick: number,
+  inclusiveLower = false,
+): number {
+  return tileSkipsInHudWindow(samples, nowTick, inclusiveLower);
+}
+
+/** Live tile HUD skip rate from the ring buffer (no sample array). */
+export function tileHudSkipRateFromRing(
+  tile: VizTileBudgetStats,
+  nowTick: number,
+  inclusiveLower = false,
+): number {
+  return tileSkipsInHudWindowRing(tile, nowTick, inclusiveLower);
+}
+
+export function computeTileHudViewerState(
+  samples: readonly VizTileHudSample[],
+  nowTick: number,
+  lastBuildCostTicks: number | null,
+): TileHudViewerState {
+  const window = tileHudSamplesInWindow(samples, nowTick, false);
+  const skipCount = window.filter((s) => s.kind === "skip").length;
+  if (skipCount === 0) return "none";
+
+  const builds = window.filter((s) => s.kind === "build");
+  if (builds.length === 0) {
+    if (lastBuildCostTicks === null) return "none";
+    return lastBuildCostTicks > VIZ_WALL_BUDGET_TICKS ? "over_budget" : "limited";
+  }
+
+  const anyOverWall = builds.some((b) => (b.costTicks ?? 0) > VIZ_WALL_BUDGET_TICKS);
+  if (anyOverWall) return "over_budget";
+  return "limited";
+}
+
+export interface TileHudChrome {
+  state: TileHudViewerState;
+  limitedLabel: string | null;
+  /** Round-up cadence k shown in the LIMITED label (not from the HUD ring). */
+  cadenceK: number;
+  skipRatePerSec: number;
+  useFailTone: boolean;
+}
+
+export function tileHudChrome(
+  tile: VizTileBudgetStats,
+  nowTick: number,
+  activeTiles: number,
+): TileHudChrome {
+  const samples = hudSamplesForTile(tile);
+  const skipRate = tileHudSkipRateFromRing(tile, nowTick, false);
+  const state = computeTileHudViewerState(samples, nowTick, tile.lastBuildCostTicks);
+  const limitedLabel =
+    state === "limited" && tileLimitedSharingLabelVisible(activeTiles, tile.cadenceK)
+      ? tileLimitedSharingLabel(activeTiles, tile.cadenceK)
+      : null;
+  return {
+    state,
+    limitedLabel,
+    cadenceK: tile.cadenceK,
+    skipRatePerSec: skipRate,
+    useFailTone: false,
+  };
+}
+
+/** Wall HUD skip rate: sum per-tile ring skip counts (no arrays or filters). */
+export function wallHudSkipRateFromRing(
+  tiles: readonly VizTileBudgetStats[],
+  nowTick: number,
+  inclusiveLower = false,
+): number {
+  let sum = 0;
+  for (let i = 0; i < tiles.length; i++) {
+    sum += tileSkipsInHudWindowRing(tiles[i]!, nowTick, inclusiveLower);
+  }
+  return sum;
+}
+
+/** Single LIMITED line on the wall HUD strip (budget tile state, wall-wide skip rate). */
+export function wallHudChrome(
+  budgetTile: VizTileBudgetStats,
+  wallTiles: readonly VizTileBudgetStats[],
+  nowTick: number,
+  activeTiles: number,
+): TileHudChrome {
+  const skipRate = wallHudSkipRateFromRing(wallTiles, nowTick, false);
+  const state = computeTileHudViewerState(
+    hudSamplesForTile(budgetTile),
+    nowTick,
+    budgetTile.lastBuildCostTicks,
+  );
+  const limitedLabel =
+    state === "limited" && tileLimitedSharingLabelVisible(activeTiles, budgetTile.cadenceK)
+      ? tileLimitedSharingLabel(activeTiles, budgetTile.cadenceK)
+      : null;
+  return {
+    state,
+    limitedLabel,
+    cadenceK: budgetTile.cadenceK,
+    skipRatePerSec: skipRate,
+    useFailTone: state === "over_budget",
+  };
+}

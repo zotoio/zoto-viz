@@ -1,0 +1,27 @@
+diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
+index ed1e351..d1d0757 100644
+--- a/web/src/core/viz-dev-wall-flags.ts
++++ b/web/src/core/viz-dev-wall-flags.ts
+@@ -1,4 +1,4 @@
+-import { setVizBuildCostTicksInjector } from "./viz-clock";
++import { setVizBuildCostTicksInjector, setVizWallClockInjector } from "./viz-clock";
+ import { vizClockMs } from "./viz-clock";
+ import { clearDevWallFlagClock, devWallFlagClockActive, setDevWallFlagClock } from "../plugins/nixie-wall-parts";
+ import { devVizWallFlagBadInputMessage } from "../ui/viz-copy";
+@@ -63,6 +63,7 @@ function parseWallClockFlag(raw: string | null): void {
+ 
+   lastParsedWallClockRaw = trimmed;
+   setDevWallFlagClock(h, min, vizClockMs());
++  setVizWallClockInjector(() => h * 3_600_000 + min * 60_000);
+ }
+ 
+ /**
+@@ -72,8 +73,6 @@ function parseWallClockFlag(raw: string | null): void {
+ export function applyDevVizWallFlagsOnBuild(search: string, _scopedTileIds: readonly string[]): void {
+   clearWallCostInjector();
+   lastVizTileCostBadInput = null;
+-  if (!import.meta.env.DEV) return;
+-
+   try {
+     const params = new URLSearchParams(search);
+     parseWallCostTicksFlag(params.get("vizTileCostTicks"));

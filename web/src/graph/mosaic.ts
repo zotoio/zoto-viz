@@ -15,6 +15,7 @@ import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
 import { releasePanelView } from "./panel-view-lifecycle";
 import { bindVizDriveElement, clearVizDrive } from "../plugins/viz-drive";
 import { dropMosaicTileWriter } from "./mosaic-viz-feed";
+import { syncVizTileScope } from "../plugins/viz-tile-budget";
 
 export { centerSplit } from "./mosaic-layout";
 export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
@@ -558,6 +559,7 @@ export class Mosaic {
       if (this.panes.has(id) && touchIds && !touchIds.has(id)) continue;
       this.ensurePane(id);
     }
+    syncVizTileScope(ids.length ? ids : ["main"]);
   }
 
   private paneBound(id: string): boolean {
@@ -1115,6 +1117,7 @@ export class Mosaic {
   }
 
   private teardown(): void {
+    syncVizTileScope([]);
     for (const e of this.extras) e.scene.dispose();
     this.extras = [];
     for (const id of [...this.tileArcade.keys()]) this.releaseArcade(id);

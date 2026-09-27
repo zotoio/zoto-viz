@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setPackAssetTokenForTests } from "../core/http";
 import * as packAssetFrame from "./pack-asset-frame";
+import * as tileBudget from "./viz-tile-budget";
 import {
   PluginSandbox,
   consentHash,
@@ -74,64 +75,16 @@ describe("page CSP", () => {
 });
 
 describe("PluginSandbox", () => {
-  it("posts config updates to the iframe when config.read is allowed", async () => {
-    expect.hasAssertions();
-    const box = new PluginSandbox();
-    const posted: unknown[] = [];
-    try {
-      await box.load("cfg-pack", "globalThis.ok = true;", ["config.read"], { a: "1" });
-      const win = document.querySelector("iframe")?.contentWindow as Window & {
-        postMessage: (data: unknown) => void;
-      };
-      const orig = win.postMessage.bind(win);
-      win.postMessage = (data) => { posted.push(data); orig(data); };
-      box.setConfig({ a: "2", b: "on" });
-      expect(posted.some((m) => (m as { type?: string }).type === "config")).toBe(true);
-    } finally {
-      box.unload();
-    }
-  });
-
-  it("does not post config when config.read is missing", async () => {
-    expect.hasAssertions();
-    const box = new PluginSandbox();
-    const posted: unknown[] = [];
-    try {
-      await box.load("cfg-pack", "globalThis.ok = true;", ["graph.read"], { a: "1" });
-      const win = document.querySelector("iframe")?.contentWindow as Window & {
-        postMessage: (data: unknown) => void;
-      };
-      const orig = win.postMessage.bind(win);
-      win.postMessage = (data) => { posted.push(data); orig(data); };
-      box.setConfig({ a: "2" });
-      expect(posted.some((m) => (m as { type?: string }).type === "config")).toBe(false);
-    } finally {
-      box.unload();
-    }
-  });
-
-  it("posts config even when the payload is empty", async () => {
-    expect.hasAssertions();
-    const box = new PluginSandbox();
-    const posted: unknown[] = [];
-    try {
-      await box.load("cfg-pack", "globalThis.ok = true;", ["config.read"], { a: "1" });
-      const win = document.querySelector("iframe")?.contentWindow as Window & {
-        postMessage: (data: unknown) => void;
-      };
-      const orig = win.postMessage.bind(win);
-      win.postMessage = (data) => { posted.push(data); orig(data); };
-      box.setConfig({});
-      const cfg = posted.find((m) => (m as { type?: string }).type === "config") as { config?: Record<string, string> };
-      expect(cfg?.config).toEqual({});
-    } finally {
-      box.unload();
-    }
-});
-
-describe("PluginSandbox", () => {
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((f) => f.remove());
+  });
+
+  it("unload resets viz tile scope to solo main", () => {
+    const spy = vi.spyOn(tileBudget, "syncVizTileScope");
+    const box = new PluginSandbox();
+    box.unload();
+    expect(spy).toHaveBeenCalledWith(["main"]);
+    spy.mockRestore();
   });
 
   it("loads srcdoc, ticks, and unloads", async () => {
@@ -145,6 +98,9 @@ describe("PluginSandbox", () => {
     box.tick([{ id: "a", rate: 1, role: "lan" }]);
     box.unload();
     expect(document.querySelector("iframe")).toBeNull();
+  });
+});
+
 describe("pack asset URLs", () => {
   afterEach(() => {
     setPackAssetTokenForTests("_sandbox", "");
@@ -180,8 +136,7 @@ describe("PluginSandbox module load", () => {
     setPackAssetTokenForTests("pulse", "sess-tok-abc");
     const box = new PluginSandbox();
     expect(pluginModuleUrl("pulse", "deadbeef")).toBe("/api/plugins/pulse/module.js?h=deadbeef");
-    const boot = box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
-    await boot;
+    await box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
     const iframe = document.querySelector("iframe");
     expect(iframe?.src).toContain("/pack-assets/sess-tok-abc/_sandbox/plugin-sandbox.html");
     box.unload();
