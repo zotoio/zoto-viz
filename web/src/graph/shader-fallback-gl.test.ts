@@ -43,8 +43,8 @@ describe("shader fallback gl context", () => {
     const notices = wall.querySelectorAll(".gfx-wall-notice");
     expect(notices).toHaveLength(1);
     expect(notices[0]?.textContent).toBe(GFX_INTERRUPTED_NOTICE);
-    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(1);
-    expect(pane.querySelector(".tile-shader-fallback__text")?.textContent).toBe("");
+    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(0);
+    expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(0);
     host.dispose();
     wall.remove();
   });

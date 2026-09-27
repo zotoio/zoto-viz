@@ -4,10 +4,8 @@ const FALLBACK_GRACE_FRAMES = 30;
 
 export interface TileShaderFallbackOpts {
   packName: string;
-  /** Shader compile failure on a pack that can push simple-view text. */
+  /** Pack implements fallbackText — grace then simple-view chip + pushed line. */
   packPush?: boolean;
-  /** Context-loss overlay — generic copy + chip immediately. */
-  contextLoss?: boolean;
   skipGrace?: boolean;
   initialText?: string;
 }
@@ -20,7 +18,6 @@ export class TileShaderFallback {
   private lastWritten = "";
   private readonly packName: string;
   private readonly packPush: boolean;
-  private readonly contextLoss: boolean;
   private showChip = false;
   private packFnDead = false;
   private graceLeft = 0;
@@ -29,7 +26,6 @@ export class TileShaderFallback {
   constructor(readonly mount: HTMLElement, opts: TileShaderFallbackOpts) {
     this.packName = opts.packName;
     this.packPush = !!opts.packPush;
-    this.contextLoss = !!opts.contextLoss;
     this.root = document.createElement("div");
     this.root.className = "tile-shader-fallback";
     this.text = document.createElement("span");
@@ -39,11 +35,7 @@ export class TileShaderFallback {
     this.chip.className = "tile-shader-fallback-chip";
     this.chip.textContent = "Simple view";
     mount.appendChild(this.root);
-    if (this.contextLoss) {
-      this.reveal();
-      this.setShowChip(true);
-      if (opts.initialText?.trim()) this.writeText(opts.initialText);
-    } else if (this.packPush) {
+    if (this.packPush) {
       if (opts.skipGrace || opts.initialText) {
         this.graceLeft = 0;
         this.gotValidPush = !!opts.initialText?.trim();
@@ -82,7 +74,7 @@ export class TileShaderFallback {
   }
 
   tickGrace(): void {
-    if (this.packFnDead || this.contextLoss || !this.packPush) return;
+    if (this.packFnDead || !this.packPush) return;
     if (this.gotValidPush) return;
     if (this.graceLeft <= 0) return;
     this.graceLeft--;

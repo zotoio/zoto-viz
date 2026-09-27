@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-ux.test.ts",
+  "testName": "shader fallback UX overlays > shader-fail-no-hook-generic",
+  "redValue": "AssertionError: expected '' to be 'Quiet Pack can\\'t run its graphics on\u2026' // Object.is equality"
+}

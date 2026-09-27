@@ -70,12 +70,20 @@ class TileShaderSlot {
   packId = "";
   packName = "";
   mount: HTMLElement | null = null;
+  /** Pack implements {@link VizZotoPluginHooks.fallbackText} (simple-view line). */
+  hasFallbackHook = true;
   compileFailed = false;
   mountedFallbackPackKey = "";
   stagedPush: string | null = null;
 
   /** New pack on this pane — clears fallback and compile latch. */
-  swapPack(packKey: string, packId: string, packName: string, mount: HTMLElement): void {
+  swapPack(
+    packKey: string,
+    packId: string,
+    packName: string,
+    mount: HTMLElement,
+    hasFallbackHook = true,
+  ): void {
     if (this.packKey !== packKey) {
       this.packKey = packKey;
       this.packId = packId;
@@ -88,6 +96,7 @@ class TileShaderSlot {
     }
     this.packName = packName;
     this.mount = mount;
+    this.hasFallbackHook = hasFallbackHook;
   }
 }
 
@@ -220,10 +229,11 @@ export class RenderHost {
     packId: string,
     mount: HTMLElement,
     packName: string,
+    hasFallbackHook = true,
   ): void {
     const slot = this.tileSlot(tileId);
     if (slot.packKey !== packKey) this.untrackFallback(slot.fallback);
-    slot.swapPack(packKey, packId, packName, mount);
+    slot.swapPack(packKey, packId, packName, mount, hasFallbackHook);
   }
 
   /**
@@ -301,18 +311,17 @@ export class RenderHost {
     this.clearShaderFallback(tileId);
   }
 
-  private mountShaderFallback(tileId: string, contextLoss = false): void {
+  private mountShaderFallback(tileId: string): void {
     const slot = this.tileSlot(tileId);
-    if (!contextLoss) slot.compileFailed = true;
+    slot.compileFailed = true;
     if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;
     this.untrackFallback(slot.fallback);
     slot.fallback?.dispose();
     const staged = slot.stagedPush?.trim() || "";
     slot.fallback = new TileShaderFallback(slot.mount!, {
       packName: slot.packName,
-      packPush: !contextLoss,
-      contextLoss,
-      skipGrace: !!staged && !contextLoss,
+      packPush: slot.hasFallbackHook,
+      skipGrace: !!staged && slot.hasFallbackHook,
       initialText: staged || undefined,
     });
     slot.mountedFallbackPackKey = slot.packKey;
@@ -361,10 +370,6 @@ export class RenderHost {
     if (this.glContextLost) return;
     this.glContextLost = true;
     this.gfxNotice.onContextLost();
-    for (const [tileId, slot] of this.tileShaders) {
-      if (slot.fallback || !slot.mount) continue;
-      this.mountShaderFallback(tileId, true);
-    }
   }
 
   private onSharedContextRestored(): void {
@@ -372,12 +377,6 @@ export class RenderHost {
     this.gfxNotice.onContextRestored();
     for (const slot of this.tileShaders.values()) {
       slot.latch.reset();
-      if (slot.fallback && !slot.compileFailed) {
-        this.untrackFallback(slot.fallback);
-        slot.fallback.dispose();
-        slot.fallback = null;
-        slot.mountedFallbackPackKey = "";
-      }
     }
   }
 

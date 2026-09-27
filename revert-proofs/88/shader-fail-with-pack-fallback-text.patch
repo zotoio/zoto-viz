@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index d040561..3e5610e 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -322,7 +322,6 @@ export class RenderHost {
+       packName: slot.packName,
+       packPush: slot.hasFallbackHook,
+       skipGrace: !!staged && slot.hasFallbackHook,
+-      initialText: staged || undefined,
+     });
+     slot.mountedFallbackPackKey = slot.packKey;
+     this.liveFallbacks.push(slot.fallback);

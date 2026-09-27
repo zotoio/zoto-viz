@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-tile.test.ts",
-  "testName": "shader fallback tile overlay > load-during-loss-not-failed",
-  "redValue": "AssertionError: expected 'shader failed' to be null"
-}

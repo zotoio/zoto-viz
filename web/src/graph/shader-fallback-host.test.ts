@@ -73,7 +73,7 @@ describe("tile shader fallback host", () => {
     expect(sanitizePackDisplayName("Ni\u0000xie <b>Clock")).toBe("Nixie bClock");
     expect(sanitizePackDisplayName("Nixie|Clock?*")).toBe("NixieClock");
     expect(genericShaderFallbackMessage(raw)).toBe(
-      `‹${clean}› can't run its graphics on this device. Other tiles aren't affected.`,
+      `${clean} can't run its graphics on this device. Other tiles aren't affected.`,
     );
   });
 

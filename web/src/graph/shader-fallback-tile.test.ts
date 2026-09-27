@@ -39,40 +39,13 @@ describe("shader fallback tile overlay", () => {
     mount.remove();
   });
 
-  it("ctxloss-chip", () => {
-    const wall = document.createElement("div");
-    document.body.appendChild(wall);
-    const host = new RenderHost(wall);
-    const pane = document.createElement("div");
-    wall.appendChild(pane);
-    host.beginTilePack("t", "k", "nixie-clock", pane, "N");
-    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
-    expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(1);
-    host.dispose();
-    wall.remove();
-  });
-
-  it("ctxloss-shows-staged-line", () => {
-    const wall = document.createElement("div");
-    document.body.appendChild(wall);
-    const host = new RenderHost(wall);
-    const pane = document.createElement("div");
-    wall.appendChild(pane);
-    host.beginTilePack("t", "k", "nixie-clock", pane, "N");
-    host.receiveFallbackPush("t", "01 05 00");
-    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
-    expect(pane.querySelector(".tile-shader-fallback__text")?.textContent).toBe("01 05 00");
-    host.dispose();
-    wall.remove();
-  });
-
   it("tunnel-line-literal", () => {
     expect(packetTunnelFallbackText({ t: 0, packets: [] })).toBe("DATA 0.50 · depth 0.60");
   });
 
   it("copy-default-name", () => {
     expect(genericShaderFallbackMessage("")).toBe(
-      "‹This view› can't run its graphics on this device. Other tiles aren't affected.",
+      "This view can't run its graphics on this device. Other tiles aren't affected.",
     );
   });
 
@@ -154,36 +127,6 @@ describe("shader fallback tile overlay", () => {
     rd.compile = vi.fn() as typeof rd.compile;
     host.beginTilePack("t", "b:1", "good", pane, "B");
     expect(host.compilePluginSky("t", {} as never, {} as never)).toBe(true);
-    host.dispose();
-    wall.remove();
-  });
-
-  it("restore-clears-loss-overlay", () => {
-    const wall = document.createElement("div");
-    document.body.appendChild(wall);
-    const pane = document.createElement("div");
-    wall.appendChild(pane);
-    const host = new RenderHost(wall);
-    host.beginTilePack("t", "k", "nixie-clock", pane, "N");
-    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
-    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(1);
-    host.canvas.dispatchEvent(new Event("webglcontextrestored"));
-    expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(0);
-    host.dispose();
-    wall.remove();
-  });
-
-  it("load-during-loss-not-failed", () => {
-    const wall = document.createElement("div");
-    document.body.appendChild(wall);
-    const pane = document.createElement("div");
-    wall.appendChild(pane);
-    const host = new RenderHost(wall);
-    Object.defineProperty(host, "software", { value: false });
-    host.beginTilePack("t", "k", "demo", pane, "Demo");
-    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
-    const err = host.probeTileSky("t", {} as THREE.Scene, {} as THREE.Camera);
-    expect(err).toBeNull();
     host.dispose();
     wall.remove();
   });
