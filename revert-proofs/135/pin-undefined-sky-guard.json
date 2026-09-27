@@ -4,5 +4,5 @@
   "testName": "drops undefined mosaic sky entries and still pins plugin looks",
   "description": "Revert pinPluginTileSkies undefined guard (toStrictEqual catches extra keys)",
   "project": "web",
-  "red": "AssertionError: expected { 'plugin:backrooms': 'plugin', …(2) } to strictly equal { 'plugin:backrooms': 'plugin', …(1) }"
+  "red": "AssertionError: expected { 'plugin:backrooms': 'plugin', \u2026(2) } to strictly equal { 'plugin:backrooms': 'plugin', \u2026(1) }"
 }

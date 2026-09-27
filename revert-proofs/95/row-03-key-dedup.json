@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > re-posting the same key avoids duplicate nodes after the first post",
-  "description": "Revert production guard (row-03-key-dedup)",
-  "red": "AssertionError: expected 3 to be 1 // Object.is equality"
-}

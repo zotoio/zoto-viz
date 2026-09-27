@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > keeps the newest notice last in its container",
-  "description": "Revert production guard (row-05-newest-order)",
-  "red": "AssertionError: expected 'server-restarted' to be 'context-lost' // Object.is equality"
-}

@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-33-s2-alert-no-autoclear)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > an alert without an action never auto-clears even when autoClearMs is forced",
-  "red": "AssertionError: expected +0 to be 1 // Object.is equality"
-}
