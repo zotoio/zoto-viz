@@ -2,6 +2,6 @@
   "runner": "pnpm",
   "testFile": "src/graph/lint-brand-casts.test.ts",
   "testName": "^lint brand casts > lint gate: no stray devicePixelRatio reads in production$",
-  "expectedRed": "AssertionError: expected [] to deeply equal [ Array(1) ]",
+  "expectedRed": "AssertionError: expected undefined to be 'device-px-ratio-read' // Object.is equality",
   "kind": "lint"
 }

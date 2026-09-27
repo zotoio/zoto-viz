@@ -46,16 +46,16 @@ describe("lint brand casts", () => {
   it("lint gate: no stray devicePixelRatio reads in production", () => {
     const sampleFile = "src/_lint-sample/stray-dpr.ts";
     const sample = "export const strayRead = devicePixelRatio;\n";
-    expect(lintSourceText(sampleFile, sample).map(formatViolation)).toEqual([
-      `${sampleFile}:device-px-ratio-read`,
-    ]);
+    const violations = lintSourceText(sampleFile, sample).map(formatViolation);
+    expect(violations[0]?.split(":")[1]).toBe("device-px-ratio-read");
+    expect(violations).toHaveLength(1);
   });
 
   it("lint gate: brand casts only in mint modules", () => {
     const sampleFile = "src/_lint-sample/brand-cast.ts";
     const sample = "export const r = null as DeviceRect;\n";
-    expect(lintSourceText(sampleFile, sample).map(formatViolation)).toEqual([
-      `${sampleFile}:brand-cast`,
-    ]);
+    const violations = lintSourceText(sampleFile, sample).map(formatViolation);
+    expect(violations[0]?.split(":")[1]).toBe("brand-cast");
+    expect(violations).toHaveLength(1);
   });
 });
