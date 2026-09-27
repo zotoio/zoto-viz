@@ -16,6 +16,7 @@ import {
   vizHudMetric,
 } from "./viz-hud";
 import { formatVizBudgetOverlay } from "../plugins/viz-budget-overlay";
+import { markPresent, presentFrameStats, resetPresentClock } from "../core/present-clock";
 
 type Box = Pick<DOMRect, "top" | "bottom" | "left" | "right">;
 
@@ -106,6 +107,21 @@ describe("viz hud helpers", () => {
 
   it("returns zero for empty skip samples", () => {
     expect(skipRatePerSec([], 5000)).toBe(0);
+  });
+
+  it("shows present-to-present last and p95 on the HUD frame line", () => {
+    resetPresentClock();
+    for (let i = 0; i < 20; i++) markPresent(1000 + i * 16.7);
+    const budget = new VizFrameBudget();
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("packet-tunnel", "Packet Tunnel");
+    hud.tick({
+      ...hudTickFromBudget("packet-tunnel", "Packet Tunnel", minimalState(), budget, 1334),
+      present: presentFrameStats(),
+    });
+    const frameLine = hud.root.querySelector(".viz-hud-frame");
+    expect(frameLine?.textContent).toMatch(/16\.7 ms · p95 16\.7 ms/);
   });
 
   it("records present-time skips after the second markPresent (soft FPS honesty)", () => {

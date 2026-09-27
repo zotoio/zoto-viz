@@ -26,6 +26,7 @@ import { STEREO_BINS } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { normalizeVizDemoPackId, type VizHud } from "../ui/viz-hud";
 import type { ViewMode } from "../core/modes";
 import { notePackSandboxFrame, packPerfEnabled } from "../core/pack-host-perf";
+import { presentFrameStats } from "../core/present-clock";
 
 export interface VizPresentDeliverHost {
   modeById: (viewId: string) => ViewMode;
@@ -138,6 +139,7 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
     frame: host.vizBudget.lastBuilt,
     state: shown,
     now: vizClockMs(),
+    present: presentFrameStats(),
     tileBudget: vizTileBudgetRegistry.getTile(budgetTileId),
     activeTiles,
     tileBudgetLines: tileLinesRaw,
