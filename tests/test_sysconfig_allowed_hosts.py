@@ -1,8 +1,12 @@
 """sys-config allowed_hosts parsing and main() listen wiring."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from service import access, sysconfig
 from service.request_guard import validate_allowed_host_entry
+
+REPO = Path(__file__).resolve().parents[1]
 
 
 def test_allowed_hosts_config_parsing_and_validation() -> None:
@@ -89,6 +93,16 @@ def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
     assert run_app_calls
     assert run_app_calls[0].get("access_log", "unset") is None
     assert run_app_calls[0]["shutdown_timeout"] == 3
+
+
+def test_api_docs_describe_loopback_host_allowlist_not_lan_scan() -> None:
+    text = (REPO / "docs" / "api.md").read_text(encoding="utf-8")
+    assert "loopback names and addresses for the bound port" in text
+    assert "all local interface addresses" not in text
+
+
+def test_sysconfig_header_documents_allowed_hosts_key() -> None:
+    assert "# allowed_hosts:" in sysconfig.HEADER
 
 
 def test_allowed_hosts_round_trips_through_dump_and_load(tmp_path) -> None:
