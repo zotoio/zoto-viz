@@ -4,7 +4,7 @@ import { compilePlugin } from "../plugins/plugin";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { Settings } from "./settings";
 import { hostModeById } from "../app/host-mode";
-import { mosaicLayoutSelects } from "../app/test/duplicate-slot-scope-note-test-dom";
+import { pickMosaicSlot } from "../app/test/duplicate-slot-mosaic-fixture";
 import {
   applyMosaicTiles,
   mountDuplicateSlotMosaicHarness,
@@ -18,7 +18,7 @@ describe("settings mosaic pane pick wiring > syncTiles after slot change", () =>
     localStorage.clear();
   });
 
-  it("runs syncTiles after mosaic slot change even when onMosaicPanePick handles the pick", async () => {
+  it("calls syncTiles once per live mosaic pane pick through onMosaicPanePick", async () => {
     const spec = loadSettingsDeclFixture();
     setPluginModes([
       compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
@@ -34,7 +34,6 @@ describe("settings mosaic pane pick wiring > syncTiles after slot change", () =>
       fallbackModeId: () => PACK,
     });
     applyMosaicTiles(settings, mosaic, [PACK, "plugin:topology", "plugin:memory", "plugin:topology"]);
-    settings.onMosaicPanePick = () => true;
     settings.openView(PACK);
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     const animUi = (settings as unknown as { animUi: { syncTiles: () => void } | null }).animUi;
@@ -45,11 +44,8 @@ describe("settings mosaic pane pick wiring > syncTiles after slot change", () =>
       syncCount += 1;
       origSync();
     };
-    const sel = mosaicLayoutSelects(settings)[1];
-    expect(sel).toBeTruthy();
-    sel!.value = "plugin:memory";
-    sel!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(syncCount).toBeGreaterThan(0);
+    pickMosaicSlot(settings, 1, "plugin:memory");
+    expect(syncCount).toBe(1);
     settings.el.remove();
   });
 });
