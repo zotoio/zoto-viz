@@ -51,12 +51,19 @@ def test_build_allowed_hosts_bind_127_0_0_2_includes_that_loopback_key() -> None
 
 
 def test_build_allowed_hosts_bind_wildcard_includes_stub_lan_interface_keys() -> None:
-    allowed = sorted(build_allowed_hosts("0.0.0.0", PORT))
-    assert allowed == WILDCARD_STUB_LAN
+    allowed = build_allowed_hosts("0.0.0.0", PORT)
+    assert "192.168.1.5:7020" in allowed, (
+        "0.0.0.0 wildcard bind must allow LAN key 192.168.1.5:7020"
+    )
+    assert sorted(allowed) == WILDCARD_STUB_LAN
 
 
 def test_build_allowed_hosts_bind_ipv6_unspecified_wildcard_includes_stub_lan() -> None:
-    assert sorted(build_allowed_hosts("::", PORT)) == WILDCARD_STUB_LAN
+    allowed = build_allowed_hosts("::", PORT)
+    assert "192.168.1.5:7020" in allowed, (
+        ":: wildcard bind must allow LAN key 192.168.1.5:7020"
+    )
+    assert sorted(allowed) == WILDCARD_STUB_LAN
 
 
 def test_build_allowed_hosts_wildcard_brackets_global_ipv6_and_accepts_host(
@@ -86,6 +93,9 @@ def test_build_allowed_hosts_wildcard_brackets_global_ipv6_and_accepts_host(
 
 
 def test_build_allowed_hosts_bind_specific_lan_includes_only_that_address() -> None:
-    allowed = sorted(build_allowed_hosts("192.168.1.5", PORT))
-    assert allowed == sorted(THREE_LOOPBACK + ["192.168.1.5:7020"])
-    assert "172.17.0.1:7020" not in allowed
+    allowed = build_allowed_hosts("192.168.1.5", PORT)
+    assert "192.168.1.5:7020" in allowed
+    assert "172.17.0.1:7020" not in allowed, (
+        "192.168.1.5 bind must not allow other LAN key 172.17.0.1:7020"
+    )
+    assert sorted(allowed) == sorted(THREE_LOOPBACK + ["192.168.1.5:7020"])
