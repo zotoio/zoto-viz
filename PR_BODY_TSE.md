@@ -60,7 +60,7 @@ Inverse-apply check: product hunks with revert rows fail single-hunk reverse whe
 
 ## Guard byte-reverts (measured red)
 
-Patches `on-plugin-change-config-guard` and `on-plugin-fields-config-guard` replace guard logic with `return true` (not `hasConfigRead` stubs). Dry-run: `patch -p1 --dry-run` at zero offset on all three guard patches.
+`on-plugin-change-config-guard` and `on-plugin-fields-config-guard` are **single-line** inverses of the store-id guard (keep the `hasConfigRead` / `loadedConfigStoreId` `if` lines; only revert `return sandboxConfigPushAllowed(...)` or `return loadedConfigStoreId === iframeConfigStoreId`). Not the two-line `return hasConfigRead` / `return hasConfigRead && Boolean(loadedConfigStoreId)` stubs. `on-plugin-fields-no-config-read` restores `if (!loadedConfigStoreId) return false;` only. All three: `patch -p1 --dry-run` at zero offset.
 
 ## `revert-proofs/36` measured reds (apply patch → run test)
 
