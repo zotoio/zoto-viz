@@ -1,4 +1,5 @@
 import type { Device, Flow, StateMsg } from "../../core/types";
+import { goldenHostViewSlices } from "./golden-host-views";
 
 const PROTOS = ["tcp", "udp", "dns", "tls", "http", "icmp"];
 
@@ -92,6 +93,8 @@ export function goldenLanFixture(): StateMsg {
     lanDevice("proc:python", "lan", 14, { names: ["python"], ports: ["cpu:0"], sources: ["golden"], cpu: 16 }),
   ];
 
+  const hostViews = goldenHostViewSlices();
+
   return {
     type: "state",
     ts: 120,
@@ -147,6 +150,7 @@ export function goldenLanFixture(): StateMsg {
         hub: "cpu:host",
         self: "cpu:host",
       },
+      ...hostViews,
     },
     sources: {
       nasa: {

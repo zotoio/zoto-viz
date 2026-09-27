@@ -25,6 +25,9 @@ describe("goldenLanFixture", () => {
     expect(golden.devices.length).toBeGreaterThanOrEqual(8);
     expect(golden.flows.length).toBeGreaterThanOrEqual(5);
     expect(golden.views?.cpu?.devices.length).toBeGreaterThanOrEqual(4);
+    expect(golden.views?.bluetooth?.devices.length).toBeGreaterThanOrEqual(6);
+    expect(golden.views?.memory?.devices.length).toBeGreaterThanOrEqual(6);
+    expect(golden.views?.bridge?.devices.length).toBeGreaterThanOrEqual(8);
     expect(golden.sources?.nasa?.items?.length).toBeGreaterThan(0);
   });
 });

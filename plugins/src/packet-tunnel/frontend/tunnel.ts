@@ -6,8 +6,16 @@ export function tunnelHue(field: number): [number, number, number] {
   return [0.15 + field * 0.7, 0.35 + field * 0.4, 0.85 - field * 0.3];
 }
 
+/** Test hook: increments when the no-traffic demo field path runs. */
+export let packetTunnelDemoBranchCount = 0;
+
+export function resetPacketTunnelDemoBranchCount(): void {
+  packetTunnelDemoBranchCount = 0;
+}
+
 /** Synthetic proto field when the LAN is quiet — keeps the tunnel visibly lit. */
 function demoTunnelField(t: number): { lead: number; depth: number } {
+  packetTunnelDemoBranchCount += 1;
   const phase = t * 0.55;
   const lead = 0.5 + 0.2 * Math.sin(phase);
   const depth = 0.5 + 0.15 * Math.sin(phase * 1.3 + 0.7);
