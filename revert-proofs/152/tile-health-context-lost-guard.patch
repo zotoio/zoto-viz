@@ -1,0 +1,16 @@
+diff --git a/web/src/plugins/tile-health-monitor.ts b/web/src/plugins/tile-health-monitor.ts
+index 6e79319c..9d10ab5d 100644
+--- a/web/src/plugins/tile-health-monitor.ts
++++ b/web/src/plugins/tile-health-monitor.ts
+@@ -216,7 +216,10 @@ export class TileHealthMonitor {
+ 
+     const sc = this.deps.sceneFor(tileId);
+     if (!sc) return;
+-    if (sc.gpuContextLost) return;
++    if (sc.gpuContextLost) {
++      this.runTileCheck(tileId, now, sc, this.sampler.scratchBuffer);
++      return;
++    }
+     const patch = this.sampleScene(sc, now);
+     if (!patch) return; // async GL read pending — not empty
+     this.runTileCheck(tileId, now, sc, patch);
