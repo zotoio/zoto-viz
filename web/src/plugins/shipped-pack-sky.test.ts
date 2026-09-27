@@ -14,6 +14,7 @@ const PINNED_SHIPPED_PACK_SKY_IDS = [
   "fractal-zoom",
   "hn-rain",
   "hn-term",
+  "host-mesh-demo",
   "kefrens-bars",
   "koi-pond",
   "marble-run",

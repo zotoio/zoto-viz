@@ -344,6 +344,15 @@ GET_STATE_TOOL: dict[str, Any] = {
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
 
+GET_PACK_PERF_TOOL: dict[str, Any] = {
+    "name": "get_pack_perf",
+    "description": (
+        "Latest browser-reported pack frame instrumentation (POST /api/pack-perf). "
+        "Enable in the UI with ?packPerf=1 or localStorage zoto-viz.packPerf=1."
+    ),
+    "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
+}
+
 GET_TRAFFIC_TOOL: dict[str, Any] = {
     "name": "get_traffic",
     "description": (
@@ -607,6 +616,7 @@ def active_tools() -> list[dict[str, Any]]:
         SET_AGENT_TOOL,
         ROLL_DICE_TOOL,
         GET_STATE_TOOL,
+        GET_PACK_PERF_TOOL,
         GET_TRAFFIC_TOOL,
         GET_RF_WATCH_TOOL,
         SET_RF_WATCH_TOOL,
@@ -997,6 +1007,9 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
         if name == "get_state":
             from .monitor import publish_state
             return _tool_text({"ok": True, **publish_state(_require_state(app))})
+        if name == "get_pack_perf":
+            from . import pack_perf
+            return _tool_text(pack_perf.mcp_pack_perf_payload(app))
         if name == "get_traffic":
             ip = str(args.get("ip") or "").strip()
             if not ip:

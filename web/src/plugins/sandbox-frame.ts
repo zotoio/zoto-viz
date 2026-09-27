@@ -126,19 +126,72 @@ function vizAllowed(cap: string): boolean {
   return allowed.has(cap);
 }
 
+type VizWriteBatchPayload = {
+  buffers: { slot: number; data: number[] }[];
+  uniforms: { name: string; value: unknown }[];
+  particles?: { data: number[]; stride?: number };
+};
+
+let vizBatch: VizWriteBatchPayload | null = null;
+let vizBatchDepth = 0;
+
+function flushVizBatch(): void {
+  if (!vizBatch) return;
+  const batch = vizBatch;
+  vizBatch = null;
+  const messages = batch.buffers.length + batch.uniforms.length + (batch.particles ? 1 : 0);
+  if (messages === 0) return;
+  if (messages === 1 && batch.buffers.length === 1 && !batch.uniforms.length && !batch.particles) {
+    const b = batch.buffers[0]!;
+    send("writeBuffer", { slot: b.slot, data: b.data });
+    return;
+  }
+  if (messages === 1 && batch.uniforms.length === 1 && !batch.buffers.length && !batch.particles) {
+    const u = batch.uniforms[0]!;
+    send("writeUniform", { name: u.name, value: u.value });
+    return;
+  }
+  send("writeBatch", batch);
+}
+
+function beginVizBatch(): void {
+  vizBatchDepth++;
+  if (vizBatchDepth === 1) vizBatch = { buffers: [], uniforms: [] };
+}
+
+function endVizBatch(): void {
+  if (vizBatchDepth <= 0) return;
+  vizBatchDepth--;
+  if (vizBatchDepth === 0) {
+    flushVizBatch();
+  }
+}
+
 function patchVizWriters(): void {
   zoto.writeBuffer = (slot, data) => {
     if (!vizAllowed("viz.write")) return;
     const arr = Array.isArray(data) ? data : Array.from(data);
+    if (vizBatchDepth > 0 && vizBatch) {
+      vizBatch.buffers.push({ slot, data: arr });
+      return;
+    }
     send("writeBuffer", { slot, data: arr });
   };
   zoto.writeUniform = (name, value) => {
     if (!vizAllowed("viz.write")) return;
+    if (vizBatchDepth > 0 && vizBatch) {
+      vizBatch.uniforms.push({ name, value });
+      return;
+    }
     send("writeUniform", { name, value });
   };
   zoto.writeParticles = (data, stride) => {
     if (!vizAllowed("viz.write")) return;
     const arr = Array.isArray(data) ? data : Array.from(data);
+    if (vizBatchDepth > 0 && vizBatch) {
+      vizBatch.particles = { data: arr, stride: stride || 4 };
+      return;
+    }
     send("writeParticles", { data: arr, stride: stride || 4 });
   };
 }
@@ -175,10 +228,23 @@ export function handleSandboxHostMessage(
     return;
   }
   if (d.type === "tick" && caps.has("graph.read") && api.onTick) api.onTick(d.nodes);
-  if (d.type === "frame" && caps.has("viz.read") && api.onFrame) api.onFrame(d.frame);
+  if (d.type === "frame" && caps.has("viz.read") && api.onFrame) {
+    beginVizBatch();
+    try {
+      api.onFrame(d.frame);
+    } finally {
+      endVizBatch();
+    }
+  }
   if (d.type === "present" && caps.has("viz.write")) {
     const fn = api.onPresent;
-    if (fn) fn(d.tick);
+    if (!fn) return;
+    beginVizBatch();
+    try {
+      fn(d.tick);
+    } finally {
+      endVizBatch();
+    }
   }
 }
 
