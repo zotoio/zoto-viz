@@ -1,12 +1,11 @@
-diff --git aa/web/src/app/main.ts bb/web/src/app/main.ts
-index 9e5b712..f7d805b 100644
---- aa/web/src/app/main.ts
-+++ bb/web/src/app/main.ts
-@@ -1245,7 +1245,6 @@ mosaic = new Mosaic({
-   onCloseLast: () => {
-     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
-   },
--  onPanePick: pickMosaicPane,
-   paneCog: (id) => makeViewCogButton({
-     className: "mosaic-pane-cog",
-     title: "this pane's view settings",
+diff --git a/web/src/app/mosaic-pane-pick.ts b/web/src/app/mosaic-pane-pick.ts
+index b2bae11..2ccffd2 100644
+--- a/web/src/app/mosaic-pane-pick.ts
++++ b/web/src/app/mosaic-pane-pick.ts
+@@ -29,6 +29,5 @@ export function applyMosaicWallPanePick<T extends Record<string, unknown>>(
+   deps: MosaicPanePickDeps,
+ ): T {
+   const withPick = cfg as T & { onPanePick?: MosaicOnPanePick };
+-  withPick.onPanePick = (fromId, toId) => pickMosaicPaneWith(deps, fromId, toId);
+   return withPick;
+ }
