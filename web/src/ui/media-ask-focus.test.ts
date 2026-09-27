@@ -82,6 +82,9 @@ describe("media ask focus dialog", () => {
     await shown();
     const dialog = document.querySelector<HTMLDialogElement>("[data-media-ask]")!;
     dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-media-ask]")).toBeNull();
+    });
     await expect(pending).resolves.toBeNull();
     expect(getUserMedia).not.toHaveBeenCalled();
     await expect(askUserMedia({ audio: true, video: false }, "pulse microphone")).resolves.toBeNull();
