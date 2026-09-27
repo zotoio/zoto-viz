@@ -100,13 +100,13 @@ describe("media ask focus (chromium)", () => {
         return new Promise(() => { /* hang */ });
       };
     });
-    await openMicAsk(page);
+    void page.evaluate(() => window.__mediaAskFocusHarness.openMicAsk());
     await page.waitForSelector("[data-media-ask]");
     await page.keyboard.press("Escape");
-    await page.waitForSelector("[data-media-ask]", { state: "detached" });
+    expect(await page.locator("[data-media-ask]").count()).toBe(0);
     gumCalls = await page.evaluate(() => (window as Window & { __gumCalls?: number }).__gumCalls ?? 0);
     expect(gumCalls).toBe(0);
-    await openMicAsk(page);
+    await page.evaluate(() => window.__mediaAskFocusHarness.openMicAsk());
     expect(await page.locator("[data-media-ask]").count()).toBe(0);
     await page.close();
   });
