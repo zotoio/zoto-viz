@@ -1,5 +1,5 @@
 diff --git a/service/pack_zip_blocks.py b/service/pack_zip_blocks.py
-index 0032c45..e427c61 100644
+index 0032c459..e427c617 100644
 --- a/service/pack_zip_blocks.py
 +++ b/service/pack_zip_blocks.py
 @@ -65,27 +65,7 @@ def _invalidate_cache() -> None:
