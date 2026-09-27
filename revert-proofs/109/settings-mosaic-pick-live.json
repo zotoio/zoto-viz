@@ -13,5 +13,5 @@
     ]
   },
   "project": "web",
-  "redLine": "AssertionError: expected \"vi.fn()\" to be called with arguments: [ 'plugin:topology', 'plugin:talkers' ]"
+  "redLine": "AssertionError: expected [] to deeply equal [ [ 'plugin:topology', \u2026(1) ] ]"
 }
