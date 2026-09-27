@@ -470,7 +470,6 @@ async function runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifac
     overlayRel,
     "-t",
     testPattern,
-    `--testTimeout=${timeoutMs}`,
     "--reporter=json",
     `--outputFile.json=${jsonOut}`,
     "--",

@@ -2,8 +2,6 @@
   "scanRoots": ["web/src", "plugins", "service", "packages"],
   "entryPoints": [
     "web/index.html",
-    "web/plugin-sandbox.html",
-    "web/src/plugins/sandbox-frame.ts",
     "web/src/app/main.ts",
     "web/src/camera/cam.worker.ts",
     "service/monitor.py"
