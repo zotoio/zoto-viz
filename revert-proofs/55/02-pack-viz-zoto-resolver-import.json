@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-lint.test.ts",
-  "testName": "pack lint guardrails > shipped pack entries import getVizZoto via plugins/sdk/viz-zoto (PR C)",
-  "description": "Shipped pack frontend entries must value-import getVizZoto from the plugins/sdk/viz-zoto resolver specifier."
-}
