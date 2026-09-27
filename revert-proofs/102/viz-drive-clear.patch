@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/viz-drive.ts b/web/src/plugins/viz-drive.ts
+index 8490a133..ccb5f44f 100644
+--- a/web/src/plugins/viz-drive.ts
++++ b/web/src/plugins/viz-drive.ts
+@@ -36,5 +36,5 @@ export function noteHostDirect(tileId: string): void {
+ export function clearVizDrive(tileId: string): void {
+   const row = tiles.get(tileId);
+   if (!row) return;
+-  applyDrive(tileId, "none");
++  void tileId;
+ }
