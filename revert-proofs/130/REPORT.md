@@ -2,12 +2,52 @@
 
 | row | test | revert description | command | result |
 | --- | --- | --- | --- | --- |
+| host-mesh-clear-no-dispose | web/src/graph/host-mesh-lane.test.ts :: host mesh lane > clear() exact teardown counts (Performance Pedant) | Revert disposeHostMeshObject3D on template clear | web/node_modules/.bin/vitest run --config ../scripts/revert-proof-vitest-overlay.mjs -t "^host mesh lane > clear\\(\\) exact teardown counts \\(Performance Pedant\\)$" --reporter=json --outputFile.json=<tmp> -- src/graph/host-mesh-lane.test.ts | RED (expected) |
+| host-mesh-clear-no-mixer-stop | web/src/graph/host-mesh-lane.test.ts :: host mesh lane > clear() exact teardown counts (Performance Pedant) | Revert stopSkinnedMixer on clearAssetLive | web/node_modules/.bin/vitest run --config ../scripts/revert-proof-vitest-overlay.mjs -t "^host mesh lane > clear\\(\\) exact teardown counts \\(Performance Pedant\\)$" --reporter=json --outputFile.json=<tmp> -- src/graph/host-mesh-lane.test.ts | RED (expected) |
+| host-mesh-clear-no-template-map-clear | web/src/graph/host-mesh-lane.test.ts :: host mesh lane > clear() exact teardown counts (Performance Pedant) | Revert templates.clear() on HostMeshLane.clear | web/node_modules/.bin/vitest run --config ../scripts/revert-proof-vitest-overlay.mjs -t "^host mesh lane > clear\\(\\) exact teardown counts \\(Performance Pedant\\)$" --reporter=json --outputFile.json=<tmp> -- src/graph/host-mesh-lane.test.ts | RED (expected) |
+| host-mesh-inflight-no-epoch | web/src/graph/host-mesh-lane.test.ts :: host mesh lane > clear() exact teardown counts (Performance Pedant) | Revert loadEpoch stale-load discard in loadInner | web/node_modules/.bin/vitest run --config ../scripts/revert-proof-vitest-overlay.mjs -t "^host mesh lane > clear\\(\\) exact teardown counts \\(Performance Pedant\\)$" --reporter=json --outputFile.json=<tmp> -- src/graph/host-mesh-lane.test.ts | RED (expected) |
 | host-mesh-strip-assets-prefix | tests/test_host_mesh_loader_gaps.py :: test_host_mesh_lane_strips_assets_prefix_in_api_url | Revert strip assets/ prefix in host mesh assetUrl | python3 -m pytest --no-cov -p no:cacheprovider -p revert_proof_pytest_plugin tests/test_host_mesh_loader_gaps.py::test_host_mesh_lane_strips_assets_prefix_in_api_url | RED (expected) |
 | pack-asset-stale-cookie-fallback | tests/test_access_sandbox_token.py :: SandboxAssetTokenOriginTests::test_null_origin_pack_assets_with_stale_csrf_cookie | Revert app csrf fallback when sandbox sends stale cookie only | python3 -m pytest --no-cov -p no:cacheprovider -p revert_proof_pytest_plugin tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_null_origin_pack_assets_with_stale_csrf_cookie | RED (expected) |
-| host-mesh-clear-no-dispose | | | | **ERROR: row host-mesh-clear-no-dispose: baseline test selection failed (target not found; never a pass) --- baseline output --- JSON report written to <tmp>** |
-| host-mesh-clear-no-mixer-stop | | | | **ERROR: row host-mesh-clear-no-mixer-stop: baseline test selection failed (target not found; never a pass) --- baseline output --- JSON report written to <tmp>** |
-| host-mesh-clear-no-template-map-clear | | | | **ERROR: row host-mesh-clear-no-template-map-clear: baseline test selection failed (target not found; never a pass) --- baseline output --- JSON report written to <tmp>** |
-| host-mesh-inflight-no-epoch | | | | **ERROR: row host-mesh-inflight-no-epoch: baseline test selection failed (target not found; never a pass) --- baseline output --- JSON report written to <tmp>** |
+
+### host-mesh-clear-no-dispose
+
+```
+AssertionError: expected "dispose" to be called 3 times, but got 0 times
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### host-mesh-clear-no-mixer-stop
+
+```
+AssertionError: expected "stopAllAction" to be called 2 times, but got 0 times
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### host-mesh-clear-no-template-map-clear
+
+```
+AssertionError: expected 3 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
+
+### host-mesh-inflight-no-epoch
+
+```
+AssertionError: expected 1 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file://<tmp>
+```
 
 ### host-mesh-strip-assets-prefix
 
@@ -40,7 +80,7 @@ _ SandboxAssetTokenOriginTests.test_null_origin_pack_assets_with_stale_csrf_cook
                 )
 >       assert resp.status == 200
 E       AssertionError: assert 401 == 200
-E        +  where 401 = <ClientResponse(http://127.0.0.1:43485/pack-assets/648cc384-b48f-4f49-86b8-9d2610607f7f.3PscsFO5jyu-P_C4P6hlySBoZMo9B2... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sun, 27 Sep 2026 16:07:08 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
+E        +  where 401 = <ClientResponse(http://127.0.0.1:34209/pack-assets/cf77ab9a-c65e-4701-9a6b-d116a2ac0954.jSliUeoOfIks13eF0sBCrhP8MrCaul... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sun, 27 Sep 2026 16:16:31 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
 
 tests/test_access_sandbox_token.py:178: AssertionError
 =============================== warnings summary ===============================
