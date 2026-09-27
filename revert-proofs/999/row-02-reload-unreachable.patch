@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 74ffb30a..8930f47e 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -345,7 +345,7 @@ function openMediaAsk(waiters: Waiter[]): void {
+ 
+   document.body.classList.add("modal-open");
+   document.body.appendChild(modal);
+-  modal.showModal();
++  modal.show();
+   allow.focus();
+ }
+ 

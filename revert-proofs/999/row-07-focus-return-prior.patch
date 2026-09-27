@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 74ffb30a..7e660f0b 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -229,7 +229,7 @@ function mergeOpen(waiters: Waiter[]): void {
+ }
+ 
+ function openMediaAsk(waiters: Waiter[]): void {
+-  const previousFocus = capturePreviousFocus();
++  const previousFocus = null;
+   const modal = document.createElement("dialog");
+   modal.className = "modal ask";
+   modal.setAttribute("data-media-ask", "1");

@@ -1,0 +1,12 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 74ffb30a..9b443e8e 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -186,7 +186,6 @@ function teardown(modal: HTMLDialogElement, previousFocus: HTMLElement | null):
+   document.body.classList.remove("modal-open");
+   if (modal.open) modal.close();
+   modal.remove();
+-  restoreFocus(previousFocus);
+ }
+ 
+ function paintCopy(host: NonNullable<typeof open>, extra?: string): void {

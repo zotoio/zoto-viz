@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-focus.test.ts",
+  "testName": "media ask focus dialog > returns focus to the header mic toggle on a fresh load after close",
+  "description": "Revert production guard (row-06-focus-return-fresh-mic)",
+  "red": "AssertionError: expected <body class>\u2026(2)</body> to be <input type=\"checkbox\" id=\"mic\"></input> // Object.is equality"
+}

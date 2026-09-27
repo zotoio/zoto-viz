@@ -1,0 +1,12 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 74ffb30a..9213aecd 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -292,7 +292,6 @@ function openMediaAsk(waiters: Waiter[]): void {
+ 
+   modal.addEventListener("cancel", (e) => {
+     e.preventDefault();
+-    deny("dismiss");
+   });
+   modal.addEventListener("click", (e) => {
+     if (e.target === modal) deny("dismiss");

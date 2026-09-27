@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-focus.test.ts",
+  "testName": "media ask focus dialog > closes on Escape without calling getUserMedia and dismisses like Not now",
+  "description": "Revert production guard (row-04-escape-dismiss-jsdom)",
+  "red": "AssertionError: expected <dialog class=\"modal ask\" \u2026(3)>\u2026(1)</dialog> to be null"
+}

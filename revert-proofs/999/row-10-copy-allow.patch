@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 74ffb30a..e7e6cc3f 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -251,7 +251,7 @@ function openMediaAsk(waiters: Waiter[]): void {
+   cancel.textContent = "Not now";
+   const allow = document.createElement("button");
+   allow.type = "button";
+-  allow.className = "btn primary";
++  allow.className = "btn";
+   allow.textContent = "Allow";
+   row.append(cancel, allow);
+   sheet.append(head, body, row);

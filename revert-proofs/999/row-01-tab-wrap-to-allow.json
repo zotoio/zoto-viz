@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-focus.chromium.test.ts",
+  "testName": "media ask focus (chromium) > cycles Tab from Not now back to Allow while the dialog is open",
+  "description": "Revert production guard (row-01-tab-wrap-to-allow)",
+  "red": "AssertionError: expected 'not-now' to be 'allow' // Object.is equality"
+}

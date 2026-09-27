@@ -1,0 +1,12 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 74ffb30a..d755d70a 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -239,7 +239,6 @@ function openMediaAsk(waiters: Waiter[]): void {
+   const head = document.createElement("div");
+   head.className = "mhead";
+   const title = document.createElement("strong");
+-  title.id = MEDIA_ASK_TITLE_ID;
+   head.appendChild(title);
+   const body = document.createElement("div");
+   body.className = "ask-body";

@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 74ffb30a..50bab9af 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -248,7 +248,7 @@ function openMediaAsk(waiters: Waiter[]): void {
+   const cancel = document.createElement("button");
+   cancel.type = "button";
+   cancel.className = "btn";
+-  cancel.textContent = "Not now";
++  cancel.textContent = "Later";
+   const allow = document.createElement("button");
+   allow.type = "button";
+   allow.className = "btn primary";
