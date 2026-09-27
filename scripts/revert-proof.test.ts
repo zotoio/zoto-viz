@@ -83,7 +83,7 @@ function ensureFixtureVenv(root: string) {
 }
 
 function runPnpmInstall(root: string) {
-  const r = spawnSync("pnpm", ["install"], {
+  const r = spawnSync("pnpm", ["install", "--prefer-offline"], {
     cwd: root,
     encoding: "utf8",
     env: process.env,
