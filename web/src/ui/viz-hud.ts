@@ -273,7 +273,6 @@ export class VizHud {
     line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
     this.devBadInputEl = document.createElement("div");
     this.devBadInputEl.className = "viz-hud-dev-bad-input sec-hint";
-    this.devBadInputEl.dataset.testid = "viz-hud-dev-bad-input";
     this.devBadInputEl.hidden = true;
     root.append(line, this.devBadInputEl, this.tileShareRow);
 

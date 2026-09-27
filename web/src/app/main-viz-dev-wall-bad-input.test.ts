@@ -35,7 +35,7 @@ describe("main viz dev wall bad-input path", () => {
     document.body.append(parent);
     const hud = new VizHud(parent, () => {});
     syncDevWallBadInputOnHud(hud);
-    const el = parent.querySelector<HTMLElement>("[data-testid='viz-hud-dev-bad-input']");
+    const el = parent.querySelector<HTMLElement>(".viz-hud-dev-bad-input");
     expect(el?.hidden).toBe(false);
     expect(el?.textContent).toBe(BAD_1_3000);
     const r = runWallHarnessNegative(TILES_2X2, "1:3000");
@@ -51,7 +51,7 @@ describe("main viz dev wall bad-input path", () => {
     const hud = new VizHud(parent, () => {});
     applyDevVizWallFlagsOnBuild("?vizTileCostTicks=1:5011", TILES_2X2);
     hud.syncDevWallBadInputMessage(devVizWallTileCostBadInputMessage());
-    expect(parent.querySelector("[data-testid='viz-hud-dev-bad-input']")?.textContent).toBe(msg);
+    expect(parent.querySelector(".viz-hud-dev-bad-input")?.textContent).toBe(msg);
     const r = runWallHarnessNegative(TILES_2X2, "1:5011");
     expect(r.skipped).toBe(0);
     expect(r.limitedWallLines).toBe(0);
