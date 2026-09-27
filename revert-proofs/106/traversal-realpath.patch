@@ -1,8 +1,8 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index 31b66d6..a7d5f10 100644
+index 34141e2..876a171 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
-@@ -80,18 +80,8 @@ def _resolve_under_root(root: Path, relpath: str) -> Path | None:
+@@ -100,18 +100,8 @@ def _resolve_under_root(root: Path, relpath: str) -> Path | None:
          return None
      target = (root / rel).resolve()
      root_res = root.resolve()

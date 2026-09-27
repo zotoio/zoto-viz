@@ -1,7 +1,8 @@
 diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
+index 29c3ce7..9884da8 100644
 --- a/service/pack_asset_tokens.py
 +++ b/service/pack_asset_tokens.py
-@@ -78,7 +78,7 @@ def verify_pack_asset_token(
+@@ -83,7 +83,7 @@ def verify_pack_asset_token(
          session_id.encode("utf-8")
      except UnicodeEncodeError:
          return False

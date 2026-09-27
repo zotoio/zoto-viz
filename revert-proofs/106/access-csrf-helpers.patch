@@ -1,8 +1,8 @@
 diff --git a/service/access.py b/service/access.py
-index 5406219..2e15a68 100644
+index bb5aec4..2ccd8fb 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -228,9 +228,7 @@ def origin_ok(request: web.Request) -> bool:
+@@ -201,9 +201,7 @@ def origin_ok(request: web.Request) -> bool:
      if not raw:
          return True  # curl / non-browser
      if raw == "null":
@@ -13,3 +13,61 @@ index 5406219..2e15a68 100644
      name = origin_hostname(raw)
      if request.app.get("insecure_lan"):
          return name == header_hostname(request.headers.get("Host", ""))
+diff --git a/service/monitor.py b/service/monitor.py
+index 2a2daca..ec5baae 100644
+--- a/service/monitor.py
++++ b/service/monitor.py
+@@ -1904,8 +1904,6 @@ def make_app(
+     allowed_hosts: list[str] | None = None,
+     insecure_lan: bool = False,
+ ) -> web.Application:
+-    from . import pack_asset_frames
+-
+     app = web.Application(
+         middlewares=[request_guard.middleware, static_path_guard, access.middleware],
+         client_max_size=agent.MAX_BODY,
+diff --git a/service/static_paths.py b/service/static_paths.py
+index 5f6d5b8..f2531f3 100644
+--- a/service/static_paths.py
++++ b/service/static_paths.py
+@@ -25,7 +25,9 @@ def canonical_static_path(path: str) -> str | None:
+     if not raw.startswith("/"):
+         return None
+     decoded = _decode_path(raw)
+-    if decoded.startswith("//") or "\\" in decoded:
++    if decoded.startswith("//"):
++        return None
++    if "\\" in decoded:
+         return None
+     segments: list[str] = []
+     for part in decoded.split("/"):
+@@ -48,8 +50,7 @@ def static_path_allowed(request_path: str) -> bool:
+     decoded = _decode_path(raw)
+     if decoded != canon and raw != canon:
+         return False
+-    base = canon.rsplit("/", 1)[-1]
+-    if base in _BLOCKED_STATIC:
++    if is_legacy_sandbox_request(request_path):
+         return False
+     return True
+ 
+diff --git a/tests/test_pack_assets_security.py b/tests/test_pack_assets_security.py
+index 85b74db..ec6948d 100644
+--- a/tests/test_pack_assets_security.py
++++ b/tests/test_pack_assets_security.py
+@@ -39,6 +39,15 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
+     async def get_application(self) -> web.Application:
+         return make_pack_test_app()
+ 
++    async def test_consented_module_js_is_no_store(self) -> None:
++        row = {"id": "demo-pack", "has_frontend": True}
++        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None):
++            with patch.object(plugins, "consented", lambda _doc: True):
++                with patch.object(plugins, "module_response", lambda _pid: web.Response(text="export {};", content_type="text/javascript")):
++                    resp = await self.client.get(pack_url("demo-pack", "module.js"), headers=NULL)
++        assert resp.status == 200
++        assert resp.headers.get("Cache-Control") == "no-store"
++
+     async def test_valid_token_cannot_fetch_unconsented_pack(self) -> None:
+         """Session token does not bypass consent for a different pack id in the path."""
+         row_a = {"id": "pack-a", "has_frontend": True, "file": "/fake/a/plugin.yml"}

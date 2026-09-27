@@ -1,5 +1,5 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index b91d376..8d01991 100644
+index 34141e2..30119b5 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
 @@ -44,9 +44,7 @@ def _frontend_root(home: Path) -> Path:

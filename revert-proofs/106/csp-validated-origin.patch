@@ -1,6 +1,8 @@
+diff --git a/service/access.py b/service/access.py
+index bb5aec4..8e832c7 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -218,9 +218,9 @@
+@@ -191,9 +191,9 @@ def origin_hostname(origin: str) -> str:
  
  def pack_asset_csp_origin(request: web.Request) -> str:
      """Origin for sandbox CSP script-src (never raw untrusted Host fragments)."""

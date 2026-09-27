@@ -1,8 +1,8 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index b91d376..02907e1 100644
+index 34141e2..e1a82d7 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
-@@ -216,8 +216,6 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
+@@ -215,8 +215,6 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
      parsed = access.parse_pack_assets_path(request.path or "")
      if not parsed:
          return _pack_not_found()

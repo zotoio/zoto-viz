@@ -1,6 +1,8 @@
+diff --git a/service/access.py b/service/access.py
+index bb5aec4..98de2c0 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -77,20 +77,9 @@ def pack_asset_token_ok(request: web.Request) -> bool:
+@@ -76,20 +76,9 @@ def pack_asset_token_ok(request: web.Request) -> bool:
      frame_id, _mac = parsed_tok
      reg = pack_asset_frames.registry_for_app(request.app)
      live = reg.is_live(sid, frame_id)

@@ -1,8 +1,8 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index b91d376..1f34786 100644
+index 34141e2..de5c4c9 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
-@@ -243,9 +243,6 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
+@@ -242,9 +242,6 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
          return resp
  
      row = plugins._plugin_row(pack_id)

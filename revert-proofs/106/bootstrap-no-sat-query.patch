@@ -1,8 +1,8 @@
 diff --git a/service/pack_assets.py b/service/pack_assets.py
-index b91d376..b5d279b 100644
+index 34141e2..49388b6 100644
 --- a/service/pack_assets.py
 +++ b/service/pack_assets.py
-@@ -271,8 +271,7 @@ def _rewrite_sandbox_html(body: str, token: str) -> str:
+@@ -270,8 +270,7 @@ def _rewrite_sandbox_html(body: str, token: str) -> str:
      def repl_asset(m: re.Match[str]) -> str:
          attr, path = m.group(1), m.group(2)
          name = path.rsplit("/", 1)[-1]

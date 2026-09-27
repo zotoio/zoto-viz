@@ -1,8 +1,8 @@
 diff --git a/service/access.py b/service/access.py
-index 5406219..6451267 100644
+index bb5aec4..0f94c2b 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -109,10 +109,7 @@ def redact_request_path(path: str, token: str) -> str:
+@@ -100,10 +100,7 @@ def redact_request_path(path: str, token: str) -> str:
      parsed = parse_pack_assets_path(path or "")
      if not parsed or not token:
          return path
