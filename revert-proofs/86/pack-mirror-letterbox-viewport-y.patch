@@ -1,13 +1,13 @@
-diff --git a/web/src/graph/render-host-gl-adapter.ts b/web/src/graph/render-host-gl-adapter.ts
-index f730eb5..a25b3db 100644
---- a/web/src/graph/render-host-gl-adapter.ts
-+++ b/web/src/graph/render-host-gl-adapter.ts
-@@ -23,7 +23,7 @@ export function applyDeviceRectToGlRenderer(
- ): void {
-   toGlRectInto(rect, canvasDeviceHeight, glScratch);
-   renderer.setScissorTest(true);
--  renderer.setViewport(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
-+  renderer.setViewport(glScratch.x, glScratch.y + 100, glScratch.w, glScratch.h);
-   renderer.setScissor(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
- }
- 
+diff --git a/web/src/graph/letterbox-fill.ts b/web/src/graph/letterbox-fill.ts
+index 9d1b774..4e21305 100644
+--- a/web/src/graph/letterbox-fill.ts
++++ b/web/src/graph/letterbox-fill.ts
+@@ -195,7 +195,7 @@ export function letterboxInnerRectInto(
+     w = h * a;
+   }
+   out.x = (bw - w) / 2;
+-  out.y = (bh - h) / 2;
++  out.y = 0;
+   out.w = w;
+   out.h = h;
+   return out;

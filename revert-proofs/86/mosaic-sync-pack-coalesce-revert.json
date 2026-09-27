@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic-sync-pack-coalesce.test.ts",
+  "testName": "^Mosaic syncPackCoalesce > syncPackCoalesce calls applyPackCoalesceLayout for duplicate pack tiles$",
+  "description": "Revert mosaic.ts syncPackCoalesce body (applyPackCoalesceLayout call).",
+  "expectedRed": "expected \"applyPackCoalesceLayout\" to be called 1 times, but got 0 times"
+}

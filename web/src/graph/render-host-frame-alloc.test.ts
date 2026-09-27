@@ -224,4 +224,14 @@ describe("RenderHost frame allocations", () => {
     expect(packMirrorSizeStats.deviceSizeAllocated).toBe(0);
     expect(packMirrorSizeStats.converterEdgeObjectsAllocated).toBe(0);
   });
+
+  it("duplicate pack tiles: exactly one renderPrimary per host frame", () => {
+    tickHost(host, 0);
+    const renderPrimary = vi.spyOn(host.packMirrors, "renderPrimary");
+    for (let f = 0; f < 300; f++) {
+      tickHost(host, f + 1);
+      expect(renderPrimary).toHaveBeenCalledTimes(1);
+      renderPrimary.mockClear();
+    }
+  });
 });

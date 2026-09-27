@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-letterbox.test.ts",
-  "testName": "^pack mirror letterbox > places letterbox inner viewport with bottom-left origin$",
-  "description": "PackTexturePresenter.draw must use bottom-left GL viewport Y for the content pass. Patched vitest: expected 120 to be 20 // Object.is equality",
-  "expectedRed": "expected 120 to be 20 // Object.is equality"
+  "testFile": "src/graph/pack-mirror-letterbox-16x9.test.ts",
+  "testName": "^pack mirror 16:9 letterbox \\(production presenter\\) > 1:1 tile pr 1.5: centred inner GL viewport, first scene row offset, surface panel bar clear$",
+  "description": "Revert letterboxInnerRectInto vertical centering (letterbox-fill.ts).",
+  "expectedRed": "expected 2 to be 3 // Object.is equality"
 }

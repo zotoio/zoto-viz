@@ -1,14 +1,13 @@
-diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
-index dcd4781..f8cd6f6 100644
---- a/web/src/graph/pack-mirror-gl.ts
-+++ b/web/src/graph/pack-mirror-gl.ts
-@@ -319,7 +319,8 @@ export class PackMirrorRegistry {
-     for (const [key, scope] of scopes) {
-       if (scope.tileCount < 2) continue;
-       if (!this.sessions.has(key)) {
--        this.sessions.set(key, new PackMirrorSession());
-+        if (!this.sessions.size) this.sessions.set(key, new PackMirrorSession());
-+        else this.sessions.set(key, [...this.sessions.values()][0]);
-         this.allocationCount += 1;
-       }
-     }
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index e7a40f6..ea5852a 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -543,7 +543,7 @@ export class RenderHost {
+     this.packScopeScratch.clear();
+     for (const v of this.views) {
+       const meta = packMirrorMeta(v);
+-      const key = meta.packCoalesceGroupKey;
++      const key = `${meta.packCoalesceGroupKey}:${v.viewEl.id || "view"}`;
+       const tileCount = meta.packCoalesceTileCount ?? 0;
+       if (!key || tileCount < 2) continue;
+       this.packScopeScratch.set(key, { tileCount, antialias });

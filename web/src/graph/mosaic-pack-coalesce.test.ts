@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as packHost from "../plugins/viz-pack-host";
-import { deliverCoalescedMosaicPacks, mosaicPackGroups, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
+import { deliverCoalescedMosaicPacks, mosaicPackGroups, resetMosaicPackCoalesceWriters, applyPackCoalesceLayout } from "./mosaic-pack-coalesce";
 import { setPluginModes, topology } from "../core/modes";
 import type { VizDataFrame } from "../plugins/viz-host";
 
@@ -100,5 +100,27 @@ describe("mosaic pack coalesce", () => {
     expect(onFrameSpy).toHaveBeenCalledTimes(1);
     expect(uboBySlot.filter((s) => s === "plugin:star-sines")).toHaveLength(2);
     expect(uboBySlot).toContain("plugin:star-sines!1");
+  });
+
+  it("applyPackCoalesceLayout assigns one primary and mirror roles on duplicate pack tiles", () => {
+    setPluginModes([
+      { ...topology, id: "plugin:star-sines", pluginId: "star-sines", label: "Sines" },
+    ]);
+    const roles = new Map<string, string>();
+    const mosaic = {
+      tileIds: ["plugin:star-sines", "plugin:star-sines!1"],
+      graphScene: (slot: string) => ({
+        setPackCoalesce: (v: { role: string } | null) => {
+          if (v) roles.set(slot, v.role);
+        },
+      }),
+    };
+    applyPackCoalesceLayout(
+      mosaic,
+      (id) => ({ pluginId: "star-sines", id }) as never,
+      () => null,
+    );
+    expect(roles.get("plugin:star-sines")).toBe("primary");
+    expect(roles.get("plugin:star-sines!1")).toBe("mirror");
   });
 });
