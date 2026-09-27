@@ -1664,7 +1664,6 @@ body.panel-wide #debuglog {
   pointer-events: none;
   text-transform: none;
 }
-.wall-notice-region { bottom: anchor(--viz-foot top); }
 .wall-notice-status,
 .wall-notice-alert { display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .wall-notice-row {
