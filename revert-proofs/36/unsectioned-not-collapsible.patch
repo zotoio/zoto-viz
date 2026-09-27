@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
-index 116265e3..dc71289b 100644
+index 116265e3..6e6361bf 100644
 --- a/web/src/plugins/plugin-ui.ts
 +++ b/web/src/plugins/plugin-ui.ts
 @@ -165,7 +165,7 @@ export function fillPluginFields(
@@ -11,3 +11,14 @@ index 116265e3..dc71289b 100644
    if (compact.length && hasSections) {
      const groups = new Map<string, PluginField[]>();
      for (const f of compact) {
+@@ -174,9 +174,7 @@ export function fillPluginFields(
+       groups.get(s)!.push(f);
+     }
+     for (const [section, sectionFields] of groups) {
+-      const container = section
+-        ? document.createElement("details")
+-        : document.createElement("div");
++      const container = document.createElement("details");
+       if (container instanceof HTMLDetailsElement) {
+         container.className = "sec sec-collapsible";
+         container.open = true;

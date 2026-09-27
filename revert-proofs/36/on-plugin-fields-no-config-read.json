@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-sandbox-config-push.test.ts",
-  "testName": "plugin sandbox config push guards > onPluginFields path: no config.read yields 0 posts",
+  "testFile": "web/src/plugins/plugin-config-sync.test.ts",
+  "testName": "allowOnPluginFieldsConfigPush > requires config.read before allowing a push",
   "description": "onPluginFields guard must require config.read",
-  "red": "AssertionError: expected [ { type: 'config', … } ] to have a length of +0 but got 1"
+  "red": "AssertionError: expected true to be false // Object.is equality"
 }

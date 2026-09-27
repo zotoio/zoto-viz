@@ -3,5 +3,5 @@
   "testFile": "web/src/plugins/plugin-ui.test.ts",
   "testName": "fillPluginFields > dirty field-dirty styling selectors target slider and toggle roots",
   "description": "Dirty warn ring must target label.slider and label.toggle, not .slider-row",
-  "red": "AssertionError: expected '/* Defaults match the \"midnight\" them…' to match /label\\.slider\\.field-dirty/"
+  "red": "label\\.slider\\.field-dirty"
 }
