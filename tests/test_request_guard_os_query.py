@@ -86,13 +86,41 @@ def test_local_interface_hosts_filters_stubbed_os_addresses(
             "10.0.0.5",
         ],
     )
-    hosts = sorted(request_guard.local_interface_hosts(7020, include_os=True))
+    hosts = sorted(request_guard.local_interface_hosts(7020))
     assert [h for h in hosts if "169.254." in h] == []
     assert [h for h in hosts if "[fe80" in h] == []
     assert [h for h in hosts if h.startswith("0.0.0.0:")] == []
     assert hosts == sorted(
         ["localhost:7020", "127.0.0.1:7020", "[::1]:7020", "10.0.0.5:7020"],
     )
+
+
+def test_local_interface_hosts_skips_link_local_os_addresses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        request_guard,
+        "query_os_interface_addresses",
+        lambda: ["169.254.1.1", "fe80::1", "10.0.0.5"],
+    )
+    hosts = request_guard.local_interface_hosts(7020)
+    assert "169.254.1.1:7020" not in hosts, (
+        "link-local 169.254.1.1 must not become allowlist key 169.254.1.1:7020"
+    )
+    assert "[fe80::1]:7020" not in hosts, "link-local fe80::1 must not become allowlist key"
+
+
+def test_local_interface_hosts_skips_wildcard_os_addresses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        request_guard,
+        "query_os_interface_addresses",
+        lambda: ["0.0.0.0", "::", "10.0.0.5"],
+    )
+    hosts = request_guard.local_interface_hosts(7020)
+    assert "0.0.0.0:7020" not in hosts, "unspecified 0.0.0.0 must not become allowlist key 0.0.0.0:7020"
+    assert "::7020" not in hosts and not any(h.startswith("[::]:") for h in hosts)
 
 
 def test_build_allowed_hosts_loopback_bind_skips_os_lan_addresses(

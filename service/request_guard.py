@@ -171,13 +171,11 @@ def query_os_interface_addresses() -> list[str]:
         return []
 
 
-def local_interface_hosts(port: int, *, include_os: bool = True) -> set[str]:
+def local_interface_hosts(port: int) -> set[str]:
     out: set[str] = set()
     out.add(_canonical_key("localhost", port))
     out.add(_canonical_key("127.0.0.1", port))
     out.add(_canonical_key("::1", port))
-    if not include_os:
-        return out
     seen: set[str] = set()
     for addr in query_os_interface_addresses():
         if addr in seen or addr in {"0.0.0.0", "::"}:
@@ -216,8 +214,13 @@ def build_allowed_hosts(
     bind = (bind or "127.0.0.1").strip()
     if bind_is_loopback(bind):
         allowed = set(_loopback_allowlist_keys(port))
+        try:
+            if ipaddress.ip_address(bind).is_loopback:
+                allowed.add(_canonical_key(bind, port))
+        except ValueError:
+            pass
     elif _bind_is_unspecified(bind):
-        allowed = set(local_interface_hosts(port, include_os=True))
+        allowed = set(local_interface_hosts(port))
     else:
         allowed = set(_loopback_allowlist_keys(port))
         allowed.add(_canonical_key(bind, port))
