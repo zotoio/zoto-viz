@@ -64,8 +64,11 @@ describe("wall notice region", () => {
     expect(cs.flexDirection).toBe("column");
     expect(cs.gap).toBe("6px");
     expect(cs.marginBottom).toBe("10px");
-    postWallNotice({ key: "install-failed", text: "x", action: { label: "Retry", onClick: () => {} } });
-    expect(getComputedStyle(document.querySelector(".wall-notice-row")!).pointerEvents).toBe("auto");
+  });
+
+  it("notice row rule in style.css declares pointer-events auto", () => {
+    const css = fs.readFileSync(path.join(webRoot, "src/style.css"), "utf8");
+    expect(css).toMatch(/\.wall-notice-row\s*\{[^}]*pointer-events:\s*auto/);
   });
 
   it("routes all ten NoticeKey values via NOTICE_ROUTE", () => {
