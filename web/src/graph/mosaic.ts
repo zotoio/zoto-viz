@@ -986,10 +986,14 @@ export class Mosaic {
     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
     if (a.mosaicUniqueSkies === true || planned) {
       const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
-      const next = pinPluginTileSkies(
-        planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
-        ids,
-      );
+      const assigned = assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      const base: Record<string, BackdropKind> = { ...assigned };
+      if (planned) {
+        for (const [id, sky] of Object.entries(planned)) {
+          if (sky !== undefined) base[id] = sky;
+        }
+      }
+      const next = pinPluginTileSkies(base, ids);
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;
