@@ -52,11 +52,19 @@ describe("consentBlockMessage", () => {
 
   it("names the plugin when available", () => {
     const msg = consentBlockMessage({ name: "Heat map" });
+    expect(msg.includes("\u2192")).toBe(true);
     expect(msg === "Not approved yet. Heat map: Approve it in Settings → Plugins.").toBe(true);
   });
 
   it("uses generic copy when the plugin name is unknown", () => {
     const msg = consentBlockMessage(null);
+    expect(msg.includes("\u2192")).toBe(true);
     expect(msg === "Not approved yet. Approve it in Settings → Plugins.").toBe(true);
+  });
+
+  it("includes unicode arrow in Settings Plugins consent copy", () => {
+    const msg = consentBlockMessage({ name: "Heat map" });
+    expect(msg.includes("\u2192")).toBe(true);
+    expect(msg.includes("Settings \u2192 Plugins.")).toBe(true);
   });
 });

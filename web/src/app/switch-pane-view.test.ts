@@ -65,6 +65,7 @@ describe("switchPaneView", () => {
       expect(m.setPaneNotice.mock.calls.length).toBe(1);
       const call = m.setPaneNotice.mock.calls[0]!;
       expect(call[0]).toBe("plugin:topology");
+      expect(call[1]?.includes("\u2192")).toBe(true);
       expect(call[1] === "Not approved yet. Talkers: Approve it in Settings → Plugins.").toBe(true);
     });
 
@@ -124,6 +125,7 @@ describe("switchPaneView", () => {
       expect(m.setPaneNotice.mock.calls.length).toBe(1);
       const call = m.setPaneNotice.mock.calls[0]!;
       expect(call[0]).toBe("plugin:topology");
+      expect(call[1]?.includes("\u2192")).toBe(true);
       expect(call[1] === "Not approved yet. Talkers: Approve it in Settings → Plugins.").toBe(true);
     });
 
