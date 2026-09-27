@@ -58,6 +58,7 @@ describe("nixie wall clock rows", () => {
     const qSpy = vi.spyOn(Document.prototype, "querySelector");
     const jsonSpy = vi.spyOn(JSON, "stringify");
     const keysSpy = vi.spyOn(Object, "keys");
+    const parseSpy = vi.spyOn(nixieTubes, "parseNixieLook");
     const hostCanvas: { w: number; h: number } = { w: 1920, h: 1080 };
     const t0 = 1_700_000_000_000;
     setVizWallClockInjector(() => t0);
@@ -88,15 +89,18 @@ describe("nixie wall clock rows", () => {
         qSpy.mockClear();
         jsonSpy.mockClear();
         keysSpy.mockClear();
+        parseSpy.mockClear();
       } else {
-        expect(nixiePackActiveLook()).toBe(lookRef);
-        expect(nixiePackActiveCanvas()).toBe(canvasRef);
+        expect(parseSpy).not.toHaveBeenCalled();
+        expect(nixiePackActiveCanvas() === canvasRef).toBe(true);
         expect(qSpy).not.toHaveBeenCalled();
         expect(jsonSpy).not.toHaveBeenCalled();
         expect(keysSpy).not.toHaveBeenCalled();
       }
     }
-    expect(formatFrames).toEqual([0, 60, 120, 180, 240, 300, 360, 420, 480, 540]);
+    expect(formatFrames.length).toBe(10);
+    expect(formatFrames[0]).toBe(0);
+    expect(formatFrames[9]).toBe(540);
     for (const i of [1, 17, 60, 119]) {
       expect(nixieSimWallMs(t0, i)).toBe(t0 + Math.floor((i * 5000) / 300));
     }

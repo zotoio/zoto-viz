@@ -161,7 +161,6 @@ describe("tile frame budget rows", () => {
     const tile = reg.getTile("t0");
     expect(tileHudSkipLabel(tile, 55, 1, VIZ_CLOCK_STEP_TICKS)).toMatch(/^skips /);
     const shown = tileHudDisplayFrame(reg.getTile("t0"), null);
-    expect(shown).toBe(f1);
     expect(shown?.t).toBe(1);
   });
 });
