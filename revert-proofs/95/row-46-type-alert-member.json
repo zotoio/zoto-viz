@@ -3,5 +3,5 @@
   "runner": "command",
   "command": "pnpm typecheck",
   "cwd": "web",
-  "red": "typecheck/wall-notice-region.typecheck.ts(5,67): error TS2322: Type '{ label: string; onClick: () => void; }' is not assignable to type 'undefined'."
+  "red": "typecheck/wall-notice-region.typecheck.ts(5,20): error TS2322: Type '\"install-failed\"' is not assignable to type 'StatusKey'.\ntypecheck/wall-notice-region.typecheck.ts(5,54): error TS2322: Type '{ label: string; onClick: () => void; }' is not assignable to type 'undefined'."
 }
