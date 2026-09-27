@@ -6,8 +6,8 @@ import asyncio
 from aiohttp import ClientSession
 
 from service import request_guard
-from service.request_guard import HOST_REJECT_BODY, normalize_host_header_key, validate_allowed_host_entry
-from tests.monitor_app_test_util import make_app_server
+from service.request_guard import HOST_REJECT_BODY, validate_allowed_host_entry
+from tests.monitor_app_test_util import host_header, make_app_server
 
 
 def test_escape_log_host_sanitizes_control_characters() -> None:
@@ -39,14 +39,19 @@ def test_validate_allowed_host_rejects_invalid_hostname_syntax() -> None:
         raise AssertionError("expected ValueError")
 
 
-def test_multiple_host_headers_rejected() -> None:
+def test_multiple_host_headers_rejected(monkeypatch) -> None:
     async def run() -> None:
-        async with make_app_server() as (ip, port, _runner):
-            url = f"http://{ip}:{port}/api/session"
+        async with make_app_server() as (ip, port, runner):
+            app = runner.app
+
+            def _two_hosts(_request):  # noqa: ANN001
+                return [f"127.0.0.1:{port}", f"evil.example:{port}"]
+
+            monkeypatch.setattr(request_guard, "_host_header_values", _two_hosts)
             async with ClientSession() as session:
                 async with session.get(
-                    url,
-                    headers=[("Host", f"127.0.0.1:{port}"), ("Host", f"evil.example:{port}")],
+                    f"http://{ip}:{port}/api/session",
+                    headers=host_header(port),
                 ) as resp:
                     assert resp.status == 400
                     assert await resp.text() == HOST_REJECT_BODY
