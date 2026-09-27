@@ -62,8 +62,15 @@ jobs:
       - name: Revert-proof self-test (head runner, base tests)
         if: github.event_name == 'pull_request'
         run: bash scripts/revert-proof-ci-selftest.sh base "${{ github.event.pull_request.base.sha }}"
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: "148.0.7778.96"
       - name: Web tests and coverage
         working-directory: web
+        env:
+          ZOTO_VIZ_EXPECT_RENDERER: swiftshader
+          PACK_MIRROR_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: pnpm test:coverage
 
   build:
