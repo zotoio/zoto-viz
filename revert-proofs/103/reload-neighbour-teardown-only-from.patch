@@ -1,8 +1,8 @@
 diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
-index 7f6a1135..84f90035 100644
+index 897db3a..526c6b5 100644
 --- a/web/src/app/switch-pane-view.ts
 +++ b/web/src/app/switch-pane-view.ts
-@@ -127,6 +127,7 @@ export async function switchPaneView(
+@@ -130,6 +130,7 @@ export async function switchPaneView(
      const tilesAfterSwap = nextPaneTiles(tilesBeforeSwap, slot.fromViewId, slot.toViewId);
      if (!tilesAfterSwap.includes(slot.fromViewId)) {
        opts.teardownView(slot.fromViewId);

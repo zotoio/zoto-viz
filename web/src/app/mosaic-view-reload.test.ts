@@ -194,6 +194,8 @@ describe("mosaic view reload regressions (B/C/D/E)", () => {
     expect(sel).toBeTruthy();
     sel!.value = "plugin:backrooms";
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(pick).toHaveBeenCalledWith("plugin:topology", "plugin:backrooms");
+    expect(pick.mock.calls.length).toBe(1);
+    expect(pick.mock.calls[0]?.[0] === "plugin:topology").toBe(true);
+    expect(pick.mock.calls[0]?.[1] === "plugin:backrooms").toBe(true);
   });
 });

@@ -1,8 +1,8 @@
 diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
-index 7f6a1135..809bc62f 100644
+index 897db3a..c6a64f2 100644
 --- a/web/src/app/switch-pane-view.ts
 +++ b/web/src/app/switch-pane-view.ts
-@@ -60,9 +60,7 @@ export function resolvePaneSwitchSlot(
+@@ -62,9 +62,7 @@ export function resolvePaneSwitchSlot(
    if (fromViewId !== undefined) {
      let paneId = fromViewId;
      if (!mosaic.tileIds.includes(paneId)) {

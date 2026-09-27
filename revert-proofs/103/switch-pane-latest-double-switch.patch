@@ -1,8 +1,8 @@
 diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
-index 7f6a1135..5cfda34a 100644
+index 897db3a..700b42d 100644
 --- a/web/src/app/switch-pane-view.ts
 +++ b/web/src/app/switch-pane-view.ts
-@@ -93,10 +93,10 @@ export async function switchPaneView(
+@@ -95,10 +95,10 @@ export async function switchPaneView(
      return { ok: false, reason: slot.reason };
    }
  
@@ -15,7 +15,7 @@ index 7f6a1135..5cfda34a 100644
        return { ok: false, reason: "A newer view switch is already in progress." };
      }
      const msg = consentBlockMessage(opts.spec);
-@@ -113,7 +113,7 @@ export async function switchPaneView(
+@@ -116,7 +116,7 @@ export async function switchPaneView(
      return { ok: false, reason: msg };
    }
  
@@ -24,7 +24,7 @@ index 7f6a1135..5cfda34a 100644
      return { ok: false, reason: "A newer view switch is already in progress." };
    }
  
-@@ -130,7 +130,7 @@ export async function switchPaneView(
+@@ -133,7 +133,7 @@ export async function switchPaneView(
      }
    }
  

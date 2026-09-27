@@ -22,6 +22,7 @@ def vitest_one(test_file: str, test_name: str) -> tuple[int, str, int]:
     out_path = WEB / ".vitest-record-output.json"
     if out_path.exists():
         out_path.unlink()
+    pattern = re.escape(test_name)
     proc = run(
         [
             "pnpm",
@@ -30,7 +31,7 @@ def vitest_one(test_file: str, test_name: str) -> tuple[int, str, int]:
             "run",
             test_file,
             "-t",
-            test_name,
+            pattern,
             "--reporter=json",
             "--outputFile=.vitest-record-output.json",
         ],

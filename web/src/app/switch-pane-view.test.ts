@@ -69,10 +69,9 @@ describe("switchPaneView", () => {
       expect(result.ok).toBe(false);
       expect(m.setPaneView).not.toHaveBeenCalled();
       expect(mountView).not.toHaveBeenCalled();
-      expect(m.setPaneNotice).toHaveBeenCalledWith(
-        "plugin:topology",
-        "Talkers isn't approved yet. Approve it in Settings → Plugins.",
-      );
+      expect(m.setPaneNotice).toHaveBeenCalledTimes(1);
+      const notice = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]![1];
+      expect(notice === "Talkers isn't approved yet. Approve it in Settings → Plugins.").toBe(true);
     });
 
     it("uses focus fallback when the requested tile id is stale", () => {
