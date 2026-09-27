@@ -14,6 +14,7 @@
     "scripts/revert-proof-vitest-overlay.mjs",
     "scripts/revert-proof-vitest-brand.mjs",
     "scripts/revert-proof-vitest-setup.ts",
-    "scripts/revert_proof_pytest_plugin.py"
+    "scripts/revert_proof_pytest_plugin.py",
+    "web/src/style.css"
   ]
 }

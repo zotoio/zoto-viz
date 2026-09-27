@@ -3,5 +3,5 @@
   "testFile": "tests/test_plugin_schema.py",
   "testName": "test_plugin_config_field_section_rejects_non_string",
   "description": "plugin.yml config field section must be type string",
-  "red": "Failed: DID NOT RAISE <class 'jsonschema.exceptions.ValidationError'>"
+  "red": "assert err is not None, f\"section {section!r} must be rejected\""
 }
