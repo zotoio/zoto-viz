@@ -986,8 +986,9 @@ export class Mosaic {
     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
     if (a.mosaicUniqueSkies === true || planned) {
       const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
+      const rolled = assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
       const next = pinPluginTileSkies(
-        planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
+        (planned ? { ...rolled, ...planned } : rolled) as Record<string, BackdropKind>,
         ids,
       );
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
