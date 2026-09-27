@@ -22,9 +22,9 @@ function boot() {
   return { wall, region, status, alert };
 }
 const rows = (key: NoticeKey) => document.querySelectorAll(`[data-notice-key="${key}"]`).length;
-function runWebTsc(): { ok: boolean; stderr: string } {
+function runWebTypecheck(): { ok: boolean; stderr: string } {
   try {
-    execSync("pnpm exec tsc --noEmit", { cwd: webRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    execSync("pnpm typecheck", { cwd: webRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     return { ok: true, stderr: "" };
   } catch (err: unknown) {
     const e = err as { stderr?: string; stdout?: string };
@@ -263,6 +263,6 @@ describe("wall notice queue", () => {
 
 describe("wall notice types", () => {
   beforeEach(() => expect.hasAssertions());
-  it("type row alert autoClearMs stays a compile error", () => { expect(runWebTsc().ok).toBe(true); });
-  it("type row status action plus autoClearMs stays a compile error", () => { expect(runWebTsc().ok).toBe(true); });
+  it("type row alert autoClearMs stays a compile error", () => { expect(runWebTypecheck().ok).toBe(true); });
+  it("type row status action plus autoClearMs stays a compile error", () => { expect(runWebTypecheck().ok).toBe(true); });
 });
