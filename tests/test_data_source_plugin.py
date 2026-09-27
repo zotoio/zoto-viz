@@ -62,7 +62,8 @@ def test_demo_flag_required(tmp_path: Path) -> None:
 
 
 def test_data_source_rejects_frontend() -> None:
-    with pytest.raises(ValueError, match="frontend"):
+    blocked = False
+    try:
         plugins.validate_doc({
             "kind": "data-source",
             "id": "x",
@@ -80,6 +81,9 @@ def test_data_source_rejects_frontend() -> None:
                 }],
             },
         })
+    except ValueError as e:
+        blocked = "frontend" in str(e)
+    assert blocked is True
 
 
 def test_all_shipped_plugin_yml_still_load() -> None:
