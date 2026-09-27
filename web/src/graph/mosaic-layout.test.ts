@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds, mosaicPaneIdsWithViewChange,
+  assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds,
   nextPaneTiles, parseMosaicNode, parseMosaicTiles, setRatio, structureKey, swapLeaves,
 } from "./mosaic-layout";
 
@@ -65,11 +65,6 @@ describe("close / swap / assign", () => {
     expect(nextPaneTiles(["a", "b"], "z", "x")).toEqual(["a", "b"]);
   });
 
-  it("mosaicPaneIdsWithViewChange lists replaced and swapped panes only", () => {
-    expect(mosaicPaneIdsWithViewChange(["a", "b", "c", "d"], ["x", "b", "c", "d"]).sort()).toEqual(["a", "x"]);
-    expect(mosaicPaneIdsWithViewChange(["a", "b", "c", "d"], ["b", "a", "c", "d"]).sort()).toEqual(["a", "b"]);
-    expect(mosaicPaneIdsWithViewChange(["a", "b"], ["a", "b"]).sort()).toEqual([]);
-  });
 });
 
 describe("ratios / parse", () => {
