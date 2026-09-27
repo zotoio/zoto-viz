@@ -3,7 +3,7 @@ import {
   hostMeshMatrixYawPos,
   maxHostMeshInstancesPerSlot,
 } from "../../../sdk/host-mesh-frame";
-import { PACK_HOST_MESH_SLOT, flushHostMeshSlotWrites, type VizWriteBatchReserve } from "../../../sdk/pack-host-mesh";
+import { PACK_HOST_MESH_SLOT } from "../../../sdk/pack-host-mesh";
 import { AQU_SLOT } from "./aquarium";
 
 export const AQU_HOST_MESH_ASSETS = [
@@ -34,7 +34,6 @@ export function writeAquariumHostMeshSlots(
   slot0: ArrayLike<number>,
   slot1: ArrayLike<number>,
   clock: number,
-  frameReserve: VizWriteBatchReserve = { messages: 0, bytes: 0 },
 ): void {
   const byAsset = new Map<number, { matrix: number[]; extras: { animTime: number; param1: number; param2: number; flags: number } }[]>();
   const push = (assetIndex: number, matrix: number[], animTime: number) => {
@@ -65,11 +64,10 @@ export function writeAquariumHostMeshSlots(
       packets.push(encodeHostMeshSlotPacket(assetIndex, part));
     }
   }
-  flushHostMeshSlotWrites(
-    writeBuffer,
-    PACK_HOST_MESH_SLOT,
-    AQU_HOST_MESH_SLOT_COUNT,
-    packets,
-    frameReserve,
-  );
+  let slot = PACK_HOST_MESH_SLOT;
+  for (const data of packets) {
+    if (slot >= PACK_HOST_MESH_SLOT + AQU_HOST_MESH_SLOT_COUNT) break;
+    writeBuffer(slot, data);
+    slot += 1;
+  }
 }
