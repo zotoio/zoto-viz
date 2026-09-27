@@ -37,13 +37,18 @@ const PLUGIN_SKY_SMOKE_LAUNCH_ARGS = [
   "--mute-audio",
 ] as const;
 
+/** Playwright launch options for headless plugin-sky draws (SwiftShader on GPU-less hosts). */
+export function buildPluginSkySmokeBrowserLaunchOptions(): Parameters<typeof chromium.launch>[0] {
+  return {
+    headless: true,
+    ignoreDefaultArgs: ["--disable-software-rasterizer"],
+    args: [...PLUGIN_SKY_SMOKE_LAUNCH_ARGS],
+  };
+}
+
 async function browser(): Promise<Browser> {
   if (!sharedBrowser) {
-    sharedBrowser = await chromium.launch({
-      headless: true,
-      ignoreDefaultArgs: ["--disable-software-rasterizer"],
-      args: [...PLUGIN_SKY_SMOKE_LAUNCH_ARGS],
-    });
+    sharedBrowser = await chromium.launch(buildPluginSkySmokeBrowserLaunchOptions());
   }
   return sharedBrowser;
 }
