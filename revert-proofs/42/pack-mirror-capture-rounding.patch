@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/pack-mirror-rect.ts b/web/src/graph/pack-mirror-rect.ts
-index 7da3257..18ef45c 100644
+index 7b35bd2..91cc688 100644
 --- a/web/src/graph/pack-mirror-rect.ts
 +++ b/web/src/graph/pack-mirror-rect.ts
-@@ -109,11 +109,12 @@ export function deviceRectFromHostViewBoxInto(
+@@ -113,11 +113,12 @@ export function deviceRectFromHostViewBoxInto(
      return deviceRectTopLeftCssInto(box, pixelRatio, out);
    }
    const topY = canvasCssHeight - cssBoxDim(box.y) - cssBoxDim(box.h);
@@ -17,6 +17,6 @@ index 7da3257..18ef45c 100644
 +  out.w = cssBoxDim(box.w) * pr;
 +  out.h = cssBoxDim(box.h) * pr;
 +  Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
-   return out as DeviceRect;
- }
- 
+   if (canvasDevicePx !== undefined) {
+     const cap = canvasDevicePx;
+     const y1 = out.y + out.h;

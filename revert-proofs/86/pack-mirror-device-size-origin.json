@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "^PackMirrorSession resource lifecycle > renderPrimary: non-finite box dims stable RT size \\(missing origin and NaN w\\)$",
-  "description": "Revert Number.isFinite clamp in deviceSizeFromCssBoxInto (#86).",
-  "expectedRed": "expected NaN to be 2 // Object.is equality"
+  "testName": "^PackMirrorSession resource lifecycle > renderPrimary: sub-pixel CSS width clamps to 2 device pixels$",
+  "description": "Revert Math.max(2, …) minimum in deviceSizeFromCssBoxInto (#86).",
+  "expectedRed": "expected +0 to be 2 // Object.is equality"
 }

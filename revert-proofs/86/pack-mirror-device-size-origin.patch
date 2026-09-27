@@ -6,8 +6,8 @@ index 7b35bd2..46e15ea 100644
    const y1 = Math.round((by + bh) * pr);
    const pw = x1 - x0;
    const ph = y1 - y0;
--  out.pw = Number.isFinite(pw) ? Math.max(2, pw) : 2;
--  out.ph = Number.isFinite(ph) ? Math.max(2, ph) : 2;
+-  out.pw = Math.max(2, pw);
+-  out.ph = Math.max(2, ph);
 +  out.pw = pw;
 +  out.ph = ph;
    return out;

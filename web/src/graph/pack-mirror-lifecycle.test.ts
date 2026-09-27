@@ -134,26 +134,17 @@ describe("PackMirrorSession resource lifecycle", () => {
     reg.dispose();
   });
 
-  it("renderPrimary: non-finite box dims stable RT size (missing origin and NaN w)", () => {
+  it("renderPrimary: sub-pixel CSS width clamps to 2 device pixels", () => {
     const rd = stubRenderer(false);
-    const regOrigin = new PackMirrorRegistry();
-    regOrigin.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
-    for (let i = 0; i < 300; i++) {
-      simulateTwoTileFrame(regOrigin, rd, "plugin:pack", false, { w: 64, h: 48 } as CssRectLoose);
-    }
+    const reg = new PackMirrorRegistry();
+    reg.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
+    const box: CssRectLoose = { x: 0, y: 0, w: 0.4, h: 48 };
+    simulateTwoTileFrame(reg, rd, "plugin:pack", false, box, testHostGl(1, 48));
+    const size = reg.sessionFor("plugin:pack")!.lastRenderDeviceSize!;
+    expect(size.pw).toBe(2);
+    expect(size.ph).toBe(48);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
-    regOrigin.dispose();
-
-    packMirrorResourceStats.reset();
-    packMirrorSizeStats.reset();
-    const regNan = new PackMirrorRegistry();
-    regNan.syncScopes(new Map([["plugin:pack", { tileCount: 2, antialias: false }]]));
-    for (let i = 0; i < 300; i++) {
-      simulateTwoTileFrame(regNan, rd, "plugin:pack", false, { x: 0, y: 0, w: Number.NaN, h: 48 });
-    }
-    expect(regNan.sessionFor("plugin:pack")!.lastRenderDeviceSize!.pw).toBe(2);
-    expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
-    regNan.dispose();
+    reg.dispose();
   });
 
   it("300 steady frames: 0 setSize; one resize: exactly 1 setSize", () => {

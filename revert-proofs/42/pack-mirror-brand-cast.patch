@@ -1,10 +1,13 @@
 diff --git a/web/src/graph/render-host-gl-adapter.ts b/web/src/graph/render-host-gl-adapter.ts
-index 2a5062a..77d7446 100644
+index f730eb5..fdc6762 100644
 --- a/web/src/graph/render-host-gl-adapter.ts
 +++ b/web/src/graph/render-host-gl-adapter.ts
-@@ -23,3 +23,5 @@ export function applyDeviceRectToGlRenderer(
-   renderer.setViewport(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
+@@ -27,6 +27,8 @@ export function applyDeviceRectToGlRenderer(
    renderer.setScissor(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
  }
-+
+ 
 +void (null as DeviceRect);
++
+ /** Host GPU pane box (bottom-left CSS) → per-edge device rect → GL viewport/scissor. */
+ export function applyHostViewBoxToGlRenderer(
+   renderer: GlViewportRenderer,
