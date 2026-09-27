@@ -2,6 +2,6 @@
   "row": "F4 dev flag off revert injector",
   "runner": "vitest",
   "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
-  "testName": "^dev viz wall flags > F5 \\(iii\\) bad tile cost: 5011 — no LIMITED on 2×2$",
+  "testName": "^dev viz wall flags > F5 \\(iii\\) whole-wall 5011 — injector set \\(over-budget path, not bad input\\)$",
   "excerpt": "AssertionError: expected 5011 to be undefined"
 }
