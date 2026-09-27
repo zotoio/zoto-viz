@@ -1,13 +1,13 @@
 diff --git a/service/plugin_local.py b/service/plugin_local.py
-index c3f9ca81..70108f6f 100644
+index c3f9ca81..91a6e123 100644
 --- a/service/plugin_local.py
 +++ b/service/plugin_local.py
-@@ -654,7 +654,7 @@ def sync_local_drop() -> list[dict[str, Any]]:
-                     {
-                         "ok": False,
-                         "error": REASON_SCHEMA_INVALID,
--                        "message": drop_zone_schema_install_message(z.stem),
-+                        "message": "invalid plugin id",
-                         "path": str(z),
-                     },
-                 )
+@@ -519,7 +519,7 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
+             {
+                 "ok": False,
+                 "error": REASON_SCHEMA_INVALID,
+-                "message": drop_zone_schema_install_message(path.stem),
++                "message": "invalid plugin id",
+             },
+             activate=False,
+         )
