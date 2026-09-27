@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-23-repost-focus-action-drop)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > dropping a focused action on re-post moves focus to the mount root",
+  "red": "AssertionError: expected <body>\u2026(2)</body> to be <div id=\"wall\" tabindex=\"-1\">\u2026(1)</div> // Object.is equality"
+}

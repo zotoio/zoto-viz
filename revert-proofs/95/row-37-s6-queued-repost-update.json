@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-37-s6-queued-repost-update)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > a re-post to a queued key updates the queued copy",
+  "red": "AssertionError: expected 'q1' to be 'q2' // Object.is equality"
+}
