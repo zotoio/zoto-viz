@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
+import { applyNixieWallClockQuery } from "./nixie-wall-flag-test-helper";
 import { resetVizClockInjectors, setVizClockInjector, setVizWallClockInjector } from "../core/viz-clock";
 import {
   bootNixieRealWallClock,
@@ -69,7 +69,7 @@ describe("nixie wall clock source rows (B1 option b)", () => {
     vi.stubEnv("DEV", true);
     let mono = 0;
     setVizClockInjector(() => mono);
-    applyDevVizWallFlagsOnBuild("?vizWallClock=01:05", ["main"]);
+    applyNixieWallClockQuery("?vizWallClock=01:05");
     mono = 3_500;
     const writeBuffer = vi.fn();
     runPackFrameHandler("nixie-clock", emptyFrame(), {
@@ -89,7 +89,7 @@ describe("nixie wall clock source rows (B1 option b)", () => {
     vi.stubEnv("DEV", true);
     let mono = 0;
     setVizClockInjector(() => mono);
-    applyDevVizWallFlagsOnBuild("?vizWallClock=23:59", ["main"]);
+    applyNixieWallClockQuery("?vizWallClock=23:59");
     mono = 61_000;
     let digits: number[] = [];
     const writeBuffer = vi.fn((_slot, data) => {

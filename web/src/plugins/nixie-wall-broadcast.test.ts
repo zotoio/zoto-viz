@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
+import { applyNixieWallClockQuery } from "./nixie-wall-flag-test-helper";
 import { setVizClockInjector, resetVizClockInjectors } from "../core/viz-clock";
 import { resetNixieFormatterCache } from "./nixie-wall-clock";
 import { resetNixiePackHostScope, runPackFrameHandler } from "./viz-pack-host";
@@ -27,7 +27,7 @@ describe("nixie wall upload F1 (live pack path, 60 fps)", () => {
     const writeBuffer = vi.fn();
     let mono = 0;
     setVizClockInjector(() => mono);
-    applyDevVizWallFlagsOnBuild("?vizWallClock=13:05", ["main"]);
+    applyNixieWallClockQuery("?vizWallClock=13:05");
     let firstBuf: number[] | undefined;
     for (let frame = 0; frame < 600; frame++) {
       mono += 1000 / 60;
@@ -50,7 +50,7 @@ describe("nixie wall upload F1 (live pack path, 60 fps)", () => {
     const writeBuffer = vi.fn();
     let mono = 30_000;
     setVizClockInjector(() => mono);
-    applyDevVizWallFlagsOnBuild("?vizWallClock=12:00", ["main"]);
+    applyNixieWallClockQuery("?vizWallClock=12:00");
     for (let frame = 0; frame < 600; frame++) {
       mono += 1000 / 60;
       runPackFrameHandler("nixie-clock", emptyFrame(), {
