@@ -42,10 +42,10 @@ describe("deliverMosaicDemoPacks", () => {
     );
     expect(uboByTile.has("plugin:star-sines")).toBe(true);
     expect(uboByTile.has("plugin:kefrens-bars")).toBe(true);
-    for (const [id, buf] of uboByTile) {
-      expect(buf.length, id).toBeGreaterThan(0);
-      expect(Array.from(buf).some((v) => v !== 0), `${id} pack UBO is all zero`).toBe(true);
-    }
+    expect(uboByTile.get("plugin:star-sines")!.length).toBe(512);
+    expect(uboByTile.get("plugin:kefrens-bars")!.length).toBe(512);
+    expect(Array.from(uboByTile.get("plugin:star-sines")!).some((v) => v !== 0)).toBe(true);
+    expect(Array.from(uboByTile.get("plugin:kefrens-bars")!).some((v) => v !== 0)).toBe(true);
     const sines = uboByTile.get("plugin:star-sines")!;
     const kef = uboByTile.get("plugin:kefrens-bars")!;
     expect(Array.from(sines).join(",")).not.toBe(Array.from(kef).join(","));

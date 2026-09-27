@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+index 271ba28b..1703b652 100644
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -456,7 +456,7 @@ export class Mosaic {
+     this.placeTree();
+     this.applyLooks(this.cfg.sync().anim);
+     this.paintPanes(this.cfg.sync().theme);
+-    this.refreshPaneModes(touch);
++    this.refreshPaneModes();
+     this.holdPluginSkies(touch);
+     this.auditPanes("bind", touch);
+     this.relayoutAll();
