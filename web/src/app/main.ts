@@ -1227,9 +1227,7 @@ const mosaicPanePickDeps = {
 function pickMosaicPane(from: string, to: string): Promise<boolean> {
   return pickMosaicPaneWith(mosaicPanePickDeps, from, to);
 }
-mosaic = new Mosaic(
-  applyMosaicWallPanePick(
-    {
+mosaic = new Mosaic({
   wall: $("wall"),
   sceneEl: $("scene"),
   main: scene,
@@ -1247,6 +1245,7 @@ mosaic = new Mosaic(
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
+  onPanePick: pickMosaicPane,
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
@@ -1267,10 +1266,7 @@ mosaic = new Mosaic(
     lastMsg: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).msg : lastRaw,
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
-    },
-    mosaicPanePickDeps,
-  ),
-);
+});
 wireSettingsMosaicPanePick(settings, pickMosaicPane);
 
 settings.addAnimation((a) => {

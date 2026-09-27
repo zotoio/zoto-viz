@@ -24,10 +24,11 @@ export type MosaicOnPanePick = (
 ) => boolean | Promise<boolean>;
 
 /** Wire mosaic wall chrome picks through `pickMosaicPaneWith` (PR #103 `onPanePick` hunk). */
-export function applyMosaicWallPanePick<T extends { onPanePick?: MosaicOnPanePick }>(
+export function applyMosaicWallPanePick<T extends Record<string, unknown>>(
   cfg: T,
   deps: MosaicPanePickDeps,
 ): T {
-  cfg.onPanePick = (fromId, toId) => pickMosaicPaneWith(deps, fromId, toId);
-  return cfg;
+  const withPick = cfg as T & { onPanePick?: MosaicOnPanePick };
+  withPick.onPanePick = (fromId, toId) => pickMosaicPaneWith(deps, fromId, toId);
+  return withPick;
 }

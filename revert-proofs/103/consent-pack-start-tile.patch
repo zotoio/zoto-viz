@@ -1,11 +1,36 @@
-diff --git a/web/src/app/mosaic-pane-pick.ts b/web/src/app/mosaic-pane-pick.ts
-index 613fa78..f7d2e27 100644
---- a/web/src/app/mosaic-pane-pick.ts
-+++ b/web/src/app/mosaic-pane-pick.ts
-@@ -28,6 +28,5 @@ export function applyMosaicWallPanePick<T extends { onPanePick?: MosaicOnPanePic
-   cfg: T,
-   deps: MosaicPanePickDeps,
- ): T {
--  cfg.onPanePick = (fromId, toId) => pickMosaicPaneWith(deps, fromId, toId);
-   return cfg;
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index 35336f4..535e02d 100644
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -119,7 +119,7 @@ import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
+ import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
+ import { mosaicReloadLayoutTiles } from "./mosaic-reload-layout";
+ import { bootMosaicPackStartLayout } from "./mosaic-boot-pack-start";
+-import { applyMosaicWallPanePick, pickMosaicPaneWith } from "./mosaic-pane-pick";
++import { pickMosaicPaneWith } from "./mosaic-pane-pick";
+ import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
+ import { onMosaicSwitchConsentDenied } from "./mosaic-switch-consent";
+ import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
+@@ -1227,9 +1227,7 @@ const mosaicPanePickDeps = {
+ function pickMosaicPane(from: string, to: string): Promise<boolean> {
+   return pickMosaicPaneWith(mosaicPanePickDeps, from, to);
  }
+-mosaic = new Mosaic(
+-  applyMosaicWallPanePick(
+-    {
++mosaic = new Mosaic({
+   wall: $("wall"),
+   sceneEl: $("scene"),
+   main: scene,
+@@ -1267,10 +1265,7 @@ mosaic = new Mosaic(
+     lastMsg: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).msg : lastRaw,
+     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
+   }),
+-    },
+-    mosaicPanePickDeps,
+-  ),
+-);
++});
+ wireSettingsMosaicPanePick(settings, pickMosaicPane);
+ 
+ settings.addAnimation((a) => {
