@@ -164,22 +164,6 @@ export function paintLetterboxBars(
   paintLetterboxBarsInto(ctx, box, inner, fill, bars);
 }
 
-export function letterboxInnerRect(
-  box: { w: number; h: number },
-  contentAspect: number,
-): { x: number; y: number; w: number; h: number } {
-  const bw = box.w;
-  const bh = box.h;
-  const a = contentAspect > 0 ? contentAspect : bw / bh;
-  let w = bw;
-  let h = w / a;
-  if (h > bh) {
-    h = bh;
-    w = h * a;
-  }
-  return { x: (bw - w) / 2, y: (bh - h) / 2, w, h };
-}
-
 export function letterboxInnerRectInto(
   box: { w: number; h: number },
   contentAspect: number,

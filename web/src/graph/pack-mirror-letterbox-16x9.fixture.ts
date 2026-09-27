@@ -40,13 +40,3 @@ export function letterbox16x9FirstSceneRowDeviceY(layoutPixelRatio: number, tile
   const vp = letterbox16x9InnerViewportGl(layoutPixelRatio, tile);
   return vp.y + vp.h;
 }
-
-/** Bottom-left CSS Y at the vertical centre of the top letterbox bar. */
-export function letterbox16x9TopBarCenterBottomLeft(
-  tile = LETTERBOX_TILE_CSS,
-): number {
-  const vp = letterbox16x9InnerViewportBottomLeft(tile);
-  const innerTop = vp.y + vp.h;
-  const tileTop = tile;
-  return innerTop + (tileTop - innerTop) * 0.5;
-}

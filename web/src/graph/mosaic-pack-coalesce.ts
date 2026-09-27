@@ -61,10 +61,6 @@ export function mosaicPackGroups(
   });
 }
 
-export function primaryTileIndex(tileSlotIds: readonly string[], viewId: string): number {
-  return mosaicPlacedTileIndices(tileSlotIds, viewId)[0] ?? 1;
-}
-
 const groupWriters = new Map<PackGroupKey, VizBufferWriter>();
 const packBudgets = new Map<PackGroupKey, VizFrameBudget>();
 
