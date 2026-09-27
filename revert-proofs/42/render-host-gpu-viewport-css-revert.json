@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-gpu-viewport-css.test.ts",
-  "testName": "^RenderHost GPU viewport \\(device rect, renderer pr 1\\) > gl\\.viewport and gl\\.scissor match converter device rect at layout pr 1\\.5$",
-  "expectedRed": "expected [ 3, 41, 227, 137 ] to deeply equal [ 2, 87, 151, 91 ]",
-  "description": "Renderer must keep getPixelRatio() at 1; layout DPR scales the backing store only. Patched (restore devicePixelRatio on Three): gl.viewport receives scaled args."
-}
