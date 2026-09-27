@@ -1141,7 +1141,7 @@ export class NetScene implements HostedView {
   private packCoalesce: {
     role: "primary" | "mirror";
     primary: NetScene | null;
-    mirrorKind?: "hostCanvas";
+    mirrorKind?: "hostCanvas" | "sandboxSurface";
     groupKey?: string;
     pluginId?: string;
     packLabel?: string;
@@ -1593,7 +1593,7 @@ export class NetScene implements HostedView {
   setPackCoalesce(role: {
     role: "primary" | "mirror";
     primary: NetScene | null;
-    mirrorKind?: "hostCanvas";
+    mirrorKind?: "hostCanvas" | "sandboxSurface";
     groupKey?: string;
     pluginId?: string;
     packLabel?: string;
@@ -1683,8 +1683,8 @@ export class NetScene implements HostedView {
     const gl = (this.host?.gl ?? (this.renderer as THREE.WebGLRenderer).getContext()) as WebGL2RenderingContext | null;
     if (!gl) return;
     let vp: GlRect;
-    if (this.lastVp && this.lastVp.__unit === "gl") {
-      vp = this.lastVp;
+    if (this.lastVp && isDeviceRect(this.lastVp)) {
+      vp = toGlRectInto(this.lastVp, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);
     } else {
       const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
       vp = toGlRectInto(dev, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);

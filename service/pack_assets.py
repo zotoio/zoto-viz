@@ -10,14 +10,14 @@ from urllib.parse import quote, unquote
 
 from aiohttp import web
 
-from . import access, plugins
+from . import access, monitor, plugins
 
 PACK_ID_SANDBOX = "_sandbox"
 
+WEB_DIST = monitor.WEB_DIST
+
 
 def _web_dist() -> Path:
-    from . import monitor
-
     return monitor.WEB_DIST
 _FRONTEND_ONLY = frozenset({".js", ".mjs", ".json", ".css", ".wasm", ".map", ".txt", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2"})
 _BLOCKED_BASENAMES = frozenset({"plugin.yml", "plugin.yaml", "service.py"})

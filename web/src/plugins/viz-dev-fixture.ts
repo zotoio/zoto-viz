@@ -1,3 +1,4 @@
+import { monoMs } from "../core/viz-time";
 import type { VizDataFrame } from "./viz-host";
 import { buildVizFrameForPlugin } from "./viz-host";
 import { buildIdleVizFrameFailed } from "./fixtures/idle-viz-frame";
@@ -48,7 +49,7 @@ export function buildVizDevFixtureFrame(
   switch (name) {
     case "idle": {
       const state = emptyMonitorState(t);
-      const raw = buildVizFrameForPlugin(state, t - dt, audio, VIZ_SDK_HOST_IDLE, 2 as const);
+      const raw = buildVizFrameForPlugin(state, monoMs(t - dt), audio, VIZ_SDK_HOST_IDLE);
       return withClock(scrubVizDataFrame(raw, scrubMapForFrame(state, raw)), t, dt, audio);
     }
     case "idle-failed":

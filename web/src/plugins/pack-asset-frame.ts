@@ -4,12 +4,18 @@ import {
   registerPackAssetFrame,
   unregisterPackAssetFrame,
 } from "../core/http";
+import { clearPackNavigationStopped } from "./pack-asset-navigation";
 import { packReconnecting, packSandboxStartFailed, SERVER_RESTART_WALL_NOTICE } from "./plugin-copy";
 
 const tileFrames = new Map<string, string>();
 const tileFrameOpenCounts = new Map<string, number>();
 const tileRebuildAttempts = new Map<string, number>();
 const tileRebuildInflight = new Set<string>();
+type RebuildAbortRow = { controller: AbortController; attemptId: number };
+const rebuildAbort = new Map<string, RebuildAbortRow>();
+let rebuildAttemptSeq = 0;
+const retryHandlers = new Map<string, { packName: string; run: () => void }>();
+const activePackByTile = new Map<string, string>();
 let wallNoticePending = false;
 let wallNoticeShown = false;
 
@@ -25,28 +31,22 @@ export type TileRebuildState = {
 };
 
 const tileRebuild = new Map<string, TileRebuildState>();
-const retryHandlers = new Map<string, { packName: string; run: () => void }>();
+
+export function rebuildAttemptKey(tileId: string, packName: string): string {
+  return `${tileId}\x1f${packName}`;
+}
 
 export function resetPackAssetFrameState(): void {
   tileFrames.clear();
   tileFrameOpenCounts.clear();
   tileRebuildAttempts.clear();
   tileRebuildInflight.clear();
+  rebuildAbort.clear();
+  retryHandlers.clear();
+  activePackByTile.clear();
   tileRebuild.clear();
   wallNoticePending = false;
   wallNoticeShown = false;
-  retryHandlers.clear();
-}
-
-export function registerPackAssetRetry(tileId: string, packName: string, run: () => void): void {
-  retryHandlers.set(tileId, { packName, run });
-}
-
-export function invokePackAssetRetry(tileId: string): boolean {
-  const row = retryHandlers.get(tileId);
-  if (!row) return false;
-  row.run();
-  return true;
 }
 
 export function notePackAssetFrameForTile(tileId: string, frameId: string): void {
@@ -69,38 +69,109 @@ export async function openPackAssetFrame(tileId: string): Promise<string> {
   return frameId;
 }
 
+export function abortPackAssetRebuildForTile(tileId: string, packName?: string): void {
+  if (packName) {
+    rebuildAbort.get(rebuildAttemptKey(tileId, packName))?.controller.abort();
+    return;
+  }
+  for (const key of rebuildAbort.keys()) {
+    if (key.startsWith(`${tileId}\x1f`)) rebuildAbort.get(key)?.controller.abort();
+  }
+}
+
+export function registerPackAssetRebuildAbort(
+  tileId: string,
+  packName: string,
+  controller: AbortController,
+): number {
+  const key = rebuildAttemptKey(tileId, packName);
+  rebuildAbort.get(key)?.controller.abort();
+  const attemptId = ++rebuildAttemptSeq;
+  rebuildAbort.set(key, { controller, attemptId });
+  return attemptId;
+}
+
+export function clearPackAssetRebuildAbort(
+  tileId: string,
+  packName: string,
+  attemptId?: number,
+): void {
+  const key = rebuildAttemptKey(tileId, packName);
+  const row = rebuildAbort.get(key);
+  if (!row) return;
+  if (attemptId !== undefined && row.attemptId !== attemptId) return;
+  rebuildAbort.delete(key);
+}
+
+export function beginActivePackLoad(tileId: string, packName: string): void {
+  const prev = activePackByTile.get(tileId);
+  if (prev && prev !== packName) {
+    clearPackNavigationStopped(tileId);
+    abortPackAssetRebuildForTile(tileId, prev);
+    tileRebuild.delete(rebuildAttemptKey(tileId, prev));
+  }
+  activePackByTile.set(tileId, packName);
+}
+
+export function endActivePackLoad(tileId: string, packName: string): void {
+  if (activePackByTile.get(tileId) === packName) activePackByTile.delete(tileId);
+}
+
+export function isActivePackLoad(tileId: string, packName: string): boolean {
+  return activePackByTile.get(tileId) === packName;
+}
+
+export function activePackForTile(tileId: string): string | undefined {
+  return activePackByTile.get(tileId);
+}
+
 export async function closePackAssetFrameForTile(tileId: string): Promise<void> {
+  abortPackAssetRebuildForTile(tileId);
+  activePackByTile.delete(tileId);
   const frameId = tileFrames.get(tileId);
   if (!frameId) return;
   tileFrames.delete(tileId);
   await unregisterPackAssetFrame(frameId);
 }
 
-export function tileRebuildState(tileId: string): TileRebuildState {
-  let row = tileRebuild.get(tileId);
+export function registerPackAssetRetry(tileId: string, packName: string, run: () => void): void {
+  retryHandlers.set(tileId, { packName, run });
+}
+
+export function invokePackAssetRetry(tileId: string): boolean {
+  const row = retryHandlers.get(tileId);
+  if (!row) return false;
+  row.run();
+  return true;
+}
+
+export function tileRebuildState(tileId: string, packName: string): TileRebuildState {
+  const key = rebuildAttemptKey(tileId, packName);
+  let row = tileRebuild.get(key);
   if (!row) {
     row = { phase: "idle", failedOnce: false, keepVisible: true };
-    tileRebuild.set(tileId, row);
+    tileRebuild.set(key, row);
   }
   return row;
 }
 
-export function markTileReconnecting(tileId: string): void {
-  const row = tileRebuildState(tileId);
+export function markTileReconnecting(tileId: string, packName: string): void {
+  const row = tileRebuildState(tileId, packName);
   row.phase = "reconnecting";
   row.keepVisible = true;
 }
 
-export function markTileRebuildFailed(tileId: string): void {
-  const row = tileRebuildState(tileId);
+export function markTileRebuildFailed(tileId: string, packName: string): void {
+  const row = tileRebuildState(tileId, packName);
   row.phase = "failed";
   row.failedOnce = true;
   row.keepVisible = true;
 }
 
-export function markTileRebuildIdle(tileId: string): void {
-  const row = tileRebuildState(tileId);
+export function markTileRebuildIdle(tileId: string, packName: string): void {
+  const row = tileRebuildState(tileId, packName);
   row.phase = "idle";
+  row.failedOnce = false;
 }
 
 export function tileReconnectingNotice(packName: string): string {
@@ -111,36 +182,39 @@ export function tileRebuildFailedNotice(packName: string): string {
   return packSandboxStartFailed(packName);
 }
 
-export function tileRebuildAttemptCount(tileId: string): number {
-  return tileRebuildAttempts.get(tileId) ?? 0;
+export function tileRebuildAttemptCount(tileId: string, packName: string): number {
+  return tileRebuildAttempts.get(rebuildAttemptKey(tileId, packName)) ?? 0;
 }
 
-export function resetTileRebuildAttempts(tileId: string): void {
-  tileRebuildAttempts.delete(tileId);
+export function resetTileRebuildAttempts(tileId: string, packName: string): void {
+  tileRebuildAttempts.delete(rebuildAttemptKey(tileId, packName));
+  const row = tileRebuildState(tileId, packName);
+  row.phase = "idle";
+  row.failedOnce = false;
 }
 
 export function rebuildBackoffMs(attemptIndex: number): number {
   return REBUILD_BACKOFF_MS[Math.min(attemptIndex - 1, REBUILD_BACKOFF_MS.length - 1)] ?? 0;
 }
 
-/** Returns 1-based attempt number for this rebuild cycle (caps at {@link MAX_REBUILD_ATTEMPTS}). */
-export function beginTileRebuild(tileId: string): number {
-  tileRebuildInflight.add(tileId);
-  const next = Math.min((tileRebuildAttempts.get(tileId) ?? 0) + 1, MAX_REBUILD_ATTEMPTS);
-  tileRebuildAttempts.set(tileId, next);
+export function beginTileRebuild(tileId: string, packName: string): number {
+  const key = rebuildAttemptKey(tileId, packName);
+  tileRebuildInflight.add(key);
+  const next = Math.min((tileRebuildAttempts.get(key) ?? 0) + 1, MAX_REBUILD_ATTEMPTS);
+  tileRebuildAttempts.set(key, next);
   return next;
 }
 
-export function endTileRebuild(tileId: string): void {
-  tileRebuildInflight.delete(tileId);
+export function endTileRebuild(tileId: string, packName: string): void {
+  tileRebuildInflight.delete(rebuildAttemptKey(tileId, packName));
 }
 
-export function tileRebuildInFlight(tileId: string): boolean {
-  return tileRebuildInflight.has(tileId);
+export function tileRebuildInFlight(tileId: string, packName: string): boolean {
+  return tileRebuildInflight.has(rebuildAttemptKey(tileId, packName));
 }
 
-export function shouldCapRebuild(tileId: string): boolean {
-  return (tileRebuildAttempts.get(tileId) ?? 0) >= MAX_REBUILD_ATTEMPTS;
+export function shouldCapRebuild(tileId: string, packName: string): boolean {
+  return (tileRebuildAttempts.get(rebuildAttemptKey(tileId, packName)) ?? 0) >= MAX_REBUILD_ATTEMPTS;
 }
 
 export function scheduleServerRestartWallNotice(): void {

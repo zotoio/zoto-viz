@@ -5,7 +5,7 @@ import {
   packAssetFrameForTile,
 } from "./pack-asset-frame";
 import { PLUGIN_SDK } from "./sdk";
-import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
+import type { VizDataFrame, VizPluginContract, VizPresentTick, VizUniformValue } from "./viz-host";
 import {
   HOST_SOURCE,
   PLUGIN_SOURCE,
@@ -213,6 +213,8 @@ export class PluginSandbox {
   private onIframeLoad: (() => void) | null = null;
   private activePackLabel = "";
   private navigationHost: NavigationStopHost | null = null;
+  private readonly presentTickPayload: VizPresentTick = { frameMs: 0, tileId: "" };
+  private lastPresentFrameMs = -1;
   handlers: PluginHostHandlers = {};
   /** Mosaic tile or `main` receiving sandbox plugin writes. */
   activeTileId = "main";
@@ -259,6 +261,7 @@ export class PluginSandbox {
     }
     this.iframe = null;
     this.iframeLoadCount = 0;
+    this.lastPresentFrameMs = -1;
     syncVizTileScope(["main"]);
   }
 
@@ -428,6 +431,28 @@ export class PluginSandbox {
   frame(data: VizDataFrame): void {
     if (!this.caps.includes("viz.read") || !this.hostPort) return;
     this.postToFramePort({ source: HOST_SOURCE, type: "frame", frame: data });
+  }
+
+  /**
+   * One {@link VizPresentTick} per sandbox per display frame (mosaic tiles share a sandbox).
+   */
+  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number, aspect?: number): void {
+    if (!this.caps.includes("viz.write") || !this.vizContract?.presentTick || !this.hostPort) return;
+    if (frameMs === this.lastPresentFrameMs) return;
+    this.lastPresentFrameMs = frameMs;
+    const tick = this.presentTickPayload;
+    tick.frameMs = frameMs;
+    tick.tileId = tileId;
+    if (pluginClock != null && Number.isFinite(pluginClock)) tick.pluginClock = pluginClock;
+    else delete tick.pluginClock;
+    if (aspect != null && Number.isFinite(aspect) && aspect > 0) tick.aspect = aspect;
+    else delete tick.aspect;
+    this.postToFramePort({ source: HOST_SOURCE, type: "present", tick });
+  }
+
+  setConfig(config: Record<string, string>): void {
+    if (!this.caps.includes("config.read") || !this.hostPort) return;
+    this.postToFramePort({ source: HOST_SOURCE, type: "config", config });
   }
 
   contract(): VizPluginContract | undefined {

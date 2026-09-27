@@ -16,6 +16,10 @@ import { releasePanelView } from "./panel-view-lifecycle";
 import { bindVizDriveElement, clearVizDrive } from "../plugins/viz-drive";
 import { dropMosaicTileWriter } from "./mosaic-viz-feed";
 import { syncVizTileScope } from "../plugins/viz-tile-budget";
+import {
+  paintPackAssetPaneNotice,
+  type PackAssetPaneNoticeOpts,
+} from "../plugins/pack-asset-pane-notice";
 
 export { centerSplit } from "./mosaic-layout";
 export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
@@ -486,10 +490,11 @@ export class Mosaic {
     id: string,
     text: string | null | undefined,
     recipe: "default" | "fail" | "reconnecting" = "default",
+    opts?: PackAssetPaneNoticeOpts,
   ): void {
     const pane = this.panes.get(id);
     if (!pane) return;
-    this.paintPaneNotice(pane, text, recipe);
+    this.paintPaneNotice(pane, text, recipe, opts);
   }
 
   setWallNotice(text: string | null | undefined): void {
@@ -533,22 +538,9 @@ export class Mosaic {
     pane: HTMLElement,
     text: string | null | undefined,
     recipe: "default" | "fail" | "reconnecting" = "default",
+    opts?: PackAssetPaneNoticeOpts,
   ): void {
-    const existing = pane.querySelector(".mosaic-pane-notice");
-    if (!text) {
-      existing?.remove();
-      return;
-    }
-    const el = existing instanceof HTMLElement ? existing : document.createElement("div");
-    if (!existing) {
-      el.className = "mosaic-pane-notice";
-      pane.appendChild(el);
-    }
-    el.classList.toggle("mosaic-pane-notice-fail", recipe === "fail");
-    el.classList.toggle("mosaic-pane-notice-reconnecting", recipe === "reconnecting");
-    pane.classList.toggle("mosaic-pane-reconnecting", recipe === "reconnecting");
-    if (recipe !== "reconnecting") pane.classList.remove("mosaic-pane-reconnecting");
-    el.textContent = text;
+    paintPackAssetPaneNotice(pane, text, recipe, opts);
   }
 
   private emitLayout(): void {

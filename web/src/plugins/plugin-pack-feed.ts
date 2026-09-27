@@ -135,7 +135,7 @@ export function packFeedPaneNotice(
 ): { text: string; recipe: PaneNoticeRecipe } | null {
   const r = tiles.get(tileId);
   if (!r) return null;
-  const rebuild = tileRebuildState(tileId);
+  const rebuild = tileRebuildState(tileId, packName ?? "");
   if (rebuild.phase === "reconnecting") {
     return { text: tileReconnectingNotice(packName ?? "Pack"), recipe: "reconnecting" };
   }
@@ -155,8 +155,15 @@ export function packFeedPaneNotice(
 
 const feedNoticeShown = new Set<string>();
 
-type MosaicNoticeHost = {
-  setPaneNotice: (id: string, text: string | null | undefined, recipe?: PaneNoticeRecipe) => void;
+import type { PackAssetPaneNoticeOpts } from "./pack-asset-pane-notice";
+
+export type MosaicNoticeHost = {
+  setPaneNotice: (
+    id: string,
+    text: string | null | undefined,
+    recipe?: PaneNoticeRecipe,
+    opts?: PackAssetPaneNoticeOpts,
+  ) => void;
 };
 
 /** Push pack-feed / sandbox-startup copy to a mosaic tile without clobbering unrelated notices. */

@@ -53,6 +53,11 @@ import {
   initModeSwitchStatusStrip,
 } from "./mode-switch-message";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
+import {
+  loadVizGovernorSetting,
+  refreshHostRenderScaleGovernorEnabled,
+  setVizGovernorSetting,
+} from "../plugins/render-scale-governor-enable";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
 import { cycleSkyPool } from "../graph/backdrop";
@@ -2399,6 +2404,7 @@ function collectSettings(): ProfileSettings {
     dice: { ...settings.diceSettings, include: { ...settings.diceSettings.include } },
     autosave: true,
     ai: agent.aiPrefs(),
+    vizGovernor: loadVizGovernorSetting(),
   };
 }
 
@@ -2444,6 +2450,8 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   if (s.camera) settings.setCamPolicy(s.camera);
   if (s.mic) settings.setMicPolicy(s.mic);
   settings.setSoundOn(!!s.sound);
+  setVizGovernorSetting(!!s.vizGovernor);
+  refreshHostRenderScaleGovernorEnabled();
   if (activeArcade) {
     arcade[activeArcade].view.stop();
     arcade[activeArcade].el.hidden = true;

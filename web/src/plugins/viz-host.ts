@@ -67,6 +67,7 @@ export interface VizPluginContract {
 export type {
   VizDataFrame,
   VizHeadline,
+  VizLinkSample,
   VizPacketSample,
   VizPresentTick,
   VizRfBeacon,
@@ -149,6 +150,9 @@ export interface VizFrameBudgetStats {
   overBudget: number;
   skipped: number;
   total: number;
+  timingSource?: "cpu" | "gpu";
+  hasSamples?: boolean;
+  p95Ms?: number;
 }
 
 const SKY_UNIFORM_SET = new Set<string>(PLUGIN_SKY_UNIFORMS);
@@ -322,33 +326,46 @@ function normalizeRssi(rssi: number): number {
   return Math.min(1, Math.max(0, (rssi + 100) / 100));
 }
 
-/** Bounded top-K by score — O(n·k), never sorts the full input. */
+/** Bounded top-K by score — O(n·k), no full-input sort; optional lex tie-break when scores tie. */
 export function topKByScore<T>(
   items: Iterable<T>,
   limit: number,
   score: (item: T) => number,
   skip: (item: T) => boolean = () => false,
+  tieBreak?: (a: T, b: T) => number,
 ): T[] {
   if (limit <= 0) return [];
   const buf: { score: number; item: T }[] = [];
+
+  const better = (sa: number, a: T, sb: number, b: T): boolean => {
+    if (sa !== sb) return sa > sb;
+    if (!tieBreak) return false;
+    return tieBreak(a, b) < 0;
+  };
+
+  const insertSorted = (s: number, item: T): void => {
+    let pos = buf.length;
+    while (pos > 0 && better(s, item, buf[pos - 1]!.score, buf[pos - 1]!.item)) pos--;
+    buf.splice(pos, 0, { score: s, item });
+  };
+
   for (const item of items) {
     if (skip(item)) continue;
     const s = score(item);
     if (s <= 0) continue;
     if (buf.length < limit) {
-      buf.push({ score: s, item });
+      insertSorted(s, item);
       continue;
     }
-    let minI = 0;
-    for (let i = 1; i < buf.length; i++) {
-      if (buf[i].score < buf[minI].score) minI = i;
-    }
-    if (s <= buf[minI].score) continue;
-    buf[minI] = { score: s, item };
+    const worst = buf[buf.length - 1]!;
+    if (!better(s, item, worst.score, worst.item)) continue;
+    buf.pop();
+    insertSorted(s, item);
   }
-  if (buf.length <= 1) return buf.map((x) => x.item);
-  buf.sort((a, b) => b.score - a.score);
-  return buf.map((x) => x.item);
+
+  const out: T[] = new Array(buf.length);
+  for (let i = 0; i < buf.length; i++) out[i] = buf[i]!.item;
+  return out;
 }
 
 function topTalkers(devices: Device[], limit: number): VizTalkerSample[] {
@@ -493,6 +510,9 @@ export class VizFrameBudget {
       overBudget: this._overBudget,
       skipped: this._skipped,
       total: this._total,
+      timingSource: "cpu",
+      hasSamples: this._total > 0,
+      p95Ms: this.p95ForGovernor(),
     };
   }
 
@@ -585,6 +605,14 @@ export class VizFrameBudget {
     tile.lastBuildCostTicks = null;
     tile.hudRingCount = 0;
     tile.hudRingNext = 0;
+  }
+
+  setGpuTimerAvailable(_ok: boolean): void {}
+
+  noteGpuMs(_ms: number): void {}
+
+  p95ForGovernor(): number {
+    return this._lastMs;
   }
 }
 
