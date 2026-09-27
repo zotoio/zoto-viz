@@ -331,7 +331,7 @@ describe("viz dogfood gates", () => {
     expect(formatSkipRate(skipRatePerSec(skipSamples, 1000))).toBe("skips 0/s");
   });
 
-  it("fat-LAN live soak: all three packs under budget or honest skips", () => {
+  it("fat-LAN live soak: exact delivered counts on fake time", () => {
     const result = withFatLanSoakFakeTime((now) =>
       runDogfoodSoak({ state: fatLan, framesPerPack: FAT_LAN_SOAK_FRAMES, now }),
     );
