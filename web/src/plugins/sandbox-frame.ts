@@ -136,11 +136,22 @@ function postPluginPort(
   runtime.pluginPort.postMessage(msg);
 }
 
+let sandboxWindowPostCount = 0;
+
+export function sandboxWindowPostCountForTests(): number {
+  return sandboxWindowPostCount;
+}
+
+export function resetSandboxWindowPostCountForTests(): void {
+  sandboxWindowPostCount = 0;
+}
+
 function postPluginWindow(
   runtime: SandboxFrameRuntime,
   msg: { source: typeof PLUGIN_SOURCE; type: string; payload?: unknown },
   transfer?: Transferable[],
 ): void {
+  sandboxWindowPostCount += 1;
   const origin = runtime.postTargetOrigin || "*";
   parent.postMessage(msg, origin, transfer);
 }
@@ -195,6 +206,7 @@ export function resetSandboxFrameRuntimeForTests(): void {
   vizBatchAllocateFreshForTests = false;
   vizBatchBeginIdentity = null;
   resetSandboxPortPostCountForTests();
+  resetSandboxWindowPostCountForTests();
   clearVizBatchInPlace(vizBatchShell);
   zoto.onTick = null;
   zoto.onConfig = null;

@@ -21,7 +21,9 @@ import {
   setVizBatchAllocateFreshForTests,
   vizBatchBeginIdentityForTests,
   resetSandboxPortPostCountForTests,
+  resetSandboxWindowPostCountForTests,
   sandboxPortPostCountForTests,
+  sandboxWindowPostCountForTests,
   vizWriteBatchBackingForTests,
 } from "./sandbox-frame";
 import {
@@ -95,17 +97,20 @@ describe("sandbox write path counts (#129)", () => {
       resetSandboxFrameRuntimeForTests();
       setSandboxFrameLocationHref("http://127.0.0.1/#zoto-boot=nonce-src");
       const ch = new MessageChannel();
-      handleSandboxBootChannelMessage({
-        data: {
-          source: HOST_SOURCE,
-          type: "boot-channel",
-          bootNonce: "nonce-src",
-          parentOrigin: "http://127.0.0.1",
-        },
-        source: {} as MessageEventSource,
-        ports: [ch.port2],
-      } as MessageEvent);
-      expect(sandboxFrameRuntimeForTests().pluginPort).toBeNull();
+      handleSandboxBootChannelMessage(
+        {
+          data: {
+            source: HOST_SOURCE,
+            type: "boot-channel",
+            bootNonce: "nonce-src",
+            parentOrigin: "http://127.0.0.1",
+          },
+          source: {} as MessageEventSource,
+          ports: [ch.port2],
+        } as MessageEvent,
+        sandboxFrameRuntimeForTests(),
+      );
+      expect(sandboxFrameRuntimeForTests().pluginPort === null).toBe(true);
       ch.port1.close();
       ch.port2.close();
     });
@@ -148,13 +153,11 @@ describe("sandbox write path counts (#129)", () => {
         {},
         defaultVizContract({ presentTick: true }),
       );
-      const parentPost = vi.spyOn(window.parent, "postMessage");
-      parentPost.mockClear();
+      resetSandboxWindowPostCountForTests();
       for (let i = 0; i < 600; i++) {
         box.deliverPresentTick(i + 1, "tile-a");
       }
-      expect(parentPost.mock.calls.length).toBe(0);
-      parentPost.mockRestore();
+      expect(sandboxWindowPostCountForTests()).toBe(0);
       box.unload();
     });
   });
