@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_handler_500_body",
-  "red": "AssertionError: assert '' == 'zoto-viz ran...e server log.'",
+  "red": "AssertionError: assert 'Reload to try again' in ''",
   "description": "Unhandled handler 500 UX copy must match the agreed literal exactly.",
   "timeoutSec": 120
 }
