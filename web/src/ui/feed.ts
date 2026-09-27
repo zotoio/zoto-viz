@@ -131,6 +131,13 @@ export class LiveFeed {
   private followTick = false;
   private lastScrollTop = 0;
 
+  /** Operator-facing install / catalog copy in the feed chrome (not ticker rows). */
+  showOperatorNotice(text: string): void {
+    const msg = text.trim();
+    this.hint.textContent = msg;
+    this.hint.hidden = !msg;
+  }
+
   constructor(host: HTMLElement, private scene: NetScene) {
     this.el = host;
     this.el.className = "livefeed";
