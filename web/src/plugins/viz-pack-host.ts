@@ -50,7 +50,7 @@ export function resetHnTermPack(): void {
 }
 
 function termNow(frame: VizDataFrame): number {
-  return typeof performance !== "undefined" ? performance.now() / 1000 : frame.t;
+  return frame.t;
 }
 
 function hnTermFrameBuffer(frame: VizDataFrame): number[] {

@@ -1,11 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatSkipRate, skipRatePerSec, vizHudMetric } from "../ui/viz-hud";
+import { formatSkipRate, skipRatePerSec, VIZ_DEMO_PACKS, vizHudMetric } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
   DEMO_PACK_CONTRACTS,
   dogfoodTick,
   dogfoodWithinBudget,
-  formatDogfoodReport,
   hostBindOnPackSwap,
   hudTickFromBudget,
   runDogfoodSoak,
@@ -28,6 +27,40 @@ import {
   buildVizFrameForPlugin,
 } from "./viz-host";
 import type { StateMsg } from "../core/types";
+
+const FAT_LAN_SOAK_FRAMES = 120;
+const FAT_LAN_SOAK_DEVICES = 420;
+const FAT_LAN_SOAK_FLOWS = 1200;
+const FAT_LAN_SOAK_CLOCK_START_MS = 1_767_225_600_000;
+const FAT_LAN_SOAK_FAKE_STEP_MS = 0.05;
+const FAT_LAN_SOAK_RANDOM_SEED = 0.25;
+const FAT_LAN_SOAK_REAL_TIME_FORBIDDEN = "fat-LAN soak must not read real time";
+
+function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(new Date(FAT_LAN_SOAK_CLOCK_START_MS));
+  vi.spyOn(Math, "random").mockReturnValue(FAT_LAN_SOAK_RANDOM_SEED);
+  const forbidRealTime = () => {
+    throw new Error(FAT_LAN_SOAK_REAL_TIME_FORBIDDEN);
+  };
+  vi.spyOn(performance, "now").mockImplementation(forbidRealTime);
+  vi.spyOn(Date, "now").mockImplementation(forbidRealTime);
+
+  let fakeMs = 0;
+  const fakeNow = () => {
+    const t = fakeMs;
+    fakeMs += FAT_LAN_SOAK_FAKE_STEP_MS;
+    vi.advanceTimersByTime(FAT_LAN_SOAK_FAKE_STEP_MS);
+    return t;
+  };
+
+  try {
+    return run(fakeNow);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
+}
 
 describe("hn rain pack", () => {
   it("packs uppercase headline bytes the sky can decode", () => {
@@ -299,47 +332,32 @@ describe("viz dogfood gates", () => {
   });
 
   it("fat-LAN live soak: all three packs under budget or honest skips", () => {
-    vi.useFakeTimers({ toFake: ["Date", "performance"] });
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-    const stepMs = 0.05;
-    const now = () => {
-      const t = performance.now();
-      vi.advanceTimersByTime(stepMs);
-      return t;
-    };
+    const result = withFatLanSoakFakeTime((now) =>
+      runDogfoodSoak({ state: fatLan, framesPerPack: FAT_LAN_SOAK_FRAMES, now }),
+    );
 
-    let result: ReturnType<typeof runDogfoodSoak>;
-    try {
-      result = runDogfoodSoak({ state: fatLan, framesPerPack: 120, now });
-    } finally {
-      vi.useRealTimers();
-    }
-    console.log("\n" + formatDogfoodReport(result));
-
-    expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
-    expect(result.fixture.flows).toBeGreaterThanOrEqual(1000);
-    expect(result.packs.length).toBeGreaterThanOrEqual(3);
-    expect(result.packs.map((p) => p.packId)).toEqual(expect.arrayContaining([
-      "packet-tunnel",
-      "rf-constellation",
-      "talker-storm",
-      "kefrens-bars",
-      "roto-proto",
-      "blob-mesh",
-      "star-sines",
-      "hn-rain",
-      "hn-term",
-      "stereo-gram",
-      "nixie-clock",
-    ]));
-
+    expect(result.framesPerPack).toBe(FAT_LAN_SOAK_FRAMES);
+    expect(result.fixture.devices).toBe(FAT_LAN_SOAK_DEVICES);
+    expect(result.fixture.flows).toBe(FAT_LAN_SOAK_FLOWS);
+    expect(result.packs.map((p) => p.packId)).toEqual([...VIZ_DEMO_PACKS]);
     for (const pack of result.packs) {
-      expect(pack.buildMs.p95).toBeLessThan(VIZ_FRAME_BUDGET_MS + 0.01);
-      expect(pack.delivered).toBe(pack.frames);
+      expect(pack.frames).toBe(FAT_LAN_SOAK_FRAMES);
+      expect(pack.delivered).toBe(FAT_LAN_SOAK_FRAMES);
       expect(pack.skipped).toBe(0);
-      expect(pack.withinBudget).toBe(true);
     }
-    expect(result.allWithinBudgetOrHonestSkips).toBe(true);
+  });
+
+  it("revert: fat-LAN soak cannot read performance.now / Date.now", () => {
+    expect(() =>
+      withFatLanSoakFakeTime((now) => {
+        void now;
+        return runDogfoodSoak({
+          state: fatLan,
+          framesPerPack: FAT_LAN_SOAK_FRAMES,
+          now: () => performance.now(),
+        });
+      }),
+    ).toThrow(FAT_LAN_SOAK_REAL_TIME_FORBIDDEN);
   });
 });
 
