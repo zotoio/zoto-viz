@@ -25,6 +25,7 @@ export type TileRebuildState = {
 };
 
 const tileRebuild = new Map<string, TileRebuildState>();
+const retryHandlers = new Map<string, { packName: string; run: () => void }>();
 
 export function resetPackAssetFrameState(): void {
   tileFrames.clear();
@@ -34,6 +35,18 @@ export function resetPackAssetFrameState(): void {
   tileRebuild.clear();
   wallNoticePending = false;
   wallNoticeShown = false;
+  retryHandlers.clear();
+}
+
+export function registerPackAssetRetry(tileId: string, packName: string, run: () => void): void {
+  retryHandlers.set(tileId, { packName, run });
+}
+
+export function invokePackAssetRetry(tileId: string): boolean {
+  const row = retryHandlers.get(tileId);
+  if (!row) return false;
+  row.run();
+  return true;
 }
 
 export function notePackAssetFrameForTile(tileId: string, frameId: string): void {

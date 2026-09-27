@@ -1,15 +1,33 @@
 /**
  * CSS vs device pixel rects for the shared render host.
- * Three.js viewport/scissor use CSS pixels; raw GL (readPixels, gl.viewport) use device pixels.
+ * `DeviceRect` is top-left device pixels (Canvas2D / `getImageData`).
+ * `GlRect` is bottom-left device pixels (raw GL `readPixels` / pack buffer).
  */
 
 export type CssRectLoose = { x: number; y: number; w: number; h: number };
 
 export type CssRect = CssRectLoose & { readonly __unit: "css" };
 
+/** Top-left origin, device pixels. */
 export type DeviceRect = CssRectLoose & { readonly __unit: "device" };
 
+/** Bottom-left origin, device pixels — only produced by `toGlRectInto`. */
+export type GlRect = CssRectLoose & { readonly __unit: "gl" };
+
 export type DeviceRectMut = { x: number; y: number; w: number; h: number };
+export type GlRectMut = { x: number; y: number; w: number; h: number };
+
+/** Canvas backing-store height in device pixels (`canvas.height`); not CSS layout height. */
+export type CanvasDeviceHeight = number & { readonly __brand: "canvasDevicePx" };
+
+export function asCanvasDeviceHeight(px: number): CanvasDeviceHeight {
+  return px as CanvasDeviceHeight;
+}
+
+/** Non-finite or missing CSS box components become 0 before edge rounding. */
+export function cssBoxDim(v: number | undefined): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
 
 export function cssRect(x: number, y: number, w: number, h: number): CssRect {
   return { x, y, w, h, __unit: "css" };
@@ -27,24 +45,37 @@ export function cssRectTopFromBottomLeft(
   return cssRect(box.x, canvasCssHeight - box.y - box.h, box.w, box.h);
 }
 
+export function viewMutAsDeviceRect(m: DeviceRectMut): DeviceRect {
+  return m as DeviceRect;
+}
+
+export function viewMutAsGlRect(m: GlRectMut): GlRect {
+  return m as GlRect;
+}
+
+export function isDeviceRect(vp: { __unit?: string }): vp is DeviceRect {
+  return vp.__unit === "device";
+}
+
 export function deviceRect(x: number, y: number, w: number, h: number): DeviceRect {
   return { x, y, w, h, __unit: "device" };
 }
 
-function deviceEdgesFromCss(
+function writeDeviceEdgesFromCss(
   r: CssRect,
   pixelRatio: number,
-): { x0: number; x1: number; y0: number; y1: number } {
+  out: { x0: number; x1: number; y0: number; y1: number },
+): void {
   const pr = pixelRatio;
-  return {
-    x0: Math.round(r.x * pr),
-    x1: Math.round((r.x + r.w) * pr),
-    y0: Math.round(r.y * pr),
-    y1: Math.round((r.y + r.h) * pr),
-  };
+  out.x0 = Math.round(r.x * pr);
+  out.x1 = Math.round((r.x + r.w) * pr);
+  out.y0 = Math.round(r.y * pr);
+  out.y1 = Math.round((r.y + r.h) * pr);
 }
 
-function writeDeviceRectFromEdges(
+const deviceEdgeScratch = { x0: 0, x1: 0, y0: 0, y1: 0 };
+
+function writeDeviceRectFromGlEdges(
   x0: number,
   x1: number,
   y0: number,
@@ -56,18 +87,104 @@ function writeDeviceRectFromEdges(
   out.w = x1 - x0;
   out.h = y1 - y0;
   out.y = canvasDeviceHeight - y1;
+  Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
   return out as DeviceRect;
 }
 
-/** Device pixels (GL bottom-left) for viewport, scissor, readPixels, and blit — per-edge `Math.round`. */
+/** Top-left CSS → top-left `DeviceRect` (per-edge `Math.round`). */
+export function toDeviceRectInto(
+  r: CssRect,
+  pixelRatio: number,
+  out: DeviceRectMut,
+): DeviceRect;
+/** CSS → GL-bottom-left `DeviceRect` for framebuffer viewport (legacy host path). */
 export function toDeviceRectInto(
   r: CssRect,
   pixelRatio: number,
   canvasDeviceHeight: number,
   out: DeviceRectMut,
+): DeviceRect;
+export function toDeviceRectInto(
+  r: CssRect,
+  pixelRatio: number,
+  canvasDeviceHeightOrOut: number | DeviceRectMut,
+  maybeOut?: DeviceRectMut,
 ): DeviceRect {
-  const { x0, x1, y0, y1 } = deviceEdgesFromCss(r, pixelRatio);
-  return writeDeviceRectFromEdges(x0, x1, y0, y1, canvasDeviceHeight, out);
+  if (typeof canvasDeviceHeightOrOut === "object") {
+    const out = canvasDeviceHeightOrOut;
+    writeDeviceEdgesFromCss(r, pixelRatio, deviceEdgeScratch);
+    out.x = deviceEdgeScratch.x0;
+    out.y = deviceEdgeScratch.y0;
+    out.w = deviceEdgeScratch.x1 - deviceEdgeScratch.x0;
+    out.h = deviceEdgeScratch.y1 - deviceEdgeScratch.y0;
+    Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
+    return out as DeviceRect;
+  }
+  const canvasDeviceHeight = canvasDeviceHeightOrOut;
+  const out = maybeOut!;
+  writeDeviceEdgesFromCss(r, pixelRatio, deviceEdgeScratch);
+  return writeDeviceRectFromGlEdges(
+    deviceEdgeScratch.x0,
+    deviceEdgeScratch.x1,
+    deviceEdgeScratch.y0,
+    deviceEdgeScratch.y1,
+    canvasDeviceHeight,
+    out,
+  );
+}
+
+/** Sole producer of `GlRect`: flip top-left device rect to GL bottom-left using canvas device height. */
+export function toGlRectInto(
+  rect: DeviceRect,
+  canvasDevicePx: CanvasDeviceHeight,
+  out: GlRectMut,
+): GlRect {
+  out.x = rect.x;
+  out.w = rect.w;
+  out.h = rect.h;
+  out.y = canvasDevicePx - rect.y - rect.h;
+  Object.defineProperty(out, "__unit", { value: "gl", enumerable: true });
+  return out as GlRect;
+}
+
+/** Host pane box → top-left device rect (`software`: top-left CSS box; GPU: bottom-left CSS box). */
+export function deviceRectFromHostViewBoxInto(
+  box: CssRectLoose,
+  software: boolean,
+  canvasCssHeight: number,
+  pixelRatio: number,
+  out: DeviceRectMut,
+  canvasDevicePx?: CanvasDeviceHeight,
+): DeviceRect {
+  if (software) {
+    return deviceRectTopLeftCssInto(box, pixelRatio, out);
+  }
+  const topY = canvasCssHeight - cssBoxDim(box.y) - cssBoxDim(box.h);
+  toDeviceRectInto(
+    cssRect(box.x, topY, box.w, box.h),
+    pixelRatio,
+    out,
+  );
+  return out as DeviceRect;
+}
+
+/** Top-left CSS box → top-left device pixels (Canvas2D `getImageData`). */
+export function deviceRectTopLeftCssInto(
+  box: CssRectLoose,
+  pixelRatio: number,
+  out: DeviceRectMut,
+): DeviceRect {
+  const pr = pixelRatio;
+  const x0 = Math.round(cssBoxDim(box.x) * pr);
+  const x1 = Math.round((cssBoxDim(box.x) + cssBoxDim(box.w)) * pr);
+  const y0 = Math.round(cssBoxDim(box.y) * pr);
+  const y1 = Math.round((cssBoxDim(box.y) + cssBoxDim(box.h)) * pr);
+  out.x = x0;
+  out.y = y0;
+  out.w = x1 - x0;
+  out.h = y1 - y0;
+  Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
+  return out as DeviceRect;
 }
 
 /** Device RT size from CSS tile edges (shared with adjacent tiles at non-integer DPR). */
