@@ -1,5 +1,4 @@
 import type { HeroPos, MosaicSize } from "./scene";
-import { allocateMosaicTileSlot, mosaicTileViewId } from "./mosaic-tile-id";
 
 /** Horizontal = left/right. Vertical = top/bottom. */
 export type MosaicDir = "h" | "v";
@@ -67,7 +66,7 @@ export function parseMosaicTiles(raw: unknown): string[] {
   const seen = new Set<string>();
   for (const row of raw.slice(0, 8)) {
     if (typeof row !== "string" || !row.trim()) continue;
-    const id = row.trim().slice(0, 96);
+    const id = row.trim().slice(0, 80);
     if (seen.has(id)) continue;
     seen.add(id);
     out.push(id);
@@ -190,14 +189,18 @@ export function mapLeaves(n: MosaicNode, ids: string[]): MosaicNode {
   return walk(cloneNode(n));
 }
 
-/** Swap two tile slots (leaf ids). */
-export function movePaneTileView(ids: string[], fromSlot: string, otherSlot: string): string[] {
-  const i = ids.indexOf(fromSlot);
-  const j = ids.indexOf(otherSlot);
-  if (i < 0 || j < 0 || i === j) return ids;
+/** Replace one pane's view. Picking a view already on the wall swaps those two panes. */
+export function nextPaneTiles(ids: string[], fromId: string, toId: string): string[] {
+  const i = ids.indexOf(fromId);
+  if (i < 0 || !toId || fromId === toId) return ids;
   const next = ids.slice();
-  next[i] = otherSlot;
-  next[j] = fromSlot;
+  const j = next.indexOf(toId);
+  if (j >= 0) {
+    next[i] = toId;
+    next[j] = fromId;
+    return next;
+  }
+  next[i] = toId;
   return next;
 }
 
@@ -221,7 +224,19 @@ export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): 
 export function assignTiles(n: MosaicNode, want: string[]): MosaicNode {
   const cur = leafIds(n);
   const clean = parseMosaicTiles(want);
-  const next = cur.map((id, i) => clean[i] ?? id);
+  const used = new Set<string>();
+  const next: string[] = [];
+  for (let i = 0; i < cur.length; i++) {
+    const cand = clean[i];
+    if (cand && !used.has(cand)) {
+      next.push(cand);
+      used.add(cand);
+      continue;
+    }
+    const keep = cur.find((id) => !used.has(id) && !clean.includes(id)) ?? cur.find((id) => !used.has(id));
+    next.push(keep ?? cur[i]!);
+    used.add(next[next.length - 1]!);
+  }
   return mapLeaves(n, next);
 }
 

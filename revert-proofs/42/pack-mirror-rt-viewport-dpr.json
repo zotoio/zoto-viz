@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-render-pack-dpr.test.ts",
-  "testName": "^PackMirrorSession renderPack DPR > uses device-pixel viewport on the render target at layout dpr=2$",
-  "description": "Render-target viewport/scissor use CSS pixels (device size divided by renderer pixel ratio). Patched vitest: expected false to be true // Object.is equality",
-  "expectedRed": "expected false to be true // Object.is equality"
-}

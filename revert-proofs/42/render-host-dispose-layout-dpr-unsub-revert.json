@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/render-host-dispose-layout-dpr.test.ts",
+  "testName": "^RenderHost dispose layout DPR listener > after dispose, window DPR change does not resize the host canvas$",
+  "expectedRed": "expected 1 to be +0 // Object.is equality",
+  "description": "dispose() unsubscribes layout DPR listener so DPR changes after teardown do not call setSize."
+}

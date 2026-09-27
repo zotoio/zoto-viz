@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { RenderHost, type HostedView } from "./render-host";
 import { deviceRectFromHostViewBoxInto, toGlRectInto, asCanvasDeviceHeight } from "./pack-mirror-rect";
+import {
+  DEFAULT_MAX_DEVICE_PX_RATIO,
+  configureLayoutMaxDevicePxRatio,
+  resetLayoutDevicePxRatioWatch,
+} from "../../test-support/layout-device-px-ratio";
 
 /** GL viewport/scissor for the standard tile at layout pr 1.5 (device H 180). */
 export const EXPECTED_TILE_GL_VIEWPORT = [2, 87, 151, 91] as const;
@@ -26,11 +31,21 @@ const { glLog, WebGLRendererMock } = vi.hoisted(() => {
     setScissorTest = vi.fn();
     setScissor = vi.fn((x: number, y: number, w: number, h: number) => {
       const pr = this.ratio;
-      this.getContext().scissor(Math.floor(x * pr), Math.floor(y * pr), Math.floor(w * pr), Math.floor(h * pr));
+      this.getContext().scissor(
+        Math.round(x * pr),
+        Math.round(y * pr),
+        Math.round(w * pr),
+        Math.round(h * pr),
+      );
     });
     setViewport = vi.fn((x: number, y: number, w: number, h: number) => {
       const pr = this.ratio;
-      this.getContext().viewport(Math.floor(x * pr), Math.floor(y * pr), Math.floor(w * pr), Math.floor(h * pr));
+      this.getContext().viewport(
+        Math.round(x * pr),
+        Math.round(y * pr),
+        Math.round(w * pr),
+        Math.round(h * pr),
+      );
     });
     setRenderTarget = vi.fn();
     getRenderTarget = () => null;
@@ -99,7 +114,6 @@ function mountGpuViewportFixture(dpr: number | "window"): {
     hostContextRestored() {},
   };
   host.add(view);
-  host.advanceFrame(0);
   return { wall, host, view, layoutPr: host.pixelRatio };
 }
 
@@ -118,6 +132,8 @@ describe("RenderHost GPU viewport (device rect, renderer pr 1)", () => {
     host?.dispose();
     wall?.remove();
     vi.unstubAllGlobals();
+    resetLayoutDevicePxRatioWatch();
+    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 
   it("setup: WebGLRenderer getPixelRatio is always 1", () => {

@@ -6,7 +6,11 @@ import type { NetScene } from "../graph/scene";
 import { markFrame } from "../core/fps";
 import { followScrollTop } from "./feed-reveal";
 import { bindFloatPanel } from "./float-drag";
-import { devicePxRatioFromWindow, devicePxRatioNumber } from "../graph/render-host-device-px-ratio";
+import {
+  devicePxRatioNumber,
+  layoutDevicePxRatio,
+  onLayoutDevicePxRatioChange,
+} from "../graph/render-host-device-px-ratio";
 export type { ChatRole, TranscriptTurn } from "./chat";
 
 const POLL_MS = 800;
@@ -143,6 +147,9 @@ export class LiveFeed {
     this.ticker.addEventListener("click", (e) => {
       const row = (e.target as HTMLElement).closest<HTMLElement>("[data-host]");
       if (row?.dataset.host) this.scene.selectIp(row.dataset.host);
+    });
+    onLayoutDevicePxRatioChange(() => {
+      if (this.cfg.layout === "bars" || this.cfg.layout === "both") this.drawBars();
     });
     this.ticker.addEventListener("scroll", () => {
       if (this.followTick) {
@@ -421,10 +428,12 @@ export class LiveFeed {
     const wrap = this.bars.parentElement!;
     const w = Math.max(80, wrap.clientWidth);
     const h = Math.max(80, wrap.clientHeight || 160);
-    const dpr = devicePxRatioNumber(devicePxRatioFromWindow());
-    if (this.bars.width !== Math.round(w * dpr) || this.bars.height !== Math.round(h * dpr)) {
-      this.bars.width = Math.round(w * dpr);
-      this.bars.height = Math.round(h * dpr);
+    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
+    const devW = Math.round(w * dpr);
+    const devH = Math.round(h * dpr);
+    if (this.bars.width !== devW || this.bars.height !== devH) {
+      this.bars.width = devW;
+      this.bars.height = devH;
       this.bars.style.width = `${w}px`;
       this.bars.style.height = `${h}px`;
     }

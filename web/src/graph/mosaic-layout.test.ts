@@ -54,17 +54,17 @@ describe("close / swap / assign", () => {
     expect(structureKey(swapped)).toBe(key);
   });
 
-  it("assigns tile slot ids in order and keeps duplicate pack views", () => {
+  it("assigns tile ids in order and skips duplicates", () => {
     const t = gridTree(["a", "b", "c", "d"], 2);
-    expect(leafIds(assignTiles(t, ["plugin:x", "plugin:x!1", "y"]))).toEqual(["plugin:x", "plugin:x!1", "y", "d"]);
+    expect(leafIds(assignTiles(t, ["x", "x", "y"]))).toEqual(["x", "y", "a", "b"]);
     expect(parseMosaicTiles(["a", "", "a", "b", 1])).toEqual(["a", "b"]);
-    expect(parseMosaicTiles(["plugin:a", "plugin:a!1"])).toEqual(["plugin:a", "plugin:a!1"]);
   });
 
-  it("places and moves tile slots", () => {
-    expect(placePaneTileView(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
-    expect(movePaneTileView(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
-    expect(placePaneTileView(["plugin:x", "b"], "b", "plugin:x")).toEqual(["plugin:x", "plugin:x!1"]);
+  it("replaces one pane and swaps when the target is already on the wall", () => {
+    expect(nextPaneTiles(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
+    expect(nextPaneTiles(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
+    expect(nextPaneTiles(["a", "b"], "a", "a")).toEqual(["a", "b"]);
+    expect(nextPaneTiles(["a", "b"], "z", "x")).toEqual(["a", "b"]);
   });
 
   it("nextPaneTiles allocates a new slot when picking another tile of the same pack view", () => {

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/render-host-set-pixel-ratio.test.ts",
+  "testName": "^RenderHost setPixelRatio auto-tune > setPixelRatio\\(1\\.25\\) keeps WebGLRenderer pixel ratio at 1 and resizes backing store$",
+  "expectedRed": "expected 1.25 to be 1 // Object.is equality",
+  "description": "Auto-tune setPixelRatio keeps renderer.getPixelRatio() at 1 and sizes backing store via resizeGpuCanvas."
+}

@@ -17,7 +17,6 @@ const brands = [
 
 const mintFiles = new Set([
   "src/graph/pack-mirror-rect.ts",
-  "src/core/time-brands.ts",
   "src/graph/render-host-device-px-ratio.ts",
 ]);
 
@@ -37,7 +36,7 @@ for (const file of globSync("src/**/*.ts", { cwd: root })) {
   if (file !== devicePxRatioMint) {
     for (const match of text.matchAll(devicePxRatioReadPattern)) {
       console.error(
-        `${file}: raw \`devicePixelRatio\` read (only ${devicePxRatioMint}; use RenderHost.devicePxRatio or devicePxRatioFromWindow)`,
+        `${file}: raw \`devicePixelRatio\` read (only ${devicePxRatioMint}; use layoutDevicePxRatio or devicePxRatioFromWindow)`,
       );
       failed = true;
       break;

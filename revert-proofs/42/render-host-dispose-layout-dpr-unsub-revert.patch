@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 459bc46..5e1922d 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -315,7 +315,6 @@ export class RenderHost {
+ 
+   dispose(): void {
+     this.disposed = true;
+-    this.unsubLayoutDpi?.();
+     cancelAnimationFrame(this.raf);
+     this.ro?.disconnect();
+     this.views = [];

@@ -81,6 +81,7 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
+import { runPackFrameHandler } from "../plugins/viz-pack-host";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -100,7 +101,7 @@ import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
-import { PluginSandbox, consentHash, hashConsented, tsPluginsAllowed } from "../plugins/host";
+import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
@@ -763,9 +764,8 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
         const target = mosaic.graphScene(id);
         if (!target) continue;
         const tileSky = mosaic.paneSky(id);
-        const viewId = mosaicTileViewId(id);
-        const pane = pluginSpecForMode(viewId);
-        const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(viewId)?.backdrop === "plugin"));
+        const pane = pluginSpecForMode(id);
+        const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
         await loadPluginSkyOnto(target, pane, wantPlugin);
       }
     } finally {
@@ -822,39 +822,27 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
         tiles: settings.animSettings.mosaicTiles,
       });
     }
-    const finishMosaic = (): void => {
-      const focusId = mosaic!.tileIds.find((id) => mosaicTileViewId(id) === m.id) ?? mosaic!.tileIds[0] ?? m.id;
-      mosaic!.focus(focusId);
-      const target = mosaic!.graphScene(focusId);
-      if (target) {
-        target.setMode(m, opts);
-        target.setStageOnly(skyStage);
-      }
-      document.body.classList.remove("arcade");
-      scene.setActive(true);
-      if (target !== scene) scene.setStageOnly(false);
-      morphViewChrome(m, opts, spec, skyStage);
-      applyViewLook();
-    };
-    const onWall = mosaic.tileIds.some((id) => mosaicTileViewId(id) === m.id);
-    if (!onWall) {
+    if (!mosaic.tileIds.includes(m.id)) {
       const slot = mosaic.focusedId || mosaic.tileIds[0];
-      if (!slot) {
+      if (!slot || !mosaic.setPaneView(slot, m.id)) {
         modeSel.value = prevMode || modeSel.value;
         liveMode = prevMode;
         localStorage.setItem("zoto-viz.mode", modeSel.value);
         return;
       }
-      if (!mosaic.setPaneView(slot, m.id)) {
-        modeSel.value = prevMode || modeSel.value;
-        liveMode = prevMode;
-        localStorage.setItem("zoto-viz.mode", modeSel.value);
-        return;
-      }
-      finishMosaic();
-      return;
     }
-    finishMosaic();
+    const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.tileIds[0] ?? m.id;
+    mosaic.focus(focusId);
+    const target = mosaic.graphScene(focusId);
+    if (target) {
+      target.setMode(m, opts);
+      target.setStageOnly(skyStage);
+    }
+    document.body.classList.remove("arcade");
+    scene.setActive(true);
+    if (target !== scene) scene.setStageOnly(false);
+    morphViewChrome(m, opts, spec, skyStage);
+    applyViewLook();
     return;
   }
 
@@ -976,22 +964,6 @@ function applyLive(m: StateMsg): void {
   if (live.patch && Object.keys(live.patch).length) void applyAgentPatch(live.patch);
 }
 
-function applyDemoDataLabels(demoSlots: ReadonlySet<string>): void {
-  const mark = (el: HTMLElement | null | undefined, on: boolean) => {
-    if (!el) return;
-    if (on) el.dataset.demoData = "1";
-    else delete el.dataset.demoData;
-  };
-  if (!mosaic?.on) {
-    mark(scene.viewEl, demoSlots.has("hero"));
-    return;
-  }
-  mark(scene.viewEl, demoSlots.has("hero"));
-  for (const slot of mosaic.tileIds) {
-    mark(mosaic.graphScene(slot)?.viewEl, demoSlots.has(slot));
-  }
-}
-
 function feed(m: StateMsg): void {
   const feedT0 = performance.now();
   lastRaw = m;
@@ -1038,9 +1010,7 @@ function feed(m: StateMsg): void {
     || pluginSpecs.find((p) => p.id === tsWatchId)
     || null;
   const packId = normalizeVizDemoPackId(active?.id ?? mode.pluginId);
-  const mosaicDemoPacks = mosaic?.on
-    && mosaic.tileIds.some((id) => normalizeVizDemoPackId(modeById(mosaicTileViewId(id)).pluginId));
-  if (active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks) {
+  if (active?.capabilities?.includes("viz.read") || packId) {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
@@ -1052,19 +1022,14 @@ function feed(m: StateMsg): void {
       : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-      deliverVizPluginFrame({
-        frame: f,
-        sandbox,
-        mosaic,
-        mosaicDemoPacks: !!mosaicDemoPacks,
-        packId,
-        activeMode: mode,
-        modeById,
-        mosaicTileViewId,
-        pluginSpecForMode,
-        optsFor,
-        budgetStats: vizBudget.stats,
-      });
+      sandbox.frame(f);
+      if (packId) {
+        runPackFrameHandler(packId, f, {
+          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+        }, optsFor(mode));
+      }
     }, buildFrame);
     if (frame) {
       vizFrameTs = frame.t;
@@ -1143,7 +1108,7 @@ settings.onPluginChange = () => {
   if (!mosaic?.on) return;
   const focus = mosaic.focusedId;
   if (!focus) return;
-  const pane = modeById(mosaicTileViewId(focus));
+  const pane = modeById(focus);
   mosaic.graphScene(focus)?.setMode(pane, optsFor(pane));
 };
 settings.onInstancesChange = () => {
@@ -1172,7 +1137,6 @@ mosaic = new Mosaic({
   arcade,
   spawnArcade: (engine) => spawnArcade(engine, scene),
   optsFor,
-  pluginSpecForMode: (modeId) => pluginSpecForMode(modeId),
   onFocus: (id) => mosaic?.focus(id),
   onPromote: (id, theme) => {
     applyMode(id, { keepLayout: true });
@@ -1691,17 +1655,11 @@ async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
   const lockLayout = !aiMosaicLayoutOn();
   if (lockLayout && p.anim) p.anim = stripMosaicLayout(p.anim);
   const cur = collectSettings();
-  if (lockLayout && mosaic?.on && p.mode && typeof p.mode === "string") {
-    const viewId = p.mode;
-    if (!mosaicWallUsesView(mosaic.tileIds, viewId)) {
-      const tiles = [...mosaic.tileIds];
-      const at = Math.max(0, tiles.indexOf(mosaic.focusedId));
-      const from = tiles[at] ?? tiles[0];
-      if (from) {
-        tiles[at] = viewId;
-        p.anim = { ...p.anim, mosaicTiles: tiles };
-      }
-    }
+  if (lockLayout && mosaic?.on && p.mode && !mosaic.tileIds.includes(p.mode)) {
+    const tiles = [...mosaic.tileIds];
+    const at = Math.max(0, tiles.indexOf(mosaic.focusedId));
+    tiles[at] = p.mode;
+    p.anim = { ...p.anim, mosaicTiles: tiles };
   }
   const next = mergeAgentPatch(cur, p);
   applySettings(next, { keepLayout: lockLayout });

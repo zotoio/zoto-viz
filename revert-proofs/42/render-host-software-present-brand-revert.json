@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/render-host-software-present.test.ts",
+  "testName": "^RenderHost software present > present returns a branded DeviceRect on the software path$",
+  "expectedRed": "expected false to be true // Object.is equality",
+  "description": "Software present() returns a DeviceRect branded with __unit device."
+}

@@ -1,0 +1,9 @@
+diff --git a/web/src/core/fps.ts b/web/src/core/fps.ts
+index ad319ac..6d6aea4 100644
+--- a/web/src/core/fps.ts
++++ b/web/src/core/fps.ts
+@@ -1,3 +1,4 @@
++void devicePixelRatio;
+ /**
+  * Display framerate of the live UI. Several rAF loops (graph, mosaic tiles, arcade, feed)
+  * share one vsync timestamp; marking the same timestamp twice does not count as two frames,

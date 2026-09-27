@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/render-host-layout-dpr-getter.test.ts",
+  "testName": "^layout DevicePxRatio getter \\(cached, matchMedia re-arm\\) > \\(a\\) steady frames: 0 window reads and 0 setSize; 2 getter calls per frame$",
+  "expectedRed": "expected 1200 to be +0 // Object.is equality",
+  "description": "Steady rAF: layoutDevicePxRatio must not read window.devicePixelRatio (spy call count)."
+}
