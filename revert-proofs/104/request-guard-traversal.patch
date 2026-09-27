@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 1e33abf..1aa12d8 100644
+index 04ba3ef..8806a0d 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -275,13 +275,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+@@ -277,13 +277,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
      scheme = request.scheme or "http"
      request["validated_http_origin"] = f"{scheme}://{key}".rstrip("/")
  
