@@ -62,6 +62,7 @@ export function packConfigValues(values: Record<string, string>): Record<string,
 }
 
 export function sectionOpenState(storeId: string, title: string, sectionDecl: PluginSectionDecl[], index: number): boolean {
+  if (!sectionDecl.length) return true;
   let map = sectionOpen.get(storeId);
   if (!map) {
     map = new Map();

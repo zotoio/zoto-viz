@@ -31,6 +31,7 @@ function pluginLayer(id: string, title: string, hint: string): HTMLElement {
 export type ViewDrawerRuntime = {
   onPluginPersist: (id: string, values: Record<string, string>) => void;
   onPluginFieldInput?: (key: string, value: string) => void;
+  pluginSettingsAnnouncer?: HTMLElement;
   viewMosaicSec: HTMLElement | null;
 };
 
@@ -42,7 +43,7 @@ export function clearViewDrawerHost(host: HTMLDivElement, viewMosaicSec: HTMLEle
   if (!viewMosaicSec) {
     const empty = document.createElement("div");
     empty.className = "sec";
-    empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. The cog next to the view menu or on a mosaic tile opens this tab. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
+    empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">On a single view, the cog next to the header view menu opens this tab. On a wall, use the corner cog on that pane. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
     host.append(empty);
   }
   if (viewMosaicSec) host.append(viewMosaicSec);
@@ -60,6 +61,7 @@ export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawer
     draftValues,
     onPluginPersist,
     onPluginFieldInput,
+    pluginSettingsAnnouncer,
     viewMosaicSec,
   } = input;
   const devices = isNestCamsDrawerContext(input) ? [...input.devices] : undefined;
@@ -95,13 +97,20 @@ export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawer
       ? `Instance ${spec.instanceId} of ${spec.id}. Corner cog on a mosaic tile opens that tile's view.`
       : "This catalog row. Corner cog on a mosaic tile opens that tile's view.",
   );
-  fillPluginFields(view, spec, pluginViewKnobs(spec, fields), onPluginPersist, {
-    skipEmpty: extra.length > 0,
-    devices,
-    wallScope,
-    draftValues,
-    onFieldInput: onPluginFieldInput,
-  });
+  fillPluginFields(
+    view,
+    spec,
+    pluginViewKnobs(spec, fields),
+    onPluginPersist,
+    {
+      skipEmpty: extra.length > 0,
+      devices,
+      wallScope,
+      draftValues,
+      onFieldInput: onPluginFieldInput,
+    },
+    pluginSettingsAnnouncer,
+  );
   if (extra.length) {
     const sec = document.createElement("div");
     sec.className = "sec";
