@@ -12,8 +12,6 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
-import { bindVizDriveElement, clearVizDrive } from "../plugins/viz-drive";
-import { dropMosaicTileWriter } from "./mosaic-viz-feed";
 
 export { centerSplit } from "./mosaic-layout";
 export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
@@ -452,13 +450,13 @@ export class Mosaic {
     this.tree = assignTiles(this.tree, want);
     this.rematchTried.clear();
     this.rematchQueued.clear();
-    this.syncPanes(this.tileIds, touch);
+    this.syncPanes(this.tileIds);
     this.placeTree();
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
     this.refreshPaneModes(touch);
-    this.holdPluginSkies(touch);
-    this.auditPanes("bind", touch);
+    this.holdPluginSkies();
+    this.auditPanes("bind");
     this.relayoutAll();
     this.emitLayout();
   }
@@ -526,14 +524,11 @@ export class Mosaic {
     this.cfg.host?.invalidate();
   }
 
-  private syncPanes(ids: string[], touchIds?: ReadonlySet<string>): void {
+  private syncPanes(ids: string[]): void {
     for (const id of [...this.panes.keys()]) {
       if (!ids.includes(id)) this.dropPane(id);
     }
-    for (const id of ids) {
-      if (this.panes.has(id) && touchIds && !touchIds.has(id)) continue;
-      this.ensurePane(id);
-    }
+    for (const id of ids) this.ensurePane(id);
   }
 
   private paneBound(id: string): boolean {
@@ -585,7 +580,6 @@ export class Mosaic {
         pane.appendChild(this.cfg.sceneEl);
         const m = mosaicPaneMode(id);
         this.cfg.main.setMode(m, this.cfg.optsFor(m));
-        this.cfg.main.retargetPanel(id);
         this.mainId = id;
       } else {
         const host = pane.querySelector<HTMLElement>(":scope > .mosaic-scene")
@@ -739,7 +733,6 @@ export class Mosaic {
   }
 
   private dropPane(id: string): void {
-    dropMosaicTileWriter(id);
     if (id === this.mainId) {
       const next = this.extras.find((e) => isGraph(e.id));
       if (next) {
@@ -751,12 +744,10 @@ export class Mosaic {
           pane.appendChild(this.cfg.sceneEl);
           const m = mosaicPaneMode(next.id);
           this.cfg.main.setMode(m, this.cfg.optsFor(m));
-          this.cfg.main.retargetPanel(next.id);
         }
         this.mainId = next.id;
       } else {
         this.mainId = "";
-        this.cfg.main.retargetPanel(null);
       }
     } else {
       const extra = this.extras.find((e) => e.id === id);
@@ -768,7 +759,6 @@ export class Mosaic {
     }
     this.panes.get(id)?.remove();
     this.panes.delete(id);
-    clearVizDrive(id);
     this.themes.delete(id);
   }
 
@@ -897,7 +887,6 @@ export class Mosaic {
     pane.appendChild(bar);
     const cog = this.cfg.paneCog?.(id);
     if (cog) pane.appendChild(cog);
-    bindVizDriveElement(id, pane);
     return pane;
   }
 

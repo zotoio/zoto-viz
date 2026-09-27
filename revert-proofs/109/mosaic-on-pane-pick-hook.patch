@@ -1,8 +1,7 @@
 diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
-index 5586cd9c..b1ebf951 100644
 --- a/web/src/graph/mosaic.ts
 +++ b/web/src/graph/mosaic.ts
-@@ -879,12 +879,7 @@ export class Mosaic {
+@@ -865,12 +865,7 @@ export class Mosaic {
        const fromId = [...this.panes.entries()].find(([, el]) => el === pane)?.[0] ?? id;
        const toId = pick.value;
        if (fromId === toId) return;

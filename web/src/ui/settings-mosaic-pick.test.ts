@@ -50,6 +50,7 @@ describe("settings mosaic pane pickers", () => {
     sel!.value = "plugin:talkers";
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
     await Promise.resolve();
+    expect(pick.mock.calls.length).toBe(1);
     expect(sel!.value).toBe("plugin:topology");
   });
 

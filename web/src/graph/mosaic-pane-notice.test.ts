@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { Mosaic } from "./mosaic";
 
 describe("mosaic pane notice", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("shows and clears inline copy on a tile", () => {
     const wall = document.createElement("div");
     const mosaic = new Mosaic({

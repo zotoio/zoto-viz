@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deliverMosaicDemoPacks, dropMosaicTileWriter } from "./mosaic-viz-feed";
 import { modeById, setPluginModes, talkers, topology } from "../core/modes";
+import { themeById } from "../core/themes";
+import { DEFAULT_DREAM } from "./scene";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 describe("deliverMosaicDemoPacks", () => {
@@ -48,5 +50,66 @@ describe("deliverMosaicDemoPacks", () => {
     const kef = uboByTile.get("plugin:kefrens-bars")!;
     expect(Array.from(sines).join(",")).not.toBe(Array.from(kef).join(","));
     dropMosaicTileWriter("plugin:star-sines");
+  });
+});
+
+describe("mosaic onPanePick wiring", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
+  it("invokes live hook instead of bare setPaneView", async () => {
+    setPluginModes([
+      { ...topology, id: "plugin:topology", pluginId: "topology", label: "Topology" },
+      { ...talkers, id: "plugin:wifi", pluginId: "wifi", label: "Wi-Fi" },
+    ]);
+    const { Mosaic } = await import("./mosaic");
+    const { RenderHost } = await import("./render-host");
+    const { NetScene } = await import("./scene");
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { value: 800, configurable: true });
+    Object.defineProperty(wall, "clientHeight", { value: 600, configurable: true });
+    const sceneEl = document.createElement("div");
+    Object.defineProperty(sceneEl, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(sceneEl, "clientHeight", { value: 300, configurable: true });
+    const host = new RenderHost(wall, { software: true });
+    const main = new NetScene(sceneEl, { host });
+    main.retargetPanel("plugin:topology");
+    const pickCalls: [string, string][] = [];
+    const pick = vi.fn(async (from: string, to: string) => {
+      pickCalls.push([from, to]);
+      return true;
+    });
+    const mosaic = new Mosaic({
+      wall,
+      sceneEl,
+      main,
+      host,
+      arcade: {},
+      optsFor: () => ({}),
+      onFocus: () => {},
+      onPromote: () => {},
+      onLayout: () => {},
+      onCloseLast: () => {},
+      onPanePick: pick,
+      sync: () => ({
+        theme: themeById("midnight"),
+        filters: {},
+        anim: DEFAULT_DREAM,
+        dreaming: false,
+        nodeFilter: () => true,
+        lastMsg: null,
+        aliasMap: new Map(),
+      }),
+    });
+    mosaic.setSize("2", "plugin:topology", "off", { tiles: ["plugin:topology", "plugin:wifi"] });
+    const pane = wall.querySelector<HTMLSelectElement>(".mosaic-pick");
+    expect(pane).toBeTruthy();
+    pane!.value = "plugin:wifi";
+    pane!.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    expect(pickCalls).toEqual([["plugin:topology", "plugin:wifi"]]);
+    host.dispose();
+    main.dispose();
   });
 });
