@@ -34,8 +34,8 @@ E              × demo frames never leave the board blank while marbles are in f
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:00:50
-E            Duration  448ms (environment 64%, transform 27%, tests 3%, import 3%, setup 2%, worker 1%)
+E            Start at  15:02:23
+E            Duration  383ms (environment 65%, transform 25%, tests 4%, import 3%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -56,7 +56,7 @@ E        +  where 1 = CompletedProcess(args=['pnpm', 'exec', 'vitest', 'run', '-
 tests/test_marble_run_pack.py:47: AssertionError
 =========================== short test summary info ============================
 FAILED tests/test_marble_run_pack.py::test_marble_run_row_demo_not_blank - As...
-============================== 1 failed in 0.92s ===============================
+============================== 1 failed in 0.86s ===============================
 ```
 
 ### row-determinism
@@ -73,14 +73,14 @@ _______________________ test_marble_run_row_determinism ________________________
 E       AssertionError: 
 E          RUN  v5.0.0 <tmp>
 E         
-E          ❯ marble-run.test.ts (10 tests | 1 failed | 9 skipped) 10ms
+E          ❯ marble-run.test.ts (10 tests | 1 failed | 9 skipped) 11ms
 E            ❯ marble-run shipped pack (10)
-E              × is deterministic for pinned seed and preset 9ms
+E              × is deterministic for pinned seed and preset 10ms
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:00:53
-E            Duration  411ms (environment 64%, transform 27%, tests 3%, import 3%, setup 2%, worker 1%)
+E            Start at  15:02:26
+E            Duration  388ms (environment 64%, transform 26%, tests 3%, import 3%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -124,8 +124,8 @@ E              × fixed timestep sim respects catch-up cap from work budget 6ms
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:00:56
-E            Duration  392ms (environment 65%, transform 27%, import 3%, tests 2%, setup 2%, worker 1%)
+E            Start at  15:02:30
+E            Duration  387ms (environment 67%, transform 24%, import 3%, tests 2%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -163,14 +163,14 @@ _____________________ test_marble_run_row_integrate_steps ______________________
 E       AssertionError: 
 E          RUN  v5.0.0 <tmp>
 E         
-E          ❯ marble-run.test.ts (10 tests | 1 failed | 9 skipped) 8ms
+E          ❯ marble-run.test.ts (10 tests | 1 failed | 9 skipped) 7ms
 E            ❯ marble-run shipped pack (10)
-E              × 600-frame row: integrate runs exactly maxSimStepsPerFrame per frame on ingest path 7ms
+E              × 600-frame row: integrate runs exactly maxSimStepsPerFrame per frame on ingest path 6ms
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:01:00
-E            Duration  396ms (environment 65%, transform 26%, import 3%, tests 2%, setup 2%, worker 1%)
+E            Start at  15:02:33
+E            Duration  382ms (environment 67%, transform 24%, import 3%, tests 2%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -214,8 +214,8 @@ E              × stable jar routing and protocol hue 6ms
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:01:03
-E            Duration  378ms (environment 65%, transform 27%, import 3%, tests 2%, setup 2%, worker 1%)
+E            Start at  15:02:36
+E            Duration  384ms (environment 66%, transform 25%, import 3%, tests 2%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -262,8 +262,8 @@ E              × live packets spawn visible marbles; failure path lights reject
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:01:06
-E            Duration  401ms (environment 64%, transform 28%, import 3%, tests 2%, setup 2%, worker 1%)
+E            Start at  15:02:40
+E            Duration  379ms (environment 65%, transform 26%, import 3%, tests 2%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -302,14 +302,14 @@ _________________________ test_marble_run_pack_vitest __________________________
 E       AssertionError: 
 E          RUN  v5.0.0 <tmp>
 E         
-E          ❯ marble-run.test.ts (10 tests | 1 failed) 50ms
+E          ❯ marble-run.test.ts (10 tests | 1 failed) 51ms
 E            ❯ marble-run shipped pack (10)
 E              × caps live packets at maxPacketsPerFrame with exact consumed and HUD skip counts 5ms
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 passed (10)
-E            Start at  15:01:10
-E            Duration  428ms (environment 58%, transform 22%, tests 14%, import 3%, setup 2%, worker 1%)
+E            Start at  15:02:43
+E            Duration  418ms (environment 58%, transform 22%, tests 15%, import 3%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -349,8 +349,8 @@ E              × caps live packets at maxPacketsPerFrame with exact consumed an
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:01:13
-E            Duration  394ms (environment 64%, transform 27%, import 3%, tests 3%, setup 2%, worker 1%)
+E            Start at  15:02:46
+E            Duration  393ms (environment 66%, transform 26%, import 3%, tests 3%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -394,8 +394,8 @@ E              × packs slot geometry contract 6ms
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:01:16
-E            Duration  400ms (environment 64%, transform 27%, import 3%, tests 2%, setup 2%, worker 1%)
+E            Start at  15:02:49
+E            Duration  385ms (environment 65%, transform 26%, import 3%, tests 2%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -439,8 +439,8 @@ E              × keeps work counts under caps for every preset at pinned seed 1
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:01:20
-E            Duration  400ms (environment 63%, transform 28%, tests 4%, import 3%, setup 2%, worker 1%)
+E            Start at  15:02:53
+E            Duration  390ms (environment 65%, transform 25%, tests 4%, import 3%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
@@ -484,8 +484,8 @@ E              × declares mapping, work budget in yaml, and compiles sky 7ms
 E         
 E          Test Files  1 failed (1)
 E               Tests  1 failed | 9 skipped (10)
-E            Start at  15:01:23
-E            Duration  397ms (environment 64%, transform 27%, import 3%, tests 3%, setup 2%, worker 1%)
+E            Start at  15:02:56
+E            Duration  383ms (environment 64%, transform 27%, import 4%, tests 3%, setup 2%, worker 1%)
 E         
 E         
 E         ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
