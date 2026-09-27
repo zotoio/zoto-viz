@@ -119,6 +119,7 @@ EXTRA_VIEWS = (
     "cypher-cic",
     "backrooms",
     "voxel-world",
+    "fractal-zoom",
 )
 
 

@@ -261,6 +261,7 @@ def test_viz_plugin_yml_validates() -> None:
     for pid in ("packet-tunnel", "rf-constellation", "talker-storm",
                 "kefrens-bars", "roto-proto", "blob-mesh", "star-sines", "hn-rain", "hn-term",
                 "stereo-gram", "syscon", "cypher-cic", "nixie-clock", "ant-colony", "rocket-car-soccer", "metro-lines"):
+                "stereo-gram", "syscon", "cypher-cic", "nixie-clock", "fractal-zoom"):
         doc = plugins.load_file(ROOT / "plugins" / "src" / pid / "plugin.yml")
         assert doc["viz"]["graphWalk"] is False
         assert doc["viz"]["idle"]["fixture"] == "host"
