@@ -113,6 +113,10 @@ def main() -> None:
     if shape:
         sys.exit(3)
     print("\nAll TSE (b)(c) gates passed")
+    qe = run(["python3", str(ROOT / "scripts" / "qe_gate_pr27.py")])
+    print(qe.stdout)
+    if qe.returncode != 0:
+        sys.exit(qe.returncode)
 
 
 if __name__ == "__main__":
