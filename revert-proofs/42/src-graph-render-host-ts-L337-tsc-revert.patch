@@ -1,0 +1,44 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index e4787b6..35f17c4 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -337,35 +337,16 @@ export class RenderHost {
+     if (this.wall.firstElementChild !== this.canvas) this.wall.prepend(this.canvas);
+   }
+ 
+-  private viewBoxInto(view: HostedView, out: SoftRect): boolean {
++  private viewBox(view: HostedView): SoftRect | null {
+     const c = this.canvasRect ?? this.canvas.getBoundingClientRect();
+     const r = view.viewEl.getBoundingClientRect();
+-    if (r.width < 2 || r.height < 2 || c.width < 2 || c.height < 2) return false;
++    if (r.width < 2 || r.height < 2 || c.width < 2 || c.height < 2) return null;
+     const x = r.left - c.left;
+     const y = this.software ? r.top - c.top : c.bottom - r.bottom;
+     const w = r.width;
+     const h = r.height;
+-    if (x + w <= 0 || y + h <= 0 || x >= c.width || y >= c.height) return false;
+-    out.x = x;
+-    out.y = y;
+-    out.w = w;
+-    out.h = h;
+-    return true;
+-  }
+-
+-  private applyWindowLayoutDevicePxRatio(): void {
+-    const capped = layoutDevicePxRatio();
+-    const pr = devicePxRatioNumber(capped);
+-    if (Math.abs(pr - this.pr) < 0.01) return;
+-    this.layoutDevicePxRatio = capped;
+-    this.pr = pr;
+-    if (!this.software) {
+-      this.renderer.setPixelRatio(1);
+-      this.resizeGpuCanvas();
+-    } else {
+-      this.resizeSoftware();
+-    }
+-    this.dirty = true;
++    if (x + w <= 0 || y + h <= 0 || x >= c.width || y >= c.height) return null;
++    return { x, y, w, h };
+   }
+ 
+   private syncSize(): void {

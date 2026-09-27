@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/render-host.ts(37,45): error TS2306: File '/workspace/web/src/graph/render-host-gl-adapter.ts' is not a module."
+}

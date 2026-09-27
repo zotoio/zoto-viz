@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/pane-change.ts(25,12): error TS2304: Cannot find name 'DeviceRect'."
+}

@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/render-host.ts(200,10): error TS2339: Property 'layoutDevicePxRatio' does not exist on type 'RenderHost'."
+}

@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/scene.ts(1607,81): error TS2339: Property 'glVpScratch' does not exist on type 'NetScene'."
+}

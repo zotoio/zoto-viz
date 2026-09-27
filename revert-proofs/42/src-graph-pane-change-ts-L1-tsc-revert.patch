@@ -1,0 +1,10 @@
+diff --git a/web/src/graph/pane-change.ts b/web/src/graph/pane-change.ts
+index 1ce54e0..856c8f8 100644
+--- a/web/src/graph/pane-change.ts
++++ b/web/src/graph/pane-change.ts
+@@ -1,5 +1,3 @@
+-import type { DeviceRect, GlRect } from "./pack-mirror-rect";
+-
+ /**
+  * Did this pane's picture change?
+  *

@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/arcade/stage3d.ts(21,8): error TS2306: File '/workspace/web/src/graph/pack-mirror-rect.ts' is not a module."
+}

@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/render-host.ts(143,37): error TS2304: Cannot find name 'dpr'."
+}

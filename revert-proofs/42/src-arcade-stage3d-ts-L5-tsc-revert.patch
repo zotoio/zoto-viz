@@ -1,0 +1,25 @@
+diff --git a/web/src/arcade/stage3d.ts b/web/src/arcade/stage3d.ts
+index e0abb0d..f25509f 100644
+--- a/web/src/arcade/stage3d.ts
++++ b/web/src/arcade/stage3d.ts
+@@ -5,20 +5,8 @@ import { rIp, rName } from "../core/redact";
+ import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
+ import { DEFAULT_THEME, type Theme } from "../core/themes";
+ import { markFrame, PaneFps } from "../core/fps";
+-import {
+-  devicePxRatioNumber,
+-  layoutBackingDevicePx,
+-  layoutDevicePxRatio,
+-  onLayoutDevicePxRatioChange,
+-} from "../graph/render-host-device-px-ratio";
+ import { timeGpu } from "../core/gpu-time";
+ import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
+-import {
+-  asCanvasDeviceHeight,
+-  deviceRect,
+-  type GlRectMut,
+-  toGlRectInto,
+-} from "../graph/pack-mirror-rect";
+ import { probeWebGL } from "../graph/webgl";
+ import { observeResize } from "../core/resize";
+ import { POLL_MS, REPLAY_S, isKnown } from "./arcade";

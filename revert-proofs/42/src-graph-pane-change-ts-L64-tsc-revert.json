@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/pane-change.ts(69,14): error TS2345: Argument of type '{ x: number; y: number; w: number; h: number; }' is not assignable to parameter of type 'GlRect'."
+}

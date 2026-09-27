@@ -1,0 +1,35 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index e4787b6..aa519d0 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -22,30 +22,6 @@ import { cssHex } from "./software-draw";
+ import { probeWebGL } from "./webgl";
+ import { observeResize } from "../core/resize";
+ import { harvestGpu, timeGpu } from "../core/gpu-time";
+-import {
+-  type CanvasDeviceHeight,
+-  type DeviceRect,
+-  type DeviceRectMut,
+-  type GlRect,
+-  type GlRectMut,
+-  asCanvasDeviceHeight,
+-  deviceRectFromHostViewBoxInto,
+-  toGlRectInto,
+-  viewMutAsDeviceRect,
+-  viewMutAsGlRect,
+-} from "./pack-mirror-rect";
+-import { applyDeviceRectToGlRenderer } from "./render-host-gl-adapter";
+-import {
+-  type DevicePxRatio,
+-  configureLayoutMaxDevicePxRatio,
+-  devicePxRatioFromNumber,
+-  devicePxRatioNumber,
+-  layoutDevicePxRatio,
+-  onLayoutDevicePxRatioChange,
+-  pinLayoutDevicePxRatio,
+-  resetLayoutDevicePxRatioWatch,
+-  startLayoutDevicePxRatioWatch,
+-} from "./render-host-device-px-ratio";
+ 
+ export interface HostedView {
+   /** element whose box on the page is this view's viewport */

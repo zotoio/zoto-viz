@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/arcade/arcade.ts(11,58): error TS2306: File '/workspace/web/src/graph/render-host-device-px-ratio.ts' is not a module."
+}

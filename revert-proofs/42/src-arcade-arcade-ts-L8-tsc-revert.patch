@@ -1,0 +1,12 @@
+diff --git a/web/src/arcade/arcade.ts b/web/src/arcade/arcade.ts
+index ce7296d..f048274 100644
+--- a/web/src/arcade/arcade.ts
++++ b/web/src/arcade/arcade.ts
+@@ -8,7 +8,6 @@ import { DEFAULT_THEME, type Theme } from "../core/themes";
+ import { markFrame, PaneFps } from "../core/fps";
+ import { CanvasChangeProbe } from "../graph/pane-change";
+ import { observeResize } from "../core/resize";
+-import { devicePxRatioNumber, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
+ 
+ /**
+  * Shared machinery for the arcade views (NetPong's siblings: Invaders, Command, Frogger). Each is a standalone

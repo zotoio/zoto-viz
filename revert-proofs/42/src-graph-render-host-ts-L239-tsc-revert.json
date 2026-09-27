@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/render-host.ts(242,22): error TS2339: Property 'viewBox' does not exist on type 'RenderHost'."
+}

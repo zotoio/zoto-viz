@@ -1,0 +1,23 @@
+diff --git a/web/src/graph/pane-change.ts b/web/src/graph/pane-change.ts
+index 1ce54e0..33ce73e 100644
+--- a/web/src/graph/pane-change.ts
++++ b/web/src/graph/pane-change.ts
+@@ -47,16 +47,14 @@ export class CanvasChangeProbe {
+   }
+ }
+ 
+-export type ProbeRect = GlRect;
+-
+-type ProbeLine = { x: number; y: number; w: number; h: number };
++export interface ProbeRect { x: number; y: number; w: number; h: number }
+ 
+ /**
+  * Three full-width rows and three full-height columns through the pane, in
+  * framebuffer pixels. Lines see motion anywhere in the pane; a centre patch
+  * misses most of it.
+  */
+-export function probeLines(vp: ProbeRect, bufW: number, bufH: number): ProbeLine[] {
++export function probeLines(vp: ProbeRect, bufW: number, bufH: number): ProbeRect[] {
+   const x0 = Math.max(0, Math.floor(vp.x));
+   const y0 = Math.max(0, Math.floor(vp.y));
+   const x1 = Math.min(bufW, Math.floor(vp.x + vp.w));

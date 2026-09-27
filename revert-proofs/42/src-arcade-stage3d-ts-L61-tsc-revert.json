@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/arcade/stage3d.ts(269,16): error TS2339: Property 'paneGlVpScratch' does not exist on type 'Stage3D'."
+}

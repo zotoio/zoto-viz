@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/arcade/arcade.ts(482,17): error TS2304: Cannot find name 'devicePxRatioNumber'."
+}

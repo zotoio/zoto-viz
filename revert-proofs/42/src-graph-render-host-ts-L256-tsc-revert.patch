@@ -1,0 +1,92 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index e4787b6..20b58da 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -256,74 +256,25 @@ export class RenderHost {
+         view.paintSoftware?.(ctx, { x, y, w, h });
+         ctx.restore();
+       }
+-      return this.writeFbViewport(box, this.pr);
++      return { x: x * this.pr, y: y * this.pr, w: w * this.pr, h: h * this.pr };
+     }
+-    this.gpuTimedView = view;
+-    this.gpuTimedScene = scene;
+-    this.gpuTimedCamera = camera;
+-    this.gpuTimedClearHex = clearHex;
+-    const vp = this.writeFbViewport(box, this.pr);
+-    const gl = this.gl;
+-    if (gl) {
+-      timeGpu(gl, this.runTimedViewDraw, this.runTimedGpuNote);
+-    } else {
+-      this.runTimedViewDraw();
+-    }
+-    this.gpuTimedView = null;
+-    this.gpuTimedScene = null;
+-    this.gpuTimedCamera = null;
+-    return vp;
+-  }
+-
+-  private readonly runTimedGpuNote = (ms: number): void => {
+-    this.gpuTimedView?.noteFrameCost?.(ms);
+-  };
+-
+-  private readonly runTimedViewDraw = (): void => {
+-    const scene = this.gpuTimedScene;
+-    const camera = this.gpuTimedCamera;
+-    if (!scene || !camera) return;
+     const rd = this.renderer as THREE.WebGLRenderer;
+-    applyDeviceRectToGlRenderer(
+-      rd,
+-      viewMutAsDeviceRect(this.fbDeviceViewport),
+-      this.canvasDeviceHeight,
+-      this.fbGlViewport,
+-    );
+-    rd.setClearColor(this.gpuTimedClearHex, 1);
+-    rd.render(scene, camera);
+-  };
+-
+-  private writeFbViewport(box: SoftRect, pr: number): Viewport {
+-    deviceRectFromHostViewBoxInto(
+-      box,
+-      this.software,
+-      this.h,
+-      pr,
+-      this.fbDeviceViewport,
+-      this.software ? undefined : this.canvasDeviceHeight,
+-    );
+-    if (this.software) {
+-      return viewMutAsDeviceRect(this.fbDeviceViewport);
+-    }
+-    toGlRectInto(
+-      viewMutAsDeviceRect(this.fbDeviceViewport),
+-      this.canvasDeviceHeight,
+-      this.fbGlViewport,
+-    );
+-    return viewMutAsGlRect(this.fbGlViewport);
+-  }
+-
+-  private refreshCanvasDeviceHeight(): void {
+-    this.canvasDeviceHeight = asCanvasDeviceHeight(Math.max(1, this.canvas.height));
++    const gl = this.gl;
++    const draw = () => {
++      rd.setViewport(x, y, w, h);
++      rd.setScissor(x, y, w, h);
++      rd.setScissorTest(true);
++      rd.setClearColor(clearHex, 1);
++      rd.render(scene, camera);
++    };
++    if (gl) timeGpu(gl, draw, (ms) => view.noteFrameCost?.(ms));
++    else draw();
++    const pr = rd.getPixelRatio();
++    return { x: x * pr, y: y * pr, w: w * pr, h: h * pr };
+   }
+ 
+   dispose(): void {
+     this.disposed = true;
+-    if (this.unsubLayoutDpi) {
+-      this.unsubLayoutDpi();
+-      resetLayoutDevicePxRatioWatch();
+-    }
+     cancelAnimationFrame(this.raf);
+     this.ro?.disconnect();
+     this.views = [];

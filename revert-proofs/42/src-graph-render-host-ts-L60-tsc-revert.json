@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/scene.ts(1597,49): error TS2559: Type 'Viewport' has no properties in common with type '{ __unit?: string | undefined; }'."
+}

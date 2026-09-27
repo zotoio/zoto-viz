@@ -1,0 +1,12 @@
+diff --git a/web/src/arcade/stage3d.ts b/web/src/arcade/stage3d.ts
+index e0abb0d..871fd01 100644
+--- a/web/src/arcade/stage3d.ts
++++ b/web/src/arcade/stage3d.ts
+@@ -35,7 +35,6 @@ export abstract class Stage3D {
+   protected running = false;
+   protected W = 0;
+   protected H = 0;
+-  private layoutDpr = 0;
+   protected pps = 0;
+   protected lastT = 0;
+   protected readonly world = new THREE.Scene();

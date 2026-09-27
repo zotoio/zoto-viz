@@ -1,0 +1,6 @@
+{
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/arcade/stage3d.ts(52,37): error TS2304: Cannot find name 'GlRectMut'."
+}
