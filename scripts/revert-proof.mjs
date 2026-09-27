@@ -483,6 +483,9 @@ async function runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifac
       REVERT_PROOF_ROOT: wtRoot,
       REVERT_PROOF_VITEST_BASE_CONFIG: baseConfigAbs,
       REVERT_PROOF_PYTHON: venvPython(mainRoot),
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, "--experimental-strip-types"]
+        .filter(Boolean)
+        .join(" "),
     },
     timeoutMs,
   });

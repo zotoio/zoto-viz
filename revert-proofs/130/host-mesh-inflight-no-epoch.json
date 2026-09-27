@@ -1,7 +1,8 @@
 {
   "description": "Revert loadEpoch stale-load discard in loadInner",
   "runner": "vitest",
-  "testFile": "src/graph/host-mesh-lane.test.ts",
+  "testFile": "web/src/graph/host-mesh-lane.test.ts",
   "testName": "host mesh lane > clear() exact teardown counts (Performance Pedant)",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
+  "red": "AssertionError: expected 1 to be +0 // Object.is equality",
+  "project": "web"
 }
