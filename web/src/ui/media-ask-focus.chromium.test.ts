@@ -71,10 +71,10 @@ describe("media ask focus (chromium)", () => {
     const page = await harnessPage();
     await openMicAsk(page);
     await page.waitForSelector("[data-media-ask]");
-    await page.keyboard.press("Tab");
-    await page.keyboard.press("Tab");
-    await page.keyboard.press("Tab");
-    expect(await activeSelector(page)).not.toBe(".wall-notice-action");
+    for (let i = 0; i < 6; i += 1) {
+      await page.keyboard.press("Tab");
+      expect(await activeSelector(page)).not.toBe(".wall-notice-action");
+    }
     await page.close();
   });
 
