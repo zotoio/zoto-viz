@@ -17,13 +17,13 @@ def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[
 
 
 def git_reset() -> None:
-    run(["git", "checkout", "HEAD", "--", "."])
+    run(["git", "checkout", "HEAD", "--", "web", "plugins"])
 
 
 def save_patch(mutate: str) -> None:
     git_reset()
     subprocess.run(mutate, shell=True, cwd=ROOT, check=True)
-    diff = run(["git", "diff"])
+    diff = run(["git", "diff", "--", "web", "plugins"])
     if diff.returncode != 0 or not diff.stdout.strip():
         raise SystemExit(f"empty diff for mutate: {mutate[:80]}")
     return diff.stdout
@@ -106,15 +106,13 @@ PY""",
         "tile shader compile latch > compile-failure-log-once",
         r"""python3 - <<'PY'
 from pathlib import Path
-import re
 rh = Path('web/src/graph/render-host.ts')
 t = rh.read_text()
+t = t.replace('    if (latch.dead) return false;\n', '', 1)
 t = t.replace('    if (latch.isFresh(gen)) return true;\n', '', 1)
 rh.write_text(t)
 lt = Path('web/src/graph/tile-shader-latch.ts')
-t2 = lt.read_text()
-t2 = t2.replace('  fail(msg: string, log: (m: string) => void): void {\n    if (this.failed) return;\n', '  fail(msg: string, log: (m: string) => void): void {\n')
-lt.write_text(t2)
+lt.write_text(lt.read_text().replace('    if (this.failed) return;\n', '', 1))
 PY""",
     ),
     (
@@ -147,8 +145,8 @@ PY""",
         "nixie shader fallback text > nixie-write-on-change",
         r"""python3 - <<'PY'
 from pathlib import Path
-p = Path('web/src/graph/tile-shader-fallback.ts')
-p.write_text(p.read_text().replace('    if (next === this.lastWritten) return;\n', ''))
+p = Path('plugins/src/nixie-clock/frontend/tubes.ts')
+p.write_text(p.read_text().replace('  if (key === cache.key) return cache.text;\n', ''))
 PY""",
     ),
     (

@@ -14,7 +14,7 @@ for json in "$DIR"/*.json; do
   test_name="$(python3 -c "import json;print(json.load(open('$json'))['testName'])")"
   esc="${test_name//\'/\'\\\'\'}"
   echo "== $row =="
-  git checkout HEAD -- . >/dev/null
+  git checkout HEAD -- web plugins >/dev/null
   if ! (cd "$WEB" && pnpm exec vitest run "$test_file" -t "^${esc}$"); then
     echo "FAIL $row: base test red"
     fail=1
@@ -25,6 +25,6 @@ for json in "$DIR"/*.json; do
     echo "FAIL $row: patched still green"
     fail=1
   fi
-  git checkout HEAD -- . >/dev/null
+  git checkout HEAD -- web plugins >/dev/null
 done
 exit "$fail"
