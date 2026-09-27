@@ -1,7 +1,0 @@
-{
-  "row": "H6 revert no applyAnim guard",
-  "testName": "^mosaic viz tile guard H6 > H6: reload with nine mosaicTiles is refused; current anim unchanged$",
-  "excerpt": "AssertionError: expected '' to be 'Couldn\\'t load this wall layout. It h\u2026' // Object.is equality",
-  "testFile": "web/src/ui/mosaic-wall-h6.test.ts",
-  "patchedAssertion": "AssertionError: expected '' to be 'Couldn\\'t load this wall layout. It h\u2026' // Object.is equality"
-}
