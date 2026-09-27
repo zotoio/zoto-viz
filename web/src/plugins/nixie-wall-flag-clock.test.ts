@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyDevVizWallFlagsOnBuild } from "../core/viz-dev-wall-flags";
+import { applyNixieWallClockQuery } from "./nixie-wall-flag-test-helper";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { clearDevWallFlagClock } from "./nixie-wall-parts";
 import { resetNixieFormatterCache } from "./nixie-wall-clock";
@@ -14,7 +14,7 @@ function digitsViaFlag(clock: string, hour12: boolean): number[] {
   vi.stubEnv("DEV", true);
   let mono = 0;
   setVizClockInjector(() => mono);
-  applyDevVizWallFlagsOnBuild(`?vizWallClock=${clock}`, ["main"]);
+  applyNixieWallClockQuery(`?vizWallClock=${clock}`);
   const look = { format: hour12 ? "12" : "24", seconds: "0" };
   let buf: number[] = [];
   runPackFrameHandler("nixie-clock", emptyFrame(), {
@@ -65,7 +65,7 @@ describe("nixie ?vizWallClock= flag (mono second clock)", () => {
     vi.stubEnv("DEV", true);
     let mono = 0;
     setVizClockInjector(() => mono);
-    applyDevVizWallFlagsOnBuild("?vizWallClock=13:05", ["a", "b"]);
+    applyNixieWallClockQuery("?vizWallClock=13:05");
     const look = { format: "24", seconds: "0" };
     const writeBuffer = vi.fn();
     runPackFrameHandler("nixie-clock", emptyFrame(), {
