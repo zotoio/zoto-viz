@@ -33,7 +33,9 @@ from typing import Iterable
 
 from aiohttp import WSCloseCode, web
 
-from . import access
+from . import access, request_guard
+from . import pack_assets
+from . import static_paths
 from . import agent
 from . import agent_assets
 from . import cursor_agent
@@ -1866,8 +1868,38 @@ async def on_cleanup(app: web.Application) -> None:
     log("stopped")
 
 
-def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecure_lan: bool = False) -> web.Application:
-    app = web.Application(middlewares=[access.middleware], client_max_size=agent.MAX_BODY)
+def _static_route_exempt(canon: str) -> bool:
+    if canon == "/":
+        return True
+    if canon.startswith("/api/"):
+        return True
+    if canon.startswith("/pack-assets/"):
+        return True
+    if canon == "/mcp" or canon.startswith("/mcp/"):
+        return True
+    if canon == "/ws" or canon.startswith("/ws/"):
+        return True
+    return False
+
+
+def make_app(
+    state: State,
+    bpf: str,
+    wifi_keys: Path = WIFI_KEYS_FILE,
+    *,
+    bind: str = "127.0.0.1",
+    port: int = 7020,
+    allowed_hosts: list[str] | None = None,
+    insecure_lan: bool = False,
+) -> web.Application:
+    app = web.Application(
+        middlewares=[request_guard.middleware, access.middleware],
+        client_max_size=agent.MAX_BODY,
+    )
+    request_guard.register_response_prepare_hook(app)
+    request_guard.configure_request_guard(
+        app, bind=bind, port=port, allowed_hosts=allowed_hosts or [],
+    )
     app["state"], app["bpf"], app["clients"], app["wifi_keys"] = state, bpf, set(), wifi_keys
     app["csrf"] = access.new_token()
     app["insecure_lan"] = insecure_lan
@@ -1949,6 +1981,11 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     return app
 
 
+def run_app_kwargs() -> dict:
+    """Shared ``web.run_app`` options (production and tests)."""
+    return {"print": None, "access_log": None, "shutdown_timeout": 3}
+
+
 def main() -> None:
     from . import typesafe_proxy
 
@@ -2012,14 +2049,17 @@ def main() -> None:
             + f", {w['dwell']} s each" + ("" if w["rotate"] else ", rotation off"))
     # shutdown_timeout bounds the wait for in-flight requests; the unit gives us 10 s in total
     try:
-        web.run_app(
-            make_app(state, args.filter, args.wifi_keys, insecure_lan=listen["insecure_lan"]),
-            host=listen["bind"],
-            port=listen["port"],
-            print=None,
-            access_log=None,
-            shutdown_timeout=3,
+        extra_hosts = [str(h) for h in (listen.get("allowed_hosts") or [])]
+        app = make_app(
+            state,
+            args.filter,
+            args.wifi_keys,
+            bind=str(listen["bind"]),
+            port=int(listen["port"]),
+            allowed_hosts=extra_hosts,
+            insecure_lan=listen["insecure_lan"],
         )
+        web.run_app(app, host=listen["bind"], port=listen["port"], **run_app_kwargs())
     finally:
         hold.stop()
 

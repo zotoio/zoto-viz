@@ -1,0 +1,79 @@
+"""frame-ancestors and X-Frame-Options on every response."""
+from __future__ import annotations
+
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock
+
+from unittest.mock import patch
+
+from aiohttp import web
+from aiohttp.test_utils import AioHTTPTestCase
+
+from service import access, monitor, plugins, request_guard
+_DIST = Path(tempfile.mkdtemp())
+_DIST.joinpath("index.html").write_text("<html><body>ok</body></html>", encoding="utf-8")
+
+CASES = [
+    ("/", {200, 404}),
+    ("/index.html", {200}),
+    ("/api/session", {200}),
+    ("/no-such-path", {404}),
+]
+
+
+class FrameEmbedPolicyTests(AioHTTPTestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._orig_dist = monitor.WEB_DIST
+        monitor.WEB_DIST = _DIST
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        monitor.WEB_DIST = cls._orig_dist
+        super().tearDownClass()
+
+    async def get_application(self):
+        state = MagicMock()
+        app = monitor.make_app(state, "", port=7020)
+        app.on_startup.clear()
+        app.on_shutdown.clear()
+        app.on_cleanup.clear()
+        return app
+
+    async def setUpAsync(self) -> None:
+        await super().setUpAsync()
+        request_guard.configure_request_guard(
+            self.client.app, bind="127.0.0.1", port=self.client.port,
+        )
+
+    def _host(self) -> dict[str, str]:
+        return {"Host": f"127.0.0.1:{self.client.port}"}
+
+    def _assert_frame_locked(self, resp) -> None:
+        assert resp.headers.get("X-Frame-Options") == "SAMEORIGIN"
+        csp = resp.headers.get("Content-Security-Policy") or ""
+        assert "frame-ancestors 'self'" in csp
+
+    async def test_api_plugin_module_js_merges_frame_ancestors(self) -> None:
+        row = {"id": "csp-pack", "has_frontend": True}
+        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "csp-pack" else None):
+            with patch.object(plugins, "consented", lambda _doc: True):
+                with patch.object(
+                    plugins,
+                    "module_response",
+                    lambda _pid: web.Response(text="export {};", content_type="text/javascript"),
+                ):
+                    resp = await self.client.get("/api/plugins/csp-pack/module.js", headers=self._host())
+        assert resp.status == 200
+        assert resp.headers.get("Content-Security-Policy") == (
+            "default-src 'none'; script-src 'none'; frame-ancestors 'self'"
+        )
+
+    async def test_frame_policy_on_responses(self) -> None:
+        for path, status_ok in CASES:
+            headers = {**self._host(), access.HEADER: "test-session"} if path.startswith("/pack-assets/") else self._host()
+            resp = await self.client.get(path, headers=headers)
+            assert resp.status in status_ok, path
+            self._assert_frame_locked(resp)
