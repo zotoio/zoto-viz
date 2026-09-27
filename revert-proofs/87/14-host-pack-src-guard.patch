@@ -1,8 +1,8 @@
 diff --git a/plugins/sdk/pack-lint-host.ts b/plugins/sdk/pack-lint-host.ts
-index 0000000..1111111 100644
+index 3f4b76d7..f7b82c08 100644
 --- a/plugins/sdk/pack-lint-host.ts
 +++ b/plugins/sdk/pack-lint-host.ts
-@@ -336,12 +336,5 @@ export function isHostCodeRepoPath(repoRel: string): boolean {
+@@ -344,13 +344,7 @@ export function isHostCodeRepoPath(repoRel: string): boolean {
  }
  
  export function disallowedHostPackSrcImports(violations: PackLintViolation[]): PackLintViolation[] {
@@ -15,3 +15,5 @@ index 0000000..1111111 100644
 -  });
 +  return [];
  }
+ 
+ const PY_PACK_SRC_IMPORT_RE =
