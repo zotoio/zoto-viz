@@ -49,7 +49,10 @@ describe("UX copy literals", () => {
     onRestart = (e) => { notices.push((e as CustomEvent<string>).detail); };
     window.addEventListener("zoto-viz-server-restart", onRestart);
     await apiFetch("/api/profiles/user", { method: "PUT" });
-    expect(notices[0]).toBe("The server restarted, so packs were reloaded.");
+    const expected = "The server restarted, so packs were reloaded.";
+    expect(notices.length).toBe(1);
+    expect((notices[0] ?? "").length).toBe(expected.length);
+    expect(notices[0]).toBe(expected);
   });
 
   it("pins retry-failed notice as exact literal", async () => {
@@ -75,8 +78,11 @@ describe("UX copy literals", () => {
       } as Response;
     }) as typeof fetch;
     await apiFetch("/api/profiles/user", { method: "PUT" });
+    const expected = "That request still failed after the server restarted.";
     const span = document.querySelector('[data-notice-key="retry-failed"] .wall-notice-text');
-    expect(span?.textContent).toBe("That request still failed after the server restarted.");
+    const text = span?.textContent ?? "";
+    expect(text.length).toBe(expected.length);
+    expect(text).toBe(expected);
     off();
   });
 

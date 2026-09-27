@@ -59,6 +59,13 @@ export function bindServerRestartWallNotice(): () => void {
       text: detail.message,
       action: { label: "Retry", onClick: () => { void detail.retry(); } },
     });
+    const retryBtn = wall.querySelector<HTMLButtonElement>(
+      '[data-notice-key="retry-failed"] .wall-notice-action',
+    );
+    if (retryBtn) retryBtn.tabIndex = -1;
+    queueMicrotask(() => {
+      if (retryBtn) retryBtn.tabIndex = 0;
+    });
   };
 
   wall.addEventListener("click", onWallClick);

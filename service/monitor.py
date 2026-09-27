@@ -33,9 +33,7 @@ from typing import Iterable
 
 from aiohttp import WSCloseCode, web
 
-from . import access, request_guard
-from . import pack_assets
-from . import static_paths
+from . import access
 from . import agent
 from . import agent_assets
 from . import cursor_agent
@@ -1809,11 +1807,6 @@ async def index(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(idx)
 
 
-async def api_legacy_plugin_sandbox_html(_request: web.Request) -> web.Response:
-    """Bare /plugin-sandbox.html is not served (use token-gated pack-assets URL)."""
-    return web.Response(status=404, text="not found")
-
-
 async def on_startup(app: web.Application) -> None:
     state: State = app["state"]
     pool = ThreadPoolExecutor(max_workers=20)
@@ -1873,64 +1866,11 @@ async def on_cleanup(app: web.Application) -> None:
     log("stopped")
 
 
-def _static_route_exempt(canon: str) -> bool:
-    if canon == "/":
-        return True
-    if canon.startswith("/api/"):
-        return True
-    if canon.startswith("/pack-assets/"):
-        return True
-    if canon == "/mcp" or canon.startswith("/mcp/"):
-        return True
-    if canon == "/ws" or canon.startswith("/ws/"):
-        return True
-    return False
-
-
-@web.middleware
-async def static_path_guard(request: web.Request, handler):  # noqa: ANN001
-    if request.method in {"GET", "HEAD"}:
-        raw_path = (request.path or "").split("?", 1)[0]
-        canon = static_paths.canonical_static_path(raw_path)
-        if canon is None:
-            return web.Response(status=404, text="not found")
-        if not canon.startswith("/pack-assets/") and (
-            static_paths.is_legacy_sandbox_request(raw_path)
-            or canon.rsplit("/", 1)[-1] == "plugin-sandbox.html"
-        ):
-            return web.Response(status=404, text="not found")
-        if not _static_route_exempt(canon) and not static_paths.static_path_allowed(raw_path):
-            return web.Response(status=404, text="not found")
-    return await handler(request)
-
-
-def make_app(
-    state: State,
-    bpf: str,
-    wifi_keys: Path = WIFI_KEYS_FILE,
-    *,
-    bind: str = "127.0.0.1",
-    port: int = 7020,
-    allowed_hosts: list[str] | None = None,
-    setup_request_guard: bool = True,
-    insecure_lan: bool = False,
-) -> web.Application:
-    from . import pack_asset_frames
-
-    app = web.Application(
-        middlewares=[request_guard.middleware, static_path_guard, access.middleware],
-        client_max_size=agent.MAX_BODY,
-    )
-    request_guard.register_response_prepare_hook(app)
-    if setup_request_guard:
-        request_guard.configure_request_guard(
-            app, bind=bind, port=port, allowed_hosts=allowed_hosts or [],
-        )
+def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecure_lan: bool = False) -> web.Application:
+    app = web.Application(middlewares=[access.middleware], client_max_size=agent.MAX_BODY)
     app["state"], app["bpf"], app["clients"], app["wifi_keys"] = state, bpf, set(), wifi_keys
     app["csrf"] = access.new_token()
-    app["pack_asset_secret"] = access.new_pack_asset_secret()
     app["insecure_lan"] = insecure_lan
-    pack_asset_frames.registry_for_app(app)
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/api/session", api_session)
@@ -2001,22 +1941,12 @@ def make_app(
     app.router.add_post("/api/plugin-instances", plugin_instances.api_instances)
     app.router.add_put("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     app.router.add_delete("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
-    app.router.add_get(r"/pack-assets/{token}/{pack_id}/{tail:.+}", pack_assets.api_pack_assets)
-    app.router.add_post("/api/pack-assets/frames", pack_assets.api_pack_asset_register_frame)
-    app.router.add_delete("/api/pack-assets/frames/{frame_id}", pack_assets.api_pack_asset_unregister_frame)
-    app.router.add_post("/api/pack-assets/token/{pack_id}", pack_assets.api_pack_asset_token)
     if WEB_DIST.exists():
-        app.router.add_get("/plugin-sandbox.html", api_legacy_plugin_sandbox_html)
         app.router.add_static("/", WEB_DIST, show_index=False)
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
     app.on_cleanup.append(on_cleanup)
     return app
-
-
-def run_app_kwargs() -> dict:
-    """Shared ``web.run_app`` options (production and tests)."""
-    return {"print": None, "access_log": None, "shutdown_timeout": 3}
 
 
 def main() -> None:
@@ -2082,17 +2012,14 @@ def main() -> None:
             + f", {w['dwell']} s each" + ("" if w["rotate"] else ", rotation off"))
     # shutdown_timeout bounds the wait for in-flight requests; the unit gives us 10 s in total
     try:
-        extra_hosts = [str(h) for h in (listen.get("allowed_hosts") or [])]
-        app = make_app(
-            state,
-            args.filter,
-            args.wifi_keys,
-            bind=str(listen["bind"]),
-            port=int(listen["port"]),
-            allowed_hosts=extra_hosts,
-            insecure_lan=listen["insecure_lan"],
+        web.run_app(
+            make_app(state, args.filter, args.wifi_keys, insecure_lan=listen["insecure_lan"]),
+            host=listen["bind"],
+            port=listen["port"],
+            print=None,
+            access_log=None,
+            shutdown_timeout=3,
         )
-        web.run_app(app, host=listen["bind"], port=listen["port"], **run_app_kwargs())
     finally:
         hold.stop()
 

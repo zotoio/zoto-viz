@@ -218,7 +218,7 @@ describe("wall notice region", () => {
     vi.useFakeTimers();
     const spy = vi.spyOn(globalThis, "setTimeout");
     const { alert } = boot();
-    postWallNotice({ key: "install-failed", text: "Install failed.", action: { label: "Retry", onClick: () => {} }, autoClearMs: 5000 } as never);
+    postWallNotice({ key: "retry-failed", text: "Retry failed.", action: { label: "Retry", onClick: () => {} }, autoClearMs: 5000 } as never);
     vi.advanceTimersByTime(10_000);
     expect(alert.childElementCount).toBe(1);
     expect(spy).toHaveBeenCalledTimes(0);
@@ -373,9 +373,9 @@ describe("wall notice region", () => {
   it("an alert without an action never auto-clears even when autoClearMs is forced", () => {
     vi.useFakeTimers();
     boot();
-    postWallNotice({ key: "install-failed", text: "Install failed.", autoClearMs: 5000 } as never);
+    postWallNotice({ key: "retry-failed", text: "Retry failed.", autoClearMs: 5000 } as never);
     vi.advanceTimersByTime(10_000);
-    expect(rows("install-failed")).toBe(1);
+    expect(rows("retry-failed")).toBe(1);
   });
 
   it("a re-post with a new action label relabels the button", () => {

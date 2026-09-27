@@ -1,21 +1,22 @@
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SERVER_RESTART_NOTICE, SESSION_RETRY_FAILED_NOTICE } from "./http-copy";
 import { apiFetch, noteCsrf } from "./http";
 import { bindServerRestartWallNotice } from "./http-notice";
 import { mountWallNoticeRegion } from "./wall-notice-region";
 
-function bootNoticeBinding(): () => void {
-  document.body.innerHTML = "<div id=\"wall\"></div>";
+function bootNoticeBinding(extraHtml = ""): () => void {
+  document.body.innerHTML = `${extraHtml}<div id="wall"></div>`;
   mountWallNoticeRegion(document.getElementById("wall")!);
   return bindServerRestartWallNotice();
 }
 
-function noticeRows(): HTMLElement[] {
-  return [...document.querySelectorAll(".wall-notice-row")] as HTMLElement[];
+function noticeRowCount(): number {
+  return document.querySelectorAll(".wall-notice-row").length;
 }
 
-function restartRows(): HTMLElement[] {
-  return [...document.querySelectorAll('[data-notice-key="server-restarted"]')] as HTMLElement[];
+function restartRowCount(): number {
+  return document.querySelectorAll('[data-notice-key="server-restarted"]').length;
 }
 
 function retryRows(): HTMLElement[] {
@@ -53,11 +54,59 @@ function staleCsrfFetch(sessionHits: { count: number }) {
   }) as typeof fetch;
 }
 
+const failingProfileFetch = (profileHits: { count: number }) => (async (url: string) => {
+  const path = String(url);
+  if (path.includes("/api/session")) {
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
+      json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
+    } as Response;
+  }
+  if (path === "/api/profiles/user") {
+    profileHits.count += 1;
+    if (profileHits.count >= 3) {
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
+    }
+    return {
+      ok: false,
+      status: 403,
+      headers: new Headers(),
+      clone() { return this; },
+      json: async () => ({ error: "csrf required" }),
+    } as Response;
+  }
+  return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
+}) as typeof fetch;
+
 describe("server restart wall notice", () => {
   afterEach(() => {
     vi.useRealTimers();
     window.dispatchEvent(new Event("zoto-viz-server-restart-cleared"));
     document.body.innerHTML = "";
+  });
+
+  describe("binder wiring", () => {
+    const origFetch = globalThis.fetch;
+    let off: () => void;
+
+    beforeEach(() => {
+      expect.hasAssertions();
+      noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
+      globalThis.fetch = staleCsrfFetch({ count: 0 });
+      off = bootNoticeBinding();
+    });
+
+    afterEach(() => {
+      globalThis.fetch = origFetch;
+      off();
+    });
+
+    it("shows the restart notice when the binder is active and a stale PUT runs", async () => {
+      await apiFetch("/api/profiles/user", { method: "PUT" });
+      expect(restartRowCount()).toBe(1);
+    });
   });
 
   describe("status copy", () => {
@@ -79,23 +128,24 @@ describe("server restart wall notice", () => {
       window.dispatchEvent(
         new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
       );
-      expect(restartRows()).toHaveLength(1);
+      expect(restartRowCount()).toBe(1);
     });
 
     it("shows exactly one status notice with the pinned literal", () => {
       window.dispatchEvent(
         new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
       );
-      expect(restartRows()).toHaveLength(1);
-      expect(restartRows()[0]!.querySelector(".wall-notice-text")!.textContent).toBe(SERVER_RESTART_NOTICE);
-      expect(laneRole(restartRows()[0]!)).toBe("status");
+      expect(restartRowCount()).toBe(1);
+      const text = document.querySelector('[data-notice-key="server-restarted"] .wall-notice-text')!.textContent;
+      expect(text).toBe(SERVER_RESTART_NOTICE);
+      expect(laneRole(document.querySelector('[data-notice-key="server-restarted"]')!)).toBe("status");
     });
 
     it("ignores restart events whose detail is not the pinned literal", () => {
       window.dispatchEvent(
         new CustomEvent("zoto-viz-server-restart", { detail: "other copy" }),
       );
-      expect(noticeRows()).toHaveLength(0);
+      expect(noticeRowCount()).toBe(0);
     });
   });
 
@@ -115,9 +165,9 @@ describe("server restart wall notice", () => {
       window.dispatchEvent(
         new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
       );
-      expect(restartRows()).toHaveLength(1);
-      restartRows()[0]!.click();
-      expect(restartRows()).toHaveLength(0);
+      expect(restartRowCount()).toBe(1);
+      document.querySelector('[data-notice-key="server-restarted"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(restartRowCount()).toBe(0);
     });
   });
 
@@ -170,7 +220,7 @@ describe("server restart wall notice", () => {
         apiFetch("/api/b", { method: "PUT" }),
         apiFetch("/api/c", { method: "PUT" }),
       ]);
-      expect(restartRows()).toHaveLength(1);
+      expect(restartRowCount()).toBe(1);
     });
 
     it("emits one restart event for two sequential stale bursts without restart-cleared", async () => {
@@ -181,7 +231,8 @@ describe("server restart wall notice", () => {
       noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
       await apiFetch("/api/b", { method: "PUT" });
       window.removeEventListener("zoto-viz-server-restart", onRestart);
-      expect(events).toEqual([SERVER_RESTART_NOTICE]);
+      expect(events.length).toBe(1);
+      expect(events[0]).toBe(SERVER_RESTART_NOTICE);
     });
 
     it("emits a restart event for each stale-token burst separated by restart-cleared", async () => {
@@ -193,7 +244,9 @@ describe("server restart wall notice", () => {
       noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
       await apiFetch("/api/b", { method: "PUT" });
       window.removeEventListener("zoto-viz-server-restart", onRestart);
-      expect(events).toEqual([SERVER_RESTART_NOTICE, SERVER_RESTART_NOTICE]);
+      expect(events.length).toBe(2);
+      expect(events[0]).toBe(SERVER_RESTART_NOTICE);
+      expect(events[1]).toBe(SERVER_RESTART_NOTICE);
     });
   });
 
@@ -239,9 +292,9 @@ describe("server restart wall notice", () => {
       window.dispatchEvent(
         new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
       );
-      expect(restartRows()).toHaveLength(1);
+      expect(restartRowCount()).toBe(1);
       vi.advanceTimersByTime(8000);
-      expect(restartRows()).toHaveLength(0);
+      expect(restartRowCount()).toBe(0);
     });
   });
 
@@ -263,12 +316,12 @@ describe("server restart wall notice", () => {
 
     it("shows the restart notice again after a cleared burst and a new stale mutation", async () => {
       await apiFetch("/api/a", { method: "PUT" });
-      expect(restartRows()).toHaveLength(1);
-      restartRows()[0]!.click();
-      expect(restartRows()).toHaveLength(0);
+      expect(restartRowCount()).toBe(1);
+      document.querySelector('[data-notice-key="server-restarted"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(restartRowCount()).toBe(0);
       noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
       await apiFetch("/api/b", { method: "PUT" });
-      expect(restartRows()).toHaveLength(1);
+      expect(restartRowCount()).toBe(1);
     });
   });
 
@@ -305,60 +358,45 @@ describe("server restart wall notice", () => {
       off();
     });
 
-    it("replaces the restart notice with a Retry failure strip", async () => {
+    it("posts retry-failed copy on the alert lane", async () => {
       await apiFetch("/api/profiles/user", { method: "PUT" });
-      expect(retryRows()).toHaveLength(1);
-      const row = retryRows()[0]!;
-      expect(row.querySelector(".wall-notice-text")!.textContent).toBe(SESSION_RETRY_FAILED_NOTICE);
-      expect(laneRole(row)).toBe("alert");
+      const row = document.querySelector('[data-notice-key="retry-failed"]');
+      expect(row).not.toBeNull();
+      const role = laneRole(row!);
+      expect(role).toBe("alert");
+    });
+
+    it("replaces the restart notice with a retry-failed strip", async () => {
+      await apiFetch("/api/profiles/user", { method: "PUT" });
+      expect(restartRowCount()).toBe(0);
+      expect(retryRows().length).toBe(1);
+      const text = retryRows()[0]!.querySelector(".wall-notice-text")!.textContent;
+      expect(text).toBe(SESSION_RETRY_FAILED_NOTICE);
     });
 
     it("keeps the retry failure strip after the restart auto-clear timer fires", async () => {
       vi.useFakeTimers();
       await apiFetch("/api/profiles/user", { method: "PUT" });
-      expect(retryRows()).toHaveLength(1);
+      expect(retryRows().length).toBe(1);
       expect(vi.getTimerCount()).toBe(0);
       vi.advanceTimersByTime(8000);
-      expect(retryRows()).toHaveLength(1);
-      expect(retryRows()[0]!.querySelector(".wall-notice-text")!.textContent).toBe(SESSION_RETRY_FAILED_NOTICE);
+      expect(retryRows().length).toBe(1);
+      const text = retryRows()[0]!.querySelector(".wall-notice-text")!.textContent;
+      expect(text).toBe(SESSION_RETRY_FAILED_NOTICE);
     });
   });
 
   describe("retry button", () => {
     const origFetch = globalThis.fetch;
     let off: () => void;
-    let profileHits: number;
+    let profileHits: { count: number };
 
     beforeEach(() => {
       expect.hasAssertions();
-      profileHits = 0;
+      profileHits = { count: 0 };
       noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
-      globalThis.fetch = (async (url: string) => {
-        const path = String(url);
-        if (path.includes("/api/session")) {
-          return {
-            ok: true,
-            status: 200,
-            headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
-            json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
-          } as Response;
-        }
-        if (path === "/api/profiles/user") {
-          profileHits += 1;
-          if (profileHits >= 3) {
-            return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
-          }
-          return {
-            ok: false,
-            status: 403,
-            headers: new Headers(),
-            clone() { return this; },
-            json: async () => ({ error: "csrf required" }),
-          } as Response;
-        }
-        return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
-      }) as typeof fetch;
-      off = bootNoticeBinding();
+      globalThis.fetch = failingProfileFetch(profileHits);
+      off = bootNoticeBinding('<button type="button" id="tab-before">Before</button>');
     });
 
     afterEach(() => {
@@ -371,7 +409,7 @@ describe("server restart wall notice", () => {
       const btn = document.querySelector(".wall-notice-action") as HTMLButtonElement;
       btn.click();
       await vi.waitFor(() => {
-        expect(profileHits).toBe(3);
+        expect(profileHits.count).toBe(3);
       });
     });
 
@@ -380,20 +418,22 @@ describe("server restart wall notice", () => {
       await apiFetch("/api/profiles/user", { method: "PUT" });
       const btn = document.querySelector(".wall-notice-action") as HTMLButtonElement;
       btn.click();
-      expect(stopSpy).toHaveBeenCalled();
-      expect(retryRows()).toHaveLength(1);
+      expect(stopSpy.mock.calls.length).toBeGreaterThan(0);
+      expect(retryRows().length).toBe(1);
       stopSpy.mockRestore();
     });
 
-    it("replays the failed mutation when Retry is focused and click retries", async () => {
+    it("replays the failed mutation when Tab focuses Retry and Enter is pressed", async () => {
+      const user = userEvent.setup();
       await apiFetch("/api/profiles/user", { method: "PUT" });
       const btn = document.querySelector(".wall-notice-action") as HTMLButtonElement;
-      expect(btn.tabIndex).toBe(0);
-      btn.focus();
-      expect(document.activeElement).toBe(btn);
-      btn.click();
+      const before = document.getElementById("tab-before") as HTMLButtonElement;
+      before.focus();
+      await user.tab();
+      expect(document.activeElement === btn).toBe(true);
+      await user.keyboard("{Enter}");
       await vi.waitFor(() => {
-        expect(profileHits).toBe(3);
+        expect(profileHits.count).toBe(3);
       });
     });
 

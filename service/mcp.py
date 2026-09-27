@@ -989,7 +989,6 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
                 return _tool_text({"ok": True, "needed": False, "id": pid})
             plugins.grant_consent(found, kind)
             from . import hooks
-
             hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
             return _tool_text({"ok": True, "needed": True, "id": pid, "kind": kind})
         if name == "draft_plugin":
