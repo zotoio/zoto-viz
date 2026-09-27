@@ -1,5 +1,6 @@
 import type { PluginField } from "../core/modes";
 import { parseMosaicSlotId } from "../graph/mosaic-tile-id";
+import { perTilePackScopeNoteMessage } from "./pack-shared-copy";
 import type { PluginView } from "./plugin";
 
 export type PluginInstance = {
@@ -82,7 +83,7 @@ function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly st
 
 export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
   if (configStoredPerTile(spec)) {
-    return "Settings apply to this tile only. Instance defaults override shared pack values.";
+    return perTilePackScopeNoteMessage(spec.name);
   }
   const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
   if (shared < 2) return null;

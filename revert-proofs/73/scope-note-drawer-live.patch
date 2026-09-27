@@ -2,8 +2,8 @@ diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
 index 4e8edea..15b76cb 100644
 --- a/web/src/plugins/instances.ts
 +++ b/web/src/plugins/instances.ts
-@@ -85,7 +85,7 @@ export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): strin
-     return "Settings apply to this tile only. Instance defaults override shared pack values.";
+@@ -86,7 +86,7 @@ export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): strin
+     return perTilePackScopeNoteMessage(spec.name);
    }
    const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
 -  if (shared < 2) return null;

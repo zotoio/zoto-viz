@@ -8,5 +8,5 @@ index 4e8edea..c9f00b6 100644
  export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
 +  return null;
    if (configStoredPerTile(spec)) {
-     return "Settings apply to this tile only. Instance defaults override shared pack values.";
+     return perTilePackScopeNoteMessage(spec.name);
    }

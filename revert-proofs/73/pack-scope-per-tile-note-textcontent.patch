@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -143,7 +143,7 @@ function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWall
+   if (!text) return;
+   const note = document.createElement("div");
+   note.className = "sec-hint plugin-pack-scope-note";
+-  note.textContent = text;
++  note.innerHTML = text;
+   const layer = viewLayerForScopeNote(host);
+   const anchor = layer.querySelector(".sec-title");
+   if (anchor?.parentElement === layer && anchor.nextSibling) {
