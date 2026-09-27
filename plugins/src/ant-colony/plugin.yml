@@ -1,0 +1,29 @@
+id: ant-colony
+name: Ant Colony
+version: 1
+hint: Cutaway formicarium — hosts are nest chambers, flows are foraging trails with packet crumbs; stigmergy pheromone grid, soldier swarms on failures.
+description: >-
+  Top-down cutaway ant farm where network traffic becomes colony life. Each talker is a chamber;
+  packet flows dig tunnels and spawn forager lines sized by bytes and rate. Pheromone trails diffuse
+  and evaporate on a fixed grid. Failures tint soldier swarms with the Zoto fail accent. Idle demo
+  keeps the nest busy with a demo label.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 8
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+    - uOpacity
+frontend:
+  entry: frontend/index.ts

@@ -1,0 +1,43 @@
+# Saved-wall snippets (mosaic tiles — koi pond legible at 2×2 and 4×4).
+
+tile_2x2:
+  look:
+    mosaic: "4"
+    hero: center
+    mosaicSharedTheme: true
+    mosaicTiles:
+      - plugin:koi-pond
+      - plugin:watch
+      - plugin:protocols
+      - plugin:talkers
+
+tile_4x4:
+  look:
+    mosaic: "16"
+    hero: center
+    mosaicSharedTheme: true
+    mosaicTiles:
+      - plugin:cores
+      - plugin:memory
+      - plugin:sockets
+      - plugin:gpu
+      - plugin:watch
+      - plugin:koi-pond
+      - plugin:protocols
+      - plugin:talkers
+      - plugin:lan-heat
+      - plugin:units
+      - plugin:disk
+      - plugin:cgroups
+      - plugin:udev
+      - plugin:rf-constellation
+      - plugin:packet-tunnel
+      - plugin:topology
+
+idle_active:
+  mode: plugin:koi-pond
+  note: Host idle fixture with demo schools — expect HUD demo marker.
+
+idle_failed:
+  mode: plugin:koi-pond
+  note: Host idle fixture with elevated sys.failed — murky water + corner fail chip.
