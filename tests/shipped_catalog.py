@@ -13,7 +13,6 @@ PINNED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = (
     "cgroups",
     "command",
     "cores",
-    "cpu-pong",
     "cpupong",
     "cypher-cic",
     "disk",

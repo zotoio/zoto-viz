@@ -1,3 +1,4 @@
+import { remapSavedViewId } from "../core/saved-view-id";
 import type { HeroPos, MosaicSize } from "./scene";
 import { allocateMosaicTileSlot, mosaicTileViewId } from "./mosaic-tile-id";
 
@@ -67,7 +68,7 @@ export function parseMosaicTiles(raw: unknown): string[] {
   const seen = new Set<string>();
   for (const row of raw.slice(0, 8)) {
     if (typeof row !== "string" || !row.trim()) continue;
-    const id = row.trim().slice(0, 96);
+    const id = remapSavedViewId(row.trim().slice(0, 96));
     if (seen.has(id)) continue;
     seen.add(id);
     out.push(id);
