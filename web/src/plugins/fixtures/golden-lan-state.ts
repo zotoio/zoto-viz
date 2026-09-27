@@ -1,5 +1,5 @@
 import type { Device, Flow, StateMsg } from "../../core/types";
-import { goldenHostViewSlices } from "./golden-host-views";
+import { goldenHostViewSlices } from "../golden-host-views";
 
 const PROTOS = ["tcp", "udp", "dns", "tls", "http", "icmp"];
 

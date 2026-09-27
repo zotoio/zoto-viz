@@ -1,7 +1,7 @@
-diff --git a/web/src/plugins/fixtures/golden-host-views.ts b/web/src/plugins/fixtures/golden-host-views.ts
+diff --git a/web/src/plugins/golden-host-views.ts b/web/src/plugins/golden-host-views.ts
 index f0bd4ffd..08857c4d 100644
---- a/web/src/plugins/fixtures/golden-host-views.ts
-+++ b/web/src/plugins/fixtures/golden-host-views.ts
+--- a/web/src/plugins/golden-host-views.ts
++++ b/web/src/plugins/golden-host-views.ts
 @@ -453,7 +453,6 @@ export function goldenHostViewSlices() {
    const bridge = goldenBridgeSlice({ memory, disk, gpu, sockets, cgroups, units, udev });
    return {
