@@ -12,6 +12,7 @@ import {
   classifyPatchedPytest,
   classifyPatchedVitest,
   gitApplyPatchStrict,
+  vitestTargetForbiddenSkipReason,
   parsePytestPluginJson,
   parseVitestJsonReport,
   validateRowMeta,
@@ -43,6 +44,45 @@ const vitestSelection = (
     })),
     testName,
   ),
+});
+
+describe("vitest forbidden skip scan (#119)", () => {
+  const testName = "widget > returns one";
+
+  it("flags it.skip", () => {
+    const src = `describe("widget", () => { it.skip("returns one", () => {}); });`;
+    expect(vitestTargetForbiddenSkipReason(src, testName)).toBe("it.skip");
+  });
+
+  it("flags it.skip.each", () => {
+    const src = `describe("widget", () => { it.skip.each([1])("returns one", () => {}); });`;
+    expect(vitestTargetForbiddenSkipReason(src, testName)).toBe("it.skip.each");
+  });
+
+  it("flags test.skipIf", () => {
+    const src = `describe("widget", () => { test.skipIf(true)("returns one", () => {}); });`;
+    expect(vitestTargetForbiddenSkipReason(src, testName)).toBe("test.skipIf");
+  });
+
+  it("flags describe.skipIf", () => {
+    const src = `describe.skipIf(true)("widget", () => { it("returns one", () => {}); });`;
+    expect(vitestTargetForbiddenSkipReason(src, testName)).toBe("describe.skipIf");
+  });
+
+  it("flags single-line it.skipIf three-arg", () => {
+    const src = `describe("widget", () => { it.skipIf(true, "returns one", () => {}); });`;
+    expect(vitestTargetForbiddenSkipReason(src, testName)).toBe("it.skipIf three-arg");
+  });
+
+  it("flags it.skipIf with space before paren", () => {
+    const src = `describe("widget", () => { it.skipIf (true, "returns one", () => {}); });`;
+    expect(vitestTargetForbiddenSkipReason(src, testName)).toBe("it.skipIf space");
+  });
+
+  it("flags curried it.skipIf (reordered condition)", () => {
+    const src = `describe("widget", () => { it.skipIf(true)("returns one", () => {}); });`;
+    expect(vitestTargetForbiddenSkipReason(src, testName)).toBe("it.skipIf curried");
+  });
 });
 
 describe("vitest JSON selection by full name", () => {
@@ -711,19 +751,44 @@ describe("revert-proof CI gate (item 9)", () => {
     const { decideBaseSelftestStep, SELFTEST_MARKER } = await import("./revert-proof-ci-gate.mjs");
     const baseSha = "deadbeef";
     const gitPath = `${baseSha}:${SELFTEST_MARKER}`;
-    const decision = decideBaseSelftestStep((p) => p === gitPath, baseSha);
+    const decision = decideBaseSelftestStep((p) => p === gitPath, baseSha, () => true);
     expect(decision.action).toBe("run");
     expect(decision.case).toBe("base_has_marker");
     expect(decision.check).toBe(`git cat-file -e ${gitPath}`);
     expect(decision.result).toBe("present");
   });
 
-  it("(ci-base) when base lacks the self-test marker, skip is allowed", async () => {
+  it("(ci-base) when base lacks the self-test marker, skip is allowed for a real commit", async () => {
     const { decideBaseSelftestStep } = await import("./revert-proof-ci-gate.mjs");
-    const decision = decideBaseSelftestStep(() => false, "deadbeef");
+    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).stdout
+      .trim();
+    const decision = decideBaseSelftestStep(() => false, head, (ref) => ref === `${head}^{commit}`);
     expect(decision.action).toBe("skip");
     expect(decision.case).toBe("base_missing_marker");
     expect(decision.result).toBe("absent");
+  });
+
+  it("(ci-base) deadbeef / no-such-ref / unfetched sha refuse skip", async () => {
+    const { decideBaseSelftestStep, SELFTEST_MARKER } = await import("./revert-proof-ci-gate.mjs");
+    const commitExists = (ref: string) => {
+      return spawnSync("git", ["cat-file", "-e", ref], { cwd: repoRoot, encoding: "utf8" }).status === 0;
+    };
+    for (const baseSha of ["deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "no-such-ref"]) {
+      const decision = decideBaseSelftestStep(() => false, baseSha, commitExists);
+      expect(decision.action).toBe("fail");
+      expect(decision.case).toBe("base_invalid_commit");
+    }
+    const missing = "0000000000000000000000000000000000000001";
+    if (commitExists(`${missing}^{commit}`)) {
+      return;
+    }
+    const unfetched = decideBaseSelftestStep(
+      (p) => p === `${missing}:${SELFTEST_MARKER}`,
+      missing,
+      commitExists,
+    );
+    expect(unfetched.action).toBe("fail");
+    expect(unfetched.case).toBe("base_invalid_commit");
   });
 
   it("(ci-head) when HEAD lacks the self-test marker, the step fails", async () => {

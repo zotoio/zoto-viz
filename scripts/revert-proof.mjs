@@ -40,6 +40,7 @@ import {
   validateStackedChildProofScope,
   validatePythonModule,
   validateRowMeta,
+  assertVitestTargetNotStaticallySkipped,
   validateTestFileRel,
   vitestTestNamePattern,
   assertReplayPullHeadTreeKey,
@@ -719,6 +720,9 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   validateRowMeta(meta, slug);
   validateRowProofPr(meta, slug, row.prNumber);
   validateTestFileRel(meta.testFile, wtRoot);
+  if (meta.runner === "vitest") {
+    assertVitestTargetNotStaticallySkipped(wtRoot, meta, slug);
+  }
   validatePatchStructure(patchText, slug);
   validatePatchRevertProofsScope(patchText, slug, row.prNumber);
   validatePatchTouchesOnlyProduction(patchText, slug);

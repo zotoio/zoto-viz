@@ -15,6 +15,7 @@ from scripts.check_pack_pr_boundary import (
     MISSING_PR_NUMBER_MESSAGE,
     PACK_PR_HOST_INFRA_FAIL,
     evaluate_pack_pr,
+    main,
     merge_workflow_label_event,
     pack_py_test_path,
     paths_from_name_status,
@@ -344,6 +345,27 @@ def test_pack_pr_rejects_second_pack_folder() -> None:
     code, lines = run_check(files, {}, pr_number=111)
     assert code == 1
     assert any("metro-lines" in line for line in lines)
+
+
+def test_legacy_cli_looks_up_labels_when_pr_from_github_event(tmp_path, monkeypatch) -> None:
+    event = {"pull_request": {"number": 42}}
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps(event), encoding="utf-8")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "zotoio/zoto-viz")
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    calls: list[tuple[str, int, str]] = []
+
+    def fake_load(repo: str, pr: int, token: str) -> tuple[set[str], list, datetime | None]:
+        calls.append((repo, pr, token))
+        return (set(), [], None)
+
+    with patch("scripts.check_pack_pr_boundary.load_pr_review_context", fake_load):
+        with patch("scripts.check_pack_pr_boundary.git_diff_changed_paths", return_value=[]):
+            code = main(["HEAD", "HEAD"])
+    assert code == 0
+    assert calls == [("zotoio/zoto-viz", 42, "test-token")]
 
 
 def test_cli_missing_pr_number_exits_nonzero() -> None:

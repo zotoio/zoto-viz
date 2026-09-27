@@ -20,7 +20,9 @@ import {
   DOGFOOD_SOAK_FRAMES_PER_PACK,
   DOGFOOD_SOAK_PATTERN_EXPECTED,
   dogfoodSoakPatternedBuildCostMs,
+  formatDogfoodCountGateReport,
   formatDogfoodReport,
+  runDogfoodCountGate,
   runDogfoodSoak,
   runPackFrameHandler,
   runPackSwapPreserve,
@@ -300,6 +302,37 @@ it("hn-term frame.t hold step: zero dt adds no typed characters", () => {
   }
   tickHnTermFrames(state, HN_TERM_DT_GUARD_SEGMENT_FRAMES, (i) => i * HN_TERM_DT_GUARD_FRAME_STEP, handlers);
   expect(hnTermPackBufferTypedCharCount(lastBuffer())).toBe(HN_TERM_DT_GUARD_TYPED_CHARS);
+});
+
+it("fat-LAN count gate: deterministic delivery and build work budgets", () => {
+  setVizClockInjector(() => 0);
+  setVizWallClockInjector(() => 0);
+  const result = runDogfoodCountGate({ state: fatLanFixture(), framesPerPack: 120 });
+  console.log("\n" + formatDogfoodCountGateReport(result));
+
+  expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
+  expect(result.fixture.flows).toBeGreaterThanOrEqual(1000);
+  expect(result.packs.length).toBeGreaterThanOrEqual(3);
+  expect(result.packs.map((p) => p.packId)).toEqual(expect.arrayContaining([
+    "packet-tunnel",
+    "rf-constellation",
+    "talker-storm",
+    "kefrens-bars",
+    "roto-proto",
+    "blob-mesh",
+    "star-sines",
+    "hn-rain",
+    "hn-term",
+    "stereo-gram",
+    "nixie-clock",
+  ]));
+
+  for (const pack of result.packs) {
+    expect(pack.delivered).toBe(pack.frames);
+    expect(pack.skipped).toBe(0);
+  }
+  expect(result.ok).toBe(true);
+  resetVizClockInjectors();
 });
 
 it("fat-LAN live soak: termNow must not read wall clock", () => {

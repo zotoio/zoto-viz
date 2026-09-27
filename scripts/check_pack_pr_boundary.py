@@ -1247,14 +1247,13 @@ def main(argv: list[str] | None = None) -> int:
     labels: set[str] = set()
     host_review_ok = False
     token = os.environ.get("GITHUB_TOKEN", "")
-    if args.repo and args.pr_number:
+    repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "")
+    if pr_number is not None and repo:
         if not token:
             print("pack-boundary: FAILED — GITHUB_TOKEN is required for PR label lookup", file=sys.stderr)
             return 1
         try:
-            labels, timeline, push_at = load_pr_review_context(
-                args.repo, args.pr_number, token
-            )
+            labels, timeline, push_at = load_pr_review_context(repo, pr_number, token)
         except urllib.error.HTTPError as exc:
             print(
                 f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",

@@ -9,7 +9,7 @@ import path from "node:path";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const perf = process.env.ZOTO_VIZ_PERF === "1";
-const testName = perf ? "fat-LAN live soak" : "fat-LAN live soak";
+const testName = perf ? "fat-LAN live soak" : "fat-LAN count gate";
 const result = spawnSync(
   "pnpm",
   ["exec", "vitest", "run", "src/plugins/dogfood.test.ts", "-t", testName],

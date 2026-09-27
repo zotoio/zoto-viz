@@ -40,8 +40,21 @@ export function assertHeadSelftestPresent(repoRoot) {
  * Base step: SKIP only when marker absent at base.sha; if present, must run (skip refused).
  * @param {(gitPath: string) => boolean} catFileExists e.g. `sha:path` → git cat-file -e
  * @param {string} baseSha
+ * @param {(commitRef: string) => boolean} [commitExists] e.g. `sha^{commit}` → git cat-file -e
  */
-export function decideBaseSelftestStep(catFileExists, baseSha) {
+export function decideBaseSelftestStep(catFileExists, baseSha, commitExists) {
+  const commitCheck = `git cat-file -e ${baseSha}^{commit}`;
+  const commitResolvable = commitExists ? commitExists(`${baseSha}^{commit}`) : true;
+  if (!commitResolvable) {
+    return {
+      action: "fail",
+      case: "base_invalid_commit",
+      message:
+        `revert-proof CI gate: FAIL — base ${baseSha} is not a resolvable commit (${commitCheck})`,
+      check: commitCheck,
+      result: "absent",
+    };
+  }
   const gitPath = `${baseSha}:${SELFTEST_MARKER}`;
   const checkCmd = `git cat-file -e ${gitPath}`;
   if (!catFileExists(gitPath)) {
@@ -91,6 +104,10 @@ function gitCatFileExists(gitPath) {
   return spawnSync("git", ["cat-file", "-e", gitPath], { encoding: "utf8" }).status === 0;
 }
 
+function gitCommitExists(commitRef) {
+  return gitCatFileExists(commitRef);
+}
+
 function repoRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 }
@@ -118,11 +135,14 @@ function main() {
       console.log(`case=${head.case} check=${head.check}`);
       process.exit(1);
     }
-    const decision = decideBaseSelftestStep(gitCatFileExists, baseSha);
+    const decision = decideBaseSelftestStep(gitCatFileExists, baseSha, gitCommitExists);
     console.log(decision.message);
     console.log(
       `case=${decision.case} action=${decision.action} check=${decision.check} result=${decision.result}`,
     );
+    if (decision.action === "fail") {
+      process.exit(1);
+    }
     if (decision.action === "skip") {
       process.exit(0);
     }

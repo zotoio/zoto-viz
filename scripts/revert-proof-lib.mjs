@@ -198,6 +198,84 @@ export function validateTestFileRel(testFile, wtRoot) {
   }
 }
 
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function quotedTitlePattern(title) {
+  return `['"\`]${escapeRegex(title)}['"\`]`;
+}
+
+/**
+ * Static scan for vitest skip forms on a revert-proof target (fail before baseline).
+ * @param {string} source
+ * @param {string} testName vitest full name (`describe > leaf`)
+ * @returns {string | null} short label when a forbidden skip form matches
+ */
+export function vitestTargetForbiddenSkipReason(source, testName) {
+  const parts = String(testName)
+    .split(/\s+>\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!parts.length) {
+    return "invalid testName";
+  }
+  const leaf = parts[parts.length - 1];
+  const leafQ = quotedTitlePattern(leaf);
+  const text = String(source).replace(/\r\n/g, "\n");
+
+  if (new RegExp(`\\bit\\.skip\\s*\\(\\s*${leafQ}`).test(text)) {
+    return "it.skip";
+  }
+  if (new RegExp(`\\bit\\.skip\\.each[\\s\\S]*?\\(\\s*${leafQ}`).test(text)) {
+    return "it.skip.each";
+  }
+  if (new RegExp(`\\btest\\.skipIf[\\s\\S]*?${leafQ}`).test(text)) {
+    return "test.skipIf";
+  }
+  for (const segment of parts.slice(0, -1)) {
+    const segQ = quotedTitlePattern(segment);
+    if (new RegExp(`\\bdescribe\\.skipIf[\\s\\S]*?\\(\\s*${segQ}`).test(text)) {
+      return "describe.skipIf";
+    }
+  }
+  if (new RegExp(`\\bit\\.skipIf\\s+\\(`).test(text) && new RegExp(leafQ).test(text)) {
+    return "it.skipIf space";
+  }
+  if (new RegExp(`\\bit\\.skipIf\\s*\\([^)]+,\\s*${leafQ}\\s*,`).test(text)) {
+    return "it.skipIf three-arg";
+  }
+  if (new RegExp(`\\bit\\.skipIf\\s*\\([^)]*\\)\\s*\\(\\s*${leafQ}`).test(text)) {
+    return "it.skipIf curried";
+  }
+  if (new RegExp(`\\bit\\s*\\(\\s*${leafQ}\\s*,\\s*\\{[^}]*\\bskip\\s*:`).test(text)) {
+    return "it options.skip";
+  }
+  if (new RegExp(`\\bit\\.skipIf\\b[\\s\\S]*?${leafQ}`).test(text)) {
+    return "it.skipIf";
+  }
+  return null;
+}
+
+/**
+ * @param {string} wtRoot
+ * @param {{ testFile: string, testName: string }} meta
+ * @param {string} slug
+ */
+export function assertVitestTargetNotStaticallySkipped(wtRoot, meta, slug) {
+  const rel = meta.testFile.replace(/\\/g, "/");
+  const abs = path.join(wtRoot, rel);
+  if (!fs.existsSync(abs)) {
+    return;
+  }
+  const reason = vitestTargetForbiddenSkipReason(fs.readFileSync(abs, "utf8"), meta.testName);
+  if (reason) {
+    throw new Error(
+      `row ${slug}: baseline test selection failed (target skipped; never a pass)`,
+    );
+  }
+}
+
 export function parseTimeoutSec(raw, slug) {
   if (raw === undefined || raw === null) {
     return 120;
