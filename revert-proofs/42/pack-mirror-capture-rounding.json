@@ -2,6 +2,6 @@
   "runner": "vitest",
   "testFile": "src/graph/render-host-fb-viewport.test.ts",
   "testName": "^RenderHost framebuffer viewport > present returns per-edge device rect at pr 1\\.5 bottom-left css \\(pane-change readPixels uses the same vp\\)$",
-  "description": "writeFbViewport \u2192 toDeviceRectInto (per-edge Math.round); pane-change probeLines/readPixels consume the same device rect. Patched vitest: expected { x: 1, y: 87, w: 152, h: 92, \u2026(1) } to deeply equal { x: 2, y: 87, w: 151, h: 91, \u2026(1) }",
-  "expectedRed": "expected { x: 1.5, y: 87, w: 151.5, …(2) } to deeply equal { x: 2, y: 87, w: 151, h: 91, …(1) }"
+  "description": "writeFbViewport uses toDeviceRectInto (per-edge Math.round); patched revert uses unrounded edge scale on host viewBox path.",
+  "expectedRed": "expected [ 1.5, 87, 151.5, 91.5 ] to deeply equal [ 2, 87, 151, 91 ]"
 }
