@@ -1,8 +1,0 @@
-{
-  "description": "Revert bindTileHealthPresentTick present listener registration",
-  "runner": "vitest",
-  "testFile": "src/app/tile-health-production.test.ts",
-  "testName": "tile health production wiring > blank tile for TILE_EMPTY_STREAK checks triggers exactly one heal",
-  "red": "AssertionError: expected [] to deeply equal [ 'resend-frame' ]",
-  "project": "web"
-}

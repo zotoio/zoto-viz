@@ -1,8 +1,0 @@
-{
-  "description": "Revert gpuContextLost early return in TileHealthMonitor.checkTile",
-  "runner": "vitest",
-  "testFile": "src/app/tile-health-production.test.ts",
-  "testName": "tile health production wiring > context lost produces zero heals until restored",
-  "red": "AssertionError: expected [ 'resend-frame' ] to have a length of +0 but got 1",
-  "project": "web"
-}
