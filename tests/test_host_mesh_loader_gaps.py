@@ -24,6 +24,30 @@ def test_host_mesh_lane_clear_cancels_inflight_and_disposes() -> None:
 REVERT_CLEAR_NO_DISPOSE = "clear(): void {\n    this.clearLive();"
 
 
+REVERT_CLEAR_NO_MIXER_STOP = """    const skin = this.skinnedLive.get(assetId);
+    if (skin) {
+      for (const s of skin) {
+        s.root.removeFromParent();
+      }
+      this.skinnedLive.delete(assetId);
+    }"""
+
+REVERT_CLEAR_NO_TEMPLATE_MAP_CLEAR = (
+    "      disposeHostMeshObject3D(t.template);\n"
+    "    }\n"
+    "    this.pending.clear();\n"
+    "    this.assetOrder = [];\n"
+    "  }\n"
+    "\n"
+    "  /** Advance skinned swim clips. */\n"
+)
+
+REVERT_INFLIGHT_NO_EPOCH_CANCEL = """      if (epoch !== this.loadEpoch) {
+        disposeHostMeshObject3D(gltf.scene);
+        return null;
+      }"""
+
+
 def test_host_mesh_lane_has_meshopt_decoder() -> None:
     text = LANE.read_text(encoding="utf-8")
     assert "setMeshoptDecoder" in text
@@ -40,6 +64,33 @@ def test_host_mesh_lane_revert_clear_without_teardown_would_fail() -> None:
     text = LANE.read_text(encoding="utf-8")
     assert REVERT_CLEAR_NO_DISPOSE not in text
     assert REVERT_CLEAR_NO_DISPOSE in text + "\n" + REVERT_CLEAR_NO_DISPOSE
+
+
+def test_host_mesh_lane_revert_clear_without_mixer_stop_would_fail() -> None:
+    text = LANE.read_text(encoding="utf-8")
+    assert "stopSkinnedMixer" in text
+    assert REVERT_CLEAR_NO_MIXER_STOP not in text
+
+
+def test_host_mesh_lane_revert_clear_without_template_map_clear_would_fail() -> None:
+    text = LANE.read_text(encoding="utf-8")
+    assert "this.templates.clear();" in text
+    assert REVERT_CLEAR_NO_TEMPLATE_MAP_CLEAR not in text
+
+
+def test_host_mesh_lane_revert_inflight_without_epoch_cancel_would_fail() -> None:
+    text = LANE.read_text(encoding="utf-8")
+    assert REVERT_INFLIGHT_NO_EPOCH_CANCEL in text
+
+
+def test_host_mesh_lane_clear_exact_counts_vitest() -> None:
+    test_ts = ROOT / "web" / "src" / "graph" / "host-mesh-lane.test.ts"
+    text = test_ts.read_text(encoding="utf-8")
+    assert "clear() exact teardown counts (Performance Pedant)" in text
+    assert "N_LOADED_MESHES = 3" in text
+    assert "M_LIVE_MIXERS = 2" in text
+    assert "geoDispose).toHaveBeenCalledTimes(N_LOADED_MESHES)" in text
+    assert "stopSpy).toHaveBeenCalledTimes(M_LIVE_MIXERS)" in text
 
 
 def test_host_mesh_lane_multi_node_rigid_clone() -> None:
