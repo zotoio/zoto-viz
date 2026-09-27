@@ -28,7 +28,9 @@ def _isolate_plugin_local(tmp_path_factory: pytest.TempPathFactory, monkeypatch:
     monkeypatch.setattr(paths, "plugin_local_dir", fake_local)
     monkeypatch.setattr(paths, "plugin_local_runtime_dir", fake_runtime)
     plugin_local.reset_watch_for_tests()
-    from service import live
+    from service import live, plugins
+
+    plugins.reset_scan_memo()
     live.reset_for_tests()
     live.set_autoconsent(False)
     return local
