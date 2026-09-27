@@ -9,7 +9,7 @@ import {
   LETTERBOX_TILE_CSS,
   letterbox16x9FirstSceneRowDeviceY,
   letterbox16x9InnerViewportGl,
-} from "./pack-mirror-letterbox-16x9.fixture";
+} from "../../test-support/pack-mirror-letterbox-16x9.fixture";
 
 describe("pack mirror 16:9 letterbox (production presenter)", () => {
   beforeEach(() => {

@@ -1,5 +1,5 @@
-import { letterboxInnerRectInto } from "./letterbox-fill";
-import { asCanvasDeviceHeight, deviceRectFromHostViewBoxInto, toGlRectInto } from "./pack-mirror-rect";
+import { letterboxInnerRectInto } from "../src/graph/letterbox-fill";
+import { asCanvasDeviceHeight, deviceRectFromHostViewBoxInto, toGlRectInto } from "../src/graph/pack-mirror-rect";
 
 /** Square mirror tile (CSS px). */
 export const LETTERBOX_TILE_CSS = 100;

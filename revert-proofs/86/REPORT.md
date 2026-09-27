@@ -5,7 +5,7 @@
 
 ## Per-hunk sweep vs `80be948`
 
-See `SWEEP-HUNKS.md` (134 hunks, one line per hunk).
+Measured remove-one-hunk sweep (production hunks only): **102** hunks — **56** CAUGHT, **45** SURVIVED, **1** obsolete (fixture path relocated). Full table lives in the PR body artifact (`pr86-body.md` on the agent run), not in-repo.
 
 ## Hygiene: no pack-mirror sandbox scaffolding
 
