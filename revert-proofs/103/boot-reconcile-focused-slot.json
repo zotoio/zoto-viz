@@ -4,8 +4,14 @@
   "testName": "reconcileMosaicTilesWithMode > replaces the focused slot when mode is missing from tiles",
   "description": "Revert reconcileMosaicTilesWithMode replacing focused slot",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": [
+      "plugin:topology",
+      "plugin:wifi"
+    ],
+    "expected": [
+      "plugin:backrooms",
+      "plugin:wifi"
+    ]
   },
   "project": "web"
 }

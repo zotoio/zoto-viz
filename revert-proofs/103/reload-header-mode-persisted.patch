@@ -1,12 +1,12 @@
 diff --git a/web/src/app/boot-view-restore.ts b/web/src/app/boot-view-restore.ts
-index 50556b6b..ac03b5d0 100644
+index 50556b6b..6404bd48 100644
 --- a/web/src/app/boot-view-restore.ts
 +++ b/web/src/app/boot-view-restore.ts
-@@ -5,7 +5,6 @@ export function resolveRestoredViewMode(args: {
-   fallback: string;
- }): string {
+@@ -7,7 +7,6 @@ export function resolveRestoredViewMode(args: {
    const fromSession = args.sessionMode?.trim();
--  if (fromSession) return fromSession;
+   if (fromSession) return fromSession;
    const fromLocal = args.localMode?.trim();
-   if (fromLocal) return fromLocal;
+-  if (fromLocal) return fromLocal;
    return args.fallback;
+ }
+ 

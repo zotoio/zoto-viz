@@ -4,8 +4,8 @@
   "testName": "mergePluginConsentLivePatch > merges WebSocket pluginConsent onto catalog rows",
   "description": "Revert mergePluginConsentLivePatch updating catalog consent",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": null,
+    "expected": "reviewed"
   },
   "project": "web"
 }

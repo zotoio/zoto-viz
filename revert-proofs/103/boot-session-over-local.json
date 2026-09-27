@@ -4,8 +4,8 @@
   "testName": "resolveRestoredViewMode > prefers session snapshot over localStorage",
   "description": "Revert session mode winning over localStorage on boot",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": "plugin:talkers",
+    "expected": "plugin:backrooms"
   },
   "project": "web"
 }
