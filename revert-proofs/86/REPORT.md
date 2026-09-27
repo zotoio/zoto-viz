@@ -6,3 +6,7 @@
 ## Per-hunk sweep vs `f6c508e`
 
 See `SWEEP-HUNKS.md` (134 hunks, one line per hunk).
+
+## Hygiene: no pack-mirror sandbox scaffolding
+
+`SandboxBitmapGl` was **deleted outright** from `pack-mirror-gl.ts` (not moved to `test-support`, no stub). No revert row referenced it. Pack-mirror tests use production types only (`PackMirrorRegistry`, `PackTexturePresenter`, `renderPrimary` / lifecycle paths). `pack-mirror-quadrant-fixture.ts` was also removed (unused). Graphics-context / sandbox readback harness work stays out of #86 until Andrew’s design lands.
