@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice types > type row status action plus autoClearMs stays a compile error",
+  "description": "Revert production guard (row-21-type-status-action-autoclear)",
+  "red": "typecheck/wall-notice-region.typecheck.ts(6,3): error TS2578: Unused '@ts-expect-error' directive."
+}

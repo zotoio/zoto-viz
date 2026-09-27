@@ -1,5 +1,5 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 90ab87c..5679f88 100644
+index 90ab87c..185541e 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
 @@ -1,39 +1,21 @@
@@ -40,20 +40,15 @@ index 90ab87c..5679f88 100644
 -
  export type WallNoticeArgs =
    | { key: StatusKey; text: string; action?: undefined; autoClearMs?: number }
-   | { key: NoticeKey; text: string; action?: NoticeAction; autoClearMs?: undefined };
+-  | { key: NoticeKey; text: string; action?: NoticeAction; autoClearMs?: undefined };
++  | { key: NoticeKey; text: string; action?: NoticeAction; autoClearMs?: number };
  
  const MAX_VISIBLE = 3;
 -
  type Entry = {
    key: NoticeKey;
    text: string;
-@@ -44,12 +26,11 @@ type Entry = {
-   isError: boolean;
- };
- 
--let deferRegionUntilPost = false;
-+let deferRegionUntilPost = true;
- let regionNode: HTMLElement | null = null;
+@@ -49,7 +31,6 @@ let regionNode: HTMLElement | null = null;
  let mountRoot: HTMLElement | null = null;
  let statusContainer: HTMLElement | null = null;
  let alertContainer: HTMLElement | null = null;

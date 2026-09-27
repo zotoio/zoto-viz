@@ -1,5 +1,5 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 90ab87c..5679f88 100644
+index 90ab87c..3b448e8 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
 @@ -1,39 +1,21 @@
@@ -47,13 +47,7 @@ index 90ab87c..5679f88 100644
  type Entry = {
    key: NoticeKey;
    text: string;
-@@ -44,12 +26,11 @@ type Entry = {
-   isError: boolean;
- };
- 
--let deferRegionUntilPost = false;
-+let deferRegionUntilPost = true;
- let regionNode: HTMLElement | null = null;
+@@ -49,7 +31,6 @@ let regionNode: HTMLElement | null = null;
  let mountRoot: HTMLElement | null = null;
  let statusContainer: HTMLElement | null = null;
  let alertContainer: HTMLElement | null = null;
@@ -138,3 +132,14 @@ index 90ab87c..5679f88 100644
  export function postWallNotice(args: WallNoticeArgs): { dismiss: () => void } {
    deferRegionUntilPost = false;
    if (!regionNode) {
+@@ -194,6 +164,10 @@ export function postWallNotice(args: WallNoticeArgs): { dismiss: () => void } {
+     live.autoClearMs = autoClearMs;
+     writeRowContent(live);
+     if (textChanged) armNoticeTimer(live);
++    if (visible.length >= MAX_VISIBLE && visible.every((x) => x.isError) && isErrorKey(key)) {
++      queue.set(key, live);
++      syncQueueCount();
++    }
+     return { dismiss: () => dismissEntry(live) };
+   }
+   const queued = queue.get(key);

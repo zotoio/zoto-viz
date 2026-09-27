@@ -1,5 +1,5 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 90ab87c..5679f88 100644
+index 90ab87c..8b71279 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
 @@ -1,39 +1,21 @@
@@ -47,13 +47,7 @@ index 90ab87c..5679f88 100644
  type Entry = {
    key: NoticeKey;
    text: string;
-@@ -44,12 +26,11 @@ type Entry = {
-   isError: boolean;
- };
- 
--let deferRegionUntilPost = false;
-+let deferRegionUntilPost = true;
- let regionNode: HTMLElement | null = null;
+@@ -49,7 +31,6 @@ let regionNode: HTMLElement | null = null;
  let mountRoot: HTMLElement | null = null;
  let statusContainer: HTMLElement | null = null;
  let alertContainer: HTMLElement | null = null;
@@ -114,15 +108,21 @@ index 90ab87c..5679f88 100644
  function evictOldestNonError(): boolean {
    for (const e of visible) {
      if (!e.isError) {
-@@ -133,7 +106,6 @@ function evictOldestNonError(): boolean {
+@@ -133,10 +106,10 @@ function evictOldestNonError(): boolean {
    }
    return false;
  }
 -
  function dismissEntry(e: Entry): void {
-   if (keyToLive.get(e.key) === e) {
-     removeLiveNotice(e);
-@@ -150,7 +122,6 @@ function dismissEntry(e: Entry): void {
+-  if (keyToLive.get(e.key) === e) {
+-    removeLiveNotice(e);
++  const cur = keyToLive.get(e.key);
++  if (cur) {
++    removeLiveNotice(cur);
+     if (queue.size > 0) {
+       const next = queue.values().next().value as Entry;
+       queue.delete(next.key);
+@@ -150,7 +123,6 @@ function dismissEntry(e: Entry): void {
      syncQueueCount();
    }
  }
@@ -130,7 +130,7 @@ index 90ab87c..5679f88 100644
  /** Status notices stack above error notices. Within each group, the newest is at the bottom. */
  export function mountWallNoticeRegion(root: HTMLElement): void {
    if (deferRegionUntilPost) return;
-@@ -178,7 +149,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+@@ -178,7 +150,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
    regionNode.append(statusContainer, alertContainer);
    root.appendChild(regionNode);
  }

@@ -1,5 +1,5 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 90ab87c..5679f88 100644
+index 90ab87c..c204bb5 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
 @@ -1,39 +1,21 @@
@@ -47,13 +47,7 @@ index 90ab87c..5679f88 100644
  type Entry = {
    key: NoticeKey;
    text: string;
-@@ -44,12 +26,11 @@ type Entry = {
-   isError: boolean;
- };
- 
--let deferRegionUntilPost = false;
-+let deferRegionUntilPost = true;
- let regionNode: HTMLElement | null = null;
+@@ -49,7 +31,6 @@ let regionNode: HTMLElement | null = null;
  let mountRoot: HTMLElement | null = null;
  let statusContainer: HTMLElement | null = null;
  let alertContainer: HTMLElement | null = null;
@@ -130,8 +124,12 @@ index 90ab87c..5679f88 100644
  /** Status notices stack above error notices. Within each group, the newest is at the bottom. */
  export function mountWallNoticeRegion(root: HTMLElement): void {
    if (deferRegionUntilPost) return;
-@@ -178,7 +149,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
-   regionNode.append(statusContainer, alertContainer);
+@@ -175,10 +146,9 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+   alertContainer = document.createElement("div");
+   alertContainer.className = "wall-notice-alert";
+   alertContainer.setAttribute("role", "alert");
+-  regionNode.append(statusContainer, alertContainer);
++  regionNode.append(alertContainer, statusContainer);
    root.appendChild(regionNode);
  }
 -

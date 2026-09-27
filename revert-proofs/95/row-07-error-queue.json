@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > error queue > queues held error notices and promotes one on dismiss",
+  "testName": "wall notice queue > R7 a held install-failed posted 600 times is queued once",
   "description": "Revert production guard (row-07-error-queue)",
   "red": "AssertionError: expected '600' to be '1' // Object.is equality"
 }

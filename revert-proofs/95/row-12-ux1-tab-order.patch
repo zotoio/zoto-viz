@@ -1,5 +1,5 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 90ab87c..5679f88 100644
+index 90ab87c..ba30ed4 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
 @@ -1,39 +1,21 @@
@@ -47,13 +47,7 @@ index 90ab87c..5679f88 100644
  type Entry = {
    key: NoticeKey;
    text: string;
-@@ -44,12 +26,11 @@ type Entry = {
-   isError: boolean;
- };
- 
--let deferRegionUntilPost = false;
-+let deferRegionUntilPost = true;
- let regionNode: HTMLElement | null = null;
+@@ -49,7 +31,6 @@ let regionNode: HTMLElement | null = null;
  let mountRoot: HTMLElement | null = null;
  let statusContainer: HTMLElement | null = null;
  let alertContainer: HTMLElement | null = null;
@@ -90,7 +84,13 @@ index 90ab87c..5679f88 100644
  function writeRowContent(e: Entry): void {
    const node = e.node!;
    let span = node.querySelector<HTMLElement>(".wall-notice-text");
-@@ -100,7 +76,6 @@ function writeRowContent(e: Entry): void {
+@@ -95,12 +71,12 @@ function writeRowContent(e: Entry): void {
+       btn.type = "button";
+       btn.className = "wall-notice-action btn small";
+       btn.textContent = e.action.label;
++      btn.tabIndex = -1;
+       btn.addEventListener("click", (ev) => { ev.stopPropagation(); e.action?.onClick(); });
+       node.append(btn);
      } else if (existingBtn.textContent !== e.action.label) existingBtn.textContent = e.action.label;
    } else existingBtn?.remove();
  }
@@ -98,7 +98,7 @@ index 90ab87c..5679f88 100644
  function removeLiveNotice(e: Entry): void {
    clearNoticeTimer(e);
    if (e.node) {
-@@ -112,7 +87,6 @@ function removeLiveNotice(e: Entry): void {
+@@ -112,7 +88,6 @@ function removeLiveNotice(e: Entry): void {
    if (idx >= 0) visible.splice(idx, 1);
    if (keyToLive.get(e.key) === e) keyToLive.delete(e.key);
  }
@@ -106,7 +106,7 @@ index 90ab87c..5679f88 100644
  function insertVisible(e: Entry): void {
    e.node = document.createElement("div");
    e.node.className = "wall-notice-row";
-@@ -123,7 +97,6 @@ function insertVisible(e: Entry): void {
+@@ -123,7 +98,6 @@ function insertVisible(e: Entry): void {
    keyToLive.set(e.key, e);
    armNoticeTimer(e);
  }
@@ -114,7 +114,7 @@ index 90ab87c..5679f88 100644
  function evictOldestNonError(): boolean {
    for (const e of visible) {
      if (!e.isError) {
-@@ -133,7 +106,6 @@ function evictOldestNonError(): boolean {
+@@ -133,7 +107,6 @@ function evictOldestNonError(): boolean {
    }
    return false;
  }
@@ -122,7 +122,7 @@ index 90ab87c..5679f88 100644
  function dismissEntry(e: Entry): void {
    if (keyToLive.get(e.key) === e) {
      removeLiveNotice(e);
-@@ -150,7 +122,6 @@ function dismissEntry(e: Entry): void {
+@@ -150,7 +123,6 @@ function dismissEntry(e: Entry): void {
      syncQueueCount();
    }
  }
@@ -130,7 +130,7 @@ index 90ab87c..5679f88 100644
  /** Status notices stack above error notices. Within each group, the newest is at the bottom. */
  export function mountWallNoticeRegion(root: HTMLElement): void {
    if (deferRegionUntilPost) return;
-@@ -178,7 +149,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+@@ -178,7 +150,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
    regionNode.append(statusContainer, alertContainer);
    root.appendChild(regionNode);
  }

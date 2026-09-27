@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > region layout styles > uses fixed bottom-centre placement with a 480px max width",
+  "testName": "wall notice region > uses fixed bottom-centre placement with a 480px max width",
   "description": "Revert production guard (row-11-region-styles)",
   "red": "AssertionError: expected 'static' to be 'fixed' // Object.is equality"
 }
