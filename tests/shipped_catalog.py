@@ -49,6 +49,7 @@ PINNED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = (
     "rf-constellation",
     "rocket-car-soccer",
     "roto-proto",
+    "sandbox-fixture-multi",
     "services",
     "skyline",
     "sockets",
