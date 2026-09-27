@@ -85,45 +85,8 @@ export function applyPackModelBytes(state: PackModelSlotState, bytes: ArrayBuffe
   };
 }
 
-export type PackModelAssetRequest = { reqId: number; path: string };
-export type PackModelAssetResponse = { reqId: number; ok: boolean; bytes?: ArrayBuffer };
-
-let nextReqId = 1;
-
-/** Host bridge: request pack asset bytes (parent fetches; sandbox CSP has connect-src none). */
-export function requestPackModelAsset(
-  path: string,
-  onResult: (bytes: ArrayBuffer | null) => void,
-): () => void {
-  if (typeof window === "undefined" || !path.trim()) {
-    onResult(null);
-    return () => {};
-  }
-  const reqId = nextReqId++;
-  const origin = document.referrer ? new URL(document.referrer).origin : window.location.origin;
-  const handler = (ev: MessageEvent) => {
-    const d = ev.data as { source?: string; type?: string; payload?: PackModelAssetResponse } | undefined;
-    if (!d || d.source !== "zoto-viz-host" || d.type !== "packAsset") return;
-    if (d.payload?.reqId !== reqId) return;
-    window.removeEventListener("message", handler);
-    onResult(d.payload.ok && d.payload.bytes ? d.payload.bytes : null);
-  };
-  window.addEventListener("message", handler);
-  window.parent.postMessage(
-    {
-      source: "zoto-viz-plugin",
-      type: "fetchPackAsset",
-      payload: { reqId, path: path.replace(/^\/+/, "") } satisfies PackModelAssetRequest,
-    },
-    origin,
-  );
-  return () => window.removeEventListener("message", handler);
-}
-
 export class PackModelSlotController {
   private state: PackModelSlotState;
-  private cancelLoad: (() => void) | null = null;
-  private loadGeneration = 0;
 
   constructor(cfg?: Record<string, string | undefined> | null) {
     this.state = initialPackModelSlotState(cfg ?? {});
@@ -138,17 +101,7 @@ export class PackModelSlotController {
   }
 
   setConfig(cfg: Record<string, string | undefined> | null | undefined): void {
-    this.cancelLoad?.();
-    this.cancelLoad = null;
-    const nextPath = parsePackModelPath(cfg);
-    if (nextPath === this.state.path && (this.state.flags & PACK_MODEL_FLAG_LOADED)) return;
     this.state = initialPackModelSlotState(cfg);
-    if (!nextPath) return;
-    const gen = ++this.loadGeneration;
-    this.cancelLoad = requestPackModelAsset(nextPath, (bytes) => {
-      if (gen !== this.loadGeneration) return;
-      this.state = applyPackModelBytes(this.state, bytes);
-    });
   }
 
   /** Test hook — inject bytes without host fetch. */
@@ -156,8 +109,12 @@ export class PackModelSlotController {
     this.state = applyPackModelBytes(this.state, bytes);
   }
 
+  /** Host or pack bridge calls this when GLB bytes arrive (see fetchPackAsset on the host). */
+  noteAssetBytes(bytes: ArrayBuffer | null): void {
+    this.state = applyPackModelBytes(this.state, bytes);
+  }
+
   dispose(): void {
-    this.cancelLoad?.();
-    this.cancelLoad = null;
+    /* no async handles */
   }
 }
