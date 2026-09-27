@@ -36,28 +36,9 @@ export default defineConfig({
   assetsInclude: ["**/*.wasm", "**/*.glsl"],
   build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
   test: {
-    projects: [
-      {
-        extends: true,
-        test: {
-          name: "unit",
-          environment: "happy-dom",
-          setupFiles: ["src/test/setup.ts"],
-          include: ["src/**/*.test.ts"],
-          exclude: ["src/plugins/nixie-local-wall-tz-sydney.test.ts"],
-        },
-      },
-      {
-        extends: true,
-        test: {
-          name: "tz-sydney",
-          include: ["src/plugins/nixie-local-wall-tz-sydney.test.ts"],
-          environment: "node",
-          pool: "forks",
-          env: { TZ: "Australia/Sydney" },
-        },
-      },
-    ],
+    environment: "happy-dom",
+    setupFiles: ["src/test/setup.ts"],
+    include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary"],

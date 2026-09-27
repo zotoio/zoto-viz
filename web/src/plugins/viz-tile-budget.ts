@@ -322,45 +322,6 @@ export function resetVizTileBudgetLifecycle(): void {
   vizTileBudgetLifecycle.released = 0;
 }
 
-function copyHudRingFromPrimary(primary: VizTileBudgetStats, tile: VizTileBudgetStats): void {
-  tile.hudRingCount = primary.hudRingCount;
-  tile.hudRingNext = primary.hudRingNext;
-  for (let i = 0; i < VIZ_HUD_SAMPLE_CAP; i++) {
-    const ps = primary.hudRing[i]!;
-    const ts = tile.hudRing[i]!;
-    ts.tick = ps.tick;
-    ts.kind = ps.kind;
-    if (ps.costTicks !== undefined) ts.costTicks = ps.costTicks;
-    else delete ts.costTicks;
-  }
-}
-
-/**
- * Mosaic wall: one primary deliver drives cadence; sibling tiles share the same
- * delivered/skipped/HUD stats so per-tile chrome and frame counters stay aligned.
- */
-export function mirrorMosaicTileCadenceFromPrimary(
-  primaryId: string,
-  scopeTileIds: readonly string[],
-): void {
-  if (scopeTileIds.length <= 1) return;
-  const primary = vizTileBudgetRegistry.getTile(primaryId);
-  for (const id of scopeTileIds) {
-    if (id === primaryId) continue;
-    const t = vizTileBudgetRegistry.getTile(id);
-    t.debt = primary.debt;
-    t.cadenceK = primary.cadenceK;
-    t.deliverAttempt = primary.deliverAttempt;
-    t.skipped = primary.skipped;
-    t.delivered = primary.delivered;
-    t.shareLimitedSkips = primary.shareLimitedSkips;
-    t.shedding = primary.shedding;
-    t.lastDeliveredFrame = primary.lastDeliveredFrame;
-    t.lastBuildCostTicks = primary.lastBuildCostTicks;
-    copyHudRingFromPrimary(primary, t);
-  }
-}
-
 /** Hook for mosaic teardown / plugin sandbox unload. */
 export function syncVizTileScope(activeTileIds: readonly string[]): void {
   vizTileBudgetRegistry.syncScope(activeTileIds);

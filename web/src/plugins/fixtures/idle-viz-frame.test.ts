@@ -1,4 +1,3 @@
-import { monoMs } from "../../core/viz-time";
 import { describe, expect, it } from "vitest";
 import type { StateMsg } from "../../core/types";
 import { buildIdleVizFrame } from "./idle-viz-frame";
@@ -47,7 +46,7 @@ describe("mergeVizIdleFrame", () => {
   });
 
   it("prefers live packets over idle", () => {
-    const live = buildVizFrame(minimalState(), monoMs(0), 0);
+    const live = buildVizFrame(minimalState(), 0, 0);
     expect(live.packets.length).toBeGreaterThan(0);
     const merged = mergeVizIdleFrame(live, idle);
     expect(merged.packets[0]?.proto).toBe(live.packets[0]?.proto);

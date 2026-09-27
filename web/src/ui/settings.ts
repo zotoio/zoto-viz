@@ -135,6 +135,7 @@ export class Settings {
   }
 
   private mosaicBootRefusedTilesRaw: string | null = null;
+  private mosaicWallStatusEl: HTMLDivElement | null = null;
   private animUi: {
     follow: Toggle; cycle: Toggle; randomize: Toggle;
     skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider; skyAi: Slider;
@@ -270,6 +271,7 @@ export class Settings {
     this.pop.append(handle, this.nav, this.body);
     this.el.append(this.btn, this.pop);
     bindFloatPanel(this.pop, handle, "settings", { pin: () => this.pinFloat(), min: { w: 360, h: 280 } });
+    this.ensureMosaicWallStatusEl();
 
     const storePrefix = cfg.storePrefix;
     const rawTilesJson = localStorage.getItem(`${storePrefix}.anim.mosaicTiles`);
@@ -282,6 +284,7 @@ export class Settings {
       this.lastMosaicTileLimitMessage = boot.message ?? "";
       this.mosaicBootRefusedTilesRaw = rawTilesJson
         ?? (Array.isArray(rawTiles) && rawTiles.length ? JSON.stringify(rawTiles) : null);
+      this.renderMosaicWallStatus();
     }
     this.feed = loadFeed(cfg.storePrefix);
     this.chat = loadChat(cfg.storePrefix);
@@ -984,6 +987,7 @@ export class Settings {
       checked: !!this.anim.mosaicSharedTheme,
       onChange: (on) => { this.anim.mosaicSharedTheme = on; this.persistAnim(); },
     });
+    const mosaicWallStatus = this.ensureMosaicWallStatusEl();
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
     mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
@@ -992,6 +996,7 @@ export class Settings {
     mosaicBtns.append(resetBtn, equalBtn);
     const mosaicBits = document.createElement("div");
     mosaicBits.className = "look-stack";
+    this.el.prepend(mosaicWallStatus);
     mosaicBits.append(
       labeled("views", mosaic.el),
       labeled("hero", hero.el),
@@ -1745,6 +1750,7 @@ export class Settings {
           countMosaicTiles(candidate),
           VIZ_MAX_ACTIVE_TILES,
         );
+      this.renderMosaicWallStatus();
       return;
     }
     if (!this.mosaicBootRefusedTilesRaw) {
@@ -1758,6 +1764,7 @@ export class Settings {
         this.lastMosaicTileLimitMessage = mosaicWallLayoutBootRefusedMessage(0, VIZ_MAX_ACTIVE_TILES);
       }
     }
+    this.renderMosaicWallStatus();
     this.anim = anim;
     this.syncAnimUi();
     this.syncTheme();
@@ -1771,6 +1778,26 @@ export class Settings {
       `${this.cfg.storePrefix}.anim.mosaicTiles`,
       this.mosaicBootRefusedTilesRaw,
     );
+  }
+
+  private ensureMosaicWallStatusEl(): HTMLDivElement {
+    if (this.mosaicWallStatusEl) return this.mosaicWallStatusEl;
+    const mosaicWallStatus = document.createElement("div");
+    mosaicWallStatus.className = "mosaic-wall-status sec-hint";
+    mosaicWallStatus.dataset.testid = "mosaic-wall-status";
+    mosaicWallStatus.hidden = true;
+    this.mosaicWallStatusEl = mosaicWallStatus;
+    this.el.prepend(mosaicWallStatus);
+    return mosaicWallStatus;
+  }
+
+  /** Persist a live drag / close / max without resetting the tree. */
+  private renderMosaicWallStatus(): void {
+    const el = this.ensureMosaicWallStatusEl();
+    const msg = this.lastMosaicTileLimitMessage.trim();
+    el.textContent = msg;
+    el.hidden = !msg;
+    el.classList.remove("fail", "viz-hud-skip-fail");
   }
 
   applyMosaicLayout(patch: {

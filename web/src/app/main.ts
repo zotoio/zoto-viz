@@ -81,11 +81,7 @@ import {
 } from "../plugins/typesafe-host";
 import { mainVizDeliver, mainVizBuildFrame } from "./viz-main-deliver";
 import { runPackFrameHandler, syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
-import {
-  mirrorMosaicTileCadenceFromPrimary,
-  syncVizTileScope,
-  vizTileBudgetRegistry,
-} from "../plugins/viz-tile-budget";
+import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -1053,7 +1049,12 @@ function feed(m: StateMsg): void {
     vizFrameClockMs = delivered.nextClockMs;
     const frame = delivered.frame;
     if (mosaic?.on && scopeTileIds.length > 1) {
-      mirrorMosaicTileCadenceFromPrimary(primaryTileId, scopeTileIds);
+      const primaryTile = vizTileBudgetRegistry.getTile(primaryTileId);
+      for (const id of scopeTileIds) {
+        const t = vizTileBudgetRegistry.getTile(id);
+        t.shedding = primaryTile.shedding;
+        if (frame) t.lastDeliveredFrame = frame;
+      }
     }
     if (frame) {
       if (packId === "hn-rain" || packId === "hn-term") {

@@ -1,7 +1,3 @@
-node_modules/.modules.yaml
-node_modules/.pnpm-workspace-state-v1.json
-node_modules/.pnpm-task-run-state-v1/
-.pnpm-workspace-state-v1.json
 .env
 .env.*
 !.env.example
