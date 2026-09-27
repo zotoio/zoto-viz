@@ -1,12 +1,29 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 78e96b2f..21e9a346 100644
+index 1c321c7e..2437bbe2 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -298,7 +298,6 @@ function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
+@@ -287,24 +287,16 @@ function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
+   const wants = [
+     host.audio ? "the microphone (watchword listening and the pulse)" : "",
+     host.video ? "the camera (live sky, gaze, live colour)" : "",
+   ].filter(Boolean);
+   host.title.textContent = host.audio && host.video
+     ? "Allow microphone and camera"
+     : host.video ? "Allow the camera" : "Allow the microphone";
    host.body.replaceChildren();
-   const p1 = document.createElement("p");
-   p1.textContent = `This window needs ${wants.join(" and ")}. The OS microphone light stays off until you accept.`;
+-  const p1 = document.createElement("p");
+-  p1.textContent = `This window needs ${wants.join(" and ")}. The OS microphone light stays off until you accept.`;
 -  const p2 = document.createElement("p");
-   p2.className = "muted";
-   p2.textContent = embeddedShell()
-     ? "This embedded browser cannot show the usual listening / camera prompt. Allow here is the accept. If nothing happens, open the monitor in Chromium on localhost."
+-  p2.className = "muted";
+-  p2.textContent = embeddedShell()
+-    ? "This embedded browser cannot show the usual listening / camera prompt. Allow here is the accept. If nothing happens, open the monitor in Chromium on localhost."
+-    : "Allow opens the browser permission dialog when this window has one. If that dialog never appears, open the monitor in Chromium on localhost.";
+-  host.body.append(p1, p2);
+   if (extra) {
+     const p3 = document.createElement("p");
+     p3.className = "muted";
+     p3.textContent = extra;
+     host.body.append(p3);
+   }
+ }
+

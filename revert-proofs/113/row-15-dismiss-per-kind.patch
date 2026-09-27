@@ -2,7 +2,12 @@ diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
 index 1c321c7e..9a877c9a 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -26,24 +26,17 @@ const dismissed: Record<MediaAskKind, boolean> = { mic: false, cam: false };
+@@ -21,34 +21,27 @@ type Waiter = {
+ const ACCEPT_KEY = "zoto-viz.mediaAccept";
+ const DISMISS_KEY = "zoto-viz.mediaDismiss";
+ 
+ const granted: Record<MediaAskKind, boolean> = { mic: false, cam: false };
+ const dismissed: Record<MediaAskKind, boolean> = { mic: false, cam: false };
  
  function loadDismissed(): void {
    try {
@@ -33,3 +38,9 @@ index 1c321c7e..9a877c9a 100644
    } catch { /* ignore */ }
  }
  
+ loadDismissed();
+ 
+ function readAccept(): Record<MediaAskKind, boolean> {
+   try {
+     const raw = localStorage.getItem(ACCEPT_KEY);
+

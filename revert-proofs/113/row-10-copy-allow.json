@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/ui/media-ask-focus.test.ts",
-  "testName": "media ask focus dialog > pins the Allow button label",
+  "testName": "pins the Allow button label",
   "description": "Revert production guard (row-10-copy-allow)",
   "red": "AssertionError: expected '' to be 'Allow' // Object.is equality"
 }

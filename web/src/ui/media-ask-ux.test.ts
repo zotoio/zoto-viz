@@ -113,6 +113,7 @@ describe("media ask UX", () => {
     await waitForDialog();
     const dialog = document.querySelector<HTMLDialogElement>("[data-media-ask]")!;
     dialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(dialog.open).toBe(false);
     await expect(pending).resolves.toBeNull();
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(dialog.returnValue).toBe("not-now");

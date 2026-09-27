@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/ui/media-ask-dismiss-storage.test.ts",
-  "testName": "media ask dismiss sessionStorage > persists mic dismiss so a reload does not reopen the dialog",
+  "testName": "persists mic dismiss so a reload does not reopen the dialog",
   "description": "Revert production guard (row-13-dismiss-persist-reload)",
   "red": "AssertionError: expected null to be '{\"mic\":true}' // Object.is equality"
 }

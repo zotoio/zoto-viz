@@ -1,12 +1,23 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 78e96b2f..1f79e507 100644
+index 1c321c7e..740b7fe5 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -346,7 +346,6 @@ function openMediaAsk(waiters: Waiter[]): void {
+@@ -337,17 +337,17 @@ function openMediaAsk(waiters: Waiter[]): void {
+   head.appendChild(title);
+   const body = document.createElement("div");
+   body.className = "ask-body";
+   const row = document.createElement("div");
+   row.className = "ask-actions";
    const cancel = document.createElement("button");
    cancel.type = "button";
    cancel.className = "btn";
 -  cancel.textContent = "Not now";
++  cancel.textContent = "";
    const allow = document.createElement("button");
    allow.type = "button";
    allow.className = "btn primary";
+   allow.textContent = "Allow";
+   row.append(cancel, allow);
+   sheet.append(head, body, row);
+   modal.append(sheet);
+

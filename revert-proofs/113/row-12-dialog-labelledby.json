@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/ui/media-ask-focus.test.ts",
-  "testName": "media ask focus dialog > uses a native dialog labelled by the heading",
+  "testName": "uses a native dialog labelled by the heading",
   "description": "Revert production guard (row-12-dialog-labelledby)",
   "red": "AssertionError: expected null to be 'media-ask-title' // Object.is equality"
 }

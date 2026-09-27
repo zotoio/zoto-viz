@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/ui/media-ask-dismiss-storage.test.ts",
-  "testName": "media ask dismiss sessionStorage > keeps camera ask available after mic dismiss across a reload",
+  "testName": "keeps camera ask available after mic dismiss across a reload",
   "description": "Revert production guard (row-15-dismiss-per-kind)",
   "red": "AssertionError: expected false to be true // Object.is equality"
 }

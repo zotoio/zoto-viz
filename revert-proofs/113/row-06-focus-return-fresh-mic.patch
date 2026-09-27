@@ -1,8 +1,13 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 78e96b2f..3023ffd3 100644
+index 1c321c7e..fb0fc8c0 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -216,7 +216,6 @@ function captureOne(constraints: MediaStreamConstraints): Promise<MediaStream |
+@@ -218,17 +218,16 @@ function captureOne(constraints: MediaStreamConstraints): Promise<MediaStream |
+       resolve(null);
+     });
+   });
+ }
+ 
  function detachMediaAsk(host: MediaAskHost): void {
    document.body.classList.remove("modal-open");
    host.modal.remove();
@@ -10,3 +15,9 @@ index 78e96b2f..3023ffd3 100644
  }
  
  function recordDismiss(host: Pick<MediaAskHost, "audio" | "video">, kind: "dismiss" | "blocked" | "stuck"): void {
+   if (host.audio) {
+     if (kind === "dismiss") dismissed.mic = true;
+     granted.mic = false;
+   }
+   if (host.video) {
+

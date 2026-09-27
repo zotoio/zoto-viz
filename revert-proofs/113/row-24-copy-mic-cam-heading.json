@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-ux.test.ts",
+  "testName": "pins the combined microphone and camera heading copy byte-for-byte",
+  "description": "Revert production guard (row-24-copy-mic-cam-heading)",
+  "red": "AssertionError: expected 'Allow microphone and camera (wrong)' to be 'Allow microphone and camera' // Object.is equality"
+}

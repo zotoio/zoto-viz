@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-ux.test.ts",
+  "testName": "records dismiss once when Not now closes the dialog",
+  "description": "Revert production guard (row-21-single-dismiss-persist)",
+  "red": "AssertionError: expected [] to have a length of 1 but got +0"
+}

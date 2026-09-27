@@ -1,13 +1,22 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 78e96b2f..c61946c1 100644
+index 1c321c7e..ab57a82f 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -328,7 +328,7 @@ function mergeOpen(waiters: Waiter[]): void {
+@@ -377,17 +377,16 @@ function openMediaAsk(waiters: Waiter[]): void {
+       modal.close("blocked");
+       return;
+     }
+     modal.close("allow");
+   });
  
- function openMediaAsk(waiters: Waiter[]): void {
-   const previousFocus = capturePreviousFocus();
--  const modal = document.createElement("dialog");
-+  const modal = document.createElement("div");
-   modal.className = "modal ask";
-   modal.setAttribute("data-media-ask", "1");
-   modal.setAttribute("aria-labelledby", MEDIA_ASK_TITLE_ID);
+   document.body.classList.add("modal-open");
+   document.body.appendChild(modal);
+-  modal.showModal();
+   allow.focus();
+ }
+ 
+ async function flush(): Promise<void> {
+   const batch = queue;
+   queue = [];
+   if (!batch.length) return;
+

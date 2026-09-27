@@ -1,8 +1,13 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 78e96b2f..15a4eb4b 100644
+index 1c321c7e..1160715e 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -331,7 +331,6 @@ function openMediaAsk(waiters: Waiter[]): void {
+@@ -322,17 +322,16 @@ function mergeOpen(waiters: Waiter[]): void {
+   paintCopy(open);
+ }
+ 
+ function openMediaAsk(waiters: Waiter[]): void {
+   const previousFocus = capturePreviousFocus();
    const modal = document.createElement("dialog");
    modal.className = "modal ask";
    modal.setAttribute("data-media-ask", "1");
@@ -10,3 +15,9 @@ index 78e96b2f..15a4eb4b 100644
    const sheet = document.createElement("div");
    sheet.className = "sheet";
    const head = document.createElement("div");
+   head.className = "mhead";
+   const title = document.createElement("strong");
+   title.id = MEDIA_ASK_TITLE_ID;
+   head.appendChild(title);
+   const body = document.createElement("div");
+

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-ux.test.ts",
+  "testName": "focuses Allow immediately when the dialog opens",
+  "description": "Revert production guard (row-22-initial-focus-allow)",
+  "red": "AssertionError: expected <body class=\"modal-open\">…(1)</body> to be <button type=\"button\" …(1)></button> // Object.is equality"
+}

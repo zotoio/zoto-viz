@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "web/src/ui/media-ask-focus.test.ts",
-  "testName": "media ask focus dialog > returns focus to the element that had it before open when still connected",
+  "testName": "returns focus to the element that had it before open when still connected",
   "description": "Revert production guard (row-07-focus-return-prior)",
   "red": "AssertionError: expected 'mic' to be 'prior' // Object.is equality"
 }
