@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 1e33abf..d061339 100644
+index 04ba3ef..7bee720 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -269,8 +269,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+@@ -271,8 +271,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
          return _host_reject_response()
  
      if not _lookup_allowed(request.app, key):
