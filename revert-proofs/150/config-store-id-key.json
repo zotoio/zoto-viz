@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/plugin-sandbox-config-push.test.ts",
+  "testName": "plugin sandbox config push (production route) > two instances: editing A posts once to A and never to B",
+  "description": "Revert config store id keying (restore pack-id sandbox post gate)",
+  "red": "PLACEHOLDER"
+}

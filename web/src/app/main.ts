@@ -115,6 +115,7 @@ import {
 import {
   mayPushSandboxOnPluginFields,
   routePluginChangeSandboxPush,
+  sandboxConfigPostMatchesLoaded,
   sandboxLoadedConfigStoreId,
   type PendingSandboxConfigPush,
 } from "./plugin-sandbox-config-push-route";
@@ -716,7 +717,7 @@ function sandboxPluginConfig(spec: PluginView): Record<string, string> {
 
 const sandboxConfigBatcher = new SandboxConfigBatcher(
   (storeId, config) => {
-    if (storeId === tsWatchStoreId) sandbox.setConfig(config);
+    if (sandboxConfigPostMatchesLoaded(storeId, tsWatchStoreId)) sandbox.setConfig(config);
   },
   (cb) => requestAnimationFrame(cb),
   (id) => cancelAnimationFrame(id),

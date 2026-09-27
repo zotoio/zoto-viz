@@ -39,6 +39,14 @@ export function mayPushSandboxOnPluginFields(
 
 export type PendingSandboxConfigPush = { storeId: string; config: Record<string, string> };
 
+/** main.ts SandboxConfigBatcher onPost — only the loaded config store receives config. */
+export function sandboxConfigPostMatchesLoaded(
+  scheduledStoreId: string,
+  tsWatchStoreId: string,
+): boolean {
+  return scheduledStoreId === tsWatchStoreId;
+}
+
 /** main.ts maybePushSandboxForStore — schedule or defer until the matching store loads. */
 export function routePluginChangeSandboxPush(
   loadedStoreId: string | null,

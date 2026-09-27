@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/plugin-config-sync.ts b/web/src/plugins/plugin-config-sync.ts
+--- a/web/src/plugins/plugin-config-sync.ts
++++ b/web/src/plugins/plugin-config-sync.ts
+@@ -10,7 +10,6 @@ export function allowOnPluginChangeConfigPush(
+   editStoreId: string,
+   hasConfigRead: boolean,
+ ): boolean {
+-  if (!hasConfigRead) return false;
+   return sandboxConfigPushAllowed(loadedConfigStoreId, editStoreId);
+ }
+ 

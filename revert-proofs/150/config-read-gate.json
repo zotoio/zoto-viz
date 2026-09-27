@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/app/plugin-sandbox-config-push.test.ts",
+  "testName": "plugin sandbox config push (production route) > pack without config.read posts nothing on change or fields refresh",
+  "description": "Revert config.read gate on onPluginChange sandbox push",
+  "red": "PLACEHOLDER"
+}

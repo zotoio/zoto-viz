@@ -1,0 +1,12 @@
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -717,7 +717,7 @@ function sandboxPluginConfig(spec: PluginView): Record<string, string> {
+ 
+ const sandboxConfigBatcher = new SandboxConfigBatcher(
+   (storeId, config) => {
+-    if (storeId === tsWatchStoreId) sandbox.setConfig(config);
++    if (storeId === tsWatchId || storeId.startsWith(`${tsWatchId}:`)) sandbox.setConfig(config);
+   },
+   (cb) => requestAnimationFrame(cb),
+   (id) => cancelAnimationFrame(id),

@@ -6,6 +6,7 @@ import {
   mayPushSandboxOnPluginChange,
   mayPushSandboxOnPluginFields,
   routePluginChangeSandboxPush,
+  sandboxConfigPostMatchesLoaded,
   sandboxLoadedConfigStoreId,
 } from "./plugin-sandbox-config-push-route";
 
@@ -74,7 +75,7 @@ function makeBatcher(
 ): (storeId: string, config: Record<string, string>) => void {
   const batcher = new SandboxConfigBatcher(
     (storeId, config) => {
-      if (storeId === tsWatchStoreId) box.setConfig(config);
+      if (sandboxConfigPostMatchesLoaded(storeId, tsWatchStoreId)) box.setConfig(config);
     },
     (cb) => {
       cb();
@@ -116,6 +117,8 @@ describe("plugin sandbox config push (production route)", () => {
     tap.rehook();
     const schedule = makeBatcher(box, PACK);
 
+    expect(mayPushSandboxOnPluginChange(PACK, PACK, spec)).toBe(false);
+    expect(mayPushSandboxOnPluginFields(PACK, spec)).toBe(false);
     productionPushOnChange(PACK, spec, PACK, spec, { a: "2" }, schedule);
     productionPushOnFields(PACK, spec, spec, { a: "2" }, schedule);
     expect(tap.posted).toHaveLength(0);
