@@ -1,8 +1,8 @@
-diff --git a/web/src/plugins/sandbox-frame.ts b/web/src/plugins/sandbox-frame.ts.revert-patched
-index b28a8346..51ba1dbe 100644
+diff --git a/web/src/plugins/sandbox-frame.ts b/web/src/plugins/sandbox-frame.ts
+index a6ecd92e..95fd375e 100644
 --- a/web/src/plugins/sandbox-frame.ts
 +++ b/web/src/plugins/sandbox-frame.ts
-@@ -159,7 +159,6 @@ function postPluginWindow(
+@@ -168,7 +168,6 @@ function postPluginWindow(
  function send(runtime: SandboxFrameRuntime, type: string, payload?: unknown): void {
    if (runtime.pluginPort) {
      postPluginPort(runtime, { source: PLUGIN_SOURCE, type, payload });
