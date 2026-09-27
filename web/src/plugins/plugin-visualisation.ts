@@ -22,6 +22,9 @@ export const PLUGIN_ENGINES = [
   "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
 ] as const satisfies readonly PluginEngine[];
 
+/** Shipped host-mesh-demo menu engine (graph over topology base). */
+export const HOST_MESH_DEMO_VISUALISATION_ENGINE: PluginEngine = "graph";
+
 const ENGINE_SET = new Set<string>(PLUGIN_ENGINES);
 const BACKDROP_SET = new Set<string>(BACKDROP_OPTIONS.map((o) => o.value));
 const NODE_COLORS = new Set(["role", "kind", "heat", "proto", "hash"]);

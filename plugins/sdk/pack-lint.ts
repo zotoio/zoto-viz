@@ -16,7 +16,8 @@ import { violationKey } from "./pack-lint-types";
 import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowlist";
 import { INLINE_ZOTO_DECLARE_HINT, PACK_ZOTO_BINDING_HINT } from "./viz-zoto";
 
-export { StarterSim } from "./starter/frontend/sim";
+/** esbuild must keep this class name in the starter template bundle (CI starter-pack-ci). */
+export const STARTER_TEMPLATE_SIM_CLASS = "StarterSim";
 
 export {
   LEGACY_DECLARE_ZOTO_PACK_IDS,
