@@ -1,0 +1,19 @@
+diff --git a/service/pack_asset_frames.py b/service/pack_asset_frames.py
+index c2d4a714..22980fc7 100644
+--- a/service/pack_asset_frames.py
++++ b/service/pack_asset_frames.py
+@@ -26,13 +26,7 @@ class PackAssetFrameRegistry:
+         self._by_session[session_id][frame_id] = _FrameRow(registered_at=t)
+ 
+     def unregister(self, session_id: str, frame_id: str) -> None:
+-        if not session_id or not frame_id:
+-            return
+-        bucket = self._by_session.get(session_id)
+-        if bucket:
+-            bucket.pop(frame_id, None)
+-            if not bucket:
+-                self._by_session.pop(session_id, None)
++        return
+ 
+     def is_live(self, session_id: str, frame_id: str, *, now: float | None = None) -> bool:
+         if not session_id or not frame_id:

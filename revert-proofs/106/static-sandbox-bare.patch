@@ -1,0 +1,15 @@
+diff --git a/service/static_paths.py b/service/static_paths.py
+index 2919b292..255d7b3a 100644
+--- a/service/static_paths.py
++++ b/service/static_paths.py
+@@ -47,10 +47,6 @@ def static_path_allowed(request_path: str) -> bool:
+         return False
+     raw = request_path.split("?", 1)[0]
+     decoded = _decode_path(raw)
+-    if decoded != canon and raw != canon:
+-        return False
+-    if is_legacy_sandbox_request(request_path):
+-        return False
+     return True
+ 
+ 

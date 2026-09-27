@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access.py::test_sandbox_bootstrap_token_authorizes_pack_asset_paths",
+  "description": "Sandbox token authorizes module path for demo pack.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert False is True"
+}

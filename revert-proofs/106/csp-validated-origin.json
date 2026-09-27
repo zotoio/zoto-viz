@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_policy.py::test_lan_host_csp_uses_validated_origin_not_wildcard",
+  "red": "AssertionError: assert False is True",
+  "description": "Sandbox CSP must use validated Host origin, not bind address.",
+  "timeoutSec": 120
+}

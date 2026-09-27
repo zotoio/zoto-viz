@@ -1,0 +1,14 @@
+diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
+index 29c3ce77..8da7b14b 100644
+--- a/service/pack_asset_tokens.py
++++ b/service/pack_asset_tokens.py
+@@ -51,8 +51,7 @@ def parse_pack_asset_token(token: str) -> tuple[str, bytes] | None:
+     if "." not in token:
+         return None
+     frame_id, mac_b64 = token.rsplit(".", 1)
+-    if not _FRAME_ID_RE.fullmatch(frame_id):
+-        return None
++    pass
+     mac = _b64url_decode(mac_b64)
+     if mac is None:
+         return None

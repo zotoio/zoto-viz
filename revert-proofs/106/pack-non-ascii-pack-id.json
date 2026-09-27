@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_pack_asset_tokens.py::test_verify_rejects_non_ascii_pack_id",
+  "red": "AssertionError: assert not True",
+  "description": "verify_pack_asset_token must reject non-ASCII pack_id before HMAC.",
+  "timeoutSec": 120
+}

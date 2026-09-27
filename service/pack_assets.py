@@ -13,8 +13,12 @@ from aiohttp import web
 from . import access, plugins
 
 PACK_ID_SANDBOX = "_sandbox"
-_REPO = Path(__file__).resolve().parents[1]
-WEB_DIST = _REPO / "web" / "dist"
+
+
+def _web_dist() -> Path:
+    from . import monitor
+
+    return monitor.WEB_DIST
 _FRONTEND_ONLY = frozenset({".js", ".mjs", ".json", ".css", ".wasm", ".map", ".txt", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2"})
 _BLOCKED_BASENAMES = frozenset({"plugin.yml", "plugin.yaml", "service.py"})
 _BACKEND_MARKERS = frozenset({"backend", "service", "collector", "datasource"})
@@ -90,6 +94,10 @@ def _pack_id_ok(pack_id: str) -> bool:
     if ".." in pack_id or "/" in pack_id or "\\" in pack_id:
         return False
     if pack_id.startswith("."):
+        return False
+    try:
+        pack_id.encode("ascii")
+    except UnicodeEncodeError:
         return False
     return True
 
@@ -216,12 +224,11 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
     parsed = access.parse_pack_assets_path(request.path or "")
     if not parsed:
         return _pack_not_found()
-    if not access.pack_asset_token_ok(request):
-        return _pack_token_invalid()
-
     _token, pack_id, raw_tail = parsed
     if not _pack_id_ok(pack_id):
         return _pack_not_found()
+    if not access.pack_asset_token_ok(request):
+        return _pack_token_invalid()
     if _tail_forbidden_path(raw_tail):
         return _pack_path_forbidden()
     tail = _normalize_tail(raw_tail)
@@ -233,7 +240,7 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
             return _pack_not_found()
         if tail == "plugin-sandbox.html":
             return await _sandbox_html(request, _token)
-        asset = WEB_DIST / "assets" / tail
+        asset = _web_dist() / "assets" / tail
         if not asset.is_file():
             return _pack_not_found()
         body = asset.read_bytes()
@@ -283,7 +290,7 @@ def _rewrite_sandbox_html(body: str, token: str) -> str:
 
 
 async def _sandbox_html(request: web.Request, token: str) -> web.Response:
-    path = WEB_DIST / "plugin-sandbox.html"
+    path = _web_dist() / "plugin-sandbox.html"
     if not path.is_file():
         return web.Response(status=404, text="plugin-sandbox.html missing (run pnpm build)")
     body = _rewrite_sandbox_html(path.read_text(encoding="utf-8"), token)

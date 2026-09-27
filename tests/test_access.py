@@ -3,9 +3,10 @@ from __future__ import annotations
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from service import access, request_guard
+from service import access, pack_asset_frames, request_guard
 from service.forensics import location_allowed
 from service.request_guard import HOST_REJECT_BODY
+from tests.pack_asset_test_util import DEFAULT_FRAME, SECRET, SESSION, mint
 
 
 def test_bind_is_loopback() -> None:
@@ -17,6 +18,22 @@ def test_bind_is_loopback() -> None:
     assert not access.bind_is_loopback("192.168.1.5")
     assert not access.bind_is_loopback("nope")
     assert access.new_token()
+    secret = access.new_pack_asset_secret()
+    assert len(secret) >= 16
+    sat = mint("pulse-ts")
+    url = access.pack_asset_url(sat, "pulse-ts", "module.js")
+    assert url.startswith("/pack-assets/")
+    assert sat in url
+    assert "?" not in url
+
+
+def test_sandbox_bootstrap_token_authorizes_pack_asset_paths() -> None:
+    """CSP only allows the ``_sandbox`` token prefix; pack modules use that same token."""
+    tok = mint("_sandbox")
+    path = access.pack_asset_url(tok, "demo-pack", "module.js")
+    req = FakeReq(path=path, header=SESSION, csrf=SESSION)
+    assert access.pack_asset_token_ok(req) is True
+    assert not access.pack_asset_token_ok(FakeReq(path=path, header="other-session", csrf="other-session"))
 
 
 def test_header_hostname() -> None:
@@ -43,9 +60,24 @@ def test_location_allowed() -> None:
 
 
 class FakeReq:
-    def __init__(self, *, method="GET", host="127.0.0.1:7020", origin="", cookie="", header="", lan=False, csrf="tok"):
+    def __init__(
+        self,
+        *,
+        method="GET",
+        host="127.0.0.1:7020",
+        origin="",
+        cookie="",
+        header="",
+        lan=False,
+        csrf="tok",
+        pack_asset_secret=SECRET,
+        path="/poke",
+        query=None,
+    ):
         self.method = method
-        self.path_qs = "/poke"
+        self.path = path
+        self.path_qs = path
+        self.query = query or {}
         self.headers = {}
         if host:
             self.headers["Host"] = host
@@ -54,13 +86,30 @@ class FakeReq:
         if header:
             self.headers[access.HEADER] = header
         self.cookies = {access.COOKIE: cookie} if cookie else {}
-        self.app = {"csrf": csrf, "insecure_lan": lan}
+        reg = pack_asset_frames.PackAssetFrameRegistry()
+        if pack_asset_secret:
+            reg.register(csrf or SESSION, DEFAULT_FRAME)
+        self.app = {
+            "csrf": csrf,
+            "insecure_lan": lan,
+            "pack_asset_secret": pack_asset_secret,
+            "pack_asset_frame_registry": reg,
+        }
 
 
 def test_host_origin_csrf_helpers() -> None:
     assert access.origin_ok(FakeReq(origin=""))
     assert access.origin_ok(FakeReq(origin="http://127.0.0.1:5173"))
     assert not access.origin_ok(FakeReq(origin="http://evil.example"))
+    assert not access.origin_ok(FakeReq(origin="null"))
+    assert not access.origin_ok(FakeReq(origin="null", path="/api/profiles"))
+    tok = mint("_sandbox")
+    assert access.origin_ok(FakeReq(
+        origin="null",
+        path=access.pack_asset_url(tok, "_sandbox", "plugin-sandbox.html"),
+        csrf=SESSION,
+    ))
+    assert access.parse_pack_assets_path("/pack-assets/tok/pid/module.js")
     assert access.origin_ok(FakeReq(host="lan.box:7020", origin="http://lan.box:7020", lan=True))
     assert not access.origin_ok(FakeReq(host="lan.box:7020", origin="http://other.box", lan=True))
     assert access.csrf_ok(FakeReq(cookie="tok", header="tok"))
@@ -89,6 +138,7 @@ class AccessMiddlewareTests(AioHTTPTestCase):
 
         app = web.Application(middlewares=[request_guard.middleware, access.middleware])
         app["csrf"] = "token-aaa"
+        app["pack_asset_secret"] = SECRET
         app["insecure_lan"] = False
         request_guard.register_response_prepare_hook(app)
         app.router.add_get("/ok", ok)
@@ -139,6 +189,13 @@ class AccessMiddlewareTests(AioHTTPTestCase):
         resp = await self.client.get(
             "/ok",
             headers={**self._host(), "Origin": "http://evil.example"},
+        )
+        assert resp.status == 403
+
+    async def test_null_origin_denied_on_profiles(self) -> None:
+        resp = await self.client.get(
+            "/ok",
+            headers={**self._host(), "Origin": "null"},
         )
         assert resp.status == 403
 

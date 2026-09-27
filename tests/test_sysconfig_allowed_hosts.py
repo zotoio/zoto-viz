@@ -95,9 +95,11 @@ def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
     assert run_app_calls[0]["shutdown_timeout"] == 3
 
 
-def test_api_docs_describe_loopback_host_allowlist_not_lan_scan() -> None:
+def test_api_docs_describe_bind_allowlist_branches() -> None:
     text = (REPO / "docs" / "api.md").read_text(encoding="utf-8")
-    assert "loopback names and addresses for the bound port" in text
+    assert "**Loopback bind**" in text
+    assert "**Wildcard bind**" in text
+    assert "**Specific non-loopback bind**" in text
     lan_scan_phrase = "all local interface addresses"
     if lan_scan_phrase in text:
         raise AssertionError(f"docs must not describe LAN scan as {lan_scan_phrase!r}")
@@ -110,8 +112,11 @@ def test_sysconfig_header_documents_allowed_hosts_key() -> None:
 
 
 def test_sysconfig_listen_opts_includes_allowed_hosts_without_listen_keys() -> None:
-    opts = sysconfig.listen_opts({"allowed_hosts": ["lan.example:8080"], "bind": "127.0.0.1", "port": 7020})
+    cfg = {"allowed_hosts": ["lan.example:8080"], "bind": "127.0.0.1", "port": 7020}
+    opts = sysconfig.listen_opts(cfg)
     assert opts["allowed_hosts"] == ["lan.example:8080"]
+    resolved = sysconfig.resolve_listen(cfg, bind="127.0.0.1", port=7020)
+    assert resolved["allowed_hosts"] == ["lan.example:8080"]
 
 
 def test_allowed_hosts_round_trips_through_dump_and_load(tmp_path) -> None:

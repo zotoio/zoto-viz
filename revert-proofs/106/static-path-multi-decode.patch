@@ -1,0 +1,19 @@
+diff --git a/service/static_paths.py b/service/static_paths.py
+index 2919b292..f3cc30ab 100644
+--- a/service/static_paths.py
++++ b/service/static_paths.py
+@@ -7,13 +7,7 @@ _LEGACY_SANDBOX = "plugin-sandbox.html"
+ 
+ 
+ def _decode_path(path: str) -> str:
+-    t = path
+-    for _ in range(6):
+-        prev = t
+-        t = unquote(t)
+-        if t == prev:
+-            break
+-    return t
++    return unquote(path)
+ 
+ 
+ def canonical_static_path(path: str) -> str | None:

@@ -1,0 +1,12 @@
+diff --git a/service/access.py b/service/access.py
+index f26adc6a..80c026ba 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -230,7 +230,6 @@ def csrf_ok(request: web.Request) -> bool:
+ 
+ def _deny(msg: str, status: int = 403) -> web.Response:
+     resp = web.json_response({"error": msg}, status=status)
+-    attach_pack_asset_json_headers(resp)
+     return resp
+ 
+ 

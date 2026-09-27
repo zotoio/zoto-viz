@@ -294,9 +294,19 @@ def compile_typescript(
     cached = _bundles.get(pid)
     if update_cache and cached and cached[2] == key:
         return {"hash": cached[0], "capabilities": caps, "bytes": len(cached[1]), "cached": True}
+    global _compile_runs, _bundle_invocations
+    fe = doc.get("frontend") if isinstance(doc.get("frontend"), dict) else {}
+    if fe.get("bundle") is False:
+        js = entry.read_bytes()
+        if len(js) > MAX_BUNDLE:
+            raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")
+        digest = hashlib.sha256(js).hexdigest()
+        _compile_runs += 1
+        if update_cache:
+            _bundles[pid] = (digest, js, key, entry, digest_src)
+        return {"hash": digest, "capabilities": caps, "bytes": len(js), "cached": False}
     if not _PACK_BUNDLE_SCRIPT.is_file():
         raise ValueError("pack bundle script missing (web/scripts/bundle-pack-entry.mjs)")
-    global _compile_runs, _bundle_invocations
     from . import cursor_agent
 
     home_resolved = home.resolve()
@@ -571,6 +581,17 @@ def _bundle_fresh(pid: str) -> tuple[str, bytes] | None:
 
 def api_module(req: web.Request) -> web.StreamResponse:
     pid = req.match_info["id"]
+    resp = module_response(pid)
+    if resp.status == 200:
+        digest = resp.headers.get("X-Zoto-Viz-Hash")
+        query = getattr(getattr(req, "rel_url", None), "query", None) or {}
+        want = query.get("h") or query.get("hash") if hasattr(query, "get") else None
+        if want and digest and want == digest:
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
+
+
+def module_response(pid: str) -> web.StreamResponse:
     got = _bundle_fresh(pid)
     if not got:
         scan()  # compile on demand from plugins/.runtime/<id>/frontend/
@@ -582,12 +603,7 @@ def api_module(req: web.Request) -> web.StreamResponse:
     resp.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'none'"
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Zoto-Viz-Hash"] = digest
-    query = getattr(getattr(req, "rel_url", None), "query", None) or {}
-    want = query.get("h") or query.get("hash") if hasattr(query, "get") else None
-    if want and want == digest:
-        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    else:
-        resp.headers["Cache-Control"] = "no-store"
+    resp.headers["Cache-Control"] = "no-store"
     return resp
 
 

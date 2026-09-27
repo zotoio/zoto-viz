@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from aiohttp import ClientSession
@@ -12,6 +12,7 @@ from aiohttp import ClientSession
 from service import access, monitor, request_guard
 from service.request_guard import HANDLER_ERROR_BODY, HOST_HEADER_INVALID_BODY, HOST_REJECT_BODY
 from tests.monitor_app_test_util import host_header, make_app_server, raw_http_url
+from tests.pack_asset_test_util import SECRET, SESSION, mint, new_frame_id
 
 SANDBOX_SNIPPET = "zoto-viz-plugin-sandbox-leak"
 TRAVERSAL_PATHS = [
@@ -31,6 +32,7 @@ FRAME_CASES = [
     "/index.html",
     "/api/session",
     "/no-such-path",
+    "/pack-assets/bad-token/demo/module.js",
     "__rejected_host__",
     "__host_format_trailing_dot__",
     "__host_format_missing_port__",
@@ -89,6 +91,62 @@ def test_disallowed_host_rejected_with_frame_headers() -> None:
                     _assert_frame_headers(resp)
 
     asyncio.run(run())
+
+
+async def _lan_host_csp() -> None:
+    lan = "192.168.1.20"
+    dist = _dist_with_sandbox()
+    async with make_app_server(web_dist=dist, listen_port=0) as (ip, port, runner):
+        request_guard.configure_request_guard(
+            runner.app, bind="127.0.0.1", port=port, allowed_hosts=[f"{lan}:{port}"],
+        )
+        runner.app["pack_asset_secret"] = SECRET
+        frame = new_frame_id()
+        tok = mint("_sandbox", session_id=SESSION, frame_id=frame, app=runner.app)
+        async with ClientSession() as session:
+            async with session.get(
+                f"http://{ip}:{port}{access.pack_asset_url(tok, '_sandbox', 'plugin-sandbox.html')}",
+                headers={
+                    "Host": f"{lan}:{port}",
+                    access.HEADER: SESSION,
+                },
+            ) as resp:
+                assert resp.status == 200
+                csp = resp.headers.get("Content-Security-Policy") or ""
+                script_src = csp.split("script-src ", 1)[1]
+                assert script_src.startswith(f"http://{lan}:") is True
+                assert "frame-ancestors 'self'" in csp
+
+
+def test_lan_host_csp_uses_validated_origin_not_wildcard() -> None:
+    asyncio.run(_lan_host_csp())
+
+
+async def _localhost_csp() -> None:
+    dist = _dist_with_sandbox()
+    async with make_app_server(web_dist=dist, listen_port=0) as (ip, port, runner):
+        runner.app["pack_asset_secret"] = SECRET
+        frame = new_frame_id()
+        tok = mint("_sandbox", session_id=SESSION, frame_id=frame, app=runner.app)
+        tok_q = quote(tok, safe="")
+        origin = f"http://localhost:{port}"
+        async with ClientSession() as session:
+            async with session.get(
+                f"http://{ip}:{port}{access.pack_asset_url(tok, '_sandbox', 'plugin-sandbox.html')}",
+                headers={
+                    **host_header(port, "localhost"),
+                    "Origin": "null",
+                    access.HEADER: SESSION,
+                },
+            ) as resp:
+                assert resp.status == 200
+                csp = resp.headers.get("Content-Security-Policy") or ""
+                assert f"script-src {origin}/pack-assets/{tok_q}/" in csp
+                assert "frame-ancestors 'self'" in csp
+
+
+def test_localhost_host_csp_shape() -> None:
+    asyncio.run(_localhost_csp())
 
 
 async def _rebinding() -> None:
@@ -177,8 +235,12 @@ async def _frame_case(case: str) -> None:
                     _assert_frame_headers(resp)
                 return
             headers = host_header(port)
+            if case.startswith("/pack-assets/"):
+                headers = {**headers, access.HEADER: SESSION}
             async with session.get(f"http://{ip}:{port}{case}", headers=headers) as resp:
-                if case == "/no-such-path":
+                if case == "/pack-assets/bad-token/demo/module.js":
+                    assert resp.status == 401
+                elif case == "/no-such-path":
                     assert resp.status == 404
                 else:
                     assert resp.status == 200
@@ -188,6 +250,22 @@ async def _frame_case(case: str) -> None:
 @pytest.mark.parametrize("case", FRAME_CASES)
 def test_frame_embed_policy_on_responses(case: str) -> None:
     asyncio.run(_frame_case(case))
+
+
+async def _direct_plugin_sandbox_404() -> None:
+    dist = _dist_with_sandbox()
+    async with make_app_server(web_dist=dist) as (ip, port, _runner):
+        async with ClientSession() as session:
+            async with session.get(
+                f"http://{ip}:{port}/plugin-sandbox.html",
+                headers=host_header(port),
+            ) as resp:
+                assert resp.status == 404
+                _assert_frame_headers(resp)
+
+
+def test_plugin_sandbox_html_not_served_from_static_root() -> None:
+    asyncio.run(_direct_plugin_sandbox_404())
 
 
 async def _handler_500_frame_headers() -> None:

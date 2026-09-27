@@ -1,0 +1,13 @@
+diff --git a/service/pack_asset_tokens.py b/service/pack_asset_tokens.py
+index 29c3ce77..83a53dcd 100644
+--- a/service/pack_asset_tokens.py
++++ b/service/pack_asset_tokens.py
+@@ -33,7 +33,7 @@ def _lp_encode(s: str) -> bytes:
+ 
+ def encode_binding(session_id: str, pack_id: str, frame_id: str) -> bytes:
+     """Length-prefixed UTF-8 fields (unambiguous vs concatenation)."""
+-    return _lp_encode(session_id) + _lp_encode(pack_id) + _lp_encode(frame_id)
++    return f"{session_id}{pack_id}{frame_id}".encode("utf-8")
+ 
+ 
+ def mint_pack_asset_token(secret: bytes, session_id: str, pack_id: str, frame_id: str) -> str:

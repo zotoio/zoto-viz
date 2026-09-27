@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access.py::test_host_origin_csrf_helpers",
+  "description": "Null Origin gated except pack-assets token paths.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert not True"
+}

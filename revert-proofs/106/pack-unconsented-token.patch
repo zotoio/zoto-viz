@@ -1,0 +1,14 @@
+diff --git a/service/pack_assets.py b/service/pack_assets.py
+index 5bfed164..e7d66c16 100644
+--- a/service/pack_assets.py
++++ b/service/pack_assets.py
+@@ -249,9 +249,6 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
+         return resp
+ 
+     row = plugins._plugin_row(pack_id)
+-    if not row or not plugins.consented(row):
+-        return _pack_forbidden()
+-
+     if tail == "module.js":
+         mod = await asyncio.to_thread(plugins.module_response, pack_id)
+         apply_pack_asset_headers(mod)

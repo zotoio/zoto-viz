@@ -259,20 +259,6 @@ def _deny(msg: str, status: int = 403) -> web.Response:
     return resp
 
 
-def attach_frame_embed_policy(resp: web.StreamResponse) -> None:
-    """Every response must not be embeddable off-origin (including errors and static files)."""
-    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
-    prior = resp.headers.get("Content-Security-Policy", "")
-    frame = "frame-ancestors 'self'"
-    if prior:
-        if "frame-ancestors" not in prior:
-            resp.headers["Content-Security-Policy"] = f"{prior}; {frame}"
-    else:
-        resp.headers["Content-Security-Policy"] = frame
-
-
-
-
 @web.middleware
 async def middleware(request: web.Request, handler):  # noqa: ANN001
     if not origin_ok(request):
