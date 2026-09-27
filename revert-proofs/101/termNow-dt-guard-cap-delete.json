@@ -1,7 +1,0 @@
-{
-  "pr": 101,
-  "patch": "revert-proofs/101/termNow-dt-guard-cap-delete.patch",
-  "testFile": "src/plugins/dogfood.test.ts",
-  "testName": "^hn-term frame.t cap step: dt above one adds capped typed characters$",
-  "red": "AssertionError: expected +0 to be 23 // Object.is equality"
-}

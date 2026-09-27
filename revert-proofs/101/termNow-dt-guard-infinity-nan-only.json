@@ -1,7 +1,0 @@
-{
-  "pr": 101,
-  "patch": "revert-proofs/101/termNow-dt-guard-infinity-nan-only.patch",
-  "testFile": "src/plugins/dogfood.test.ts",
-  "testName": "^hn-term frame.t infinity step: non-finite dt uses 1/60 fallback$",
-  "red": "AssertionError: expected 23 to be 1 // Object.is equality"
-}
