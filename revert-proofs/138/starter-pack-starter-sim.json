@@ -2,6 +2,7 @@
   "runner": "vitest",
   "testFile": "src/plugins/starter-pack-ci.test.ts",
   "testName": "pack starter template CI > zips, compiles through service esbuild with SDK inlined in module.js",
-  "description": "Revert starter SDK sim export name so bundle no longer contains StarterSim",
+  "description": "Revert STARTER_TEMPLATE_SIM_CLASS so bundle no longer contains StarterSim",
+  "project": "web",
   "red": "AssertionError: expected '...' to contain 'StarterSim'"
 }

@@ -2,6 +2,7 @@
   "runner": "vitest",
   "testFile": "src/plugins/shipped-pack-visualisation-engine.test.ts",
   "testName": "shipped pack visualisation engines > loads every shipped plugin.yml with visualisation.yml and no unknown engine",
-  "description": "Revert host-mesh-demo visualisation.engine to invalid topology value",
-  "red": "AssertionError: expected [ Array(1) ] to deeply equal []"
+  "description": "Revert HOST_MESH_DEMO_VISUALISATION_ENGINE anchor",
+  "project": "web",
+  "red": "AssertionError: expected 'graph' to be 'topology' // Object.is equality"
 }
