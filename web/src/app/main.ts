@@ -2192,14 +2192,16 @@ async function bootCatalogFromSession(): Promise<void> {
     if (bootTiles.join("\0") !== settings.animSettings.mosaicTiles.join("\0")) {
       settings.applyAnim({ ...settings.animSettings, mosaicTiles: bootTiles });
     }
-    mosaic.setSize(settings.animSettings.mosaic, bootMode, settings.animSettings.hero, {
-      tree: settings.animSettings.mosaicTree,
-      maximized: settings.animSettings.mosaicMaxId || null,
-      tiles: settings.animSettings.mosaicTiles,
-    });
-    mosaic.hydrate();
+    if (mosaic) {
+      mosaic.setSize(settings.animSettings.mosaic, bootMode, settings.animSettings.hero, {
+        tree: settings.animSettings.mosaicTree,
+        maximized: settings.animSettings.mosaicMaxId || null,
+        tiles: settings.animSettings.mosaicTiles,
+      });
+      mosaic.hydrate();
+    }
   }
-  const restored = await profiles.boot(live);
+  const restored = profiles ? await profiles.boot(live) : false;
   await agent.syncStatus();
   if (!agent.savedBackend() && agent.cursorReady()) {
     agent.useBackend("cursor");

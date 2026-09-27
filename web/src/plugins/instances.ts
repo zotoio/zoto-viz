@@ -1,7 +1,7 @@
 import type { PluginField } from "../core/modes";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
-import type { PluginView } from "./plugin";
 import { perTilePackScopeNoteMessage } from "./pack-shared-copy";
+import type { PluginView } from "./plugin";
 
 export { mosaicTileViewId } from "../graph/mosaic-tile-id";
 
@@ -89,13 +89,17 @@ export function countTilesSharingConfigStore(spec: PluginView, tileModeIds: read
 }
 
 /** Host note under plugin settings (null = hide). */
+function packDisplayName(spec: PluginView): string {
+  return spec.packName || spec.name || spec.id;
+}
+
 export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
   if (configStoredPerTile(spec)) {
-    return perTilePackScopeNoteMessage(spec.packName ?? spec.name ?? spec.id);
+    return perTilePackScopeNoteMessage(packDisplayName(spec));
   }
   const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
   if (shared < 2) return null;
-  return `Changes apply to all ${shared} ${spec.packName ?? spec.name ?? spec.id} tiles on this wall.`;
+  return `Changes apply to all ${shared} ${packDisplayName(spec)} tiles on this wall.`;
 }
 
 export function parseInstances(raw: unknown): PluginInstance[] | undefined {

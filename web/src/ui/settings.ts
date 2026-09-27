@@ -214,7 +214,7 @@ export class Settings {
   } | null = null;
   private deviceUi: { cam: Toggle; mic: Toggle; sound: Toggle } | null = null;
   private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
-  private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
+  private pulseNow: () => { level: number; bass: number; listening?: boolean; awaitingClick?: boolean } = () => ({ level: 0, bass: 0 });
   private meterRaf = 0;
   private dice: DiceConfig;
   private diceUi: {
