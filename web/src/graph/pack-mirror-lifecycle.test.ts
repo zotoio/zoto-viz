@@ -151,7 +151,7 @@ describe("PackMirrorSession resource lifecycle", () => {
     for (let i = 0; i < 300; i++) {
       simulateTwoTileFrame(regNan, rd, "plugin:pack", false, { x: 0, y: 0, w: Number.NaN, h: 48 });
     }
-    expect(regNan.sessionFor("plugin:pack")!.lastRenderDeviceSize!.ph).toBe(2);
+    expect(regNan.sessionFor("plugin:pack")!.lastRenderDeviceSize!.pw).toBe(2);
     expect(packMirrorResourceStats.renderTargetSetSize).toBe(0);
     regNan.dispose();
   });
