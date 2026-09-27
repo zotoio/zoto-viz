@@ -159,8 +159,11 @@ describe("fillPluginFields", () => {
   it("field edited cue clears when value returns to default", () => {
     expect.hasAssertions();
     const { row, range } = dirtySliderRow(gainSpec);
+    expect(row.classList.contains("field-dirty")).toBe(true);
+    expect(row.querySelector(".field-edited-cue")?.textContent).toBe(FIELD_EDITED_LABEL);
     range.value = "3";
     range.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(row.classList.contains("field-dirty")).toBe(false);
     expect(row.querySelector(".field-edited-cue")).toBeNull();
     writePluginConfig(configStoreId(gainSpec), { gain: "3" });
     const hostSaved = document.createElement("div");
@@ -172,9 +175,9 @@ describe("fillPluginFields", () => {
     expect.hasAssertions();
     const cssPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../style.css");
     const css = readFileSync(cssPath, "utf8");
-    expect(css).toMatch(/label\.slider\.field-dirty/);
-    expect(css).toMatch(/label\.toggle\.field-dirty/);
-    expect(css).not.toMatch(/\.field-dirty \.slider-row/);
+    expect(css.includes(".settings-pop label.slider.field-dirty")).toBe(true);
+    expect(css.includes(".settings-pop label.toggle.field-dirty")).toBe(true);
+    expect(css.includes(".settings-pop .field-dirty .slider-row")).toBe(false);
   });
 
   it("marks dirty number sliders and boolean toggles with field-dirty", () => {
@@ -222,7 +225,7 @@ describe("fillPluginFields", () => {
       config: [{ key: "on", label: "on", type: "boolean", default: false }],
     };
     fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
-    expect(host.querySelector("details.sec-collapsible")).toBeNull();
+    expect(host.querySelectorAll("details.sec-collapsible").length).toBe(0);
     expect(host.querySelector(".sec-controls")).toBeTruthy();
   });
 

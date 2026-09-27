@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (plugin-sandbox-sdk-types)",
-  "runner": "command",
-  "command": "pnpm typecheck",
-  "cwd": "web",
-  "red": "typecheck/plugin-sandbox.typecheck.ts(1,15): error TS2305: Module '\"../../plugins/sdk/plugin-sandbox\"' has no exported member 'ZotoVizPluginHost'."
-}

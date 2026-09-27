@@ -1,7 +1,107 @@
+diff --git a/revert-proofs/36/section-details-open-default.patch b/revert-proofs/36/section-details-open-default.patch
+index 457457a2..762bf623 100644
+--- a/revert-proofs/36/section-details-open-default.patch
++++ b/revert-proofs/36/section-details-open-default.patch
+@@ -1,7 +1,93 @@
++diff --git a/revert-proofs/36/plugin-spec-for-store-id.patch b/revert-proofs/36/plugin-spec-for-store-id.patch
++index 7a585e89..00674d5c 100644
++--- a/revert-proofs/36/plugin-spec-for-store-id.patch
+++++ b/revert-proofs/36/plugin-spec-for-store-id.patch
++@@ -1,7 +1,79 @@
+++diff --git a/revert-proofs/36/field-unsaved-change-aria.patch b/revert-proofs/36/field-unsaved-change-aria.patch
+++index 5f8fad63..517c0aed 100644
+++--- a/revert-proofs/36/field-unsaved-change-aria.patch
++++++ b/revert-proofs/36/field-unsaved-change-aria.patch
+++@@ -1,7 +1,65 @@
++++diff --git a/revert-proofs/36/field-edited-label-string.patch b/revert-proofs/36/field-edited-label-string.patch
++++index 06519dc3..b0f277fb 100644
++++--- a/revert-proofs/36/field-edited-label-string.patch
+++++++ b/revert-proofs/36/field-edited-label-string.patch
++++@@ -1,7 +1,51 @@
+++++diff --git a/revert-proofs/36/on-plugin-change-config-guard.patch b/revert-proofs/36/on-plugin-change-config-guard.patch
+++++index 94bb7074..a60adf63 100644
+++++--- a/revert-proofs/36/on-plugin-change-config-guard.patch
++++++++ b/revert-proofs/36/on-plugin-change-config-guard.patch
+++++@@ -1,12 +1,14 @@
+++++ diff --git a/web/src/plugins/plugin-config-sync.ts b/web/src/plugins/plugin-config-sync.ts
++++++index 517bb2bd..d27088c4 100644
+++++ --- a/web/src/plugins/plugin-config-sync.ts
+++++ +++ b/web/src/plugins/plugin-config-sync.ts
+++++-@@ -10,7 +10,7 @@ export function allowOnPluginChangeConfigPush(
++++++@@ -10,8 +10,7 @@ export function allowOnPluginChangeConfigPush(
++++++   editStoreId: string,
+++++    hasConfigRead: boolean,
+++++  ): boolean {
+++++-   if (!hasConfigRead) return false;
++++++-  if (!hasConfigRead) return false;
+++++ -  return sandboxConfigPushAllowed(loadedConfigStoreId, editStoreId);
+++++-+  return true;
+++++++  return hasConfigRead;
+++++  }
+++++  
+++++  /** main.ts onPluginFields → sandbox.setConfig */
+++++diff --git a/revert-proofs/36/on-plugin-fields-config-guard.patch b/revert-proofs/36/on-plugin-fields-config-guard.patch
+++++index 353a4ee5..bb944215 100644
+++++--- a/revert-proofs/36/on-plugin-fields-config-guard.patch
++++++++ b/revert-proofs/36/on-plugin-fields-config-guard.patch
+++++@@ -1,11 +1,12 @@
+++++ diff --git a/web/src/plugins/plugin-config-sync.ts b/web/src/plugins/plugin-config-sync.ts
+++++-index 517bb2bd..8d48611f 100644
++++++index 517bb2bd..e6dc5371 100644
+++++ --- a/web/src/plugins/plugin-config-sync.ts
+++++ +++ b/web/src/plugins/plugin-config-sync.ts
+++++-@@ -21,5 +21,5 @@ export function allowOnPluginFieldsConfigPush(
++++++@@ -20,6 +20,5 @@ export function allowOnPluginFieldsConfigPush(
++++++   iframeConfigStoreId: string,
+++++    hasConfigRead: boolean,
+++++  ): boolean {
+++++-   if (!hasConfigRead || !loadedConfigStoreId) return false;
++++++-  if (!hasConfigRead || !loadedConfigStoreId) return false;
+++++ -  return loadedConfigStoreId === iframeConfigStoreId;
+++++-+  return true;
+++++++  return hasConfigRead && Boolean(loadedConfigStoreId);
+++++  }
++++ diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+++++index 116265e3..b0c97ec9 100644
++++ --- a/web/src/plugins/plugin-ui.ts
++++ +++ b/web/src/plugins/plugin-ui.ts
++++-@@ -17,7 +17,7 @@ function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
+++++@@ -35,7 +35,7 @@ function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
++++      if (!el.querySelector(".field-edited-cue")) {
++++        const cue = document.createElement("span");
++++        cue.className = "field-edited-cue";
+++ diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
++++index 116265e3..28b4c1c9 100644
+++ --- a/web/src/plugins/plugin-ui.ts
+++ +++ b/web/src/plugins/plugin-ui.ts
+++-@@ -13,7 +13,7 @@ export const FIELD_EDITED_ARIA = "Unsaved change";
++++@@ -31,7 +31,7 @@ function syncSectionSummaryEdited(details: HTMLDetailsElement): void {
+++  function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
+++    el.classList.toggle("field-dirty", dirty);
+++    if (dirty) {
++ diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
+++index ed67578e..e3858438 100644
++ --- a/web/src/plugins/instances.ts
++ +++ b/web/src/plugins/instances.ts
++-@@ -98,7 +98,7 @@ export function expandPluginInstances(spec: PluginView): PluginView[] {
+++@@ -99,7 +99,7 @@ export function expandPluginInstances(spec: PluginView): PluginView[] {
++  export function pluginSpecForStoreId(specs: PluginView[], storeId: string): PluginView | null {
++    for (const raw of specs) {
++      for (const expanded of expandPluginInstances(raw)) {
+ diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
++index 116265e3..788543e3 100644
+ --- a/web/src/plugins/plugin-ui.ts
+ +++ b/web/src/plugins/plugin-ui.ts
+-@@ -175,7 +175,6 @@ export function fillPluginFields(
++@@ -179,7 +179,6 @@ export function fillPluginFields(
+          : document.createElement("div");
+        if (container instanceof HTMLDetailsElement) {
+          container.className = "sec sec-collapsible";
 diff --git a/schema/plugin.schema.json b/schema/plugin.schema.json
+index 944695ff..3bc50c4b 100644
 --- a/schema/plugin.schema.json
 +++ b/schema/plugin.schema.json
-@@ -211,7 +211,6 @@
+@@ -216,7 +216,6 @@
          "label": { "type": "string", "maxLength": 64 },
          "type": { "type": "string", "enum": ["boolean", "select", "number", "text", "textarea"] },
          "section": {

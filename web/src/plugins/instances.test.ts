@@ -54,6 +54,7 @@ describe("plugin instances", () => {
   });
 
   it("resolves instance store ids against the catalog tree", () => {
+    expect.hasAssertions();
     const catalog = pack({
       instances: [
         { id: "carousel", source: "nasa" },
