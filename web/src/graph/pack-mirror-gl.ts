@@ -421,8 +421,9 @@ export class SandboxBitmapGl {
     fill: SurfaceLetterboxFill,
     dst: CssRect,
     aspect: number,
+    hostGl?: PackMirrorHostGl,
   ): CssRect {
-    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true });
+    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true }, hostGl);
   }
 }
 

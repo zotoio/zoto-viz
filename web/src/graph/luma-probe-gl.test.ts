@@ -17,12 +17,16 @@ function mockGl(): WebGL2RenderingContext & { errors: number[] } {
     SYNC_GPU_COMMANDS_COMPLETE: 0x9117,
     SYNC_STATUS: 0x9114,
     SIGNALED: 0x9119,
+    NO_ERROR: 0,
+    TIMEOUT_EXPIRED: 0x911c,
+    WAIT_FAILED: 0x911d,
     bindFramebuffer: vi.fn(),
     bindBuffer: vi.fn(),
     bufferData: vi.fn(),
     createBuffer: vi.fn(() => ({})),
     readPixels: vi.fn(),
     fenceSync: vi.fn(() => ({})),
+    clientWaitSync: vi.fn(() => 0x9119),
     getSyncParameter: vi.fn(() => 0x9119),
     deleteSync: vi.fn(),
     deleteBuffer: vi.fn(),
@@ -41,8 +45,8 @@ describe("luma and pane change probes", () => {
     const probe = new LumaProbe(8, 0);
     probe.tick(gl, 320, 240, 0);
     probe.tick(gl, 320, 240, 200);
-    expect(gl.bindFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, null);
     expect(gl.readPixels).toHaveBeenCalled();
+    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.PIXEL_PACK_BUFFER, expect.anything());
     expect(gl.getError()).toBe(0);
   });
 
