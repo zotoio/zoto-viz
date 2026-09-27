@@ -1,13 +1,14 @@
-diff --git a/plugins/sdk/pack-lint.ts b/plugins/sdk/pack-lint.ts
-index 73da1154..2b05823c 100644
---- a/plugins/sdk/pack-lint.ts
-+++ b/plugins/sdk/pack-lint.ts
-@@ -17,7 +17,7 @@ import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowl
- import { INLINE_ZOTO_DECLARE_HINT, PACK_ZOTO_BINDING_HINT } from "./viz-zoto";
- 
- /** esbuild must keep this class name in the starter template bundle (CI starter-pack-ci). */
--export const STARTER_TEMPLATE_SIM_CLASS = "StarterSim";
+diff --git a/web/src/plugins/plugin.ts b/web/src/plugins/plugin.ts
+index 45bd8f72..b9bf96e0 100644
+--- a/web/src/plugins/plugin.ts
++++ b/web/src/plugins/plugin.ts
+@@ -48,6 +48,9 @@ import type { BackdropKind } from "../graph/backdrop";
+ import type { FloorShape } from "../graph/floor";
+ import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
+ import { apiFetch } from "../core/http";
++
++/** esbuild must preserve this class name in plugins/sdk/starter CI bundles. */
 +export const STARTER_TEMPLATE_SIM_CLASS = "StarterPackSim";
- 
- export {
-   LEGACY_DECLARE_ZOTO_PACK_IDS,
+ import type { ManifestBlockedPlugin } from "./plugin-manifest-blocked";
+ import {
+   manifestBlockedViewSelectRow,

@@ -48,6 +48,9 @@ import type { BackdropKind } from "../graph/backdrop";
 import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
+
+/** esbuild must preserve this class name in plugins/sdk/starter CI bundles. */
+export const STARTER_TEMPLATE_SIM_CLASS = "StarterSim";
 import type { ManifestBlockedPlugin } from "./plugin-manifest-blocked";
 import {
   manifestBlockedViewSelectRow,

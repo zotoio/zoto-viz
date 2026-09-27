@@ -6,11 +6,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import type { VizDataFrame } from "../../../plugins/sdk/viz-contract";
 import { VIZ_FIXTURE_IDLE } from "../../../plugins/sdk/viz-fixtures";
-import {
-  STARTER_TEMPLATE_SIM_CLASS,
-  formatViolationMessage,
-  scanPackDirectory,
-} from "../../../plugins/sdk/pack-lint";
+import { formatViolationMessage, scanPackDirectory } from "../../../plugins/sdk/pack-lint";
+import { STARTER_TEMPLATE_SIM_CLASS } from "./plugin";
 import { StarterSim } from "../../../plugins/sdk/starter/frontend/sim";
 import { closePluginSkySmokeBrowser } from "./plugin-sky-smoke-render";
 import {
