@@ -9,7 +9,23 @@ SRC = ROOT / "plugins" / "src" / "marble-run"
 PACK_TEST = SRC / "frontend" / "marble-run.test.ts"
 
 
+def _ensure_web_vitest() -> None:
+    web = ROOT / "web"
+    vitest_bin = web / "node_modules" / ".bin" / "vitest"
+    if vitest_bin.is_file():
+        return
+    proc = subprocess.run(
+        ["pnpm", "install", "--frozen-lockfile"],
+        cwd=web,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
 def _pack_vitest_filter(pattern: str) -> None:
+    _ensure_web_vitest()
     web = ROOT / "web"
     config = SRC / "vitest.config.cjs"
     proc = subprocess.run(
@@ -33,6 +49,7 @@ def _pack_vitest_filter(pattern: str) -> None:
 
 def test_marble_run_pack_vitest() -> None:
     assert PACK_TEST.is_file()
+    _ensure_web_vitest()
     web = ROOT / "web"
     config = SRC / "vitest.config.cjs"
     proc = subprocess.run(
