@@ -45,6 +45,10 @@ def test_make_app_configures_request_guard() -> None:
     from unittest.mock import MagicMock
 
     app = monitor.make_app(MagicMock(), "", bind="127.0.0.1", port=7020)
-    assert app.get("request_guard_allowed_hosts") == frozenset(
-        {"localhost:7020", "127.0.0.1:7020", "[::1]:7020"},
-    )
+    hosts = app.get("request_guard_allowed_hosts")
+    assert hosts is not None
+    assert sorted(hosts) == [
+        "127.0.0.1:7020",
+        "[::1]:7020",
+        "localhost:7020",
+    ]

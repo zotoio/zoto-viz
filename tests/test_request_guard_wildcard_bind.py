@@ -8,7 +8,10 @@ import pytest
 from aiohttp import ClientSession
 
 from service.request_guard import HOST_REJECT_BODY, build_allowed_hosts
+from tests.lan_guard_test_util import stub_lan_os_interfaces
 from tests.monitor_app_test_util import make_app_server
+
+pytestmark = pytest.mark.usefixtures("stub_lan_os_interfaces")
 
 
 async def _get_status(ip: str, port: int, host: str) -> tuple[int, str]:
@@ -68,5 +71,5 @@ def test_build_allowed_hosts_wildcard_bind_excludes_bind_address() -> None:
         assert f"[::1]:{port}" in allowed
         assert f"viz.example.lan:{port}" in allowed
         assert f"evil.example:{port}" not in allowed
-        assert f"0.0.0.0:{port}" not in allowed
-        assert f"[::]:{port}" not in allowed
+        assert [h for h in allowed if h.startswith("0.0.0.0:")] == []
+        assert [h for h in allowed if h.startswith("[::]:")] == []

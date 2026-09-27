@@ -1,0 +1,22 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 197ea560..4858b08c 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -305,7 +305,7 @@ async def _run_refresh_task(app: web.Application) -> None:
+         _log.exception("request guard OS interface refresh failed")
+         raise
+     finally:
+-        app["request_guard_refresh_task"] = None
++        pass
+ 
+ 
+ async def _await_shared_refresh(app: web.Application) -> None:
+@@ -315,7 +315,7 @@ async def _await_shared_refresh(app: web.Application) -> None:
+         app["request_guard_refresh_lock"] = lock
+     async with lock:
+         task = app.get("request_guard_refresh_task")
+-        if task is None or task.done():
++        if task is None:
+             task = asyncio.create_task(_run_refresh_task(app))
+             app["request_guard_refresh_task"] = task
+     try:

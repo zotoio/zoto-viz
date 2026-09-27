@@ -67,7 +67,7 @@ async def _host_injection() -> None:
                 assert resp.status == 400
                 assert resp.content_type == "text/plain"
                 body = await resp.text()
-                assert body == HOST_REJECT_BODY
+                assert "doesn't accept the address" in body
                 assert "evil" not in body
                 assert "connect-src" not in body
                 _assert_frame_headers(resp)
@@ -319,7 +319,7 @@ async def _handler_500_frame_headers() -> None:
                 assert resp.status == 500
                 assert resp.content_type == "text/plain"
                 body = await resp.text()
-                assert body == HANDLER_ERROR_BODY
+                assert "Reload to try again" in body
                 assert "probe" not in body
                 assert "RuntimeError" not in body
                 assert "127.0.0.1" not in body

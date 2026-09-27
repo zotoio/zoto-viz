@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_miss_after_30s_refreshes_os_interfaces_once",
+  "red": "AssertionError: assert 1 == (1 + 1)",
+  "timeoutSec": 120
+}

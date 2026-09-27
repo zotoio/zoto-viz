@@ -1,9 +1,13 @@
 """Outermost HTTP guard: Host allowlist, path dot-segments, frame-embed headers."""
 from __future__ import annotations
 
+import asyncio
 import ipaddress
+import json
 import logging
 import re
+import subprocess
+import time
 from typing import Iterable
 
 from aiohttp import web
@@ -130,12 +134,50 @@ def normalize_host_header_key(
     return _canonical_key(host, port)
 
 
-def _loopback_hosts(port: int) -> set[str]:
-    return {
-        _canonical_key("localhost", port),
-        _canonical_key("127.0.0.1", port),
-        _canonical_key("::1", port),
-    }
+def query_os_interface_addresses() -> list[str]:
+    """IP address strings from local interfaces (stub only this in tests, not ``local_interface_hosts``)."""
+    try:
+        proc = subprocess.run(
+            ["ip", "-j", "addr"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return []
+        data = json.loads(proc.stdout or "[]")
+        addrs: list[str] = []
+        for iface in data:
+            for info in iface.get("addr_info") or []:
+                if info.get("family") not in ("inet", "inet6"):
+                    continue
+                local = info.get("local")
+                if local:
+                    addrs.append(str(local))
+        return addrs
+    except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return []
+
+
+def local_interface_hosts(port: int) -> set[str]:
+    out: set[str] = set()
+    out.add(_canonical_key("localhost", port))
+    out.add(_canonical_key("127.0.0.1", port))
+    out.add(_canonical_key("::1", port))
+    seen: set[str] = set()
+    for addr in query_os_interface_addresses():
+        if addr in seen or addr in {"0.0.0.0", "::"}:
+            continue
+        seen.add(addr)
+        try:
+            ip = ipaddress.ip_address(addr)
+            if ip.is_loopback or ip.is_link_local:
+                continue
+        except ValueError:
+            continue
+        out.add(_canonical_key(addr, port))
+    return out
 
 
 def build_allowed_hosts(
@@ -143,7 +185,7 @@ def build_allowed_hosts(
     port: int,
     extra: Iterable[str] | None = None,
 ) -> frozenset[str]:
-    allowed: set[str] = set(_loopback_hosts(port))
+    allowed: set[str] = set(local_interface_hosts(port))
     bind = (bind or "127.0.0.1").strip()
     if bind and bind not in {"0.0.0.0", "::"}:
         allowed.add(_canonical_key(bind, port))
@@ -229,6 +271,11 @@ def configure_request_guard(
     app["request_guard_bind"] = bind
     app["request_guard_port"] = int(port)
     app["request_guard_extra_hosts"] = extra
+    clk = app.get("request_guard_clock", time.monotonic)
+    now = clk()
+    app["request_guard_last_if_lookup"] = now
+    if app.get("request_guard_refresh_lock") is None:
+        app["request_guard_refresh_lock"] = asyncio.Lock()
     _refresh_allowed_hosts(app)
 
 
@@ -249,8 +296,45 @@ def _host_header_values(request: web.Request) -> list[str]:
         return [single] if single else []
 
 
-def _lookup_allowed(app: web.Application, key: str) -> bool:
+async def _run_refresh_task(app: web.Application) -> None:
+    clock = app.get("request_guard_clock", time.monotonic)
+    try:
+        await asyncio.to_thread(_refresh_allowed_hosts, app)
+        app["request_guard_last_if_lookup"] = clock()
+    except Exception:
+        _log.exception("request guard OS interface refresh failed")
+        raise
+    finally:
+        app["request_guard_refresh_task"] = None
+
+
+async def _await_shared_refresh(app: web.Application) -> None:
+    lock = app.get("request_guard_refresh_lock")
+    if lock is None:
+        lock = asyncio.Lock()
+        app["request_guard_refresh_lock"] = lock
+    async with lock:
+        task = app.get("request_guard_refresh_task")
+        if task is None or task.done():
+            task = asyncio.create_task(_run_refresh_task(app))
+            app["request_guard_refresh_task"] = task
+    try:
+        await task
+    except Exception:
+        pass
+
+
+async def _lookup_allowed(app: web.Application, key: str) -> bool:
     allowed: frozenset[str] = app.get("request_guard_allowed_hosts") or frozenset()
+    if key in allowed:
+        return True
+    clock = app.get("request_guard_clock", time.monotonic)
+    now = clock()
+    last = float(app.get("request_guard_last_if_lookup") or 0.0)
+    if now - last < 30.0:
+        return False
+    await _await_shared_refresh(app)
+    allowed = app.get("request_guard_allowed_hosts") or frozenset()
     return key in allowed
 
 
@@ -268,7 +352,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
         _log.warning("rejected Host header (format): %s", escape_log_host(raw_host))
         return _host_reject_response()
 
-    if not _lookup_allowed(request.app, key):
+    if not await _lookup_allowed(request.app, key):
         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
         return _host_reject_response()
 
