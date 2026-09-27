@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_zip_install_ux.py",
   "testName": "test_zip_ux_upgrade_rollback_example",
   "description": "Literal upgrade rollback message template.",
-  "patchedFailure": "tests/test_pack_zip_install_ux.py:37: AssertionError: zip ux upgrade rollback template"
+  "patchedFailure": "tests/test_pack_zip_install_ux.py:78: AssertionError"
 }

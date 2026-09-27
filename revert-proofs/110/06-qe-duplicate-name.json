@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_safe_zip_install.py",
   "testName": "test_qe_duplicate_name_rejected_before_staging",
   "description": "Duplicate normalized zip entry names rejected before staging.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:173: AssertionError: duplicate zip entry blocked"
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:173: AssertionError"
 }

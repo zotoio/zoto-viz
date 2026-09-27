@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_zip_install_ux.py",
   "testName": "test_zip_ux_api_unsafe_oversize_message",
   "description": "Literal oversize zip tail copy.",
-  "patchedFailure": "tests/test_pack_zip_install_ux.py:37: AssertionError: zip ux oversize tail"
+  "patchedFailure": "tests/test_pack_zip_install_ux.py:156: AssertionError"
 }

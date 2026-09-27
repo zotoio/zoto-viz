@@ -3,5 +3,5 @@
   "testFile": "tests/test_plugin_install.py",
   "testName": "test_install_local_zip_upload_stem_not_server_temp",
   "description": "Unsafe zip message must use upload stem, not server temp zip name.",
-  "patchedFailure": "tests/test_plugin_install.py:230: AssertionError: unsafe zip upload stem message"
+  "patchedFailure": "tests/test_plugin_install.py:268: AssertionError"
 }
