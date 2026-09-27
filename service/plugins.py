@@ -49,6 +49,7 @@ from .pack_runtime import (
     zip_block_cache_key,
 )
 from .plugin_install import InstallV2BlockedError
+from . import data_source_plugin as dsp
 import yaml
 from aiohttp import web
 
@@ -1019,6 +1020,11 @@ def _option_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _check_semantics(doc: dict[str, Any], *, include_settings: bool = False) -> None:
+    dsp.check_data_source_semantics(doc)
+    if dsp.plugin_kind(doc) == "data-source":
+        if include_settings:
+            _check_plugin_settings(doc)
+        return
     keys: set[str] = set()
     for opt in _option_rows(doc):
         key = _take_key(keys, opt)
@@ -1196,6 +1202,8 @@ def validate_plugin_home(home: Path) -> dict[str, Any]:
     yml = home / "plugin.yml"
     doc = load_file(yml)
     rel = str(yml)
+    if dsp.plugin_kind(doc) == "data-source":
+        dsp.validate_data_source_tree(home, doc)
     merged = _attach_visualisation({**doc}, home, errors, rel, blocked=None)
     if errors:
         raise ValueError(errors[0]["error"])
@@ -1673,6 +1681,8 @@ def _catalog_row(
     )
     if row is None:
         return None
+    if dsp.plugin_kind(row) == "data-source":
+        row["pluginKind"] = "data-source"
     if isinstance(doc.get("assets"), list) and doc["assets"]:
         row["assets"] = doc["assets"]
         assets_digest = _assets_manifest_sha256(home, doc)
@@ -1868,6 +1878,27 @@ def api_list(_: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+def api_data_source_demo(req: web.Request) -> web.Response:
+    """Serve a bundled demo snapshot for a data-source plugin (YAML-only; no live fetch)."""
+    pid = req.match_info["id"]
+    source_id = str(req.match_info.get("source_id") or "").strip()
+    row = _plugin_row(pid)
+    if not row:
+        return web.json_response({"error": "unknown plugin"}, status=404)
+    if dsp.plugin_kind(row) != "data-source":
+        return web.json_response({"error": "not a data-source plugin"}, status=404)
+    home = _plugin_pack_home(row)
+    if not home:
+        return web.json_response({"error": "plugin home missing"}, status=404)
+    try:
+        payload = dsp.read_demo_snapshot(home, row, source_id)
+    except KeyError:
+        return web.json_response({"error": "unknown source"}, status=404)
+    except (ValueError, OSError) as e:
+        return web.json_response({"error": str(e)}, status=400)
+    return web.json_response(payload, headers={"Cache-Control": "no-store"})
+
+
 async def api_list_http(request: web.Request) -> web.Response:
     return await asyncio.to_thread(api_list, request)
 
@@ -1882,6 +1913,10 @@ async def api_sky_http(request: web.Request) -> web.StreamResponse:
 
 async def api_asset_http(request: web.Request) -> web.StreamResponse:
     return await asyncio.to_thread(api_asset, request)
+
+
+async def api_data_source_demo_http(request: web.Request) -> web.Response:
+    return await asyncio.to_thread(api_data_source_demo, request)
 
 
 def python_allow(spec: dict[str, Any]) -> bool:

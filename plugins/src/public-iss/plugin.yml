@@ -1,0 +1,14 @@
+kind: data-source
+id: public-iss
+name: ISS track
+version: 1
+description: Public International Space Station position — demo snapshot only until live fetch lands.
+dataSource:
+  sources:
+    - id: position
+      hosts:
+        - api.open-notify.org
+      refreshSec: 5
+      apiKeyRequired: false
+      outputShape: vizFrame
+      demoSnapshot: snapshots/position.demo.json

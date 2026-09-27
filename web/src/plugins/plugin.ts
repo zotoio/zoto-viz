@@ -243,6 +243,9 @@ export interface PluginView {
   /** Declared binary assets (meshes/textures) hashed into consent (`assets_sha256`). */
   assets?: { id: string; path: string; sha256?: string; bytes?: number; triangles?: number }[];
   assets_sha256?: string;
+  /** Catalog manifest kind; data-source trees are remix feeds, not view menu rows. */
+  pluginKind?: "data-source";
+  dataSource?: import("../remix/remix-types").DataSourceBlock;
 }
 
 const LOOK_ANIM_KEYS = [
