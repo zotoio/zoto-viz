@@ -1883,7 +1883,7 @@ export class Settings {
       const packId = this.viewBind.spec.id;
       const prevCount = countPackTiles(prevTiles, packId);
       const nextCount = countPackTiles(this.anim.mosaicTiles, packId);
-      if (prevCount !== nextCount) {
+      if (prevCount !== nextCount && !this.viewPluginDirty) {
         this.viewDrawerKey = null;
         this.bindView(
           this.viewBind.spec,
@@ -1894,7 +1894,12 @@ export class Settings {
         );
       }
     }
-    if (this.viewPluginDirty && this.isOpen && this.activePane === "view") {
+    if (
+      this.viewPluginDirty
+      && this.isOpen
+      && this.activePane === "view"
+      && this.viewDrawerStatusEl.hidden
+    ) {
       const gain = this.viewHost?.querySelector<HTMLInputElement>(
         '.plugin-layer[data-layer="view"] .slider input[type=range]',
       );
@@ -1942,7 +1947,8 @@ export class Settings {
       this.viewDrawerKey = null;
       this.viewFocusId = "";
       this.syncViewCog();
-      this.focusMosaicLayoutPickerTrigger();
+      const layoutBtn = this.mosaicLayoutPickerTrigger;
+      if (layoutBtn) queueMicrotask(() => layoutBtn.focus());
       return;
     }
     this.clearViewDrawerStatus();
@@ -2040,8 +2046,16 @@ export class Settings {
         const to = sel.value;
         if (!from || from === to) return;
         if (this.onMosaicPanePick) {
-          if (!this.onMosaicPanePick(from, to)) fillViewSelect(sel, from);
-          else this.syncPackScopeNoteFromAnim();
+          const outcome = this.onMosaicPanePick(from, to);
+          const finish = (ok: boolean) => {
+            if (!ok) fillViewSelect(sel, from);
+            else this.syncPackScopeNoteFromAnim();
+          };
+          if (outcome && typeof outcome === "object" && "then" in outcome) {
+            void Promise.resolve(outcome).then(finish);
+          } else {
+            finish(!!outcome);
+          }
         } else {
           const next = nextPaneTiles(ids, from, to);
           this.anim.mosaicTiles = parseMosaicTiles(next);
