@@ -577,6 +577,57 @@ function formatCommandForReport(wtRoot, executable, args) {
   return parts.join(" ");
 }
 
+function commandOutputLine(output, red) {
+  for (const line of String(output ?? "").split(/\r?\n/)) {
+    if (line === red) {
+      return line;
+    }
+  }
+  return null;
+}
+
+async function runCommand(wtRoot, meta, slug, phase, timeoutMs) {
+  const cwd = path.join(wtRoot, meta.cwd);
+  const result = await runProcess(meta.command, [], {
+    cwd,
+    shell: true,
+    env: { ...process.env, FORCE_COLOR: "0" },
+    timeoutMs,
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  const exitOk = result.exitCode === 0;
+  if (phase === "baseline") {
+    return {
+      command: `${meta.command} (cwd ${meta.cwd})`,
+      ...result,
+      counts: {
+        selection: { ok: true, target: { status: exitOk ? "passed" : "failed" } },
+        executed: 1,
+        exitOk,
+      },
+      output,
+    };
+  }
+  const redLine = commandOutputLine(output, meta.red);
+  const failed = !exitOk && redLine !== null;
+  return {
+    command: `${meta.command} (cwd ${meta.cwd})`,
+    ...result,
+    counts: {
+      selection: {
+        ok: true,
+        target: {
+          status: failed ? "failed" : exitOk ? "passed" : "failed",
+          failureMessage: redLine ?? output.split(/\r?\n/).find((l) => l.includes("error TS")) ?? output,
+        },
+      },
+      executed: 1,
+      exitOk,
+    },
+    output,
+  };
+}
+
 async function runTestPhase(
   mainRoot,
   wtRoot,
@@ -586,6 +637,9 @@ async function runTestPhase(
   timeoutMs,
   artifactsDir,
 ) {
+  if (meta.runner === "command") {
+    return runCommand(wtRoot, meta, slug, phase, timeoutMs);
+  }
   if (meta.runner === "vitest") {
     return runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir);
   }
@@ -713,7 +767,9 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   const { slug, patchPath, patchText, meta } = row;
   validateRowMeta(meta, slug);
   validateRowProofPr(meta, slug, row.prNumber);
-  validateTestFileRel(meta.testFile, wtRoot);
+  if (meta.runner !== "command") {
+    validateTestFileRel(meta.testFile, wtRoot);
+  }
   validatePatchStructure(patchText, slug);
   validatePatchRevertProofsScope(patchText, slug, row.prNumber);
   validatePatchTouchesOnlyProduction(patchText, slug);
@@ -721,7 +777,9 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
 
   const timeoutSec = parseTimeoutSec(meta.timeoutSec, slug);
   const timeoutMs = timeoutSec * 1000;
-  const testLabel = `${meta.testFile} :: ${meta.testName}`;
+  const testLabel = meta.runner === "command"
+    ? `${meta.cwd}: ${meta.command}`
+    : `${meta.testFile} :: ${meta.testName}`;
 
   resetWorktree(wtRoot);
 
@@ -752,7 +810,14 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
       snippet ? `${base}\n--- baseline output ---\n${snippet}` : base,
     );
   }
-  if (meta.runner === "vitest") {
+  if (meta.runner === "command") {
+    if (!baseline.counts.exitOk) {
+      const snippet = trimFailureOutput(baseline.output || "");
+      throw new Error(
+        `row ${slug}: baseline command must exit 0${snippet ? `\n--- baseline output ---\n${snippet}` : ""}`,
+      );
+    }
+  } else if (meta.runner === "vitest") {
     if (baseline.counts.failed > 0 || baseline.counts.passed !== 1) {
       const snippet = trimFailureOutput(baseline.output || "");
       throw new Error(
@@ -811,7 +876,16 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   }
   assertExactlyOneTest(slug, "patched", patched, meta);
 
-  if (meta.runner === "vitest") {
+  if (meta.runner === "command") {
+    if (patched.counts.exitOk) {
+      throw new Error(`row ${slug}: command stayed GREEN after revert patch (expected failure)`);
+    }
+    if (!commandOutputLine(patched.output, meta.red)) {
+      throw new Error(
+        `row ${slug}: patched command output missing exact red line (proves nothing)`,
+      );
+    }
+  } else if (meta.runner === "vitest") {
     const kind = classifyPatchedVitest({
       counts: patched.counts,
     });

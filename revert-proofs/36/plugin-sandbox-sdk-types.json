@@ -1,8 +1,7 @@
 {
-  "runner": "tsc",
-  "testFile": "web/src/plugins/plugin-sandbox-sdk.test.ts",
-  "testName": "plugin sandbox SDK types > exports ZotoVizPluginHost for pack frontends",
-  "allowTypeError": true,
-  "allowTypeErrorReason": "ZotoVizPluginHost import must resolve from plugins/sdk/plugin-sandbox.ts",
-  "description": "plugins/sdk/plugin-sandbox.ts stays referenced for pack #24 type imports"
+  "description": "plugins/sdk/plugin-sandbox.ts stays referenced for pack #24 type imports",
+  "runner": "command",
+  "command": "pnpm typecheck",
+  "cwd": "web",
+  "red": "typecheck/plugin-sandbox.typecheck.ts(1,15): error TS2305: Module '\"../../plugins/sdk/plugin-sandbox\"' has no exported member 'ZotoVizPluginHost'."
 }

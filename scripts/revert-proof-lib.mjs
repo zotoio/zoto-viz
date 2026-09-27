@@ -215,13 +215,22 @@ export function parseTimeoutSec(raw, slug) {
 }
 
 export function validateRowMeta(meta, slug) {
+  if (meta.runner === "command") {
+    for (const key of ["runner", "description", "command", "cwd"]) {
+      if (!meta[key] || typeof meta[key] !== "string") {
+        throw new Error(`row ${slug}: sidecar JSON missing string field "${key}"`);
+      }
+    }
+    validateRedSidecar(meta, slug);
+    return;
+  }
   for (const key of ["runner", "testFile", "testName", "description"]) {
     if (!meta[key] || typeof meta[key] !== "string") {
       throw new Error(`row ${slug}: sidecar JSON missing string field "${key}"`);
     }
   }
   if (meta.runner !== "vitest" && meta.runner !== "pytest") {
-    throw new Error(`row ${slug}: runner must be vitest or pytest`);
+    throw new Error(`row ${slug}: runner must be vitest, pytest, or command`);
   }
   validateRedSidecar(meta, slug);
 }
@@ -249,6 +258,10 @@ export function validateRedSidecar(meta, slug) {
 export function patchedFailureRedLine(target, runner) {
   if (!target) {
     return null;
+  }
+  if (runner === "command") {
+    const msg = target.failureMessage;
+    return typeof msg === "string" && msg.length > 0 ? msg : null;
   }
   if (runner === "pytest") {
     const assertLine = target.revertProofRed?.assert;

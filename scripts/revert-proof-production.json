@@ -15,6 +15,8 @@
     "scripts/revert-proof-vitest-brand.mjs",
     "scripts/revert-proof-vitest-setup.ts",
     "scripts/revert_proof_pytest_plugin.py",
-    "web/src/style.css"
+    "web/src/style.css",
+    "web/typecheck/plugin-sandbox.typecheck.ts",
+    "web/tsconfig.typecheck.json"
   ]
 }
