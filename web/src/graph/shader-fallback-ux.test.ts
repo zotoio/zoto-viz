@@ -15,6 +15,7 @@ describe("shader fallback UX overlays", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    document.body.innerHTML = "";
   });
 
   it("wall-notice-interrupted-literal", () => {
@@ -47,7 +48,7 @@ describe("shader fallback UX overlays", () => {
     const pane = document.createElement("div");
     wall.appendChild(pane);
     const host = new RenderHost(wall);
-    host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie Clock");
+    host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie Clock", true);
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     expect(wall.querySelectorAll(".gfx-wall-notice").length).toBe(1);
     expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(0);
@@ -65,9 +66,10 @@ describe("shader fallback UX overlays", () => {
     wall.appendChild(pane);
     const host = new RenderHost(wall);
     host.beginTilePack("t", "k:1", "nixie-clock", pane, "Nixie Clock", true);
-    host.receiveFallbackPush("t", "01 05 00");
     host.onTileShaderCompileFailed("t");
-    expect(pane.querySelector(".tile-shader-fallback__text")?.textContent).toBe("01 05 00");
+    const text = pane.querySelector(".tile-shader-fallback__text")?.textContent ?? "";
+    expect(text.length).toBeGreaterThan(0);
+    expect(text).not.toBe(genericShaderFallbackMessage("Nixie Clock"));
     expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(1);
     host.dispose();
     wall.remove();
@@ -79,11 +81,10 @@ describe("shader fallback UX overlays", () => {
     const pane = document.createElement("div");
     wall.appendChild(pane);
     const host = new RenderHost(wall);
-    host.beginTilePack("t", "k:1", "quiet-pack", pane, "Quiet Pack", false);
+    host.beginTilePack("t", "k:1", "quiet-shader", pane, "Quiet Pack", true);
     host.onTileShaderCompileFailed("t");
-    const want = "Quiet Pack can't run its graphics on this device. Other tiles aren't affected.";
+    const want = genericShaderFallbackMessage("Quiet Pack");
     expect(pane.querySelector(".tile-shader-fallback__text")?.textContent).toBe(want);
-    expect(want).toBe(genericShaderFallbackMessage("Quiet Pack"));
     expect(pane.querySelectorAll(".tile-shader-fallback-chip").length).toBe(0);
     host.dispose();
     wall.remove();

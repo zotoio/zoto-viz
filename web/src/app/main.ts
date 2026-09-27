@@ -427,8 +427,6 @@ function swapVizPack(packId: VizDemoPackId): void {
   preserveVizUbo = true;
   applyMode(pluginViewId(packId));
 }
-let sandboxFallbackPackId = "";
-
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
   setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
@@ -439,9 +437,6 @@ sandbox.handlers = {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
-  fallbackText: (text) => {
-    if (sandboxFallbackPackId) renderHost.receiveFallbackPushForPack(sandboxFallbackPackId, text);
-  },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };
@@ -599,7 +594,6 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
-    sandboxFallbackPackId = "";
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
@@ -607,7 +601,6 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   }
   if (!tsPluginsAllowed()) {
     sandbox.unload();
-    sandboxFallbackPackId = "";
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
@@ -615,7 +608,6 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
     sandbox.unload();
-    sandboxFallbackPackId = "";
     bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
@@ -623,7 +615,6 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   }
   try {
     await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
-    sandboxFallbackPackId = spec.id;
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
@@ -637,7 +628,6 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   } catch (e) {
     console.warn("zoto-viz plugin runtime:", e);
     sandbox.unload();
-    sandboxFallbackPackId = "";
     scene.clearPluginStyle();
   }
 }
@@ -737,6 +727,7 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
         packName: spec.name,
         look: lookOpts,
         packKey: `${spec.id}:${spec.shader_sha256 || ""}`,
+        isShaderPack: true,
       },
     );
     if (err) {
@@ -1030,7 +1021,6 @@ function feed(m: StateMsg): void {
     }, buildFrame);
     if (frame) {
       vizFrameTs = frame.t;
-      renderHost.driveShaderFallbacks(frame);
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }

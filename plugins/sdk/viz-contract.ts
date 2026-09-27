@@ -72,14 +72,8 @@ export interface VizSysTelemetry {
   udev: number;
 }
 
-/**
- * Optional pack hooks implemented on `window.zoto` in the plugin iframe.
- * `fallbackText` supplies a plain-text “simple view” line each frame (host dedupes).
- */
-export interface VizZotoPluginHooks {
-  /** Pull simple-view text for the current frame (host dedupes sends). */
-  fallbackText?: (frame: VizDataFrame) => string;
-}
+/** Optional pack hooks implemented on `window.zoto` in the plugin iframe. */
+export interface VizZotoPluginHooks {}
 
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */
 export interface VizDataFrame {

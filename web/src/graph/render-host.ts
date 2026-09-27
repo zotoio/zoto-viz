@@ -25,7 +25,13 @@ import { harvestGpu, timeGpu } from "../core/gpu-time";
 import { TileShaderLatch } from "./tile-shader-latch";
 import { GfxWallNotice } from "./gfx-wall-notice";
 import { TileShaderFallback } from "./tile-shader-fallback";
-import type { VizDataFrame } from "../plugins/viz-host";
+import { genericShaderFallbackMessage } from "./shader-fallback-copy";
+import {
+  resolveShaderFallbackLine,
+  SHADER_FALLBACK_TICK_MS,
+  shaderPackForId,
+  type ShaderPack,
+} from "./shader-pack-fallback";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
@@ -70,11 +76,11 @@ class TileShaderSlot {
   packId = "";
   packName = "";
   mount: HTMLElement | null = null;
-  /** Pack implements {@link VizZotoPluginHooks.fallbackText} (simple-view line). */
-  hasFallbackHook = true;
+  /** Manifest marks a plugin sky (GLSL) pack — only these enter simple-view fallback. */
+  isShaderPack = false;
+  shaderPack: ShaderPack = {};
   compileFailed = false;
   mountedFallbackPackKey = "";
-  stagedPush: string | null = null;
 
   /** New pack on this pane — clears fallback and compile latch. */
   swapPack(
@@ -82,7 +88,7 @@ class TileShaderSlot {
     packId: string,
     packName: string,
     mount: HTMLElement,
-    hasFallbackHook = true,
+    isShaderPack = false,
   ): void {
     if (this.packKey !== packKey) {
       this.packKey = packKey;
@@ -92,11 +98,11 @@ class TileShaderSlot {
       this.fallback?.dispose();
       this.fallback = null;
       this.mountedFallbackPackKey = "";
-      this.stagedPush = null;
     }
     this.packName = packName;
     this.mount = mount;
-    this.hasFallbackHook = hasFallbackHook;
+    this.isShaderPack = isShaderPack;
+    this.shaderPack = isShaderPack ? shaderPackForId(packId) : {};
   }
 }
 
@@ -118,7 +124,8 @@ export class RenderHost {
   private readonly tileShaders = new Map<string, TileShaderSlot>();
   private readonly gfxNotice: GfxWallNotice;
   private glContextLost = false;
-  private readonly liveFallbacks: TileShaderFallback[] = [];
+  private readonly fallbackTileIds = new Set<string>();
+  private fallbackTick: ReturnType<typeof setInterval> | null = null;
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -229,11 +236,11 @@ export class RenderHost {
     packId: string,
     mount: HTMLElement,
     packName: string,
-    hasFallbackHook = true,
+    isShaderPack = false,
   ): void {
     const slot = this.tileSlot(tileId);
-    if (slot.packKey !== packKey) this.untrackFallback(slot.fallback);
-    slot.swapPack(packKey, packId, packName, mount, hasFallbackHook);
+    if (slot.packKey !== packKey) this.stopFallbackTile(tileId, slot);
+    slot.swapPack(packKey, packId, packName, mount, isShaderPack);
   }
 
   /**
@@ -313,57 +320,71 @@ export class RenderHost {
 
   private mountShaderFallback(tileId: string): void {
     const slot = this.tileSlot(tileId);
+    if (!slot.isShaderPack) return;
     slot.compileFailed = true;
-    if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;
-    this.untrackFallback(slot.fallback);
+    if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) {
+      this.refreshShaderFallbackText(tileId);
+      return;
+    }
+    this.stopFallbackTile(tileId, slot);
     slot.fallback?.dispose();
-    const staged = slot.stagedPush?.trim() || "";
+    const initialText = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
+    const showChip = typeof slot.shaderPack.fallbackText === "function"
+      && initialText !== genericShaderFallbackMessage(slot.packName);
     slot.fallback = new TileShaderFallback(slot.mount!, {
       packName: slot.packName,
-      packPush: slot.hasFallbackHook,
-      skipGrace: !!staged && slot.hasFallbackHook,
-      initialText: staged || undefined,
+      showChip,
+      initialText,
     });
     slot.mountedFallbackPackKey = slot.packKey;
-    this.liveFallbacks.push(slot.fallback);
-  }
-
-  receiveFallbackPush(tileId: string, text: string): void {
-    const slot = this.tileSlot(tileId);
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    slot.stagedPush = trimmed;
-    if (!slot.fallback) return;
-    slot.fallback.pushPackText(trimmed);
-  }
-
-  receiveFallbackPushForPack(packId: string, text: string): void {
-    for (const [tileId, slot] of this.tileShaders) {
-      if (slot.packId === packId) this.receiveFallbackPush(tileId, text);
-    }
+    this.startFallbackTile(tileId);
   }
 
   clearShaderFallback(tileId: string): void {
     const slot = this.tileShaders.get(tileId);
     if (!slot) return;
-    this.untrackFallback(slot.fallback);
+    this.stopFallbackTile(tileId, slot);
     slot.fallback?.dispose();
     slot.fallback = null;
     slot.mountedFallbackPackKey = "";
     slot.compileFailed = false;
-    slot.stagedPush = null;
   }
 
-  driveShaderFallbacks(_frame: VizDataFrame): void {
-    for (let i = 0; i < this.liveFallbacks.length; i++) {
-      this.liveFallbacks[i]!.tickGrace();
+  private refreshShaderFallbackText(tileId: string): void {
+    const slot = this.tileShaders.get(tileId);
+    if (!slot?.fallback) return;
+    const line = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
+    slot.fallback.applyText(line);
+  }
+
+  private startFallbackTile(tileId: string): void {
+    this.fallbackTileIds.add(tileId);
+    if (this.fallbackTick !== null) return;
+    this.fallbackTick = setInterval(() => {
+      for (const id of this.fallbackTileIds) this.refreshShaderFallbackText(id);
+    }, SHADER_FALLBACK_TICK_MS);
+  }
+
+  private stopFallbackTile(tileId: string, _slot: TileShaderSlot): void {
+    this.fallbackTileIds.delete(tileId);
+    if (this.fallbackTileIds.size === 0 && this.fallbackTick !== null) {
+      clearInterval(this.fallbackTick);
+      this.fallbackTick = null;
     }
   }
 
-  private untrackFallback(fb: TileShaderFallback | null): void {
-    if (!fb) return;
-    const i = this.liveFallbacks.indexOf(fb);
-    if (i >= 0) this.liveFallbacks.splice(i, 1);
+  private clearAllShaderFallbacks(): void {
+    if (this.fallbackTick !== null) {
+      clearInterval(this.fallbackTick);
+      this.fallbackTick = null;
+    }
+    this.fallbackTileIds.clear();
+    for (const slot of this.tileShaders.values()) {
+      slot.fallback?.dispose();
+      slot.fallback = null;
+      slot.mountedFallbackPackKey = "";
+      slot.compileFailed = false;
+    }
   }
 
   private onSharedContextLost(): void {
@@ -434,6 +455,7 @@ export class RenderHost {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
+    this.clearAllShaderFallbacks();
     this.views = [];
     this.renderer.forceContextLoss();
     this.renderer.dispose();

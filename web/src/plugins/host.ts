@@ -10,7 +10,6 @@ export function hostAllows(type: string, caps: string[]): boolean {
   if (type === "writeBuffer" || type === "writeUniform" || type === "writeParticles") {
     return caps.includes("viz.write");
   }
-  if (type === "fallbackText") return caps.includes("viz.read");
   return false;
 }
 
@@ -21,8 +20,7 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeBuffer"; payload: { slot: number; data: number[] } }
   | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
-  | { source: "zoto-viz-plugin"; type: "log"; payload: string }
-  | { source: "zoto-viz-plugin"; type: "fallbackText"; payload: { text: string } };
+  | { source: "zoto-viz-plugin"; type: "log"; payload: string };
 
 export type ParentMsg =
   | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
@@ -36,7 +34,6 @@ export interface PluginHostHandlers {
   writeBuffer?: (slot: number, data: number[]) => void;
   writeUniform?: (name: string, value: VizUniformValue) => void;
   writeParticles?: (data: number[], stride?: number) => void;
-  fallbackText?: (text: string) => void;
 }
 
 const TS_STORE = "zoto-viz.tsPlugins";
@@ -157,6 +154,5 @@ export class PluginSandbox {
     if (d.type === "writeBuffer") this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
     if (d.type === "writeUniform") this.handlers.writeUniform?.(d.payload.name, d.payload.value);
     if (d.type === "writeParticles") this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
-    if (d.type === "fallbackText") this.handlers.fallbackText?.(d.payload.text);
   };
 }

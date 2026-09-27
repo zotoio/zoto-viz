@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/shader-pack-fallback.ts b/web/src/graph/shader-pack-fallback.ts
+index deec56b..a69b4ff 100644
+--- a/web/src/graph/shader-pack-fallback.ts
++++ b/web/src/graph/shader-pack-fallback.ts
+@@ -39,7 +39,7 @@ export function shaderPackForId(packId: string): ShaderPack {
+ 
+ /** Resolve simple-view copy for one pack (hook, generic, or throw/empty). */
+ export function resolveShaderFallbackLine(pack: ShaderPack | null, packName: string): string {
+-  if (!pack?.fallbackText) return genericShaderFallbackMessage(packName);
++  if (!pack?.fallbackText) return "nope";
+   try {
+     const raw = pack.fallbackText();
+     if (raw === undefined || raw === "") return genericShaderFallbackMessage(packName);

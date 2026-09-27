@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-hook.test.ts",
+  "testName": "shader fallback pack hook > throw-tick",
+  "redValue": "AssertionError: expected 'ok' to be '\u2039Hook Pack\u203a can\\'t run its graphics o\u2026' // Object.is equality"
+}

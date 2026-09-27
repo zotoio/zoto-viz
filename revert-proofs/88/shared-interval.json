@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-hook.test.ts",
+  "testName": "shader fallback pack hook > shared-interval",
+  "redValue": "AssertionError: expected 3 to be 2 // Object.is equality"
+}

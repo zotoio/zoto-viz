@@ -1893,7 +1893,13 @@ export class NetScene implements HostedView {
   /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */
   setPluginShader(
     opts: { id: string; source: string } | null,
-    meta?: { packId: string; packName: string; look?: Record<string, string>; packKey?: string },
+    meta?: {
+      packId: string;
+      packName: string;
+      look?: Record<string, string>;
+      packKey?: string;
+      isShaderPack?: boolean;
+    },
   ): string | null {
     if (opts && meta && this.host) {
       this.host.beginTilePack(
@@ -1902,6 +1908,7 @@ export class NetScene implements HostedView {
         meta.packId,
         this.container,
         meta.packName,
+        meta.isShaderPack ?? true,
       );
     }
     const gpuProbe = this.host && opts && meta

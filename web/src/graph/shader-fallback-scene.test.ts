@@ -3,16 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NetScene } from "./scene";
 import { RenderHost } from "./render-host";
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
-import { FALLBACK_GRACE_FRAMES } from "./shader-fallback-test-helpers";
-import type { VizDataFrame } from "../plugins/viz-host";
-
-const EMPTY: VizDataFrame = {
-  t: 0, dt: 0.016, audio: 0, packets: [], rf: [], talkers: [], headlines: [],
-};
-
-function drive(host: RenderHost, n: number): void {
-  for (let i = 0; i < n; i++) host.driveShaderFallbacks(EMPTY);
-}
 
 const OK = `
 void main() {
@@ -71,7 +61,6 @@ describe("shader fallback net scene", () => {
     );
     expect(err).toBe("shader failed");
     expect(pane.querySelectorAll(".tile-shader-fallback").length).toBe(1);
-    drive(host, FALLBACK_GRACE_FRAMES);
     expect(pane.querySelector(".tile-shader-fallback__text")?.textContent).toBe(
       genericShaderFallbackMessage("Bad Pack"),
     );
@@ -135,6 +124,7 @@ describe("shader fallback net scene", () => {
       { packId: "demo", packName: "Demo", packKey: "demo:1" },
     );
     expect(begin).toHaveBeenCalledTimes(1);
+    expect(begin).toHaveBeenCalledWith("pane-a", "demo:1", "demo", pane, "Demo", true);
     begin.mockRestore();
     host.dispose();
     wall.remove();

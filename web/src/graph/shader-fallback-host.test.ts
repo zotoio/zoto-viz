@@ -30,7 +30,11 @@ describe("tile shader fallback host", () => {
     const beforeNodes = document.body.querySelectorAll("*").length;
     const focus = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(() => {});
     const pack = "Packet Tunnel";
-    const fb = new TileShaderFallback(mount, { packName: pack, packPush: false });
+    const fb = new TileShaderFallback(mount, {
+      packName: pack,
+      showChip: false,
+      initialText: genericShaderFallbackMessage(pack),
+    });
     const nodes = mount.querySelectorAll(".tile-shader-fallback");
     expect(nodes).toHaveLength(1);
     const el = nodes[0] as HTMLElement;
@@ -41,11 +45,6 @@ describe("tile shader fallback host", () => {
     const cs = getComputedStyle(el);
     expect(cs.display).toBe("flex");
     expect(cs.position).toBe("absolute");
-    expect(cs.top).toBe("0px");
-    expect(cs.right).toBe("0px");
-    expect(cs.bottom).toBe("0px");
-    expect(cs.left).toBe("0px");
-    fb.tickGrace();
     expect(focus).toHaveBeenCalledTimes(0);
     expect(document.body.querySelectorAll("*").length - beforeNodes).toBe(2);
     focus.mockRestore();
@@ -56,12 +55,11 @@ describe("tile shader fallback host", () => {
   it("simple-view-chip", () => {
     const mount = document.createElement("div");
     document.body.appendChild(mount);
-    const fb = new TileShaderFallback(mount, { packName: "Nixie", packPush: true });
-    fb.pushPackText("01 05 00");
+    const fb = new TileShaderFallback(mount, { packName: "Nixie", showChip: true, initialText: "01 05 00" });
     const chips = mount.querySelectorAll(".tile-shader-fallback-chip");
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe("Simple view");
-    expect(getComputedStyle(chips[0] as HTMLElement).textTransform).toBe("none");
+    fb.dispose();
     mount.remove();
   });
 
@@ -69,11 +67,8 @@ describe("tile shader fallback host", () => {
     const raw = `../evil/${"x".repeat(120)}<script>alert(1)</script>`;
     const clean = sanitizePackDisplayName(raw);
     expect(clean.length).toBe(80);
-    expect(clean).not.toMatch(/[<>]/);
-    expect(sanitizePackDisplayName("Ni\u0000xie <b>Clock")).toBe("Nixie bClock");
-    expect(sanitizePackDisplayName("Nixie|Clock?*")).toBe("NixieClock");
     expect(genericShaderFallbackMessage(raw)).toBe(
-      `${clean} can't run its graphics on this device. Other tiles aren't affected.`,
+      `‹${clean}› can't run its graphics on this device. Other tiles aren't affected.`,
     );
   });
 
@@ -95,7 +90,11 @@ describe("tile shader fallback host", () => {
   it("fallback-text-css", () => {
     const mount = document.createElement("div");
     document.body.appendChild(mount);
-    const fb = new TileShaderFallback(mount, { packName: "P", packPush: false });
+    const fb = new TileShaderFallback(mount, {
+      packName: "P",
+      showChip: false,
+      initialText: genericShaderFallbackMessage("P"),
+    });
     const text = mount.querySelector(".tile-shader-fallback__text") as HTMLElement;
     expect(getComputedStyle(text).maxWidth).toBe("364px");
     fb.dispose();

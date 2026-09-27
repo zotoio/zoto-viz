@@ -1,12 +1,6 @@
 /** IN-18 Nixie clock — local time packed into sky slots. */
 
-import {
-  formatNixieFallbackLine,
-  nixieCanvasSize,
-  packNixieBuffer,
-  parseNixieLook,
-  type NixieLook,
-} from "./tubes";
+import { nixieCanvasSize, packNixieBuffer, parseNixieLook, type NixieLook } from "./tubes";
 import type { VizDataFrame, VizZotoPluginHooks } from "../../../sdk/viz-contract";
 
 declare const zoto: VizZotoPluginHooks & {
@@ -18,16 +12,6 @@ declare const zoto: VizZotoPluginHooks & {
 };
 
 let look: NixieLook = parseNixieLook(zoto.getConfig?.());
-const NIXIE_NOW = new Date();
-const NIXIE_SCRATCH = { h: 0, m: 0, s: 0 };
-const NIXIE_CACHE = { key: -1, text: "" };
-
-function nixieFallbackLine(): string {
-  NIXIE_NOW.setTime(Date.now());
-  return formatNixieFallbackLine(NIXIE_NOW, look, NIXIE_SCRATCH, NIXIE_CACHE);
-}
-
-zoto.fallbackText = () => nixieFallbackLine();
 
 zoto.onConfig = (cfg) => {
   look = parseNixieLook(cfg);

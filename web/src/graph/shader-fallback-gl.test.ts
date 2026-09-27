@@ -37,7 +37,7 @@ describe("shader fallback gl context", () => {
 
   it("context-loss-notice-no-generic", () => {
     const { host, wall, pane } = hostWithGl();
-    host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie");
+    host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie", true);
     host.compilePluginSky("t", {} as never, {} as never);
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     const notices = wall.querySelectorAll(".gfx-wall-notice");
@@ -53,11 +53,11 @@ describe("shader fallback gl context", () => {
     const { host, wall, pane } = hostWithGl();
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
-    host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie");
+    host.beginTilePack("t", "nixie:1", "nixie-clock", pane, "Nixie", true);
     host.compilePluginSky("t", {} as never, {} as never);
     const deadPane = document.createElement("div");
     wall.appendChild(deadPane);
-    host.beginTilePack("dead", "g:1", "gone-pack", deadPane, "Gone");
+    host.beginTilePack("dead", "g:1", "gone-pack", deadPane, "Gone", true);
     vi.mocked(host.compilePluginSky).mockRestore();
     Object.defineProperty(host, "software", { value: false });
     failCompileWith(host, "dead", scene, camera, { shaderLog: "shader failed" });
