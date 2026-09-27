@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| `proven_at` | `8d27f0fa68460e4a7579dd9db1256693209ca8c1` |
-| `tree` | `def148d4d32ab83c191321272c316f60ce61de56` |
+| `proven_at` | `76dbc39fbc04f85d7620f8361d12b67f123ae581` |
+| `tree` | `e95d260f8837a19b0cec37af8e53133d1a326bbc` |
 
 Six patch+json rows guarding pack PR `revert-proofs/<own PR>/` rules and required PR number.
