@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setPackAssetTokenForTests } from "../core/http";
+import * as packAssetFrame from "../plugins/pack-asset-frame";
 import { countPluginSandboxIframes, PluginSandbox } from "../plugins/host";
 import { defaultVizContract } from "../plugins/viz-host";
 import type { ViewMode } from "../core/modes";
@@ -67,6 +69,28 @@ const thirdSpec: PluginView = {
   has_frontend: true,
   hash: "tunnel-hash",
 };
+const rotoSpec: PluginView = {
+  id: "roto-proto",
+  name: "Roto",
+  version: 1,
+  capabilities: ["viz.write"],
+  viz: defaultVizContract({ presentTick: true }),
+};
+
+function pluginSpecConsentedForCleanup(id: string): PluginView | null {
+  if (id === "plugin:stereo-gram") return stereoSpec;
+  if (id === "plugin:packet-tunnel") return { ...thirdSpec, consent: "reviewed" };
+  if (id === "plugin:roto-proto") {
+    return {
+      ...rotoSpec,
+      consent: "reviewed",
+      runtime: "typescript",
+      has_frontend: true,
+      hash: "roto-hash",
+    };
+  }
+  return null;
+}
 
 function mode(id: string, pluginId: string, label: string): ViewMode {
   return {
@@ -120,13 +144,6 @@ function buildHost(
 
   let live = "plugin:stereo-gram";
   let skyPromptPack = "";
-  const rotoSpec: PluginView = {
-    id: "roto-proto",
-    name: "Roto",
-    version: 1,
-    capabilities: ["viz.write"],
-    viz: defaultVizContract({ presentTick: true }),
-  };
   const specs: Record<string, PluginView> = {
     "plugin:stereo-gram": stereoSpec,
     "plugin:packet-tunnel": thirdSpec,
@@ -640,24 +657,43 @@ describe("applyModeImpl rollback", () => {
   });
 });
 
+const SANDBOX_TEST_FRAME = "11111111-1111-4111-8111-111111111111";
+const SANDBOX_TEST_TOKEN = "sess-tok-cleanup";
+
+function armPluginSandboxPackAssets(): void {
+  setPackAssetTokenForTests("_sandbox", SANDBOX_TEST_TOKEN);
+  setPackAssetTokenForTests("packet-tunnel", SANDBOX_TEST_TOKEN);
+  setPackAssetTokenForTests("roto-proto", SANDBOX_TEST_TOKEN);
+  vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue(SANDBOX_TEST_FRAME);
+}
+
 describe("mode switch cleanup counts", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    resetModeSwitchAttemptForTests();
+    resetModeSwitchCoordinatorForTests();
+    resetModeSwitchStateForTests();
+    resetPackConsentForTests();
+    setLastConsentedModeId("plugin:stereo-gram");
+    armPluginSandboxPackAssets();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    setPackAssetTokenForTests("_sandbox", "");
+    setPackAssetTokenForTests("packet-tunnel", "");
+    setPackAssetTokenForTests("roto-proto", "");
     document.querySelectorAll("iframe[sandbox]").forEach((el) => el.remove());
+    resetModeSwitchAttemptForTests();
+    resetModeSwitchCoordinatorForTests();
+    resetModeSwitchStateForTests();
+    resetPackConsentForTests();
     vi.useRealTimers();
   });
 
   it("20 fast A,B,C switches with slow sky and real loadTs leave one sandbox iframe", async () => {
     const sandbox = new PluginSandbox();
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      text: async () => "export default function onPresent() {}",
-    })));
     vi.spyOn(pluginModule, "fetchPluginSky").mockImplementation(
       (_id, _hash, signal) => new Promise((resolve, reject) => {
         const t = setTimeout(() => {
@@ -672,6 +708,7 @@ describe("mode switch cleanup counts", () => {
     );
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
+      pluginSpecForMode: pluginSpecConsentedForCleanup,
       loadTsPlugin: async (spec, signal) => {
         await attachPluginFrontend(sandbox, spec, {}, signal);
       },
@@ -692,10 +729,10 @@ describe("mode switch cleanup counts", () => {
     });
     runApplyUser(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    vi.advanceTimersByTime(200);
+    vi.advanceTimersByTime(500);
     await vi.waitFor(() => {
       expect(countPluginSandboxIframes()).toBe(1);
-    });
+    }, { timeout: 3000 });
   });
 
   it("committed attempt detaches abort listeners so switching to C disposes B once", async () => {
@@ -703,15 +740,12 @@ describe("mode switch cleanup counts", () => {
     let liveSkyPack: string | null = null;
     const sandbox = new PluginSandbox();
     const unloadSpy = vi.spyOn(PluginSandbox.prototype, "unload");
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      text: async () => "export default function onPresent() {}",
-    })));
     vi.spyOn(pluginModule, "fetchPluginSky").mockResolvedValue(
       "#version 300 es\nprecision highp float;out vec4 o;uniform float uTime,uOpacity,uBright;void main(){o=vec4(0.2);}",
     );
     const host = buildHost({
       ensureReviewed: async () => "ok",
+      pluginSpecForMode: pluginSpecConsentedForCleanup,
       loadTsPlugin: async (spec, signal) => {
         await attachPluginFrontend(sandbox, spec, {}, signal);
       },
@@ -732,18 +766,20 @@ describe("mode switch cleanup counts", () => {
     });
     runApplyUser(host, "plugin:stereo-gram");
     await flushMicrotasks();
+    expect(host.pluginSpecForMode("plugin:packet-tunnel")?.consent).toBe("reviewed");
     const bSignal = runApplyUser(host, "plugin:packet-tunnel");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
     await vi.waitFor(() => {
-      expect(host.modeSel.value).toBe("plugin:packet-tunnel");
       expect(getActiveModeSwitchSignal()).toBeUndefined();
       expect(modeSwitchAbortListenerCountForTests(bSignal)).toBe(0);
     });
     const unloadsAfterB = unloadSpy.mock.calls.length;
     expect(skyDisposals["packet-tunnel"] ?? 0).toBe(0);
     runApplyUser(host, "plugin:roto-proto");
-    await flushMicrotasks();
-    expect(unloadSpy.mock.calls.length - unloadsAfterB).toBe(1);
-    expect(skyDisposals["packet-tunnel"]).toBe(1);
+    await vi.waitFor(() => {
+      expect(unloadSpy.mock.calls.length - unloadsAfterB).toBe(1);
+      expect(skyDisposals["packet-tunnel"]).toBe(1);
+    });
   });
 });
 

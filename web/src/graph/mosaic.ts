@@ -12,7 +12,7 @@ import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
 import {
-  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, parseMosaicNode,
+  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, nextPaneTilesForPicker, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
@@ -25,6 +25,8 @@ import {
   type PackAssetPaneNoticeOpts,
 } from "../plugins/pack-asset-pane-notice";
 import { mosaicTileViewId } from "./mosaic-tile-id";
+import { applyPackCoalesceLayout } from "./mosaic-pack-coalesce";
+import type { PluginView } from "../plugins/plugin";
 
 export { centerSplit } from "./mosaic-layout";
 export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
@@ -283,7 +285,12 @@ export class Mosaic {
       onPaneAuditBind?: (id: string) => void;
       onPaneRebind?: (id: string) => void;
     };
+    pluginSpecForMode?: (modeId: string) => PluginView | null;
   }) {}
+
+  private syncPackCoalesce(): void {
+    applyPackCoalesceLayout(this, mosaicPaneMode, this.cfg.pluginSpecForMode);
+  }
 
   get on(): boolean { return this.size !== "off"; }
   get current(): MosaicSize { return this.size; }
@@ -536,8 +543,16 @@ export class Mosaic {
 
   /** Change one pane. Picking a view already on the wall swaps those two tiles. */
   setPaneView(fromId: string, toId: string): boolean {
+    return this.applyPaneTileList(fromId, toId, nextPaneTiles(this.tileIds, fromId, toId));
+  }
+
+  /** Settings mosaic slot picker: duplicate pack tiles when the view is already on the wall. */
+  setPaneViewFromPicker(fromId: string, toId: string): boolean {
+    return this.applyPaneTileList(fromId, toId, nextPaneTilesForPicker(this.tileIds, fromId, toId));
+  }
+
+  private applyPaneTileList(fromId: string, toId: string, next: string[]): boolean {
     if (!this.tree || !toId || fromId === toId) return false;
-    const next = nextPaneTiles(this.tileIds, fromId, toId);
     if (next.join("\0") === this.tileIds.join("\0")) return false;
     if (!next.includes(fromId)) releasePanelView(fromId);
     this.assignViews(next);
