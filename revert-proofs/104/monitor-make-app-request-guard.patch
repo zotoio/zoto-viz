@@ -1,5 +1,5 @@
 diff --git a/service/monitor.py b/service/monitor.py
-index 5a7fc2f9..594e0504 100644
+index 5a7fc2f..594e050 100644
 --- a/service/monitor.py
 +++ b/service/monitor.py
 @@ -1881,9 +1881,6 @@ def make_app(

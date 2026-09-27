@@ -1,5 +1,5 @@
 diff --git a/service/access.py b/service/access.py
-index 2d4933b6..715e9694 100644
+index 2d4933b..715e969 100644
 --- a/service/access.py
 +++ b/service/access.py
 @@ -100,14 +100,7 @@ def _deny(msg: str, status: int = 403) -> web.Response:

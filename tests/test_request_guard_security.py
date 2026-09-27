@@ -6,7 +6,7 @@ import asyncio
 from aiohttp import ClientSession
 
 from service import request_guard
-from service.request_guard import HOST_REJECT_BODY, validate_allowed_host_entry
+from service.request_guard import HOST_REJECT_BODY, normalize_host_header_key, validate_allowed_host_entry
 from tests.monitor_app_test_util import host_header, make_app_server
 
 
@@ -28,6 +28,10 @@ def test_validate_allowed_host_rejects_out_of_range_port() -> None:
 
 def test_host_forbidden_character_pattern_blocks_semicolon() -> None:
     assert request_guard._HOST_FORBIDDEN_CHARS.search(";")
+
+
+def test_normalize_host_rejects_ipv6_zone_identifier() -> None:
+    assert normalize_host_header_key("[fe80::1%eth0]:7020", 7020) is None
 
 
 def test_validate_allowed_host_rejects_invalid_hostname_syntax() -> None:
