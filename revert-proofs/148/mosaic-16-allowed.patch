@@ -1,0 +1,13 @@
+diff --git a/service/pack_wall_layout.py b/service/pack_wall_layout.py
+index b6faaf9f..a6a414b5 100644
+--- a/service/pack_wall_layout.py
++++ b/service/pack_wall_layout.py
+@@ -6,7 +6,7 @@ from typing import Any
+ 
+ import yaml
+ 
+-ALLOWED_MOSAIC_SIZES: frozenset[str] = frozenset({"off", "4", "6", "8"})
++ALLOWED_MOSAIC_SIZES: frozenset[str] = frozenset({"off", "4", "6", "8", "16"})
+ 
+ 
+ def wall_layout_mosaic_error(rel_path: str, value: str) -> str:
