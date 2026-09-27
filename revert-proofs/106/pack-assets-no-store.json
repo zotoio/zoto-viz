@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_consented_module_js_is_no_store",
-  "description": "Pack asset responses must be no-store.",
-  "timeoutSec": 120,
-  "red": "AssertionError: assert None == 'no-store'"
-}

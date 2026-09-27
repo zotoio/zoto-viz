@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_asset_tokens.py::test_revoked_frame_denied",
-  "description": "Revoked frame must not verify.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert not True"
-}

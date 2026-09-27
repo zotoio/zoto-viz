@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_non_frontend_python_under_frontend_is_404",
-  "red": "AssertionError: assert 200 == 404",
-  "timeoutSec": 120
-}

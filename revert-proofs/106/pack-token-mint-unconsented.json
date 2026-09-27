@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_token_mint_denied_for_unconsented_pack",
-  "red": "AssertionError: assert 200 == 403",
-  "description": "Token mint must refuse unconsented packs.",
-  "timeoutSec": 120
-}

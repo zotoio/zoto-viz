@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_asset_tokens.py::test_parse_rejects_frame_id_not_matching_uuid_regex",
-  "red": "AssertionError: assert ('not-a-uuid-frame-id', b\"`\\xf8\\x9c\\xe7\\x94\\x7ftp\\xeb\\xe16(\\xa0\\xca\\xe6LKo\\x81\\xa5U\\xabXv\\xf2\\x90\\xadX'h\\xfa~\") is None",
-  "description": "parse_pack_asset_token must enforce UUID frame-id grammar on the token prefix.",
-  "timeoutSec": 120
-}

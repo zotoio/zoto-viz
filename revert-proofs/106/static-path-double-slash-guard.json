@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_static_paths_security.py::test_canonical_static_path_rejects_leading_double_slash",
-  "description": "Reject // prefix in canonical static paths.",
-  "timeoutSec": 120,
-  "red": "AssertionError: assert '/etc/passwd' is None"
-}

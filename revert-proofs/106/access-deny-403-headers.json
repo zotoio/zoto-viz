@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_access_deny_headers.py::test_csrf_denied_attaches_frame_and_pack_asset_headers",
-  "red": "AssertionError: assert None == 'nosniff'",
-  "description": "CSRF 403 denials must attach pack-asset JSON response headers.",
-  "timeoutSec": 120
-}

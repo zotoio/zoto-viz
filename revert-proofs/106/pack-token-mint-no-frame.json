@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_token_mint_denied_when_frame_not_registered",
-  "red": "AssertionError: assert 200 == 403",
-  "description": "Token mint requires a live registered frame.",
-  "timeoutSec": 120
-}
