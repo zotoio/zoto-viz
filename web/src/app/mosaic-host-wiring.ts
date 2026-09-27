@@ -1,4 +1,4 @@
-import type { BackdropKind } from "../graph/scene";
+import type { BackdropKind } from "../graph/backdrop";
 import { mosaicTileViewId, mosaicWallUsesView } from "../graph/mosaic-tile-id";
 import type { PluginLook } from "../plugins/plugin";
 
