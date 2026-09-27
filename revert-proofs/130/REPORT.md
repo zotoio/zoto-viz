@@ -7,6 +7,7 @@
 | host-mesh-clear-no-template-map-clear | web/src/graph/host-mesh-lane.test.ts :: host mesh lane > clear() exact teardown counts (Performance Pedant) | Revert templates.clear() on HostMeshLane.clear | web/node_modules/.bin/vitest run --config ../scripts/revert-proof-vitest-overlay.mjs -t "^host mesh lane > clear\\(\\) exact teardown counts \\(Performance Pedant\\)$" --reporter=json --outputFile.json=<tmp> -- src/graph/host-mesh-lane.test.ts | RED (expected) |
 | host-mesh-inflight-no-epoch | web/src/graph/host-mesh-lane.test.ts :: host mesh lane > clear() exact teardown counts (Performance Pedant) | Revert loadEpoch stale-load discard in loadInner | web/node_modules/.bin/vitest run --config ../scripts/revert-proof-vitest-overlay.mjs -t "^host mesh lane > clear\\(\\) exact teardown counts \\(Performance Pedant\\)$" --reporter=json --outputFile.json=<tmp> -- src/graph/host-mesh-lane.test.ts | RED (expected) |
 | host-mesh-strip-assets-prefix | tests/test_host_mesh_loader_gaps.py :: test_host_mesh_lane_strips_assets_prefix_in_api_url | Revert strip assets/ prefix in host mesh assetUrl | python3 -m pytest --no-cov -p no:cacheprovider -p revert_proof_pytest_plugin tests/test_host_mesh_loader_gaps.py::test_host_mesh_lane_strips_assets_prefix_in_api_url | RED (expected) |
+| host-mesh-swim-clip-normalize | web/src/graph/host-mesh-lane.test.ts :: host mesh lane > normalizeSwimClipStart shifts swim tracks to t=0 without changing duration | Revert swim clip time shift in normalizeSwimClipStart | web/node_modules/.bin/vitest run --config ../scripts/revert-proof-vitest-overlay.mjs -t "^host mesh lane > normalizeSwimClipStart shifts swim tracks to t=0 without changing duration$" --reporter=json --outputFile.json=<tmp> -- src/graph/host-mesh-lane.test.ts | RED (expected) |
 | pack-asset-stale-cookie-fallback | tests/test_access_sandbox_token.py :: SandboxAssetTokenOriginTests::test_null_origin_pack_assets_with_stale_csrf_cookie | Revert app csrf fallback when sandbox sends stale cookie only | python3 -m pytest --no-cov -p no:cacheprovider -p revert_proof_pytest_plugin tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_null_origin_pack_assets_with_stale_csrf_cookie | RED (expected) |
 
 ### host-mesh-clear-no-dispose
@@ -68,6 +69,22 @@ FAILED tests/test_host_mesh_loader_gaps.py::test_host_mesh_lane_strips_assets_pr
 ============================== 1 failed in 0.05s ===============================
 ```
 
+### host-mesh-swim-clip-normalize
+
+```
+AssertionError: expected 0.0416666679084301 to be +0 // Object.is equality
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithCancel (file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
+    at runWithTimeout (file://<tmp>
+```
+
 ### pack-asset-stale-cookie-fallback
 
 ```
@@ -80,7 +97,7 @@ _ SandboxAssetTokenOriginTests.test_null_origin_pack_assets_with_stale_csrf_cook
                 )
 >       assert resp.status == 200
 E       AssertionError: assert 401 == 200
-E        +  where 401 = <ClientResponse(http://127.0.0.1:34209/pack-assets/cf77ab9a-c65e-4701-9a6b-d116a2ac0954.jSliUeoOfIks13eF0sBCrhP8MrCaul... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sun, 27 Sep 2026 16:16:31 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
+E        +  where 401 = <ClientResponse(http://127.0.0.1:42667/pack-assets/e1d3366b-28dd-4f05-91e4-3d62e3c1169b.lRiPJ3IUn_s-MzXOvSlcu_jqjkMRKm... HttpOnly; Path=/; SameSite=Strict', 'Date': 'Sun, 27 Sep 2026 17:41:02 GMT', 'Server': 'Python/3.12 aiohttp/3.14.3')>\n.status
 
 tests/test_access_sandbox_token.py:178: AssertionError
 =============================== warnings summary ===============================
