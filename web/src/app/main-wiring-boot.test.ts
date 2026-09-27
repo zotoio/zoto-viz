@@ -7,7 +7,7 @@ import type { Settings } from "../ui/settings";
 import { hostModeById } from "./host-mode";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const wallHtml = readFileSync(join(here, "main-wall-fixture.html"), "utf8");
+const wallHtml = readFileSync(join(here, "test/main-wall-fixture.html"), "utf8");
 
 let capturedSettings: Settings | null = null;
 
@@ -75,6 +75,11 @@ class WS {
   send() {}
 }
 
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await new Promise<void>((r) => queueMicrotask(r));
+}
+
 describe("main.ts wiring boot", () => {
   beforeEach(() => {
     expect.hasAssertions();
@@ -91,9 +96,11 @@ describe("main.ts wiring boot", () => {
 
   it("delegates plugin fields, bind-this-view, applyMode drawer, and mosaic pane pick at boot", async () => {
     await import("./main");
-    await new Promise((r) => setTimeout(r, 100));
+    await flushMicrotasks();
     capturedSettings!.onPluginChange!("plugin:topology", {});
-    capturedSettings!.viewCog!.click();
+    const viewCog = document.querySelector<HTMLButtonElement>("#modeBox button.cog");
+    expect(viewCog).toBeTruthy();
+    viewCog!.click();
 
     const expectSpyOnce = (spy: { mock: { calls: unknown[] } }, name: string) => {
       const n = spy.mock.calls.length;
