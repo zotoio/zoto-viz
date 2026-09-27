@@ -115,9 +115,9 @@ export interface FractalOptions {
 }
 
 export const FRACTAL_DEFAULTS: FractalOptions = {
-  type: "mandelbulb",
-  preset: "bulb-classic",
-  zoomSpeed: 0.35,
+  type: "mandel2d",
+  preset: "mandel-deep",
+  zoomSpeed: 0.55,
   zoomDir: "in",
   autoPilot: true,
   paused: false,
@@ -132,7 +132,7 @@ export const FRACTAL_DEFAULTS: FractalOptions = {
   fog: 0.22,
   dof: false,
   renderScale: 1,
-  palette: "cosmic",
+  palette: "deep",
   paletteCycle: 0.25,
   orbitTrap: true,
   hueShift: 0,

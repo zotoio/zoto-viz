@@ -443,8 +443,36 @@ describe("fractal-zoom shipped pack", () => {
       }
     });
 
+    it("does not paste a static wide Mandelbrot over dark 3D pixels", () => {
+      expect(FRAG).not.toMatch(/lum\s*<\s*0\.14/);
+      expect(FRAG).not.toContain("color2d(uv, 6.0");
+      expect(FRAG).toContain("0.95 / zsc");
+      expect(FRAG).toContain("zWave");
+      expect(FRAG).toContain("-0.743643887");
+    });
+
+    it("dives into Mandelbrot edges: mandelScale shrinks exponentially", () => {
+      const cfg = { preset: "mandel-deep", ...fractalPresetConfig("mandel-deep") };
+      resetFractalDrive();
+      const a = packFractalDrive(0, 1 / 60, 0, 1.6, cfg, IDLE_POINTER);
+      for (let i = 0; i < 600; i++) {
+        packFractalDrive(i / 60, 1 / 60, 0, 1.6, cfg, IDLE_POINTER);
+      }
+      const b = packFractalDrive(10, 1 / 60, 0, 1.6, cfg, IDLE_POINTER);
+      expect(b.slot0[FZ_SLOT.zoomLog]!).toBeGreaterThan(a.slot0[FZ_SLOT.zoomLog]! + 2);
+      expect(b.slot0[FZ_SLOT.mandelScale]!).toBeLessThan(a.slot0[FZ_SLOT.mandelScale]! * 0.05);
+      expect(a.slot0[FZ_SLOT.mandelScale]!).toBeGreaterThan(1);
+    });
+
+    it("iframe clock uses simT, not unix frame.t", () => {
+      expect(FRONT).toContain("let simT = 0");
+      expect(FRONT).toContain("packFractalDrive(simT, dt");
+      expect(FRONT).not.toContain("packFractalDrive(frame.t");
+      expect(FRONT).not.toContain('writeUniform("uBright"');
+    });
+
     it("does not default zoom speed to the slider maximum", () => {
-      expect(PLUGIN).toMatch(/key: zoomSpeed[\s\S]*?default:\s*0\.35/);
+      expect(PLUGIN).toMatch(/key: zoomSpeed[\s\S]*?default:\s*0\.55/);
       expect(PLUGIN).toMatch(/max:\s*1\.?0?/);
       const bare = parseFractalOptions({});
       expect(bare.zoomSpeed).toBeLessThan(1);
