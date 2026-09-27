@@ -132,7 +132,7 @@ def test_zip_ux_fault_message_example() -> None:
     )
 
 def test_zip_ux_api_unsafe_corrupt_message() -> None:
-    payload = zip_unsafe_blocked_payload("not a zip", "not a zip", zip_display_name="pack")
+    payload = zip_unsafe_blocked_payload("not a zip", zip_display_name="pack")
     assert payload["ok"] is False
     assert payload["error"] == "pack_zip_unsafe"
     assert payload["message"] == "Couldn't install pack.zip. The file isn't a valid pack or is damaged."
@@ -140,7 +140,6 @@ def test_zip_ux_api_unsafe_corrupt_message() -> None:
 
 def test_zip_ux_api_unsafe_encrypted_message() -> None:
     payload = zip_unsafe_blocked_payload(
-        "encrypted entries are not allowed",
         "encrypted entries are not allowed",
         zip_display_name="unsafe",
     )
@@ -151,7 +150,6 @@ def test_zip_ux_api_unsafe_encrypted_message() -> None:
 
 def test_zip_ux_api_unsafe_oversize_message() -> None:
     payload = zip_unsafe_blocked_payload(
-        "uncompressed size exceeds 50",
         "uncompressed size exceeds 50",
         zip_display_name="unsafe",
     )
