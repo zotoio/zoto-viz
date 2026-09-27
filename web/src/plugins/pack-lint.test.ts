@@ -336,7 +336,7 @@ describe("pack lint guardrails", () => {
     const hits = scanPackLintFixture(OFF_ALLOWLIST_PACK_REPO_REL, text, "not-on-legacy-allowlist", repoRoot);
     expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
     const { disallowedLegacyZoto } = assertBaselineGuard(hits, loadBaseline(repoRoot));
-    expect(disallowedLegacyZoto.length).toBe(1);
+    expect(disallowedLegacyZoto.length).toEqual(1);
   });
 
   it("off-allowlist declare const zoto blocks pack install lint", () => {
