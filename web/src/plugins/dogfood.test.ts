@@ -60,6 +60,17 @@ function hnTermPackBufferTypedCharCount(buf: number[]): number {
   return count;
 }
 
+/** Cells that were space in `before` and non-space in `after`. */
+function hnTermPackBufferNewTypedCharCount(before: number[], after: number[]): number {
+  const a = hnTermPackBufferCells(before);
+  const b = hnTermPackBufferCells(after);
+  let count = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a.charCodeAt(i) === 32 && b.charCodeAt(i) !== 32) count++;
+  }
+  return count;
+}
+
 function runFatLanSpyRowHnTermPack(): number[] {
   resetHnTermPack();
   const state = fatLanFixture();
@@ -84,35 +95,46 @@ function runFatLanSpyRowHnTermPack(): number[] {
 const FAT_LAN_SPY_ROW_HN_TERM_TYPED_CHARS = 19;
 
 const HN_TERM_DT_GUARD_SEGMENT_FRAMES = 60;
+const HN_TERM_DT_GUARD_HOLD_FRAMES = 10;
 const HN_TERM_DT_GUARD_FRAME_STEP = 1 / 30;
 
-function runHnTermBackwardFrameTRow(): number[] {
-  resetHnTermPack();
-  const state = fatLanFixture();
-  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+function hnTermDtGuardHandlers(): {
+  handlers: {
+    writeBuffer: (slot: number, data: number[]) => void;
+    writeUniform: () => void;
+    writeParticles: () => void;
+  };
+  lastBuffer: () => number[];
+} {
   let captured: number[] = [];
-  const handlers = {
-    writeBuffer: (_slot: number, data: number[]) => {
-      captured = Array.from(data);
+  return {
+    handlers: {
+      writeBuffer: (_slot: number, data: number[]) => {
+        captured = Array.from(data);
+      },
+      writeUniform: () => {},
+      writeParticles: () => {},
     },
-    writeUniform: () => {},
-    writeParticles: () => {},
+    lastBuffer: () => captured,
   };
-  const tickSegment = () => {
-    for (let i = 0; i < HN_TERM_DT_GUARD_SEGMENT_FRAMES; i++) {
-      const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
-      frame.t = i * HN_TERM_DT_GUARD_FRAME_STEP;
-      runPackFrameHandler("hn-term", frame, handlers);
-    }
-  };
-  tickSegment();
-  tickSegment();
-  return captured;
 }
 
-/** Two segments of 60 at `t = i/30` with `frame.t` rewound without `resetHnTermPack`. */
-const HN_TERM_DT_GUARD_TYPED_CHARS = 18;
+function tickHnTermFrames(
+  state: StateMsg,
+  frames: number,
+  tAt: (index: number) => number,
+  handlers: ReturnType<typeof hnTermDtGuardHandlers>["handlers"],
+): void {
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  for (let i = 0; i < frames; i++) {
+    const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+    frame.t = tAt(i);
+    runPackFrameHandler("hn-term", frame, handlers);
+  }
+}
 
+/** 60× `i/30`, 10× hold, 60× `i/30` rewind without `resetHnTermPack`. */
+const HN_TERM_DT_GUARD_TYPED_CHARS = 18;
 function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date(FAT_LAN_SOAK_CLOCK_START_MS));
@@ -186,8 +208,38 @@ it("fat-LAN live soak: exact delivered counts on fake time", () => {
 });
 
 it("hn-term frame.t backward step: dt guard uses 1/60 fallback", () => {
-  const buf = runHnTermBackwardFrameTRow();
-  expect(hnTermPackBufferTypedCharCount(buf)).toBe(HN_TERM_DT_GUARD_TYPED_CHARS);
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const { handlers, lastBuffer } = hnTermDtGuardHandlers();
+  const segment = () =>
+    tickHnTermFrames(state, HN_TERM_DT_GUARD_SEGMENT_FRAMES, (i) => i * HN_TERM_DT_GUARD_FRAME_STEP, handlers);
+  segment();
+  const frozenAtHold = Array.from(lastBuffer());
+  const holdT = (HN_TERM_DT_GUARD_SEGMENT_FRAMES - 1) * HN_TERM_DT_GUARD_FRAME_STEP;
+  tickHnTermFrames(state, HN_TERM_DT_GUARD_HOLD_FRAMES, () => holdT, handlers);
+  expect(hnTermPackBufferNewTypedCharCount(frozenAtHold, lastBuffer())).toBe(0);
+  segment();
+  expect(hnTermPackBufferTypedCharCount(lastBuffer())).toBe(HN_TERM_DT_GUARD_TYPED_CHARS);
+});
+
+it("hn-term frame.t hold step: zero dt adds no typed characters", () => {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const { handlers, lastBuffer } = hnTermDtGuardHandlers();
+  tickHnTermFrames(state, HN_TERM_DT_GUARD_SEGMENT_FRAMES, (i) => i * HN_TERM_DT_GUARD_FRAME_STEP, handlers);
+  let prev = Array.from(lastBuffer());
+  const holdT = (HN_TERM_DT_GUARD_SEGMENT_FRAMES - 1) * HN_TERM_DT_GUARD_FRAME_STEP;
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  for (let i = 0; i < HN_TERM_DT_GUARD_HOLD_FRAMES; i++) {
+    const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+    frame.t = holdT;
+    runPackFrameHandler("hn-term", frame, handlers);
+    const cur = Array.from(lastBuffer());
+    expect(hnTermPackBufferNewTypedCharCount(prev, cur)).toBe(0);
+    prev = cur;
+  }
+  tickHnTermFrames(state, HN_TERM_DT_GUARD_SEGMENT_FRAMES, (i) => i * HN_TERM_DT_GUARD_FRAME_STEP, handlers);
+  expect(hnTermPackBufferTypedCharCount(lastBuffer())).toBe(HN_TERM_DT_GUARD_TYPED_CHARS);
 });
 
 it("fat-LAN live soak: termNow must not read wall clock", () => {

@@ -54,9 +54,11 @@ function termNow(frame: VizDataFrame): number {
 }
 
 function hnTermDt(now: number): number {
-  let dt = termLastT > 0 ? Math.min(1, Math.max(0, now - termLastT)) : 1 / 60;
-  if (!Number.isFinite(dt) || dt <= 0) dt = 1 / 60;
-  return dt;
+  if (termLastT <= 0) return 1 / 60;
+  const raw = now - termLastT;
+  if (!Number.isFinite(raw) || raw < 0) return 1 / 60;
+  if (raw === 0) return 0;
+  return Math.min(1, raw);
 }
 
 function hnTermFrameBuffer(frame: VizDataFrame): number[] {
