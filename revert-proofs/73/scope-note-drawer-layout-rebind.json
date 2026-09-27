@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
-  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > vertical layout patch does not rebuild the view drawer while editing$",
-  "description": "Rebuild the view drawer (bindView) on every mosaic layout patch.",
-  "redOutput": "AssertionError: expected \"rebuildViewDrawerContent\" to not be called at all, but actually been called 1 times"
-}

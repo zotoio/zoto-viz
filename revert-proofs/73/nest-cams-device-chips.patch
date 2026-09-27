@@ -1,7 +1,8 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index 455b9f1..e5d13e1 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1774,7 +1774,10 @@ export class Settings {
+@@ -1797,7 +1797,10 @@ export class Settings {
        );
        gain?.focus();
      }

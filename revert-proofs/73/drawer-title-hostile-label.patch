@@ -1,7 +1,8 @@
 diff --git a/web/src/plugins/plugin.ts b/web/src/plugins/plugin.ts
+index b4a2c0f..fbdab74 100644
 --- a/web/src/plugins/plugin.ts
 +++ b/web/src/plugins/plugin.ts
-@@ -529,7 +529,7 @@ export function specCaption(spec: PluginView): string {
+@@ -530,7 +530,7 @@ export function specCaption(spec: PluginView): string {
    const dispatch = engineDispatch(spec);
    return viewCaption({
      id: spec.id,

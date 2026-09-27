@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/main-apply-mode-drawer.wiring.test.ts",
+  "testName": "^main applyMode drawer wiring > rebind guard > does not rebuild the drawer when applyMode keeps the same drawer key$",
+  "description": "main applyMode must not rebuild the drawer when the drawer key is unchanged.",
+  "redOutput": "AssertionError: expected \"bindThisView\" to not be called at all, but actually been called 1 times"
+}

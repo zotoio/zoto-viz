@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/mosaic-layout.ts b/web/src/graph/mosaic-layout.ts
-index 9dd4013..18f1f76 100644
+index 0ccc771..26e2421 100644
 --- a/web/src/graph/mosaic-layout.ts
 +++ b/web/src/graph/mosaic-layout.ts
-@@ -213,7 +213,8 @@ export function placePaneTileView(ids: string[], fromSlot: string, viewId: strin
+@@ -202,7 +202,8 @@ export function placePaneTileView(ids: string[], fromSlot: string, viewId: strin
  /** Drawer / wall pane pick: allocate another tile slot for the same catalog view when needed. */
  export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
    if (!viewId || fromSlot === viewId) return ids;

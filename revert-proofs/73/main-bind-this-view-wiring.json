@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/main-bind-this-view.wiring.test.ts",
+  "testName": "^main bindThisView wiring > mosaic slot mode id > bindView receives the slot mode id for duplicate tiles$",
+  "description": "main bindThisView must use hostModeById for slot mode ids.",
+  "redOutput": "AssertionError: expected \"hostModeById\" to be called with arguments: [ 'plugin:settings-fixture!1' ]"
+}

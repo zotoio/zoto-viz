@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
-index bc0eb6e..c7dfad3 100644
+index 71f9f9e..6bb95b4 100644
 --- a/web/src/plugins/plugin-ui.ts
 +++ b/web/src/plugins/plugin-ui.ts
 @@ -93,7 +93,7 @@ export function fillPluginFields(

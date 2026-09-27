@@ -74,6 +74,10 @@ def parse_patch_edits(patch_text: str) -> list[tuple[str, str, str]]:
             m = re.search(r" b/(web/.+)$", line)
             file_rel = m.group(1) if m else None
             continue
+        if line.startswith("--- a/"):
+            flush()
+            file_rel = line[6:].split("\t", 1)[0]
+            continue
         if line.startswith("@@"):
             flush()
             continue
@@ -94,12 +98,26 @@ def write_row_from_edits(name: str, edits: list[tuple[str, str, str]], *, replac
     checkout_web()
 
 
-def write_row_from_patch(name: str) -> None:
+def normalize_legacy_patch(name: str) -> None:
     patch_path = PROOFS / f"{name}.patch"
-    edits = parse_patch_edits(patch_path.read_text())
-    if not edits:
-        raise SystemExit(f"{name}: no edits parsed")
-    write_row_from_edits(name, edits)
+    checkout_web()
+    check = subprocess.run(
+        ["git", "apply", "--check", str(patch_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if check.returncode != 0:
+        edits = parse_patch_edits(patch_path.read_text())
+        if not edits:
+            raise SystemExit(f"{name}: cannot apply or parse patch")
+        inverted = [(rel, rev, head) for rel, head, rev in edits]
+        write_row_from_edits(name, inverted)
+        return
+    subprocess.run(["git", "apply", str(patch_path)], cwd=ROOT, check=True)
+    diff = git_diff(["web"])
+    patch_path.write_text(diff)
+    checkout_web()
 
 
 def run_vitest_red(test_file: str, test_name: str) -> str:
@@ -300,7 +318,7 @@ def main() -> None:
         p.stem for p in PROOFS.glob("*.patch") if p.stem not in NEW_META
     )
     for name in legacy:
-        write_row_from_patch(name)
+        normalize_legacy_patch(name)
         out = subprocess.run(
             ["git", "apply", "--check", "-v", str(PROOFS / f"{name}.patch")],
             cwd=ROOT,

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
-  "testName": "^applyInstance packName > keeps packName when instance row has a label$",
-  "description": "applyInstance must not overwrite packName with the instance label.",
-  "redOutput": "AssertionError: expected 'Alt feed' to be 'Headlines' // Object.is equality"
-}

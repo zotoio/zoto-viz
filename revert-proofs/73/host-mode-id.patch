@@ -1,8 +1,8 @@
 diff --git a/web/src/app/host-mode.ts b/web/src/app/host-mode.ts
-index 1111111..2222222 100644
+index 8aca787..2e202ec 100644
 --- a/web/src/app/host-mode.ts
 +++ b/web/src/app/host-mode.ts
-@@ -7,14 +7,5 @@ function withSlotId(modeId: string, mode: ViewMode): ViewMode {
+@@ -8,14 +8,5 @@ function withSlotId(modeId: string, mode: ViewMode): ViewMode {
  }
  
  export function hostModeById(modeId: string): ViewMode {

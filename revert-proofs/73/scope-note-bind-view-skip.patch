@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 0c6fb83..3e49988 100644
+index 455b9f1..96a0e8b 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -491,7 +491,7 @@ export class Settings {
+@@ -492,7 +492,7 @@ export class Settings {
        nestDevices: this.nestDevices,
        draftValues,
      });

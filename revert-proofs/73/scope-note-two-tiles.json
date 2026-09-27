@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/duplicate-slot-shared-config.test.ts",
-  "testName": "^duplicate slot shared config > scope note when two tiles share one store > shows Changes apply to all 2 when the pack is on two mosaic slots$",
-  "description": "Hide pack scope note when two tiles share one config store.",
-  "redOutput": "AssertionError: expected null to be 'Changes apply to all 2 Settings fixtu…' // Object.is equality"
-}

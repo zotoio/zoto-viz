@@ -13,7 +13,7 @@ export type MainOnPluginFieldsDeps = {
   modeSelValue: () => string;
   hostModeById: (id: string) => ViewMode;
   optsFor: (m: ViewMode) => Record<string, string>;
-  mosaic: Pick<Mosaic, "on" | "graphScene"> | null | undefined;
+  mosaic: Pick<Mosaic, "on" | "graphScene" | "tileIds"> | null | undefined;
   scene: Pick<NetScene, "setMode">;
   pluginSpecForMode: (modeId: string) => PluginView | null;
   setCurrentOpts: (o: Record<string, string>) => void;
@@ -32,7 +32,7 @@ export function runMainOnPluginFields(deps: MainOnPluginFieldsDeps): void {
     fallbackModeId: deps.modeSelValue,
     hostModeById: deps.hostModeById,
     optsFor: deps.optsFor,
-    mosaic: deps.mosaic,
+    mosaic: deps.mosaic ?? null,
     scene: deps.scene,
     pluginSpecForMode: deps.pluginSpecForMode,
     setCurrentOpts: deps.setCurrentOpts,

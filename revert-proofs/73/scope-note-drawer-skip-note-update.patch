@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 0c6fb83..9bbaba5 100644
+index 455b9f1..adb8be8 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1862,10 +1862,7 @@ export class Settings {
+@@ -1872,10 +1872,7 @@ export class Settings {
    refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
  
    private syncPackScopeNoteFromAnim(): void {
