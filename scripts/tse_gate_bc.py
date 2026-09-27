@@ -82,6 +82,57 @@ def vitest_full_file(tf: str, tn: str) -> tuple[int, str, str | None]:
     return code, summary, measured
 
 
+def patch_mutation_body(patch: Path) -> str:
+    lines: list[str] = []
+    for ln in patch.read_text().splitlines():
+        if ln.startswith("@@"):
+            continue
+        if ln.startswith(("diff ", "index ", "---", "+++")):
+            continue
+        if ln[:1] in "-+ ":
+            lines.append(ln)
+    return "\n".join(lines)
+
+
+def mutation_hash(patch: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(patch_mutation_body(patch).encode()).hexdigest()[:16]
+
+
+def validate_sidecar_assertion(row: str, expected: str) -> list[str]:
+    errs: list[str] = []
+    if not expected.startswith("AssertionError:"):
+        errs.append(f"{row}: patchedAssertion must start with AssertionError:")
+    if re.search(r"\b\d+\s*ms\b|Duration|Test Files|passed \|", expected):
+        errs.append(f"{row}: patchedAssertion looks like a summary line, not AssertionError")
+    return errs
+
+
+def check_mutation_duplicates() -> list[str]:
+    """Same +/- body (@@ stripped) + same vitest target + same assertion => one row."""
+    groups: dict[tuple[str, str, str, str], list[str]] = {}
+    for sc in sorted((ROOT / "revert-proofs/27").glob("*.json")):
+        patch = sc.with_suffix(".patch")
+        if not patch.exists():
+            continue
+        d = json.loads(sc.read_text())
+        key = (
+            mutation_hash(patch),
+            d["testFile"],
+            d["testName"],
+            d["patchedAssertion"],
+        )
+        groups.setdefault(key, []).append(sc.stem)
+    return [f"duplicate mutation+test rows: {names} (hash {key[0]})" for key, names in groups.items() if len(names) > 1]
+
+
+def check_pnpm_not_in_diff(base: str, head: str) -> list[str]:
+    stat = run(["git", "diff", f"{base}...{head}", "--stat"]).stdout
+    bad = [ln for ln in stat.splitlines() if ".modules.yaml" in ln or "pnpm-workspace-state" in ln]
+    return [f"PR diff must not touch pnpm lock state: {ln.strip()}" for ln in bad]
+
+
 def patch_minus_plus(patch: Path) -> tuple[list[str], list[str]]:
     minus, plus = [], []
     for ln in patch.read_text().splitlines():
@@ -131,7 +182,29 @@ def main() -> None:
     if dup:
         sys.exit(1)
 
-    print("\n=== (4) strict git apply --check @ split HEAD web trees ===")
+    print("\n=== (b2) mutation body dup (@@ stripped) + same test + assertion ===")
+    mut_dups = check_mutation_duplicates()
+    print("\n".join(mut_dups) if mut_dups else "(empty — no duplicate mutation rows)")
+    if mut_dups:
+        sys.exit(6)
+
+    print("\n=== (#80) pnpm state files must not appear in PR diff stat ===")
+    pnpm_errs: list[str] = []
+    pnpm_errs.extend(check_pnpm_not_in_diff("6520b01", "4a1e647d"))
+    pnpm_errs.extend(check_pnpm_not_in_diff("4a1e647d", "e4d64961"))
+    pnpm_errs.extend(check_pnpm_not_in_diff("e4d64961", "6678a61b"))
+    print("\n".join(pnpm_errs) if pnpm_errs else "No node_modules/.modules.yaml or .pnpm-workspace-state-v1.json in split diffs.")
+
+    sidecar_shape: list[str] = []
+    for sc in sorted((ROOT / "revert-proofs/27").glob("*.json")):
+        d = json.loads(sc.read_text())
+        sidecar_shape.extend(validate_sidecar_assertion(sc.stem, d["patchedAssertion"]))
+    if sidecar_shape:
+        print("\n=== (#80) patchedAssertion shape ===")
+        for e in sidecar_shape:
+            print(e)
+    if pnpm_errs or sidecar_shape:
+        sys.exit(7)
     apply_errs: list[str] = []
     for split, base, head in SPLITS:
         rows = sidecars(base, head)
@@ -155,6 +228,7 @@ def main() -> None:
             shape.extend(validate_patch(row, patch, sc))
             d = json.loads(sc.read_text())
             expected = d["patchedAssertion"]
+            shape.extend(validate_sidecar_assertion(row, expected))
             tf, tn = d["testFile"], d["testName"]
             checkout_web(head)
             if run(["git", "apply", "-p1", str(patch)]).returncode != 0:
