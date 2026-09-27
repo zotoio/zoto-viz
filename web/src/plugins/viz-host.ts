@@ -67,6 +67,8 @@ export interface VizPluginContract {
   uniforms: VizSkyUniform[];
   ubo: typeof VIZ_UBO;
   idle: VizIdleConfig;
+  /** Pack may hold a still picture with detail; host skips the stillness empty rule. */
+  mayBeStatic?: boolean;
 }
 
 export type {
@@ -374,6 +376,8 @@ export function parseVizContractResult(raw: unknown): VizContractParseResult | u
 export function parseVizContract(raw: unknown): VizPluginContract | undefined {
   const parsed = parseVizContractResult(raw);
   return parsed?.state === "ready" ? parsed.contract : undefined;
+  const mayBeStatic = doc.mayBeStatic === true;
+  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO, idle, mayBeStatic };
 }
 
 function clampInt(raw: unknown, lo: number, hi: number, fallback: number): number {
@@ -823,6 +827,12 @@ export class VizBufferWriter {
   private readonly lengths: Uint16Array;
   private readonly particles: Float32Array;
   private particleCount = 0;
+  private writes = 0;
+
+  /** Increments on any successful buffer / uniform / particle write. */
+  get writeGeneration(): number {
+    return this.writes;
+  }
 
   constructor(contract: VizPluginContract) {
     this.contract = contract;
@@ -849,6 +859,7 @@ export class VizBufferWriter {
     for (let i = 0; i < len; i++) buf[i] = Number(data[i]) || 0;
     for (let i = len; i < buf.length; i++) buf[i] = 0;
     this.lengths[slot] = len;
+    this.writes++;
     return { ok: true };
   }
 
@@ -860,11 +871,13 @@ export class VizBufferWriter {
       if (!Array.isArray(value) || value.length !== 3) {
         return { ok: false, error: `${name} requires vec3` };
       }
+      this.writes++;
       return { ok: true };
     }
     if (typeof value !== "number" || !Number.isFinite(value)) {
       return { ok: false, error: `${name} requires float` };
     }
+    this.writes++;
     return { ok: true };
   }
 
@@ -879,6 +892,7 @@ export class VizBufferWriter {
     const n = count * stride;
     for (let i = 0; i < n; i++) this.particles[i] = Number(data[i]) || 0;
     this.particleCount = count;
+    this.writes++;
     return { ok: true, written: count };
   }
 

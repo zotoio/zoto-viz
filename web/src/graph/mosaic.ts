@@ -230,6 +230,8 @@ export class Mosaic {
     /** Live tile picker (consent, setMode, sky sync). When set, pane chrome uses this instead of bare assignViews. */
     onPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
     paneCog?: (id: string) => HTMLButtonElement;
+    /** Mosaic pane bound or its view id changed (dropdown / swap). */
+    onTileViewChange?: (viewId: string) => void;
     sync: () => MosaicSync;
     /** Per-tile render-scale governor + sky uniform contract. */
     configureGraphPane?: (scene: NetScene, modeId: string) => void;
@@ -265,6 +267,10 @@ export class Mosaic {
   graphScene(id: string): NetScene | null {
     if (this.mainId === id) return this.cfg.main;
     return this.extras.find((e) => e.id === id)?.scene ?? null;
+  }
+
+  paneElement(id: string): HTMLElement | null {
+    return this.panes.get(id) ?? null;
   }
 
   private restoreSolo(): void {
@@ -400,9 +406,13 @@ export class Mosaic {
     for (const s of this.graphs) fn(s);
   }
 
-  update(msg: StateMsg): void {
-    for (const e of this.extras) e.scene.update(msg);
-    for (const slot of this.tileArcade.values()) slot.view.update(msg);
+  update(msg: StateMsg, remap?: (tileId: string, m: StateMsg) => StateMsg): void {
+    for (const e of this.extras) {
+      e.scene.update(remap ? remap(e.id, msg) : msg);
+    }
+    for (const [id, slot] of this.tileArcade) {
+      slot.view.update(remap ? remap(id, msg) : msg);
+    }
   }
 
   applyLooks(a: DreamAnim, pin = true): void {
@@ -473,7 +483,13 @@ export class Mosaic {
     const want = parseMosaicTiles(tiles);
     if (want.join("\0") === prev.join("\0")) return;
     const touch = new Set(mosaicPaneIdsWithViewChange(prev, want));
+    if (want.join("\0") === this.tileIds.join("\0")) return;
+    const prev = this.tileIds;
     this.tree = assignTiles(this.tree, want);
+    const next = this.tileIds;
+    for (let i = 0; i < next.length; i++) {
+      if (prev[i] !== next[i] && next[i]) this.cfg.onTileViewChange?.(next[i]);
+    }
     this.rematchTried.clear();
     this.rematchQueued.clear();
     this.syncPanes(this.tileIds);
@@ -601,6 +617,7 @@ export class Mosaic {
     }
     if (this.paneBound(id)) {
       this.auditPane(id, "bind");
+      this.cfg.onTileViewChange?.(id);
       return;
     }
     if (isGraph(id)) {
@@ -622,6 +639,7 @@ export class Mosaic {
         this.extras.push({ id, scene: s });
       }
       this.auditPane(id, "bind");
+      this.cfg.onTileViewChange?.(id);
       return;
     }
     const slot = this.ensureArcade(id);

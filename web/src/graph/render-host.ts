@@ -370,6 +370,22 @@ export class RenderHost {
   }
 
   /** Whole-wall layout DPR (auto-tune). Backing store scales here; renderer pixel ratio stays 1. */
+  /** Force a WebGL context loss so panes can rebuild GL state (tile heal ladder). */
+  recreateContext(): void {
+    if (this.software) return;
+    const r = this.renderer as THREE.WebGLRenderer;
+    try {
+      r.forceContextLoss();
+    } catch { /* already lost */ }
+    requestAnimationFrame(() => {
+      try {
+        r.forceContextRestore();
+      } catch { /* extension missing */ }
+      this.dirty = true;
+    });
+  }
+
+  /** Whole-wall pixel ratio (auto-tune). No-op when unchanged. */
   setPixelRatio(pr: number): void {
     if (Math.abs(pr - this.pixelRatio) < 0.01) return;
     this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);

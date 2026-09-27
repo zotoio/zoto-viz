@@ -1,0 +1,22 @@
+id: tile-health-stall
+name: Tile health — stall
+version: 1
+hint: Host dogfood pack — stops viz writes after 40 frames.
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 4
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAccent
+    - uBg
+    - uOpacity
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts

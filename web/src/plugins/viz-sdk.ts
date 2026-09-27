@@ -17,6 +17,12 @@ zoto.writeParticles = function(data, stride) {
   const arr = Array.isArray(data) ? data : Array.from(data);
   send("writeParticles", { data: arr, stride: stride || 4 });
 };
+zoto.reportDrawState = function(drawing) {
+  send("drawState", { drawing: !!drawing });
+};
+zoto.loseHostContext = function() {
+  send("loseHostContext", {});
+};
 window.addEventListener("message", (ev) => {
   const d = ev.data;
   if (!d || d.source !== "zoto-viz-host") return;

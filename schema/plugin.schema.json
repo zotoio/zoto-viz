@@ -608,6 +608,11 @@
         "idle": {
           "$ref": "#/$defs/vizIdle",
           "description": "Demo frame fallback when live monitor slices are empty. Required with viz.read or viz.write."
+        },
+        "mayBeStatic": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the host tile-health probe skips the stillness (no new frames) empty rule. Flat/uniform panels are still detected."
         }
       }
     },
