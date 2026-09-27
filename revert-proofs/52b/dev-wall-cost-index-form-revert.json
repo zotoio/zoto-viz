@@ -1,8 +1,0 @@
-{
-  "row": "A revert: whole-wall flag accepts index:ticks again",
-  "runner": "vitest",
-  "testFile": "web/src/app/main-viz-dev-wall-bad-input.test.ts",
-  "testName": "^main viz dev wall bad-input path > Q3 indexed 1:3000 \u2014 exact bad-input message, 0 LIMITED lines, 0 skips$",
-  "patchedAssertion": "AssertionError: expected true to be false // Object.is equality",
-  "excerpt": "AssertionError: expected true to be false // Object.is equality"
-}

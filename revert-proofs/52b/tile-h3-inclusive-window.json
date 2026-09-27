@@ -1,8 +1,0 @@
-{
-  "row": "H3 revert inclusive HUD window lower bound",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
-  "testName": "^tile HUD rows \\(half-open window \\(now\u2212300000, now\\] in ticks\\) > H3: window edge \u2014 exactly 40 and 55 skipped/s at i=119$",
-  "excerpt": "AssertionError: expected 41 to be 40 // Object.is equality",
-  "patchedAssertion": "AssertionError: expected 41 to be 40 // Object.is equality"
-}

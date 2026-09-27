@@ -1,8 +1,0 @@
-{
-  "row": "R8 revert shedding blanks HUD frame",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-budget.test.ts",
-  "testName": "^tile frame budget rows > R8: HUD over-budget skip rate and shedding keeps last frame$",
-  "excerpt": "AssertionError: expected null to be { t: 1, dt: +0, audio: +0, \u2026(4) } // Object.is equality",
-  "patchedAssertion": "AssertionError: expected null to be { t: 1, dt: +0, audio: +0, \u2026(4) } // Object.is equality"
-}

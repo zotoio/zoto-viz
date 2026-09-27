@@ -1,8 +1,0 @@
-{
-  "row": "A7 nixie-clock GLSL: fc undeclared revert \u2192 1 compile error",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/nixie-clock-sky.test.ts",
-  "testName": "^nixie-clock sky GLSL > A7: wrapped nixie fragment compiles with 0 errors \\(counting GL probe\\)$",
-  "patchedAssertion": "AssertionError: expected 1 to be +0 // Object.is equality",
-  "excerpt": "AssertionError: expected 1 to be +0 // Object.is equality"
-}

@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-budget.test.ts",
-  "testName": "^tile frame budget rows > R3: zero floor — 4 ms then 20 ms yields exactly one skip$",
-  "description": "Removing debt floor eliminates the post-20ms skip"
-}

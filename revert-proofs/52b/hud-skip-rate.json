@@ -1,8 +1,0 @@
-{
-  "row": "HUD skip rate revert inclusive lower bound in sim",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
-  "testName": "^tile HUD rows \\(half-open window \\(now\u2212300000, now\\] in ticks\\) > H1: 10 ms at 2\u00d72 \u2014 cadence k=3; i=119 \u2192 20 frames, LIMITED every 3rd frame label$",
-  "excerpt": "AssertionError: expected 41 to be 40 // Object.is equality",
-  "patchedAssertion": "AssertionError: expected 41 to be 40 // Object.is equality"
-}

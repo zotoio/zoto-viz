@@ -1,8 +1,0 @@
-{
-  "row": "Q4 flag clock revert re-anchors on wall rebuild",
-  "runner": "vitest",
-  "testFile": "src/core/viz-dev-wall-flags.test.ts",
-  "testName": "^dev viz wall flags > Q4 flag clock: 01:05 \\+30s rebuild \\+1s \u2192 \\{h:1,m:5,s:31\\}$",
-  "patchedAssertion": "AssertionError: expected { h: 1, m: 5, s: 1 } to deeply equal { h: 1, m: 5, s: 31 }",
-  "excerpt": "AssertionError: expected { h: 1, m: 5, s: 1 } to deeply equal { h: 1, m: 5, s: 31 }"
-}
