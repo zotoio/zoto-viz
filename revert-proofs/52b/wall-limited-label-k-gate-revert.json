@@ -3,6 +3,6 @@
   "runner": "vitest",
   "testFile": "src/ui/tile-hud-label.test.ts",
   "testName": "^tile HUD LIMITED label \\(60 fps, per line\\) > Amendment 6a gate: k=1 \u2192 no label \\(revert shows every 1st frame\\)$",
-  "excerpt": "AssertionError: expected 'LIMITED \u00b7 sharing the frame with 4 tiles \u00b7 updating every 1st frame' to be null",
-  "patchedAssertion": "AssertionError: expected 'LIMITED \u00b7 sharing the frame with 4 tiles \u00b7 updating every 1st frame' to be null"
+  "excerpt": "AssertionError: expected true to be false // Object.is equality",
+  "patchedAssertion": "AssertionError: expected true to be false // Object.is equality"
 }

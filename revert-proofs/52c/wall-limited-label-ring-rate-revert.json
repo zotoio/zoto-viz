@@ -3,6 +3,6 @@
   "runner": "vitest",
   "testFile": "src/core/viz-wall-limited-harness.test.ts",
   "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > Amendment 6 L2: 3000 @ 2\u00d72 LIMITED text is every 3rd frame$",
-  "patchedAssertion": "AssertionError: expected 'LIMITED \u00b7 sharing the frame with 4 tiles \u00b7 3.0 skipped/s' to be 'LIMITED \u00b7 sharing the frame with 4 tiles \u00b7 updating every 3rd frame' // Object.is equality",
-  "excerpt": "AssertionError: expected 'LIMITED \u00b7 sharing the frame with 4 tiles \u00b7 3.0 skipped/s' to be 'LIMITED \u00b7 sharing the frame with 4 tiles \u00b7 updating every 3rd frame' // Object.is equality"
+  "patchedAssertion": "AssertionError: expected 'LIMITED \u00b7 sharing the frame with 4 ti\u2026' to be 'LIMITED \u00b7 sharing the frame with 4 ti\u2026' // Object.is equality",
+  "excerpt": "AssertionError: expected 'LIMITED \u00b7 sharing the frame with 4 ti\u2026' to be 'LIMITED \u00b7 sharing the frame with 4 ti\u2026' // Object.is equality"
 }
