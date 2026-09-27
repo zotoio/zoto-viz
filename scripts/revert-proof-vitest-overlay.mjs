@@ -32,7 +32,29 @@ const { mergeConfig } = await import(
   pathToFileURL(path.join(vitestPkgRoot, "dist/config.js")).href
 );
 
-const base = (await import(pathToFileURL(baseConfigPath).href)).default;
+function resolveVitePkgRoot(root) {
+  for (const rel of ["web/node_modules/vite", "node_modules/vite"]) {
+    const pkgRoot = path.join(root, rel);
+    if (fs.existsSync(path.join(pkgRoot, "package.json"))) {
+      return pkgRoot;
+    }
+  }
+  throw new Error(`vite package not found under ${root}`);
+}
+
+const vitePkgRoot = resolveVitePkgRoot(wtRoot);
+const { loadConfigFromFile } = await import(
+  pathToFileURL(path.join(vitePkgRoot, "dist/node/index.js")).href
+);
+const loaded = await loadConfigFromFile(
+  { command: "serve", mode: "test" },
+  baseConfigPath,
+  path.dirname(baseConfigPath),
+);
+if (!loaded) {
+  throw new Error(`failed to load vitest base config ${baseConfigPath}`);
+}
+const base = loaded.config;
 
 export default mergeConfig(base, {
   test: {

@@ -91,6 +91,15 @@ export type SandboxZoto = {
   getConfig(): Record<string, string>;
 };
 
+declare global {
+  interface Window {
+    __zotoConfig?: Record<string, string>;
+    __zotoViz?: unknown;
+    __zotoContractVersion?: number;
+  }
+  var zoto: SandboxZoto;
+}
+
 export type SandboxFrameRuntime = {
   allowed: Set<string>;
   bootDone: boolean;
@@ -183,11 +192,11 @@ export const sandboxZotoApi: SandboxZoto = {
   writeBuffer(_slot, _data) { /* viz.write patched after boot */ },
   writeUniform(_name, _value) { /* viz.write patched after boot */ },
   writeParticles(_data, _stride) { /* viz.write patched after boot */ },
-  getConfig() { return (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig || {}; },
+  getConfig() { return window.__zotoConfig || {}; },
 };
 
 const zoto = sandboxZotoApi;
-(globalThis as unknown as { zoto: SandboxZoto }).zoto = zoto;
+globalThis.zoto = zoto;
 
 export function setSandboxFrameLocationHref(href: string): void {
   runtime.locationHref = href;
@@ -351,8 +360,8 @@ export function applySandboxCapsForTests(caps: string[]): void {
 function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: unknown; contractVersion?: number }): void {
   allowed = new Set(d.caps ?? []);
   runtime.allowed = allowed;
-  (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
-  (window as unknown as { __zotoViz?: unknown }).__zotoViz = d.viz || null;
+  window.__zotoConfig = d.config || {};
+  window.__zotoViz = d.viz || null;
   const viz = d.viz as { contract?: number } | null | undefined;
   const version = typeof d.contractVersion === "number"
     ? d.contractVersion
@@ -360,7 +369,7 @@ function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: 
       ? viz.contract
       : undefined;
   if (typeof version === "number") {
-    (window as unknown as { __zotoContractVersion?: number }).__zotoContractVersion = version;
+    window.__zotoContractVersion = version;
   }
   patchVizWriters();
 }
@@ -373,7 +382,7 @@ export function handleSandboxHostMessage(
 ): void {
   if (!d || d.source !== HOST_SOURCE) return;
   if (d.type === "config") {
-    (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
+    window.__zotoConfig = d.config || {};
     api.onConfig?.(d.config || {});
     return;
   }
