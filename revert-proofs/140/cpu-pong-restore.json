@@ -3,7 +3,7 @@
   "description": "Revert row: restore plugins/src/cpu-pong/ duplicate tree",
   "runner": "pytest",
   "testFile": "tests/test_shipped_pack_slug_collision.py",
-  "testName": "^test_no_shipped_pack_slug_collisions_on_disk$",
+  "testName": "test_no_shipped_pack_slug_collisions_on_disk",
   "patchedAssertion": "AssertionError: assert [('cpu-pong', 'cpupong')] == []",
   "excerpt": "AssertionError: assert [('cpu-pong', 'cpupong')] == []",
   "red": "assert find_shipped_pack_slug_collisions(SRC) == []"
