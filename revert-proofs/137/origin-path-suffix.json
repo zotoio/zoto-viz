@@ -1,0 +1,7 @@
+{
+  "description": "Revert strict Origin path rejection (localhost:PORT/x allowed)",
+  "runner": "pytest",
+  "testFile": "tests/test_access_origin_strict.py",
+  "testName": "test_origin_ok_denies_localhost_port_with_path_suffix",
+  "red": "assert not access.origin_ok(_FakeReq(origin=origin, host=f\"localhost:{PORT}\"))"
+}

@@ -1,0 +1,13 @@
+diff --git a/service/access.py b/service/access.py
+index 3bbdd90e..b9025131 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -253,7 +253,7 @@ def origin_ok(request: web.Request) -> bool:
+     if raw == "null":
+         if parse_pack_assets_path(request.path or ""):
+             return request.method in {"GET", "HEAD"}
+-        return False
++        return True
+     name = strict_origin_hostname(raw)
+     if not name:
+         return False

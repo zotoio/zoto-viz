@@ -1,0 +1,7 @@
+{
+  "description": "Revert strict Origin parse (userinfo @localhost bypass via urlparse.hostname)",
+  "runner": "pytest",
+  "testFile": "tests/test_access_origin_strict.py",
+  "testName": "test_origin_ok_denies_userinfo_evil_com_at_localhost_port",
+  "red": "assert not access.origin_ok(_FakeReq(origin=origin, host=f\"localhost:{PORT}\"))"
+}

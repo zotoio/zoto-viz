@@ -1,0 +1,7 @@
+{
+  "description": "Revert default-mode canonical loopback gate (127.0.0.2 Origin allowed)",
+  "runner": "pytest",
+  "testFile": "tests/test_access_origin_strict.py",
+  "testName": "test_origin_ok_denies_127_0_0_2_origin_in_default_mode",
+  "red": "assert not access.origin_ok(_FakeReq(origin=origin, host=f\"127.0.0.2:{PORT}\", lan=False))"
+}
