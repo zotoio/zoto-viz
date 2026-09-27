@@ -8,5 +8,5 @@
     "expected": "Blob Mesh couldn't start, its sandbox didn't respond"
   },
   "project": "web",
-  "redLine": "AssertionError: expected undefined to be 'Blob Mesh couldn\\'t start, its sandbo\u2026' // Object.is equality"
+  "redLine": "TypeError: .toMatch() expects to receive a string, but got undefined"
 }
