@@ -129,6 +129,20 @@ export const FEED_HEADLINE_LIMIT = 64;
 export const FEED_SLIDE_LIMIT = 48;
 const MAX_IMAGE_HREF = 2000;
 
+/** Shipped news / stills — titles live on carousel, rain, and term views. */
+export const FEED_NEWS_IDS = new Set([
+  "hn", "nasa", "apod", "earth-iotd", "commons-potd", "met",
+  "lobsters", "guardian", "mastodon",
+]);
+
+/** RSS / HTTP news and pictured feeds stay off the packet ticker unless a view binds them. */
+export function isFeedNewsSource(live: Pick<SourceLive, "id" | "kind">): boolean {
+  const kind = (live.kind || "").toLowerCase();
+  if (kind === "journal" || kind === "kmsg" || kind === "file") return false;
+  if (kind === "rss" || kind === "http") return true;
+  return FEED_NEWS_IDS.has((live.id || "").toLowerCase());
+}
+
 /** Count feed-eligible headlines without materializing the full list (viz decimation stats). */
 export function countEligibleSourceHeadlines(
   sources: Record<string, SourceLive> | undefined,
@@ -153,8 +167,12 @@ export function countEligibleSourceHeadlines(
     return count >= scanCap;
   };
   for (const live of Object.values(sources)) {
-    if (!live || live.feed === false || live.paused || live.ok === false) continue;
-    if (want && live.id !== want) continue;
+    if (!live || live.paused || live.ok === false) continue;
+    if (want) {
+      if (live.id !== want) continue;
+    } else if (!pictured) {
+      if (live.feed === false || isFeedNewsSource(live)) continue;
+    }
     const kind = (live.kind || "").toLowerCase() || undefined;
     if (kind === "http" && live.json !== undefined && !(live.items && live.items.length)) {
       for (const text of jsonStrings(live.json, scanCap - count)) {
@@ -202,8 +220,12 @@ export function sourceHeadlines(
     return out.length >= limit;
   };
   for (const live of Object.values(sources)) {
-    if (!live || live.feed === false || live.paused || live.ok === false) continue;
-    if (want && live.id !== want) continue;
+    if (!live || live.paused || live.ok === false) continue;
+    if (want) {
+      if (live.id !== want) continue;
+    } else if (!pictured) {
+      if (live.feed === false || isFeedNewsSource(live)) continue;
+    }
     const label = live.label || live.id;
     const kind = (live.kind || "").toLowerCase() || undefined;
     if (kind === "http" && live.json !== undefined && !(live.items && live.items.length)) {

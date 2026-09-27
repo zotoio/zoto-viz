@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  FEED_HEADLINE_LIMIT, illustratedSourceBind, isFeedNewsSource, sourceHeadlines, stripMarkup, type SourceLive,
   countEligibleSourceHeadlines,
   FEED_HEADLINE_LIMIT,
   illustratedSourceBind,
+  isFeedNewsSource,
   sourceHeadlines,
   stripMarkup,
   type SourceLive,
@@ -97,17 +97,15 @@ describe("sourceHeadlines", () => {
     const sources: Record<string, SourceLive> = {
       feed: {
         id: "feed",
-        kind: "rss",
+        kind: "file",
         label: "Feed",
         ok: true,
         feed: true,
-        items: Array.from({ length: 72 }, (_, i) => ({ title: `Item ${i}` })),
+        text: Array.from({ length: 72 }, (_, i) => `Item ${i}`).join("\n"),
       },
     };
-    expect(countEligibleSourceHeadlines(sources)).toBe(72);
-    expect(countEligibleSourceHeadlines(sources)).toBe(
-      sourceHeadlines(sources, Number.MAX_SAFE_INTEGER).length,
-    );
+    const uncapped = sourceHeadlines(sources, Number.MAX_SAFE_INTEGER).length;
+    expect(countEligibleSourceHeadlines(sources)).toBe(uncapped);
   });
 
   it("strips HTML from article blurbs", () => {

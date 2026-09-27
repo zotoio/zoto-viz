@@ -794,6 +794,40 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
   await loadPluginSkyOnto(scene, spec, true);
 }
 
+/** Consent, mode, sky, and frontend for every mosaic tile after a pane pick. */
+let mosaicViewsLoad = 0;
+async function loadMosaicViews(tiles: string[]): Promise<void> {
+  if (!mosaic?.on || !tiles.length) return;
+  const gen = ++mosaicViewsLoad;
+  for (const id of tiles) {
+    if (gen !== mosaicViewsLoad) return;
+    const mode = modeById(id);
+    const spec = mode.pluginId ? pluginSpecForMode(mode.id) : null;
+    if (!(await ensureReviewed(spec))) continue;
+    if (gen !== mosaicViewsLoad || !mosaic.on) return;
+    const target = mosaic.graphScene(id);
+    if (target) {
+      const look = lookForMode(mode.id) ?? spec?.look;
+      const skyStage = !mode.standalone && !!(mode.stageOnly || look?.stageOnly);
+      target.setMode(mode, optsFor(mode));
+      target.setStageOnly(skyStage);
+    }
+  }
+  if (gen !== mosaicViewsLoad || !mosaic.on) return;
+  const focus = (mosaic.focusedId && tiles.includes(mosaic.focusedId))
+    ? mosaic.focusedId
+    : (mosaic.mainTileId && tiles.includes(mosaic.mainTileId) ? mosaic.mainTileId : tiles[0]!);
+  const fm = modeById(focus);
+  const fspec = fm.pluginId ? pluginSpecForMode(fm.id) : null;
+  const paneSpec = skySpecForMode(fm.id, fspec);
+  if (fm.standalone || arcadeSlotFor(fm) !== "carousel") {
+    await loadTsPlugin(paneSpec);
+  }
+  if (gen !== mosaicViewsLoad || !mosaic.on) return;
+  await syncPluginSky(paneSpec);
+  nestCams.setActive(tiles.some((id) => modeById(id).pluginId === "nest-cams"));
+}
+
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   const m = modeById(id);
   const opts = optsFor(m);
@@ -824,9 +858,12 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
       localStorage.setItem("zoto-viz.mode", modeSel.value);
       return;
     }
+    if (mosaic?.on && !(m.pluginId && m.standalone)) {
+      await loadMosaicViews(mosaic.tileIds);
+      return;
+    }
     if (m.standalone || arcadeSlotFor(m) !== "carousel") {
-      void loadTsPlugin(paneSpec);
-      void syncPluginSky(paneSpec);
+      await Promise.all([loadTsPlugin(paneSpec), syncPluginSky(paneSpec)]);
     }
   })();
   feedCtl.feed?.setGraphBase(m.graphBase);
@@ -1160,6 +1197,7 @@ mosaic = new Mosaic({
     applyViewLook();
   },
   onLayout: (patch) => settings.applyMosaicLayout(patch),
+  onPaneViews: (tiles) => { void loadMosaicViews(tiles); },
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },

@@ -65,7 +65,8 @@
     {
       "id": "host-03",
       "rate": 4,
-      "role": "lan"
+      "role": "lan",
+      "failed": 0.5
     },
     {
       "id": "host-07",
@@ -75,7 +76,8 @@
     {
       "id": "host-04",
       "rate": 3,
-      "role": "lan"
+      "role": "lan",
+      "failed": 0.35
     },
     {
       "id": "host-08",
@@ -100,22 +102,6 @@
   ],
   "headlines": [
     {
-      "id": "nasa:0",
-      "label": "NASA IOTD",
-      "text": "Pillars of Creation",
-      "kind": "rss",
-      "summary": "Golden demo still for carousel and feed checks.",
-      "image": "https://images-assets.nasa.gov/image/PIA25434/PIA25434~orig.jpg"
-    },
-    {
-      "id": "nasa:1",
-      "label": "NASA IOTD",
-      "text": "Earth at Night",
-      "kind": "rss",
-      "summary": "Second golden headline when live capture is empty.",
-      "image": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001435/GSFC_20171208_Archive_e001435~large.jpg"
-    },
-    {
       "id": "demo:0",
       "label": "Demo",
       "text": "Zoto viz golden seed",
@@ -138,73 +124,73 @@
   "contract": 2,
   "links": [
     {
-      "src": "10.0.0.1",
-      "dst": "104.16.0.1",
+      "src": "host-02",
+      "dst": "host-09",
       "rate": 7
     },
     {
-      "src": "10.0.0.42",
-      "dst": "10.0.0.1",
+      "src": "host-06",
+      "dst": "host-02",
       "rate": 6
     },
     {
-      "src": "10.0.0.33",
-      "dst": "8.8.8.8",
+      "src": "host-05",
+      "dst": "host-10",
       "rate": 5
     },
     {
-      "src": "10.0.0.15",
-      "dst": "10.0.0.1",
+      "src": "host-03",
+      "dst": "host-02",
       "rate": 4
     },
     {
-      "src": "10.0.0.51",
-      "dst": "1.1.1.1",
+      "src": "host-07",
+      "dst": "host-01",
       "rate": 4
     },
     {
-      "src": "10.0.0.22",
-      "dst": "10.0.0.1",
+      "src": "host-04",
+      "dst": "host-02",
       "rate": 3
     },
     {
-      "src": "10.0.0.77",
-      "dst": "10.0.0.1",
+      "src": "host-08",
+      "dst": "host-02",
       "rate": 2
     },
     {
-      "src": "104.16.0.1",
-      "dst": "10.0.0.1",
+      "src": "host-09",
+      "dst": "host-02",
       "rate": 1.75
     },
     {
-      "src": "10.0.0.1",
-      "dst": "10.0.0.42",
+      "src": "host-02",
+      "dst": "host-06",
       "rate": 1.5
     },
     {
-      "src": "8.8.8.8",
-      "dst": "10.0.0.33",
+      "src": "host-10",
+      "dst": "host-05",
       "rate": 1.25
     },
     {
-      "src": "1.1.1.1",
-      "dst": "10.0.0.51",
+      "src": "host-01",
+      "dst": "host-07",
       "rate": 1
     },
     {
-      "src": "10.0.0.1",
-      "dst": "10.0.0.15",
+      "src": "host-02",
+      "dst": "host-03",
       "rate": 1
     },
     {
-      "src": "10.0.0.1",
-      "dst": "10.0.0.22",
+      "src": "host-02",
+      "dst": "host-04",
       "rate": 0.75
     },
     {
-      "src": "10.0.0.1",
-      "dst": "10.0.0.77",
+      "src": "host-02",
+      "dst": "host-08",
       "rate": 0.5
     }
   ]

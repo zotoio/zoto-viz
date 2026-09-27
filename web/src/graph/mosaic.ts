@@ -84,7 +84,7 @@ export function pinPluginTileSkies(
     if (sky !== undefined) out[id] = sky;
   }
   for (const id of ids) {
-    if (lookForTile(id)?.backdrop === "plugin") out[id] = "plugin";
+    if (lookForMode(id)?.backdrop === "plugin") out[id] = "plugin";
   }
   return out;
 }
@@ -94,12 +94,10 @@ export function mosaicAnimForTile(
   id: string,
   tileSky?: BackdropKind,
 ): DreamAnim {
-<<<<<<< HEAD
   const merged = mergeLook(wall, lookForTile(id));
-=======
-  const merged = mergeLook(wall, lookForMode(id));
->>>>>>> 469a2c571496e7afc37c05fa5db23f74f7ff2b96
-  if (tileSky === "plugin") return { ...merged, backdrop: "plugin" };
+  if (lookForTile(id)?.backdrop === "plugin" || tileSky === "plugin") {
+    return { ...merged, backdrop: "plugin" };
+  }
   if (tileSky) return { ...merged, backdrop: tileSky };
   return merged;
 }
@@ -262,6 +260,8 @@ export class Mosaic {
     onFocus: (id: string) => void;
     onPromote: (id: string, theme: Theme | null) => void;
     onLayout: (patch: MosaicLayoutPatch) => void;
+    onWall?: (on: boolean) => void;
+    onPaneViews?: (tiles: string[]) => void;
     onCloseLast: () => void;
     paneCog?: (id: string) => HTMLButtonElement;
     sync: () => MosaicSync;
@@ -531,6 +531,7 @@ export class Mosaic {
     const next = nextPaneTiles(this.tileIds, fromSlot, viewId);
     if (next.join("\0") === this.tileIds.join("\0")) return false;
     this.assignViews(next);
+    this.cfg.onPaneViews?.(this.tileIds);
     return true;
   }
 
@@ -763,6 +764,7 @@ export class Mosaic {
     this.flushSync();
     this.relayoutAll();
     this.emitLayout();
+    this.cfg.onPaneViews?.(this.tileIds);
   }
 
   private fallbackHostSky(id: string): void {
@@ -1077,7 +1079,6 @@ export class Mosaic {
     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
     if (a.mosaicUniqueSkies === true || planned) {
       const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
-<<<<<<< HEAD
       const assigned = assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
       const base: Record<string, BackdropKind> = { ...assigned };
       if (planned) {
@@ -1086,9 +1087,6 @@ export class Mosaic {
         }
       }
       const next = pinPluginTileSkies(base, ids);
-=======
-      const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
->>>>>>> 469a2c571496e7afc37c05fa5db23f74f7ff2b96
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;
@@ -1099,21 +1097,13 @@ export class Mosaic {
     }
     const stale = this.tileSkies.size > 0 && this.tileIds.some((id) => !this.tileSkies.has(id));
     if (this.tileSkies.size && stale) {
-<<<<<<< HEAD
       const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
-=======
-      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
->>>>>>> 469a2c571496e7afc37c05fa5db23f74f7ff2b96
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;
     }
     if (!this.tileSkies.size && shouldUniqueMosaicSkies()) {
-<<<<<<< HEAD
       const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
-=======
-      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
->>>>>>> 469a2c571496e7afc37c05fa5db23f74f7ff2b96
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
     }
     this.applyRecoveredSkies();

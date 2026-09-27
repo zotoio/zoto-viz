@@ -68,123 +68,123 @@
   ],
   "talkers": [
     {
-      "id": "host-114",
-      "rate": 209,
+      "id": "host-262",
+      "rate": 32.2,
       "role": "lan"
     },
     {
-      "id": "host-309",
-      "rate": 209,
-      "role": "lan"
-    },
-    {
-      "id": "host-113",
-      "rate": 208,
+      "id": "host-163",
+      "rate": 31.2,
       "role": "internet"
     },
     {
-      "id": "host-308",
-      "rate": 208,
+      "id": "host-276",
+      "rate": 28.2,
+      "role": "lan"
+    },
+    {
+      "id": "host-396",
+      "rate": 25.6,
+      "role": "lan"
+    },
+    {
+      "id": "host-403",
+      "rate": 25.6,
+      "role": "lan"
+    },
+    {
+      "id": "host-387",
+      "rate": 24.799999999999997,
+      "role": "lan"
+    },
+    {
+      "id": "host-39",
+      "rate": 24.6,
+      "role": "lan"
+    },
+    {
+      "id": "host-89",
+      "rate": 24.6,
+      "role": "internet"
+    },
+    {
+      "id": "host-284",
+      "rate": 24.400000000000002,
+      "role": "lan"
+    },
+    {
+      "id": "host-57",
+      "rate": 24,
+      "role": "lan"
+    },
+    {
+      "id": "host-384",
+      "rate": 22.6,
+      "role": "lan"
+    },
+    {
+      "id": "host-370",
+      "rate": 22.400000000000002,
+      "role": "lan"
+    },
+    {
+      "id": "host-137",
+      "rate": 22,
+      "role": "lan"
+    },
+    {
+      "id": "host-321",
+      "rate": 21.800000000000004,
       "role": "lan"
     },
     {
       "id": "host-112",
-      "rate": 207,
+      "rate": 21.2,
       "role": "lan"
     },
     {
-      "id": "host-307",
-      "rate": 207,
+      "id": "host-229",
+      "rate": 21.2,
       "role": "lan"
     },
     {
-      "id": "host-111",
-      "rate": 206,
-      "role": "lan"
-    },
-    {
-      "id": "host-306",
-      "rate": 206,
+      "id": "host-258",
+      "rate": 21.2,
       "role": "internet"
     },
     {
-      "id": "host-110",
-      "rate": 205,
+      "id": "host-291",
+      "rate": 21.2,
       "role": "lan"
     },
     {
-      "id": "host-304",
-      "rate": 205,
+      "id": "host-415",
+      "rate": 21,
       "role": "lan"
     },
     {
-      "id": "host-109",
-      "rate": 204,
+      "id": "host-09",
+      "rate": 20.8,
       "role": "lan"
     },
     {
-      "id": "host-303",
-      "rate": 204,
+      "id": "host-185",
+      "rate": 20.8,
       "role": "lan"
     },
     {
-      "id": "host-108",
-      "rate": 203,
+      "id": "host-213",
+      "rate": 20.200000000000003,
       "role": "lan"
     },
     {
-      "id": "host-302",
-      "rate": 203,
+      "id": "host-50",
+      "rate": 20.2,
       "role": "lan"
     },
     {
-      "id": "host-107",
-      "rate": 202,
-      "role": "lan"
-    },
-    {
-      "id": "host-301",
-      "rate": 202,
-      "role": "lan"
-    },
-    {
-      "id": "host-106",
-      "rate": 201,
-      "role": "lan"
-    },
-    {
-      "id": "host-300",
-      "rate": 201,
-      "role": "lan"
-    },
-    {
-      "id": "host-105",
-      "rate": 200,
-      "role": "lan"
-    },
-    {
-      "id": "host-299",
-      "rate": 200,
-      "role": "lan"
-    },
-    {
-      "id": "host-103",
-      "rate": 199,
-      "role": "lan"
-    },
-    {
-      "id": "host-298",
-      "rate": 199,
-      "role": "lan"
-    },
-    {
-      "id": "host-102",
-      "rate": 198,
-      "role": "lan"
-    },
-    {
-      "id": "host-297",
-      "rate": 198,
+      "id": "host-133",
+      "rate": 20.2,
       "role": "lan"
     }
   ],
@@ -202,5 +202,96 @@
     "udev": 0
   },
   "contract": 2,
-  "links": []
+  "links": [
+    {
+      "src": "host-112",
+      "dst": "host-57",
+      "rate": 5
+    },
+    {
+      "src": "host-89",
+      "dst": "host-133",
+      "rate": 4
+    },
+    {
+      "src": "host-384",
+      "dst": "host-185",
+      "rate": 4
+    },
+    {
+      "src": "host-396",
+      "dst": "host-89",
+      "rate": 4
+    },
+    {
+      "src": "host-133",
+      "dst": "host-258",
+      "rate": 3
+    },
+    {
+      "src": "host-258",
+      "dst": "host-403",
+      "rate": 3
+    },
+    {
+      "src": "host-291",
+      "dst": "host-89",
+      "rate": 3
+    },
+    {
+      "src": "host-57",
+      "dst": "host-112",
+      "rate": 1
+    },
+    {
+      "src": "host-262",
+      "dst": "host-387",
+      "rate": 1
+    },
+    {
+      "src": "host-284",
+      "dst": "host-57",
+      "rate": 1
+    },
+    {
+      "src": "host-89",
+      "dst": "host-396",
+      "rate": 0.8
+    },
+    {
+      "src": "host-133",
+      "dst": "host-89",
+      "rate": 0.8
+    },
+    {
+      "src": "host-185",
+      "dst": "host-384",
+      "rate": 0.8
+    },
+    {
+      "src": "host-89",
+      "dst": "host-291",
+      "rate": 0.6000000000000001
+    },
+    {
+      "src": "host-258",
+      "dst": "host-133",
+      "rate": 0.6000000000000001
+    },
+    {
+      "src": "host-403",
+      "dst": "host-258",
+      "rate": 0.6000000000000001
+    },
+    {
+      "src": "host-57",
+      "dst": "host-284",
+      "rate": 0.2
+    },
+    {
+      "src": "host-387",
+      "dst": "host-262",
+      "rate": 0.2
+    }
+  ]
 }
