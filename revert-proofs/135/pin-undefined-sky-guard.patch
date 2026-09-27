@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+index 2988728c..9caab745 100644
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -96,7 +96,7 @@ export function pinPluginTileSkies(
+   const out: Record<string, BackdropKind> = {};
+   for (const id of ids) {
+     const sky = skies[id] !== undefined ? skies[id]! : existing[id];
+-    if (sky !== undefined) out[id] = sky;
++    out[id] = sky!;
+   }
+   for (const id of ids) {
+     if (lookForTile(id)?.backdrop === "plugin") out[id] = "plugin";

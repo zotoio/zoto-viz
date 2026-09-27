@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic-ingest-sky-plan.test.ts",
+  "testName": "keeps unlisted tile skies on a partial unique-sky plan and never stores undefined",
+  "description": "Revert ingestSkyPlan pinPluginTileSkies wiring for partial unique-sky plans",
+  "project": "web",
+  "red": "AssertionError: expected undefined to be 'space' // Object.is equality"
+}
