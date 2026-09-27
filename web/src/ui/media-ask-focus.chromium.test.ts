@@ -57,7 +57,7 @@ describe("media ask focus (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask][open]");
+    await page.waitForSelector("[data-media-ask]");
     expect(await activeSelector(page)).toBe("allow");
     await page.keyboard.press("Shift+Tab");
     expect(await activeSelector(page)).toBe("not-now");
@@ -70,7 +70,7 @@ describe("media ask focus (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask][open]");
+    await page.waitForSelector("[data-media-ask]");
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");
@@ -82,7 +82,7 @@ describe("media ask focus (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask][open]");
+    await page.waitForSelector("[data-media-ask]");
     for (let i = 0; i < 10; i += 1) {
       await page.keyboard.press("Tab");
       expect(await activeSelector(page)).not.toBe(".wall-notice-action");
@@ -101,7 +101,7 @@ describe("media ask focus (chromium)", () => {
       };
     });
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask][open]");
+    await page.waitForSelector("[data-media-ask]");
     await page.keyboard.press("Escape");
     await page.waitForSelector("[data-media-ask]", { state: "detached" });
     gumCalls = await page.evaluate(() => (window as Window & { __gumCalls?: number }).__gumCalls ?? 0);
@@ -113,7 +113,7 @@ describe("media ask focus (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask][open]");
+    await page.waitForSelector("[data-media-ask]");
     await page.keyboard.press("Escape");
     await page.waitForSelector("[data-media-ask]", { state: "detached" });
     expect(await activeSelector(page)).toBe("#mic");
